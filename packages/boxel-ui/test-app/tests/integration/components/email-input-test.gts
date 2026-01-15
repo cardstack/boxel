@@ -14,9 +14,9 @@ module('Integration | Component | email-input', function (hooks) {
     let value: string | null = null;
     const set = (newValue: string) => (value = newValue);
 
-    await render(<template>
-      <EmailInput @value={{value}} @onChange={{set}} />
-    </template>);
+    await render(
+      <template><EmailInput @value={{value}} @onChange={{set}} /></template>,
+    );
 
     await typeIn('[data-test-boxel-email-input]', 'user@example');
 
@@ -43,9 +43,9 @@ module('Integration | Component | email-input', function (hooks) {
     let value: string | null = 'first.last+tag@sub.domain.co';
     const set = (newValue: string) => (value = newValue);
 
-    await render(<template>
-      <EmailInput @value={{value}} @onChange={{set}} />
-    </template>);
+    await render(
+      <template><EmailInput @value={{value}} @onChange={{set}} /></template>,
+    );
 
     assert
       .dom('[data-test-boxel-email-input]')
@@ -59,9 +59,9 @@ module('Integration | Component | email-input', function (hooks) {
     let value: string | null = 'alice@';
     const set = (newValue: string) => (value = newValue);
 
-    await render(<template>
-      <EmailInput @value={{value}} @onChange={{set}} />
-    </template>);
+    await render(
+      <template><EmailInput @value={{value}} @onChange={{set}} /></template>,
+    );
 
     assert.dom('[data-test-boxel-email-input]').hasValue('alice@');
     assert
@@ -87,9 +87,9 @@ module('Integration | Component | email-input', function (hooks) {
       event = _event;
     };
 
-    await render(<template>
-      <EmailInput @value={{value}} @onChange={{set}} />
-    </template>);
+    await render(
+      <template><EmailInput @value={{value}} @onChange={{set}} /></template>,
+    );
 
     await fillIn('[data-test-boxel-email-input]', 'alice@email');
     await triggerEvent('[data-test-boxel-email-input]', 'blur');
@@ -125,9 +125,9 @@ module('Integration | Component | email-input', function (hooks) {
       event = _event;
     };
 
-    await render(<template>
-      <EmailInput @value={{value}} @onChange={{set}} />
-    </template>);
+    await render(
+      <template><EmailInput @value={{value}} @onChange={{set}} /></template>,
+    );
 
     await fillIn('[data-test-boxel-email-input]', '');
     await triggerEvent('[data-test-boxel-email-input]', 'blur');
@@ -149,9 +149,11 @@ module('Integration | Component | email-input', function (hooks) {
     let value: string | null = null;
     const set = (newValue: string) => (value = newValue);
 
-    await render(<template>
-      <EmailInput @value={{value}} @onChange={{set}} required />
-    </template>);
+    await render(
+      <template>
+        <EmailInput @value={{value}} @onChange={{set}} required />
+      </template>,
+    );
 
     await triggerEvent('[data-test-boxel-email-input]', 'blur');
 

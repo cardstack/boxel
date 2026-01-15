@@ -8,9 +8,10 @@ import {
 import { VirtualNetwork } from '@cardstack/runtime-common';
 import jwt from 'jsonwebtoken';
 import { basename } from 'path';
+import type ms from 'ms';
 
 function createJWT(
-  expiresIn: string | number,
+  expiresIn: ms.StringValue,
   payload: Record<string, unknown> = {},
 ) {
   return jwt.sign(payload, 'secret', { expiresIn });

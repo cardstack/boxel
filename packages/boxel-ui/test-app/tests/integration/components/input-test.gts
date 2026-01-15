@@ -15,9 +15,9 @@ module('Integration | Component | input', function (hooks) {
   setupRenderingTest(hooks);
 
   test('it passes through the value and does not render missing optional properties', async function (assert) {
-    await render(<template>
-      <BoxelInput data-test-input @value='hello' />
-    </template>);
+    await render(
+      <template><BoxelInput data-test-input @value='hello' /></template>,
+    );
 
     assert.dom('[data-test-input]').hasValue('hello');
     assert.dom('[data-test-input]').doesNotHaveAttribute('type');
@@ -35,9 +35,11 @@ module('Integration | Component | input', function (hooks) {
       value = newValue;
     }
 
-    await render(<template>
-      <BoxelInput data-test-input @onInput={{onInput}} @value={{value}} />
-    </template>);
+    await render(
+      <template>
+        <BoxelInput data-test-input @onInput={{onInput}} @value={{value}} />
+      </template>,
+    );
     await fillIn('[data-test-input]', 'no');
 
     assert.strictEqual(value, 'no');
@@ -60,16 +62,18 @@ module('Integration | Component | input', function (hooks) {
       keyPressed = true;
     }
 
-    await render(<template>
-      <button>do nothing</button>
-      <BoxelInput
-        data-test-input
-        @onFocus={{onFocus}}
-        @onBlur={{onBlur}}
-        @onKeyPress={{onKeyPress}}
-        @value=''
-      />
-    </template>);
+    await render(
+      <template>
+        <button>do nothing</button>
+        <BoxelInput
+          data-test-input
+          @onFocus={{onFocus}}
+          @onBlur={{onBlur}}
+          @onKeyPress={{onKeyPress}}
+          @value=''
+        />
+      </template>,
+    );
 
     await click('[data-test-input]');
     await click('button');
@@ -81,26 +85,32 @@ module('Integration | Component | input', function (hooks) {
   });
 
   test('textarea @type produces a textarea', async function (assert) {
-    await render(<template>
-      <BoxelInput data-test-input @type='textarea' @value='' />
-    </template>);
+    await render(
+      <template>
+        <BoxelInput data-test-input @type='textarea' @value='' />
+      </template>,
+    );
 
     assert.dom('[data-test-input]').hasTagName('textarea');
     assert.dom('[data-test-input]').doesNotHaveAttribute('type');
   });
 
   test('other @type passes through', async function (assert) {
-    await render(<template>
-      <BoxelInput data-test-input @type='number' @value='' />
-    </template>);
+    await render(
+      <template>
+        <BoxelInput data-test-input @type='number' @value='' />
+      </template>,
+    );
 
     assert.dom('[data-test-input]').hasAttribute('type', 'number');
   });
 
   test('@helperText shows', async function (assert) {
-    await render(<template>
-      <BoxelInput data-test-input @helperText='help!' @value='' />
-    </template>);
+    await render(
+      <template>
+        <BoxelInput data-test-input @helperText='help!' @value='' />
+      </template>,
+    );
 
     let helperElementId = find('[data-test-boxel-input-helper-text]')?.id;
 
@@ -111,23 +121,27 @@ module('Integration | Component | input', function (hooks) {
   });
 
   test('@placeholder shows', async function (assert) {
-    await render(<template>
-      <BoxelInput data-test-input @placeholder='a placeholder' @value='' />
-    </template>);
+    await render(
+      <template>
+        <BoxelInput data-test-input @placeholder='a placeholder' @value='' />
+      </template>,
+    );
 
     assert.dom('[placeholder]').hasAttribute('placeholder', 'a placeholder');
   });
 
   test('it indicates @optional status but @required takes priority', async function (assert) {
-    await render(<template>
-      <BoxelInput data-test-optional-input @optional={{true}} @value='' />
-      <BoxelInput
-        data-test-required-input
-        @required={{true}}
-        @optional={{true}}
-        @value=''
-      />
-    </template>);
+    await render(
+      <template>
+        <BoxelInput data-test-optional-input @optional={{true}} @value='' />
+        <BoxelInput
+          data-test-required-input
+          @required={{true}}
+          @optional={{true}}
+          @value=''
+        />
+      </template>,
+    );
 
     assert.dom('*:has([data-test-optional-input])').containsText('Optional');
 
@@ -146,15 +160,17 @@ module('Integration | Component | input', function (hooks) {
 
     let stateObject = new StateObject();
 
-    await render(<template>
-      <BoxelInput
-        data-test-input
-        @state={{stateObject.state}}
-        @disabled={{stateObject.disabled}}
-        @errorMessage={{stateObject.errorMessage}}
-        @value=''
-      />
-    </template>);
+    await render(
+      <template>
+        <BoxelInput
+          data-test-input
+          @state={{stateObject.state}}
+          @disabled={{stateObject.disabled}}
+          @errorMessage={{stateObject.errorMessage}}
+          @value=''
+        />
+      </template>,
+    );
 
     assert.dom('[data-test-boxel-input-error-message]').doesNotExist();
     assert.dom('[data-test-boxel-input-validation-state="none"]').exists();

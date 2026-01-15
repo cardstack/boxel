@@ -116,9 +116,11 @@ module('Integration | helpers | formatDateTime', function (hooks) {
   });
 
   test('defaults to medium date style', async function (assert) {
-    await render(<template>
-      {{formatDateTime BASE_DATE locale='en-US' timeZone='UTC'}}
-    </template>);
+    await render(
+      <template>
+        {{formatDateTime BASE_DATE locale='en-US' timeZone='UTC'}}
+      </template>,
+    );
 
     assert.dom().hasText('Mar 15, 2024', 'uses medium date style by default');
   });
@@ -148,28 +150,39 @@ module('Integration | helpers | formatDateTime', function (hooks) {
   });
 
   test('preset short and long map to Intl date styles', async function (assert) {
-    await render(<template>
-      {{formatDateTime BASE_DATE locale='en-US' timeZone='UTC' preset='short'}}
-    </template>);
+    await render(
+      <template>
+        {{formatDateTime
+          BASE_DATE
+          locale='en-US'
+          timeZone='UTC'
+          preset='short'
+        }}
+      </template>,
+    );
     assert.dom().hasText('3/15/24', 'short preset uses short date style');
 
-    await render(<template>
-      {{formatDateTime BASE_DATE locale='en-US' timeZone='UTC' preset='long'}}
-    </template>);
+    await render(
+      <template>
+        {{formatDateTime BASE_DATE locale='en-US' timeZone='UTC' preset='long'}}
+      </template>,
+    );
     assert.dom().hasText('March 15, 2024', 'long preset uses long date style');
   });
 
   test('respects explicit date and time styles with hour cycle', async function (assert) {
-    await render(<template>
-      {{formatDateTime
-        BASE_DATE
-        locale='en-US'
-        dateStyle='medium'
-        timeStyle='short'
-        timeZone='America/New_York'
-        hour12=false
-      }}
-    </template>);
+    await render(
+      <template>
+        {{formatDateTime
+          BASE_DATE
+          locale='en-US'
+          dateStyle='medium'
+          timeStyle='short'
+          timeZone='America/New_York'
+          hour12=false
+        }}
+      </template>,
+    );
 
     assert
       .dom()
@@ -180,190 +193,238 @@ module('Integration | helpers | formatDateTime', function (hooks) {
   });
 
   test('kind variants format partial dates', async function (assert) {
-    await render(<template>
-      {{formatDateTime BASE_DATE kind='month' locale='en-US' timeZone='UTC'}}
-    </template>);
+    await render(
+      <template>
+        {{formatDateTime BASE_DATE kind='month' locale='en-US' timeZone='UTC'}}
+      </template>,
+    );
     assert.dom().hasText('March', 'formats month');
 
-    await render(<template>
-      {{formatDateTime BASE_DATE kind='monthDay' locale='en-US' timeZone='UTC'}}
-    </template>);
+    await render(
+      <template>
+        {{formatDateTime
+          BASE_DATE
+          kind='monthDay'
+          locale='en-US'
+          timeZone='UTC'
+        }}
+      </template>,
+    );
     assert.dom().hasText('Mar 15', 'formats month and day');
 
-    await render(<template>
-      {{formatDateTime
-        BASE_DATE
-        kind='monthYear'
-        locale='en-US'
-        timeZone='UTC'
-        monthDisplay='long'
-      }}
-    </template>);
+    await render(
+      <template>
+        {{formatDateTime
+          BASE_DATE
+          kind='monthYear'
+          locale='en-US'
+          timeZone='UTC'
+          monthDisplay='long'
+        }}
+      </template>,
+    );
     assert.dom().hasText('March 2024', 'formats month and year');
 
-    await render(<template>
-      {{formatDateTime BASE_DATE kind='year' locale='en-US' timeZone='UTC'}}
-    </template>);
+    await render(
+      <template>
+        {{formatDateTime BASE_DATE kind='year' locale='en-US' timeZone='UTC'}}
+      </template>,
+    );
     assert.dom().hasText('2024', 'formats year');
 
-    await render(<template>
-      {{formatDateTime
-        BASE_DATE
-        kind='month'
-        locale='en-US'
-        timeZone='UTC'
-        monthDisplay='narrow'
-      }}
-    </template>);
+    await render(
+      <template>
+        {{formatDateTime
+          BASE_DATE
+          kind='month'
+          locale='en-US'
+          timeZone='UTC'
+          monthDisplay='narrow'
+        }}
+      </template>,
+    );
     assert.dom().hasText('M', 'supports narrow month display');
 
-    await render(<template>
-      {{formatDateTime BASE_DATE kind='time' locale='en-US' timeZone='UTC'}}
-    </template>);
+    await render(
+      <template>
+        {{formatDateTime BASE_DATE kind='time' locale='en-US' timeZone='UTC'}}
+      </template>,
+    );
     assert.dom().hasText('3:45 PM', 'formats time-only output');
   });
 
   test('date and datetime kinds include the expected fields', async function (assert) {
-    await render(<template>
-      {{formatDateTime BASE_DATE kind='date' locale='en-US' timeZone='UTC'}}
-    </template>);
+    await render(
+      <template>
+        {{formatDateTime BASE_DATE kind='date' locale='en-US' timeZone='UTC'}}
+      </template>,
+    );
     assert.dom().hasText('Mar 15, 2024', 'kind="date" renders date only');
 
-    await render(<template>
-      {{formatDateTime BASE_DATE kind='datetime' locale='en-US' timeZone='UTC'}}
-    </template>);
+    await render(
+      <template>
+        {{formatDateTime
+          BASE_DATE
+          kind='datetime'
+          locale='en-US'
+          timeZone='UTC'
+        }}
+      </template>,
+    );
     assert
       .dom()
       .hasText('Mar 15, 2024, 3:45 PM', 'kind="datetime" renders date + time');
   });
 
   test('month display supports numeric, 2-digit, short, and long outputs', async function (assert) {
-    await render(<template>
-      {{formatDateTime
-        BASE_DATE
-        kind='month'
-        locale='en-US'
-        timeZone='UTC'
-        monthDisplay='numeric'
-      }}
-    </template>);
+    await render(
+      <template>
+        {{formatDateTime
+          BASE_DATE
+          kind='month'
+          locale='en-US'
+          timeZone='UTC'
+          monthDisplay='numeric'
+        }}
+      </template>,
+    );
     assert.dom().hasText('3', 'numeric month display shows "3"');
 
-    await render(<template>
-      {{formatDateTime
-        BASE_DATE
-        kind='month'
-        locale='en-US'
-        timeZone='UTC'
-        monthDisplay='2-digit'
-      }}
-    </template>);
+    await render(
+      <template>
+        {{formatDateTime
+          BASE_DATE
+          kind='month'
+          locale='en-US'
+          timeZone='UTC'
+          monthDisplay='2-digit'
+        }}
+      </template>,
+    );
     assert.dom().hasText('03', '2-digit month display zero pads');
 
-    await render(<template>
-      {{formatDateTime
-        BASE_DATE
-        kind='month'
-        locale='en-US'
-        timeZone='UTC'
-        monthDisplay='short'
-      }}
-    </template>);
+    await render(
+      <template>
+        {{formatDateTime
+          BASE_DATE
+          kind='month'
+          locale='en-US'
+          timeZone='UTC'
+          monthDisplay='short'
+        }}
+      </template>,
+    );
     assert.dom().hasText('Mar', 'short month display abbreviates');
 
-    await render(<template>
-      {{formatDateTime
-        BASE_DATE
-        kind='monthYear'
-        locale='en-US'
-        timeZone='UTC'
-        monthDisplay='long'
-      }}
-    </template>);
+    await render(
+      <template>
+        {{formatDateTime
+          BASE_DATE
+          kind='monthYear'
+          locale='en-US'
+          timeZone='UTC'
+          monthDisplay='long'
+        }}
+      </template>,
+    );
     assert.dom().hasText('March 2024', 'long month display spells out month');
   });
 
   test('date and time style permutations', async function (assert) {
-    await render(<template>
-      {{formatDateTime
-        BASE_DATE
-        locale='en-US'
-        timeZone='UTC'
-        dateStyle='full'
-      }}
-    </template>);
+    await render(
+      <template>
+        {{formatDateTime
+          BASE_DATE
+          locale='en-US'
+          timeZone='UTC'
+          dateStyle='full'
+        }}
+      </template>,
+    );
     assert
       .dom()
       .hasText('Friday, March 15, 2024', 'full date style includes weekday');
 
-    await render(<template>
-      {{formatDateTime
-        BASE_DATE
-        locale='en-US'
-        timeZone='UTC'
-        timeStyle='medium'
-      }}
-    </template>);
+    await render(
+      <template>
+        {{formatDateTime
+          BASE_DATE
+          locale='en-US'
+          timeZone='UTC'
+          timeStyle='medium'
+        }}
+      </template>,
+    );
     assert.dom().includesText('3:45:00', 'medium time style shows seconds');
 
-    await render(<template>
-      {{formatDateTime
-        BASE_DATE
-        locale='en-US'
-        timeZone='UTC'
-        timeStyle='long'
-      }}
-    </template>);
+    await render(
+      <template>
+        {{formatDateTime
+          BASE_DATE
+          locale='en-US'
+          timeZone='UTC'
+          timeStyle='long'
+        }}
+      </template>,
+    );
     assert
       .dom()
       .includesText('3:45:00 PM UTC', 'long time style includes zone');
 
-    await render(<template>
-      {{formatDateTime
-        BASE_DATE
-        locale='en-US'
-        timeZone='UTC'
-        dateStyle='long'
-        timeStyle='short'
-      }}
-    </template>);
+    await render(
+      <template>
+        {{formatDateTime
+          BASE_DATE
+          locale='en-US'
+          timeZone='UTC'
+          dateStyle='long'
+          timeStyle='short'
+        }}
+      </template>,
+    );
     assert.dom().includesText('March 15, 2024', 'combined style shows date');
     assert.dom().includesText('3:45 PM', 'combined style shows time');
   });
 
   test('hour cycle and hour12 options affect output format', async function (assert) {
-    await render(<template>
-      {{formatDateTime
-        BASE_DATE
-        locale='en-US'
-        timeZone='UTC'
-        kind='time'
-        hour12=true
-      }}
-    </template>);
+    await render(
+      <template>
+        {{formatDateTime
+          BASE_DATE
+          locale='en-US'
+          timeZone='UTC'
+          kind='time'
+          hour12=true
+        }}
+      </template>,
+    );
     assert.dom().hasText('3:45 PM', 'explicit hour12 formatting shows AM/PM');
 
-    await render(<template>
-      {{formatDateTime
-        BASE_DATE
-        locale='en-US'
-        timeZone='UTC'
-        kind='time'
-        hourCycle='h23'
-      }}
-    </template>);
+    await render(
+      <template>
+        {{formatDateTime
+          BASE_DATE
+          locale='en-US'
+          timeZone='UTC'
+          kind='time'
+          hourCycle='h23'
+        }}
+      </template>,
+    );
     assert.dom().hasText('15:45', 'h23 cycle renders 24-hour clock');
 
     const MIDNIGHT = new Date('2024-03-15T00:30:00.000Z');
-    await render(<template>
-      {{formatDateTime
-        MIDNIGHT
-        locale='en-US'
-        timeZone='UTC'
-        kind='time'
-        hourCycle='h11'
-      }}
-    </template>);
+    await render(
+      <template>
+        {{formatDateTime
+          MIDNIGHT
+          locale='en-US'
+          timeZone='UTC'
+          kind='time'
+          hourCycle='h11'
+        }}
+      </template>,
+    );
     assert.dom().hasText('0:30 AM', 'h11 cycle emits 0-11 hours with AM');
   });
 
@@ -416,14 +477,16 @@ module('Integration | helpers | formatDateTime', function (hooks) {
   });
 
   test('Day.js advanced tokens cover ordinal, weekday, and literal text', async function (assert) {
-    await render(<template>
-      {{formatDateTime
-        BASE_DATE
-        locale='en'
-        timeZone='UTC'
-        format='dddd, MMMM Do, YYYY [at] h:mm A'
-      }}
-    </template>);
+    await render(
+      <template>
+        {{formatDateTime
+          BASE_DATE
+          locale='en'
+          timeZone='UTC'
+          format='dddd, MMMM Do, YYYY [at] h:mm A'
+        }}
+      </template>,
+    );
 
     assert
       .dom()
@@ -434,14 +497,16 @@ module('Integration | helpers | formatDateTime', function (hooks) {
   });
 
   test('locale and timezone combinations render localized output', async function (assert) {
-    await render(<template>
-      {{formatDateTime
-        BASE_DATE
-        locale='es-ES'
-        timeZone='Europe/Madrid'
-        dateStyle='long'
-      }}
-    </template>);
+    await render(
+      <template>
+        {{formatDateTime
+          BASE_DATE
+          locale='es-ES'
+          timeZone='Europe/Madrid'
+          dateStyle='long'
+        }}
+      </template>,
+    );
     assert
       .dom()
       .hasText(
@@ -449,43 +514,49 @@ module('Integration | helpers | formatDateTime', function (hooks) {
         'Spanish locale uses expected long format',
       );
 
-    await render(<template>
-      {{formatDateTime
-        BASE_DATE
-        locale='fr-FR'
-        timeZone='Europe/Paris'
-        dateStyle='long'
-      }}
-    </template>);
+    await render(
+      <template>
+        {{formatDateTime
+          BASE_DATE
+          locale='fr-FR'
+          timeZone='Europe/Paris'
+          dateStyle='long'
+        }}
+      </template>,
+    );
     assert
       .dom()
       .hasText('15 mars 2024', 'French locale renders localized month');
 
-    await render(<template>
-      {{formatDateTime
-        BASE_DATE
-        locale='en-US'
-        timeZone='Asia/Tokyo'
-        kind='datetime'
-        dateStyle='long'
-        timeStyle='short'
-      }}
-    </template>);
+    await render(
+      <template>
+        {{formatDateTime
+          BASE_DATE
+          locale='en-US'
+          timeZone='Asia/Tokyo'
+          kind='datetime'
+          dateStyle='long'
+          timeStyle='short'
+        }}
+      </template>,
+    );
     assert
       .dom()
       .includesText('March 16, 2024', 'Tokyo timezone advances the date');
     assert.dom().includesText('12:45 AM', 'Tokyo timezone adjusts the time');
 
-    await render(<template>
-      {{formatDateTime
-        BASE_DATE
-        locale='en-US'
-        timeZone='America/Los_Angeles'
-        kind='datetime'
-        dateStyle='long'
-        timeStyle='short'
-      }}
-    </template>);
+    await render(
+      <template>
+        {{formatDateTime
+          BASE_DATE
+          locale='en-US'
+          timeZone='America/Los_Angeles'
+          kind='datetime'
+          dateStyle='long'
+          timeStyle='short'
+        }}
+      </template>,
+    );
     assert
       .dom()
       .includesText('March 15, 2024', 'Los Angeles stays on the same day');
@@ -495,48 +566,63 @@ module('Integration | helpers | formatDateTime', function (hooks) {
   });
 
   test('week and quarter formatting', async function (assert) {
-    await render(<template>
-      {{formatDateTime BASE_DATE kind='week' locale='en-US' timeZone='UTC'}}
-    </template>);
+    await render(
+      <template>
+        {{formatDateTime BASE_DATE kind='week' locale='en-US' timeZone='UTC'}}
+      </template>,
+    );
     assert.dom().hasText('2024-W11', 'formats ISO week');
 
-    await render(<template>
-      {{formatDateTime
-        BASE_DATE
-        kind='week'
-        locale='en-US'
-        timeZone='UTC'
-        weekFormat='label'
-      }}
-    </template>);
+    await render(
+      <template>
+        {{formatDateTime
+          BASE_DATE
+          kind='week'
+          locale='en-US'
+          timeZone='UTC'
+          weekFormat='label'
+        }}
+      </template>,
+    );
     assert.dom().hasText('week 11, 2024', 'formats localized week label');
 
-    await render(<template>
-      {{formatDateTime BASE_DATE kind='quarter' locale='en-US' timeZone='UTC'}}
-    </template>);
+    await render(
+      <template>
+        {{formatDateTime
+          BASE_DATE
+          kind='quarter'
+          locale='en-US'
+          timeZone='UTC'
+        }}
+      </template>,
+    );
     assert.dom().hasText('Q1 2024', 'defaults to short quarter format');
 
-    await render(<template>
-      {{formatDateTime
-        BASE_DATE
-        kind='quarter'
-        locale='en-US'
-        timeZone='UTC'
-        quarterFormat='long'
-      }}
-    </template>);
+    await render(
+      <template>
+        {{formatDateTime
+          BASE_DATE
+          kind='quarter'
+          locale='en-US'
+          timeZone='UTC'
+          quarterFormat='long'
+        }}
+      </template>,
+    );
     assert.dom().hasText('quarter 1, 2024', 'supports long quarter labels');
   });
 
   test('uses Day.js when token format provided', async function (assert) {
-    await render(<template>
-      {{formatDateTime
-        BASE_DATE
-        locale='en'
-        timeZone='UTC'
-        format='YYYY/MM/DD'
-      }}
-    </template>);
+    await render(
+      <template>
+        {{formatDateTime
+          BASE_DATE
+          locale='en'
+          timeZone='UTC'
+          format='YYYY/MM/DD'
+        }}
+      </template>,
+    );
 
     assert.dom().hasText('2024/03/15', 'renders using token format');
   });
@@ -545,21 +631,32 @@ module('Integration | helpers | formatDateTime', function (hooks) {
     const secondsTimestamp = 1_700_000_000;
     const excelSerial = 45365;
 
-    await render(<template>
-      {{formatDateTime secondsTimestamp locale='en-US' timeZone='UTC' unit='s'}}
-    </template>);
+    await render(
+      <template>
+        {{formatDateTime
+          secondsTimestamp
+          locale='en-US'
+          timeZone='UTC'
+          unit='s'
+        }}
+      </template>,
+    );
     assert
       .dom()
       .hasText('Nov 14, 2023', 'interprets numeric seconds timestamp');
 
-    await render(<template>
-      {{formatDateTime excelSerial parse=(hash serialOrigin='excel1900')}}
-    </template>);
+    await render(
+      <template>
+        {{formatDateTime excelSerial parse=(hash serialOrigin='excel1900')}}
+      </template>,
+    );
     assert.dom().hasText('Mar 14, 2024', 'parses Excel 1900 serial dates');
 
-    await render(<template>
-      {{formatDateTime excelSerial parse=(hash serialOrigin='excel1904')}}
-    </template>);
+    await render(
+      <template>
+        {{formatDateTime excelSerial parse=(hash serialOrigin='excel1904')}}
+      </template>,
+    );
     assert.dom().hasText('Mar 15, 2028', 'parses Excel 1904 serial dates');
   });
 
@@ -591,14 +688,16 @@ module('Integration | helpers | formatDateTime', function (hooks) {
   });
 
   test('falls back when value cannot be parsed', async function (assert) {
-    await render(<template>
-      {{formatDateTime 'not-a-date' fallback='Invalid date'}}
-    </template>);
+    await render(
+      <template>
+        {{formatDateTime 'not-a-date' fallback='Invalid date'}}
+      </template>,
+    );
     assert.dom().hasText('Invalid date', 'uses fallback for invalid string');
 
-    await render(<template>
-      {{formatDateTime null fallback='Missing'}}
-    </template>);
+    await render(
+      <template>{{formatDateTime null fallback='Missing'}}</template>,
+    );
     assert.dom().hasText('Missing', 'uses fallback for null value');
   });
 
