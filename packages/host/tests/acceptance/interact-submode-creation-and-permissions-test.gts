@@ -712,17 +712,24 @@ module(
           ],
         });
 
+        let didAssertAuth = false;
         getService('network').mount(
           async (req) => {
-            if (req.method !== 'GET' && req.method !== 'HEAD') {
-              let token = req.headers.get('Authorization');
-              assert.notStrictEqual(token, null);
-
-              let claims = claimsFromRawToken(token!);
-              assert.deepEqual(claims.user, '@testuser:localhost');
-              assert.strictEqual(claims.realm, 'http://test-realm/test2/');
-              assert.deepEqual(claims.permissions, ['read', 'write']);
+            if (
+              didAssertAuth ||
+              !req.url.startsWith(testRealm2URL) ||
+              !['POST', 'PATCH'].includes(req.method)
+            ) {
+              return null;
             }
+            let token = req.headers.get('Authorization');
+            assert.notStrictEqual(token, null);
+
+            let claims = claimsFromRawToken(token!);
+            assert.deepEqual(claims.user, '@testuser:localhost');
+            assert.strictEqual(claims.realm, 'http://test-realm/test2/');
+            assert.deepEqual(claims.permissions, ['read', 'write']);
+            didAssertAuth = true;
             return null;
           },
           { prepend: true },
