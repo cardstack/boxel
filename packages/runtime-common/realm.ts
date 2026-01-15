@@ -1794,7 +1794,8 @@ export class Realm {
       (lookupRouteTable(this.#publicEndpoints, this.paths, request) ||
         request.method === 'HEAD' ||
         // If the realm is public readable or writable, do not require a JWT
-        (requiredPermission === 'read' && (await this.isWorldReadable())) ||
+        (requiredPermission === 'read' &&
+          realmPermissions['*']?.includes('read')) ||
         (requiredPermission === 'write' &&
           realmPermissions['*']?.includes('write')))
     ) {
