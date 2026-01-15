@@ -667,15 +667,7 @@ export default class RealmService extends Service {
 
   async waitForBulkInfoIfNeeded(): Promise<void> {
     if (this.bulkInfoPromise) {
-      if (isTesting()) {
-        // eslint-disable-next-line no-console
-        console.info('[realm-prefetch] waiting for in-flight bulk prefetch');
-      }
       await this.bulkInfoPromise;
-      if (isTesting()) {
-        // eslint-disable-next-line no-console
-        console.info('[realm-prefetch] in-flight bulk prefetch completed');
-      }
     }
   }
 
@@ -691,56 +683,22 @@ export default class RealmService extends Service {
 
   async prefetchRealmInfos(realmUrls: string[]): Promise<void> {
     let uniqueRealmUrls = Array.from(new Set(realmUrls));
-    if (isTesting()) {
-      // eslint-disable-next-line no-console
-      console.info('[realm-prefetch] request', {
-        requestedCount: realmUrls.length,
-        uniqueCount: uniqueRealmUrls.length,
-        realms: uniqueRealmUrls,
-      });
-    }
     if (uniqueRealmUrls.length === 0) {
-      if (isTesting()) {
-        // eslint-disable-next-line no-console
-        console.info('[realm-prefetch] no realms to prefetch');
-      }
       return;
     }
 
     if (this.bulkInfoPromise) {
-      if (isTesting()) {
-        // eslint-disable-next-line no-console
-        console.info('[realm-prefetch] awaiting existing bulk prefetch');
-      }
       await this.bulkInfoPromise;
     }
 
     let missingRealmUrls = uniqueRealmUrls.filter((realmURL) => {
       return !this.knownRealm(realmURL, { tracked: false })?.info;
     });
-    if (isTesting()) {
-      // eslint-disable-next-line no-console
-      console.info('[realm-prefetch] missing realm infos', {
-        missingCount: missingRealmUrls.length,
-        realms: missingRealmUrls,
-      });
-    }
     if (missingRealmUrls.length === 0) {
-      if (isTesting()) {
-        // eslint-disable-next-line no-console
-        console.info('[realm-prefetch] all realm infos already cached');
-      }
       return;
     }
 
     let startedAt = Date.now();
-    if (isTesting()) {
-      // eslint-disable-next-line no-console
-      console.info('[realm-prefetch] fetching realm infos', {
-        realmCount: missingRealmUrls.length,
-        realms: missingRealmUrls,
-      });
-    }
     let bulkPromise = (async () => {
       try {
         let { data, publicReadableRealms } =
@@ -758,20 +716,8 @@ export default class RealmService extends Service {
             publicReadableSet.has(realmURL),
           );
         }
-        if (isTesting()) {
-          // eslint-disable-next-line no-console
-          console.info('[realm-prefetch] fetched realm infos', {
-            receivedCount: data.length,
-            publicReadableCount: publicReadableSet.size,
-            durationMs: Date.now() - startedAt,
-          });
-        }
       } catch (error) {
         log.warn(`Failed to prefetch realm info: ${error}`);
-        if (isTesting()) {
-          // eslint-disable-next-line no-console
-          console.warn('[realm-prefetch] failed to prefetch realm infos', error);
-        }
       }
     })();
 
@@ -779,12 +725,6 @@ export default class RealmService extends Service {
     try {
       await bulkPromise;
     } finally {
-      if (isTesting()) {
-        // eslint-disable-next-line no-console
-        console.info('[realm-prefetch] bulk prefetch finished', {
-          durationMs: Date.now() - startedAt,
-        });
-      }
       if (this.bulkInfoPromise === bulkPromise) {
         this.bulkInfoPromise = undefined;
       }
