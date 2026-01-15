@@ -9,7 +9,7 @@ import {
 import type { RealmServerTokenClaim } from '../utils/jwt';
 import type { CreateRoutesArgs } from '../routes';
 import { addToCreditsLedger } from '@cardstack/billing/billing-queries';
-import { getLowCreditThreshold } from '../lib/daily-credit-grant-config';
+import { parseLowCreditThreshold } from '../lib/daily-credit-grant-config';
 
 export default function handleCreateUserRequest({
   dbAdapter,
@@ -41,6 +41,14 @@ export default function handleCreateUserRequest({
 
     let registrationToken = json.data.attributes.registrationToken;
 
+    let lowCreditThreshold: number;
+    try {
+      lowCreditThreshold = parseLowCreditThreshold();
+    } catch (error) {
+      await sendResponseForSystemError(ctxt, (error as Error).message);
+      return;
+    }
+
     let user;
 
     try {
@@ -65,15 +73,12 @@ export default function handleCreateUserRequest({
     }
 
     // Grant daily credits up to the low-credit threshold for new users.
-    let lowCreditThreshold = getLowCreditThreshold();
-    if (lowCreditThreshold != null) {
-      await addToCreditsLedger(dbAdapter, {
-        userId: user!.id,
-        creditAmount: lowCreditThreshold,
-        creditType: 'daily_credit',
-        subscriptionCycleId: null,
-      });
-    }
+    await addToCreditsLedger(dbAdapter, {
+      userId: user!.id,
+      creditAmount: lowCreditThreshold,
+      creditType: 'daily_credit',
+      subscriptionCycleId: null,
+    });
 
     await setContextResponse(ctxt, new Response('ok'));
   };
