@@ -7,14 +7,15 @@ import {
   formattedError,
   SupportedMimeType,
   type CardDocument,
+  type CardErrorJSONAPI,
   type SingleCardDocument,
   type LooseSingleCardDocument,
   type RealmInfo,
   type Loader,
 } from '@cardstack/runtime-common';
-
 import type { AtomicOperation } from '@cardstack/runtime-common/atomic-document';
 import { createAtomicDocument } from '@cardstack/runtime-common/atomic-document';
+import { validateWriteSize } from '@cardstack/runtime-common/write-size-validation';
 
 import type {
   BaseDef,
@@ -27,6 +28,7 @@ import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
 import LimitedSet from '../lib/limited-set';
 
+import type EnvironmentService from './environment-service';
 import type LoaderService from './loader-service';
 import type MessageService from './message-service';
 import type NetworkService from './network';
@@ -57,10 +59,12 @@ export default class CardService extends Service {
   @service declare private loaderService: LoaderService;
   @service declare private messageService: MessageService;
   @service declare private network: NetworkService;
+  @service declare private environmentService: EnvironmentService;
   @service declare private realm: Realm;
   @service declare private reset: ResetService;
 
   private subscriber: CardSaveSubscriber | undefined;
+  private writeErrors = new Map<string, CardErrorJSONAPI>();
   // For tracking requests during the duration of this service. Used for being able to tell when to ignore an incremental indexing realm event.
   // We want to ignore it when it is a result of our own request so that we don't reload the card and overwrite any unsaved changes made during auto save request and realm event.
   declare private loaderToCardAPILoadingCache: WeakMap<
@@ -103,6 +107,18 @@ export default class CardService extends Service {
     this.subscriber = undefined;
   }
 
+  peekWriteError(url: string): CardErrorJSONAPI | undefined {
+    return this.writeErrors.get(url);
+  }
+
+  private storeWriteError(url: string, error: CardErrorJSONAPI) {
+    this.writeErrors.set(url, error);
+  }
+
+  private clearWriteError(url: string) {
+    this.writeErrors.delete(url);
+  }
+
   async fetchJSON(
     url: string | URL,
     args?: CardServiceRequestInit,
@@ -140,22 +156,75 @@ export default class CardService extends Service {
       requestInit.method = 'POST';
       requestHeaders.set('X-HTTP-Method-Override', 'QUERY');
     }
+    let urlString = url instanceof URL ? url.href : url;
+    let method = requestInit.method?.toUpperCase?.();
+    if (
+      !isReadOperation &&
+      (method === 'POST' || method === 'PATCH') &&
+      requestInit.body
+    ) {
+      let jsonString =
+        typeof requestInit.body === 'string'
+          ? requestInit.body
+          : JSON.stringify(requestInit.body, null, 2);
+      validateWriteSize(
+        jsonString,
+        this.environmentService.maxCardWriteSizeBytes,
+        'card',
+      );
+    }
+
     let response = await this.network.authedFetch(url, requestInit);
     if (!response.ok) {
       let responseText = await response.text();
+      let parsedError: CardErrorJSONAPI | undefined;
+      try {
+        let parsed = JSON.parse(responseText);
+        let candidate = parsed?.errors?.[0];
+        if (candidate) {
+          if (typeof candidate.status === 'string') {
+            let parsedStatus = Number(candidate.status);
+            candidate.status = Number.isNaN(parsedStatus)
+              ? candidate.status
+              : parsedStatus;
+          }
+          parsedError = candidate as CardErrorJSONAPI;
+        }
+      } catch {
+        parsedError = undefined;
+      }
+      if (parsedError) {
+        if (!isReadOperation) {
+          this.storeWriteError(urlString, parsedError);
+        }
+        throw parsedError;
+      }
+
       let err = new Error(
         `status: ${response.status} -
           ${response.statusText}. ${responseText}`,
       ) as any;
-
       err.status = response.status;
       err.responseText = responseText;
       err.responseHeaders = response.headers;
-
+      if (!isReadOperation) {
+        let error = formattedError(urlString, err)?.errors?.[0];
+        if (error) {
+          this.storeWriteError(urlString, error);
+          throw error;
+        }
+      }
       throw err;
     }
     if (response.status !== 204) {
-      return await response.json();
+      let json = await response.json();
+      if (!isReadOperation) {
+        this.clearWriteError(urlString);
+      }
+      return json;
+    }
+    if (!isReadOperation) {
+      this.clearWriteError(urlString);
     }
     return;
   }
@@ -191,6 +260,11 @@ export default class CardService extends Service {
     options?: SaveSourceOptions,
   ) {
     try {
+      validateWriteSize(
+        content,
+        this.environmentService.maxCardWriteSizeBytes,
+        'file',
+      );
       let clientRequestId = options?.clientRequestId ?? `${type}:${uuidv4()}`;
       this.clientRequestIds.add(clientRequestId);
 
@@ -210,6 +284,7 @@ export default class CardService extends Service {
         console.error(errorMessage);
         throw new Error(errorMessage);
       }
+      this.clearWriteError(url.href);
       this.subscriber?.(url, content);
 
       if (options?.resetLoader) {
@@ -220,8 +295,10 @@ export default class CardService extends Service {
     } catch (e: any) {
       let error = formattedError(undefined, e)?.errors?.[0];
       if (error) {
+        this.storeWriteError(url.href, error);
         throw error;
       }
+      this.storeWriteError(url.href, e);
       throw new Error(e);
     }
   }
@@ -294,6 +371,18 @@ export default class CardService extends Service {
   }
 
   async executeAtomicOperations(operations: AtomicOperation[], realmURL: URL) {
+    let maxSizeBytes = this.environmentService.maxCardWriteSizeBytes;
+    for (let operation of operations) {
+      if (operation.data?.type === 'source') {
+        let content = operation.data.attributes?.content;
+        if (typeof content === 'string') {
+          validateWriteSize(content, maxSizeBytes, 'file');
+        }
+      } else if (operation.data?.type === 'card') {
+        let jsonString = JSON.stringify(operation.data, null, 2);
+        validateWriteSize(jsonString, maxSizeBytes, 'card');
+      }
+    }
     let doc = createAtomicDocument(operations);
     let response = await this.network.authedFetch(`${realmURL.href}_atomic`, {
       method: 'POST',

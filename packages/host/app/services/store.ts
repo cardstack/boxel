@@ -1245,6 +1245,7 @@ export default class StoreService extends Service implements StoreInterface {
   private calculateLastSavedMsg(autoSaveState: AutoSaveState) {
     let savedMessage: string | undefined;
     if (autoSaveState.lastSaveError) {
+      console.log(autoSaveState.lastSaveError);
       savedMessage = `Failed to save: ${this.getErrorMessage(
         autoSaveState.lastSaveError,
       )}`;

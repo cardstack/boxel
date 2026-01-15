@@ -104,6 +104,7 @@ export {
   type CardErrorsJSONAPI,
   isCardErrorJSONAPI,
 } from './error';
+export { validateWriteSize } from './write-size-validation';
 
 export interface ResourceObject {
   type: string;

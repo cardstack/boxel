@@ -6,6 +6,7 @@ import {
   typeIn,
   triggerKeyEvent,
   settled,
+  waitUntil,
 } from '@ember/test-helpers';
 
 import { triggerEvent } from '@ember/test-helpers';
@@ -1158,6 +1159,50 @@ module('Acceptance | interact submode tests', function (hooks) {
         .exists('linksToMany field has a linked card');
       assert.dom(withLinksSelector).hasValue('With Pet');
       await assertFocusPreserved(withLinksSelector, `With Pet${typedText}`);
+    });
+  });
+
+  module('size limit errors', function () {
+    test('edit view shows size limit error when save exceeds limit', async function (assert) {
+      let environmentService = getService('environment-service') as any;
+      let originalMaxSize = environmentService.maxCardWriteSizeBytes;
+      environmentService.maxCardWriteSizeBytes = 1000;
+
+      try {
+        await visitOperatorMode({
+          stacks: [
+            [
+              {
+                id: `${testRealmURL}Pet/mango`,
+                format: 'edit',
+              },
+            ],
+          ],
+        });
+
+        await fillIn(
+          `[data-test-stack-card="${testRealmURL}Pet/mango"] [data-test-field="name"] input`,
+          'x'.repeat(5000),
+        );
+
+        await waitUntil(() =>
+          Boolean(
+            !find(
+              `[data-test-stack-card="${testRealmURL}Pet/mango"] [data-test-auto-save-indicator]`,
+            )?.textContent?.includes('Saving'),
+          ),
+        );
+
+        assert
+          .dom(
+            `[data-test-stack-card="${testRealmURL}Pet/mango"] [data-test-auto-save-indicator]`,
+          )
+          .includesText(
+            `exceeds maximum allowed size (${environmentService.maxCardWriteSizeBytes} bytes)`,
+          );
+      } finally {
+        environmentService.maxCardWriteSizeBytes = originalMaxSize;
+      }
     });
   });
 });
