@@ -413,6 +413,13 @@ export class Realm {
   readonly paths: RealmPaths;
 
   private visibilityPromise?: Promise<RealmVisibility>;
+
+  // We are caching world readable permissions for realms such that we can avoid
+  // having to look up the realm permissions for world-read realms on every HTTP
+  // HEAD and GET request. the tradeoff is that if there is an out-of-band
+  // update to the permissions that effects world readability (e.g. directly
+  // updating the DB), that will mean we need to restart the realm server to
+  // pick up the permissions change.
   #worldReadable?: boolean;
   #worldReadablePromise?: Promise<boolean>;
 
@@ -1414,10 +1421,9 @@ export class Realm {
 
     let localPath = this.paths.local(new URL(request.url));
     let requiredPermission: RealmAction = 'read';
-    if (
-      ['_permissions'].includes(localPath) ||
-      (localPath === '_config' && request.method === 'PATCH')
-    ) {
+    if (localPath === '_permissions') {
+      requiredPermission = 'realm-owner';
+    } else if (localPath === '_config' && request.method === 'PATCH') {
       requiredPermission = 'realm-owner';
     } else if (['PUT', 'PATCH', 'POST', 'DELETE'].includes(request.method)) {
       requiredPermission = 'write';
@@ -4171,8 +4177,9 @@ export class Realm {
         let worldReadable = permissions['*']?.includes('read') ?? false;
         if (this.#worldReadable === undefined) {
           this.#worldReadable = worldReadable;
+          return worldReadable;
         }
-        return this.#worldReadable ?? worldReadable;
+        return this.#worldReadable;
       })();
     }
     return await this.#worldReadablePromise;
