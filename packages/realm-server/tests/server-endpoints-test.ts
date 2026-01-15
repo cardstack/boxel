@@ -101,6 +101,7 @@ module(basename(__filename), function () {
       let request: SuperTest<Test>;
       let dir: DirResult;
       let dbAdapter: PgAdapter;
+      let originalLowCreditThreshold: string | undefined;
 
       function onRealmSetup(args: {
         testRealm: Realm;
@@ -115,8 +116,18 @@ module(basename(__filename), function () {
       }
 
       hooks.beforeEach(async function () {
+        originalLowCreditThreshold = process.env.LOW_CREDIT_THRESHOLD;
+        process.env.LOW_CREDIT_THRESHOLD = '2000';
         dir = dirSync();
         copySync(join(__dirname, 'cards'), dir.name);
+      });
+
+      hooks.afterEach(async function () {
+        if (originalLowCreditThreshold == null) {
+          delete process.env.LOW_CREDIT_THRESHOLD;
+        } else {
+          process.env.LOW_CREDIT_THRESHOLD = originalLowCreditThreshold;
+        }
       });
 
       module('various other realm tests', function (hooks) {
