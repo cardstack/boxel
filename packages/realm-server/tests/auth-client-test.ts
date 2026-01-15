@@ -119,7 +119,7 @@ module(basename(__filename), function () {
     });
 
     test('it refreshes the jwt if it expired in the client', async function (assert) {
-      let jwtFromClient = createJWT(-1); // Expired 1 second ago
+      let jwtFromClient = createJWT('-1s'); // Expired 1 second ago
       client['_jwt'] = jwtFromClient;
       assert.notEqual(
         jwtFromClient,
