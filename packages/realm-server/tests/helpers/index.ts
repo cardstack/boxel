@@ -1,13 +1,17 @@
 import {
   writeFileSync,
   writeJSONSync,
+  readFileSync,
+  utimesSync,
   readdirSync,
   statSync,
   ensureDirSync,
-  copySync,
 } from 'fs-extra';
 import { NodeAdapter } from '../../node-realm';
-import { join } from 'path';
+import { dirname, isAbsolute, join } from 'path';
+import { createHash } from 'crypto';
+import { spawn } from 'child_process';
+import { Client } from 'pg';
 import type {
   LooseSingleCardDocument,
   RealmPermissions,
@@ -42,7 +46,7 @@ import {
   CachingDefinitionLookup,
 } from '@cardstack/runtime-common';
 import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms';
-import { dirSync, setGracefulCleanup, type DirResult } from 'tmp';
+import { dirSync, file, setGracefulCleanup, type DirResult } from 'tmp';
 import { getLocalConfig as getSynapseConfig } from '../../synapse';
 import { RealmServer } from '../../server';
 
@@ -50,6 +54,7 @@ import {
   PgAdapter,
   PgQueuePublisher,
   PgQueueRunner,
+  postgresConfig,
 } from '@cardstack/postgres';
 import type { Server } from 'http';
 import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
@@ -70,9 +75,14 @@ import type {
 import { createRemotePrerenderer } from '../../prerender/remote-prerenderer';
 import { createPrerenderHttpServer } from '../../prerender/prerender-app';
 import { buildCreatePrerenderAuth } from '../../prerender/auth';
+import { glob } from 'glob';
+import { template } from 'lodash';
 
 const testRealmURL = new URL('http://127.0.0.1:4444/');
 const testRealmHref = testRealmURL.href;
+const processStartTimeMs = Date.now();
+
+const TEMPLATE_DB_PREFIX = 'test_template';
 
 export const testRealmServerMatrixUsername = 'node-test_realm-server';
 export const testRealmServerMatrixUserId = `@${testRealmServerMatrixUsername}:localhost`;
@@ -128,6 +138,221 @@ export const testRealmInfo = {
   publishable: null,
   lastPublishedAt: null,
 };
+
+export function buildCardFileSystem(entries: string[]): Record<string, string> {
+  let cardsDir = join(__dirname, '..', 'cards');
+  let fileSystem: Record<string, string> = {};
+
+  for (let entry of entries) {
+    let normalized = entry.replace(/^\.\//, '');
+    if (isAbsolute(entry) || normalized.split('/').includes('..')) {
+      throw new Error(`Card entry must be within ../cards: ${entry}`);
+    }
+
+    let matches: string[] = [];
+    let fullPath = join(cardsDir, normalized);
+
+    try {
+      let stats = statSync(fullPath);
+      if (stats.isDirectory()) {
+        matches = glob.sync(`${normalized}/**/*`, {
+          cwd: cardsDir,
+          nodir: true,
+          dot: true,
+        });
+      } else {
+        matches = [normalized];
+      }
+    } catch {
+      matches = glob.sync(normalized, { cwd: cardsDir, dot: true });
+    }
+
+    if (matches.length === 0) {
+      throw new Error(`No card files matched: ${entry}`);
+    }
+
+    for (let match of matches) {
+      let matchPath = join(cardsDir, match);
+      let stats = statSync(matchPath);
+      if (stats.isDirectory()) {
+        let nestedMatches = glob.sync(`${match}/**/*`, {
+          cwd: cardsDir,
+          nodir: true,
+          dot: true,
+        });
+        for (let nested of nestedMatches) {
+          if (!fileSystem[nested]) {
+            fileSystem[nested] = readFileSync(join(cardsDir, nested), 'utf8');
+          }
+        }
+      } else if (!fileSystem[match]) {
+        fileSystem[match] = readFileSync(matchPath, 'utf8');
+      }
+    }
+  }
+
+  return fileSystem;
+}
+
+function stableStringify(value: unknown): string {
+  let seen = new WeakSet();
+  return JSON.stringify(value, (_key, val) => {
+    if (val && typeof val === 'object' && !Array.isArray(val)) {
+      if (seen.has(val)) {
+        return '[Circular]';
+      }
+      seen.add(val);
+      let sorted: Record<string, unknown> = {};
+      for (let key of Object.keys(val).sort()) {
+        sorted[key] = (val as Record<string, unknown>)[key];
+      }
+      return sorted;
+    }
+    return val;
+  });
+}
+
+function safeDbName(name: string): string {
+  if (!/^[a-zA-Z0-9_]+$/.test(name)) {
+    throw new Error(`Unsafe database name: ${name}`);
+  }
+  return name;
+}
+
+function adminDbConfig() {
+  let config = postgresConfig();
+  return { ...config, database: 'postgres' };
+}
+
+async function runCommand(
+  command: string,
+  args: string[],
+  env: NodeJS.ProcessEnv,
+): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    let stderr = '';
+    let child = spawn(command, args, { env });
+    child.stderr?.on('data', (data) => {
+      stderr += data.toString();
+    });
+    child.on('error', reject);
+    child.on('close', (code) => {
+      if (code === 0) {
+        resolve();
+      } else {
+        reject(new Error(`${command} exited with code ${code}: ${stderr}`));
+      }
+    });
+  });
+}
+
+async function createTemplateDb(options: {
+  sourceDbName: string;
+  templateDbName: string;
+}): Promise<void> {
+  let client = new Client(adminDbConfig());
+  let dumpPath = `/tmp/${options.templateDbName}.dump`;
+  await client.connect();
+  try {
+    let existing = await client.query(
+      'SELECT 1 FROM pg_database WHERE datname = $1',
+      [options.templateDbName],
+    );
+    if (existing.rowCount > 0) {
+      return;
+    }
+
+    let templateDbName = safeDbName(options.templateDbName);
+    let sourceDbName = safeDbName(options.sourceDbName);
+    await client.query(`CREATE DATABASE ${templateDbName}`);
+
+    await runCommand(
+      'docker',
+      [
+        'exec',
+        'boxel-pg',
+        'pg_dump',
+        '--format=custom',
+        '--file',
+        dumpPath,
+        '--username',
+        'postgres',
+        sourceDbName,
+      ],
+      process.env,
+    );
+
+    await runCommand(
+      'docker',
+      [
+        'exec',
+        'boxel-pg',
+        'pg_restore',
+        '--no-owner',
+        '--no-privileges',
+        '--username',
+        'postgres',
+        '--dbname',
+        templateDbName,
+        dumpPath,
+      ],
+      process.env,
+    );
+
+    await client.query(`ALTER DATABASE ${templateDbName} IS_TEMPLATE true`);
+    await client.query(
+      `ALTER DATABASE ${templateDbName} WITH ALLOW_CONNECTIONS false`,
+    );
+  } finally {
+    try {
+      await runCommand(
+        'docker',
+        ['exec', 'boxel-pg', 'rm', '-f', dumpPath],
+        process.env,
+      );
+    } catch {
+      // ignore cleanup failures
+    }
+    await client.end();
+  }
+}
+
+async function restoreDbFromTemplate(options: {
+  targetDbName: string;
+  templateDbName: string;
+}): Promise<boolean> {
+  let client = new Client(adminDbConfig());
+  await client.connect();
+  try {
+    let existing = await client.query(
+      'SELECT 1 FROM pg_database WHERE datname = $1',
+      [options.templateDbName],
+    );
+    if (existing.rowCount === 0) {
+      return false;
+    }
+
+    let templateDbName = safeDbName(options.templateDbName);
+    let targetDbName = safeDbName(options.targetDbName);
+    await client.query(
+      `CREATE DATABASE ${targetDbName} WITH TEMPLATE ${templateDbName}`,
+    );
+    return true;
+  } finally {
+    await client.end();
+  }
+}
+
+async function dropTestDb(dbName: string): Promise<void> {
+  let client = new Client(adminDbConfig());
+  await client.connect();
+  try {
+    let safeName = safeDbName(dbName);
+    await client.query(`DROP DATABASE IF EXISTS ${safeName} WITH (FORCE)`);
+  } finally {
+    await client.end();
+  }
+}
 
 export const realmServerTestMatrix: MatrixConfig = {
   url: matrixURL,
@@ -256,6 +481,7 @@ async function startTestPrerenderServer(): Promise<string> {
   }
   let server = createPrerenderHttpServer({
     silent: Boolean(process.env.SILENT_PRERENDERER),
+    maxPages: 1,
   });
   prerenderServer = server;
   trackServer(server);
@@ -308,6 +534,7 @@ export function setupDB(
     beforeEach?: BeforeAfterCallback;
     afterEach?: BeforeAfterCallback;
   } = {},
+  templateDbName?: string,
 ) {
   let dbAdapter: PgAdapter;
   let publisher: QueuePublisher;
@@ -315,6 +542,27 @@ export function setupDB(
 
   const runBeforeHook = async () => {
     prepareTestDB();
+    if (templateDbName) {
+      let targetDbName =
+        process.env.PGDATABASE ??
+        `test_db_${Math.floor(10000000 * Math.random())}`;
+      try {
+        let restored = await restoreDbFromTemplate({
+          targetDbName,
+          templateDbName,
+        });
+        if (!restored) {
+          console.warn(
+            `[template-db] template not found: ${templateDbName}, continuing without restore`,
+          );
+        }
+      } catch (error) {
+        console.warn(
+          `[template-db] failed to restore from ${templateDbName}, continuing without restore`,
+          error,
+        );
+      }
+    }
     dbAdapter = new PgAdapter({ autoMigrate: true });
     trackedDbAdapters.add(dbAdapter);
     publisher = new PgQueuePublisher(dbAdapter);
@@ -338,6 +586,17 @@ export function setupDB(
     await dbAdapter?.close();
     if (dbAdapter) {
       trackedDbAdapters.delete(dbAdapter);
+    }
+
+    if (process.env.PGDATABASE) {
+      try {
+        await dropTestDb(process.env.PGDATABASE);
+      } catch (error) {
+        console.warn(
+          `[test-setup] failed to drop test db ${process.env.PGDATABASE}`,
+          error,
+        );
+      }
     }
     await stopTestPrerenderServer();
   };
@@ -420,11 +679,17 @@ export async function createRealm({
   await insertPermissions(dbAdapter, new URL(realmURL), permissions);
 
   for (let [filename, contents] of Object.entries(fileSystem)) {
+    let fullPath = join(dir, filename);
+    ensureDirSync(dirname(fullPath));
+
     if (typeof contents === 'string') {
-      writeFileSync(join(dir, filename), contents);
+      writeFileSync(fullPath, contents);
     } else {
-      writeJSONSync(join(dir, filename), contents);
+      writeJSONSync(fullPath, contents);
     }
+
+    let mtime = new Date(processStartTimeMs);
+    utimesSync(fullPath, mtime, mtime);
   }
 
   let adapter = new NodeAdapter(dir, enableFileWatcher);
@@ -1102,33 +1367,56 @@ export function setupPermissionedRealm(
     published?: boolean;
   },
 ) {
+  if (!fileSystem) {
+    fileSystem = buildCardFileSystem(['**/*']);
+  }
   let testRealmServer: Awaited<ReturnType<typeof runTestRealmServer>>;
+  let resolvedRealmURL = realmURL ?? testRealmURL;
 
   setGracefulCleanup();
 
-  setupDB(hooks, {
-    [mode]: async (
-      dbAdapter: PgAdapter,
-      publisher: QueuePublisher,
-      runner: QueueRunner,
-    ) => {
-      let resolvedRealmURL = realmURL ?? testRealmURL;
-      let dir = dirSync();
+  let templateDbName = undefined;
+  // Only create a template DB for non-published realms
+  // based on their permissions and filesystem
+  if (!published) {
+    let hash = createHash('sha256')
+      .update(
+        stableStringify({
+          permissions,
+          fileSystem,
+          published,
+          resolvedRealmURL: resolvedRealmURL.href,
+        }),
+      )
+      .digest('hex')
+      .slice(0, 16);
+    templateDbName = `${TEMPLATE_DB_PREFIX}_${hash}_${process.pid}`;
+  }
 
-      let testRealmDir;
+  setupDB(
+    hooks,
+    {
+      [mode]: async (
+        dbAdapter: PgAdapter,
+        publisher: QueuePublisher,
+        runner: QueueRunner,
+      ) => {
+        let dir = dirSync();
 
-      if (published) {
-        let publishedRealmId = uuidv4();
+        let testRealmDir;
 
-        testRealmDir = join(
-          dir.name,
-          'realm_server_1',
-          PUBLISHED_DIRECTORY_NAME,
-          publishedRealmId,
-        );
+        if (published) {
+          let publishedRealmId = uuidv4();
 
-        dbAdapter.execute(
-          `INSERT INTO
+          testRealmDir = join(
+            dir.name,
+            'realm_server_1',
+            PUBLISHED_DIRECTORY_NAME,
+            publishedRealmId,
+          );
+
+          dbAdapter.execute(
+            `INSERT INTO
             published_realms
             (id, owner_username, source_realm_url, published_realm_url)
             VALUES
@@ -1138,47 +1426,58 @@ export function setupPermissionedRealm(
               'http://example.localhost/source',
               '${resolvedRealmURL.href}'
             )`,
-        );
-      } else {
-        testRealmDir = join(dir.name, 'realm_server_1', 'test');
-      }
+          );
+        } else {
+          testRealmDir = join(dir.name, 'realm_server_1', 'test');
+        }
 
-      ensureDirSync(testRealmDir);
+        ensureDirSync(testRealmDir);
 
-      // If a fileSystem is provided, use it to populate the test realm, otherwise copy the default cards
-      if (!fileSystem) {
-        copySync(join(__dirname, '..', 'cards'), testRealmDir);
-      }
+        let virtualNetwork = createVirtualNetwork();
 
-      let virtualNetwork = createVirtualNetwork();
+        testRealmServer = await runTestRealmServer({
+          virtualNetwork,
+          testRealmDir,
+          realmsRootPath: join(dir.name, 'realm_server_1'),
+          realmURL: resolvedRealmURL,
+          permissions,
+          dbAdapter,
+          runner,
+          publisher,
+          matrixURL,
+          fileSystem,
+          enableFileWatcher: subscribeToRealmEvents,
+        });
+        if (templateDbName) {
+          try {
+            let sourceDbName =
+              process.env.PGDATABASE ??
+              dbAdapter.url.split('/').pop() ??
+              'boxel';
+            await createTemplateDb({
+              sourceDbName,
+              templateDbName,
+            });
+          } catch (error) {
+            console.warn('[template-db] failed to create template', error);
+          }
+        }
 
-      testRealmServer = await runTestRealmServer({
-        virtualNetwork,
-        testRealmDir,
-        realmsRootPath: join(dir.name, 'realm_server_1'),
-        realmURL: resolvedRealmURL,
-        permissions,
-        dbAdapter,
-        runner,
-        publisher,
-        matrixURL,
-        fileSystem,
-        enableFileWatcher: subscribeToRealmEvents,
-      });
+        let request = supertest(testRealmServer.testRealmHttpServer);
 
-      let request = supertest(testRealmServer.testRealmHttpServer);
-
-      onRealmSetup?.({
-        dbAdapter,
-        testRealm: testRealmServer.testRealm,
-        testRealmPath: testRealmServer.testRealmDir,
-        testRealmHttpServer: testRealmServer.testRealmHttpServer,
-        testRealmAdapter: testRealmServer.testRealmAdapter,
-        request,
-        dir,
-      });
+        onRealmSetup?.({
+          dbAdapter,
+          testRealm: testRealmServer.testRealm,
+          testRealmPath: testRealmServer.testRealmDir,
+          testRealmHttpServer: testRealmServer.testRealmHttpServer,
+          testRealmAdapter: testRealmServer.testRealmAdapter,
+          request,
+          dir,
+        });
+      },
     },
-  });
+    templateDbName,
+  );
 
   hooks[mode === 'beforeEach' ? 'afterEach' : 'after'](async function () {
     testRealmServer.testRealm.unsubscribe();

@@ -19,18 +19,49 @@ function getCiTestModules(yamlFilePath: string) {
     const yamlContent = readFileSync(yamlFilePath, 'utf8');
     const yamlData = yaml.load(yamlContent) as Record<string, any>;
 
-    const shardIndexes: string[] =
-      yamlData?.jobs?.['realm-server-test']?.strategy?.matrix?.testModule;
+    const matrix = yamlData?.jobs?.['realm-server-test']?.strategy?.matrix;
+    const testModules = matrix?.testModule;
 
-    if (!Array.isArray(shardIndexes)) {
+    if (Array.isArray(testModules)) {
+      return testModules;
+    }
+
+    const include = matrix?.include;
+    if (!Array.isArray(include)) {
       throw new Error(
-        `Invalid 'jobs.realm-server-test.strategy.matrix.testModule' format in the YAML file.`,
+        `Invalid 'jobs.realm-server-test.strategy.matrix' format in the YAML file.`,
       );
     }
 
-    return shardIndexes;
+    const modules = new Set<string>();
+    const invalidEntries: number[] = [];
+    include.forEach((entry: Record<string, any>, index: number) => {
+      const entryModules = entry?.testModules;
+      if (Array.isArray(entryModules)) {
+        entryModules.forEach((moduleName: string) => modules.add(moduleName));
+        return;
+      }
+      if (typeof entryModules === 'string') {
+        entryModules
+          .split(/[,\s]+/)
+          .filter(Boolean)
+          .forEach((moduleName) => modules.add(moduleName));
+        return;
+      }
+      invalidEntries.push(index);
+    });
+
+    if (invalidEntries.length > 0) {
+      throw new Error(
+        `Invalid 'jobs.realm-server-test.strategy.matrix.include[*].testModules' entries at indexes: ${invalidEntries.join(', ')}`,
+      );
+    }
+
+    return Array.from(modules);
   } catch (error: any) {
-    console.error(`Error reading shardIndex from YAML file: ${error.message}`);
+    console.error(
+      `Error reading test modules from YAML file: ${error.message}`,
+    );
     process.exit(1);
   }
 }

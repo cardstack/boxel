@@ -88,7 +88,7 @@
     "start:smtp": "cd ../matrix && pnpm assert-smtp-running",
     "start:pg": "./scripts/start-pg.sh",
     "stop:pg": "./scripts/stop-pg.sh",
-    "test:wait-for-servers": "WAIT_ON_TIMEOUT=900000 NODE_NO_WARNINGS=1 start-server-and-test 'pnpm run wait' 'http-get://localhost:4201/base/_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson' 'pnpm run wait' 'http-get://localhost:4202/node-test/_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson|http://localhost:8008|http://localhost:5001' 'test-module'",
+    "test:wait-for-servers": "WAIT_ON_TIMEOUT=900000 NODE_NO_WARNINGS=1 start-server-and-test 'pnpm run wait' 'http-get://localhost:4201/base/_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson' 'pnpm run wait' 'http-get://localhost:4202/node-test/_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson|http://localhost:8008|http://localhost:5001' 'test'",
     "setup:base-in-deployment": "mkdir -p /persistent/base && rsync --dry-run --itemize-changes --checksum --recursive --delete ../base/. /persistent/base/ && rsync --checksum --recursive --delete ../base/. /persistent/base/",
     "setup:experiments-in-deployment": "mkdir -p /persistent/experiments && rsync --dry-run --itemize-changes --checksum --recursive ../experiments-realm/. /persistent/experiments/ && rsync --checksum --recursive ../experiments-realm/. /persistent/experiments/",
     "setup:catalog-in-deployment": "mkdir -p /persistent/catalog && rsync --dry-run --itemize-changes --checksum --recursive --delete ../catalog-realm/. /persistent/catalog/ && rsync --checksum --recursive --delete ../catalog-realm/. /persistent/catalog/",
