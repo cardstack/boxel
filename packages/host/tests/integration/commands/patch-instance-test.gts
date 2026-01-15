@@ -77,52 +77,22 @@ module('Integration | commands | patch-instance', function (hooks) {
     );
     let url = new URL(`${testRealmURL}Person/hassan`);
     let saves = 0;
-    getService('network').mount(
-      async (req) => {
-        if (req.url.includes('_info')) {
-          // eslint-disable-next-line no-console
-          console.info(`[patch-instance] _info ${req.method} ${req.url}`);
-        }
-        if (
-          req.url.includes('/Person/hassan') &&
-          ['POST', 'PATCH'].includes(req.method)
-        ) {
-          // eslint-disable-next-line no-console
-          console.info(`[patch-instance] save ${req.method} ${req.url}`);
-        }
-      },
-      { prepend: true },
-    );
     this.onSave((saveURL) => {
       if (saveURL.href === url.href) {
         saves++;
-        // eslint-disable-next-line no-console
-        console.info(`[patch-instance] onSave ${saveURL.href} count=${saves}`);
       }
     });
 
-    try {
-      await patchInstanceCommand.execute({
-        cardId: `${testRealmURL}Person/hassan`,
-        patch: {
-          attributes: {
-            name: 'Paper',
-          },
+    await patchInstanceCommand.execute({
+      cardId: `${testRealmURL}Person/hassan`,
+      patch: {
+        attributes: {
+          name: 'Paper',
         },
-      });
-    } catch (error) {
-      // eslint-disable-next-line no-console
-      console.info('[patch-instance] execute failed', error);
-      throw error;
-    }
+      },
+    });
 
-    try {
-      await waitUntil(() => saves > 0);
-    } catch (error) {
-      // eslint-disable-next-line no-console
-      console.info(`[patch-instance] waitUntil timed out, saves=${saves}`);
-      throw error;
-    }
+    await waitUntil(() => saves > 0);
 
     let result = await indexQuery.instance(url);
     assert.ok(result, 'instance query returned a result');

@@ -720,15 +720,16 @@ module(
               req.url.startsWith(testRealm2URL) &&
               ['POST', 'PATCH'].includes(req.method);
             if (shouldAssertAuth) {
-            let token = req.headers.get('Authorization');
-            assert.notStrictEqual(token, null);
+              let token = req.headers.get('Authorization');
+              assert.notStrictEqual(token, null);
 
-            let claims = claimsFromRawToken(token!);
-            assert.deepEqual(claims.user, '@testuser:localhost');
-            assert.strictEqual(claims.realm, 'http://test-realm/test2/');
+              let claims = claimsFromRawToken(token!);
+              assert.deepEqual(claims.user, '@testuser:localhost');
+              assert.strictEqual(claims.realm, 'http://test-realm/test2/');
               assert.deepEqual(claims.permissions, ['read', 'write']);
               didAssertAuth = true;
             }
+            return null;
           },
           { prepend: true },
         );
