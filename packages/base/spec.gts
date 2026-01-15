@@ -219,8 +219,10 @@ class Isolated extends Component<typeof Spec> {
       </section>
       <section class='examples section'>
         <header class='row-header' aria-labelledby='examples'>
-          <LayersSubtract width='20' height='20' role='presentation' />
-          <h2 id='examples'>Examples</h2>
+          <div class='row-header-left'>
+            <LayersSubtract width='20' height='20' role='presentation' />
+            <h2 id='examples'>Examples</h2>
+          </div>
         </header>
         {{#if (eq @model.specType 'field')}}
           {{#if this.isPrimitiveField}}
@@ -239,8 +241,10 @@ class Isolated extends Component<typeof Spec> {
       </section>
       <section class='module section'>
         <header class='row-header' aria-labelledby='module'>
-          <GitBranch width='20' height='20' role='presentation' />
-          <h2 id='module'>Module</h2>
+          <div class='row-header-left'>
+            <GitBranch width='20' height='20' role='presentation' />
+            <h2 id='module'>Module</h2>
+          </div>
         </header>
         <div class='code-ref-container'>
           <FieldContainer
@@ -715,7 +719,6 @@ class Edit extends Component<typeof Spec> {
       .row-header {
         display: flex;
         align-items: center;
-        justify-content: space-between;
         gap: var(--boxel-sp-xs);
         padding-bottom: var(--boxel-sp-lg);
       }
