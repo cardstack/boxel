@@ -15,7 +15,7 @@ import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms';
 
 module(`realm-endpoints/${basename(__filename)}`, function () {
-  module('Realm-specific Endpoints | GET _info', function (hooks) {
+  module('Realm-specific Endpoints | QUERY _info', function (hooks) {
     let realmURL = new URL('http://127.0.0.1:4444/test/');
     let testRealm: Realm;
     let testRealmHttpServer: Server;
@@ -56,7 +56,8 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
       test('serves the request', async function (assert) {
         let infoPath = new URL('_info', realmURL).pathname;
         let response = await request
-          .get(infoPath)
+          .post(infoPath)
+          .set('X-HTTP-Method-Override', 'QUERY')
           .set('Accept', 'application/vnd.api+json');
 
         assert.strictEqual(response.status, 200, 'HTTP 200 status');
@@ -100,7 +101,8 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
       test('401 with invalid JWT', async function (assert) {
         let infoPath = new URL('_info', realmURL).pathname;
         let response = await request
-          .get(infoPath)
+          .post(infoPath)
+          .set('X-HTTP-Method-Override', 'QUERY')
           .set('Accept', 'application/vnd.api+json');
 
         assert.strictEqual(response.status, 401, 'HTTP 401 status');
@@ -109,7 +111,8 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
       test('401 without a JWT', async function (assert) {
         let infoPath = new URL('_info', realmURL).pathname;
         let response = await request
-          .get(infoPath)
+          .post(infoPath)
+          .set('X-HTTP-Method-Override', 'QUERY')
           .set('Accept', 'application/vnd.api+json'); // no Authorization header
 
         assert.strictEqual(response.status, 401, 'HTTP 401 status');
@@ -118,7 +121,8 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
       test('403 without permission', async function (assert) {
         let infoPath = new URL('_info', realmURL).pathname;
         let response = await request
-          .get(infoPath)
+          .post(infoPath)
+          .set('X-HTTP-Method-Override', 'QUERY')
           .set('Accept', 'application/vnd.api+json')
           .set('Authorization', `Bearer ${createJWT(testRealm, 'not-john')}`);
 
@@ -128,7 +132,8 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
       test('200 with permission', async function (assert) {
         let infoPath = new URL('_info', realmURL).pathname;
         let response = await request
-          .get(infoPath)
+          .post(infoPath)
+          .set('X-HTTP-Method-Override', 'QUERY')
           .set('Accept', 'application/vnd.api+json')
           .set(
             'Authorization',
@@ -169,7 +174,8 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
         test('200 with permission', async function (assert) {
           let infoPath = new URL('_info', realmURL).pathname;
           let response = await request
-            .get(infoPath)
+            .post(infoPath)
+            .set('X-HTTP-Method-Override', 'QUERY')
             .set('Accept', 'application/vnd.api+json')
             .set(
               'Authorization',
@@ -211,7 +217,8 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
       test('200 with permission', async function (assert) {
         let infoPath = new URL('_info', realmURL).pathname;
         let response = await request
-          .get(infoPath)
+          .post(infoPath)
+          .set('X-HTTP-Method-Override', 'QUERY')
           .set('Accept', 'application/vnd.api+json')
           .set(
             'Authorization',

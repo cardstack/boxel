@@ -3,10 +3,7 @@ import type { Test, SuperTest } from 'supertest';
 import { basename } from 'path';
 import type { Realm } from '@cardstack/runtime-common';
 import { setupPermissionedRealm, createJWT } from './helpers';
-import {
-  buildQueryParamValue,
-  PRERENDERED_HTML_FORMATS,
-} from '@cardstack/runtime-common';
+import { PRERENDERED_HTML_FORMATS } from '@cardstack/runtime-common';
 import type { Query } from '@cardstack/runtime-common/query';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 

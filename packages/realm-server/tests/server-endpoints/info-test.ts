@@ -102,7 +102,7 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
       },
     });
 
-    test('GET /_info federates info across realms and includes public list header', async function (assert) {
+    test('QUERY /_info federates info across realms and includes public list header', async function (assert) {
       await insertUser(dbAdapter, ownerUserId, 'stripe-test-user', null);
 
       let realmServerToken = createRealmServerJWT(
@@ -110,14 +110,12 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
         realmSecretSeed,
       );
 
-      let infoURL = new URL('/_info', testRealm.url);
-      infoURL.searchParams.append('realms', testRealm.url);
-      infoURL.searchParams.append('realms', secondaryRealm.url);
-
       let response = await request
-        .get(`${infoURL.pathname}${infoURL.search}`)
+        .post('/_info')
+        .set('X-HTTP-Method-Override', 'QUERY')
         .set('Accept', 'application/vnd.api+json')
-        .set('Authorization', `Bearer ${realmServerToken}`);
+        .set('Authorization', `Bearer ${realmServerToken}`)
+        .send({ realms: [testRealm.url, secondaryRealm.url] });
 
       assert.strictEqual(response.status, 200, 'HTTP 200 status');
       let { data } = response.body as {
@@ -149,20 +147,18 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
       );
     });
 
-    test('GET /_info returns 403 when user lacks read access', async function (assert) {
+    test('QUERY /_info returns 403 when user lacks read access', async function (assert) {
       let realmServerToken = createRealmServerJWT(
         { user: '@rando:localhost', sessionRoom: 'session-room-test' },
         realmSecretSeed,
       );
 
-      let infoURL = new URL('/_info', testRealm.url);
-      infoURL.searchParams.append('realms', testRealm.url);
-      infoURL.searchParams.append('realms', secondaryRealm.url);
-
       let response = await request
-        .get(`${infoURL.pathname}${infoURL.search}`)
+        .post('/_info')
+        .set('X-HTTP-Method-Override', 'QUERY')
         .set('Accept', 'application/vnd.api+json')
-        .set('Authorization', `Bearer ${realmServerToken}`);
+        .set('Authorization', `Bearer ${realmServerToken}`)
+        .send({ realms: [testRealm.url, secondaryRealm.url] });
 
       assert.strictEqual(response.status, 403, 'HTTP 403 status');
       assert.ok(
@@ -171,13 +167,12 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
       );
     });
 
-    test('GET /_info returns 401 when unauthenticated user requests non-public realm', async function (assert) {
-      let infoURL = new URL('/_info', testRealm.url);
-      infoURL.searchParams.append('realms', secondaryRealm.url);
-
+    test('QUERY /_info returns 401 when unauthenticated user requests non-public realm', async function (assert) {
       let response = await request
-        .get(`${infoURL.pathname}${infoURL.search}`)
-        .set('Accept', 'application/vnd.api+json');
+        .post('/_info')
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .set('Accept', 'application/vnd.api+json')
+        .send({ realms: [secondaryRealm.url] });
 
       assert.strictEqual(response.status, 401, 'HTTP 401 status');
       assert.ok(
@@ -186,17 +181,19 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
       );
     });
 
-    test('GET /_info returns 400 when realms param is missing', async function (assert) {
+    test('QUERY /_info returns 400 when realms are missing', async function (assert) {
       let response = await request
-        .get('/_info')
-        .set('Accept', 'application/vnd.api+json');
+        .post('/_info')
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .set('Accept', 'application/vnd.api+json')
+        .send({});
 
       assert.strictEqual(response.status, 400, 'HTTP 400 status');
       assert.ok(
         response.body.errors?.[0]?.includes(
-          'realms query param must be supplied',
+          'realms must be supplied in request body',
         ),
-        'response explains missing realms query param',
+        'response explains missing realms list',
       );
     });
   });

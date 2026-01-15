@@ -253,7 +253,8 @@ module(basename(__filename), function () {
 
     test('can set response Cache-Control header for json api request', async function (assert) {
       let response = await request
-        .get(`/_info`)
+        .post(`/_info`)
+        .set('X-HTTP-Method-Override', 'QUERY')
         .set('Accept', SupportedMimeType.JSONAPI)
         .set(
           'Authorization',

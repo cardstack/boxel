@@ -299,6 +299,7 @@ class RealmResource {
       let response: Response;
       try {
         response = await this.network.authedFetch(`${this.realmURL}_info`, {
+          method: 'QUERY',
           headers,
         });
       } catch (error) {

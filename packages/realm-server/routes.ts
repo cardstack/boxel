@@ -133,7 +133,7 @@ export function createRoutes(args: CreateRoutesArgs) {
     }),
   );
   router.all('/_search', multiRealmAuthorization(args), handleSearch());
-  router.get(
+  router.all(
     '/_info',
     multiRealmAuthorization(args),
     handleRealmInfo({ dbAdapter: args.dbAdapter }),

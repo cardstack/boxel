@@ -520,6 +520,7 @@ export class Realm {
 
     this.#router = new Router(new URL(url))
       .get('/_info', SupportedMimeType.RealmInfo, this.realmInfo.bind(this))
+      .query('/_info', SupportedMimeType.RealmInfo, this.realmInfo.bind(this))
       .patch(
         '/_config',
         SupportedMimeType.JSON,
@@ -3345,6 +3346,7 @@ export class Realm {
       try {
         let infoURL = new URL('_info', realmUrl);
         let response = await this.__fetchForTesting(infoURL, {
+          method: 'QUERY',
           headers: { Accept: SupportedMimeType.RealmInfo },
         });
         if (!response.ok) {

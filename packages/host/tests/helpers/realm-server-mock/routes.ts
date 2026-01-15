@@ -152,23 +152,30 @@ function registerSearchRoutes() {
 function registerInfoRoutes() {
   registerRealmServerRoute({
     path: '/_info',
-    handler: async (_req, url) => {
-      let realmList = parseRealmsParam(url);
+    handler: async (req) => {
+      let payload;
+      try {
+        payload = await parseSearchRequestPayload(req.clone());
+      } catch (e) {
+        if (e instanceof SearchRequestError) {
+          return buildSearchErrorResponse(e.message);
+        }
+        throw e;
+      }
+
+      let realmList: string[];
+      try {
+        realmList = parseRealmsFromPayload(payload);
+      } catch (e) {
+        if (e instanceof SearchRequestError) {
+          return buildSearchErrorResponse(e.message);
+        }
+        throw e;
+      }
+
       console.info(
         `[realm-server-mock] _info request ${JSON.stringify(realmList)}`,
       );
-
-      if (realmList.length === 0) {
-        return new Response(
-          JSON.stringify({
-            errors: ['realms query param must be supplied'],
-          }),
-          {
-            status: 400,
-            headers: { 'content-type': SupportedMimeType.JSONAPI },
-          },
-        );
-      }
 
       let data: { id: string; type: 'realm-info'; attributes: RealmInfo }[] =
         [];
@@ -387,6 +394,7 @@ async function getRealmInfoForURL(realmURL: string): Promise<RealmInfo | null> {
   );
   try {
     let response = await globalThis.fetch(`${resolvedRealmURL}_info`, {
+      method: 'QUERY',
       headers: { Accept: SupportedMimeType.RealmInfo },
     });
     if (!response.ok) {

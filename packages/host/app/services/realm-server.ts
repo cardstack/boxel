@@ -434,15 +434,14 @@ export default class RealmServerService extends Service {
     await this.login();
 
     let infoURL = new URL('_info', realmServerURL);
-    for (let realmURL of uniqueRealmUrls) {
-      infoURL.searchParams.append('realms', realmURL);
-    }
 
     let response = await this.authedFetch(infoURL.href, {
-      method: 'GET',
+      method: 'QUERY',
       headers: {
         Accept: SupportedMimeType.RealmInfo,
+        'Content-Type': 'application/json',
       },
+      body: JSON.stringify({ realms: uniqueRealmUrls }),
     });
 
     if (!response.ok) {
