@@ -7,6 +7,7 @@ import {
   linksTo,
   linksToMany,
 } from 'https://cardstack.com/base/card-api';
+import { gt } from '@cardstack/boxel-ui/helpers';
 import { FileDef } from 'https://cardstack.com/base/file-api';
 
 /**
@@ -44,18 +45,8 @@ export class FileLinksExample extends CardDef {
         <section class='primary-document'>
           <h2>Primary Document</h2>
           {{#if @model.primaryDocument}}
-            <div class='file-card'>
-              <span class='file-name'>{{@model.primaryDocument.name}}</span>
-              <span
-                class='file-type'
-              >{{@model.primaryDocument.contentType}}</span>
-              {{#if @model.primaryDocument.url}}
-                <a
-                  href={{@model.primaryDocument.url}}
-                  target='_blank'
-                  rel='noopener noreferrer'
-                >View File</a>
-              {{/if}}
+            <div class='primary-document-card'>
+              <@fields.primaryDocument @format='embedded' />
             </div>
           {{else}}
             <p class='empty-state'>No primary document linked</p>
@@ -64,22 +55,10 @@ export class FileLinksExample extends CardDef {
 
         <section class='attachments'>
           <h2>Attachments ({{@model.attachments.length}})</h2>
-          {{#if @model.attachments.length}}
-            <ul class='attachments-list'>
-              {{#each @model.attachments as |attachment|}}
-                <li class='file-card'>
-                  <span class='file-name'>{{attachment.name}}</span>
-                  <span class='file-type'>{{attachment.contentType}}</span>
-                  {{#if attachment.url}}
-                    <a
-                      href={{attachment.url}}
-                      target='_blank'
-                      rel='noopener noreferrer'
-                    >View</a>
-                  {{/if}}
-                </li>
-              {{/each}}
-            </ul>
+          {{#if (gt @model.attachments.length 0)}}
+            <div class='attachments-list'>
+              <@fields.attachments @format='embedded' />
+            </div>
           {{else}}
             <p class='empty-state'>No attachments linked</p>
           {{/if}}
@@ -110,30 +89,17 @@ export class FileLinksExample extends CardDef {
         section {
           margin-bottom: var(--boxel-sp-lg);
         }
-        .file-card {
+        .attachments-list {
           display: flex;
-          align-items: center;
-          gap: var(--boxel-sp-sm);
+          flex-direction: column;
+          gap: var(--boxel-sp);
+        }
+        .primary-document-card > :deep(.linksTo-field),
+        .attachments-list > :deep(.linksToMany-field) {
           padding: var(--boxel-sp-sm);
           background: var(--boxel-light);
           border: 1px solid var(--boxel-200);
           border-radius: var(--boxel-radius-sm);
-        }
-        .file-name {
-          font-weight: 500;
-          flex: 1;
-        }
-        .file-type {
-          font-size: var(--boxel-font-xs);
-          color: var(--boxel-500);
-        }
-        .attachments-list {
-          list-style: none;
-          padding: 0;
-          margin: 0;
-          display: flex;
-          flex-direction: column;
-          gap: var(--boxel-sp-xs);
         }
         .empty-state {
           color: var(--boxel-400);
