@@ -2,14 +2,9 @@ import { module, test } from 'qunit';
 import type { Test, SuperTest } from 'supertest';
 import { basename } from 'path';
 import type { Realm } from '@cardstack/runtime-common';
-import { stringify } from 'qs';
 import type { Query } from '@cardstack/runtime-common/query';
 import { setupPermissionedRealm, createJWT } from '../helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
-
-function buildQueryParam(query: Query) {
-  return encodeURIComponent(stringify(query, { encode: false }));
-}
 
 module(`realm-endpoints/${basename(__filename)}`, function () {
   module('Realm-specific Endpoints | _search', function () {
@@ -44,7 +39,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
       };
     }
 
-    module('GET request', function (_hooks) {
+    module('QUERY request (public realm)', function (_hooks) {
       let query = () => buildPersonQuery('Mango');
 
       module('public readable realm', function (hooks) {
@@ -56,10 +51,12 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
           onRealmSetup,
         });
 
-        test('serves a /_search GET request', async function (assert) {
+        test('serves a /_search QUERY request', async function (assert) {
           let response = await request
-            .get(`${searchPath}?query=${buildQueryParam(query())}`)
-            .set('Accept', 'application/vnd.card+json');
+            .post(searchPath)
+            .set('Accept', 'application/vnd.card+json')
+            .set('X-HTTP-Method-Override', 'QUERY')
+            .send(query());
 
           assert.strictEqual(response.status, 200, 'HTTP 200 status');
           assert.strictEqual(
@@ -100,8 +97,10 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
           };
 
           let response = await request
-            .get(`${searchPath}?query=${buildQueryParam(unknownTypeQuery)}`)
-            .set('Accept', 'application/vnd.card+json');
+            .post(searchPath)
+            .set('Accept', 'application/vnd.card+json')
+            .set('X-HTTP-Method-Override', 'QUERY')
+            .send(unknownTypeQuery);
 
           assert.strictEqual(response.status, 200, 'HTTP 200 status');
           let json = response.body;
@@ -137,8 +136,10 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
           };
 
           let response = await request
-            .get(`${searchPath}?query=${buildQueryParam(paginationQuery)}`)
-            .set('Accept', 'application/vnd.card+json');
+            .post(searchPath)
+            .set('Accept', 'application/vnd.card+json')
+            .set('X-HTTP-Method-Override', 'QUERY')
+            .send(paginationQuery);
 
           assert.strictEqual(response.status, 200, 'HTTP 200 status');
           let json = response.body;
@@ -151,8 +152,10 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
           // Get the second page
           paginationQuery.page = { number: 1, size: 1 };
           response = await request
-            .get(`${searchPath}?query=${buildQueryParam(paginationQuery)}`)
-            .set('Accept', 'application/vnd.card+json');
+            .post(searchPath)
+            .set('Accept', 'application/vnd.card+json')
+            .set('X-HTTP-Method-Override', 'QUERY')
+            .send(paginationQuery);
 
           assert.strictEqual(
             response.status,
@@ -176,56 +179,9 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
           );
         });
       });
-
-      module('permissioned realm', function (hooks) {
-        setupPermissionedRealm(hooks, {
-          permissions: {
-            john: ['read'],
-          },
-          realmURL: new URL('http://127.0.0.1:4444/test/'),
-          onRealmSetup,
-        });
-
-        test('401 with invalid JWT', async function (assert) {
-          let response = await request
-            .get(`${searchPath}?query=${buildQueryParam(query())}`)
-            .set('Accept', 'application/vnd.card+json');
-
-          assert.strictEqual(response.status, 401, 'HTTP 401 status');
-        });
-
-        test('401 without a JWT', async function (assert) {
-          let response = await request
-            .get(`${searchPath}?query=${buildQueryParam(query())}`)
-            .set('Accept', 'application/vnd.card+json'); // no Authorization header
-
-          assert.strictEqual(response.status, 401, 'HTTP 401 status');
-        });
-
-        test('403 without permission', async function (assert) {
-          let response = await request
-            .get(`${searchPath}?query=${buildQueryParam(query())}`)
-            .set('Accept', 'application/vnd.card+json')
-            .set('Authorization', `Bearer ${createJWT(testRealm, 'not-john')}`);
-
-          assert.strictEqual(response.status, 403, 'HTTP 403 status');
-        });
-
-        test('200 with permission', async function (assert) {
-          let response = await request
-            .get(`${searchPath}?query=${buildQueryParam(query())}`)
-            .set('Accept', 'application/vnd.card+json')
-            .set(
-              'Authorization',
-              `Bearer ${createJWT(testRealm, 'john', ['read'])}`,
-            );
-
-          assert.strictEqual(response.status, 200, 'HTTP 200 status');
-        });
-      });
     });
 
-    module('QUERY request', function (_hooks) {
+    module('QUERY request (permissioned realm)', function (_hooks) {
       let query = () => buildPersonQuery('Mango');
 
       module('public readable realm', function (hooks) {
