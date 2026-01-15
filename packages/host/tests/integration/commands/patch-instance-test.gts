@@ -65,19 +65,6 @@ module('Integration | commands | patch-instance', function (hooks) {
         'Person/germaine.json': new Person({ name: 'Germaine' }),
       },
     });
-    realm
-      .indexing()
-      .then(() => {
-        console.info(
-          `[patch-instance] realm indexing completed for ${realm.url}`,
-        );
-      })
-      .catch((error) => {
-        console.warn(
-          `[patch-instance] realm indexing failed for ${realm.url}`,
-          error,
-        );
-      });
     indexQuery = realm.realmIndexQueryEngine;
   });
 
@@ -227,14 +214,9 @@ module('Integration | commands | patch-instance', function (hooks) {
     this.onSave((saveURL) => {
       if (saveURL.href === url.href) {
         saves++;
-
-        console.info(
-          `[patch-instance] save completed for ${saveURL.href} (count: ${saves})`,
-        );
       }
     });
 
-    console.info('[patch-instance] executing linksTo patch');
     await patchInstanceCommand.execute({
       cardId: `${testRealmURL}Person/hassan`,
       patch: {
@@ -245,8 +227,6 @@ module('Integration | commands | patch-instance', function (hooks) {
     });
 
     await waitUntil(() => saves > 0);
-
-    console.info(`[patch-instance] linksTo save observed (count: ${saves})`);
 
     let result = await indexQuery.instance(url);
     assert.ok(result, 'instance query returned a result');
