@@ -68,13 +68,11 @@ module('Integration | commands | patch-instance', function (hooks) {
     realm
       .indexing()
       .then(() => {
-        // eslint-disable-next-line no-console
         console.info(
           `[patch-instance] realm indexing completed for ${realm.url}`,
         );
       })
       .catch((error) => {
-        // eslint-disable-next-line no-console
         console.warn(
           `[patch-instance] realm indexing failed for ${realm.url}`,
           error,
@@ -229,14 +227,13 @@ module('Integration | commands | patch-instance', function (hooks) {
     this.onSave((saveURL) => {
       if (saveURL.href === url.href) {
         saves++;
-        // eslint-disable-next-line no-console
+
         console.info(
           `[patch-instance] save completed for ${saveURL.href} (count: ${saves})`,
         );
       }
     });
 
-    // eslint-disable-next-line no-console
     console.info('[patch-instance] executing linksTo patch');
     await patchInstanceCommand.execute({
       cardId: `${testRealmURL}Person/hassan`,
@@ -248,7 +245,7 @@ module('Integration | commands | patch-instance', function (hooks) {
     });
 
     await waitUntil(() => saves > 0);
-    // eslint-disable-next-line no-console
+
     console.info(`[patch-instance] linksTo save observed (count: ${saves})`);
 
     let result = await indexQuery.instance(url);

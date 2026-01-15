@@ -698,7 +698,6 @@ export default class RealmService extends Service {
       return;
     }
 
-    let startedAt = Date.now();
     let bulkPromise = (async () => {
       try {
         let { data, publicReadableRealms } =
