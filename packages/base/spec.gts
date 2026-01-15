@@ -35,7 +35,7 @@ import {
   type CommandContext,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
-import { eq, type MenuItemOptions } from '@cardstack/boxel-ui/helpers';
+import { eq, not, type MenuItemOptions } from '@cardstack/boxel-ui/helpers';
 import { AiBw as AiBwIcon } from '@cardstack/boxel-ui/icons';
 
 import GlimmerComponent from '@glimmer/component';
@@ -581,19 +581,21 @@ class Edit extends Component<typeof Spec> {
             <BookOpenText width='20' height='20' role='presentation' />
             <h2 id='readme'>Read Me</h2>
           </div>
-          <BoxelButton
-            @kind='primary'
-            @size='extra-small'
-            @loading={{this.generateReadmeTask.isRunning}}
-            {{on 'click' this.generateReadme}}
-            data-test-generate-readme
-          >
-            {{#if this.generateReadmeTask.isRunning}}
-              Generating...
-            {{else}}
-              Generate README
-            {{/if}}
-          </BoxelButton>
+          {{#if @canEdit}}
+            <BoxelButton
+              @kind='primary'
+              @size='extra-small'
+              @loading={{this.generateReadmeTask.isRunning}}
+              {{on 'click' this.generateReadme}}
+              data-test-generate-readme
+            >
+              {{#if this.generateReadmeTask.isRunning}}
+                Generating...
+              {{else}}
+                Generate README
+              {{/if}}
+            </BoxelButton>
+          {{/if}}
         </header>
         <div data-test-readme>
           <@fields.readMe />
@@ -801,6 +803,7 @@ class SpecTitleField extends StringField {
         @value={{@model}}
         @onInput={{@set}}
         @placeholder={{this.placeholder}}
+        @disabled={{not @canEdit}}
         class='spec-title-input'
       />
       <style scoped>
@@ -837,6 +840,7 @@ class SpecDescriptionField extends StringField {
         @value={{@model}}
         @onInput={{@set}}
         @placeholder={{this.placeholder}}
+        @disabled={{not @canEdit}}
         class='spec-description-input'
       />
       <style scoped>
