@@ -457,9 +457,9 @@ export interface Store {
   getSaveState(id: string): AutoSaveState | undefined;
 }
 
-export interface CardCatalogQuery extends Query {
+export type CardCatalogQuery = Query & {
   filter?: CardTypeFilter | EveryFilter;
-}
+};
 
 export interface CardCreator {
   create(

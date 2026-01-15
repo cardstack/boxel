@@ -499,8 +499,17 @@ export class RealmIndexQueryEngine {
   ): Promise<{ cards: CardResource<Saved>[]; error?: QueryFieldErrorDetail }> {
     try {
       let searchURL = buildQuerySearchURL(realmHref, query);
+      let { realm, realms, ...queryWithoutRealm } = query as Query & {
+        realm?: string;
+        realms?: string[];
+      };
+      let realmList = realms ?? (realm ? [realm] : [realmHref]);
       let response = await this.#fetch(searchURL, {
-        headers: { Accept: SupportedMimeType.CardJson },
+        method: 'QUERY',
+        headers: {
+          Accept: SupportedMimeType.CardJson,
+        },
+        body: JSON.stringify({ ...queryWithoutRealm, realms: realmList }),
       });
       if (!response.ok) {
         let type: QueryFieldErrorType =

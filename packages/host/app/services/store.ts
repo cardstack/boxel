@@ -512,16 +512,13 @@ export default class StoreService extends Service implements StoreInterface {
     this.realmServer.assertOwnRealmServer(realmServerURLs);
     let [realmServerURL] = realmServerURLs;
     let searchURL = new URL('_search', realmServerURL);
-    for (let realm of realms) {
-      searchURL.searchParams.append('realms', realm);
-    }
     let response = await this.realmServer.maybeAuthedFetch(searchURL.href, {
       method: 'QUERY',
       headers: {
         Accept: SupportedMimeType.CardJson,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(query),
+      body: JSON.stringify({ ...query, realms }),
     });
     if (!response.ok) {
       let responseText = await response.text();
