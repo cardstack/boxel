@@ -39,6 +39,19 @@ const PUBLISHED_REALM_DOMAIN_OVERRIDES: Record<
   '@buck:stack.cards': {
     'custombuck.staging.boxel.build': 'custombuck.stack.cards',
   },
+  '@ctse:stack.cards': {
+    'docs.staging.boxel.build': 'docs.stack.cards',
+    'home.staging.boxel.build': 'home.stack.cards',
+    'whitepaper.staging.boxel.build': 'whitepaper.stack.cards',
+  },
+  '@bucktest:boxel.ai': {
+    'custombuck.boxel.site': 'custombuck.boxel.ai',
+  },
+  '@chris:boxel.ai': {
+    'docs.boxel.site': 'docs.boxel.ai',
+    'home.boxel.site': 'home.boxel.ai',
+    'whitepaper.boxel.site': 'whitepaper.boxel.ai',
+  },
 };
 
 function maybeOverridePublishedRealmURL(
