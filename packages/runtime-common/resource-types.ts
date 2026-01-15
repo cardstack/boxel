@@ -175,7 +175,7 @@ export function isCardResource(resource: any): resource is CardResource {
     }
   }
 
-  if (!('adoptsFrom' in meta) && typeof meta.adoptsFrom !== 'object') {
+  if (!('adoptsFrom' in meta) || typeof meta.adoptsFrom !== 'object') {
     return false;
   }
   let { adoptsFrom } = meta;
