@@ -354,10 +354,15 @@ module(`Integration | realm indexing`, function (hooks) {
           mango.error.errorDetail.message,
           `missing file ${testRealmURL}Person/owner.json`,
         );
-        assert.deepEqual(mango.error.errorDetail.deps, [
-          `${testRealmURL}Person/owner.json`,
-          'http://localhost:4202/test/pet',
-        ]);
+        assert.deepEqual(
+          mango.error.errorDetail.deps,
+          [
+            `${testRealmURL}Person/owner`,
+            `${testRealmURL}Person/owner.json`,
+            'http://localhost:4202/test/pet',
+          ],
+          'error deps are correct',
+        );
       } else {
         assert.ok(false, `expected search entry to be an error doc`);
       }
