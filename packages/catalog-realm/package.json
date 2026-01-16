@@ -8,6 +8,10 @@
     "@cardstack/boxel-ui": "workspace:*",
     "@cardstack/local-types": "workspace:*",
     "@cardstack/runtime-common": "workspace:*",
+    "@glint/core": "1.3.0",
+    "@glint/environment-ember-loose": "catalog:",
+    "@glint/environment-ember-template-imports": "1.3.0",
+    "@glint/template": "1.3.0",
     "@types/lodash": "catalog:",
     "@types/uuid": "catalog:",
     "chess.js": "catalog:",
@@ -23,7 +27,8 @@
   "scripts": {
     "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\"",
     "lint:hbs": "ember-template-lint . --no-error-on-unmatched-pattern",
-    "lint:hbs:fix": "ember-template-lint . --fix"
+    "lint:hbs:fix": "ember-template-lint . --fix",
+    "lint:glint": "glint"
   },
   "volta": {
     "extends": "../../package.json"
