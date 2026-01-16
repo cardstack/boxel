@@ -1377,7 +1377,10 @@ module(basename(__filename), function () {
         `SELECT error_doc IS NULL AS is_sql_null
          FROM boxel_index
          WHERE realm_url = '${testRealm}'
-           AND url = '${testRealm}deep-card'
+           AND (
+             url = '${testRealm}deep-card.json'
+             OR file_alias = '${testRealm}deep-card'
+           )
            AND type = 'instance'`,
       )) as { is_sql_null: boolean }[];
       assert.strictEqual(
