@@ -11,6 +11,7 @@ DEFAULT_BOXEL_HOMEPAGE_REALM_URL='https://realms-staging.stack.cards/boxel-homep
 BOXEL_HOMEPAGE_REALM_URL="${RESOLVED_BOXEL_HOMEPAGE_REALM_URL:-$DEFAULT_BOXEL_HOMEPAGE_REALM_URL}"
 
 NODE_NO_WARNINGS=1 \
+  LOW_CREDIT_THRESHOLD=2000 \
   MATRIX_URL=https://matrix-staging.stack.cards \
   BOXEL_HOST_URL=https://realms-staging.stack.cards \
   REALM_SERVER_MATRIX_USERNAME=realm_server \
