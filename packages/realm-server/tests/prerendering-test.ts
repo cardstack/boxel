@@ -26,13 +26,49 @@ import {
   trimExecutableExtension,
 } from '@cardstack/runtime-common';
 
-function makeStubPagePool(maxPages: number) {
+class TestSemaphore {
+  #available: number;
+  #queue: Array<(release: () => void) => void> = [];
+
+  constructor(max: number) {
+    this.#available = Math.max(1, max);
+  }
+
+  async acquire(): Promise<() => void> {
+    if (this.#available > 0) {
+      this.#available--;
+      return this.#release;
+    }
+    return await new Promise<() => void>((resolve) => {
+      this.#queue.push(resolve);
+    });
+  }
+
+  #release = () => {
+    let next = this.#queue.shift();
+    if (next) {
+      next(this.#release);
+      return;
+    }
+    this.#available++;
+  };
+}
+
+function makeStubPagePool(
+  maxPages: number,
+  renderSemaphore?: { acquire(): Promise<() => void> },
+  createContextDelay?: (contextNumber: number) => Promise<void>,
+) {
   let contextCounter = 0;
   let contextsCreated: string[] = [];
   let contextsClosed: string[] = [];
   let browser = {
     async createBrowserContext() {
-      let id = `ctx-${++contextCounter}`;
+      let counter = ++contextCounter;
+      if (createContextDelay) {
+        await createContextDelay(counter);
+      }
+      let id = `ctx-${counter}`;
       contextsCreated.push(id);
       return {
         async newPage() {
@@ -72,6 +108,7 @@ function makeStubPagePool(maxPages: number) {
     browserManager: browserManager as any,
     boxelHostURL: 'http://localhost:4200',
     standbyTimeoutMs: 500,
+    renderSemaphore,
   });
   return { pool, contextsCreated, contextsClosed };
 }
@@ -1965,117 +2002,318 @@ module(basename(__filename), function () {
         );
       });
 
-      test('serializes cross-realm prerenders when no more capacity', async function (assert) {
-        let prevPoolSize = process.env.PRERENDER_PAGE_POOL_SIZE;
-        let originalGetPage = PagePool.prototype.getPage;
-        let originalCloseAll = PagePool.prototype.closeAll;
-        let originalPrerenderAttempt =
-          RenderRunner.prototype.prerenderCardAttempt;
-        let originalRetrySignature =
-          RenderRunner.prototype.shouldRetryWithClearCache;
-        let localPrerenderer: Prerenderer | undefined;
-
+      test('serializes prerenders when only one tab is available', async function (assert) {
+        let prevTabMax = process.env.PRERENDER_REALM_TAB_MAX;
+        let semaphore = new TestSemaphore(1);
         let active = 0;
         let maxActive = 0;
+        let pool: PagePool | undefined;
 
         try {
-          process.env.PRERENDER_PAGE_POOL_SIZE = '1';
-          PagePool.prototype.getPage = async function (realm: string) {
-            return {
-              page: {} as any,
-              reused: false,
-              launchMs: 0,
-              pageId: `fake-${realm}`,
-            };
-          };
-          PagePool.prototype.closeAll = async function () {};
-          RenderRunner.prototype.shouldRetryWithClearCache = () => undefined;
-          RenderRunner.prototype.prerenderCardAttempt = async function ({
-            realm,
-            url,
-          }: {
-            realm: string;
-            url: string;
-          }) {
+          process.env.PRERENDER_REALM_TAB_MAX = '1';
+          ({ pool } = makeStubPagePool(1, semaphore));
+          await pool.warmStandbys();
+
+          let run = async (realm: string) => {
+            let lease = await pool!.getPage(realm);
             active++;
             maxActive = Math.max(maxActive, active);
             await new Promise((resolve) => setTimeout(resolve, 25));
             active--;
-            return {
-              response: {
-                serialized: null,
-                searchDoc: null,
-                displayNames: null,
-                deps: null,
-                types: null,
-                iconHTML: null,
-                isolatedHTML: url,
-                headHTML: null,
-                atomHTML: null,
-                embeddedHTML: null,
-                fittedHTML: null,
-              },
-              timings: { launchMs: 0, renderMs: 5 },
-              pool: {
-                pageId: `fake-${realm}`,
-                realm,
-                reused: false,
-                evicted: false,
-                timedOut: false,
-              },
-            };
+            lease.release();
           };
 
-          localPrerenderer = getPrerendererForTesting({
-            maxPages: 1,
-            serverURL: 'http://127.0.0.1:4225',
-          });
-
-          let realmA = 'https://realm-a.example/';
-          let realmB = 'https://realm-b.example/';
-          let authA = testCreatePrerenderAuth(testUserId, {
-            [realmA]: ['read'],
-          });
-          let authB = testCreatePrerenderAuth(testUserId, {
-            [realmB]: ['read'],
-          });
-
-          let [resA, resB] = await Promise.all([
-            localPrerenderer.prerenderCard({
-              realm: realmA,
-              url: `${realmA}card`,
-              auth: authA,
-            }),
-            localPrerenderer.prerenderCard({
-              realm: realmB,
-              url: `${realmB}card`,
-              auth: authB,
-            }),
-          ]);
+          await Promise.all([run('realm-a'), run('realm-b')]);
 
           assert.strictEqual(
             maxActive,
             1,
-            'global prerender semaphore serializes cross-realm work when pool is full',
-          );
-          assert.deepEqual(
-            [resA.response.isolatedHTML, resB.response.isolatedHTML].sort(),
-            [`${realmA}card`, `${realmB}card`].sort(),
-            'responses come from stubbed render attempts',
+            'renders serialize when only one tab is allowed',
           );
         } finally {
-          if (prevPoolSize === undefined) {
-            delete process.env.PRERENDER_PAGE_POOL_SIZE;
+          await pool?.closeAll();
+          if (prevTabMax === undefined) {
+            delete process.env.PRERENDER_REALM_TAB_MAX;
           } else {
-            process.env.PRERENDER_PAGE_POOL_SIZE = prevPoolSize;
+            process.env.PRERENDER_REALM_TAB_MAX = prevTabMax;
           }
-          PagePool.prototype.getPage = originalGetPage;
-          PagePool.prototype.closeAll = originalCloseAll;
-          RenderRunner.prototype.prerenderCardAttempt =
-            originalPrerenderAttempt;
-          RenderRunner.prototype.shouldRetryWithClearCache =
-            originalRetrySignature;
-          await localPrerenderer?.stop();
+        }
+      });
+
+      test('runs prerenders in parallel when multiple tabs are available', async function (assert) {
+        let prevTabMax = process.env.PRERENDER_REALM_TAB_MAX;
+        let semaphore = new TestSemaphore(2);
+        let active = 0;
+        let maxActive = 0;
+        let pool: PagePool | undefined;
+
+        try {
+          process.env.PRERENDER_REALM_TAB_MAX = '2';
+          ({ pool } = makeStubPagePool(2, semaphore));
+          await pool.warmStandbys();
+
+          let run = async (realm: string) => {
+            let lease = await pool!.getPage(realm);
+            active++;
+            maxActive = Math.max(maxActive, active);
+            await new Promise((resolve) => setTimeout(resolve, 25));
+            active--;
+            lease.release();
+          };
+
+          await Promise.all([run('realm-a'), run('realm-a')]);
+
+          assert.strictEqual(
+            maxActive,
+            2,
+            'renders run in parallel on separate tabs',
+          );
+        } finally {
+          await pool?.closeAll();
+          if (prevTabMax === undefined) {
+            delete process.env.PRERENDER_REALM_TAB_MAX;
+          } else {
+            process.env.PRERENDER_REALM_TAB_MAX = prevTabMax;
+          }
+        }
+      });
+
+      test('prefers idle tab aligned to realm over standby tabs', async function (assert) {
+        let { pool } = makeStubPagePool(2);
+        await pool.warmStandbys();
+
+        let first = await pool.getPage('realm-a');
+        first.release();
+        await pool.warmStandbys();
+
+        let second = await pool.getPage('realm-a');
+        assert.strictEqual(
+          second.pageId,
+          first.pageId,
+          'idle aligned tab reused when available',
+        );
+        assert.true(second.reused, 'reuse flagged for aligned idle tab');
+
+        second.release();
+        await pool.closeAll();
+      });
+
+      test('prefers standby over idle tabs from other realms', async function (assert) {
+        let originalNow = Date.now;
+        let now = 1000;
+        (Date as any).now = () => now;
+        let { pool } = makeStubPagePool(1);
+
+        try {
+          await pool.warmStandbys(); // standby at t=1000
+          now = 1100;
+          let realmALease = await pool.getPage('realm-a');
+          realmALease.release();
+
+          now = 2000;
+          await pool.warmStandbys(); // standby created after idle realm tab
+          let realmBLease = await pool.getPage('realm-b');
+          assert.notStrictEqual(
+            realmBLease.pageId,
+            realmALease.pageId,
+            'standby chosen instead of commandeering an idle realm tab',
+          );
+          assert.false(
+            realmBLease.reused,
+            'standby assignment marked as not reused',
+          );
+          realmBLease.release();
+        } finally {
+          await pool.closeAll();
+          (Date as any).now = originalNow;
+        }
+      });
+
+      test('enforces per-realm tab cap by queueing on an existing tab', async function (assert) {
+        let prevTabMax = process.env.PRERENDER_REALM_TAB_MAX;
+        let pool: PagePool | undefined;
+        let resolved = false;
+
+        try {
+          process.env.PRERENDER_REALM_TAB_MAX = '1';
+          ({ pool } = makeStubPagePool(2));
+          await pool.warmStandbys();
+
+          let first = await pool.getPage('realm-a');
+          let secondPromise = pool.getPage('realm-a').then((lease) => {
+            resolved = true;
+            return lease;
+          });
+
+          await new Promise((resolve) => setTimeout(resolve, 5));
+          assert.false(resolved, 'second request waits when tab cap reached');
+
+          first.release();
+          let second = await secondPromise;
+          assert.strictEqual(
+            second.pageId,
+            first.pageId,
+            'queued request reuses the existing tab',
+          );
+          assert.true(second.reused, 'reuse flagged for queued request');
+          second.release();
+        } finally {
+          await pool?.closeAll();
+          if (prevTabMax === undefined) {
+            delete process.env.PRERENDER_REALM_TAB_MAX;
+          } else {
+            process.env.PRERENDER_REALM_TAB_MAX = prevTabMax;
+          }
+        }
+      });
+
+      test('queues on the least-pending tab when the realm cap is met', async function (assert) {
+        let prevTabMax = process.env.PRERENDER_REALM_TAB_MAX;
+        let pool: PagePool | undefined;
+        let originalNow = Date.now;
+        let now = 1000;
+        (Date as any).now = () => now;
+        let thirdResolved = false;
+        let fourthResolved = false;
+
+        try {
+          process.env.PRERENDER_REALM_TAB_MAX = '2';
+          ({ pool } = makeStubPagePool(2));
+          await pool.warmStandbys();
+
+          let first = await pool.getPage('realm-a');
+          now = 1100;
+          let second = await pool.getPage('realm-a');
+
+          let thirdPromise = pool.getPage('realm-a').then((lease) => {
+            thirdResolved = true;
+            return lease;
+          });
+          await new Promise((resolve) => setTimeout(resolve, 0));
+          let fourthPromise = pool.getPage('realm-a').then((lease) => {
+            fourthResolved = true;
+            return lease;
+          });
+
+          second.release();
+          await new Promise((resolve) => setTimeout(resolve, 5));
+          assert.true(
+            fourthResolved,
+            'request queued on least-pending tab unblocks first',
+          );
+          assert.false(
+            thirdResolved,
+            'request queued on busier tab still waits',
+          );
+
+          let fourth = await fourthPromise;
+          assert.strictEqual(
+            fourth.pageId,
+            second.pageId,
+            'fourth request queued on least-pending tab',
+          );
+
+          first.release();
+          let third = await thirdPromise;
+          assert.strictEqual(
+            third.pageId,
+            first.pageId,
+            'third request queued on the LRU tab when pending counts tied',
+          );
+          fourth.release();
+          third.release();
+        } finally {
+          (Date as any).now = originalNow;
+          await pool?.closeAll();
+          if (prevTabMax === undefined) {
+            delete process.env.PRERENDER_REALM_TAB_MAX;
+          } else {
+            process.env.PRERENDER_REALM_TAB_MAX = prevTabMax;
+          }
+        }
+      });
+
+      test('queued cross-realm requests realign the tab per request', async function (assert) {
+        let { pool } = makeStubPagePool(1);
+        await pool.warmStandbys();
+
+        let first = await pool.getPage('realm-a');
+        await pool.warmStandbys();
+        let blocker = await pool.getPage('realm-c');
+
+        let order: string[] = [];
+        let secondPromise = pool.getPage('realm-a').then((lease) => {
+          order.push('a');
+          return lease;
+        });
+        let thirdPromise = pool.getPage('realm-b').then((lease) => {
+          order.push('b');
+          return lease;
+        });
+
+        first.release();
+
+        let second = await secondPromise;
+        assert.deepEqual(order, ['a'], 'queued realm-a request runs first');
+        assert.true(
+          pool.getWarmRealms().includes('realm-a'),
+          'tab aligned to realm-a while queued work runs',
+        );
+        second.release();
+        blocker.release();
+
+        let third = await thirdPromise;
+        assert.deepEqual(
+          order,
+          ['a', 'b'],
+          'queued realm-b request runs after',
+        );
+        assert.true(
+          pool.getWarmRealms().includes('realm-b'),
+          'tab realigned to realm-b when queued request starts',
+        );
+        third.release();
+        blocker.release();
+
+        await pool.closeAll();
+      });
+
+      test('does not reassign a busy tab with queued work across realms', async function (assert) {
+        let { pool } = makeStubPagePool(1, undefined, async (contextNumber) => {
+          if (contextNumber > 1) {
+            throw new Error('standby creation disabled for test');
+          }
+        });
+
+        try {
+          await pool.warmStandbys();
+
+          let first = await pool.getPage('realm-a');
+
+          let secondPromise = pool.getPage('realm-a');
+          let thirdPromise = pool.getPage('realm-b');
+
+          await assert.rejects(
+            thirdPromise,
+            /No standby page available for prerender/,
+            'cross-realm request rejects when only busy tab has queued work',
+          );
+
+          first.release();
+          let second = await secondPromise;
+          assert.strictEqual(
+            second.pageId,
+            first.pageId,
+            'queued same-realm request keeps the original tab',
+          );
+          second.release();
+
+          assert.false(
+            pool.getWarmRealms().includes('realm-b'),
+            'cross-realm request does not reassign the tab',
+          );
+        } finally {
+          await pool.closeAll();
         }
       });
 
@@ -2097,6 +2335,7 @@ module(basename(__filename), function () {
           2,
           'spare standby created once the only slot is occupied',
         );
+        first.release();
         await pool.closeAll();
       });
 
@@ -2105,8 +2344,12 @@ module(basename(__filename), function () {
         await pool.warmStandbys(); // fill initial standbys
 
         let realmAFirst = await pool.getPage('realm-a');
+        let realmAFirstId = realmAFirst.pageId;
+        realmAFirst.release();
         await pool.warmStandbys(); // replenish after consuming standby
         let realmBFirst = await pool.getPage('realm-b');
+        let realmBFirstId = realmBFirst.pageId;
+        realmBFirst.release();
         await pool.warmStandbys(); // replenish again to keep standbys warm
 
         let realmASecond = await pool.getPage('realm-a');
@@ -2118,19 +2361,21 @@ module(basename(__filename), function () {
         assert.true(realmBSecond.reused, 'realm B reuses its page');
         assert.strictEqual(
           realmASecond.pageId,
-          realmAFirst.pageId,
+          realmAFirstId,
           'realm A keeps the same page',
         );
         assert.strictEqual(
           realmBSecond.pageId,
-          realmBFirst.pageId,
+          realmBFirstId,
           'realm B keeps the same page',
         );
         assert.notStrictEqual(
-          realmAFirst.pageId,
-          realmBFirst.pageId,
+          realmAFirstId,
+          realmBFirstId,
           'distinct pages per realm from standbys',
         );
+        realmASecond.release();
+        realmBSecond.release();
         await pool.closeAll();
       });
 
@@ -2144,8 +2389,9 @@ module(basename(__filename), function () {
           'initial standbys created up to maxPages',
         );
 
-        await pool.getPage('realm-a');
+        let realmLease = await pool.getPage('realm-a');
         await pool.warmStandbys(); // ensure standby pool replenishment settles before idle sweep
+        realmLease.release();
 
         let originalNow = Date.now;
         try {
