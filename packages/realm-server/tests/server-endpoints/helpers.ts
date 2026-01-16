@@ -40,7 +40,16 @@ export type ServerEndpointsTestContext = {
   startRealmServer: () => Promise<void>;
 };
 
-export function setupServerEndpointsTest(hooks: NestedHooks) {
+export type ServerEndpointsTestOptions = {
+  beforeStartRealmServer?: (
+    context: ServerEndpointsTestContext,
+  ) => void | Promise<void>;
+};
+
+export function setupServerEndpointsTest(
+  hooks: NestedHooks,
+  options: ServerEndpointsTestOptions = {},
+) {
   let context = {} as ServerEndpointsTestContext;
   let ownerUserId = '@mango:localhost';
 
@@ -110,6 +119,9 @@ export function setupServerEndpointsTest(hooks: NestedHooks) {
       context.testRealmDir = join(context.dir.name, 'realm_server_2', 'test');
       ensureDirSync(context.testRealmDir);
       copySync(join(__dirname, '..', 'cards'), context.testRealmDir);
+      if (options.beforeStartRealmServer) {
+        await options.beforeStartRealmServer(context);
+      }
       await startRealmServer(_dbAdapter, _publisher, _runner);
     },
     afterEach: async () => {

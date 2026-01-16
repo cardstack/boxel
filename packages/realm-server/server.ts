@@ -310,9 +310,14 @@ export class RealmServer {
 
       ctxt.type = 'html';
 
-      let cardURL = new URL(
+      let requestURL = new URL(
         `${ctxt.protocol}://${ctxt.host}${ctxt.originalUrl}`,
       );
+      let cardURL = requestURL;
+      let isIndexRequest = requestURL.pathname.endsWith('/');
+      if (isIndexRequest) {
+        cardURL = new URL('index', requestURL);
+      }
 
       let indexHTML = await this.retrieveIndexHTML();
       let hasPublicPermissions = await this.hasPublicPermissions(cardURL);
