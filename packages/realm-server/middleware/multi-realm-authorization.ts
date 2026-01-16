@@ -1,18 +1,17 @@
 import type Koa from 'koa';
 import type { DBAdapter, Realm } from '@cardstack/runtime-common';
 import {
-  query,
-  param,
-  separatedByCommas,
   fetchUserPermissions,
   parseRealmsFromPayload,
   parseSearchRequestPayload,
-  ensureTrailingSlash,
   SearchRequestError,
-  type Expression,
 } from '@cardstack/runtime-common';
 import { AuthenticationError } from '@cardstack/runtime-common/router';
 import { retrieveTokenClaim, type RealmServerTokenClaim } from '../utils/jwt';
+import {
+  buildReadableRealms,
+  getPublishedRealmURLs,
+} from '../utils/realm-readability';
 import {
   fetchRequestFromContext,
   sendResponseForBadRequest,
@@ -66,19 +65,7 @@ export function multiRealmAuthorization({
       return;
     }
 
-    let publishedRealmURLs = new Set<string>();
-    if (realmList.length > 0) {
-      let publishedRealms = (await query(dbAdapter, [
-        'SELECT published_realm_url FROM published_realms WHERE published_realm_url IN (',
-        ...separatedByCommas(realmList.map((realmURL) => [param(realmURL)])),
-        ')',
-      ] as Expression)) as { published_realm_url: string }[];
-      publishedRealmURLs = new Set(
-        publishedRealms.map((row) =>
-          ensureTrailingSlash(row.published_realm_url),
-        ),
-      );
-    }
+    let publishedRealmURLs = await getPublishedRealmURLs(dbAdapter, realmList);
 
     let readableRealms = new Set<string>();
     let authorization = ctxt.req.headers['authorization'];
@@ -87,14 +74,10 @@ export function multiRealmAuthorization({
         userId: '*',
         onlyOwnRealms: false,
       });
-      readableRealms = new Set(
-        Object.entries(publicPermissions)
-          .filter(([, permissions]) => permissions.includes('read'))
-          .map(([realmURL]) => ensureTrailingSlash(realmURL)),
+      readableRealms = buildReadableRealms(
+        publicPermissions,
+        publishedRealmURLs,
       );
-      for (let realmURL of publishedRealmURLs) {
-        readableRealms.add(realmURL);
-      }
 
       let realmsRequiringAuth = realmList.filter(
         (realmURL) => !readableRealms.has(realmURL),
@@ -122,14 +105,10 @@ export function multiRealmAuthorization({
         userId: token.user,
         onlyOwnRealms: false,
       });
-      readableRealms = new Set(
-        Object.entries(permissionsForAllRealms)
-          .filter(([, permissions]) => permissions.includes('read'))
-          .map(([realmURL]) => ensureTrailingSlash(realmURL)),
+      readableRealms = buildReadableRealms(
+        permissionsForAllRealms,
+        publishedRealmURLs,
       );
-      for (let realmURL of publishedRealmURLs) {
-        readableRealms.add(realmURL);
-      }
 
       let unauthorizedRealms = realmList.filter(
         (realmURL) => !readableRealms.has(realmURL),

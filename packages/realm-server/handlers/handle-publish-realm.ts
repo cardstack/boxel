@@ -154,6 +154,7 @@ export default function handlePublishRealm({
 
       let realmInfoResponse = await virtualNetwork.handle(
         new Request(`${sourceRealmURL}_info`, {
+          method: 'QUERY',
           headers: {
             Accept: SupportedMimeType.RealmInfo,
             Authorization: sourceRealmSession,

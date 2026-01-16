@@ -637,6 +637,7 @@ export default class MatrixService extends Service {
 
     if (this.client.isLoggedIn()) {
       this.realmServer.setClient(this.client);
+      await this.realmServer.login();
       this.saveAuth(auth);
       this.bindEventListeners();
 
@@ -665,6 +666,10 @@ export default class MatrixService extends Service {
             accountDataContent?.realms ?? [],
           ),
         ]);
+
+        await this.realm.prefetchRealmInfos(
+          this.realmServer.availableRealmURLs,
+        );
 
         await this.initSlidingSync(accountDataContent);
         await this.client.startClient({ slidingSync: this.slidingSync });

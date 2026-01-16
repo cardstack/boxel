@@ -4,6 +4,7 @@ import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
+import { isTesting } from '@embroider/macros';
 import Component from '@glimmer/component';
 
 import { restartableTask, task, timeout } from 'ember-concurrency';
@@ -348,16 +349,27 @@ export default class CardCatalogModal extends Component<Signature> {
     ) => {
       await this.realmServer.ready;
       // Preload realm info without blocking the modal from opening.
-      void Promise.all(
+      let prefetchRealmInfo = Promise.all(
         this.realmServer.availableRealmURLs.map(async (realmURL) => {
           let resource = this.realm.getOrCreateRealmResource(realmURL);
           try {
             await resource.fetchInfo();
-          } catch {
-            // Leave realm info as fallback if it cannot be fetched.
+          } catch (error) {
+            // Keep any existing realm info if the fetch fails; non-fatal for modal.
+
+            console.warn(
+              'Failed to fetch realm info for',
+              realmURL.toString?.() ?? realmURL,
+              error,
+            );
           }
         }),
       );
+      if (isTesting()) {
+        await prefetchRealmInfo;
+      } else {
+        void prefetchRealmInfo;
+      }
       this.stateId++;
       let title = await chooseCardTitle(
         query.filter,

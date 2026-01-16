@@ -20,6 +20,7 @@ import {
   isCardErrorJSONAPI,
   CardContextName,
   CommandContextName,
+  type getCard as GetCardType,
 } from '@cardstack/runtime-common';
 
 import HostModeContent from '@cardstack/host/components/host-mode/content';
@@ -65,8 +66,8 @@ export class IndexComponent extends Component<IndexComponentComponentSignature> 
   @service private declare store: StoreService;
 
   @provide(GetCardContextName)
-  private get getCard() {
-    return getCard;
+  private get getCard(): GetCardType {
+    return getCard as unknown as GetCardType;
   }
 
   @provide(GetCardsContextName)

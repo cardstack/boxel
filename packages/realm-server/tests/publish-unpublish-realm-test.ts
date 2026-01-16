@@ -159,7 +159,7 @@ module(basename(__filename), function () {
         sourceRealmUrlString = createSourceRealmResponse.body.data.id;
 
         // Make the published realm public so reading _info doesn’t need a token
-        dbAdapter.execute(`
+        await dbAdapter.execute(`
           INSERT INTO realm_user_permissions (realm_url, username, read, write, realm_owner)
           VALUES ('${sourceRealmUrlString}', '*', true, true, true)
         `);
@@ -260,7 +260,8 @@ module(basename(__filename), function () {
         let sourceRealmInfoPath = `${sourceRealmPath}_info`;
 
         let sourceRealmInfoResponse = await request
-          .get(sourceRealmInfoPath)
+          .post(sourceRealmInfoPath)
+          .set('X-HTTP-Method-Override', 'QUERY')
           .set('Accept', 'application/vnd.api+json');
 
         assert.strictEqual(
@@ -290,7 +291,8 @@ module(basename(__filename), function () {
 
         // Test that published realm info includes lastPublishedAt as a string
         let publishedRealmInfoResponse = await request
-          .get('/test-realm/_info')
+          .post('/test-realm/_info')
+          .set('X-HTTP-Method-Override', 'QUERY')
           .set('Accept', 'application/vnd.api+json')
           .set('Host', new URL(publishedRealmURL).host)
           .set(
@@ -589,7 +591,8 @@ module(basename(__filename), function () {
 
         // Verify that source realm info no longer includes lastPublishedAt
         let sourceRealmInfoResponse = await request
-          .get('/test/_info')
+          .post('/test/_info')
+          .set('X-HTTP-Method-Override', 'QUERY')
           .set('Accept', 'application/vnd.api+json');
 
         assert.strictEqual(
@@ -605,7 +608,8 @@ module(basename(__filename), function () {
 
         // Verify that published realm is no longer accessible
         let publishedRealmInfoResponse = await request
-          .get('/test-realm/_info')
+          .post('/test-realm/_info')
+          .set('X-HTTP-Method-Override', 'QUERY')
           .set('Accept', 'application/vnd.api+json')
           .set('Host', new URL(publishedRealmURL).host);
 
@@ -738,9 +742,10 @@ module(basename(__filename), function () {
         );
       });
 
-      test('GET /_info returns lastPublishedAt as null for unpublished realm', async function (assert) {
+      test('QUERY /_info returns lastPublishedAt as null for unpublished realm', async function (assert) {
         let response = await request
-          .get('/test/_info')
+          .post('/test/_info')
+          .set('X-HTTP-Method-Override', 'QUERY')
           .set('Accept', 'application/vnd.api+json');
 
         assert.strictEqual(response.status, 200, 'HTTP 200 status');

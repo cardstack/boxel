@@ -1,4 +1,4 @@
-import type { LooseCardResource } from './index';
+import type { LooseCardResource, FileMetaResource } from './index';
 import { relationshipEntries } from './relationship-utils';
 import { RealmPaths } from './paths';
 
@@ -80,7 +80,7 @@ type VisitInstanceURL = (
 ) => void;
 
 export function visitInstanceURLs(
-  resourceJson: LooseCardResource,
+  resourceJson: LooseCardResource | FileMetaResource,
   visit: VisitInstanceURL,
 ): void {
   if (resourceJson.links) {
