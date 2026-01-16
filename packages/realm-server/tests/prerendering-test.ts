@@ -494,11 +494,21 @@ module(basename(__filename), function () {
         result.response.error?.error.stack?.includes('at transpileJS'),
         `stack should include "at transpileJS" but was ${result.response.error?.error.stack}`,
       );
-      assert.strictEqual(
-        result.response.error?.error.additionalErrors,
-        null,
-        'error is primary and not nested in additionalErrors',
-      );
+      let additionalErrors = result.response.error?.error.additionalErrors;
+      if (additionalErrors !== null) {
+        assert.ok(
+          Array.isArray(additionalErrors),
+          'additionalErrors is an array when present',
+        );
+        assert.ok(
+          additionalErrors?.every(
+            (entry) =>
+              entry?.title === 'Console error' ||
+              entry?.title === 'Console assert',
+          ),
+          'additionalErrors only include console entries',
+        );
+      }
       let deps = result.response.error?.error.deps ?? [];
       assert.ok(
         deps.some((dep) => dep.includes(`${realmURL}broken`)),

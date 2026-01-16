@@ -855,7 +855,7 @@ export class RenderRunner {
     this.#incEvictionMetric(realm, reason);
     log.warn(`Evicting realm %s due to %s during %s`, realm, reason, step);
     try {
-      await this.#pagePool.disposeRealm(realm);
+      await this.#pagePool.disposeRealm(realm, { retainConsoleErrors: true });
     } catch (e) {
       log.warn(`Error disposing realm %s on %s:`, realm, reason, e);
     }

@@ -142,12 +142,15 @@ export class PagePool {
     };
   }
 
-  async disposeRealm(realm: string): Promise<void> {
+  async disposeRealm(
+    realm: string,
+    options?: { retainConsoleErrors?: boolean },
+  ): Promise<void> {
     let entry = this.#realmPages.get(realm);
     if (!entry || entry.type !== 'pool') return;
     this.#realmPages.delete(realm);
     this.#lru.delete(realm);
-    await this.#closeEntry(entry);
+    await this.#closeEntry(entry, options?.retainConsoleErrors);
     try {
       const managerURL = resolvePrerenderManagerURL();
       let target = new URL(
@@ -365,7 +368,7 @@ export class PagePool {
     this.#lru.add(realm);
   }
 
-  async #closeEntry(entry: Entry): Promise<void> {
+  async #closeEntry(entry: Entry, retainConsoleErrors = false): Promise<void> {
     try {
       await entry.context.close();
     } catch (e) {
@@ -374,7 +377,9 @@ export class PagePool {
         e,
       );
     }
-    this.#consoleErrorsByPageId.delete(entry.pageId);
+    if (!retainConsoleErrors) {
+      this.#consoleErrorsByPageId.delete(entry.pageId);
+    }
   }
 
   #attachPageConsole(page: Page, realm: string, pageId: string): void {
