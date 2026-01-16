@@ -1,5 +1,6 @@
 import type Koa from 'koa';
 import {
+  ensureTrailingSlash,
   fetchUserPermissions,
   query,
   SupportedMimeType,
@@ -31,6 +32,57 @@ import { registerUser } from '../synapse';
 import { passwordFromSeed } from '@cardstack/runtime-common/matrix-client';
 
 const log = logger('handle-publish');
+
+// Workaround to override published realm URLs to support custom domains. Remove in CS-9061.
+const PUBLISHED_REALM_DOMAIN_OVERRIDES: Record<
+  string,
+  Record<string, string>
+> = {
+  '@buck:stack.cards': {
+    'custombuck.staging.boxel.build': 'custombuck.stack.cards',
+  },
+  '@ctse:stack.cards': {
+    'docs.staging.boxel.build': 'docs.stack.cards',
+    'home.staging.boxel.build': 'home.stack.cards',
+    'whitepaper.staging.boxel.build': 'whitepaper.stack.cards',
+  },
+  '@bucktest:boxel.ai': {
+    'custombuck.boxel.site': 'custombuck.boxel.ai',
+  },
+  '@chris:boxel.ai': {
+    'docs.boxel.site': 'docs.boxel.ai',
+    'home.boxel.site': 'home.boxel.ai',
+    'whitepaper.boxel.site': 'whitepaper.boxel.ai',
+  },
+};
+
+function maybeOverridePublishedRealmURL(
+  ownerUserId: string,
+  publishedRealmURL: string,
+): string {
+  let userOverrides = PUBLISHED_REALM_DOMAIN_OVERRIDES[ownerUserId];
+  if (!userOverrides) {
+    return publishedRealmURL;
+  }
+
+  let publishedURL: URL;
+  try {
+    publishedURL = new URL(publishedRealmURL);
+  } catch {
+    return publishedRealmURL;
+  }
+
+  let overrideDomain = userOverrides[publishedURL.host.toLowerCase()];
+  if (!overrideDomain) {
+    return publishedRealmURL;
+  }
+
+  let overriddenURL = new URL(publishedRealmURL);
+  overriddenURL.host = overrideDomain;
+
+  let overriddenRealmURL = overriddenURL.toString();
+  return ensureTrailingSlash(overriddenRealmURL);
+}
 
 function rewriteHostHomeForPublishedRealm(
   hostHome: string | undefined | null | unknown,
@@ -133,6 +185,17 @@ export default function handlePublishRealm({
         `${ownerUserId} does not have enough permission to publish this realm`,
       );
       return;
+    }
+
+    let overriddenPublishedRealmURL = maybeOverridePublishedRealmURL(
+      ownerUserId,
+      publishedRealmURL,
+    );
+    if (overriddenPublishedRealmURL !== publishedRealmURL) {
+      log.info(
+        `Overriding publishedRealmURL for ${ownerUserId} from ${publishedRealmURL} to ${overriddenPublishedRealmURL}`,
+      );
+      publishedRealmURL = overriddenPublishedRealmURL;
     }
 
     try {
