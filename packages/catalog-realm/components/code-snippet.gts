@@ -52,7 +52,7 @@ export default class CodeSnippet extends GlimmerComponent<CodeSnippetSignature> 
       }
       .code-snippet-label {
         font-size: var(--boxel-caption-font-size);
-        font-weight: 500;
+        font-weight: var(--boxel-caption-font-weight);
         color: var(--header-fg);
         text-transform: uppercase;
         letter-spacing: var(--boxel-lsp-xxs);
@@ -67,7 +67,7 @@ export default class CodeSnippet extends GlimmerComponent<CodeSnippetSignature> 
         color: var(--field-fg);
         font-family: var(--font-mono, var(--boxel-monospace-font-family));
         font-size: var(--boxel-font-size-xs);
-        line-height: 1.5;
+        line-height: var(--boxel-caption-line-height);
         overflow-x: auto;
         white-space: pre-wrap;
       }
