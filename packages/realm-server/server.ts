@@ -321,11 +321,7 @@ export class RealmServer {
         cardURL = new URL('index', requestURL);
       }
       if (isIndexRequest) {
-        let prefersHostHome = this.isHostModeRequest(requestURL);
-        let resolvedHome = await this.resolveIndexCardHome(
-          cardURL,
-          prefersHostHome,
-        );
+        let resolvedHome = await this.resolveIndexCardHome(cardURL);
         if (resolvedHome) {
           cardURL = resolvedHome;
         }
@@ -593,21 +589,15 @@ export class RealmServer {
     );
   }
 
-  private isHostModeRequest(requestURL: URL): boolean {
-    return requestURL.host !== this.serverURL.host;
-  }
-
   private async resolveIndexCardHome(
     indexCardURL: URL,
-    prefersHostHome: boolean,
   ): Promise<URL | null> {
     let indexCard = await this.retrieveIndexCardResource(indexCardURL);
     if (!indexCard) {
       return null;
     }
 
-    let relationshipName = prefersHostHome ? 'hostHome' : 'interactHome';
-    let relationship = indexCard.relationships?.[relationshipName];
+    let relationship = indexCard.relationships?.interactHome;
     if (Array.isArray(relationship)) {
       relationship = relationship[0];
     }
