@@ -1,9 +1,6 @@
 import { module, test } from 'qunit';
 import { join, basename } from 'path';
-import {
-  systemInitiatedPriority,
-  type SingleCardDocument,
-} from '@cardstack/runtime-common';
+import { systemInitiatedPriority } from '@cardstack/runtime-common';
 import { setupServerEndpointsTest, testRealm2URL } from './helpers';
 import { ensureDirSync, writeJSONSync } from 'fs-extra';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
@@ -66,6 +63,19 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         );
       });
 
+      test('serves isolated HTML for /subdirectory/index.json at /subdirectory/', async function (assert) {
+        let response = await context.request2
+          .get('/test/subdirectory/')
+          .set('Accept', 'text/html');
+
+        assert.strictEqual(response.status, 200, 'serves HTML response');
+
+        assert.ok(
+          response.text.includes('Subdirectory Index'),
+          'isolated HTML is injected into the HTML response',
+        );
+      });
+
       test('does not inject head or isolated HTML when realm is not public', async function (assert) {
         let cardURL = new URL('private-index-test', testRealm2URL).href;
         let headHTML = '<meta data-test-head-html content="private-head" />';
@@ -123,25 +133,6 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         assert.ok(
           response.text.includes(scopedCSS),
           'scoped CSS is included in the HTML response',
-        );
-      });
-
-      test('serves subdirectory index.json when requesting a trailing slash', async function (assert) {
-        let response = await context.request2
-          .get('/test/subdirectory/')
-          .set('Accept', 'application/vnd.card+json');
-
-        assert.strictEqual(response.status, 200, 'serves JSON response');
-        let doc = response.body as SingleCardDocument;
-        assert.strictEqual(
-          doc.data.id,
-          new URL('subdirectory/index', testRealm2URL).href,
-          'serves the subdirectory index card',
-        );
-        assert.strictEqual(
-          doc.data.attributes?.firstName,
-          'Subdirectory Index',
-          'serves the subdirectory index card content',
         );
       });
 
