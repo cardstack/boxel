@@ -2,7 +2,7 @@ import { module, test } from 'qunit';
 import { join, basename } from 'path';
 import { systemInitiatedPriority } from '@cardstack/runtime-common';
 import { setupServerEndpointsTest, testRealm2URL } from './helpers';
-import { ensureDirSync, writeJSONSync } from 'fs-extra';
+import { ensureDirSync, writeFileSync, writeJSONSync } from 'fs-extra';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
 module(`server-endpoints/${basename(__filename)}`, function () {
@@ -27,6 +27,101 @@ module(`server-endpoints/${basename(__filename)}`, function () {
               },
             },
           });
+
+          writeFileSync(
+            join(context.testRealmDir, 'isolated-card.gts'),
+            `
+              import { Component, CardDef } from 'https://cardstack.com/base/card-api';
+
+              export class IsolatedCard extends CardDef {
+                static isolated = class Isolated extends Component<typeof this> {
+                  <template>
+                    <div data-test-isolated-html>Isolated HTML</div>
+                  </template>
+                };
+              }
+              `,
+          );
+
+          writeJSONSync(join(context.testRealmDir, 'isolated-test.json'), {
+            data: {
+              type: 'card',
+              attributes: {},
+              meta: {
+                adoptsFrom: {
+                  module: './isolated-card.gts',
+                  name: 'IsolatedCard',
+                },
+              },
+            },
+          });
+
+          writeFileSync(
+            join(context.testRealmDir, 'head-card.gts'),
+            `
+            import { Component, CardDef } from 'https://cardstack.com/base/card-api';
+
+            export class HeadCard extends CardDef {
+              static isolated = class Isolated extends Component<typeof this> {
+                <template>
+                  <div data-test-isolated-html>Private isolated HTML</div>
+                </template>
+              };
+
+              static head = class Head extends Component<typeof this> {
+                <template>
+                  <meta data-test-head-html content="private-head" />
+                </template>
+              };
+            }
+            `,
+          );
+
+          writeJSONSync(join(context.testRealmDir, 'private-index-test.json'), {
+            data: {
+              type: 'card',
+              attributes: {},
+              meta: {
+                adoptsFrom: {
+                  module: './head-card.gts',
+                  name: 'HeadCard',
+                },
+              },
+            },
+          });
+
+          writeFileSync(
+            join(context.testRealmDir, 'scoped-css-card.gts'),
+            `
+            import { Component, CardDef } from 'https://cardstack.com/base/card-api';
+
+            export class ScopedCssCard extends CardDef {
+              static isolated = class Isolated extends Component<typeof this> {
+                <template>
+                  <div class="scoped-css-marker" data-test-scoped-css>Scoped CSS</div>
+                  <style scoped>
+                    .scoped-css-marker {
+                      --scoped-css-marker: 1;
+                    }
+                  </style>
+                </template>
+              };
+            }
+            `,
+          );
+
+          writeJSONSync(join(context.testRealmDir, 'scoped-css-test.json'), {
+            data: {
+              type: 'card',
+              attributes: {},
+              meta: {
+                adoptsFrom: {
+                  module: './scoped-css-card.gts',
+                  name: 'ScopedCssCard',
+                },
+              },
+            },
+          });
         },
       });
 
@@ -44,14 +139,6 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       });
 
       test('serves isolated HTML in index responses for card URLs', async function (assert) {
-        let cardURL = new URL('isolated-test', testRealm2URL).href;
-        let isolatedHTML = '<div data-test-isolated-html>Isolated HTML</div>';
-
-        await context.dbAdapter.execute(
-          `INSERT INTO boxel_index_working (url, file_alias, type, realm_version, realm_url, isolated_html)
-         VALUES ('${cardURL}', '${cardURL}', 'instance', 1, '${testRealm2URL.href}', '${isolatedHTML}')`,
-        );
-
         let response = await context.request2
           .get('/test/isolated-test')
           .set('Accept', 'text/html');
@@ -77,16 +164,6 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       });
 
       test('does not inject head or isolated HTML when realm is not public', async function (assert) {
-        let cardURL = new URL('private-index-test', testRealm2URL).href;
-        let headHTML = '<meta data-test-head-html content="private-head" />';
-        let isolatedHTML =
-          '<div data-test-isolated-html>Private isolated HTML</div>';
-
-        await context.dbAdapter.execute(
-          `INSERT INTO boxel_index_working (url, file_alias, type, realm_version, realm_url, head_html, isolated_html)
-         VALUES ('${cardURL}', '${cardURL}', 'instance', 1, '${testRealm2URL.href}', '${headHTML}', '${isolatedHTML}')`,
-        );
-
         await context.dbAdapter.execute(
           `DELETE FROM realm_user_permissions WHERE realm_url = '${testRealm2URL.href}' AND username = '*'`,
         );
@@ -107,20 +184,6 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       });
 
       test('serves scoped CSS in index responses for card URLs', async function (assert) {
-        let cardURL = new URL('scoped-css-test', testRealm2URL).href;
-        let scopedCSS = '.layout{display:flex;}';
-        let encodedCSS = encodeURIComponent(
-          Buffer.from(scopedCSS).toString('base64'),
-        );
-        let deps = JSON.stringify([
-          `https://cardstack.com/base/card-api.gts.${encodedCSS}.glimmer-scoped.css`,
-        ]);
-
-        await context.dbAdapter.execute(
-          `INSERT INTO boxel_index_working (url, file_alias, type, realm_version, realm_url, deps)
-         VALUES ('${cardURL}', '${cardURL}', 'instance', 1, '${testRealm2URL.href}', '${deps}'::jsonb)`,
-        );
-
         let response = await context.request2
           .get('/test/scoped-css-test')
           .set('Accept', 'text/html');
@@ -131,7 +194,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           'scoped CSS style tag is injected into the HTML response',
         );
         assert.ok(
-          response.text.includes(scopedCSS),
+          response.text.includes('--scoped-css-marker: 1'),
           'scoped CSS is included in the HTML response',
         );
       });
