@@ -5,8 +5,9 @@ import { join, basename } from 'path';
 import type { Server } from 'http';
 import type { DirResult } from 'tmp';
 import { existsSync, readJSONSync, statSync } from 'fs-extra';
-import type { Realm } from '@cardstack/runtime-common';
+import type { Realm, Relationship } from '@cardstack/runtime-common';
 import {
+  baseRealm,
   isSingleCardDocument,
   type LooseSingleCardDocument,
   type SingleCardDocument,
@@ -187,6 +188,118 @@ module(basename(__filename), function () {
               cardTitle: null,
             },
           });
+        });
+
+        test('includes FileDef resources for file links in included payload', async function (assert) {
+          let { testRealm: realm, request } = getRealmSetup();
+
+          let writes = new Map<string, string>([
+            [
+              'gallery.gts',
+              `
+                import { CardDef, field, linksTo, linksToMany } from "https://cardstack.com/base/card-api";
+                import { FileDef } from "https://cardstack.com/base/file-api";
+
+                export class Gallery extends CardDef {
+                  @field hero = linksTo(FileDef);
+                  @field attachments = linksToMany(FileDef);
+                }
+              `,
+            ],
+            [
+              'gallery.json',
+              JSON.stringify({
+                data: {
+                  attributes: {},
+                  relationships: {
+                    hero: {
+                      links: {
+                        self: './hero.png',
+                      },
+                    },
+                    'attachments.0': {
+                      links: {
+                        self: './first.png',
+                      },
+                    },
+                    'attachments.1': {
+                      links: {
+                        self: './second.png',
+                      },
+                    },
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: './gallery.gts',
+                      name: 'Gallery',
+                    },
+                  },
+                },
+              }),
+            ],
+            ['hero.png', 'mock hero image'],
+            ['first.png', 'mock first image'],
+            ['second.png', 'mock second image'],
+          ]);
+
+          await realm.writeMany(writes);
+
+          let response = await request
+            .get('/gallery')
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+
+          let doc = response.body as LooseSingleCardDocument;
+          assert.ok(Array.isArray(doc.included), 'included resources present');
+
+          let included = doc.included ?? [];
+          let hero = included.find(
+            (resource) => resource.id === `${testRealmHref}hero.png`,
+          );
+          let first = included.find(
+            (resource) => resource.id === `${testRealmHref}first.png`,
+          );
+          let second = included.find(
+            (resource) => resource.id === `${testRealmHref}second.png`,
+          );
+
+          assert.ok(hero, 'includes hero FileDef resource');
+          assert.ok(first, 'includes first attachment FileDef resource');
+          assert.ok(second, 'includes second attachment FileDef resource');
+          assert.strictEqual(
+            hero?.type,
+            'file-meta',
+            'FileDef uses file-meta type',
+          );
+          assert.strictEqual(hero?.attributes?.name, 'hero.png');
+          assert.strictEqual(hero?.attributes?.contentType, 'image/png');
+          assert.deepEqual(hero?.meta?.adoptsFrom, {
+            module: `${baseRealm.url}file-api`,
+            name: 'FileDef',
+          });
+
+          assert.deepEqual(
+            (doc.data.relationships?.hero as Relationship)?.data,
+            {
+              type: 'file-meta',
+              id: `${testRealmHref}hero.png`,
+            },
+          );
+          assert.deepEqual(
+            (doc.data.relationships?.['attachments.0'] as Relationship)?.data,
+            {
+              type: 'file-meta',
+              id: `${testRealmHref}first.png`,
+            },
+          );
+          assert.deepEqual(
+            (doc.data.relationships?.['attachments.1'] as Relationship)?.data,
+            {
+              type: 'file-meta',
+              id: `${testRealmHref}second.png`,
+            },
+          );
         });
         test('card-level query-backed relationships resolve via search at read time', async function (assert) {
           let { testRealm: realm, request } = getRealmSetup();

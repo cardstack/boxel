@@ -29,6 +29,7 @@ import {
   baseRealm,
   primitive,
   localId,
+  getField,
   PermissionsContextName,
   fields,
   cardTypeDisplayName,
@@ -48,6 +49,8 @@ import {
   saveCard,
   provideConsumeContext,
   testModuleRealm,
+  setupIntegrationTestRealm,
+  setupLocalIndexing,
 } from '../../helpers';
 import {
   Base64ImageField,
@@ -85,6 +88,7 @@ import {
   CardInfoField,
 } from '../../helpers/base-realm';
 import { mango } from '../../helpers/image-fixture';
+import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderCard } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
 
@@ -379,6 +383,472 @@ module('Integration | card-basics', function (hooks) {
 
       loader.shimModule(`${testRealmURL}test-cards`, { ExteriorField });
       assert.true(instanceOf(new ExteriorField(), FieldDef));
+    });
+
+    test('linksTo FileDef renders without editor controls in edit format', async function (assert) {
+      class ImageDef extends FileDef {
+        static fitted = class Fitted extends Component<typeof this> {
+          <template>
+            <div data-test-image-def>{{@model.name}}</div>
+          </template>
+        };
+      }
+
+      class Gallery extends CardDef {
+        @field hero = linksTo(ImageDef as unknown as typeof CardDef);
+        static edit = class Edit extends Component<typeof this> {
+          <template>
+            <div data-test-gallery-edit>
+              <@fields.hero />
+            </div>
+          </template>
+        };
+      }
+
+      loader.shimModule(`${testRealmURL}test-cards`, { Gallery, ImageDef });
+
+      let hero = new ImageDef({
+        id: 'https://example.com/hero.png',
+        name: 'hero.png',
+        url: 'https://example.com/hero.png',
+        sourceUrl: 'https://example.com/hero.png',
+        contentType: 'image/png',
+      });
+      let gallery = new Gallery({ hero });
+
+      await renderCard(loader, gallery, 'edit');
+
+      assert
+        .dom('[data-test-links-to-editor="hero"]')
+        .doesNotExist('FileDef links should not show linksTo editor UI');
+      assert
+        .dom('[data-test-image-def]')
+        .hasText('hero.png', 'FileDef uses delegated fitted view');
+    });
+
+    test('linksToMany FileDef renders without editor controls in edit format', async function (assert) {
+      class ImageDef extends FileDef {
+        static fitted = class Fitted extends Component<typeof this> {
+          <template>
+            <div data-test-image-def>{{@model.name}}</div>
+          </template>
+        };
+      }
+
+      class Gallery extends CardDef {
+        @field attachments = linksToMany(ImageDef as unknown as typeof CardDef);
+        static edit = class Edit extends Component<typeof this> {
+          <template>
+            <div data-test-gallery-edit>
+              <@fields.attachments />
+            </div>
+          </template>
+        };
+      }
+
+      loader.shimModule(`${testRealmURL}test-cards`, { Gallery, ImageDef });
+
+      let attachment1 = new ImageDef({
+        id: 'https://example.com/first.png',
+        name: 'first.png',
+        url: 'https://example.com/first.png',
+        sourceUrl: 'https://example.com/first.png',
+        contentType: 'image/png',
+      });
+      let attachment2 = new ImageDef({
+        id: 'https://example.com/second.png',
+        name: 'second.png',
+        url: 'https://example.com/second.png',
+        sourceUrl: 'https://example.com/second.png',
+        contentType: 'image/png',
+      });
+      let gallery = new Gallery({ attachments: [attachment1, attachment2] });
+
+      await renderCard(loader, gallery, 'edit');
+
+      assert
+        .dom('[data-test-links-to-many="attachments"]')
+        .doesNotExist('FileDef links should not show linksToMany editor UI');
+      assert
+        .dom('[data-test-plural-view-field="attachments"]')
+        .exists('FileDef links render via the plural view');
+      assert
+        .dom('[data-test-image-def]')
+        .exists(
+          { count: 2 },
+          'FileDef uses delegated fitted view for each item',
+        );
+    });
+
+    test('linksTo FileDef renders delegated embedded view', async function (assert) {
+      class ImageDef extends FileDef {
+        static embedded = class Embedded extends Component<typeof this> {
+          <template>
+            <div data-test-image-def-embedded>{{@model.name}}</div>
+          </template>
+        };
+      }
+
+      class Gallery extends CardDef {
+        @field hero = linksTo(ImageDef as unknown as typeof CardDef);
+        static embedded = class Embedded extends Component<typeof this> {
+          <template>
+            <div data-test-gallery-embedded>
+              <@fields.hero @format='embedded' />
+            </div>
+          </template>
+        };
+      }
+
+      loader.shimModule(`${testRealmURL}test-cards`, { Gallery, ImageDef });
+
+      let hero = new ImageDef({
+        id: 'https://example.com/hero.png',
+        name: 'hero.png',
+        url: 'https://example.com/hero.png',
+        sourceUrl: 'https://example.com/hero.png',
+        contentType: 'image/png',
+      });
+      let gallery = new Gallery({ hero });
+
+      await renderCard(loader, gallery, 'embedded');
+
+      assert
+        .dom('[data-test-image-def-embedded]')
+        .hasText('hero.png', 'FileDef uses delegated embedded view');
+    });
+
+    test('linksToMany FileDef renders delegated fitted view', async function (assert) {
+      class ImageDef extends FileDef {
+        static fitted = class Fitted extends Component<typeof this> {
+          <template>
+            <div data-test-image-def-fitted>{{@model.name}}</div>
+          </template>
+        };
+      }
+
+      class Gallery extends CardDef {
+        @field attachments = linksToMany(ImageDef as unknown as typeof CardDef);
+        static fitted = class Fitted extends Component<typeof this> {
+          <template>
+            <div data-test-gallery-fitted>
+              <@fields.attachments />
+            </div>
+          </template>
+        };
+      }
+
+      loader.shimModule(`${testRealmURL}test-cards`, { Gallery, ImageDef });
+
+      let attachment1 = new ImageDef({
+        id: 'https://example.com/first.png',
+        name: 'first.png',
+        url: 'https://example.com/first.png',
+        sourceUrl: 'https://example.com/first.png',
+        contentType: 'image/png',
+      });
+      let attachment2 = new ImageDef({
+        id: 'https://example.com/second.png',
+        name: 'second.png',
+        url: 'https://example.com/second.png',
+        sourceUrl: 'https://example.com/second.png',
+        contentType: 'image/png',
+      });
+      let gallery = new Gallery({ attachments: [attachment1, attachment2] });
+
+      await renderCard(loader, gallery, 'fitted');
+
+      assert
+        .dom('[data-test-image-def-fitted]')
+        .exists(
+          { count: 2 },
+          'FileDef uses delegated fitted view for each item',
+        );
+      assert
+        .dom('[data-test-plural-view-format="fitted"]')
+        .exists('linksToMany renders in fitted format');
+    });
+
+    test('linksTo FileDef requires id when assigning', async function (assert) {
+      class ImageDef extends FileDef {}
+
+      class Gallery extends CardDef {
+        @field hero = linksTo(ImageDef as unknown as typeof CardDef);
+      }
+
+      loader.shimModule(`${testRealmURL}test-cards`, { Gallery, ImageDef });
+
+      let hero = new ImageDef({
+        name: 'hero.png',
+        url: 'https://example.com/hero.png',
+        sourceUrl: 'https://example.com/hero.png',
+        contentType: 'image/png',
+      });
+
+      try {
+        new Gallery({ hero });
+        throw new Error('expected error was not thrown');
+      } catch (err: any) {
+        assert.ok(
+          err.message.match(
+            /linksTo field 'hero' cannot reference a FileDef without an id/,
+          ),
+          'linksTo rejects FileDef without id at assignment time',
+        );
+      }
+    });
+
+    test('linksTo FileDef requires id when serializing', async function (assert) {
+      class ImageDef extends FileDef {}
+
+      class Gallery extends CardDef {
+        @field hero = linksTo(ImageDef as unknown as typeof CardDef);
+      }
+
+      loader.shimModule(`${testRealmURL}test-cards`, { Gallery, ImageDef });
+
+      let hero = new ImageDef({
+        name: 'hero.png',
+        url: 'https://example.com/hero.png',
+        sourceUrl: 'https://example.com/hero.png',
+        contentType: 'image/png',
+      });
+
+      let heroField = getField(Gallery, 'hero');
+      let doc = {
+        data: { type: 'card', id: 'https://example.com/gallery' },
+      } as any;
+
+      try {
+        heroField?.serialize(hero, doc, new Set());
+        throw new Error('expected error was not thrown');
+      } catch (err: any) {
+        assert.ok(
+          err.message.match(
+            /linksTo field 'hero' cannot serialize a FileDef without an id/,
+          ),
+          'linksTo refuses to serialize FileDef without id',
+        );
+      }
+    });
+
+    test('linksToMany FileDef requires id when assigning', async function (assert) {
+      class ImageDef extends FileDef {}
+
+      class Gallery extends CardDef {
+        @field attachments = linksToMany(ImageDef as unknown as typeof CardDef);
+      }
+
+      loader.shimModule(`${testRealmURL}test-cards`, { Gallery, ImageDef });
+
+      let attachment = new ImageDef({
+        name: 'first.png',
+        url: 'https://example.com/first.png',
+        sourceUrl: 'https://example.com/first.png',
+        contentType: 'image/png',
+      });
+
+      try {
+        new Gallery({ attachments: [attachment] });
+        throw new Error('expected error was not thrown');
+      } catch (err: any) {
+        assert.ok(
+          err.message.match(
+            /linksToMany field 'attachments' cannot reference a FileDef without an id/,
+          ),
+          'linksToMany rejects FileDef without id at assignment time',
+        );
+      }
+    });
+
+    test('linksToMany FileDef requires id when serializing', async function (assert) {
+      class ImageDef extends FileDef {}
+
+      class Gallery extends CardDef {
+        @field attachments = linksToMany(ImageDef as unknown as typeof CardDef);
+      }
+
+      loader.shimModule(`${testRealmURL}test-cards`, { Gallery, ImageDef });
+
+      let attachment = new ImageDef({
+        name: 'first.png',
+        url: 'https://example.com/first.png',
+        sourceUrl: 'https://example.com/first.png',
+        contentType: 'image/png',
+      });
+
+      let attachmentsField = getField(Gallery, 'attachments');
+      let doc = {
+        data: { type: 'card', id: 'https://example.com/gallery' },
+      } as any;
+
+      try {
+        attachmentsField?.serialize([attachment], doc, new Set());
+        throw new Error('expected error was not thrown');
+      } catch (err: any) {
+        assert.ok(
+          err.message.match(
+            /linksToMany field 'attachments' cannot serialize a FileDef without an id/,
+          ),
+          'linksToMany refuses to serialize FileDef without id',
+        );
+      }
+    });
+
+    module('links to files in test realm', function (hooks) {
+      let mockMatrixUtils = setupMockMatrix(hooks);
+      setupLocalIndexing(hooks);
+
+      test('linksTo FileDef renders delegated view from realm file meta', async function (assert) {
+        class Gallery extends CardDef {
+          @field hero = linksTo(FileDef as unknown as typeof CardDef);
+          static fitted = class Fitted extends Component<typeof this> {
+            <template>
+              <div data-test-gallery-fitted>
+                <@fields.hero />
+              </div>
+            </template>
+          };
+        }
+
+        await setupIntegrationTestRealm({
+          mockMatrixUtils,
+          contents: {
+            'test-cards.gts': { Gallery },
+            'hero.png': 'mock image bytes',
+            'Gallery/hero.json': {
+              data: {
+                type: 'card',
+                attributes: {
+                  cardInfo: {},
+                },
+                relationships: {
+                  hero: {
+                    links: {
+                      self: `${testRealmURL}hero.png`,
+                    },
+                    data: {
+                      id: `${testRealmURL}hero.png`,
+                      type: 'file-meta',
+                    },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: `${testRealmURL}test-cards`,
+                    name: 'Gallery',
+                  },
+                },
+              },
+            },
+          },
+        });
+
+        let store = getService('store');
+        let gallery = await store.get(`${testRealmURL}Gallery/hero`);
+        await store.loaded();
+
+        await renderCard(loader, gallery as BaseDef, 'fitted');
+        await waitUntil(() =>
+          document
+            .querySelector('[data-test-gallery-fitted]')
+            ?.textContent?.includes('hero.png'),
+        );
+
+        assert
+          .dom('[data-test-gallery-fitted]')
+          .includesText(
+            'hero.png',
+            'FileDef renders delegated view from file meta',
+          );
+      });
+
+      test('linksToMany FileDef renders delegated view from realm file meta', async function (assert) {
+        class Gallery extends CardDef {
+          @field attachments = linksToMany(
+            FileDef as unknown as typeof CardDef,
+          );
+          static fitted = class Fitted extends Component<typeof this> {
+            <template>
+              <div data-test-gallery-fitted>
+                <@fields.attachments />
+              </div>
+            </template>
+          };
+        }
+
+        await setupIntegrationTestRealm({
+          mockMatrixUtils,
+          contents: {
+            'test-cards.gts': { Gallery },
+            'first.png': 'first mock image',
+            'second.png': 'second mock image',
+            'Gallery/attachments.json': {
+              data: {
+                type: 'card',
+                attributes: {
+                  cardInfo: {},
+                },
+                relationships: {
+                  'attachments.0': {
+                    links: {
+                      self: `${testRealmURL}first.png`,
+                    },
+                    data: {
+                      id: `${testRealmURL}first.png`,
+                      type: 'file-meta',
+                    },
+                  },
+                  'attachments.1': {
+                    links: {
+                      self: `${testRealmURL}second.png`,
+                    },
+                    data: {
+                      id: `${testRealmURL}second.png`,
+                      type: 'file-meta',
+                    },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: `${testRealmURL}test-cards`,
+                    name: 'Gallery',
+                  },
+                },
+              },
+            },
+          },
+        });
+
+        let store = getService('store');
+        let gallery = await store.get(`${testRealmURL}Gallery/attachments`);
+        await store.loaded();
+
+        await renderCard(loader, gallery as BaseDef, 'fitted');
+        await waitUntil(() => {
+          let text =
+            document.querySelector(
+              '[data-test-plural-view-field="attachments"]',
+            )?.textContent ?? '';
+          return text.includes('first.png') && text.includes('second.png');
+        });
+
+        assert
+          .dom('[data-test-plural-view-field="attachments"]')
+          .exists('FileDef links render via the plural view');
+        assert
+          .dom('[data-test-plural-view-field="attachments"]')
+          .includesText(
+            'first.png',
+            'FileDef renders delegated view from file meta',
+          );
+        assert
+          .dom('[data-test-plural-view-field="attachments"]')
+          .includesText(
+            'second.png',
+            'FileDef renders delegated view from file meta',
+          );
+      });
     });
 
     test('primitive field type checking', async function (assert) {
