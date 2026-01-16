@@ -9,7 +9,7 @@
     "type": "card",
     "attributes": {
       "ref": {
-        "name": "default",
+        "name": "QuantityField",
         "module": "../fields/quantity"
       },
       "title": "Quantity Field",

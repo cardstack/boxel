@@ -4,8 +4,8 @@
     "attributes": {
       "readMe": null,
       "ref": {
-        "name": "default",
-        "module": "http://localhost:4201/catalog/fields/image"
+        "name": "ImageField",
+        "module": "../fields/image"
       },
       "specType": "field",
       "containedExamples": [],

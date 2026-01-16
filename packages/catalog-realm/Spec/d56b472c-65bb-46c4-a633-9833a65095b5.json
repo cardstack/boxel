@@ -9,8 +9,8 @@
     "type": "card",
     "attributes": {
       "ref": {
-        "name": "default",
-        "module": "http://localhost:4201/catalog/fields/color"
+        "name": "ColorField",
+        "module": "../fields/color"
       },
       "title": "Color Field",
       "readMe": "",

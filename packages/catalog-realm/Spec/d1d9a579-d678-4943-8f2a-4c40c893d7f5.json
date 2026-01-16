@@ -9,7 +9,7 @@
     "type": "card",
     "attributes": {
       "ref": {
-        "name": "default",
+        "name": "NumberField",
         "module": "../fields/number"
       },
       "title": "Default Number Field",
