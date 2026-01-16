@@ -10,6 +10,7 @@ import type { Loader } from '@cardstack/runtime-common/loader';
 
 import ENV from '@cardstack/host/config/environment';
 
+import { provideConsumeContext } from '../helpers';
 import {
   setupBaseRealm,
   field,
@@ -17,7 +18,6 @@ import {
   CardDef,
   Component,
 } from '../helpers/base-realm';
-import { provideConsumeContext } from '../helpers';
 import { renderCard } from '../helpers/render-component';
 import { setupRenderingTest } from '../helpers/setup';
 
