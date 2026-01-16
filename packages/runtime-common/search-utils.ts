@@ -2,6 +2,7 @@ import { ensureTrailingSlash } from './paths';
 import { assertQuery, InvalidQueryError, type Query } from './query';
 import {
   isValidPrerenderedHtmlFormat,
+  PRERENDERED_HTML_FORMATS,
   type PrerenderedHtmlFormat,
 } from './prerendered-html-format';
 import type {
@@ -48,7 +49,10 @@ function normalizeStringParam(value: unknown): string | undefined {
 
 function normalizeStringArrayParam(value: unknown): string[] | undefined {
   if (Array.isArray(value)) {
-    return value.map((entry) => String(entry));
+    if (!value.every((entry) => typeof entry === 'string')) {
+      return undefined;
+    }
+    return value;
   }
   if (typeof value === 'string') {
     return [value];
@@ -204,7 +208,14 @@ export function parsePrerenderedSearchRequestFromPayload(payload: unknown): {
       ? (payload as Record<string, any>)
       : {};
   htmlFormat = normalizeStringParam(payloadRecord.prerenderedHtmlFormat);
+  let hasCardUrls = 'cardUrls' in payloadRecord;
   cardUrls = normalizeStringArrayParam(payloadRecord.cardUrls);
+  if (hasCardUrls && !cardUrls) {
+    throw new SearchRequestError(
+      'invalid-query',
+      'cardUrls must be a string or array of strings',
+    );
+  }
   renderType = normalizeRenderType(payloadRecord.renderType);
   let {
     prerenderedHtmlFormat: _remove1,
@@ -217,7 +228,7 @@ export function parsePrerenderedSearchRequestFromPayload(payload: unknown): {
   if (!isValidPrerenderedHtmlFormat(htmlFormat)) {
     throw new SearchRequestError(
       'invalid-prerendered-html-format',
-      "Must include a 'prerenderedHtmlFormat' parameter with a value of 'embedded', 'fitted', 'atom', or 'head' to use this endpoint",
+      `Must include a 'prerenderedHtmlFormat' parameter with a value of ${PRERENDERED_HTML_FORMATS.join(', ')} to use this endpoint`,
     );
   }
 

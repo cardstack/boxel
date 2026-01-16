@@ -148,6 +148,7 @@ import './server-endpoints/queue-status-test';
 import './server-endpoints/realm-lifecycle-test';
 import './server-endpoints/search-test';
 import './server-endpoints/search-prerendered-test';
+import './server-endpoints/info-test';
 import './server-endpoints/stripe-session-test';
 import './server-endpoints/stripe-webhook-test';
 import './server-endpoints/user-and-catalog-test';

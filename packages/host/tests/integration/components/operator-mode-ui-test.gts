@@ -34,7 +34,11 @@ module('Integration | operator-mode | ui', function (hooks) {
       },
     );
 
-    await waitFor('[data-test-card-header-realm-icon]');
+    await waitFor('[data-test-boxel-card-header-title]', { timeout: 10000 });
+    await waitFor(
+      `[data-test-card-header-realm-icon="https://boxel-images.boxel.ai/icons/Letter-o.png"]`,
+      { timeout: 10000 },
+    );
     assert
       .dom('[data-test-boxel-card-header-title]')
       .hasText('Person - Fadhlan');

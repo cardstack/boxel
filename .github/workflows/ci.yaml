@@ -466,6 +466,7 @@ jobs:
             "server-endpoints/queue-status-test.ts",
             "server-endpoints/realm-lifecycle-test.ts",
             "server-endpoints/search-test.ts",
+            "server-endpoints/info-test.ts",
             "server-endpoints/search-prerendered-test.ts",
             "server-endpoints/stripe-session-test.ts",
             "server-endpoints/stripe-webhook-test.ts",

@@ -3560,6 +3560,7 @@ posts/ignore-me.gts
     let response = await handle(
       realm,
       new Request(`${testRealmURL}_info`, {
+        method: 'QUERY',
         headers: {
           Accept: 'application/vnd.api+json',
         },
@@ -3598,6 +3599,7 @@ posts/ignore-me.gts
     let response = await handle(
       realm,
       new Request(`${testRealmURL}_info`, {
+        method: 'QUERY',
         headers: {
           Accept: 'application/vnd.api+json',
         },
@@ -3627,6 +3629,7 @@ posts/ignore-me.gts
     let response = await handle(
       realm,
       new Request(`${testRealmURL}_info`, {
+        method: 'QUERY',
         headers: {
           Accept: 'application/vnd.api+json',
         },

@@ -1908,8 +1908,8 @@ module(basename(__filename), function () {
   });
 
   module('permissioned realm', function () {
-    let testRealm1URL = 'http://127.0.0.1:4447/';
-    let testRealm2URL = 'http://127.0.0.1:4448/';
+    let testRealm1URL = 'http://127.0.0.1:4447/test/';
+    let testRealm2URL = 'http://127.0.0.1:4448/test/';
     let testRealm2: Realm;
 
     function setupRealms(
