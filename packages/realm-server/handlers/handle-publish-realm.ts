@@ -1,5 +1,6 @@
 import type Koa from 'koa';
 import {
+  ensureTrailingSlash,
   fetchUserPermissions,
   query,
   SupportedMimeType,
@@ -77,10 +78,9 @@ function maybeOverridePublishedRealmURL(
 
   let overriddenURL = new URL(publishedRealmURL);
   overriddenURL.host = overrideDomain;
+
   let overriddenRealmURL = overriddenURL.toString();
-  return overriddenRealmURL.endsWith('/')
-    ? overriddenRealmURL
-    : `${overriddenRealmURL}/`;
+  return ensureTrailingSlash(overriddenRealmURL);
 }
 
 function rewriteHostHomeForPublishedRealm(
