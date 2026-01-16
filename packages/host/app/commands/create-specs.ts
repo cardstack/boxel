@@ -33,6 +33,7 @@ import GenerateReadmeSpecCommand from './generate-readme-spec';
 
 import type CardService from '../services/card-service';
 import type ModuleContentsService from '../services/module-contents-service';
+import type RealmService from '../services/realm';
 import type StoreService from '../services/store';
 
 class SpecTypeGuesser {
@@ -132,6 +133,7 @@ export default class CreateSpecCommand extends HostBaseCommand<
   @service declare private store: StoreService;
   @service declare private cardService: CardService;
   @service declare private moduleContentsService: ModuleContentsService;
+  @service declare private realm: RealmService;
 
   static actionVerb = 'Create';
   requireInputFields = ['targetRealm'];
@@ -206,6 +208,12 @@ export default class CreateSpecCommand extends HostBaseCommand<
       throw new Error('Failed to create or retrieve spec');
     }
 
+    let canEdit = this.realm.canWrite(targetRealm);
+    if (!canEdit) {
+      throw new Error(
+        `Cannot generate README without write access to ${targetRealm}`,
+      );
+    }
     if (autoGenerateReadme && !createdSpecRes.spec.readMe) {
       // we populate the readme when is not already set even when spec is already created
       let generateReadmeSpecCommand = new GenerateReadmeSpecCommand(

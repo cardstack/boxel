@@ -36,6 +36,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       let matrixClient: MatrixClient;
       let roomId: string;
       let userId = '@test_realm:localhost';
+      let originalLowCreditThreshold: string | undefined;
       let waitForBillingNotification = async function (
         assert: Assert,
         done: () => void,
@@ -72,6 +73,8 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       });
 
       hooks.beforeEach(async function () {
+        originalLowCreditThreshold = process.env.LOW_CREDIT_THRESHOLD;
+        process.env.LOW_CREDIT_THRESHOLD = '2000';
         let stripe = getStripe();
         createSubscriptionStub = sinon.stub(stripe.subscriptions, 'create');
         fetchPriceListStub = sinon.stub(stripe.prices, 'list');
@@ -99,6 +102,11 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       hooks.afterEach(async function () {
         createSubscriptionStub.restore();
         fetchPriceListStub.restore();
+        if (originalLowCreditThreshold == null) {
+          delete process.env.LOW_CREDIT_THRESHOLD;
+        } else {
+          process.env.LOW_CREDIT_THRESHOLD = originalLowCreditThreshold;
+        }
       });
 
       test('subscribes user back to free plan when the current subscription is expired', async function (assert) {
@@ -503,9 +511,10 @@ module(`server-endpoints/${basename(__filename)}`, function () {
                 creditsAvailableInPlanAllowance: null,
                 creditsIncludedInPlanAllowance: null,
                 extraCreditsAvailableInBalance: 0,
-                lowCreditThreshold: null,
+                lowCreditThreshold: 2000,
                 lastDailyCreditGrantAt: null,
-                nextDailyCreditGrantAt: null,
+                nextDailyCreditGrantAt:
+                  json.data.attributes.nextDailyCreditGrantAt,
               },
               relationships: {
                 subscription: null,

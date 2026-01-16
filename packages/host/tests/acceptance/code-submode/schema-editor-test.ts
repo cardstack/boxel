@@ -1161,14 +1161,12 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
       codePath: `${testRealmURL}empty.gts`,
     });
 
-    await waitFor('[data-test-error-details]');
-
-    assert.dom('[data-test-boxel-copy-button]').exists();
-    await triggerEvent(`[data-test-boxel-copy-button]`, 'mouseenter');
-    assert.dom('[data-test-tooltip-content]').hasText('Copy to clipboard');
+    await waitFor('[data-test-empty-file-message]');
     assert
-      .dom('[data-test-error-details]')
-      .hasText('Stack trace: File is empty');
+      .dom('[data-test-empty-file-message]')
+      .hasText(
+        'File is empty - tools like schema inspector, and file preview, are unavailable.',
+      );
   });
 
   test<TestContextWithSave>('updates cursor position in monaco editor when field row clicked', async function (assert) {

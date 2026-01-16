@@ -11,6 +11,20 @@ module(`server-endpoints/${basename(__filename)}`, function () {
     'Realm Server Endpoints (not specific to one realm)',
     function (hooks) {
       let context = setupServerEndpointsTest(hooks);
+      let originalLowCreditThreshold: string | undefined;
+
+      hooks.beforeEach(function () {
+        originalLowCreditThreshold = process.env.LOW_CREDIT_THRESHOLD;
+        process.env.LOW_CREDIT_THRESHOLD = '2000';
+      });
+
+      hooks.afterEach(function () {
+        if (originalLowCreditThreshold == null) {
+          delete process.env.LOW_CREDIT_THRESHOLD;
+        } else {
+          process.env.LOW_CREDIT_THRESHOLD = originalLowCreditThreshold;
+        }
+      });
 
       test('can create a user', async function (assert) {
         let ownerUserId = '@mango:localhost';
