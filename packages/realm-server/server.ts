@@ -589,9 +589,7 @@ export class RealmServer {
     );
   }
 
-  private async resolveIndexCardHome(
-    indexCardURL: URL,
-  ): Promise<URL | null> {
+  private async resolveIndexCardHome(indexCardURL: URL): Promise<URL | null> {
     let indexCard = await this.retrieveIndexCardResource(indexCardURL);
     if (!indexCard) {
       return null;
@@ -661,7 +659,9 @@ export class RealmServer {
     }
     if (resource instanceof Uint8Array) {
       try {
-        return JSON.parse(Buffer.from(resource).toString('utf8')) as CardResource;
+        return JSON.parse(
+          Buffer.from(resource).toString('utf8'),
+        ) as CardResource;
       } catch (_error) {
         return null;
       }
