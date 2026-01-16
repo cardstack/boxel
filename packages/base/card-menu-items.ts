@@ -16,6 +16,7 @@ import {
   cardTypeIcon,
   CommandContext,
   Format,
+  getAncestor,
   identifyCard,
   isResolvedCodeRef,
   realmURL,
@@ -103,7 +104,7 @@ export function getDefaultCardMenuItems(
       );
     }
 
-    if (isListingCard(card)) {
+    if (isListingSubclass(card)) {
       menuItems.push({
         label: 'Make a PR',
         action: async () => {
@@ -169,7 +170,7 @@ export function getDefaultCardMenuItems(
       disabled: !cardId,
     });
     menuItems = [...menuItems, ...getSampleDataMenuItems(card, params)];
-    if (!isListingCard(card)) {
+    if (!isListingSubclass(card)) {
       menuItems.push({
         label: `Create listing with AI`,
         action: async () => {
@@ -229,6 +230,20 @@ function isIndexCard(card: CardDef): boolean {
   return (card.id as unknown as string) === `${cardRealmURL.href}index`;
 }
 
-function isListingCard(card: CardDef): boolean {
-  return card?.constructor?.name?.endsWith?.('Listing') ?? false;
+// Check if a card inherits from the catalog Listing class by verifying
+// the module path in the inheritance chain
+function isListingSubclass(card: CardDef): boolean {
+  let current: typeof BaseDef | undefined = card?.constructor as
+    | typeof BaseDef
+    | undefined;
+
+  while (current) {
+    const codeRef = identifyCard(current);
+    if (codeRef && codeRef.module.includes('catalog-app/listing/listing')) {
+      return true;
+    }
+    current = getAncestor(current);
+  }
+
+  return false;
 }
