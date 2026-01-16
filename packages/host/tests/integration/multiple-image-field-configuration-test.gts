@@ -1,7 +1,11 @@
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { ensureTrailingSlash } from '@cardstack/runtime-common';
+import {
+  ensureTrailingSlash,
+  PermissionsContextName,
+  type Permissions,
+} from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
 import ENV from '@cardstack/host/config/environment';
@@ -13,6 +17,7 @@ import {
   CardDef,
   Component,
 } from '../helpers/base-realm';
+import { provideConsumeContext } from '../helpers';
 import { renderCard } from '../helpers/render-component';
 import { setupRenderingTest } from '../helpers/setup';
 
@@ -40,6 +45,10 @@ module('Integration | multiple image field configuration', function (hooks) {
       `${catalogRealmURL}fields/image`,
     );
     CatalogImageFieldClass = imageModule.default;
+
+    // Set up permissions to allow editing
+    const permissions: Permissions = { canWrite: true, canRead: true };
+    provideConsumeContext(PermissionsContextName, permissions);
   });
 
   async function renderConfiguredField(
