@@ -415,6 +415,15 @@ export class Realm {
 
   private visibilityPromise?: Promise<RealmVisibility>;
 
+  // We are caching world readable permissions for realms such that we can avoid
+  // having to look up the realm permissions for world-read realms on every HTTP
+  // HEAD and GET request. the tradeoff is that if there is an out-of-band
+  // update to the permissions that effects world readability (e.g. directly
+  // updating the DB), that will mean we need to restart the realm server to
+  // pick up the permissions change.
+  #worldReadable?: boolean;
+  #worldReadablePromise?: Promise<boolean>;
+
   get url(): string {
     return this.paths.url;
   }
@@ -640,7 +649,7 @@ export class Realm {
     Object.values(SupportedMimeType).forEach((mimeType) => {
       if (mimeType !== SupportedMimeType.CardSource) {
         this.#router.head('/.*', mimeType as SupportedMimeType, async () => {
-          let requestContext = await this.createRequestContext();
+          let requestContext = await this.createRequestContext('read');
           return createResponse({ init: { status: 200 }, requestContext });
         });
       }
@@ -1275,6 +1284,8 @@ export class Realm {
         });
       }
     }
+    await this.isWorldReadable();
+
     this.#perfLog.debug(
       `realm server ${this.url} startup in ${Date.now() - startTime} ms`,
     );
@@ -1416,24 +1427,20 @@ export class Realm {
       request.headers.delete('X-HTTP-Method-Override');
     }
 
-    let requestContext = await this.createRequestContext(); // Cache realm permissions for the duration of the request so that we don't have to fetch them multiple times
     let localPath = this.paths.local(new URL(request.url));
+    let requiredPermission: RealmAction = 'read';
+    if (localPath === '_permissions') {
+      requiredPermission = 'realm-owner';
+    } else if (localPath === '_config' && request.method === 'PATCH') {
+      requiredPermission = 'realm-owner';
+    } else if (['PUT', 'PATCH', 'POST', 'DELETE'].includes(request.method)) {
+      requiredPermission = 'write';
+    }
+
+    let requestContext = await this.createRequestContext(requiredPermission);
 
     try {
       if (!isLocal) {
-        let requiredPermission: RealmAction;
-        if (
-          ['_permissions'].includes(localPath) ||
-          (localPath === '_config' && request.method === 'PATCH')
-        ) {
-          requiredPermission = 'realm-owner';
-        } else if (
-          ['PUT', 'PATCH', 'POST', 'DELETE'].includes(request.method)
-        ) {
-          requiredPermission = 'write';
-        } else {
-          requiredPermission = 'read';
-        }
         await this.checkPermission(request, requestContext, requiredPermission);
       }
       let acceptedMimeType = extractSupportedMimeType(
@@ -3768,6 +3775,12 @@ export class Realm {
     }
 
     await insertPermissions(this.#dbAdapter, new URL(this.url), patch);
+    if (Object.prototype.hasOwnProperty.call(patch, '*')) {
+      let worldReadable =
+        Array.isArray(patch['*']) && patch['*'].includes('read');
+      this.#worldReadable = worldReadable;
+      this.#worldReadablePromise = Promise.resolve(worldReadable);
+    }
     return await this.getRealmPermissions(request, requestContext);
   }
 
@@ -4184,11 +4197,46 @@ export class Realm {
     );
   }
 
-  private async createRequestContext(): Promise<RequestContext> {
-    let permissions = {
-      [this.#realmServerMatrixUserId]: ['assume-user'] as RealmAction[],
-      ...(await fetchRealmPermissions(this.#dbAdapter, new URL(this.url))),
-    };
+  private async isWorldReadable(): Promise<boolean> {
+    if (this.#worldReadable !== undefined) {
+      return this.#worldReadable;
+    }
+    if (!this.#worldReadablePromise) {
+      this.#worldReadablePromise = (async () => {
+        let permissions = await fetchRealmPermissions(
+          this.#dbAdapter,
+          new URL(this.url),
+        );
+        let worldReadable = permissions['*']?.includes('read') ?? false;
+        if (this.#worldReadable === undefined) {
+          this.#worldReadable = worldReadable;
+          return worldReadable;
+        }
+        return this.#worldReadable;
+      })();
+    }
+    return await this.#worldReadablePromise;
+  }
+
+  private async createRequestContext(
+    requiredPermission: RealmAction,
+  ): Promise<RequestContext> {
+    let permissions: RealmPermissions;
+    let shouldUseWorldReadable =
+      requiredPermission === 'read' && (await this.isWorldReadable());
+
+    if (shouldUseWorldReadable) {
+      permissions = {
+        [this.#realmServerMatrixUserId]: ['assume-user'],
+        '*': ['read'],
+      };
+    } else {
+      permissions = {
+        [this.#realmServerMatrixUserId]: ['assume-user'],
+        ...(await fetchRealmPermissions(this.#dbAdapter, new URL(this.url))),
+      };
+    }
+
     return {
       realm: this,
       permissions,
