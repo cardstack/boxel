@@ -239,7 +239,11 @@ function isListingSubclass(card: CardDef): boolean {
 
   while (current) {
     const codeRef = identifyCard(current);
-    if (codeRef && codeRef.module.includes('catalog-app/listing/listing')) {
+    if (
+      codeRef &&
+      isResolvedCodeRef(codeRef) &&
+      codeRef.module.includes('catalog-app/listing/listing')
+    ) {
       return true;
     }
     current = getAncestor(current);
