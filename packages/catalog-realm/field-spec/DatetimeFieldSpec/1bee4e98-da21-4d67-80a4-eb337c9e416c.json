@@ -9,8 +9,8 @@
     "type": "card",
     "attributes": {
       "ref": {
-        "name": "DatetimeFieldSpec",
-        "module": "../datetime-field-spec"
+        "name": "DatetimeField",
+        "module": "../../fields/date-time"
       },
       "short": "2026-01-08T16:04:00",
       "title": "Datetime Field Spec",

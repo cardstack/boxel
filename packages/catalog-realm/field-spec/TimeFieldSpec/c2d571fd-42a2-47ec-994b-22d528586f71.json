@@ -9,8 +9,8 @@
     "type": "card",
     "attributes": {
       "ref": {
-        "name": "TimeFieldSpec",
-        "module": "../time-field-spec"
+        "name": "TimeField",
+        "module": "../../fields/time"
       },
       "title": "Time Field Spec",
       "hour24": {

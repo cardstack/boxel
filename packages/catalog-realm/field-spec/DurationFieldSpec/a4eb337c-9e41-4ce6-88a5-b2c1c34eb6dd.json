@@ -9,8 +9,8 @@
     "type": "card",
     "attributes": {
       "ref": {
-        "name": "DurationFieldSpec",
-        "module": "../duration-field-spec"
+        "name": "DurationField",
+        "module": "../../fields/time/duration"
       },
       "full": {
         "days": 31,

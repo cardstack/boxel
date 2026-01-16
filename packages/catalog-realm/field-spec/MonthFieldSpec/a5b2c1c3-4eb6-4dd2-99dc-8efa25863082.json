@@ -9,8 +9,8 @@
     "type": "card",
     "attributes": {
       "ref": {
-        "name": "MonthFieldSpec",
-        "module": "../month-field-spec"
+        "name": "MonthField",
+        "module": "../../fields/date/month"
       },
       "title": "Month Field Spec",
       "readMe": null,
