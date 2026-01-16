@@ -21,6 +21,7 @@ import {
   IconSearch,
   Copy,
 } from '@cardstack/boxel-ui/icons';
+import Package from '@cardstack/boxel-icons/package';
 
 import {
   hasExecutableExtension,
@@ -45,7 +46,9 @@ import {
 } from '@cardstack/host/resources/module-contents';
 
 import { getResolvedCodeRefFromType } from '@cardstack/host/services/card-type-service';
+import type CommandService from '@cardstack/host/services/command-service';
 import type RealmService from '@cardstack/host/services/realm';
+import ListingCreateCommand from '@cardstack/host/commands/listing-create';
 
 import type { CardDef, BaseDef } from 'https://cardstack.com/base/card-api';
 
@@ -102,6 +105,7 @@ interface Signature {
 export default class DetailPanel extends Component<Signature> {
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare realm: RealmService;
+  @service private declare commandService: CommandService;
 
   private lastModified = lastModifiedDate(this, () => this.args.readyFile);
 
@@ -173,6 +177,44 @@ export default class DetailPanel extends Component<Signature> {
     return this.cardInstanceType?.isLoading;
   }
 
+  private get isListingCard() {
+    return this.args.cardInstance?.constructor?.name?.endsWith?.('Listing') ?? false;
+  }
+
+  private get isSelectedFieldDefinition() {
+    return (
+      this.args.selectedDeclaration &&
+      isCardOrFieldDeclaration(this.args.selectedDeclaration) &&
+      isFieldDef(this.args.selectedDeclaration.cardOrField)
+    );
+  }
+
+  private get isSelectedCardDefinition() {
+    return (
+      this.args.selectedDeclaration &&
+      isCardOrFieldDeclaration(this.args.selectedDeclaration) &&
+      isCardDef(this.args.selectedDeclaration.cardOrField)
+    );
+  }
+
+  private get isSelectedListingField() {
+    if (!this.isSelectedFieldDefinition) {
+      return false;
+    }
+    const fieldName = this.args.selectedDeclaration?.exportName || 
+                      this.args.selectedDeclaration?.localName || '';
+    return fieldName.endsWith('Listing');
+  }
+
+  private get isSelectedListingCard() {
+    if (!this.isSelectedCardDefinition) {
+      return false;
+    }
+    const cardName = this.args.selectedDeclaration?.exportName || 
+                     this.args.selectedDeclaration?.localName || '';
+    return cardName.endsWith('Listing');
+  }
+
   private get definitionActions() {
     if (
       this.args.selectedDeclaration &&
@@ -180,64 +222,106 @@ export default class DetailPanel extends Component<Signature> {
     ) {
       return [];
     }
-    return [
-      // internal cards are not really meant to be addressable instances, but
-      // rather interior owned instances, as well as only card definitions can
-      // be instantiated (not field definitions)
-      ...(this.args.selectedDeclaration?.exportName &&
+    const actions = [];
+    
+    // internal cards are not really meant to be addressable instances, but
+    // rather interior owned instances, as well as only card definitions can
+    // be instantiated (not field definitions)
+    if (
+      this.args.selectedDeclaration?.exportName &&
       (this.args.selectedDeclaration?.cardOrField as typeof CardDef).isCardDef
-        ? [
-            {
-              label: 'Create Instance',
-              icon: IconPlus,
-              handler: this.createInstance,
-            },
-          ]
-        : []),
-      // the inherit feature performs in the inheritance in a new module,
-      // this means that the Card/Field that we are inheriting must be exported
-      ...(this.args.selectedDeclaration?.exportName
-        ? [
-            {
-              label: 'Inherit',
-              icon: IconInherit,
-              handler: this.inherit,
-            },
-          ]
-        : []),
-      ...(this.args.selectedDeclaration?.exportName &&
+    ) {
+      actions.push({
+        label: 'Create Instance',
+        icon: IconPlus,
+        handler: this.createInstance,
+      });
+    }
+    
+    // the inherit feature performs in the inheritance in a new module,
+    // this means that the Card/Field that we are inheriting must be exported
+    if (this.args.selectedDeclaration?.exportName) {
+      actions.push({
+        label: 'Inherit',
+        icon: IconInherit,
+        handler: this.inherit,
+      });
+    }
+    
+    if (
+      this.args.selectedDeclaration?.exportName &&
       (this.args.selectedDeclaration?.cardOrField as typeof CardDef).isCardDef
-        ? [
-            {
-              label: 'Find instances',
-              icon: IconSearch,
-              handler: this.searchForInstances,
-            },
-          ]
-        : []),
-    ];
+    ) {
+      actions.push({
+        label: 'Find instances',
+        icon: IconSearch,
+        handler: this.searchForInstances,
+      });
+    }
+    
+    // Add "Create listing" for field definitions if not a listing field and user can edit
+    if (
+      this.isSelectedFieldDefinition &&
+      !this.isSelectedListingField &&
+      this.args.selectedDeclaration?.exportName &&
+      this.realm.canWrite(this.args.readyFile.url)
+    ) {
+      actions.push({
+        label: 'Create listing',
+        icon: Package,
+        handler: this.createListingWithAI,
+      });
+    }
+    
+    // Add "Create listing" for card definitions if not a listing card and user can edit
+    // Note: Users can create multiple listings, so we don't check if a listing already exists
+    if (
+      this.isSelectedCardDefinition &&
+      !this.isSelectedListingCard &&
+      this.args.selectedDeclaration?.exportName &&
+      this.realm.canWrite(this.args.readyFile.url)
+    ) {
+      actions.push({
+        label: 'Create listing',
+        icon: Package,
+        handler: this.createListingWithAI,
+      });
+    }
+    
+    return actions;
   }
 
   private get instanceActions() {
     if (!this.isCardInstance) {
       return [];
     }
-    return [
+    const actions = [
       {
         label: 'Duplicate',
         icon: Copy,
         handler: this.duplicateInstance,
       },
-      ...(this.realm.canWrite(this.args.readyFile.url)
-        ? [
-            {
-              label: 'Delete',
-              icon: IconTrash,
-              handler: () => this.args.delete(this.args.cardInstance),
-            },
-          ]
-        : []),
     ];
+    
+    // Add "Create listing" if not a listing card and user can edit
+    if (!this.isListingCard && this.realm.canWrite(this.args.readyFile.url)) {
+      actions.push({
+        label: 'Create listing',
+        icon: Package,
+        handler: this.createListingWithAI,
+      });
+    }
+    
+    // Add delete action if user can write
+    if (this.realm.canWrite(this.args.readyFile.url)) {
+      actions.push({
+        label: 'Delete',
+        icon: IconTrash,
+        handler: () => this.args.delete(this.args.cardInstance),
+      });
+    }
+    
+    return actions;
   }
 
   private get miscFileActions() {
@@ -339,6 +423,29 @@ export default class DetailPanel extends Component<Signature> {
       this.operatorModeStateService.state.codePath!,
     );
     this.args.openSearch(`carddef:${refURL}`);
+  }
+
+  @action private async createListingWithAI() {
+    const command = new ListingCreateCommand(this.commandService.commandContext);
+    
+    if (this.isCardInstance && this.args.cardInstance?.id) {
+      // Card instance case
+      await command.execute({
+        openCardId: this.args.cardInstance.id as string,
+      });
+    } else if (this.isSelectedFieldDefinition) {
+      // Field definition case
+      const codeRef = this.selectedDeclarationAsCodeRef;
+      await command.execute({
+        codeRef,
+      });
+    } else if (this.isSelectedCardDefinition) {
+      // Card definition case
+      const codeRef = this.selectedDeclarationAsCodeRef;
+      await command.execute({
+        codeRef,
+      });
+    }
   }
 
   private get selectedDeclarationAsCodeRef(): ResolvedCodeRef {

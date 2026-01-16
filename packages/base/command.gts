@@ -355,6 +355,7 @@ export class CreateListingPRResult extends CardDef {
 
 export class ListingCreateInput extends CardDef {
   @field openCardId = contains(StringField);
+  @field codeRef = contains(CodeRefField);
   @field targetRealm = contains(StringField);
 }
 
