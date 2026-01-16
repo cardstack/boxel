@@ -3,7 +3,6 @@ import {
   makeCardTypeSummaryDoc,
   transformResultsToPrerenderedCardsDoc,
   type SingleCardDocument,
-  type SingleFileMetaDocument,
   type CardCollectionDocument,
   type PrerenderedCardCollectionDocument,
 } from './document-types';
@@ -415,15 +414,6 @@ export class Realm {
 
   private visibilityPromise?: Promise<RealmVisibility>;
 
-  // We are caching world readable permissions for realms such that we can avoid
-  // having to look up the realm permissions for world-read realms on every HTTP
-  // HEAD and GET request. the tradeoff is that if there is an out-of-band
-  // update to the permissions that effects world readability (e.g. directly
-  // updating the DB), that will mean we need to restart the realm server to
-  // pick up the permissions change.
-  #worldReadable?: boolean;
-  #worldReadablePromise?: Promise<boolean>;
-
   get url(): string {
     return this.paths.url;
   }
@@ -530,7 +520,6 @@ export class Realm {
 
     this.#router = new Router(new URL(url))
       .get('/_info', SupportedMimeType.RealmInfo, this.realmInfo.bind(this))
-      .query('/_info', SupportedMimeType.RealmInfo, this.realmInfo.bind(this))
       .patch(
         '/_config',
         SupportedMimeType.JSON,
@@ -649,7 +638,7 @@ export class Realm {
     Object.values(SupportedMimeType).forEach((mimeType) => {
       if (mimeType !== SupportedMimeType.CardSource) {
         this.#router.head('/.*', mimeType as SupportedMimeType, async () => {
-          let requestContext = await this.createRequestContext('read');
+          let requestContext = await this.createRequestContext();
           return createResponse({ init: { status: 200 }, requestContext });
         });
       }
@@ -1284,8 +1273,6 @@ export class Realm {
         });
       }
     }
-    await this.isWorldReadable();
-
     this.#perfLog.debug(
       `realm server ${this.url} startup in ${Date.now() - startTime} ms`,
     );
@@ -1330,24 +1317,18 @@ export class Realm {
     }
     // hard coded test URLs
     if ((globalThis as any).__environment === 'test') {
-      let url = new URL(this.url);
-      if (url.hostname === '127.0.0.1') {
-        switch (url.port) {
-          case '4441':
-            return '@base_realm:localhost';
-          case '4444':
-          case '4445':
-          case '4446':
-          case '4447':
-          case '4448':
-          case '4449':
-          case '4450':
-          case '4451':
-          case '4452':
-            return '@node-test_realm:localhost';
-        }
+      switch (this.url) {
+        case 'http://127.0.0.1:4441/':
+          return '@base_realm:localhost';
+        case 'http://127.0.0.1:4444/':
+        case 'http://127.0.0.1:4445/':
+        case 'http://127.0.0.1:4445/test/':
+        case 'http://127.0.0.1:4446/demo/':
+        case 'http://127.0.0.1:4448/':
+          return '@node-test_realm:localhost';
+        default:
+          return '@test_realm:localhost';
       }
-      return '@test_realm:localhost';
     }
     throw new Error(`Cannot determine realm owner for realm ${this.url}.`);
   }
@@ -1427,20 +1408,24 @@ export class Realm {
       request.headers.delete('X-HTTP-Method-Override');
     }
 
+    let requestContext = await this.createRequestContext(); // Cache realm permissions for the duration of the request so that we don't have to fetch them multiple times
     let localPath = this.paths.local(new URL(request.url));
-    let requiredPermission: RealmAction = 'read';
-    if (localPath === '_permissions') {
-      requiredPermission = 'realm-owner';
-    } else if (localPath === '_config' && request.method === 'PATCH') {
-      requiredPermission = 'realm-owner';
-    } else if (['PUT', 'PATCH', 'POST', 'DELETE'].includes(request.method)) {
-      requiredPermission = 'write';
-    }
-
-    let requestContext = await this.createRequestContext(requiredPermission);
 
     try {
       if (!isLocal) {
+        let requiredPermission: RealmAction;
+        if (
+          ['_permissions'].includes(localPath) ||
+          (localPath === '_config' && request.method === 'PATCH')
+        ) {
+          requiredPermission = 'realm-owner';
+        } else if (
+          ['PUT', 'PATCH', 'POST', 'DELETE'].includes(request.method)
+        ) {
+          requiredPermission = 'write';
+        } else {
+          requiredPermission = 'read';
+        }
         await this.checkPermission(request, requestContext, requiredPermission);
       }
       let acceptedMimeType = extractSupportedMimeType(
@@ -1512,8 +1497,8 @@ export class Realm {
     requestContext: RequestContext,
   ) {
     let start = Date.now();
-    let requestURL = new URL(request.url);
-    let localPath = this.paths.local(requestURL);
+    let url = new URL(request.url);
+    let localPath = this.paths.local(url);
     let moduleCachingDisabled =
       this.#disableModuleCaching ||
       Boolean(request.headers.get('X-Boxel-Disable-Module-Cache'));
@@ -2146,9 +2131,9 @@ export class Realm {
       (this.#dbAdapter
         ? await getContentHash(this.#dbAdapter, this.url, localPath)
         : undefined) ?? (await computeContentHashFromRef(fileRef));
-    let doc: SingleFileMetaDocument = {
+    let doc: LooseSingleCardDocument = {
       data: {
-        type: 'file-meta',
+        type: 'card',
         id: fileURL,
         attributes: {
           name,
@@ -2195,9 +2180,9 @@ export class Realm {
         : this.#dbAdapter
           ? await getContentHash(this.#dbAdapter, this.url, localPath)
           : undefined;
-    let doc: SingleFileMetaDocument = {
+    let doc: LooseSingleCardDocument = {
       data: {
-        type: 'file-meta',
+        type: 'card',
         id: fileURL,
         attributes: {
           name: searchDoc.name ?? name,
@@ -2653,15 +2638,9 @@ export class Realm {
     request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
-    let requestURL = new URL(request.url);
-    let localPath = this.paths.local(requestURL);
+    let localPath = this.paths.local(new URL(request.url));
     if (localPath === '') {
       localPath = 'index';
-    } else if (requestURL.pathname.endsWith('/')) {
-      let indexPath = join(localPath, 'index');
-      if (await this.#adapter.exists(`${indexPath}.json`)) {
-        localPath = indexPath;
-      }
     }
 
     let url = this.paths.fileURL(localPath.replace(/\.json$/, ''));
@@ -3038,7 +3017,7 @@ export class Realm {
     let payload: Record<string, any> | undefined;
     let htmlFormat: string | undefined;
     let cardUrls: string[] | string | undefined;
-    let renderType: CodeRef | undefined;
+    let renderType: unknown;
     let cardsQuery: unknown;
 
     if (request.method !== 'QUERY') {
@@ -3108,32 +3087,13 @@ export class Realm {
       });
     }
 
-    let normalizedCardUrls: string[] | undefined;
-    if (Array.isArray(cardUrls)) {
-      if (!cardUrls.every((url) => typeof url === 'string')) {
-        return createResponse({
-          body: JSON.stringify({
-            errors: [
-              {
-                status: '400',
-                title: 'Bad Request',
-                message: 'cardUrls must be a string or array of strings',
-              },
-            ],
-          }),
-          init: {
-            status: 400,
-            headers: { 'content-type': SupportedMimeType.CardJson },
-          },
-          requestContext,
-        });
-      }
-      normalizedCardUrls = cardUrls;
-    } else if (typeof cardUrls === 'string') {
-      normalizedCardUrls = [cardUrls];
-    }
-    let normalizedRenderType = isResolvedCodeRef(renderType)
-      ? renderType
+    let normalizedCardUrls = Array.isArray(cardUrls)
+      ? cardUrls.map((url) => String(url))
+      : cardUrls
+        ? [String(cardUrls)]
+        : undefined;
+    let normalizedRenderType = isResolvedCodeRef(renderType as any)
+      ? (renderType as ResolvedCodeRef)
       : undefined;
 
     try {
@@ -3379,7 +3339,6 @@ export class Realm {
       try {
         let infoURL = new URL('_info', realmUrl);
         let response = await this.__fetchForTesting(infoURL, {
-          method: 'QUERY',
           headers: { Accept: SupportedMimeType.RealmInfo },
         });
         if (!response.ok) {
@@ -3781,12 +3740,6 @@ export class Realm {
     }
 
     await insertPermissions(this.#dbAdapter, new URL(this.url), patch);
-    if (Object.prototype.hasOwnProperty.call(patch, '*')) {
-      let worldReadable =
-        Array.isArray(patch['*']) && patch['*'].includes('read');
-      this.#worldReadable = worldReadable;
-      this.#worldReadablePromise = Promise.resolve(worldReadable);
-    }
     return await this.getRealmPermissions(request, requestContext);
   }
 
@@ -3850,10 +3803,6 @@ export class Realm {
       this.#log.warn(`Failed to query source realm publications: ${error}`);
       return [];
     }
-  }
-
-  async getRealmInfo(): Promise<RealmInfo> {
-    return this.parseRealmInfo();
   }
 
   private async parseRealmInfo(): Promise<RealmInfo> {
@@ -4203,46 +4152,11 @@ export class Realm {
     );
   }
 
-  private async isWorldReadable(): Promise<boolean> {
-    if (this.#worldReadable !== undefined) {
-      return this.#worldReadable;
-    }
-    if (!this.#worldReadablePromise) {
-      this.#worldReadablePromise = (async () => {
-        let permissions = await fetchRealmPermissions(
-          this.#dbAdapter,
-          new URL(this.url),
-        );
-        let worldReadable = permissions['*']?.includes('read') ?? false;
-        if (this.#worldReadable === undefined) {
-          this.#worldReadable = worldReadable;
-          return worldReadable;
-        }
-        return this.#worldReadable;
-      })();
-    }
-    return await this.#worldReadablePromise;
-  }
-
-  private async createRequestContext(
-    requiredPermission: RealmAction,
-  ): Promise<RequestContext> {
-    let permissions: RealmPermissions;
-    let shouldUseWorldReadable =
-      requiredPermission === 'read' && (await this.isWorldReadable());
-
-    if (shouldUseWorldReadable) {
-      permissions = {
-        [this.#realmServerMatrixUserId]: ['assume-user'],
-        '*': ['read'],
-      };
-    } else {
-      permissions = {
-        [this.#realmServerMatrixUserId]: ['assume-user'],
-        ...(await fetchRealmPermissions(this.#dbAdapter, new URL(this.url))),
-      };
-    }
-
+  private async createRequestContext(): Promise<RequestContext> {
+    let permissions = {
+      [this.#realmServerMatrixUserId]: ['assume-user'] as RealmAction[],
+      ...(await fetchRealmPermissions(this.#dbAdapter, new URL(this.url))),
+    };
     return {
       realm: this,
       permissions,
