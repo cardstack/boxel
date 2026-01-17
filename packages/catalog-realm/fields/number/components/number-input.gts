@@ -17,6 +17,7 @@ interface Signature {
     value: number | null;
     config: NumberInputOptions;
     onChange: (value: number | null) => void;
+    disabled?: boolean;
   };
 }
 
@@ -105,6 +106,7 @@ export default class NumberInput extends GlimmerComponent<Signature> {
       @max={{this.rangeConfig.max}}
       @state={{this.validationState}}
       @errorMessage={{this.errorMessage}}
+      @disabled={{@disabled}}
       data-test-number-input
     />
   </template>

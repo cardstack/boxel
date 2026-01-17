@@ -1,7 +1,7 @@
 import { Component } from 'https://cardstack.com/base/card-api';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
-import { lte } from '@cardstack/boxel-ui/helpers';
+import { lte, not } from '@cardstack/boxel-ui/helpers';
 
 import NumberField, {
   deserializeForUI,
@@ -57,6 +57,7 @@ export default class RatingField extends NumberField {
           <button
             type='button'
             class='star-btn {{if (lte star this.numericValue) "star-filled"}}'
+            disabled={{not @canEdit}}
             {{on 'click' (fn this.setRating star)}}
           >★</button>
         {{/each}}

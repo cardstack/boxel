@@ -1,5 +1,6 @@
 import GlimmerComponent from '@glimmer/component';
 import { on } from '@ember/modifier';
+import { or } from '@cardstack/boxel-ui/helpers';
 import Grid3x3Icon from '@cardstack/boxel-icons/grid-3x3';
 
 interface MultipleImageGalleryUploadArgs {
@@ -10,6 +11,7 @@ interface MultipleImageGalleryUploadArgs {
     maxFilesReached: boolean;
     currentCount: number;
     maxFiles: number;
+    disabled?: boolean;
   };
 }
 
@@ -17,7 +19,7 @@ export default class MultipleImageGalleryUpload extends GlimmerComponent<Multipl
   <template>
     <label
       class='upload-trigger variant-gallery
-        {{if @maxFilesReached "disabled"}}'
+        {{if (or @maxFilesReached @disabled) "disabled"}}'
       {{on 'dragover' @onDragOver}}
       {{on 'drop' @onDrop}}
     >
@@ -29,14 +31,16 @@ export default class MultipleImageGalleryUpload extends GlimmerComponent<Multipl
           Add to gallery ({{@currentCount}}/{{@maxFiles}})
         {{/if}}
       </span>
-      <input
-        type='file'
-        class='file-input'
-        accept='image/*'
-        multiple={{true}}
-        disabled={{@maxFilesReached}}
-        {{on 'change' @onFileSelect}}
-      />
+      {{#unless @disabled}}
+        <input
+          type='file'
+          class='file-input'
+          accept='image/*'
+          multiple={{true}}
+          disabled={{@maxFilesReached}}
+          {{on 'change' @onFileSelect}}
+        />
+      {{/unless}}
     </label>
 
     <style scoped>

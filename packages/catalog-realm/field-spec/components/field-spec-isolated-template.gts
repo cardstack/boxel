@@ -5,11 +5,13 @@ import {
   BaseDef,
   getCardMeta,
   getFields,
+  type Field,
 } from 'https://cardstack.com/base/card-api';
 import { FieldContainer, RealmIcon } from '@cardstack/boxel-ui/components';
 import BookOpenText from '@cardstack/boxel-icons/book-open-text';
 import GitBranch from '@cardstack/boxel-icons/git-branch';
 import LayoutList from '@cardstack/boxel-icons/layout-list';
+import CodeSnippet from '../../components/code-snippet';
 import { DiagonalArrowLeftUp as ExportArrow } from '@cardstack/boxel-ui/icons';
 import { action } from '@ember/object';
 import { task } from 'ember-concurrency';
@@ -115,7 +117,7 @@ export default class FieldSpecIsolatedTemplate extends Component<typeof Spec> {
     return getCardMeta(this.args.model as CardDef, 'realmInfo');
   }
 
-  get allFields() {
+  get allFields(): Record<string, Field> {
     if (!this.args.model) return {};
     return getFields(this.args.model, {
       includeComputeds: false,
@@ -131,6 +133,25 @@ export default class FieldSpecIsolatedTemplate extends Component<typeof Spec> {
   get specModal(): CardDef {
     return this.args.model as CardDef;
   }
+
+  getFieldCodeSnippet = (fieldName: string): string => {
+    const field = this.allFields[fieldName];
+    if (!field) return '';
+
+    const cardName = field.card?.name || 'Unknown';
+    const fieldType = field.fieldType;
+    const config = field.configuration;
+
+    if (config && typeof config !== 'function') {
+      const configStr = JSON.stringify(config, null, 2)
+        .split('\n')
+        .map((line, i) => (i === 0 ? line : '  ' + line))
+        .join('\n');
+      return `@field ${fieldName} = ${fieldType}(${cardName}, {\n  configuration: ${configStr},\n});`;
+    }
+
+    return `@field ${fieldName} = ${fieldType}(${cardName});`;
+  };
 
   <template>
     <article class='container'>
@@ -170,15 +191,13 @@ export default class FieldSpecIsolatedTemplate extends Component<typeof Spec> {
         >
           <div class='row-header-left'>
             <LayoutList width='20' height='20' role='presentation' />
-            <h2 id='fields-configuration-preview'>Field Configuration Playground</h2>
+            <h2 id='fields-configuration-preview'>Field Usage Examples</h2>
           </div>
         </header>
         <div class='fields-configuration-grid'>
           {{#each this.configurationFields as |fieldName|}}
             <article class='fields-configuration-card'>
-              <h3 class='fields-configuration-title'>
-                {{fieldName}}
-              </h3>
+              <CodeSnippet @code={{this.getFieldCodeSnippet fieldName}} />
               <FieldRenderer
                 @instance={{this.specModal}}
                 @fieldName={{fieldName}}
@@ -196,8 +215,10 @@ export default class FieldSpecIsolatedTemplate extends Component<typeof Spec> {
 
       <section class='module section'>
         <header class='row-header' aria-labelledby='module'>
-          <GitBranch width='20' height='20' role='presentation' />
-          <h2 id='module'>Module</h2>
+          <div class='row-header-left'>
+            <GitBranch width='20' height='20' role='presentation' />
+            <h2 id='module'>Module</h2>
+          </div>
         </header>
         <div class='code-ref-container'>
           <FieldContainer

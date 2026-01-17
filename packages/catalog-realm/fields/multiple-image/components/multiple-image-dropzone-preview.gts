@@ -25,6 +25,7 @@ interface MultipleImageDropzonePreviewArgs {
     onToggleSelection: (id: string) => void;
     getProgressStyle: (progress: number) => SafeString;
     formatSize: (bytes: number) => string;
+    disabled?: boolean;
   };
 }
 
@@ -118,13 +119,15 @@ export default class MultipleImageDropzonePreview extends GlimmerComponent<Multi
           <div class='upload-error-text'>Upload failed</div>
         {{/if}}
       </div>
-      <button
-        type='button'
-        {{on 'click' (fn @onRemove @entry.id)}}
-        class='list-remove'
-      >
-        <XIcon class='remove-icon' />
-      </button>
+      {{#unless @disabled}}
+        <button
+          type='button'
+          {{on 'click' (fn @onRemove @entry.id)}}
+          class='list-remove'
+        >
+          <XIcon class='remove-icon' />
+        </button>
+      {{/unless}}
     </div>
 
     <style scoped>

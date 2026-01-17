@@ -1,6 +1,6 @@
 import GlimmerComponent from '@glimmer/component';
 import { on } from '@ember/modifier';
-import { eq } from '@cardstack/boxel-ui/helpers';
+import { eq, or } from '@cardstack/boxel-ui/helpers';
 import UploadIcon from '@cardstack/boxel-icons/upload';
 
 interface MultipleImageDropzoneUploadArgs {
@@ -12,6 +12,7 @@ interface MultipleImageDropzoneUploadArgs {
     currentCount: number;
     maxFiles: number;
     variant: 'dropzone' | 'list' | 'gallery';
+    disabled?: boolean;
   };
 }
 
@@ -19,7 +20,7 @@ export default class MultipleImageDropzoneUpload extends GlimmerComponent<Multip
   <template>
     <label
       class='upload-trigger variant-{{@variant}}
-        {{if @maxFilesReached "disabled"}}'
+        {{if (or @maxFilesReached @disabled) "disabled"}}'
       {{on 'dragover' @onDragOver}}
       {{on 'drop' @onDrop}}
     >
@@ -38,14 +39,16 @@ export default class MultipleImageDropzoneUpload extends GlimmerComponent<Multip
           {{/if}}
         </span>
       {{/if}}
-      <input
-        type='file'
-        class='file-input'
-        accept='image/*'
-        multiple={{true}}
-        disabled={{@maxFilesReached}}
-        {{on 'change' @onFileSelect}}
-      />
+      {{#unless @disabled}}
+        <input
+          type='file'
+          class='file-input'
+          accept='image/*'
+          multiple={{true}}
+          disabled={{@maxFilesReached}}
+          {{on 'change' @onFileSelect}}
+        />
+      {{/unless}}
     </label>
 
     <style scoped>

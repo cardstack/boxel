@@ -1,4 +1,4 @@
-import { eq } from '@cardstack/boxel-ui/helpers';
+import { eq, not, and } from '@cardstack/boxel-ui/helpers';
 import { htmlSafe } from '@ember/template';
 
 import XIcon from '@cardstack/boxel-icons/x';
@@ -546,6 +546,7 @@ class MultipleImageFieldEdit extends Component<typeof MultipleImageField> {
             @maxFilesReached={{this.maxFilesReached}}
             @currentCount={{this.uploadEntries.length}}
             @maxFiles={{this.maxFiles}}
+            @disabled={{not @canEdit}}
           />
         {{else}}
           <MultipleImageDropzoneUpload
@@ -556,6 +557,7 @@ class MultipleImageFieldEdit extends Component<typeof MultipleImageField> {
             @currentCount={{this.uploadEntries.length}}
             @maxFiles={{this.maxFiles}}
             @variant={{this.variant}}
+            @disabled={{not @canEdit}}
           />
         {{/if}}
 
@@ -570,7 +572,7 @@ class MultipleImageFieldEdit extends Component<typeof MultipleImageField> {
           }}
         >
           {{! Batch actions header (inside preview container) }}
-          {{#if this.allowBatchSelect}}
+          {{#if (and this.allowBatchSelect @canEdit)}}
             <div class='batch-actions'>
               <label class='select-all-label'>
                 <input
@@ -607,6 +609,7 @@ class MultipleImageFieldEdit extends Component<typeof MultipleImageField> {
                 @onRemove={{this.removeImage}}
                 @onToggleSelection={{this.toggleSelection}}
                 @getProgressStyle={{this.getProgressStyle}}
+                @disabled={{not @canEdit}}
               />
             {{else}}
               <MultipleImageDropzonePreview
@@ -619,6 +622,7 @@ class MultipleImageFieldEdit extends Component<typeof MultipleImageField> {
                 @onToggleSelection={{this.toggleSelection}}
                 @getProgressStyle={{this.getProgressStyle}}
                 @formatSize={{this.formatSize}}
+                @disabled={{not @canEdit}}
               />
             {{/if}}
           {{/each}}
@@ -634,6 +638,7 @@ class MultipleImageFieldEdit extends Component<typeof MultipleImageField> {
               @maxFilesReached={{this.maxFilesReached}}
               @currentCount={{this.uploadEntries.length}}
               @maxFiles={{this.maxFiles}}
+              @disabled={{not @canEdit}}
             />
           {{else}}
             <MultipleImageDropzoneUpload
@@ -644,6 +649,7 @@ class MultipleImageFieldEdit extends Component<typeof MultipleImageField> {
               @currentCount={{this.uploadEntries.length}}
               @maxFiles={{this.maxFiles}}
               @variant={{this.variant}}
+              @disabled={{not @canEdit}}
             />
           {{/if}}
         {{/unless}}

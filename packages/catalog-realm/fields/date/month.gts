@@ -6,7 +6,7 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import NumberField from 'https://cardstack.com/base/number';
 import { action } from '@ember/object';
-import { formatDateTime } from '@cardstack/boxel-ui/helpers';
+import { formatDateTime, not } from '@cardstack/boxel-ui/helpers';
 import { BoxelSelect } from '@cardstack/boxel-ui/components';
 import CalendarIcon from '@cardstack/boxel-icons/calendar';
 
@@ -50,6 +50,7 @@ class MonthFieldEdit extends Component<typeof MonthField> {
       @onChange={{this.updateValue}}
       @placeholder='Select month'
       @dropdownClass='month-dropdown'
+      @disabled={{not @canEdit}}
       data-test-month-select
       as |option|
     >

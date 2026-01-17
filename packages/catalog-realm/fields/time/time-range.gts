@@ -44,12 +44,12 @@ class TimeRangeFieldEdit extends Component<typeof TimeRangeField> {
       <div class='range-inputs'>
         <div class='input-wrapper'>
           <label class='input-label'>Start</label>
-          <@fields.start @format='edit' />
+          <@fields.start @format='edit' @canEdit={{@canEdit}} />
         </div>
         <span class='range-arrow'>→</span>
         <div class='input-wrapper'>
           <label class='input-label'>End</label>
-          <@fields.end @format='edit' />
+          <@fields.end @format='edit' @canEdit={{@canEdit}} />
         </div>
       </div>
       {{#if this.durationDisplay}}

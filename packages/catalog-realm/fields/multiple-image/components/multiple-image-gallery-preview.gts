@@ -23,6 +23,7 @@ interface MultipleImageGalleryPreviewArgs {
     onRemove: (id: string) => void;
     onToggleSelection: (id: string) => void;
     getProgressStyle: (progress: number) => SafeString;
+    disabled?: boolean;
   };
 }
 
@@ -102,13 +103,15 @@ export default class MultipleImageGalleryPreview extends GlimmerComponent<Multip
         {{/if}}
       {{/if}}
 
-      <button
-        type='button'
-        {{on 'click' (fn @onRemove @entry.id)}}
-        class='gallery-remove'
-      >
-        <XIcon class='remove-icon' />
-      </button>
+      {{#unless @disabled}}
+        <button
+          type='button'
+          {{on 'click' (fn @onRemove @entry.id)}}
+          class='gallery-remove'
+        >
+          <XIcon class='remove-icon' />
+        </button>
+      {{/unless}}
     </div>
 
     <style scoped>
