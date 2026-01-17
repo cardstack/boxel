@@ -119,6 +119,7 @@ import { fetcher } from './fetcher';
 import { RealmIndexQueryEngine } from './realm-index-query-engine';
 import { RealmIndexUpdater } from './realm-index-updater';
 import serialize from './file-serializer';
+import { validateWriteSize } from './write-size-validation';
 import { md5 } from 'super-fast-md5';
 
 import type { Utils } from './matrix-backend-authentication';
@@ -359,6 +360,8 @@ interface Options {
   fromScratchIndexPriority?: number;
 }
 
+const DEFAULT_MAX_CARD_WRITE_SIZE_BYTES = 64 * 1024;
+
 interface UpdateItem {
   operation: 'add' | 'update' | 'removed';
   url: URL;
@@ -394,6 +397,7 @@ export class Realm {
   #copiedFromRealm: URL | undefined;
   #sourceCache = new AliasCache<SourceCacheEntry>();
   #moduleCache = new AliasCache<ModuleCacheEntry>();
+  #maxCardWriteSizeBytes: number;
 
   #publicEndpoints: RouteTable<true> = new Map([
     [
@@ -444,6 +448,7 @@ export class Realm {
       realmServerMatrixClient,
       realmServerURL,
       definitionLookup,
+      maxCardWriteSizeBytes,
     }: {
       url: string;
       adapter: RealmAdapter;
@@ -455,6 +460,7 @@ export class Realm {
       realmServerMatrixClient: MatrixClient;
       realmServerURL: string;
       definitionLookup: DefinitionLookup;
+      maxCardWriteSizeBytes?: number;
     },
     opts?: Options,
   ) {
@@ -469,6 +475,8 @@ export class Realm {
       opts?.fromScratchIndexPriority ?? systemInitiatedPriority;
     this.#realmServerMatrixClient = realmServerMatrixClient;
     this.#realmServerURL = ensureTrailingSlash(realmServerURL);
+    this.#maxCardWriteSizeBytes =
+      maxCardWriteSizeBytes ?? DEFAULT_MAX_CARD_WRITE_SIZE_BYTES;
     this.#realmServerMatrixUserId = userIdFromUsername(
       realmServerMatrixClient.username,
       realmServerMatrixClient.matrixURL.href,
@@ -794,6 +802,7 @@ export class Realm {
           throw e;
         }
       }
+      validateWriteSize(content, this.#maxCardWriteSizeBytes, 'file');
       let existingFile = await readFileAsText(path, (p) =>
         this.#adapter.openFile(p),
       );
@@ -1062,12 +1071,16 @@ export class Realm {
         });
       }
       if (isModuleResource(resource)) {
-        files.set(localPath, resource.attributes?.content ?? '');
+        let content = resource.attributes?.content ?? '';
+        validateWriteSize(content, this.#maxCardWriteSizeBytes, 'file');
+        files.set(localPath, content);
       } else if (isCardResource(resource)) {
         let doc = {
           data: resource,
         };
-        files.set(localPath, JSON.stringify(doc, null, 2));
+        let jsonString = JSON.stringify(doc, null, 2);
+        validateWriteSize(jsonString, this.#maxCardWriteSizeBytes, 'card');
+        files.set(localPath, jsonString);
       } else {
         return createResponse({
           body: JSON.stringify({

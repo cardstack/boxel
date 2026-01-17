@@ -2,6 +2,7 @@ import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
 import { LoadingIndicator } from '@cardstack/boxel-ui/components';
 
+import { bool, or } from '@cardstack/boxel-ui/helpers';
 import { CheckMark, IconPencilCrossedOut } from '@cardstack/boxel-ui/icons';
 
 interface Signature {
@@ -12,6 +13,7 @@ interface Signature {
   Args: {
     isReadOnly: boolean;
     isSaving: boolean;
+    errorMessage?: string;
   };
 }
 
@@ -48,6 +50,12 @@ const CodeSubmodeEditorIndicator: TemplateOnlyComponent<Signature> = <template>
       --icon-color: var(--boxel-800);
       --icon-background-color: #ffd73c;
       background-color: #ffd73c;
+    }
+
+    .indicator-error {
+      --icon-color: #fff;
+      background-color: rgba(220, 53, 69, 0.9);
+      color: #fff;
     }
 
     .indicator.visible {
@@ -88,8 +96,17 @@ const CodeSubmodeEditorIndicator: TemplateOnlyComponent<Signature> = <template>
       </span>
     </div>
   {{else}}
-    <div class='indicator indicator-saving {{if @isSaving "visible"}}'>
-      {{#if @isSaving}}
+    <div
+      class='indicator
+        {{if @errorMessage "indicator-error" "indicator-saving"}}
+        {{if (or @isSaving (bool @errorMessage)) "visible"}}'
+      data-test-save-error={{if @errorMessage 'true'}}
+    >
+      {{#if @errorMessage}}
+        <span class='indicator-msg'>
+          {{@errorMessage}}
+        </span>
+      {{else if @isSaving}}
         <span class='indicator-msg'>
           Now Saving
         </span>
