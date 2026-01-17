@@ -9,8 +9,8 @@
     "type": "card",
     "attributes": {
       "ref": {
-        "name": "QuantityFieldSpec",
-        "module": "../quantity-field-spec"
+        "name": "QuantityField",
+        "module": "../../fields/quantity"
       },
       "title": "Quantity Field Spec",
       "readMe": null,

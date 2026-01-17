@@ -109,7 +109,7 @@ export type NumberFieldConfiguration =
       options?: GaugeOptions;
     };
 
-export default class NumberField extends BaseNumberField {
+export class NumberField extends BaseNumberField {
   static displayName = 'Number Field';
   static icon = HashIcon;
 
@@ -285,3 +285,5 @@ export default class NumberField extends BaseNumberField {
     </template>
   };
 }
+
+export default NumberField;

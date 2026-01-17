@@ -4,7 +4,7 @@
     "attributes": {
       "readMe": null,
       "ref": {
-        "module": "http://localhost:4201/catalog/fields/image/components/image-dropzone-preview",
+        "module": "../fields/image/components/image-dropzone-preview",
         "name": "default"
       },
       "specType": "component",

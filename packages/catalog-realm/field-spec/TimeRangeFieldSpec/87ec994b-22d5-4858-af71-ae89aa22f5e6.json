@@ -9,8 +9,8 @@
     "type": "card",
     "attributes": {
       "ref": {
-        "name": "TimeRangeFieldSpec",
-        "module": "../time-range-field-spec"
+        "name": "TimeRangeField",
+        "module": "../../fields/time/time-range"
       },
       "title": "Time Range Field Spec",
       "readMe": null,

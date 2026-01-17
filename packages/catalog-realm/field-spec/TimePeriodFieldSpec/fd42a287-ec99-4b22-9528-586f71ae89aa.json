@@ -9,8 +9,8 @@
     "type": "card",
     "attributes": {
       "ref": {
-        "name": "TimePeriodFieldSpec",
-        "module": "../time-period-field-spec"
+        "name": "TimePeriodField",
+        "module": "../../fields/time-period"
       },
       "title": "Time Period Field Spec",
       "readMe": null,

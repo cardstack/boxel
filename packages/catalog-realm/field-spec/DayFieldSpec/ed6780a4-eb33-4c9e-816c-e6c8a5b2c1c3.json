@@ -9,8 +9,8 @@
     "type": "card",
     "attributes": {
       "ref": {
-        "name": "DayFieldSpec",
-        "module": "../day-field-spec"
+        "name": "DayField",
+        "module": "../../fields/date/day"
       },
       "title": "Day Field Spec",
       "readMe": null,

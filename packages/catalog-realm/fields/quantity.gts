@@ -25,7 +25,7 @@ export type QuantityFieldConfiguration = {
   options?: QuantityOptions;
 };
 
-export default class QuantityField extends NumberField {
+export class QuantityField extends NumberField {
   static displayName = 'Quantity Number Field';
 
   static edit = class Edit extends Component<typeof this> {
@@ -246,3 +246,5 @@ export default class QuantityField extends NumberField {
     </template>
   };
 }
+
+export default QuantityField;

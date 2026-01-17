@@ -9,8 +9,8 @@
     "type": "card",
     "attributes": {
       "ref": {
-        "name": "WeekFieldSpec",
-        "module": "../week-field-spec"
+        "name": "WeekField",
+        "module": "../../fields/date/week"
       },
       "title": "Week Field Spec",
       "readMe": null,
