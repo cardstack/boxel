@@ -59,10 +59,10 @@ interface Signature {
 }
 
 export default class RoomMessageCommand extends Component<Signature> {
-  @service private declare commandService: CommandService;
-  @service private declare matrixService: MatrixService;
-  @service private declare realm: RealmService;
-  @service private declare operatorModeStateService: OperatorModeStateService;
+  @service declare private commandService: CommandService;
+  @service declare private matrixService: MatrixService;
+  @service declare private realm: RealmService;
+  @service declare private operatorModeStateService: OperatorModeStateService;
 
   private get previewCommandCode() {
     let { name, arguments: payload } = this.args.messageCommand;

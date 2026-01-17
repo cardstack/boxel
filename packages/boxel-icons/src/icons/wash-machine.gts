@@ -20,7 +20,7 @@ const IconComponent: TemplateOnlyComponent<Signature> = <template>
       d='M5 5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2z'
     /><path
       d='M8 14a4 4 0 1 0 8 0 4 4 0 1 0-8 0M8 6h.01M11 6h.01M14 6h2'
-    /><path d='M8 14c1.333-.667 2.667-.667 4 0 1.333.667 2.667.667 4 0' /></svg>
+    /><path d='M8 14q2-1 4 0t4 0' /></svg>
 </template>;
 
 // @ts-expect-error this is the only way to set a name on a Template Only Component currently

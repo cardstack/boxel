@@ -1081,9 +1081,7 @@ module('Integration | card-basics', function (hooks) {
           },
         });
         static embedded = class Embedded extends Component<typeof this> {
-          <template>
-            <@fields.name />
-          </template>
+          <template><@fields.name /></template>
         };
       }
 
@@ -1093,9 +1091,7 @@ module('Integration | card-basics', function (hooks) {
         @field guests = containsMany(Guest);
 
         static isolated = class Isolated extends Component<typeof this> {
-          <template>
-            Guests: <@fields.guests @format='atom' />
-          </template>
+          <template>Guests: <@fields.guests @format='atom' /></template>
         };
       }
 
@@ -1154,9 +1150,7 @@ module('Integration | card-basics', function (hooks) {
         @field guests = linksToMany(Guest);
 
         static isolated = class Isolated extends Component<typeof this> {
-          <template>
-            Guests: <@fields.guests @format='atom' />
-          </template>
+          <template>Guests: <@fields.guests @format='atom' /></template>
         };
       }
 
@@ -1665,9 +1659,11 @@ module('Integration | card-basics', function (hooks) {
       }
       let card = new DriverCard();
 
-      await render(<template>
-        <div data-test-type-display-name>{{cardTypeDisplayName card}}</div>
-      </template>);
+      await render(
+        <template>
+          <div data-test-type-display-name>{{cardTypeDisplayName card}}</div>
+        </template>,
+      );
       assert.dom('[data-test-type-display-name]').containsText(`Driver`);
     });
 
@@ -3278,9 +3274,7 @@ module('Integration | card-basics', function (hooks) {
         @field cardWithSpecialField = linksToMany(TestCardWithField);
 
         static isolated = class Isolated extends Component<typeof TestCard> {
-          <template>
-            <@fields.cardWithSpecialField @format='fitted' />
-          </template>
+          <template><@fields.cardWithSpecialField @format='fitted' /></template>
         };
       }
 
@@ -3629,9 +3623,7 @@ module('Integration | card-basics', function (hooks) {
       class Person extends CardDef {
         @field pets = containsMany(StringField);
         static embedded = class Embedded extends Component<typeof this> {
-          <template>
-            <@fields.pets />
-          </template>
+          <template><@fields.pets /></template>
         };
       }
       let person = new Person({ pets: ['Mango', 'Van Gogh'] });
@@ -3647,9 +3639,7 @@ module('Integration | card-basics', function (hooks) {
       class Person extends CardDef {
         @field pets = containsMany(StringField);
         static embedded = class Embedded extends Component<typeof this> {
-          <template>
-            <@fields.pets />
-          </template>
+          <template><@fields.pets /></template>
         };
       }
       let person = new Person({ pets: ['Mango', 'Van Gogh'] });
@@ -3665,9 +3655,7 @@ module('Integration | card-basics', function (hooks) {
       class Person extends CardDef {
         @field pets = containsMany(StringField);
         static embedded = class Embedded extends Component<typeof this> {
-          <template>
-            <@fields.pets />
-          </template>
+          <template><@fields.pets /></template>
         };
       }
       let person = new Person({ pets: ['Mango', 'Van Gogh'] });
@@ -3687,18 +3675,14 @@ module('Integration | card-basics', function (hooks) {
       class Person extends FieldDef {
         @field firstName = contains(StringField);
         static embedded = class Embedded extends Component<typeof this> {
-          <template>
-            <@fields.firstName />
-          </template>
+          <template><@fields.firstName /></template>
         };
       }
 
       class Family extends CardDef {
         @field people = containsMany(Person);
         static isolated = class Isolated extends Component<typeof this> {
-          <template>
-            <@fields.people />
-          </template>
+          <template><@fields.people /></template>
         };
       }
 
@@ -3854,9 +3838,7 @@ module('Integration | card-basics', function (hooks) {
       class Person extends Animal {
         @field firstName = contains(firstName);
         static embedded = class Embedded extends Component<typeof this> {
-          <template>
-            <@fields.firstName /><@fields.species />
-          </template>
+          <template><@fields.firstName /><@fields.species /></template>
         };
       }
 
@@ -3871,9 +3853,7 @@ module('Integration | card-basics', function (hooks) {
       class Person extends FieldDef {
         @field firstName = contains(StringField);
         static embedded = class Embedded extends Component<typeof this> {
-          <template>
-            <@fields.firstName />
-          </template>
+          <template><@fields.firstName /></template>
         };
       }
 
@@ -3949,9 +3929,7 @@ module('Integration | card-basics', function (hooks) {
       class Person extends CardDef {
         @field languagesSpoken = containsMany(TestString);
         static edit = class Edit extends Component<typeof this> {
-          <template>
-            <@fields.languagesSpoken />
-          </template>
+          <template><@fields.languagesSpoken /></template>
         };
       }
 
@@ -4219,9 +4197,7 @@ module('Integration | card-basics', function (hooks) {
           },
         });
         static embedded = class Embedded extends Component<typeof this> {
-          <template>
-            <@fields.countryName />
-          </template>
+          <template><@fields.countryName /></template>
         };
       }
 

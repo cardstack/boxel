@@ -71,7 +71,7 @@ export default class PhoneInput extends Component<Signature> {
       this.validationState = this.hasBlurred ? 'invalid' : 'initial';
       this.errorMessage =
         this.validationState === 'invalid'
-          ? normalized.error.message ?? this.fallbackErrorMessage
+          ? (normalized.error.message ?? this.fallbackErrorMessage)
           : undefined;
       this.notify(input, normalized, ev);
     } else {

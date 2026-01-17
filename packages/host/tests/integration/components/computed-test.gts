@@ -71,9 +71,7 @@ module('Integration | computeds', function (hooks) {
         },
       });
       static isolated = class Isolated extends Component<typeof this> {
-        <template>
-          <@fields.fullName />
-        </template>
+        <template><@fields.fullName /></template>
       };
     }
 
@@ -96,9 +94,7 @@ module('Integration | computeds', function (hooks) {
         },
       });
       static isolated = class Isolated extends Component<typeof this> {
-        <template>
-          <@fields.summary />
-        </template>
+        <template><@fields.summary /></template>
       };
     }
 
@@ -219,9 +215,7 @@ module('Integration | computeds', function (hooks) {
         },
       });
       static isolated = class Isolated extends Component<typeof this> {
-        <template>
-          <@fields.reversePeople />
-        </template>
+        <template><@fields.reversePeople /></template>
       };
     }
 
@@ -264,9 +258,7 @@ module('Integration | computeds', function (hooks) {
     class Person extends FieldDef {
       @field firstName = contains(StringField);
       static embedded = class Embedded extends Component<typeof this> {
-        <template>
-          <@fields.firstName />
-        </template>
+        <template><@fields.firstName /></template>
       };
     }
 
@@ -278,9 +270,7 @@ module('Integration | computeds', function (hooks) {
         },
       });
       static isolated = class Isolated extends Component<typeof this> {
-        <template>
-          <@fields.reversePeople />
-        </template>
+        <template><@fields.reversePeople /></template>
       };
     }
     let abdelRahmans = new Family();

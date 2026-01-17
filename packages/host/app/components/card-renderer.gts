@@ -38,11 +38,11 @@ interface Signature {
 }
 
 export default class CardRenderer extends Component<Signature> {
-  @consume(GetCardContextName) private declare getCard: getCard;
-  @consume(GetCardsContextName) private declare getCards: getCards;
+  @consume(GetCardContextName) declare private getCard: getCard;
+  @consume(GetCardsContextName) declare private getCards: getCards;
   @consume(GetCardCollectionContextName)
-  private declare getCardCollection: getCardCollection;
-  @consume(CardContextName) private declare cardContext: CardContext;
+  declare private getCardCollection: getCardCollection;
+  @consume(CardContextName) declare private cardContext: CardContext;
 
   @provide(DefaultFormatsContextName)
   // @ts-ignore "defaultFormat is declared but not used"

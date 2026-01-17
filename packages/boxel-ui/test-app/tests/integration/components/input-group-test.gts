@@ -23,15 +23,17 @@ module('Integration | Component | InputGroup', function (hooks) {
 
     let stateObject = new StateObject();
 
-    await render(<template>
-      <BoxelInputGroup
-        @placeholder='InputGroup'
-        @value='hello'
-        @state={{stateObject.state}}
-        @validIcon={{stateObject.validIcon}}
-        @invalidIcon={{stateObject.invalidIcon}}
-      />
-    </template>);
+    await render(
+      <template>
+        <BoxelInputGroup
+          @placeholder='InputGroup'
+          @value='hello'
+          @state={{stateObject.state}}
+          @validIcon={{stateObject.validIcon}}
+          @invalidIcon={{stateObject.invalidIcon}}
+        />
+      </template>,
+    );
 
     assert.dom('[data-test-override-icon]').doesNotExist();
 

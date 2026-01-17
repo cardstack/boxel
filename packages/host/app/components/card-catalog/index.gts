@@ -319,15 +319,15 @@ export default class CardCatalog extends Component<Signature> {
     </style>
   </template>
 
-  @service private declare realm: RealmService;
+  @service declare private realm: RealmService;
 
   @cached
   private get selectedCardScrollKey() {
     return typeof this.args.selectedCard === 'string'
       ? this.args.selectedCard
       : typeof this.args.selectedCard === 'object'
-      ? `new card for ${this.args.selectedCard.realmURL}`
-      : undefined;
+        ? `new card for ${this.args.selectedCard.realmURL}`
+        : undefined;
   }
 
   @cached

@@ -17,12 +17,10 @@ const IconComponent: TemplateOnlyComponent<Signature> = <template>
     viewBox='0 0 24 24'
     ...attributes
   ><path stroke='none' d='M0 0h24v24H0z' /><path
-      d='M10 20V4H7a4 4 0 0 0-4 4v8a4 4 0 0 0 4 4h3zM14 20V4h3a4 4 0 0 1 4 4v8a4 4 0 0 1-4 4h-3z'
-    /><circle cx='17.5' cy='15.5' r='1' fill='currentColor' /><circle
-      cx='6.5'
-      cy='8.5'
-      r='1'
+      d='M10 20V4H7a4 4 0 0 0-4 4v8a4 4 0 0 0 4 4zM14 20V4h3a4 4 0 0 1 4 4v8a4 4 0 0 1-4 4z'
+    /><path
       fill='currentColor'
+      d='M16.5 15.5a1 1 0 1 0 2 0 1 1 0 1 0-2 0M5.5 8.5a1 1 0 1 0 2 0 1 1 0 1 0-2 0'
     /></svg>
 </template>;
 

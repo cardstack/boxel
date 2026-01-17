@@ -193,9 +193,7 @@ module('Integration | card-catalog', function (hooks) {
     });
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-        </template>
+        <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
     await waitFor(`[data-test-stack-card="${testRealmURL}index"]`);

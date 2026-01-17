@@ -854,9 +854,7 @@ module('Integration | Store', function (hooks) {
     setCardInOperatorModeState(`${testRealmURL}Person/hassan`, 'edit');
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-        </template>
+        <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
 
@@ -1372,9 +1370,7 @@ module('Integration | Store', function (hooks) {
     setCardInOperatorModeState(`${testRealmURL}Person/hassan`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-        </template>
+        <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
 
@@ -1410,9 +1406,7 @@ module('Integration | Store', function (hooks) {
     setCardInOperatorModeState(`${testRealmURL}Person/hassan`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-        </template>
+        <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
     let instance = (await storeService.get(
@@ -1452,9 +1446,7 @@ module('Integration | Store', function (hooks) {
     setCardInOperatorModeState(`${testRealmURL}Person/hassan`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-        </template>
+        <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
 
@@ -1514,9 +1506,7 @@ module('Integration | Store', function (hooks) {
     setCardInOperatorModeState(`${testRealmURL}Person/hassan`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-        </template>
+        <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
     assert
@@ -1555,9 +1545,7 @@ module('Integration | Store', function (hooks) {
     setCardInOperatorModeState(newInstance[localId]);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-        </template>
+        <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
     assert
@@ -1717,9 +1705,7 @@ module('Integration | Store', function (hooks) {
     setCardInOperatorModeState(hassan, 'edit');
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-        </template>
+        <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
 
@@ -1960,9 +1946,7 @@ module('Integration | Store', function (hooks) {
 
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <ResourceConsumer />
-        </template>
+        <template><ResourceConsumer /></template>
       },
     );
 
@@ -2054,9 +2038,7 @@ module('Integration | Store', function (hooks) {
 
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <ResourceConsumer />
-        </template>
+        <template><ResourceConsumer /></template>
       },
     );
 
@@ -2145,9 +2127,7 @@ module('Integration | Store', function (hooks) {
 
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <ResourceConsumer />
-        </template>
+        <template><ResourceConsumer /></template>
       },
     );
 

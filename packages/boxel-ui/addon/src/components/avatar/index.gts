@@ -73,7 +73,7 @@ export default class Avatar extends Component<Signature> {
     }
     let name = this.args.displayName?.length
       ? this.args.displayName
-      : this.args.userId?.replace(/^@/, '') ?? '';
+      : (this.args.userId?.replace(/^@/, '') ?? '');
     return name.slice(0, 1).toUpperCase();
   }
 }

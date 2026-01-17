@@ -116,7 +116,7 @@ class IndexComponent extends Component {
     };
   }) as UsageComponent[];
 
-  @service private declare router: RouterService;
+  @service declare private router: RouterService;
 
   @tracked private theme?: Theme;
   @tracked private isCycleThemesEnabled = false;

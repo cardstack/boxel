@@ -7,9 +7,7 @@ import {
 } from 'https://cardstack.com/base/card-api';
 
 class View extends Component<typeof SillyNumberField> {
-  <template>
-    {{this.value}}
-  </template>
+  <template>{{this.value}}</template>
   get value() {
     if (this.args.model == null) {
       return '';

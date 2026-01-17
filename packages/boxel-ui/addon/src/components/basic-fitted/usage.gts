@@ -278,8 +278,7 @@ export default class BasicFittedUsage extends Component {
       <:description>
         Designed to render well inside a CSS container with the following
         properties specified:
-        <pre
-        >
+        <pre>
           .sample-container-class {
             container-name: fitted-card;
             container-type: size;

@@ -70,12 +70,12 @@ interface Signature {
 const log = logger('component:code-editor');
 
 export default class CodeEditor extends Component<Signature> {
-  @service private declare monacoService: MonacoService;
-  @service private declare operatorModeStateService: OperatorModeStateService;
-  @service private declare environmentService: EnvironmentService;
-  @service private declare recentFilesService: RecentFilesService;
-  @service private declare store: StoreService;
-  @service private declare commandService: CommandService;
+  @service declare private monacoService: MonacoService;
+  @service declare private operatorModeStateService: OperatorModeStateService;
+  @service declare private environmentService: EnvironmentService;
+  @service declare private recentFilesService: RecentFilesService;
+  @service declare private store: StoreService;
+  @service declare private commandService: CommandService;
 
   @tracked private maybeMonacoSDK: MonacoSDK | undefined;
   @tracked private isFormatting = false;

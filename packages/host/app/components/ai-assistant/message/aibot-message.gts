@@ -62,7 +62,7 @@ interface Signature {
 }
 
 export default class FormattedAiBotMessage extends Component<Signature> {
-  @service private declare commandService: CommandService;
+  @service declare private commandService: CommandService;
 
   private isLastHtmlGroup = (index: number) => {
     return index === (this.args.htmlParts?.length ?? 0) - 1;

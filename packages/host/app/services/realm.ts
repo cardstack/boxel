@@ -72,8 +72,7 @@ export interface BasePublishabilityViolation {
   resource: string;
 }
 
-export interface PrivateDependencyViolation
-  extends BasePublishabilityViolation {
+export interface PrivateDependencyViolation extends BasePublishabilityViolation {
   kind: 'private-dependency';
   externalDependencies: PrivateDependencyReference[];
 }

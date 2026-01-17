@@ -325,7 +325,7 @@ const reExportVisitor = {
 };
 
 export function error(path: NodePath<any>, message: string) {
-  return path.buildCodeFrameError(message, CompilerError);
+  return path.buildCodeFrameError(message, CompilerError as ErrorConstructor);
 }
 class CompilerError extends Error {
   constructor(message: string) {

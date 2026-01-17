@@ -67,9 +67,7 @@ class CardContextConsumer extends GlimmerComponent<CardContextConsumerSignature>
     };
   }
 
-  <template>
-    {{yield this.context}}
-  </template>
+  <template>{{yield this.context}}</template>
 }
 
 module('Integration | card api (Usage of publicAPI actions)', function (hooks) {

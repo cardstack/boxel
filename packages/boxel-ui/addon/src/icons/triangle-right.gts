@@ -14,7 +14,7 @@ const IconComponent: TemplateOnlyComponent<Signature> = <template>
       stroke-linecap='round'
       stroke-linejoin='round'
       stroke-width='2'
-      d='m1.414 6.414 4-4-4-4v8Z'
+      d='m1.414 6.414 4-4-4-4z'
     /></svg>
 </template>;
 

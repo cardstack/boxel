@@ -364,9 +364,9 @@ export default class AiAssistantPanel extends Component<Signature> {
     </style>
   </template>
 
-  @service private declare matrixService: MatrixService;
-  @service private declare monacoService: MonacoService;
-  @service private declare aiAssistantPanelService: AiAssistantPanelService;
+  @service declare private matrixService: MatrixService;
+  @service declare private monacoService: MonacoService;
+  @service declare private aiAssistantPanelService: AiAssistantPanelService;
 
   @tracked private maybeMonacoSDK: MonacoSDK | undefined;
 
@@ -450,9 +450,9 @@ export default class AiAssistantPanel extends Component<Signature> {
   private get isReady() {
     return Boolean(
       this.matrixService.currentRoomId &&
-        this.maybeMonacoSDK &&
-        !this.aiAssistantPanelService.loadingRooms &&
-        this.aiAssistantPanelService.isCreateRoomIdle,
+      this.maybeMonacoSDK &&
+      !this.aiAssistantPanelService.loadingRooms &&
+      this.aiAssistantPanelService.isCreateRoomIdle,
     );
   }
 }

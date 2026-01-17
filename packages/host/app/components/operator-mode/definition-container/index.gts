@@ -8,8 +8,7 @@ import type { BaseArgs, ActiveArgs } from './base';
 import type { ClickableArgs } from './clickable';
 
 interface FileArgs
-  extends Omit<BaseArgs, 'title' | 'name' | 'isActive'>,
-    ActiveArgs {}
+  extends Omit<BaseArgs, 'title' | 'name' | 'isActive'>, ActiveArgs {}
 
 interface FileSignature {
   Element: HTMLElement;
@@ -50,8 +49,7 @@ const ModuleDefinitionContainer: TemplateOnlyComponent<ModSig> = <template>
 </template>;
 
 interface InstanceArgs
-  extends Omit<BaseArgs, 'title' | 'isActive'>,
-    ActiveArgs {}
+  extends Omit<BaseArgs, 'title' | 'isActive'>, ActiveArgs {}
 
 interface InstSig {
   Element: HTMLElement;
@@ -71,8 +69,7 @@ const InstanceDefinitionContainer: TemplateOnlyComponent<InstSig> = <template>
 </template>;
 
 interface ClickableModuleArgs
-  extends Omit<BaseArgs, 'infoText' | 'isActive'>,
-    ClickableArgs {}
+  extends Omit<BaseArgs, 'infoText' | 'isActive'>, ClickableArgs {}
 
 interface ClickableModuleSignature {
   Element: HTMLElement;

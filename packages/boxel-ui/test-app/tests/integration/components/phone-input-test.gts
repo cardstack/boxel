@@ -31,9 +31,11 @@ module('Integration | Component | phone-input', function (hooks) {
       event = ev;
     };
 
-    await render(<template>
-      <PhoneInput @value={{value}} @onChange={{handleChange}} />
-    </template>);
+    await render(
+      <template>
+        <PhoneInput @value={{value}} @onChange={{handleChange}} />
+      </template>,
+    );
 
     await fillIn(phoneInput, '2025550125');
 
@@ -76,9 +78,11 @@ module('Integration | Component | phone-input', function (hooks) {
       validation = newValidation;
     };
 
-    await render(<template>
-      <PhoneInput @value={{value}} @onChange={{handleChange}} />
-    </template>);
+    await render(
+      <template>
+        <PhoneInput @value={{value}} @onChange={{handleChange}} />
+      </template>,
+    );
 
     await fillIn(phoneInput, '123');
     await triggerEvent(phoneInput, 'blur');
@@ -119,9 +123,11 @@ module('Integration | Component | phone-input', function (hooks) {
       validation = newValidation;
     };
 
-    await render(<template>
-      <PhoneInput @value={{value}} @onChange={{handleChange}} />
-    </template>);
+    await render(
+      <template>
+        <PhoneInput @value={{value}} @onChange={{handleChange}} />
+      </template>,
+    );
 
     await fillIn(phoneInput, '');
     await triggerEvent(phoneInput, 'blur');
@@ -146,9 +152,11 @@ module('Integration | Component | phone-input', function (hooks) {
     let value: string | null = null;
     const set = (newValue: string) => (value = newValue);
 
-    await render(<template>
-      <PhoneInput @value={{value}} @onChange={{set}} @required={{true}} />
-    </template>);
+    await render(
+      <template>
+        <PhoneInput @value={{value}} @onChange={{set}} @required={{true}} />
+      </template>,
+    );
 
     await triggerEvent(phoneInput, 'blur');
 

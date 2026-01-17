@@ -213,46 +213,52 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
             }
         `;
 
-        await render(<template>
-          {{! template-lint-disable no-inline-styles }}
-          <style scoped>{{testContainerStyles}}</style>
-          <div style={{htmlSafe renderController.containerStyle}}>
-            <ResizablePanelGroup
-              @orientation={{orientationProperties.orientation}}
-              @reverseCollapse={{true}}
-              as |ResizablePanel ResizeHandle|
-            >
-              {{#each renderController.panels as |panel index|}}
-                {{#if (not panel.isHidden)}}
-                  <ResizablePanel
-                    @defaultSize={{panel.defaultSize}}
-                    @minSize={{panel.minSize}}
-                    @maxSize={{panel.maxSize}}
-                    @collapsible={{panel.collapsible}}
-                  >
-                    <div
-                      class='panel'
-                      style={{htmlSafe
-                        (if
-                          panel.outerContainerStyle panel.outerContainerStyle ''
-                        )
-                      }}
-                      data-test-panel-index={{index}}
+        await render(
+          <template>
+            {{! template-lint-disable no-inline-styles }}
+            <style scoped>
+              {{testContainerStyles}}
+            </style>
+            <div style={{htmlSafe renderController.containerStyle}}>
+              <ResizablePanelGroup
+                @orientation={{orientationProperties.orientation}}
+                @reverseCollapse={{true}}
+                as |ResizablePanel ResizeHandle|
+              >
+                {{#each renderController.panels as |panel index|}}
+                  {{#if (not panel.isHidden)}}
+                    <ResizablePanel
+                      @defaultSize={{panel.defaultSize}}
+                      @minSize={{panel.minSize}}
+                      @maxSize={{panel.maxSize}}
+                      @collapsible={{panel.collapsible}}
                     >
-                      <div>
-                        Panel
-                        {{index}}
+                      <div
+                        class='panel'
+                        style={{htmlSafe
+                          (if
+                            panel.outerContainerStyle
+                            panel.outerContainerStyle
+                            ''
+                          )
+                        }}
+                        data-test-panel-index={{index}}
+                      >
+                        <div>
+                          Panel
+                          {{index}}
+                        </div>
                       </div>
-                    </div>
-                  </ResizablePanel>
-                  {{#if panel.showResizeHandle}}
-                    <ResizeHandle />
+                    </ResizablePanel>
+                    {{#if panel.showResizeHandle}}
+                      <ResizeHandle />
+                    {{/if}}
                   {{/if}}
-                {{/if}}
-              {{/each}}
-            </ResizablePanelGroup>
-          </div>
-        </template>);
+                {{/each}}
+              </ResizablePanelGroup>
+            </div>
+          </template>,
+        );
         await waitForRerender();
       }
 

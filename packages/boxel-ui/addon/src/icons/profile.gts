@@ -14,7 +14,7 @@ const IconComponent: TemplateOnlyComponent<Signature> = <template>
       style='opacity:.5;fill:none;stroke:#fff;stroke-linecap:round;stroke-linejoin:round;stroke-width:3.5'
       transform='translate(17.297 16.055)'
     ><path
-        d='M25.279 28.89v-3.21a6.371 6.371 0 0 0-6.32-6.42H6.32A6.371 6.371 0 0 0 0 25.68v3.21'
+        d='M25.279 28.89v-3.21a6.37 6.37 0 0 0-6.32-6.42H6.32A6.37 6.37 0 0 0 0 25.68v3.21'
       /><circle cx='12.64' cy='6.32' r='6.32' /></g></svg>
 </template>;
 

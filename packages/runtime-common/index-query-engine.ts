@@ -110,18 +110,17 @@ interface IndexedError {
   error: SerializedError;
 }
 
-interface InstanceError
-  extends Partial<
-    Omit<
-      IndexedInstance,
-      | 'type'
-      | 'realmVersion'
-      | 'realmURL'
-      | 'instance'
-      | 'lastModified'
-      | 'resourceCreatedAt'
-    >
-  > {
+interface InstanceError extends Partial<
+  Omit<
+    IndexedInstance,
+    | 'type'
+    | 'realmVersion'
+    | 'realmURL'
+    | 'instance'
+    | 'lastModified'
+    | 'resourceCreatedAt'
+  >
+> {
   type: 'instance-error';
   error: SerializedError;
   realmVersion: number;

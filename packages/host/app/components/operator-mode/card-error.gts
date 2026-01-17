@@ -137,7 +137,7 @@ export default class CardErrorComponent extends Component<Signature> {
     </style>
   </template>
 
-  @service private declare loaderService: LoaderService;
+  @service declare private loaderService: LoaderService;
 
   private get id() {
     return this.args.error.id;

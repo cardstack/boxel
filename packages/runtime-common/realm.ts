@@ -11,6 +11,7 @@ import { isMeta, type CardResource, type Relationship } from './resource-types';
 import { normalizeRelationships } from './relationship-utils';
 import type { LocalPath } from './paths';
 import { RealmPaths, ensureTrailingSlash, join } from './paths';
+import type ms from 'ms';
 import {
   persistFileMeta,
   removeFileMeta,
@@ -314,7 +315,11 @@ export interface RealmAdapter {
 
   remove(path: LocalPath): Promise<void>;
 
-  createJWT(claims: TokenClaims, expiration: string, secret: string): string;
+  createJWT(
+    claims: TokenClaims,
+    expiration: ms.StringValue,
+    secret: string,
+  ): string;
 
   // throws if token cannot be verified or expired
   verifyJWT(
@@ -724,7 +729,7 @@ export class Realm {
     this.#moduleCache.clear();
   }
 
-  createJWT(claims: TokenClaims, expiration: string): string {
+  createJWT(claims: TokenClaims, expiration: ms.StringValue): string {
     return this.#adapter.createJWT(claims, expiration, this.#realmSecretSeed);
   }
 
