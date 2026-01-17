@@ -137,8 +137,12 @@ export class RoomResource extends Resource<Args> {
         return;
       }
       let memberIds = this.matrixRoom.memberIds;
-      // If the AI bot is not in the room, don't process the events
-      if (!memberIds || !memberIds.includes(this.matrixService.aiBotUserId)) {
+      // If neither the AI bot nor the submission bot is in the room, don't process the events
+      const hasAiBot = memberIds?.includes(this.matrixService.aiBotUserId);
+      const hasSubmissionBot = memberIds?.includes(
+        this.matrixService.submissionBotUserId,
+      );
+      if (!memberIds || (!hasAiBot && !hasSubmissionBot)) {
         return;
       }
       // TODO: enabledSkillCards can have references to skills whose URL

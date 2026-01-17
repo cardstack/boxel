@@ -1,0 +1,29 @@
+{
+  "name": "@cardstack/bot-core",
+  "version": "0.0.1",
+  "description": "Shared utilities for Matrix bot services",
+  "main": "index.ts",
+  "dependencies": {
+    "@cardstack/postgres": "workspace:*",
+    "@cardstack/runtime-common": "workspace:*",
+    "debug": "^4.4.3",
+    "matrix-js-sdk": "catalog:"
+  },
+  "devDependencies": {
+    "@cardstack/local-types": "workspace:*",
+    "@types/debug": "^4.1.12",
+    "@types/node": "catalog:",
+    "concurrently": "catalog:",
+    "typescript": "catalog:"
+  },
+  "scripts": {
+    "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\"",
+    "lint:fix": "concurrently \"pnpm:lint:*:fix\" --names \"fix:\"",
+    "lint:js": "eslint . --report-unused-disable-directives --cache",
+    "lint:js:fix": "eslint . --report-unused-disable-directives --fix",
+    "lint:glint": "glint"
+  },
+  "volta": {
+    "extends": "../../package.json"
+  }
+}

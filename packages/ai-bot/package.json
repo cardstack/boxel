@@ -2,6 +2,7 @@
   "name": "@cardstack/ai-bot",
   "dependencies": {
     "@cardstack/billing": "workspace:*",
+    "@cardstack/bot-core": "workspace:*",
     "@cardstack/postgres": "workspace:*",
     "@cardstack/runtime-common": "workspace:*",
     "@sentry/node": "catalog:",

@@ -1258,10 +1258,15 @@ export default class Room extends Component<Signature> {
   }
 
   private get generatingResults() {
-    return (
-      this.messages[this.messages.length - 1] &&
-      !this.messages[this.messages.length - 1].isStreamingFinished
-    );
+    let lastMessage = this.messages[this.messages.length - 1];
+    if (!lastMessage) {
+      return false;
+    }
+    // Only show "Generating results..." for AI bot messages that are streaming
+    // Submission bot messages don't use streaming and should not trigger this
+    const isFromAiBot =
+      lastMessage.author.userId === this.matrixService.aiBotUserId;
+    return isFromAiBot && !lastMessage.isStreamingFinished;
   }
 
   @cached

@@ -28,6 +28,7 @@ import type {
 } from '@cardstack/runtime-common';
 import {
   aiBotUsername,
+  submissionBotUsername,
   logger,
   isCardInstance,
   Deferred,
@@ -398,6 +399,11 @@ export default class MatrixService extends Service {
   get aiBotUserId() {
     let server = this.userId!.split(':')[1];
     return `@${aiBotUsername}:${server}`;
+  }
+
+  get submissionBotUserId() {
+    let server = this.userId!.split(':')[1];
+    return `@${submissionBotUsername}:${server}`;
   }
 
   get userName() {
@@ -1371,6 +1377,10 @@ export default class MatrixService extends Service {
         throw e;
       }
     }
+  }
+
+  async inviteToRoom(roomId: string, userId: string) {
+    return this.client.invite(roomId, userId);
   }
 
   async sendStateEvent(

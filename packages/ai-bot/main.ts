@@ -1,8 +1,7 @@
 import './instrument';
 import './setup-logger'; // This should be first
 import type { MatrixEvent } from 'matrix-js-sdk';
-import { RoomMemberEvent, RoomEvent, createClient } from 'matrix-js-sdk';
-import { SlidingSync, type MSC3575List } from 'matrix-js-sdk/lib/sliding-sync';
+import { RoomEvent } from 'matrix-js-sdk';
 import OpenAI from 'openai';
 import {
   logger,
@@ -23,12 +22,17 @@ import {
   constructHistory,
 } from '@cardstack/runtime-common/ai';
 import { validateAICredits } from '@cardstack/billing/ai-billing';
+import { APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE } from '@cardstack/runtime-common/matrix-constants';
 import {
-  SLIDING_SYNC_AI_ROOM_LIST_NAME,
-  SLIDING_SYNC_LIST_TIMELINE_LIMIT,
-  SLIDING_SYNC_TIMEOUT,
-  APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE,
-} from '@cardstack/runtime-common/matrix-constants';
+  createBotMatrixClient,
+  acquireRoomLock,
+  releaseRoomLock,
+  createShutdownHandler,
+  setupSignalHandlers,
+  isShuttingDown,
+  createSlidingSync,
+  setupAutoJoinOnInvite,
+} from '@cardstack/bot-core';
 
 import { handleDebugCommands } from './lib/debug';
 import { Responder } from './lib/responder';
@@ -45,12 +49,7 @@ import { PgAdapter } from '@cardstack/postgres';
 import type { ChatCompletionMessageParam } from 'openai/resources';
 import type { OpenAIError } from 'openai/error';
 import type { ChatCompletionStream } from 'openai/lib/ChatCompletionStream';
-import { acquireRoomLock, releaseRoomLock } from './lib/queries';
-import { DebugLogger } from 'matrix-js-sdk/lib/logger';
-import { setupSignalHandlers } from './lib/signal-handlers';
-import { isShuttingDown, setActiveGenerations } from './lib/shutdown';
 import type { MatrixClient } from 'matrix-js-sdk';
-import { debug } from 'debug';
 import { profEnabled, profTime, profNote } from './lib/profiler';
 import { publishCodePatchCorrectnessMessage } from './lib/code-patch-correctness';
 
@@ -163,63 +162,34 @@ let assistant: Assistant;
 
 (async () => {
   const matrixUrl = process.env.MATRIX_URL || 'http://localhost:8008';
-  let matrixDebugLogger = !process.env.DISABLE_MATRIX_JS_LOGGING
-    ? new DebugLogger(debug(`matrix-js-sdk:${aiBotUsername}`))
-    : undefined;
-  let client = createClient({
-    baseUrl: matrixUrl,
-    logger: matrixDebugLogger,
+  const enableDebugLogging = !process.env.DISABLE_MATRIX_JS_LOGGING;
+
+  // Create and authenticate Matrix client using bot-core
+  const { client, userId: aiBotUserId } = await createBotMatrixClient({
+    matrixUrl,
+    username: aiBotUsername,
+    password: process.env.BOXEL_AIBOT_PASSWORD || 'pass',
+    enableDebugLogging,
+  }).catch((e) => {
+    log.error(e);
+    process.exit(1);
   });
-  let auth = await client
-    .loginWithPassword(
-      aiBotUsername,
-      process.env.BOXEL_AIBOT_PASSWORD || 'pass',
-    )
-    .catch((e) => {
-      log.error(e);
-      log.info(`The matrix bot could not login to the server.
-Common issues are:
-- The server is not running (configured to use ${matrixUrl})
-   - Check it is reachable at ${matrixUrl}/_matrix/client/versions
-   - If running in development, check the docker container is running (see the boxel README)
-- The bot is not registered on the matrix server
-  - The bot uses the username ${aiBotUsername}
-- The bot is registered but the password is incorrect
-   - The bot password ${
-     process.env.BOXEL_AIBOT_PASSWORD
-       ? 'is set in the env var, check it is correct'
-       : 'is not set in the env var so defaults to "pass"'
-   }
-      `);
-      process.exit(1);
-    });
-  let { user_id: aiBotUserId } = auth;
 
   assistant = new Assistant(client, aiBotUserId, aiBotInstanceId);
 
-  // Set up signal handlers for graceful shutdown
-  setupSignalHandlers();
+  // Set up signal handlers for graceful shutdown using bot-core
+  const handleShutdown = createShutdownHandler({
+    activeWork: activeGenerations,
+    workLabel: 'active generations',
+  });
+  setupSignalHandlers({ onShutdown: handleShutdown, botName: 'ai-bot' });
 
-  // Share activeGenerations map with shutdown module
-  setActiveGenerations(activeGenerations);
-
-  client.on(RoomMemberEvent.Membership, function (event, member) {
-    if (event.event.origin_server_ts! < startTime) {
-      return;
-    }
-    if (member.membership === 'invite' && member.userId === aiBotUserId) {
-      client
-        .joinRoom(member.roomId)
-        .then(function () {
-          log.info('%s auto-joined %s', member.name, member.roomId);
-        })
-        .catch(function (err) {
-          log.info(
-            'Error joining this room, typically happens when a user invites then leaves before this is joined',
-            err,
-          );
-        });
-    }
+  // Set up auto-join on invite using bot-core
+  setupAutoJoinOnInvite({
+    client,
+    botUserId: aiBotUserId,
+    ignoreEventsBefore: startTime,
+    botName: 'ai-bot',
   });
 
   // TODO: Set this up to use a queue that gets drained (CS-8516)
@@ -604,22 +574,8 @@ Common issues are:
     }
   });
 
-  let lists: Map<string, MSC3575List> = new Map();
-  lists.set(SLIDING_SYNC_AI_ROOM_LIST_NAME, {
-    ranges: [[0, 0]],
-    filters: {
-      is_dm: false,
-    },
-    timeline_limit: SLIDING_SYNC_LIST_TIMELINE_LIMIT,
-    required_state: [['*', '*']],
-  });
-  let slidingSync = new SlidingSync(
-    client.baseUrl,
-    lists,
-    { timeline_limit: SLIDING_SYNC_LIST_TIMELINE_LIMIT },
-    client,
-    SLIDING_SYNC_TIMEOUT,
-  );
+  // Set up sliding sync using bot-core
+  const slidingSync = createSlidingSync({ client });
   await client.startClient({
     slidingSync,
   });
