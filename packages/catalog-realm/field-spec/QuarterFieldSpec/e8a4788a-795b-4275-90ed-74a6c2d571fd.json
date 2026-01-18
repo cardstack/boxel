@@ -9,7 +9,7 @@
     "type": "card",
     "attributes": {
       "ref": {
-        "name": "QuarterField",
+        "name": "default",
         "module": "../../fields/date/quarter"
       },
       "title": "Quarter Field Spec",

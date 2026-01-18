@@ -30,7 +30,7 @@ export type SliderFieldConfiguration = {
   options?: SliderOptions;
 };
 
-export class SliderField extends NumberField {
+export default class SliderField extends NumberField {
   static displayName = 'Slider Number Field';
 
   static edit = class Edit extends Component<typeof this> {
@@ -202,4 +202,3 @@ export class SliderField extends NumberField {
   };
 }
 
-export default SliderField;

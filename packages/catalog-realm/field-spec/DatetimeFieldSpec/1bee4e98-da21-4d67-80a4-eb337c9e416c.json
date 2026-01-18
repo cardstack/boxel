@@ -9,7 +9,7 @@
     "type": "card",
     "attributes": {
       "ref": {
-        "name": "DatetimeField",
+        "name": "default",
         "module": "../../fields/date-time"
       },
       "short": "2026-01-08T16:04:00",

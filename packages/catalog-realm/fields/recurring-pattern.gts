@@ -410,7 +410,7 @@ class RecurringPatternFieldEdit extends Component<
   </template>
 }
 
-export class RecurringPatternField extends FieldDef {
+export default class RecurringPatternField extends FieldDef {
   static displayName = 'Recurring Pattern';
   static icon = CalendarEventIcon;
 
@@ -548,5 +548,3 @@ export class RecurringPatternField extends FieldDef {
 
   static edit = RecurringPatternFieldEdit;
 }
-
-export default RecurringPatternField;

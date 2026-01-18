@@ -23,7 +23,7 @@ export type RatingFieldConfiguration = {
   options?: RatingOptions;
 };
 
-export class RatingField extends NumberField {
+export default class RatingField extends NumberField {
   static displayName = 'Rating Number Field';
 
   static edit = class Edit extends Component<typeof this> {
@@ -223,5 +223,3 @@ export class RatingField extends NumberField {
     );
   };
 }
-
-export default RatingField;

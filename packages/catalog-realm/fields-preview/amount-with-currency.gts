@@ -1,4 +1,4 @@
-import { AmountWithCurrency as AmountWithCurrencyField } from '../fields/amount-with-currency';
+import AmountWithCurrencyField from '../fields/amount-with-currency';
 
 import {
   CardDef,

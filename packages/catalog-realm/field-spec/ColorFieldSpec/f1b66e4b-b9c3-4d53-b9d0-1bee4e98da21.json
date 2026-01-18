@@ -9,7 +9,7 @@
     "type": "card",
     "attributes": {
       "ref": {
-        "name": "ColorField",
+        "name": "default",
         "module": "../../fields/color"
       },
       "title": "Color Field Spec",

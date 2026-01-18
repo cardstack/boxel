@@ -46,7 +46,7 @@ interface DateTimeConfiguration {
 // Local datetime format (no timezone)
 const localDatetimeFormat = "yyyy-MM-dd'T'HH:mm:ss";
 
-export class DatetimeField extends FieldDef {
+export default class DatetimeField extends FieldDef {
   static displayName = 'Date & Time';
   static icon = CalendarEventIcon;
   static [primitive]: Date;
@@ -223,5 +223,3 @@ export class DatetimeField extends FieldDef {
     }
   };
 }
-
-export default DatetimeField;

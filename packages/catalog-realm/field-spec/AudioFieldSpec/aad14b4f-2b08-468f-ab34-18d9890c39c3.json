@@ -9,7 +9,7 @@
     "type": "card",
     "attributes": {
       "ref": {
-        "name": "AudioField",
+        "name": "default",
         "module": "../../fields/audio"
       },
       "title": "Audio Field Spec",

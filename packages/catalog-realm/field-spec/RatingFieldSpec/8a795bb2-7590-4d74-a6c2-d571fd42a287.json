@@ -9,7 +9,7 @@
     "type": "card",
     "attributes": {
       "ref": {
-        "name": "RatingField",
+        "name": "default",
         "module": "../../fields/rating"
       },
       "title": "Rating Field Spec",

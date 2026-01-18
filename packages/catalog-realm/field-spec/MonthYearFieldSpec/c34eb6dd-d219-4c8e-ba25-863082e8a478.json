@@ -9,7 +9,7 @@
     "type": "card",
     "attributes": {
       "ref": {
-        "name": "MonthYearField",
+        "name": "default",
         "module": "../../fields/date/month-year"
       },
       "title": "Month Year Field Spec",

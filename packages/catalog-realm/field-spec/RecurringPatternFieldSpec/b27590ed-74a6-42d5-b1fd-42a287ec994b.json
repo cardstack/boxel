@@ -9,7 +9,7 @@
     "type": "card",
     "attributes": {
       "ref": {
-        "name": "RecurringPatternField",
+        "name": "default",
         "module": "../../fields/recurring-pattern"
       },
       "title": "Recurring Pattern Field Spec",

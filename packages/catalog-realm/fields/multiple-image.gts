@@ -1007,7 +1007,7 @@ class MultipleImageFieldEmbedded extends Component<typeof MultipleImageField> {
 }
 
 // Actual MultipleImageField class definition
-export class MultipleImageField extends FieldDef {
+export default class MultipleImageField extends FieldDef {
   static displayName = 'Multiple Images';
   static icon = Grid3x3Icon;
 
@@ -1017,5 +1017,3 @@ export class MultipleImageField extends FieldDef {
   static atom = MultipleImageFieldAtom;
   static edit = MultipleImageFieldEdit;
 }
-
-export default MultipleImageField;

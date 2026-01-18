@@ -21,7 +21,7 @@ class EditView extends Component<typeof ColorField> {
   </template>
 }
 
-export class ColorField extends StringField {
+export default class ColorField extends StringField {
   static displayName = 'Color Field';
   static icon = PaletteIcon;
 
@@ -30,5 +30,3 @@ export class ColorField extends StringField {
   static fitted = View;
   static edit = EditView;
 }
-
-export default ColorField;

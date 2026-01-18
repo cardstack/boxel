@@ -9,7 +9,7 @@
     "type": "card",
     "attributes": {
       "ref": {
-        "name": "DateRangeField",
+        "name": "default",
         "module": "../../fields/date/date-range"
       },
       "title": "Date Range Field Spec",

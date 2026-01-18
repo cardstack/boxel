@@ -9,7 +9,7 @@
     "type": "card",
     "attributes": {
       "ref": {
-        "name": "DateField",
+        "name": "default",
         "module": "../../fields/date"
       },
       "title": "Date Field Spec",

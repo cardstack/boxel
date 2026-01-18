@@ -9,7 +9,7 @@
     "type": "card",
     "attributes": {
       "ref": {
-        "name": "TimeRangeField",
+        "name": "default",
         "module": "../../fields/time/time-range"
       },
       "title": "Time Range Field Spec",

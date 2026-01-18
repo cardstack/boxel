@@ -8,7 +8,7 @@ import {
 import StringField from 'https://cardstack.com/base/string';
 import NumberField from 'https://cardstack.com/base/number';
 import DatetimeField from 'https://cardstack.com/base/datetime';
-import { ContactLinkField } from '../fields/contact-link';
+import ContactLinkField from '../fields/contact-link';
 
 import {
   formatCurrency,

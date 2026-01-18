@@ -9,7 +9,7 @@
     "type": "card",
     "attributes": {
       "ref": {
-        "name": "WeekField",
+        "name": "default",
         "module": "../../fields/date/week"
       },
       "title": "Week Field Spec",

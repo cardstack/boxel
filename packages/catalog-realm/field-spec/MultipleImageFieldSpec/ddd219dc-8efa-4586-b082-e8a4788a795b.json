@@ -9,7 +9,7 @@
     "type": "card",
     "attributes": {
       "ref": {
-        "name": "MultipleImageField",
+        "name": "default",
         "module": "../../fields/multiple-image"
       },
       "list": {

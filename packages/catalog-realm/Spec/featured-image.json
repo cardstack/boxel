@@ -4,7 +4,7 @@
     "attributes": {
       "readMe": null,
       "ref": {
-        "name": "FeaturedImageField",
+        "name": "default",
         "module": "../fields/featured-image"
       },
       "specType": "field",

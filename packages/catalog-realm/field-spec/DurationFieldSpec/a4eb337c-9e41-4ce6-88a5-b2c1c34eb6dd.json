@@ -9,7 +9,7 @@
     "type": "card",
     "attributes": {
       "ref": {
-        "name": "DurationField",
+        "name": "default",
         "module": "../../fields/time/duration"
       },
       "full": {

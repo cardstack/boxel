@@ -567,7 +567,7 @@ class AudioFieldFitted extends Component<typeof AudioField> {
   </template>
 }
 
-export class AudioField extends FieldDef {
+export default class AudioField extends FieldDef {
   static displayName = 'Audio';
   static icon = MusicIcon;
 
@@ -1010,5 +1010,3 @@ export class AudioField extends FieldDef {
 
   static edit = AudioFieldEdit;
 }
-
-export default AudioField;

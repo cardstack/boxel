@@ -9,7 +9,7 @@
     "type": "card",
     "attributes": {
       "ref": {
-        "name": "DatetimeStampField",
+        "name": "default",
         "module": "../../fields/datetime-stamp"
       },
       "title": "Datetime Stamp Field Spec",

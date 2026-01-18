@@ -8,7 +8,7 @@ import {
 import StringField from 'https://cardstack.com/base/string';
 import TextAreaField from 'https://cardstack.com/base/text-area';
 import DatetimeField from 'https://cardstack.com/base/datetime';
-import { GeoSearchPointField } from '../fields/geo-search-point';
+import GeoSearchPointField from '../fields/geo-search-point';
 
 import { formatDateTime, not } from '@cardstack/boxel-ui/helpers';
 import { FieldContainer, BoxelInput } from '@cardstack/boxel-ui/components';

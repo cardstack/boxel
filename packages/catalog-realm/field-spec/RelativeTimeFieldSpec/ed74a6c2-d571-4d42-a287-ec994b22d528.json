@@ -9,7 +9,7 @@
     "type": "card",
     "attributes": {
       "ref": {
-        "name": "RelativeTimeField",
+        "name": "default",
         "module": "../../fields/time/relative-time"
       },
       "title": "Relative Time Field Spec",

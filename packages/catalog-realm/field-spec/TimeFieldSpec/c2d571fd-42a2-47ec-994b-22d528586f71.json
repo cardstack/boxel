@@ -9,7 +9,7 @@
     "type": "card",
     "attributes": {
       "ref": {
-        "name": "TimeField",
+        "name": "default",
         "module": "../../fields/time"
       },
       "title": "Time Field Spec",

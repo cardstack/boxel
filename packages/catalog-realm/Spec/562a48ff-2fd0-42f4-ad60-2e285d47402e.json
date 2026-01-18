@@ -9,7 +9,7 @@
     "type": "card",
     "attributes": {
       "ref": {
-        "name": "SliderField",
+        "name": "default",
         "module": "../fields/slider"
       },
       "title": "Slider Field",

@@ -34,7 +34,7 @@ import { DealEvent } from './deal-event';
 import { DealPriority } from './deal-priority';
 import { DealStatus } from './deal-status';
 
-import { AmountWithCurrency as AmountWithCurrencyField } from './fields/amount-with-currency';
+import AmountWithCurrencyField from './fields/amount-with-currency';
 
 import AccountHeader from './components/account-header';
 import { ContactRow } from './components/contact-row';

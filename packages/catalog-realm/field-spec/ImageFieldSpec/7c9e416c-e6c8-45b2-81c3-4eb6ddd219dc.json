@@ -9,7 +9,7 @@
     "type": "card",
     "attributes": {
       "ref": {
-        "name": "ImageField",
+        "name": "default",
         "module": "../../fields/image"
       },
       "title": "Image Field Spec",

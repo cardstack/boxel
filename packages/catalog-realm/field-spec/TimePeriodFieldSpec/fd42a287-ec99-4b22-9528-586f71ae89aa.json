@@ -9,7 +9,7 @@
     "type": "card",
     "attributes": {
       "ref": {
-        "name": "TimePeriodField",
+        "name": "default",
         "module": "../../fields/time-period"
       },
       "title": "Time Period Field Spec",
