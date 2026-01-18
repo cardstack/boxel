@@ -14,9 +14,8 @@ import type BillingService from '../services/billing-service';
 
 import type { ComponentLike } from '@glint/template';
 
-function formatEtTimestamp(date: Date) {
+function formatLocalTimestamp(date: Date) {
   let formatter = new Intl.DateTimeFormat(undefined, {
-    timeZone: 'America/New_York',
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
@@ -165,14 +164,14 @@ export default class WithSubscriptionData extends Component<WithSubscriptionData
       let distance = formatDistanceToNow(
         new Date(this.nextDailyCreditGrantAt * 1000),
       );
-      let timestampEt = formatEtTimestamp(
+      let timestampLocal = formatLocalTimestamp(
         new Date(this.nextDailyCreditGrantAt * 1000),
       );
       let creditAmount = formatNumber(this.lowCreditThreshold, {
         size: 'short',
       });
       return [
-        `Next free credit daily grant will top up your balance to ${creditAmount} credits in ${distance} (${timestampEt}).`,
+        `Next free credit daily grant will top up your balance to ${creditAmount} credits in ${distance} (${timestampLocal}).`,
       ];
     }
 
@@ -186,7 +185,7 @@ export default class WithSubscriptionData extends Component<WithSubscriptionData
         addSuffix: true,
       },
     );
-    let timestampLastDailyCreditGrant = formatEtTimestamp(
+    let timestampLastDailyCreditGrant = formatLocalTimestamp(
       new Date(this.lastDailyCreditGrantAt * 1000),
     );
     let thresholdAmount = formatNumber(this.lowCreditThreshold, {
