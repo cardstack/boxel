@@ -652,15 +652,15 @@ export class Listing extends CardDef {
       if (updateSpecs) {
         menuItems = [...menuItems, updateSpecs];
       }
-      const makeAPR = this.getMakeAPRMenuItem(params);
-      if (makeAPR) {
-        menuItems = [...menuItems, makeAPR];
+      const createPRMenuItem = this.getCreatePRMenuItem(params);
+      if (createPRMenuItem) {
+        menuItems = [...menuItems, createPRMenuItem];
       }
     }
     return menuItems;
   }
 
-  private getMakeAPRMenuItem(
+  private getCreatePRMenuItem(
     params: GetCardMenuItemParams,
   ): MenuItemOptions | undefined {
     if (params.menuContext !== 'interact') {

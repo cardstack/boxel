@@ -19,7 +19,7 @@ import type {
 import {
   cardTypeIcon,
   identifyCard,
-  isListing,
+  isListingCard,
   isResolvedCodeRef,
   realmURL,
 } from '@cardstack/runtime-common';
@@ -213,8 +213,4 @@ function isIndexCard(card: CardDef): boolean {
     return false;
   }
   return (card.id as unknown as string) === `${cardRealmURL.href}index`;
-}
-
-function isListingCard(card: CardDef): boolean {
-  return isListing in card.constructor;
 }
