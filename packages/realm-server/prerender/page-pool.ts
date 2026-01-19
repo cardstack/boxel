@@ -86,6 +86,7 @@ export class PagePool {
   #boxelHostURL: string;
   #standbyTimeoutMs: number;
   #renderSemaphore: RenderSemaphore | undefined;
+  #disableStandbyRefill: boolean;
   #ensuringStandbys: Promise<void> | null = null;
   #creatingStandbys = 0;
   #consoleErrorsByPageId = new Map<string, Map<string, ConsoleErrorEntry>>();
@@ -97,6 +98,7 @@ export class PagePool {
     boxelHostURL: string;
     standbyTimeoutMs?: number;
     renderSemaphore?: RenderSemaphore;
+    disableStandbyRefill?: boolean;
   }) {
     this.#maxPages = options.maxPages;
     let envTabMax = Number(process.env.PRERENDER_REALM_TAB_MAX ?? 1);
@@ -109,6 +111,7 @@ export class PagePool {
     this.#boxelHostURL = options.boxelHostURL;
     this.#standbyTimeoutMs = options.standbyTimeoutMs ?? 30_000;
     this.#renderSemaphore = options.renderSemaphore;
+    this.#disableStandbyRefill = options.disableStandbyRefill ?? false;
   }
 
   getWarmRealms(): string[] {
@@ -271,6 +274,9 @@ export class PagePool {
 
   #desiredStandbyCount(): number {
     let activeTabs = this.#poolEntryCount();
+    if (this.#disableStandbyRefill && activeTabs > 0) {
+      return 0;
+    }
     if (activeTabs >= this.#maxPages) {
       return 1;
     }

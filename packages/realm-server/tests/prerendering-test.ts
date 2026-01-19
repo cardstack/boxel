@@ -58,6 +58,7 @@ function makeStubPagePool(
   maxPages: number,
   renderSemaphore?: { acquire(): Promise<() => void> },
   createContextDelay?: (contextNumber: number) => Promise<void>,
+  options?: { disableStandbyRefill?: boolean; standbyTimeoutMs?: number },
 ) {
   let contextCounter = 0;
   let contextsCreated: string[] = [];
@@ -107,8 +108,9 @@ function makeStubPagePool(
     serverURL: 'http://localhost',
     browserManager: browserManager as any,
     boxelHostURL: 'http://localhost:4200',
-    standbyTimeoutMs: 500,
+    standbyTimeoutMs: options?.standbyTimeoutMs ?? 500,
     renderSemaphore,
+    disableStandbyRefill: options?.disableStandbyRefill,
   });
   return { pool, contextsCreated, contextsClosed };
 }
@@ -2370,10 +2372,8 @@ module(basename(__filename), function () {
       });
 
       test('does not reassign a busy tab with queued work across realms', async function (assert) {
-        let { pool } = makeStubPagePool(1, undefined, async (contextNumber) => {
-          if (contextNumber > 1) {
-            throw new Error('standby creation disabled for test');
-          }
+        let { pool } = makeStubPagePool(1, undefined, undefined, {
+          disableStandbyRefill: true,
         });
 
         try {
