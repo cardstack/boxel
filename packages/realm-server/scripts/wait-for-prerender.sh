@@ -3,7 +3,7 @@
 wait_for_prerender() {
   local url="${1:-${PRERENDER_HEALTH_URL:-http://localhost:4221/}}"
   local trimmed_url="${url%/}/"
-  TIMEOUT_SECONDS=150
+  TIMEOUT_SECONDS=30
   START_TIME=$(date +%s)
 
   echo "Waiting for prerender server at ${trimmed_url}"

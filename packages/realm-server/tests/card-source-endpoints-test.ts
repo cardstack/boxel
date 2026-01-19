@@ -939,6 +939,40 @@ module(basename(__filename), function () {
         });
       });
 
+      module('public writable realm with size limit', function (hooks) {
+        setupPermissionedRealm(hooks, {
+          permissions: {
+            '*': ['read', 'write'],
+          },
+          cardSizeLimit: 512,
+          onRealmSetup,
+        });
+
+        test('returns 413 when source payload exceeds size limit', async function (assert) {
+          let oversized = 'a'.repeat(2048);
+          let response = await request
+            .post('/too-large.gts')
+            .set('Accept', 'application/vnd.card+source')
+            .send(oversized);
+
+          assert.strictEqual(response.status, 413, 'HTTP 413 status');
+          assert.strictEqual(
+            response.body.errors[0].title,
+            'Payload Too Large',
+            'error title is correct',
+          );
+          assert.strictEqual(
+            response.body.errors[0].status,
+            413,
+            'error status is correct',
+          );
+          assert.ok(
+            response.body.errors[0].message.includes('File size'),
+            'error message mentions file size',
+          );
+        });
+      });
+
       module('permissioned realm', function (hooks) {
         setupPermissionedRealm(hooks, {
           permissions: {

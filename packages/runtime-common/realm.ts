@@ -22,6 +22,7 @@ import {
   methodNotAllowed,
   badRequest,
   CardError,
+  responseWithError,
   formattedError,
 } from './error';
 import { v4 as uuidV4 } from 'uuid';
@@ -790,7 +791,11 @@ export class Realm {
           throw e;
         }
       }
-      validateWriteSize(content, this.#cardSizeLimit, 'file');
+      let sizeType: 'card' | 'file' =
+        path.endsWith('.json') && isCardDocumentString(content)
+          ? 'card'
+          : 'file';
+      this.assertWriteSize(content, sizeType);
       let existingFile = await readFileAsText(path, (p) =>
         this.#adapter.openFile(p),
       );
@@ -1060,14 +1065,14 @@ export class Realm {
       }
       if (isModuleResource(resource)) {
         let content = resource.attributes?.content ?? '';
-        validateWriteSize(content, this.#cardSizeLimit, 'file');
+        this.assertWriteSize(content, 'file');
         files.set(localPath, content);
       } else if (isCardResource(resource)) {
         let doc = {
           data: resource,
         };
         let jsonString = JSON.stringify(doc, null, 2);
-        validateWriteSize(jsonString, this.#cardSizeLimit, 'card');
+        this.assertWriteSize(jsonString, 'card');
         files.set(localPath, jsonString);
       } else {
         return createResponse({
@@ -1089,17 +1094,20 @@ export class Realm {
       }
     }
 
-    if (files.size > 0) {
-      try {
-        writeResults = await this.writeMany(files, {
-          clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
-          serializeFile: true,
-        });
-      } catch (e: any) {
-        return createResponse({
-          body: JSON.stringify({
-            errors: [{ title: 'Write Error', detail: e.message }],
-          }),
+      if (files.size > 0) {
+        try {
+          writeResults = await this.writeMany(files, {
+            clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
+            serializeFile: true,
+          });
+        } catch (e: any) {
+          if (e instanceof CardError) {
+            return responseWithError(e, requestContext);
+          }
+          return createResponse({
+            body: JSON.stringify({
+              errors: [{ title: 'Write Error', detail: e.message }],
+            }),
           init: {
             status: 500,
             headers: { 'content-type': SupportedMimeType.JSONAPI },
@@ -1906,6 +1914,17 @@ export class Realm {
       },
       requestContext,
     });
+  }
+
+  private assertWriteSize(content: string, type: 'card' | 'file') {
+    try {
+      validateWriteSize(content, this.#cardSizeLimit, type);
+    } catch (error: any) {
+      throw new CardError(error?.message ?? 'Payload too large', {
+        status: 413,
+        title: 'Payload Too Large',
+      });
+    }
   }
 
   private async getSourceOrRedirect(
