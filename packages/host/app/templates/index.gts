@@ -233,7 +233,7 @@ export class IndexComponent extends Component<IndexComponentComponentSignature> 
           @removeCardFromStack={{this.removeCardFromStack}}
           @viewCard={{this.viewCard}}
           class='host-mode-content'
-          {{this.removeIsolatedMarkup}}
+          {{!-- {{this.removeIsolatedMarkup}} --}}
         />
       {{/if}}
     {{else}}

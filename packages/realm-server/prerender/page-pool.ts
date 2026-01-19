@@ -282,6 +282,10 @@ export class PagePool {
       let browser = await this.#browserManager.getBrowser();
       context = await browser.createBrowserContext();
       let page = await context.newPage();
+      await page.evaluateOnNewDocument((mode) => {
+        // @ts-expect-error hmm
+        globalThis.__boxelRenderMode = mode;
+      }, 'serialize');
       let pageId = uuidv4();
       this.#attachPageConsole(page, 'standby', pageId);
       await this.#loadStandbyPage(page, pageId);
