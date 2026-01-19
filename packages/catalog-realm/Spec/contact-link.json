@@ -10,7 +10,7 @@
           {
             "adoptsFrom": {
               "module": "../fields/contact-link",
-              "name": "ContactLinkField"
+              "name": "default"
             }
           }
         ]
@@ -19,7 +19,7 @@
     "type": "card",
     "attributes": {
       "ref": {
-        "name": "ContactLinkField",
+        "name": "default",
         "module": "../fields/contact-link"
       },
       "title": "ContactLinkField",

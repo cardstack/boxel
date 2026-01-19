@@ -2,9 +2,9 @@ import { module, test } from 'qunit';
 import type { Test, SuperTest } from 'supertest';
 import { basename } from 'path';
 import type { Realm } from '@cardstack/runtime-common';
+import { setupPermissionedRealm, createJWT } from './helpers';
 import { PRERENDERED_HTML_FORMATS } from '@cardstack/runtime-common';
 import type { Query } from '@cardstack/runtime-common/query';
-import { setupPermissionedRealm, createJWT } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
 const missingPrerenderedHtmlFormatMessage = `Must include a 'prerenderedHtmlFormat' parameter with a value of ${PRERENDERED_HTML_FORMATS.join()} to use this endpoint`;

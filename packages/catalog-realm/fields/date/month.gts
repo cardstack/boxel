@@ -58,7 +58,7 @@ class MonthFieldEdit extends Component<typeof MonthField> {
   </template>
 }
 
-export class MonthField extends FieldDef {
+export default class MonthField extends FieldDef {
   static displayName = 'Month';
   static icon = CalendarIcon;
 
@@ -161,5 +161,3 @@ export class MonthField extends FieldDef {
 
   static edit = MonthFieldEdit;
 }
-
-export default MonthField;

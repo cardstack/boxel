@@ -77,6 +77,42 @@ const testRealmHref = testRealmURL.href;
 export const testRealmServerMatrixUsername = 'node-test_realm-server';
 export const testRealmServerMatrixUserId = `@${testRealmServerMatrixUsername}:localhost`;
 
+export type RealmRequest = {
+  get(path: string): Test;
+  post(path: string): Test;
+  put(path: string): Test;
+  patch(path: string): Test;
+  delete(path: string): Test;
+  head(path: string): Test;
+};
+
+export function withRealmPath(
+  request: SuperTest<Test>,
+  realmURL: URL,
+): RealmRequest {
+  let realmPath = realmURL.pathname.replace(/\/?$/, '/');
+  let prefixPath = (path: string) => {
+    if (path.startsWith('http://') || path.startsWith('https://')) {
+      return path;
+    }
+    if (path.startsWith(realmPath)) {
+      return path;
+    }
+    if (path.startsWith('/')) {
+      return `${realmPath}${path.slice(1)}`;
+    }
+    return `${realmPath}${path}`;
+  };
+  return {
+    get: (path: string) => request.get(prefixPath(path)),
+    post: (path: string) => request.post(prefixPath(path)),
+    put: (path: string) => request.put(prefixPath(path)),
+    patch: (path: string) => request.patch(prefixPath(path)),
+    delete: (path: string) => request.delete(prefixPath(path)),
+    head: (path: string) => request.head(prefixPath(path)),
+  };
+}
+
 export { testRealmHref, testRealmURL };
 
 const REALM_EVENT_TS_SKEW_BUFFER_MS = 2000;
@@ -283,10 +319,25 @@ async function startTestPrerenderServer(): Promise<string> {
 
 async function stopTestPrerenderServer() {
   if (prerenderServer && prerenderServer.listening) {
+    if (hasStopPrerenderer(prerenderServer)) {
+      await prerenderServer.__stopPrerenderer?.();
+    }
     await closeServer(prerenderServer);
   }
   prerenderServer = undefined;
   prerenderServerStart = undefined;
+}
+
+interface StoppablePrerenderServer extends Server {
+  __stopPrerenderer?: () => Promise<void>;
+}
+
+function hasStopPrerenderer(
+  server: Server,
+): server is StoppablePrerenderServer {
+  return (
+    typeof (server as StoppablePrerenderServer).__stopPrerenderer === 'function'
+  );
 }
 
 export async function getTestPrerenderer(): Promise<Prerenderer> {
@@ -939,7 +990,8 @@ export function setupMatrixRoom(
   getRealmSetup: () => {
     testRealm: Realm;
     testRealmHttpServer: Server;
-    request: SuperTest<Test>;
+    request: { post(path: string): Test };
+    serverRequest?: SuperTest<Test>;
     dir: DirResult;
     dbAdapter: PgAdapter;
   },
@@ -962,7 +1014,7 @@ export function setupMatrixRoom(
       throw new Error('matrixClient did not return an OpenID token');
     }
 
-    let response = await realmSetup.request
+    let response = await (realmSetup.serverRequest ?? realmSetup.request)
       .post('/_server-session')
       .send(JSON.stringify(openIdToken))
       .set('Accept', 'application/json')
@@ -1187,6 +1239,17 @@ export function setupPermissionedRealm(
     }
     await closeServer(testRealmServer.testRealmHttpServer);
     resetCatalogRealms();
+  });
+}
+
+export function setupPermissionedRealmAtURL(
+  hooks: NestedHooks,
+  realmURL: URL,
+  options: Omit<Parameters<typeof setupPermissionedRealm>[1], 'realmURL'>,
+) {
+  return setupPermissionedRealm(hooks, {
+    ...options,
+    realmURL,
   });
 }
 

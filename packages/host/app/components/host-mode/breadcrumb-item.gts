@@ -4,7 +4,7 @@ import { action } from '@ember/object';
 import Component from '@glimmer/component';
 import { cached } from '@glimmer/tracking';
 
-import { cardTypeIcon } from '@cardstack/runtime-common';
+import { cardTypeIcon, isCardInstance } from '@cardstack/runtime-common';
 
 import { getCard } from '@cardstack/host/resources/card-resource';
 
@@ -51,8 +51,12 @@ export default class HostModeBreadcrumbItem extends Component<Signature> {
   }
 
   private get label() {
-    if (this.card && typeof this.card.title === 'string') {
-      return this.card.title;
+    let card = this.card;
+    if (card && isCardInstance(card) && typeof card.title === 'string') {
+      return card.title;
+    }
+    if (card && 'name' in card && typeof card.name === 'string') {
+      return card.name;
     }
 
     return this.args.cardId;

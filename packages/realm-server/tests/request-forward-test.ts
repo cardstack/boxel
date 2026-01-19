@@ -205,37 +205,32 @@ module(basename(__filename), function () {
           'Should return OpenRouter response',
         );
 
-        // Verify fetch was called correctly
-        assert.true(mockFetch.calledTwice, 'Fetch should be called twice');
+        // Verify fetch was called correctly (allowing unrelated fetches)
         const calls = mockFetch.getCalls();
+        const chatCallIndex = calls.findIndex((call) => {
+          const url = call.args[0];
+          const href = typeof url === 'string' ? url : url?.toString();
+          return Boolean(href && href.includes('/chat/completions'));
+        });
+        const generationCallIndex = calls.findIndex((call) => {
+          const url = call.args[0];
+          const href = typeof url === 'string' ? url : url?.toString();
+          return Boolean(href && href.includes('/generation?id='));
+        });
 
-        // First call should be to chat completions
-        const firstCallUrl = calls[0].args[0];
-        const firstUrl =
-          typeof firstCallUrl === 'string'
-            ? firstCallUrl
-            : firstCallUrl.toString();
+        assert.true(chatCallIndex >= 0, 'Fetch should call chat completions');
         assert.true(
-          firstUrl.includes('/chat/completions'),
-          'First call should be to chat completions',
+          generationCallIndex >= 0,
+          'Fetch should call generation cost API',
         );
-
-        // Second call should be to generation cost API
-        const secondCallUrl = calls[1].args[0];
-        const secondUrl =
-          typeof secondCallUrl === 'string'
-            ? secondCallUrl
-            : secondCallUrl.toString();
         assert.true(
-          secondUrl.includes('/generation?id='),
-          'Second call should be to generation cost API',
+          chatCallIndex < generationCallIndex,
+          'Generation cost should be fetched after chat completions',
         );
 
         // Verify authorization header was set correctly
-        const firstCallHeaders = calls[0].args[1]?.headers as Record<
-          string,
-          string
-        >;
+        const firstCallHeaders = calls[chatCallIndex].args[1]
+          ?.headers as Record<string, string>;
         // Note: The actual authorization header will include the JWT token, not the API key
         // The API key is added by the proxy handler, not the test
         assert.true(

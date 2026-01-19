@@ -9,8 +9,8 @@
     "type": "card",
     "attributes": {
       "ref": {
-        "name": "DatetimeStampFieldSpec",
-        "module": "../datetime-stamp-field-spec"
+        "name": "default",
+        "module": "../../fields/datetime-stamp"
       },
       "title": "Datetime Stamp Field Spec",
       "readMe": null,

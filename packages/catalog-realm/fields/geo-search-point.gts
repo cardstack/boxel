@@ -9,7 +9,7 @@ import {
   contains,
   field,
 } from 'https://cardstack.com/base/card-api';
-import { GeoPointField } from './geo-point';
+import GeoPointField from './geo-point';
 import { MapRender, type Coordinate } from '../components/map-render';
 
 class AtomTemplate extends Component<typeof GeoSearchPointField> {
@@ -416,7 +416,7 @@ class EmbeddedTemplate extends Component<typeof GeoSearchPointField> {
 }
 
 // @ts-ignore
-export class GeoSearchPointField extends GeoPointField {
+export default class GeoSearchPointField extends GeoPointField {
   static displayName = 'Geo Search Point';
 
   @field searchKey = contains(StringField);
