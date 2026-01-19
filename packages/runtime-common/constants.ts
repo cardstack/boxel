@@ -35,6 +35,7 @@ export const fieldSerializer = Symbol.for('cardstack-field-serializer');
 export const fieldsUntracked = Symbol.for('cardstack-fields-untracked');
 export const getCardMenuItems = Symbol.for('cardstack-get-card-menu-items');
 export const isBaseInstance = Symbol.for('isBaseInstance');
+export const isListing = Symbol.for('cardstack-listing');
 export const localId = Symbol.for('cardstack-local-id');
 export const meta = Symbol.for('cardstack-meta');
 export const realmURL = Symbol.for('cardstack-realm-url');

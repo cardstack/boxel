@@ -9,25 +9,25 @@ import GenerateExampleCardsCommand from '@cardstack/boxel-host/commands/generate
 import ListingCreateCommand from '@cardstack/boxel-host/commands/listing-create';
 import OpenInInteractModeCommand from '@cardstack/boxel-host/commands/open-in-interact-mode';
 import PopulateWithSampleDataCommand from '@cardstack/boxel-host/commands/populate-with-sample-data';
-import CreateListingPRCommand from '@cardstack/boxel-host/commands/create-listing-pr';
 import ShowCardCommand from '@cardstack/boxel-host/commands/show-card';
 import SwitchSubmodeCommand from '@cardstack/boxel-host/commands/switch-submode';
-import {
-  cardTypeIcon,
+import type {
   CommandContext,
   Format,
-  getAncestor,
+  ResolvedCodeRef,
+} from '@cardstack/runtime-common';
+import {
+  cardTypeIcon,
   identifyCard,
+  isListing,
   isResolvedCodeRef,
   realmURL,
-  ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 
 import CodeIcon from '@cardstack/boxel-icons/code';
 import ArrowLeft from '@cardstack/boxel-icons/arrow-left';
 import Eye from '@cardstack/boxel-icons/eye';
 import LinkIcon from '@cardstack/boxel-icons/link';
-import Package from '@cardstack/boxel-icons/package';
 import Trash2Icon from '@cardstack/boxel-icons/trash-2';
 import Wand from '@cardstack/boxel-icons/wand';
 
@@ -104,21 +104,6 @@ export function getDefaultCardMenuItems(
       );
     }
 
-    if (isListingSubclass(card)) {
-      menuItems.push({
-        label: 'Make a PR',
-        action: async () => {
-          if (!card[realmURL]?.href) {
-            return;
-          }
-          await new CreateListingPRCommand(params.commandContext).execute({
-            listing: card,
-            realm: card[realmURL]!.href,
-          });
-        },
-        icon: Package,
-      });
-    }
   }
   if (
     params.menuContext === 'ai-assistant' &&
@@ -170,7 +155,7 @@ export function getDefaultCardMenuItems(
       disabled: !cardId,
     });
     menuItems = [...menuItems, ...getSampleDataMenuItems(card, params)];
-    if (!isListingSubclass(card)) {
+    if (!isListingCard(card)) {
       menuItems.push({
         label: `Create listing with AI`,
         action: async () => {
@@ -178,7 +163,7 @@ export function getDefaultCardMenuItems(
             openCardId: cardId,
           });
         },
-        icon: Package,
+        icon: Wand,
         disabled: !params.canEdit,
       });
     }
@@ -230,24 +215,6 @@ function isIndexCard(card: CardDef): boolean {
   return (card.id as unknown as string) === `${cardRealmURL.href}index`;
 }
 
-// Check if a card inherits from the catalog Listing class by verifying
-// the module path in the inheritance chain
-function isListingSubclass(card: CardDef): boolean {
-  let current: typeof BaseDef | undefined = card?.constructor as
-    | typeof BaseDef
-    | undefined;
-
-  while (current) {
-    const codeRef = identifyCard(current);
-    if (
-      codeRef &&
-      isResolvedCodeRef(codeRef) &&
-      codeRef.module.includes('catalog-app/listing/listing')
-    ) {
-      return true;
-    }
-    current = getAncestor(current);
-  }
-
-  return false;
+function isListingCard(card: CardDef): boolean {
+  return isListing in card.constructor;
 }
