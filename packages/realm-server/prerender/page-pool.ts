@@ -209,6 +209,7 @@ export class PagePool {
       for (let entry of entries) {
         await this.#closeEntry(entry, retainConsoleErrors);
       }
+      await this.#notifyManagerRealmEvicted(realm);
     } else {
       for (let entry of entries) {
         void this.#closeEntry(entry, retainConsoleErrors).finally(() => {
@@ -220,8 +221,8 @@ export class PagePool {
           }
         });
       }
+      void this.#notifyManagerRealmEvicted(realm);
     }
-    await this.#notifyManagerRealmEvicted(realm);
     void this.#browserManager.cleanupUserDataDirs();
     void this.#ensureStandbyPool();
   }
