@@ -24,7 +24,9 @@ function setupFetchDebugging(hooks: NestedHooks) {
       try {
         return await boundFetch(input, init);
       } catch (error) {
-        console.error(`[test-fetch] ${method} ${url} failed`, error);
+        console.error(
+          `[test-fetch] ${method} ${url} failed: ${formatErrorForLog(error)}`,
+        );
         throw error;
       }
     };
@@ -47,6 +49,29 @@ function describeFetchRequest(input: RequestInfo | URL, init?: RequestInit) {
   let url = input instanceof URL ? input.href : String(input);
   let method = init?.method ?? 'GET';
   return { method, url };
+}
+
+function formatErrorForLog(error: unknown): string {
+  if (error instanceof Error) {
+    let header = error.name ? `${error.name}: ${error.message}` : error.message;
+    let stack = error.stack?.trim();
+    if (stack && !stack.includes(header)) {
+      return `${header}\n${stack}`;
+    }
+    return stack ?? header ?? 'Unknown error';
+  }
+  if (typeof error === 'string') {
+    return error;
+  }
+  try {
+    let serialized = JSON.stringify(error);
+    if (serialized && serialized !== '{}') {
+      return serialized;
+    }
+  } catch (_e) {
+    // fall through to string coercion
+  }
+  return String(error);
 }
 
 export function setupApplicationTest(hooks: NestedHooks) {

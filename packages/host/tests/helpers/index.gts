@@ -797,6 +797,13 @@ async function setupTestRealm({
     definitionLookup,
   });
 
+  // Register the realm early so realm-server mock _info lookups can resolve
+  // without falling back to real network fetches.
+  getTestRealmRegistry().set(realm.url, {
+    realm,
+    adapter,
+  });
+
   // we use this to run cards that were added to the test filesystem
   adapter.setLoader(
     new Loader(realm.__fetchForTesting, virtualNetwork.resolveImport),
