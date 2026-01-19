@@ -18,7 +18,7 @@ class AtomTemplate extends Component<typeof Route> {
     <div class='route-display'>
       <MapIcon class='map-icon' />
       <div class='route-info'>
-        <span class='route-title'>{{@model.title}}</span>
+        <span class='route-title'>{{@model.cardTitle}}</span>
       </div>
     </div>
 
@@ -75,7 +75,7 @@ class IsolatedTemplate extends Component<typeof Route> {
   get routes() {
     return [
       {
-        name: this.args.model?.title || 'Route',
+        name: this.args.model?.cardTitle || 'Route',
         coordinates: this.routeCoordinates,
       },
     ];
@@ -288,7 +288,7 @@ class EmbeddedTemplate extends Component<typeof Route> {
   get routes() {
     return [
       {
-        name: this.args.model?.title || 'Route',
+        name: this.args.model?.cardTitle || 'Route',
         coordinates: this.routeCoordinates,
       },
     ];
@@ -299,7 +299,7 @@ class EmbeddedTemplate extends Component<typeof Route> {
   }
 
   get routeTitle() {
-    return this.args.model?.title || 'Untitled Route';
+    return this.args.model?.cardTitle || 'Untitled Route';
   }
 
   <template>
@@ -414,7 +414,7 @@ export class Route extends CardDef {
   @field coordinates = containsMany(CoordinateField);
   @field mapConfig = contains(LeafletMapConfigField);
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: Route) {
       if (this.routeName && this.routeName.trim() !== '') {
         return this.routeName;

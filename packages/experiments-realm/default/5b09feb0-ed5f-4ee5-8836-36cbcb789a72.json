@@ -12,9 +12,9 @@
       "version": null,
       "cardInfo": {
         "notes": "",
-        "title": "IKEA",
-        "description": "Guide to brand elements and visual style",
-        "thumbnailURL": ""
+        "name": "IKEA",
+        "summary": "Guide to brand elements and visual style",
+        "cardThumbnailURL": ""
       },
       "markUsage": {
         "primaryMark1": "https://cdn.brandfetch.io/idLsXYVLUs/theme/dark/logo.svg?c=1dxbfHSJFAPEGdCLU4o5B",
@@ -49,7 +49,7 @@
           "fontFamily": "'Noto IKEA', 'Noto Sans', sans-serif",
           "fontWeight": "400",
           "lineHeight": "1.5",
-          "sampleText": "Price as of 2024 • Assembly required"
+          "sampleText": "Price as of 2024 \u2022 Assembly required"
         },
         "heading": {
           "fontSize": "48px",

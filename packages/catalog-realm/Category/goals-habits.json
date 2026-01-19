@@ -11,9 +11,9 @@
       "name": "Goals & Habits",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": "Personal goal setting, habit tracking, self-improvement plans, milestone celebrations, and progress monitoring.",
-        "thumbnailURL": null
+        "name": null,
+        "summary": "Personal goal setting, habit tracking, self-improvement plans, milestone celebrations, and progress monitoring.",
+        "cardThumbnailURL": null
       }
     },
     "relationships": {

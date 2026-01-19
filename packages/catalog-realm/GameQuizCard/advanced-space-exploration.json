@@ -11,9 +11,9 @@
       "subject": "Astronomy & Astrophysics",
       "cardInfo": {
         "notes": "Designed for astronomy enthusiasts and students seeking to test their knowledge of cutting-edge space science.",
-        "title": "Space Exploration Quiz",
-        "description": "An expert-level quiz exploring advanced concepts in astronomy, astrophysics, and space exploration missions.",
-        "thumbnailURL": null
+        "name": "Space Exploration Quiz",
+        "summary": "An expert-level quiz exploring advanced concepts in astronomy, astrophysics, and space exploration missions.",
+        "cardThumbnailURL": null
       },
       "gameScore": 37.5,
       "quizTitle": "Advanced Space Exploration Challenge",

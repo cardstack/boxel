@@ -9,9 +9,9 @@
       },
       "specType": "component",
       "containedExamples": [],
-      "title": "Card List",
-      "description": "Spec for Card List component",
-      "thumbnailURL": null
+      "cardTitle": "Card List",
+      "cardDescription": "Spec for Card List component",
+      "cardThumbnailURL": null
     },
     "relationships": {},
     "meta": {

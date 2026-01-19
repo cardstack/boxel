@@ -12,19 +12,19 @@
         "name": "default",
         "module": "../../fields/date/day"
       },
-      "title": "Day Field Spec",
+      "cardTitle": "Day Field Spec",
       "readMe": null,
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": null
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null
       },
       "specType": "card",
       "standard": {
         "value": 2
       },
-      "description": null,
+      "cardDescription": null,
       "containedExamples": []
     },
     "relationships": {

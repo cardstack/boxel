@@ -9,9 +9,9 @@
       },
       "specType": "field",
       "containedExamples": [],
-      "title": "Deal Priority",
-      "description": "Spec for Deal Priority field",
-      "thumbnailURL": null
+      "cardTitle": "Deal Priority",
+      "cardDescription": "Spec for Deal Priority field",
+      "cardThumbnailURL": null
     },
     "relationships": {},
     "meta": {

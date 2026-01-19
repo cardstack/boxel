@@ -9,9 +9,9 @@
       },
       "specType": "card",
       "containedExamples": [],
-      "title": "CRM Task",
-      "description": "Spec for CRM Task",
-      "thumbnailURL": null
+      "cardTitle": "CRM Task",
+      "cardDescription": "Spec for CRM Task",
+      "cardThumbnailURL": null
     },
     "relationships": {},
     "meta": {

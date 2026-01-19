@@ -17,9 +17,9 @@
       "summary": "An AI-assisted card for grading assignments. Define questions, collect student answers, and trigger grading through a linked AI skill. The system creates an assistant room, sends the assignment and skill, and executes a grading command. The AI returns a letter grade, individual question scores, and markdown-formatted feedback, which are displayed in a styled summary.",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/homework-grader-listing/thumbnail.png"
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/homework-grader-listing/thumbnail.png"
       }
     },
     "relationships": {

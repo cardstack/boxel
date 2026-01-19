@@ -2,7 +2,7 @@
   "data": {
     "type": "card",
     "attributes": {
-      "title": "Style Reference",
+      "cardTitle": "Style Reference",
       "specType": "card",
       "ref": {
         "module": "https://cardstack.com/base/style-reference",

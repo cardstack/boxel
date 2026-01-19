@@ -9,9 +9,9 @@
       },
       "specType": "component",
       "containedExamples": [],
-      "title": "Search Input",
-      "description": "Spec for Search Input component",
-      "thumbnailURL": null
+      "cardTitle": "Search Input",
+      "cardDescription": "Spec for Search Input component",
+      "cardThumbnailURL": null
     },
     "relationships": {},
     "meta": {

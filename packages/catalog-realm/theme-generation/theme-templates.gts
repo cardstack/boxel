@@ -18,7 +18,7 @@ export const STRUCTURED_THEME_TEMPLATE = `
       "cardInfo": {
         "title": "<title describing the theme>",
         "description": "<1-2 sentence summary>",
-        "thumbnailURL": "<https url>"
+        "cardThumbnailURL": "<https url>"
       },
       "rootVariables": {
         "background": "<css color>",
@@ -132,7 +132,7 @@ export const STYLE_REFERENCE_TEMPLATE = `
       "cardInfo": {
         "title": "<title>",
         "description": "<summary>",
-        "thumbnailURL": "<https url>"
+        "cardThumbnailURL": "<https url>"
       },
       "inspirations": ["<keyword>", "<keyword>", "<keyword>"],
       "wallpaperImages": ["<https url>", "<https url>"],
@@ -249,7 +249,7 @@ export const BRAND_GUIDE_TEMPLATE = `
       "cardInfo": {
         "title": "<title>",
         "description": "<summary>",
-        "thumbnailURL": "<https url>"
+        "cardThumbnailURL": "<https url>"
       },
       "inspirations": ["<keyword>", "<keyword>", "<keyword>"],
       "wallpaperImages": ["<https url>", "<https url>"],

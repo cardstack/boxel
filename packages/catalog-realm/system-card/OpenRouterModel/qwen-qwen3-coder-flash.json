@@ -6,7 +6,7 @@
       "canonicalSlug": "qwen/qwen3-coder-flash",
       "name": "Qwen: Qwen3 Coder Flash",
       "created": 1758115536,
-      "description": "Qwen3 Coder Flash is Alibaba's fast and cost efficient version of their proprietary Qwen3 Coder Plus. It is a powerful coding agent model specializing in autonomous programming via tool calling and environment interaction, combining coding proficiency with versatile general-purpose abilities.",
+      "cardDescription": "Qwen3 Coder Flash is Alibaba's fast and cost efficient version of their proprietary Qwen3 Coder Plus. It is a powerful coding agent model specializing in autonomous programming via tool calling and environment interaction, combining coding proficiency with versatile general-purpose abilities.",
       "pricing": {
         "prompt": "0.0000003",
         "completion": "0.0000015",
@@ -47,9 +47,9 @@
         "frequency_penalty": null
       },
       "cardInfo": {
-        "title": null,
-        "description": null,
-        "thumbnailURL": null,
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
         "notes": null
       }
     },

@@ -11,9 +11,9 @@
       "version": null,
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": null
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null
       },
       "styleName": "Vintage Luxury",
       "visualDNA": "Sepia tones, serif heads, collage layout, gold-foil touches, patina textures",
@@ -62,7 +62,7 @@
       "inspirations": [
         "Gucci Vault",
         "Burberry Archive",
-        "Hermès Heritage"
+        "Herm\u00e8s Heritage"
       ],
       "rootVariables": {
         "card": "hsl(40, 30%, 98%)",

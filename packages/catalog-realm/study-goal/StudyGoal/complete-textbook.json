@@ -11,9 +11,9 @@
       "subject": "Computer Science",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": null
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null
       },
       "priority": "high",
       "progress": 65,
@@ -21,7 +21,7 @@
       "goalTitle": "Complete Data Structures Textbook",
       "targetDate": "2025-09-26",
       "completedAt": null,
-      "description": "Finish reading the entire textbook and complete all practice problems by end of month.",
+      "cardDescription": "Finish reading the entire textbook and complete all practice problems by end of month.",
       "isCompleted": false,
       "actualTimeSpent": null,
       "studyTimeEstimate": null

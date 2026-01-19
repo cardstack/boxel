@@ -7,9 +7,9 @@
       "slug": "tv-series",
       "pillColor": "#fff500",
       "cardInfo": {
-        "description": null,
-        "title": "TV Series",
-        "thumbnailURL": null
+        "summary": null,
+        "name": "TV Series",
+        "cardThumbnailURL": null
       }
     },
     "relationships": {

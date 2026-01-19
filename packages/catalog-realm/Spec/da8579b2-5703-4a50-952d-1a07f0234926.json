@@ -9,9 +9,9 @@
       },
       "specType": "card",
       "containedExamples": [],
-      "title": "MusicianLandingPage",
-      "description": "Spec of MusicianLandingPage",
-      "thumbnailURL": null
+      "cardTitle": "MusicianLandingPage",
+      "cardDescription": "Spec of MusicianLandingPage",
+      "cardThumbnailURL": null
     },
     "relationships": {
       "linkedExamples": {

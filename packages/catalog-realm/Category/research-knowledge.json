@@ -11,9 +11,9 @@
       "name": "Research & Knowledge",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": "Academic research, knowledge bases, information gathering, reference materials, and research project management.",
-        "thumbnailURL": null
+        "name": null,
+        "summary": "Academic research, knowledge bases, information gathering, reference materials, and research project management.",
+        "cardThumbnailURL": null
       }
     },
     "relationships": {

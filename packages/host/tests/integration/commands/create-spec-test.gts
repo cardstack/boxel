@@ -134,7 +134,7 @@ export class TestSpec extends Spec {
 
     assert.strictEqual(savedSpec.specType, 'card', 'Spec type is card');
     assert.strictEqual(
-      savedSpec.title,
+      savedSpec.cardTitle,
       'Test Card',
       'Spec title matches display name',
     );
@@ -221,7 +221,7 @@ export class TestSpec extends Spec {
 
     assert.strictEqual(savedSpec.specType, 'command', 'Spec type is command');
     assert.strictEqual(
-      savedSpec.title,
+      savedSpec.cardTitle,
       'TestCommand',
       'Spec title falls back to export name for commands',
     );
@@ -286,7 +286,7 @@ export class TestSpec extends Spec {
       assert.ok(spec.id, 'Spec has an ID');
       const savedSpec = (await store.get(spec.id!)) as Spec;
       assert.ok(savedSpec.specType, 'Spec has a type');
-      assert.ok(savedSpec.title, 'Spec has a title');
+      assert.ok(savedSpec.cardTitle, 'Spec has a title');
       assert.ok(savedSpec.ref?.module, 'Spec has a module reference');
     }
   });

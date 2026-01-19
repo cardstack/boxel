@@ -11,9 +11,9 @@
       "name": "Parties & Celebrations",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": "Party planning, celebrations, special events, social gatherings, birthdays, holidays, and festive occasions.",
-        "thumbnailURL": null
+        "name": null,
+        "summary": "Party planning, celebrations, special events, social gatherings, birthdays, holidays, and festive occasions.",
+        "cardThumbnailURL": null
       }
     },
     "relationships": {

@@ -56,7 +56,7 @@ const personCardSource = `
     static displayName = 'Person';
     @field firstName = contains(StringField);
     @field lastName = contains(StringField);
-    @field title = contains(StringField, {
+    @field cardTitle = contains(StringField, {
       computeVia: function (this: Person) {
         return [this.firstName, this.lastName].filter(Boolean).join(' ');
       },
@@ -66,7 +66,7 @@ const personCardSource = `
         <div data-test-person>
           <p>First name: <@fields.firstName /></p>
           <p>Last name: <@fields.lastName /></p>
-          <p>Title: <@fields.title /></p>
+          <p>Title: <@fields.cardTitle /></p>
         </div>
         <style scoped>
           div {
@@ -99,7 +99,7 @@ const petCardSource = `
   export class Pet extends CardDef {
     static displayName = 'Pet';
     @field name = contains(StringField);
-    @field title = contains(StringField, {
+    @field cardTitle = contains(StringField, {
       computeVia: function (this: Pet) {
         return this.name;
       },
@@ -113,7 +113,7 @@ const petCardSource = `
     }
     static isolated = class Isolated extends Component<typeof this> {
       <template>
-        <h1>{{@model.title}}</h1>
+        <h1>{{@model.cardTitle}}</h1>
         <h2 data-test-pet={{@model.name}}>
           <@fields.name/>
         </h2>
@@ -129,7 +129,7 @@ const employeeCardSource = `
   export default class Employee extends CardDef {
     static displayName = 'Employee';
     @field name = contains(StringField);
-    @field title = contains(StringField, {
+    @field cardTitle = contains(StringField, {
       computeVia: function (this: Pet) {
         return this.name;
       },
@@ -319,8 +319,8 @@ module('Acceptance | Spec preview', function (hooks) {
           data: {
             type: 'card',
             attributes: {
-              title: 'Person',
-              description: 'Spec for Person',
+              cardTitle: 'Person',
+              cardDescription: 'Spec for Person',
               specType: 'card',
               ref: {
                 module: `./person`,
@@ -339,7 +339,7 @@ module('Acceptance | Spec preview', function (hooks) {
           data: {
             type: 'card',
             attributes: {
-              title: 'QuoteField',
+              cardTitle: 'QuoteField',
               specType: 'field',
               ref: {
                 module: './quote-field',
@@ -391,7 +391,7 @@ module('Acceptance | Spec preview', function (hooks) {
           data: {
             type: 'card',
             attributes: {
-              title: 'Pet',
+              cardTitle: 'Pet',
               specType: 'card',
               ref: {
                 module: `./pet`,
@@ -410,7 +410,7 @@ module('Acceptance | Spec preview', function (hooks) {
           data: {
             type: 'card',
             attributes: {
-              title: 'Pet2',
+              cardTitle: 'Pet2',
               specType: 'card',
               ref: {
                 module: `./pet`,
@@ -519,8 +519,8 @@ module('Acceptance | Spec preview', function (hooks) {
               },
               specType: 'field',
               containedExamples: [],
-              description: null,
-              thumbnailURL: null,
+              cardDescription: null,
+              cardThumbnailURL: null,
             },
             relationships: {
               linkedExamples: {
@@ -541,8 +541,8 @@ module('Acceptance | Spec preview', function (hooks) {
           data: {
             type: 'card',
             attributes: {
-              title: 'PetField',
-              description: 'Spec',
+              cardTitle: 'PetField',
+              cardDescription: 'Spec',
               specType: 'field',
               ref: {
                 module: `./pet`,
@@ -561,8 +561,8 @@ module('Acceptance | Spec preview', function (hooks) {
           data: {
             type: 'card',
             attributes: {
-              title: 'DifferentField',
-              description: 'Spec for DifferentField',
+              cardTitle: 'DifferentField',
+              cardDescription: 'Spec for DifferentField',
               specType: 'field',
               ref: {
                 module: `./person`,
@@ -581,8 +581,8 @@ module('Acceptance | Spec preview', function (hooks) {
           data: {
             type: 'card',
             attributes: {
-              title: 'PrimitiveField',
-              description: 'Spec for PrimitiveField',
+              cardTitle: 'PrimitiveField',
+              cardDescription: 'Spec for PrimitiveField',
               specType: 'field',
               ref: {
                 module: `./primitive-field`,
@@ -601,8 +601,8 @@ module('Acceptance | Spec preview', function (hooks) {
           data: {
             type: 'card',
             attributes: {
-              title: 'SubclassPrimitiveField',
-              description: 'Spec for SubclassPrimitiveField',
+              cardTitle: 'SubclassPrimitiveField',
+              cardDescription: 'Spec for SubclassPrimitiveField',
               specType: 'field',
               ref: {
                 module: `./primitive-field`,
@@ -637,8 +637,8 @@ module('Acceptance | Spec preview', function (hooks) {
           data: {
             type: 'card',
             attributes: {
-              title: 'Person',
-              description: 'Spec',
+              cardTitle: 'Person',
+              cardDescription: 'Spec',
               specType: 'card',
               ref: {
                 module: `./person`,
@@ -657,7 +657,7 @@ module('Acceptance | Spec preview', function (hooks) {
           data: {
             type: 'card',
             attributes: {
-              title: 'QuoteField',
+              cardTitle: 'QuoteField',
               specType: 'field',
               ref: {
                 module: './quote-field',

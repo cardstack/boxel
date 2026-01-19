@@ -27,7 +27,7 @@ import FeaturedImageField from '../fields/featured-image';
 class EmbeddedTemplate extends Component<typeof BlogPost> {
   <template>
     <article class='embedded-blog-post'>
-      <div class='thumbnail' style={{setBackgroundImage @model.thumbnailURL}} />
+      <div class='thumbnail' style={{setBackgroundImage @model.cardThumbnailURL}} />
       {{#if @model.categories.length}}
         <div class='categories'>
           {{#each @model.categories as |category|}}
@@ -37,8 +37,8 @@ class EmbeddedTemplate extends Component<typeof BlogPost> {
           {{/each}}
         </div>
       {{/if}}
-      <h3 class='title'><@fields.title /></h3>
-      <p class='description'>{{@model.description}}</p>
+      <h3 class='title'><@fields.cardTitle /></h3>
+      <p class='description'>{{@model.cardDescription}}</p>
       <span class='byline'>
         {{@model.formattedAuthors}}
       </span>
@@ -129,7 +129,7 @@ class EmbeddedTemplate extends Component<typeof BlogPost> {
 class FittedTemplate extends Component<typeof BlogPost> {
   <template>
     <article class='fitted-blog-post'>
-      <div class='thumbnail' style={{setBackgroundImage @model.thumbnailURL}} />
+      <div class='thumbnail' style={{setBackgroundImage @model.cardThumbnailURL}} />
       <div class='categories'>
         {{#each @model.categories as |category|}}
           <div class='category' style={{categoryStyle category}}>
@@ -138,8 +138,8 @@ class FittedTemplate extends Component<typeof BlogPost> {
         {{/each}}
       </div>
       <div class='content'>
-        <h3 class='title'><@fields.title /></h3>
-        <p class='description'>{{@model.description}}</p>
+        <h3 class='title'><@fields.cardTitle /></h3>
+        <p class='description'>{{@model.cardDescription}}</p>
         {{#if @model.formattedAuthors}}
           <span class='byline'>{{@model.formattedAuthors}}</span>
         {{/if}}
@@ -607,7 +607,7 @@ export class BlogPost extends CardDef {
   static displayName = 'Blog Post';
   static icon = BlogIcon;
   @field headline = contains(StringField);
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: BlogPost) {
       return this.headline?.length
         ? this.headline
@@ -688,7 +688,7 @@ export class BlogPost extends CardDef {
     const authors = this.authors ?? [];
     if (authors.length === 0) return undefined;
 
-    const titles = authors.map((author) => author.title);
+    const titles = authors.map((author) => author.cardTitle);
 
     if (titles.length === 2) {
       return `${titles[0]} and ${titles[1]}`;
@@ -720,10 +720,10 @@ export class BlogPost extends CardDef {
               {{/each}}
             </div>
           {{/if}}
-          <h1><@fields.title /></h1>
-          {{#if @model.description}}
+          <h1><@fields.cardTitle /></h1>
+          {{#if @model.cardDescription}}
             <p class='description'>
-              <@fields.description />
+              <@fields.cardDescription />
             </p>
           {{/if}}
           <ul class='info'>

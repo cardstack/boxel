@@ -26,9 +26,9 @@
           "distance": 75
         }
       ],
-      "title": "Cycling Mileage Log",
-      "description": null,
-      "thumbnailURL": null
+      "cardTitle": "Cycling Mileage Log",
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "meta": {
       "adoptsFrom": {

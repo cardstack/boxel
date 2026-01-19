@@ -9,9 +9,9 @@
       },
       "specType": "component",
       "containedExamples": [],
-      "title": "CRM Progress Bar",
-      "description": "Spec for CRM Progress Bar component",
-      "thumbnailURL": null
+      "cardTitle": "CRM Progress Bar",
+      "cardDescription": "Spec for CRM Progress Bar component",
+      "cardThumbnailURL": null
     },
     "relationships": {},
     "meta": {

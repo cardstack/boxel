@@ -11,9 +11,9 @@
       "name": "Sports & Fitness",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": "Athletic activities, workout routines, sports team management, fitness challenges, and recreational sports coordination.",
-        "thumbnailURL": null
+        "name": null,
+        "summary": "Athletic activities, workout routines, sports team management, fitness challenges, and recreational sports coordination.",
+        "cardThumbnailURL": null
       }
     },
     "relationships": {

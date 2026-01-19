@@ -15,9 +15,9 @@
       "summary": "Classic casino Blackjack with authentic rules - hit, stand, or double down as you play against the dealer's AI. Features dynamic card scoring, 3:2 blackjack payouts, flexible betting options, and persistent statistics tracking.",
       "cardInfo": {
         "notes": null,
-        "title": "",
-        "description": "",
-        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/blackjack-listing/thumbnail.png"
+        "name": "",
+        "summary": "",
+        "cardThumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/blackjack-listing/thumbnail.png"
       }
     },
     "relationships": {

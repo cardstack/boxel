@@ -15,9 +15,9 @@
       "summary": "Professional recording studio management card for tracking projects, monitoring audio levels, and managing recording sessions",
       "cardInfo": {
         "notes": "Features include studio name management, project tracking, recording status monitoring, input gain control, and output volume management",
-        "title": "Recording Studio Management",
-        "description": "A comprehensive solution for managing recording studio operations including project tracking, audio monitoring, and session management",
-        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/recording-studio-listing/thumbnail.png"
+        "name": "Recording Studio Management",
+        "summary": "A comprehensive solution for managing recording studio operations including project tracking, audio monitoring, and session management",
+        "cardThumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/recording-studio-listing/thumbnail.png"
       }
     },
     "relationships": {

@@ -6,12 +6,12 @@
       "heroImage": "https://images.pexels.com/photos/1571460/pexels-photo-1571460.jpeg?auto=compress&cs=tinysrgb&w=1920",
       "price": 1299,
       "currency": "USD",
-      "description": "A low-profile modular sofa with washable slipcovers, deep seats, and hidden storage under every chaise. Pair with accent cushions for a bold splash of color.",
+      "cardDescription": "A low-profile modular sofa with washable slipcovers, deep seats, and hidden storage under every chaise. Pair with accent cushions for a bold splash of color.",
       "cardInfo": {
         "notes": null,
-        "title": "SOLGLIM Modular Sofa",
-        "description": "Family-sized seating with washable covers and hidden storage.",
-        "thumbnailURL": "https://images.pexels.com/photos/1571460/pexels-photo-1571460.jpeg?auto=compress&cs=tinysrgb&w=600"
+        "name": "SOLGLIM Modular Sofa",
+        "summary": "Family-sized seating with washable covers and hidden storage.",
+        "cardThumbnailURL": "https://images.pexels.com/photos/1571460/pexels-photo-1571460.jpeg?auto=compress&cs=tinysrgb&w=600"
       }
     },
     "relationships": {

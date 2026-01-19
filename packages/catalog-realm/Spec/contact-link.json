@@ -22,16 +22,16 @@
         "name": "default",
         "module": "../fields/contact-link"
       },
-      "title": "ContactLinkField",
+      "cardTitle": "ContactLinkField",
       "readMe": null,
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": null
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null
       },
       "specType": "field",
-      "description": null,
+      "cardDescription": null,
       "containedExamples": [
         {
           "label": null,

@@ -6,7 +6,7 @@
       "canonicalSlug": "openai/gpt-4-turbo-preview",
       "name": "OpenAI: GPT-4 Turbo Preview",
       "created": 1706140800,
-      "description": "The preview GPT-4 model with improved instruction following, JSON mode, reproducible outputs, parallel function calling, and more. Training data: up to Dec 2023.\n\n**Note:** heavily rate limited by OpenAI while in preview.",
+      "cardDescription": "The preview GPT-4 model with improved instruction following, JSON mode, reproducible outputs, parallel function calling, and more. Training data: up to Dec 2023.\n\n**Note:** heavily rate limited by OpenAI while in preview.",
       "pricing": {
         "prompt": "0.00001",
         "completion": "0.00003",
@@ -49,9 +49,9 @@
       ],
       "defaultParameters": {},
       "cardInfo": {
-        "title": null,
-        "description": null,
-        "thumbnailURL": null,
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
         "notes": null
       }
     },

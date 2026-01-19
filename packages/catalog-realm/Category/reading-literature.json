@@ -11,9 +11,9 @@
       "name": "Reading & Literature",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": "Book collections, reading lists, literary analysis, author studies, and book club participation.",
-        "thumbnailURL": null
+        "name": null,
+        "summary": "Book collections, reading lists, literary analysis, author studies, and book club participation.",
+        "cardThumbnailURL": null
       }
     },
     "relationships": {

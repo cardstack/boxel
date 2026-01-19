@@ -534,7 +534,7 @@ module(basename(__filename), function () {
         // TODO: restore in CS-9807
         // assert.ok(
         //   cleanedHead.includes('<title data-test-card-head-title>'),
-        //   `head html includes title: ${cleanedHead}`,
+        //   `head html includes cardTitle: ${cleanedHead}`,
         // );
 
         assert.strictEqual(
@@ -706,11 +706,11 @@ module(basename(__filename), function () {
         assert.deepEqual(
           hassan.doc.data.attributes,
           {
-            title: 'Untitled Card',
+            cardTitle: 'Untitled Card',
             nickName: "Ringo's buddy",
             firstName: 'Hassan',
-            description: null,
-            thumbnailURL: null,
+            cardDescription: null,
+            cardThumbnailURL: null,
             cardInfo,
           },
           'doc attributes are correct',
@@ -746,7 +746,7 @@ module(basename(__filename), function () {
             id: hassanId,
             pet: {
               id: `${testRealm}ringo`,
-              title: 'Untitled Card',
+              cardTitle: 'Untitled Card',
               firstName: 'Ringo',
               cardInfo: {
                 theme: null,
@@ -755,7 +755,7 @@ module(basename(__filename), function () {
             nickName: "Ringo's buddy",
             _cardType: 'PetPerson',
             firstName: 'Hassan',
-            title: 'Untitled Card',
+            cardTitle: 'Untitled Card',
             cardInfo: {
               theme: null,
             },

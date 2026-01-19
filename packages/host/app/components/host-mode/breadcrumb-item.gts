@@ -52,8 +52,8 @@ export default class HostModeBreadcrumbItem extends Component<Signature> {
 
   private get label() {
     let card = this.card;
-    if (card && isCardInstance(card) && typeof card.title === 'string') {
-      return card.title;
+    if (card && isCardInstance(card) && typeof card.cardTitle === 'string') {
+      return card.cardTitle;
     }
     if (card && 'name' in card && typeof card.name === 'string') {
       return card.name;

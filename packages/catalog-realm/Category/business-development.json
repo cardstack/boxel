@@ -11,9 +11,9 @@
       "name": "Business Development",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": "Partnership management, market research, competitive analysis, strategic planning, and business opportunity tracking.",
-        "thumbnailURL": null
+        "name": null,
+        "summary": "Partnership management, market research, competitive analysis, strategic planning, and business opportunity tracking.",
+        "cardThumbnailURL": null
       }
     },
     "relationships": {

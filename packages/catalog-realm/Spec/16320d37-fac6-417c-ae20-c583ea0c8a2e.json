@@ -1,0 +1,35 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "readMe": null,
+      "ref": {
+        "name": "default",
+        "module": "http://localhost:4201/catalog/fields/image"
+      },
+      "specType": "field",
+      "containedExamples": [],
+      "cardTitle": "Image",
+      "cardDescription": null,
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      }
+    },
+    "relationships": {
+      "linkedExamples": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

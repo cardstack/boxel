@@ -9,9 +9,9 @@
       },
       "specType": "component",
       "containedExamples": [],
-      "title": "Filter Trigger",
-      "description": "Spec for Filter Trigger component",
-      "thumbnailURL": null
+      "cardTitle": "Filter Trigger",
+      "cardDescription": "Spec for Filter Trigger component",
+      "cardThumbnailURL": null
     },
     "relationships": {},
     "meta": {

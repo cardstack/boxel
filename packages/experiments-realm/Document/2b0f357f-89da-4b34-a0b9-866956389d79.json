@@ -2,8 +2,8 @@
   "data": {
     "type": "card",
     "attributes": {
-      "description": null,
-      "thumbnailURL": null
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "meta": {
       "adoptsFrom": {

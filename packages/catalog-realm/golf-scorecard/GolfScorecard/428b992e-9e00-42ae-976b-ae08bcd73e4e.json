@@ -137,9 +137,9 @@
       ],
       "signedByPlayer": false,
       "signedByMarker": false,
-      "title": "Rory McIlroy - 2025 US Open Round 1",
-      "description": "First round scorecard for Rory McIlroy at the 2025 US Open Championship",
-      "thumbnailURL": null
+      "cardTitle": "Rory McIlroy - 2025 US Open Round 1",
+      "cardDescription": "First round scorecard for Rory McIlroy at the 2025 US Open Championship",
+      "cardThumbnailURL": null
     },
     "meta": {
       "adoptsFrom": {

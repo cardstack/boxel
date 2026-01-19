@@ -9,12 +9,12 @@
       },
       "specType": "app",
       "containedExamples": [],
-      "title": "DataExplorer",
-      "description": null,
+      "cardTitle": "DataExplorer",
+      "cardDescription": null,
       "cardInfo": {
-        "title": null,
-        "description": null,
-        "thumbnailURL": null,
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
         "notes": null
       }
     },

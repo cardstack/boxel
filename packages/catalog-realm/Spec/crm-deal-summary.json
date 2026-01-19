@@ -9,9 +9,9 @@
       },
       "specType": "component",
       "containedExamples": [],
-      "title": "Deal Summary",
-      "description": "Spec for Deal Summary component",
-      "thumbnailURL": null
+      "cardTitle": "Deal Summary",
+      "cardDescription": "Spec for Deal Summary component",
+      "cardThumbnailURL": null
     },
     "relationships": {},
     "meta": {

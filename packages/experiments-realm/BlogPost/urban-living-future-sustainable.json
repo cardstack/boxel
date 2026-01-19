@@ -8,13 +8,13 @@
     },
     "type": "card",
     "attributes": {
-      "body": "As urban populations swell and space becomes increasingly limited, the debate between vertical development and sustainable community-building intensifies. Skyscrapers promise to accommodate more people in a smaller footprint, enhancing density and reducing urban sprawl. However, this vertical approach can strain infrastructure and may lack the sense of community that many residents crave. On the other hand, sustainable communities emphasize green spaces, local resources, and human-scale development, fostering a stronger connection between people and their environment. While both paths offer solutions to urban challenges, the future of cities may lie in blending these two concepts—integrating smart skyscrapers with sustainable, community-oriented design to create harmonious, livable urban ecosystems.",
+      "body": "As urban populations swell and space becomes increasingly limited, the debate between vertical development and sustainable community-building intensifies. Skyscrapers promise to accommodate more people in a smaller footprint, enhancing density and reducing urban sprawl. However, this vertical approach can strain infrastructure and may lack the sense of community that many residents crave. On the other hand, sustainable communities emphasize green spaces, local resources, and human-scale development, fostering a stronger connection between people and their environment. While both paths offer solutions to urban challenges, the future of cities may lie in blending these two concepts\u2014integrating smart skyscrapers with sustainable, community-oriented design to create harmonious, livable urban ecosystems.",
       "slug": "urban-living-future-sustainable",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": "As our cities grow ever upward, should we continue to build, or focus on creating? This article explores the pros and cons of both approaches.",
-        "thumbnailURL": "https://images.unsplash.com/photo-1548182880-8b7b2af2caa2?q=80&w=2970&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
+        "name": null,
+        "summary": "As our cities grow ever upward, should we continue to build, or focus on creating? This article explores the pros and cons of both approaches.",
+        "cardThumbnailURL": "https://images.unsplash.com/photo-1548182880-8b7b2af2caa2?q=80&w=2970&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
       },
       "headline": "The Future of Urban Living: Skyscrapers or Sustainable Communities?",
       "publishDate": "2024-12-06T22:29:00.000Z",

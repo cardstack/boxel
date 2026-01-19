@@ -73,7 +73,7 @@ class EditTemplate extends Component<typeof Account> {
         <@fields.crmApp />
       </FieldContainer>
       <FieldContainer @label='Logo URL'>
-        <@fields.thumbnailURL />
+        <@fields.cardThumbnailURL />
       </FieldContainer>
     </div>
     <style scoped>
@@ -364,10 +364,10 @@ class IsolatedTemplate extends Component<typeof Account> {
     <PageLayout @format='isolated'>
       <:header>
         <div class='header-container'>
-          <AccountHeader @logoURL={{@model.thumbnailURL}} @name={{@model.name}}>
+          <AccountHeader @logoURL={{@model.cardThumbnailURL}} @name={{@model.name}}>
             <:name>
               <h1 class={{cn 'account-name' default-value=(not @model.name)}}>
-                {{#if @model.title}}<@fields.title />{{else}}Missing Account
+                {{#if @model.cardTitle}}<@fields.cardTitle />{{else}}Missing Account
                   Name{{/if}}
               </h1>
             </:name>
@@ -879,10 +879,10 @@ class EmbeddedTemplate extends Component<typeof Account> {
     <PageLayout class='account-page-layout-embedded'>
       <:header>
         <div class='header-container'>
-          <AccountHeader @logoURL={{@model.thumbnailURL}} @name={{@model.name}}>
+          <AccountHeader @logoURL={{@model.cardThumbnailURL}} @name={{@model.name}}>
             <:name>
               <h1 class={{cn 'account-name' default-value=(not @model.name)}}>
-                {{#if @model.title}}<@fields.title />{{else}}Missing Account
+                {{#if @model.cardTitle}}<@fields.cardTitle />{{else}}Missing Account
                   Name{{/if}}
               </h1>
             </:name>
@@ -1114,12 +1114,12 @@ class FittedTemplate extends Component<typeof Account> {
       <:header>
         <AccountHeader
           class='account-header-fitted'
-          @logoURL={{@model.thumbnailURL}}
+          @logoURL={{@model.cardThumbnailURL}}
           @name={{@model.name}}
         >
           <:name>
             <h1 class={{cn 'account-name' default-value=(not @model.name)}}>
-              {{#if @model.title}}<@fields.title />{{else}}Missing Account Name{{/if}}
+              {{#if @model.cardTitle}}<@fields.cardTitle />{{else}}Missing Account Name{{/if}}
             </h1>
           </:name>
         </AccountHeader>
@@ -1283,7 +1283,7 @@ export class Account extends CardDef {
       return this.primaryContact?.statusTag;
     },
   });
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: Account) {
       return this.company?.name;
     },

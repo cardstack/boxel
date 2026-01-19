@@ -557,7 +557,7 @@ export class SpreadsheetChartIsolated extends Component<
               <path d='M3 3v18h18' />
               <path d='M18.7 8l-5.1 5.2-2.8-2.7L7 14.3' />
             </svg>
-            {{@model.title}}
+            {{@model.cardTitle}}
           </h1>
         </div>
         <div class='chart-controls'>
@@ -634,7 +634,7 @@ export class SpreadsheetChartIsolated extends Component<
               />
               <polyline points='14,2 14,8 20,8' />
             </svg>
-            <span>Data source: <strong>{{@model.source.title}}</strong></span>
+            <span>Data source: <strong>{{@model.source.cardTitle}}</strong></span>
           </div>
         {{/if}}
         <span class='chart-type-label'>{{this.chartData.chartType}}</span>
@@ -1313,10 +1313,10 @@ export class SpreadsheetChart extends CardDef {
   @field xHeader = contains(StringField);
   @field topN = contains(NumberField);
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: SpreadsheetChart) {
       try {
-        const srcTitle = (this as any).source?.title;
+        const srcTitle = (this as any).source?.cardTitle;
         const chartType = this.chartType || 'bar';
         const capitalizedType =
           chartType.charAt(0).toUpperCase() + chartType.slice(1);
@@ -1371,11 +1371,11 @@ export class SpreadsheetChart extends CardDef {
               <path d='M18 16v-4' />
             {{/if}}
           </svg>
-          <div class='title'>{{@model.title}}</div>
+          <div class='title'>{{@model.cardTitle}}</div>
         </div>
         <div class='meta'>{{this.dataSummary}}</div>
         {{#if @model.source}}
-          <div class='source'>From: {{@model.source.title}}</div>
+          <div class='source'>From: {{@model.source.cardTitle}}</div>
         {{/if}}
       </div>
 
@@ -1478,7 +1478,7 @@ export class SpreadsheetChart extends CardDef {
             {{/if}}
           </svg>
           <div class='strip-content'>
-            <div class='primary-text'>{{@model.title}}</div>
+            <div class='primary-text'>{{@model.cardTitle}}</div>
             <div class='secondary-text'>{{this.miniData}}</div>
           </div>
         </div>
@@ -1505,11 +1505,11 @@ export class SpreadsheetChart extends CardDef {
                 <path d='M11 16v-6' />
               {{/if}}
             </svg>
-            <div class='primary-text'>{{@model.title}}</div>
+            <div class='primary-text'>{{@model.cardTitle}}</div>
           </div>
           <div class='secondary-text'>{{this.miniData}}</div>
           {{#if @model.source}}
-            <div class='tertiary-text'>From {{@model.source.title}}</div>
+            <div class='tertiary-text'>From {{@model.source.cardTitle}}</div>
           {{/if}}
         </div>
 
@@ -1538,13 +1538,13 @@ export class SpreadsheetChart extends CardDef {
               </svg>
             </div>
             <div class='card-info'>
-              <div class='primary-text'>{{@model.title}}</div>
+              <div class='primary-text'>{{@model.cardTitle}}</div>
               <div class='secondary-text'>{{this.miniData}}</div>
             </div>
           </div>
           {{#if @model.source}}
             <div class='card-footer'>
-              <div class='tertiary-text'>Source: {{@model.source.title}}</div>
+              <div class='tertiary-text'>Source: {{@model.source.cardTitle}}</div>
             </div>
           {{/if}}
         </div>

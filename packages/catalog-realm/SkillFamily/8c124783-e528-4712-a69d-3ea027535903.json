@@ -8,15 +8,15 @@
     },
     "type": "card",
     "attributes": {
-      "title": "Boxel Skill Family",
+      "cardTitle": "Boxel Skill Family",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": null
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null
       },
       "commands": [],
-      "description": null
+      "cardDescription": null
     },
     "relationships": {
       "statements.0": {

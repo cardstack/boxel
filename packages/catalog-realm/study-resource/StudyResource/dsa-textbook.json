@@ -18,9 +18,9 @@
       "subject": "Computer Science",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": null
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null
       },
       "difficulty": "intermediate",
       "lastAccessed": "2025-09-24T03:20:37.777Z",

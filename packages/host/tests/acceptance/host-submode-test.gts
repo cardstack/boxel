@@ -37,14 +37,14 @@ const personCardSource = `
     static displayName = 'Person';
     @field firstName = contains(StringField);
     @field lastName = contains(StringField);
-    @field title = contains(StringField, {
+    @field cardTitle = contains(StringField, {
       computeVia: function (this: Person) {
         return [this.firstName, this.lastName].filter(Boolean).join(' ');
       },
     });
     static isolated = class Isolated extends Component<typeof this> {
       <template>
-          <p>Title: <@fields.title /></p>
+          <p>Title: <@fields.cardTitle /></p>
       </template>
     };
   }
@@ -148,7 +148,7 @@ module('Acceptance | host submode', function (hooks) {
         data: {
           type: 'card',
           attributes: {
-            title: 'Primary View Demo',
+            cardTitle: 'Primary View Demo',
             targetCardURL: `${testRealmURL}ViewCardDemo/2.json`,
           },
           meta: {
@@ -163,7 +163,7 @@ module('Acceptance | host submode', function (hooks) {
         data: {
           type: 'card',
           attributes: {
-            title: 'Secondary View Demo',
+            cardTitle: 'Secondary View Demo',
             targetCardURL: `${testRealmURL}ViewCardDemo/3.json`,
           },
           meta: {
@@ -178,7 +178,7 @@ module('Acceptance | host submode', function (hooks) {
         data: {
           type: 'card',
           attributes: {
-            title: 'Tertiary View Demo',
+            cardTitle: 'Tertiary View Demo',
             targetCardURL: `${testRealmURL}ViewCardDemo/1.json`,
           },
           meta: {

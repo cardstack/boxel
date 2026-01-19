@@ -1839,8 +1839,8 @@ class SongBuilderIsolated extends Component<typeof SongBuilderCard> {
               <h3>Description</h3>
               <div class='description-display'>
                 {{if
-                  @model.description
-                  @model.description
+                  @model.cardDescription
+                  @model.cardDescription
                   'Add a description for your song...'
                 }}
               </div>
@@ -3187,7 +3187,7 @@ export class SongBuilderCard extends CardDef {
   // ¹⁵ Basic song information
   @field songTitle = contains(StringField);
   @field artist = contains(StringField);
-  @field description = contains(TextAreaField);
+  @field cardDescription = contains(TextAreaField);
   @field genre = contains(StringField);
   @field key = contains(StringField);
   @field tempo = contains(NumberField);
@@ -3199,7 +3199,7 @@ export class SongBuilderCard extends CardDef {
   @field masterVolume = contains(NumberField);
   // Duration calculated automatically from sections
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: SongBuilderCard) {
       try {
         return this.songTitle ?? 'Song Builder';
@@ -3228,8 +3228,8 @@ export class SongBuilderCard extends CardDef {
               </svg>
               {{if @model.songTitle @model.songTitle 'Song Builder'}}
             </h3>
-            {{#if @model.description}}
-              <p class='builder-description'>{{@model.description}}</p>
+            {{#if @model.cardDescription}}
+              <p class='builder-description'>{{@model.cardDescription}}</p>
             {{/if}}
           </div>
         </div>

@@ -202,7 +202,7 @@ export class RealmIndexQueryEngine {
           errorDetail: instance.error,
           scopedCssUrls,
           lastKnownGoodHtml: instance.isolatedHtml ?? null,
-          cardTitle: instance.searchDoc?.title ?? null,
+          cardTitle: instance.searchDoc?.cardTitle ?? null,
         },
       };
     }
