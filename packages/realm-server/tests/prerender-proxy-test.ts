@@ -33,7 +33,7 @@ module(basename(__filename), function () {
 
     function makePrerenderer() {
       let renderCalls: Array<{
-        kind: 'card' | 'module';
+        kind: 'card' | 'module' | 'file-extract';
         args: {
           realm: string;
           url: string;
@@ -70,6 +70,16 @@ module(basename(__filename), function () {
             createdAt: Date.now(),
             deps: [],
             definitions: {},
+          };
+        },
+        async prerenderFileExtract(args) {
+          renderCalls.push({ kind: 'file-extract', args });
+          return {
+            id: args.url,
+            nonce: 'nonce',
+            status: 'ready',
+            searchDoc: { url: args.url, title: 'through proxy' },
+            deps: [],
           };
         },
       };

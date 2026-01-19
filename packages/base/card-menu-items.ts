@@ -9,6 +9,7 @@ import GenerateExampleCardsCommand from '@cardstack/boxel-host/commands/generate
 import ListingCreateCommand from '@cardstack/boxel-host/commands/listing-create';
 import OpenInInteractModeCommand from '@cardstack/boxel-host/commands/open-in-interact-mode';
 import PopulateWithSampleDataCommand from '@cardstack/boxel-host/commands/populate-with-sample-data';
+import CreateListingPRCommand from '@cardstack/boxel-host/commands/create-listing-pr';
 import ShowCardCommand from '@cardstack/boxel-host/commands/show-card';
 import SwitchSubmodeCommand from '@cardstack/boxel-host/commands/switch-submode';
 import {
@@ -100,6 +101,22 @@ export function getDefaultCardMenuItems(
           disabled: !card.id,
         },
       );
+    }
+
+    if (isListingCard(card)) {
+      menuItems.push({
+        label: 'Make a PR',
+        action: async () => {
+          if (!card[realmURL]?.href) {
+            return;
+          }
+          await new CreateListingPRCommand(params.commandContext).execute({
+            listing: card,
+            realm: card[realmURL]!.href,
+          });
+        },
+        icon: Package,
+      });
     }
   }
   if (

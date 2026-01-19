@@ -33,6 +33,10 @@ module('Integration | operator-mode | basics', function (hooks) {
         </template>
       },
     );
+    await waitFor('[data-test-boxel-card-header-title]');
+    await waitFor(
+      `[data-test-card-header-realm-icon="https://boxel-images.boxel.ai/icons/Letter-o.png"]`,
+    );
     assert
       .dom('[data-test-boxel-card-header-title]')
       .hasText('Person - Fadhlan');

@@ -10,7 +10,7 @@ import TriangleAlert from '@cardstack/boxel-icons/triangle-alert';
 
 import { didCancel, restartableTask } from 'ember-concurrency';
 import { consume } from 'ember-provide-consume-context';
-import { flatMap, isEqual } from 'lodash';
+import { isEqual } from 'lodash';
 import { trackedFunction } from 'reactiveweb/function';
 
 import { TrackedSet } from 'tracked-built-ins';
@@ -25,6 +25,7 @@ import {
   type PrerenderedCardData,
   type PrerenderedCardComponentSignature,
   CardContextName,
+  SupportedMimeType,
 } from '@cardstack/runtime-common';
 import type { PrerenderedCardCollectionDocument } from '@cardstack/runtime-common/document-types';
 import { isPrerenderedCardCollectionDocument } from '@cardstack/runtime-common/document-types';
@@ -36,8 +37,8 @@ import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event'
 import SubscribeToRealms from '../helpers/subscribe-to-realms';
 import { type HTMLComponent, htmlComponent } from '../lib/html-component';
 
-import type CardService from '../services/card-service';
 import type LoaderService from '../services/loader-service';
+import type RealmServerService from '../services/realm-server';
 
 const waiter = buildWaiter('prerendered-card-search:waiter');
 const OWNER_DESTROYED_ERROR =
@@ -136,6 +137,18 @@ const normalizeRealms = (realms: string[]) => {
   });
 };
 
+function resolveCardRealmUrl(cardId: string, realms: string[]): string {
+  let cardUrl = new URL(cardId);
+  for (let realm of realms) {
+    let realmUrl = new URL(realm);
+    let realmPaths = new RealmPaths(realmUrl);
+    if (realmPaths.inRealm(cardUrl)) {
+      return realmPaths.url;
+    }
+  }
+  return new RealmPaths(cardUrl).url;
+}
+
 interface SearchResult {
   instances: PrerenderedCard[];
   meta: QueryResultsMeta;
@@ -179,8 +192,8 @@ function wrapWithModifier(
 
 export default class PrerenderedCardSearch extends Component<PrerenderedCardComponentSignature> {
   @consume(CardContextName) private declare cardContext?: CardContext;
-  @service declare cardService: CardService;
   @service declare loaderService: LoaderService;
+  @service declare realmServer: RealmServerService;
   _lastSearchQuery: Query | null = null;
   _lastCardUrls: string[] | undefined;
   _lastSearchResults: SearchResult | undefined;
@@ -211,22 +224,45 @@ export default class PrerenderedCardSearch extends Component<PrerenderedCardComp
     query: Query,
     format: Format,
     cardUrls: string[],
-    realmURL: string,
+    realms: string[],
   ): Promise<SearchResult> {
-    let json = (await this.cardService.fetchJSON(
-      `${realmURL}_search-prerendered`,
-      {
-        method: 'QUERY',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          ...query,
-          prerenderedHtmlFormat: format,
-          cardUrls,
-        }),
+    if (realms.length === 0) {
+      return { instances: [], meta: { page: { total: 0 } } };
+    }
+
+    let realmServerURLs = this.realmServer.getRealmServersForRealms(realms);
+    // TODO remove this assertion after multi-realm server/federated identity is supported
+    this.realmServer.assertOwnRealmServer(realmServerURLs);
+    let [realmServerURL] = realmServerURLs;
+    let searchURL = new URL('_search-prerendered', realmServerURL);
+
+    let response = await this.realmServer.maybeAuthedFetch(searchURL.href, {
+      method: 'QUERY',
+      headers: {
+        Accept: SupportedMimeType.CardJson,
+        'Content-Type': 'application/json',
       },
-    )) as unknown as PrerenderedCardCollectionDocument;
+      body: JSON.stringify({
+        ...query,
+        realms,
+        prerenderedHtmlFormat: format,
+        cardUrls,
+      }),
+    });
+
+    if (!response.ok) {
+      let responseText = await response.text();
+      let err = new Error(
+        `status: ${response.status} - ${response.statusText}. ${responseText}`,
+      ) as any;
+      err.status = response.status;
+      err.responseText = responseText;
+      err.responseHeaders = response.headers;
+      throw err;
+    }
+
+    let json =
+      (await response.json()) as unknown as PrerenderedCardCollectionDocument;
 
     if (!isPrerenderedCardCollectionDocument(json)) {
       throw new Error(
@@ -247,12 +283,14 @@ export default class PrerenderedCardSearch extends Component<PrerenderedCardComp
 
     let modifier = this.cardComponentModifier;
 
+    let resolvedRealms = normalizeRealms(realms);
     return {
       instances: json.data.filter(Boolean).map((r) => {
+        let realmUrl = resolveCardRealmUrl(r.id, resolvedRealms);
         return new PrerenderedCard(
           {
             url: r.id,
-            realmUrl: realmURL,
+            realmUrl,
             html: r.attributes?.html,
             isError: !!r.attributes?.isError,
           },
@@ -342,42 +380,28 @@ export default class PrerenderedCardSearch extends Component<PrerenderedCardComp
         results = results.filter((r) => !r.url.startsWith(realmNeedingRefresh));
       }
 
-      let searchPromises = Array.from(realmsNeedingRefresh).map(
-        async (realm) => {
-          try {
-            return await this.searchPrerendered(
-              query,
-              format,
-              cardUrls ?? [],
-              realm,
-            );
-          } catch (error) {
-            console.error(
-              `Failed to search prerendered for realm ${realm}:`,
-              error,
-            );
-            return { instances: [], meta: { page: { total: 0 } } };
-          }
-        },
-      );
+      let searchResult: SearchResult;
+      try {
+        searchResult = await this.searchPrerendered(
+          query,
+          format,
+          cardUrls ?? [],
+          realmsNeedingRefresh,
+        );
+      } catch (error) {
+        console.error(
+          `Failed to search prerendered for realms ${realmsNeedingRefresh.join(
+            ', ',
+          )}:`,
+          error,
+        );
+        searchResult = { instances: [], meta: { page: { total: 0 } } };
+      }
 
-      const searchResults = await Promise.all(searchPromises);
-      const allInstances = flatMap(
-        searchResults,
-        (result) => result.instances || [],
-      );
-      results.push(...allInstances);
-
-      const combinedMeta: QueryResultsMeta = searchResults.reduce(
-        (acc, result) => {
-          if (result.meta?.page?.total !== undefined) {
-            acc.page = acc.page || { total: 0 };
-            acc.page.total = (acc.page.total || 0) + result.meta.page.total;
-          }
-          return acc;
-        },
-        { page: { total: 0 } } as QueryResultsMeta,
-      );
+      results.push(...(searchResult.instances || []));
+      let combinedMeta: QueryResultsMeta = searchResult.meta ?? {
+        page: { total: 0 },
+      };
 
       this._lastSearchResults = { instances: results, meta: combinedMeta };
       return { instances: results, isLoading: false, meta: combinedMeta };

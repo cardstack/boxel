@@ -4,7 +4,7 @@
     "attributes": {
       "readMe": null,
       "ref": {
-        "name": "CurrencyField",
+        "name": "default",
         "module": "../crm-app/fields/currency"
       },
       "specType": "field",

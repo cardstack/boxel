@@ -16,7 +16,7 @@ import {
   eq,
 } from '@cardstack/boxel-ui/helpers';
 import { Button } from '@cardstack/boxel-ui/components';
-import { QRField } from '../fields/qr-code';
+import QRField from '../fields/qr-code';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';

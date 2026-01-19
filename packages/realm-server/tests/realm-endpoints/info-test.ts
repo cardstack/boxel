@@ -6,19 +6,17 @@ import { dirSync, type DirResult } from 'tmp';
 import { copySync } from 'fs-extra';
 import type { Realm } from '@cardstack/runtime-common';
 import {
-  setupBaseRealmServer,
   setupPermissionedRealm,
-  matrixURL,
   closeServer,
   testRealmInfo,
-  testRealmHref,
   createJWT,
 } from '../helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms';
 
 module(`realm-endpoints/${basename(__filename)}`, function () {
-  module('Realm-specific Endpoints | GET _info', function (hooks) {
+  module('Realm-specific Endpoints | QUERY _info', function (hooks) {
+    let realmURL = new URL('http://127.0.0.1:4444/test/');
     let testRealm: Realm;
     let testRealmHttpServer: Server;
     let request: SuperTest<Test>;
@@ -36,8 +34,6 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
       dir = args.dir;
     }
 
-    setupBaseRealmServer(hooks, matrixURL);
-
     hooks.beforeEach(async function () {
       dir = dirSync();
       copySync(join(__dirname, '..', 'cards'), dir.name);
@@ -53,18 +49,21 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
         permissions: {
           '*': ['read'],
         },
+        realmURL,
         onRealmSetup,
       });
 
       test('serves the request', async function (assert) {
+        let infoPath = new URL('_info', realmURL).pathname;
         let response = await request
-          .get(`/_info`)
+          .post(infoPath)
+          .set('X-HTTP-Method-Override', 'QUERY')
           .set('Accept', 'application/vnd.api+json');
 
         assert.strictEqual(response.status, 200, 'HTTP 200 status');
         assert.strictEqual(
           response.get('X-boxel-realm-url'),
-          testRealmHref,
+          realmURL.href,
           'realm url header is correct',
         );
         assert.strictEqual(
@@ -77,7 +76,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
           json,
           {
             data: {
-              id: testRealmHref,
+              id: realmURL.href,
               type: 'realm-info',
               attributes: {
                 ...testRealmInfo,
@@ -95,28 +94,35 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
         permissions: {
           john: ['read', 'write'],
         },
+        realmURL,
         onRealmSetup,
       });
 
       test('401 with invalid JWT', async function (assert) {
+        let infoPath = new URL('_info', realmURL).pathname;
         let response = await request
-          .get(`/_info`)
+          .post(infoPath)
+          .set('X-HTTP-Method-Override', 'QUERY')
           .set('Accept', 'application/vnd.api+json');
 
         assert.strictEqual(response.status, 401, 'HTTP 401 status');
       });
 
       test('401 without a JWT', async function (assert) {
+        let infoPath = new URL('_info', realmURL).pathname;
         let response = await request
-          .get(`/_info`)
+          .post(infoPath)
+          .set('X-HTTP-Method-Override', 'QUERY')
           .set('Accept', 'application/vnd.api+json'); // no Authorization header
 
         assert.strictEqual(response.status, 401, 'HTTP 401 status');
       });
 
       test('403 without permission', async function (assert) {
+        let infoPath = new URL('_info', realmURL).pathname;
         let response = await request
-          .get(`/_info`)
+          .post(infoPath)
+          .set('X-HTTP-Method-Override', 'QUERY')
           .set('Accept', 'application/vnd.api+json')
           .set('Authorization', `Bearer ${createJWT(testRealm, 'not-john')}`);
 
@@ -124,8 +130,10 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
       });
 
       test('200 with permission', async function (assert) {
+        let infoPath = new URL('_info', realmURL).pathname;
         let response = await request
-          .get(`/_info`)
+          .post(infoPath)
+          .set('X-HTTP-Method-Override', 'QUERY')
           .set('Accept', 'application/vnd.api+json')
           .set(
             'Authorization',
@@ -138,7 +146,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
           json,
           {
             data: {
-              id: testRealmHref,
+              id: realmURL.href,
               type: 'realm-info',
               attributes: {
                 ...testRealmInfo,
@@ -159,12 +167,15 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
           permissions: {
             users: ['read'],
           },
+          realmURL,
           onRealmSetup,
         });
 
         test('200 with permission', async function (assert) {
+          let infoPath = new URL('_info', realmURL).pathname;
           let response = await request
-            .get(`/_info`)
+            .post(infoPath)
+            .set('X-HTTP-Method-Override', 'QUERY')
             .set('Accept', 'application/vnd.api+json')
             .set(
               'Authorization',
@@ -177,7 +188,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
             json,
             {
               data: {
-                id: testRealmHref,
+                id: realmURL.href,
                 type: 'realm-info',
                 attributes: {
                   ...testRealmInfo,
@@ -199,12 +210,15 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
           jane: ['read'],
           john: ['read', 'write'],
         },
+        realmURL,
         onRealmSetup,
       });
 
       test('200 with permission', async function (assert) {
+        let infoPath = new URL('_info', realmURL).pathname;
         let response = await request
-          .get(`/_info`)
+          .post(infoPath)
+          .set('X-HTTP-Method-Override', 'QUERY')
           .set('Accept', 'application/vnd.api+json')
           .set(
             'Authorization',
@@ -217,7 +231,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
           json,
           {
             data: {
-              id: testRealmHref,
+              id: realmURL.href,
               type: 'realm-info',
               attributes: {
                 ...testRealmInfo,

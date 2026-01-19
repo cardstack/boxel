@@ -1,0 +1,63 @@
+import type Koa from 'koa';
+import {
+  buildSearchErrorResponse,
+  SupportedMimeType,
+  parsePrerenderedSearchRequestFromPayload,
+  parsePrerenderedSearchRequestFromRequest,
+  SearchRequestError,
+  searchPrerenderedRealms,
+} from '@cardstack/runtime-common';
+import {
+  fetchRequestFromContext,
+  sendResponseForBadRequest,
+  setContextResponse,
+} from '../middleware';
+import {
+  getMultiRealmAuthorization,
+  getSearchRequestPayload,
+} from '../middleware/multi-realm-authorization';
+
+export default function handleSearchPrerendered(): (
+  ctxt: Koa.Context,
+) => Promise<void> {
+  return async function (ctxt: Koa.Context) {
+    let { realmList, realmByURL } = getMultiRealmAuthorization(ctxt);
+
+    let request = await fetchRequestFromContext(ctxt);
+    let parsed;
+    try {
+      let payload = getSearchRequestPayload(ctxt);
+      parsed =
+        payload !== undefined
+          ? parsePrerenderedSearchRequestFromPayload(payload)
+          : await parsePrerenderedSearchRequestFromRequest(request);
+    } catch (e) {
+      if (e instanceof SearchRequestError) {
+        if (e.code === 'invalid-query') {
+          await setContextResponse(ctxt, buildSearchErrorResponse(e.message));
+        } else {
+          await sendResponseForBadRequest(ctxt, e.message);
+        }
+        return;
+      }
+      throw e;
+    }
+
+    let combined = await searchPrerenderedRealms(
+      realmList.map((realmURL) => realmByURL.get(realmURL)),
+      parsed.cardsQuery,
+      {
+        htmlFormat: parsed.htmlFormat,
+        cardUrls: parsed.cardUrls,
+        renderType: parsed.renderType,
+      },
+    );
+
+    await setContextResponse(
+      ctxt,
+      new Response(JSON.stringify(combined, null, 2), {
+        headers: { 'content-type': SupportedMimeType.CardJson },
+      }),
+    );
+  };
+}

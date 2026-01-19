@@ -952,7 +952,36 @@ module('Acceptance | operator mode tests', function (hooks) {
   });
 
   module('account popover', function (hooks) {
-    let userResponseBody = {
+    type UserResponseAttributes = {
+      matrixUserId: string;
+      stripeCustomerId: string;
+      creditsAvailableInPlanAllowance: number;
+      creditsIncludedInPlanAllowance: number;
+      extraCreditsAvailableInBalance: number;
+      lowCreditThreshold?: number | null;
+      nextDailyCreditGrantAt?: number | null;
+      lastDailyCreditGrantAt?: number | null;
+      stripeCustomerEmail?: string | null;
+    };
+
+    type UserResponseBody = {
+      data: {
+        type: 'user';
+        id: number;
+        attributes: UserResponseAttributes;
+        relationships: {
+          subscription: {
+            data: {
+              type: 'subscription';
+              id: number;
+            };
+          };
+        };
+      };
+      included: Array<Record<string, unknown>>;
+    };
+
+    let userResponseBody: UserResponseBody = {
       data: {
         type: 'user',
         id: 1,
@@ -1342,6 +1371,71 @@ module('Acceptance | operator mode tests', function (hooks) {
       assert.dom('[data-test-starter-plan-button]').hasText('Manage Plan');
       assert.dom('[data-test-creator-plan-button]').hasText('Get Started');
       assert.dom('[data-test-power-user-plan-button]').hasText('Get Started');
+    });
+
+    test('shows daily grant note when user is below threshold', async function (assert) {
+      let originalAttributes = { ...userResponseBody.data.attributes };
+      let nowSeconds = Math.floor(Date.now() / 1000);
+      userResponseBody.data.attributes = {
+        ...originalAttributes,
+        creditsAvailableInPlanAllowance: 1000,
+        creditsIncludedInPlanAllowance: 1000,
+        extraCreditsAvailableInBalance: 100,
+        lowCreditThreshold: 2000,
+        nextDailyCreditGrantAt: nowSeconds + 3600,
+        lastDailyCreditGrantAt: null,
+      };
+      try {
+        await visitOperatorMode({
+          submode: 'interact',
+          codePath: `${testRealmURL}employee.gts`,
+        });
+
+        await waitFor('[data-test-profile-icon-button]');
+        await click('[data-test-profile-icon-button]');
+
+        assert.dom('[data-test-daily-grant-note]').exists();
+        assert
+          .dom('[data-test-daily-grant-note]')
+          .includesText('top up your balance to 2,000 credits');
+      } finally {
+        userResponseBody.data.attributes = originalAttributes;
+      }
+    });
+
+    test('shows last daily grant note when user is above threshold', async function (assert) {
+      let originalAttributes = { ...userResponseBody.data.attributes };
+      let nowSeconds = Math.floor(Date.now() / 1000);
+      userResponseBody.data.attributes = {
+        ...originalAttributes,
+        creditsAvailableInPlanAllowance: 2000,
+        creditsIncludedInPlanAllowance: 2000,
+        extraCreditsAvailableInBalance: 200,
+        lowCreditThreshold: 2000,
+        nextDailyCreditGrantAt: null,
+        lastDailyCreditGrantAt: nowSeconds - 3600,
+      };
+      try {
+        await visitOperatorMode({
+          submode: 'interact',
+          codePath: `${testRealmURL}employee.gts`,
+        });
+
+        await waitFor('[data-test-profile-icon-button]');
+        await click('[data-test-profile-icon-button]');
+
+        assert.dom('[data-test-daily-grant-note]').exists();
+        assert
+          .dom('[data-test-daily-grant-note]')
+          .includesText(
+            'We topped up your account to 2,000 credits since you were getting low.',
+          );
+        assert
+          .dom('[data-test-daily-grant-note]')
+          .includesText('Last daily credits grant:');
+      } finally {
+        userResponseBody.data.attributes = originalAttributes;
+      }
     });
 
     test(`ai panel continues being open when switching to code submode`, async function (assert) {

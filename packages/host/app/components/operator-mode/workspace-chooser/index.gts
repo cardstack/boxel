@@ -1,6 +1,7 @@
 import { inject as service } from '@ember/service';
 import Component from '@glimmer/component';
 
+import config from '@cardstack/host/config/environment';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 
@@ -24,6 +25,16 @@ export default class WorkspaceChooser extends Component<Signature> {
     );
   }
 
+  private get communityRealmURLs() {
+    let realmURLs = this.realmServer.catalogRealmURLs ?? [];
+    if (config.environment !== 'production') {
+      return realmURLs;
+    }
+    return realmURLs.filter(
+      (realmURL) => !realmURL.includes('/boxel-homepage/'),
+    );
+  }
+
   <template>
     <div class='workspace-chooser' data-test-workspace-chooser>
       <div class='workspace-chooser__content'>
@@ -43,7 +54,7 @@ export default class WorkspaceChooser extends Component<Signature> {
         {{#if this.displayCatalogWorkspaces}}
           <span class='workspace-chooser__title'>Community Catalogs</span>
           <div class='workspace-list' data-test-catalog-list>
-            {{#each this.realmServer.catalogRealmURLs as |realmURL|}}
+            {{#each this.communityRealmURLs as |realmURL|}}
               <Workspace @realmURL={{realmURL}} />
             {{/each}}
           </div>

@@ -78,6 +78,17 @@ export default class CheckCorrectnessCommand extends HostBaseCommand<
     let errors: string[] = [];
     let lintIssues: string[] = [];
 
+    if (
+      targetType === 'file' &&
+      (await this.isEmptyFileContent(input.targetRef))
+    ) {
+      return new CorrectnessResultCard({
+        correct: true,
+        errors: [],
+        warnings: [],
+      });
+    }
+
     if (targetType === 'file' && input.targetRef.endsWith('.gts')) {
       errors = await this.collectModuleErrors(input.targetRef, roomId);
       lintIssues = await this.collectLintIssues(input.targetRef);
@@ -161,6 +172,10 @@ export default class CheckCorrectnessCommand extends HostBaseCommand<
       fileURL.href,
       cardIndexingTimeout,
     );
+
+    if (await this.isEmptyFileContent(targetRef)) {
+      return [];
+    }
 
     let errorMessage = await this.prerenderModule(moduleURL, realmURL);
 
@@ -316,6 +331,16 @@ export default class CheckCorrectnessCommand extends HostBaseCommand<
         error,
       );
       return [];
+    }
+  }
+
+  private async isEmptyFileContent(targetRef: string): Promise<boolean> {
+    try {
+      let fileUrl = new URL(targetRef);
+      let { status, content } = await this.cardService.getSource(fileUrl);
+      return status === 200 && content.trim() === '';
+    } catch {
+      return false;
     }
   }
 

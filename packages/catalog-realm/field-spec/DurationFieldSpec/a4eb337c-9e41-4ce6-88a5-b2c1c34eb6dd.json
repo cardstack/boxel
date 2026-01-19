@@ -1,0 +1,72 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "DurationFieldSpec",
+        "module": "../duration-field-spec"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "default",
+        "module": "../../fields/time/duration"
+      },
+      "full": {
+        "days": 31,
+        "hours": 0,
+        "years": 1995,
+        "months": 3,
+        "minutes": 0,
+        "seconds": 0
+      },
+      "title": "Duration Field Spec",
+      "readMe": null,
+      "dayTime": {
+        "days": 20,
+        "hours": 0,
+        "years": null,
+        "months": null,
+        "minutes": 0,
+        "seconds": 0
+      },
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "specType": "card",
+      "standard": {
+        "days": null,
+        "hours": 24,
+        "years": null,
+        "months": null,
+        "minutes": 12,
+        "seconds": 60
+      },
+      "yearMonth": {
+        "days": null,
+        "hours": 0,
+        "years": 2020,
+        "months": 12,
+        "minutes": 0,
+        "seconds": 0
+      },
+      "description": null,
+      "containedExamples": []
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "linkedExamples": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

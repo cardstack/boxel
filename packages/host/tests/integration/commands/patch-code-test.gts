@@ -212,4 +212,31 @@ ${REPLACE_MARKER}`;
       operatorModeStateService.restore({ stacks: [[]] });
     }
   });
+
+  test('allows empty search and replace blocks via patch-code for new files', async function (assert) {
+    let commandService = getService('command-service');
+    let patchCodeCommand = new PatchCodeCommand(commandService.commandContext);
+    let emptyFileUrl = `${testRealmURL}empty.gts`;
+
+    adapter.lintStub = async (request: Request): Promise<LintResult> => {
+      return {
+        output: await request.text(),
+        fixed: false,
+        messages: [],
+      };
+    };
+
+    const codeBlock = `${SEARCH_MARKER}
+${SEPARATOR_MARKER}
+${REPLACE_MARKER}`;
+
+    let result = await patchCodeCommand.execute({
+      fileUrl: emptyFileUrl,
+      codeBlocks: [codeBlock],
+    });
+
+    assert.strictEqual(result.finalFileUrl, emptyFileUrl);
+    assert.strictEqual(result.patchedContent, '');
+    assert.strictEqual(result.results[0]?.status, 'applied');
+  });
 });

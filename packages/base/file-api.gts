@@ -1,6 +1,11 @@
 import { concat } from '@ember/helper';
 import FileIcon from '@cardstack/boxel-icons/file';
 import {
+  byteStreamToUint8Array,
+  inferContentType,
+} from '@cardstack/runtime-common';
+import { md5 } from 'super-fast-md5';
+import {
   BaseDef,
   BaseDefComponent,
   Component,
@@ -8,6 +13,7 @@ import {
   StringField,
   contains,
   field,
+  getDataBucket,
 } from './card-api';
 
 class View extends Component<typeof FileDef> {
@@ -44,9 +50,33 @@ export type SerializedFile = {
   contentHash?: string;
 };
 
+export type ByteStream = ReadableStream<Uint8Array> | Uint8Array;
+
+// Throw this error from extractAttributes when the file content doesn't match this FileDef's
+// expectations so the extractor can fall back to a superclass/base FileDef.
+export class FileContentMismatchError extends Error {
+  name = 'FileContentMismatchError';
+}
+
 export class FileDef extends BaseDef {
   static displayName = 'File';
+  static isFileDef = true;
   static icon = FileIcon;
+
+  static assignInitialFieldValue(
+    instance: BaseDef,
+    fieldName: string,
+    value: any,
+  ) {
+    if (fieldName === 'id') {
+      // Similar to CardDef, set 'id' directly in the deserialized cache
+      // to avoid triggering recomputes during instantiation
+      let deserialized = getDataBucket(instance);
+      deserialized.set('id', value);
+    } else {
+      super.assignInitialFieldValue(instance, fieldName, value);
+    }
+  }
 
   @field id = contains(ReadOnlyField);
   @field sourceUrl = contains(StringField);
@@ -60,6 +90,33 @@ export class FileDef extends BaseDef {
   static isolated: BaseDefComponent = View;
   static atom: BaseDefComponent = View;
   static edit: BaseDefComponent = Edit;
+
+  static async extractAttributes(
+    url: string,
+    getStream: () => Promise<ByteStream>,
+    options: { contentHash?: string } = {},
+  ): Promise<SerializedFile> {
+    let parsed = new URL(url);
+    let name = parsed.pathname.split('/').pop() ?? parsed.pathname;
+    let contentType = inferContentType(name);
+    let contentHash: string | undefined = options.contentHash;
+    if (!contentHash) {
+      let bytes = await byteStreamToUint8Array(await getStream());
+      try {
+        contentHash = md5(bytes);
+      } catch {
+        contentHash = md5(new TextDecoder().decode(bytes));
+      }
+    }
+
+    return {
+      sourceUrl: url,
+      url,
+      name,
+      contentType,
+      contentHash,
+    };
+  }
 
   serialize() {
     return {

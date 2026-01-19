@@ -1,7 +1,6 @@
 import type { RenderingTestContext } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
-import { stringify } from 'qs';
 import { module, test } from 'qunit';
 
 import { validate as uuidValidate } from 'uuid';
@@ -442,9 +441,11 @@ module('Integration | realm', function (hooks) {
       let response = await handle(
         realm,
         new Request(`${testRealmURL}root/_search`, {
+          method: 'QUERY',
           headers: {
             Accept: 'application/vnd.card+json',
           },
+          body: JSON.stringify({}),
         }),
       );
       let json = await response.json();
@@ -3040,9 +3041,11 @@ module('Integration | realm', function (hooks) {
     let response = await handle(
       realm,
       new Request(`${testRealmURL}_search`, {
+        method: 'QUERY',
         headers: {
           Accept: 'application/vnd.card+json',
         },
+        body: JSON.stringify({}),
       }),
     );
     let json = await response.json();
@@ -3126,21 +3129,20 @@ module('Integration | realm', function (hooks) {
 
     let response = await handle(
       realm,
-      new Request(
-        `${testRealmURL}_search?${stringify({
+      new Request(`${testRealmURL}_search`, {
+        method: 'QUERY',
+        headers: {
+          Accept: 'application/vnd.card+json',
+        },
+        body: JSON.stringify({
           sort: [
             {
               by: 'id',
               on: { module: `${baseRealm.url}card-api`, name: 'CardDef' },
             },
           ],
-        })}`,
-        {
-          headers: {
-            Accept: 'application/vnd.card+json',
-          },
-        },
-      ),
+        }),
+      }),
     );
     let json = await response.json();
     delete json.included?.[0].meta.lastModified;
@@ -3558,6 +3560,7 @@ posts/ignore-me.gts
     let response = await handle(
       realm,
       new Request(`${testRealmURL}_info`, {
+        method: 'QUERY',
         headers: {
           Accept: 'application/vnd.api+json',
         },
@@ -3596,6 +3599,7 @@ posts/ignore-me.gts
     let response = await handle(
       realm,
       new Request(`${testRealmURL}_info`, {
+        method: 'QUERY',
         headers: {
           Accept: 'application/vnd.api+json',
         },
@@ -3625,6 +3629,7 @@ posts/ignore-me.gts
     let response = await handle(
       realm,
       new Request(`${testRealmURL}_info`, {
+        method: 'QUERY',
         headers: {
           Accept: 'application/vnd.api+json',
         },

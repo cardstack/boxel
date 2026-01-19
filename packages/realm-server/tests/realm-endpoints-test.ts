@@ -23,7 +23,6 @@ import {
   type QueueRunner,
 } from '@cardstack/runtime-common';
 import {
-  setupBaseRealmServer,
   setupPermissionedRealm,
   runTestRealmServer,
   setupDB,
@@ -46,6 +45,8 @@ import {
   cardInfo,
   getTestPrerenderer,
   testCreatePrerenderAuth,
+  type RealmRequest,
+  withRealmPath,
 } from './helpers';
 import { expectIncrementalIndexEvent } from './helpers/indexing';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
@@ -65,9 +66,13 @@ const testRealm2URL = new URL('http://127.0.0.1:4445/test/');
 
 module(basename(__filename), function () {
   module('Realm-specific Endpoints', function (hooks) {
+    let realmURL = new URL('http://127.0.0.1:4444/test/');
+    let testRealmHref = realmURL.href;
+    let testRealmURL = realmURL;
     let testRealm: Realm;
     let testRealmHttpServer: Server;
-    let request: SuperTest<Test>;
+    let request: RealmRequest;
+    let serverRequest: SuperTest<Test>;
     let dir: DirResult;
     let dbAdapter: PgAdapter;
     let testRealmHttpServer2: Server;
@@ -86,7 +91,8 @@ module(basename(__filename), function () {
     }) {
       testRealm = args.testRealm;
       testRealmHttpServer = args.testRealmHttpServer;
-      request = args.request;
+      serverRequest = args.request;
+      request = withRealmPath(args.request, realmURL);
       dir = args.dir;
       dbAdapter = args.dbAdapter;
     }
@@ -96,12 +102,11 @@ module(basename(__filename), function () {
         testRealm,
         testRealmHttpServer,
         request,
+        serverRequest,
         dir,
         dbAdapter,
       };
     }
-
-    setupBaseRealmServer(hooks, matrixURL);
 
     setupPermissionedRealm(hooks, {
       permissions: {
@@ -109,6 +114,7 @@ module(basename(__filename), function () {
         user: ['read', 'write', 'realm-owner'],
         carol: ['read', 'write'],
       },
+      realmURL,
       onRealmSetup,
     });
 
@@ -216,8 +222,8 @@ module(basename(__filename), function () {
         ),
         'content-type uses file meta mime type',
       );
-
       let json = response.body as LooseSingleCardDocument;
+      assert.strictEqual(json.data.type, 'file-meta');
       assert.strictEqual(json.data.attributes?.name, 'person.gts');
       assert.deepEqual(json.data.meta?.adoptsFrom, {
         module: `${baseRealm.url}file-api`,
@@ -248,7 +254,8 @@ module(basename(__filename), function () {
 
     test('can set response Cache-Control header for json api request', async function (assert) {
       let response = await request
-        .get(`/_info`)
+        .post(`/_info`)
+        .set('X-HTTP-Method-Override', 'QUERY')
         .set('Accept', SupportedMimeType.JSONAPI)
         .set(
           'Authorization',
@@ -937,21 +944,19 @@ module(basename(__filename), function () {
           'Authorization',
           `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`,
         )
-        .send(
-          JSON.stringify({
-            data: {
-              attributes: {
-                firstName: 'Mango',
-              },
-              meta: {
-                adoptsFrom: {
-                  module: '/person',
-                  name: 'Person',
-                },
+        .send({
+          data: {
+            attributes: {
+              firstName: 'Mango',
+            },
+            meta: {
+              adoptsFrom: {
+                module: '../person.gts',
+                name: 'Person',
               },
             },
-          }),
-        );
+          },
+        });
 
       let newCardId = postResponse.body.data.id;
       let newCardPath = new URL(newCardId).pathname;
@@ -1183,8 +1188,6 @@ module(basename(__filename), function () {
     let request: SuperTest<Test>;
 
     let dir: DirResult;
-
-    setupBaseRealmServer(hooks, matrixURL);
 
     hooks.beforeEach(async function () {
       dir = dirSync();
@@ -1682,8 +1685,6 @@ module(basename(__filename), function () {
     let request: SuperTest<Test>;
 
     let dir: DirResult;
-
-    setupBaseRealmServer(hooks, matrixURL);
 
     hooks.beforeEach(async function () {
       dir = dirSync();

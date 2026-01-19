@@ -2,6 +2,7 @@ import {
   type RenderRouteOptions,
   type RenderResponse,
   type ModuleRenderResponse,
+  type FileExtractResponse,
   Deferred,
   logger,
 } from '@cardstack/runtime-common';
@@ -372,6 +373,151 @@ export class Prerenderer {
         return lastResult;
       }
       throw new Error(`module prerender attempts exhausted for ${url}`);
+    } finally {
+      try {
+        releaseGlobal?.();
+      } catch (_e) {
+        // best-effort release; avoids blocking future renders
+      }
+      deferred.fulfill();
+    }
+  }
+
+  async prerenderFileExtract({
+    realm,
+    url,
+    auth,
+    opts,
+    renderOptions,
+  }: {
+    realm: string;
+    url: string;
+    auth: string;
+    opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
+    renderOptions?: RenderRouteOptions;
+  }): Promise<{
+    response: FileExtractResponse;
+    timings: { launchMs: number; renderMs: number };
+    pool: {
+      pageId: string;
+      realm: string;
+      reused: boolean;
+      evicted: boolean;
+      timedOut: boolean;
+    };
+  }> {
+    if (this.#stopped) {
+      throw new Error('Prerenderer has been stopped and cannot be used');
+    }
+    let prev = this.#pendingByRealm.get(realm) ?? Promise.resolve();
+    let deferred = new Deferred<void>();
+    this.#pendingByRealm.set(
+      realm,
+      prev.then(() => deferred.promise),
+    );
+
+    let releaseGlobal: (() => void) | undefined;
+    try {
+      await prev.catch((e) => {
+        log.debug('Previous prerender in chain failed (continuing):', e);
+      });
+      releaseGlobal = await this.#semaphore.acquire();
+
+      let attemptOptions = renderOptions;
+      let lastResult:
+        | {
+            response: FileExtractResponse;
+            timings: { launchMs: number; renderMs: number };
+            pool: {
+              pageId: string;
+              realm: string;
+              reused: boolean;
+              evicted: boolean;
+              timedOut: boolean;
+            };
+          }
+        | undefined;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        let result: {
+          response: FileExtractResponse;
+          timings: { launchMs: number; renderMs: number };
+          pool: {
+            pageId: string;
+            realm: string;
+            reused: boolean;
+            evicted: boolean;
+            timedOut: boolean;
+          };
+        };
+        try {
+          result = await this.#renderRunner.prerenderFileExtractAttempt({
+            realm,
+            url,
+            auth,
+            opts,
+            renderOptions: attemptOptions,
+          });
+        } catch (e) {
+          log.error(
+            `file extract prerender attempt for ${url} (realm ${realm}) failed with error, restarting browser`,
+            e,
+          );
+          await this.#restartBrowser();
+          try {
+            result = await this.#renderRunner.prerenderFileExtractAttempt({
+              realm,
+              url,
+              auth,
+              opts,
+              renderOptions: attemptOptions,
+            });
+          } catch (e2) {
+            log.error(
+              `file extract prerender attempt for ${url} (realm ${realm}) failed again after browser restart`,
+              e2,
+            );
+            throw e2;
+          }
+        }
+        lastResult = result;
+
+        let retrySignature = this.#renderRunner.shouldRetryWithClearCache(
+          result.response,
+        );
+        let isClearCacheAttempt = attemptOptions?.clearCache === true;
+
+        if (!isClearCacheAttempt && retrySignature) {
+          log.warn(
+            `retrying file extract prerender for ${url} with clearCache due to error signature: ${retrySignature.join(
+              ' | ',
+            )}`,
+          );
+          attemptOptions = {
+            ...(attemptOptions ?? {}),
+            clearCache: true,
+          };
+          continue;
+        }
+
+        if (isClearCacheAttempt && retrySignature && result.response.error) {
+          log.warn(
+            `file extract prerender retry with clearCache did not resolve error signature ${retrySignature.join(
+              ' | ',
+            )} for ${url}`,
+          );
+        }
+
+        return result;
+      }
+      if (lastResult) {
+        if (lastResult.response.error) {
+          log.error(
+            `file extract prerender attempts exhausted for ${url} in realm ${realm}, returning last error response`,
+          );
+        }
+        return lastResult;
+      }
+      throw new Error(`file extract prerender attempts exhausted for ${url}`);
     } finally {
       try {
         releaseGlobal?.();

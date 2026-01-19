@@ -9,7 +9,7 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import { MapRender, type Coordinate } from '../components/map-render';
 import { Route } from '../route/route';
-import { LeafletMapConfigField } from '../fields/leaflet-map-config-field';
+import LeafletMapConfigField from '../fields/leaflet-map-config-field';
 
 class AtomTemplate extends Component<typeof TravelMapper> {
   <template>

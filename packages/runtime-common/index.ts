@@ -1,4 +1,9 @@
-import type { CardResource, LooseCardResource, Meta } from './resource-types';
+import type {
+  CardResource,
+  LinkableResource,
+  LooseLinkableResource,
+  Meta,
+} from './resource-types';
 import type { ResolvedCodeRef } from './code-ref';
 import type { RenderRouteOptions } from './render-route-options';
 import type { Definition } from './definitions';
@@ -6,9 +11,14 @@ import type { Definition } from './definitions';
 import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
 import type { ErrorEntry } from './index-writer';
 
+export interface LooseSingleResourceDocument<T extends LinkableResource> {
+  data: LooseLinkableResource<T>;
+  included?: LooseLinkableResource<LinkableResource>[];
+}
+
 export interface LooseSingleCardDocument {
-  data: LooseCardResource;
-  included?: CardResource[];
+  data: LooseLinkableResource<CardResource>;
+  included?: LinkableResource[];
 }
 
 export type PatchData = {
@@ -41,6 +51,16 @@ export interface RenderResponse extends PrerenderMeta {
 
 export interface RenderError extends ErrorEntry {
   evict?: boolean;
+}
+
+export interface FileExtractResponse {
+  id: string;
+  nonce: string;
+  status: 'ready' | 'error';
+  searchDoc: Record<string, any> | null;
+  deps: string[];
+  error?: RenderError;
+  mismatch?: true;
 }
 
 export interface ModuleDefinitionResult {
@@ -76,6 +96,7 @@ export type PrerenderCardArgs = ModulePrerenderArgs;
 export interface Prerenderer {
   prerenderCard(args: PrerenderCardArgs): Promise<RenderResponse>;
   prerenderModule(args: ModulePrerenderArgs): Promise<ModuleRenderResponse>;
+  prerenderFileExtract(args: ModulePrerenderArgs): Promise<FileExtractResponse>;
 }
 
 export type RealmAction = 'read' | 'write' | 'realm-owner' | 'assume-user';
@@ -152,6 +173,7 @@ export * from './matrix-constants';
 export * from './matrix-client';
 export * from './queue';
 export * from './expression';
+export * from './infer-content-type';
 export * from './index-query-engine';
 export * from './index-writer';
 export * from './definitions';
@@ -170,6 +192,7 @@ export * from './authorization-middleware';
 export * from './resource-types';
 export * from './query';
 export * from './search-utils';
+export * from './prerendered-html-format';
 export * from './query-field-utils';
 export * from './relationship-utils';
 export * from './formats';
@@ -186,6 +209,7 @@ export * from './helpers/ensure-extension';
 export * from './url';
 export * from './render-route-options';
 export * from './publishability';
+export * from './pr-manifest';
 
 export const executableExtensions = ['.js', '.gjs', '.ts', '.gts'];
 export { createResponse } from './create-response';
@@ -226,10 +250,12 @@ export * from './serializers';
 export type {
   CardDocument,
   SingleCardDocument,
+  SingleFileMetaDocument,
   CardCollectionDocument,
 } from './document-types';
 export type {
   CardResource,
+  FileMetaResource,
   ModuleResource,
   CardResourceMeta,
   ResourceID,
@@ -237,11 +263,13 @@ export type {
   Saved,
   Relationship,
   CardFields,
+  LooseLinkableResource,
 } from './resource-types';
 export {
   isCardDocument,
   isCardCollectionDocument,
   isSingleCardDocument,
+  isSingleFileMetaDocument,
   isCardDocumentString,
 } from './document-types';
 export {
@@ -443,9 +471,9 @@ export interface Store {
   getSaveState(id: string): AutoSaveState | undefined;
 }
 
-export interface CardCatalogQuery extends Query {
+export type CardCatalogQuery = Query & {
   filter?: CardTypeFilter | EveryFilter;
-}
+};
 
 export interface CardCreator {
   create(

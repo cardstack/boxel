@@ -66,7 +66,6 @@ export default {
       // our copied files
       hook: 'generateBundle',
     }),
-    scopedCSS('src'),
 
     // This babel config should *not* apply presets or compile away ES modules.
     // It exists only to provide development niceties for you, like automatic

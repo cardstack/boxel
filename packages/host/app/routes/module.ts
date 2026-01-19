@@ -123,7 +123,9 @@ export default class ModuleRoute extends Route<Model> {
   #releaseTimerBlock: (() => void) | undefined;
 
   deactivate() {
-    (globalThis as any).__boxelRenderContext = undefined;
+    if (isTesting()) {
+      (globalThis as any).__boxelRenderContext = undefined;
+    }
     this.lastStoreResetKey = undefined;
     this.#authGuard.unregister();
     this.#restoreRenderTimers?.();

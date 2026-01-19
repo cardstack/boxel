@@ -1,0 +1,50 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "RatingFieldSpec",
+        "module": "../rating-field-spec"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "default",
+        "module": "../../fields/rating"
+      },
+<<<<<<< HEAD:packages/catalog-realm/Spec/eaec6b42-8ad5-4a06-962a-48ff2fd052f4.json
+      "cardTitle": "Quantity Field",
+=======
+      "title": "Rating Field Spec",
+>>>>>>> main:packages/catalog-realm/field-spec/RatingFieldSpec/8a795bb2-7590-4d74-a6c2-d571fd42a287.json
+      "readMe": null,
+      "cardInfo": {
+        "notes": null,
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null
+      },
+<<<<<<< HEAD:packages/catalog-realm/Spec/eaec6b42-8ad5-4a06-962a-48ff2fd052f4.json
+      "specType": "field",
+      "cardDescription": null,
+=======
+      "specType": "card",
+      "standard": 4,
+      "description": null,
+>>>>>>> main:packages/catalog-realm/field-spec/RatingFieldSpec/8a795bb2-7590-4d74-a6c2-d571fd42a287.json
+      "containedExamples": []
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "linkedExamples": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

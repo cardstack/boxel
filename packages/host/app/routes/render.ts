@@ -124,7 +124,9 @@ export default class RenderRoute extends Route<Model> {
       currentURL: this.router.currentURL,
     });
     this.#setAllModelStatuses('unusable');
-    (globalThis as any).__boxelRenderContext = undefined;
+    if (isTesting()) {
+      (globalThis as any).__boxelRenderContext = undefined;
+    }
   };
 
   activate() {
@@ -133,7 +135,9 @@ export default class RenderRoute extends Route<Model> {
   }
 
   deactivate() {
-    (globalThis as any).__boxelRenderContext = undefined;
+    if (isTesting()) {
+      (globalThis as any).__boxelRenderContext = undefined;
+    }
     (globalThis as any).__renderModel = undefined;
     window.removeEventListener('boxel-render-error', this.handleRenderError);
     this.#detachWindowErrorListeners();
@@ -183,7 +187,9 @@ export default class RenderRoute extends Route<Model> {
     let canonicalOptions = serializeRenderRouteOptions(parsedOptions);
     this.#setupTransitionHelper(id, nonce, canonicalOptions);
     // this is a tool for our prerenderer to understand if a timed out render is salvageable
-    (globalThis as any).__docsInFlight = () => this.store.docsInFlight.length;
+    (globalThis as any).__docsInFlight = () =>
+      this.store.cardDocsInFlight.length +
+      this.store.fileMetaDocsInFlight.length;
     let key = `${id}|${nonce}|${canonicalOptions}`;
     let existing = this.#modelPromises.get(key);
     if (existing) {
@@ -215,6 +221,33 @@ export default class RenderRoute extends Route<Model> {
         this.store.resetCache();
         this.lastStoreResetKey = resetKey;
       }
+    }
+    if (parsedOptions.fileExtract) {
+      let state = new TrackedMap<string, unknown>();
+      state.set('status', 'ready');
+      let readyDeferred = new Deferred<void>();
+      readyDeferred.fulfill();
+      let model: Model = {
+        instance: undefined,
+        nonce,
+        cardId: id,
+        renderOptions: parsedOptions,
+        get status(): RenderStatus {
+          return (state.get('status') as RenderStatus) ?? 'loading';
+        },
+        get ready(): boolean {
+          return (state.get('status') as RenderStatus) === 'ready';
+        },
+        readyPromise: readyDeferred.promise,
+      };
+      this.#modelStates.set(model, {
+        state,
+        readyDeferred,
+        isReady: true,
+      });
+      (globalThis as any).__renderModel = model;
+      this.currentTransition = undefined;
+      return model;
     }
     // This is for host tests
     (globalThis as any).__renderModel = undefined;

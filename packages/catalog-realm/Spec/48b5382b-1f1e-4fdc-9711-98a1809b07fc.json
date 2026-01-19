@@ -5,7 +5,7 @@
       "readMe": null,
       "ref": {
         "module": "../fields/geo-search-point",
-        "name": "GeoSearchPointField"
+        "name": "default"
       },
       "specType": "card",
       "containedExamples": [],

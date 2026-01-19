@@ -4,7 +4,7 @@
     "attributes": {
       "readMe": null,
       "ref": {
-        "name": "MapConfigField",
+        "name": "default",
         "module": "../fields/leaflet-map-config-field"
       },
       "specType": "field",

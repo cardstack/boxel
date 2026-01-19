@@ -270,20 +270,17 @@ export class SearchResource<T extends CardDef = CardDef> extends Resource<
     let realmServerURLs = this.realmServer.getRealmServersForRealms(
       this.realmsToSearch,
     );
-    // TODO remove this assertion after multi-realm serer/federated identity is supported
+    // TODO remove this assertion after multi-realm server/federated identity is supported
     this.realmServer.assertOwnRealmServer(realmServerURLs);
     let [realmServerURL] = realmServerURLs;
     try {
       let searchURL = new URL('_search', realmServerURL);
-      for (let realm of this.realmsToSearch) {
-        searchURL.searchParams.append('realms', realm);
-      }
       let response = await this.realmServer.maybeAuthedFetch(searchURL.href, {
         method: 'QUERY',
         headers: {
           Accept: 'application/vnd.card+json',
         },
-        body: JSON.stringify(query),
+        body: JSON.stringify({ ...query, realms: this.realmsToSearch }),
       });
       if (!response.ok) {
         let responseText = await response.text();

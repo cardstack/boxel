@@ -627,6 +627,9 @@ export function setupOperatorModeTests(
           ...Object.fromEntries(personCards),
         },
       }));
+
+    let realmService = getService('realm');
+    await realmService.getOrCreateRealmResource(testRealmURL).fetchInfo();
   });
 
   function setCardInOperatorModeState(

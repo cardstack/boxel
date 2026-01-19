@@ -9,6 +9,7 @@ import {
 import type { RealmServerTokenClaim } from '../utils/jwt';
 import type { CreateRoutesArgs } from '../routes';
 import { addToCreditsLedger } from '@cardstack/billing/billing-queries';
+import { parseLowCreditThreshold } from '../lib/daily-credit-grant-config';
 
 export default function handleCreateUserRequest({
   dbAdapter,
@@ -40,6 +41,14 @@ export default function handleCreateUserRequest({
 
     let registrationToken = json.data.attributes.registrationToken;
 
+    let lowCreditThreshold: number;
+    try {
+      lowCreditThreshold = parseLowCreditThreshold();
+    } catch (error) {
+      await sendResponseForSystemError(ctxt, (error as Error).message);
+      return;
+    }
+
     let user;
 
     try {
@@ -63,12 +72,11 @@ export default function handleCreateUserRequest({
       return;
     }
 
-    // When user signs up, they get 1000 credits and no stripe subscription is needed
-    // In this case we don't need to create a subscription cycle, just add the credits to the user
+    // Grant daily credits up to the low-credit threshold for new users.
     await addToCreditsLedger(dbAdapter, {
       userId: user!.id,
-      creditAmount: 1000,
-      creditType: 'extra_credit',
+      creditAmount: lowCreditThreshold,
+      creditType: 'daily_credit',
       subscriptionCycleId: null,
     });
 

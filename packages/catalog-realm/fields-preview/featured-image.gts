@@ -1,4 +1,4 @@
-import { FeaturedImageField } from '../fields/featured-image';
+import FeaturedImageField from '../fields/featured-image';
 
 import {
   CardDef,

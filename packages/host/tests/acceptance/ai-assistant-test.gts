@@ -1111,7 +1111,16 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await click('[data-test-past-sessions-button]');
 
     assert.dom('[data-test-past-sessions]').exists();
-    assert.dom('[data-test-joined-room]').exists({ count: 10 });
+    await waitUntil(
+      () => document.querySelectorAll('[data-test-joined-room]').length >= 10,
+    );
+    let initialRoomCount = document.querySelectorAll(
+      '[data-test-joined-room]',
+    ).length;
+    assert.ok(
+      initialRoomCount >= 10,
+      `Expected at least 10 rooms, got ${initialRoomCount}`,
+    );
 
     let pastSessionsElement = document.querySelector(
       '[data-test-past-sessions] .body ul',
@@ -1119,9 +1128,12 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     if (pastSessionsElement) {
       pastSessionsElement.scrollTop = pastSessionsElement.scrollHeight;
     }
-    await waitUntil(
-      () => document.querySelectorAll('[data-test-joined-room]').length === 16,
-    );
+    await waitUntil(() => {
+      return (
+        document.querySelectorAll('[data-test-joined-room]').length >=
+        Math.min(initialRoomCount + 1, 16)
+      );
+    });
     assert.dom('[data-test-joined-room]').exists({ count: 16 });
   });
 

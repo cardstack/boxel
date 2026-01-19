@@ -41,7 +41,7 @@ module('Integration | audio fields', function (hooks) {
     const audioModule: any = await loader.import(
       `${catalogRealmURL}fields/audio`,
     );
-    AudioFieldClass = audioModule.AudioField;
+    AudioFieldClass = audioModule.default;
   }
 
   async function renderField(

@@ -6,16 +6,16 @@ import type {
   RealmAdapter,
   RenderResponse,
   ModuleRenderResponse,
+  FileExtractResponse,
   RenderRouteOptions,
 } from '@cardstack/runtime-common';
+import { baseRealm } from '@cardstack/runtime-common';
 import type { Prerenderer } from '../prerender/index';
 import { PagePool } from '../prerender/page-pool';
 import { RenderRunner } from '../prerender/render-runner';
 
 import {
-  setupBaseRealmServer,
   setupPermissionedRealms,
-  matrixURL,
   cleanWhiteSpace,
   testCreatePrerenderAuth,
   getPrerendererForTesting,
@@ -78,10 +78,8 @@ function makeStubPagePool(maxPages: number) {
 
 module(basename(__filename), function () {
   module('prerender - dynamic tests', function (hooks) {
-    let realmURL = 'http://127.0.0.1:4450/';
-    let prerenderServerURL = realmURL.endsWith('/')
-      ? realmURL.slice(0, -1)
-      : realmURL;
+    let realmURL = 'http://127.0.0.1:4450/test/';
+    let prerenderServerURL = new URL(realmURL).origin;
     let testUserId = '@user1:localhost';
     let permissions: RealmPermissions = {};
     let prerenderer: Prerenderer;
@@ -103,8 +101,6 @@ module(basename(__filename), function () {
     hooks.afterEach(async () => {
       await prerenderer.disposeRealm(realmURL);
     });
-
-    setupBaseRealmServer(hooks, matrixURL);
 
     setupPermissionedRealms(hooks, {
       realms: [
@@ -240,6 +236,7 @@ module(basename(__filename), function () {
                 },
               },
             },
+            'notes.txt': 'Hello from file extract',
           },
         },
       ],
@@ -717,14 +714,42 @@ module(basename(__filename), function () {
         'subsequent render succeeds',
       );
     });
+
+    test('file prerender returns extracted metadata', async function (assert) {
+      const fileURL = `${realmURL}notes.txt`;
+
+      let result = await prerenderer.prerenderFileExtract({
+        realm: realmURL,
+        url: fileURL,
+        auth: auth(),
+        renderOptions: { fileExtract: true },
+      });
+
+      assert.strictEqual(
+        result.response.status,
+        'ready',
+        'file extract reports ready',
+      );
+      assert.strictEqual(
+        result.response.searchDoc?.name,
+        'notes.txt',
+        'search doc includes name',
+      );
+      assert.ok(
+        result.response.deps.includes(`${baseRealm.url}file-api`),
+        'deps include base file-api module',
+      );
+      assert.ok(
+        result.response.deps.includes(fileURL),
+        'deps include file url',
+      );
+    });
   });
 
   module('prerender - permissioned auth failures', function (hooks) {
-    let providerRealmURL = 'http://127.0.0.1:4451/';
-    let consumerRealmURL = 'http://127.0.0.1:4452/';
-    let prerenderServerURL = consumerRealmURL.endsWith('/')
-      ? consumerRealmURL.slice(0, -1)
-      : consumerRealmURL;
+    let providerRealmURL = 'http://127.0.0.1:4451/test/';
+    let consumerRealmURL = 'http://127.0.0.1:4452/test/';
+    let prerenderServerURL = new URL(consumerRealmURL).origin;
     let testUserId = '@user1:localhost';
     let permissions: RealmPermissions = {};
     let prerenderer: Prerenderer;
@@ -753,8 +778,6 @@ module(basename(__filename), function () {
         prerenderer.disposeRealm(consumerRealmURL),
       ]);
     });
-
-    setupBaseRealmServer(hooks, matrixURL);
 
     setupPermissionedRealms(hooks, {
       mode: 'before',
@@ -786,6 +809,7 @@ module(basename(__filename), function () {
                 },
               },
             },
+            'secret.txt': 'Top Secret file',
           },
         },
         {
@@ -891,6 +915,37 @@ module(basename(__filename), function () {
       );
     });
 
+    test('file prerender surfaces auth error without timing out', async function (assert) {
+      const fileURL = `${providerRealmURL}secret.txt`;
+
+      let result = await prerenderer.prerenderFileExtract({
+        realm: providerRealmURL,
+        url: fileURL,
+        auth: auth(),
+        renderOptions: { fileExtract: true },
+      });
+
+      assert.ok(
+        result.response.error,
+        'auth failure returns an error response',
+      );
+      let status = result.response.error?.error.status;
+      assert.strictEqual(status, 401, 'auth error status should be 401');
+      assert.notStrictEqual(
+        result.response.error?.error.title,
+        'Render timeout',
+        'auth failure is not reported as a timeout',
+      );
+      assert.false(
+        result.pool.timedOut,
+        'auth failure should not mark prerender as timed out',
+      );
+      assert.false(
+        result.pool.evicted,
+        'auth failure should not evict prerender page',
+      );
+    });
+
     test('card prerender surfaces auth error without timing out', async function (assert) {
       const cardURL = `${consumerRealmURL}auth-proxy-1`;
 
@@ -946,12 +1001,10 @@ module(basename(__filename), function () {
   });
 
   module('prerender - static tests', function (hooks) {
-    let realmURL1 = 'http://127.0.0.1:4447/';
-    let realmURL2 = 'http://127.0.0.1:4448/';
-    let realmURL3 = 'http://127.0.0.1:4449/';
-    let prerenderServerURL = realmURL1.endsWith('/')
-      ? realmURL1.slice(0, -1)
-      : realmURL1;
+    let realmURL1 = 'http://127.0.0.1:4447/test/';
+    let realmURL2 = 'http://127.0.0.1:4448/test/';
+    let realmURL3 = 'http://127.0.0.1:4449/test/';
+    let prerenderServerURL = new URL(realmURL1).origin;
     let testUserId = '@user1:localhost';
     let permissions: RealmPermissions = {};
     let prerenderer: Prerenderer;
@@ -974,8 +1027,6 @@ module(basename(__filename), function () {
     hooks.after(async function () {
       await prerenderer.stop();
     });
-
-    setupBaseRealmServer(hooks, matrixURL);
 
     setupPermissionedRealms(hooks, {
       mode: 'before',
@@ -2241,6 +2292,101 @@ module(basename(__filename), function () {
         );
       } finally {
         RenderRunner.prototype.prerenderModuleAttempt = originalAttempt;
+        await prerenderer?.stop();
+      }
+    });
+  });
+
+  module('prerender - file retries', function () {
+    test('file prerender retries with clear cache on retry signature', async function (assert) {
+      let originalAttempt = RenderRunner.prototype.prerenderFileExtractAttempt;
+      let prerenderer: Prerenderer | undefined;
+      let attempts: Array<RenderRouteOptions | undefined> = [];
+      let retryRealm = 'https://file-retry.example/';
+      let fileURL = `${retryRealm}notes.txt`;
+
+      try {
+        let attemptCount = 0;
+        RenderRunner.prototype.prerenderFileExtractAttempt = async function (
+          args: Parameters<RenderRunner['prerenderFileExtractAttempt']>[0],
+        ) {
+          let { realm: attemptRealm, url, renderOptions } = args;
+          attempts.push(renderOptions);
+          attemptCount++;
+          let response: FileExtractResponse =
+            attemptCount === 1
+              ? {
+                  id: url,
+                  nonce: `nonce-${attemptCount}`,
+                  status: 'error',
+                  searchDoc: null,
+                  deps: [],
+                  error: {
+                    type: 'file-error',
+                    error: {
+                      message: `Failed to execute 'removeChild' on 'Node': NotFoundError`,
+                      status: 500,
+                      title: 'boom',
+                      additionalErrors: null,
+                      stack: `Failed to execute 'removeChild' on 'Node': NotFoundError`,
+                    },
+                  },
+                }
+              : {
+                  id: url,
+                  nonce: `nonce-${attemptCount}`,
+                  status: 'ready',
+                  searchDoc: { name: 'notes.txt' },
+                  deps: [],
+                };
+
+          return {
+            response,
+            timings: { launchMs: 0, renderMs: 1 },
+            pool: {
+              pageId: `page-${attemptCount}`,
+              realm: attemptRealm,
+              reused: attemptCount > 1,
+              evicted: false,
+              timedOut: false,
+            },
+          };
+        };
+
+        prerenderer = getPrerendererForTesting({
+          maxPages: 1,
+          serverURL: 'http://127.0.0.1:4225',
+        });
+
+        let result = await prerenderer.prerenderFileExtract({
+          realm: retryRealm,
+          url: fileURL,
+          auth: 'test-auth',
+          renderOptions: { fileExtract: true },
+        });
+
+        assert.strictEqual(
+          attempts.length,
+          2,
+          'prerender retries once with clearCache',
+        );
+        assert.deepEqual(
+          attempts[0],
+          { fileExtract: true },
+          'first attempt uses provided render options',
+        );
+        assert.deepEqual(
+          attempts[1],
+          { fileExtract: true, clearCache: true },
+          'second attempt enables clearCache',
+        );
+        assert.strictEqual(
+          result.response.status,
+          'ready',
+          'successful response returned after retry',
+        );
+      } finally {
+        RenderRunner.prototype.prerenderFileExtractAttempt = originalAttempt;
         await prerenderer?.stop();
       }
     });

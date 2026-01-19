@@ -9,6 +9,7 @@ import {
   type RenderRouteOptions,
   type RenderResponse,
   type ModuleRenderResponse,
+  type FileExtractResponse,
 } from '@cardstack/runtime-common';
 import {
   ecsMetadata,
@@ -23,6 +24,10 @@ import {
   PRERENDER_SERVER_STATUS_DRAINING,
   PRERENDER_SERVER_STATUS_HEADER,
 } from './prerender-constants';
+
+type PrerenderServer = Server & {
+  __stopPrerenderer?: () => Promise<void>;
+};
 
 let log = logger('prerender-server');
 const defaultPrerenderServerPort = 4221;
@@ -313,6 +318,24 @@ export function buildPrerenderApp(options: {
     },
   });
 
+  registerPrerenderRoute('/prerender-file-extract', {
+    requestDescription: 'file extract prerender request',
+    responseType: 'prerender-file-extract-result',
+    infoLabel: 'file extract prerendered',
+    warnTimeoutMessage: (url) => `file extract render of ${url} timed out`,
+    errorContext: '/prerender-file-extract',
+    execute: (args) => prerenderer.prerenderFileExtract(args),
+    drainingPromise: options.drainingPromise,
+    afterResponse: (url, response) => {
+      const fileResponse = response as FileExtractResponse;
+      if (fileResponse.status === 'error' && fileResponse.error) {
+        log.debug(
+          `file extract of ${url} resulted in error doc:\n${JSON.stringify(fileResponse.error, null, 2)}`,
+        );
+      }
+    },
+  });
+
   app
     .use((ctxt: Koa.Context, next: Koa.Next) => {
       if (
@@ -399,6 +422,24 @@ export function createPrerenderHttpServer(options?: {
     isDraining: () => draining,
     drainingPromise: drainingDeferred.promise,
   });
+  let stopPromise: Promise<void> | null = null;
+
+  async function stopPrerendererOnce(): Promise<void> {
+    if (!stopPromise) {
+      stopPromise = (async () => {
+        try {
+          await prerenderer.stop();
+        } catch (e: any) {
+          // Best-effort shutdown; log and continue
+          log.warn(
+            'Error stopping prerenderer on server close:',
+            e?.message ?? e,
+          );
+        }
+      })();
+    }
+    await stopPromise;
+  }
   const heartbeatIntervalMs = Math.max(
     1000,
     Number(process.env.PRERENDER_HEARTBEAT_INTERVAL_MS ?? 5000),
@@ -458,15 +499,12 @@ export function createPrerenderHttpServer(options?: {
     }
   }
 
-  let server = createServer(app.callback());
+  let server = createServer(app.callback()) as PrerenderServer;
+  server.__stopPrerenderer = stopPrerendererOnce;
+
   server.on('close', async () => {
     stopHeartbeatLoop();
-    try {
-      await prerenderer.stop();
-    } catch (e: any) {
-      // Best-effort shutdown; log and continue
-      log.warn('Error stopping prerenderer on server close:', e?.message ?? e);
-    }
+    await stopPrerendererOnce();
     try {
       await unregisterWithManager(serverURL);
     } catch (e) {

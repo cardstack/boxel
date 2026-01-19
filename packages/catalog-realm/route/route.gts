@@ -8,9 +8,8 @@ import {
   field,
 } from 'https://cardstack.com/base/card-api';
 import { MapRender, type Coordinate } from '../components/map-render';
-import { LeafletMapConfigField } from '../fields/leaflet-map-config-field';
-import {
-  GeoSearchPointField,
+import LeafletMapConfigField from '../fields/leaflet-map-config-field';
+import GeoSearchPointField, {
   GeoSearchPointEditTemplate,
 } from '../fields/geo-search-point';
 

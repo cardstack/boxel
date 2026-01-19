@@ -270,6 +270,10 @@ test.describe('Head tags', () => {
     let defaultCardURL = `${publishedRealmURL}default-head-card.json`;
 
     await page.goto(defaultCardURL);
+
+    // Wait for Ember to take over
+    await page.locator('[data-test-host-mode-content]').waitFor();
+
     await expect(
       page.locator('head meta[property="og:title"]'),
     ).toHaveAttribute('content', 'Default Head Card');

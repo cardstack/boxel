@@ -99,6 +99,9 @@ catalogs:
     '@lukeed/uuid':
       specifier: ^2.0.1
       version: 2.0.1
+    '@octokit/rest':
+      specifier: ^22.0.1
+      version: 22.0.1
     '@percy/cli':
       specifier: ^1.31.1
       version: 1.31.1
@@ -499,8 +502,8 @@ catalogs:
       specifier: ^0.52.2
       version: 0.52.2
     monaco-editor-webpack-plugin:
-      specifier: ^7.1.0
-      version: 7.1.0
+      specifier: ^7.1.1
+      version: 7.1.1
     ms:
       specifier: ^2.1.3
       version: 2.1.3
@@ -657,6 +660,9 @@ patchedDependencies:
   '@embroider/compat':
     hash: db8df3cd3be93909d4ddbc1eace0a46dd23639f38332d9eb4c500c534687c7b2
     path: patches/@embroider__compat.patch
+  '@embroider/webpack':
+    hash: 3575bbdd1074ff74a26adde4a25140c197c845679f6ad0941e00494f73c79eff
+    path: patches/@embroider__webpack.patch
   ember-basic-dropdown@8.0.4:
     hash: 19b0fc5d4bd8b9aa296c4065fa5e33bdbb965db0b277810b596eacd0b9e2f428
     path: patches/ember-basic-dropdown@8.0.4.patch
@@ -675,9 +681,6 @@ patchedDependencies:
   matrix-js-sdk@38.3.0:
     hash: 0472d34281d936a5dcdacff67d2851d88c1df9593cd06b7725ee8414c12aa1d5
     path: patches/matrix-js-sdk@38.3.0.patch
-  monaco-editor-webpack-plugin@7.1.0:
-    hash: 98cfe2a40393462942e2d29ed97efabd9ff34b697dd261ef6ed3890c7b4619c6
-    path: patches/monaco-editor-webpack-plugin@7.1.0.patch
   monaco-editor@0.52.2:
     hash: a09898c89392828a4df910a8b4b952fd774a69b779906e9fa5742cb9c05c2ecf
     path: patches/monaco-editor@0.52.2.patch
@@ -1257,10 +1260,10 @@ importers:
         version: 1.16.13(@glint/template@1.3.0)
       '@embroider/test-setup':
         specifier: ^4.0.0
-        version: 4.0.0(@embroider/compat@3.5.6(patch_hash=db8df3cd3be93909d4ddbc1eace0a46dd23639f38332d9eb4c500c534687c7b2)(@embroider/core@3.5.6(@glint/template@1.3.0))(@glint/template@1.3.0))(@embroider/core@3.5.6(@glint/template@1.3.0))(@embroider/webpack@4.0.4(@embroider/core@3.5.6(@glint/template@1.3.0))(webpack@5.99.6))
+        version: 4.0.0(@embroider/compat@3.5.6(patch_hash=db8df3cd3be93909d4ddbc1eace0a46dd23639f38332d9eb4c500c534687c7b2)(@embroider/core@3.5.6(@glint/template@1.3.0))(@glint/template@1.3.0))(@embroider/core@3.5.6(@glint/template@1.3.0))(@embroider/webpack@4.0.4(patch_hash=3575bbdd1074ff74a26adde4a25140c197c845679f6ad0941e00494f73c79eff)(@embroider/core@3.5.6(@glint/template@1.3.0))(webpack@5.99.6))
       '@embroider/webpack':
         specifier: ^4.0.4
-        version: 4.0.4(@embroider/core@3.5.6(@glint/template@1.3.0))(webpack@5.99.6)
+        version: 4.0.4(patch_hash=3575bbdd1074ff74a26adde4a25140c197c845679f6ad0941e00494f73c79eff)(@embroider/core@3.5.6(@glint/template@1.3.0))(webpack@5.99.6)
       '@glimmer/component':
         specifier: ^2.0.0
         version: 2.0.0
@@ -1700,10 +1703,10 @@ importers:
         version: 1.16.13(@glint/template@1.3.0)
       '@embroider/test-setup':
         specifier: ^4.0.0
-        version: 4.0.0(@embroider/compat@3.5.6(patch_hash=db8df3cd3be93909d4ddbc1eace0a46dd23639f38332d9eb4c500c534687c7b2)(@embroider/core@3.5.6(@glint/template@1.3.0))(@glint/template@1.3.0))(@embroider/core@3.5.6(@glint/template@1.3.0))(@embroider/webpack@4.0.4(@embroider/core@3.5.6(@glint/template@1.3.0))(webpack@5.99.6))
+        version: 4.0.0(@embroider/compat@3.5.6(patch_hash=db8df3cd3be93909d4ddbc1eace0a46dd23639f38332d9eb4c500c534687c7b2)(@embroider/core@3.5.6(@glint/template@1.3.0))(@glint/template@1.3.0))(@embroider/core@3.5.6(@glint/template@1.3.0))(@embroider/webpack@4.0.4(patch_hash=3575bbdd1074ff74a26adde4a25140c197c845679f6ad0941e00494f73c79eff)(@embroider/core@3.5.6(@glint/template@1.3.0))(webpack@5.99.6))
       '@embroider/webpack':
         specifier: ^4.0.4
-        version: 4.0.4(@embroider/core@3.5.6(@glint/template@1.3.0))(webpack@5.99.6)
+        version: 4.0.4(patch_hash=3575bbdd1074ff74a26adde4a25140c197c845679f6ad0941e00494f73c79eff)(@embroider/core@3.5.6(@glint/template@1.3.0))(webpack@5.99.6)
       '@glimmer/component':
         specifier: ^2.0.0
         version: 2.0.0
@@ -2025,7 +2028,7 @@ importers:
         version: link:../runtime-common
       '@cardstack/view-transitions':
         specifier: 'catalog:'
-        version: 0.2.0(@babel/core@7.26.10)(ember-modifier@4.1.0(ember-source@5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.26.10)(@glimmer/component@2.0.0)(@glint/template@1.3.0)(rsvp@4.8.5)(webpack@5.99.6)))
+        version: 0.2.0(@babel/core@7.26.10)(ember-modifier@4.1.0(ember-source@5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.26.10)(@glimmer/component@2.0.0)(@glint/template@1.3.0)(rsvp@4.8.5)))
       '@types/lodash':
         specifier: 'catalog:'
         version: 4.17.15
@@ -2101,7 +2104,7 @@ importers:
         version: link:../runtime-common
       '@cardstack/view-transitions':
         specifier: 'catalog:'
-        version: 0.2.0(@babel/core@7.26.10)(ember-modifier@4.1.0(ember-source@5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.26.10)(@glimmer/component@2.0.0)(@glint/template@1.3.0)(rsvp@4.8.5)(webpack@5.99.6)))
+        version: 0.2.0(@babel/core@7.26.10)(ember-modifier@4.1.0(ember-source@5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.26.10)(@glimmer/component@2.0.0)(@glint/template@1.3.0)(rsvp@4.8.5)))
       '@ember/optional-features':
         specifier: ^2.0.0
         version: 2.0.0
@@ -2125,7 +2128,7 @@ importers:
         version: 1.16.13(@glint/template@1.3.0)
       '@embroider/webpack':
         specifier: ^4.0.4
-        version: 4.0.4(@embroider/core@3.5.6(@glint/template@1.3.0))(webpack@5.99.6)
+        version: 4.0.4(patch_hash=3575bbdd1074ff74a26adde4a25140c197c845679f6ad0941e00494f73c79eff)(@embroider/core@3.5.6(@glint/template@1.3.0))(webpack@5.99.6)
       '@floating-ui/dom':
         specifier: 'catalog:'
         version: 1.6.3
@@ -2461,7 +2464,7 @@ importers:
         version: 0.52.2(patch_hash=a09898c89392828a4df910a8b4b952fd774a69b779906e9fa5742cb9c05c2ecf)
       monaco-editor-webpack-plugin:
         specifier: 'catalog:'
-        version: 7.1.0(patch_hash=98cfe2a40393462942e2d29ed97efabd9ff34b697dd261ef6ed3890c7b4619c6)(monaco-editor@0.52.2(patch_hash=a09898c89392828a4df910a8b4b952fd774a69b779906e9fa5742cb9c05c2ecf))(webpack@5.99.6)
+        version: 7.1.1(monaco-editor@0.52.2(patch_hash=a09898c89392828a4df910a8b4b952fd774a69b779906e9fa5742cb9c05c2ecf))(webpack@5.99.6)
       ms:
         specifier: 'catalog:'
         version: 2.1.3
@@ -2671,6 +2674,9 @@ importers:
       '@koa/router':
         specifier: 'catalog:'
         version: 14.0.0
+      '@octokit/rest':
+        specifier: 'catalog:'
+        version: 22.0.1
       '@sentry/node':
         specifier: 'catalog:'
         version: 8.31.0
@@ -2767,6 +2773,9 @@ importers:
       fs-extra:
         specifier: 'catalog:'
         version: 11.3.0
+      glimmer-scoped-css:
+        specifier: 'catalog:'
+        version: 0.8.1
       glob:
         specifier: 'catalog:'
         version: 11.0.1
@@ -2830,6 +2839,9 @@ importers:
       stripe:
         specifier: 'catalog:'
         version: 17.2.1
+      super-fast-md5:
+        specifier: 'catalog:'
+        version: 1.0.1
       supertest:
         specifier: 'catalog:'
         version: 6.2.4
@@ -5008,8 +5020,20 @@ packages:
   '@octokit/auth-token@2.5.0':
     resolution: {integrity: sha512-r5FVUJCOLl19AxiuZD2VRZ/ORjp/4IN98Of6YJoJOkY75CIBuYfmiNHGrDwXr+aLGG55igl9QrxX3hbiXlLb+g==}
 
+  '@octokit/auth-token@6.0.0':
+    resolution: {integrity: sha512-P4YJBPdPSpWTQ1NU4XYdvHvXJJDxM6YwpS0FZHRgP7YFkdVxsWcpWGy/NVqlAA7PcPCnMacXlRm1y2PFZRWL/w==}
+    engines: {node: '>= 20'}
+
   '@octokit/core@3.6.0':
     resolution: {integrity: sha512-7RKRKuA4xTjMhY+eG3jthb3hlZCsOwg3rztWh75Xc+ShDWOfDDATWbeZpAHBNRpm4Tv9WgBMOy1zEJYXG6NJ7Q==}
+
+  '@octokit/core@7.0.6':
+    resolution: {integrity: sha512-DhGl4xMVFGVIyMwswXeyzdL4uXD5OGILGX5N8Y+f6W7LhC1Ze2poSNrkF/fedpVDHEEZ+PHFW0vL14I+mm8K3Q==}
+    engines: {node: '>= 20'}
+
+  '@octokit/endpoint@11.0.2':
+    resolution: {integrity: sha512-4zCpzP1fWc7QlqunZ5bSEjxc6yLAlRTnDwKtgXfcI/FxxGoqedDG8V2+xJ60bV2kODqcGB+nATdtap/XYq2NZQ==}
+    engines: {node: '>= 20'}
 
   '@octokit/endpoint@6.0.12':
     resolution: {integrity: sha512-lF3puPwkQWGfkMClXb4k/eUT/nZKQfxinRWJrdZaJO85Dqwo/G0yOC434Jr2ojwafWJMYqFGFa5ms4jJUgujdA==}
@@ -5017,13 +5041,38 @@ packages:
   '@octokit/graphql@4.8.0':
     resolution: {integrity: sha512-0gv+qLSBLKF0z8TKaSKTsS39scVKF9dbMxJpj3U0vC7wjNWFuIpL/z76Qe2fiuCbDRcJSavkXsVtMS6/dtQQsg==}
 
+  '@octokit/graphql@9.0.3':
+    resolution: {integrity: sha512-grAEuupr/C1rALFnXTv6ZQhFuL1D8G5y8CN04RgrO4FIPMrtm+mcZzFG7dcBm+nq+1ppNixu+Jd78aeJOYxlGA==}
+    engines: {node: '>= 20'}
+
   '@octokit/openapi-types@12.11.0':
     resolution: {integrity: sha512-VsXyi8peyRq9PqIz/tpqiL2w3w80OgVMwBHltTml3LmVvXiphgeqmY9mvBw9Wu7e0QWk/fqD37ux8yP5uVekyQ==}
+
+  '@octokit/openapi-types@27.0.0':
+    resolution: {integrity: sha512-whrdktVs1h6gtR+09+QsNk2+FO+49j6ga1c55YZudfEG+oKJVvJLQi3zkOm5JjiUXAagWK2tI2kTGKJ2Ys7MGA==}
+
+  '@octokit/plugin-paginate-rest@14.0.0':
+    resolution: {integrity: sha512-fNVRE7ufJiAA3XUrha2omTA39M6IXIc6GIZLvlbsm8QOQCYvpq/LkMNGyFlB1d8hTDzsAXa3OKtybdMAYsV/fw==}
+    engines: {node: '>= 20'}
+    peerDependencies:
+      '@octokit/core': '>=6'
 
   '@octokit/plugin-paginate-rest@2.21.3':
     resolution: {integrity: sha512-aCZTEf0y2h3OLbrgKkrfFdjRL6eSOo8komneVQJnYecAxIej7Bafor2xhuDJOIFau4pk0i/P28/XgtbyPF0ZHw==}
     peerDependencies:
       '@octokit/core': '>=2'
+
+  '@octokit/plugin-request-log@6.0.0':
+    resolution: {integrity: sha512-UkOzeEN3W91/eBq9sPZNQ7sUBvYCqYbrrD8gTbBuGtHEuycE4/awMXcYvx6sVYo7LypPhmQwwpUe4Yyu4QZN5Q==}
+    engines: {node: '>= 20'}
+    peerDependencies:
+      '@octokit/core': '>=6'
+
+  '@octokit/plugin-rest-endpoint-methods@17.0.0':
+    resolution: {integrity: sha512-B5yCyIlOJFPqUUeiD0cnBJwWJO8lkJs5d8+ze9QDP6SvfiXSz1BF+91+0MeI1d2yxgOhU/O+CvtiZ9jSkHhFAw==}
+    engines: {node: '>= 20'}
+    peerDependencies:
+      '@octokit/core': '>=6'
 
   '@octokit/plugin-rest-endpoint-methods@4.15.1':
     resolution: {integrity: sha512-4gQg4ySoW7ktKB0Mf38fHzcSffVZd6mT5deJQtpqkuPuAqzlED5AJTeW8Uk7dPRn7KaOlWcXB0MedTFJU1j4qA==}
@@ -5033,8 +5082,23 @@ packages:
   '@octokit/request-error@2.1.0':
     resolution: {integrity: sha512-1VIvgXxs9WHSjicsRwq8PlR2LR2x6DwsJAaFgzdi0JfJoGSO8mYI/cHJQ+9FbN21aa+DrgNLnwObmyeSC8Rmpg==}
 
+  '@octokit/request-error@7.1.0':
+    resolution: {integrity: sha512-KMQIfq5sOPpkQYajXHwnhjCC0slzCNScLHs9JafXc4RAJI+9f+jNDlBNaIMTvazOPLgb4BnlhGJOTbnN0wIjPw==}
+    engines: {node: '>= 20'}
+
+  '@octokit/request@10.0.7':
+    resolution: {integrity: sha512-v93h0i1yu4idj8qFPZwjehoJx4j3Ntn+JhXsdJrG9pYaX6j/XRz2RmasMUHtNgQD39nrv/VwTWSqK0RNXR8upA==}
+    engines: {node: '>= 20'}
+
   '@octokit/request@5.6.3':
     resolution: {integrity: sha512-bFJl0I1KVc9jYTe9tdGGpAMPy32dLBXXo1dS/YwSCTL/2nd9XeHsY616RE3HPXDVk+a+dBuzyz5YdlXwcDTr2A==}
+
+  '@octokit/rest@22.0.1':
+    resolution: {integrity: sha512-Jzbhzl3CEexhnivb1iQ0KJ7s5vvjMWcmRtq5aUsKmKDrRW6z3r84ngmiFKFvpZjpiU/9/S6ITPFRpn5s/3uQJw==}
+    engines: {node: '>= 20'}
+
+  '@octokit/types@16.0.0':
+    resolution: {integrity: sha512-sKq+9r1Mm4efXW1FCk7hFSeJo4QKreL/tTbR0rz/qx/r1Oa2VV83LTA/H/MuCOX7uCIJmQVRKBcbmWoySjAnSg==}
 
   '@octokit/types@6.41.0':
     resolution: {integrity: sha512-eJ2jbzjdijiL3B4PrSQaSjuF2sPEQPVCPzBvTHJD9Nz+9dw2SGH4K4xeQJ77YfTq5bRQ+bD8wT11JbeDPmxmGg==}
@@ -6697,6 +6761,9 @@ packages:
 
   before-after-hook@2.2.3:
     resolution: {integrity: sha512-NzUnlZexiaH/46WDhANlyR2bXRopNg4F/zuSA3OpZnllCUgRaOF2znDioDWrmbNVsuZk6l9pMquQB38cfBZwkQ==}
+
+  before-after-hook@4.0.0:
+    resolution: {integrity: sha512-q6tR3RPqIB1pMiTRMFcZwuG5T8vwp+vUvEG0vuI6B+Rikh5BfPp2fQ82c925FOs+b0lcFQ8CFrL+KbilfZFhOQ==}
 
   better-path-resolve@1.0.0:
     resolution: {integrity: sha512-pbnl5XzGBdrFU/wT4jqmJVPn2B6UHPBOhzMQkY/SPUPB6QtUXtmBHBIwCbXJol93mOpGMnQyP/+BB19q04xj7g==}
@@ -9016,6 +9083,9 @@ packages:
     engines: {node: '>= 10.17.0'}
     hasBin: true
 
+  fast-content-type-parse@3.0.0:
+    resolution: {integrity: sha512-ZvLdcY8P+N8mGQJahJV5G4U88CSvT1rP8ApL6uETe88MBXrBHAkZlSEySdUlyztF7ccb+Znos3TFqaepHxdhBg==}
+
   fast-deep-equal@3.1.3:
     resolution: {integrity: sha512-f3qQ9oQy9j2AhBe/H9VC91wLmKBCCU/gDOnKNAYG5hswO7BLKj09Hc5HYNz9cGI++xlpDCIgDaitVs03ATR84Q==}
 
@@ -10864,8 +10934,8 @@ packages:
   moment@2.29.4:
     resolution: {integrity: sha512-5LC9SOxjSc2HF6vO2CyuTDNivEdoz2IvyJJGj6X8DJ0eFyfszE0QiEd+iXmBvUP3WHxSjFH/vIsA0EN00cgr8w==}
 
-  monaco-editor-webpack-plugin@7.1.0:
-    resolution: {integrity: sha512-ZjnGINHN963JQkFqjjcBtn1XBtUATDZBMgNQhDQwd78w2ukRhFXAPNgWuacaQiDZsUr4h1rWv5Mv6eriKuOSzA==}
+  monaco-editor-webpack-plugin@7.1.1:
+    resolution: {integrity: sha512-WxdbFHS3Wtz4V9hzhe/Xog5hQRSMxmDLkEEYZwqMDHgJlkZo00HVFZR0j5d0nKypjTUkkygH3dDSXERLG4757A==}
     peerDependencies:
       monaco-editor: '>= 0.31.0'
       webpack: ^4.5.0 || 5.x
@@ -13125,6 +13195,9 @@ packages:
   universal-user-agent@6.0.0:
     resolution: {integrity: sha512-isyNax3wXoKaulPDZWHQqbmIx1k2tb9fb3GGDBRxCscfYV2Ch7WxPArBsFEG8s/safwXTT7H4QGhaIkTp9447w==}
 
+  universal-user-agent@7.0.3:
+    resolution: {integrity: sha512-TmnEAEAsBJVZM/AADELsK76llnwcf9vMKuPz8JflO1frO8Lchitr0fNaN9d+Ap0BjKtqWqd/J17qeDnXh8CL2A==}
+
   universalify@0.1.2:
     resolution: {integrity: sha512-rBJeI5CXAlmy1pV+617WB9J63U6XcazHHF2f2dbJix4XzpUF0RS3Zbj0FGIOCAva5P/d/GBOYaACQ1w+0azUkg==}
     engines: {node: '>= 4.0.0'}
@@ -14620,7 +14693,7 @@ snapshots:
 
   '@cardstack/requirejs-monaco-ember-polyfill@0.0.1': {}
 
-  '@cardstack/view-transitions@0.2.0(@babel/core@7.26.10)(ember-modifier@4.1.0(ember-source@5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.26.10)(@glimmer/component@2.0.0)(@glint/template@1.3.0)(rsvp@4.8.5)(webpack@5.99.6)))':
+  '@cardstack/view-transitions@0.2.0(@babel/core@7.26.10)(ember-modifier@4.1.0(ember-source@5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.26.10)(@glimmer/component@2.0.0)(@glint/template@1.3.0)(rsvp@4.8.5)))':
     dependencies:
       '@embroider/addon-shim': 1.10.2
       decorator-transforms: 2.3.0(@babel/core@7.26.10)
@@ -15088,14 +15161,14 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@embroider/test-setup@4.0.0(@embroider/compat@3.5.6(patch_hash=db8df3cd3be93909d4ddbc1eace0a46dd23639f38332d9eb4c500c534687c7b2)(@embroider/core@3.5.6(@glint/template@1.3.0))(@glint/template@1.3.0))(@embroider/core@3.5.6(@glint/template@1.3.0))(@embroider/webpack@4.0.4(@embroider/core@3.5.6(@glint/template@1.3.0))(webpack@5.99.6))':
+  '@embroider/test-setup@4.0.0(@embroider/compat@3.5.6(patch_hash=db8df3cd3be93909d4ddbc1eace0a46dd23639f38332d9eb4c500c534687c7b2)(@embroider/core@3.5.6(@glint/template@1.3.0))(@glint/template@1.3.0))(@embroider/core@3.5.6(@glint/template@1.3.0))(@embroider/webpack@4.0.4(patch_hash=3575bbdd1074ff74a26adde4a25140c197c845679f6ad0941e00494f73c79eff)(@embroider/core@3.5.6(@glint/template@1.3.0))(webpack@5.99.6))':
     dependencies:
       lodash: 4.17.21
       resolve: 1.22.10
     optionalDependencies:
       '@embroider/compat': 3.5.6(patch_hash=db8df3cd3be93909d4ddbc1eace0a46dd23639f38332d9eb4c500c534687c7b2)(@embroider/core@3.5.6(@glint/template@1.3.0))(@glint/template@1.3.0)
       '@embroider/core': 3.5.6(@glint/template@1.3.0)
-      '@embroider/webpack': 4.0.4(@embroider/core@3.5.6(@glint/template@1.3.0))(webpack@5.99.6)
+      '@embroider/webpack': 4.0.4(patch_hash=3575bbdd1074ff74a26adde4a25140c197c845679f6ad0941e00494f73c79eff)(@embroider/core@3.5.6(@glint/template@1.3.0))(webpack@5.99.6)
 
   '@embroider/util@1.13.1(@glint/environment-ember-loose@1.5.2(@glimmer/component@2.0.0)(@glint/template@1.3.0)(ember-cli-htmlbars@6.3.0)(ember-modifier@4.1.0(ember-source@5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.26.10)(@glimmer/component@2.0.0)(@glint/template@1.3.0)(rsvp@4.8.5))))(@glint/template@1.3.0)(ember-source@5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.26.10)(@glimmer/component@2.0.0)(@glint/template@1.3.0)(rsvp@4.8.5))':
     dependencies:
@@ -15109,7 +15182,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@embroider/webpack@4.0.4(@embroider/core@3.5.6(@glint/template@1.3.0))(webpack@5.99.6)':
+  '@embroider/webpack@4.0.4(patch_hash=3575bbdd1074ff74a26adde4a25140c197c845679f6ad0941e00494f73c79eff)(@embroider/core@3.5.6(@glint/template@1.3.0))(webpack@5.99.6)':
     dependencies:
       '@babel/core': 7.26.10(supports-color@8.1.1)
       '@babel/preset-env': 7.26.9(@babel/core@7.26.10)(supports-color@8.1.1)
@@ -15810,6 +15883,8 @@ snapshots:
     dependencies:
       '@octokit/types': 6.41.0
 
+  '@octokit/auth-token@6.0.0': {}
+
   '@octokit/core@3.6.0':
     dependencies:
       '@octokit/auth-token': 2.5.0
@@ -15821,6 +15896,21 @@ snapshots:
       universal-user-agent: 6.0.0
     transitivePeerDependencies:
       - encoding
+
+  '@octokit/core@7.0.6':
+    dependencies:
+      '@octokit/auth-token': 6.0.0
+      '@octokit/graphql': 9.0.3
+      '@octokit/request': 10.0.7
+      '@octokit/request-error': 7.1.0
+      '@octokit/types': 16.0.0
+      before-after-hook: 4.0.0
+      universal-user-agent: 7.0.3
+
+  '@octokit/endpoint@11.0.2':
+    dependencies:
+      '@octokit/types': 16.0.0
+      universal-user-agent: 7.0.3
 
   '@octokit/endpoint@6.0.12':
     dependencies:
@@ -15836,12 +15926,34 @@ snapshots:
     transitivePeerDependencies:
       - encoding
 
+  '@octokit/graphql@9.0.3':
+    dependencies:
+      '@octokit/request': 10.0.7
+      '@octokit/types': 16.0.0
+      universal-user-agent: 7.0.3
+
   '@octokit/openapi-types@12.11.0': {}
+
+  '@octokit/openapi-types@27.0.0': {}
+
+  '@octokit/plugin-paginate-rest@14.0.0(@octokit/core@7.0.6)':
+    dependencies:
+      '@octokit/core': 7.0.6
+      '@octokit/types': 16.0.0
 
   '@octokit/plugin-paginate-rest@2.21.3(@octokit/core@3.6.0)':
     dependencies:
       '@octokit/core': 3.6.0
       '@octokit/types': 6.41.0
+
+  '@octokit/plugin-request-log@6.0.0(@octokit/core@7.0.6)':
+    dependencies:
+      '@octokit/core': 7.0.6
+
+  '@octokit/plugin-rest-endpoint-methods@17.0.0(@octokit/core@7.0.6)':
+    dependencies:
+      '@octokit/core': 7.0.6
+      '@octokit/types': 16.0.0
 
   '@octokit/plugin-rest-endpoint-methods@4.15.1(@octokit/core@3.6.0)':
     dependencies:
@@ -15855,6 +15967,18 @@ snapshots:
       deprecation: 2.3.1
       once: 1.4.0
 
+  '@octokit/request-error@7.1.0':
+    dependencies:
+      '@octokit/types': 16.0.0
+
+  '@octokit/request@10.0.7':
+    dependencies:
+      '@octokit/endpoint': 11.0.2
+      '@octokit/request-error': 7.1.0
+      '@octokit/types': 16.0.0
+      fast-content-type-parse: 3.0.0
+      universal-user-agent: 7.0.3
+
   '@octokit/request@5.6.3':
     dependencies:
       '@octokit/endpoint': 6.0.12
@@ -15865,6 +15989,17 @@ snapshots:
       universal-user-agent: 6.0.0
     transitivePeerDependencies:
       - encoding
+
+  '@octokit/rest@22.0.1':
+    dependencies:
+      '@octokit/core': 7.0.6
+      '@octokit/plugin-paginate-rest': 14.0.0(@octokit/core@7.0.6)
+      '@octokit/plugin-request-log': 6.0.0(@octokit/core@7.0.6)
+      '@octokit/plugin-rest-endpoint-methods': 17.0.0(@octokit/core@7.0.6)
+
+  '@octokit/types@16.0.0':
+    dependencies:
+      '@octokit/openapi-types': 27.0.0
 
   '@octokit/types@6.41.0':
     dependencies:
@@ -17893,6 +18028,8 @@ snapshots:
   basic-ftp@5.0.5: {}
 
   before-after-hook@2.2.3: {}
+
+  before-after-hook@4.0.0: {}
 
   better-path-resolve@1.0.0:
     dependencies:
@@ -21620,6 +21757,8 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
+  fast-content-type-parse@3.0.0: {}
+
   fast-deep-equal@3.1.3: {}
 
   fast-diff@1.3.0: {}
@@ -23771,7 +23910,7 @@ snapshots:
 
   moment@2.29.4: {}
 
-  monaco-editor-webpack-plugin@7.1.0(patch_hash=98cfe2a40393462942e2d29ed97efabd9ff34b697dd261ef6ed3890c7b4619c6)(monaco-editor@0.52.2(patch_hash=a09898c89392828a4df910a8b4b952fd774a69b779906e9fa5742cb9c05c2ecf))(webpack@5.99.6):
+  monaco-editor-webpack-plugin@7.1.1(monaco-editor@0.52.2(patch_hash=a09898c89392828a4df910a8b4b952fd774a69b779906e9fa5742cb9c05c2ecf))(webpack@5.99.6):
     dependencies:
       loader-utils: 2.0.4
       monaco-editor: 0.52.2(patch_hash=a09898c89392828a4df910a8b4b952fd774a69b779906e9fa5742cb9c05c2ecf)
@@ -26389,6 +26528,8 @@ snapshots:
       '@types/unist': 2.0.11
 
   universal-user-agent@6.0.0: {}
+
+  universal-user-agent@7.0.3: {}
 
   universalify@0.1.2: {}
 

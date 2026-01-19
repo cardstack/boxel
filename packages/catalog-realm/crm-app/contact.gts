@@ -26,7 +26,7 @@ import { CrmApp } from './crm-app';
 import { Company } from './company';
 import { StatusTagField } from './contact-status-tag';
 
-import { ContactLinkField } from '../fields/contact-link';
+import ContactLinkField from '../fields/contact-link';
 
 export class SocialLinkField extends ContactLinkField {
   static displayName = 'social-link';
