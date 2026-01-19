@@ -274,7 +274,7 @@ class Isolated extends Component<typeof ModelUpdater> {
           workingModelCard.canonicalSlug = apiModel.canonical_slug;
           workingModelCard.name = apiModel.name;
           workingModelCard.created = apiModel.created;
-          workingModelCard.description = apiModel.description || '';
+          workingModelCard.cardDescription = apiModel.description || '';
           workingModelCard.contextLength = apiModel.context_length;
 
           if (apiModel.pricing) {
@@ -346,7 +346,7 @@ class Isolated extends Component<typeof ModelUpdater> {
                 canonicalSlug: workingModelCard.canonicalSlug,
                 name: workingModelCard.name,
                 created: workingModelCard.created,
-                description: workingModelCard.description,
+                description: workingModelCard.cardDescription,
                 pricing: workingModelCard.pricing
                   ? {
                       prompt: workingModelCard.pricing.prompt,
@@ -477,7 +477,7 @@ class Isolated extends Component<typeof ModelUpdater> {
   <template>
     <article class='model-updater'>
       <header class='header'>
-        <h1>{{if @model.title @model.title 'OpenRouter Model Updater'}}</h1>
+        <h1>{{if @model.cardTitle @model.cardTitle 'OpenRouter Model Updater'}}</h1>
         <p class='subtitle'>Fetch and update OpenRouter model data</p>
       </header>
 
@@ -879,9 +879,9 @@ export class ModelUpdater extends CardDef {
     description: 'Status of the last update operation',
   });
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: ModelUpdater) {
-      return this.cardInfo?.title || 'OpenRouter Model Updater';
+      return this.cardInfo?.name || 'OpenRouter Model Updater';
     },
   });
   static isolated = Isolated;

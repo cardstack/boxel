@@ -16,14 +16,14 @@
         }
       },
       "details": [
-        "Hilton for Business members can get statement credits of up to $50 quarterly on eligible purchases made directly with Hilton. Enrollment required. If you do not already have a Hilton for Business account, you will be registered for one at the time you enroll in the benefit.‡"
+        "Hilton for Business members can get statement credits of up to $50 quarterly on eligible purchases made directly with Hilton. Enrollment required. If you do not already have a Hilton for Business account, you will be registered for one at the time you enroll in the benefit.\u2021"
       ],
       "partner": "",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": null
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null
       },
       "minSpend": {
         "amount": 50,

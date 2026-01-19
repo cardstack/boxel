@@ -152,7 +152,7 @@ export default class CreateSpecCommand extends HostBaseCommand<
     createIfExists: boolean = false,
     autoGenerateReadme: boolean = false,
   ): Promise<CreateSpecResult> {
-    const title = this.getSpecTitle(declaration, codeRef.name);
+    const cardTitle = this.getSpecTitle(declaration, codeRef.name);
     const specType = new SpecTypeGuesser(declaration).type;
 
     const ResolvedSpecClass = await getSpecClassFromDeclaration(
@@ -177,14 +177,14 @@ export default class CreateSpecCommand extends HostBaseCommand<
         targetRealm,
       ]);
       if (existingSpecs.length > 0) {
-        console.warn(`Spec already exists for ${title}, skipping`);
+        console.warn(`Spec already exists for ${cardTitle}, skipping`);
         let savedSpec = existingSpecs[0] as Spec;
         createdSpecRes = { spec: savedSpec, new: false };
       } else {
         let spec = new ResolvedSpecClass({
           specType,
           ref: codeRef,
-          title,
+          cardTitle,
         }) as Spec;
         let savedSpec = (await this.store.add<Spec>(spec, {
           realm: targetRealm,
@@ -195,7 +195,7 @@ export default class CreateSpecCommand extends HostBaseCommand<
       let spec = new ResolvedSpecClass({
         specType,
         ref: codeRef,
-        title,
+        cardTitle,
       }) as Spec;
 
       let savedSpec = (await this.store.add<Spec>(spec, {

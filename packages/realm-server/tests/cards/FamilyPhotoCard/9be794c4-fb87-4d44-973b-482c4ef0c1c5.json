@@ -1,7 +1,29 @@
 {
   "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "FamilyPhotoCard",
+        "module": "../family_photo_card"
+      }
+    },
     "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "notes": null,
+        "summary": null,
+        "cardThumbnailURL": null
+      },
+      "photoUrl": null,
+      "widthInches": null,
+      "heightInches": null
+    },
     "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
       "taggedPeople.0": {
         "links": {
           "self": "../PersonCard/936d9784-5e80-4fb5-88e2-8d29a07d07db"
@@ -16,12 +38,6 @@
         "links": {
           "self": "../PersonCard/50812f7d-fa48-46ed-a45d-548cb254cf48"
         }
-      }
-    },
-    "meta": {
-      "adoptsFrom": {
-        "module": "../family_photo_card",
-        "name": "FamilyPhotoCard"
       }
     }
   }

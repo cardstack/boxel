@@ -18,8 +18,8 @@
       },
       "name": "Build Kanban Board Component",
       "details": "Implement drag and drop functionality using ember-modifier-drag-and-drop:\n\n- Install addon and implement TypeScript interfaces for events/data transfer\n- Create reusable drag/drop modifiers with visual feedback and preview\n- Add validation logic and write tests",
-      "description": "",
-      "thumbnailURL": null
+      "cardDescription": "",
+      "cardThumbnailURL": null
     },
     "relationships": {
       "project": {

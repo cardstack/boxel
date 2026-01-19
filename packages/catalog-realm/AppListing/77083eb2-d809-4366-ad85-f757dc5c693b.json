@@ -16,9 +16,9 @@
       "summary": "A comprehensive event ticket management system for tracking and managing event attendance with QR codes, pricing, and venue information.",
       "cardInfo": {
         "notes": null,
-        "title": "Event Ticket",
-        "description": "Create and manage event tickets with built-in QR codes, pricing, seating sections, and attendance tracking. Perfect for concerts, conferences, workshops, and any ticketed events.",
-        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/event-ticket-listing/thumbnail.png"
+        "name": "Event Ticket",
+        "summary": "Create and manage event tickets with built-in QR codes, pricing, seating sections, and attendance tracking. Perfect for concerts, conferences, workshops, and any ticketed events.",
+        "cardThumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/event-ticket-listing/thumbnail.png"
       }
     },
     "relationships": {

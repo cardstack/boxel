@@ -6,7 +6,7 @@
       "canonicalSlug": "z-ai/glm-4-32b-0414",
       "name": "Z.AI: GLM 4 32B ",
       "created": 1753376617,
-      "description": "GLM 4 32B is a cost-effective foundation language model.\n\nIt can efficiently perform complex tasks and has significantly enhanced capabilities in tool use, online search, and code-related intelligent tasks.\n\nIt is made by the same lab behind the thudm models.",
+      "cardDescription": "GLM 4 32B is a cost-effective foundation language model.\n\nIt can efficiently perform complex tasks and has significantly enhanced capabilities in tool use, online search, and code-related intelligent tasks.\n\nIt is made by the same lab behind the thudm models.",
       "pricing": {
         "prompt": "0.0000001",
         "completion": "0.0000001",
@@ -44,9 +44,9 @@
         "frequency_penalty": null
       },
       "cardInfo": {
-        "title": null,
-        "description": null,
-        "thumbnailURL": null,
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
         "notes": null
       }
     },

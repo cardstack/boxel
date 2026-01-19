@@ -8,7 +8,7 @@ export class Seller extends CardDef {
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <@fields.title />
+      <@fields.cardTitle />
     </template>
   };
 

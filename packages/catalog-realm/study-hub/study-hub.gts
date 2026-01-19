@@ -1836,7 +1836,7 @@ class StudyHubEmbedded extends Component<typeof StudyHub> {
                     <span class='goal-title'>{{if
                         goal.goalTitle
                         goal.goalTitle
-                        (if goal.title goal.title 'Untitled Goal')
+                        (if goal.cardTitle goal.cardTitle 'Untitled Goal')
                       }}</span>
                     <span class='goal-progress'>{{if
                         goal.progress
@@ -2009,7 +2009,7 @@ export class StudyHub extends CardDef {
   @field annotations = linksToMany(() => AnnotationCard); // ¹²¹ Dynamic annotation cards
 
   // ²¹ Computed title
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: StudyHub) {
       try {
         return this.hubName ?? 'My Study Hub';
@@ -2329,7 +2329,7 @@ export class StudyHub extends CardDef {
                         <span class='goal-name'>{{if
                             goal.goalTitle
                             goal.goalTitle
-                            (if goal.title goal.title 'Untitled Goal')
+                            (if goal.cardTitle goal.cardTitle 'Untitled Goal')
                           }}</span>
                         <span class='goal-progress'>{{if
                             goal.progress

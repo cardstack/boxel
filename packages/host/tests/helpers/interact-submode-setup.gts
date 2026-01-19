@@ -83,7 +83,7 @@ export function setupInteractSubmodeTests(
       @field name = contains(StringField);
       @field favoriteTreat = contains(StringField);
 
-      @field title = contains(StringField, {
+      @field cardTitle = contains(StringField, {
         computeVia: function (this: Pet) {
           return this.name;
         },
@@ -98,15 +98,15 @@ export function setupInteractSubmodeTests(
       static isolated = class Isolated extends Component<typeof this> {
         <template>
           <GridContainer class='container'>
-            <h2 data-test-pet-title><@fields.title /></h2>
+            <h2 data-test-pet-title><@fields.cardTitle /></h2>
             <div>
               <div>Favorite Treat: <@fields.favoriteTreat /></div>
               <div data-test-editable-meta>
                 {{#if @canEdit}}
-                  <@fields.title />
+                  <@fields.cardTitle />
                   is editable.
                 {{else}}
-                  <@fields.title />
+                  <@fields.cardTitle />
                   is NOT editable.
                 {{/if}}
               </div>
@@ -125,7 +125,7 @@ export function setupInteractSubmodeTests(
       static displayName = 'Shipping Info';
       @field preferredCarrier = contains(StringField);
       @field remarks = contains(StringField);
-      @field title = contains(StringField, {
+      @field cardTitle = contains(StringField, {
         computeVia: function (this: ShippingInfo) {
           return this.preferredCarrier;
         },
@@ -193,7 +193,7 @@ export function setupInteractSubmodeTests(
           return this.firstName[0];
         },
       });
-      @field title = contains(StringField, {
+      @field cardTitle = contains(StringField, {
         computeVia: function (this: Person) {
           return this.firstName;
         },
@@ -279,12 +279,12 @@ export function setupInteractSubmodeTests(
 
     let generateSpec = (
       fileName: string,
-      title: string,
+      cardTitle: string,
       ref: { module: string; name: string },
     ) => ({
       [`${fileName}.json`]: new Spec({
-        title,
-        description: `Spec for ${title}`,
+        title: cardTitle,
+        cardDescription: `Spec for ${cardTitle}`,
         specType: 'card',
         ref,
       }),
@@ -316,8 +316,8 @@ export function setupInteractSubmodeTests(
         'README.txt': `Hello World`,
         'FileLinkCard/notes.txt': 'Hello from a file link',
         'person-entry.json': new Spec({
-          title: 'Person Card',
-          description: 'Spec for Person Card',
+          cardTitle: 'Person Card',
+          cardDescription: 'Spec for Person Card',
           specType: 'card',
           ref: {
             module: `${testRealmURL}person`,
@@ -325,8 +325,8 @@ export function setupInteractSubmodeTests(
           },
         }),
         'pet-entry.json': new Spec({
-          title: 'Pet Card',
-          description: 'Spec for Pet Card',
+          cardTitle: 'Pet Card',
+          cardDescription: 'Spec for Pet Card',
           specType: 'card',
           ref: {
             module: `${testRealmURL}pet`,
@@ -335,8 +335,8 @@ export function setupInteractSubmodeTests(
         }),
         ...catalogEntries,
         'puppy-entry.json': new Spec({
-          title: 'Puppy Card',
-          description: 'Spec for Puppy Card',
+          cardTitle: 'Puppy Card',
+          cardDescription: 'Spec for Puppy Card',
           specType: 'card',
           ref: {
             module: `${testRealmURL}pet`,

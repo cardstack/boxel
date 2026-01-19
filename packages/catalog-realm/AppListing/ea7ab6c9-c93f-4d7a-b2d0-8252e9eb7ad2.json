@@ -15,9 +15,9 @@
       "summary": "A comprehensive music album management application for organizing and discovering your music collection",
       "cardInfo": {
         "notes": null,
-        "title": "Music Album Manager",
-        "description": "",
-        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/music-album-listing/thumbnail.png"
+        "name": "Music Album Manager",
+        "summary": "",
+        "cardThumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/music-album-listing/thumbnail.png"
       }
     },
     "relationships": {

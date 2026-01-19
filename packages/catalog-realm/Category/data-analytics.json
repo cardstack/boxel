@@ -11,9 +11,9 @@
       "name": "Data & Analytics",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": "Data analysis, machine learning models, statistical analysis, data visualization, and database management.",
-        "thumbnailURL": null
+        "name": null,
+        "summary": "Data analysis, machine learning models, statistical analysis, data visualization, and database management.",
+        "cardThumbnailURL": null
       }
     },
     "relationships": {

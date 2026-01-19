@@ -262,7 +262,7 @@ export default class FileDefManagerImpl
         const contentHash = await this.getContentHash(content);
         let fileDef = this.fileAPI.createFileDef({
           sourceUrl: entry.card.id,
-          name: entry.card.title,
+          name: entry.card.cardTitle,
           contentType: SupportedMimeType.CardJson,
           contentHash,
         });

@@ -121,7 +121,7 @@ export class Post extends CardDef {
   @field content = contains(TextAreaPlaceholderField);
   @field createdAt = contains(DatetimeField);
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: Post) {
       const preview = this.content?.substring(0, 50) || 'New Post';
       return preview.length > 50 ? preview + '...' : preview;

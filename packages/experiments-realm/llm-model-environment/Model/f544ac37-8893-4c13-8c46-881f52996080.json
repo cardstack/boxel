@@ -5,8 +5,8 @@
       "modelId": "deepseek/deepseek-chat-v3-0324",
       "modelName": "DeepSeek V3 0324",
       "displayName": "DeepSeek V3 0324",
-      "description": null,
-      "thumbnailURL": null
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "meta": {
       "adoptsFrom": {

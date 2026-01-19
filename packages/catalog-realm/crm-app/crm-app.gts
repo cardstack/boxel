@@ -580,9 +580,9 @@ class CrmAppTemplate extends Component<typeof CrmApp> {
     >
       <:sidebar>
         <TitleGroup
-          @title={{@model.title}}
-          @tagline={{@model.description}}
-          @thumbnailURL={{@model.thumbnailURL}}
+          @title={{@model.cardTitle}}
+          @tagline={{@model.cardDescription}}
+          @thumbnailURL={{@model.cardThumbnailURL}}
           @element='header'
           aria-label='Sidebar Header'
         />

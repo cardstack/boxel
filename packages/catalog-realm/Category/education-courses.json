@@ -11,9 +11,9 @@
       "name": "Education & Courses",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": "Online courses, formal education, certification programs, academic progress tracking, and learning schedule management.",
-        "thumbnailURL": null
+        "name": null,
+        "summary": "Online courses, formal education, certification programs, academic progress tracking, and learning schedule management.",
+        "cardThumbnailURL": null
       }
     },
     "relationships": {

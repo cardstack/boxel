@@ -187,9 +187,9 @@ module('Acceptance | theme-card-test', function (hooks) {
             type: 'card',
             attributes: {
               cardInfo: {
-                title: 'Starry Night',
-                description: 'A celestial theme',
-                thumbnailURL:
+                name: 'Starry Night',
+                summmary: 'A celestial theme',
+                cardThumbnailURL:
                   'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?q=80&w=400&auto=format&fit=crop',
               },
               cssImports: [
@@ -215,10 +215,10 @@ module('Acceptance | theme-card-test', function (hooks) {
               cardInfo: {
                 notes:
                   'Color palette extracted from the famous painting: deep Prussian blue (#0a0f23), golden yellow (#ffd700), warm amber (#ffb347), and creamy highlights (#f4f1e8). Uses elegant serif fonts to match the artistic, classical nature of the inspiration.',
-                title: 'Starry Night',
-                description:
+                name: 'Starry Night',
+                summary:
                   "A celestial theme inspired by Van Gogh's masterpiece, featuring deep midnight blues swirling with golden yellows and warm amber accents.",
-                thumbnailURL:
+                cardThumbnailURL:
                   'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?q=80&w=400&auto=format&fit=crop',
               },
               styleName: 'Starry Night',
@@ -260,8 +260,8 @@ module('Acceptance | theme-card-test', function (hooks) {
             type: 'card',
             attributes: {
               cardInfo: {
-                title: 'Soft Pop',
-                description: 'A theme with soft color pops',
+                name: 'Soft Pop',
+                summary: 'A theme with soft color pops',
               },
             },
           },

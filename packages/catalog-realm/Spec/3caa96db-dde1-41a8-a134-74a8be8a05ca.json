@@ -9,10 +9,10 @@
       },
       "specType": "card",
       "containedExamples": [],
-      "title": "Tournament",
-      "description": null,
+      "cardTitle": "Tournament",
+      "cardDescription": null,
       "cardInfo": {},
-      "thumbnailURL": null
+      "cardThumbnailURL": null
     },
     "relationships": {
       "linkedExamples": {

@@ -4,7 +4,7 @@
     "attributes": {
       "firstName": "Robert",
       "lastName": "Fields",
-      "bio": "Robert Fields has over a decade of experience dissecting the evolving landscape of speculative cinema. Known for incisive commentary and a nuanced appreciation of narrative complexity, Fields’ insights have appeared in numerous niche publications and festival panels, shaping discussions on storytelling’s future frontiers.",
+      "bio": "Robert Fields has over a decade of experience dissecting the evolving landscape of speculative cinema. Known for incisive commentary and a nuanced appreciation of narrative complexity, Fields\u2019 insights have appeared in numerous niche publications and festival panels, shaping discussions on storytelling\u2019s future frontiers.",
       "fullBio": null,
       "quote": null,
       "contactLinks": [
@@ -28,8 +28,8 @@
         "width": null
       },
       "cardInfo": {
-        "description": "Senior Film Critic & Cultural Commentator",
-        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/portraits/photo-1512485694743-9c9538b4e6e0.jpeg"
+        "summary": "Senior Film Critic & Cultural Commentator",
+        "cardThumbnailURL": "https://boxel-images.boxel.ai/app-assets/portraits/photo-1512485694743-9c9538b4e6e0.jpeg"
       }
     },
     "relationships": {

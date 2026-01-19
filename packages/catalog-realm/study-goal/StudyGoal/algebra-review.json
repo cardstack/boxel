@@ -11,9 +11,9 @@
       "subject": "Mathematics",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": null
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null
       },
       "priority": "high",
       "progress": 75,
@@ -21,7 +21,7 @@
       "goalTitle": "Linear Algebra Review",
       "targetDate": "2025-01-20",
       "completedAt": null,
-      "description": "Complete comprehensive review of linear algebra concepts before starting ML course.",
+      "cardDescription": "Complete comprehensive review of linear algebra concepts before starting ML course.",
       "isCompleted": false,
       "actualTimeSpent": null,
       "studyTimeEstimate": null

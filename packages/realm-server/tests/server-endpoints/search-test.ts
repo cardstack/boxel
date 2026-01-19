@@ -42,7 +42,7 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
           type: 'card',
           attributes: {
             cardInfo: {
-              title: 'Shared Card',
+              name: 'Shared Card',
             },
           },
           meta: {
@@ -58,7 +58,7 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
           type: 'card',
           attributes: {
             cardInfo: {
-              title: 'Other Card',
+              name: 'Other Card',
             },
           },
           meta: {
@@ -152,7 +152,7 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
         filter: {
           on: baseCardRef,
           eq: {
-            title: 'Shared Card',
+            cardTitle: 'Shared Card',
           },
         },
       };
@@ -195,7 +195,7 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
         filter: {
           on: baseCardRef,
           eq: {
-            title: 'Shared Card',
+            cardTitle: 'Shared Card',
           },
         },
       };
@@ -225,7 +225,7 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
         filter: {
           on: baseCardRef,
           eq: {
-            title: 'Shared Card',
+            cardTitle: 'Shared Card',
           },
         },
       };
@@ -256,7 +256,7 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
         filter: {
           on: baseCardRef,
           eq: {
-            title: 'Test Card',
+            cardTitle: 'Test Card',
           },
         },
       };
@@ -283,7 +283,7 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
         filter: {
           on: baseCardRef,
           eq: {
-            title: 'Test Card',
+            cardTitle: 'Test Card',
           },
         },
       };
@@ -329,7 +329,7 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
         filter: {
           on: baseCardRef,
           eq: {
-            title: 'Test Card',
+            cardTitle: 'Test Card',
           },
         },
       };

@@ -2,8 +2,8 @@
   "data": {
     "type": "card",
     "attributes": {
-      "title": "Sprint Planner",
-      "description": "Spec for Sprint Planner App card",
+      "cardTitle": "Sprint Planner",
+      "cardDescription": "Spec for Sprint Planner App card",
       "specType": "app",
       "ref": {
         "module": "../sprint-planner",

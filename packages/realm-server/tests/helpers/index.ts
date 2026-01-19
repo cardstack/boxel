@@ -1275,9 +1275,9 @@ export function createJWT(
 
 export const cardInfo = {
   notes: null,
-  title: null,
-  description: null,
-  thumbnailURL: null,
+  name: null,
+  summary: null,
+  cardThumbnailURL: null,
 };
 
 export const cardDefinition: Definition['fields'] = {
@@ -1290,7 +1290,7 @@ export const cardDefinition: Definition['fields'] = {
     },
     isPrimitive: true,
   },
-  title: {
+  cardTitle: {
     type: 'contains',
     isComputed: true,
     fieldOrCard: {
@@ -1299,7 +1299,7 @@ export const cardDefinition: Definition['fields'] = {
     },
     isPrimitive: true,
   },
-  description: {
+  cardDescription: {
     type: 'contains',
     isComputed: true,
     fieldOrCard: {
@@ -1308,7 +1308,7 @@ export const cardDefinition: Definition['fields'] = {
     },
     isPrimitive: true,
   },
-  thumbnailURL: {
+  cardThumbnailURL: {
     type: 'contains',
     isComputed: true,
     fieldOrCard: {
@@ -1326,7 +1326,7 @@ export const cardDefinition: Definition['fields'] = {
     },
     isPrimitive: false,
   },
-  'cardInfo.title': {
+  'cardInfo.name': {
     type: 'contains',
     isComputed: false,
     fieldOrCard: {
@@ -1335,7 +1335,7 @@ export const cardDefinition: Definition['fields'] = {
     },
     isPrimitive: true,
   },
-  'cardInfo.description': {
+  'cardInfo.summary': {
     type: 'contains',
     isComputed: false,
     fieldOrCard: {
@@ -1344,7 +1344,7 @@ export const cardDefinition: Definition['fields'] = {
     },
     isPrimitive: true,
   },
-  'cardInfo.thumbnailURL': {
+  'cardInfo.cardThumbnailURL': {
     type: 'contains',
     isComputed: false,
     fieldOrCard: {
@@ -1380,7 +1380,7 @@ export const cardDefinition: Definition['fields'] = {
     },
     isPrimitive: true,
   },
-  'cardInfo.theme.title': {
+  'cardInfo.theme.cardTitle': {
     type: 'contains',
     isComputed: true,
     fieldOrCard: {
@@ -1389,7 +1389,7 @@ export const cardDefinition: Definition['fields'] = {
     },
     isPrimitive: true,
   },
-  'cardInfo.theme.description': {
+  'cardInfo.theme.cardDescription': {
     type: 'contains',
     isComputed: true,
     fieldOrCard: {
@@ -1398,7 +1398,7 @@ export const cardDefinition: Definition['fields'] = {
     },
     isPrimitive: true,
   },
-  'cardInfo.theme.thumbnailURL': {
+  'cardInfo.theme.cardThumbnailURL': {
     type: 'contains',
     isComputed: true,
     fieldOrCard: {
@@ -1416,7 +1416,7 @@ export const cardDefinition: Definition['fields'] = {
     },
     isPrimitive: false,
   },
-  'cardInfo.theme.cardInfo.title': {
+  'cardInfo.theme.cardInfo.name': {
     type: 'contains',
     isComputed: false,
     fieldOrCard: {
@@ -1425,7 +1425,7 @@ export const cardDefinition: Definition['fields'] = {
     },
     isPrimitive: true,
   },
-  'cardInfo.theme.cardInfo.description': {
+  'cardInfo.theme.cardInfo.summary': {
     type: 'contains',
     isComputed: false,
     fieldOrCard: {
@@ -1434,7 +1434,7 @@ export const cardDefinition: Definition['fields'] = {
     },
     isPrimitive: true,
   },
-  'cardInfo.theme.cardInfo.thumbnailURL': {
+  'cardInfo.theme.cardInfo.cardThumbnailURL': {
     type: 'contains',
     isComputed: false,
     fieldOrCard: {
@@ -1488,7 +1488,7 @@ export const cardDefinition: Definition['fields'] = {
     },
     isPrimitive: true,
   },
-  'cardInfo.theme.cardInfo.theme.title': {
+  'cardInfo.theme.cardInfo.theme.cardTitle': {
     type: 'contains',
     isComputed: true,
     fieldOrCard: {
@@ -1506,7 +1506,7 @@ export const cardDefinition: Definition['fields'] = {
     },
     isPrimitive: false,
   },
-  'cardInfo.theme.cardInfo.theme.cardInfo.title': {
+  'cardInfo.theme.cardInfo.theme.cardInfo.name': {
     type: 'contains',
     isComputed: false,
     fieldOrCard: {
@@ -1515,7 +1515,7 @@ export const cardDefinition: Definition['fields'] = {
     },
     isPrimitive: true,
   },
-  'cardInfo.theme.cardInfo.theme.cardInfo.description': {
+  'cardInfo.theme.cardInfo.theme.cardInfo.summary': {
     type: 'contains',
     isComputed: false,
     fieldOrCard: {
@@ -1524,7 +1524,7 @@ export const cardDefinition: Definition['fields'] = {
     },
     isPrimitive: true,
   },
-  'cardInfo.theme.cardInfo.theme.cardInfo.thumbnailURL': {
+  'cardInfo.theme.cardInfo.theme.cardInfo.cardThumbnailURL': {
     type: 'contains',
     isComputed: false,
     fieldOrCard: {
@@ -1542,7 +1542,7 @@ export const cardDefinition: Definition['fields'] = {
     },
     isPrimitive: true,
   },
-  'cardInfo.theme.cardInfo.theme.description': {
+  'cardInfo.theme.cardInfo.theme.cardDescription': {
     type: 'contains',
     isComputed: true,
     fieldOrCard: {
@@ -1569,7 +1569,7 @@ export const cardDefinition: Definition['fields'] = {
     },
     isPrimitive: true,
   },
-  'cardInfo.theme.cardInfo.theme.thumbnailURL': {
+  'cardInfo.theme.cardInfo.theme.cardThumbnailURL': {
     type: 'contains',
     isComputed: true,
     fieldOrCard: {
@@ -1596,7 +1596,7 @@ export const cardDefinition: Definition['fields'] = {
     },
     isPrimitive: true,
   },
-  'cardInfo.theme.cardInfo.theme.cardInfo.theme.title': {
+  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardTitle': {
     type: 'contains',
     isComputed: true,
     fieldOrCard: {
@@ -1614,7 +1614,7 @@ export const cardDefinition: Definition['fields'] = {
     },
     isPrimitive: false,
   },
-  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.title': {
+  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.name': {
     type: 'contains',
     isComputed: false,
     fieldOrCard: {
@@ -1623,7 +1623,7 @@ export const cardDefinition: Definition['fields'] = {
     },
     isPrimitive: true,
   },
-  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.description': {
+  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.summary': {
     type: 'contains',
     isComputed: false,
     fieldOrCard: {
@@ -1632,7 +1632,7 @@ export const cardDefinition: Definition['fields'] = {
     },
     isPrimitive: true,
   },
-  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.thumbnailURL': {
+  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.cardThumbnailURL': {
     type: 'contains',
     isComputed: false,
     fieldOrCard: {
@@ -1650,7 +1650,7 @@ export const cardDefinition: Definition['fields'] = {
     },
     isPrimitive: true,
   },
-  'cardInfo.theme.cardInfo.theme.cardInfo.theme.description': {
+  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardDescription': {
     type: 'contains',
     isComputed: true,
     fieldOrCard: {
@@ -1677,7 +1677,7 @@ export const cardDefinition: Definition['fields'] = {
     },
     isPrimitive: true,
   },
-  'cardInfo.theme.cardInfo.theme.cardInfo.theme.thumbnailURL': {
+  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardThumbnailURL': {
     type: 'contains',
     isComputed: true,
     fieldOrCard: {
@@ -1704,7 +1704,7 @@ export const cardDefinition: Definition['fields'] = {
     },
     isPrimitive: true,
   },
-  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.title': {
+  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardTitle': {
     type: 'contains',
     isComputed: true,
     fieldOrCard: {
@@ -1722,7 +1722,16 @@ export const cardDefinition: Definition['fields'] = {
     },
     isPrimitive: false,
   },
-  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.title':
+  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.name': {
+    type: 'contains',
+    isComputed: false,
+    fieldOrCard: {
+      name: 'StringField',
+      module: 'https://cardstack.com/base/card-api',
+    },
+    isPrimitive: true,
+  },
+  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.summary':
     {
       type: 'contains',
       isComputed: false,
@@ -1732,17 +1741,7 @@ export const cardDefinition: Definition['fields'] = {
       },
       isPrimitive: true,
     },
-  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.description':
-    {
-      type: 'contains',
-      isComputed: false,
-      fieldOrCard: {
-        name: 'StringField',
-        module: 'https://cardstack.com/base/card-api',
-      },
-      isPrimitive: true,
-    },
-  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.thumbnailURL':
+  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.cardThumbnailURL':
     {
       type: 'contains',
       isComputed: false,
@@ -1752,15 +1751,16 @@ export const cardDefinition: Definition['fields'] = {
       },
       isPrimitive: true,
     },
-  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.description': {
-    type: 'contains',
-    isComputed: true,
-    fieldOrCard: {
-      name: 'StringField',
-      module: 'https://cardstack.com/base/card-api',
+  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardDescription':
+    {
+      type: 'contains',
+      isComputed: true,
+      fieldOrCard: {
+        name: 'StringField',
+        module: 'https://cardstack.com/base/card-api',
+      },
+      isPrimitive: true,
     },
-    isPrimitive: true,
-  },
   'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.cssVariables': {
     type: 'contains',
     isComputed: false,
@@ -1779,15 +1779,16 @@ export const cardDefinition: Definition['fields'] = {
     },
     isPrimitive: true,
   },
-  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.thumbnailURL': {
-    type: 'contains',
-    isComputed: true,
-    fieldOrCard: {
-      name: 'MaybeBase64Field',
-      module: 'https://cardstack.com/base/card-api',
+  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardThumbnailURL':
+    {
+      type: 'contains',
+      isComputed: true,
+      fieldOrCard: {
+        name: 'MaybeBase64Field',
+        module: 'https://cardstack.com/base/card-api',
+      },
+      isPrimitive: true,
     },
-    isPrimitive: true,
-  },
   'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme':
     {
       type: 'linksTo',

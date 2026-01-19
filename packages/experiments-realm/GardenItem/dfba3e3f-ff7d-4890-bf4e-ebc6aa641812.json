@@ -5,8 +5,8 @@
       "gardenItemId": "prairie-smoke",
       "name": "Prairie Smoke",
       "symbol": "F",
-      "description": null,
-      "thumbnailURL": null
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "meta": {
       "adoptsFrom": {

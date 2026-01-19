@@ -3,7 +3,7 @@
     "type": "card",
     "attributes": {
       "playlistName": "Chill Vibes",
-      "description": "Perfect background music for working, studying, or relaxing. Smooth beats and mellow tones.",
+      "cardDescription": "Perfect background music for working, studying, or relaxing. Smooth beats and mellow tones.",
       "coverImageUrl": "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=300&h=300&fit=crop&crop=center",
       "songCount": 3,
       "duration": "10m 39s",
@@ -18,7 +18,7 @@
       "tags": "chill, ambient, focus, study",
       "averageEnergy": 4,
       "averageDanceability": 3,
-      "title": "Chill Vibes"
+      "cardTitle": "Chill Vibes"
     },
     "relationships": {
       "songs.0": {

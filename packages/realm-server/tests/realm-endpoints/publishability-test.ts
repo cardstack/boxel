@@ -129,7 +129,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
               data: {
                 type: 'card',
                 attributes: {
-                  title: 'Broken',
+                  cardTitle: 'Broken',
                 },
                 meta: {
                   adoptsFrom: {

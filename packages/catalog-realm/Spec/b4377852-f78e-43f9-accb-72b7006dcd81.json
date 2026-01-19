@@ -10,16 +10,16 @@
       "specType": "field",
       "containedExamples": [
         {
-          "title": null,
+          "cardTitle": null,
           "url": null,
-          "description": null,
+          "cardDescription": null,
           "backgroundColor": null,
           "textColor": null
         }
       ],
-      "title": "LinkField",
-      "description": null,
-      "thumbnailURL": null
+      "cardTitle": "LinkField",
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "relationships": {
       "linkedExamples": {

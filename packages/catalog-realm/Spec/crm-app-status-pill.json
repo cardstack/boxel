@@ -9,9 +9,9 @@
       },
       "specType": "component",
       "containedExamples": [],
-      "title": "Status Pill",
-      "description": "Spec for Status Pill component",
-      "thumbnailURL": null
+      "cardTitle": "Status Pill",
+      "cardDescription": "Spec for Status Pill component",
+      "cardThumbnailURL": null
     },
     "relationships": {},
     "meta": {

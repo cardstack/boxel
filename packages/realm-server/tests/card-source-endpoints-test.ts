@@ -779,9 +779,9 @@ module(basename(__filename), function () {
             assert.deepEqual(json.data.attributes, {
               field1: 'a',
               field2a: null,
-              title: 'Untitled Card',
-              description: null,
-              thumbnailURL: null,
+              cardTitle: 'Untitled Card',
+              cardDescription: null,
+              cardThumbnailURL: null,
               cardInfo,
             });
           }
@@ -822,9 +822,9 @@ module(basename(__filename), function () {
             assert.deepEqual(json.data.attributes, {
               field1: 'a',
               field2a: 'c',
-              title: 'Untitled Card',
-              description: null,
-              thumbnailURL: null,
+              cardTitle: 'Untitled Card',
+              cardDescription: null,
+              cardThumbnailURL: null,
               cardInfo,
             });
           }
@@ -881,9 +881,9 @@ module(basename(__filename), function () {
             assert.deepEqual(json.data.attributes, {
               field1: 'a',
               field2a: 'c',
-              title: 'Untitled Card',
-              description: null,
-              thumbnailURL: null,
+              cardTitle: 'Untitled Card',
+              cardDescription: null,
+              cardThumbnailURL: null,
               cardInfo,
             });
           }

@@ -9,9 +9,9 @@
       },
       "specType": "card",
       "containedExamples": [],
-      "title": "Map",
-      "description": "Spec of Map",
-      "thumbnailURL": null
+      "cardTitle": "Map",
+      "cardDescription": "Spec of Map",
+      "cardThumbnailURL": null
     },
     "relationships": {
       "linkedExamples.0": {

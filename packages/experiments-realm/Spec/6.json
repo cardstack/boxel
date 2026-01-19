@@ -2,8 +2,8 @@
   "data": {
     "type": "card",
     "attributes": {
-      "title": "Friend from /friend",
-      "description": "Spec for Friend from /friend",
+      "cardTitle": "Friend from /friend",
+      "cardDescription": "Spec for Friend from /friend",
       "specType": "card",
       "ref": {
         "module": "../friend",

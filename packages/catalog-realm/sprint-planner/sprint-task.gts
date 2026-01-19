@@ -25,7 +25,7 @@ export class Team extends CardDef {
   static displayName = 'Team';
   static icon = UsersIcon;
   @field name = contains(StringField);
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: Team) {
       return this.name;
     },
@@ -100,7 +100,7 @@ export class Project extends CardDef {
   static displayName = 'Project';
   static icon = FolderGitIcon;
   @field name = contains(StringField);
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: Project) {
       return this.name;
     },
@@ -507,7 +507,7 @@ export class SprintTask extends Task {
   @field subtasks = linksToMany(() => SprintTask);
   @field status = contains(SprintTaskStatusField);
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: SprintTask) {
       return this.name;
     },

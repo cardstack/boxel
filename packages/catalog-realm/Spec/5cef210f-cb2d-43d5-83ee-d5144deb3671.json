@@ -9,9 +9,9 @@
       },
       "specType": "card",
       "containedExamples": [],
-      "title": "BlackjackGame",
-      "description": null,
-      "thumbnailURL": null
+      "cardTitle": "BlackjackGame",
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "meta": {
       "adoptsFrom": {

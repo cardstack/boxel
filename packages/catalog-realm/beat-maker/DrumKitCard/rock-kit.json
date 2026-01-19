@@ -3,7 +3,7 @@
     "type": "card",
     "attributes": {
       "kitName": "Rock Kit",
-      "description": "Aggressive punchy drums with heavy compression and beater clicks",
+      "cardDescription": "Aggressive punchy drums with heavy compression and beater clicks",
       "category": "Rock",
       "creator": "Beat Maker Studio",
       "kit": {
@@ -15,7 +15,7 @@
         "clapParams": "{\"type\": \"rock\", \"frequency\": 2100, \"decay\": 0.12, \"amplitude\": 0.9, \"shape\": 2.5, \"resonance\": 4}",
         "crashParams": "{\"type\": \"rock\", \"frequency\": 3800, \"decay\": 0.9, \"amplitude\": 0.6, \"shape\": 1, \"resonance\": 2}"
       },
-      "title": "Rock Kit"
+      "cardTitle": "Rock Kit"
     },
     "relationships": {},
     "meta": {
