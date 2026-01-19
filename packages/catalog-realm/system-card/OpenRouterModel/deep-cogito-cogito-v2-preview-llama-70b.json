@@ -6,7 +6,7 @@
       "canonicalSlug": "deepcogito/cogito-v2-preview-llama-70b",
       "name": "Deep Cogito: Cogito V2 Preview Llama 70B",
       "created": 1756831784,
-      "description": "Cogito v2 70B is a dense hybrid reasoning model that combines direct answering capabilities with advanced self-reflection. Built with iterative policy improvement, it delivers strong performance across reasoning tasks while maintaining efficiency through shorter reasoning chains and improved intuition.",
+      "cardDescription": "Cogito v2 70B is a dense hybrid reasoning model that combines direct answering capabilities with advanced self-reflection. Built with iterative policy improvement, it delivers strong performance across reasoning tasks while maintaining efficiency through shorter reasoning chains and improved intuition.",
       "pricing": {
         "prompt": "0.00000088",
         "completion": "0.00000088",
@@ -55,9 +55,9 @@
         "frequency_penalty": null
       },
       "cardInfo": {
-        "title": null,
-        "description": null,
-        "thumbnailURL": null,
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
         "notes": null
       }
     },

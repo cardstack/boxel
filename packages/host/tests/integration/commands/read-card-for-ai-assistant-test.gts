@@ -54,7 +54,7 @@ module('Integration | commands | read-card-for-ai-assistant', function (hooks) {
             export class Person extends CardDef {
               @field firstName = contains(StringField);
               @field hourlyRate = contains(NumberField);
-              @field title = contains(StringField, {
+              @field cardTitle = contains(StringField, {
                 computeVia: function (this: Person) {
                   return this.firstName;
                 },

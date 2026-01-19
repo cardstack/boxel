@@ -10,7 +10,7 @@
     "attributes": {
       "songTitle": "Midnight Runner",
       "artist": "Neon Collective",
-      "description": "A pulsing synthwave journey through neon-lit city streets",
+      "cardDescription": "A pulsing synthwave journey through neon-lit city streets",
       "genre": "Synthwave",
       "key": "A Minor",
       "tempo": 132,
@@ -23,22 +23,37 @@
             {
               "chordName": "Am",
               "chordType": "minor",
-              "notes": ["A2", "C3", "E3", "A3"],
+              "notes": [
+                "A2",
+                "C3",
+                "E3",
+                "A3"
+              ],
               "rootNote": "A",
               "quality": "minor"
             },
             {
               "chordName": "F",
-              "chordType": "major", 
-              "notes": ["F2", "A2", "C3", "F3"],
+              "chordType": "major",
+              "notes": [
+                "F2",
+                "A2",
+                "C3",
+                "F3"
+              ],
               "rootNote": "F",
               "quality": "major"
             },
             {
               "chordName": "C",
               "chordType": "major",
-              "notes": ["C3", "E3", "G3", "C4"],
-              "rootNote": "C", 
+              "notes": [
+                "C3",
+                "E3",
+                "G3",
+                "C4"
+              ],
+              "rootNote": "C",
               "quality": "major"
             }
           ],
@@ -52,28 +67,48 @@
             {
               "chordName": "Am",
               "chordType": "minor",
-              "notes": ["A2", "C3", "E3", "A3"],
+              "notes": [
+                "A2",
+                "C3",
+                "E3",
+                "A3"
+              ],
               "rootNote": "A",
               "quality": "minor"
             },
             {
               "chordName": "F",
               "chordType": "major",
-              "notes": ["F2", "A2", "C3", "F3"],
-              "rootNote": "F", 
+              "notes": [
+                "F2",
+                "A2",
+                "C3",
+                "F3"
+              ],
+              "rootNote": "F",
               "quality": "major"
             },
             {
               "chordName": "C",
               "chordType": "major",
-              "notes": ["C3", "E3", "G3", "C4"],
+              "notes": [
+                "C3",
+                "E3",
+                "G3",
+                "C4"
+              ],
               "rootNote": "C",
               "quality": "major"
             },
             {
               "chordName": "G",
               "chordType": "major",
-              "notes": ["G2", "B2", "D3", "G3"],
+              "notes": [
+                "G2",
+                "B2",
+                "D3",
+                "G3"
+              ],
               "rootNote": "G",
               "quality": "major"
             }
@@ -88,21 +123,36 @@
             {
               "chordName": "F",
               "chordType": "major",
-              "notes": ["F2", "A2", "C3", "F3"],
+              "notes": [
+                "F2",
+                "A2",
+                "C3",
+                "F3"
+              ],
               "rootNote": "F",
               "quality": "major"
             },
             {
               "chordName": "G",
-              "chordType": "major", 
-              "notes": ["G2", "B2", "D3", "G3"],
+              "chordType": "major",
+              "notes": [
+                "G2",
+                "B2",
+                "D3",
+                "G3"
+              ],
               "rootNote": "G",
               "quality": "major"
             },
             {
               "chordName": "Am",
               "chordType": "minor",
-              "notes": ["A2", "C3", "E3", "A3"],
+              "notes": [
+                "A2",
+                "C3",
+                "E3",
+                "A3"
+              ],
               "rootNote": "A",
               "quality": "minor"
             }
@@ -111,34 +161,54 @@
           "notes": "Build tension with rising arpeggios and filter sweeps. Prepare for chorus impact."
         },
         {
-          "sectionName": "chorus", 
+          "sectionName": "chorus",
           "lyrics": "**Chorus:**\n\nI'm a midnight runner\nRacing through the neon glow\nI'm a midnight runner\nWhere the vintage synths all flow\n\nThrough the city lights I fly\nUnder stars of electric sky\nI'm a midnight runner\nAnd I'll never let it go",
           "chords": [
             {
               "chordName": "Am",
               "chordType": "minor",
-              "notes": ["A2", "C3", "E3", "A3"],
+              "notes": [
+                "A2",
+                "C3",
+                "E3",
+                "A3"
+              ],
               "rootNote": "A",
               "quality": "minor"
             },
             {
               "chordName": "F",
               "chordType": "major",
-              "notes": ["F2", "A2", "C3", "F3"],
+              "notes": [
+                "F2",
+                "A2",
+                "C3",
+                "F3"
+              ],
               "rootNote": "F",
               "quality": "major"
             },
             {
               "chordName": "C",
               "chordType": "major",
-              "notes": ["C3", "E3", "G3", "C4"],
+              "notes": [
+                "C3",
+                "E3",
+                "G3",
+                "C4"
+              ],
               "rootNote": "C",
               "quality": "major"
             },
             {
               "chordName": "G",
               "chordType": "major",
-              "notes": ["G2", "B2", "D3", "G3"],
+              "notes": [
+                "G2",
+                "B2",
+                "D3",
+                "G3"
+              ],
               "rootNote": "G",
               "quality": "major"
             }
@@ -153,28 +223,48 @@
             {
               "chordName": "Am",
               "chordType": "minor",
-              "notes": ["A2", "C3", "E3", "A3"],
+              "notes": [
+                "A2",
+                "C3",
+                "E3",
+                "A3"
+              ],
               "rootNote": "A",
               "quality": "minor"
             },
             {
-              "chordName": "F", 
+              "chordName": "F",
               "chordType": "major",
-              "notes": ["F2", "A2", "C3", "F3"],
+              "notes": [
+                "F2",
+                "A2",
+                "C3",
+                "F3"
+              ],
               "rootNote": "F",
               "quality": "major"
             },
             {
               "chordName": "C",
               "chordType": "major",
-              "notes": ["C3", "E3", "G3", "C4"],
+              "notes": [
+                "C3",
+                "E3",
+                "G3",
+                "C4"
+              ],
               "rootNote": "C",
               "quality": "major"
             },
             {
               "chordName": "G",
               "chordType": "major",
-              "notes": ["G2", "B2", "D3", "G3"],
+              "notes": [
+                "G2",
+                "B2",
+                "D3",
+                "G3"
+              ],
               "rootNote": "G",
               "quality": "major"
             }
@@ -189,28 +279,48 @@
             {
               "chordName": "Dm",
               "chordType": "minor",
-              "notes": ["D3", "F3", "A3", "D4"],
+              "notes": [
+                "D3",
+                "F3",
+                "A3",
+                "D4"
+              ],
               "rootNote": "D",
               "quality": "minor"
             },
             {
               "chordName": "G",
               "chordType": "major",
-              "notes": ["G2", "B2", "D3", "G3"],
-              "rootNote": "G", 
+              "notes": [
+                "G2",
+                "B2",
+                "D3",
+                "G3"
+              ],
+              "rootNote": "G",
               "quality": "major"
             },
             {
               "chordName": "F",
               "chordType": "major",
-              "notes": ["F2", "A2", "C3", "F3"],
+              "notes": [
+                "F2",
+                "A2",
+                "C3",
+                "F3"
+              ],
               "rootNote": "F",
               "quality": "major"
             },
             {
               "chordName": "C",
               "chordType": "major",
-              "notes": ["C3", "E3", "G3", "C4"],
+              "notes": [
+                "C3",
+                "E3",
+                "G3",
+                "C4"
+              ],
               "rootNote": "C",
               "quality": "major"
             }
@@ -225,28 +335,48 @@
             {
               "chordName": "Am",
               "chordType": "minor",
-              "notes": ["A2", "C3", "E3", "A3"],
+              "notes": [
+                "A2",
+                "C3",
+                "E3",
+                "A3"
+              ],
               "rootNote": "A",
               "quality": "minor"
             },
             {
               "chordName": "F",
               "chordType": "major",
-              "notes": ["F2", "A2", "C3", "F3"],
+              "notes": [
+                "F2",
+                "A2",
+                "C3",
+                "F3"
+              ],
               "rootNote": "F",
               "quality": "major"
             },
             {
               "chordName": "C",
               "chordType": "major",
-              "notes": ["C3", "E3", "G3", "C4"],
+              "notes": [
+                "C3",
+                "E3",
+                "G3",
+                "C4"
+              ],
               "rootNote": "C",
               "quality": "major"
             },
             {
               "chordName": "G",
               "chordType": "major",
-              "notes": ["G2", "B2", "D3", "G3"],
+              "notes": [
+                "G2",
+                "B2",
+                "D3",
+                "G3"
+              ],
               "rootNote": "G",
               "quality": "major"
             }
@@ -260,15 +390,25 @@
           "chords": [
             {
               "chordName": "Am",
-              "chordType": "minor", 
-              "notes": ["A2", "C3", "E3", "A3"],
+              "chordType": "minor",
+              "notes": [
+                "A2",
+                "C3",
+                "E3",
+                "A3"
+              ],
               "rootNote": "A",
               "quality": "minor"
             },
             {
               "chordName": "F",
               "chordType": "major",
-              "notes": ["F2", "A2", "C3", "F3"],
+              "notes": [
+                "F2",
+                "A2",
+                "C3",
+                "F3"
+              ],
               "rootNote": "F",
               "quality": "major"
             }
@@ -345,7 +485,7 @@
           "pan": 22,
           "isMuted": false,
           "isSolo": false,
-          "effects": "Reverb, Delay, Vintage EQ", 
+          "effects": "Reverb, Delay, Vintage EQ",
           "notes": "Hand claps, tambourine, and electronic hits. Add rhythmic texture."
         },
         {
@@ -362,9 +502,9 @@
       "masterVolume": 87,
       "songDuration": 220,
       "cardInfo": {
-        "title": null,
-        "description": null,
-        "thumbnailURL": null,
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
         "notes": null
       }
     },

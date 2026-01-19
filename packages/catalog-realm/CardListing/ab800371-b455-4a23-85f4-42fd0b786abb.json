@@ -15,9 +15,9 @@
       "summary": "Professional beat maker and rhythm sequencer for creating music beats, patterns, and drum sequences with customizable instruments and sound kits.",
       "cardInfo": {
         "notes": "Includes multiple instrument kits, pattern sequencing, and real-time beat creation capabilities",
-        "title": "Beat Maker Studio",
-        "description": "A comprehensive beat making application that allows users to create custom drum patterns, sequence beats, and mix audio with various instrument kits. Features include BPM control, swing settings, pattern management, and multiple sound libraries for professional music production.",
-        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/beat-maker-listing/thumbnail.png"
+        "name": "Beat Maker Studio",
+        "summary": "A comprehensive beat making application that allows users to create custom drum patterns, sequence beats, and mix audio with various instrument kits. Features include BPM control, swing settings, pattern management, and multiple sound libraries for professional music production.",
+        "cardThumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/beat-maker-listing/thumbnail.png"
       }
     },
     "relationships": {

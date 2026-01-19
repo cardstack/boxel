@@ -9,9 +9,9 @@
       },
       "specType": "card",
       "containedExamples": [],
-      "title": "Todo",
-      "description": "Spec of Todo",
-      "thumbnailURL": null
+      "cardTitle": "Todo",
+      "cardDescription": "Spec of Todo",
+      "cardThumbnailURL": null
     },
     "relationships": {
       "linkedExamples": {

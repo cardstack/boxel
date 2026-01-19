@@ -58,7 +58,7 @@ module('Acceptance | prerender | module', function (hooks) {
 
     export class Parent extends CardDef {
       static displayName = 'Parent';
-      @field title = contains(StringField);
+      @field cardTitle = contains(StringField);
     }
   `;
   const CHILD_MODULE = `

@@ -9,10 +9,10 @@
       },
       "specType": "card",
       "containedExamples": [],
-      "title": "OnlineCustomer",
-      "description": "Spec of OnlineCustomer",
+      "cardTitle": "OnlineCustomer",
+      "cardDescription": "Spec of OnlineCustomer",
       "cardInfo": {},
-      "thumbnailURL": null
+      "cardThumbnailURL": null
     },
     "relationships": {
       "linkedExamples": {

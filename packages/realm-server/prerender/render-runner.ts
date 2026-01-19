@@ -8,7 +8,8 @@ import {
   serializeRenderRouteOptions,
   logger,
 } from '@cardstack/runtime-common';
-import type { PagePool } from './page-pool';
+import type { SerializedError } from '@cardstack/runtime-common/error';
+import type { ConsoleErrorEntry, PagePool } from './page-pool';
 import {
   captureResult,
   captureModule,
@@ -120,6 +121,7 @@ export class RenderRunner {
       evicted: false,
       timedOut: false,
     };
+    this.#pagePool.resetConsoleErrors(pageId);
     const markTimeout = (err?: RenderError) => {
       if (!poolInfo.timedOut && err?.error?.title === 'Render timeout') {
         poolInfo.timedOut = true;
@@ -212,17 +214,19 @@ export class RenderRunner {
           deps: null,
           types: null,
         };
+        let response: RenderResponse = {
+          ...meta,
+          ...(error ? { error } : {}),
+          iconHTML: null,
+          isolatedHTML,
+          headHTML: null,
+          atomHTML: null,
+          embeddedHTML: null,
+          fittedHTML: null,
+        };
+        response.error = this.#mergeConsoleErrors(pageId, response.error);
         return {
-          response: {
-            ...meta,
-            ...(error ? { error } : {}),
-            iconHTML: null,
-            isolatedHTML,
-            headHTML: null,
-            atomHTML: null,
-            embeddedHTML: null,
-            fittedHTML: null,
-          },
+          response,
           timings: { launchMs, renderMs: Date.now() - renderStart },
           pool: poolInfo,
         };
@@ -369,6 +373,7 @@ export class RenderRunner {
         embeddedHTML,
         fittedHTML,
       };
+      response.error = this.#mergeConsoleErrors(pageId, response.error);
       return {
         response,
         timings: { launchMs, renderMs: Date.now() - renderStart },
@@ -416,6 +421,7 @@ export class RenderRunner {
       evicted: false,
       timedOut: false,
     };
+    this.#pagePool.resetConsoleErrors(pageId);
     const markTimeout = (err?: RenderError) => {
       if (!poolInfo.timedOut && err?.error?.title === 'Render timeout') {
         poolInfo.timedOut = true;
@@ -522,6 +528,7 @@ export class RenderRunner {
         }
       }
 
+      response.error = this.#mergeConsoleErrors(pageId, response.error);
       return {
         response,
         timings: { launchMs, renderMs: Date.now() - renderStart },
@@ -569,6 +576,7 @@ export class RenderRunner {
       evicted: false,
       timedOut: false,
     };
+    this.#pagePool.resetConsoleErrors(pageId);
     const markTimeout = (err?: RenderError) => {
       if (!poolInfo.timedOut && err?.error?.title === 'Render timeout') {
         poolInfo.timedOut = true;
@@ -669,6 +677,7 @@ export class RenderRunner {
         }
       }
 
+      response.error = this.#mergeConsoleErrors(pageId, response.error);
       return {
         response,
         timings: { launchMs, renderMs: Date.now() - renderStart },
@@ -751,6 +760,58 @@ export class RenderRunner {
     return undefined;
   }
 
+  #mergeConsoleErrors<T extends { error: SerializedError }>(
+    pageId: string,
+    error?: T,
+  ): T | undefined {
+    let consoleErrors = this.#pagePool.takeConsoleErrors(pageId);
+    if (consoleErrors.length === 0 || !error) {
+      return error;
+    }
+    let existing = Array.isArray(error.error.additionalErrors)
+      ? [...error.error.additionalErrors]
+      : [];
+    let consoleAdditional = this.#serializeConsoleErrors(consoleErrors);
+    if (consoleAdditional.length === 0) {
+      return error;
+    }
+    return {
+      ...error,
+      error: {
+        ...error.error,
+        additionalErrors: [...existing, ...consoleAdditional],
+      },
+    };
+  }
+
+  #serializeConsoleErrors(
+    consoleErrors: ConsoleErrorEntry[],
+  ): SerializedError[] {
+    return consoleErrors.map((entry) => ({
+      status: 500,
+      title: entry.type === 'assert' ? 'Console assert' : 'Console error',
+      message: this.#formatConsoleError(entry),
+      additionalErrors: null,
+    }));
+  }
+
+  #formatConsoleError(entry: ConsoleErrorEntry): string {
+    let message = entry.text;
+    let location = entry.location?.url;
+    if (location) {
+      let segments: number[] = [];
+      if (typeof entry.location?.lineNumber === 'number') {
+        segments.push(entry.location.lineNumber + 1);
+      }
+      if (typeof entry.location?.columnNumber === 'number') {
+        segments.push(entry.location.columnNumber + 1);
+      }
+      let suffix = segments.length ? `:${segments.join(':')}` : '';
+      message = `${message} (${location}${suffix})`;
+    }
+    return message;
+  }
+
   #evictionReason(renderError: RenderError): 'timeout' | 'unusable' | null {
     let status = Number(renderError.error?.status);
     if (status === 401 || status === 403) {
@@ -803,7 +864,10 @@ export class RenderRunner {
     this.#incEvictionMetric(realm, reason);
     log.warn(`Evicting realm %s due to %s during %s`, realm, reason, step);
     try {
-      await this.#pagePool.disposeRealm(realm, { awaitIdle: false });
+      await this.#pagePool.disposeRealm(realm, {
+        awaitIdle: false,
+        retainConsoleErrors: true,
+      });
     } catch (e) {
       log.warn(`Error disposing realm %s on %s:`, realm, reason, e);
     }

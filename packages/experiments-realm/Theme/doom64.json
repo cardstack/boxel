@@ -10,9 +10,9 @@
     "attributes": {
       "cardInfo": {
         "notes": null,
-        "title": "Doom64",
-        "description": null,
-        "thumbnailURL": null
+        "name": "Doom64",
+        "summary": null,
+        "cardThumbnailURL": null
       },
       "cssImports": [
         "https://fonts.googleapis.com/css2?family=Oxanium:wght@200..800&family=Source+Code+Pro:ital,wght@0,200..900;1,200..900&display=swap"

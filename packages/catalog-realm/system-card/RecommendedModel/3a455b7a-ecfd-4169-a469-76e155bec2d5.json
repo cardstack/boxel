@@ -11,9 +11,9 @@
       "purpose": "chat",
       "cardInfo": {
         "notes": null,
-        "title": "",
-        "description": "",
-        "thumbnailURL": null
+        "name": "",
+        "summary": "",
+        "cardThumbnailURL": null
       },
       "thinkingEffort": "none"
     },

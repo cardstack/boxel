@@ -14,7 +14,7 @@ export default class SortDropdownUsage extends Component<Signature> {
       displayName: 'A-Z',
       sort: [
         {
-          by: 'title',
+          by: 'cardTitle',
           direction: 'asc',
         },
       ],

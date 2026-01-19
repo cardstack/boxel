@@ -1177,7 +1177,7 @@ export class StudySession extends CardDef {
   @field isCompleted = contains(BooleanField);
 
   // ⁸ Computed title with subject context
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: StudySession) {
       try {
         const session = this.sessionTitle || 'Study Session';

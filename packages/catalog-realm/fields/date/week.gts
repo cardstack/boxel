@@ -27,7 +27,7 @@ class WeekFieldEdit extends Component<typeof WeekField> {
   </template>
 }
 
-export class WeekField extends FieldDef {
+export default class WeekField extends FieldDef {
   static displayName = 'Week';
   static icon = CalendarEventIcon;
 
@@ -143,4 +143,3 @@ export class WeekField extends FieldDef {
   static edit = WeekFieldEdit;
 }
 
-export default WeekField;

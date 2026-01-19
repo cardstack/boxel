@@ -21,17 +21,17 @@ export class Friend extends CardDef {
       return 10 / 2;
     },
   });
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: Friend) {
       return this.firstName;
     },
   });
-  @field description = contains(StringField, {
+  @field cardDescription = contains(StringField, {
     computeVia: function (this: Friend) {
       return `Friend`;
     },
   });
-  @field thumbnailURL = contains(StringField);
+  @field cardThumbnailURL = contains(StringField);
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>

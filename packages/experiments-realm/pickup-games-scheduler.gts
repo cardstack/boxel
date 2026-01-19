@@ -21,7 +21,7 @@ export class GameSlot extends CardDef {
   @field startTime = contains(DateTimeField);
   @field endTime = contains(DateTimeField);
   @field players = containsMany(StringField);
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia(this: GameSlot) {
       if (this.startTime) {
         let result = formatDate(this.startTime, 'iiii M/d h:mm aa');
@@ -43,7 +43,7 @@ export class GameSlot extends CardDef {
     }
     <template>
       <div class={{if this.hasEnoughPlayers 'game-on' 'need-more'}}>
-        <h3><@fields.title /></h3>
+        <h3><@fields.cardTitle /></h3>
         <ul>
           {{#unless @fields.players.length}}
             <li><em>Nobody yet</em></li>

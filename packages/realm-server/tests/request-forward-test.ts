@@ -520,7 +520,7 @@ module(basename(__filename), function () {
       const mockGoogleResponse = {
         items: [
           {
-            title: 'Test Image 1',
+            cardTitle: 'Test Image 1',
             link: 'https://example.com/image1.jpg',
             image: {
               thumbnailLink: 'https://example.com/thumb1.jpg',

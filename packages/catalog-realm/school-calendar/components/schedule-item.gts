@@ -14,12 +14,12 @@ export class ScheduleItem extends CardDef {
   static displayName = 'Schedule Item';
   static icon = ClockIcon;
 
-  @field title = contains(StringField);
+  @field cardTitle = contains(StringField);
   @field dayOfWeek = contains(StringField);
   @field startTime = contains(StringField);
   @field endTime = contains(StringField);
   @field location = contains(StringField);
-  @field description = contains(MarkdownField);
+  @field cardDescription = contains(MarkdownField);
   @field color = contains(StringField);
 
   static isolated = class Isolated extends Component<typeof ScheduleItem> {
@@ -29,7 +29,7 @@ export class ScheduleItem extends CardDef {
           class='schedule-header'
           style={{htmlSafe (concat 'background-color: ' @model.color)}}
         >
-          <h1>{{@model.title}}</h1>
+          <h1>{{@model.cardTitle}}</h1>
           <div class='schedule-meta'>
             <span class='day'>{{@model.dayOfWeek}}</span>
             <span class='time'>{{@model.startTime}} - {{@model.endTime}}</span>
@@ -40,7 +40,7 @@ export class ScheduleItem extends CardDef {
         <div class='schedule-content'>
           <div class='schedule-description'>
             <h2>Description</h2>
-            <@fields.description />
+            <@fields.cardDescription />
           </div>
         </div>
       </div>
@@ -94,7 +94,7 @@ export class ScheduleItem extends CardDef {
           <span>{{@model.dayOfWeek}}</span>
         </div>
         <div class='schedule-details'>
-          <h3>{{@model.title}}</h3>
+          <h3>{{@model.cardTitle}}</h3>
           <div class='time-location'>
             <span class='time'>⏱️
               {{@model.startTime}}

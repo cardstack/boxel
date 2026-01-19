@@ -6,7 +6,7 @@
       "canonicalSlug": "arcee-ai/coder-large",
       "name": "Arcee AI: Coder Large",
       "created": 1746478663,
-      "description": "Coder‑Large is a 32 B‑parameter offspring of Qwen 2.5‑Instruct that has been further trained on permissively‑licensed GitHub, CodeSearchNet and synthetic bug‑fix corpora. It supports a 32k context window, enabling multi‑file refactoring or long diff review in a single call, and understands 30‑plus programming languages with special attention to TypeScript, Go and Terraform. Internal benchmarks show 5–8 pt gains over CodeLlama‑34 B‑Python on HumanEval and competitive BugFix scores thanks to a reinforcement pass that rewards compilable output. The model emits structured explanations alongside code blocks by default, making it suitable for educational tooling as well as production copilot scenarios. Cost‑wise, Together AI prices it well below proprietary incumbents, so teams can scale interactive coding without runaway spend. ",
+      "cardDescription": "Coder\u2011Large is a 32\u202fB\u2011parameter offspring of Qwen\u202f2.5\u2011Instruct that has been further trained on permissively\u2011licensed GitHub, CodeSearchNet and synthetic bug\u2011fix corpora. It supports a 32k context window, enabling multi\u2011file refactoring or long diff review in a single call, and understands 30\u2011plus programming languages with special attention to TypeScript, Go and Terraform. Internal benchmarks show 5\u20138\u202fpt gains over CodeLlama\u201134\u202fB\u2011Python on HumanEval and competitive BugFix scores thanks to a reinforcement pass that rewards compilable output. The model emits structured explanations alongside code blocks by default, making it suitable for educational tooling as well as production copilot scenarios. Cost\u2011wise, Together AI prices it well below proprietary incumbents, so teams can scale interactive coding without runaway spend. ",
       "pricing": {
         "prompt": "0.0000005",
         "completion": "0.0000008",
@@ -45,9 +45,9 @@
       ],
       "defaultParameters": {},
       "cardInfo": {
-        "title": null,
-        "description": null,
-        "thumbnailURL": null,
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
         "notes": null
       }
     },

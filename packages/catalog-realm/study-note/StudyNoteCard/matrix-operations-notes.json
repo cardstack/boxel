@@ -15,13 +15,13 @@
         "Eigenvalues",
         "Determinant"
       ],
-      "content": "# Matrix Operations\n\n## Multiplication Rules\n- **(AB)C = A(BC)** - Associative property\n- **A(B + C) = AB + AC** - Distributive property\n- **AB ≠ BA** in general - Not commutative (order matters!)\n- **Dimensions matter**: (m×n) × (n×p) = (m×p)\n\n## Special Matrices\n- **Identity Matrix (I)**: Acts like the number 1\n  - AI = IA = A for any compatible matrix A\n- **Inverse Matrix (A⁻¹)**: Where AA⁻¹ = A⁻¹A = I\n  - Only exists for square matrices with non-zero determinant\n- **Transpose (Aᵀ)**: Flip across main diagonal\n  - (AB)ᵀ = BᵀAᵀ (order reverses!)\n\n## Determinant Properties\n- det(AB) = det(A) × det(B)\n- det(Aᵀ) = det(A)\n- If det(A) = 0, matrix is singular (no inverse)\n\n## Eigenvalue Applications\n- Principal Component Analysis (PCA)\n- Stability analysis in differential equations\n- Google's PageRank algorithm\n- Image compression and processing",
+      "content": "# Matrix Operations\n\n## Multiplication Rules\n- **(AB)C = A(BC)** - Associative property\n- **A(B + C) = AB + AC** - Distributive property\n- **AB \u2260 BA** in general - Not commutative (order matters!)\n- **Dimensions matter**: (m\u00d7n) \u00d7 (n\u00d7p) = (m\u00d7p)\n\n## Special Matrices\n- **Identity Matrix (I)**: Acts like the number 1\n  - AI = IA = A for any compatible matrix A\n- **Inverse Matrix (A\u207b\u00b9)**: Where AA\u207b\u00b9 = A\u207b\u00b9A = I\n  - Only exists for square matrices with non-zero determinant\n- **Transpose (A\u1d40)**: Flip across main diagonal\n  - (AB)\u1d40 = B\u1d40A\u1d40 (order reverses!)\n\n## Determinant Properties\n- det(AB) = det(A) \u00d7 det(B)\n- det(A\u1d40) = det(A)\n- If det(A) = 0, matrix is singular (no inverse)\n\n## Eigenvalue Applications\n- Principal Component Analysis (PCA)\n- Stability analysis in differential equations\n- Google's PageRank algorithm\n- Image compression and processing",
       "subject": "Mathematics",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": null
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null
       },
       "createdAt": "2025-01-12T11:00:00.000Z",
       "noteTitle": "Matrix Operations Notes",

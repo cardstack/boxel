@@ -33,9 +33,9 @@
           "selectedValue": "Summer"
         }
       ],
-      "title": "Swamp Milkweed (Asclepias incarnata)",
-      "description": "An herbaceous perennial in the Apocynaceae (dogbane) family. It is native to eastern and central United States. It grows in wet sites but adapts to drier sites in moist clay or loam soils. The attractive pink to rose-purple flowers mature in mid-spring and last into early fall. Milkweed is an important food source for Monarch butterfly caterpillars.",
-      "thumbnailURL": "https://www.gardenia.net/wp-content/uploads/2023/05/Asclepias-incarnata-Swamp-Milkweed-780x520.webp"
+      "cardTitle": "Swamp Milkweed (Asclepias incarnata)",
+      "cardDescription": "An herbaceous perennial in the Apocynaceae (dogbane) family. It is native to eastern and central United States. It grows in wet sites but adapts to drier sites in moist clay or loam soils. The attractive pink to rose-purple flowers mature in mid-spring and last into early fall. Milkweed is an important food source for Monarch butterfly caterpillars.",
+      "cardThumbnailURL": "https://www.gardenia.net/wp-content/uploads/2023/05/Asclepias-incarnata-Swamp-Milkweed-780x520.webp"
     },
     "meta": {
       "adoptsFrom": {

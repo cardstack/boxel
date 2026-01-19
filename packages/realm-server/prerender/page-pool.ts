@@ -57,12 +57,23 @@ type StandbyEntry = {
   transitioning?: boolean;
 };
 type Entry = PoolEntry | StandbyEntry;
+type ConsoleErrorLocation = {
+  url?: string;
+  lineNumber?: number;
+  columnNumber?: number;
+};
+export type ConsoleErrorEntry = {
+  type: ReturnType<ConsoleMessage['type']>;
+  text: string;
+  location?: ConsoleErrorLocation;
+};
 
 const log = logger('prerenderer');
 const chromeLog = logger('prerenderer-chrome');
 const STANDBY_CREATION_RETRIES = 3;
 const STANDBY_BACKOFF_MS = 500;
 const STANDBY_BACKOFF_CAP_MS = 4000;
+const CONSOLE_ERROR_LIMIT = 50;
 
 export class PagePool {
   #realmPages = new Map<string, Set<PoolEntry>>();
@@ -77,6 +88,7 @@ export class PagePool {
   #renderSemaphore: RenderSemaphore | undefined;
   #ensuringStandbys: Promise<void> | null = null;
   #creatingStandbys = 0;
+  #consoleErrorsByPageId = new Map<string, Map<string, ConsoleErrorEntry>>();
 
   constructor(options: {
     maxPages: number;
@@ -101,6 +113,16 @@ export class PagePool {
 
   getWarmRealms(): string[] {
     return [...this.#realmPages.keys()];
+  }
+
+  resetConsoleErrors(pageId: string): void {
+    this.#consoleErrorsByPageId.set(pageId, new Map());
+  }
+
+  takeConsoleErrors(pageId: string): ConsoleErrorEntry[] {
+    let bucket = this.#consoleErrorsByPageId.get(pageId);
+    this.#consoleErrorsByPageId.delete(pageId);
+    return bucket ? [...bucket.values()] : [];
   }
 
   async warmStandbys(): Promise<void> {
@@ -172,20 +194,21 @@ export class PagePool {
 
   async disposeRealm(
     realm: string,
-    options?: { awaitIdle?: boolean },
+    options?: { awaitIdle?: boolean; retainConsoleErrors?: boolean },
   ): Promise<void> {
     let entries = this.#realmPages.get(realm);
     if (!entries || entries.size === 0) return;
     this.#realmPages.delete(realm);
     this.#lru.delete(realm);
     let awaitIdle = options?.awaitIdle !== false;
+    let retainConsoleErrors = options?.retainConsoleErrors ?? false;
     if (awaitIdle) {
       for (let entry of entries) {
-        await this.#closeEntry(entry);
+        await this.#closeEntry(entry, retainConsoleErrors);
       }
     } else {
       for (let entry of entries) {
-        void this.#closeEntry(entry);
+        void this.#closeEntry(entry, retainConsoleErrors);
       }
     }
     await this.#notifyManagerRealmEvicted(realm);
@@ -549,7 +572,7 @@ export class PagePool {
     }
   }
 
-  async #closeEntry(entry: Entry): Promise<void> {
+  async #closeEntry(entry: Entry, retainConsoleErrors = false): Promise<void> {
     let release: (() => void) | undefined;
     try {
       entry.closing = true;
@@ -563,6 +586,9 @@ export class PagePool {
     } finally {
       release?.();
     }
+    if (!retainConsoleErrors) {
+      this.#consoleErrorsByPageId.delete(entry.pageId);
+    }
   }
 
   #attachPageConsole(page: Page, realm: string, pageId: string): void {
@@ -571,17 +597,24 @@ export class PagePool {
         let logFn = this.#logMethodForConsole(message.type());
         let formatted = await this.#formatConsoleMessage(message);
         let location = message.location();
+        let locationData = location?.url
+          ? {
+              url: location.url,
+              lineNumber: location.lineNumber,
+              columnNumber: location.columnNumber,
+            }
+          : undefined;
         let locationInfo = '';
-        if (location?.url) {
+        if (locationData?.url) {
           let segments: number[] = [];
-          if (typeof location.lineNumber === 'number') {
-            segments.push(location.lineNumber + 1);
+          if (typeof locationData.lineNumber === 'number') {
+            segments.push(locationData.lineNumber + 1);
           }
-          if (typeof location.columnNumber === 'number') {
-            segments.push(location.columnNumber + 1);
+          if (typeof locationData.columnNumber === 'number') {
+            segments.push(locationData.columnNumber + 1);
           }
           let suffix = segments.length ? `:${segments.join(':')}` : '';
-          locationInfo = ` (${location.url}${suffix})`;
+          locationInfo = ` (${locationData.url}${suffix})`;
         }
         logFn(
           'Console[%s] realm=%s pageId=%s%s %s',
@@ -591,6 +624,14 @@ export class PagePool {
           locationInfo,
           formatted,
         );
+        let type = message.type();
+        if (type === 'error' || type === 'assert') {
+          this.#recordConsoleError(pageId, {
+            type,
+            text: formatted,
+            location: locationData,
+          });
+        }
       } catch (e) {
         log.debug(
           'Failed to process console output for realm %s page %s:',
@@ -600,6 +641,28 @@ export class PagePool {
         );
       }
     });
+  }
+
+  #recordConsoleError(pageId: string, entry: ConsoleErrorEntry): void {
+    let bucket = this.#consoleErrorsByPageId.get(pageId);
+    if (!bucket) {
+      bucket = new Map();
+      this.#consoleErrorsByPageId.set(pageId, bucket);
+    }
+    if (bucket.size >= CONSOLE_ERROR_LIMIT) {
+      return;
+    }
+    let location = entry.location;
+    let key = [
+      entry.type,
+      entry.text,
+      location?.url ?? '',
+      location?.lineNumber ?? '',
+      location?.columnNumber ?? '',
+    ].join('|');
+    if (!bucket.has(key)) {
+      bucket.set(key, entry);
+    }
   }
 
   #logMethodForConsole(

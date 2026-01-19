@@ -2,7 +2,7 @@
   "data": {
     "type": "card",
     "attributes": {
-      "title": "Theme",
+      "cardTitle": "Theme",
       "specType": "card",
       "ref": {
         "module": "https://cardstack.com/base/theme",

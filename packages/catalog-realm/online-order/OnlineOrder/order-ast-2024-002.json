@@ -10,9 +10,9 @@
     "attributes": {
       "cardInfo": {
         "notes": "Customer requested express shipping due to urgent project deadline. PayPal payment processed successfully.",
-        "title": "Tech Startup Order",
-        "description": "Complete order details for AST-2024-002 including wireless peripherals shipped to Portland office",
-        "thumbnailURL": null
+        "name": "Tech Startup Order",
+        "summary": "Complete order details for AST-2024-002 including wireless peripherals shipped to Portland office",
+        "cardThumbnailURL": null
       },
       "orderDate": "2025-01-02T14:22:00.000Z",
       "orderTotal": 87.45,

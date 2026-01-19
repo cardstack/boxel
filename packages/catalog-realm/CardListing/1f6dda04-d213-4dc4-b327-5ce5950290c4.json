@@ -15,9 +15,9 @@
       "summary": "A comprehensive card system for organizing study notes with markdown support, subject categorization, and tagging functionality. Perfect for students, educators, and lifelong learners.",
       "cardInfo": {
         "notes": "Ideal for computer science students, algorithm study, and technical concept documentation",
-        "title": "Study Note",
-        "description": "Create and organize study notes with structured content, subject classification, and searchable tags. Features markdown support for rich formatting and timestamp tracking for study progress.",
-        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/study-note-listing/thumbnail.png"
+        "name": "Study Note",
+        "summary": "Create and organize study notes with structured content, subject classification, and searchable tags. Features markdown support for rich formatting and timestamp tracking for study progress.",
+        "cardThumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/study-note-listing/thumbnail.png"
       }
     },
     "relationships": {

@@ -9,8 +9,8 @@
     "type": "card",
     "attributes": {
       "ref": {
-        "name": "AudioFieldSpec",
-        "module": "../audio-field-spec"
+        "name": "default",
+        "module": "../../fields/audio"
       },
       "title": "Audio Field Spec",
       "readMe": null,

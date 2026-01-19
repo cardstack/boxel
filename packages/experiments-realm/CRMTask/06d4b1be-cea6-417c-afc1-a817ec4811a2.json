@@ -18,8 +18,8 @@
       },
       "name": "Fitness First App Integration Kickoff",
       "details": "Initial technical meeting for mobile app integration project phase",
-      "description": null,
-      "thumbnailURL": null
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "relationships": {
       "crmApp": {

@@ -36,7 +36,7 @@ export class Transaction extends CardDef {
       return `${this.chain.blockExplorer}/tx/${this.transactionHash}`;
     },
   });
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: Transaction) {
       if (!this.transactionHash) {
         return;
@@ -48,7 +48,7 @@ export class Transaction extends CardDef {
   static embedded = class Embedded extends Component<typeof this> {
     <template>
       <GridContainer>
-        <FieldContainer @label='Title'><@fields.title /></FieldContainer>
+        <FieldContainer @label='Title'><@fields.cardTitle /></FieldContainer>
         <FieldContainer @label='From'><@fields.from /></FieldContainer>
         <FieldContainer @label='To'><@fields.to /></FieldContainer>
         <FieldContainer @label='BlockNumber'><@fields.blockNumber
@@ -65,7 +65,7 @@ export class Transaction extends CardDef {
   static isolated = class Isolated extends Component<typeof Transaction> {
     <template>
       <GridContainer class='container'>
-        <FieldContainer @label='Title'><@fields.title /></FieldContainer>
+        <FieldContainer @label='Title'><@fields.cardTitle /></FieldContainer>
         <FieldContainer @label='Status'><@fields.status /></FieldContainer>
         <FieldContainer @label='Chain'><@fields.chain /></FieldContainer>
         <FieldContainer @label='BlockHash'><@fields.blockHash

@@ -9,12 +9,12 @@
       },
       "specType": null,
       "containedExamples": [],
-      "title": "getAvataarsUrl",
-      "description": null,
+      "cardTitle": "getAvataarsUrl",
+      "cardDescription": null,
       "cardInfo": {
-        "title": null,
-        "description": null,
-        "thumbnailURL": null,
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
         "notes": null
       }
     },

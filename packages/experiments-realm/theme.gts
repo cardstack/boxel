@@ -61,8 +61,8 @@ class Isolated extends Component<typeof BrandTheme> {
           <h1 class='brand-name'>{{@model.brand}} Theme</h1>
         </div>
         <p class='brand-description'>{{if
-            @model.description
-            @model.description
+            @model.cardDescription
+            @model.cardDescription
             'A comprehensive guide to brand elements and visual style'
           }}</p>
       </header>
@@ -1159,9 +1159,9 @@ export class BrandTheme extends CardDef {
   @field logoURL = contains(UrlField);
   @field symbolURL = contains(UrlField);
   @field cssVariables = contains(TextAreaField);
-  @field title = contains(StringField);
-  @field description = contains(StringField);
-  @field thumbnailURL = contains(UrlField, {
+  @field cardTitle = contains(StringField);
+  @field cardDescription = contains(StringField);
+  @field cardThumbnailURL = contains(UrlField, {
     computeVia: function (this: BrandTheme) {
       try {
         // Use the symbolURL as thumbnailURL

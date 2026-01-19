@@ -110,7 +110,7 @@ module('Acceptance | Commands tests', function (hooks) {
       @field name = contains(StringField);
       @field favoriteTreat = contains(StringField);
 
-      @field title = contains(StringField, {
+      @field cardTitle = contains(StringField, {
         computeVia: function (this: Pet) {
           return this.name;
         },
@@ -125,15 +125,15 @@ module('Acceptance | Commands tests', function (hooks) {
       static isolated = class Isolated extends Component<typeof this> {
         <template>
           <GridContainer class='container'>
-            <h2><@fields.title /></h2>
+            <h2><@fields.cardTitle /></h2>
             <div>
               <div>Favorite Treat: <@fields.favoriteTreat /></div>
               <div data-test-editable-meta>
                 {{#if @canEdit}}
-                  <@fields.title />
+                  <@fields.cardTitle />
                   is editable.
                 {{else}}
-                  <@fields.title />
+                  <@fields.cardTitle />
                   is NOT editable.
                 {{/if}}
               </div>
@@ -265,7 +265,7 @@ module('Acceptance | Commands tests', function (hooks) {
           return this.firstName[0];
         },
       });
-      @field title = contains(StringField, {
+      @field cardTitle = contains(StringField, {
         computeVia: function (this: Person) {
           return [this.firstName, this.lastName].filter(Boolean).join(' ');
         },
@@ -429,9 +429,9 @@ module('Acceptance | Commands tests', function (hooks) {
                   requiresApproval: true,
                 },
               ],
-              title: 'Useful Commands',
-              description: null,
-              thumbnailURL: null,
+              cardTitle: 'Useful Commands',
+              cardDescription: null,
+              cardThumbnailURL: null,
             },
             meta: {
               adoptsFrom: skillCardRef,
@@ -660,7 +660,7 @@ module('Acceptance | Commands tests', function (hooks) {
           arguments: JSON.stringify({
             description: 'Finding and opening Hassan card',
             attributes: {
-              title: 'Hassan',
+              cardTitle: 'Hassan',
             },
           }),
         },
@@ -840,7 +840,7 @@ module('Acceptance | Commands tests', function (hooks) {
               'Displaying the card with the Latin word for milkweed in the title.',
             attributes: {
               cardId: 'http://test-realm/test/Person/hassan',
-              cardInfo: { title: 'Asclepias' },
+              cardInfo: { name: 'Asclepias' },
             },
           }),
         },
@@ -929,7 +929,7 @@ module('Acceptance | Commands tests', function (hooks) {
             description:
               'Displaying the card with the Latin word for milkweed in the title.',
             attributes: {
-              cardId: 'http://test-realm/test/Person/hassan',
+              id: 'http://test-realm/test/Person/hassan',
               title: 'Asclepias',
             },
           }),
@@ -1218,7 +1218,7 @@ module('Acceptance | Commands tests', function (hooks) {
             description:
               'Displaying the card with the Latin word for milkweed in the title.',
             attributes: {
-              cardId: 'http://test-realm/test/Person/hassan',
+              id: 'http://test-realm/test/Person/hassan',
               title: 'Asclepias',
             },
           }),

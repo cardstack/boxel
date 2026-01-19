@@ -6,7 +6,7 @@
       "canonicalSlug": "mistralai/mistral-7b-instruct",
       "name": "Mistral: Mistral 7B Instruct",
       "created": 1716768000,
-      "description": "A high-performing, industry-standard 7.3B parameter model, with optimizations for speed and context length.\n\n*Mistral 7B Instruct has multiple version variants, and this is intended to be the latest version.*",
+      "cardDescription": "A high-performing, industry-standard 7.3B parameter model, with optimizations for speed and context length.\n\n*Mistral 7B Instruct has multiple version variants, and this is intended to be the latest version.*",
       "pricing": {
         "prompt": "0.000000028",
         "completion": "0.000000054",
@@ -51,9 +51,9 @@
         "temperature": 0.3
       },
       "cardInfo": {
-        "title": null,
-        "description": null,
-        "thumbnailURL": null,
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
         "notes": null
       }
     },

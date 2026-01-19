@@ -3,7 +3,7 @@ import BaseDatetimeField from 'https://cardstack.com/base/datetime';
 import ClockAlertIcon from '@cardstack/boxel-icons/clock-alert';
 import { formatDateTime } from '@cardstack/boxel-ui/helpers';
 
-export class DatetimeStampField extends BaseDatetimeField {
+export default class DatetimeStampField extends BaseDatetimeField {
   static displayName = 'DateTime Stamp';
   static icon = ClockAlertIcon;
 
@@ -102,5 +102,3 @@ export class DatetimeStampField extends BaseDatetimeField {
     </template>
   };
 }
-
-export default DatetimeStampField;

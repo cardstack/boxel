@@ -11,9 +11,9 @@
       "name": "Travel Experiences",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": "Trip planning, destination guides, accommodation booking, travel itineraries, local experiences, and adventure activities.",
-        "thumbnailURL": null
+        "name": null,
+        "summary": "Trip planning, destination guides, accommodation booking, travel itineraries, local experiences, and adventure activities.",
+        "cardThumbnailURL": null
       }
     },
     "relationships": {

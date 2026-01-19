@@ -113,11 +113,11 @@ module('Unit | query', function (hooks) {
       @field name = contains(StringField);
     }
     class SimpleSpec extends CardDef {
-      @field title = contains(StringField);
+      @field cardTitle = contains(StringField);
       @field ref = contains(CodeRefField);
     }
     class Event extends CardDef {
-      @field title = contains(StringField);
+      @field cardTitle = contains(StringField);
       @field venue = contains(StringField);
       @field date = contains(DateField);
     }
@@ -129,14 +129,14 @@ module('Unit | query', function (hooks) {
     loader.shimModule(`${testRealmURL}event`, { Event });
 
     let stringFieldEntry = new SimpleSpec({
-      title: 'String Field',
+      cardTitle: 'String Field',
       ref: {
         module: `${baseRealm.url}string`,
         name: 'default',
       },
     });
     let numberFieldEntry = new SimpleSpec({
-      title: 'Number Field',
+      cardTitle: 'Number Field',
       ref: {
         module: `${baseRealm.url}number`,
         name: 'default',
@@ -171,12 +171,12 @@ module('Unit | query', function (hooks) {
     let paper = new Cat({ name: 'Paper' });
 
     let mangoBirthday = new Event({
-      title: "Mango's Birthday",
+      cardTitle: "Mango's Birthday",
       venue: 'Dog Park',
       date: p('2024-10-30'),
     });
     let vangoghBirthday = new Event({
-      title: "Van Gogh's Birthday",
+      cardTitle: "Van Gogh's Birthday",
       venue: 'Backyard',
       date: p('2024-11-19'),
     });
@@ -637,7 +637,7 @@ module('Unit | query', function (hooks) {
         card: stringFieldEntry,
         data: {
           search_doc: {
-            title: stringFieldEntry.title,
+            cardTitle: stringFieldEntry.cardTitle,
             ref: internalKeyFor((stringFieldEntry as any).ref, undefined),
           },
         },
@@ -646,7 +646,7 @@ module('Unit | query', function (hooks) {
         card: numberFieldEntry,
         data: {
           search_doc: {
-            title: numberFieldEntry.title,
+            cardTitle: numberFieldEntry.cardTitle,
             ref: internalKeyFor((numberFieldEntry as any).ref, undefined),
           },
         },
@@ -684,7 +684,7 @@ module('Unit | query', function (hooks) {
         card: mangoBirthday,
         data: {
           search_doc: {
-            title: mangoBirthday.title,
+            cardTitle: mangoBirthday.cardTitle,
             venue: (mangoBirthday as any).venue,
             date: format((mangoBirthday as any).date, 'yyyy-MM-dd'),
           },
@@ -694,7 +694,7 @@ module('Unit | query', function (hooks) {
         card: vangoghBirthday,
         data: {
           search_doc: {
-            title: vangoghBirthday.title,
+            cardTitle: vangoghBirthday.cardTitle,
             venue: (vangoghBirthday as any).venue,
             date: format((vangoghBirthday as any).date, 'yyyy-MM-dd'),
           },

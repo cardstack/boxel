@@ -18,7 +18,7 @@ export class PersonCard extends CardDef {
   @field name = contains(StringField, {
     description: 'Name of the person',
   });
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: PersonCard) {
       return this.name;
     },

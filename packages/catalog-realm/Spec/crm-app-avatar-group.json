@@ -9,9 +9,9 @@
       },
       "specType": "component",
       "containedExamples": [],
-      "title": "Avatar Group",
-      "description": "Spec for Avatar Group component",
-      "thumbnailURL": null
+      "cardTitle": "Avatar Group",
+      "cardDescription": "Spec for Avatar Group component",
+      "cardThumbnailURL": null
     },
     "relationships": {},
     "meta": {

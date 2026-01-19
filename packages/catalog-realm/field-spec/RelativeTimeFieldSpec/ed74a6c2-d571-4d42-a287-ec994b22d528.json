@@ -9,8 +9,8 @@
     "type": "card",
     "attributes": {
       "ref": {
-        "name": "RelativeTimeFieldSpec",
-        "module": "../relative-time-field-spec"
+        "name": "default",
+        "module": "../../fields/time/relative-time"
       },
       "title": "Relative Time Field Spec",
       "readMe": null,
