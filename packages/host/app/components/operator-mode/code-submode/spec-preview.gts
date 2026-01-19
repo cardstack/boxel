@@ -4,9 +4,11 @@ import { action } from '@ember/object';
 import { service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
 import GlimmerComponent from '@glimmer/component';
-import { resource, use } from 'ember-resources';
 
 import { consume, provide } from 'ember-provide-consume-context';
+import { resource, use } from 'ember-resources';
+
+import { TrackedObject } from 'tracked-built-ins';
 
 import {
   BoxelButton,
@@ -37,9 +39,9 @@ import CardRenderer from '@cardstack/host/components/card-renderer';
 import { urlForRealmLookup } from '@cardstack/host/lib/utils';
 import type { ModuleDeclaration } from '@cardstack/host/resources/module-contents';
 
+import type LoaderService from '@cardstack/host/services/loader-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type { ModuleInspectorView } from '@cardstack/host/services/operator-mode-state-service';
-import type LoaderService from '@cardstack/host/services/loader-service';
 import type RealmService from '@cardstack/host/services/realm';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 import type SpecPanelService from '@cardstack/host/services/spec-panel-service';
@@ -55,7 +57,6 @@ import Overlays from '../overlays';
 
 import type { CardDefOrId } from '../stack-item';
 import type { WithBoundArgs } from '@glint/template';
-import { TrackedObject } from 'tracked-built-ins';
 
 interface Signature {
   Element: HTMLElement;

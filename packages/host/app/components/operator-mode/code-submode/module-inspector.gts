@@ -17,6 +17,8 @@ import { consume } from 'ember-provide-consume-context';
 import { resource, use } from 'ember-resources';
 import window from 'ember-window-mock';
 
+import { TrackedObject } from 'tracked-built-ins';
+
 import { eq } from '@cardstack/boxel-ui/helpers';
 
 import type {
@@ -87,7 +89,6 @@ import type { FileDef } from 'https://cardstack.com/base/file-api';
 import type { Spec } from 'https://cardstack.com/base/spec';
 
 import type { ComponentLike } from '@glint/template';
-import { TrackedObject } from 'tracked-built-ins';
 
 const moduleInspectorPanels: Record<ModuleInspectorView, ComponentLike> = {
   schema: Schema,
