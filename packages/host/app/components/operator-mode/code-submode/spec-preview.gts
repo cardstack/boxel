@@ -75,6 +75,7 @@ interface Signature {
       WithBoundArgs<
         typeof SpecPreviewContent,
         | 'showCreateSpec'
+        | 'errorMessage'
         | 'canWrite'
         | 'onSelectSpec'
         | 'activeSpec'
@@ -90,6 +91,7 @@ interface ContentSignature {
   Element: HTMLDivElement;
   Args: {
     showCreateSpec: boolean;
+    errorMessage?: string;
     canWrite: boolean;
     onSelectSpec: (spec: Spec) => void;
     allSpecs: Spec[];
@@ -184,6 +186,10 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
       {{#if @showCreateSpec}}
         <div data-test-create-spec-intent-message>
           Create a Boxel Specification to be able to create new instances
+        </div>
+      {{else if @errorMessage}}
+        <div data-test-spec-error-message>
+          {{@errorMessage}}
         </div>
       {{else if this.displayCannotWrite}}
         <div data-test-cannot-write-intent-message>
@@ -365,6 +371,17 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
     );
   }
 
+  private get displayCannotCreateSpecFromSpec() {
+    return this.selectedDeclarationIsSpec;
+  }
+
+  private get errorMessage() {
+    if (this.displayCannotCreateSpecFromSpec) {
+      return 'Cannot display or create Boxel Specification for subclasses of spec';
+    }
+    return undefined;
+  }
+
   get isLoading() {
     return false;
   }
@@ -385,6 +402,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
         (component
           SpecPreviewContent
           showCreateSpec=@showCreateSpec
+          errorMessage=this.errorMessage
           canWrite=this.canWrite
           onSelectSpec=this.onSelectSpec
           activeSpec=@activeSpec

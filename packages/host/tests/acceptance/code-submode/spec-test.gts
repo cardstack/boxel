@@ -738,7 +738,7 @@ module('Acceptance | Spec preview', function (hooks) {
     assert.dom('[data-test-create-spec-intent-message]').exists();
     await percySnapshot(assert);
   });
-  test('shows cannot create spec message for spec declaration', async function (assert) {
+  test('shows cannot create spec message for subclasses of spec ', async function (assert) {
     await visitOperatorMode({
       submode: 'code',
       codePath: `${testRealmURL}test-spec.gts`,
@@ -746,7 +746,12 @@ module('Acceptance | Spec preview', function (hooks) {
     await click('[data-test-module-inspector-view="spec"]');
     assert.dom('[data-test-create-spec-button]').doesNotExist();
     assert.dom('[data-test-create-spec-intent-message]').doesNotExist();
-    assert.dom('[data-test-cannot-write-intent-message]').exists();
+    assert.dom('[data-test-cannot-write-intent-message]').doesNotExist();
+    assert
+      .dom('[data-test-spec-error-message]')
+      .hasText(
+        'Cannot display or create Boxel Specification for subclasses of spec',
+      );
   });
   test('spec updates when different declaration selected in the module', async function (assert) {
     await visitOperatorMode({
