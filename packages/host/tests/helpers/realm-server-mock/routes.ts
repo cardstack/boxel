@@ -173,10 +173,6 @@ function registerInfoRoutes() {
         throw e;
       }
 
-      console.info(
-        `[realm-server-mock] _info request ${JSON.stringify(realmList)}`,
-      );
-
       let data: { id: string; type: 'realm-info'; attributes: RealmInfo }[] =
         [];
       let publicReadableRealms: string[] = [];
@@ -194,12 +190,6 @@ function registerInfoRoutes() {
         }
         data.push({ id: realmURL, type: 'realm-info', attributes: info });
       }
-      console.info(
-        `[realm-server-mock] _info response ${JSON.stringify({
-          realms: data.map((entry) => entry.id),
-          publicReadableRealms,
-        })}`,
-      );
 
       let headers: Record<string, string> = {
         'content-type': SupportedMimeType.RealmInfo,
