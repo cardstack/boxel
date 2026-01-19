@@ -1105,20 +1105,20 @@ export class Realm {
       }
     }
 
-      if (files.size > 0) {
-        try {
-          writeResults = await this.writeMany(files, {
-            clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
-            serializeFile: true,
-          });
-        } catch (e: any) {
-          if (e instanceof CardError) {
-            return responseWithError(e, requestContext);
-          }
-          return createResponse({
-            body: JSON.stringify({
-              errors: [{ title: 'Write Error', detail: e.message }],
-            }),
+    if (files.size > 0) {
+      try {
+        writeResults = await this.writeMany(files, {
+          clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
+          serializeFile: true,
+        });
+      } catch (e: any) {
+        if (e instanceof CardError) {
+          return responseWithError(e, requestContext);
+        }
+        return createResponse({
+          body: JSON.stringify({
+            errors: [{ title: 'Write Error', detail: e.message }],
+          }),
           init: {
             status: 500,
             headers: { 'content-type': SupportedMimeType.JSONAPI },
