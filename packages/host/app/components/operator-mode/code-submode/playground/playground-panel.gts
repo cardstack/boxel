@@ -586,11 +586,11 @@ export default class PlaygroundPanel extends Component<Signature> {
   private autoGenerateInstance = restartableTask(async () => {
     this.#creationError = false;
     try {
-    if (this.args.isFieldDef && this.specCard) {
-      await this.createNewField.perform(this.specCard);
-    } else {
-      await this.createNewCard.perform();
-    }
+      if (this.args.isFieldDef && this.specCard) {
+        await this.createNewField.perform(this.specCard);
+      } else {
+        await this.createNewCard.perform();
+      }
     } catch {
       this.#creationError = true;
     }
