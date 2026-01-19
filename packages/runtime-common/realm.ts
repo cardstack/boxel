@@ -359,7 +359,7 @@ interface Options {
   fromScratchIndexPriority?: number;
 }
 
-const DEFAULT_MAX_CARD_WRITE_SIZE_BYTES = 64 * 1024;
+const DEFAULT_CARD_SIZE_LIMIT = 64 * 1024;
 
 interface UpdateItem {
   operation: 'add' | 'update' | 'removed';
@@ -396,7 +396,7 @@ export class Realm {
   #copiedFromRealm: URL | undefined;
   #sourceCache = new AliasCache<SourceCacheEntry>();
   #moduleCache = new AliasCache<ModuleCacheEntry>();
-  #maxCardWriteSizeBytes: number;
+  #cardSizeLimit: number;
 
   #publicEndpoints: RouteTable<true> = new Map([
     [
@@ -438,7 +438,7 @@ export class Realm {
       realmServerMatrixClient,
       realmServerURL,
       definitionLookup,
-      maxCardWriteSizeBytes,
+      cardSizeLimit,
     }: {
       url: string;
       adapter: RealmAdapter;
@@ -450,7 +450,7 @@ export class Realm {
       realmServerMatrixClient: MatrixClient;
       realmServerURL: string;
       definitionLookup: DefinitionLookup;
-      maxCardWriteSizeBytes?: number;
+      cardSizeLimit?: number;
     },
     opts?: Options,
   ) {
@@ -465,8 +465,7 @@ export class Realm {
       opts?.fromScratchIndexPriority ?? systemInitiatedPriority;
     this.#realmServerMatrixClient = realmServerMatrixClient;
     this.#realmServerURL = ensureTrailingSlash(realmServerURL);
-    this.#maxCardWriteSizeBytes =
-      maxCardWriteSizeBytes ?? DEFAULT_MAX_CARD_WRITE_SIZE_BYTES;
+    this.#cardSizeLimit = cardSizeLimit ?? DEFAULT_CARD_SIZE_LIMIT;
     this.#realmServerMatrixUserId = userIdFromUsername(
       realmServerMatrixClient.username,
       realmServerMatrixClient.matrixURL.href,
@@ -791,7 +790,7 @@ export class Realm {
           throw e;
         }
       }
-      validateWriteSize(content, this.#maxCardWriteSizeBytes, 'file');
+      validateWriteSize(content, this.#cardSizeLimit, 'file');
       let existingFile = await readFileAsText(path, (p) =>
         this.#adapter.openFile(p),
       );
@@ -1061,14 +1060,14 @@ export class Realm {
       }
       if (isModuleResource(resource)) {
         let content = resource.attributes?.content ?? '';
-        validateWriteSize(content, this.#maxCardWriteSizeBytes, 'file');
+        validateWriteSize(content, this.#cardSizeLimit, 'file');
         files.set(localPath, content);
       } else if (isCardResource(resource)) {
         let doc = {
           data: resource,
         };
         let jsonString = JSON.stringify(doc, null, 2);
-        validateWriteSize(jsonString, this.#maxCardWriteSizeBytes, 'card');
+        validateWriteSize(jsonString, this.#cardSizeLimit, 'card');
         files.set(localPath, jsonString);
       } else {
         return createResponse({

@@ -128,7 +128,6 @@ module('Integration | commands | check-correctness', function (hooks) {
       secondResult.correct,
       'second run reports errors after invalid change',
     );
-    console.log(secondResult.errors);
     assert.ok(
       secondResult.errors.some((e: string) =>
         e.includes('Name cannot be "Bill"'),
@@ -296,8 +295,8 @@ ${REPLACE_MARKER}`;
     let roomId = '!room:example.com';
     let fileUrl = `${testRealmURL}pet.gts`;
 
-    let originalMaxSize = environmentService.maxCardWriteSizeBytes;
-    environmentService.maxCardWriteSizeBytes = 20;
+    let originalMaxSize = environmentService.cardSizeLimit;
+    environmentService.cardSizeLimit = 20;
 
     try {
       let { content } = await cardService.getSource(new URL(fileUrl));
@@ -324,7 +323,7 @@ ${REPLACE_MARKER}`;
         'error mentions size limit',
       );
     } finally {
-      environmentService.maxCardWriteSizeBytes = originalMaxSize;
+      environmentService.cardSizeLimit = originalMaxSize;
     }
   });
 
@@ -343,8 +342,8 @@ ${REPLACE_MARKER}`;
     store.addReference(cardId);
     await store.waitForCardLoad(cardId);
 
-    let originalMaxSize = environmentService.maxCardWriteSizeBytes;
-    environmentService.maxCardWriteSizeBytes = 1000;
+    let originalMaxSize = environmentService.cardSizeLimit;
+    environmentService.cardSizeLimit = 1000;
 
     try {
       let patchCommand = new PatchCardInstanceCommand(
@@ -367,14 +366,13 @@ ${REPLACE_MARKER}`;
         targetRef: cardId,
         roomId,
       });
-      console.log(result.errors);
       assert.false(result.correct, 'size limit error reports incorrect');
       assert.ok(
-        result.errors[0]?.includes('exceeds maximum allowed size (20 bytes)'),
+        result.errors[0]?.includes('exceeds maximum allowed size (1000 bytes)'),
         'error mentions size limit',
       );
     } finally {
-      environmentService.maxCardWriteSizeBytes = originalMaxSize;
+      environmentService.cardSizeLimit = originalMaxSize;
     }
   });
 });

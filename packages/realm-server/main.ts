@@ -272,9 +272,7 @@ const getIndexHTML = async () => {
         realmServerMatrixClient,
         realmServerURL: serverURL,
         definitionLookup,
-        maxCardWriteSizeBytes: Number(
-          process.env.MAX_CARD_WRITE_SIZE_BYTES ?? 64 * 1024,
-        ),
+        cardSizeLimit: Number(process.env.CARD_SIZE_LIMIT ?? 64 * 1024),
       },
       {
         fullIndexOnStartup: true,

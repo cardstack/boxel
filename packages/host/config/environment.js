@@ -40,9 +40,7 @@ module.exports = function (environment) {
     cardRenderTimeout: Number(
       process.env.RENDER_TIMEOUT_MS ?? DEFAULT_CARD_RENDER_TIMEOUT_MS,
     ),
-    maxCardWriteSizeBytes: Number(
-      process.env.MAX_CARD_WRITE_SIZE_BYTES ?? 64 * 1024,
-    ),
+    cardSizeLimit: Number(process.env.CARD_SIZE_LIMIT ?? 64 * 1024),
     iconsURL: process.env.ICONS_URL || 'https://boxel-icons.boxel.ai',
     publishedRealmBoxelSpaceDomain:
       process.env.PUBLISHED_REALM_BOXEL_SPACE_DOMAIN || 'localhost:4201',
@@ -92,9 +90,6 @@ module.exports = function (environment) {
     ENV.serverEchoDebounceMs = 0;
     ENV.loginMessageTimeoutMs = 0;
     ENV.minSaveTaskDurationMs = 0;
-    ENV.maxCardWriteSizeBytes = Number(
-      process.env.MAX_CARD_WRITE_SIZE_BYTES ?? 1024,
-    );
     ENV.sqlSchema = sqlSchema;
     ENV.featureFlags = {
       SHOW_ASK_AI: true,

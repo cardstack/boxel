@@ -79,7 +79,7 @@ export class RealmServer {
     | (() => Promise<string | undefined>)
     | undefined;
   private enableFileWatcher: boolean;
-  private maxCardWriteSizeBytes: number;
+  private cardSizeLimit: number;
   private domainsForPublishedRealms:
     | {
         boxelSpace?: string;
@@ -139,9 +139,7 @@ export class RealmServer {
     ensureDirSync(realmsRootPath);
 
     this.serverURL = serverURL;
-    this.maxCardWriteSizeBytes = Number(
-      process.env.MAX_CARD_WRITE_SIZE_BYTES ?? 64 * 1024,
-    );
+    this.cardSizeLimit = Number(process.env.CARD_SIZE_LIMIT ?? 64 * 1024);
     this.virtualNetwork = virtualNetwork;
     this.matrixClient = matrixClient;
 
@@ -434,7 +432,7 @@ export class RealmServer {
           hostsOwnAssets: false,
           assetsURL: this.assetsURL.href,
           realmServerURL: this.serverURL.href,
-          maxCardWriteSizeBytes: this.maxCardWriteSizeBytes,
+          cardSizeLimit: this.cardSizeLimit,
         });
         return `${g1}${encodeURIComponent(JSON.stringify(config))}${g3}`;
       },
@@ -758,7 +756,7 @@ export class RealmServer {
         realmServerMatrixClient: this.matrixClient,
         realmServerURL: this.serverURL.href,
         definitionLookup: this.definitionLookup,
-        maxCardWriteSizeBytes: this.maxCardWriteSizeBytes,
+        cardSizeLimit: this.cardSizeLimit,
       },
       Object.keys(realmOptions).length ? realmOptions : undefined,
     );
@@ -828,7 +826,7 @@ export class RealmServer {
             realmServerMatrixClient: this.matrixClient,
             realmServerURL: this.serverURL.href,
             definitionLookup: this.definitionLookup,
-            maxCardWriteSizeBytes: this.maxCardWriteSizeBytes,
+            cardSizeLimit: this.cardSizeLimit,
           });
           this.virtualNetwork.mount(realm.handle);
           realms.push(realm);
@@ -959,7 +957,7 @@ export class RealmServer {
             realmServerMatrixClient: this.matrixClient,
             realmServerURL: this.serverURL.href,
             definitionLookup: this.definitionLookup,
-            maxCardWriteSizeBytes: this.maxCardWriteSizeBytes,
+            cardSizeLimit: this.cardSizeLimit,
           });
 
           this.virtualNetwork.mount(realm.handle);

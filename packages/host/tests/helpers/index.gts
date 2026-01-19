@@ -794,9 +794,7 @@ async function setupTestRealm({
     }),
     realmServerURL: ensureTrailingSlash(ENV.realmServerURL),
     definitionLookup,
-    maxCardWriteSizeBytes: Number(
-      process.env.MAX_CARD_WRITE_SIZE_BYTES ?? 64 * 1024,
-    ),
+    cardSizeLimit: Number(process.env.CARD_SIZE_LIMIT ?? 64 * 1024),
   });
 
   // we use this to run cards that were added to the test filesystem

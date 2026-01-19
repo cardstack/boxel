@@ -1165,8 +1165,8 @@ module('Acceptance | interact submode tests', function (hooks) {
   module('size limit errors', function () {
     test('edit view shows size limit error when save exceeds limit', async function (assert) {
       let environmentService = getService('environment-service') as any;
-      let originalMaxSize = environmentService.maxCardWriteSizeBytes;
-      environmentService.maxCardWriteSizeBytes = 1000;
+      let originalMaxSize = environmentService.cardSizeLimit;
+      environmentService.cardSizeLimit = 1000;
 
       try {
         await visitOperatorMode({
@@ -1198,10 +1198,10 @@ module('Acceptance | interact submode tests', function (hooks) {
             `[data-test-stack-card="${testRealmURL}Pet/mango"] [data-test-auto-save-indicator]`,
           )
           .includesText(
-            `exceeds maximum allowed size (${environmentService.maxCardWriteSizeBytes} bytes)`,
+            `exceeds maximum allowed size (${environmentService.cardSizeLimit} bytes)`,
           );
       } finally {
-        environmentService.maxCardWriteSizeBytes = originalMaxSize;
+        environmentService.cardSizeLimit = originalMaxSize;
       }
     });
   });
