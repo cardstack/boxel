@@ -14,6 +14,7 @@ import Schema from '@cardstack/boxel-icons/schema';
 import { task } from 'ember-concurrency';
 import Modifier from 'ember-modifier';
 import { consume } from 'ember-provide-consume-context';
+import { resource, use } from 'ember-resources';
 import window from 'ember-window-mock';
 
 import { eq } from '@cardstack/boxel-ui/helpers';
@@ -29,9 +30,11 @@ import {
   type Query,
   type CardResourceMeta,
   isFieldDef,
+  isSpecCard,
   internalKeyFor,
   GetCardsContextName,
   GetCardContextName,
+  loadCardDef,
   specRef,
   localId,
   meta,
@@ -84,6 +87,7 @@ import type { FileDef } from 'https://cardstack.com/base/file-api';
 import type { Spec } from 'https://cardstack.com/base/spec';
 
 import type { ComponentLike } from '@glint/template';
+import { TrackedObject } from 'tracked-built-ins';
 
 const moduleInspectorPanels: Record<ModuleInspectorView, ComponentLike> = {
   schema: Schema,
@@ -131,6 +135,30 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
 
   @tracked private specSearch: ReturnType<getCards<Spec>> | undefined;
   @tracked private cardResource: ReturnType<getCard> | undefined;
+
+  @use private isSpecResource = resource(() => {
+    let state = new TrackedObject<{ value: boolean }>({ value: false });
+    let codeRef = this.selectedDeclarationAsCodeRef;
+    if (!codeRef.module || !codeRef.name) {
+      return state;
+    }
+    (async () => {
+      try {
+        let cardDef = await loadCardDef(codeRef, {
+          loader: this.loaderService.loader,
+          relativeTo: new URL(this.operatorModeStateService.realmURL),
+        });
+        state.value = isSpecCard(cardDef);
+      } catch {
+        state.value = false;
+      }
+    })();
+    return state;
+  });
+
+  private get selectedDeclarationIsSpec() {
+    return this.isSpecResource?.value ?? false;
+  }
 
   private get isEmptyFile() {
     return this.args.readyFile?.content.match(/^\s*$/);
@@ -447,6 +475,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
       !this.specSearch?.isLoading &&
       this.specsForSelectedDefinition.length === 0 &&
       !this.activeSpec &&
+      !this.selectedDeclarationIsSpec &&
       this.canWrite
     );
   }

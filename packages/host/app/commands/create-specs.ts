@@ -6,6 +6,7 @@ import {
   type ResolvedCodeRef,
   isCardDef,
   isFieldDef,
+  isSpecCard,
   type Query,
   type Loader,
   getAncestor,
@@ -152,6 +153,12 @@ export default class CreateSpecCommand extends HostBaseCommand<
     createIfExists: boolean = false,
     autoGenerateReadme: boolean = false,
   ): Promise<CreateSpecResult> {
+    if (
+      isCardOrFieldDeclaration(declaration) &&
+      isSpecCard(declaration.cardOrField)
+    ) {
+      throw new Error('Cannot create a spec from another spec');
+    }
     const title = this.getSpecTitle(declaration, codeRef.name);
     const specType = new SpecTypeGuesser(declaration).type;
 

@@ -4,6 +4,7 @@ import { action } from '@ember/object';
 import { service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
 import GlimmerComponent from '@glimmer/component';
+import { resource, use } from 'ember-resources';
 
 import { consume, provide } from 'ember-provide-consume-context';
 
@@ -27,6 +28,8 @@ import {
   localId,
   isLocalId,
   CardContextName,
+  isSpecCard,
+  loadCardDef,
 } from '@cardstack/runtime-common';
 
 import CardRenderer from '@cardstack/host/components/card-renderer';
@@ -36,6 +39,7 @@ import type { ModuleDeclaration } from '@cardstack/host/resources/module-content
 
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type { ModuleInspectorView } from '@cardstack/host/services/operator-mode-state-service';
+import type LoaderService from '@cardstack/host/services/loader-service';
 import type RealmService from '@cardstack/host/services/realm';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 import type SpecPanelService from '@cardstack/host/services/spec-panel-service';
@@ -51,6 +55,7 @@ import Overlays from '../overlays';
 
 import type { CardDefOrId } from '../stack-item';
 import type { WithBoundArgs } from '@glint/template';
+import { TrackedObject } from 'tracked-built-ins';
 
 interface Signature {
   Element: HTMLElement;
@@ -318,18 +323,46 @@ const SpecPreviewLoading: TemplateOnlyComponent<SpecPreviewLoadingSignature> =
   </template>;
 
 export default class SpecPreview extends GlimmerComponent<Signature> {
+  @service private declare loaderService: LoaderService;
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare realm: RealmService;
   @service private declare recentFilesService: RecentFilesService;
   @service private declare specPanelService: SpecPanelService;
   @service private declare store: StoreService;
 
+  @use private selectedDeclarationSpecState = resource(() => {
+    let state = new TrackedObject<{ value: boolean }>({ value: false });
+    let codeRef = this.args.selectedDeclarationAsCodeRef;
+    if (!codeRef.module || !codeRef.name) {
+      return state;
+    }
+    (async () => {
+      try {
+        let cardDef = await loadCardDef(codeRef, {
+          loader: this.loaderService.loader,
+          relativeTo: new URL(this.operatorModeStateService.realmURL),
+        });
+        state.value = isSpecCard(cardDef);
+      } catch {
+        state.value = false;
+      }
+    })();
+    return state;
+  });
+
   @action private onSelectSpec(spec: Spec): void {
     this.specPanelService.setSelection(spec.id);
   }
 
+  private get selectedDeclarationIsSpec() {
+    return this.selectedDeclarationSpecState?.value ?? false;
+  }
+
   private get canWrite() {
-    return this.realm.canWrite(this.operatorModeStateService.realmURL);
+    return (
+      this.realm.canWrite(this.operatorModeStateService.realmURL) &&
+      !this.selectedDeclarationIsSpec
+    );
   }
 
   get isLoading() {

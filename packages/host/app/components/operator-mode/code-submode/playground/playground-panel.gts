@@ -25,6 +25,7 @@ import {
   CardContextName,
   cardTypeDisplayName,
   getCardMenuItems,
+  isSpecCard,
   type Permissions,
   PermissionsContextName,
 } from '@cardstack/runtime-common';
@@ -584,10 +585,14 @@ export default class PlaygroundPanel extends Component<Signature> {
 
   private autoGenerateInstance = restartableTask(async () => {
     this.#creationError = false;
+    try {
     if (this.args.isFieldDef && this.specCard) {
       await this.createNewField.perform(this.specCard);
     } else {
       await this.createNewCard.perform();
+    }
+    } catch {
+      this.#creationError = true;
     }
   });
 
@@ -644,6 +649,7 @@ export default class PlaygroundPanel extends Component<Signature> {
         },
       };
     } else {
+      await this.assertNotSpecCard();
       newCardJSON = {
         data: {
           lid: localId,
@@ -694,6 +700,15 @@ export default class PlaygroundPanel extends Component<Signature> {
     this.persistSelections(specCard.id, 'edit', index);
     this.closeInstanceChooser();
   });
+
+  private async assertNotSpecCard() {
+    let cardDef = await loadCardDef(this.args.codeRef, {
+      loader: this.loaderService.loader,
+    });
+    if (isSpecCard(cardDef)) {
+      throw new Error('Cannot create a spec from another spec');
+    }
+  }
 
   private closeInstanceChooser = () =>
     (

@@ -29,6 +29,7 @@ import {
   ensureExtension,
   isPrimitive,
   isResolvedCodeRef,
+  isSpec,
   loadCardDef,
   Loader,
   realmURL,
@@ -857,6 +858,7 @@ class SpecDescriptionField extends StringField {
 
 export class Spec extends CardDef {
   static displayName = 'Spec';
+  static [isSpec] = true;
   static icon = BoxModel;
   @field readMe = contains(MarkdownField);
 

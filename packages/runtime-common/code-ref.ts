@@ -9,6 +9,7 @@ import type {
 import { Loader } from './loader';
 import {
   isField,
+  isSpec,
   primitive,
   fields,
   fieldsUntracked,
@@ -116,6 +117,10 @@ export function isFieldInstance<T extends FieldDef>(
 
 export function isPrimitive(def: any) {
   return isBaseDef(def) && primitive in def;
+}
+
+export function isSpecCard(def: any) {
+  return isBaseDef(def) && isSpec in def;
 }
 
 export function codeRefWithAbsoluteURL(

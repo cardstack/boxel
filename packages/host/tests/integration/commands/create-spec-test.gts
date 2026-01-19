@@ -106,6 +106,11 @@ export default class TestComponent extends Component {
 export default class TestCommand extends Command {
   static displayName = 'Test Command';
 }`,
+        'test-spec.gts': `import { Spec } from 'https://cardstack.com/base/spec';
+
+export class TestSpec extends Spec {
+  static displayName = 'Test Spec';
+}`,
         '.realm.json': `{ "name": "${realmName}" }`,
       },
     });
@@ -238,6 +243,27 @@ export default class TestCommand extends Command {
         assert.strictEqual(
           error.message,
           `Could not find declaration for NonExistentExport in ${testRealmURL}test-card.gts`,
+        );
+      }
+    }
+  });
+
+  test('throws error when creating a spec from another spec', async function (assert) {
+    try {
+      await createSpecCommand.execute({
+        codeRef: {
+          module: `${testRealmURL}test-spec.gts`,
+          name: 'TestSpec',
+        },
+        targetRealm: testRealmURL,
+      });
+      assert.ok(false, 'Should have thrown an error');
+    } catch (error) {
+      assert.ok(error instanceof Error, 'Error is thrown');
+      if (error instanceof Error) {
+        assert.strictEqual(
+          error.message,
+          'Cannot create a spec from another spec',
         );
       }
     }
