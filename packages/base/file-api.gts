@@ -42,13 +42,13 @@ class Edit extends Component<typeof FileDef> {
   </template>
 }
 
-export type SerializedFile = {
+export type SerializedFile<Extra extends object = {}> = {
   sourceUrl: string;
   url: string;
   name: string;
   contentType: string;
   contentHash?: string;
-};
+} & Extra;
 
 export type ByteStream = ReadableStream<Uint8Array> | Uint8Array;
 

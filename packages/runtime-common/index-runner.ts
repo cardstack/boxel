@@ -48,6 +48,15 @@ import {
 } from './error';
 
 const FILEDEF_CODE_REF_BY_EXTENSION: Record<string, ResolvedCodeRef> = {
+  // TODO: Replace with realm metadata configuration.
+  '.markdown': {
+    module: `${baseRealm.url}markdown-file-def`,
+    name: 'MarkdownDef',
+  },
+  '.md': {
+    module: `${baseRealm.url}markdown-file-def`,
+    name: 'MarkdownDef',
+  },
   '.mismatch': { module: './filedef-mismatch', name: 'FileDef' },
 };
 const BASE_FILE_DEF_CODE_REF: ResolvedCodeRef = {
