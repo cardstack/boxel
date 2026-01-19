@@ -516,7 +516,8 @@ export async function createRealm({
     realmServerMatrixClient,
     realmServerURL: new URL(new URL(realmURL).origin).href,
     definitionLookup,
-    cardSizeLimit: cardSizeLimit ?? Number(process.env.CARD_SIZE_LIMIT ?? 64 * 1024),
+    cardSizeLimit:
+      cardSizeLimit ?? Number(process.env.CARD_SIZE_LIMIT ?? 64 * 1024),
   });
   if (worker) {
     virtualNetwork.mount(realm.handle);

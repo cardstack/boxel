@@ -958,7 +958,7 @@ module(basename(__filename), function () {
       });
 
       module('public writable realm with size limit', function (hooks) {
-        setupPermissionedRealm(hooks, {
+        setupPermissionedRealmAtURL(hooks, realmURL, {
           permissions: {
             '*': ['read', 'write'],
           },
