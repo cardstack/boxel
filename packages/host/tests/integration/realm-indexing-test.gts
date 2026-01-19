@@ -188,6 +188,7 @@ module(`Integration | realm indexing`, function (hooks) {
     assert.true(response.ok, 'file meta request succeeds');
 
     let body = await response.json();
+    assert.strictEqual(body?.data?.type, 'file-meta');
     let contentHash = body?.data?.attributes?.contentHash;
     let expectedHash = md5(
       new TextEncoder().encode('Hello from the test realm.'),
@@ -353,10 +354,15 @@ module(`Integration | realm indexing`, function (hooks) {
           mango.error.errorDetail.message,
           `missing file ${testRealmURL}Person/owner.json`,
         );
-        assert.deepEqual(mango.error.errorDetail.deps, [
-          `${testRealmURL}Person/owner.json`,
-          'http://localhost:4202/test/pet',
-        ]);
+        assert.deepEqual(
+          mango.error.errorDetail.deps,
+          [
+            `${testRealmURL}Person/owner`,
+            `${testRealmURL}Person/owner.json`,
+            'http://localhost:4202/test/pet',
+          ],
+          'error deps are correct',
+        );
       } else {
         assert.ok(false, `expected search entry to be an error doc`);
       }

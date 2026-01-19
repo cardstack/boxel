@@ -78,10 +78,8 @@ function makeStubPagePool(maxPages: number) {
 
 module(basename(__filename), function () {
   module('prerender - dynamic tests', function (hooks) {
-    let realmURL = 'http://127.0.0.1:4450/';
-    let prerenderServerURL = realmURL.endsWith('/')
-      ? realmURL.slice(0, -1)
-      : realmURL;
+    let realmURL = 'http://127.0.0.1:4450/test/';
+    let prerenderServerURL = new URL(realmURL).origin;
     let testUserId = '@user1:localhost';
     let permissions: RealmPermissions = {};
     let prerenderer: Prerenderer;
@@ -749,11 +747,9 @@ module(basename(__filename), function () {
   });
 
   module('prerender - permissioned auth failures', function (hooks) {
-    let providerRealmURL = 'http://127.0.0.1:4451/';
-    let consumerRealmURL = 'http://127.0.0.1:4452/';
-    let prerenderServerURL = consumerRealmURL.endsWith('/')
-      ? consumerRealmURL.slice(0, -1)
-      : consumerRealmURL;
+    let providerRealmURL = 'http://127.0.0.1:4451/test/';
+    let consumerRealmURL = 'http://127.0.0.1:4452/test/';
+    let prerenderServerURL = new URL(consumerRealmURL).origin;
     let testUserId = '@user1:localhost';
     let permissions: RealmPermissions = {};
     let prerenderer: Prerenderer;
@@ -1005,12 +1001,10 @@ module(basename(__filename), function () {
   });
 
   module('prerender - static tests', function (hooks) {
-    let realmURL1 = 'http://127.0.0.1:4447/';
-    let realmURL2 = 'http://127.0.0.1:4448/';
-    let realmURL3 = 'http://127.0.0.1:4449/';
-    let prerenderServerURL = realmURL1.endsWith('/')
-      ? realmURL1.slice(0, -1)
-      : realmURL1;
+    let realmURL1 = 'http://127.0.0.1:4447/test/';
+    let realmURL2 = 'http://127.0.0.1:4448/test/';
+    let realmURL3 = 'http://127.0.0.1:4449/test/';
+    let prerenderServerURL = new URL(realmURL1).origin;
     let testUserId = '@user1:localhost';
     let permissions: RealmPermissions = {};
     let prerenderer: Prerenderer;

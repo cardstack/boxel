@@ -187,7 +187,9 @@ export default class RenderRoute extends Route<Model> {
     let canonicalOptions = serializeRenderRouteOptions(parsedOptions);
     this.#setupTransitionHelper(id, nonce, canonicalOptions);
     // this is a tool for our prerenderer to understand if a timed out render is salvageable
-    (globalThis as any).__docsInFlight = () => this.store.docsInFlight.length;
+    (globalThis as any).__docsInFlight = () =>
+      this.store.cardDocsInFlight.length +
+      this.store.fileMetaDocsInFlight.length;
     let key = `${id}|${nonce}|${canonicalOptions}`;
     let existing = this.#modelPromises.get(key);
     if (existing) {

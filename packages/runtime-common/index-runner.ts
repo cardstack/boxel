@@ -713,6 +713,7 @@ export class IndexRunner {
         // we tack on data that can only be determined via access to underlying filesystem/DB
         if (!this.#realmInfo) {
           let realmInfoResponse = await this.#fetch(`${this.realmURL}_info`, {
+            method: 'QUERY',
             headers: { Accept: SupportedMimeType.RealmInfo },
           });
           this.#realmInfo = (await realmInfoResponse.json())?.data?.attributes;
