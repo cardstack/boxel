@@ -28,6 +28,7 @@ import {
 import type { SerializedError } from './error';
 import type { DBAdapter } from './db';
 import type { RealmMetaTable } from './index-structure';
+import type { FileMetaResource } from './resource-types';
 import {
   coerceTypes,
   type BoxelIndexTable,
@@ -107,6 +108,7 @@ export interface FileEntry {
   resourceCreatedAt: number;
   deps: Set<string>;
   searchData?: Record<string, any>;
+  resource?: FileMetaResource | null;
   types?: string[];
   displayNames?: string[];
 }
@@ -331,6 +333,7 @@ export class Batch {
         entryPayload = {
           type: 'file',
           deps: [...entry.deps],
+          pristine_doc: entry.resource ?? null,
           search_doc: entry.searchData ?? null,
           types: entry.types ?? null,
           display_names: entry.displayNames ?? null,

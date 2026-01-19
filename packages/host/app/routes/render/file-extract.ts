@@ -4,15 +4,25 @@ import { service } from '@ember/service';
 
 import { isTesting } from '@embroider/macros';
 
+import { isEqual } from 'lodash';
+
 import {
   baseRealm,
+  baseRef,
   CardError,
   formattedError,
+  identifyCard,
+  inferContentType,
+  internalKeyFor,
   SupportedMimeType,
+  type CodeRef,
   type FileExtractResponse,
+  type FileMetaResource,
   type RenderError,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
+
+import type { BaseDef } from 'https://cardstack.com/base/card-api';
 
 import { errorJsonApiToErrorEntry } from '../../lib/window-error-handler';
 import { createAuthErrorGuard } from '../../utils/auth-error-guard';
@@ -40,6 +50,8 @@ type FileDefConstructor = {
 type FileDefExtractResult = {
   status: 'ready' | 'error';
   searchDoc: Record<string, any> | null;
+  resource?: FileMetaResource;
+  types?: string[];
   deps: string[];
   error?: RenderError;
   mismatch?: true;
@@ -277,9 +289,18 @@ class FileDefAttributesExtractor {
           : 'FileDef module did not export extractAttributes';
       let searchDoc = await tryExtract(klass, missingMessage);
       if (searchDoc) {
+        let types = getTypes(klass).map((type) =>
+          internalKeyFor(type, undefined),
+        );
         return {
           status: 'ready',
           searchDoc,
+          resource: buildFileResource(
+            this.#fileURL,
+            searchDoc,
+            this.#fileDefCodeRef,
+          ),
+          types,
           deps,
           ...(error ? { error } : {}),
           ...(mismatch ? { mismatch: true } : {}),
@@ -383,4 +404,48 @@ class FileDefAttributesExtractor {
     }
     return new Uint8Array(await new Response(stream).arrayBuffer());
   }
+}
+
+function getTypes(klass: FileDefConstructor): CodeRef[] {
+  let types = [];
+  let current: FileDefConstructor | undefined = klass;
+
+  while (current) {
+    let ref = identifyCard(current as unknown as typeof BaseDef);
+    if (!ref || isEqual(ref, baseRef)) {
+      break;
+    }
+    types.push(ref);
+    current = Reflect.getPrototypeOf(current) as FileDefConstructor | undefined;
+  }
+  return types;
+}
+
+function buildFileResource(
+  fileURL: string,
+  attributes: Record<string, any>,
+  adoptsFrom: ResolvedCodeRef,
+): FileMetaResource {
+  let name = new URL(fileURL).pathname.split('/').pop() ?? fileURL;
+  let baseAttributes = {
+    name,
+    url: fileURL,
+    sourceUrl: fileURL,
+    contentType: inferContentType(name),
+  };
+  let mergedAttributes: Record<string, unknown> = { ...baseAttributes };
+  for (let [key, value] of Object.entries(attributes)) {
+    if (value !== undefined) {
+      mergedAttributes[key] = value;
+    }
+  }
+  return {
+    id: fileURL,
+    type: 'file-meta',
+    attributes: mergedAttributes,
+    meta: {
+      adoptsFrom,
+    },
+    links: { self: fileURL },
+  };
 }

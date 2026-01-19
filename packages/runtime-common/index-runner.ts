@@ -37,6 +37,7 @@ import {
   type Reader,
   type Stats,
   baseRealm,
+  internalKeyFor,
 } from './index';
 import { inferContentType } from './infer-content-type';
 import {
@@ -47,8 +48,11 @@ import {
 } from './error';
 
 const FILEDEF_CODE_REF_BY_EXTENSION: Record<string, ResolvedCodeRef> = {
-  // TODO: Replace with realm metadata configuration.
   '.mismatch': { module: './filedef-mismatch', name: 'FileDef' },
+};
+const BASE_FILE_DEF_CODE_REF: ResolvedCodeRef = {
+  module: `${baseRealm.url}file-api`,
+  name: 'FileDef',
 };
 
 function resolveFileDefCodeRef(fileURL: URL): ResolvedCodeRef {
@@ -59,7 +63,7 @@ function resolveFileDefCodeRef(fileURL: URL): ResolvedCodeRef {
     ? FILEDEF_CODE_REF_BY_EXTENSION[extension]
     : undefined;
   if (!mapping) {
-    return { module: `${baseRealm.url}file-api`, name: 'FileDef' };
+    return BASE_FILE_DEF_CODE_REF;
   }
   if (mapping.module.includes('://')) {
     return mapping;
@@ -866,6 +870,13 @@ export class IndexRunner {
     let name = path.split('/').pop() ?? path;
     let contentType = inferContentType(name);
     let fileDefCodeRef = resolveFileDefCodeRef(new URL(fileURL));
+    let fileTypeRefs = [fileDefCodeRef];
+    if (
+      fileDefCodeRef.module !== BASE_FILE_DEF_CODE_REF.module ||
+      fileDefCodeRef.name !== BASE_FILE_DEF_CODE_REF.name
+    ) {
+      fileTypeRefs.push(BASE_FILE_DEF_CODE_REF);
+    }
     let clearCache = this.#consumeClearCacheForRender();
     let renderOptions: RenderRouteOptions = {
       fileExtract: true,
@@ -942,11 +953,17 @@ export class IndexRunner {
       );
     }
 
+    let fallbackTypes = fileTypeRefs.map((ref) =>
+      internalKeyFor(ref, undefined),
+    );
+    let fileTypes = extractResult.types ?? fallbackTypes;
+
     await this.batch.updateEntry(entryURL, {
       type: 'file',
       lastModified,
       resourceCreatedAt,
       deps: new Set([...(extractResult.deps ?? []), fileURL]),
+      resource: extractResult.resource ?? null,
       searchData: {
         url: fileURL,
         sourceUrl: fileURL,
@@ -954,7 +971,7 @@ export class IndexRunner {
         contentType,
         ...(extractResult.searchDoc ?? {}),
       },
-      types: [],
+      types: fileTypes,
       displayNames: [],
     });
     this.stats.filesIndexed++;
