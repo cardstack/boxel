@@ -1,6 +1,6 @@
 # Card Field Rename: cardDef + cardInfo
 
-This branch renames card fields:
+[#3800 PR](https://github.com/cardstack/boxel/pull/3800) renames card fields:
 
 - `title` -> `cardTitle`
 - `description` -> `cardDescription`
@@ -27,6 +27,7 @@ node scripts/rename-card-fields.js <path-to-data-root> apply yes
 ```
 
 Notes:
+
 - The script scans for `.json` files recursively.
 - It writes a `.bak` file next to each updated JSON file when backups are enabled (`yes`).
 - Use `no` as the third argument if you do not want backups.
