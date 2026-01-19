@@ -426,7 +426,9 @@ export class PagePool {
     realm: string,
   ): Promise<{ entry: PoolEntry; reused: boolean; releaseTab: () => void }> {
     let entries = this.#realmPages.get(realm);
-    let entryList = entries ? [...entries].filter((entry) => !entry.closing) : [];
+    let entryList = entries
+      ? [...entries].filter((entry) => !entry.closing)
+      : [];
     let idle = entryList.filter((entry) => entry.queue.pendingCount === 0);
     if (idle.length > 0) {
       let entry = this.#selectLRUTab(idle);
