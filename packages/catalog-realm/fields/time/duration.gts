@@ -161,7 +161,7 @@ class DurationFieldEdit extends Component<typeof DurationField> {
   </template>
 }
 
-export class DurationField extends FieldDef {
+export default class DurationField extends FieldDef {
   static displayName = 'Duration';
   static icon = HourglassIcon;
 
@@ -294,5 +294,3 @@ export class DurationField extends FieldDef {
 
   static edit = DurationFieldEdit;
 }
-
-export default DurationField;

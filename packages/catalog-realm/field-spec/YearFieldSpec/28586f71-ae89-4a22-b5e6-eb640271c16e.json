@@ -9,8 +9,8 @@
     "type": "card",
     "attributes": {
       "ref": {
-        "name": "YearFieldSpec",
-        "module": "../year-field-spec"
+        "name": "default",
+        "module": "../../fields/date/year"
       },
       "title": "Year Field Spec",
       "readMe": null,

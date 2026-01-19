@@ -1,4 +1,4 @@
-import { ContactLinkField } from '../fields/contact-link';
+import ContactLinkField from '../fields/contact-link';
 
 import {
   CardDef,

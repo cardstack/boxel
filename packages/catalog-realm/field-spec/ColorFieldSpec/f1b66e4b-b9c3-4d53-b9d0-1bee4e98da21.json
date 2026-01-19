@@ -9,8 +9,8 @@
     "type": "card",
     "attributes": {
       "ref": {
-        "name": "ColorFieldSpec",
-        "module": "../color-field-spec"
+        "name": "default",
+        "module": "../../fields/color"
       },
       "title": "Color Field Spec",
       "wheel": "#ddff00",

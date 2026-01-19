@@ -16,7 +16,7 @@ import UrlField from 'https://cardstack.com/base/url';
 import MarkdownField from 'https://cardstack.com/base/markdown';
 import { gt } from '@cardstack/boxel-ui/helpers';
 import { formatCurrency, formatNumber } from '@cardstack/boxel-ui/helpers';
-import { AmountWithCurrency } from '../fields/amount-with-currency';
+import AmountWithCurrency from '../fields/amount-with-currency';
 import { createOptionSelectField } from '../utils/create-option-select';
 
 const BusinessOrPersonalField = createOptionSelectField({
