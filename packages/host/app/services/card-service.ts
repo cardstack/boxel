@@ -304,7 +304,7 @@ export default class CardService extends Service {
   async getRealmInfoByRealmURL(realmURL: URL): Promise<RealmInfo> {
     let response = await this.network.authedFetch(`${realmURL}_info`, {
       headers: { Accept: SupportedMimeType.RealmInfo },
-      method: 'GET',
+      method: 'QUERY',
     });
 
     if (!response.ok) {

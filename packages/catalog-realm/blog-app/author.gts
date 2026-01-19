@@ -20,8 +20,8 @@ import UserRoundPen from '@cardstack/boxel-icons/user-round-pen';
 import { cn, not } from '@cardstack/boxel-ui/helpers';
 
 import { setBackgroundImage } from '../components/layout';
-import { FeaturedImageField } from '../fields/featured-image';
-import { ContactLinkField } from '../fields/contact-link';
+import FeaturedImageField from '../fields/featured-image';
+import ContactLinkField from '../fields/contact-link';
 import { BlogApp } from './blog-app';
 
 class AuthorContactLink extends ContactLinkField {

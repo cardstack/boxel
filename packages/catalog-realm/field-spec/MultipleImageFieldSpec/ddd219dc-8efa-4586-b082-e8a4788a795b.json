@@ -9,8 +9,8 @@
     "type": "card",
     "attributes": {
       "ref": {
-        "name": "MultipleImageFieldSpec",
-        "module": "../multiple-image-field-spec"
+        "name": "default",
+        "module": "../../fields/multiple-image"
       },
       "list": {
         "images": [

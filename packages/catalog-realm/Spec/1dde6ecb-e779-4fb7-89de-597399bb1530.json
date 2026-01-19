@@ -9,11 +9,11 @@
     "type": "card",
     "attributes": {
       "ref": {
-        "name": "QRField",
+        "name": "default",
         "module": "../fields/qr-code"
       },
       "title": "QR Code",
-      "readMe": "A Field to embed QR codes in your cards.\n\n## Usage\n\nTo use the QR Code field in your card definitions:\n\n```typescript\nimport { QRCodeField } from '../fields/qr-code';\n\n@field code = contains(QRCodeField);\n```\n\nA typical pattern is to use a computed field that generates the QR code based on the card's ID:\n\n```typescript\n@field qrCode = contains(QRCodeField, {\n  computeVia: function() {\n    return new QRCodeField({data: this.id});\n  }\n});\n```\n\nTo display the QR code in your templates:\n\n```handlebars\n<@fields.qrCode @format='embedded'/>\n```\n\nThis field allows you to generate and display QR codes within your cards.",
+      "readMe": "A Field to embed QR codes in your cards.\n\n## Usage\n\nTo use the QR Code field in your card definitions:\n\n```typescript\nimport QRField from '../fields/qr-code';\n\n@field code = contains(QRField);\n```\n\nA typical pattern is to use a computed field that generates the QR code based on the card's ID:\n\n```typescript\n@field qrCode = contains(QRField, {\n  computeVia: function() {\n    return new QRField({data: this.id});\n  }\n});\n```\n\nTo display the QR code in your templates:\n\n```handlebars\n<@fields.qrCode @format='embedded'/>\n```\n\nThis field allows you to generate and display QR codes within your cards.",
       "cardInfo": {
         "notes": null,
         "title": null,

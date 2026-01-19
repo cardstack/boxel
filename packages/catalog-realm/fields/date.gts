@@ -24,7 +24,7 @@ interface DateTimeConfiguration {
   };
 }
 
-export class DateField extends BaseDateField {
+export default class DateField extends BaseDateField {
   static displayName = 'Date';
   static icon = CalendarIcon;
 
@@ -144,5 +144,3 @@ export class DateField extends BaseDateField {
     </template>
   };
 }
-
-export default DateField;

@@ -511,6 +511,45 @@ module('Acceptance | interact submode tests', function (hooks) {
         .exists('linked card now rendered as a stack item in edit format');
     });
 
+    test('clicking a linked file opens it as a new isolated stack item', async function (assert) {
+      let fileId = `${testRealmURL}FileLinkCard/notes.txt`;
+      await visitOperatorMode({
+        stacks: [
+          [
+            {
+              id: `${testRealmURL}FileLinkCard/with-file`,
+              format: 'isolated',
+            },
+          ],
+        ],
+      });
+
+      assert
+        .dom(
+          `[data-test-stack-card="${testRealmURL}FileLinkCard/with-file"] [data-test-card="${fileId}"]`,
+        )
+        .exists('linked file is rendered in the card');
+
+      await click(
+        `[data-test-stack-card="${testRealmURL}FileLinkCard/with-file"] [data-test-card="${fileId}"]`,
+      );
+
+      assert.operatorModeParametersMatch(currentURL(), {
+        stacks: [
+          [
+            {
+              id: `${testRealmURL}FileLinkCard/with-file`,
+              format: 'isolated',
+            },
+            {
+              id: fileId,
+              format: 'isolated',
+            },
+          ],
+        ],
+      });
+    });
+
     test('can save mutated card without having opened in stack', async function (assert) {
       await visitOperatorMode({
         stacks: [

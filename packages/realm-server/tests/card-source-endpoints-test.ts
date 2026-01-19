@@ -14,12 +14,12 @@ import {
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
 import {
-  setupPermissionedRealm,
+  setupPermissionedRealmAtURL,
   setupMatrixRoom,
-  testRealmHref,
-  testRealmURL,
   createJWT,
   cardInfo,
+  type RealmRequest,
+  withRealmPath,
 } from './helpers';
 import { query, param } from '@cardstack/runtime-common';
 import type { PgAdapter } from '@cardstack/postgres';
@@ -32,9 +32,13 @@ import isEqual from 'lodash/isEqual';
 
 module(basename(__filename), function () {
   module('Realm-specific Endpoints | card source requests', function () {
+    let realmURL = new URL('http://127.0.0.1:4444/test/');
+    let testRealmHref = realmURL.href;
+    let testRealmURL = realmURL;
     let testRealm: Realm;
     let testRealmHttpServer: Server;
-    let request: SuperTest<Test>;
+    let request: RealmRequest;
+    let serverRequest: SuperTest<Test>;
     let dir: DirResult;
     let dbAdapter: PgAdapter;
 
@@ -47,7 +51,8 @@ module(basename(__filename), function () {
     }) {
       testRealm = args.testRealm;
       testRealmHttpServer = args.testRealmHttpServer;
-      request = args.request;
+      serverRequest = args.request;
+      request = withRealmPath(args.request, realmURL);
       dir = args.dir;
       dbAdapter = args.dbAdapter;
     }
@@ -57,6 +62,7 @@ module(basename(__filename), function () {
         testRealm,
         testRealmHttpServer,
         request,
+        serverRequest,
         dir,
         dbAdapter,
       };
@@ -64,7 +70,7 @@ module(basename(__filename), function () {
 
     module('card source GET request', function (_hooks) {
       module('public readable realm', function (hooks) {
-        setupPermissionedRealm(hooks, {
+        setupPermissionedRealmAtURL(hooks, realmURL, {
           permissions: {
             '*': ['read'],
           },
@@ -239,7 +245,10 @@ module(basename(__filename), function () {
             'true',
             'realm is public readable',
           );
-          assert.strictEqual(response.headers['location'], '/person.gts');
+          assert.strictEqual(
+            response.headers['location'],
+            new URL('person.gts', realmURL).pathname,
+          );
         });
 
         test('serves a card instance GET request with card-source accept header that results in redirect', async function (assert) {
@@ -258,7 +267,10 @@ module(basename(__filename), function () {
             'true',
             'realm is public readable',
           );
-          assert.strictEqual(response.headers['location'], '/person-1.json');
+          assert.strictEqual(
+            response.headers['location'],
+            new URL('person-1.json', realmURL).pathname,
+          );
         });
 
         test('serves source of a card module that is in error state', async function (assert) {
@@ -301,7 +313,10 @@ module(basename(__filename), function () {
             'true',
             'realm is public readable',
           );
-          assert.strictEqual(response.headers['location'], '/person');
+          assert.strictEqual(
+            response.headers['location'],
+            new URL('person', realmURL).pathname,
+          );
         });
 
         test('serves a module GET request', async function (assert) {
@@ -335,7 +350,7 @@ module(basename(__filename), function () {
       });
 
       module('permissioned realm', function (hooks) {
-        setupPermissionedRealm(hooks, {
+        setupPermissionedRealmAtURL(hooks, realmURL, {
           permissions: {
             john: ['read'],
           },
@@ -384,7 +399,7 @@ module(basename(__filename), function () {
 
     module('card source HEAD request', function (_hooks) {
       module('public readable realm', function (hooks) {
-        setupPermissionedRealm(hooks, {
+        setupPermissionedRealmAtURL(hooks, realmURL, {
           permissions: {
             '*': ['read'],
           },
@@ -426,14 +441,17 @@ module(basename(__filename), function () {
             'true',
             'realm is public readable',
           );
-          assert.strictEqual(response.headers['location'], '/person.gts');
+          assert.strictEqual(
+            response.headers['location'],
+            new URL('person.gts', realmURL).pathname,
+          );
         });
       });
     });
 
     module('card-source DELETE request', function (_hooks) {
       module('public writable realm', function (hooks) {
-        setupPermissionedRealm(hooks, {
+        setupPermissionedRealmAtURL(hooks, realmURL, {
           permissions: {
             '*': ['read', 'write'],
           },
@@ -505,7 +523,7 @@ module(basename(__filename), function () {
       });
 
       module('permissioned realm', function (hooks) {
-        setupPermissionedRealm(hooks, {
+        setupPermissionedRealmAtURL(hooks, realmURL, {
           permissions: {
             john: ['read', 'write'],
           },
@@ -546,7 +564,7 @@ module(basename(__filename), function () {
 
     module('card-source POST request', function (_hooks) {
       module('public writable realm', function (hooks) {
-        setupPermissionedRealm(hooks, {
+        setupPermissionedRealmAtURL(hooks, realmURL, {
           permissions: {
             '*': ['read', 'write'],
           },
@@ -974,7 +992,7 @@ module(basename(__filename), function () {
       });
 
       module('permissioned realm', function (hooks) {
-        setupPermissionedRealm(hooks, {
+        setupPermissionedRealmAtURL(hooks, realmURL, {
           permissions: {
             john: ['read', 'write'],
           },

@@ -823,6 +823,25 @@ module('Acceptance | Spec preview', function (hooks) {
     await percySnapshot(assert);
   });
 
+  test('spec fields in edit format are read-only when user cannot write', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealm2URL}person-entry.json`,
+      cardPreviewFormat: 'edit',
+    });
+    await waitFor(
+      `[data-test-card="${testRealm2URL}person-entry"][data-test-card-format="edit"]`,
+    );
+
+    assert.dom('[data-test-title] input').isDisabled();
+    assert.dom('[data-test-description] input').isDisabled();
+
+    assert.dom('[data-test-readme] textarea').isDisabled();
+    assert.dom('[data-test-readme] textarea').hasAttribute('readonly');
+
+    assert.dom('[data-test-generate-readme]').doesNotExist();
+  });
+
   test('renders linked examples in isolated spec view when user cannot write', async function (assert) {
     setRealmPermissions({
       [testRealmURL]: ['read'],

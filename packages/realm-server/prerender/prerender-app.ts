@@ -25,6 +25,10 @@ import {
   PRERENDER_SERVER_STATUS_HEADER,
 } from './prerender-constants';
 
+type PrerenderServer = Server & {
+  __stopPrerenderer?: () => Promise<void>;
+};
+
 let log = logger('prerender-server');
 const defaultPrerenderServerPort = 4221;
 
@@ -418,6 +422,24 @@ export function createPrerenderHttpServer(options?: {
     isDraining: () => draining,
     drainingPromise: drainingDeferred.promise,
   });
+  let stopPromise: Promise<void> | null = null;
+
+  async function stopPrerendererOnce(): Promise<void> {
+    if (!stopPromise) {
+      stopPromise = (async () => {
+        try {
+          await prerenderer.stop();
+        } catch (e: any) {
+          // Best-effort shutdown; log and continue
+          log.warn(
+            'Error stopping prerenderer on server close:',
+            e?.message ?? e,
+          );
+        }
+      })();
+    }
+    await stopPromise;
+  }
   const heartbeatIntervalMs = Math.max(
     1000,
     Number(process.env.PRERENDER_HEARTBEAT_INTERVAL_MS ?? 5000),
@@ -477,15 +499,12 @@ export function createPrerenderHttpServer(options?: {
     }
   }
 
-  let server = createServer(app.callback());
+  let server = createServer(app.callback()) as PrerenderServer;
+  server.__stopPrerenderer = stopPrerendererOnce;
+
   server.on('close', async () => {
     stopHeartbeatLoop();
-    try {
-      await prerenderer.stop();
-    } catch (e: any) {
-      // Best-effort shutdown; log and continue
-      log.warn('Error stopping prerenderer on server close:', e?.message ?? e);
-    }
+    await stopPrerendererOnce();
     try {
       await unregisterWithManager(serverURL);
     } catch (e) {

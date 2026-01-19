@@ -997,6 +997,7 @@ module(basename(__filename), function () {
       assert.strictEqual(response.status, 200, 'file meta response is ok');
       let doc = (await response.json()) as LooseSingleCardDocument;
       assert.strictEqual(doc.data.id, `${testRealm}random-file.txt`);
+      assert.strictEqual(doc.data.type, 'file-meta');
       assert.strictEqual(
         doc.data.attributes?.name,
         'from-index.txt',
@@ -1908,8 +1909,8 @@ module(basename(__filename), function () {
   });
 
   module('permissioned realm', function () {
-    let testRealm1URL = 'http://127.0.0.1:4447/';
-    let testRealm2URL = 'http://127.0.0.1:4448/';
+    let testRealm1URL = 'http://127.0.0.1:4447/test/';
+    let testRealm2URL = 'http://127.0.0.1:4448/test/';
     let testRealm2: Realm;
 
     function setupRealms(

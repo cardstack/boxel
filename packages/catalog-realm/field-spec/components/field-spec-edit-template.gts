@@ -169,19 +169,21 @@ export default class FieldSpecEditTemplate extends Component<typeof Spec> {
             <BookOpenText width='20' height='20' role='presentation' />
             <h2 id='readme'>Read Me</h2>
           </div>
-          <BoxelButton
-            @kind='primary'
-            @size='extra-small'
-            @loading={{this.generateReadmeTask.isRunning}}
-            {{on 'click' this.generateReadme}}
-            data-test-generate-readme
-          >
-            {{#if this.generateReadmeTask.isRunning}}
-              Generating...
-            {{else}}
-              Generate README
-            {{/if}}
-          </BoxelButton>
+          {{#if @canEdit}}
+            <BoxelButton
+              @kind='primary'
+              @size='extra-small'
+              @loading={{this.generateReadmeTask.isRunning}}
+              {{on 'click' this.generateReadme}}
+              data-test-generate-readme
+            >
+              {{#if this.generateReadmeTask.isRunning}}
+                Generating...
+              {{else}}
+                Generate README
+              {{/if}}
+            </BoxelButton>
+          {{/if}}
         </header>
         <div data-test-readme>
           <@fields.readMe />

@@ -39,7 +39,7 @@ class TimeFieldEdit extends Component<typeof TimeField> {
   </template>
 }
 
-export class TimeField extends FieldDef {
+export default class TimeField extends FieldDef {
   static displayName = 'Time';
   static icon = ClockIcon;
 
@@ -163,5 +163,3 @@ export class TimeField extends FieldDef {
 
   static edit = TimeFieldEdit;
 }
-
-export default TimeField;

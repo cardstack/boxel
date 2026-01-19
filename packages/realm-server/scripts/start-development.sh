@@ -5,7 +5,10 @@ SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
 wait_for_postgres
 
 pnpm --dir=../skills-realm skills:setup
-pnpm --dir=../boxel-homepage-realm boxel-homepage:setup
+
+if [ -z "${SKIP_BOXEL_HOMEPAGE:-}" ]; then
+  pnpm --dir=../boxel-homepage-realm boxel-homepage:setup
+fi
 
 if [ -z "$MATRIX_REGISTRATION_SHARED_SECRET" ]; then
   MATRIX_REGISTRATION_SHARED_SECRET=$(ts-node --transpileOnly "$SCRIPTS_DIR/matrix-registration-secret.ts")
@@ -34,11 +37,8 @@ fi
 
 PRERENDER_URL="${PRERENDER_URL:-http://localhost:4221}"
 
-
-
-
 LOW_CREDIT_THRESHOLD="${LOW_CREDIT_THRESHOLD:-2000}" \
-NODE_ENV=development \
+  NODE_ENV=development \
   NODE_NO_WARNINGS=1 \
   PGPORT=5435 \
   PGDATABASE=boxel \

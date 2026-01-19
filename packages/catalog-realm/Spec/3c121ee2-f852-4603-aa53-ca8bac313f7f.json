@@ -5,7 +5,7 @@
       "readMe": null,
       "ref": {
         "module": "../fields/currency",
-        "name": "CurrencyField"
+        "name": "default"
       },
       "specType": "field",
       "containedExamples": [],

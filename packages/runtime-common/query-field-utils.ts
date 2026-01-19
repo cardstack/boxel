@@ -1,6 +1,7 @@
 import { codeRefWithAbsoluteURL } from './code-ref';
 import type { FieldDefinition } from './definitions';
 import type {
+  FileMetaResource,
   LooseCardResource,
   Relationship,
   ResourceID,
@@ -30,7 +31,7 @@ export interface NormalizeQueryDefinitionParams {
   fieldName: string;
   fieldPath?: string;
   resolvePathValue: (path: string) => any;
-  resource?: LooseCardResource;
+  resource?: LooseCardResource | FileMetaResource;
   relativeTo?: URL;
 }
 
@@ -265,7 +266,7 @@ export function normalizeQueryDefinition({
 }
 
 export function getValueForResourcePath(
-  resource: LooseCardResource,
+  resource: LooseCardResource | FileMetaResource,
   path: string,
 ): any {
   let root: any = {
