@@ -162,6 +162,8 @@ module('Integration | card-copy', function (hooks) {
       };
     }
 
+    // Defer matrix startup until all test realms (including read-only) are
+    // registered to avoid _info fetch races during matrix boot.
     ({ realm: realm1 } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
