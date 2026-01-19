@@ -201,17 +201,24 @@ export class PagePool {
   ): Promise<void> {
     let entries = this.#realmPages.get(realm);
     if (!entries || entries.size === 0) return;
-    this.#realmPages.delete(realm);
     this.#lru.delete(realm);
     let awaitIdle = options?.awaitIdle !== false;
     let retainConsoleErrors = options?.retainConsoleErrors ?? false;
     if (awaitIdle) {
+      this.#realmPages.delete(realm);
       for (let entry of entries) {
         await this.#closeEntry(entry, retainConsoleErrors);
       }
     } else {
       for (let entry of entries) {
-        void this.#closeEntry(entry, retainConsoleErrors);
+        void this.#closeEntry(entry, retainConsoleErrors).finally(() => {
+          let currentEntries = this.#realmPages.get(realm);
+          if (!currentEntries) return;
+          currentEntries.delete(entry);
+          if (currentEntries.size === 0) {
+            this.#realmPages.delete(realm);
+          }
+        });
       }
     }
     await this.#notifyManagerRealmEvicted(realm);
@@ -419,9 +426,7 @@ export class PagePool {
     realm: string,
   ): Promise<{ entry: PoolEntry; reused: boolean; releaseTab: () => void }> {
     let entries = this.#realmPages.get(realm);
-    let entryList = entries
-      ? [...entries].filter((entry) => !entry.closing && !entry.transitioning)
-      : [];
+    let entryList = entries ? [...entries].filter((entry) => !entry.closing) : [];
     let idle = entryList.filter((entry) => entry.queue.pendingCount === 0);
     if (idle.length > 0) {
       let entry = this.#selectLRUTab(idle);

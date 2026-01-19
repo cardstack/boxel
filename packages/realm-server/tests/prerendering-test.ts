@@ -58,7 +58,13 @@ function makeStubPagePool(
   maxPages: number,
   renderSemaphore?: { acquire(): Promise<() => void> },
   createContextDelay?: (contextNumber: number) => Promise<void>,
-  options?: { disableStandbyRefill?: boolean; standbyTimeoutMs?: number },
+  options?: {
+    disableStandbyRefill?: boolean;
+    standbyTimeoutMs?: number;
+    closeContextDelay?: (id: string) => Promise<void>;
+    onContextCreated?: (id: string) => void;
+    onContextClosed?: (id: string) => void;
+  },
 ) {
   let contextCounter = 0;
   let contextsCreated: string[] = [];
@@ -71,6 +77,7 @@ function makeStubPagePool(
       }
       let id = `ctx-${counter}`;
       contextsCreated.push(id);
+      options?.onContextCreated?.(id);
       return {
         async newPage() {
           return {
@@ -89,7 +96,11 @@ function makeStubPagePool(
           } as any;
         },
         async close() {
+          if (options?.closeContextDelay) {
+            await options.closeContextDelay(id);
+          }
           contextsClosed.push(id);
+          options?.onContextClosed?.(id);
           return;
         },
       } as any;
@@ -2366,7 +2377,6 @@ module(basename(__filename), function () {
           'tab realigned to realm-b when queued request starts',
         );
         third.release();
-        blocker.release();
 
         await pool.closeAll();
       });
@@ -2405,6 +2415,115 @@ module(basename(__filename), function () {
           );
         } finally {
           await pool.closeAll();
+        }
+      });
+
+      test('queues same-realm request when tab is transitioning', async function (assert) {
+        let { pool } = makeStubPagePool(1, undefined, undefined, {
+          disableStandbyRefill: true,
+        });
+
+        try {
+          await pool.warmStandbys();
+
+          let first = await pool.getPage('realm-a');
+
+          let crossResolved = false;
+          let sameResolved = false;
+          let crossPromise = pool.getPage('realm-b').then((lease) => {
+            crossResolved = true;
+            return lease;
+          });
+          let samePromise = pool.getPage('realm-a').then((lease) => {
+            sameResolved = true;
+            return lease;
+          });
+
+          await new Promise((resolve) => setTimeout(resolve, 5));
+          assert.false(
+            crossResolved,
+            'cross-realm request waits for the busy tab',
+          );
+          assert.false(
+            sameResolved,
+            'same-realm request queues even while transitioning',
+          );
+
+          first.release();
+
+          let cross = await crossPromise;
+          assert.strictEqual(
+            cross.pageId,
+            first.pageId,
+            'cross-realm request uses the existing tab',
+          );
+          cross.release();
+
+          let same = await samePromise;
+          assert.strictEqual(
+            same.pageId,
+            first.pageId,
+            'same-realm request uses the same tab',
+          );
+          assert.false(
+            pool.getWarmRealms().includes('realm-b'),
+            'tab realigned back to realm-a after same-realm request',
+          );
+          same.release();
+        } finally {
+          await pool.closeAll();
+        }
+      });
+
+      test('does not oversubscribe contexts during async eviction', async function (assert) {
+        let prevTabMax = process.env.PRERENDER_REALM_TAB_MAX;
+        let pool: PagePool | undefined;
+        let active = 0;
+        let peak = 0;
+        let resolveClose!: () => void;
+        let closeGate = new Promise<void>((resolve) => {
+          resolveClose = resolve;
+        });
+
+        try {
+          process.env.PRERENDER_REALM_TAB_MAX = '2';
+          ({ pool } = makeStubPagePool(2, undefined, undefined, {
+            closeContextDelay: async () => closeGate,
+            onContextCreated() {
+              active++;
+              peak = Math.max(peak, active);
+            },
+            onContextClosed() {
+              active--;
+            },
+          }));
+
+          await pool.warmStandbys();
+
+          let first = await pool.getPage('realm-a');
+          let second = await pool.getPage('realm-a');
+
+          await pool.disposeRealm('realm-a', { awaitIdle: false });
+          await pool.warmStandbys();
+
+          assert.ok(
+            peak <= 3,
+            'context count stays within maxPages+1 during async eviction',
+          );
+
+          first.release();
+          second.release();
+          resolveClose();
+        } finally {
+          if (resolveClose) {
+            resolveClose();
+          }
+          await pool?.closeAll();
+          if (prevTabMax === undefined) {
+            delete process.env.PRERENDER_REALM_TAB_MAX;
+          } else {
+            process.env.PRERENDER_REALM_TAB_MAX = prevTabMax;
+          }
         }
       });
 
