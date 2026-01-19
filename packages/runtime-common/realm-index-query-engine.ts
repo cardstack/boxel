@@ -20,12 +20,17 @@ import {
   type DefinitionLookup,
   visitInstanceURLs,
   maybeRelativeURL,
+  codeRefFromInternalKey,
 } from '.';
 import type { Realm } from './realm';
 import { RealmPaths } from './paths';
 import type { Query } from './query';
 import { CardError, type SerializedError } from './error';
-import { isResolvedCodeRef, visitModuleDeps } from './code-ref';
+import {
+  isCodeRef,
+  isResolvedCodeRef,
+  visitModuleDeps,
+} from './code-ref';
 import {
   isCardCollectionDocument,
   isSingleCardDocument,
@@ -756,23 +761,48 @@ function fileResourceFromIndex(
       : undefined;
   let lastModified = fileEntry.lastModified ?? unixTime(Date.now());
   let createdAt = fileEntry.resourceCreatedAt ?? lastModified;
+  let adoptsFrom =
+    codeRefFromInternalKey(fileEntry.types?.[0]) ??
+    (isCodeRef(fileEntry.resource?.meta?.adoptsFrom)
+      ? fileEntry.resource?.meta?.adoptsFrom
+      : {
+          module: `${baseRealm.url}file-api`,
+          name: 'FileDef',
+        });
+  let resourceAttributes = fileEntry.resource?.attributes ?? {};
+  let baseAttributes = {
+    name: resourceAttributes.name ?? searchDoc.name ?? name,
+    url: resourceAttributes.url ?? searchDoc.url ?? fileURL.href,
+    sourceUrl:
+      resourceAttributes.sourceUrl ?? searchDoc.sourceUrl ?? fileURL.href,
+    contentType:
+      resourceAttributes.contentType ??
+      searchDoc.contentType ??
+      inferredContentType,
+    contentHash: resourceAttributes.contentHash ?? contentHash,
+    lastModified,
+    createdAt,
+  };
+  let attributes: Record<string, unknown> = { ...baseAttributes };
+  for (let [key, value] of Object.entries(resourceAttributes)) {
+    if (value !== undefined && !(key in attributes)) {
+      attributes[key] = value;
+    }
+  }
+  for (let [key, value] of Object.entries(searchDoc)) {
+    if (key in baseAttributes || value === undefined) {
+      continue;
+    }
+    attributes[key] = value;
+  }
   return {
     id: fileURL.href,
     type: 'file-meta',
     attributes: {
-      name: searchDoc.name ?? name,
-      url: searchDoc.url ?? fileURL.href,
-      sourceUrl: searchDoc.sourceUrl ?? fileURL.href,
-      contentType: searchDoc.contentType ?? inferredContentType,
-      contentHash,
-      lastModified,
-      createdAt,
+      ...attributes,
     },
     meta: {
-      adoptsFrom: {
-        module: `${baseRealm.url}file-api`,
-        name: 'FileDef',
-      },
+      adoptsFrom,
       realmURL: fileEntry.realmURL,
     },
     links: { self: fileURL.href },

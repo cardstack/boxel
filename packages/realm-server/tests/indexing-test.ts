@@ -1,6 +1,6 @@
 import { module, test } from 'qunit';
 import { dirSync } from 'tmp';
-import { SupportedMimeType } from '@cardstack/runtime-common';
+import { internalKeyFor, SupportedMimeType } from '@cardstack/runtime-common';
 import type {
   DBAdapter,
   LooseSingleCardDocument,
@@ -989,7 +989,7 @@ module(basename(__filename), function () {
       // Mutate the index row so we can validate that the response must come from the index,
       // not from filesystem metadata.
       await testDbAdapter.execute(
-        `UPDATE boxel_index SET search_doc = '{"name":"from-index.txt","contentType":"application/x-index-test"}'::jsonb WHERE url = '${testRealm}random-file.txt'`,
+        `UPDATE boxel_index SET search_doc = '{"name":"from-index.txt","contentType":"application/x-index-test"}'::jsonb, pristine_doc = '{"id":"${testRealm}random-file.txt","type":"file-meta","attributes":{"name":"from-pristine.txt","contentType":"application/x-pristine","custom":"present"},"meta":{"adoptsFrom":{"module":"https://cardstack.com/base/file-api","name":"FileDef"}}}'::jsonb WHERE url = '${testRealm}random-file.txt'`,
       );
       let response = await fetch(`${testRealm}random-file.txt`, {
         headers: { Accept: SupportedMimeType.FileMeta },
@@ -1000,17 +1000,62 @@ module(basename(__filename), function () {
       assert.strictEqual(doc.data.type, 'file-meta');
       assert.strictEqual(
         doc.data.attributes?.name,
-        'from-index.txt',
-        'name sourced from index',
+        'from-pristine.txt',
+        'name sourced from pristine file resource',
       );
       assert.strictEqual(
         doc.data.attributes?.contentType,
-        'application/x-index-test',
-        'contentType sourced from index',
+        'application/x-pristine',
+        'contentType sourced from pristine file resource',
+      );
+      assert.strictEqual(
+        doc.data.attributes?.custom,
+        'present',
+        'custom attributes sourced from pristine file resource',
+      );
+      assert.deepEqual(
+        doc.data.meta?.adoptsFrom,
+        {
+          module: 'https://cardstack.com/base/file-api',
+          name: 'FileDef',
+        },
+        'adoptsFrom sourced from pristine file resource',
       );
       assert.ok(
         doc.data.attributes?.lastModified,
         'lastModified sourced from response attributes',
+      );
+    });
+
+    test('file meta adoptsFrom prefers index types', async function (assert) {
+      let fileDefModule = new URL('filedef-mismatch', testRealm).href;
+      let fileDefKey = internalKeyFor(
+        { module: fileDefModule, name: 'FileDef' },
+        undefined,
+      );
+      await testDbAdapter.execute(
+        `UPDATE boxel_index SET types = '${JSON.stringify([
+          fileDefKey,
+        ])}'::jsonb, pristine_doc = NULL WHERE url = '${testRealm}random-file.txt'`,
+      );
+
+      let response = await fetch(`${testRealm}random-file.txt`, {
+        headers: { Accept: SupportedMimeType.FileMeta },
+      });
+      assert.strictEqual(response.status, 200, 'file meta response is ok');
+      let doc = (await response.json()) as LooseSingleCardDocument;
+      let adoptsFrom = doc.data.meta?.adoptsFrom as
+        | { module?: string; name?: string }
+        | undefined;
+      assert.strictEqual(
+        adoptsFrom?.module,
+        fileDefModule,
+        'adoptsFrom module sourced from index types',
+      );
+      assert.strictEqual(
+        adoptsFrom?.name,
+        'FileDef',
+        'adoptsFrom name sourced from index types',
       );
     });
   });
