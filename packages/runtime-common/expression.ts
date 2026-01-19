@@ -277,14 +277,12 @@ export function asExpressions(
   valueExpressions: Param[][];
 } {
   let paramBucket = Object.fromEntries(
-    Object.entries(values).map(([col, val]) => [
-      col,
-      param(
-        opts?.jsonFields?.includes(col)
-          ? stringify(val ?? null)
-          : (val ?? null),
-      ),
-    ]),
+    Object.entries(values).map(([col, val]) => {
+      if (opts?.jsonFields?.includes(col)) {
+        return [col, param(val == null ? null : (stringify(val) ?? null))];
+      }
+      return [col, param(val ?? null)];
+    }),
   );
   let nameExpressions = Object.keys(paramBucket).map((name) => [name]);
   let valueExpressions = Object.keys(paramBucket).map((k) => {

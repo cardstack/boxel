@@ -1373,6 +1373,22 @@ module(basename(__filename), function () {
         'instance',
         'instance is repaired when missing module is added',
       );
+      let rows = (await testDbAdapter.execute(
+        `SELECT error_doc IS NULL AS is_sql_null
+         FROM boxel_index
+         WHERE realm_url = '${testRealm}'
+           AND (
+             url = '${testRealm}deep-card.json'
+             OR file_alias = '${testRealm}deep-card'
+           )
+           AND type = 'instance'`,
+      )) as { is_sql_null: boolean }[];
+      assert.strictEqual(
+        rows.length,
+        1,
+        'index row exists for deep-card instance',
+      );
+      assert.true(rows[0].is_sql_null, 'error_doc is SQL NULL after recovery');
     });
 
     test('can incrementally index deleted instance', async function (assert) {
