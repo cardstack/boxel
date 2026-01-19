@@ -186,7 +186,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           assert.strictEqual(response.status, 200, 'HTTP 200 status');
           let doc = response.body as SingleCardDocument;
           assert.strictEqual(
-            doc.data.attributes?.title,
+            doc.data.attributes?.cardTitle,
             'Test Card',
             'instance data is correct',
           );
@@ -396,7 +396,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           assert.strictEqual(response.status, 200, 'HTTP 200 status');
           let doc = response.body as SingleCardDocument;
           assert.strictEqual(
-            doc.data.attributes?.title,
+            doc.data.attributes?.cardTitle,
             'Test Card',
             'instance data is correct',
           );

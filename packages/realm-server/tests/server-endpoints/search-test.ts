@@ -152,7 +152,7 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
         filter: {
           on: baseCardRef,
           eq: {
-            title: 'Shared Card',
+            cardTitle: 'Shared Card',
           },
         },
       };
@@ -195,7 +195,7 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
         filter: {
           on: baseCardRef,
           eq: {
-            title: 'Shared Card',
+            cardTitle: 'Shared Card',
           },
         },
       };

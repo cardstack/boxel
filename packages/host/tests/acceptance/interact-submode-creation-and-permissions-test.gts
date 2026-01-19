@@ -551,12 +551,12 @@ module(
         await click('[data-test-operator-mode-stack] [data-test-edit-button]');
         assert
           .dom(
-            "[data-test-contains-many='additionalAddresses'] [data-test-field='title'] input",
+            "[data-test-contains-many='additionalAddresses'] [data-test-field='cardTitle'] input",
           )
           .doesNotExist();
         assert
           .dom(
-            "[data-test-contains-many='additionalAddresses'] [data-test-field='title']",
+            "[data-test-contains-many='additionalAddresses'] [data-test-field='cardTitle']",
           )
           .exists({ count: 1 });
 

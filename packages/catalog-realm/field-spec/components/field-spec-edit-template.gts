@@ -152,14 +152,14 @@ export default class FieldSpecEditTemplate extends Component<typeof Spec> {
         <div class='header-info-container'>
           <div class='header-title-container' data-test-title>
             <label for='spec-title' class='boxel-sr-only'>Title</label>
-            <@fields.title />
+            <@fields.cardTitle />
           </div>
           <div class='header-description-container' data-test-description>
             <label
               for='spec-description'
               class='boxel-sr-only'
             >Description</label>
-            <@fields.description />
+            <@fields.cardDescription />
           </div>
         </div>
       </header>
