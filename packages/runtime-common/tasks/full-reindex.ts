@@ -42,13 +42,20 @@ const fullReindex: Task<FullReindexArgs, void> = ({
     // Only include realms with a non-bot owner
     const realmsWithUsernames = realmUrls
       .map((realmUrl) => {
-        const username = ownerMap.get(realmUrl)!;
+        const username = ownerMap.get(realmUrl);
+        if (!username) {
+          log.warn(
+            `${jobIdentity(jobInfo)} skipping realm without owner: ${realmUrl}`,
+          );
+          return null;
+        }
         return {
           realmUrl,
           realmUsername: username,
         };
       })
-      .filter((realm) => !realm.realmUsername.startsWith('@realm/'));
+      .filter((realm): realm is RealmReindexTarget => realm !== null)
+      .filter((realm) => !realm.realmUsername.startsWith('realm/'));
 
     if (realmsWithUsernames.length === 0) {
       log.debug(

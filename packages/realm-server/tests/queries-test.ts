@@ -5,6 +5,7 @@ import { v4 as uuidv4 } from 'uuid';
 import type { PgAdapter } from '@cardstack/postgres';
 import {
   asExpressions,
+  fetchAllRealmsWithOwners,
   fetchUserPermissions,
   insert,
   insertPermissions,
@@ -30,14 +31,16 @@ module(basename(__filename), function () {
     async function insertPublishedRealm({
       sourceRealmURL,
       publishedRealmURL,
+      ownerUsername = '@realm/published-owner',
     }: {
       sourceRealmURL: string;
       publishedRealmURL: string;
+      ownerUsername?: string;
     }) {
       let publishedRealmId = uuidv4();
       let { nameExpressions, valueExpressions } = asExpressions({
         id: publishedRealmId,
-        owner_username: '@realm/published-owner',
+        owner_username: ownerUsername,
         source_realm_url: sourceRealmURL,
         published_realm_url: publishedRealmURL,
         last_published_at: Date.now().toString(),
@@ -138,6 +141,94 @@ module(basename(__filename), function () {
       assert.false(
         publishedRealmURL in permissions,
         'filters out published realms when fetching all permissions',
+      );
+    });
+  });
+
+  module('fetchAllRealmsWithOwners', function (hooks) {
+    let dbAdapter: PgAdapter;
+
+    setupDB(hooks, {
+      beforeEach: async (
+        _dbAdapter: PgAdapter,
+        _publisher,
+        _runner,
+      ): Promise<void> => {
+        dbAdapter = _dbAdapter;
+      },
+    });
+
+    async function insertPublishedRealm({
+      sourceRealmURL,
+      publishedRealmURL,
+      ownerUsername = '@realm/published-owner',
+    }: {
+      sourceRealmURL: string;
+      publishedRealmURL: string;
+      ownerUsername?: string;
+    }) {
+      let publishedRealmId = uuidv4();
+      let { nameExpressions, valueExpressions } = asExpressions({
+        id: publishedRealmId,
+        owner_username: ownerUsername,
+        source_realm_url: sourceRealmURL,
+        published_realm_url: publishedRealmURL,
+        last_published_at: Date.now().toString(),
+      });
+      await query(
+        dbAdapter,
+        insert('published_realms', nameExpressions, valueExpressions),
+      );
+    }
+
+    test('uses source realm owner when published realm permissions are missing', async function (assert) {
+      const ownerUserId = '@owner:localhost';
+      const sourceRealmURL = 'http://example.com/source/';
+      const publishedRealmURL = 'http://example.com/published/';
+
+      await insertPermissions(dbAdapter, new URL(sourceRealmURL), {
+        [ownerUserId]: ['read', 'realm-owner'],
+      });
+
+      await insertPublishedRealm({ sourceRealmURL, publishedRealmURL });
+
+      let owners = await fetchAllRealmsWithOwners(dbAdapter);
+      let ownerByRealm = new Map(
+        owners.map((owner) => [owner.realm_url, owner.owner_username]),
+      );
+
+      assert.strictEqual(
+        ownerByRealm.get(sourceRealmURL),
+        'owner',
+        'returns source realm owner',
+      );
+      assert.strictEqual(
+        ownerByRealm.get(publishedRealmURL),
+        'owner',
+        'falls back to source realm owner for published realms',
+      );
+    });
+
+    test('falls back to published realm owner when source owner is missing', async function (assert) {
+      const sourceRealmURL = 'http://example.com/missing-source/';
+      const publishedRealmURL = 'http://example.com/published-only/';
+      const publishedOwner = '@realm/published-only';
+
+      await insertPublishedRealm({
+        sourceRealmURL,
+        publishedRealmURL,
+        ownerUsername: publishedOwner,
+      });
+
+      let owners = await fetchAllRealmsWithOwners(dbAdapter);
+      let ownerByRealm = new Map(
+        owners.map((owner) => [owner.realm_url, owner.owner_username]),
+      );
+
+      assert.strictEqual(
+        ownerByRealm.get(publishedRealmURL),
+        'realm/published-only',
+        'uses published realm owner when source owner is missing',
       );
     });
   });
