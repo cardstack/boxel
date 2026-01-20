@@ -19,7 +19,6 @@ import type {
 import {
   cardTypeIcon,
   identifyCard,
-  isListingCard,
   isResolvedCodeRef,
   realmURL,
 } from '@cardstack/runtime-common';
@@ -155,18 +154,16 @@ export function getDefaultCardMenuItems(
       disabled: !cardId,
     });
     menuItems = [...menuItems, ...getSampleDataMenuItems(card, params)];
-    if (!isListingCard(card)) {
-      menuItems.push({
-        label: `Create listing with AI`,
-        action: async () => {
-          await new ListingCreateCommand(params.commandContext).execute({
-            openCardId: cardId,
-          });
-        },
-        icon: Wand,
-        disabled: !params.canEdit,
-      });
-    }
+    menuItems.push({
+      label: `Create listing with AI`,
+      action: async () => {
+        await new ListingCreateCommand(params.commandContext).execute({
+          openCardId: cardId,
+        });
+      },
+      icon: Wand,
+      disabled: !params.canEdit,
+    });
   }
   return menuItems;
 }

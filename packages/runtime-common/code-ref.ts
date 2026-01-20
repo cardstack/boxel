@@ -13,7 +13,6 @@ import {
   fields,
   fieldsUntracked,
   isBaseInstance,
-  isListing,
 } from './constants';
 import { CardError } from './error';
 import { meta, relativeTo } from './constants';
@@ -103,10 +102,6 @@ export function isCardDef(
 
 export function isCardInstance<T extends CardDef>(card: any): card is T {
   return isCardDef(card?.constructor);
-}
-
-export function isListingCard(card: any): boolean {
-  return isCardDef(card?.constructor) && isListing in card.constructor;
 }
 
 export function isFieldDef(field: any): field is typeof FieldDef {

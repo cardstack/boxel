@@ -47,7 +47,7 @@ import ListingGenerateExampleCommand from '@cardstack/boxel-host/commands/listin
 import ListingUpdateSpecsCommand from '@cardstack/boxel-host/commands/listing-update-specs';
 import CreateListingPRCommand from '@cardstack/boxel-host/commands/create-listing-pr';
 
-import { getCardMenuItems, isListing } from '@cardstack/runtime-common';
+import { getCardMenuItems } from '@cardstack/runtime-common';
 
 import { Publisher } from './publisher';
 import { Category } from './category';
@@ -564,7 +564,6 @@ class EmbeddedTemplate extends Component<typeof Listing> {
 export class Listing extends CardDef {
   static displayName = 'Listing';
   static headerColor = '#6638ff';
-  static [isListing] = true;
 
   @field name = contains(StringField);
   @field summary = contains(MarkdownField);
