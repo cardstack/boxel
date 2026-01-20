@@ -14,7 +14,16 @@ export async function findNonConflictingFilename(
     }
   }
 
-  return `${baseName}-${maxAttempts}${extension}`;
+  const finalCandidateUrl = `${baseName}-${maxAttempts}${extension}`;
+  const finalExists = await fileExists(finalCandidateUrl);
+
+  if (!finalExists) {
+    return finalCandidateUrl;
+  }
+
+  throw new Error(
+    `Unable to find non-conflicting filename for "${fileUrl}" after ${maxAttempts} attempts.`,
+  );
 }
 
 function parseFilename(fileUrl: string): {
