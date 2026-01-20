@@ -16,14 +16,14 @@
         }
       },
       "details": [
-        "Statement credits up to $300 semi-annually on prepaid bookings through Amex Travel with Fine Hotels + Resorts® or The Hotel Collection®. The Hotel Collection requires a minimum two-night stay.‡"
+        "Statement credits up to $300 semi-annually on prepaid bookings through Amex Travel with Fine Hotels + Resorts\u00ae or The Hotel Collection\u00ae. The Hotel Collection requires a minimum two-night stay.\u2021"
       ],
       "partner": "Fine Hotels + Resorts / The Hotel Collection",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": null
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null
       },
       "minSpend": {
         "amount": 300,

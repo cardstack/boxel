@@ -3,9 +3,9 @@
     "type": "card",
     "attributes": {
       "quantity": 2,
-      "title": "Potions",
-      "description": null,
-      "thumbnailURL": null
+      "cardTitle": "Potions",
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "relationships": {
       "item": {

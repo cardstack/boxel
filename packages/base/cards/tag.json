@@ -2,8 +2,8 @@
   "data": {
     "type": "card",
     "attributes": {
-      "title": "Tag",
-      "description": "Tag card",
+      "cardTitle": "Tag",
+      "cardDescription": "Tag card",
       "specType": "card",
       "ref": {
         "module": "https://cardstack.com/base/tag",

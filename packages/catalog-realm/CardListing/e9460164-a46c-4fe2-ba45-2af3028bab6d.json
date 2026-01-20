@@ -17,9 +17,9 @@
       "summary": "A song composition tool that helps users create original music with customizable genres, keys, tempo, and multi-track arrangements.",
       "cardInfo": {
         "notes": "",
-        "title": "AI Song Builder",
-        "description": "Create original music compositions with AI assistance. Features customizable song structures, multiple instrument tracks, tempo control, and various musical genres. Perfect for musicians, content creators, and music enthusiasts looking to compose original songs.",
-        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/song-builder-listing/thumbnail.png"
+        "name": "AI Song Builder",
+        "summary": "Create original music compositions with AI assistance. Features customizable song structures, multiple instrument tracks, tempo control, and various musical genres. Perfect for musicians, content creators, and music enthusiasts looking to compose original songs.",
+        "cardThumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/song-builder-listing/thumbnail.png"
       }
     },
     "relationships": {

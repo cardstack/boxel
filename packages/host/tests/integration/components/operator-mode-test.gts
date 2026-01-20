@@ -528,7 +528,7 @@ module('Integration | operator-mode | basics', function (hooks) {
       .exists();
 
     await fillIn(
-      '[data-test-stack-card-index="2"] [data-test-field="title"] [data-test-boxel-input]',
+      '[data-test-stack-card-index="2"] [data-test-field="cardTitle"] [data-test-boxel-input]',
       'Mad As a Hatter',
     );
 

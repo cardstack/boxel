@@ -11,9 +11,9 @@
       "name": "Accounting & Finance",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": "Financial management, bookkeeping, budgeting, invoicing, tax preparation, audit reports, and financial planning tools.",
-        "thumbnailURL": null
+        "name": null,
+        "summary": "Financial management, bookkeeping, budgeting, invoicing, tax preparation, audit reports, and financial planning tools.",
+        "cardThumbnailURL": null
       }
     },
     "relationships": {

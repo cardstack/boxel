@@ -12,16 +12,16 @@
         "name": "LeafletMap",
         "module": "../leaflet-map/leaflet-map"
       },
-      "title": "LeafletMap",
+      "cardTitle": "LeafletMap",
       "readMe": null,
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": null
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null
       },
       "specType": "card",
-      "description": "Spec of LeafletMap",
+      "cardDescription": "Spec of LeafletMap",
       "containedExamples": []
     },
     "relationships": {

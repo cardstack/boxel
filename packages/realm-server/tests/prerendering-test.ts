@@ -236,6 +236,50 @@ module(basename(__filename), function () {
                 },
               },
             },
+            'console-error.gts': `
+              import { CardDef, Component } from 'https://cardstack.com/base/card-api';
+              export class ConsoleError extends CardDef {
+                static isolated = class extends Component<typeof this> {
+                  get explode() {
+                    console.error('console boom');
+                    throw new Error('boom');
+                  }
+                  <template>{{this.explode}}</template>
+                }
+              }
+            `,
+            'console-error.json': {
+              data: {
+                meta: {
+                  adoptsFrom: {
+                    module: './console-error',
+                    name: 'ConsoleError',
+                  },
+                },
+              },
+            },
+            'console-no-error.gts': `
+              import { CardDef, Component } from 'https://cardstack.com/base/card-api';
+              export class ConsoleNoError extends CardDef {
+                static isolated = class extends Component<typeof this> {
+                  constructor(...args) {
+                    super(...args);
+                    console.error('console boom');
+                  }
+                  <template>ok</template>
+                }
+              }
+            `,
+            'console-no-error.json': {
+              data: {
+                meta: {
+                  adoptsFrom: {
+                    module: './console-no-error',
+                    name: 'ConsoleNoError',
+                  },
+                },
+              },
+            },
             'notes.txt': 'Hello from file extract',
           },
         },
@@ -450,11 +494,21 @@ module(basename(__filename), function () {
         result.response.error?.error.stack?.includes('at transpileJS'),
         `stack should include "at transpileJS" but was ${result.response.error?.error.stack}`,
       );
-      assert.strictEqual(
-        result.response.error?.error.additionalErrors,
-        null,
-        'error is primary and not nested in additionalErrors',
-      );
+      let additionalErrors = result.response.error?.error.additionalErrors;
+      if (additionalErrors !== null) {
+        assert.ok(
+          Array.isArray(additionalErrors),
+          'additionalErrors is an array when present',
+        );
+        assert.ok(
+          additionalErrors?.every(
+            (entry) =>
+              entry?.title === 'Console error' ||
+              entry?.title === 'Console assert',
+          ),
+          'additionalErrors only include console entries',
+        );
+      }
       let deps = result.response.error?.error.deps ?? [];
       assert.ok(
         deps.some((dep) => dep.includes(`${realmURL}broken`)),
@@ -512,6 +566,43 @@ module(basename(__filename), function () {
         result.pool.evicted,
         'runtime error evicts prerender page to recover clean state',
       );
+    });
+
+    test('card prerender includes console errors when render fails', async function (assert) {
+      let cardURL = `${realmURL}console-error.json`;
+
+      let result = await prerenderer.prerenderCard({
+        realm: realmURL,
+        url: cardURL,
+        auth: auth(),
+      });
+
+      assert.ok(result.response.error, 'prerender reports error');
+      let additionalErrors = result.response.error?.error.additionalErrors;
+      assert.ok(
+        Array.isArray(additionalErrors),
+        'additionalErrors includes console errors',
+      );
+      assert.ok(
+        additionalErrors?.some(
+          (error) =>
+            typeof error?.message === 'string' &&
+            error.message.includes('console boom'),
+        ),
+        'console error message is captured',
+      );
+    });
+
+    test('card prerender ignores console errors on success', async function (assert) {
+      let cardURL = `${realmURL}console-no-error.json`;
+
+      let result = await prerenderer.prerenderCard({
+        realm: realmURL,
+        url: cardURL,
+        auth: auth(),
+      });
+
+      assert.notOk(result.response.error, 'prerender succeeds');
     });
 
     test('card prerender surfaces unhandled promise rejection without timing out', async function (assert) {
@@ -799,7 +890,7 @@ module(basename(__filename), function () {
             'secret.json': {
               data: {
                 attributes: {
-                  title: 'Top Secret',
+                  cardTitle: 'Top Secret',
                 },
                 meta: {
                   adoptsFrom: {
@@ -1412,7 +1503,7 @@ module(basename(__filename), function () {
 
       test('isolated HTML', function (assert) {
         assert.ok(
-          /data-test-field="cardDescription"/.test(result.isolatedHTML!),
+          /data-test-field="cardInfo-summary"/.test(result.isolatedHTML!),
           `failed to match isolated html:${result.isolatedHTML}`,
         );
       });

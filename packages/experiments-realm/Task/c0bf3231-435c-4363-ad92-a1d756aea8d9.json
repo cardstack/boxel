@@ -18,8 +18,8 @@
       },
       "name": "Renew Google Play Data Agreement",
       "details": null,
-      "description": null,
-      "thumbnailURL": null
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "relationships": {
       "tags": {

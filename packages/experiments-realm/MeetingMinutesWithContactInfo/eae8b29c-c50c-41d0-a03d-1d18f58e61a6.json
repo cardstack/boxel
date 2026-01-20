@@ -17,9 +17,9 @@
       "company": "Matrix Studios",
       "cardInfo": {
         "notes": "## Meeting Notes\n\nDate: January 15, 2024<br>\nParticipants: John Doe, Jane Smith, Alice Johnson\n\n### Key Points Discussed\n<ul>\n<li>Project timeline was reviewed and adjusted for Q2</li>\n<li> Budget allocation confirmed</li>\n<li> Risk assessment introduced, with mitigation strategies \n   identified</li>\n</ul>\n\n### Actions Items\n<ol>\n<li> <strong>John Doe:</strong> Update project timeline by January 20</li>\n<li> <strong>Jane Smith:</strong> Finalize budget report by January 22</li>\n<li> <strong>Alice Johnson:</strong> Conduct a follow-up meeting with  \n    stakeholders by January 30</li>\n</ol>",
-        "title": "Minutes of Meeting - Project Alpha",
-        "description": "Concise documentation of the decisions, tasks, and discussions from the Project Alpha Meeting on January 15, 2024.",
-        "thumbnailURL": null
+        "name": "Minutes of Meeting - Project Alpha",
+        "summary": "Concise documentation of the decisions, tasks, and discussions from the Project Alpha Meeting on January 15, 2024.",
+        "cardThumbnailURL": null
       }
     },
     "relationships": {

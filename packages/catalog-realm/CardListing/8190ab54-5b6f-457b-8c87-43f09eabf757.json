@@ -17,9 +17,9 @@
       "summary": "An interactive card for playing and exploring musical chord progressions with customizable player settings and multiple progression options.",
       "cardInfo": {
         "notes": "Perfect for music education, composition, and practice. Supports various chord progressions and player customization.",
-        "title": "Chord Progression Player",
-        "description": "",
-        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/chord-progression-listing/thumbnail.png"
+        "name": "Chord Progression Player",
+        "summary": "",
+        "cardThumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/chord-progression-listing/thumbnail.png"
       }
     },
     "relationships": {

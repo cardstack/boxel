@@ -113,7 +113,7 @@ export class IndexComponent extends Component<IndexComponentComponentSignature> 
       return `Card not found: ${this.args.model?.id}`;
     }
 
-    return this.card?.title ?? '';
+    return this.card?.cardTitle ?? '';
   }
 
   private viewCard: ViewCardFn = (cardOrURL) => {

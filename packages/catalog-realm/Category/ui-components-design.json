@@ -11,9 +11,9 @@
       "name": "UI Components & Design Systems",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": "Component specifications, design tokens, interaction patterns, animation sequences, layout templates, and design system tooling.",
-        "thumbnailURL": null
+        "name": null,
+        "summary": "Component specifications, design tokens, interaction patterns, animation sequences, layout templates, and design system tooling.",
+        "cardThumbnailURL": null
       }
     },
     "relationships": {

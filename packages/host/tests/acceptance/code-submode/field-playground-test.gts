@@ -47,7 +47,7 @@ const authorCard = `import { contains, field, CardDef, Component, FieldDef } fro
     @field firstName = contains(StringField);
     @field lastName = contains(StringField);
     @field bio = contains(MarkdownField);
-    @field title = contains(StringField, {
+    @field cardTitle = contains(StringField, {
       computeVia: function (this: Author) {
         return [this.firstName, this.lastName].filter(Boolean).join(' ');
       },
@@ -56,7 +56,7 @@ const authorCard = `import { contains, field, CardDef, Component, FieldDef } fro
     <template>
       <article>
         <header>
-          <h1 data-test-author-title><@fields.title /></h1>
+          <h1 data-test-author-title><@fields.cardTitle /></h1>
         </header>
         <div data-test-author-bio><@fields.bio /></div>
       </article>
@@ -112,14 +112,14 @@ const blogPostCard = `import { contains, containsMany, field, linksTo, CardDef, 
 
   export class Comment extends FieldDef {
     static displayName = 'Comment';
-    @field title = contains(StringField);
+    @field cardTitle = contains(StringField);
     @field name = contains(StringField);
     @field message = contains(StringField);
 
     static embedded = class Embedded extends Component<typeof this> {
       <template>
         <div data-test-embedded-comment>
-          <h4 data-test-embedded-comment-title><@fields.title /></h4>
+          <h4 data-test-embedded-comment-title><@fields.cardTitle /></h4>
           <p><@fields.message /> - by <@fields.name /></p>
         </div>
       </template>
@@ -127,7 +127,7 @@ const blogPostCard = `import { contains, containsMany, field, linksTo, CardDef, 
 
     static fitted = class Fitted extends Component<typeof this> {
       <template>
-        <div data-test-fitted-comment><@fields.title /> - by <@fields.name /></div>
+        <div data-test-fitted-comment><@fields.cardTitle /> - by <@fields.name /></div>
       </template>
     }
   }
@@ -154,7 +154,7 @@ const blogPostCard = `import { contains, containsMany, field, linksTo, CardDef, 
 
   export class BlogPost extends CardDef {
     static displayName = 'Blog Post';
-    @field title = contains(StringField)
+    @field cardTitle = contains(StringField)
     @field publishDate = contains(DatetimeField);
     @field author = linksTo(Author);
     @field comments = containsMany(Comment);
@@ -177,7 +177,7 @@ const blogPostCard = `import { contains, containsMany, field, linksTo, CardDef, 
     <template>
       <article>
         <header>
-          <h1 data-test-post-title><@fields.title /></h1>
+          <h1 data-test-post-title><@fields.cardTitle /></h1>
         </header>
         <div data-test-byline><@fields.author /></div>
         <div data-test-post-body><@fields.body /></div>
@@ -194,11 +194,11 @@ const blogPostCard = `import { contains, containsMany, field, linksTo, CardDef, 
 const petCard = `import { contains, containsMany, field, CardDef, Component, FieldDef, StringField } from 'https://cardstack.com/base/card-api';
   export class ToyField extends FieldDef {
     static displayName = 'Toy';
-    @field title = contains(StringField);
+    @field cardTitle = contains(StringField);
   }
   export class TreatField extends FieldDef {
     static displayName = 'Treat';
-    @field title = contains(StringField);
+    @field cardTitle = contains(StringField);
   }
   export class PetCard extends CardDef {
     static displayName = 'Pet';
@@ -220,10 +220,10 @@ const commentSpec2 = {
       specType: 'field',
       containedExamples: [
         {
-          title: 'Spec 2 Example 1',
+          cardTitle: 'Spec 2 Example 1',
         },
       ],
-      title: 'Comment spec II',
+      cardTitle: 'Comment spec II',
     },
     meta: {
       fields: {
@@ -255,17 +255,17 @@ const commentSpec1 = {
       specType: 'field',
       containedExamples: [
         {
-          title: 'Terrible product',
+          cardTitle: 'Terrible product',
           name: 'Marco',
           message: 'I would give 0 stars if I could. Do not buy!',
         },
         {
-          title: 'Needs better packaging',
+          cardTitle: 'Needs better packaging',
           name: 'Harry',
           message: 'Arrived broken',
         },
       ],
-      title: 'Comment spec',
+      cardTitle: 'Comment spec',
     },
     meta: {
       fields: {
@@ -340,8 +340,8 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
           'BlogPost/remote-work.json': {
             data: {
               attributes: {
-                title: 'The Ultimate Guide to Remote Work',
-                description:
+                cardTitle: 'The Ultimate Guide to Remote Work',
+                cardDescription:
                   'In today’s digital age, remote work has transformed from a luxury to a necessity. This comprehensive guide will help you navigate the world of remote work, offering tips, tools, and best practices for success.',
               },
               relationships: {
@@ -371,7 +371,7 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
                 },
                 specType: 'field',
                 containedExamples: [],
-                title: 'FullNameField spec',
+                cardTitle: 'FullNameField spec',
               },
               meta: {
                 adoptsFrom: {
@@ -395,7 +395,7 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
                   { email: 'lilian@email.com' },
                   { email: 'susie@email.com' },
                 ],
-                title: 'Contact Info',
+                cardTitle: 'Contact Info',
               },
               meta: {
                 fields: {
@@ -437,10 +437,10 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
                 },
                 specType: 'field',
                 containedExamples: [
-                  { title: 'Tug rope' },
-                  { title: 'Lambchop' },
+                  { cardTitle: 'Tug rope' },
+                  { cardTitle: 'Lambchop' },
                 ],
-                title: 'Toy',
+                cardTitle: 'Toy',
               },
               meta: {
                 fields: {
@@ -470,8 +470,11 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
             data: {
               attributes: {
                 firstName: 'Mango',
-                title: 'Mango',
-                favoriteToys: [{ title: 'Tug rope' }, { title: 'Lambchop' }],
+                cardTitle: 'Mango',
+                favoriteToys: [
+                  { cardTitle: 'Tug rope' },
+                  { cardTitle: 'Lambchop' },
+                ],
               },
               meta: {
                 adoptsFrom: {
@@ -750,7 +753,7 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
       await toggleSpecPanel();
       assert
         .dom(
-          '[data-test-contains-many="containedExamples"] [data-test-item="1"] [data-test-field="title"] input',
+          '[data-test-contains-many="containedExamples"] [data-test-item="1"] [data-test-field="cardTitle"] input',
         )
         .hasValue('Needs better packaging');
       await click(
@@ -841,7 +844,9 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
 
       await createNewInstance();
       assert
-        .dom('[data-test-field-preview-card] [data-test-field="title"] input')
+        .dom(
+          '[data-test-field-preview-card] [data-test-field="cardTitle"] input',
+        )
         .hasNoValue();
       selection =
         getPlaygroundSelections()?.[`${testRealmURL}blog-post/Comment`];
@@ -858,7 +863,7 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
         .exists({ count: 3 });
       assert
         .dom(
-          '[data-test-contains-many="containedExamples"] [data-test-item="2"] [data-test-field="title"] input',
+          '[data-test-contains-many="containedExamples"] [data-test-item="2"] [data-test-field="cardTitle"] input',
         )
         .hasNoValue();
 
@@ -994,7 +999,7 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
       const originalEmbeddedBlock = `    static embedded = class Embedded extends Component<typeof this> {
       <template>
         <div data-test-embedded-comment>
-          <h4 data-test-embedded-comment-title><@fields.title /></h4>
+          <h4 data-test-embedded-comment-title><@fields.cardTitle /></h4>
           <p><@fields.message /> - by <@fields.name /></p>
         </div>
       </template>
@@ -1126,8 +1131,8 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
                   module: '../pet',
                 },
                 specType: 'field',
-                containedExamples: [{ title: 'Tug rope' }],
-                title: 'Toy',
+                containedExamples: [{ cardTitle: 'Tug rope' }],
+                cardTitle: 'Toy',
               },
               meta: {
                 fields: {
@@ -1157,7 +1162,7 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
                 },
                 specType: 'field',
                 containedExamples: [],
-                title: 'FullNameField spec',
+                cardTitle: 'FullNameField spec',
               },
               meta: {
                 adoptsFrom: {
@@ -1189,7 +1194,7 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
           eq: {
             specType: 'field',
             isField: true,
-            title: 'Quote',
+            cardTitle: 'Quote',
             moduleHref: `${additionalRealmURL}author`,
           },
         },
@@ -1211,7 +1216,7 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
           eq: {
             specType: 'field',
             isField: true,
-            title: 'Quote',
+            cardTitle: 'Quote',
             moduleHref: `${additionalRealmURL}author`,
           },
         },
@@ -1264,7 +1269,9 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
 
       await createNewInstance();
       assert
-        .dom('[data-test-field-preview-card] [data-test-field="title"] input')
+        .dom(
+          '[data-test-field-preview-card] [data-test-field="cardTitle"] input',
+        )
         .hasNoValue();
       selection =
         getPlaygroundSelections()?.[`${additionalRealmURL}pet/ToyField`];
@@ -1281,7 +1288,7 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
         .exists({ count: 2 });
       assert
         .dom(
-          '[data-test-contains-many="containedExamples"] [data-test-item="1"] [data-test-field="title"] input',
+          '[data-test-contains-many="containedExamples"] [data-test-item="1"] [data-test-field="cardTitle"] input',
         )
         .hasNoValue();
 

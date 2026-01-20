@@ -3,7 +3,7 @@
     "type": "card",
     "attributes": {
       "goalTitle": "Daily Coding Practice",
-      "description": "Solve at least 2 coding problems every day to maintain problem-solving skills.",
+      "cardDescription": "Solve at least 2 coding problems every day to maintain problem-solving skills.",
       "targetDate": "2025-01-18",
       "priority": "medium",
       "category": "daily",

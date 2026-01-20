@@ -10,13 +10,13 @@ import {
 import { Post } from './post';
 
 export class Publication extends CardDef {
-  @field title = contains(StringField);
-  @field description = contains(StringField);
+  @field cardTitle = contains(StringField);
+  @field cardDescription = contains(StringField);
   @field featuredPosts = linksToMany(() => Post);
   static isolated = class Isolated extends Component<typeof this> {
     <template>
-      <h1><@fields.title /></h1>
-      <h2><@fields.description /></h2>
+      <h1><@fields.cardTitle /></h1>
+      <h2><@fields.cardDescription /></h2>
     </template>
   };
 }

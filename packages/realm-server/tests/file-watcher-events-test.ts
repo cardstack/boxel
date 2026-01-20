@@ -169,7 +169,7 @@ module(basename(__filename), function () {
         data: {
           type: 'card',
           attributes: {
-            title: 'Mango',
+            cardTitle: 'Mango',
             name: 'Mango',
           },
           meta: {

@@ -144,10 +144,10 @@ export default class FieldSpecIsolatedTemplate extends Component<typeof Spec> {
         </div>
         <div class='header-info-container'>
           <h1 class='title' id='title' data-test-title>
-            <@fields.title />
+            <@fields.cardTitle />
           </h1>
           <p class='description' data-test-description>
-            <@fields.description />
+            <@fields.cardDescription />
           </p>
         </div>
       </header>

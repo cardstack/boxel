@@ -9,9 +9,9 @@
       },
       "specType": "field",
       "containedExamples": [],
-      "title": "Urgency Tag",
-      "description": "Spec for Urgency Tag",
-      "thumbnailURL": null
+      "cardTitle": "Urgency Tag",
+      "cardDescription": "Spec for Urgency Tag",
+      "cardThumbnailURL": null
     },
     "relationships": {},
     "meta": {

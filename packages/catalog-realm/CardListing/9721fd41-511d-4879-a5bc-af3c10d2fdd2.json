@@ -15,9 +15,9 @@
       "summary": "Premium custom motorcycle showcase with garage-themed presentation - display engine specs, build details, and chrome styling while viewing interactive tank display and rebel aesthetics. Features chrome skull badges, engine controls, custom features listing, garage environment theming, and authentic motorcycle culture styling for complete bike enthusiast experiences.",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": "",
-        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/chrome-rebel-listing/thumbnail.png"
+        "name": null,
+        "summary": "",
+        "cardThumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/chrome-rebel-listing/thumbnail.png"
       }
     },
     "relationships": {

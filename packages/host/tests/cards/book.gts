@@ -9,5 +9,5 @@ export class Book extends CardDef {
   @field author = contains(PersonField);
   @field editions = contains(NumberField);
   @field pubDate = contains(DateField);
-  @field title = contains(StringField);
+  @field cardTitle = contains(StringField);
 }

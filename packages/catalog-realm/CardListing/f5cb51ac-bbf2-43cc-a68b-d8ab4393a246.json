@@ -15,9 +15,9 @@
       "summary": "A comprehensive card for tracking and managing study goals with progress monitoring",
       "cardInfo": {
         "notes": null,
-        "title": "Study Goal",
-        "description": "Track your study objectives with detailed progress monitoring, time estimates, and completion tracking. Perfect for students and lifelong learners managing their educational journey.",
-        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/study-goal-listing/thumbnail.png"
+        "name": "Study Goal",
+        "summary": "Track your study objectives with detailed progress monitoring, time estimates, and completion tracking. Perfect for students and lifelong learners managing their educational journey.",
+        "cardThumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/study-goal-listing/thumbnail.png"
       }
     },
     "relationships": {

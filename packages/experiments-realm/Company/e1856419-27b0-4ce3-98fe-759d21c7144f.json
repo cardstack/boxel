@@ -19,8 +19,8 @@
       "phone": 12065559012,
       "website": "https://pawspetclinic.com",
       "stockSymbol": null,
-      "description": "Veterinary clinic seeking to improve online appointment booking and pet owner communication systems.",
-      "thumbnailURL": "https://example.com/paws-clinic-logo.png"
+      "cardDescription": "Veterinary clinic seeking to improve online appointment booking and pet owner communication systems.",
+      "cardThumbnailURL": "https://example.com/paws-clinic-logo.png"
     },
     "relationships": {
       "crmApp": {

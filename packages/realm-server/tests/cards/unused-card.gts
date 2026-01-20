@@ -8,7 +8,7 @@ import StringField from 'https://cardstack.com/base/string';
 
 export class UnusedCard extends CardDef {
   @field firstName = contains(StringField);
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: UnusedCard) {
       return this.firstName;
     },

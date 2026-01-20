@@ -354,7 +354,7 @@ export default class InteractSubmode extends Component {
             `destination index card ${destinationIndexCardUrl} is not a card`,
           );
         }
-        sources.sort((a, b) => a.title.localeCompare(b.title));
+        sources.sort((a, b) => a.cardTitle.localeCompare(b.cardTitle));
         let scrollToCardId: string | undefined;
         let newCardId: string | undefined;
         let targetStackIndex = destinationItem.stackIndex;
@@ -403,7 +403,7 @@ export default class InteractSubmode extends Component {
       let loadedCard = card as CardDef;
       cardToDelete = {
         id: loadedCard.id,
-        title: loadedCard.title,
+        title: loadedCard.cardTitle,
       };
     } else {
       let cardUrl = card instanceof URL ? card : new URL(card as string);
@@ -411,7 +411,7 @@ export default class InteractSubmode extends Component {
       if (isCardInstance(loadedCard)) {
         cardToDelete = {
           id: loadedCard.id,
-          title: loadedCard.title,
+          title: loadedCard.cardTitle,
         };
       } else {
         let error = loadedCard;

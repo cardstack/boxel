@@ -2410,9 +2410,9 @@ export class MarkdownField extends StringField {
 
 export class CardInfoField extends FieldDef {
   static displayName = 'Card Info';
-  @field title = contains(StringField);
-  @field description = contains(StringField);
-  @field thumbnailURL = contains(MaybeBase64Field);
+  @field name = contains(StringField);
+  @field summary = contains(StringField);
+  @field cardThumbnailURL = contains(MaybeBase64Field);
   @field theme = linksTo(() => Theme);
   @field notes = contains(MarkdownField);
 }
@@ -2439,24 +2439,24 @@ export class CardDef extends BaseDef {
   }
   @field id = contains(ReadOnlyField);
   @field cardInfo = contains(CardInfoField);
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: CardDef) {
-      return this.cardInfo.title?.trim()?.length
-        ? this.cardInfo.title
+      return this.cardInfo.name?.trim()?.length
+        ? this.cardInfo.name
         : `Untitled ${this.constructor.displayName}`;
     },
   });
-  @field description = contains(StringField, {
+  @field cardDescription = contains(StringField, {
     computeVia: function (this: CardDef) {
-      return this.cardInfo.description;
+      return this.cardInfo.summary;
     },
   });
   // TODO: this will probably be an image or image url field card when we have it
   // UPDATE: we now have a Base64ImageField card. we can probably refactor this
   // to use it directly now (or wait until a better image field comes along)
-  @field thumbnailURL = contains(MaybeBase64Field, {
+  @field cardThumbnailURL = contains(MaybeBase64Field, {
     computeVia: function (this: CardDef) {
-      return this.cardInfo.thumbnailURL;
+      return this.cardInfo.cardThumbnailURL;
     },
   });
   static displayName = 'Card';

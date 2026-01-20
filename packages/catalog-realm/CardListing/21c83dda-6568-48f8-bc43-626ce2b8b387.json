@@ -12,12 +12,12 @@
       "images": [
         "https://boxel-images.boxel.ai/app-assets/catalog/todo-mvc-listing/screenshot-01.png"
       ],
-      "summary": "TodoMVC is a simple yet powerful demonstration app that showcases how different JavaScript frameworks implement the same basic functionality—a to-do list. It provides a consistent way to compare frameworks by offering a shared baseline in UI and features.",
+      "summary": "TodoMVC is a simple yet powerful demonstration app that showcases how different JavaScript frameworks implement the same basic functionality\u2014a to-do list. It provides a consistent way to compare frameworks by offering a shared baseline in UI and features.",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/todo-mvc-listing/thumbnail.png"
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/todo-mvc-listing/thumbnail.png"
       }
     },
     "relationships": {

@@ -47,7 +47,7 @@ class IsolatedTemplate extends Component<typeof AvatarCreator> {
 
     await createRealImageCommand.execute({
       avatar: this.args.model.avatar, // Pass the Avatar field (not the plain model)
-      avatarUrl: this.args.model?.thumbnailURL, // The thumbnailURL field is used in prompts as a reference image
+      avatarUrl: this.args.model?.cardThumbnailURL, // The thumbnailURL field is used in prompts as a reference image
       notes: this.args.model.cardInfo?.notes, // The cardInfo notes field is used in prompts as context
     });
 
@@ -90,15 +90,15 @@ export class AvatarCreator extends CardDef {
     description: 'Avatar appearance configuration',
   });
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: AvatarCreator) {
       return 'Avatar';
     },
   });
 
-  @field thumbnailURL = contains(StringField, {
+  @field cardThumbnailURL = contains(StringField, {
     computeVia: function (this: AvatarCreator) {
-      return this.avatar?.thumbnailURL || '';
+      return this.avatar?.cardThumbnailURL || '';
     },
   });
 

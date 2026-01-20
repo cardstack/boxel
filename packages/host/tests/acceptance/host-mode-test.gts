@@ -95,7 +95,7 @@ module('Acceptance | host mode tests', function (hooks) {
       static displayName = 'Pet';
       static headerColor = '#355e3b';
       @field name = contains(StringField);
-      @field title = contains(StringField, {
+      @field cardTitle = contains(StringField, {
         computeVia: function (this: Pet) {
           return this.name;
         },
@@ -156,7 +156,7 @@ module('Acceptance | host mode tests', function (hooks) {
           data: {
             type: 'card',
             attributes: {
-              title: 'Primary View Demo',
+              cardTitle: 'Primary View Demo',
               targetCardURL: `${testHostModeRealmURL}ViewCardDemo/secondary.json`,
             },
             meta: {
@@ -171,7 +171,7 @@ module('Acceptance | host mode tests', function (hooks) {
           data: {
             type: 'card',
             attributes: {
-              title: 'Secondary View Demo',
+              cardTitle: 'Secondary View Demo',
               targetCardURL: `${testHostModeRealmURL}ViewCardDemo/tertiary.json`,
             },
             meta: {
@@ -186,7 +186,7 @@ module('Acceptance | host mode tests', function (hooks) {
           data: {
             type: 'card',
             attributes: {
-              title: 'Tertiary View Demo',
+              cardTitle: 'Tertiary View Demo',
               targetCardURL: `${testHostModeRealmURL}ViewCardDemo/index.json`,
             },
             meta: {

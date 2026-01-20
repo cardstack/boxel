@@ -32,8 +32,8 @@
         "width": null
       },
       "cardInfo": {
-        "description": null,
-        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/portraits/photo-1509868918748-a554ad25f858.jpeg"
+        "summary": null,
+        "cardThumbnailURL": "https://boxel-images.boxel.ai/app-assets/portraits/photo-1509868918748-a554ad25f858.jpeg"
       }
     },
     "relationships": {

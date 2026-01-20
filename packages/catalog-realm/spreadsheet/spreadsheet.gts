@@ -932,7 +932,7 @@ export class Spreadsheet extends CardDef {
   @field csvFilename = contains(StringField);
   @field delimiter = contains(StringField);
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: Spreadsheet) {
       return this.name ?? 'Untitled Spreadsheet';
     },

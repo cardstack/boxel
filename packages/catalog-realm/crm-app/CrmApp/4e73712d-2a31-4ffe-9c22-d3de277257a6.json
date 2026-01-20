@@ -2,9 +2,9 @@
   "data": {
     "type": "card",
     "attributes": {
-      "title": "Vibeverse",
-      "description": "Feel the moment",
-      "thumbnailURL": "https://boxel-images.boxel.ai/icons/vibeverse.jpg"
+      "cardTitle": "Vibeverse",
+      "cardDescription": "Feel the moment",
+      "cardThumbnailURL": "https://boxel-images.boxel.ai/icons/vibeverse.jpg"
     },
     "meta": {
       "adoptsFrom": {

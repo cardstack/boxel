@@ -777,7 +777,7 @@ module('Integration | operator-mode | card catalog', function (hooks) {
     );
     await click('[data-test-card-catalog-go-button]');
 
-    await fillIn('[data-test-field="title"] input', 'New Skill');
+    await fillIn('[data-test-field="cardTitle"] input', 'New Skill');
     await click('[data-test-close-button]');
 
     assert.dom(`[data-test-boxel-filter-list-button]`).exists({ count: 14 });

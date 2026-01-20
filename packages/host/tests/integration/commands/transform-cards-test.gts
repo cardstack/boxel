@@ -76,7 +76,7 @@ module('Integration | commands | transform-cards', function (hooks) {
       static displayName = 'Person';
       @field name = contains(StringField);
       @field age = contains(StringField);
-      @field title = contains(StringField, {
+      @field cardTitle = contains(StringField, {
         computeVia: function (this: Person) {
           return this.name;
         },
@@ -87,7 +87,7 @@ module('Integration | commands | transform-cards', function (hooks) {
       static displayName = 'Pet';
       @field name = contains(StringField);
       @field species = contains(StringField);
-      @field title = contains(StringField, {
+      @field cardTitle = contains(StringField, {
         computeVia: function (this: Pet) {
           return this.name;
         },
@@ -298,7 +298,7 @@ module('Integration | commands | transform-cards', function (hooks) {
     await transformCommand.execute({
       query: {
         filter: {
-          contains: { title: 'Alice' },
+          contains: { cardTitle: 'Alice' },
           on: {
             module: `${testRealmURL}person`,
             name: 'Person',
@@ -385,7 +385,7 @@ module('Integration | commands | transform-cards', function (hooks) {
     await transformCommand.execute({
       query: {
         filter: {
-          contains: { title: 'NonExistentCard' },
+          contains: { cardTitle: 'NonExistentCard' },
         },
       },
       commandRef: {
@@ -416,7 +416,7 @@ module('Integration | commands | transform-cards', function (hooks) {
     await transformCommand.execute({
       query: {
         filter: {
-          contains: { title: 'Alice' },
+          contains: { cardTitle: 'Alice' },
           on: {
             module: `${testRealmURL}person`,
             name: 'Person',
@@ -459,7 +459,7 @@ module('Integration | commands | transform-cards', function (hooks) {
       await transformCommand.execute({
         query: {
           filter: {
-            contains: { title: 'Alice' },
+            contains: { cardTitle: 'Alice' },
           },
         },
         commandRef: {
