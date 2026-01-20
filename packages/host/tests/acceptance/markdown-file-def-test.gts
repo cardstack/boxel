@@ -44,7 +44,7 @@ module('Acceptance | markdown file def', function (hooks) {
       JSON.stringify(renderOptions),
     )}/file-extract`;
 
-  const fileURL = (path: string) => new URL(path, testRealmURL).href;
+  const makeFileURL = (path: string) => new URL(path, testRealmURL).href;
 
   const markdownDefCodeRef = (): ResolvedCodeRef => ({
     module: `${baseRealm.url}markdown-file-def`,
@@ -109,7 +109,7 @@ Another paragraph follows.`,
   });
 
   test('extracts title and excerpt from markdown', async function (assert) {
-    let url = fileURL('readme.md');
+    let url = makeFileURL('readme.md');
     await visit(
       renderPath(url, {
         fileExtract: true,
@@ -138,7 +138,7 @@ Another paragraph follows.`,
   });
 
   test('falls back when markdown def is used for non-markdown files', async function (assert) {
-    let url = fileURL('notes.txt');
+    let url = makeFileURL('notes.txt');
     await visit(
       renderPath(url, {
         fileExtract: true,
