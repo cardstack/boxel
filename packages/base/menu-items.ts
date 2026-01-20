@@ -51,7 +51,7 @@ export type GetMenuItemParams = {
   format?: Format;
 } & MenuContext;
 
-export function getDefaultMenuItems(
+export function getDefaultCardMenuItems(
   card: CardDef,
   params: GetMenuItemParams,
 ): MenuItemOptions[] {

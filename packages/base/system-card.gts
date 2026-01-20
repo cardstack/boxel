@@ -2,7 +2,7 @@ import { CardDef, field, contains, linksToMany, linksTo } from './card-api';
 import BooleanField from './boolean';
 import StringField from './string';
 import { getMenuItems } from '@cardstack/runtime-common';
-import { type GetMenuItemParams } from './card-items';
+import { type GetMenuItemParams } from './menu-items';
 import { type MenuItemOptions } from '@cardstack/boxel-ui/helpers';
 import SetUserSystemCardCommand from '@cardstack/boxel-host/commands/set-user-system-card';
 import AppsIcon from '@cardstack/boxel-icons/apps';

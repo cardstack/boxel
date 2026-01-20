@@ -143,7 +143,7 @@ import {
   setRealmContextOnField,
   type NotLoadedValue,
 } from './field-support';
-import { type GetMenuItemParams, getDefaultMenuItems } from './menu-items';
+import { type GetMenuItemParams, getDefaultCardMenuItems } from './menu-items';
 import {
   LinkableDocument,
   SingleFileMetaDocument,
@@ -2519,7 +2519,7 @@ export class CardDef extends BaseDef {
   }
 
   [getMenuItems](params: GetMenuItemParams): MenuItemOptions[] {
-    return getDefaultMenuItems(this, params);
+    return getDefaultCardMenuItems(this, params);
   }
 }
 

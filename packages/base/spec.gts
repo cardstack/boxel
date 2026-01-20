@@ -56,7 +56,7 @@ import { TrackedObject } from 'tracked-built-ins';
 import GenerateReadmeSpecCommand from '@cardstack/boxel-host/commands/generate-readme-spec';
 import PopulateWithSampleDataCommand from '@cardstack/boxel-host/commands/populate-with-sample-data';
 import GenerateExampleCardsCommand from '@cardstack/boxel-host/commands/generate-example-cards';
-import { type GetMenuItemParams } from './card-items';
+import { type GetMenuItemParams } from './menu-items';
 
 export type SpecType = 'card' | 'field' | 'component' | 'app' | 'command';
 
