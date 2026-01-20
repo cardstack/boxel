@@ -750,7 +750,7 @@ module('Acceptance | Spec preview', function (hooks) {
     assert
       .dom('[data-test-spec-error-message]')
       .hasText(
-        'Cannot display or create Boxel Specification for subclasses of spec',
+        'This is a card definition for a  Spec Card. Cannot create or display spec instances for this card type.',
       );
   });
   test('spec updates when different declaration selected in the module', async function (assert) {

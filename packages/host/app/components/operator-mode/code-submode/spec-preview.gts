@@ -378,7 +378,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
 
   private get errorMessage() {
     if (this.displayCannotCreateSpecFromSpec) {
-      return 'Cannot display or create Boxel Specification for subclasses of spec';
+      return 'This is a card definition for a  Spec Card. Cannot create or display spec instances for this card type.';
     }
     return undefined;
   }
