@@ -11,9 +11,9 @@
       "name": "Teaching & Instruction",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": "Lesson planning, educational materials, student management, curriculum development, and teaching methodology.",
-        "thumbnailURL": null
+        "name": null,
+        "summary": "Lesson planning, educational materials, student management, curriculum development, and teaching methodology.",
+        "cardThumbnailURL": null
       }
     },
     "relationships": {

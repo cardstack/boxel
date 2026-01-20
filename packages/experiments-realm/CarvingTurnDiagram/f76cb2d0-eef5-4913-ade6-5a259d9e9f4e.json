@@ -55,9 +55,9 @@
           "edgeAngleDegrees": "45"
         }
       ],
-      "title": "FunXR Open style",
-      "description": "Primary open style for 24'/25' season",
-      "thumbnailURL": null
+      "cardTitle": "FunXR Open style",
+      "cardDescription": "Primary open style for 24'/25' season",
+      "cardThumbnailURL": null
     },
     "meta": {
       "adoptsFrom": {

@@ -18,13 +18,13 @@
       },
       "cardInfo": {},
       "totalSpent": 2847.33,
-      "description": null,
+      "cardDescription": null,
       "loyaltyTier": {
         "name": "Bronze"
       },
       "totalOrders": 12,
       "customerName": "Zara Ahmed",
-      "thumbnailURL": null,
+      "cardThumbnailURL": null,
       "customerSince": "2024-02-28T13:10:00.000Z"
     },
     "relationships": {

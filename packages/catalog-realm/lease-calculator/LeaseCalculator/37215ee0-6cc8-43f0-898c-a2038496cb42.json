@@ -53,9 +53,9 @@
       "estimatedResaleValueFinancePercent": 44,
       "userMemo": "2024 Toyota Camry LE - Standard trim level lease comparison",
       "resultMode": "lease",
-      "title": "2024 Toyota Camry LE Lease Calculator",
-      "description": "Lease vs finance calculator for a 2024 Toyota Camry LE with standard incentives and California tax rates",
-      "thumbnailURL": null
+      "cardTitle": "2024 Toyota Camry LE Lease Calculator",
+      "cardDescription": "Lease vs finance calculator for a 2024 Toyota Camry LE with standard incentives and California tax rates",
+      "cardThumbnailURL": null
     },
     "meta": {
       "adoptsFrom": {

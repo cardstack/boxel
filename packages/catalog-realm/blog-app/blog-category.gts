@@ -68,7 +68,7 @@ let BlogCategoryTemplate = class Embedded extends Component<
       <div class='category-full-name'>
         <@fields.longName />
       </div>
-      <div class='category-description'><@fields.description /></div>
+      <div class='category-description'><@fields.cardDescription /></div>
     </div>
   </template>
 };
@@ -80,7 +80,7 @@ export class BlogCategory extends CardDef {
   @field shortName = contains(StringField);
   @field slug = contains(StringField);
   @field pillColor = contains(ColorField);
-  @field description = contains(StringField);
+  @field cardDescription = contains(StringField);
   @field blog = linksTo(BlogAppCard, { isUsed: true });
 
   static embedded = BlogCategoryTemplate;
@@ -214,7 +214,7 @@ export class BlogCategory extends CardDef {
         <div class='category-full-name'>
           <@fields.longName />
         </div>
-        <div class='category-description'><@fields.description /></div>
+        <div class='category-description'><@fields.cardDescription /></div>
       </div>
     </template>
   };

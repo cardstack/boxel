@@ -6,7 +6,7 @@
       "canonicalSlug": "openai/codex-mini",
       "name": "OpenAI: Codex Mini",
       "created": 1747409761,
-      "description": "codex-mini-latest is a fine-tuned version of o4-mini specifically for use in Codex CLI. For direct use in the API, we recommend starting with gpt-4.1.",
+      "cardDescription": "codex-mini-latest is a fine-tuned version of o4-mini specifically for use in Codex CLI. For direct use in the API, we recommend starting with gpt-4.1.",
       "pricing": {
         "prompt": "0.0000015",
         "completion": "0.000006",
@@ -44,9 +44,9 @@
       ],
       "defaultParameters": {},
       "cardInfo": {
-        "title": null,
-        "description": null,
-        "thumbnailURL": null,
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
         "notes": null
       }
     },

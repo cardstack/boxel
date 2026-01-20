@@ -52,7 +52,7 @@ export default class CardQueryResults extends Component<Signature> {
             ? [
                 {
                   contains: {
-                    title: searchTerm,
+                    cardTitle: searchTerm,
                   },
                 },
               ]

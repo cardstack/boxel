@@ -71,7 +71,7 @@ module('Acceptance | index card home resolution', function (hooks) {
     class Pet extends CardDef {
       static displayName = 'Pet';
       @field name = contains(StringField);
-      @field title = contains(StringField, {
+      @field cardTitle = contains(StringField, {
         computeVia(this: Pet) {
           return this.name;
         },

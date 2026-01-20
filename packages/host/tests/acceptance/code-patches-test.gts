@@ -49,13 +49,13 @@ export class TestCard extends CardDef {
   static displayName = 'Test Card';
 
   @field name = contains(StringField);
-  @field description = contains(StringField);
+  @field cardDescription = contains(StringField);
 
   static isolated = class Isolated extends Component<typeof this> {
     <template>
       <div data-test-test-card>
         <h1>{{@model.name}}</h1>
-        <p>{{@model.description}}</p>
+        <p>{{@model.cardDescription}}</p>
       </div>
     </template>
   };
@@ -137,9 +137,9 @@ module('Acceptance | Code patches tests', function (hooks) {
                   requiresApproval: true,
                 },
               ],
-              title: 'Useful Commands',
-              description: null,
-              thumbnailURL: null,
+              cardTitle: 'Useful Commands',
+              cardDescription: null,
+              cardThumbnailURL: null,
             },
             meta: {
               adoptsFrom: skillCardRef,
@@ -398,7 +398,7 @@ ${REPLACE_MARKER}
           id: 'abc123',
           name: 'show-card_566f',
           arguments: JSON.stringify({
-            description: 'Showing skill card',
+            cardDescription: 'Showing skill card',
             attributes: {
               cardId: `${testRealmURL}Skill/useful-commands`,
             },
@@ -653,7 +653,7 @@ ${REPLACE_MARKER}
           id: 'abc123',
           name: 'show-card_566f',
           arguments: JSON.stringify({
-            description: 'Showing skill card',
+            cardDescription: 'Showing skill card',
             attributes: {
               cardId: `${testRealmURL}Skill/useful-commands`,
             },
@@ -1727,7 +1727,7 @@ ${REPLACE_MARKER}
       .exists('Initial name field exists');
     assert
       .dom(
-        '[data-test-card-schema="Test Card"] [data-test-field-name="description"]',
+        '[data-test-card-schema="Test Card"] [data-test-field-name="cardDescription"]',
       )
       .exists('Initial description field exists');
 
@@ -1739,9 +1739,9 @@ ${REPLACE_MARKER}
     let codeBlock = `\`\`\`
 http://test-realm/test/test-card.gts
 ${SEARCH_MARKER}
-  @field description = contains(StringField);
+  @field cardDescription = contains(StringField);
 ${SEPARATOR_MARKER}
-  @field description = contains(StringField);
+  @field cardDescription = contains(StringField);
   @field email = contains(StringField);
 ${REPLACE_MARKER}\n\`\`\``;
 
@@ -1829,9 +1829,9 @@ ${REPLACE_MARKER}\n\`\`\``;
     let codeBlock = `\`\`\`
 http://test-realm/test/test-card.gts
 ${SEARCH_MARKER}
-  @field description = contains(StringField);
+  @field cardDescription = contains(StringField);
 ${SEPARATOR_MARKER}
-  @field description = contains(StringField);
+  @field cardDescription = contains(StringField);
   @field email = contains(StringField);
 ${REPLACE_MARKER}\n\`\`\``;
 

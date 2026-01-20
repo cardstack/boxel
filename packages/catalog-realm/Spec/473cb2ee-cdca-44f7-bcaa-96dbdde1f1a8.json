@@ -9,10 +9,10 @@
       },
       "specType": "card",
       "containedExamples": [],
-      "title": "PlayerProgress",
-      "description": null,
+      "cardTitle": "PlayerProgress",
+      "cardDescription": null,
       "cardInfo": {},
-      "thumbnailURL": null
+      "cardThumbnailURL": null
     },
     "relationships": {
       "linkedExamples": {

@@ -11,9 +11,9 @@
       "name": "E-commerce & Online Sales",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": "Online stores, digital marketplaces, sales platforms, customer relationship management, order processing, and e-commerce business operations.",
-        "thumbnailURL": null
+        "name": null,
+        "summary": "Online stores, digital marketplaces, sales platforms, customer relationship management, order processing, and e-commerce business operations.",
+        "cardThumbnailURL": null
       }
     },
     "relationships": {

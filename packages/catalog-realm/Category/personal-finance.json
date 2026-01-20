@@ -11,9 +11,9 @@
       "name": "Personal Finance",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": "Budget planning, investment portfolios, savings goals, financial statements, insurance policies, and retirement planning.",
-        "thumbnailURL": null
+        "name": null,
+        "summary": "Budget planning, investment portfolios, savings goals, financial statements, insurance policies, and retirement planning.",
+        "cardThumbnailURL": null
       }
     },
     "relationships": {

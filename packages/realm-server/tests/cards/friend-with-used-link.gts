@@ -12,7 +12,7 @@ export class FriendWithUsedLink extends CardDef {
   @field firstName = contains(StringField);
   @field friend = linksTo(() => FriendWithUsedLink, { isUsed: true }); // using isUsed: true will throw when ensureLinksLoaded encounters broken links
   @field friends = linksToMany(() => FriendWithUsedLink);
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: FriendWithUsedLink) {
       return this.firstName;
     },

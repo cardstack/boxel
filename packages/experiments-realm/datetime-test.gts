@@ -14,7 +14,7 @@ export class DateTimeTest extends CardDef {
   @field testDate = contains(DatetimeField);
   @field testDescription = contains(StringField);
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: DateTimeTest) {
       return this.testDescription || 'DateTime Test';
     },

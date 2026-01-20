@@ -11,9 +11,9 @@
       "name": "Shopping & Consumer",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": "Product research, price comparison, wish lists, purchase tracking, and consumer review management.",
-        "thumbnailURL": null
+        "name": null,
+        "summary": "Product research, price comparison, wish lists, purchase tracking, and consumer review management.",
+        "cardThumbnailURL": null
       }
     },
     "relationships": {

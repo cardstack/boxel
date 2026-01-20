@@ -7,9 +7,9 @@
       "slug": "movies",
       "pillColor": "#fff500",
       "cardInfo": {
-        "description": null,
-        "title": "Movie Review",
-        "thumbnailURL": null
+        "summary": null,
+        "name": "Movie Review",
+        "cardThumbnailURL": null
       }
     },
     "relationships": {

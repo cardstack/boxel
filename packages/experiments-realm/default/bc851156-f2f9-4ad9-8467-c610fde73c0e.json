@@ -11,9 +11,9 @@
       "version": null,
       "cardInfo": {
         "notes": "Inspired by coral reefs and deep ocean environments. The color palette flows from light aqua surfaces to deep ocean blues, with gentle curves that mimic water movement and typography that feels clean and fluid like underwater currents.",
-        "title": "Ocean",
-        "description": "A serene ocean-inspired design system featuring deep blues, crystalline waters, and flowing aquatic elements. Perfect for applications that need to convey depth, tranquility, and fluid movement.",
-        "thumbnailURL": "https://images.unsplash.com/photo-1544551763-46a013bb70d5?w=400&h=300&fit=crop&crop=center"
+        "name": "Ocean",
+        "summary": "A serene ocean-inspired design system featuring deep blues, crystalline waters, and flowing aquatic elements. Perfect for applications that need to convey depth, tranquility, and fluid movement.",
+        "cardThumbnailURL": "https://images.unsplash.com/photo-1544551763-46a013bb70d5?w=400&h=300&fit=crop&crop=center"
       },
       "cssImports": [
         "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Crimson+Text:wght@400;600&display=swap"

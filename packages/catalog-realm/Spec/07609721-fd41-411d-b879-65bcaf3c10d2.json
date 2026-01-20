@@ -9,9 +9,9 @@
       },
       "specType": "card",
       "containedExamples": [],
-      "title": "ChromeRebel",
-      "description": "Spec of ChromeRebel",
-      "thumbnailURL": null
+      "cardTitle": "ChromeRebel",
+      "cardDescription": "Spec of ChromeRebel",
+      "cardThumbnailURL": null
     },
     "relationships": {
       "linkedExamples": {

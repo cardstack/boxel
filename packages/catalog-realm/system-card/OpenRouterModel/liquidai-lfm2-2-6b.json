@@ -6,7 +6,7 @@
       "canonicalSlug": "liquid/lfm-2.2-6b",
       "name": "LiquidAI/LFM2-2.6B",
       "created": 1760970889,
-      "description": "LFM2 is a new generation of hybrid models developed by Liquid AI, specifically designed for edge AI and on-device deployment. It sets a new standard in terms of quality, speed, and memory efficiency.",
+      "cardDescription": "LFM2 is a new generation of hybrid models developed by Liquid AI, specifically designed for edge AI and on-device deployment. It sets a new standard in terms of quality, speed, and memory efficiency.",
       "pricing": {
         "prompt": "0.00000005",
         "completion": "0.0000001",
@@ -49,9 +49,9 @@
         "frequency_penalty": null
       },
       "cardInfo": {
-        "title": null,
-        "description": null,
-        "thumbnailURL": null,
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
         "notes": null
       }
     },

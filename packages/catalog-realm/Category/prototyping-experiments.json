@@ -11,9 +11,9 @@
       "name": "Prototyping & Experiments",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": "Prototype versions, A/B test configurations, feature flags, experiment designs, user feedback, and rollout plans.",
-        "thumbnailURL": null
+        "name": null,
+        "summary": "Prototype versions, A/B test configurations, feature flags, experiment designs, user feedback, and rollout plans.",
+        "cardThumbnailURL": null
       }
     },
     "relationships": {

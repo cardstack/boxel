@@ -141,9 +141,9 @@ module(`Integration | realm indexing`, function (hooks) {
         type: 'card',
         attributes: {
           cardInfo,
-          title: 'Untitled Card',
-          description: null,
-          thumbnailURL: null,
+          cardTitle: 'Untitled Card',
+          cardDescription: null,
+          cardThumbnailURL: null,
         },
         relationships: {
           'cardInfo.theme': { links: { self: null } },
@@ -188,6 +188,7 @@ module(`Integration | realm indexing`, function (hooks) {
     assert.true(response.ok, 'file meta request succeeds');
 
     let body = await response.json();
+    assert.strictEqual(body?.data?.type, 'file-meta');
     let contentHash = body?.data?.attributes?.contentHash;
     let expectedHash = md5(
       new TextEncoder().encode('Hello from the test realm.'),
@@ -287,7 +288,7 @@ module(`Integration | realm indexing`, function (hooks) {
       JSON.stringify({
         data: {
           attributes: {
-            title: 'test',
+            cardTitle: 'test',
           },
           meta: {
             adoptsFrom: {
@@ -353,10 +354,15 @@ module(`Integration | realm indexing`, function (hooks) {
           mango.error.errorDetail.message,
           `missing file ${testRealmURL}Person/owner.json`,
         );
-        assert.deepEqual(mango.error.errorDetail.deps, [
-          `${testRealmURL}Person/owner.json`,
-          'http://localhost:4202/test/pet',
-        ]);
+        assert.deepEqual(
+          mango.error.errorDetail.deps,
+          [
+            `${testRealmURL}Person/owner`,
+            `${testRealmURL}Person/owner.json`,
+            'http://localhost:4202/test/pet',
+          ],
+          'error deps are correct',
+        );
       } else {
         assert.ok(false, `expected search entry to be an error doc`);
       }
@@ -390,10 +396,10 @@ module(`Integration | realm indexing`, function (hooks) {
             self: './mango',
           },
           attributes: {
-            description: null,
+            cardDescription: null,
             firstName: 'Mango',
-            title: 'Mango',
-            thumbnailURL: null,
+            cardTitle: 'Mango',
+            cardThumbnailURL: null,
             cardInfo,
           },
           relationships: {
@@ -478,10 +484,10 @@ module(`Integration | realm indexing`, function (hooks) {
           self: './mango',
         },
         attributes: {
-          description: null,
+          cardDescription: null,
           firstName: 'Mango',
-          title: 'Mango',
-          thumbnailURL: null,
+          cardTitle: 'Mango',
+          cardThumbnailURL: null,
           cardInfo,
         },
         relationships: {
@@ -524,10 +530,10 @@ module(`Integration | realm indexing`, function (hooks) {
             self: './mango',
           },
           attributes: {
-            description: null,
+            cardDescription: null,
             firstName: 'Van Gogh',
-            title: 'Van Gogh',
-            thumbnailURL: null,
+            cardTitle: 'Van Gogh',
+            cardThumbnailURL: null,
             cardInfo,
           },
           relationships: {
@@ -609,10 +615,10 @@ module(`Integration | realm indexing`, function (hooks) {
           self: './mango',
         },
         attributes: {
-          description: null,
+          cardDescription: null,
           firstName: 'Mango',
-          title: 'Mango',
-          thumbnailURL: null,
+          cardTitle: 'Mango',
+          cardThumbnailURL: null,
           cardInfo,
         },
         relationships: {
@@ -695,10 +701,10 @@ module(`Integration | realm indexing`, function (hooks) {
           self: './mango',
         },
         attributes: {
-          description: null,
+          cardDescription: null,
           firstName: 'Mango',
-          title: 'Mango',
-          thumbnailURL: null,
+          cardTitle: 'Mango',
+          cardThumbnailURL: null,
           cardInfo,
         },
         relationships: {
@@ -742,8 +748,8 @@ module(`Integration | realm indexing`, function (hooks) {
         'person-spec.json': {
           data: {
             attributes: {
-              title: 'Person Card',
-              description: 'Spec for Person card',
+              cardTitle: 'Person Card',
+              cardDescription: 'Spec for Person card',
               specType: 'card',
               ref: {
                 module: `./person`, // we should never serialize like this, but we should do our best to interpret it
@@ -772,15 +778,15 @@ module(`Integration | realm indexing`, function (hooks) {
           self: './person-spec',
         },
         attributes: {
-          title: 'Person Card',
-          description: 'Spec for Person card',
+          cardTitle: 'Person Card',
+          cardDescription: 'Spec for Person card',
           moduleHref: `${testRealmURL}person`,
           readMe: null,
           specType: 'card',
           isCard: true,
           isComponent: false,
           isField: false,
-          thumbnailURL: null,
+          cardThumbnailURL: null,
           ref: {
             module: `${testRealmURL}person`,
             name: 'Person',
@@ -810,12 +816,12 @@ module(`Integration | realm indexing`, function (hooks) {
       );
       assert.deepEqual(instance?.searchDoc, {
         _cardType: 'Spec',
-        description: 'Spec for Person card',
+        cardDescription: 'Spec for Person card',
         id: `${testRealmURL}person-spec`,
         specType: 'card',
         moduleHref: `${testRealmURL}person`,
         ref: `${testRealmURL}person/Person`,
-        title: 'Person Card',
+        cardTitle: 'Person Card',
         containedExamples: null,
         linkedExamples: null,
         isCard: true,
@@ -843,8 +849,8 @@ module(`Integration | realm indexing`, function (hooks) {
         'person-spec.json': {
           data: {
             attributes: {
-              title: 'Person Card',
-              description: 'Spec for Person card',
+              cardTitle: 'Person Card',
+              cardDescription: 'Spec for Person card',
               specType: 'card',
               ref: {
                 module: `${testRealmURL}person`,
@@ -891,15 +897,15 @@ module(`Integration | realm indexing`, function (hooks) {
           self: './person-spec',
         },
         attributes: {
-          title: 'Person Card',
-          description: 'Spec for Person card',
+          cardTitle: 'Person Card',
+          cardDescription: 'Spec for Person card',
           moduleHref: `${testRealmURL}person`,
           readMe: null,
           specType: 'card',
           isCard: true,
           isComponent: false,
           isField: false,
-          thumbnailURL: null,
+          cardThumbnailURL: null,
           ref: {
             module: `${testRealmURL}person`,
             name: 'Person',
@@ -929,12 +935,12 @@ module(`Integration | realm indexing`, function (hooks) {
       );
       assert.deepEqual(instance?.searchDoc, {
         _cardType: 'Spec',
-        description: 'Spec for Person card',
+        cardDescription: 'Spec for Person card',
         id: `${testRealmURL}person-spec`,
         specType: 'card',
         moduleHref: `${testRealmURL}person`,
         ref: `${testRealmURL}person/Person`,
-        title: 'Person Card',
+        cardTitle: 'Person Card',
         containedExamples: null,
         linkedExamples: null,
         isCard: true,
@@ -965,13 +971,13 @@ module(`Integration | realm indexing`, function (hooks) {
               },
               functionName: 'switch-submode_dd88',
               requiresApproval: false,
-              title: 'Switch Submode',
+              cardTitle: 'Switch Submode',
             },
           ],
-          description: null,
+          cardDescription: null,
           instructions: 'How to win friends and influence people',
-          thumbnailURL: null,
-          title: null,
+          cardThumbnailURL: null,
+          cardTitle: null,
           cardInfo,
         },
         relationships: {
@@ -999,7 +1005,7 @@ module(`Integration | realm indexing`, function (hooks) {
             codeRef: `@cardstack/boxel-host/commands/switch-submode/default`,
             functionName: 'switch-submode_dd88',
             requiresApproval: false,
-            title: 'Switch Submode',
+            cardTitle: 'Switch Submode',
           },
         ],
         cardInfo: { theme: null },
@@ -1475,15 +1481,15 @@ module(`Integration | realm indexing`, function (hooks) {
         type: 'card',
         attributes: {
           cardInfo: {
-            description: null,
+            summary: null,
             notes: null,
-            thumbnailURL: null,
-            title: null,
+            cardThumbnailURL: null,
+            name: null,
           },
-          description: null,
+          cardDescription: null,
           firstName: 'Van Van',
-          thumbnailURL: null,
-          title: 'Untitled Card',
+          cardThumbnailURL: null,
+          cardTitle: 'Untitled Card',
         },
         relationships: {
           'cardInfo.theme': {
@@ -1553,7 +1559,7 @@ module(`Integration | realm indexing`, function (hooks) {
         },
         firstName: 'Van Gogh',
         id: `${testRealmURL}vangogh`,
-        title: 'Untitled Card',
+        cardTitle: 'Untitled Card',
       },
       'search doc is correct',
     );
@@ -1650,7 +1656,7 @@ module(`Integration | realm indexing`, function (hooks) {
   test(`can generate embedded HTML for instance's card class hierarchy`, async function (assert) {
     class Person extends CardDef {
       static displayName = 'Person';
-      @field description = contains(StringField);
+      @field cardDescription = contains(StringField);
       @field firstName = contains(StringField);
       static embedded = class Embedded extends Component<typeof this> {
         <template>
@@ -1683,7 +1689,7 @@ module(`Integration | realm indexing`, function (hooks) {
             attributes: {
               firstName: 'Germaine',
               favoriteColor: 'hot pink',
-              description: 'Fancy Germaine',
+              cardDescription: 'Fancy Germaine',
             },
             meta: {
               adoptsFrom: {
@@ -1787,7 +1793,7 @@ module(`Integration | realm indexing`, function (hooks) {
     class Person extends CardDef {
       static displayName = 'Person';
       @field firstName = contains(StringField);
-      @field description = contains(StringField);
+      @field cardDescription = contains(StringField);
       static fitted = class Fitted extends Component<typeof this> {
         <template>
           <h1> Person Fitted Card: <@fields.firstName /></h1>
@@ -1819,7 +1825,7 @@ module(`Integration | realm indexing`, function (hooks) {
             attributes: {
               firstName: 'Germaine',
               favoriteColor: 'hot pink',
-              description: 'Fancy Germaine',
+              cardDescription: 'Fancy Germaine',
             },
             meta: {
               adoptsFrom: {
@@ -1920,27 +1926,27 @@ module(`Integration | realm indexing`, function (hooks) {
     class Person extends FieldDef {
       @field firstName = contains(StringField);
       @field pet = linksTo(() => PetCard);
-      @field title = contains(StringField, {
+      @field cardTitle = contains(StringField, {
         computeVia: function (this: Person) {
           return this.firstName;
         },
       });
     }
     class Appointment extends FieldDef {
-      @field title = contains(StringField);
+      @field cardTitle = contains(StringField);
       @field contact = contains(Person);
     }
 
     class PetCard extends CardDef {
       @field firstName = contains(StringField);
       @field appointment = contains(Appointment);
-      @field title = contains(StringField, {
+      @field cardTitle = contains(StringField, {
         computeVia: function (this: PetCard) {
           return this.firstName;
         },
       });
-      @field description = contains(StringField);
-      @field thumbnailURL = contains(StringField);
+      @field cardDescription = contains(StringField);
+      @field cardThumbnailURL = contains(StringField);
     }
 
     let { realm } = await setupIntegrationTestRealm({
@@ -1954,11 +1960,11 @@ module(`Integration | realm indexing`, function (hooks) {
             attributes: {
               firstName: 'Jackie',
               appointment: {
-                title: 'Vet visit',
+                cardTitle: 'Vet visit',
                 contact: { firstName: 'Burcu' },
               },
-              description: 'Dog',
-              thumbnailURL: './jackie.jpg',
+              cardDescription: 'Dog',
+              cardThumbnailURL: './jackie.jpg',
             },
             meta: {
               adoptsFrom: { module: `./pet-card`, name: 'PetCard' },
@@ -1987,15 +1993,15 @@ module(`Integration | realm indexing`, function (hooks) {
     if (card?.type === 'doc') {
       assert.deepEqual(card.doc.data.attributes, {
         firstName: 'Jackie',
-        title: 'Jackie',
+        cardTitle: 'Jackie',
         appointment: {
-          title: 'Vet visit',
+          cardTitle: 'Vet visit',
           contact: {
             firstName: 'Burcu',
           },
         },
-        description: 'Dog',
-        thumbnailURL: `./jackie.jpg`,
+        cardDescription: 'Dog',
+        cardThumbnailURL: `./jackie.jpg`,
         cardInfo,
       });
       assert.deepEqual(card.doc.data.relationships, {
@@ -2103,9 +2109,9 @@ module(`Integration | realm indexing`, function (hooks) {
           },
           attributes: {
             name: 'Acme Industries',
-            title: 'Acme Industries',
-            description: 'Vendor',
-            thumbnailURL: null,
+            cardTitle: 'Acme Industries',
+            cardDescription: 'Vendor',
+            cardThumbnailURL: null,
             paymentMethods: [
               {
                 type: 'crypto',
@@ -2168,10 +2174,10 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             attributes: {
               name: 'Ethereum Mainnet',
-              title: 'Ethereum Mainnet',
+              cardTitle: 'Ethereum Mainnet',
               chainId: 1,
-              description: `Chain 1`,
-              thumbnailURL: `Ethereum Mainnet-icon.png`,
+              cardDescription: `Chain 1`,
+              cardThumbnailURL: `Ethereum Mainnet-icon.png`,
               cardInfo,
             },
             relationships: {
@@ -2198,10 +2204,10 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             attributes: {
               name: 'Polygon',
-              title: 'Polygon',
+              cardTitle: 'Polygon',
               chainId: 137,
-              description: `Chain 137`,
-              thumbnailURL: `Polygon-icon.png`,
+              cardDescription: `Chain 137`,
+              cardThumbnailURL: `Polygon-icon.png`,
               cardInfo,
             },
             relationships: {
@@ -2342,8 +2348,8 @@ module(`Integration | realm indexing`, function (hooks) {
         lastName: 'Abdel-Rahman',
         email: 'hassan@cardstack.com',
         posts: 100,
-        title: 'Hassan Abdel-Rahman',
-        description: 'Person',
+        cardTitle: 'Hassan Abdel-Rahman',
+        cardDescription: 'Person',
         fullName: 'Hassan Abdel-Rahman',
         _cardType: 'Person',
         cardInfo: { theme: null },
@@ -2359,7 +2365,7 @@ module(`Integration | realm indexing`, function (hooks) {
         'Publication/pacific.json': {
           data: {
             id: `${testRealmURL}Publication/pacific`,
-            attributes: { title: 'Pacific Weekly' },
+            attributes: { cardTitle: 'Pacific Weekly' },
             relationships: {
               'featuredPosts.0': { links: { self: `../Post/1` } },
               'featuredPosts.1': { links: { self: `../Post/2` } },
@@ -2376,7 +2382,7 @@ module(`Integration | realm indexing`, function (hooks) {
           data: {
             id: `${testRealmURL}Post/1`,
             attributes: {
-              title: '50 Ways to Leave Your Laptop',
+              cardTitle: '50 Ways to Leave Your Laptop',
               views: 5,
             },
             relationships: {
@@ -2396,7 +2402,7 @@ module(`Integration | realm indexing`, function (hooks) {
           data: {
             id: `${testRealmURL}Post/2`,
             attributes: {
-              title: '49 Shades of Mauve',
+              cardTitle: '49 Shades of Mauve',
               views: 24,
             },
             relationships: {
@@ -2420,12 +2426,12 @@ module(`Integration | realm indexing`, function (hooks) {
       {
         _cardType: 'Post',
         author: {
-          description: 'Person',
+          cardDescription: 'Person',
           fullName: ' ',
-          title: ' ',
+          cardTitle: ' ',
         },
         id: `${testRealmURL}Post/1`,
-        title: '50 Ways to Leave Your Laptop',
+        cardTitle: '50 Ways to Leave Your Laptop',
         publication: {
           id: `${testRealmURL}Publication/pacific`,
         },
@@ -2443,13 +2449,13 @@ module(`Integration | realm indexing`, function (hooks) {
       {
         _cardType: 'Publication',
         id: `${testRealmURL}Publication/pacific`,
-        title: 'Pacific Weekly',
+        cardTitle: 'Pacific Weekly',
         featuredPosts: [
           {
             author: {
-              description: 'Person',
+              cardDescription: 'Person',
               fullName: ' ',
-              title: ' ',
+              cardTitle: ' ',
             },
             cardInfo: {
               theme: null,
@@ -2458,14 +2464,14 @@ module(`Integration | realm indexing`, function (hooks) {
             publication: {
               id: `${testRealmURL}Publication/pacific`,
             },
-            title: '50 Ways to Leave Your Laptop',
+            cardTitle: '50 Ways to Leave Your Laptop',
             views: 5,
           },
           {
             author: {
-              description: 'Person',
+              cardDescription: 'Person',
               fullName: ' ',
-              title: ' ',
+              cardTitle: ' ',
             },
             cardInfo: {
               theme: null,
@@ -2474,7 +2480,7 @@ module(`Integration | realm indexing`, function (hooks) {
             publication: {
               id: `${testRealmURL}Publication/pacific`,
             },
-            title: '49 Shades of Mauve',
+            cardTitle: '49 Shades of Mauve',
             views: 24,
           },
         ],
@@ -2495,36 +2501,38 @@ module(`Integration | realm indexing`, function (hooks) {
           return `${this.firstName ?? ''} ${this.lastName ?? ''}`;
         },
       });
-      @field title = contains(StringField, {
+      @field cardTitle = contains(StringField, {
         computeVia: function (this: Person) {
           return `${this.firstName ?? ''} ${this.lastName ?? ''}`;
         },
       });
-      @field description = contains(StringField, {
+      @field cardDescription = contains(StringField, {
         computeVia: () => 'Person',
       });
     }
     class Post extends FieldDef {
-      @field title = contains(StringField);
-      @field description = contains(StringField);
+      @field cardTitle = contains(StringField);
+      @field cardDescription = contains(StringField);
       @field author = contains(Person);
       @field views = contains(NumberField);
       @field createdAt = contains(DatetimeField);
     }
     class Booking extends FieldDef {
-      @field title = contains(StringField);
+      @field cardTitle = contains(StringField);
       @field venue = contains(StringField);
       @field startTime = contains(DatetimeField);
       @field endTime = contains(DatetimeField);
       @field hosts = containsMany(Person);
       @field sponsors = containsMany(StringField);
       @field posts = containsMany(Post);
-      @field description = contains(StringField, {
+      @field cardDescription = contains(StringField, {
         computeVia: function (this: Booking) {
           return this.venue;
         },
       });
-      @field thumbnailURL = contains(StringField, { computeVia: () => null });
+      @field cardThumbnailURL = contains(StringField, {
+        computeVia: () => null,
+      });
     }
     let { realm } = await setupIntegrationTestRealm({
       mockMatrixUtils,
@@ -2535,8 +2543,8 @@ module(`Integration | realm indexing`, function (hooks) {
         'Spec/booking.json': {
           data: {
             attributes: {
-              title: 'Booking',
-              description: 'Spec for Booking',
+              cardTitle: 'Booking',
+              cardDescription: 'Spec for Booking',
               specType: 'card',
               ref: {
                 module: 'http://localhost:4202/test/booking',
@@ -2560,13 +2568,13 @@ module(`Integration | realm indexing`, function (hooks) {
     assert.deepEqual(entry?.searchDoc, {
       _cardType: 'Spec',
       id: `${testRealmURL}Spec/booking`,
-      description: 'Spec for Booking',
+      cardDescription: 'Spec for Booking',
       specType: 'card',
       moduleHref: 'http://localhost:4202/test/booking',
       containedExamples: null,
       linkedExamples: null,
       ref: 'http://localhost:4202/test/booking/Booking',
-      title: 'Booking',
+      cardTitle: 'Booking',
       isCard: true,
       isComponent: false,
       isField: false,
@@ -2639,9 +2647,9 @@ module(`Integration | realm indexing`, function (hooks) {
         links: { self: './hassan' },
         attributes: {
           firstName: 'Hassan',
-          title: 'Hassan Pet Person',
-          description: 'A person with pets',
-          thumbnailURL: null,
+          cardTitle: 'Hassan Pet Person',
+          cardDescription: 'A person with pets',
+          cardThumbnailURL: null,
           cardInfo,
         },
         relationships: {
@@ -2682,10 +2690,10 @@ module(`Integration | realm indexing`, function (hooks) {
           type: 'card',
           links: { self: `../Pet/mango` },
           attributes: {
-            description: null,
+            cardDescription: null,
             firstName: 'Mango',
-            title: 'Mango',
-            thumbnailURL: null,
+            cardTitle: 'Mango',
+            cardThumbnailURL: null,
             cardInfo,
           },
           relationships: {
@@ -2707,10 +2715,10 @@ module(`Integration | realm indexing`, function (hooks) {
           type: 'card',
           links: { self: `../Pet/vanGogh` },
           attributes: {
-            description: null,
+            cardDescription: null,
             firstName: 'Van Gogh',
-            title: 'Van Gogh',
-            thumbnailURL: null,
+            cardTitle: 'Van Gogh',
+            cardThumbnailURL: null,
             cardInfo,
           },
           relationships: {
@@ -2752,21 +2760,21 @@ module(`Integration | realm indexing`, function (hooks) {
             id: `${testRealmURL}Pet/mango`,
             firstName: 'Mango',
             owner: null,
-            title: 'Mango',
+            cardTitle: 'Mango',
             cardInfo: { theme: null },
           },
           {
             id: `${testRealmURL}Pet/vanGogh`,
             firstName: 'Van Gogh',
             owner: null,
-            title: 'Van Gogh',
+            cardTitle: 'Van Gogh',
             cardInfo: { theme: null },
           },
         ],
         friend: null,
-        title: 'Hassan Pet Person',
-        description: 'A person with pets',
-        thumbnailURL: null,
+        cardTitle: 'Hassan Pet Person',
+        cardDescription: 'A person with pets',
+        cardThumbnailURL: null,
         cardInfo: { theme: null },
       });
     } else {
@@ -2814,9 +2822,9 @@ module(`Integration | realm indexing`, function (hooks) {
           links: { self: './burcu' },
           attributes: {
             firstName: 'Burcu',
-            title: 'Burcu Pet Person',
-            description: 'A person with pets',
-            thumbnailURL: null,
+            cardTitle: 'Burcu Pet Person',
+            cardDescription: 'A person with pets',
+            cardThumbnailURL: null,
             cardInfo,
           },
           relationships: {
@@ -2859,9 +2867,9 @@ module(`Integration | realm indexing`, function (hooks) {
         firstName: 'Burcu',
         pets: null,
         friend: null,
-        title: 'Burcu Pet Person',
-        description: 'A person with pets',
-        thumbnailURL: null,
+        cardTitle: 'Burcu Pet Person',
+        cardDescription: 'A person with pets',
+        cardThumbnailURL: null,
         cardInfo: { theme: null },
       });
     } else {
@@ -2890,8 +2898,8 @@ module(`Integration | realm indexing`, function (hooks) {
         'pet-person-spec.json': {
           data: {
             attributes: {
-              title: 'PetPerson',
-              description: 'Spec for PetPerson',
+              cardTitle: 'PetPerson',
+              cardDescription: 'Spec for PetPerson',
               specType: 'card',
               ref: {
                 module: `${testModuleRealm}pet-person`,
@@ -2933,10 +2941,10 @@ module(`Integration | realm indexing`, function (hooks) {
         type: 'card',
         links: { self: './pet-person-spec' },
         attributes: {
-          title: 'PetPerson',
-          description: 'Spec for PetPerson',
+          cardTitle: 'PetPerson',
+          cardDescription: 'Spec for PetPerson',
           readMe: null,
-          thumbnailURL: null,
+          cardThumbnailURL: null,
           ref: {
             module: `${testModuleRealm}pet-person`,
             name: 'PetPerson',
@@ -2984,8 +2992,8 @@ module(`Integration | realm indexing`, function (hooks) {
       assert.deepEqual(entry.searchDoc, {
         _cardType: 'Spec',
         id: `${testRealmURL}pet-person-spec`,
-        title: 'PetPerson',
-        description: 'Spec for PetPerson',
+        cardTitle: 'PetPerson',
+        cardDescription: 'Spec for PetPerson',
         containedExamples: null,
         linkedExamples: null,
         moduleHref: `${testModuleRealm}pet-person`,
@@ -3013,7 +3021,7 @@ module(`Integration | realm indexing`, function (hooks) {
             id: `${testRealmURL}Friend/hassan`,
             attributes: {
               firstName: 'Hassan',
-              description: 'Friend of dogs',
+              cardDescription: 'Friend of dogs',
             },
             relationships: {
               friend: {
@@ -3035,7 +3043,7 @@ module(`Integration | realm indexing`, function (hooks) {
             id: `${testRealmURL}Friend/mango`,
             attributes: {
               firstName: 'Mango',
-              description: 'Dog friend',
+              cardDescription: 'Dog friend',
             },
             relationships: {
               friend: {
@@ -3057,8 +3065,8 @@ module(`Integration | realm indexing`, function (hooks) {
             id: `${testRealmURL}Friend/vanGogh`,
             attributes: {
               firstName: 'Van Gogh',
-              description: 'Dog friend',
-              thumbnailURL: 'van-gogh.jpg',
+              cardDescription: 'Dog friend',
+              cardThumbnailURL: 'van-gogh.jpg',
             },
             relationships: {
               friend: {
@@ -3090,9 +3098,9 @@ module(`Integration | realm indexing`, function (hooks) {
         },
         attributes: {
           firstName: 'Hassan',
-          title: 'Hassan',
-          description: 'Friend of dogs',
-          thumbnailURL: null,
+          cardTitle: 'Hassan',
+          cardDescription: 'Friend of dogs',
+          cardThumbnailURL: null,
           cardInfo,
         },
         relationships: {
@@ -3135,13 +3143,13 @@ module(`Integration | realm indexing`, function (hooks) {
         _cardType: 'Friend',
         id: `${testRealmURL}Friend/hassan`,
         firstName: 'Hassan',
-        title: 'Hassan',
-        description: 'Friend of dogs',
+        cardTitle: 'Hassan',
+        cardDescription: 'Friend of dogs',
         friend: {
           id: `${testRealmURL}Friend/mango`,
           firstName: 'Mango',
-          title: 'Mango',
-          description: 'Dog friend',
+          cardTitle: 'Mango',
+          cardDescription: 'Dog friend',
           friend: {
             id: `${testRealmURL}Friend/vanGogh`,
           },
@@ -3166,7 +3174,7 @@ module(`Integration | realm indexing`, function (hooks) {
             id: `${testRealmURL}Friend/hassan`,
             attributes: {
               firstName: 'Hassan',
-              description: 'Dog owner',
+              cardDescription: 'Dog owner',
             },
             relationships: {
               friend: {
@@ -3188,7 +3196,7 @@ module(`Integration | realm indexing`, function (hooks) {
             id: `${testRealmURL}Friend/mango`,
             attributes: {
               firstName: 'Mango',
-              description: 'Dog friend',
+              cardDescription: 'Dog friend',
             },
             relationships: {
               friend: {
@@ -3222,9 +3230,9 @@ module(`Integration | realm indexing`, function (hooks) {
           links: { self: './hassan' },
           attributes: {
             firstName: 'Hassan',
-            title: 'Hassan',
-            description: 'Dog owner',
-            thumbnailURL: null,
+            cardTitle: 'Hassan',
+            cardDescription: 'Dog owner',
+            cardThumbnailURL: null,
             cardInfo,
           },
           relationships: {
@@ -3262,9 +3270,9 @@ module(`Integration | realm indexing`, function (hooks) {
             links: { self: `./mango` },
             attributes: {
               firstName: 'Mango',
-              title: 'Mango',
-              description: 'Dog friend',
-              thumbnailURL: null,
+              cardTitle: 'Mango',
+              cardDescription: 'Dog friend',
+              cardThumbnailURL: null,
               cardInfo,
             },
             relationships: {
@@ -3313,18 +3321,18 @@ module(`Integration | realm indexing`, function (hooks) {
         _cardType: 'Friend',
         id: `${testRealmURL}Friend/hassan`,
         firstName: 'Hassan',
-        description: 'Dog owner',
+        cardDescription: 'Dog owner',
         friend: {
           id: `${testRealmURL}Friend/mango`,
           firstName: 'Mango',
-          title: 'Mango',
+          cardTitle: 'Mango',
           friend: {
             id: `${testRealmURL}Friend/hassan`,
           },
-          description: 'Dog friend',
+          cardDescription: 'Dog friend',
           cardInfo: { theme: null },
         },
-        title: 'Hassan',
+        cardTitle: 'Hassan',
         cardInfo: { theme: null },
       });
     } else {
@@ -3348,9 +3356,9 @@ module(`Integration | realm indexing`, function (hooks) {
           links: { self: './mango' },
           attributes: {
             firstName: 'Mango',
-            title: 'Mango',
-            description: 'Dog friend',
-            thumbnailURL: null,
+            cardTitle: 'Mango',
+            cardDescription: 'Dog friend',
+            cardThumbnailURL: null,
             cardInfo,
           },
           relationships: {
@@ -3388,9 +3396,9 @@ module(`Integration | realm indexing`, function (hooks) {
             links: { self: `./hassan` },
             attributes: {
               firstName: 'Hassan',
-              title: 'Hassan',
-              description: 'Dog owner',
-              thumbnailURL: null,
+              cardTitle: 'Hassan',
+              cardDescription: 'Dog owner',
+              cardThumbnailURL: null,
               cardInfo,
             },
             relationships: {
@@ -3439,16 +3447,16 @@ module(`Integration | realm indexing`, function (hooks) {
         _cardType: 'Friend',
         id: `${testRealmURL}Friend/mango`,
         firstName: 'Mango',
-        title: 'Mango',
-        description: 'Dog friend',
+        cardTitle: 'Mango',
+        cardDescription: 'Dog friend',
         friend: {
           id: `${testRealmURL}Friend/hassan`,
-          title: 'Hassan',
+          cardTitle: 'Hassan',
           firstName: 'Hassan',
           friend: {
             id: `${testRealmURL}Friend/mango`,
           },
-          description: 'Dog owner',
+          cardDescription: 'Dog owner',
           cardInfo: { theme: null },
         },
         cardInfo: { theme: null },
@@ -3470,7 +3478,7 @@ module(`Integration | realm indexing`, function (hooks) {
             id: `${testRealmURL}Friend/hassan`,
             attributes: {
               firstName: 'Hassan',
-              description: 'Dog owner',
+              cardDescription: 'Dog owner',
             },
             relationships: {
               friend: {
@@ -3504,9 +3512,9 @@ module(`Integration | realm indexing`, function (hooks) {
           links: { self: './hassan' },
           attributes: {
             firstName: 'Hassan',
-            title: 'Hassan',
-            description: 'Dog owner',
-            thumbnailURL: null,
+            cardTitle: 'Hassan',
+            cardDescription: 'Dog owner',
+            cardThumbnailURL: null,
             cardInfo,
           },
           relationships: {
@@ -3554,11 +3562,11 @@ module(`Integration | realm indexing`, function (hooks) {
         _cardType: 'Friend',
         id: `${testRealmURL}Friend/hassan`,
         firstName: 'Hassan',
-        description: 'Dog owner',
+        cardDescription: 'Dog owner',
         friend: {
           id: `${testRealmURL}Friend/hassan`,
         },
-        title: 'Hassan',
+        cardTitle: 'Hassan',
         cardInfo: { theme: null },
       });
     } else {
@@ -3634,9 +3642,9 @@ module(`Integration | realm indexing`, function (hooks) {
           links: { self: './hassan' },
           attributes: {
             firstName: 'Hassan',
-            title: 'Hassan',
-            description: null,
-            thumbnailURL: null,
+            cardTitle: 'Hassan',
+            cardDescription: null,
+            cardThumbnailURL: null,
             cardInfo,
           },
           relationships: {
@@ -3673,9 +3681,9 @@ module(`Integration | realm indexing`, function (hooks) {
             links: { self: './mango' },
             attributes: {
               firstName: 'Mango',
-              title: 'Mango',
-              description: null,
-              thumbnailURL: null,
+              cardTitle: 'Mango',
+              cardDescription: null,
+              cardThumbnailURL: null,
               cardInfo,
             },
             relationships: {
@@ -3702,9 +3710,9 @@ module(`Integration | realm indexing`, function (hooks) {
             links: { self: './vanGogh' },
             attributes: {
               firstName: 'Van Gogh',
-              title: 'Van Gogh',
-              description: null,
-              thumbnailURL: null,
+              cardTitle: 'Van Gogh',
+              cardDescription: null,
+              cardThumbnailURL: null,
               cardInfo,
             },
             relationships: {
@@ -3743,12 +3751,12 @@ module(`Integration | realm indexing`, function (hooks) {
           _cardType: 'Friends',
           id: hassanID,
           firstName: 'Hassan',
-          title: 'Hassan',
+          cardTitle: 'Hassan',
           friends: [
             {
               id: mangoID,
               firstName: 'Mango',
-              title: 'Mango',
+              cardTitle: 'Mango',
               friends: [{ id: hassanID }],
               cardInfo: { theme: null },
             },
@@ -3756,7 +3764,7 @@ module(`Integration | realm indexing`, function (hooks) {
               id: vanGoghID,
               firstName: 'Van Gogh',
               friends: [{ id: hassanID }],
-              title: 'Van Gogh',
+              cardTitle: 'Van Gogh',
               cardInfo: { theme: null },
             },
           ],
@@ -3780,9 +3788,9 @@ module(`Integration | realm indexing`, function (hooks) {
           links: { self: './mango' },
           attributes: {
             firstName: 'Mango',
-            title: 'Mango',
-            description: null,
-            thumbnailURL: null,
+            cardTitle: 'Mango',
+            cardDescription: null,
+            cardThumbnailURL: null,
             cardInfo,
           },
           relationships: {
@@ -3814,9 +3822,9 @@ module(`Integration | realm indexing`, function (hooks) {
             links: { self: './hassan' },
             attributes: {
               firstName: 'Hassan',
-              title: 'Hassan',
-              description: null,
-              thumbnailURL: null,
+              cardTitle: 'Hassan',
+              cardDescription: null,
+              cardThumbnailURL: null,
               cardInfo,
             },
             relationships: {
@@ -3847,9 +3855,9 @@ module(`Integration | realm indexing`, function (hooks) {
             links: { self: './vanGogh' },
             attributes: {
               firstName: 'Van Gogh',
-              title: 'Van Gogh',
-              description: null,
-              thumbnailURL: null,
+              cardTitle: 'Van Gogh',
+              cardDescription: null,
+              cardThumbnailURL: null,
               cardInfo,
             },
             relationships: {
@@ -3888,18 +3896,18 @@ module(`Integration | realm indexing`, function (hooks) {
           _cardType: 'Friends',
           id: mangoID,
           firstName: 'Mango',
-          title: 'Mango',
+          cardTitle: 'Mango',
           friends: [
             {
               id: hassanID,
               firstName: 'Hassan',
-              title: 'Hassan',
+              cardTitle: 'Hassan',
               friends: [
                 { id: mangoID },
                 {
                   id: vanGoghID,
                   firstName: 'Van Gogh',
-                  title: 'Van Gogh',
+                  cardTitle: 'Van Gogh',
                   friends: [
                     {
                       id: hassanID,
@@ -3931,9 +3939,9 @@ module(`Integration | realm indexing`, function (hooks) {
           links: { self: './vanGogh' },
           attributes: {
             firstName: 'Van Gogh',
-            title: 'Van Gogh',
-            description: null,
-            thumbnailURL: null,
+            cardTitle: 'Van Gogh',
+            cardDescription: null,
+            cardThumbnailURL: null,
             cardInfo,
           },
           relationships: {
@@ -3965,9 +3973,9 @@ module(`Integration | realm indexing`, function (hooks) {
             links: { self: './hassan' },
             attributes: {
               firstName: 'Hassan',
-              title: 'Hassan',
-              description: null,
-              thumbnailURL: null,
+              cardTitle: 'Hassan',
+              cardDescription: null,
+              cardThumbnailURL: null,
               cardInfo,
             },
             relationships: {
@@ -3998,9 +4006,9 @@ module(`Integration | realm indexing`, function (hooks) {
             links: { self: './mango' },
             attributes: {
               firstName: 'Mango',
-              title: 'Mango',
-              description: null,
-              thumbnailURL: null,
+              cardTitle: 'Mango',
+              cardDescription: null,
+              cardThumbnailURL: null,
               cardInfo,
             },
             relationships: {
@@ -4039,12 +4047,12 @@ module(`Integration | realm indexing`, function (hooks) {
           _cardType: 'Friends',
           id: vanGoghID,
           firstName: 'Van Gogh',
-          title: 'Van Gogh',
+          cardTitle: 'Van Gogh',
           friends: [
             {
               id: hassanID,
               firstName: 'Hassan',
-              title: 'Hassan',
+              cardTitle: 'Hassan',
               friends: [
                 {
                   cardInfo: {
@@ -4057,7 +4065,7 @@ module(`Integration | realm indexing`, function (hooks) {
                     },
                   ],
                   id: mangoID,
-                  title: 'Mango',
+                  cardTitle: 'Mango',
                 },
                 { id: vanGoghID },
               ],
@@ -4114,7 +4122,6 @@ module(`Integration | realm indexing`, function (hooks) {
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/letter-case.js',
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/link.js',
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/notepad-text.js',
-        'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/package.js',
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/palette.js',
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/rectangle-ellipsis.js',
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/trash-2.js',
@@ -4147,7 +4154,6 @@ module(`Integration | realm indexing`, function (hooks) {
         'https://packages/@cardstack/boxel-host/commands/copy-and-edit',
         'https://packages/@cardstack/boxel-host/commands/copy-card',
         'https://packages/@cardstack/boxel-host/commands/create-ai-assistant-room',
-        'https://packages/@cardstack/boxel-host/commands/create-listing-pr',
         'https://packages/@cardstack/boxel-host/commands/generate-example-cards',
         'https://packages/@cardstack/boxel-host/commands/listing-create',
         'https://packages/@cardstack/boxel-host/commands/open-in-interact-mode',
@@ -4189,7 +4195,7 @@ module(`Integration | realm indexing`, function (hooks) {
         'spec-1.json': {
           data: {
             attributes: {
-              title: 'My Spec',
+              cardTitle: 'My Spec',
               containedExamples: [
                 {
                   firstName: 'A',
@@ -4244,7 +4250,6 @@ module(`Integration | realm indexing`, function (hooks) {
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/letter-case.js',
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/link.js',
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/notepad-text.js',
-        'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/package.js',
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/palette.js',
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/rectangle-ellipsis.js',
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/stack.js',
@@ -4283,7 +4288,6 @@ module(`Integration | realm indexing`, function (hooks) {
         'https://packages/@cardstack/boxel-host/commands/copy-and-edit',
         'https://packages/@cardstack/boxel-host/commands/copy-card',
         'https://packages/@cardstack/boxel-host/commands/create-ai-assistant-room',
-        'https://packages/@cardstack/boxel-host/commands/create-listing-pr',
         'https://packages/@cardstack/boxel-host/commands/generate-example-cards',
         'https://packages/@cardstack/boxel-host/commands/generate-readme-spec',
         'https://packages/@cardstack/boxel-host/commands/listing-create',

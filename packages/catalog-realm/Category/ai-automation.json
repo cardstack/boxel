@@ -11,9 +11,9 @@
       "name": "AI & Automation",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": "Artificial intelligence projects, automation scripts, machine learning workflows, and intelligent system development.",
-        "thumbnailURL": null
+        "name": null,
+        "summary": "Artificial intelligence projects, automation scripts, machine learning workflows, and intelligent system development.",
+        "cardThumbnailURL": null
       }
     },
     "relationships": {

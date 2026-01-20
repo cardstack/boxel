@@ -298,9 +298,9 @@ class MusicCoderIsolated extends Component<typeof MusicCoder> {
   <template>
     <div class='mini-music-studio'>
       <header class='studio-header'>
-        <h1>{{if @model.title @model.title 'Live Music Coder'}}</h1>
-        {{#if @model.description}}
-          <p class='description'>{{@model.description}}</p>
+        <h1>{{if @model.cardTitle @model.cardTitle 'Live Music Coder'}}</h1>
+        {{#if @model.cardDescription}}
+          <p class='description'>{{@model.cardDescription}}</p>
         {{/if}}
       </header>
 
@@ -690,8 +690,8 @@ export class MusicCoder extends CardDef {
   static displayName = 'Music Coder';
   static icon = MusicIcon;
 
-  @field title = contains(StringField);
-  @field description = contains(TextAreaField);
+  @field cardTitle = contains(StringField);
+  @field cardDescription = contains(TextAreaField);
   @field pattern = contains(TextAreaField);
   @field bpm = contains(NumberField);
 
@@ -702,7 +702,7 @@ export class MusicCoder extends CardDef {
       <div class='music-studio-card'>
         <div class='card-header'>
           <MusicIcon width='20' height='20' class='music-icon' />
-          <h3>{{if @model.title @model.title 'Music Studio'}}</h3>
+          <h3>{{if @model.cardTitle @model.cardTitle 'Music Studio'}}</h3>
         </div>
         <div class='pattern-preview'>
           <code>{{@model.pattern}}</code>

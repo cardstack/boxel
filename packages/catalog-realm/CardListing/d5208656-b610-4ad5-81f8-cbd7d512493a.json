@@ -17,9 +17,9 @@
       "summary": "This code defines a set of classes for modeling and displaying various reward program components such as time periods, bonuses, benefits, earning rules, and an overarching reward card program, primarily for use in digital interfaces. Its main purpose is to structure, compute, and present reward-related data with embedded and styled components for a comprehensive loyalty or rewards platform.",
       "cardInfo": {
         "notes": null,
-        "title": "Reward Card Program",
-        "description": "This code defines a set of classes for modeling and displaying various reward program components such as time periods, bonuses, benefits, earning rules, and an overarching reward card program, primarily for use in digital interfaces. Its main purpose is to structure, compute, and present reward-related data with embedded and styled components for a comprehensive loyalty or rewards platform.",
-        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/reward-card-program-listing/thumbnail.png"
+        "name": "Reward Card Program",
+        "summary": "This code defines a set of classes for modeling and displaying various reward program components such as time periods, bonuses, benefits, earning rules, and an overarching reward card program, primarily for use in digital interfaces. Its main purpose is to structure, compute, and present reward-related data with embedded and styled components for a comprehensive loyalty or rewards platform.",
+        "cardThumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/reward-card-program-listing/thumbnail.png"
       }
     },
     "relationships": {

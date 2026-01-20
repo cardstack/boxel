@@ -9,9 +9,9 @@
       },
       "specType": "card",
       "containedExamples": [],
-      "title": "ActivityLog",
-      "description": null,
-      "thumbnailURL": null
+      "cardTitle": "ActivityLog",
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "relationships": {
       "linkedExamples": {

@@ -34,6 +34,7 @@ import {
 import { eq, type MenuItemOptions } from '@cardstack/boxel-ui/helpers';
 import Refresh from '@cardstack/boxel-icons/refresh';
 import Wand from '@cardstack/boxel-icons/wand';
+import Package from '@cardstack/boxel-icons/package';
 
 import AppListingHeader from '../components/app-listing-header';
 import ChooseRealmAction from '../components/choose-realm-action';
@@ -44,6 +45,7 @@ import { listingActions, isReady } from '../resources/listing-actions';
 import GetAllRealmMetasCommand from '@cardstack/boxel-host/commands/get-all-realm-metas';
 import ListingGenerateExampleCommand from '@cardstack/boxel-host/commands/listing-generate-example';
 import ListingUpdateSpecsCommand from '@cardstack/boxel-host/commands/listing-update-specs';
+import CreateListingPRCommand from '@cardstack/boxel-host/commands/create-listing-pr';
 
 import { getCardMenuItems } from '@cardstack/runtime-common';
 
@@ -180,9 +182,9 @@ class EmbeddedTemplate extends Component<typeof Listing> {
   <template>
     <div class='app-listing-embedded'>
       <AppListingHeader
-        @thumbnailUrl={{@model.thumbnailURL}}
+        @thumbnailUrl={{@model.cardThumbnailURL}}
         @name={{this.appName}}
-        @description={{@model.description}}
+        @description={{@model.cardDescription}}
         @publisher={{this.publisherName}}
       >
         <:action>
@@ -562,6 +564,7 @@ class EmbeddedTemplate extends Component<typeof Listing> {
 export class Listing extends CardDef {
   static displayName = 'Listing';
   static headerColor = '#6638ff';
+
   @field name = contains(StringField);
   @field summary = contains(MarkdownField);
   @field specs = linksToMany(() => Spec);
@@ -573,7 +576,7 @@ export class Listing extends CardDef {
   @field examples = linksToMany(() => CardDef);
   @field skills = linksToMany(() => Skill);
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia(this: Listing) {
       return this.name;
     },
@@ -648,8 +651,38 @@ export class Listing extends CardDef {
       if (updateSpecs) {
         menuItems = [...menuItems, updateSpecs];
       }
+      const createPRMenuItem = this.getCreatePRMenuItem(params);
+      if (createPRMenuItem) {
+        menuItems = [...menuItems, createPRMenuItem];
+      }
     }
     return menuItems;
+  }
+
+  private getCreatePRMenuItem(
+    params: GetCardMenuItemParams,
+  ): MenuItemOptions | undefined {
+    if (params.menuContext !== 'interact') {
+      return;
+    }
+    if (!this[realmURL]?.href) {
+      return;
+    }
+    const commandContext = params.commandContext;
+    if (!commandContext) {
+      return;
+    }
+
+    return {
+      label: 'Make a PR',
+      action: async () => {
+        await new CreateListingPRCommand(commandContext).execute({
+          listing: this,
+          realm: this[realmURL]!.href,
+        });
+      },
+      icon: Package,
+    };
   }
 
   static isolated = EmbeddedTemplate;

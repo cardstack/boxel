@@ -4,17 +4,17 @@
     "attributes": {
       "readMe": null,
       "ref": {
-        "module": "http://localhost:4201/catalog/fields/image/components/preview-modal",
+        "module": "../fields/image/components/preview-modal",
         "name": "default"
       },
       "specType": "component",
       "containedExamples": [],
-      "title": "default",
-      "description": null,
+      "cardTitle": "default",
+      "cardDescription": null,
       "cardInfo": {
-        "title": null,
-        "description": null,
-        "thumbnailURL": null,
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
         "notes": null
       }
     },

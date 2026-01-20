@@ -2,14 +2,14 @@
   "data": {
     "type": "card",
     "attributes": {
-      "title": "Parent-Teacher Conferences",
+      "cardTitle": "Parent-Teacher Conferences",
       "startDateTime": "2024-11-07T13:00:00.000Z",
       "endDateTime": "2024-11-07T20:00:00.000Z",
-      "description": "Fall semester parent-teacher conferences. Parents will have scheduled time slots to meet with teachers and discuss student progress. Evening appointments available for working parents. Online scheduling portal opens two weeks before the event.",
+      "cardDescription": "Fall semester parent-teacher conferences. Parents will have scheduled time slots to meet with teachers and discuss student progress. Evening appointments available for working parents. Online scheduling portal opens two weeks before the event.",
       "location": "Classrooms",
       "isAllDay": false,
       "requiresRsvp": true,
-      "thumbnailURL": "https://images.unsplash.com/photo-1577896851231-70ef18881754?q=80&w=2070&auto=format&fit=crop"
+      "cardThumbnailURL": "https://images.unsplash.com/photo-1577896851231-70ef18881754?q=80&w=2070&auto=format&fit=crop"
     },
     "relationships": {
       "rsvp": {

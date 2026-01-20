@@ -2,8 +2,8 @@
   "data": {
     "type": "card",
     "attributes": {
-      "title": "Skill Plus",
-      "description": "A card with instructions to teach a skill to the AI bot",
+      "cardTitle": "Skill Plus",
+      "cardDescription": "A card with instructions to teach a skill to the AI bot",
       "specType": "card",
       "ref": {
         "module": "../skill-plus",

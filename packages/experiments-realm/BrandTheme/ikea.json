@@ -6,8 +6,8 @@
       "logoURL": "https://cdn.brandfetch.io/idLsXYVLUs/theme/dark/logo.svg?c=1dxbfHSJFAPEGdCLU4o5B",
       "symbolURL": "https://cdn.brandfetch.io/idLsXYVLUs/w/400/h/400/theme/dark/icon.png?c=1dxbfHSJFAPEGdCLU4o5B",
       "cssVariables": "--logo-primary-url: 'https://www.ikea.com/logo.png';\n--logo-symbol-url: 'https://www.ikea.com/icon.png';\n--logo-wordmark-url: 'https://www.ikea.com/wordmark.png';\n--logo-clear-space-ratio: 0.9;\n--logo-min-height-digital: 30px;\n--logo-min-height-print: 0.35in;\n--color-primary: #0058A3;\n--color-secondary: #FFD500;\n--color-dark: #003B6F;\n--color-light: #FFFFFF;\n--color-background: #F5F5F5;\n--font-family-base: 'Noto Sans', 'Helvetica Neue', sans-serif;\n--typescale-h1: 28px;\n--typescale-body: 14px;\n--lineheight-base: 1.6;\n--spacing-unit: 8px;\n--radius-base: 0px;\n--icon-set-url: 'https://www.ikea.com/icons.svg';\n--pattern-background-url: 'https://www.ikea.com/bg-pattern.svg';",
-      "title": "IKEA Theme",
-      "description": null
+      "cardTitle": "IKEA Theme",
+      "cardDescription": null
     },
     "meta": {
       "adoptsFrom": {

@@ -18,13 +18,13 @@
       },
       "cardInfo": {},
       "totalSpent": 12389.5,
-      "description": null,
+      "cardDescription": null,
       "loyaltyTier": {
         "name": "Silver"
       },
       "totalOrders": 45,
       "customerName": "Elena Vasquez",
-      "thumbnailURL": null,
+      "cardThumbnailURL": null,
       "customerSince": "2023-09-12T16:20:00.000Z"
     },
     "relationships": {

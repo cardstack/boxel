@@ -11,9 +11,9 @@
       "name": "Real Estate & Property",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": "Property management, lease tracking, tenant communication, maintenance scheduling, and real estate investment tools.",
-        "thumbnailURL": null
+        "name": null,
+        "summary": "Property management, lease tracking, tenant communication, maintenance scheduling, and real estate investment tools.",
+        "cardThumbnailURL": null
       }
     },
     "relationships": {

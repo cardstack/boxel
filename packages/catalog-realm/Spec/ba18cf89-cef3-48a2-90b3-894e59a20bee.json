@@ -9,9 +9,9 @@
       },
       "specType": "card",
       "containedExamples": [],
-      "title": "SparkingWaterCatalog",
-      "description": "Spec of SparkingWaterCatalog",
-      "thumbnailURL": null
+      "cardTitle": "SparkingWaterCatalog",
+      "cardDescription": "Spec of SparkingWaterCatalog",
+      "cardThumbnailURL": null
     },
     "relationships": {
       "linkedExamples": {

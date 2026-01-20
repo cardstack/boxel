@@ -10,9 +10,9 @@
     "attributes": {
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": null
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null
       },
       "category": "Travel - Amex Travel",
       "appliesTo": "Flights and prepaid hotels booked on AmexTravel.com",
@@ -22,7 +22,7 @@
           "code": "USD"
         }
       },
-      "conditions": "Earn 5X Membership Rewards® points on flights and prepaid hotels booked on AmexTravel.com.‡",
+      "conditions": "Earn 5X Membership Rewards\u00ae points on flights and prepaid hotels booked on AmexTravel.com.\u2021",
       "rateMultiplier": 5
     },
     "relationships": {

@@ -16,7 +16,7 @@ import {
   eq,
 } from '@cardstack/boxel-ui/helpers';
 import { Button } from '@cardstack/boxel-ui/components';
-import { QRField } from '../fields/qr-code';
+import QRField from '../fields/qr-code';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
@@ -1695,7 +1695,7 @@ export class EventTicketCard extends CardDef {
   @field maxCapacity = contains(NumberField);
   @field soldTickets = contains(NumberField);
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: EventTicketCard) {
       try {
         const event = this.eventName ?? 'Unknown Event';

@@ -17,9 +17,9 @@
       "summary": "Professional branded lease payment calculator with comprehensive financial analysis - configure all lease parameters, fees, and incentives while viewing real-time payment breakdowns. Features Money Factor adjustments, Multiple Security Deposits optimization, Leasehackr scoring integration, and detailed cost comparisons with authentic BMW design aesthetics",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/lease-calculator-listing/thumbnail.png"
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/lease-calculator-listing/thumbnail.png"
       }
     },
     "relationships": {

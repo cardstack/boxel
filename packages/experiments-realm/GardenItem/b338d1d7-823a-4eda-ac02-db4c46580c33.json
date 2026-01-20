@@ -5,8 +5,8 @@
       "gardenItemId": "purple-coneflower",
       "name": "Purple Coneflower",
       "symbol": "B",
-      "description": null,
-      "thumbnailURL": null
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "meta": {
       "adoptsFrom": {

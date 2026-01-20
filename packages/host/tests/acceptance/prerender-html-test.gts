@@ -117,7 +117,7 @@ module('Acceptance | prerender | html', function (hooks) {
       @field emergencyContacts = contains(EmergencyContacts);
       @field sitters = containsMany(PetSitter);
       @field cliques = containsMany(PetClique);
-      @field title = contains(StringField, {
+      @field cardTitle = contains(StringField, {
         computeVia(this: Pet) {
           return `${this.name}`;
         },
@@ -166,7 +166,7 @@ module('Acceptance | prerender | html', function (hooks) {
       @field name = contains(StringField);
       @field pets = linksToMany(() => Pet);
       @field friends = linksToMany(() => Person);
-      @field title = contains(StringField, {
+      @field cardTitle = contains(StringField, {
         computeVia(this: Person) {
           return this.name;
         },
@@ -545,7 +545,7 @@ module('Acceptance | prerender | html', function (hooks) {
     await visit(renderPath(url, '/html/isolated/0'));
     assert
       .dom(
-        `[data-test-card="${testRealmURL}Cat/paper"][data-test-card-format="isolated"] [data-test-field="cardTitle"]`,
+        `[data-test-card="${testRealmURL}Cat/paper"][data-test-card-format="isolated"] [data-test-field="cardInfo-name"]`,
       )
       .containsText('Paper', 'isolated format is rendered');
   });

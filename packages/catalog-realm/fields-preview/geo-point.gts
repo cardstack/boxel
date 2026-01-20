@@ -1,4 +1,4 @@
-import { GeoPointField } from '../fields/geo-point';
+import GeoPointField from '../fields/geo-point';
 
 import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
 import { Component } from 'https://cardstack.com/base/card-api';

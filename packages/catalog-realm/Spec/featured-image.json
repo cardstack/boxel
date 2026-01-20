@@ -4,14 +4,14 @@
     "attributes": {
       "readMe": null,
       "ref": {
-        "name": "FeaturedImageField",
+        "name": "default",
         "module": "../fields/featured-image"
       },
       "specType": "field",
       "containedExamples": [],
-      "title": "FeaturedImageField",
-      "description": null,
-      "thumbnailURL": null
+      "cardTitle": "FeaturedImageField",
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "meta": {
       "adoptsFrom": {

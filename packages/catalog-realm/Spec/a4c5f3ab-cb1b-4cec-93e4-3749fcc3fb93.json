@@ -9,9 +9,9 @@
       },
       "specType": "card",
       "containedExamples": [],
-      "title": "BirthdayCard",
-      "description": "Spec of BirthdayCard",
-      "thumbnailURL": null
+      "cardTitle": "BirthdayCard",
+      "cardDescription": "Spec of BirthdayCard",
+      "cardThumbnailURL": null
     },
     "relationships": {
       "linkedExamples": {

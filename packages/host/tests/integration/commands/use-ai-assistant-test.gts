@@ -66,8 +66,8 @@ module('Integration | commands | ai-assistant', function (hooks) {
         'empty1.json': {
           data: {
             attributes: {
-              title: 'Empty Card 1',
-              description: 'This is an empty card.',
+              cardTitle: 'Empty Card 1',
+              cardDescription: 'This is an empty card.',
             },
             meta: {
               adoptsFrom: {
@@ -80,8 +80,8 @@ module('Integration | commands | ai-assistant', function (hooks) {
         'empty2.json': {
           data: {
             attributes: {
-              title: 'Empty Card 2',
-              description: 'This is an empty card.',
+              cardTitle: 'Empty Card 2',
+              cardDescription: 'This is an empty card.',
             },
             meta: {
               adoptsFrom: {
@@ -99,9 +99,9 @@ module('Integration | commands | ai-assistant', function (hooks) {
             attributes: {
               instructions: 'Here is the one thing you need to know.',
               commands: [],
-              title: 'Skill1',
-              description: null,
-              thumbnailURL: null,
+              cardTitle: 'Skill1',
+              cardDescription: null,
+              cardThumbnailURL: null,
             },
             meta: {
               adoptsFrom: skillCardRef,
@@ -114,9 +114,9 @@ module('Integration | commands | ai-assistant', function (hooks) {
             attributes: {
               instructions: 'Here is the two thing you need to know.',
               commands: [],
-              title: 'Skill2',
-              description: null,
-              thumbnailURL: null,
+              cardTitle: 'Skill2',
+              cardDescription: null,
+              cardThumbnailURL: null,
             },
             meta: {
               adoptsFrom: skillCardRef,

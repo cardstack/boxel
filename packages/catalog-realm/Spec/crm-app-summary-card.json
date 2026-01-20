@@ -9,9 +9,9 @@
       },
       "specType": "component",
       "containedExamples": [],
-      "title": "Summary Card",
-      "description": "Spec for Summary Card component",
-      "thumbnailURL": null
+      "cardTitle": "Summary Card",
+      "cardDescription": "Spec for Summary Card component",
+      "cardThumbnailURL": null
     },
     "relationships": {},
     "meta": {

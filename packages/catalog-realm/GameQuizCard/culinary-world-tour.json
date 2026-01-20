@@ -11,9 +11,9 @@
       "subject": "Culinary Arts & World Cuisines",
       "cardInfo": {
         "notes": "Perfect for culinary students, food enthusiasts, and aspiring chefs looking to expand their global cuisine knowledge.",
-        "title": "World Cuisine Quiz",
-        "description": "Test your knowledge of international cooking techniques, ingredients, and traditional dishes from around the globe.",
-        "thumbnailURL": null
+        "name": "World Cuisine Quiz",
+        "summary": "Test your knowledge of international cooking techniques, ingredients, and traditional dishes from around the globe.",
+        "cardThumbnailURL": null
       },
       "gameScore": 0,
       "quizTitle": "Global Cuisine Mastery Quiz",
@@ -51,7 +51,7 @@
             "Sous vide",
             "Confit",
             "Braising",
-            "Flambé"
+            "Flamb\u00e9"
           ],
           "correctAnswer": "Confit"
         },

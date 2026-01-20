@@ -9,9 +9,9 @@
       },
       "specType": "card",
       "containedExamples": [],
-      "title": "CocktailRecipe",
-      "description": "Spec of Cocktail Recipe",
-      "thumbnailURL": null
+      "cardTitle": "CocktailRecipe",
+      "cardDescription": "Spec of Cocktail Recipe",
+      "cardThumbnailURL": null
     },
     "relationships": {
       "linkedExamples": {

@@ -2,8 +2,8 @@
   "data": {
     "type": "card",
     "attributes": {
-      "title": "Markdown Field",
-      "description": "A field that captures markdown values",
+      "cardTitle": "Markdown Field",
+      "cardDescription": "A field that captures markdown values",
       "specType": "field",
       "ref": {
         "module": "https://cardstack.com/base/markdown",

@@ -29,6 +29,7 @@ import {
   ensureExtension,
   isPrimitive,
   isResolvedCodeRef,
+  isSpec,
   loadCardDef,
   Loader,
   realmURL,
@@ -199,10 +200,10 @@ class Isolated extends Component<typeof Spec> {
         </div>
         <div class='header-info-container'>
           <h1 class='title' id='title' data-test-title>
-            <@fields.title />
+            <@fields.cardTitle />
           </h1>
           <p class='description' data-test-description>
-            <@fields.description />
+            <@fields.cardDescription />
           </p>
         </div>
       </header>
@@ -437,8 +438,8 @@ class Fitted extends Component<typeof Spec> {
   <template>
     <BasicFitted
       class='spec-fitted'
-      @primary={{@model.title}}
-      @secondary={{@model.description}}
+      @primary={{@model.cardTitle}}
+      @secondary={{@model.cardDescription}}
     >
       <:thumbnail>
         {{#if this.icon}}
@@ -564,14 +565,14 @@ class Edit extends Component<typeof Spec> {
         <div class='header-info-container'>
           <div class='header-title-container' data-test-title>
             <label for='spec-title' class='boxel-sr-only'>Title</label>
-            <@fields.title />
+            <@fields.cardTitle />
           </div>
           <div class='header-description-container' data-test-description>
             <label
               for='spec-description'
               class='boxel-sr-only'
             >Description</label>
-            <@fields.description />
+            <@fields.cardDescription />
           </div>
         </div>
       </header>
@@ -857,6 +858,7 @@ class SpecDescriptionField extends StringField {
 
 export class Spec extends CardDef {
   static displayName = 'Spec';
+  static [isSpec] = true;
   static icon = BoxModel;
   @field readMe = contains(MarkdownField);
 
@@ -891,8 +893,8 @@ export class Spec extends CardDef {
   });
   @field linkedExamples = linksToMany(CardDef);
   @field containedExamples = containsMany(FieldDef, { isUsed: true });
-  @field title = contains(SpecTitleField);
-  @field description = contains(SpecDescriptionField);
+  @field cardTitle = contains(SpecTitleField);
+  @field cardDescription = contains(SpecDescriptionField);
 
   [getCardMenuItems](params: GetCardMenuItemParams): MenuItemOptions[] {
     let menuItems = super[getCardMenuItems](params);
@@ -956,8 +958,8 @@ export class Spec extends CardDef {
           <this.icon width='30' height='30' role='presentation' />
         </div>
         <div class='header-info-container'>
-          <h3 class='title'><@fields.title /></h3>
-          <p class='description'><@fields.description /></p>
+          <h3 class='title'><@fields.cardTitle /></h3>
+          <p class='description'><@fields.cardDescription /></p>
         </div>
         {{#if @model.specType}}
           <SpecTag @specType={{@model.specType}} />

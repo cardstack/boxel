@@ -11,9 +11,9 @@
       "name": "Health & Wellness",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": "Fitness tracking, nutrition planning, medical records, mental health support, and wellness goal management.",
-        "thumbnailURL": null
+        "name": null,
+        "summary": "Fitness tracking, nutrition planning, medical records, mental health support, and wellness goal management.",
+        "cardThumbnailURL": null
       }
     },
     "relationships": {

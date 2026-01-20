@@ -15,6 +15,7 @@ import {
   type Box,
   type Field,
   type CardContext,
+  type LinkableDefConstructor,
   CreateCardFn,
 } from './card-api';
 import {
@@ -37,7 +38,7 @@ interface Signature {
   Element: HTMLElement;
   Args: {
     model: Box<CardDef | null>;
-    field: Field<typeof CardDef>;
+    field: Field<LinkableDefConstructor>;
     typeConstraint?: ResolvedCodeRef;
     createCard?: CreateCardFn;
   };

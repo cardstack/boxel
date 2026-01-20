@@ -11,9 +11,9 @@
       "name": "Data Engineering",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": "Data pipelines, ETL jobs, schema management, stream processing, data quality rules, and transformation recipes.",
-        "thumbnailURL": null
+        "name": null,
+        "summary": "Data pipelines, ETL jobs, schema management, stream processing, data quality rules, and transformation recipes.",
+        "cardThumbnailURL": null
       }
     },
     "relationships": {

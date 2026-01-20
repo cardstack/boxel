@@ -15,9 +15,9 @@
       "endDate": "2025-02-28T20:00:00.000Z",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": null
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null
       },
       "organizer": "Riot Games",
       "prizePool": 1000000,

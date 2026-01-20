@@ -9,20 +9,20 @@
     "type": "card",
     "attributes": {
       "ref": {
-        "name": "QuantityFieldSpec",
-        "module": "../quantity-field-spec"
+        "name": "default",
+        "module": "../../fields/quantity"
       },
-      "title": "Quantity Field Spec",
+      "cardTitle": "Quantity Field Spec",
       "readMe": null,
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": null
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null
       },
       "specType": "card",
       "standard": 2,
-      "description": null,
+      "cardDescription": null,
       "containedExamples": []
     },
     "relationships": {

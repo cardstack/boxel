@@ -3,7 +3,7 @@
     "type": "card",
     "attributes": {
       "playlistName": "Relaxed Chill",
-      "description": "Chill and mellow vibes for unwinding after a long day or studying",
+      "cardDescription": "Chill and mellow vibes for unwinding after a long day or studying",
       "coverImageUrl": "https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=400&h=400&fit=crop",
       "songCount": 32,
       "duration": "2h 18m",
