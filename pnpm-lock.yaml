@@ -946,6 +946,31 @@ importers:
         specifier: 'catalog:'
         version: 8.2.2
 
+  packages/bot-runner:
+    dependencies:
+      '@cardstack/postgres':
+        specifier: workspace:*
+        version: link:../postgres
+      '@cardstack/runtime-common':
+        specifier: workspace:*
+        version: link:../runtime-common
+      matrix-js-sdk:
+        specifier: 'catalog:'
+        version: 38.3.0(patch_hash=0472d34281d936a5dcdacff67d2851d88c1df9593cd06b7725ee8414c12aa1d5)
+      ts-node:
+        specifier: ^10.9.2
+        version: 10.9.2(@types/node@24.3.0)(typescript@5.8.3)
+      typescript:
+        specifier: 'catalog:'
+        version: 5.8.3
+    devDependencies:
+      '@cardstack/local-types':
+        specifier: workspace:*
+        version: link:../local-types
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.3.0
+
   packages/boxel-homepage-realm: {}
 
   packages/boxel-icons:
@@ -2028,7 +2053,7 @@ importers:
         version: link:../runtime-common
       '@cardstack/view-transitions':
         specifier: 'catalog:'
-        version: 0.2.0(@babel/core@7.26.10)(ember-modifier@4.1.0(ember-source@5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.26.10)(@glimmer/component@2.0.0)(@glint/template@1.3.0)(rsvp@4.8.5)))
+        version: 0.2.0(@babel/core@7.26.10)(ember-modifier@4.1.0(ember-source@5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.26.10)(@glimmer/component@2.0.0)(@glint/template@1.3.0)(rsvp@4.8.5)(webpack@5.99.6)))
       '@types/lodash':
         specifier: 'catalog:'
         version: 4.17.15
@@ -2104,7 +2129,7 @@ importers:
         version: link:../runtime-common
       '@cardstack/view-transitions':
         specifier: 'catalog:'
-        version: 0.2.0(@babel/core@7.26.10)(ember-modifier@4.1.0(ember-source@5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.26.10)(@glimmer/component@2.0.0)(@glint/template@1.3.0)(rsvp@4.8.5)))
+        version: 0.2.0(@babel/core@7.26.10)(ember-modifier@4.1.0(ember-source@5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.26.10)(@glimmer/component@2.0.0)(@glint/template@1.3.0)(rsvp@4.8.5)(webpack@5.99.6)))
       '@ember/optional-features':
         specifier: ^2.0.0
         version: 2.0.0
@@ -14693,7 +14718,7 @@ snapshots:
 
   '@cardstack/requirejs-monaco-ember-polyfill@0.0.1': {}
 
-  '@cardstack/view-transitions@0.2.0(@babel/core@7.26.10)(ember-modifier@4.1.0(ember-source@5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.26.10)(@glimmer/component@2.0.0)(@glint/template@1.3.0)(rsvp@4.8.5)))':
+  '@cardstack/view-transitions@0.2.0(@babel/core@7.26.10)(ember-modifier@4.1.0(ember-source@5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.26.10)(@glimmer/component@2.0.0)(@glint/template@1.3.0)(rsvp@4.8.5)(webpack@5.99.6)))':
     dependencies:
       '@embroider/addon-shim': 1.10.2
       decorator-transforms: 2.3.0(@babel/core@7.26.10)

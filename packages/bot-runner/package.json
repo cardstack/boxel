@@ -1,0 +1,21 @@
+{
+  "name": "@cardstack/bot-runner",
+  "dependencies": {
+    "@cardstack/postgres": "workspace:*",
+    "@cardstack/runtime-common": "workspace:*",
+    "matrix-js-sdk": "catalog:",
+    "ts-node": "^10.9.2",
+    "typescript": "catalog:"
+  },
+  "devDependencies": {
+    "@cardstack/local-types": "workspace:*",
+    "@types/node": "catalog:"
+  },
+  "scripts": {
+    "start": "NODE_NO_WARNINGS=1 ts-node --transpileOnly main",
+    "start:development": "NODE_NO_WARNINGS=1 PGDATABASE=boxel PGPORT=5435 ts-node --transpileOnly main"
+  },
+  "volta": {
+    "extends": "../../package.json"
+  }
+}
