@@ -641,6 +641,7 @@ module('Unit | index-writer', function (hooks) {
         realm_version: 2,
         realm_url: testRealmURL2,
         type: 'instance',
+        has_error: false,
         pristine_doc: {
           ...resource,
           id: `${testRealmURL2}1`,
@@ -696,6 +697,7 @@ module('Unit | index-writer', function (hooks) {
         realm_version: 2,
         realm_url: testRealmURL2,
         type: 'module',
+        has_error: false,
         error_doc: null,
         pristine_doc: null,
         search_doc: null,
@@ -801,7 +803,7 @@ module('Unit | index-writer', function (hooks) {
     await batch.done();
 
     let [{ indexed_at: _remove, ...errorEntry }] = (await adapter.execute(
-      'SELECT * FROM boxel_index WHERE realm_version = 2 AND type = \'instance-error\' ORDER BY url COLLATE "POSIX"',
+      'SELECT * FROM boxel_index WHERE realm_version = 2 AND type = \'instance\' AND has_error = TRUE ORDER BY url COLLATE "POSIX"',
       { coerceTypes },
     )) as unknown as BoxelIndexTable[];
     assert.deepEqual(
@@ -811,7 +813,8 @@ module('Unit | index-writer', function (hooks) {
         file_alias: `${testRealmURL}1`,
         realm_version: 2,
         realm_url: testRealmURL,
-        type: 'instance-error',
+        type: 'instance',
+        has_error: true,
         pristine_doc: resource,
         error_doc: {
           message: 'test error',
@@ -865,7 +868,7 @@ module('Unit | index-writer', function (hooks) {
     await batch.done();
 
     let [{ indexed_at: _remove, ...errorEntry }] = (await adapter.execute(
-      'SELECT * FROM boxel_index WHERE realm_version = 2 AND type = \'instance-error\' ORDER BY url COLLATE "POSIX"',
+      'SELECT * FROM boxel_index WHERE realm_version = 2 AND type = \'instance\' AND has_error = TRUE ORDER BY url COLLATE "POSIX"',
       { coerceTypes },
     )) as unknown as BoxelIndexTable[];
     assert.deepEqual(
@@ -875,7 +878,8 @@ module('Unit | index-writer', function (hooks) {
         file_alias: `${testRealmURL}1`,
         realm_version: 2,
         realm_url: testRealmURL,
-        type: 'instance-error',
+        type: 'instance',
+        has_error: true,
         pristine_doc: null,
         error_doc: {
           message: 'test error',
@@ -921,7 +925,7 @@ module('Unit | index-writer', function (hooks) {
     await batch.done();
 
     let [{ error_doc: errorDoc, deps }] = (await adapter.execute(
-      'SELECT error_doc, deps FROM boxel_index WHERE realm_version = 2 AND type = \'instance-error\' ORDER BY url COLLATE "POSIX"',
+      'SELECT error_doc, deps FROM boxel_index WHERE realm_version = 2 AND type = \'instance\' AND has_error = TRUE ORDER BY url COLLATE "POSIX"',
       { coerceTypes },
     )) as Pick<BoxelIndexTable, 'error_doc' | 'deps'>[];
 
@@ -949,7 +953,8 @@ module('Unit | index-writer', function (hooks) {
         url: `${testRealmURL}1.json`,
         realm_version: 1,
         realm_url: testRealmURL,
-        type: 'instance-error',
+        type: 'instance',
+        has_error: true,
         error_doc: {
           message: 'test error',
           status: 500,
@@ -1376,7 +1381,8 @@ module('Unit | index-writer', function (hooks) {
         url: `${testRealmURL}person.gts`,
         realm_version: 1,
         realm_url: testRealmURL,
-        type: 'module-error',
+        type: 'module',
+        has_error: true,
         error_doc: {
           message: 'test error',
           status: 500,

@@ -3279,12 +3279,16 @@ export class Realm {
         ? String(payload.type[0])
         : String(payload.type)
       : undefined;
-    let acceptedTypes = requestedType
-      ? [requestedType, `${requestedType}-error`]
-      : ['instance', 'instance-error', 'module', 'module-error'];
+    let wantsErrorOnly = requestedType?.endsWith('-error') ?? false;
+    let normalizedType = wantsErrorOnly
+      ? requestedType?.replace(/-error$/, '')
+      : requestedType;
+    let acceptedTypes = normalizedType
+      ? [normalizedType]
+      : ['instance', 'module', 'file'];
 
     let rows = (await query(this.#dbAdapter, [
-      `SELECT url, realm_url, deps, type FROM boxel_index WHERE (url =`,
+      `SELECT url, realm_url, deps, type, has_error FROM boxel_index WHERE (url =`,
       param(resourceUrl),
       `OR file_alias =`,
       param(resourceUrl),
@@ -3293,17 +3297,20 @@ export class Realm {
         index === 0 ? [param(type)] : [',', param(type)],
       ),
       `) AND (is_deleted IS NULL OR is_deleted = FALSE)`,
+      ...(wantsErrorOnly ? [`AND has_error = TRUE`] : []),
     ])) as {
       url: string;
       realm_url: string;
       deps: unknown;
       type: string;
+      has_error: boolean | null;
     }[];
 
     let entries = rows.map((row) => ({
       canonicalUrl: row.url,
       realmUrl: ensureTrailingSlash(row.realm_url),
       entryType: row.type,
+      hasError: Boolean(row.has_error),
       dependencies: parseDeps(row.deps),
     }));
 
@@ -3315,6 +3322,7 @@ export class Realm {
           canonicalUrl: entry.canonicalUrl,
           realmUrl: entry.realmUrl,
           entryType: entry.entryType,
+          hasError: entry.hasError,
           dependencies: entry.dependencies,
         },
       })),
@@ -3354,7 +3362,8 @@ export class Realm {
     let errorRows = (await query(this.#dbAdapter, [
       `SELECT url, error_doc FROM boxel_index WHERE realm_url =`,
       param(sourceRealmURL),
-      `AND type = 'instance-error'`,
+      `AND type = 'instance'`,
+      `AND has_error = TRUE`,
       `AND (is_deleted IS NULL OR is_deleted = FALSE)`,
     ])) as { url: string; error_doc: unknown | null }[];
 
@@ -3435,20 +3444,19 @@ export class Realm {
         return [];
       }
       let rows = (await query(this.#dbAdapter, [
-        `SELECT url, realm_url, deps, type FROM boxel_index WHERE (url =`,
+        `SELECT url, realm_url, deps, type, has_error FROM boxel_index WHERE (url =`,
         param(resourceUrl),
         `OR file_alias =`,
         param(resourceUrl),
-        `) AND type IN (`,
+        `) AND type =`,
         param('instance'),
-        `,`,
-        param('instance-error'),
-        `) AND (is_deleted IS NULL OR is_deleted = FALSE)`,
+        `AND (is_deleted IS NULL OR is_deleted = FALSE)`,
       ])) as {
         url: string;
         realm_url: string;
         deps: unknown;
         type: ResourceIndexEntry['entryType'];
+        has_error: boolean | null;
       }[];
 
       if (rows.length === 0) {
@@ -3459,6 +3467,7 @@ export class Realm {
         canonicalUrl: row.url,
         realmUrl: ensureTrailingSlash(row.realm_url),
         entryType: row.type,
+        hasError: Boolean(row.has_error),
         dependencies: parseDeps(row.deps),
       }));
     };
@@ -3496,6 +3505,7 @@ export class Realm {
             canonicalUrl?: string;
             realmUrl?: string;
             entryType?: string;
+            hasError?: boolean;
             dependencies?: unknown;
           };
         }>;
@@ -3514,10 +3524,20 @@ export class Realm {
               )
             : [];
 
+          let entryType = resource.attributes?.entryType;
+          if (
+            entryType !== 'instance' &&
+            entryType !== 'module' &&
+            entryType !== 'file'
+          ) {
+            return undefined;
+          }
+
           return {
             canonicalUrl,
             realmUrl: ensureTrailingSlash(realmUrl),
-            entryType: resource.attributes?.entryType,
+            entryType,
+            hasError: Boolean(resource.attributes?.hasError),
             dependencies,
           };
         })
