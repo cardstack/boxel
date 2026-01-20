@@ -576,7 +576,7 @@ export class RealmServer {
 
   private injectIsolatedHTML(indexHTML: string, isolatedHTML: string): string {
     return indexHTML.replace(
-      /(<script[^>]+id="fastboot-body-start"[^>]*>\s*<\/script>)([\s\S]*?)(<script[^>]+id="fastboot-body-end"[^>]*>\s*<\/script>)/,
+      /(<script[^>]+id="boxel-isolated-start"[^>]*>\s*<\/script>)([\s\S]*?)(<script[^>]+id="boxel-isolated-end"[^>]*>\s*<\/script>)/,
       `$1\n${isolatedHTML}\n$3`,
     );
   }
