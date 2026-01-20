@@ -446,6 +446,27 @@ module(basename(__filename), function () {
             new URL('person.gts', realmURL).pathname,
           );
         });
+
+        test('serves a card-source HEAD request for a regular file without redirect', async function (assert) {
+          await testRealm.write('notes.md', '# Notes\n');
+
+          let response = await request
+            .head('/notes.md')
+            .set('Accept', 'application/vnd.card+source');
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          assert.strictEqual(
+            response.get('X-boxel-realm-url'),
+            testRealmHref,
+            'realm url header is correct',
+          );
+          assert.strictEqual(
+            response.get('X-boxel-realm-public-readable'),
+            'true',
+            'realm is public readable',
+          );
+          assert.notOk(response.headers['location'], 'no redirect location');
+        });
       });
     });
 
