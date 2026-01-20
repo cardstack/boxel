@@ -72,4 +72,5 @@ For each card instance we persist:
 
 ## Operational notes
 - The prerenderer URL is required for workers/realm-server; missing or unreachable URLs fail fast.
+- `FROM_SCRATCH_JOB_TIMEOUT_SEC` controls the from-scratch indexing job timeout (seconds) and caps the queue worker runtime; default is 2400.
 - For local testing helpers, see `packages/host/tests/helpers/index.gts` and `packages/realm-server/tests/helpers/index.ts` which start a test prerenderer and wire the same flow.
