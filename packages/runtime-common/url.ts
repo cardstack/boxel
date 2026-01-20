@@ -76,9 +76,15 @@ export function removeFileExtension(fileURL: string | undefined) {
 
 export function hasExtension(value: string) {
   try {
-    return (new URL(value).pathname.split('/').pop() ?? '').includes('.');
+    let pathname = new URL(value).pathname;
+    let lastSegment = pathname.split('/').pop() ?? '';
+    let lastDotIndex = lastSegment.lastIndexOf('.');
+    return lastDotIndex > 0 && lastDotIndex < lastSegment.length - 1;
   } catch {
-    return value.includes('.');
+    let path = value.split(/[?#]/)[0];
+    let lastSegment = path.split('/').pop() ?? '';
+    let lastDotIndex = lastSegment.lastIndexOf('.');
+    return lastDotIndex > 0 && lastDotIndex < lastSegment.length - 1;
   }
 }
 
