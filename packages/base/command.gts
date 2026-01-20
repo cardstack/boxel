@@ -117,6 +117,12 @@ export class FileContents extends CardDef {
 export class SwitchSubmodeInput extends CardDef {
   @field submode = contains(StringField);
   @field codePath = contains(StringField);
+  @field createFile = contains(BooleanField);
+}
+
+export class SwitchSubmodeResult extends CardDef {
+  @field codePath = contains(StringField);
+  @field requestedCodePath = contains(StringField);
 }
 
 export class WriteTextFileInput extends CardDef {

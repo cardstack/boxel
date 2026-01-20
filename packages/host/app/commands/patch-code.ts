@@ -16,6 +16,7 @@ import type CommandService from '../services/command-service';
 import type MonacoService from '../services/monaco-service';
 import type OperatorModeStateService from '../services/operator-mode-state-service';
 import type RealmService from '../services/realm';
+import { findNonConflictingFilename } from '../utils/file-name';
 
 interface FileInfo {
   exists: boolean;
@@ -218,34 +219,9 @@ export default class PatchCodeCommand extends HostBaseCommand<
       return originalUrl;
     }
 
-    return await this.findNonConflictingFilename(originalUrl);
-  }
-
-  private async findNonConflictingFilename(fileUrl: string): Promise<string> {
-    let MAX_ATTEMPTS = 100;
-    let { baseName, extension } = this.parseFilename(fileUrl);
-
-    for (let counter = 1; counter < MAX_ATTEMPTS; counter++) {
-      let candidateUrl = `${baseName}-${counter}${extension}`;
-      let exists = await this.fileExists(candidateUrl);
-
-      if (!exists) {
-        return candidateUrl;
-      }
-    }
-
-    return `${baseName}-${MAX_ATTEMPTS}${extension}`;
-  }
-
-  private parseFilename(fileUrl: string): {
-    baseName: string;
-    extension: string;
-  } {
-    let extensionMatch = fileUrl.match(/\.([^.]+)$/);
-    let extension = extensionMatch?.[0] || '';
-    let baseName = fileUrl.replace(/\.([^.]+)$/, '');
-
-    return { baseName, extension };
+    return await findNonConflictingFilename(originalUrl, (candidateUrl) =>
+      this.fileExists(candidateUrl),
+    );
   }
 
   private async fileExists(fileUrl: string): Promise<boolean> {

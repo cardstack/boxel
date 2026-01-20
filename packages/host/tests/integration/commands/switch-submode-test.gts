@@ -123,4 +123,68 @@ module('Integration | commands | switch-submode', function (hooks) {
       'Workspace chooser should be closed after switching submode',
     );
   });
+
+  test('createFile creates a blank file when it does not exist', async function (assert) {
+    assert.expect(5);
+
+    let commandService = getService('command-service');
+    let cardService = getService('card-service');
+    let operatorModeStateService = getService('operator-mode-state-service');
+    operatorModeStateService.restore({
+      stacks: [[]],
+      submode: 'interact',
+    });
+    let switchSubmodeCommand = new SwitchSubmodeCommand(
+      commandService.commandContext,
+    );
+    let fileUrl = `${testRealmURL}new-file.gts`;
+
+    let result = await switchSubmodeCommand.execute({
+      submode: 'code',
+      codePath: fileUrl,
+      createFile: true,
+    });
+
+    assert.strictEqual(operatorModeStateService.state?.submode, 'code');
+    assert.strictEqual(operatorModeStateService.state?.codePath?.href, fileUrl);
+    assert.notOk(result, 'no result card when using requested path');
+
+    let { status, content } = await cardService.getSource(new URL(fileUrl));
+    assert.strictEqual(status, 200);
+    assert.strictEqual(content, '');
+  });
+
+  test('createFile picks a non-conflicting filename when the target exists', async function (assert) {
+    assert.expect(6);
+
+    let commandService = getService('command-service');
+    let cardService = getService('card-service');
+    let operatorModeStateService = getService('operator-mode-state-service');
+    operatorModeStateService.restore({
+      stacks: [[]],
+      submode: 'interact',
+    });
+    let switchSubmodeCommand = new SwitchSubmodeCommand(
+      commandService.commandContext,
+    );
+    let fileUrl = `${testRealmURL}existing-file.gts`;
+    let newFileUrl = `${testRealmURL}existing-file-1.gts`;
+
+    await cardService.saveSource(new URL(fileUrl), 'existing content', 'create-file');
+
+    let result = await switchSubmodeCommand.execute({
+      submode: 'code',
+      codePath: fileUrl,
+      createFile: true,
+    });
+
+    assert.ok(result, 'returns a result card with the new filename');
+    assert.strictEqual(result?.codePath, newFileUrl);
+    assert.strictEqual(result?.requestedCodePath, fileUrl);
+    assert.strictEqual(operatorModeStateService.state?.codePath?.href, newFileUrl);
+
+    let { status, content } = await cardService.getSource(new URL(newFileUrl));
+    assert.strictEqual(status, 200);
+    assert.strictEqual(content, '');
+  });
 });
