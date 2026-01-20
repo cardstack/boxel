@@ -62,6 +62,7 @@ import {
   type LintResult,
   type Query,
   type PrerenderedHtmlFormat,
+  codeRefFromInternalKey,
   codeRefWithAbsoluteURL,
   userInitiatedPriority,
   systemInitiatedPriority,
@@ -71,7 +72,7 @@ import {
   type IndexedFile,
   PRERENDERED_HTML_FORMATS,
 } from './index';
-import { visitModuleDeps } from './code-ref';
+import { isCodeRef, visitModuleDeps } from './code-ref';
 import merge from 'lodash/merge';
 import mergeWith from 'lodash/mergeWith';
 import cloneDeep from 'lodash/cloneDeep';
@@ -190,6 +191,15 @@ const FILE_DEF_CODE_REF: ResolvedCodeRef = {
   module: `${baseRealm.url}file-api`,
   name: 'FileDef',
 };
+export const FILE_META_RESERVED_KEYS = new Set([
+  'name',
+  'url',
+  'sourceUrl',
+  'contentType',
+  'contentHash',
+  'lastModified',
+  'createdAt',
+]);
 
 type CachedSourceFileEntry = {
   type: 'file';
@@ -2195,21 +2205,48 @@ export class Realm {
         : this.#dbAdapter
           ? await getContentHash(this.#dbAdapter, this.url, localPath)
           : undefined;
+    let adoptsFrom =
+      codeRefFromInternalKey(fileEntry.types?.[0]) ??
+      (isCodeRef(fileEntry.resource?.meta?.adoptsFrom)
+        ? fileEntry.resource?.meta?.adoptsFrom
+        : FILE_DEF_CODE_REF);
+    let resourceAttributes =
+      (fileEntry as IndexedFile).resource?.attributes ?? {};
+    let baseAttributes = {
+      name: resourceAttributes.name ?? searchDoc.name ?? name,
+      url: resourceAttributes.url ?? searchDoc.url ?? fileURL,
+      sourceUrl: resourceAttributes.sourceUrl ?? searchDoc.sourceUrl ?? fileURL,
+      contentType:
+        resourceAttributes.contentType ??
+        searchDoc.contentType ??
+        inferredContentType,
+      contentHash: resourceAttributes.contentHash ?? contentHash,
+      lastModified: fileEntry.lastModified ?? unixTime(Date.now()),
+      createdAt: createdAt ?? unixTime(Date.now()),
+    };
+    let attributes: Record<string, unknown> = { ...baseAttributes };
+    for (let [key, value] of Object.entries(resourceAttributes)) {
+      if (value !== undefined && !(key in attributes)) {
+        attributes[key] = value;
+      }
+    }
+    for (let [key, value] of Object.entries(searchDoc)) {
+      if (FILE_META_RESERVED_KEYS.has(key) || key in attributes) {
+        continue;
+      }
+      if (value !== undefined) {
+        attributes[key] = value;
+      }
+    }
     let doc: SingleFileMetaDocument = {
       data: {
         type: 'file-meta',
         id: fileURL,
         attributes: {
-          name: searchDoc.name ?? name,
-          url: searchDoc.url ?? fileURL,
-          sourceUrl: searchDoc.sourceUrl ?? fileURL,
-          contentType: searchDoc.contentType ?? inferredContentType,
-          contentHash,
-          lastModified: fileEntry.lastModified ?? unixTime(Date.now()),
-          createdAt: createdAt ?? unixTime(Date.now()),
+          ...attributes,
         },
         meta: {
-          adoptsFrom: FILE_DEF_CODE_REF,
+          adoptsFrom,
           realmInfo,
           realmURL: this.url,
         },

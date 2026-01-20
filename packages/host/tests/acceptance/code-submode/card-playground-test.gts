@@ -66,6 +66,17 @@ const codeRefDriverCard = `import { CardDef, field, contains } from 'https://car
     @field ref = contains(CodeRefField);
 }`;
 
+const testSpecCard = `import { Component } from 'https://cardstack.com/base/card-api';
+  import { Spec } from 'https://cardstack.com/base/spec';
+  export class TestSpec extends Spec {
+    static displayName = 'TestSpec';
+    static isolated = class Isolated extends Component<typeof this> {
+      <template>
+        <div data-test-subclass-spec>Spec Subclass</div>
+      </template>
+    }
+  }`;
+
 const authorCard = `import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
   import MarkdownField from 'https://cardstack.com/base/markdown';
   import StringField from "https://cardstack.com/base/string";
@@ -235,6 +246,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
           'author.gts': authorCard,
           'blog-post.gts': blogPostCard,
           'code-ref-driver.gts': codeRefDriverCard,
+          'test-spec.gts': testSpecCard,
           'person.gts': personCard,
           'head-preview.gts': headPreviewCard,
           'Author/jane-doe.json': {
@@ -459,6 +471,17 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       assert
         .dom('[data-test-playground-panel]')
         .exists('exists for BlogPost (exported card def)');
+    });
+
+    test('playground does not auto-create spec for subclasses of specs', async function (assert) {
+      await visitOperatorMode({
+        submode: 'code',
+        codePath: `${testRealmURL}test-spec.gts`,
+      });
+      await selectDeclaration('TestSpec');
+      await togglePlaygroundPanel();
+      await waitFor('[data-test-playground-panel]');
+      assert.dom('[data-test-subclass-spec]').doesNotExist();
     });
 
     test('can populate instance chooser dropdown from recent files and pre-select the first card', async function (assert) {

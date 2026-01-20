@@ -29,6 +29,7 @@ export const skillCardRef: ResolvedCodeRef = {
 };
 
 export const isField = Symbol('cardstack-field');
+export const isSpec = Symbol('is-spec');
 export const primitive = Symbol('cardstack-primitive');
 export const fields = Symbol.for('cardstack-fields');
 export const fieldSerializer = Symbol.for('cardstack-field-serializer');

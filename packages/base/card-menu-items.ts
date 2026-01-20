@@ -9,24 +9,24 @@ import GenerateExampleCardsCommand from '@cardstack/boxel-host/commands/generate
 import ListingCreateCommand from '@cardstack/boxel-host/commands/listing-create';
 import OpenInInteractModeCommand from '@cardstack/boxel-host/commands/open-in-interact-mode';
 import PopulateWithSampleDataCommand from '@cardstack/boxel-host/commands/populate-with-sample-data';
-import CreateListingPRCommand from '@cardstack/boxel-host/commands/create-listing-pr';
 import ShowCardCommand from '@cardstack/boxel-host/commands/show-card';
 import SwitchSubmodeCommand from '@cardstack/boxel-host/commands/switch-submode';
-import {
-  cardTypeIcon,
+import type {
   CommandContext,
   Format,
+  ResolvedCodeRef,
+} from '@cardstack/runtime-common';
+import {
+  cardTypeIcon,
   identifyCard,
   isResolvedCodeRef,
   realmURL,
-  ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 
 import CodeIcon from '@cardstack/boxel-icons/code';
 import ArrowLeft from '@cardstack/boxel-icons/arrow-left';
 import Eye from '@cardstack/boxel-icons/eye';
 import LinkIcon from '@cardstack/boxel-icons/link';
-import Package from '@cardstack/boxel-icons/package';
 import Trash2Icon from '@cardstack/boxel-icons/trash-2';
 import Wand from '@cardstack/boxel-icons/wand';
 
@@ -103,21 +103,6 @@ export function getDefaultCardMenuItems(
       );
     }
 
-    if (isListingCard(card)) {
-      menuItems.push({
-        label: 'Make a PR',
-        action: async () => {
-          if (!card[realmURL]?.href) {
-            return;
-          }
-          await new CreateListingPRCommand(params.commandContext).execute({
-            listing: card,
-            realm: card[realmURL]!.href,
-          });
-        },
-        icon: Package,
-      });
-    }
   }
   if (
     params.menuContext === 'ai-assistant' &&
@@ -169,18 +154,16 @@ export function getDefaultCardMenuItems(
       disabled: !cardId,
     });
     menuItems = [...menuItems, ...getSampleDataMenuItems(card, params)];
-    if (!isListingCard(card)) {
-      menuItems.push({
-        label: `Create listing with AI`,
-        action: async () => {
-          await new ListingCreateCommand(params.commandContext).execute({
-            openCardId: cardId,
-          });
-        },
-        icon: Package,
-        disabled: !params.canEdit,
-      });
-    }
+    menuItems.push({
+      label: `Create listing with AI`,
+      action: async () => {
+        await new ListingCreateCommand(params.commandContext).execute({
+          openCardId: cardId,
+        });
+      },
+      icon: Wand,
+      disabled: !params.canEdit,
+    });
   }
   return menuItems;
 }
@@ -227,8 +210,4 @@ function isIndexCard(card: CardDef): boolean {
     return false;
   }
   return (card.id as unknown as string) === `${cardRealmURL.href}index`;
-}
-
-function isListingCard(card: CardDef): boolean {
-  return card?.constructor?.name?.endsWith?.('Listing') ?? false;
 }

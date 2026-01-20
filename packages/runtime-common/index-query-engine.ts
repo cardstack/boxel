@@ -64,6 +64,7 @@ import {
   type DefinitionLookup,
 } from './definition-lookup';
 import { isScopedCSSRequest } from 'glimmer-scoped-css';
+import type { FileMetaResource } from './resource-types';
 
 interface IndexedModule {
   type: 'module';
@@ -79,6 +80,7 @@ export interface IndexedFile {
   lastModified: number | null;
   resourceCreatedAt: number | null;
   searchDoc: Record<string, any> | null;
+  resource: FileMetaResource | null;
   types: string[] | null;
   displayNames: string[] | null;
   deps: string[] | null;
@@ -353,6 +355,7 @@ export class IndexQueryEngine {
     }
     let {
       url: canonicalURL,
+      pristine_doc: resource,
       search_doc: searchDoc,
       realm_version: realmVersion,
       realm_url: realmURL,
@@ -367,6 +370,7 @@ export class IndexQueryEngine {
       type: 'file',
       canonicalURL,
       searchDoc,
+      resource: (resource as FileMetaResource | null) ?? null,
       types,
       displayNames,
       deps,
