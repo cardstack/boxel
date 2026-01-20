@@ -948,7 +948,9 @@ export default class PlaygroundPanel extends Component<Signature> {
                   />
                 </section>
               {{else if this.createNewIsRunning}}
-                <LoadingIndicator @color='var(--boxel-light)' />
+                <div class='loading'>
+                  <LoadingIndicator @color='var(--boxel-light)' />
+                </div>
               {{else if this.maybeGenerateFieldSpec}}
                 <SpecSearch
                   @query={{this.specQuery}}
@@ -1030,8 +1032,11 @@ export default class PlaygroundPanel extends Component<Signature> {
       }
       .loading {
         display: flex;
+        align-items: center;
         justify-content: center;
-        margin: 30vh auto;
+        flex: 1;
+        min-height: 100%;
+        width: 100%;
       }
 
       .playground-panel-content:has(.social-preview-container) {
