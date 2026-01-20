@@ -173,10 +173,6 @@ function registerInfoRoutes() {
         throw e;
       }
 
-      console.info(
-        `[realm-server-mock] _info request ${JSON.stringify(realmList)}`,
-      );
-
       let data: { id: string; type: 'realm-info'; attributes: RealmInfo }[] =
         [];
       let publicReadableRealms: string[] = [];
@@ -184,9 +180,6 @@ function registerInfoRoutes() {
       for (let realmURL of realmList) {
         let info = await getRealmInfoForURL(realmURL);
         if (!info) {
-          console.warn(
-            `[realm-server-mock] _info missing realm info for ${realmURL}`,
-          );
           continue;
         }
         if (info.visibility === 'public') {
@@ -194,12 +187,6 @@ function registerInfoRoutes() {
         }
         data.push({ id: realmURL, type: 'realm-info', attributes: info });
       }
-      console.info(
-        `[realm-server-mock] _info response ${JSON.stringify({
-          realms: data.map((entry) => entry.id),
-          publicReadableRealms,
-        })}`,
-      );
 
       let headers: Record<string, string> = {
         'content-type': SupportedMimeType.RealmInfo,
@@ -375,48 +362,22 @@ async function getRealmInfoForURL(realmURL: string): Promise<RealmInfo | null> {
       if (realmConfig) {
         info = applyRealmConfigOverrides(info, realmConfig);
       }
-      console.info(
-        `[realm-server-mock] _info registry hit ${JSON.stringify({
-          realmURL,
-          name: info?.name,
-        })}`,
-      );
       return info;
     }
   }
 
   let resolvedRealmURL = resolveRemoteRealmURL(realmURL);
-  console.warn(
-    `[realm-server-mock] _info registry miss ${JSON.stringify({
-      realmURL,
-      resolvedRealmURL,
-    })}`,
-  );
   try {
     let response = await globalThis.fetch(`${resolvedRealmURL}_info`, {
       method: 'QUERY',
       headers: { Accept: SupportedMimeType.RealmInfo },
     });
     if (!response.ok) {
-      console.warn(
-        `[realm-server-mock] _info remote fetch failed ${JSON.stringify({
-          realmURL,
-          resolvedRealmURL,
-          status: response.status,
-        })}`,
-      );
       return null;
     }
     let json = await response.json();
     return json.data.attributes as RealmInfo;
   } catch (error) {
-    console.warn(
-      `[realm-server-mock] _info remote fetch error ${JSON.stringify({
-        realmURL,
-        resolvedRealmURL,
-        error: String(error),
-      })}`,
-    );
     return null;
   }
 }
