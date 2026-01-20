@@ -491,7 +491,7 @@ export class IndexRunner {
 
       if (
         !indexEntry ||
-        indexEntry.type.endsWith('-error') ||
+        indexEntry.hasError ||
         indexEntry.lastModified == null ||
         lastModified !== indexEntry.lastModified
       ) {

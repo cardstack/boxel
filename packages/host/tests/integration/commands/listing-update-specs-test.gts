@@ -49,6 +49,7 @@ module('Integration | commands | listing-update-specs', function (hooks) {
                   canonicalUrl: exampleCardId,
                   realmUrl: testRealmURL,
                   entryType: 'instance',
+                  hasError: false,
                   dependencies: [modulePath],
                 },
               },

@@ -23,6 +23,7 @@
    resource_created_at,
    icon_html TEXT,
    head_html TEXT,
+   has_error BOOLEAN DEFAULT false NOT NULL,
    PRIMARY KEY ( url, realm_url, type ) 
 );
 
@@ -48,6 +49,7 @@
    display_names BLOB,
    resource_created_at,
    head_html TEXT,
+   has_error BOOLEAN DEFAULT false NOT NULL,
    PRIMARY KEY ( url, realm_url, type ) 
 );
 
