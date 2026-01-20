@@ -54,7 +54,7 @@ import {
   localId as localIdSymbol,
   CardContextName,
   CardCrudFunctionsContextName,
-  getCardMenuItems,
+  getMenuItems,
 } from '@cardstack/runtime-common';
 
 import type { StackItem } from '@cardstack/host/lib/stack-item';
@@ -480,7 +480,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
     }
 
     return toMenuItems(
-      this.card?.[getCardMenuItems]?.({
+      this.card?.[getMenuItems]?.({
         canEdit: this.url ? this.realm.canWrite(this.url as string) : false,
         cardCrudFunctions: this.cardCrudFunctions,
         menuContext: 'interact',
