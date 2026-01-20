@@ -88,7 +88,7 @@ export default class SwitchSubmodeCommand extends HostBaseCommand<
                 requestedCodePath: codeUrl.href,
               });
             }
-          } else if (status !== 200) {
+          } else {
             throw new Error(
               `Error checking if file exists at ${codeUrl}: ${status}`,
             );
