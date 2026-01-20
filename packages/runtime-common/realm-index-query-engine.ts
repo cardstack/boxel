@@ -23,6 +23,7 @@ import {
   codeRefFromInternalKey,
 } from '.';
 import type { Realm } from './realm';
+import { FILE_META_RESERVED_KEYS } from './realm';
 import { RealmPaths } from './paths';
 import type { Query } from './query';
 import { CardError, type SerializedError } from './error';
@@ -786,7 +787,11 @@ function fileResourceFromIndex(
     }
   }
   for (let [key, value] of Object.entries(searchDoc)) {
-    if (key in baseAttributes || value === undefined) {
+    if (
+      key in baseAttributes ||
+      FILE_META_RESERVED_KEYS.has(key) ||
+      value === undefined
+    ) {
       continue;
     }
     attributes[key] = value;

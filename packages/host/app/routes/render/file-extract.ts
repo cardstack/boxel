@@ -289,17 +289,13 @@ class FileDefAttributesExtractor {
           : 'FileDef module did not export extractAttributes';
       let searchDoc = await tryExtract(klass, missingMessage);
       if (searchDoc) {
-        let types = getTypes(klass).map((type) =>
-          internalKeyFor(type, undefined),
-        );
+        let typeCodeRefs = getTypes(klass);
+        let types = typeCodeRefs.map((type) => internalKeyFor(type, undefined));
+        let adoptsFrom = typeCodeRefs[0] ?? this.#fileDefCodeRef;
         return {
           status: 'ready',
           searchDoc,
-          resource: buildFileResource(
-            this.#fileURL,
-            searchDoc,
-            this.#fileDefCodeRef,
-          ),
+          resource: buildFileResource(this.#fileURL, searchDoc, adoptsFrom),
           types,
           deps,
           ...(error ? { error } : {}),
@@ -424,18 +420,18 @@ function getTypes(klass: FileDefConstructor): CodeRef[] {
 function buildFileResource(
   fileURL: string,
   attributes: Record<string, any>,
-  adoptsFrom: ResolvedCodeRef,
+  adoptsFrom: CodeRef,
 ): FileMetaResource {
   let name = new URL(fileURL).pathname.split('/').pop() ?? fileURL;
   let baseAttributes = {
-    name,
-    url: fileURL,
-    sourceUrl: fileURL,
-    contentType: inferContentType(name),
+    name: attributes.name ?? name,
+    url: attributes.url ?? fileURL,
+    sourceUrl: attributes.sourceUrl ?? fileURL,
+    contentType: attributes.contentType ?? inferContentType(name),
   };
   let mergedAttributes: Record<string, unknown> = { ...baseAttributes };
   for (let [key, value] of Object.entries(attributes)) {
-    if (value !== undefined) {
+    if (value !== undefined && !(key in mergedAttributes)) {
       mergedAttributes[key] = value;
     }
   }

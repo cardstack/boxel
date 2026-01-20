@@ -191,7 +191,7 @@ const FILE_DEF_CODE_REF: ResolvedCodeRef = {
   module: `${baseRealm.url}file-api`,
   name: 'FileDef',
 };
-const FILE_META_RESERVED_KEYS = new Set([
+export const FILE_META_RESERVED_KEYS = new Set([
   'name',
   'url',
   'sourceUrl',
