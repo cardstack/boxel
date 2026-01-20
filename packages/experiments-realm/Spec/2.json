@@ -1,8 +1,8 @@
 {
   "data": {
     "attributes": {
-      "title": "Pet",
-      "description": "Spec for Pet card",
+      "cardTitle": "Pet",
+      "cardDescription": "Spec for Pet card",
       "ref": {
         "module": "../pet",
         "name": "Pet"

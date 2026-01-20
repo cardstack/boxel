@@ -19,10 +19,10 @@ export class CalendarEvent extends CardDef {
   static displayName = 'Calendar Event';
   static icon = EventIcon;
 
-  @field title = contains(StringField);
+  @field cardTitle = contains(StringField);
   @field startDateTime = contains(DatetimeField);
   @field endDateTime = contains(DatetimeField);
-  @field description = contains(MarkdownField);
+  @field cardDescription = contains(MarkdownField);
   @field location = contains(StringField);
   @field isAllDay = contains(BooleanField);
   @field requiresRsvp = contains(BooleanField);
@@ -39,7 +39,7 @@ export class CalendarEvent extends CardDef {
             )
           }}
         >
-          <h1>{{@model.title}}</h1>
+          <h1>{{@model.cardTitle}}</h1>
           <div class='event-meta'>
             <div class='event-time'>
               {{#if @model.isAllDay}}
@@ -60,7 +60,7 @@ export class CalendarEvent extends CardDef {
         <div class='event-content'>
           <div class='event-description'>
             <h2>About This Event</h2>
-            <@fields.description />
+            <@fields.cardDescription />
           </div>
 
           {{#if @model.requiresRsvp}}
@@ -151,7 +151,7 @@ export class CalendarEvent extends CardDef {
           <div class='day'>{{dayjsFormat @model.startDateTime 'DD'}}</div>
         </div>
         <div class='event-details'>
-          <h3>{{@model.title}}</h3>
+          <h3>{{@model.cardTitle}}</h3>
           <div class='event-time-location'>
             {{#if @model.isAllDay}}
               <span class='time'>All Day</span>

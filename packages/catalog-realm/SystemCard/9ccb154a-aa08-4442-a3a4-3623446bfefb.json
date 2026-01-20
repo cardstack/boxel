@@ -10,9 +10,9 @@
     "attributes": {
       "cardInfo": {
         "notes": null,
-        "title": "Pinecliff 3",
-        "description": null,
-        "thumbnailURL": null
+        "name": "Pinecliff 3",
+        "summary": null,
+        "cardThumbnailURL": null
       }
     },
     "relationships": {

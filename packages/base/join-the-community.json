@@ -3,29 +3,29 @@
     "type": "card",
     "id": "join-the-community",
     "attributes": {
-      "title": "JOIN THE COMMUNITY",
+      "cardTitle": "JOIN THE COMMUNITY",
       "socialMediaLinks": [
         {
           "platform": "Discord",
-          "description": "Live discussions and support",
+          "cardDescription": "Live discussions and support",
           "url": "https://discord.gg/boxel",
           "iconColor": "#5865f2"
         },
         {
           "platform": "Twitter",
-          "description": "Stay updated with the latest news",
+          "cardDescription": "Stay updated with the latest news",
           "url": "https://x.com/boxel_ai",
           "iconColor": "#1da1f2"
         },
         {
           "platform": "YouTube",
-          "description": "Tutorials and feature demonstrations",
+          "cardDescription": "Tutorials and feature demonstrations",
           "url": "https://youtube.com/cardstackproject",
           "iconColor": "#ff0000"
         },
         {
           "platform": "Reddit",
-          "description": "Community discussions and showcases",
+          "cardDescription": "Community discussions and showcases",
           "url": "https://reddit.com/r/cardstack",
           "iconColor": "#ff4500"
         }

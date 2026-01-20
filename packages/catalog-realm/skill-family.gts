@@ -269,12 +269,12 @@ class SkillFamilyIsolated extends Component<typeof SkillFamily> {
               </svg>
               <div class='title-text'>
                 <h1>{{if
-                    @model.title
-                    @model.title
+                    @model.cardTitle
+                    @model.cardTitle
                     'Skill Family Documentation'
                   }}</h1>
-                {{#if @model.description}}
-                  <p class='subtitle'>{{@model.description}}</p>
+                {{#if @model.cardDescription}}
+                  <p class='subtitle'>{{@model.cardDescription}}</p>
                 {{/if}}
               </div>
             </div>

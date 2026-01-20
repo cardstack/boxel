@@ -33,9 +33,9 @@
           "requiresApproval": false
         }
       ],
-      "title": "Catalog Listing",
-      "description": null,
-      "thumbnailURL": null
+      "cardTitle": "Catalog Listing",
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "meta": {
       "adoptsFrom": {

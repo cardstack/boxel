@@ -44,8 +44,8 @@ module(`Integration | realm querying`, function (hooks) {
       data: {
         type: 'card',
         attributes: {
-          title: 'Card 1',
-          description: 'Sample post',
+          cardTitle: 'Card 1',
+          cardDescription: 'Sample post',
           author: {
             firstName: 'Cardy',
             lastName: 'Stackington Jr. III',
@@ -80,8 +80,8 @@ module(`Integration | realm querying`, function (hooks) {
       data: {
         type: 'card',
         attributes: {
-          title: 'Card 1',
-          description: 'Sample post',
+          cardTitle: 'Card 1',
+          cardDescription: 'Sample post',
           author: {
             firstName: 'Carl',
             lastName: 'Stack',
@@ -102,8 +102,8 @@ module(`Integration | realm querying`, function (hooks) {
       data: {
         type: 'card',
         attributes: {
-          title: 'Card 2',
-          description: 'Sample post',
+          cardTitle: 'Card 2',
+          cardDescription: 'Sample post',
           author: {
             firstName: 'Carl',
             lastName: 'Deck',
@@ -181,8 +181,8 @@ module(`Integration | realm querying`, function (hooks) {
       data: {
         type: 'card',
         attributes: {
-          title: 'Post',
-          description: 'A card that represents a blog post',
+          cardTitle: 'Post',
+          cardDescription: 'A card that represents a blog post',
           specType: 'card',
           ref: {
             module: `${testModuleRealm}post`,
@@ -201,8 +201,8 @@ module(`Integration | realm querying`, function (hooks) {
       data: {
         type: 'card',
         attributes: {
-          title: 'Article',
-          description: 'A card that represents an online article ',
+          cardTitle: 'Article',
+          cardDescription: 'A card that represents an online article ',
           specType: 'card',
           ref: {
             module: `${testModuleRealm}article`,
@@ -221,7 +221,7 @@ module(`Integration | realm querying`, function (hooks) {
       data: {
         type: 'card',
         attributes: {
-          title: "Mango's Birthday",
+          cardTitle: "Mango's Birthday",
           venue: 'Dog Park',
           date: '2024-10-30',
         },
@@ -237,7 +237,7 @@ module(`Integration | realm querying`, function (hooks) {
       data: {
         type: 'card',
         attributes: {
-          title: "Van Gogh's Birthday",
+          cardTitle: "Van Gogh's Birthday",
           venue: 'Backyard',
           date: '2024-11-19',
         },
@@ -352,7 +352,7 @@ module(`Integration | realm querying`, function (hooks) {
           sponsors: ['Sony', 'Nintendo'],
           posts: [
             {
-              title: 'post 1',
+              cardTitle: 'post 1',
               author: {
                 firstName: 'A',
                 lastName: null,
@@ -384,7 +384,7 @@ module(`Integration | realm querying`, function (hooks) {
           sponsors: null,
           posts: [
             {
-              title: 'post 1',
+              cardTitle: 'post 1',
               author: {
                 firstName: 'A',
                 lastName: 'B',
@@ -393,7 +393,7 @@ module(`Integration | realm querying`, function (hooks) {
               views: 10,
             },
             {
-              title: 'post 2',
+              cardTitle: 'post 2',
               author: {
                 firstName: 'C',
                 lastName: 'D',
@@ -402,7 +402,7 @@ module(`Integration | realm querying`, function (hooks) {
               views: 13,
             },
             {
-              title: 'post 2',
+              cardTitle: 'post 2',
               author: {
                 firstName: 'C',
                 lastName: 'D',
@@ -586,7 +586,7 @@ module(`Integration | realm querying`, function (hooks) {
     let { data: matching } = await queryEngine.search({
       filter: {
         on: { module: `${testModuleRealm}post`, name: 'Post' },
-        eq: { title: 'Card 1', description: 'Sample post' },
+        eq: { cardTitle: 'Card 1', cardDescription: 'Sample post' },
       },
     });
     assert.deepEqual(
@@ -727,7 +727,7 @@ module(`Integration | realm querying`, function (hooks) {
           name: 'Post',
         },
         every: [
-          { eq: { title: 'Card 1' } },
+          { eq: { cardTitle: 'Card 1' } },
           { not: { eq: { 'author.firstName': 'Cardy' } } },
         ],
       },
@@ -1276,7 +1276,7 @@ module(`Integration | realm querying`, function (hooks) {
   test(`can search for cards by using the 'contains' filter`, async function (assert) {
     let { data: matching } = await queryEngine.search({
       filter: {
-        contains: { title: 'ca' },
+        contains: { cardTitle: 'ca' },
       },
     });
     assert.strictEqual(matching.length, 5);
@@ -1296,7 +1296,7 @@ module(`Integration | realm querying`, function (hooks) {
     let { data: personMatchingByTitle } = await queryEngine.search({
       filter: {
         on: { module: `${testModuleRealm}person`, name: 'Person' },
-        contains: { title: 'ca' },
+        contains: { cardTitle: 'ca' },
       },
     });
     assert.strictEqual(personMatchingByTitle.length, 2);
@@ -1322,7 +1322,7 @@ module(`Integration | realm querying`, function (hooks) {
     let { data: matching } = await queryEngine.search({
       filter: {
         on: { module: `${testModuleRealm}dog`, name: 'Dog' },
-        contains: { title: null },
+        contains: { cardTitle: null },
       },
     });
     assert.strictEqual(matching.length, 3);

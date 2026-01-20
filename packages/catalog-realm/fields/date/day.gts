@@ -63,7 +63,7 @@ class DayFieldEdit extends Component<typeof DayField> {
   </template>
 }
 
-export class DayField extends FieldDef {
+export default class DayField extends FieldDef {
   static displayName = 'Day';
   static icon = CalendarDaysIcon;
 
@@ -148,5 +148,3 @@ export class DayField extends FieldDef {
 
   static edit = DayFieldEdit;
 }
-
-export default DayField;

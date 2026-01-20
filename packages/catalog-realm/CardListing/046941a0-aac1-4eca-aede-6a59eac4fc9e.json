@@ -16,9 +16,9 @@
       "summary": "A comprehensive annotation system for pdf documents and textbooks with support for highlights, notes, and position tracking",
       "cardInfo": {
         "notes": "Features include:  page number references, annotation positioning, color-coded highlights, and timestamped creation tracking",
-        "title": "Annotation",
-        "description": "An interactive annotation card that allows users to highlight text, add notes, and track position information in pdf documents. Perfect for students, researchers, and professionals who need to annotate textbooks, and other documents.",
-        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/annotation-listing/thumbnail.png"
+        "name": "Annotation",
+        "summary": "An interactive annotation card that allows users to highlight text, add notes, and track position information in pdf documents. Perfect for students, researchers, and professionals who need to annotate textbooks, and other documents.",
+        "cardThumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/annotation-listing/thumbnail.png"
       }
     },
     "relationships": {

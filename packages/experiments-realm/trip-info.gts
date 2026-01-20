@@ -120,7 +120,7 @@ export class TripInfo extends CardDef {
   static icon = MapPinIcon;
   @field destinations = linksToMany(Country);
   @field traveler = contains(Traveler);
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: TripInfo) {
       return this.traveler?.name
         ? `Trip Info for ${this.traveler.name}`

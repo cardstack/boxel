@@ -168,8 +168,8 @@ class StudyGoalIsolated extends Component<typeof StudyGoal> {
                 </div>
               {{/if}}
 
-              {{#if @model.description}}
-                <div class='goal-description'>{{@model.description}}</div>
+              {{#if @model.cardDescription}}
+                <div class='goal-description'>{{@model.cardDescription}}</div>
               {{/if}}
             </div>
 
@@ -1761,8 +1761,8 @@ class StudyGoalEmbedded extends Component<typeof StudyGoal> {
         </div>
       </div>
 
-      {{#if @model.description}}
-        <div class='goal-description'>{{@model.description}}</div>
+      {{#if @model.cardDescription}}
+        <div class='goal-description'>{{@model.cardDescription}}</div>
       {{/if}}
 
       <div class='progress-display'>
@@ -2105,7 +2105,7 @@ export class StudyGoal extends CardDef {
   static icon = TargetIcon;
 
   @field goalTitle = contains(StringField); // ⁶ Primary fields
-  @field description = contains(TextAreaField);
+  @field cardDescription = contains(TextAreaField);
   @field targetDate = contains(DateField);
   @field isCompleted = contains(BooleanField);
   @field subject = contains(StringField);
@@ -2117,7 +2117,7 @@ export class StudyGoal extends CardDef {
   @field completedAt = contains(DatetimeField); // ⁽⁶⁾ When goal was completed
 
   // ⁷ Computed title
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: StudyGoal) {
       try {
         return this.goalTitle ?? 'Untitled Goal';

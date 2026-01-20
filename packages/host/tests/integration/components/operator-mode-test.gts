@@ -33,6 +33,10 @@ module('Integration | operator-mode | basics', function (hooks) {
         </template>
       },
     );
+    await waitFor('[data-test-boxel-card-header-title]');
+    await waitFor(
+      `[data-test-card-header-realm-icon="https://boxel-images.boxel.ai/icons/Letter-o.png"]`,
+    );
     assert
       .dom('[data-test-boxel-card-header-title]')
       .hasText('Person - Fadhlan');
@@ -524,7 +528,7 @@ module('Integration | operator-mode | basics', function (hooks) {
       .exists();
 
     await fillIn(
-      '[data-test-stack-card-index="2"] [data-test-field="title"] [data-test-boxel-input]',
+      '[data-test-stack-card-index="2"] [data-test-field="cardTitle"] [data-test-boxel-input]',
       'Mad As a Hatter',
     );
 

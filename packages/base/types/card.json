@@ -2,8 +2,8 @@
   "data": {
     "type": "card",
     "attributes": {
-      "title": "General Card",
-      "description": "A general card that can contain any card type.",
+      "cardTitle": "General Card",
+      "cardDescription": "A general card that can contain any card type.",
       "specType": "card",
       "ref": {
         "module": "https://cardstack.com/base/card-api",

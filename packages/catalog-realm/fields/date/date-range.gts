@@ -103,7 +103,7 @@ class DateRangeFieldEdit extends Component<typeof DateRangeField> {
   </template>
 }
 
-export class DateRangeField extends FieldDef {
+export default class DateRangeField extends FieldDef {
   static displayName = 'Date Range';
   static icon = CalendarStatsIcon;
 
@@ -225,5 +225,3 @@ export class DateRangeField extends FieldDef {
 
   static edit = DateRangeFieldEdit;
 }
-
-export default DateRangeField;

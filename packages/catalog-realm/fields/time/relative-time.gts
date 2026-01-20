@@ -73,7 +73,7 @@ class RelativeTimeFieldEdit extends Component<typeof RelativeTimeField> {
   </template>
 }
 
-export class RelativeTimeField extends FieldDef {
+export default class RelativeTimeField extends FieldDef {
   static displayName = 'Relative Time';
   static icon = ClockIcon;
 
@@ -164,5 +164,3 @@ export class RelativeTimeField extends FieldDef {
 
   static edit = RelativeTimeFieldEdit;
 }
-
-export default RelativeTimeField;

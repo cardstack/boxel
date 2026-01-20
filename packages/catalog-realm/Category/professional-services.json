@@ -11,9 +11,9 @@
       "name": "Professional Services",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": "Consulting engagements, legal documents, client proposals, service agreements, billing structures, and professional standards.",
-        "thumbnailURL": null
+        "name": null,
+        "summary": "Consulting engagements, legal documents, client proposals, service agreements, billing structures, and professional standards.",
+        "cardThumbnailURL": null
       }
     },
     "relationships": {

@@ -2,9 +2,9 @@
   "data": {
     "type": "card",
     "attributes": {
-      "title": "Morning Crew",
-      "description": null,
-      "thumbnailURL": "https://i.imgur.com/RZ0rsfxt.jpg"
+      "cardTitle": "Morning Crew",
+      "cardDescription": null,
+      "cardThumbnailURL": "https://i.imgur.com/RZ0rsfxt.jpg"
     },
     "relationships": {
       "gameSlots.0": {

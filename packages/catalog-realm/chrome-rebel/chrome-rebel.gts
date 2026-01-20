@@ -1117,7 +1117,7 @@ export class ChromeRebel extends CardDef {
   @field customFeatures = contains(StringField);
   @field isCustomBuild = contains(BooleanField);
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: ChromeRebel) {
       return this.bikeName;
     },

@@ -3,8 +3,8 @@
     "type": "card",
     "attributes": {
       "key": "enchanted-forest",
-      "title": "The Enchanted Forest",
-      "description": "A magical wood seeks your help to break a moonlit curse.",
+      "cardTitle": "The Enchanted Forest",
+      "cardDescription": "A magical wood seeks your help to break a moonlit curse.",
       "tags": [],
       "imageStyles": []
     },

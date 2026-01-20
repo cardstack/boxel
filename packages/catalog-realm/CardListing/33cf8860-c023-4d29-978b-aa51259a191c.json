@@ -12,12 +12,12 @@
       "images": [
         "https://boxel-images.boxel.ai/app-assets/catalog/golf-scorecard-listing/screenshot_01.png"
       ],
-      "summary": "This card logs strokes, pars, and putts across all 18 holes—auto-computing birdies, bogeys, and total scores. Includes live leaderboard views, TV-style overlays, and PGA/USGA branding support. Ideal for tournaments, sports apps, and golf analytics dashboards.",
+      "summary": "This card logs strokes, pars, and putts across all 18 holes\u2014auto-computing birdies, bogeys, and total scores. Includes live leaderboard views, TV-style overlays, and PGA/USGA branding support. Ideal for tournaments, sports apps, and golf analytics dashboards.",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/golf-scorecard-listing/thumbnail.png"
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/golf-scorecard-listing/thumbnail.png"
       }
     },
     "relationships": {

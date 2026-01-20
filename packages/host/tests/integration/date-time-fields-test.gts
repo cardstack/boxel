@@ -59,87 +59,87 @@ module('Integration | date-time fields', function (hooks) {
     const dateModule: any = await loader.import(
       `${catalogRealmURL}fields/date`,
     );
-    DateFieldClass = dateModule.DateField ?? dateModule.default;
+    DateFieldClass = dateModule.default;
 
     const timeModule: any = await loader.import(
       `${catalogRealmURL}fields/time`,
     );
-    TimeFieldClass = timeModule.TimeField;
+    TimeFieldClass = timeModule.default;
 
     const datetimeModule: any = await loader.import(
       `${catalogRealmURL}fields/date-time`,
     );
-    DatetimeFieldClass = datetimeModule.DatetimeField;
+    DatetimeFieldClass = datetimeModule.default;
 
     const datetimeStampModule: any = await loader.import(
       `${catalogRealmURL}fields/datetime-stamp`,
     );
-    DatetimeStampFieldClass = datetimeStampModule.DatetimeStampField;
+    DatetimeStampFieldClass = datetimeStampModule.default;
 
     const dayModule: any = await loader.import(
       `${catalogRealmURL}fields/date/day`,
     );
-    DayFieldClass = dayModule.DayField;
+    DayFieldClass = dayModule.default;
 
     const dateRangeModule: any = await loader.import(
       `${catalogRealmURL}fields/date/date-range`,
     );
-    DateRangeFieldClass = dateRangeModule.DateRangeField;
+    DateRangeFieldClass = dateRangeModule.default;
 
     const timeRangeModule: any = await loader.import(
       `${catalogRealmURL}fields/time/time-range`,
     );
-    TimeRangeFieldClass = timeRangeModule.TimeRangeField;
+    TimeRangeFieldClass = timeRangeModule.default;
 
     const durationModule: any = await loader.import(
       `${catalogRealmURL}fields/time/duration`,
     );
-    DurationFieldClass = durationModule.DurationField;
+    DurationFieldClass = durationModule.default;
 
     const relativeModule: any = await loader.import(
       `${catalogRealmURL}fields/time/relative-time`,
     );
-    RelativeTimeFieldClass = relativeModule.RelativeTimeField;
+    RelativeTimeFieldClass = relativeModule.default;
 
     const timePeriodModule: any = await loader.import(
       `${catalogRealmURL}fields/time-period`,
     );
-    TimePeriodFieldClass = timePeriodModule.TimePeriodField;
+    TimePeriodFieldClass = timePeriodModule.default;
 
     const monthDayModule: any = await loader.import(
       `${catalogRealmURL}fields/date/month-day`,
     );
-    MonthDayFieldClass = monthDayModule.MonthDayField;
+    MonthDayFieldClass = monthDayModule.default;
 
     const yearModule: any = await loader.import(
       `${catalogRealmURL}fields/date/year`,
     );
-    YearFieldClass = yearModule.YearField;
+    YearFieldClass = yearModule.default;
 
     const monthModule: any = await loader.import(
       `${catalogRealmURL}fields/date/month`,
     );
-    MonthFieldClass = monthModule.MonthField;
+    MonthFieldClass = monthModule.default;
 
     const monthYearModule: any = await loader.import(
       `${catalogRealmURL}fields/date/month-year`,
     );
-    MonthYearFieldClass = monthYearModule.MonthYearField;
+    MonthYearFieldClass = monthYearModule.default;
 
     const weekModule: any = await loader.import(
       `${catalogRealmURL}fields/date/week`,
     );
-    WeekFieldClass = weekModule.WeekField;
+    WeekFieldClass = weekModule.default;
 
     const quarterModule: any = await loader.import(
       `${catalogRealmURL}fields/date/quarter`,
     );
-    QuarterFieldClass = quarterModule.QuarterField;
+    QuarterFieldClass = quarterModule.default;
 
     const recurringModule: any = await loader.import(
       `${catalogRealmURL}fields/recurring-pattern`,
     );
-    RecurringPatternFieldClass = recurringModule.RecurringPatternField;
+    RecurringPatternFieldClass = recurringModule.default;
   }
 
   async function renderField(

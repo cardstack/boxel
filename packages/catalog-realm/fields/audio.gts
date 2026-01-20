@@ -117,8 +117,8 @@ class AudioFieldEdit extends Component<typeof AudioField> {
         <div class='metadata-fields'>
           <FieldContainer @label='Title'>
             <BoxelInput
-              @value={{@model.title}}
-              @onInput={{fn (mut @model.title)}}
+              @value={{@model.cardTitle}}
+              @onInput={{fn (mut @model.cardTitle)}}
               placeholder='Track title'
               @disabled={{not @canEdit}}
             />
@@ -584,7 +584,7 @@ class AudioFieldFitted extends Component<typeof AudioField> {
   </template>
 }
 
-export class AudioField extends FieldDef {
+export default class AudioField extends FieldDef {
   static displayName = 'Audio';
   static icon = MusicIcon;
 
@@ -595,7 +595,7 @@ export class AudioField extends FieldDef {
   @field fileSize = contains(NumberField); // in bytes
 
   // Optional metadata
-  @field title = contains(StringField);
+  @field cardTitle = contains(StringField);
   @field artist = contains(StringField);
   @field waveformData = contains(StringField); // JSON array of heights
 
@@ -616,7 +616,7 @@ export class AudioField extends FieldDef {
 
   @field displayTitle = contains(StringField, {
     computeVia: function (this: AudioField) {
-      return this.title || this.filename || 'Untitled Audio';
+      return this.cardTitle || this.filename || 'Untitled Audio';
     },
   });
 
@@ -1027,5 +1027,3 @@ export class AudioField extends FieldDef {
 
   static edit = AudioFieldEdit;
 }
-
-export default AudioField;

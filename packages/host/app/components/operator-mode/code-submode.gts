@@ -804,7 +804,7 @@ export default class CodeSubmode extends Component<Signature> {
             <:content>
               {{#if this.isCard}}
                 Delete the card
-                <strong>{{this.itemToDeleteAsCard.title}}</strong>?
+                <strong>{{this.itemToDeleteAsCard.cardTitle}}</strong>?
               {{else}}
                 Delete the file
                 <strong>{{urlToFilename this.itemToDeleteAsFile}}</strong>?

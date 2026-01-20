@@ -6,15 +6,15 @@
       "issueDate": "2025-03-11",
       "dueDate": "2025-04-10",
       "amount": 3298.55,
-      "description": "Invoice for interior design services including consultation, 3D rendering, and purchase of bespoke furniture items. The package also includes custom artwork selection and installation service fees.",
+      "cardDescription": "Invoice for interior design services including consultation, 3D rendering, and purchase of bespoke furniture items. The package also includes custom artwork selection and installation service fees.",
       "customerName": "Alexis Taylor",
       "customerEmail": "alexis.taylor@example.com",
       "customerAddress": "987 Elm Street, Metropolis, NY 10001",
       "companyName": "Creative Interiors",
       "companyEmail": "contact@creativeinteriors.com",
       "companyAddress": "789 Design Avenue, Art District, CA 90210",
-      "title": "Creative Interiors Invoice INV-2025-0427",
-      "thumbnailURL": null
+      "cardTitle": "Creative Interiors Invoice INV-2025-0427",
+      "cardThumbnailURL": null
     },
     "relationships": {
       "currentTheme": {

@@ -843,7 +843,7 @@ export default class Room extends Component<Signature> {
       for (let modelConfig of systemCard.modelConfigurations) {
         if (modelConfig.modelId) {
           options[modelConfig.modelId] =
-            modelConfig.title || modelConfig.modelId;
+            modelConfig.cardTitle || modelConfig.modelId;
         }
       }
       // Add any used LLMs that aren't already in the options
@@ -1311,6 +1311,10 @@ export default class Room extends Component<Signature> {
     let lastMessage = this.messages[this.messages.length - 1];
     if (lastMessage) {
       this.lastCanceledActionMessageId = lastMessage.eventId;
+      this.matrixService.markActionAsCanceled(
+        this.args.roomId,
+        lastMessage.eventId,
+      );
     }
   }
 

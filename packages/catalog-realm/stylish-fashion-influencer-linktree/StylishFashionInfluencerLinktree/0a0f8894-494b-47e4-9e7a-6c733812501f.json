@@ -9,57 +9,57 @@
       "accentColor": "#fd79a8",
       "socialLinks": [
         {
-          "title": "Shop My Amazon Favorites ✨",
+          "cardTitle": "Shop My Amazon Favorites ✨",
           "url": "https://amazon.com/shop/sophiarose",
           "backgroundColor": "#FA7F01",
           "textColor": "#ffffff",
           "emoji": "🛍️"
         },
         {
-          "title": "Instagram @sophiarose.style",
+          "cardTitle": "Instagram @sophiarose.style",
           "url": "https://instagram.com/sophiarose.style",
           "backgroundColor": "#E1306C",
           "textColor": "#FFFFFF",
           "emoji": "📸"
         },
         {
-          "title": "TikTok Style Videos",
+          "cardTitle": "TikTok Style Videos",
           "url": "https://tiktok.com/@sophiarose.style",
           "backgroundColor": "#000000",
           "textColor": "#FFFFFF",
           "emoji": "🎵"
         },
         {
-          "title": "YouTube Fashion Hauls",
+          "cardTitle": "YouTube Fashion Hauls",
           "url": "https://youtube.com/@sophiarosestyle",
           "backgroundColor": "#FF0000",
           "textColor": "#FFFFFF",
           "emoji": "📹"
         },
         {
-          "title": "Pinterest Style Board",
+          "cardTitle": "Pinterest Style Board",
           "url": "https://pinterest.com/sophiarosestyle",
           "backgroundColor": "#BD081C",
           "textColor": "#FFFFFF",
           "emoji": "📌"
         },
         {
-          "title": "My Fashion Blog",
+          "cardTitle": "My Fashion Blog",
           "url": "https://sophiarosestyle.com",
           "backgroundColor": "#FFB6C1",
           "textColor": "#2D3436",
           "emoji": "💄"
         },
         {
-          "title": "Email Newsletter 💌",
+          "cardTitle": "Email Newsletter 💌",
           "url": "https://sophiarosestyle.com/newsletter",
           "backgroundColor": "#74B9FF",
           "textColor": "#FFFFFF",
           "emoji": "💌"
         }
       ],
-      "description": null,
-      "thumbnailURL": null
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "meta": {
       "adoptsFrom": {

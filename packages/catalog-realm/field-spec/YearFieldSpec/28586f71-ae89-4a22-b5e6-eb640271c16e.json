@@ -9,22 +9,22 @@
     "type": "card",
     "attributes": {
       "ref": {
-        "name": "YearFieldSpec",
-        "module": "../year-field-spec"
+        "name": "default",
+        "module": "../../fields/date/year"
       },
-      "title": "Year Field Spec",
+      "cardTitle": "Year Field Spec",
       "readMe": null,
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": null
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null
       },
       "specType": "card",
       "standard": {
         "value": 2020
       },
-      "description": null,
+      "cardDescription": null,
       "containedExamples": []
     },
     "relationships": {

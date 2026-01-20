@@ -11,9 +11,9 @@
       "name": "Data Management",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": "Database systems, data storage, backup solutions, data migration, ETL processes, data warehousing, and information architecture tools.",
-        "thumbnailURL": null
+        "name": null,
+        "summary": "Database systems, data storage, backup solutions, data migration, ETL processes, data warehousing, and information architecture tools.",
+        "cardThumbnailURL": null
       }
     },
     "relationships": {

@@ -13,9 +13,9 @@
       "audioUrl": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Carefree.mp3",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": null
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null
       },
       "duration": "3:32",
       "songTitle": "Carefree",

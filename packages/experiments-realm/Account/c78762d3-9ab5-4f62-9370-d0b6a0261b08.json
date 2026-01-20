@@ -32,8 +32,8 @@
         "foregroundColor": "#512DA8",
         "backgroundColor": "#EDE7F6"
       },
-      "description": "Proposal sent for website redesign and booking system integration",
-      "thumbnailURL": null
+      "cardDescription": "Proposal sent for website redesign and booking system integration",
+      "cardThumbnailURL": null
     },
     "relationships": {
       "crmApp": {

@@ -6,7 +6,7 @@
       "canonicalSlug": "amazon/nova-premier-v1",
       "name": "Amazon: Nova Premier 1.0",
       "created": 1761950332,
-      "description": "Amazon Nova Premier is the most capable of Amazon’s multimodal models for complex reasoning tasks and for use as the best teacher for distilling custom models.",
+      "cardDescription": "Amazon Nova Premier is the most capable of Amazon\u2019s multimodal models for complex reasoning tasks and for use as the best teacher for distilling custom models.",
       "pricing": {
         "prompt": "0.0000025",
         "completion": "0.0000125",
@@ -46,9 +46,9 @@
         "frequency_penalty": null
       },
       "cardInfo": {
-        "title": null,
-        "description": null,
-        "thumbnailURL": null,
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
         "notes": null
       }
     },

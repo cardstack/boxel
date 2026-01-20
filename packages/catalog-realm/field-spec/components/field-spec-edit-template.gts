@@ -173,14 +173,14 @@ export default class FieldSpecEditTemplate extends Component<typeof Spec> {
         <div class='header-info-container'>
           <div class='header-title-container' data-test-title>
             <label for='spec-title' class='boxel-sr-only'>Title</label>
-            <@fields.title />
+            <@fields.cardTitle />
           </div>
           <div class='header-description-container' data-test-description>
             <label
               for='spec-description'
               class='boxel-sr-only'
             >Description</label>
-            <@fields.description />
+            <@fields.cardDescription />
           </div>
         </div>
       </header>
@@ -190,19 +190,21 @@ export default class FieldSpecEditTemplate extends Component<typeof Spec> {
             <BookOpenText width='20' height='20' role='presentation' />
             <h2 id='readme'>Read Me</h2>
           </div>
-          <BoxelButton
-            @kind='primary'
-            @size='extra-small'
-            @loading={{this.generateReadmeTask.isRunning}}
-            {{on 'click' this.generateReadme}}
-            data-test-generate-readme
-          >
-            {{#if this.generateReadmeTask.isRunning}}
-              Generating...
-            {{else}}
-              Generate README
-            {{/if}}
-          </BoxelButton>
+          {{#if @canEdit}}
+            <BoxelButton
+              @kind='primary'
+              @size='extra-small'
+              @loading={{this.generateReadmeTask.isRunning}}
+              {{on 'click' this.generateReadme}}
+              data-test-generate-readme
+            >
+              {{#if this.generateReadmeTask.isRunning}}
+                Generating...
+              {{else}}
+                Generate README
+              {{/if}}
+            </BoxelButton>
+          {{/if}}
         </header>
         <div data-test-readme>
           <@fields.readMe />

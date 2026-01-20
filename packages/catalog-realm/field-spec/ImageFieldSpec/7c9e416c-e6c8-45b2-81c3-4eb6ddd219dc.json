@@ -9,8 +9,8 @@
     "type": "card",
     "attributes": {
       "ref": {
-        "name": "ImageFieldSpec",
-        "module": "../image-field-spec"
+        "name": "default",
+        "module": "../../fields/image"
       },
       "title": "Image Field Spec",
       "avatar": {

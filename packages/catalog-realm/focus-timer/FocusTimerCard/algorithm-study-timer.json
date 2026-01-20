@@ -11,9 +11,9 @@
       "subject": "Computer Science",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": null
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null
       },
       "isActive": true,
       "startTime": null,

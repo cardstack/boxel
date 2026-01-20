@@ -11,9 +11,9 @@
       "name": "Marketing & Growth",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": "Digital marketing campaigns, content creation, SEO optimization, social media management, and growth analytics.",
-        "thumbnailURL": null
+        "name": null,
+        "summary": "Digital marketing campaigns, content creation, SEO optimization, social media management, and growth analytics.",
+        "cardThumbnailURL": null
       }
     },
     "relationships": {

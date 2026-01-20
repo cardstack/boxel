@@ -3,12 +3,12 @@
     "type": "card",
     "attributes": {
       "flavorName": "Berry Bliss",
-      "description": "**Sweet meets tart!** 🫐🍓\n\nA delightful blend of mixed berries including blueberry, raspberry, and blackberry. Light and fruity with natural berry extracts for an authentic taste.",
+      "cardDescription": "**Sweet meets tart!** 🫐🍓\n\nA delightful blend of mixed berries including blueberry, raspberry, and blackberry. Light and fruity with natural berry extracts for an authentic taste.",
       "primaryColor": "#FA7F01",
       "accentColor": "#FBEB06",
       "intensity": 3,
       "price": 2.99,
-      "thumbnailURL": null
+      "cardThumbnailURL": null
     },
     "meta": {
       "adoptsFrom": {

@@ -11,9 +11,9 @@
       "name": "Customer Support",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": "Help desk management, ticket tracking, customer communication, knowledge base creation, and support analytics.",
-        "thumbnailURL": null
+        "name": null,
+        "summary": "Help desk management, ticket tracking, customer communication, knowledge base creation, and support analytics.",
+        "cardThumbnailURL": null
       }
     },
     "relationships": {

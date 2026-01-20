@@ -61,7 +61,7 @@ export class CommandExecutionState<CardResultType extends CardDefConstructor>
  *   typeof SearchCardsResult
  * >(this, SearchCardsByTypeAndTitleCommand, () => {
  *   return {
- *     title: this.args.model.titleSearch,
+ *     title: this.args.model.cardTitleSearch,
  *   };
  * });
  * ```

@@ -16,14 +16,14 @@
         }
       },
       "details": [
-        "Statement credits up to $209 per calendar year for an auto-renewing CLEAR® Plus Membership, excluding taxes and fees.‡"
+        "Statement credits up to $209 per calendar year for an auto-renewing CLEAR\u00ae Plus Membership, excluding taxes and fees.\u2021"
       ],
       "partner": "",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": null
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null
       },
       "minSpend": {
         "amount": null,

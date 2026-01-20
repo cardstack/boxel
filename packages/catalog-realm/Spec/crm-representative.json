@@ -9,9 +9,9 @@
       },
       "specType": "card",
       "containedExamples": [],
-      "title": "Representative",
-      "description": "Spec for Representative",
-      "thumbnailURL": null
+      "cardTitle": "Representative",
+      "cardDescription": "Spec for Representative",
+      "cardThumbnailURL": null
     },
     "relationships": {},
     "meta": {

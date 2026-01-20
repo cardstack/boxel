@@ -9,8 +9,8 @@
     "type": "card",
     "attributes": {
       "ref": {
-        "name": "NumberFieldSpec",
-        "module": "../number-field-spec"
+        "name": "default",
+        "module": "../../fields/number"
       },
       "stat": 100,
       "gauge": 30,

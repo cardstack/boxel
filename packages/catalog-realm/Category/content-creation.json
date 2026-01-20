@@ -11,9 +11,9 @@
       "name": "Content Creation",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": "Writing tools, video editing, graphic design, audio production, publishing platforms, content management systems, and creative workflow tools.",
-        "thumbnailURL": null
+        "name": null,
+        "summary": "Writing tools, video editing, graphic design, audio production, publishing platforms, content management systems, and creative workflow tools.",
+        "cardThumbnailURL": null
       }
     },
     "relationships": {

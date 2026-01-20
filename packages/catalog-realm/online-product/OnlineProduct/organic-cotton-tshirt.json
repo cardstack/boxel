@@ -3,7 +3,7 @@
     "type": "card",
     "attributes": {
       "productName": "Organic Cotton Classic T-Shirt",
-      "price": 28.00,
+      "price": 28.0,
       "salePrice": 19.99,
       "sku": "OCT-NAVY-L",
       "category": "Clothing",
@@ -11,15 +11,15 @@
       "inventory": 7,
       "inStock": true,
       "imageUrl": "https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?auto=format&fit=crop&w=800&q=80",
-      "title": "Organic Cotton Classic T-Shirt",
+      "cardTitle": "Organic Cotton Classic T-Shirt",
       "cardInfo": {
-        "title": "Organic Cotton Classic T-Shirt",
-        "description": "Soft and comfortable classic t-shirt made from 100% organic cotton. Available in navy blue, size large. Category: Clothing. SKU: OCT-NAVY-L",
-        "thumbnailURL": "https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?auto=format&fit=crop&w=400&q=80",
+        "name": "Organic Cotton Classic T-Shirt",
+        "summary": "Soft and comfortable classic t-shirt made from 100% organic cotton. Available in navy blue, size large. Category: Clothing. SKU: OCT-NAVY-L",
+        "cardThumbnailURL": "https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?auto=format&fit=crop&w=400&q=80",
         "notes": null
       },
-      "description": "Soft and comfortable classic t-shirt made from 100% organic cotton. Available in navy blue, size large. Category: Clothing. SKU: OCT-NAVY-L",
-      "thumbnailURL": "https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?auto=format&fit=crop&w=400&q=80"
+      "cardDescription": "Soft and comfortable classic t-shirt made from 100% organic cotton. Available in navy blue, size large. Category: Clothing. SKU: OCT-NAVY-L",
+      "cardThumbnailURL": "https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?auto=format&fit=crop&w=400&q=80"
     },
     "relationships": {
       "cardInfo.theme": {

@@ -32,8 +32,8 @@
         "foregroundColor": "#FBC02D",
         "backgroundColor": "#FFF9C4"
       },
-      "description": "Current client with website and social media package expiring in 30 days",
-      "thumbnailURL": null
+      "cardDescription": "Current client with website and social media package expiring in 30 days",
+      "cardThumbnailURL": null
     },
     "relationships": {
       "crmApp": {

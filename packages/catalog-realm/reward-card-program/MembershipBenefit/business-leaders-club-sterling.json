@@ -11,11 +11,11 @@
       "partner": "The Leading Hotels of the World",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": null
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null
       },
-      "conditions": "Complimentary Leaders Club Sterling Status from The Leading Hotels of the World®. Must enroll through American Express to activate. Status valid while cardmember in good standing. Access to over 400 independent luxury hotels globally.",
+      "conditions": "Complimentary Leaders Club Sterling Status from The Leading Hotels of the World\u00ae. Must enroll through American Express to activate. Status valid while cardmember in good standing. Access to over 400 independent luxury hotels globally.",
       "statusLevel": "Diamond",
       "benefitsList": [
         "Complimentary Wi-Fi at all LHW properties",

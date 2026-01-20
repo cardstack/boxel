@@ -19,8 +19,8 @@
       "phone": 12065555678,
       "website": "https://fitnessfirstgym.com",
       "stockSymbol": null,
-      "description": "Modern fitness center with 3 locations. Needs help with membership campaigns and class scheduling system.",
-      "thumbnailURL": "https://example.com/fitness-first-logo.png"
+      "cardDescription": "Modern fitness center with 3 locations. Needs help with membership campaigns and class scheduling system.",
+      "cardThumbnailURL": "https://example.com/fitness-first-logo.png"
     },
     "relationships": {
       "crmApp": {

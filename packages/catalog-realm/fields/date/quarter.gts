@@ -110,7 +110,7 @@ class QuarterFieldEdit extends Component<typeof QuarterField> {
   </template>
 }
 
-export class QuarterField extends FieldDef {
+export default class QuarterField extends FieldDef {
   static displayName = 'Quarter';
   static icon = CalendarStatsIcon;
 
@@ -192,5 +192,3 @@ export class QuarterField extends FieldDef {
 
   static edit = QuarterFieldEdit;
 }
-
-export default QuarterField;

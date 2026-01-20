@@ -64,9 +64,9 @@ class IsolatedFurnitureTearSheetTemplate extends Component<
             <div class='detail-group'>
               <h2>Product Details</h2>
 
-              {{#if @model.description}}
+              {{#if @model.cardDescription}}
                 <div class='description'>
-                  <@fields.description />
+                  <@fields.cardDescription />
                 </div>
               {{else}}
                 <p class='placeholder-text'>Add product description to highlight
@@ -406,7 +406,7 @@ export class FurnitureTearSheet extends CardDef {
   @field productName = contains(StringField);
   @field collection = contains(StringField);
   @field heroImageUrl = contains(UrlField);
-  @field description = contains(MarkdownField);
+  @field cardDescription = contains(MarkdownField);
   @field dimensions = contains(StringField);
   @field materials = contains(StringField);
   @field finish = contains(StringField);
@@ -416,7 +416,7 @@ export class FurnitureTearSheet extends CardDef {
   @field designerNotes = contains(MarkdownField);
   @field careinstructions = contains(MarkdownField);
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: FurnitureTearSheet) {
       const name = this.productName ?? 'Furniture Piece';
       const collection = this.collection ? ` - ${this.collection}` : '';
