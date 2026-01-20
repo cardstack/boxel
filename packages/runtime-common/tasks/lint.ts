@@ -63,6 +63,12 @@ async function lintFix({
 
   const baseRules: Linter.RulesRecord = {
     'no-undef': 'off',
+    'no-unused-vars': [
+      'error',
+      {
+        argsIgnorePattern: '^this$',
+      },
+    ],
     '@cardstack/boxel/template-missing-invokable': [
       'error',
       {
