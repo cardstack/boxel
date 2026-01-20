@@ -17,13 +17,8 @@ async function loadDocumentWithRequest(
   requestURL.searchParams.set('noCache', 'true');
   try {
     response = await fetch(requestURL.href, {
-      // there is a bunch of realm meta that is missing when we load a document
-      // in this manner (card-src/file-meta), hopefully that does not come back
-      // to bite us. loading a document in this manner is useful because it
-      // allows us to handle an index that is being built: where the document
-      // you are loading might not have been added to the index yet. this
-      // allows us to remove the visit() function when crawling the links of
-      // documents being indexed and not finding the document yet in the index.
+      // We bypass cache so callers see authoritative 404s from the server,
+      // which are handled the same way as card lookups.
       headers: {
         Accept: accept,
       },

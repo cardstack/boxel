@@ -64,6 +64,7 @@ import {
   type PrerenderedHtmlFormat,
   codeRefFromInternalKey,
   codeRefWithAbsoluteURL,
+  resolveFileDefCodeRef,
   userInitiatedPriority,
   systemInitiatedPriority,
   userIdFromUsername,
@@ -187,10 +188,6 @@ const CACHE_HIT_VALUE = 'hit';
 const CACHE_MISS_VALUE = 'miss';
 const MODULE_ETAG_VARIANT = 'module';
 const SOURCE_ETAG_VARIANT = 'source';
-const FILE_DEF_CODE_REF: ResolvedCodeRef = {
-  module: `${baseRealm.url}file-api`,
-  name: 'FileDef',
-};
 export const FILE_META_RESERVED_KEYS = new Set([
   'name',
   'url',
@@ -624,11 +621,7 @@ export class Realm {
         SupportedMimeType.CardJson,
         this.patchCardInstance.bind(this),
       )
-      .delete(
-        '/|/.+(?<!.json)',
-        SupportedMimeType.CardJson,
-        this.removeCard.bind(this),
-      )
+      .delete('/|/.+', SupportedMimeType.CardJson, this.removeCard.bind(this))
       .post(
         '/.*',
         SupportedMimeType.CardSource,
@@ -1453,16 +1446,6 @@ export class Realm {
       if (!isLocal) {
         await this.checkPermission(request, requestContext, requiredPermission);
       }
-      let acceptedMimeType = extractSupportedMimeType(
-        request.headers.get('Accept') as unknown as null | string | [string],
-      );
-      if (
-        acceptedMimeType === SupportedMimeType.CardJson &&
-        ['POST', 'PATCH', 'PUT', 'DELETE'].includes(request.method) &&
-        (await this.openFileForMetadata(localPath))
-      ) {
-        return methodNotAllowed(request, requestContext);
-      }
       if (!this.#realmIndexQueryEngine) {
         return systemError({
           requestContext,
@@ -2132,60 +2115,7 @@ export class Realm {
     if (!localPath || localPath.startsWith('_')) {
       return undefined;
     }
-    if (localPath.endsWith('.json')) {
-      return undefined;
-    }
     return this.#adapter.openFile(localPath);
-  }
-
-  private async fileMetaDocument(
-    requestContext: RequestContext,
-    localPath: LocalPath,
-    contentType: SupportedMimeType = SupportedMimeType.CardJson,
-  ): Promise<Response | undefined> {
-    let fileRef = await this.openFileForMetadata(localPath);
-    if (!fileRef) {
-      return undefined;
-    }
-    let fileURL = this.paths.fileURL(localPath).href;
-    let name = localPath.split('/').pop() ?? localPath;
-    let inferredContentType = inferContentType(name);
-    let createdAt = await this.getCreatedTime(localPath);
-    let realmInfo = await this.parseRealmInfo();
-    let contentHash =
-      (this.#dbAdapter
-        ? await getContentHash(this.#dbAdapter, this.url, localPath)
-        : undefined) ?? (await computeContentHashFromRef(fileRef));
-    let doc: SingleFileMetaDocument = {
-      data: {
-        type: 'file-meta',
-        id: fileURL,
-        attributes: {
-          name,
-          url: fileURL,
-          sourceUrl: fileURL,
-          contentType: inferredContentType,
-          contentHash,
-          lastModified: fileRef.lastModified,
-          createdAt: createdAt ?? fileRef.lastModified,
-        },
-        meta: {
-          adoptsFrom: FILE_DEF_CODE_REF,
-          realmInfo,
-          realmURL: this.url,
-        },
-        links: { self: fileURL },
-      },
-    };
-    return createResponse({
-      body: JSON.stringify(doc, null, 2),
-      init: {
-        headers: {
-          'content-type': contentType,
-        },
-      },
-      requestContext,
-    });
   }
 
   private async fileMetaDocumentFromIndex(
@@ -2209,7 +2139,7 @@ export class Realm {
       codeRefFromInternalKey(fileEntry.types?.[0]) ??
       (isCodeRef(fileEntry.resource?.meta?.adoptsFrom)
         ? fileEntry.resource?.meta?.adoptsFrom
-        : FILE_DEF_CODE_REF);
+        : resolveFileDefCodeRef(new URL(fileURL)));
     let resourceAttributes =
       (fileEntry as IndexedFile).resource?.attributes ?? {};
     let baseAttributes = {
@@ -2272,8 +2202,12 @@ export class Realm {
     if (localPath === '') {
       localPath = 'index';
     }
+    let queryOpts = this.#realmIndexUpdater.isIndexing
+      ? { useWorkInProgressIndex: true }
+      : undefined;
     let fileEntry = await this.#realmIndexQueryEngine.file(
       this.paths.fileURL(localPath),
+      queryOpts,
     );
     if (fileEntry) {
       return await this.fileMetaDocumentFromIndex(
@@ -2281,14 +2215,6 @@ export class Realm {
         localPath,
         fileEntry,
       );
-    }
-    let fileResponse = await this.fileMetaDocument(
-      requestContext,
-      localPath,
-      SupportedMimeType.FileMeta,
-    );
-    if (fileResponse) {
-      return fileResponse;
     }
     return notFound(request, requestContext);
   }

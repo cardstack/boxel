@@ -15,6 +15,7 @@ import { module, test } from 'qunit';
 
 import {
   isCardInstance,
+  isCardErrorJSONAPI,
   baseRealm,
   localId,
   baseCardRef,
@@ -38,6 +39,7 @@ import type { CardErrorJSONAPI } from '@cardstack/host/services/store';
 
 import type { CardDef as CardDefType } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
+import type { FileDef } from 'https://cardstack.com/base/file-api';
 import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
 
 import {
@@ -1177,6 +1179,35 @@ module('Integration | Store', function (hooks) {
       attachments[1]?.name,
       'second.png',
       'second attachment uses file meta name',
+    );
+  });
+
+  test('getFileMeta loads file meta for executable files', async function (assert) {
+    let fileMeta = await storeService.getFileMeta<FileDef>(
+      `${testRealmURL}person.gts`,
+    );
+    assert.false(
+      isCardErrorJSONAPI(fileMeta),
+      'file meta result is not an error',
+    );
+    assert.false(
+      isCardInstance(fileMeta),
+      'file meta result is not a card instance',
+    );
+    assert.strictEqual(
+      (fileMeta as any).id,
+      `${testRealmURL}person.gts`,
+      'file meta id is set',
+    );
+    assert.strictEqual(
+      (fileMeta as any).name,
+      'person.gts',
+      'file meta name is set',
+    );
+    assert.strictEqual(
+      (fileMeta as any).contentType,
+      'text/typescript+glimmer',
+      'file meta content type is inferred',
     );
   });
 

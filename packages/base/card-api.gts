@@ -1318,9 +1318,8 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
       format: Format | undefined,
       defaultFormat: Format,
       isComputed: boolean,
-      isFileDef: boolean,
     ) {
-      return (format ?? defaultFormat) === 'edit' && !isComputed && !isFileDef;
+      return (format ?? defaultFormat) === 'edit' && !isComputed;
     }
     function getChildFormat(
       format: Format | undefined,
@@ -1354,9 +1353,7 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
         <CardCrudFunctionsConsumer as |cardCrudFunctions|>
           <DefaultFormatsConsumer as |defaultFormats|>
             {{#if
-              (shouldRenderEditor
-                @format defaultFormats.cardDef isComputed isFileDef
-              )
+              (shouldRenderEditor @format defaultFormats.cardDef isComputed)
             }}
               <LinksToEditor
                 @model={{(getInnerModel)}}
@@ -2858,6 +2855,10 @@ function lazilyLoadLink(
       };
       if (isCardError(error) && error.deps?.length) {
         payloadError.deps = [...new Set(error.deps)];
+      }
+      if (isMissingFile) {
+        let missingDep = isFileLink ? reference : referenceForMissingFile;
+        payloadError.deps = [...new Set([...(payloadError.deps ?? []), missingDep])];
       }
       let payload = JSON.stringify({
         type: 'error',

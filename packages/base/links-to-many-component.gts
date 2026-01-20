@@ -482,9 +482,8 @@ function shouldRenderEditor(
   format: Format | undefined,
   defaultFormat: Format,
   isComputed: boolean,
-  isFileDef: boolean,
 ) {
-  return (format ?? defaultFormat) === 'edit' && !isComputed && !isFileDef;
+  return (format ?? defaultFormat) === 'edit' && !isComputed;
 }
 const componentCache = initSharedState(
   'linksToManyComponentCache',
@@ -519,11 +518,7 @@ export function getLinksToManyComponent({
   let linksToManyComponent = class LinksToManyComponent extends GlimmerComponent<BoxComponentSignature> {
     <template>
       <DefaultFormatsConsumer as |defaultFormats|>
-        {{#if
-          (shouldRenderEditor
-            @format defaultFormats.cardDef isComputed isFileDef
-          )
-        }}
+        {{#if (shouldRenderEditor @format defaultFormats.cardDef isComputed)}}
           <LinksToManyEditor
             @model={{model}}
             @arrayField={{arrayField}}

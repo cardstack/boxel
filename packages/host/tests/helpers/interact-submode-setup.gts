@@ -56,12 +56,12 @@ export function setupInteractSubmodeTests(
     let string: typeof import('https://cardstack.com/base/string');
     let spec: typeof import('https://cardstack.com/base/spec');
     let cardsGrid: typeof import('https://cardstack.com/base/cards-grid');
-    let fileApi: typeof import('https://cardstack.com/base/file-api');
+    let markdownFileDef: typeof import('https://cardstack.com/base/markdown-file-def');
     cardApi = await loader.import(`${baseRealm.url}card-api`);
     string = await loader.import(`${baseRealm.url}string`);
     spec = await loader.import(`${baseRealm.url}spec`);
     cardsGrid = await loader.import(`${baseRealm.url}cards-grid`);
-    fileApi = await loader.import(`${baseRealm.url}file-api`);
+    markdownFileDef = await loader.import(`${baseRealm.url}markdown-file-def`);
 
     let {
       field,
@@ -76,7 +76,7 @@ export function setupInteractSubmodeTests(
     let { default: StringField } = string;
     let { Spec } = spec;
     let { CardsGrid } = cardsGrid;
-    let { FileDef } = fileApi;
+    let { MarkdownDef } = markdownFileDef;
 
     class Pet extends CardDef {
       static displayName = 'Pet';
@@ -245,7 +245,7 @@ export function setupInteractSubmodeTests(
     class FileLinkCard extends CardDef {
       static displayName = 'File Link Card';
       @field title = contains(StringField);
-      @field attachment = linksTo(FileDef);
+      @field attachment = linksTo(MarkdownDef);
 
       static isolated = class Isolated extends Component<typeof this> {
         <template>
@@ -313,8 +313,8 @@ export function setupInteractSubmodeTests(
         'personnel.gts': { Personnel },
         'pet.gts': { Pet, Puppy },
         'shipping-info.gts': { ShippingInfo },
-        'README.txt': `Hello World`,
-        'FileLinkCard/notes.txt': 'Hello from a file link',
+        'README.md': `# Hello World`,
+        'FileLinkCard/notes.md': '# Hello from a file link',
         'person-entry.json': new Spec({
           cardTitle: 'Person Card',
           cardDescription: 'Spec for Person Card',
@@ -392,12 +392,34 @@ export function setupInteractSubmodeTests(
             relationships: {
               attachment: {
                 links: {
-                  self: './notes.txt',
+                  self: './notes.md',
                 },
                 data: {
                   type: 'file-meta',
-                  id: './notes.txt',
+                  id: `${testRealmURL}FileLinkCard/notes.md`,
                 },
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: '../file-link-card',
+                name: 'FileLinkCard',
+              },
+            },
+          },
+        },
+        'FileLinkCard/empty.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              title: 'Empty linked file',
+            },
+            relationships: {
+              attachment: {
+                links: {
+                  self: null,
+                },
+                data: null,
               },
             },
             meta: {
