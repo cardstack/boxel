@@ -55,7 +55,7 @@ const fullReindex: Task<FullReindexArgs, void> = ({
         };
       })
       .filter((realm): realm is RealmReindexTarget => realm !== null)
-      .filter((realm) => !realm.realmUsername.startsWith('@realm/'));
+      .filter((realm) => !realm.realmUsername.startsWith('realm/'));
 
     if (realmsWithUsernames.length === 0) {
       log.debug(
