@@ -74,6 +74,14 @@ export function removeFileExtension(fileURL: string | undefined) {
   return fileURL?.replace(/\.[^/.]+$/, '');
 }
 
+export function hasExtension(value: string) {
+  try {
+    return (new URL(value).pathname.split('/').pop() ?? '').includes('.');
+  } catch {
+    return value.includes('.');
+  }
+}
+
 type VisitInstanceURL = (
   instanceURL: string,
   setInstanceURL: (newURL: string) => void,

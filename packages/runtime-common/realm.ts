@@ -71,6 +71,7 @@ import {
   isBrowserTestEnv,
   type IndexedFile,
   PRERENDERED_HTML_FORMATS,
+  hasExtension,
 } from './index';
 import { isCodeRef, visitModuleDeps } from './code-ref';
 import merge from 'lodash/merge';
@@ -1974,15 +1975,25 @@ export class Realm {
 
     let start = Date.now();
     try {
-      let handle = await this.getFileWithFallbacks(localName, [
-        ...executableExtensions,
-        '.json',
-      ]);
+      let isNonExecutableFile =
+        hasExtension(localName) &&
+        !hasExecutableExtension(localName) &&
+        !localName.endsWith('.json');
+      let fallbackExtensions = isNonExecutableFile
+        ? []
+        : [...executableExtensions, '.json'];
+      let handle = await this.getFileWithFallbacks(
+        localName,
+        fallbackExtensions,
+      );
       if (!handle) {
         return notFound(request, requestContext, `${localName} not found`);
       }
 
       if (handle.path !== localName) {
+        if (isNonExecutableFile) {
+          return notFound(request, requestContext, `${localName} not found`);
+        }
         let headers = {
           Location: `${new URL(this.url).pathname}${handle.path}`,
           [CACHE_HEADER]: CACHE_MISS_VALUE,
