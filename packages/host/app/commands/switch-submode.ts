@@ -6,10 +6,11 @@ import { Submodes } from '../components/submode-switcher';
 
 import HostBaseCommand from '../lib/host-base-command';
 
-import type OperatorModeStateService from '../services/operator-mode-state-service';
-import type CardService from '../services/card-service';
-import type StoreService from '../services/store';
 import { findNonConflictingFilename } from '../utils/file-name';
+
+import type CardService from '../services/card-service';
+import type OperatorModeStateService from '../services/operator-mode-state-service';
+import type StoreService from '../services/store';
 
 export default class SwitchSubmodeCommand extends HostBaseCommand<
   typeof BaseCommandModule.SwitchSubmodeInput,
@@ -53,7 +54,7 @@ export default class SwitchSubmodeCommand extends HostBaseCommand<
       case Submodes.Interact:
         await this.operatorModeStateService.updateCodePath(null);
         break;
-      case Submodes.Code:
+      case Submodes.Code: {
         let codePath =
           input.codePath ??
           (this.lastCardInRightMostStack
@@ -95,6 +96,7 @@ export default class SwitchSubmodeCommand extends HostBaseCommand<
         }
         await this.operatorModeStateService.updateCodePath(finalCodeUrl);
         break;
+      }
       default:
         throw new Error(`invalid submode specified: ${input.submode}`);
     }

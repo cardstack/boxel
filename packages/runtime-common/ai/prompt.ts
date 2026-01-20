@@ -868,7 +868,8 @@ function getSwitchSubmodeInstruction(
   let parsed: { data?: any } | undefined;
   let cardContent = cardPayload.content ?? cardPayload;
   try {
-    parsed = typeof cardContent === 'string' ? JSON.parse(cardContent) : cardContent;
+    parsed =
+      typeof cardContent === 'string' ? JSON.parse(cardContent) : cardContent;
   } catch {
     return undefined;
   }

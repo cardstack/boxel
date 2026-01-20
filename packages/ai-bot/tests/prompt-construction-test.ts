@@ -2723,6 +2723,112 @@ Attached Files (files with newer versions don't show their content):
     assert.ok(alertTool, 'Should have AlertTheUser function available');
   });
 
+  test('switch-submode result appends a filename instruction to tool message', async function () {
+    const roomId = '!room:localhost';
+    const commandEventId = 'switch-submode-event';
+    const commandResultId = 'switch-submode-result';
+    const commandRequestId = 'switch-submode-cmd';
+    const requestedCodePath =
+      'http://localhost:4201/drafts/rock-paper-scissors.gts';
+    const finalCodePath =
+      'http://localhost:4201/drafts/rock-paper-scissors-1.gts';
+
+    const history: DiscreteMatrixEvent[] = [
+      {
+        type: 'm.room.message',
+        event_id: commandEventId,
+        room_id: roomId,
+        sender: '@aibot:localhost',
+        origin_server_ts: 1,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          body: 'Switch to code',
+          format: 'org.matrix.custom.html',
+          isStreamingFinished: true,
+          [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+            {
+              id: commandRequestId,
+              name: 'switch-submode_1234',
+              arguments: JSON.stringify({
+                description: 'Switch to code submode',
+                attributes: {
+                  submode: 'code',
+                  codePath: requestedCodePath,
+                  createFile: true,
+                },
+              }),
+            },
+          ],
+          data: {
+            context: {
+              tools: [],
+              functions: [],
+            },
+          },
+        },
+        unsigned: { age: 0, transaction_id: commandEventId },
+        status: EventStatus.SENT,
+      },
+      {
+        type: APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+        event_id: commandResultId,
+        room_id: roomId,
+        sender: '@command:localhost',
+        origin_server_ts: 2,
+        content: {
+          msgtype: APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
+          commandRequestId,
+          'm.relates_to': {
+            event_id: commandEventId,
+            key: 'applied',
+            rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+          },
+          data: {
+            card: {
+              sourceUrl: finalCodePath,
+              url: finalCodePath,
+              name: 'switch-submode-result.json',
+              contentType: 'application/json',
+              content: JSON.stringify({
+                data: {
+                  attributes: {
+                    codePath: finalCodePath,
+                    requestedCodePath,
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: 'https://cardstack.com/base/command',
+                      name: 'SwitchSubmodeResult',
+                    },
+                  },
+                },
+              }),
+            },
+          },
+        },
+        unsigned: { age: 0, transaction_id: commandResultId },
+        status: EventStatus.SENT,
+      },
+    ];
+
+    const result = await buildPromptForModel(
+      history,
+      '@aibot:localhost',
+      [],
+      [],
+      [],
+      fakeMatrixClient,
+    );
+    const toolMessages = result.filter((message) => message.role === 'tool');
+    assert.strictEqual(toolMessages.length, 1, 'should have one tool message');
+    assert.ok(
+      (toolMessages[0].content as string).includes(
+        `Use ${finalCodePath} for the SEARCH/REPLACE block since ${requestedCodePath} already exists.`,
+      ),
+      'tool message should include the filename instruction',
+    );
+  });
+
   test('Tools are not required unless they are in the last message', async () => {
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
