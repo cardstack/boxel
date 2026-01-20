@@ -11,14 +11,14 @@ import {
 
 import type {
   CardDef,
-  GetCardMenuItemParams,
+  GetMenuItemParams,
 } from 'https://cardstack.com/base/card-api';
 
 import { setupRenderingTest } from '../helpers/setup';
 
-let getDefaultCardMenuItems: (
+let getDefaultMenuItems: (
   card: CardDef,
-  params: GetCardMenuItemParams,
+  params: GetMenuItemParams,
 ) => MenuItemOptions[];
 
 class DummyCard {
@@ -28,7 +28,7 @@ class DummyCard {
   ) {}
 }
 
-module('Unit | card-menu-items', function (hooks) {
+module('Unit | menu-items', function (hooks) {
   setupRenderingTest(hooks);
 
   let loader: Loader;
@@ -36,8 +36,8 @@ module('Unit | card-menu-items', function (hooks) {
     loader = getService('loader-service').loader;
   });
   hooks.beforeEach(async function () {
-    let mod: any = await loader.import(`${baseRealm.url}card-menu-items`);
-    getDefaultCardMenuItems = mod.getDefaultCardMenuItems;
+    let mod: any = await loader.import(`${baseRealm.url}menu-items`);
+    getDefaultMenuItems = mod.getDefaultMenuItems;
   });
 
   test('interact context includes Copy Card URL and (when editable) New Card of This Type and Delete', function (assert: Assert) {
@@ -45,7 +45,7 @@ module('Unit | card-menu-items', function (hooks) {
       'https://example.com/realm/card-1',
       'One',
     ) as unknown as CardDef;
-    let items = getDefaultCardMenuItems(card, {
+    let items = getDefaultMenuItems(card, {
       canEdit: true,
       cardCrudFunctions: {},
       menuContext: 'interact',
@@ -66,7 +66,7 @@ module('Unit | card-menu-items', function (hooks) {
       'https://example.com/realm/card-2',
       'Two',
     ) as unknown as CardDef;
-    let items = getDefaultCardMenuItems(card, {
+    let items = getDefaultMenuItems(card, {
       canEdit: false,
       cardCrudFunctions: {},
       menuContext: 'ai-assistant',
@@ -89,7 +89,7 @@ module('Unit | card-menu-items', function (hooks) {
       'https://example.com/realm/card-2',
       'Two',
     ) as unknown as CardDef;
-    let items = getDefaultCardMenuItems(card, {
+    let items = getDefaultMenuItems(card, {
       canEdit: false,
       cardCrudFunctions: {},
       menuContext: 'ai-assistant',
@@ -112,7 +112,7 @@ module('Unit | card-menu-items', function (hooks) {
       'https://example.com/realm/card-3',
       'Three',
     ) as unknown as CardDef;
-    let items = getDefaultCardMenuItems(card, {
+    let items = getDefaultMenuItems(card, {
       canEdit: true,
       cardCrudFunctions: {},
       menuContext: 'code-mode-playground',
@@ -139,7 +139,7 @@ module('Unit | card-menu-items', function (hooks) {
       'https://example.com/realm/card-4',
       'Four',
     ) as unknown as CardDef;
-    let items = getDefaultCardMenuItems(card, {
+    let items = getDefaultMenuItems(card, {
       canEdit: true,
       cardCrudFunctions: {},
       menuContext: 'code-mode-preview',

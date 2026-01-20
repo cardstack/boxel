@@ -44,16 +44,16 @@ type MenuContext =
       };
     };
 
-export type GetCardMenuItemParams = {
+export type GetMenuItemParams = {
   canEdit: boolean;
   cardCrudFunctions: Partial<CardCrudFunctions>;
   commandContext: CommandContext;
   format?: Format;
 } & MenuContext;
 
-export function getDefaultCardMenuItems(
+export function getDefaultMenuItems(
   card: CardDef,
-  params: GetCardMenuItemParams,
+  params: GetMenuItemParams,
 ): MenuItemOptions[] {
   let cardId = card.id as unknown as string;
   let menuItems: MenuItemOptions[] = [];
@@ -102,7 +102,6 @@ export function getDefaultCardMenuItems(
         },
       );
     }
-
   }
   if (
     params.menuContext === 'ai-assistant' &&
@@ -170,7 +169,7 @@ export function getDefaultCardMenuItems(
 
 function getSampleDataMenuItems(
   card: CardDef,
-  { commandContext }: Pick<GetCardMenuItemParams, 'commandContext'>,
+  { commandContext }: Pick<GetMenuItemParams, 'commandContext'>,
 ): MenuItemOptions[] {
   let cardId = card.id as unknown as string;
   let menuItems: MenuItemOptions[] = [];

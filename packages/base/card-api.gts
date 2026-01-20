@@ -27,7 +27,7 @@ import {
   fieldsUntracked,
   formats,
   getAncestor,
-  getCardMenuItems,
+  getMenuItems,
   getField,
   getSerializer,
   humanReadable,
@@ -143,10 +143,7 @@ import {
   setRealmContextOnField,
   type NotLoadedValue,
 } from './field-support';
-import {
-  type GetCardMenuItemParams,
-  getDefaultCardMenuItems,
-} from './card-menu-items';
+import { type GetMenuItemParams, getDefaultMenuItems } from './menu-items';
 import {
   LinkableDocument,
   SingleFileMetaDocument,
@@ -182,7 +179,7 @@ export {
   getStore,
   type BoxComponent,
   type DeserializeOpts,
-  type GetCardMenuItemParams,
+  type GetMenuItemParams,
   type JSONAPISingleResourceDocument,
   type ResourceID,
   type SerializeOpts,
@@ -2521,8 +2518,8 @@ export class CardDef extends BaseDef {
     return realmURLString ? new URL(realmURLString) : undefined;
   }
 
-  [getCardMenuItems](params: GetCardMenuItemParams): MenuItemOptions[] {
-    return getDefaultCardMenuItems(this, params);
+  [getMenuItems](params: GetMenuItemParams): MenuItemOptions[] {
+    return getDefaultMenuItems(this, params);
   }
 }
 
@@ -2543,8 +2540,8 @@ export class Theme extends CardDef {
       'CSS links (e.g. Google Fonts) imported via the CardContainer.',
   });
 
-  [getCardMenuItems](params: GetCardMenuItemParams): MenuItemOptions[] {
-    let menuItems = super[getCardMenuItems](params);
+  [getMenuItems](params: GetMenuItemParams): MenuItemOptions[] {
+    let menuItems = super[getMenuItems](params);
     if (params.menuContext === 'interact' && params.commandContext && this.id) {
       menuItems = [
         ...menuItems,

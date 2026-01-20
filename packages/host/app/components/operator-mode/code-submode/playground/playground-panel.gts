@@ -24,7 +24,7 @@ import { Folder, IconPlusThin } from '@cardstack/boxel-ui/icons';
 import {
   CardContextName,
   cardTypeDisplayName,
-  getCardMenuItems,
+  getMenuItems,
   isSpecCard,
   type Permissions,
   PermissionsContextName,
@@ -177,7 +177,7 @@ export default class PlaygroundPanel extends Component<Signature> {
       return [];
     }
     return toMenuItems(
-      this.card?.[getCardMenuItems]?.({
+      this.card?.[getMenuItems]?.({
         canEdit: this.canEditCard,
         cardCrudFunctions: {},
         menuContext: 'code-mode-playground',

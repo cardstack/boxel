@@ -24,7 +24,7 @@ import {
   BasicFitted,
 } from '@cardstack/boxel-ui/components';
 import {
-  getCardMenuItems,
+  getMenuItems,
   codeRefWithAbsoluteURL,
   ensureExtension,
   isPrimitive,
@@ -56,7 +56,7 @@ import { TrackedObject } from 'tracked-built-ins';
 import GenerateReadmeSpecCommand from '@cardstack/boxel-host/commands/generate-readme-spec';
 import PopulateWithSampleDataCommand from '@cardstack/boxel-host/commands/populate-with-sample-data';
 import GenerateExampleCardsCommand from '@cardstack/boxel-host/commands/generate-example-cards';
-import { type GetCardMenuItemParams } from './card-menu-items';
+import { type GetMenuItemParams } from './card-items';
 
 export type SpecType = 'card' | 'field' | 'component' | 'app' | 'command';
 
@@ -896,8 +896,8 @@ export class Spec extends CardDef {
   @field cardTitle = contains(SpecTitleField);
   @field cardDescription = contains(SpecDescriptionField);
 
-  [getCardMenuItems](params: GetCardMenuItemParams): MenuItemOptions[] {
-    let menuItems = super[getCardMenuItems](params);
+  [getMenuItems](params: GetMenuItemParams): MenuItemOptions[] {
+    let menuItems = super[getMenuItems](params);
     if (this.specType !== 'field') {
       return menuItems;
     }
