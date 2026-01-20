@@ -18,3 +18,7 @@ The following are important concepts:
 - [Indexing](indexing.md): Indexing powers the re-rendering of cards when it's dependencies get updated.
 - [Realm](realm.md): Realms are storage for cards that have their own underlying permissions and indexer.
 - [Search](search.md): Every Card is searchable within and across realms.
+
+## Operations
+
+- From-scratch indexing timeout: set `FROM_SCRATCH_JOB_TIMEOUT_SEC` (seconds) to control the from-scratch indexing job timeout and the queue worker cap; default is 2400.

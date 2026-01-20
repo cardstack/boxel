@@ -10,7 +10,18 @@ import { IndexRunner } from '../index-runner';
 import type { Stats } from '../worker';
 
 export { fromScratchIndex, incrementalIndex };
-export const FROM_SCRATCH_JOB_TIMEOUT_SEC = 20 * 60;
+const DEFAULT_FROM_SCRATCH_JOB_TIMEOUT_SEC = 40 * 60;
+const envTimeoutSec = Number(
+  (
+    globalThis as {
+      process?: { env?: Record<string, string | undefined> };
+    }
+  ).process?.env?.FROM_SCRATCH_JOB_TIMEOUT_SEC,
+);
+export const FROM_SCRATCH_JOB_TIMEOUT_SEC =
+  Number.isFinite(envTimeoutSec) && envTimeoutSec > 0
+    ? envTimeoutSec
+    : DEFAULT_FROM_SCRATCH_JOB_TIMEOUT_SEC;
 
 export interface IncrementalArgs extends WorkerArgs {
   urls: string[];
