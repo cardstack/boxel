@@ -710,6 +710,9 @@ export async function captureResult(
             undefined,
         } as RenderCapture;
       } else {
+        let useContainerCapture =
+          capture !== 'textContent' &&
+          (globalThis as any).__boxelRenderMode === 'serialize';
         const firstChild = resolvedElement.children[0] as
           | (HTMLElement & {
               textContent: string;
@@ -731,6 +734,15 @@ export async function captureResult(
                 additionalErrors: null,
               },
             }),
+            alive,
+            id: resolvedElement.dataset.prerenderId ?? undefined,
+            nonce: resolvedElement.dataset.prerenderNonce ?? undefined,
+          } as RenderCapture;
+        }
+        if (useContainerCapture) {
+          return {
+            status: finalStatus,
+            value: resolvedElement.innerHTML,
             alive,
             id: resolvedElement.dataset.prerenderId ?? undefined,
             nonce: resolvedElement.dataset.prerenderNonce ?? undefined,

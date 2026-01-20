@@ -54,6 +54,7 @@ export class RenderRunner {
   }
 
   async #getPageForRealm(realm: string, auth: string) {
+    // debugger;
     let pageInfo = await this.#pagePool.getPage(realm);
     let lastAuth = this.#lastAuthByRealm.get(realm);
     if (pageInfo.reused && lastAuth) {
@@ -112,6 +113,10 @@ export class RenderRunner {
     this.#nonce++;
     log.info(`prerendering url ${url}, nonce=${this.#nonce} realm=${realm}`);
 
+    if (url.includes('ramped')) {
+      // debugger;
+    }
+
     const { page, reused, launchMs, pageId } = await this.#getPageForRealm(
       realm,
       auth,
@@ -163,6 +168,26 @@ export class RenderRunner {
           'isolated',
           '0',
         );
+
+        let debug = await page.evaluate(() => {
+          let mode = (globalThis as any).__boxelRenderMode;
+          let hasMarkers = false;
+          let openBlocks = 0;
+          let walker = document.createTreeWalker(
+            document.body,
+            NodeFilter.SHOW_COMMENT,
+          );
+          while (walker.nextNode()) {
+            let val = walker.currentNode.nodeValue ?? '';
+            if (val.startsWith('%+b:')) {
+              openBlocks++;
+              hasMarkers = true;
+            }
+          }
+          return { mode, hasMarkers, openBlocks };
+        });
+        log.info('prerender markers', debug);
+
         return await captureResult(page, 'innerHTML', captureOptions);
       },
       opts?.timeoutMs,

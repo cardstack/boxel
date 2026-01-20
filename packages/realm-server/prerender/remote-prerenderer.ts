@@ -130,7 +130,7 @@ export function createRemotePrerenderer(
         if (e?.name === 'AbortError') {
           // AbortError from request timeout—consider this a hard timeout, not a retryable deployment blip.
           throw new Error(
-            `Prerender request to ${endpoint.href} aborted after ${requestTimeoutMs}ms`,
+            `${new Date()} Prerender request to ${endpoint.href} aborted after ${requestTimeoutMs}ms`,
           );
         }
         let retryable =

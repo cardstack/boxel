@@ -10,19 +10,19 @@ let hasPatchedBootSync = false;
 export function initialize(): void {
   let log = (message: string) => console.log(`[rehydrate:init] ${message}`);
 
-  let fastbootBodyStart = document?.getElementById('fastboot-body-start');
+  // let fastbootBodyStart = document?.getElementById('fastboot-body-start');
 
-  if (fastbootBodyStart) {
-    log('Found body start, removing');
-    fastbootBodyStart.parentNode?.removeChild(fastbootBodyStart);
-  }
+  // if (fastbootBodyStart) {
+  //   log('Found body start, removing');
+  //   fastbootBodyStart.parentNode?.removeChild(fastbootBodyStart);
+  // }
 
-  let fastbootBodyEnd = document?.getElementById('fastboot-body-end');
+  // let fastbootBodyEnd = document?.getElementById('fastboot-body-end');
 
-  if (fastbootBodyEnd) {
-    log('Found body end, removing');
-    fastbootBodyEnd.parentNode?.removeChild(fastbootBodyEnd);
-  }
+  // if (fastbootBodyEnd) {
+  //   log('Found body end, removing');
+  //   fastbootBodyEnd.parentNode?.removeChild(fastbootBodyEnd);
+  // }
 
   return;
 

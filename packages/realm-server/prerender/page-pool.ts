@@ -282,12 +282,37 @@ export class PagePool {
       let browser = await this.#browserManager.getBrowser();
       context = await browser.createBrowserContext();
       let page = await context.newPage();
-      await page.evaluateOnNewDocument((mode) => {
-        // @ts-expect-error hmm
-        globalThis.__boxelRenderMode = mode;
-      }, 'serialize');
+
+      page.on('pageerror', (err) => log.error(`pageerror ${pageId}:`, err));
+      page.on('error', (err) => log.error(`error ${pageId}:`, err));
+      page.on('requestfailed', (req) =>
+        log.warn(
+          `requestfailed ${pageId}: ${req.url()} ${req.failure()?.errorText}`,
+        ),
+      );
+      page.on('response', (res) => {
+        if (res.status() >= 400) {
+          log.warn(`response ${pageId}: ${res.status()} ${res.url()}`);
+        }
+      });
+
       let pageId = uuidv4();
       this.#attachPageConsole(page, 'standby', pageId);
+      log.debug(`Created standby page ${pageId}`);
+      log.debug('About to add script for new document');
+
+      // await page.evaluateOnNewDocument(
+      //   `globalThis.__boxelRenderMode = 'serialize';`,
+      // );
+      await page.evaluateOnNewDocument(`console.log('hello from whatever');`);
+      await page.evaluateOnNewDocument(`console.error('hey an error');`);
+      console.log('sending globalThis thing');
+      await page.evaluateOnNewDocument(`console.log(globalThis);`);
+      await page.evaluateOnNewDocument(
+        'window.__boxelRenderMode = "serialize";',
+      );
+      console.log('done');
+
       await this.#loadStandbyPage(page, pageId);
       let entry: StandbyEntry = {
         type: 'standby',
