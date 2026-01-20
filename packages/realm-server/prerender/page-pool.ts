@@ -375,6 +375,7 @@ export class PagePool {
       await page.evaluateOnNewDocument(`console.error('hey an error');`);
       console.log('sending globalThis thing');
       await page.evaluateOnNewDocument(`console.log(globalThis);`);
+      // FIXME can this be globalThis indeed?
       await page.evaluateOnNewDocument(
         'window.__boxelRenderMode = "serialize";',
       );
