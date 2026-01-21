@@ -150,6 +150,14 @@ const newSkillCardSource = `
   }
 `;
 
+const specCardSource = `
+  import { Spec } from 'https://cardstack.com/base/spec';
+
+  export class TestSpec extends Spec {
+    static displayName = 'TestSpec';
+  }
+`;
+
 const primitiveFieldCardSource = `
   import {
     field,
@@ -303,6 +311,7 @@ module('Acceptance | Spec preview', function (hooks) {
         'pet.gts': petCardSource,
         'employee.gts': employeeCardSource,
         'new-skill.gts': newSkillCardSource,
+        'test-spec.gts': specCardSource,
         'quote-field.gts': quoteFieldCardSource,
         'primitive-field.gts': primitiveFieldCardSource,
         'polymorphic-field.gts': polymorphicFieldCardSource,
@@ -728,6 +737,21 @@ module('Acceptance | Spec preview', function (hooks) {
     await click('[data-test-module-inspector-view="spec"]');
     assert.dom('[data-test-create-spec-intent-message]').exists();
     await percySnapshot(assert);
+  });
+  test('shows cannot create spec message for subclasses of spec ', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}test-spec.gts`,
+    });
+    await click('[data-test-module-inspector-view="spec"]');
+    assert.dom('[data-test-create-spec-button]').doesNotExist();
+    assert.dom('[data-test-create-spec-intent-message]').doesNotExist();
+    assert.dom('[data-test-cannot-write-intent-message]').doesNotExist();
+    assert
+      .dom('[data-test-spec-error-message]')
+      .hasText(
+        'This is a card definition for a  Spec Card. Cannot create or display spec instances for this card type.',
+      );
   });
   test('spec updates when different declaration selected in the module', async function (assert) {
     await visitOperatorMode({

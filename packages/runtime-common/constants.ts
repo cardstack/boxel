@@ -29,11 +29,12 @@ export const skillCardRef: ResolvedCodeRef = {
 };
 
 export const isField = Symbol('cardstack-field');
+export const isSpec = Symbol('is-spec');
 export const primitive = Symbol('cardstack-primitive');
 export const fields = Symbol.for('cardstack-fields');
 export const fieldSerializer = Symbol.for('cardstack-field-serializer');
 export const fieldsUntracked = Symbol.for('cardstack-fields-untracked');
-export const getCardMenuItems = Symbol.for('cardstack-get-card-menu-items');
+export const getMenuItems = Symbol.for('cardstack-get-menu-items');
 export const isBaseInstance = Symbol.for('isBaseInstance');
 export const localId = Symbol.for('cardstack-local-id');
 export const meta = Symbol.for('cardstack-meta');
