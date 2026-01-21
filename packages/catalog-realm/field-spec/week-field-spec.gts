@@ -246,7 +246,6 @@ class WeekFieldSpecEdit extends Component<typeof WeekFieldSpec> {
       </SpecReadmeSection>
 
       <ExamplesWithInteractive>
-
         <article class='fields-configuration-card'>
           <CodeSnippet @code={{standardFieldCode}} />
           <@fields.standard @format='edit' />

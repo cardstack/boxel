@@ -318,7 +318,6 @@ class NumberFieldSpecEdit extends Component<typeof NumberFieldSpec> {
       </SpecReadmeSection>
 
       <ExamplesWithInteractive>
-
         <article class='fields-configuration-card'>
           <CodeSnippet @code={{standardFieldCode}} />
           <@fields.standard @format='edit' />

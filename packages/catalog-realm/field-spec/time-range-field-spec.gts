@@ -246,7 +246,6 @@ class TimeRangeFieldSpecEdit extends Component<typeof TimeRangeFieldSpec> {
       </SpecReadmeSection>
 
       <ExamplesWithInteractive>
-
         <article class='fields-configuration-card'>
           <CodeSnippet @code={{standardFieldCode}} />
           <@fields.standard @format='edit' />

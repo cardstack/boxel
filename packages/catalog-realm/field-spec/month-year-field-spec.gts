@@ -246,7 +246,6 @@ class MonthYearFieldSpecEdit extends Component<typeof MonthYearFieldSpec> {
       </SpecReadmeSection>
 
       <ExamplesWithInteractive>
-
         <article class='fields-configuration-card'>
           <CodeSnippet @code={{standardFieldCode}} />
           <@fields.standard @format='edit' />

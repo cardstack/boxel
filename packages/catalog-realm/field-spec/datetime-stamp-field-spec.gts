@@ -250,7 +250,6 @@ class DatetimeStampFieldSpecEdit extends Component<
       </SpecReadmeSection>
 
       <ExamplesWithInteractive>
-
         <article class='fields-configuration-card'>
           <CodeSnippet @code={{standardFieldCode}} />
           <@fields.standard @format='edit' />

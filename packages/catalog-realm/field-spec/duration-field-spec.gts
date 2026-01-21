@@ -282,7 +282,6 @@ class DurationFieldSpecEdit extends Component<typeof DurationFieldSpec> {
       </SpecReadmeSection>
 
       <ExamplesWithInteractive>
-
         <article class='fields-configuration-card'>
           <CodeSnippet @code={{standardFieldCode}} />
           <@fields.standard @format='edit' />

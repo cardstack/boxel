@@ -266,7 +266,6 @@ class DatetimeFieldSpecEdit extends Component<typeof DatetimeFieldSpec> {
       </SpecReadmeSection>
 
       <ExamplesWithInteractive>
-
         <article class='fields-configuration-card'>
           <CodeSnippet @code={{standardFieldCode}} />
           <@fields.standard @format='edit' />

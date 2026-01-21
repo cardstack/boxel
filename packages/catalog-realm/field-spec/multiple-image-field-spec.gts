@@ -286,7 +286,6 @@ class MultipleImageFieldSpecEdit extends Component<
       </SpecReadmeSection>
 
       <ExamplesWithInteractive>
-
         <article class='fields-configuration-card'>
           <CodeSnippet @code={{listFieldCode}} />
           <@fields.list @format='edit' />

@@ -248,7 +248,6 @@ class TimePeriodFieldSpecEdit extends Component<typeof TimePeriodFieldSpec> {
       </SpecReadmeSection>
 
       <ExamplesWithInteractive>
-
         <article class='fields-configuration-card'>
           <CodeSnippet @code={{standardFieldCode}} />
           <@fields.standard @format='edit' />

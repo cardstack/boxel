@@ -246,7 +246,6 @@ class DateRangeFieldSpecEdit extends Component<typeof DateRangeFieldSpec> {
       </SpecReadmeSection>
 
       <ExamplesWithInteractive>
-
         <article class='fields-configuration-card'>
           <CodeSnippet @code={{standardFieldCode}} />
           <@fields.standard @format='edit' />

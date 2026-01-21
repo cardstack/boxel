@@ -277,7 +277,6 @@ class ImageFieldSpecEdit extends Component<typeof ImageFieldSpec> {
       </SpecReadmeSection>
 
       <ExamplesWithInteractive>
-
         <article class='fields-configuration-card'>
           <CodeSnippet @code={{browseFieldCode}} />
           <@fields.browse @format='edit' />

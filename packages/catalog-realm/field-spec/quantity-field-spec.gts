@@ -246,7 +246,6 @@ class QuantityFieldSpecEdit extends Component<typeof QuantityFieldSpec> {
       </SpecReadmeSection>
 
       <ExamplesWithInteractive>
-
         <article class='fields-configuration-card'>
           <CodeSnippet @code={{standardFieldCode}} />
           <@fields.standard @format='edit' />
