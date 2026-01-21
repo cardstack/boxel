@@ -49,7 +49,7 @@ const PUBLISHED_REALM_DOMAIN_OVERRIDES: Record<
   '@bucktest:boxel.ai': {
     'custombuck.boxel.site': 'custombuck.boxel.ai',
   },
-  '@chris:boxel.ai': {
+  '@official:boxel.ai': {
     'docs.boxel.site': 'docs.boxel.ai',
     'home.boxel.site': 'home.boxel.ai',
     'whitepaper.boxel.site': 'whitepaper.boxel.ai',
