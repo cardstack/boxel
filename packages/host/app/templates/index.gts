@@ -30,8 +30,6 @@ import PrerenderedCardSearch from '@cardstack/host/components/prerendered-card-s
 
 import config from '@cardstack/host/config/environment';
 
-import type IndexController from '@cardstack/host/controllers/index';
-
 import { getCardCollection } from '@cardstack/host/resources/card-collection';
 import { getCard } from '@cardstack/host/resources/card-resource';
 
@@ -49,6 +47,7 @@ import type {
 
 import type HostModeService from '../services/host-mode-service';
 import type OperatorModeStateService from '../services/operator-mode-state-service';
+import IndexController from '../controllers';
 
 export interface IndexComponentComponentSignature {
   Args: {
@@ -222,7 +221,7 @@ export class IndexComponent extends Component<IndexComponentComponentSignature> 
       {{pageTitle this.title}}
 
       {{#if this.isError}}
-        <div data-test-error='not-found'>
+        <div data-test-error='not-found' class='not-found'>
           Card not found:
           {{@model.id}}
         </div>
@@ -242,11 +241,15 @@ export class IndexComponent extends Component<IndexComponentComponentSignature> 
     {{/if}}
 
     <style scoped>
-      .host-mode-content {
+      .host-mode-content,
+      .not-found {
         height: 100%;
         position: fixed;
         top: 0;
         left: 0;
+      }
+      .not-found {
+        z-index: 1;
       }
     </style>
   </template>
