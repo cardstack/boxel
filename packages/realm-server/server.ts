@@ -374,6 +374,7 @@ export class RealmServer {
 
       if (isolatedHTML != null) {
         responseHTML = this.injectIsolatedHTML(responseHTML, isolatedHTML);
+        responseHTML = this.injectRenderModeScript(responseHTML);
       }
 
       ctxt.body = responseHTML;
@@ -579,6 +580,18 @@ export class RealmServer {
       /(<script[^>]+id="fastboot-body-start"[^>]*>\s*<\/script>)([\s\S]*?)(<script[^>]+id="fastboot-body-end"[^>]*>\s*<\/script>)/,
       `$1\n${isolatedHTML}\n$3`,
     );
+  }
+
+  private injectRenderModeScript(indexHTML: string): string {
+    let script = `<script>globalThis.__boxelRenderMode = 'rehydrate';</script>`;
+    let updated = indexHTML.replace(
+      /(<meta[^>]+data-boxel-head-end[^>]*>)/,
+      `$1\n${script}`,
+    );
+    if (updated === indexHTML) {
+      return indexHTML.replace(/<\/head>/i, `${script}\n</head>`);
+    }
+    return updated;
   }
 
   private serveFromRealm = async (ctxt: Koa.Context, _next: Koa.Next) => {
