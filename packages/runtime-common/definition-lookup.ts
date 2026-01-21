@@ -1,4 +1,14 @@
 import type { DBAdapter, TypeCoercion } from './db';
+import {
+  addExplicitParens,
+  any,
+  dbExpression,
+  every,
+  param,
+  query,
+  separatedByCommas,
+  type Expression,
+} from './expression';
 import type { SerializedError } from './error';
 import {
   fetchUserPermissions,
@@ -132,6 +142,10 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     return await this.lookupDefinitionWithContext(codeRef);
   }
 
+  private async query(expression: Expression, coerceTypes?: TypeCoercion) {
+    return await query(this.#dbAdapter, expression, coerceTypes);
+  }
+
   private async lookupDefinitionWithContext(
     codeRef: ResolvedCodeRef,
     contextOpts?: LookupContext,
@@ -226,10 +240,12 @@ export class CachingDefinitionLookup implements DefinitionLookup {
   }
 
   async clearRealmCache(realmURL: string): Promise<void> {
-    await this.#dbAdapter.execute(
-      `DELETE FROM ${MODULES_TABLE} WHERE resolved_realm_url = $1`,
-      { bind: [realmURL] },
-    );
+    await this.query([
+      'DELETE FROM',
+      MODULES_TABLE,
+      'WHERE',
+      ...(every([['resolved_realm_url =', param(realmURL)]]) as Expression),
+    ]);
   }
 
   registerRealm(realm: LocalRealm): void {
@@ -358,23 +374,23 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     resolvedRealmURL: string,
   ): Promise<ModuleCacheEntry | undefined> {
     let moduleAlias = normalizeExecutableURL(moduleUrl);
-    let rows = (await this.#dbAdapter.execute(
-      `SELECT definitions, deps, error_doc, cache_scope, auth_user_id, resolved_realm_url
-       FROM ${MODULES_TABLE}
-       WHERE resolved_realm_url = $1
-         AND cache_scope = $2
-         AND auth_user_id = $3
-         AND (url = $4 OR file_alias = $5)`,
-      {
-        bind: [
-          resolvedRealmURL,
-          cacheScope,
-          authUserId,
-          moduleUrl,
-          moduleAlias,
-        ],
-        coerceTypes: modulesTableCoerceTypes,
-      },
+    let rows = (await this.query(
+      [
+        'SELECT definitions, deps, error_doc, cache_scope, auth_user_id, resolved_realm_url',
+        'FROM',
+        MODULES_TABLE,
+        'WHERE',
+        ...(every([
+          ['resolved_realm_url =', param(resolvedRealmURL)],
+          ['cache_scope =', param(cacheScope)],
+          ['auth_user_id =', param(authUserId)],
+          any([
+            ['url =', param(moduleUrl)],
+            ['file_alias =', param(moduleAlias)],
+          ]) as Expression,
+        ]) as Expression),
+      ],
+      modulesTableCoerceTypes,
     )) as {
       definitions: Record<string, ModuleDefinitionResult | ErrorEntry> | null;
       deps: string[] | null;
@@ -409,30 +425,46 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     cacheScope,
     authUserId,
   }: WriteToDatabaseCacheParams): Promise<void> {
-    await this.#dbAdapter.execute(
-      `INSERT INTO ${MODULES_TABLE} (url, file_alias, definitions, deps, error_doc, created_at, resolved_realm_url, cache_scope, auth_user_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-       ON CONFLICT (url, cache_scope, auth_user_id) DO UPDATE SET
-         file_alias = excluded.file_alias,
-         definitions = excluded.definitions,
-         deps = excluded.deps,
-         error_doc = excluded.error_doc,
-         created_at = excluded.created_at,
-         resolved_realm_url = excluded.resolved_realm_url`,
-      {
-        bind: [
-          moduleUrl,
-          moduleAlias,
-          JSON.stringify(definitions ?? {}),
-          JSON.stringify(deps ?? []),
-          errorDoc ? JSON.stringify(errorDoc) : null,
-          Date.now(),
-          resolvedRealmURL,
-          cacheScope,
-          authUserId,
-        ],
-      },
-    );
+    await this.query([
+      'INSERT INTO',
+      MODULES_TABLE,
+      ...(addExplicitParens(
+        separatedByCommas([
+          ['url'],
+          ['file_alias'],
+          ['definitions'],
+          ['deps'],
+          ['error_doc'],
+          ['created_at'],
+          ['resolved_realm_url'],
+          ['cache_scope'],
+          ['auth_user_id'],
+        ]),
+      ) as Expression),
+      'VALUES',
+      ...(addExplicitParens(
+        separatedByCommas([
+          [param(moduleUrl)],
+          [param(moduleAlias)],
+          [param(JSON.stringify(definitions ?? {}))],
+          [param(JSON.stringify(deps ?? []))],
+          [param(errorDoc ? JSON.stringify(errorDoc) : null)],
+          [param(Date.now())],
+          [param(resolvedRealmURL)],
+          [param(cacheScope)],
+          [param(authUserId)],
+        ]),
+      ) as Expression),
+      'ON CONFLICT (url, cache_scope, auth_user_id) DO UPDATE SET',
+      ...(separatedByCommas([
+        ['file_alias = excluded.file_alias'],
+        ['definitions = excluded.definitions'],
+        ['deps = excluded.deps'],
+        ['error_doc = excluded.error_doc'],
+        ['created_at = excluded.created_at'],
+        ['resolved_realm_url = excluded.resolved_realm_url'],
+      ]) as Expression),
+    ]);
   }
 
   private async populateCache(
@@ -543,18 +575,26 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     if (deps.length === 0) {
       return [];
     }
-    let placeholders = deps.map((_, index) => `$${index + 4}`).join(', ');
-    let rows = (await this.#dbAdapter.execute(
-      `SELECT error_doc
-       FROM ${MODULES_TABLE}
-       WHERE resolved_realm_url = $1
-         AND cache_scope = $2
-         AND auth_user_id = $3
-         AND (url IN (${placeholders}) OR file_alias IN (${placeholders}))`,
-      {
-        bind: [resolvedRealmURL, cacheScope, authUserId, ...deps],
-        coerceTypes: modulesTableCoerceTypes,
-      },
+    let depList = addExplicitParens(
+      separatedByCommas(deps.map((dep) => [param(dep)])),
+    ) as Expression;
+    let rows = (await this.query(
+      [
+        'SELECT error_doc',
+        'FROM',
+        MODULES_TABLE,
+        'WHERE',
+        ...(every([
+          ['resolved_realm_url =', param(resolvedRealmURL)],
+          ['cache_scope =', param(cacheScope)],
+          ['auth_user_id =', param(authUserId)],
+          any([
+            ['url IN', ...depList],
+            ['file_alias IN', ...depList],
+          ]) as Expression,
+        ]) as Expression),
+      ],
+      modulesTableCoerceTypes,
     )) as { error_doc: ErrorEntry | null }[];
 
     let errors: SerializedError[] = [];
@@ -707,16 +747,22 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     if (!moduleAlias) {
       return [];
     }
-    let rows = (await this.#dbAdapter.execute(
-      `SELECT DISTINCT url, file_alias
-       FROM ${MODULES_TABLE}
-       CROSS JOIN LATERAL jsonb_array_elements_text(
-         COALESCE(deps, '[]'::jsonb)
-       ) AS dep
-       WHERE resolved_realm_url = $1
-         AND dep = $2`,
-      { bind: [resolvedRealmURL, moduleAlias] },
-    )) as { url: string; file_alias: string | null }[];
+    let rows = (await this.query([
+      'SELECT DISTINCT url, file_alias',
+      'FROM',
+      MODULES_TABLE,
+      dbExpression({
+        pg: `CROSS JOIN LATERAL jsonb_array_elements_text(
+               COALESCE(deps, '[]'::jsonb)
+             ) AS dep(value)`,
+        sqlite: `CROSS JOIN json_each(COALESCE(deps, '[]')) AS dep`,
+      }),
+      'WHERE',
+      ...(every([
+        ['resolved_realm_url =', param(resolvedRealmURL)],
+        ['dep.value =', param(moduleAlias)],
+      ]) as Expression),
+    ])) as { url: string; file_alias: string | null }[];
 
     return rows.map((row) => ({
       url: row.url,
@@ -763,17 +809,21 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     if (moduleAliases.length === 0) {
       return;
     }
-    let placeholders = moduleAliases
-      .map((_, index) => `$${index + 2}`)
-      .join(', ');
-    await this.#dbAdapter.execute(
-      `DELETE FROM ${MODULES_TABLE}
-       WHERE resolved_realm_url = $1
-         AND (url IN (${placeholders}) OR file_alias IN (${placeholders}))`,
-      {
-        bind: [resolvedRealmURL, ...moduleAliases],
-      },
-    );
+    let aliasList = addExplicitParens(
+      separatedByCommas(moduleAliases.map((alias) => [param(alias)])),
+    ) as Expression;
+    await this.query([
+      'DELETE FROM',
+      MODULES_TABLE,
+      'WHERE',
+      ...(every([
+        ['resolved_realm_url =', param(resolvedRealmURL)],
+        any([
+          ['url IN', ...aliasList],
+          ['file_alias IN', ...aliasList],
+        ]) as Expression,
+      ]) as Expression),
+    ]);
   }
 }
 
