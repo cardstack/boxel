@@ -10,14 +10,14 @@ let hasPatchedBootSync = false;
 export function initialize(): void {
   let log = (message: string) => console.log(`[rehydrate:init] ${message}`);
 
-  // let fastbootBodyStart = document?.getElementById('boxel-isolated-start');
+  // let fastbootBodyStart = document?.getElementById('fastboot-body-start');
 
   // if (fastbootBodyStart) {
   //   log('Found body start, removing');
   //   fastbootBodyStart.parentNode?.removeChild(fastbootBodyStart);
   // }
 
-  // let fastbootBodyEnd = document?.getElementById('boxel-isolated-end');
+  // let fastbootBodyEnd = document?.getElementById('fastboot-body-end');
 
   // if (fastbootBodyEnd) {
   //   log('Found body end, removing');
@@ -43,10 +43,10 @@ export function initialize(): void {
     return;
   }
 
-  let current = document.getElementById('boxel-isolated-start');
+  let current = document.getElementById('fastboot-body-start');
 
   if (!current) {
-    log('boxel-isolated-start not found');
+    log('fastboot-body-start not found');
     return;
   }
 
@@ -88,7 +88,7 @@ export function initialize(): void {
 
   log('removing fastboot markers');
   current.parentNode?.removeChild(current);
-  let end = document.getElementById('boxel-isolated-end');
+  let end = document.getElementById('fastboot-body-end');
 
   if (end?.parentNode) {
     end.parentNode.removeChild(end);

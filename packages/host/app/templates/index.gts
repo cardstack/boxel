@@ -204,8 +204,8 @@ export class IndexComponent extends Component<IndexComponentComponentSignature> 
     if (typeof document === 'undefined') {
       return;
     }
-    let start = document.getElementById('boxel-isolated-start');
-    let end = document.getElementById('boxel-isolated-end');
+    let start = document.getElementById('fastboot-body-start');
+    let end = document.getElementById('fastboot-body-end');
     if (!start || !end) {
       return;
     }
