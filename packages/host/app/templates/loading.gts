@@ -1,10 +1,11 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
+
 import RouteTemplate from 'ember-route-template';
 
 import { LoadingIndicator } from '@cardstack/boxel-ui/components';
 
 const Loading: TemplateOnlyComponent = <template>
-  <div id='host-loading'>
+  <div id='host-loading' data-test-host-loading>
     <div class='loading-container'>
       <div class='loading-indicator'>
         <LoadingIndicator @color='#00FFBA' />

@@ -45,9 +45,10 @@ import type {
   ViewCardFn,
 } from 'https://cardstack.com/base/card-api';
 
+import type IndexController from '../controllers';
+
 import type HostModeService from '../services/host-mode-service';
 import type OperatorModeStateService from '../services/operator-mode-state-service';
-import IndexController from '../controllers';
 
 export interface IndexComponentComponentSignature {
   Args: {
