@@ -132,7 +132,7 @@ test.describe('Host mode', () => {
     await logout(page);
   });
 
-  test('published card response includes isolated template markup', async ({
+  test('published card response includes isolated template markup that’s rehydrated when Ember takes over', async ({
     page,
   }) => {
     let html = await waitUntil(async () => {
@@ -152,8 +152,11 @@ test.describe('Host mode', () => {
 
     await page.goto(publishedCardURL);
     await expect(page.locator('[data-test-host-mode-isolated]')).toBeVisible();
+
     let button = page.locator('[data-test-host-mode-button]');
     await expect(button).toBeVisible();
+
+    // Click the button in the template until the Ember event handler responds and shows the extra element
     await waitUntil(async () => {
       await button.click();
       return await page.locator('[data-test-host-mode-extra]').isVisible();
