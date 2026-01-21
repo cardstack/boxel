@@ -13,7 +13,7 @@ import {
   type LinkableDefConstructor,
   CreateCardFn,
   CardCrudFunctions,
-  isFileDefConstructor,
+  isFileDef,
 } from './card-api';
 import {
   BoxComponentSignature,
@@ -514,7 +514,7 @@ export function getLinksToManyComponent({
       getBoxComponent(cardTypeFor(field, child), child, field),
     ); // Wrap the the components in a function so that the template is reactive to changes in the model (this is essentially a helper)
   let isComputed = !!field.computeVia || !!field.queryDefinition;
-  let isFileDef = isFileDefConstructor(field.card as typeof BaseDef);
+  let isFileDefField = isFileDef(field.card);
   let linksToManyComponent = class LinksToManyComponent extends GlimmerComponent<BoxComponentSignature> {
     <template>
       <DefaultFormatsConsumer as |defaultFormats|>
@@ -554,7 +554,7 @@ export function getLinksToManyComponent({
                     @format={{getPluralChildFormat
                       effectiveFormat
                       model
-                      isFileDef
+                      isFileDefField
                     }}
                     @displayContainer={{@displayContainer}}
                     class='linksToMany-item'

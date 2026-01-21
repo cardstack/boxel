@@ -16,7 +16,7 @@ import {
   type CardContext,
   type LinkableDefConstructor,
   CreateCardFn,
-  isFileDefConstructor,
+  isFileDef,
 } from './card-api';
 import {
   chooseCard,
@@ -167,7 +167,7 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
   }
 
   private chooseCard = restartableTask(async () => {
-    if (isFileDefConstructor(this.args.field.card as typeof BaseDef)) {
+    if (isFileDef(this.args.field.card)) {
       let file = await chooseFile();
       if (file) {
         this.args.model.value = file;
