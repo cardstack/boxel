@@ -772,9 +772,28 @@ export async function captureResult(
         }
         if (useParentCapture) {
           let parent = resolvedElement.parentElement;
+
+          // Collect elements and Glimmer serialisation comments
+          let pieces: string[] = [];
+          if (parent) {
+            let nodes = Array.from(parent.childNodes);
+            for (let node of nodes) {
+              if (node === resolvedElement) {
+                pieces.push(resolvedElement.innerHTML);
+                continue;
+              }
+              if (node.nodeType === 8) {
+                let value = (node as Comment).nodeValue ?? '';
+                if (value.includes('%+') || value.includes('%-')) {
+                  pieces.push(`<!--${value}-->`);
+                }
+              }
+            }
+          }
           return {
             status: finalStatus,
-            value: parent ? parent.innerHTML : resolvedElement.innerHTML,
+            value:
+              pieces.length > 0 ? pieces.join('') : resolvedElement.innerHTML,
             alive,
             id: resolvedElement.dataset.prerenderId ?? undefined,
             nonce: resolvedElement.dataset.prerenderNonce ?? undefined,
