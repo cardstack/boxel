@@ -12,19 +12,19 @@
         "name": "default",
         "module": "../../fields/date"
       },
-      "title": "Date Field Spec",
       "readMe": null,
       "compact": "2026-01-15",
       "cardInfo": {
+        "name": null,
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": null
+        "summary": null,
+        "cardThumbnailURL": null
       },
-      "specType": "card",
+      "specType": "field",
       "standard": "2026-01-08",
-      "description": null,
+      "cardTitle": "Date Field Spec",
       "customFormat": "2026-01-23",
+      "cardDescription": null,
       "containedExamples": []
     },
     "relationships": {

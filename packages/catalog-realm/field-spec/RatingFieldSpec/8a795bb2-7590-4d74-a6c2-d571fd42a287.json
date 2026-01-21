@@ -12,15 +12,16 @@
         "name": "default",
         "module": "../../fields/rating"
       },
-      "cardTitle": "Quantity Field",
       "readMe": null,
       "cardInfo": {
-        "notes": null,
         "name": null,
+        "notes": null,
         "summary": null,
         "cardThumbnailURL": null
       },
       "specType": "field",
+      "standard": null,
+      "cardTitle": "Rating Field Spec",
       "cardDescription": null,
       "containedExamples": []
     },
