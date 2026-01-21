@@ -2,6 +2,7 @@ import {
   Spec,
   SpecHeader,
   SpecReadmeSection,
+  ExamplesWithInteractive,
   SpecModuleSection,
 } from 'https://cardstack.com/base/spec';
 import {
@@ -14,7 +15,7 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import DurationField from '../fields/time/duration';
 import CodeSnippet from '../components/code-snippet';
-import ExamplesWithInteractive from './components/examples-with-interactive';
+
 import { action } from '@ember/object';
 import { task } from 'ember-concurrency';
 import { use, resource } from 'ember-resources';
@@ -137,28 +138,24 @@ class DurationFieldSpecIsolated extends Component<typeof DurationFieldSpec> {
         <@fields.readMe />
       </SpecReadmeSection>
 
-      
-      
       <ExamplesWithInteractive>
         <article class='fields-configuration-card'>
-                            <CodeSnippet @code={{standardFieldCode}} />
-                            <@fields.standard />
-                          </article>
+          <CodeSnippet @code={{standardFieldCode}} />
+          <@fields.standard />
+        </article>
         <article class='fields-configuration-card'>
-                            <CodeSnippet @code={{fullFieldCode}} />
-                            <@fields.full />
-                          </article>
+          <CodeSnippet @code={{fullFieldCode}} />
+          <@fields.full />
+        </article>
         <article class='fields-configuration-card'>
-                            <CodeSnippet @code={{dayTimeFieldCode}} />
-                            <@fields.dayTime />
-                          </article>
+          <CodeSnippet @code={{dayTimeFieldCode}} />
+          <@fields.dayTime />
+        </article>
         <article class='fields-configuration-card'>
-                            <CodeSnippet @code={{yearMonthFieldCode}} />
-                            <@fields.yearMonth />
-                          </article>
+          <CodeSnippet @code={{yearMonthFieldCode}} />
+          <@fields.yearMonth />
+        </article>
       </ExamplesWithInteractive>
-
-
 
       <SpecModuleSection
         @moduleHref={{@model.moduleHref}}
@@ -167,7 +164,7 @@ class DurationFieldSpecIsolated extends Component<typeof DurationFieldSpec> {
         @realmInfo={{this.realmInfo}}
       />
     </article>
-            <style scoped>
+    <style scoped>
       .container {
         --boxel-spec-background-color: #ebeaed;
         --boxel-spec-code-ref-background-color: #e2e2e2;
@@ -188,8 +185,6 @@ class DurationFieldSpecIsolated extends Component<typeof DurationFieldSpec> {
         gap: var(--boxel-sp-xs);
       }
     </style>
-
-
   </template>
 }
 
@@ -313,7 +308,7 @@ class DurationFieldSpecEdit extends Component<typeof DurationFieldSpec> {
         @realmInfo={{this.realmInfo}}
       />
     </article>
-        <style scoped>
+    <style scoped>
       .container {
         --boxel-spec-background-color: #ebeaed;
         --boxel-spec-code-ref-background-color: #e2e2e2;

@@ -2,6 +2,7 @@ import {
   Spec,
   SpecHeader,
   SpecReadmeSection,
+  ExamplesWithInteractive,
   SpecModuleSection,
 } from 'https://cardstack.com/base/spec';
 import {
@@ -14,7 +15,7 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import MonthYearField from '../fields/date/month-year';
 import CodeSnippet from '../components/code-snippet';
-import ExamplesWithInteractive from './components/examples-with-interactive';
+
 import { action } from '@ember/object';
 import { task } from 'ember-concurrency';
 import { use, resource } from 'ember-resources';
@@ -113,7 +114,6 @@ class MonthYearFieldSpecIsolated extends Component<typeof MonthYearFieldSpec> {
         <@fields.readMe />
       </SpecReadmeSection>
 
-
       <ExamplesWithInteractive>
         <article class='fields-configuration-card'>
           <CodeSnippet @code={{standardFieldCode}} />
@@ -149,10 +149,6 @@ class MonthYearFieldSpecIsolated extends Component<typeof MonthYearFieldSpec> {
         gap: var(--boxel-sp-xs);
       }
     </style>
-
-
-
-
   </template>
 }
 
@@ -285,9 +281,6 @@ class MonthYearFieldSpecEdit extends Component<typeof MonthYearFieldSpec> {
         gap: var(--boxel-sp-xs);
       }
     </style>
-
-
-
   </template>
 }
 

@@ -2,6 +2,7 @@ import {
   Spec,
   SpecHeader,
   SpecReadmeSection,
+  ExamplesWithInteractive,
   SpecModuleSection,
 } from 'https://cardstack.com/base/spec';
 import {
@@ -14,7 +15,7 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import ImageField from '../fields/image';
 import CodeSnippet from '../components/code-snippet';
-import ExamplesWithInteractive from './components/examples-with-interactive';
+
 import { action } from '@ember/object';
 import { task } from 'ember-concurrency';
 import { use, resource } from 'ember-resources';
@@ -136,7 +137,6 @@ class ImageFieldSpecIsolated extends Component<typeof ImageFieldSpec> {
         <@fields.readMe />
       </SpecReadmeSection>
 
-
       <ExamplesWithInteractive>
         <article class='fields-configuration-card'>
           <CodeSnippet @code={{browseFieldCode}} />
@@ -180,10 +180,6 @@ class ImageFieldSpecIsolated extends Component<typeof ImageFieldSpec> {
         gap: var(--boxel-sp-xs);
       }
     </style>
-
-
-
-
   </template>
 }
 
@@ -324,9 +320,6 @@ class ImageFieldSpecEdit extends Component<typeof ImageFieldSpec> {
         gap: var(--boxel-sp-xs);
       }
     </style>
-
-
-
   </template>
 }
 

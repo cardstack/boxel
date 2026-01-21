@@ -2,6 +2,7 @@ import {
   Spec,
   SpecHeader,
   SpecReadmeSection,
+  ExamplesWithInteractive,
   SpecModuleSection,
 } from 'https://cardstack.com/base/spec';
 import {
@@ -14,7 +15,7 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import AudioField from '../fields/audio';
 import CodeSnippet from '../components/code-snippet';
-import ExamplesWithInteractive from './components/examples-with-interactive';
+
 import { action } from '@ember/object';
 import { task } from 'ember-concurrency';
 import { use, resource } from 'ember-resources';
@@ -154,7 +155,7 @@ class AudioFieldSpecIsolated extends Component<typeof AudioFieldSpec> {
         <@fields.readMe />
       </SpecReadmeSection>
 
-       <ExamplesWithInteractive>
+      <ExamplesWithInteractive>
         <article class='fields-configuration-card'>
           <CodeSnippet @code={{standardFieldCode}} />
           <@fields.standard />

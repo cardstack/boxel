@@ -2,6 +2,7 @@ import {
   Spec,
   SpecHeader,
   SpecReadmeSection,
+  ExamplesWithInteractive,
   SpecModuleSection,
 } from 'https://cardstack.com/base/spec';
 import {
@@ -14,7 +15,7 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import DatetimeField from '../fields/date-time';
 import CodeSnippet from '../components/code-snippet';
-import ExamplesWithInteractive from './components/examples-with-interactive';
+
 import { action } from '@ember/object';
 import { task } from 'ember-concurrency';
 import { use, resource } from 'ember-resources';
@@ -123,24 +124,22 @@ class DatetimeFieldSpecIsolated extends Component<typeof DatetimeFieldSpec> {
         <@fields.readMe />
       </SpecReadmeSection>
 
-      
       <ExamplesWithInteractive>
         <article class='fields-configuration-card'>
-                    <CodeSnippet @code={{standardFieldCode}} />
-                    <@fields.standard />
-                  </article>
+          <CodeSnippet @code={{standardFieldCode}} />
+          <@fields.standard />
+        </article>
 
         <article class='fields-configuration-card'>
-                    <CodeSnippet @code={{shortFieldCode}} />
-                    <@fields.short />
-                  </article>
+          <CodeSnippet @code={{shortFieldCode}} />
+          <@fields.short />
+        </article>
 
         <article class='fields-configuration-card'>
-                    <CodeSnippet @code={{customFormatFieldCode}} />
-                    <@fields.customFormat />
-                  </article>
+          <CodeSnippet @code={{customFormatFieldCode}} />
+          <@fields.customFormat />
+        </article>
       </ExamplesWithInteractive>
-
 
       <SpecModuleSection
         @moduleHref={{@model.moduleHref}}
@@ -149,7 +148,7 @@ class DatetimeFieldSpecIsolated extends Component<typeof DatetimeFieldSpec> {
         @realmInfo={{this.realmInfo}}
       />
     </article>
-        <style scoped>
+    <style scoped>
       .container {
         --boxel-spec-background-color: #ebeaed;
         --boxel-spec-code-ref-background-color: #e2e2e2;
