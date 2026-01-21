@@ -151,9 +151,7 @@ test.describe('Host mode', () => {
     expect(html).toContain('data-test-host-mode-isolated');
 
     await page.goto(publishedCardURL);
-    await expect(
-      page.locator('[data-test-host-mode-isolated]'),
-    ).toBeVisible();
+    await expect(page.locator('[data-test-host-mode-isolated]')).toBeVisible();
     let button = page.locator('[data-test-host-mode-button]');
     await expect(button).toBeVisible();
     await waitUntil(async () => {
