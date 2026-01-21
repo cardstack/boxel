@@ -61,37 +61,37 @@ class DurationFieldEdit extends Component<typeof DurationField> {
         {{#if this.showYears}}
           <div class='duration-chip'>
             <label class='chip-label'>Years</label>
-            <@fields.years @format='edit' @canEdit={{@canEdit}} />
+            <@fields.years @format='edit' />
           </div>
         {{/if}}
         {{#if this.showMonths}}
           <div class='duration-chip'>
             <label class='chip-label'>Months</label>
-            <@fields.months @format='edit' @canEdit={{@canEdit}} />
+            <@fields.months @format='edit' />
           </div>
         {{/if}}
         {{#if this.showDays}}
           <div class='duration-chip'>
             <label class='chip-label'>Days</label>
-            <@fields.days @format='edit' @canEdit={{@canEdit}} />
+            <@fields.days @format='edit' />
           </div>
         {{/if}}
         {{#if this.showHours}}
           <div class='duration-chip'>
             <label class='chip-label'>Hours</label>
-            <@fields.hours @format='edit' @canEdit={{@canEdit}} />
+            <@fields.hours @format='edit' />
           </div>
         {{/if}}
         {{#if this.showMinutes}}
           <div class='duration-chip'>
             <label class='chip-label'>Minutes</label>
-            <@fields.minutes @format='edit' @canEdit={{@canEdit}} />
+            <@fields.minutes @format='edit' />
           </div>
         {{/if}}
         {{#if this.showSeconds}}
           <div class='duration-chip'>
             <label class='chip-label'>Seconds</label>
-            <@fields.seconds @format='edit' @canEdit={{@canEdit}} />
+            <@fields.seconds @format='edit' />
           </div>
         {{/if}}
       </div>

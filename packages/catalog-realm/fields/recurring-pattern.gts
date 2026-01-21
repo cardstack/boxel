@@ -216,7 +216,7 @@ class RecurringPatternFieldEdit extends Component<
           {{! Start Date }}
           <div class='detail-field'>
             <label class='detail-label'>Starts on</label>
-            <@fields.startDate @format='edit' @canEdit={{@canEdit}} />
+            <@fields.startDate @format='edit' />
           </div>
 
           {{! Weekly: Day selection }}
@@ -247,7 +247,7 @@ class RecurringPatternFieldEdit extends Component<
           {{#if this.needsDayOfMonth}}
             <div class='detail-field'>
               <label class='detail-label'>Day of month</label>
-              <@fields.dayOfMonth @format='edit' @canEdit={{@canEdit}} />
+              <@fields.dayOfMonth @format='edit' />
             </div>
           {{/if}}
 
@@ -275,13 +275,13 @@ class RecurringPatternFieldEdit extends Component<
             <div class='end-options'>
               <div class='end-option'>
                 <label class='end-option-label'>On date</label>
-                <@fields.endDate @format='edit' @canEdit={{@canEdit}} />
+                <@fields.endDate @format='edit' />
               </div>
               <div class='end-option'>
                 <label class='end-option-label'>After</label>
                 <div class='occurrence-input'>
                   <div class='occurrence-field'>
-                    <@fields.occurrences @format='edit' @canEdit={{@canEdit}} />
+                    <@fields.occurrences @format='edit' />
                   </div>
                   <span class='occurrence-label'>occurrences</span>
                 </div>

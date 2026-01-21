@@ -37,7 +37,7 @@ class RelativeTimeFieldEdit extends Component<typeof RelativeTimeField> {
     <div class='relative-time-edit'>
       <div class='relative-time-inputs'>
         <div class='amount-field'>
-          <@fields.amount @format='edit' @canEdit={{@canEdit}} />
+          <@fields.amount @format='edit' />
         </div>
         <BoxelSelect
           @selected={{this.selectedUnit}}
