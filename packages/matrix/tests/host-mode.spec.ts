@@ -40,11 +40,29 @@ test.describe('Host mode', () => {
       'host-mode-isolated-card.gts',
       `
         import { CardDef, Component } from 'https://cardstack.com/base/card-api';
+        import { on } from '@ember/modifier';
+        import { tracked } from '@glimmer/tracking';
 
         export class HostModeIsolatedCard extends CardDef {
           static isolated = class Isolated extends Component<typeof this> {
+            @tracked showExtra = false;
+
+            addExtra = () => {
+              this.showExtra = true;
+            };
+
             <template>
               <p data-test-host-mode-isolated>Host mode isolated</p>
+              <button
+                type="button"
+                data-test-host-mode-button
+                {{on 'click' this.addExtra}}
+              >
+                Add extra
+              </button>
+              {{#if this.showExtra}}
+                <div data-test-host-mode-extra>Extra content</div>
+              {{/if}}
             </template>
           };
         }
@@ -136,6 +154,13 @@ test.describe('Host mode', () => {
     await expect(
       page.locator('[data-test-host-mode-isolated]'),
     ).toBeVisible();
+    let button = page.locator('[data-test-host-mode-button]');
+    await expect(button).toBeVisible();
+    await waitUntil(async () => {
+      await button.click();
+      return await page.locator('[data-test-host-mode-extra]').isVisible();
+    });
+    await expect(page.locator('[data-test-host-mode-extra]')).toBeVisible();
   });
 
   test.skip('card in a published realm renders in host mode with a connect button', async ({
