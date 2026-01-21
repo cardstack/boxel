@@ -9,7 +9,7 @@ import {
   Component,
   instanceOf,
   realmURL,
-  type GetCardMenuItemParams,
+  type GetMenuItemParams,
 } from 'https://cardstack.com/base/card-api';
 import { commandData } from 'https://cardstack.com/base/resources/command-data';
 import MarkdownField from 'https://cardstack.com/base/markdown';
@@ -47,7 +47,7 @@ import ListingGenerateExampleCommand from '@cardstack/boxel-host/commands/listin
 import ListingUpdateSpecsCommand from '@cardstack/boxel-host/commands/listing-update-specs';
 import CreateListingPRCommand from '@cardstack/boxel-host/commands/create-listing-pr';
 
-import { getCardMenuItems } from '@cardstack/runtime-common';
+import { getMenuItems } from '@cardstack/runtime-common';
 
 import { Publisher } from './publisher';
 import { Category } from './category';
@@ -583,7 +583,7 @@ export class Listing extends CardDef {
   });
 
   protected getGenerateExampleMenuItem(
-    params: GetCardMenuItemParams,
+    params: GetMenuItemParams,
   ): MenuItemOptions | undefined {
     if (!params.commandContext) {
       return undefined;
@@ -616,7 +616,7 @@ export class Listing extends CardDef {
   }
 
   private getUpdateSpecsMenuItem(
-    params: GetCardMenuItemParams,
+    params: GetMenuItemParams,
   ): MenuItemOptions | undefined {
     if (params.menuContext !== 'interact') {
       return;
@@ -638,9 +638,9 @@ export class Listing extends CardDef {
     };
   }
 
-  [getCardMenuItems](params: GetCardMenuItemParams): MenuItemOptions[] {
+  [getMenuItems](params: GetMenuItemParams): MenuItemOptions[] {
     let menuItems = super
-      [getCardMenuItems](params)
+      [getMenuItems](params)
       .filter((item) => item.label?.toLowerCase() !== 'create listing with ai');
     if (params.menuContext === 'interact') {
       const extra = this.getGenerateExampleMenuItem(params);
@@ -660,7 +660,7 @@ export class Listing extends CardDef {
   }
 
   private getCreatePRMenuItem(
-    params: GetCardMenuItemParams,
+    params: GetMenuItemParams,
   ): MenuItemOptions | undefined {
     if (params.menuContext !== 'interact') {
       return;

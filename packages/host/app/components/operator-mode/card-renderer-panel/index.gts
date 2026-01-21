@@ -20,7 +20,7 @@ import { Eye, IconCode } from '@cardstack/boxel-ui/icons';
 import {
   cardTypeDisplayName,
   cardTypeIcon,
-  getCardMenuItems,
+  getMenuItems,
   identifyCard,
   isResolvedCodeRef,
 } from '@cardstack/runtime-common';
@@ -112,7 +112,7 @@ export default class CardRendererPanel extends Component<Signature> {
       return [];
     }
     return toMenuItems(
-      this.args.card[getCardMenuItems]({
+      this.args.card[getMenuItems]({
         canEdit: this.realm.canWrite(this.args.card.id),
         cardCrudFunctions: {},
         menuContext: 'code-mode-preview',

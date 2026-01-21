@@ -62,6 +62,7 @@ import {
   type LintResult,
   type Query,
   type PrerenderedHtmlFormat,
+  codeRefFromInternalKey,
   codeRefWithAbsoluteURL,
   userInitiatedPriority,
   systemInitiatedPriority,
@@ -70,8 +71,9 @@ import {
   isBrowserTestEnv,
   type IndexedFile,
   PRERENDERED_HTML_FORMATS,
+  hasExtension,
 } from './index';
-import { visitModuleDeps } from './code-ref';
+import { isCodeRef, visitModuleDeps } from './code-ref';
 import merge from 'lodash/merge';
 import mergeWith from 'lodash/mergeWith';
 import cloneDeep from 'lodash/cloneDeep';
@@ -190,6 +192,15 @@ const FILE_DEF_CODE_REF: ResolvedCodeRef = {
   module: `${baseRealm.url}file-api`,
   name: 'FileDef',
 };
+export const FILE_META_RESERVED_KEYS = new Set([
+  'name',
+  'url',
+  'sourceUrl',
+  'contentType',
+  'contentHash',
+  'lastModified',
+  'createdAt',
+]);
 
 type CachedSourceFileEntry = {
   type: 'file';
@@ -1964,15 +1975,25 @@ export class Realm {
 
     let start = Date.now();
     try {
-      let handle = await this.getFileWithFallbacks(localName, [
-        ...executableExtensions,
-        '.json',
-      ]);
+      let isNonExecutableFile =
+        hasExtension(localName) &&
+        !hasExecutableExtension(localName) &&
+        !localName.endsWith('.json');
+      let fallbackExtensions = isNonExecutableFile
+        ? []
+        : [...executableExtensions, '.json'];
+      let handle = await this.getFileWithFallbacks(
+        localName,
+        fallbackExtensions,
+      );
       if (!handle) {
         return notFound(request, requestContext, `${localName} not found`);
       }
 
       if (handle.path !== localName) {
+        if (isNonExecutableFile) {
+          return notFound(request, requestContext, `${localName} not found`);
+        }
         let headers = {
           Location: `${new URL(this.url).pathname}${handle.path}`,
           [CACHE_HEADER]: CACHE_MISS_VALUE,
@@ -2195,21 +2216,48 @@ export class Realm {
         : this.#dbAdapter
           ? await getContentHash(this.#dbAdapter, this.url, localPath)
           : undefined;
+    let adoptsFrom =
+      codeRefFromInternalKey(fileEntry.types?.[0]) ??
+      (isCodeRef(fileEntry.resource?.meta?.adoptsFrom)
+        ? fileEntry.resource?.meta?.adoptsFrom
+        : FILE_DEF_CODE_REF);
+    let resourceAttributes =
+      (fileEntry as IndexedFile).resource?.attributes ?? {};
+    let baseAttributes = {
+      name: resourceAttributes.name ?? searchDoc.name ?? name,
+      url: resourceAttributes.url ?? searchDoc.url ?? fileURL,
+      sourceUrl: resourceAttributes.sourceUrl ?? searchDoc.sourceUrl ?? fileURL,
+      contentType:
+        resourceAttributes.contentType ??
+        searchDoc.contentType ??
+        inferredContentType,
+      contentHash: resourceAttributes.contentHash ?? contentHash,
+      lastModified: fileEntry.lastModified ?? unixTime(Date.now()),
+      createdAt: createdAt ?? unixTime(Date.now()),
+    };
+    let attributes: Record<string, unknown> = { ...baseAttributes };
+    for (let [key, value] of Object.entries(resourceAttributes)) {
+      if (value !== undefined && !(key in attributes)) {
+        attributes[key] = value;
+      }
+    }
+    for (let [key, value] of Object.entries(searchDoc)) {
+      if (FILE_META_RESERVED_KEYS.has(key) || key in attributes) {
+        continue;
+      }
+      if (value !== undefined) {
+        attributes[key] = value;
+      }
+    }
     let doc: SingleFileMetaDocument = {
       data: {
         type: 'file-meta',
         id: fileURL,
         attributes: {
-          name: searchDoc.name ?? name,
-          url: searchDoc.url ?? fileURL,
-          sourceUrl: searchDoc.sourceUrl ?? fileURL,
-          contentType: searchDoc.contentType ?? inferredContentType,
-          contentHash,
-          lastModified: fileEntry.lastModified ?? unixTime(Date.now()),
-          createdAt: createdAt ?? unixTime(Date.now()),
+          ...attributes,
         },
         meta: {
-          adoptsFrom: FILE_DEF_CODE_REF,
+          adoptsFrom,
           realmInfo,
           realmURL: this.url,
         },
@@ -3242,12 +3290,16 @@ export class Realm {
         ? String(payload.type[0])
         : String(payload.type)
       : undefined;
-    let acceptedTypes = requestedType
-      ? [requestedType, `${requestedType}-error`]
-      : ['instance', 'instance-error', 'module', 'module-error'];
+    let wantsErrorOnly = requestedType?.endsWith('-error') ?? false;
+    let normalizedType = wantsErrorOnly
+      ? requestedType?.replace(/-error$/, '')
+      : requestedType;
+    let acceptedTypes = normalizedType
+      ? [normalizedType]
+      : ['instance', 'module', 'file'];
 
     let rows = (await query(this.#dbAdapter, [
-      `SELECT url, realm_url, deps, type FROM boxel_index WHERE (url =`,
+      `SELECT url, realm_url, deps, type, has_error FROM boxel_index WHERE (url =`,
       param(resourceUrl),
       `OR file_alias =`,
       param(resourceUrl),
@@ -3256,17 +3308,20 @@ export class Realm {
         index === 0 ? [param(type)] : [',', param(type)],
       ),
       `) AND (is_deleted IS NULL OR is_deleted = FALSE)`,
+      ...(wantsErrorOnly ? [`AND has_error = TRUE`] : []),
     ])) as {
       url: string;
       realm_url: string;
       deps: unknown;
       type: string;
+      has_error: boolean | null;
     }[];
 
     let entries = rows.map((row) => ({
       canonicalUrl: row.url,
       realmUrl: ensureTrailingSlash(row.realm_url),
       entryType: row.type,
+      hasError: Boolean(row.has_error),
       dependencies: parseDeps(row.deps),
     }));
 
@@ -3278,6 +3333,7 @@ export class Realm {
           canonicalUrl: entry.canonicalUrl,
           realmUrl: entry.realmUrl,
           entryType: entry.entryType,
+          hasError: entry.hasError,
           dependencies: entry.dependencies,
         },
       })),
@@ -3317,7 +3373,8 @@ export class Realm {
     let errorRows = (await query(this.#dbAdapter, [
       `SELECT url, error_doc FROM boxel_index WHERE realm_url =`,
       param(sourceRealmURL),
-      `AND type = 'instance-error'`,
+      `AND type = 'instance'`,
+      `AND has_error = TRUE`,
       `AND (is_deleted IS NULL OR is_deleted = FALSE)`,
     ])) as { url: string; error_doc: unknown | null }[];
 
@@ -3398,20 +3455,19 @@ export class Realm {
         return [];
       }
       let rows = (await query(this.#dbAdapter, [
-        `SELECT url, realm_url, deps, type FROM boxel_index WHERE (url =`,
+        `SELECT url, realm_url, deps, type, has_error FROM boxel_index WHERE (url =`,
         param(resourceUrl),
         `OR file_alias =`,
         param(resourceUrl),
-        `) AND type IN (`,
+        `) AND type =`,
         param('instance'),
-        `,`,
-        param('instance-error'),
-        `) AND (is_deleted IS NULL OR is_deleted = FALSE)`,
+        `AND (is_deleted IS NULL OR is_deleted = FALSE)`,
       ])) as {
         url: string;
         realm_url: string;
         deps: unknown;
         type: ResourceIndexEntry['entryType'];
+        has_error: boolean | null;
       }[];
 
       if (rows.length === 0) {
@@ -3422,6 +3478,7 @@ export class Realm {
         canonicalUrl: row.url,
         realmUrl: ensureTrailingSlash(row.realm_url),
         entryType: row.type,
+        hasError: Boolean(row.has_error),
         dependencies: parseDeps(row.deps),
       }));
     };
@@ -3459,6 +3516,7 @@ export class Realm {
             canonicalUrl?: string;
             realmUrl?: string;
             entryType?: string;
+            hasError?: boolean;
             dependencies?: unknown;
           };
         }>;
@@ -3477,10 +3535,20 @@ export class Realm {
               )
             : [];
 
+          let entryType = resource.attributes?.entryType;
+          if (
+            entryType !== 'instance' &&
+            entryType !== 'module' &&
+            entryType !== 'file'
+          ) {
+            return undefined;
+          }
+
           return {
             canonicalUrl,
             realmUrl: ensureTrailingSlash(realmUrl),
-            entryType: resource.attributes?.entryType,
+            entryType,
+            hasError: Boolean(resource.attributes?.hasError),
             dependencies,
           };
         })

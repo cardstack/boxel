@@ -1,0 +1,35 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      }
+    },
+    "relationships": {
+      "instructionsSource": {
+        "links": {
+          "self": "./talk-like-a-pirate.md"
+        },
+        "data": {
+          "type": "file",
+          "id": "./talk-like-a-pirate.md"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../markdown-skill",
+        "name": "MarkdownSkill"
+      }
+    }
+  }
+}

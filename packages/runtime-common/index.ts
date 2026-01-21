@@ -1,5 +1,6 @@
 import type {
   CardResource,
+  FileMetaResource,
   LinkableResource,
   LooseLinkableResource,
   Meta,
@@ -58,6 +59,8 @@ export interface FileExtractResponse {
   nonce: string;
   status: 'ready' | 'error';
   searchDoc: Record<string, any> | null;
+  resource?: FileMetaResource | null;
+  types?: string[] | null;
   deps: string[];
   error?: RenderError;
   mismatch?: true;

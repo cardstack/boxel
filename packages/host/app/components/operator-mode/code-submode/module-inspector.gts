@@ -40,6 +40,7 @@ import {
   specRef,
   localId,
   meta,
+  hasExtension,
 } from '@cardstack/runtime-common';
 
 import CreateSpecCommand from '@cardstack/host/commands/create-specs';
@@ -278,7 +279,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
       return;
     }
 
-    const fileUrl = cardId.endsWith('.json') ? cardId : `${cardId}.json`;
+    const fileUrl = hasExtension(cardId) ? cardId : `${cardId}.json`;
     await this.operatorModeStateService.updateCodePath(new URL(fileUrl));
   };
 

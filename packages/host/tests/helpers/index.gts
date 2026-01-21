@@ -633,11 +633,13 @@ export async function setupAcceptanceTestRealm({
   realmURL,
   permissions,
   mockMatrixUtils,
+  startMatrix = true,
 }: {
   contents: RealmContents;
   realmURL?: string;
   permissions?: RealmPermissions;
   mockMatrixUtils: MockUtils;
+  startMatrix?: boolean;
 }) {
   let resolvedRealmURL = ensureTrailingSlash(realmURL ?? testRealmURL);
   setupAuthEndpoints({
@@ -649,6 +651,7 @@ export async function setupAcceptanceTestRealm({
     isAcceptanceTest: true,
     permissions,
     mockMatrixUtils,
+    startMatrix,
   });
   getTestRealmRegistry().set(result.realm.url, {
     realm: result.realm,
@@ -662,11 +665,13 @@ export async function setupIntegrationTestRealm({
   realmURL,
   permissions,
   mockMatrixUtils,
+  startMatrix = true,
 }: {
   contents: RealmContents;
   realmURL?: string;
   permissions?: RealmPermissions;
   mockMatrixUtils: MockUtils;
+  startMatrix?: boolean;
 }) {
   let resolvedRealmURL = ensureTrailingSlash(realmURL ?? testRealmURL);
   setupAuthEndpoints({
@@ -678,6 +683,7 @@ export async function setupIntegrationTestRealm({
     isAcceptanceTest: false,
     permissions: permissions as RealmPermissions,
     mockMatrixUtils,
+    startMatrix,
   });
   getTestRealmRegistry().set(result.realm.url, {
     realm: result.realm,
@@ -708,12 +714,14 @@ async function setupTestRealm({
   isAcceptanceTest,
   permissions = { '*': ['read', 'write'] },
   mockMatrixUtils,
+  startMatrix = true,
 }: {
   contents: RealmContents;
   realmURL?: string;
   isAcceptanceTest?: boolean;
   permissions?: RealmPermissions;
   mockMatrixUtils: MockUtils;
+  startMatrix?: boolean;
 }) {
   let owner = (getContext() as TestContext).owner;
   let { virtualNetwork } = getService('network');
@@ -797,6 +805,13 @@ async function setupTestRealm({
     definitionLookup,
   });
 
+  // Register the realm early so realm-server mock _info lookups can resolve
+  // without falling back to real network fetches.
+  getTestRealmRegistry().set(realm.url, {
+    realm,
+    adapter,
+  });
+
   // we use this to run cards that were added to the test filesystem
   adapter.setLoader(
     new Loader(realm.__fetchForTesting, virtualNetwork.resolveImport),
@@ -804,7 +819,9 @@ async function setupTestRealm({
 
   // TODO this is the only use of Realm.maybeHandle left--can we get rid of it?
   virtualNetwork.mount(realm.maybeHandle);
-  await mockMatrixUtils.start();
+  if (startMatrix) {
+    await mockMatrixUtils.start();
+  }
   await adapter.ready;
   await worker.run();
   await realm.start();

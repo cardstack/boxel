@@ -21,7 +21,7 @@ import { bool, cn, eq, not, toMenuItems } from '@cardstack/boxel-ui/helpers';
 import {
   cardTypeDisplayName,
   cardTypeIcon,
-  getCardMenuItems,
+  getMenuItems,
 } from '@cardstack/runtime-common';
 
 import type { CommandRequest } from '@cardstack/runtime-common/commands';
@@ -161,7 +161,7 @@ export default class RoomMessageCommand extends Component<Signature> {
 
   private get moreOptionsMenuItems() {
     let menuItems =
-      this.commandResultCard.card?.[getCardMenuItems]?.({
+      this.commandResultCard.card?.[getMenuItems]?.({
         canEdit: false,
         cardCrudFunctions: {},
         menuContext: 'ai-assistant',
