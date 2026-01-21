@@ -22,7 +22,6 @@ import { TrackedObject } from 'tracked-built-ins';
 import { isPrimitive, loadCardDef } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common';
 import GenerateReadmeSpecCommand from '@cardstack/boxel-host/commands/generate-readme-spec';
-import LayoutList from '@cardstack/boxel-icons/layout-list';
 
 function myLoader(): Loader {
   // @ts-ignore
@@ -155,51 +154,40 @@ class AudioFieldSpecIsolated extends Component<typeof AudioFieldSpec> {
         <@fields.readMe />
       </SpecReadmeSection>
 
-      <section class='fields-configuration-preview section'>
-        <header
-          class='row-header'
-          aria-labelledby='fields-configuration-preview'
-        >
-          <div class='row-header-left'>
-            <LayoutList width='20' height='20' role='presentation' />
-            <h2 id='fields-configuration-preview'>Field Usage Examples</h2>
-          </div>
-        </header>
-        <div class='fields-configuration-grid'>
-          <article class='fields-configuration-card'>
-            <CodeSnippet @code={{standardFieldCode}} />
-            <@fields.standard />
-          </article>
-          <article class='fields-configuration-card'>
-            <CodeSnippet @code={{waveformPlayerFieldCode}} />
-            <@fields.waveformPlayer />
-          </article>
-          <article class='fields-configuration-card'>
-            <CodeSnippet @code={{playlistRowFieldCode}} />
-            <@fields.playlistRow />
-          </article>
-          <article class='fields-configuration-card'>
-            <CodeSnippet @code={{miniPlayerFieldCode}} />
-            <@fields.miniPlayer />
-          </article>
-          <article class='fields-configuration-card'>
-            <CodeSnippet @code={{albumCoverFieldCode}} />
-            <@fields.albumCover />
-          </article>
-          <article class='fields-configuration-card'>
-            <CodeSnippet @code={{withVolumeFieldCode}} />
-            <@fields.withVolume />
-          </article>
-          <article class='fields-configuration-card'>
-            <CodeSnippet @code={{trimEditorFieldCode}} />
-            <@fields.trimEditor />
-          </article>
-          <article class='fields-configuration-card'>
-            <CodeSnippet @code={{advancedControlsFieldCode}} />
-            <@fields.advancedControls />
-          </article>
-        </div>
-      </section>
+       <ExamplesWithInteractive>
+        <article class='fields-configuration-card'>
+          <CodeSnippet @code={{standardFieldCode}} />
+          <@fields.standard />
+        </article>
+        <article class='fields-configuration-card'>
+          <CodeSnippet @code={{waveformPlayerFieldCode}} />
+          <@fields.waveformPlayer />
+        </article>
+        <article class='fields-configuration-card'>
+          <CodeSnippet @code={{playlistRowFieldCode}} />
+          <@fields.playlistRow />
+        </article>
+        <article class='fields-configuration-card'>
+          <CodeSnippet @code={{miniPlayerFieldCode}} />
+          <@fields.miniPlayer />
+        </article>
+        <article class='fields-configuration-card'>
+          <CodeSnippet @code={{albumCoverFieldCode}} />
+          <@fields.albumCover />
+        </article>
+        <article class='fields-configuration-card'>
+          <CodeSnippet @code={{withVolumeFieldCode}} />
+          <@fields.withVolume />
+        </article>
+        <article class='fields-configuration-card'>
+          <CodeSnippet @code={{trimEditorFieldCode}} />
+          <@fields.trimEditor />
+        </article>
+        <article class='fields-configuration-card'>
+          <CodeSnippet @code={{advancedControlsFieldCode}} />
+          <@fields.advancedControls />
+        </article>
+      </ExamplesWithInteractive>
 
       <SpecModuleSection
         @moduleHref={{@model.moduleHref}}
@@ -218,38 +206,6 @@ class AudioFieldSpecIsolated extends Component<typeof AudioFieldSpec> {
         min-height: max-content;
         padding: var(--boxel-sp);
         background-color: var(--boxel-spec-background-color);
-      }
-      .section {
-        margin-top: var(--boxel-sp);
-        padding-top: var(--boxel-sp);
-        border-top: 1px solid var(--boxel-400);
-      }
-      h2 {
-        margin: 0;
-        font: 600 var(--boxel-font-sm);
-        letter-spacing: var(--boxel-lsp-xs);
-      }
-      .row-header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: var(--boxel-sp-xs);
-        padding-bottom: var(--boxel-sp-lg);
-      }
-      .row-header-left {
-        display: flex;
-        align-items: center;
-        gap: var(--boxel-sp-xs);
-      }
-      .fields-configuration-preview {
-        display: flex;
-        flex-direction: column;
-        gap: var(--boxel-sp);
-      }
-      .fields-configuration-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-        gap: var(--boxel-sp);
       }
       .fields-configuration-card {
         border: var(--boxel-border);
