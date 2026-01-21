@@ -1259,7 +1259,7 @@ export class Realm {
 
   async reindex() {
     await this.#realmIndexUpdater.fullIndex();
-    await this.#definitionLookup.invalidate(this.url);
+    await this.#definitionLookup.clearRealmCache(this.url);
     this.#moduleCache.clear();
     this.broadcastRealmEvent({
       eventName: 'index',
@@ -2125,15 +2125,17 @@ export class Realm {
   private async handleExecutableInvalidations(
     invalidatedURLs: URL[],
   ): Promise<void> {
-    let definitionsInvalidated = false;
+    let definitionInvalidations: Promise<void>[] = [];
     for (const invalidatedURL of invalidatedURLs) {
       if (hasExecutableExtension(invalidatedURL.href)) {
-        definitionsInvalidated = true;
         this.#moduleCache.invalidate(this.paths.local(invalidatedURL));
+        definitionInvalidations.push(
+          this.#definitionLookup.invalidate(invalidatedURL.href),
+        );
       }
     }
-    if (definitionsInvalidated) {
-      await this.#definitionLookup.invalidate(this.url);
+    if (definitionInvalidations.length > 0) {
+      await Promise.all(definitionInvalidations);
     }
   }
 
@@ -4205,7 +4207,7 @@ export class Realm {
 
       if (hasExecutableExtension(localPath)) {
         this.#moduleCache.invalidate(localPath);
-        await this.#definitionLookup.invalidate(this.url);
+        await this.#definitionLookup.invalidate(tracked.url.href);
       }
 
       this.broadcastRealmEvent(data);
