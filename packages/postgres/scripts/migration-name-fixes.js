@@ -12,7 +12,7 @@ const migrationRenames = [
   ['1768000000000_add-type-to-index-pk', '1767624996365_add-type-to-index-pk'],
   [
     '1768000000001_update-index-error-types',
-    '1767624996365_update-index-error-types',
+    '1767624996375_update-index-error-types',
   ],
   [
     '1769000000000_add-content-hash-to-realm-file-meta',
