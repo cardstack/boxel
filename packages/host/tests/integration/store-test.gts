@@ -377,6 +377,44 @@ module('Integration | Store', function (hooks) {
     );
   });
 
+  test('file-meta instance is retained when referenced', async function (assert) {
+    await testRealm.write('hero.png', 'mock hero image');
+    let fileUrl = `${testRealmURL}hero.png`;
+
+    let fileInstance = await storeService.get(fileUrl);
+    assert.ok(fileInstance, 'file meta instance is loaded');
+    assert.ok(
+      (fileInstance as any).constructor?.isFileDef,
+      'file meta instance is a FileDef',
+    );
+
+    storeService.addReference(fileUrl);
+    forceGC();
+
+    let peekedInstance = cardStore.get(fileUrl) as unknown;
+    assert.strictEqual(
+      peekedInstance,
+      fileInstance,
+      'file meta instance is retained after GC with reference',
+    );
+  });
+
+  test('file-meta instance is garbage collected when references drop', async function (assert) {
+    await testRealm.write('hero.png', 'mock hero image');
+    let fileUrl = `${testRealmURL}hero.png`;
+
+    await storeService.get(fileUrl);
+    storeService.addReference(fileUrl);
+    storeService.dropReference(fileUrl);
+    forceGC();
+
+    assert.strictEqual(
+      cardStore.get(fileUrl),
+      undefined,
+      'file meta instance is garbage collected after reference drop',
+    );
+  });
+
   test('garbage collects cards that only consume each other', async function (assert) {
     let alpha = new PersonDef({ name: 'Alpha' });
     let beta = new PersonDef({ name: 'Beta' });
