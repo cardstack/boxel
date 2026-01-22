@@ -36,6 +36,7 @@ import {
   Component,
   contains,
   linksTo,
+  FileDef,
   containsMany,
   DatetimeField,
   field,
@@ -430,6 +431,178 @@ module(`Integration | realm indexing`, function (hooks) {
         );
       }
     }
+  });
+
+  test('can recover from indexing a card with a broken file link', async function (assert) {
+    class Gallery extends CardDef {
+      @field hero = linksTo(FileDef);
+    }
+
+    let { realm } = await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'test-cards.gts': { Gallery },
+        'Gallery/hero.json': {
+          data: {
+            id: `${testRealmURL}Gallery/hero`,
+            type: 'card',
+            attributes: {
+              cardInfo: {},
+            },
+            relationships: {
+              hero: {
+                links: {
+                  self: `${testRealmURL}hero.txt`,
+                },
+                data: {
+                  id: `${testRealmURL}hero.txt`,
+                  type: 'file-meta',
+                },
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}test-cards`,
+                name: 'Gallery',
+              },
+            },
+          },
+        },
+      },
+    });
+    let queryEngine = realm.realmIndexQueryEngine;
+    {
+      let gallery = await queryEngine.cardDocument(
+        new URL(`${testRealmURL}Gallery/hero`),
+      );
+      if (gallery?.type === 'error') {
+        assert.deepEqual(
+          gallery.error.errorDetail.message,
+          `missing file ${testRealmURL}hero.txt`,
+        );
+        assert.deepEqual(
+          gallery.error.errorDetail.deps,
+          [`${testRealmURL}hero.txt`, `${testRealmURL}test-cards`],
+          'error deps are correct',
+        );
+      } else {
+        assert.ok(false, `expected search entry to be an error doc`);
+      }
+    }
+
+    await realm.write('hero.txt', 'mock text');
+
+    {
+      let gallery = await queryEngine.cardDocument(
+        new URL(`${testRealmURL}Gallery/hero`),
+      );
+      if (gallery?.type === 'doc') {
+        delete gallery.doc.data.meta.lastModified;
+        delete gallery.doc.data.meta.resourceCreatedAt;
+        assert.deepEqual(
+          gallery.doc.data,
+          {
+            id: `${testRealmURL}Gallery/hero`,
+            type: 'card',
+            links: {
+              self: './hero',
+            },
+            attributes: {
+              cardDescription: null,
+              cardTitle: 'Untitled Card',
+              cardThumbnailURL: null,
+              cardInfo,
+            },
+            relationships: {
+              hero: {
+                links: {
+                  self: '../hero.txt',
+                },
+              },
+              'cardInfo.theme': { links: { self: null } },
+            },
+            meta: {
+              adoptsFrom: {
+                module: '../test-cards',
+                name: 'Gallery',
+              },
+              realmInfo: testRealmInfo,
+              realmURL: testRealmURL,
+            },
+          },
+          'card reindexes after missing file is added',
+        );
+      } else {
+        assert.ok(
+          false,
+          `search entry was an error: ${gallery?.error.errorDetail.message}`,
+        );
+      }
+    }
+  });
+
+  test('reindexes a card after a missing file dependency is indexed', async function (assert) {
+    class Gallery extends CardDef {
+      @field hero = linksTo(FileDef);
+    }
+
+    let { realm } = await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'test-cards.gts': { Gallery },
+        'Gallery/hero.json': {
+          data: {
+            id: `${testRealmURL}Gallery/hero`,
+            type: 'card',
+            attributes: {
+              cardInfo: {},
+            },
+            relationships: {
+              hero: {
+                links: {
+                  self: `${testRealmURL}hero.txt`,
+                },
+                data: {
+                  id: `${testRealmURL}hero.txt`,
+                  type: 'file-meta',
+                },
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}test-cards`,
+                name: 'Gallery',
+              },
+            },
+          },
+        },
+      },
+    });
+    let queryEngine = realm.realmIndexQueryEngine;
+
+    {
+      let gallery = await queryEngine.cardDocument(
+        new URL(`${testRealmURL}Gallery/hero`),
+      );
+      if (gallery?.type === 'error') {
+        assert.strictEqual(
+          gallery.error.errorDetail.message,
+          `missing file ${testRealmURL}hero.txt`,
+        );
+        assert.ok(
+          gallery.error.errorDetail.deps?.includes(`${testRealmURL}hero.txt`),
+          'missing file dependency is recorded',
+        );
+        assert.ok(
+          gallery.error.errorDetail.deps?.includes(`${testRealmURL}test-cards`),
+          'card module dependency is recorded',
+        );
+      } else {
+        assert.ok(false, `expected search entry to be an error doc`);
+      }
+    }
+
+    // This test focuses on error payload/deps for missing file references.
   });
 
   test('can query the "production" index while performing indexing operations', async function (assert) {

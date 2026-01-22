@@ -380,6 +380,8 @@ export default class CardPrerender extends Component {
       renderOptions?: RenderRouteOptions;
     }): Promise<FileExtractResponse> => {
       this.#nonce++;
+      this.localIndexer.renderError = undefined;
+      this.#renderErrorPayload = undefined;
       let shouldClearCache = this.#consumeClearCacheForRender(
         Boolean(renderOptions?.clearCache),
       );

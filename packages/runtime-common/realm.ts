@@ -83,7 +83,6 @@ import { inferContentType } from './infer-content-type';
 import type { CardFields } from './resource-types';
 import {
   fileContentToText,
-  fileContentToBytes,
   readFileAsText,
   getFileWithFallbacks,
   type TextFileRef,
@@ -259,21 +258,6 @@ function computeContentHash(content: string | Uint8Array): string {
     } catch {
       throw new Error('Failed to compute content hash');
     }
-  }
-}
-
-async function computeContentHashFromRef(
-  ref: FileRef,
-): Promise<string | undefined> {
-  try {
-    let content = ref.content;
-    if (typeof content === 'string' || content instanceof Uint8Array) {
-      return computeContentHash(content);
-    }
-    let bytes = await fileContentToBytes({ content });
-    return computeContentHash(bytes);
-  } catch {
-    return undefined;
   }
 }
 
@@ -1454,9 +1438,14 @@ export class Realm {
       }
       if (this.#router.handles(request)) {
         return this.#router.handle(request, requestContext);
-      } else {
-        return this.fallbackHandle(request, requestContext);
       }
+      let acceptMimeType = extractSupportedMimeType(
+        request.headers.get('Accept') as unknown as null | string | [string],
+      );
+      if (acceptMimeType === SupportedMimeType.CardJson) {
+        return notFound(request, requestContext);
+      }
+      return this.fallbackHandle(request, requestContext);
     } catch (e) {
       if (e instanceof AuthenticationError) {
         return createResponse({
@@ -2216,6 +2205,9 @@ export class Realm {
         fileEntry,
       );
     }
+    this.#log.warn(
+      `file-meta missing from index for ${this.paths.fileURL(localPath).href} (indexing=${this.#realmIndexUpdater.isIndexing})`,
+    );
     return notFound(request, requestContext);
   }
 
@@ -2225,7 +2217,7 @@ export class Realm {
   ): Promise<Response> {
     let localPath = this.paths.local(new URL(request.url));
     if (await this.openFileForMetadata(localPath)) {
-      return methodNotAllowed(request, requestContext);
+      return notFound(request, requestContext);
     }
     let body = await request.text();
     let json;
@@ -2370,7 +2362,7 @@ export class Realm {
       return methodNotAllowed(request, requestContext);
     }
     if (await this.openFileForMetadata(localPath)) {
-      return methodNotAllowed(request, requestContext);
+      return notFound(request, requestContext);
     }
 
     let url = this.paths.fileURL(localPath);
@@ -2698,7 +2690,7 @@ export class Realm {
     let url = new URL(new URL(reqURL).pathname, reqURL);
     let localPath = this.paths.local(url);
     if (await this.openFileForMetadata(localPath)) {
-      return methodNotAllowed(request, requestContext);
+      return notFound(request, requestContext);
     }
     let result = await this.#realmIndexQueryEngine.cardDocument(url);
     if (!result) {

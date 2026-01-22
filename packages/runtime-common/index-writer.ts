@@ -718,6 +718,15 @@ export class Batch {
     this.#invalidations = new Set([...this.#invalidations, ...invalidations]);
   }
 
+  async dependentsFor(url: URL): Promise<string[]> {
+    await this.ready;
+    let alias = trimExecutableExtension(url).href;
+    if (!alias) {
+      return [];
+    }
+    return await this.calculateInvalidations(alias, new Set<string>());
+  }
+
   private async itemsThatReference(resolvedPath: string): Promise<
     {
       url: string;
@@ -730,48 +739,63 @@ export class Batch {
     let results: (Pick<BoxelIndexTable, 'url' | 'file_alias'> & {
       type: BoxelIndexTable['type'];
     })[] = [];
-    let rows: (Pick<BoxelIndexTable, 'url' | 'file_alias'> & {
-      type: BoxelIndexTable['type'];
-    })[] = [];
-    let pageNumber = 0;
-    do {
-      // SQLite does not support cursors when used in the worker thread since
-      // the API for using cursors cannot be serialized over the postMessage
-      // boundary. so we use a handcrafted paging approach
-      rows = (await this.#query([
-        'SELECT i.url, i.file_alias, i.type',
-        'FROM boxel_index_working as i',
-        dbExpression({
-          sqlite:
-            'CROSS JOIN LATERAL jsonb_array_elements_text(i.deps) as deps_array_element',
-        }),
-        'WHERE',
-        ...every([
-          [
-            dbExpression({
-              sqlite: `deps_array_element =`,
-              pg: `i.deps @>`,
-            }),
-            param({ sqlite: resolvedPath, pg: `["${resolvedPath}"]` }),
-          ],
-          // css is a subset of modules, so there won't by any references that
-          // are css entries that aren't already represented by a module entry
-          [`i.type != 'css'`],
-          // probably need to reevaluate this condition when we get to cross
-          // realm invalidation
-          [`i.realm_url =`, param(this.realmURL.href)],
-        ]),
-        `LIMIT ${pageSize} OFFSET ${pageNumber * pageSize}`,
-      ] as Expression)) as (Pick<BoxelIndexTable, 'url' | 'file_alias'> & {
+    let seen = new Set<string>();
+
+    let loadFromTable = async (tableName: string) => {
+      let rows: (Pick<BoxelIndexTable, 'url' | 'file_alias'> & {
         type: BoxelIndexTable['type'];
-      })[];
-      results = [...results, ...rows];
-      pageNumber++;
-    } while (rows.length === pageSize);
+      })[] = [];
+      let pageNumber = 0;
+      do {
+        // SQLite does not support cursors when used in the worker thread since
+        // the API for using cursors cannot be serialized over the postMessage
+        // boundary. so we use a handcrafted paging approach
+        rows = (await this.#query([
+          'SELECT i.url, i.file_alias, i.type',
+          `FROM ${tableName} as i`,
+          dbExpression({
+            sqlite:
+              'CROSS JOIN LATERAL jsonb_array_elements_text(i.deps) as deps_array_element',
+          }),
+          'WHERE',
+          ...every([
+            [
+              dbExpression({
+                sqlite: `deps_array_element =`,
+                pg: `i.deps @>`,
+              }),
+              param({ sqlite: resolvedPath, pg: `["${resolvedPath}"]` }),
+            ],
+            // css is a subset of modules, so there won't by any references that
+            // are css entries that aren't already represented by a module entry
+            [`i.type != 'css'`],
+            // probably need to reevaluate this condition when we get to cross
+            // realm invalidation
+            [`i.realm_url =`, param(this.realmURL.href)],
+          ]),
+          `LIMIT ${pageSize} OFFSET ${pageNumber * pageSize}`,
+        ] as Expression)) as (Pick<BoxelIndexTable, 'url' | 'file_alias'> & {
+          type: BoxelIndexTable['type'];
+        })[];
+        for (let row of rows) {
+          let key = `${row.url}|${row.type}`;
+          if (seen.has(key)) {
+            continue;
+          }
+          seen.add(key);
+          results.push(row);
+        }
+        pageNumber++;
+      } while (rows.length === pageSize);
+      return pageNumber;
+    };
+
+    let workingPages = await loadFromTable('boxel_index_working');
+    let productionPages = await loadFromTable('boxel_index');
     this.#perfLog.debug(
       `${jobIdentity(this.jobInfo)} time to determine items that reference ${resolvedPath} ${
         Date.now() - start
-      } ms (page count=${pageNumber})`,
+      } ms (page count=${workingPages + productionPages})`,
     );
     return results.map(({ url, file_alias, type }) => ({
       url,
@@ -784,14 +808,21 @@ export class Batch {
     resolvedPath: string,
     visited: Set<string>,
   ): Promise<string[]> {
-    if (
-      visited.has(resolvedPath) ||
-      this.nodeResolvedInvalidations.includes(resolvedPath)
-    ) {
+    if (visited.has(resolvedPath)) {
       return [];
+    }
+    if (!resolvedPath.endsWith('.json')) {
+      this.#perfLog.debug(
+        `${jobIdentity(this.jobInfo)} calculating invalidations for non-json dep ${resolvedPath}`,
+      );
     }
     visited.add(resolvedPath);
     let items = await this.itemsThatReference(resolvedPath);
+    if (!resolvedPath.endsWith('.json')) {
+      this.#perfLog.debug(
+        `${jobIdentity(this.jobInfo)} found ${items.length} items referencing non-json dep ${resolvedPath}`,
+      );
+    }
     let invalidations = items.map(({ url }) => url);
     let aliases = items.map(({ alias: moduleAlias, type, url }) =>
       type === 'instance' || type === 'instance-error'

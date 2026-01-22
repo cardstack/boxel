@@ -124,11 +124,7 @@ function applyAuthMessageOverrides(renderError: RenderError): RenderError {
 function extractMissingRefFromMessage(message: string): string | undefined {
   let match = /^missing file (.+?)(?: not found)?$/i.exec(message.trim());
   if (match?.[1]) {
-    let ref = match[1].trim();
-    if (!ref.endsWith('.json')) {
-      ref = `${ref}.json`;
-    }
-    return ref;
+    return match[1].trim();
   }
   return undefined;
 }

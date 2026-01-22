@@ -1078,6 +1078,10 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
             links: {
               self: makeRelativeURL(value.reference, opts),
             },
+            data: {
+              type: relationshipType,
+              id: makeRelativeURL(value.reference, opts),
+            },
           },
         },
       };
@@ -2815,6 +2819,11 @@ function lazilyLoadLink(
         isFileLink || reference.endsWith('.json')
           ? reference
           : `${reference}.json`;
+      if (isMissingFile) {
+        console.warn(
+          `[linksTo missing file] field=${field.name} reference=${reference} referenceForMissingFile=${referenceForMissingFile} isFileLink=${isFileLink}`,
+        );
+      }
       let payloadError: {
         title: string;
         status: number;
@@ -2836,7 +2845,9 @@ function lazilyLoadLink(
       }
       if (isMissingFile) {
         let missingDep = isFileLink ? reference : referenceForMissingFile;
-        payloadError.deps = [...new Set([...(payloadError.deps ?? []), missingDep])];
+        payloadError.deps = [
+          ...new Set([...(payloadError.deps ?? []), missingDep]),
+        ];
       }
       let payload = JSON.stringify({
         type: 'error',
