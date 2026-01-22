@@ -1,5 +1,5 @@
-import Component from '@glimmer/component';
 import { scheduleOnce } from '@ember/runloop';
+import Component from '@glimmer/component';
 import { cached, tracked } from '@glimmer/tracking';
 
 import { modifier } from 'ember-modifier';
@@ -43,6 +43,8 @@ export default class HeadFormatPreview extends Component<Signature> {
     };
 
     let updateHeadMarkup = () => {
+      pendingUpdate = false;
+
       let markupSource = getMarkupSource();
       let nextMarkup = markupSource.innerHTML.trim();
 
@@ -59,10 +61,7 @@ export default class HeadFormatPreview extends Component<Signature> {
       pendingUpdate = true;
 
       // Prevent updating this.headMarkup twice in one render
-      scheduleOnce('afterRender', this, () => {
-        pendingUpdate = false;
-        updateHeadMarkup();
-      });
+      scheduleOnce('afterRender', this, updateHeadMarkup);
     };
 
     scheduleUpdate();
