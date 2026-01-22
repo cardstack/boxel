@@ -138,6 +138,18 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         );
       });
 
+      test('serves isolated HTML for realm index request', async function (assert) {
+        let response = await context.request2
+          .get('/test')
+          .set('Accept', 'text/html');
+
+        assert.strictEqual(response.status, 200, 'serves HTML response');
+        assert.ok(
+          response.text.includes('data-test-home-card'),
+          'isolated HTML for index card is injected into the HTML response',
+        );
+      });
+
       test('serves isolated HTML in index responses for card URLs', async function (assert) {
         let response = await context.request2
           .get('/test/isolated-test')
