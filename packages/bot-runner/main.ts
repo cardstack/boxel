@@ -1,7 +1,7 @@
 import './setup-logger'; // This should be first
 import { RoomMemberEvent, RoomEvent, createClient } from 'matrix-js-sdk';
 import { PgAdapter, PgQueuePublisher } from '@cardstack/postgres';
-import { query } from '@cardstack/runtime-common';
+import { param, query } from '@cardstack/runtime-common';
 import { logger } from '@cardstack/runtime-common';
 
 const log = logger('bot-runner');
@@ -16,15 +16,15 @@ const botPassword = process.env.BOT_RUNNER_PASSWORD || 'password';
     baseUrl: matrixUrl,
   });
 
-  let auth = await client.loginWithPassword(botUsername, botPassword).catch(
-    (error) => {
+  let auth = await client
+    .loginWithPassword(botUsername, botPassword)
+    .catch((error) => {
       log.error(error);
       log.error(
         `Bot runner could not login to Matrix at ${matrixUrl}. Check credentials and server availability.`,
       );
       process.exit(1);
-    },
-  );
+    });
 
   log.info(`logged in as ${auth.user_id}`);
 
@@ -46,32 +46,15 @@ const botPassword = process.env.BOT_RUNNER_PASSWORD || 'password';
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);
 
-  async function getRegisteredUsers() {
+  async function getRegistrationsForUser(matrixUserId: string) {
     let rows = await query(dbAdapter, [
-      `SELECT u.matrix_user_id, br.created_at`,
+      `SELECT br.created_at`,
       `FROM bot_registrations br`,
       `JOIN users u ON u.id = br.user_id`,
+      `WHERE u.matrix_user_id = `,
+      param(matrixUserId),
     ]);
-    let users = new Map<string, number>();
-    for (let row of rows as Array<{ matrix_user_id: string; created_at: string }>) {
-      if (!row.matrix_user_id || !row.created_at) {
-        continue;
-      }
-      let createdAtMs = Date.parse(row.created_at);
-      if (Number.isNaN(createdAtMs)) {
-        continue;
-      }
-      users.set(row.matrix_user_id, createdAtMs);
-    }
-    return users;
-  }
-
-  let registeredUsers = new Map<string, number>();
-  try {
-    registeredUsers = await getRegisteredUsers();
-  } catch (error) {
-    log.error('failed to load bot registrations', error);
-    process.exit(1);
+    return rows as Array<{ created_at: string }>;
   }
 
   client.on(RoomMemberEvent.Membership, function (event, member) {
@@ -105,24 +88,28 @@ const botPassword = process.env.BOT_RUNNER_PASSWORD || 'password';
     if (!senderMatrixUserId || senderMatrixUserId === auth.user_id) {
       return;
     }
-    let registrationCreatedAt = registeredUsers.get(senderMatrixUserId);
-    if (!registrationCreatedAt) {
+    let registrations: Array<{ created_at: string }>;
+    try {
+      registrations = await getRegistrationsForUser(senderMatrixUserId);
+    } catch (error) {
+      log.error('failed to load bot registrations', error);
       return;
     }
-    if (event.event.origin_server_ts! < registrationCreatedAt) {
+    if (!registrations.length) {
+      log.info('no registrations found for sender %s', senderMatrixUserId);
       return;
     }
-
-    let eventBody = event.getContent()?.body || '';
-    log.info(
-      'received event in room %s (%s): %s',
-      room.name,
-      room.roomId,
-      eventBody,
-    );
-
-    // TODO: filter out events we want to handle (e.g. command messages, system events)
-    // TODO: enqueue bot command job via queuePublisher.publish(...)
+    for (let registration of registrations) {
+      let createdAt = Date.parse(registration.created_at);
+      if (Number.isNaN(createdAt)) {
+        continue;
+      }
+      if (event.event.origin_server_ts! < createdAt) {
+        continue;
+      }
+      // TODO: filter out events we want to handle based on the registration (e.g. command messages, system events)
+      // TODO: handle the event for this registration (e.g. enqueue a job).
+    }
   });
 
   client.startClient();
