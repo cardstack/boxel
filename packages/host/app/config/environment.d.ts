@@ -39,5 +39,5 @@ declare const config: {
   publishedRealmBoxelSpaceDomain: string;
   publishedRealmBoxelSiteDomain: string;
   defaultSystemCardId: string;
-  cardSizeLimit: number;
+  cardSizeLimitBytes: number;
 };

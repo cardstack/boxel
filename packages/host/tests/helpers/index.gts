@@ -29,6 +29,7 @@ import {
   testRealmURL,
   testRealmURLToUsername,
   Worker,
+  DEFAULT_CARD_SIZE_LIMIT_BYTES,
   type DefinitionLookup,
   type LooseSingleCardDocument,
   type Prerenderer,
@@ -794,7 +795,9 @@ async function setupTestRealm({
     }),
     realmServerURL: ensureTrailingSlash(ENV.realmServerURL),
     definitionLookup,
-    cardSizeLimit: Number(process.env.CARD_SIZE_LIMIT ?? 64 * 1024),
+    cardSizeLimitBytes: Number(
+      process.env.CARD_SIZE_LIMIT_BYTES ?? DEFAULT_CARD_SIZE_LIMIT_BYTES,
+    ),
   });
 
   // we use this to run cards that were added to the test filesystem

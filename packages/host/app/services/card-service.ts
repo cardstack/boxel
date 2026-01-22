@@ -344,7 +344,7 @@ export default class CardService extends Service {
     content: string,
     type: 'card' | 'file',
   ) {
-    let maxSizeBytes = this.environmentService.cardSizeLimit;
+    let maxSizeBytes = this.environmentService.cardSizeLimitBytes;
     try {
       this.sizeLimitError.delete(url);
       validateWriteSize(content, maxSizeBytes, type);

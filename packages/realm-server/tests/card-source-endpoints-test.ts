@@ -962,7 +962,7 @@ module(basename(__filename), function () {
           permissions: {
             '*': ['read', 'write'],
           },
-          cardSizeLimit: 512,
+          cardSizeLimitBytes: 512,
           onRealmSetup,
         });
 

@@ -11,6 +11,7 @@ import { isMeta, type CardResource, type Relationship } from './resource-types';
 import { normalizeRelationships } from './relationship-utils';
 import type { LocalPath } from './paths';
 import { RealmPaths, ensureTrailingSlash, join } from './paths';
+import { DEFAULT_CARD_SIZE_LIMIT_BYTES } from './constants';
 import {
   persistFileMeta,
   removeFileMeta,
@@ -361,8 +362,6 @@ interface Options {
   fromScratchIndexPriority?: number;
 }
 
-const DEFAULT_CARD_SIZE_LIMIT = 64 * 1024;
-
 interface UpdateItem {
   operation: 'add' | 'update' | 'removed';
   url: URL;
@@ -398,7 +397,7 @@ export class Realm {
   #copiedFromRealm: URL | undefined;
   #sourceCache = new AliasCache<SourceCacheEntry>();
   #moduleCache = new AliasCache<ModuleCacheEntry>();
-  #cardSizeLimit: number;
+  #cardSizeLimitBytes: number;
 
   #publicEndpoints: RouteTable<true> = new Map([
     [
@@ -449,7 +448,7 @@ export class Realm {
       realmServerMatrixClient,
       realmServerURL,
       definitionLookup,
-      cardSizeLimit,
+      cardSizeLimitBytes,
     }: {
       url: string;
       adapter: RealmAdapter;
@@ -461,7 +460,7 @@ export class Realm {
       realmServerMatrixClient: MatrixClient;
       realmServerURL: string;
       definitionLookup: DefinitionLookup;
-      cardSizeLimit?: number;
+      cardSizeLimitBytes?: number;
     },
     opts?: Options,
   ) {
@@ -476,7 +475,7 @@ export class Realm {
       opts?.fromScratchIndexPriority ?? systemInitiatedPriority;
     this.#realmServerMatrixClient = realmServerMatrixClient;
     this.#realmServerURL = ensureTrailingSlash(realmServerURL);
-    this.#cardSizeLimit = cardSizeLimit ?? DEFAULT_CARD_SIZE_LIMIT;
+    this.#cardSizeLimitBytes = cardSizeLimitBytes ?? DEFAULT_CARD_SIZE_LIMIT_BYTES;
     this.#realmServerMatrixUserId = userIdFromUsername(
       realmServerMatrixClient.username,
       realmServerMatrixClient.matrixURL.href,
@@ -1933,7 +1932,7 @@ export class Realm {
 
   private assertWriteSize(content: string, type: 'card' | 'file') {
     try {
-      validateWriteSize(content, this.#cardSizeLimit, type);
+      validateWriteSize(content, this.#cardSizeLimitBytes, type);
     } catch (error: any) {
       throw new CardError(error?.message ?? 'Payload too large', {
         status: 413,

@@ -295,8 +295,8 @@ ${REPLACE_MARKER}`;
     let roomId = '!room:example.com';
     let fileUrl = `${testRealmURL}pet.gts`;
 
-    let originalMaxSize = environmentService.cardSizeLimit;
-    environmentService.cardSizeLimit = 20;
+    let originalMaxSize = environmentService.cardSizeLimitBytes;
+    environmentService.cardSizeLimitBytes = 20;
 
     try {
       let { content } = await cardService.getSource(new URL(fileUrl));
@@ -323,7 +323,7 @@ ${REPLACE_MARKER}`;
         'error mentions size limit',
       );
     } finally {
-      environmentService.cardSizeLimit = originalMaxSize;
+      environmentService.cardSizeLimitBytes = originalMaxSize;
     }
   });
 
@@ -342,8 +342,8 @@ ${REPLACE_MARKER}`;
     store.addReference(cardId);
     await store.waitForCardLoad(cardId);
 
-    let originalMaxSize = environmentService.cardSizeLimit;
-    environmentService.cardSizeLimit = 1000;
+    let originalMaxSize = environmentService.cardSizeLimitBytes;
+    environmentService.cardSizeLimitBytes = 1000;
 
     try {
       let patchCommand = new PatchCardInstanceCommand(
@@ -372,7 +372,7 @@ ${REPLACE_MARKER}`;
         'error mentions size limit',
       );
     } finally {
-      environmentService.cardSizeLimit = originalMaxSize;
+      environmentService.cardSizeLimitBytes = originalMaxSize;
     }
   });
 });
