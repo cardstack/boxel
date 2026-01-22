@@ -297,6 +297,7 @@ import type {
   FieldDef,
   BaseDef,
 } from 'https://cardstack.com/base/card-api';
+import type { FileDef } from 'https://cardstack.com/base/file-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type { RealmInfo } from './realm';
 import type { PrerenderedCard, QueryResultsMeta } from './index-query-engine';
@@ -464,6 +465,7 @@ export interface Store {
   peekLive<T extends CardDef>(id: string): T | CardErrorJSONAPI | undefined;
   peekError(id: string): CardErrorJSONAPI | undefined;
   get<T extends CardDef>(id: string): Promise<T | CardErrorJSONAPI>;
+  getFileMeta<T extends FileDef>(url: string): Promise<T | CardErrorJSONAPI>;
   delete(id: string): Promise<void>;
   patch<T extends CardDef>(
     id: string,
@@ -658,5 +660,10 @@ export function isBrowserTestEnv() {
   return typeof window !== 'undefined' && Boolean((globalThis as any).QUnit);
 }
 
+export {
+  BASE_FILE_DEF_CODE_REF,
+  FILEDEF_CODE_REF_BY_EXTENSION,
+  resolveFileDefCodeRef,
+} from './file-def-map';
 export * from './prerendered-card-search';
 export { DEFAULT_LLM_ID_TO_NAME } from './matrix-constants';

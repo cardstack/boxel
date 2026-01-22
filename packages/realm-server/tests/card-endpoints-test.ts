@@ -1888,7 +1888,7 @@ module(basename(__filename), function () {
             })
             .set('Accept', 'application/vnd.card+json');
 
-          assert.strictEqual(response.status, 405, 'HTTP 405 status');
+          assert.strictEqual(response.status, 404, 'HTTP 404 status');
         });
       });
     });
@@ -1922,7 +1922,7 @@ module(basename(__filename), function () {
             })
             .set('Accept', 'application/vnd.card+json');
 
-          assert.strictEqual(response.status, 405, 'HTTP 405 status');
+          assert.strictEqual(response.status, 404, 'HTTP 404 status');
         });
       });
 
@@ -3445,7 +3445,7 @@ module(basename(__filename), function () {
             })
             .set('Accept', 'application/vnd.card+json');
 
-          assert.strictEqual(response.status, 405, 'HTTP 405 status');
+          assert.strictEqual(response.status, 404, 'HTTP 404 status');
         });
       });
     });
@@ -3467,7 +3467,7 @@ module(basename(__filename), function () {
             .delete('/greeting.txt')
             .set('Accept', 'application/vnd.card+json');
 
-          assert.strictEqual(response.status, 405, 'HTTP 405 status');
+          assert.strictEqual(response.status, 404, 'HTTP 404 status');
         });
       });
 

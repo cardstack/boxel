@@ -6,6 +6,7 @@ import type {
   FieldDef,
   FieldConstructor,
 } from 'https://cardstack.com/base/card-api';
+import type { FileDef } from 'https://cardstack.com/base/file-api';
 import { Loader } from './loader';
 import {
   isField,
@@ -107,6 +108,10 @@ export function isCardInstance<T extends CardDef>(card: any): card is T {
 
 export function isFieldDef(field: any): field is typeof FieldDef {
   return isBaseDef(field) && 'isFieldDef' in field;
+}
+
+export function isFileDef(def: any): def is typeof FileDef {
+  return isBaseDef(def) && 'isFileDef' in def;
 }
 
 export function isFieldInstance<T extends FieldDef>(

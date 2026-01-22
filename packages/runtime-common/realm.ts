@@ -64,6 +64,7 @@ import {
   type PrerenderedHtmlFormat,
   codeRefFromInternalKey,
   codeRefWithAbsoluteURL,
+  resolveFileDefCodeRef,
   userInitiatedPriority,
   systemInitiatedPriority,
   userIdFromUsername,
@@ -83,7 +84,6 @@ import { inferContentType } from './infer-content-type';
 import type { CardFields } from './resource-types';
 import {
   fileContentToText,
-  fileContentToBytes,
   readFileAsText,
   getFileWithFallbacks,
   type TextFileRef,
@@ -188,10 +188,6 @@ const CACHE_HIT_VALUE = 'hit';
 const CACHE_MISS_VALUE = 'miss';
 const MODULE_ETAG_VARIANT = 'module';
 const SOURCE_ETAG_VARIANT = 'source';
-const FILE_DEF_CODE_REF: ResolvedCodeRef = {
-  module: `${baseRealm.url}file-api`,
-  name: 'FileDef',
-};
 export const FILE_META_RESERVED_KEYS = new Set([
   'name',
   'url',
@@ -263,21 +259,6 @@ function computeContentHash(content: string | Uint8Array): string {
     } catch {
       throw new Error('Failed to compute content hash');
     }
-  }
-}
-
-async function computeContentHashFromRef(
-  ref: FileRef,
-): Promise<string | undefined> {
-  try {
-    let content = ref.content;
-    if (typeof content === 'string' || content instanceof Uint8Array) {
-      return computeContentHash(content);
-    }
-    let bytes = await fileContentToBytes({ content });
-    return computeContentHash(bytes);
-  } catch {
-    return undefined;
   }
 }
 
@@ -625,11 +606,7 @@ export class Realm {
         SupportedMimeType.CardJson,
         this.patchCardInstance.bind(this),
       )
-      .delete(
-        '/|/.+(?<!.json)',
-        SupportedMimeType.CardJson,
-        this.removeCard.bind(this),
-      )
+      .delete('/|/.+', SupportedMimeType.CardJson, this.removeCard.bind(this))
       .post(
         '/.*',
         SupportedMimeType.CardSource,
@@ -1454,16 +1431,6 @@ export class Realm {
       if (!isLocal) {
         await this.checkPermission(request, requestContext, requiredPermission);
       }
-      let acceptedMimeType = extractSupportedMimeType(
-        request.headers.get('Accept') as unknown as null | string | [string],
-      );
-      if (
-        acceptedMimeType === SupportedMimeType.CardJson &&
-        ['POST', 'PATCH', 'PUT', 'DELETE'].includes(request.method) &&
-        (await this.openFileForMetadata(localPath))
-      ) {
-        return methodNotAllowed(request, requestContext);
-      }
       if (!this.#realmIndexQueryEngine) {
         return systemError({
           requestContext,
@@ -1472,9 +1439,14 @@ export class Realm {
       }
       if (this.#router.handles(request)) {
         return this.#router.handle(request, requestContext);
-      } else {
-        return this.fallbackHandle(request, requestContext);
       }
+      let acceptMimeType = extractSupportedMimeType(
+        request.headers.get('Accept') as unknown as null | string | [string],
+      );
+      if (acceptMimeType === SupportedMimeType.CardJson) {
+        return notFound(request, requestContext);
+      }
+      return this.fallbackHandle(request, requestContext);
     } catch (e) {
       if (e instanceof AuthenticationError) {
         return createResponse({
@@ -2145,60 +2117,7 @@ export class Realm {
     if (!localPath || localPath.startsWith('_')) {
       return undefined;
     }
-    if (localPath.endsWith('.json')) {
-      return undefined;
-    }
     return this.#adapter.openFile(localPath);
-  }
-
-  private async fileMetaDocument(
-    requestContext: RequestContext,
-    localPath: LocalPath,
-    contentType: SupportedMimeType = SupportedMimeType.CardJson,
-  ): Promise<Response | undefined> {
-    let fileRef = await this.openFileForMetadata(localPath);
-    if (!fileRef) {
-      return undefined;
-    }
-    let fileURL = this.paths.fileURL(localPath).href;
-    let name = localPath.split('/').pop() ?? localPath;
-    let inferredContentType = inferContentType(name);
-    let createdAt = await this.getCreatedTime(localPath);
-    let realmInfo = await this.parseRealmInfo();
-    let contentHash =
-      (this.#dbAdapter
-        ? await getContentHash(this.#dbAdapter, this.url, localPath)
-        : undefined) ?? (await computeContentHashFromRef(fileRef));
-    let doc: SingleFileMetaDocument = {
-      data: {
-        type: 'file-meta',
-        id: fileURL,
-        attributes: {
-          name,
-          url: fileURL,
-          sourceUrl: fileURL,
-          contentType: inferredContentType,
-          contentHash,
-          lastModified: fileRef.lastModified,
-          createdAt: createdAt ?? fileRef.lastModified,
-        },
-        meta: {
-          adoptsFrom: FILE_DEF_CODE_REF,
-          realmInfo,
-          realmURL: this.url,
-        },
-        links: { self: fileURL },
-      },
-    };
-    return createResponse({
-      body: JSON.stringify(doc, null, 2),
-      init: {
-        headers: {
-          'content-type': contentType,
-        },
-      },
-      requestContext,
-    });
   }
 
   private async fileMetaDocumentFromIndex(
@@ -2222,7 +2141,7 @@ export class Realm {
       codeRefFromInternalKey(fileEntry.types?.[0]) ??
       (isCodeRef(fileEntry.resource?.meta?.adoptsFrom)
         ? fileEntry.resource?.meta?.adoptsFrom
-        : FILE_DEF_CODE_REF);
+        : resolveFileDefCodeRef(new URL(fileURL)));
     let resourceAttributes =
       (fileEntry as IndexedFile).resource?.attributes ?? {};
     let baseAttributes = {
@@ -2285,8 +2204,12 @@ export class Realm {
     if (localPath === '') {
       localPath = 'index';
     }
+    let queryOpts = this.#realmIndexUpdater.isIndexing
+      ? { useWorkInProgressIndex: true }
+      : undefined;
     let fileEntry = await this.#realmIndexQueryEngine.file(
       this.paths.fileURL(localPath),
+      queryOpts,
     );
     if (fileEntry) {
       return await this.fileMetaDocumentFromIndex(
@@ -2295,14 +2218,9 @@ export class Realm {
         fileEntry,
       );
     }
-    let fileResponse = await this.fileMetaDocument(
-      requestContext,
-      localPath,
-      SupportedMimeType.FileMeta,
+    this.#log.warn(
+      `file-meta missing from index for ${this.paths.fileURL(localPath).href} (indexing=${this.#realmIndexUpdater.isIndexing})`,
     );
-    if (fileResponse) {
-      return fileResponse;
-    }
     return notFound(request, requestContext);
   }
 
@@ -2312,7 +2230,7 @@ export class Realm {
   ): Promise<Response> {
     let localPath = this.paths.local(new URL(request.url));
     if (await this.openFileForMetadata(localPath)) {
-      return methodNotAllowed(request, requestContext);
+      return notFound(request, requestContext);
     }
     let body = await request.text();
     let json;
@@ -2457,7 +2375,7 @@ export class Realm {
       return methodNotAllowed(request, requestContext);
     }
     if (await this.openFileForMetadata(localPath)) {
-      return methodNotAllowed(request, requestContext);
+      return notFound(request, requestContext);
     }
 
     let url = this.paths.fileURL(localPath);
@@ -2785,7 +2703,7 @@ export class Realm {
     let url = new URL(new URL(reqURL).pathname, reqURL);
     let localPath = this.paths.local(url);
     if (await this.openFileForMetadata(localPath)) {
-      return methodNotAllowed(request, requestContext);
+      return notFound(request, requestContext);
     }
     let result = await this.#realmIndexQueryEngine.cardDocument(url);
     if (!result) {

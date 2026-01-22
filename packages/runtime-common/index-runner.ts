@@ -36,9 +36,9 @@ import {
   type LocalPath,
   type Reader,
   type Stats,
-  baseRealm,
   internalKeyFor,
 } from './index';
+import { BASE_FILE_DEF_CODE_REF, resolveFileDefCodeRef } from './file-def-map';
 import { inferContentType } from './infer-content-type';
 import {
   CardError,
@@ -46,42 +46,6 @@ import {
   serializableError,
   type SerializedError,
 } from './error';
-
-const FILEDEF_CODE_REF_BY_EXTENSION: Record<string, ResolvedCodeRef> = {
-  // TODO: Replace with realm metadata configuration.
-  '.markdown': {
-    module: `${baseRealm.url}markdown-file-def`,
-    name: 'MarkdownDef',
-  },
-  '.md': {
-    module: `${baseRealm.url}markdown-file-def`,
-    name: 'MarkdownDef',
-  },
-  '.mismatch': { module: './filedef-mismatch', name: 'FileDef' },
-};
-const BASE_FILE_DEF_CODE_REF: ResolvedCodeRef = {
-  module: `${baseRealm.url}file-api`,
-  name: 'FileDef',
-};
-
-function resolveFileDefCodeRef(fileURL: URL): ResolvedCodeRef {
-  let name = fileURL.pathname.split('/').pop() ?? '';
-  let dot = name.lastIndexOf('.');
-  let extension = dot === -1 ? '' : name.slice(dot).toLowerCase();
-  let mapping = extension
-    ? FILEDEF_CODE_REF_BY_EXTENSION[extension]
-    : undefined;
-  if (!mapping) {
-    return BASE_FILE_DEF_CODE_REF;
-  }
-  if (mapping.module.includes('://')) {
-    return mapping;
-  }
-  return {
-    ...mapping,
-    module: new URL(mapping.module, fileURL).href,
-  };
-}
 
 function canonicalURL(url: string, relativeTo?: string): string {
   try {
@@ -110,6 +74,7 @@ export class IndexRunner {
   #realmURL: URL;
   #realmInfo?: RealmInfo;
   #jobInfo: JobInfo;
+  #reindexedAfterFile = new Set<string>();
   #reportStatus?: (
     jobInfo: JobInfo | undefined,
     status: 'start' | 'finish',
@@ -189,11 +154,40 @@ export class IndexRunner {
 
     let visitStart = Date.now();
     invalidations = sortInvalidations(invalidations);
-    for (let invalidation of invalidations) {
+    let pending = [...invalidations];
+    let queued = new Set(pending.map((url) => url.href));
+    let visitCounts = new Map<string, number>();
+    while (pending.length > 0) {
+      let invalidation = pending.shift()!;
+      queued.delete(invalidation.href);
+      let count = visitCounts.get(invalidation.href) ?? 0;
+      if (count >= 2) {
+        continue;
+      }
+      visitCounts.set(invalidation.href, count + 1);
       await current.tryToVisit(invalidation);
+      if (!invalidation.href.endsWith('.json')) {
+        await current.batch.invalidate([invalidation]);
+        let newInvalidations = current.batch.invalidations
+          .filter((href) => href !== invalidation.href && !queued.has(href))
+          .map((href) => new URL(href));
+        if (newInvalidations.length > 0) {
+          let sorted = sortInvalidations(newInvalidations);
+          for (let next of sorted) {
+            let nextCount = visitCounts.get(next.href) ?? 0;
+            if (nextCount >= 2) {
+              continue;
+            }
+            pending.push(next);
+            queued.add(next.href);
+          }
+        }
+      }
     }
     current.#perfLog.debug(
-      `${jobIdentity(current.#jobInfo)} completed index visit in ${Date.now() - visitStart} ms`,
+      `${jobIdentity(current.#jobInfo)} completed index visit in ${
+        Date.now() - visitStart
+      } ms`,
     );
     let finalizeStart = Date.now();
     let { totalIndexEntries } = await current.batch.done();
@@ -202,7 +196,9 @@ export class IndexRunner {
     );
     current.stats.totalIndexEntries = totalIndexEntries;
     current.#log.debug(
-      `${jobIdentity(current.#jobInfo)} completed from scratch indexing in ${Date.now() - start}ms`,
+      `${jobIdentity(current.#jobInfo)} completed from scratch indexing in ${
+        Date.now() - start
+      }ms`,
     );
     current.#perfLog.debug(
       `${jobIdentity(current.#jobInfo)} completed from scratch indexing for realm ${
@@ -251,11 +247,38 @@ export class IndexRunner {
     }
 
     let hrefs = urls.map((u) => u.href);
-    for (let invalidation of invalidations) {
+    let pending = [...invalidations];
+    let queued = new Set(pending.map((url) => url.href));
+    let visitCounts = new Map<string, number>();
+    while (pending.length > 0) {
+      let invalidation = pending.shift()!;
+      queued.delete(invalidation.href);
+      let count = visitCounts.get(invalidation.href) ?? 0;
+      if (count >= 2) {
+        continue;
+      }
+      visitCounts.set(invalidation.href, count + 1);
       if (operation === 'delete' && hrefs.includes(invalidation.href)) {
         // file is deleted, there is nothing to visit
       } else {
         await current.tryToVisit(invalidation);
+      }
+      if (!invalidation.href.endsWith('.json')) {
+        await current.batch.invalidate([invalidation]);
+        let newInvalidations = current.batch.invalidations
+          .filter((href) => !queued.has(href))
+          .map((href) => new URL(href));
+        if (newInvalidations.length > 0) {
+          let sorted = sortInvalidations(newInvalidations);
+          for (let next of sorted) {
+            let nextCount = visitCounts.get(next.href) ?? 0;
+            if (nextCount >= 2) {
+              continue;
+            }
+            pending.push(next);
+            queued.add(next.href);
+          }
+        }
       }
     }
 
@@ -552,6 +575,9 @@ export class IndexRunner {
     if (!fileRef) {
       let error = new CardError(`missing file ${url.href}`, { status: 404 });
       error.deps = [url.href];
+      this.#log.warn(
+        `${jobIdentity(this.#jobInfo)} missing file while visiting ${url.href}; deps=${error.deps.join(', ')}`,
+      );
       throw error;
     }
     let { content, lastModified } = fileRef;
@@ -808,6 +834,11 @@ export class IndexRunner {
           ),
         );
         renderError.error.deps = [...new Set(renderError.error.deps)];
+        if (/^missing file /i.test(renderError.error.message ?? '')) {
+          this.#log.warn(
+            `${jobIdentity(this.#jobInfo)} missing file while indexing card instance ${path}; deps=${(renderError.error.deps ?? []).join(', ')}`,
+          );
+        }
 
         if (renderError.cardType) {
           renderError.searchData = {
@@ -861,6 +892,7 @@ export class IndexRunner {
       }
     } finally {
       deferred?.fulfill();
+      this.#indexingInstances.delete(fileURL);
       this.reportStatus('finish', fileURL, resource);
     }
   }
@@ -937,6 +969,27 @@ export class IndexRunner {
     };
 
     if (!extractResult || extractResult.status === 'error') {
+      if (uncaughtError) {
+        this.#log.warn(
+          `${jobIdentity(this.#jobInfo)} file extract threw for ${path}: ${
+            (uncaughtError as Error)?.message ?? String(uncaughtError)
+          }`,
+        );
+      }
+      if (extractResult && !extractResult.error) {
+        this.#log.warn(
+          `${jobIdentity(this.#jobInfo)} file extract error without payload for ${path}: ${JSON.stringify(
+            extractResult,
+          )}`,
+        );
+      }
+      if (extractResult?.error) {
+        this.#log.warn(
+          `${jobIdentity(this.#jobInfo)} file extract error details for ${path}: ${JSON.stringify(
+            extractResult.error,
+          )}`,
+        );
+      }
       let renderError = normalizeToErrorEntry(
         extractResult?.error,
         uncaughtError,
@@ -947,6 +1000,11 @@ export class IndexRunner {
         renderError.error.deps.push(...extractResult.deps);
       }
       renderError.error.deps = [...new Set(renderError.error.deps)];
+      if (/^missing file /i.test(renderError.error.message ?? '')) {
+        this.#log.warn(
+          `${jobIdentity(this.#jobInfo)} missing file while indexing ${path}; deps=${(renderError.error.deps ?? []).join(', ')}`,
+        );
+      }
 
       this.#log.warn(
         `${jobIdentity(this.#jobInfo)} encountered error indexing file ${path}: ${renderError.error.message}`,
@@ -983,6 +1041,19 @@ export class IndexRunner {
       types: fileTypes,
       displayNames: [],
     });
+    let dependents = await this.batch.dependentsFor(entryURL);
+    if (dependents.length === 0 && entryURL.href.endsWith('.png')) {
+      this.#log.warn(
+        `${jobIdentity(this.#jobInfo)} no dependents found for ${entryURL.href} after indexing file`,
+      );
+    }
+    for (let dependent of dependents) {
+      if (dependent === entryURL.href || this.#reindexedAfterFile.has(dependent)) {
+        continue;
+      }
+      this.#reindexedAfterFile.add(dependent);
+      await this.tryToVisit(new URL(dependent));
+    }
     this.stats.filesIndexed++;
   }
 
@@ -990,7 +1061,8 @@ export class IndexRunner {
     instanceURL: URL,
     entry: InstanceEntry | ErrorEntry,
   ) {
-    await this.batch.updateEntry(assertURLEndsWithJSON(instanceURL), entry);
+    let entryURL = assertURLEndsWithJSON(instanceURL);
+    await this.batch.updateEntry(entryURL, entry);
     if (entry.type === 'instance') {
       this.stats.instancesIndexed++;
     } else {

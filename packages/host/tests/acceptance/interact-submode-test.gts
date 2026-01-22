@@ -6,6 +6,7 @@ import {
   typeIn,
   triggerKeyEvent,
   settled,
+  waitFor,
 } from '@ember/test-helpers';
 
 import { triggerEvent } from '@ember/test-helpers';
@@ -511,7 +512,7 @@ module('Acceptance | interact submode tests', function (hooks) {
     });
 
     test('clicking a linked file opens it as a new isolated stack item', async function (assert) {
-      let fileId = `${testRealmURL}FileLinkCard/notes.txt`;
+      let fileId = `${testRealmURL}FileLinkCard/notes.md`;
       await visitOperatorMode({
         stacks: [
           [
@@ -547,6 +548,55 @@ module('Acceptance | interact submode tests', function (hooks) {
           ],
         ],
       });
+    });
+
+    test('can link a file via the chooser and index the update', async function (assert) {
+      let cardId = `${testRealmURL}FileLinkCard/empty`;
+      await visitOperatorMode({
+        stacks: [
+          [
+            {
+              id: cardId,
+              format: 'edit',
+            },
+          ],
+        ],
+      });
+
+      let messageService = getService('message-service');
+      let receivedEventDeferred = new Deferred<IncrementalIndexEventContent>();
+      messageService.listenerCallbacks.get(testRealmURL)!.push((ev) => {
+        if (
+          ev.eventName === 'index' &&
+          ev.indexType === 'incremental-index-initiation'
+        ) {
+          return; // ignore the index initiation event
+        }
+        if (ev.eventName === 'index' && ev.indexType === 'incremental') {
+          receivedEventDeferred.fulfill(ev as IncrementalIndexEventContent);
+        }
+      });
+
+      await click(
+        `[data-test-links-to-editor="attachment"] [data-test-add-new="attachment"]`,
+      );
+      await waitFor('[data-test-file="README.md"]');
+      await click('[data-test-file="README.md"]');
+      await click('[data-test-choose-file-modal-add-button]');
+
+      await click('[data-test-edit-button]');
+
+      assert
+        .dom(
+          `[data-test-stack-card="${cardId}"] [data-test-file-link-attachment]`,
+        )
+        .includesText('Hello World', 'linked file is rendered');
+
+      let indexEvent = await receivedEventDeferred.promise;
+      assert.ok(
+        indexEvent.invalidations.includes(cardId),
+        'indexing invalidates the edited card',
+      );
     });
 
     test('can save mutated card without having opened in stack', async function (assert) {

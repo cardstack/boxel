@@ -26,7 +26,7 @@ import type { Realm } from './realm';
 import { FILE_META_RESERVED_KEYS } from './realm';
 import { RealmPaths } from './paths';
 import type { Query } from './query';
-import { CardError, type SerializedError } from './error';
+import { CardError, serializableError, type SerializedError } from './error';
 import { isCodeRef, isResolvedCodeRef, visitModuleDeps } from './code-ref';
 import {
   isCardCollectionDocument,
@@ -35,7 +35,12 @@ import {
   type CardCollectionDocument,
 } from './document-types';
 import { relationshipEntries } from './relationship-utils';
-import type { CardResource, FileMetaResource, Saved } from './resource-types';
+import {
+  FileMetaResourceType,
+  type CardResource,
+  type FileMetaResource,
+  type Saved,
+} from './resource-types';
 import type { FieldDefinition } from './definitions';
 import {
   normalizeQueryDefinition,
@@ -217,16 +222,32 @@ export class RealmIndexQueryEngine {
       );
     }
     if (opts?.loadLinks) {
-      let included = await this.loadLinks(
-        {
-          realmURL: this.realmURL,
-          resource: doc.data,
-          omit: [...(doc.data.id ? [doc.data.id] : [])],
-        },
-        opts,
-      );
-      if (included.length > 0) {
-        doc.included = included;
+      try {
+        let included = await this.loadLinks(
+          {
+            realmURL: this.realmURL,
+            resource: doc.data,
+            omit: [...(doc.data.id ? [doc.data.id] : [])],
+          },
+          opts,
+        );
+        if (included.length > 0) {
+          doc.included = included;
+        }
+      } catch (err) {
+        if (err instanceof CardError) {
+          let scopedCssUrls = (err.deps ?? []).filter(isScopedCSSRequest);
+          return {
+            type: 'error',
+            error: {
+              errorDetail: serializableError(err),
+              scopedCssUrls,
+              lastKnownGoodHtml: null,
+              cardTitle: null,
+            },
+          };
+        }
+        throw err;
       }
     }
     relativizeDocument(doc, this.realmURL);
@@ -598,6 +619,10 @@ export class RealmIndexQueryEngine {
         if (!relationship.links?.self) {
           continue;
         }
+        let relationshipType =
+          !Array.isArray(relationship.data) && relationship.data
+            ? relationship.data.type
+            : undefined;
         processedRelationships.add(key);
         let linkURL = new URL(
           relationship.links.self,
@@ -605,21 +630,35 @@ export class RealmIndexQueryEngine {
         );
         let linkResource: CardResource<Saved> | FileMetaResource | undefined;
         if (realmPath.inRealm(linkURL)) {
-          let maybeResult = await this.#indexQueryEngine.getInstance(
-            linkURL,
-            opts,
-          );
-          if (maybeResult?.type === 'instance') {
-            linkResource = maybeResult.instance;
-          } else {
+          if (relationshipType === FileMetaResourceType) {
             let fileEntry = await this.#indexQueryEngine.getFile(linkURL, opts);
             if (fileEntry) {
               linkResource = fileResourceFromIndex(linkURL, fileEntry);
             }
+          } else {
+            let maybeResult = await this.#indexQueryEngine.getInstance(
+              linkURL,
+              opts,
+            );
+            if (maybeResult?.type === 'instance') {
+              linkResource = maybeResult.instance;
+            } else {
+              let fileEntry = await this.#indexQueryEngine.getFile(
+                linkURL,
+                opts,
+              );
+              if (fileEntry) {
+                linkResource = fileResourceFromIndex(linkURL, fileEntry);
+              }
+            }
           }
         } else {
+          let acceptHeader =
+            relationshipType === FileMetaResourceType
+              ? SupportedMimeType.FileMeta
+              : SupportedMimeType.CardJson;
           let response = await this.#fetch(linkURL, {
-            headers: { Accept: SupportedMimeType.CardJson },
+            headers: { Accept: acceptHeader },
           });
           if (!response.ok) {
             let cardError = await CardError.fromFetchResponse(

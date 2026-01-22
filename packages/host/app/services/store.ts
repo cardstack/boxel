@@ -52,6 +52,7 @@ import {
 
 import type { CardDef, BaseDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
+import type { FileDef } from 'https://cardstack.com/base/file-api';
 
 import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
 
@@ -375,6 +376,31 @@ export default class StoreService extends Service implements StoreInterface {
 
   async get<T extends CardDef>(id: string): Promise<T | CardErrorJSONAPI> {
     return await this.getInstance<T>({ idOrDoc: id });
+  }
+
+  async getFileMeta<T extends FileDef>(
+    url: string,
+  ): Promise<T | CardErrorJSONAPI> {
+    return await this.withTestWaiters(async () => {
+      try {
+        let fileMetaDoc = await this.store.loadFileMetaDocument(url);
+        if (isCardError(fileMetaDoc)) {
+          throw fileMetaDoc;
+        }
+        let api = await this.cardService.getAPI();
+        let fileInstance = await api.createFromSerialized(
+          fileMetaDoc.data,
+          fileMetaDoc,
+          fileMetaDoc.data.id ? new URL(fileMetaDoc.data.id) : new URL(url),
+          { store: this.store },
+        );
+        this.setIdentityContext(fileInstance as unknown as CardDef);
+        return fileInstance as unknown as T;
+      } catch (error: any) {
+        let errorResponse = processCardError(url, error);
+        return errorResponse.errors[0];
+      }
+    });
   }
 
   // Bypass cached state and fetch from source of truth

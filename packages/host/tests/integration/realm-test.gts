@@ -2958,6 +2958,48 @@ module('Integration | realm', function (hooks) {
     assert.strictEqual(response.status, 404, 'file no longer exists');
   });
 
+  test('realm can delete a file asset via card source', async function (assert) {
+    let { realm } = await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'notes.md': '# Notes\n\nhello\n',
+      },
+    });
+
+    let response = await handle(
+      realm,
+      new Request(`${testRealmURL}notes.md`, {
+        headers: {
+          Accept: 'application/vnd.card+source',
+        },
+      }),
+    );
+    assert.strictEqual(response.status, 200, 'file exists');
+
+    response = await handle(
+      realm,
+      new Request(`${testRealmURL}notes.md`, {
+        method: 'DELETE',
+        headers: {
+          Accept: 'application/vnd.card+source',
+        },
+      }),
+    );
+    await realm.flushUpdateEvents();
+
+    assert.strictEqual(response.status, 204, 'file is deleted');
+
+    response = await handle(
+      realm,
+      new Request(`${testRealmURL}notes.md`, {
+        headers: {
+          Accept: 'application/vnd.card+source',
+        },
+      }),
+    );
+    assert.strictEqual(response.status, 404, 'file no longer exists');
+  });
+
   test('realm can serve compiled js file when requested without file extension ', async function (assert) {
     let { realm } = await setupIntegrationTestRealm({
       mockMatrixUtils,

@@ -269,7 +269,7 @@ export class CardError extends Error implements SerializedError {
 }
 
 export function isCardErrorJSONAPI(err: any): err is CardErrorJSONAPI {
-  return (
+  return !!(
     err != null &&
     typeof err === 'object' &&
     err.status &&
