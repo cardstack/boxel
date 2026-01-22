@@ -352,6 +352,8 @@ module(`server-endpoints/${basename(__filename)}`, function () {
 
         let deleteResponse = await context.request2
           .delete('/_bot-registration')
+          .set('Accept', 'application/vnd.api+json')
+          .set('Content-Type', 'application/vnd.api+json')
           .set(
             'Authorization',
             `Bearer ${createRealmServerJWT(
@@ -385,6 +387,8 @@ module(`server-endpoints/${basename(__filename)}`, function () {
 
         let response = await context.request2
           .delete('/_bot-registration')
+          .set('Accept', 'application/vnd.api+json')
+          .set('Content-Type', 'application/vnd.api+json')
           .set(
             'Authorization',
             `Bearer ${createRealmServerJWT(
@@ -441,6 +445,8 @@ module(`server-endpoints/${basename(__filename)}`, function () {
 
         let response = await context.request2
           .delete('/_bot-registration')
+          .set('Accept', 'application/vnd.api+json')
+          .set('Content-Type', 'application/vnd.api+json')
           .set(
             'Authorization',
             `Bearer ${createRealmServerJWT(
