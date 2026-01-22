@@ -405,9 +405,7 @@ export class MyCard extends CardDef {
         responseJson.output,
         `import { eq } from '@cardstack/boxel-ui/helpers';
 import MyComponent from 'somewhere';
-<template>
-  <MyComponent @flag={{eq 1 1}} />
-</template>
+<template><MyComponent @flag={{eq 1 1}} /></template>
 `,
         'GTS template content is properly formatted',
       );
