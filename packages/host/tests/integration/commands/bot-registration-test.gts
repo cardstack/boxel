@@ -154,9 +154,7 @@ module('Integration | commands | bot-registration', function (hooks) {
       botRegistrationId: registerResult.botRegistrationId,
     });
 
-    let registrations = await realmServer.getBotRegistrations(
-      '@testuser:localhost',
-    );
+    let registrations = await realmServer.getBotRegistrations();
     assert.strictEqual(registrations.length, 0, 'bot registration removed');
   });
 });
