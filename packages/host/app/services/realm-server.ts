@@ -663,7 +663,7 @@ export default class RealmServerService extends Service {
     return response;
   }
 
-  async registerBot(matrixUserId: string) {
+  async registerBot(matrixUserId: string, name?: string) {
     await this.login();
 
     let response = await this.network.fetch(
@@ -680,6 +680,7 @@ export default class RealmServerService extends Service {
             type: 'bot-registration',
             attributes: {
               matrixUserId,
+              ...(name === undefined ? {} : { name }),
             },
           },
         }),

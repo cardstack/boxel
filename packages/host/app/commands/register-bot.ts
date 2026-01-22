@@ -17,7 +17,7 @@ export default class RegisterBotCommand extends HostBaseCommand<
   @service declare private realmServer: RealmServerService;
 
   static actionVerb = 'Register';
-  description = 'Register the bot runner for this user';
+  description = 'Register bot';
 
   async getInputType() {
     let commandModule = await this.loadCommandModule();
@@ -33,6 +33,7 @@ export default class RegisterBotCommand extends HostBaseCommand<
 
     let registration = (await this.realmServer.registerBot(
       input.matrixUserId,
+      input.name,
     )) as RegisterBotResult;
 
     return new RegisterBotResult({

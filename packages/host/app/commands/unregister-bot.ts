@@ -13,7 +13,7 @@ export default class UnregisterBotCommand extends HostBaseCommand<
   @service declare private realmServer: RealmServerService;
 
   static actionVerb = 'Unregister';
-  description = 'Unregister the bot runner for this user';
+  description = 'Unregister bot';
 
   async getInputType() {
     let commandModule = await this.loadCommandModule();

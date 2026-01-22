@@ -54,7 +54,7 @@ const botPassword = process.env.BOT_RUNNER_PASSWORD || 'password';
       `WHERE u.matrix_user_id = `,
       param(matrixUserId),
     ]);
-    return rows as Array<{ created_at: string }>;
+    return rows as { created_at: string }[];
   }
 
   client.on(RoomMemberEvent.Membership, function (event, member) {
@@ -88,7 +88,7 @@ const botPassword = process.env.BOT_RUNNER_PASSWORD || 'password';
     if (!senderMatrixUserId || senderMatrixUserId === auth.user_id) {
       return;
     }
-    let registrations: Array<{ created_at: string }>;
+    let registrations: Awaited<ReturnType<typeof getRegistrationsForUser>>;
     try {
       registrations = await getRegistrationsForUser(senderMatrixUserId);
     } catch (error) {
