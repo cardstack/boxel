@@ -11,6 +11,13 @@ const matrixUrl = process.env.MATRIX_URL || 'http://localhost:8008';
 const botUsername = process.env.BOT_RUNNER_USERNAME || 'bot-runner';
 const botPassword = process.env.BOT_RUNNER_PASSWORD || 'password';
 
+interface BotRegistration {
+  id: string;
+  name: string | null;
+  created_at: string;
+  matrix_user_id: string;
+}
+
 (async () => {
   let client = createClient({
     baseUrl: matrixUrl,
@@ -48,13 +55,13 @@ const botPassword = process.env.BOT_RUNNER_PASSWORD || 'password';
 
   async function getRegistrationsForUser(matrixUserId: string) {
     let rows = await query(dbAdapter, [
-      `SELECT br.created_at`,
+      `SELECT br.id, br.name, br.created_at, u.matrix_user_id`,
       `FROM bot_registrations br`,
       `JOIN users u ON u.id = br.user_id`,
       `WHERE u.matrix_user_id = `,
       param(matrixUserId),
     ]);
-    return rows as { created_at: string }[];
+    return rows as BotRegistration[];
   }
 
   client.on(RoomMemberEvent.Membership, function (event, member) {
