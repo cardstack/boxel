@@ -235,8 +235,8 @@ export class CharacterSheet extends CardDef {
       {{! Character Header Section }}
       <div class='character-header'>
         <h1>{{@model.name}}</h1>
-        <h3>{{@model.title}}</h3>
-        <p>{{@model.description}}</p>
+        <h3>{{@model.cardTitle}}</h3>
+        <p>{{@model.cardDescription}}</p>
       </div>
 
       {{! Character Basic Information Section }}

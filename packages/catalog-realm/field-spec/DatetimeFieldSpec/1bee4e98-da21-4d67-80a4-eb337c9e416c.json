@@ -9,22 +9,22 @@
     "type": "card",
     "attributes": {
       "ref": {
-        "name": "DatetimeFieldSpec",
-        "module": "../datetime-field-spec"
+        "name": "default",
+        "module": "../../fields/date-time"
       },
-      "short": "2026-01-08T16:04:00",
-      "title": "Datetime Field Spec",
+      "short": null,
       "readMe": null,
       "cardInfo": {
+        "name": null,
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": null
+        "summary": null,
+        "cardThumbnailURL": null
       },
-      "specType": "card",
-      "standard": "2026-01-08T16:03:00",
-      "description": null,
-      "customFormat": "2026-01-08T16:04:00",
+      "specType": "field",
+      "standard": "2026-01-21T22:56:00",
+      "cardTitle": "Datetime Field Spec",
+      "customFormat": null,
+      "cardDescription": null,
       "containedExamples": []
     },
     "relationships": {

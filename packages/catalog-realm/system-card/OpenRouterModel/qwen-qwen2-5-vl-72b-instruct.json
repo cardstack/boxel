@@ -6,7 +6,7 @@
       "canonicalSlug": "qwen/qwen2.5-vl-72b-instruct",
       "name": "Qwen: Qwen2.5 VL 72B Instruct",
       "created": 1738410311,
-      "description": "Qwen2.5-VL is proficient in recognizing common objects such as flowers, birds, fish, and insects. It is also highly capable of analyzing texts, charts, icons, graphics, and layouts within images.",
+      "cardDescription": "Qwen2.5-VL is proficient in recognizing common objects such as flowers, birds, fish, and insects. It is also highly capable of analyzing texts, charts, icons, graphics, and layouts within images.",
       "pricing": {
         "prompt": "0.00000003",
         "completion": "0.00000013",
@@ -49,9 +49,9 @@
       ],
       "defaultParameters": {},
       "cardInfo": {
-        "title": null,
-        "description": null,
-        "thumbnailURL": null,
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
         "notes": null
       }
     },

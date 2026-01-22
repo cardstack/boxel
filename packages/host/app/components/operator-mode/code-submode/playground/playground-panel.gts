@@ -24,7 +24,8 @@ import { Folder, IconPlusThin } from '@cardstack/boxel-ui/icons';
 import {
   CardContextName,
   cardTypeDisplayName,
-  getCardMenuItems,
+  getMenuItems,
+  isSpecCard,
   type Permissions,
   PermissionsContextName,
 } from '@cardstack/runtime-common';
@@ -176,7 +177,7 @@ export default class PlaygroundPanel extends Component<Signature> {
       return [];
     }
     return toMenuItems(
-      this.card?.[getCardMenuItems]?.({
+      this.card?.[getMenuItems]?.({
         canEdit: this.canEditCard,
         cardCrudFunctions: {},
         menuContext: 'code-mode-playground',
@@ -584,10 +585,14 @@ export default class PlaygroundPanel extends Component<Signature> {
 
   private autoGenerateInstance = restartableTask(async () => {
     this.#creationError = false;
-    if (this.args.isFieldDef && this.specCard) {
-      await this.createNewField.perform(this.specCard);
-    } else {
-      await this.createNewCard.perform();
+    try {
+      if (this.args.isFieldDef && this.specCard) {
+        await this.createNewField.perform(this.specCard);
+      } else {
+        await this.createNewCard.perform();
+      }
+    } catch {
+      this.#creationError = true;
     }
   });
 
@@ -627,7 +632,7 @@ export default class PlaygroundPanel extends Component<Signature> {
           attributes: {
             specType: 'field',
             ref: this.args.codeRef,
-            title: this.args.codeRef.name,
+            cardTitle: this.args.codeRef.name,
             containedExamples: [new fieldCard()],
           },
           meta: {
@@ -644,6 +649,7 @@ export default class PlaygroundPanel extends Component<Signature> {
         },
       };
     } else {
+      await this.assertNotSpecCard();
       newCardJSON = {
         data: {
           lid: localId,
@@ -694,6 +700,15 @@ export default class PlaygroundPanel extends Component<Signature> {
     this.persistSelections(specCard.id, 'edit', index);
     this.closeInstanceChooser();
   });
+
+  private async assertNotSpecCard() {
+    let cardDef = await loadCardDef(this.args.codeRef, {
+      loader: this.loaderService.loader,
+    });
+    if (isSpecCard(cardDef)) {
+      throw new Error('Cannot create a spec from another spec');
+    }
+  }
 
   private closeInstanceChooser = () =>
     (
@@ -933,7 +948,9 @@ export default class PlaygroundPanel extends Component<Signature> {
                   />
                 </section>
               {{else if this.createNewIsRunning}}
-                <LoadingIndicator @color='var(--boxel-light)' />
+                <div class='loading'>
+                  <LoadingIndicator @color='var(--boxel-light)' />
+                </div>
               {{else if this.maybeGenerateFieldSpec}}
                 <SpecSearch
                   @query={{this.specQuery}}
@@ -1015,8 +1032,11 @@ export default class PlaygroundPanel extends Component<Signature> {
       }
       .loading {
         display: flex;
+        align-items: center;
         justify-content: center;
-        margin: 30vh auto;
+        flex: 1;
+        min-height: 100%;
+        width: 100%;
       }
 
       .playground-panel-content:has(.social-preview-container) {

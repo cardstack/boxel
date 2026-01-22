@@ -9,12 +9,12 @@
       },
       "specType": "command",
       "containedExamples": [],
-      "title": "ExportProductCatalogCommand",
-      "description": null,
+      "cardTitle": "ExportProductCatalogCommand",
+      "cardDescription": null,
       "cardInfo": {
-        "title": null,
-        "description": null,
-        "thumbnailURL": null,
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
         "notes": null
       }
     },

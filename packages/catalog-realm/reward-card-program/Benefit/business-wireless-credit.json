@@ -16,14 +16,14 @@
         }
       },
       "details": [
-        "Statement credits up to $10 per month for wireless phone service purchases made directly with a U.S. wireless telephone service provider. Enrollment required.‡"
+        "Statement credits up to $10 per month for wireless phone service purchases made directly with a U.S. wireless telephone service provider. Enrollment required.\u2021"
       ],
       "partner": "",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": null
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null
       },
       "minSpend": {
         "amount": 10,

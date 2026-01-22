@@ -1,11 +1,12 @@
 // --- Type Imports ---
 
 import type {
-  LooseCardResource,
-  Loader,
   CardDocument,
   CardResource,
   CardResourceMeta,
+  FileMetaResource,
+  Loader,
+  LooseCardResource,
   LooseSingleCardDocument,
   Meta,
 } from '@cardstack/runtime-common';
@@ -86,7 +87,7 @@ function myLoader(): Loader {
 }
 
 export async function cardClassFromResource<CardT extends BaseDefConstructor>(
-  resource: LooseCardResource | undefined,
+  resource: LooseCardResource | CardResource | FileMetaResource | undefined,
   fallback: CardT,
   relativeTo: URL | undefined,
 ): Promise<CardT> {
@@ -172,7 +173,7 @@ export function makeRelativeURL(
 export function resourceFrom(
   doc: CardDocument | undefined,
   resourceId: string | undefined,
-): LooseCardResource | undefined {
+): CardResource | FileMetaResource | undefined {
   if (doc == null) {
     return;
   }

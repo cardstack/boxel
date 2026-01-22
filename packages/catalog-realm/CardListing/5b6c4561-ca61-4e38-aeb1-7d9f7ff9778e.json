@@ -15,9 +15,9 @@
       "summary": "A comprehensive application for managing and organizing travel routes between multiple destinations.",
       "cardInfo": {
         "notes": null,
-        "title": "Travel Mapper",
-        "description": "Organize and manage travel routes with support for multiple destinations and route planning. Perfect for logistics, travel planning, and route optimization.",
-        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/travel-mapper-listing/thumbnail.png"
+        "name": "Travel Mapper",
+        "summary": "Organize and manage travel routes with support for multiple destinations and route planning. Perfect for logistics, travel planning, and route optimization.",
+        "cardThumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/travel-mapper-listing/thumbnail.png"
       }
     },
     "relationships": {

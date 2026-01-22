@@ -38,8 +38,8 @@
           "value": "x.com"
         }
       ],
-      "description": "Owner and head pastry chef at Sweet Tooth Bakery",
-      "thumbnailURL": "https://images.pexels.com/photos/415829/pexels-photo-415829.jpeg"
+      "cardDescription": "Owner and head pastry chef at Sweet Tooth Bakery",
+      "cardThumbnailURL": "https://images.pexels.com/photos/415829/pexels-photo-415829.jpeg"
     },
     "relationships": {
       "crmApp": {

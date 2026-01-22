@@ -21,9 +21,9 @@
           "dietaryRestrictions": "None"
         }
       ],
-      "title": "Back to School Night RSVP",
-      "description": "Please RSVP for our annual Back to School Night event. Let us know if you have any dietary restrictions.",
-      "thumbnailURL": null
+      "cardTitle": "Back to School Night RSVP",
+      "cardDescription": "Please RSVP for our annual Back to School Night event. Let us know if you have any dietary restrictions.",
+      "cardThumbnailURL": null
     },
     "meta": {
       "adoptsFrom": {

@@ -6,7 +6,7 @@
       "canonicalSlug": "qwen/qwen3-coder-plus",
       "name": "Qwen: Qwen3 Coder Plus",
       "created": 1758662707,
-      "description": "Qwen3 Coder Plus is Alibaba's proprietary version of the Open Source Qwen3 Coder 480B A35B. It is a powerful coding agent model specializing in autonomous programming via tool calling and environment interaction, combining coding proficiency with versatile general-purpose abilities.",
+      "cardDescription": "Qwen3 Coder Plus is Alibaba's proprietary version of the Open Source Qwen3 Coder 480B A35B. It is a powerful coding agent model specializing in autonomous programming via tool calling and environment interaction, combining coding proficiency with versatile general-purpose abilities.",
       "pricing": {
         "prompt": "0.000001",
         "completion": "0.000005",
@@ -48,9 +48,9 @@
         "frequency_penalty": null
       },
       "cardInfo": {
-        "title": null,
-        "description": null,
-        "thumbnailURL": null,
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
         "notes": null
       }
     },

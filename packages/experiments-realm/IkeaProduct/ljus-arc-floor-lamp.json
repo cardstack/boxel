@@ -11,13 +11,13 @@
       "price": 189,
       "cardInfo": {
         "notes": null,
-        "title": "LJUS Arc Floor Lamp",
-        "description": "Powder-coated arc lamp with linen drum shade.",
-        "thumbnailURL": "https://images.pexels.com/photos/6585751/pexels-photo-6585751.jpeg?auto=compress&cs=tinysrgb&w=600"
+        "name": "LJUS Arc Floor Lamp",
+        "summary": "Powder-coated arc lamp with linen drum shade.",
+        "cardThumbnailURL": "https://images.pexels.com/photos/6585751/pexels-photo-6585751.jpeg?auto=compress&cs=tinysrgb&w=600"
       },
       "currency": "USD",
       "heroImage": "https://images.pexels.com/photos/6585751/pexels-photo-6585751.jpeg?auto=compress&cs=tinysrgb&w=1920",
-      "description": "Matte powder-coated arc with a linen drum shade and a hidden dimmer. Swings over sofas or reading chairs for soft, even light.",
+      "cardDescription": "Matte powder-coated arc with a linen drum shade and a hidden dimmer. Swings over sofas or reading chairs for soft, even light.",
       "productName": "LJUS Arc Floor Lamp"
     },
     "relationships": {

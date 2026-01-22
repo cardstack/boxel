@@ -50,7 +50,7 @@ export class SkillReference extends FieldDef {
     // Computed topic from skill or override
     computeVia: function (this: SkillReference) {
       return (
-        this.alternateTitle || this.skill?.cardInfo?.title || 'Untitled Skill'
+        this.alternateTitle || this.skill?.cardInfo?.name || 'Untitled Skill'
       );
     },
   });

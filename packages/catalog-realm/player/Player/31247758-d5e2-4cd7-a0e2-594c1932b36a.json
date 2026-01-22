@@ -21,9 +21,9 @@
       },
       "cardInfo": {
         "notes": null,
-        "title": "Bruno Mars",
-        "description": null,
-        "thumbnailURL": null
+        "name": "Bruno Mars",
+        "summary": null,
+        "cardThumbnailURL": null
       }
     },
     "relationships": {

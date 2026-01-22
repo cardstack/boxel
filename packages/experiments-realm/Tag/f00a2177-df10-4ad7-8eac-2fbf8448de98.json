@@ -4,8 +4,8 @@
     "attributes": {
       "name": "Card",
       "color": "",
-      "description": null,
-      "thumbnailURL": null
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "meta": {
       "adoptsFrom": {

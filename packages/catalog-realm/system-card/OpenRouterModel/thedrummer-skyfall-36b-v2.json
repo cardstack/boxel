@@ -6,7 +6,7 @@
       "canonicalSlug": "thedrummer/skyfall-36b-v2",
       "name": "TheDrummer: Skyfall 36B V2",
       "created": 1741636566,
-      "description": "Skyfall 36B v2 is an enhanced iteration of Mistral Small 2501, specifically fine-tuned for improved creativity, nuanced writing, role-playing, and coherent storytelling.",
+      "cardDescription": "Skyfall 36B v2 is an enhanced iteration of Mistral Small 2501, specifically fine-tuned for improved creativity, nuanced writing, role-playing, and coherent storytelling.",
       "pricing": {
         "prompt": "0.0000005",
         "completion": "0.0000008",
@@ -46,9 +46,9 @@
       ],
       "defaultParameters": {},
       "cardInfo": {
-        "title": null,
-        "description": null,
-        "thumbnailURL": null,
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
         "notes": null
       }
     },

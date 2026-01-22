@@ -4,8 +4,8 @@
     "attributes": {
       "name": "Game",
       "color": "#1EDF67",
-      "description": null,
-      "thumbnailURL": null
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "meta": {
       "adoptsFrom": {

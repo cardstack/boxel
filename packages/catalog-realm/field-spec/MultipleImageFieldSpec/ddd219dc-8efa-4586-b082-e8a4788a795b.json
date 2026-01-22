@@ -9,8 +9,8 @@
     "type": "card",
     "attributes": {
       "ref": {
-        "name": "MultipleImageFieldSpec",
-        "module": "../multiple-image-field-spec"
+        "name": "default",
+        "module": "../../fields/multiple-image"
       },
       "list": {
         "images": [
@@ -25,7 +25,6 @@
           }
         ]
       },
-      "title": "Multiple Image Field Spec",
       "readMe": null,
       "gallery": {
         "images": [
@@ -38,10 +37,10 @@
         ]
       },
       "cardInfo": {
+        "name": null,
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": null
+        "summary": null,
+        "cardThumbnailURL": null
       },
       "dropzone": {
         "images": [
@@ -50,8 +49,9 @@
           }
         ]
       },
-      "specType": "card",
-      "description": null,
+      "specType": "field",
+      "cardTitle": "Multiple Image Field Spec",
+      "cardDescription": null,
       "containedExamples": []
     },
     "relationships": {

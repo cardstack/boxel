@@ -16,9 +16,9 @@
       "summary": "A professional 3-octave virtual piano with real-time notation recording, playback, and keyboard controls. Features include live audio synthesis, notation-to-keyboard translation, and an intuitive recording system for capturing musical ideas.",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/piano-listing/thumbnail.png"
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/piano-listing/thumbnail.png"
       }
     },
     "relationships": {

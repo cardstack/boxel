@@ -2,9 +2,9 @@
   "data": {
     "type": "card",
     "attributes": {
-      "title": "Default embedded view with thumbnail",
-      "description": null,
-      "thumbnailURL": null
+      "cardTitle": "Default embedded view with thumbnail",
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "relationships": {
       "card": {

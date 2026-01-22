@@ -9,9 +9,9 @@
       },
       "specType": "card",
       "containedExamples": [],
-      "title": "StoryBoard",
-      "description": "Spec of Story Board",
-      "thumbnailURL": null
+      "cardTitle": "StoryBoard",
+      "cardDescription": "Spec of Story Board",
+      "cardThumbnailURL": null
     },
     "relationships": {
       "linkedExamples": {

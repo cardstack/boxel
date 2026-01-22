@@ -11,9 +11,9 @@
       "name": "Video Games & Interactive",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": "Video games, interactive entertainment, gaming achievements, multiplayer coordination, and digital game collection management.",
-        "thumbnailURL": null
+        "name": null,
+        "summary": "Video games, interactive entertainment, gaming achievements, multiplayer coordination, and digital game collection management.",
+        "cardThumbnailURL": null
       }
     },
     "relationships": {

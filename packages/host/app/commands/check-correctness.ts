@@ -173,6 +173,10 @@ export default class CheckCorrectnessCommand extends HostBaseCommand<
       cardIndexingTimeout,
     );
 
+    if (await this.isEmptyFileContent(targetRef)) {
+      return [];
+    }
+
     let errorMessage = await this.prerenderModule(moduleURL, realmURL);
 
     if (!errorMessage) {

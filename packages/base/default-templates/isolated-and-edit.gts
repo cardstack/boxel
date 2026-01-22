@@ -13,7 +13,11 @@ export default class DefaultCardDefTemplate extends GlimmerComponent<{
     format: Format;
   };
 }> {
-  private specialFields: string[] = ['title', 'description', 'thumbnailURL'];
+  private specialFields: string[] = [
+    'cardTitle',
+    'cardDescription',
+    'cardThumbnailURL',
+  ];
   private excludedFields: string[] = [
     'id',
     'cardInfo',
@@ -21,7 +25,7 @@ export default class DefaultCardDefTemplate extends GlimmerComponent<{
     'theme',
   ];
 
-  // Logic: If special field (title,description,thumbnailUrl) is NOT computed,
+  // Logic: If special field (cardTitle, cardDescription, cardThumbnailURL) is NOT computed,
   // then display its edit format alongside other top-level fields.
   private get specialDisplayFieldNames(): string[] | undefined {
     let fieldNames = this.specialFields.filter((fieldName) => {
@@ -57,9 +61,9 @@ export default class DefaultCardDefTemplate extends GlimmerComponent<{
       <Header @hasBottomBorder={{true}} class='card-info-header'>
         {{#if (eq @format 'isolated')}}
           <CardInfoTemplates.view
-            @title={{@model.title}}
-            @description={{@model.description}}
-            @thumbnailURL={{@model.thumbnailURL}}
+            @cardTitle={{@model.cardTitle}}
+            @cardDescription={{@model.cardDescription}}
+            @cardThumbnailURL={{@model.cardThumbnailURL}}
             @icon={{@model.constructor.icon}}
           />
         {{else}}

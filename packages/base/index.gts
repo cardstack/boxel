@@ -18,7 +18,7 @@ export class IndexCard extends CardDef {
       return this[realmInfo]?.name;
     },
   });
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: IndexCard) {
       return this.realmName;
     },

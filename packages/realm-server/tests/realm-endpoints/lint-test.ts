@@ -158,6 +158,36 @@ export class MyCard extends CardDef {
       }
     });
 
+    test('does not flag explicit this parameters', async function (assert) {
+      const source = `const computeVia = function (this: { title: string }) {
+  return this.title;
+};
+
+computeVia.call({ title: 'Tic Tac Toe' });
+`;
+
+      const response = await request
+        .post('/_lint?lintMode=lint')
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'john', ['read', 'write'])}`,
+        )
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .set('Accept', 'application/json')
+        .set('X-Filename', 'example.ts')
+        .send(source);
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+
+      const result = JSON.parse(response.text);
+      const messages = Array.isArray(result.messages) ? result.messages : [];
+      assert.deepEqual(
+        messages,
+        [],
+        'Explicit this parameters should not be reported as unused',
+      );
+    });
+
     test('handles various error scenarios gracefully', async function (assert) {
       const errorCases = createErrorTestCases();
 
@@ -537,7 +567,7 @@ import MyComponent from 'somewhere';
         .set('Accept', 'application/json')
         .send(`import { CardDef } from "https://cardstack.com/base/card-api";
 export class MyCard extends CardDef {
-@field name = contains(StringField, { description: "test description" });
+@field name = contains(StringField, { cardDescription: "test description" });
 }`);
 
       assert.strictEqual(response.status, 200, 'HTTP 200 status');

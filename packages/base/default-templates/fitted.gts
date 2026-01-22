@@ -16,10 +16,10 @@ export default class DefaultFittedTemplate extends GlimmerComponent<{
   }
   <template>
     <BasicFitted
-      @primary={{@model.title}}
+      @primary={{@model.cardTitle}}
       @secondary={{cardTypeDisplayName @model}}
-      @description={{@model.description}}
-      @thumbnailURL={{@model.thumbnailURL}}
+      @description={{@model.cardDescription}}
+      @thumbnailURL={{@model.cardThumbnailURL}}
       @iconComponent={{cardTypeIcon @model}}
       @isEmpty={{this.isEmpty}}
     />

@@ -9,9 +9,9 @@
       },
       "specType": "card",
       "containedExamples": [],
-      "title": "MinecraftInvite",
-      "description": "Spec of MinecraftInvite",
-      "thumbnailURL": null
+      "cardTitle": "MinecraftInvite",
+      "cardDescription": "Spec of MinecraftInvite",
+      "cardThumbnailURL": null
     },
     "relationships": {
       "linkedExamples": {

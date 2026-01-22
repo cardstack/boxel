@@ -9,9 +9,9 @@
       },
       "specType": "card",
       "containedExamples": [],
-      "title": "App Card",
-      "description": "Spec for App Card",
-      "thumbnailURL": null
+      "cardTitle": "App Card",
+      "cardDescription": "Spec for App Card",
+      "cardThumbnailURL": null
     },
     "relationships": {},
     "meta": {

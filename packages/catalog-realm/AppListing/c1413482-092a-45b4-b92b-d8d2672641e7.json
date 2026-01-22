@@ -15,9 +15,9 @@
       "summary": "Manage and display music tracks with comprehensive metadata including artist, duration, genre, and audio streaming capabilities",
       "cardInfo": {
         "notes": null,
-        "title": "Song",
-        "description": "Manage and display music tracks with comprehensive metadata including artist, duration, genre, and audio streaming capabilities",
-        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/song-listing/thumbnail.png"
+        "name": "Song",
+        "summary": "Manage and display music tracks with comprehensive metadata including artist, duration, genre, and audio streaming capabilities",
+        "cardThumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/song-listing/thumbnail.png"
       }
     },
     "relationships": {

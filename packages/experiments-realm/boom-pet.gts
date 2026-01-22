@@ -10,13 +10,13 @@ import {
 
 // this field explodes when serialized (saved)
 export class BoomField extends FieldDef {
-  @field title = contains(StringField);
+  @field cardTitle = contains(StringField);
   static [serialize](_boom: any) {
     throw new Error('Boom!');
   }
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <@fields.title />
+      <@fields.cardTitle />
     </template>
   };
 }
@@ -50,7 +50,7 @@ export class WorkingCard extends CardDef {
 
 export class FailingField extends FieldDef {
   static displayName = 'Failing Field';
-  @field title = contains(StringField);
+  @field cardTitle = contains(StringField);
   static embedded = class Embedded extends Component<typeof this> {
     <template>
       <p>This will fail.</p> {{this.boom}}

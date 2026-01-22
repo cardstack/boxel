@@ -15,9 +15,9 @@
       "summary": "Professional social media link aggregator with premium fashion influencer design - configure profile details, custom links, and brand colors while viewing animated Brooklyn-to-Austin aesthetic presentations. Features floating sparkle animations, premium ring effects, crown badges, agency representation indicators, and luxury gradient styling for sophisticated influencer brand management.",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/stylish-fashion-influencer-linktree-listing/thumbnail.png"
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/stylish-fashion-influencer-linktree-listing/thumbnail.png"
       }
     },
     "relationships": {

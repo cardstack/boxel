@@ -9,9 +9,9 @@
       },
       "specType": "card",
       "containedExamples": [],
-      "title": "Task",
-      "description": "Spec of Task",
-      "thumbnailURL": null
+      "cardTitle": "Task",
+      "cardDescription": "Spec of Task",
+      "cardThumbnailURL": null
     },
     "relationships": {
       "linkedExamples": {

@@ -6,7 +6,7 @@
       "canonicalSlug": "openai/gpt-4.1-nano-2025-04-14",
       "name": "OpenAI: GPT-4.1 Nano",
       "created": 1744651369,
-      "description": "For tasks that demand low latency, GPT‑4.1 nano is the fastest and cheapest model in the GPT-4.1 series. It delivers exceptional performance at a small size with its 1 million token context window, and scores 80.1% on MMLU, 50.3% on GPQA, and 9.8% on Aider polyglot coding – even higher than GPT‑4o mini. It’s ideal for tasks like classification or autocompletion.",
+      "cardDescription": "For tasks that demand low latency, GPT\u20114.1 nano is the fastest and cheapest model in the GPT-4.1 series. It delivers exceptional performance at a small size with its 1 million token context window, and scores 80.1% on MMLU, 50.3% on GPQA, and 9.8% on Aider polyglot coding \u2013 even higher than GPT\u20114o mini. It\u2019s ideal for tasks like classification or autocompletion.",
       "pricing": {
         "prompt": "0.0000001",
         "completion": "0.0000004",
@@ -43,9 +43,9 @@
       ],
       "defaultParameters": {},
       "cardInfo": {
-        "title": null,
-        "description": null,
-        "thumbnailURL": null,
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
         "notes": null
       }
     },

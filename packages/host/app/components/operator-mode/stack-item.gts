@@ -54,7 +54,7 @@ import {
   localId as localIdSymbol,
   CardContextName,
   CardCrudFunctionsContextName,
-  getCardMenuItems,
+  getMenuItems,
 } from '@cardstack/runtime-common';
 
 import type { StackItem } from '@cardstack/host/lib/stack-item';
@@ -442,7 +442,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
   }
 
   private get headerTitle() {
-    let cardTitle = this.card?.title;
+    let cardTitle = this.card?.cardTitle;
     if (this.card && cardTitle?.startsWith('Untitled ')) {
       let strippedTitle = cardTitle.slice('Untitled '.length);
       if (strippedTitle === cardTypeDisplayName(this.card)) {
@@ -454,7 +454,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
   }
 
   private get cardTitle() {
-    return this.card ? this.card.title : undefined;
+    return this.card ? this.card.cardTitle : undefined;
   }
 
   private get moreOptionsMenuItemsForErrorCard() {
@@ -480,7 +480,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
     }
 
     return toMenuItems(
-      this.card?.[getCardMenuItems]?.({
+      this.card?.[getMenuItems]?.({
         canEdit: this.url ? this.realm.canWrite(this.url as string) : false,
         cardCrudFunctions: this.cardCrudFunctions,
         menuContext: 'interact',

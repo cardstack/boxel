@@ -11,9 +11,9 @@
       "name": "Design & Creative",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": "UI/UX design, graphic design, creative projects, design systems, and visual asset management.",
-        "thumbnailURL": null
+        "name": null,
+        "summary": "UI/UX design, graphic design, creative projects, design systems, and visual asset management.",
+        "cardThumbnailURL": null
       }
     },
     "relationships": {

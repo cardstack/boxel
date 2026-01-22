@@ -2,9 +2,9 @@
   "data": {
     "type": "card",
     "attributes": {
-      "title": "Cardstack Sprint Planner",
-      "description": null,
-      "thumbnailURL": null
+      "cardTitle": "Cardstack Sprint Planner",
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "relationships": {
       "project": {

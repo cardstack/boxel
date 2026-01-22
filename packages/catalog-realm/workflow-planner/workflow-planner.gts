@@ -21,7 +21,7 @@ export class WorkflowStepField extends FieldDef {
   static displayName = 'Workflow Step';
 
   @field name = contains(StringField);
-  @field description = contains(MarkdownField);
+  @field cardDescription = contains(MarkdownField);
   @field isComplete = contains(BooleanField);
   @field dueDate = contains(DateField);
 }
@@ -30,8 +30,8 @@ export class WorkflowPlanner extends CardDef {
   static displayName = 'Workflow Planner';
   static prefersWideFormat = true;
 
-  @field title = contains(StringField);
-  @field description = contains(MarkdownField);
+  @field cardTitle = contains(StringField);
+  @field cardDescription = contains(MarkdownField);
   @field steps = containsMany(WorkflowStepField);
   @field dateRange = contains(DateRangeField);
 
@@ -53,7 +53,7 @@ export class WorkflowPlanner extends CardDef {
         <header class='workflow-header'>
           <div class='header-content'>
             <div class='title-section'>
-              <h1 class='workflow-title'>{{@model.title}}</h1>
+              <h1 class='workflow-title'>{{@model.cardTitle}}</h1>
             </div>
             <div class='workflow-dates'>
               {{#if @model.dateRange.start}}
@@ -84,7 +84,7 @@ export class WorkflowPlanner extends CardDef {
 
         <div class='workflow-description'>
           <div class='description-card'>
-            <@fields.description />
+            <@fields.cardDescription />
           </div>
         </div>
 
@@ -146,7 +146,7 @@ export class WorkflowPlanner extends CardDef {
                         {{/if}}
                       </div>
                       <div class='step-description'>
-                        {{step.description}}
+                        {{step.cardDescription}}
                       </div>
                     </div>
                   </div>
@@ -495,12 +495,12 @@ export class WorkflowPlanner extends CardDef {
         <div class='edit-form'>
           <div class='field-container'>
             <label>Title</label>
-            <@fields.title />
+            <@fields.cardTitle />
           </div>
 
           <div class='field-container'>
             <label>Description</label>
-            <@fields.description />
+            <@fields.cardDescription />
           </div>
 
           <div class='field-container'>

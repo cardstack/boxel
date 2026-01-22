@@ -2,8 +2,8 @@
   "data": {
     "type": "card",
     "attributes": {
-      "title": "Person",
-      "description": "Spec for Person card",
+      "cardTitle": "Person",
+      "cardDescription": "Spec for Person card",
       "specType": "card",
       "ref": {
         "module": "../person",

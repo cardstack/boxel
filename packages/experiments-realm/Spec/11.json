@@ -2,8 +2,8 @@
   "data": {
     "type": "card",
     "attributes": {
-      "title": "ContactCard",
-      "description": "Spec for ContactCard",
+      "cardTitle": "ContactCard",
+      "cardDescription": "Spec for ContactCard",
       "specType": "card",
       "ref": {
         "module": "../contact-card",

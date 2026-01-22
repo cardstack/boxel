@@ -5,14 +5,16 @@ import { provide } from 'ember-provide-consume-context';
 
 import { gt, not } from '@cardstack/boxel-ui/helpers';
 
-import { CardCrudFunctionsContextName } from '@cardstack/runtime-common';
+import {
+  CardCrudFunctionsContextName,
+  isCardInstance,
+} from '@cardstack/runtime-common';
 import { meta } from '@cardstack/runtime-common/constants';
 
 import { getCard } from '@cardstack/host/resources/card-resource';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-
 import type {
+  CardDef,
   ViewCardFn,
   CardCrudFunctions,
 } from 'https://cardstack.com/base/card-api';
@@ -56,19 +58,21 @@ export default class HostModeContent extends Component<Signature> {
   }
 
   get isWideCard() {
-    if (!this.primaryCard) {
+    let primaryCard = this.primaryCard;
+    if (!primaryCard || !isCardInstance(primaryCard)) {
       return false;
     }
 
-    return (this.primaryCard.constructor as typeof CardDef).prefersWideFormat;
+    return (primaryCard.constructor as typeof CardDef).prefersWideFormat;
   }
 
   get backgroundImageStyle() {
-    if (!this.primaryCard || this.isWideCard) {
+    let primaryCard = this.primaryCard;
+    if (!primaryCard || !isCardInstance(primaryCard) || this.isWideCard) {
       return htmlSafe('');
     }
 
-    let backgroundImageUrl = this.primaryCard?.[meta]?.realmInfo?.backgroundURL;
+    let backgroundImageUrl = primaryCard[meta]?.realmInfo?.backgroundURL;
 
     if (backgroundImageUrl) {
       return htmlSafe(`background-image: url(${backgroundImageUrl});`);

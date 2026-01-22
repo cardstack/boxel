@@ -11,14 +11,14 @@ import {
 
 import type {
   CardDef,
-  GetCardMenuItemParams,
+  GetMenuItemParams,
 } from 'https://cardstack.com/base/card-api';
 
 import { setupRenderingTest } from '../helpers/setup';
 
 let getDefaultCardMenuItems: (
   card: CardDef,
-  params: GetCardMenuItemParams,
+  params: GetMenuItemParams,
 ) => MenuItemOptions[];
 
 class DummyCard {
@@ -28,7 +28,7 @@ class DummyCard {
   ) {}
 }
 
-module('Unit | card-menu-items', function (hooks) {
+module('Unit | CardDef menu items', function (hooks) {
   setupRenderingTest(hooks);
 
   let loader: Loader;
@@ -36,7 +36,7 @@ module('Unit | card-menu-items', function (hooks) {
     loader = getService('loader-service').loader;
   });
   hooks.beforeEach(async function () {
-    let mod: any = await loader.import(`${baseRealm.url}card-menu-items`);
+    let mod: any = await loader.import(`${baseRealm.url}menu-items`);
     getDefaultCardMenuItems = mod.getDefaultCardMenuItems;
   });
 

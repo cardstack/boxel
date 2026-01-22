@@ -41,7 +41,7 @@ module('Integration | audio fields', function (hooks) {
     const audioModule: any = await loader.import(
       `${catalogRealmURL}fields/audio`,
     );
-    AudioFieldClass = audioModule.AudioField;
+    AudioFieldClass = audioModule.default;
   }
 
   async function renderField(
@@ -104,7 +104,7 @@ module('Integration | audio fields', function (hooks) {
     mimeType: 'audio/mpeg',
     duration: 180, // 3 minutes
     fileSize: 3145728, // 3MB
-    title: 'Test Track',
+    cardTitle: 'Test Track',
     artist: 'Test Artist',
   };
 
@@ -225,7 +225,7 @@ module('Integration | audio fields', function (hooks) {
       AudioFieldClass,
       buildField(AudioFieldClass, {
         ...sampleAudioData,
-        title: 'Custom Title',
+        cardTitle: 'Custom Title',
       }),
     );
 

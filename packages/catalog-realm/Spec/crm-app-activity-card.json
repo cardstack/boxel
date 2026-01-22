@@ -9,9 +9,9 @@
       },
       "specType": "component",
       "containedExamples": [],
-      "title": "Activity Card",
-      "description": "Spec for Activity Card component",
-      "thumbnailURL": null
+      "cardTitle": "Activity Card",
+      "cardDescription": "Spec for Activity Card component",
+      "cardThumbnailURL": null
     },
     "relationships": {},
     "meta": {

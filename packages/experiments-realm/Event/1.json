@@ -7,8 +7,8 @@
       "startDateTime": "2024-07-11T04:31:00.000Z",
       "endDateTime": null,
       "eventType": "Call",
-      "description": "This is a sample meeting created for testing purposes",
-      "thumbnailURL": null
+      "cardDescription": "This is a sample meeting created for testing purposes",
+      "cardThumbnailURL": null
     },
     "relationships": {
       "assignee": {

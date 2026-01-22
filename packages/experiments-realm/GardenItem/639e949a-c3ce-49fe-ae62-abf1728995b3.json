@@ -5,8 +5,8 @@
       "gardenItemId": "royal-catchfly",
       "name": "Royal Catchfly",
       "symbol": "C",
-      "description": null,
-      "thumbnailURL": null
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "meta": {
       "adoptsFrom": {

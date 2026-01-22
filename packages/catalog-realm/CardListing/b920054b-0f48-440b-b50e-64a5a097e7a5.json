@@ -16,9 +16,9 @@
       "summary": "This listing provides a comprehensive framework for creating, managing, and displaying interactive game-based quizzes, including user interface components, scoring logic, game state management, responsive styling, and multimedia effects to facilitate engaging educational or entertainment experiences.",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/game-quiz-listing/thumbnail.png"
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/game-quiz-listing/thumbnail.png"
       }
     },
     "relationships": {

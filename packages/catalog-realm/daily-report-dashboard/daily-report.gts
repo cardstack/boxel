@@ -22,7 +22,7 @@ export class DailyReport extends CardDef {
   @field recommendations = contains(MarkdownField);
   @field policyManual = linksTo(PolicyManual);
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: DailyReport) {
       try {
         if (!this.reportDate) return 'Daily Report';

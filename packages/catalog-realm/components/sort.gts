@@ -19,7 +19,7 @@ export const sortByCardTitleAsc: Sort = [
       module: `${baseRealm.url}card-api`,
       name: 'CardDef',
     },
-    by: 'title',
+    by: 'cardTitle',
     direction: 'asc',
   },
 ];

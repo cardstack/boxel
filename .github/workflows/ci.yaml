@@ -466,6 +466,7 @@ jobs:
             "server-endpoints/queue-status-test.ts",
             "server-endpoints/realm-lifecycle-test.ts",
             "server-endpoints/search-test.ts",
+            "server-endpoints/info-test.ts",
             "server-endpoints/search-prerendered-test.ts",
             "server-endpoints/stripe-session-test.ts",
             "server-endpoints/stripe-webhook-test.ts",
@@ -480,6 +481,7 @@ jobs:
             "get-boxel-claimed-domain-test.ts",
             "realm-auth-test.ts",
             "queries-test.ts",
+            "full-reindex-test.ts",
           ]
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2

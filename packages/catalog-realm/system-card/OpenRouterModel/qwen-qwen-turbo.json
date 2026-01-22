@@ -6,7 +6,7 @@
       "canonicalSlug": "qwen/qwen-turbo-2024-11-01",
       "name": "Qwen: Qwen-Turbo",
       "created": 1738410974,
-      "description": "Qwen-Turbo, based on Qwen2.5, is a 1M context model that provides fast speed and low cost, suitable for simple tasks.",
+      "cardDescription": "Qwen-Turbo, based on Qwen2.5, is a 1M context model that provides fast speed and low cost, suitable for simple tasks.",
       "pricing": {
         "prompt": "0.00000005",
         "completion": "0.0000002",
@@ -43,9 +43,9 @@
       ],
       "defaultParameters": {},
       "cardInfo": {
-        "title": null,
-        "description": null,
-        "thumbnailURL": null,
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
         "notes": null
       }
     },

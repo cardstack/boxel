@@ -9,6 +9,7 @@ import type {
 import { Loader } from './loader';
 import {
   isField,
+  isSpec,
   primitive,
   fields,
   fieldsUntracked,
@@ -16,7 +17,7 @@ import {
 } from './constants';
 import { CardError } from './error';
 import { meta, relativeTo } from './constants';
-import type { LooseCardResource } from './index';
+import type { LooseCardResource, FileMetaResource } from './index';
 import { isUrlLike, trimExecutableExtension } from './index';
 
 export type ResolvedCodeRef = {
@@ -116,6 +117,10 @@ export function isFieldInstance<T extends FieldDef>(
 
 export function isPrimitive(def: any) {
   return isBaseDef(def) && primitive in def;
+}
+
+export function isSpecCard(def: any) {
+  return isBaseDef(def) && isSpec in def;
 }
 
 export function codeRefWithAbsoluteURL(
@@ -289,6 +294,16 @@ export function getField<T extends BaseDef>(
   return undefined;
 }
 
+export function normalizeCodeRef(ref: CodeRef): {
+  module: string;
+  name: string;
+} {
+  if (!('type' in ref)) {
+    return { module: ref.module, name: ref.name };
+  }
+  return normalizeCodeRef(ref.card);
+}
+
 export function getAncestor(
   card: BaseDefConstructor,
 ): BaseDefConstructor | undefined {
@@ -441,7 +456,7 @@ function visitCodeRef(codeRef: CodeRef, visit: VisitModuleDep): void {
 }
 
 export function visitModuleDeps(
-  resourceJson: LooseCardResource,
+  resourceJson: LooseCardResource | FileMetaResource,
   visit: VisitModuleDep,
 ): void {
   let resourceMeta = resourceJson.meta;

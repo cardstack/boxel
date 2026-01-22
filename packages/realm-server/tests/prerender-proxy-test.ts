@@ -47,7 +47,7 @@ module(basename(__filename), function () {
           renderCalls.push({ kind: 'card', args });
           return {
             serialized: null,
-            searchDoc: { url: args.url, title: 'through proxy' },
+            searchDoc: { url: args.url, cardTitle: 'through proxy' },
             displayNames: ['Proxy Card'],
             deps: [],
             types: [],
@@ -137,7 +137,7 @@ module(basename(__filename), function () {
             id: cardURL,
             attributes: {
               serialized: null,
-              searchDoc: { url: cardURL, title: 'through proxy' },
+              searchDoc: { url: cardURL, cardTitle: 'through proxy' },
               displayNames: ['Proxy Card'],
               deps: [],
               types: [],

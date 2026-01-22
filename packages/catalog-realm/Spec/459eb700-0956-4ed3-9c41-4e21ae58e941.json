@@ -13,9 +13,9 @@
           "name": null
         }
       ],
-      "title": "ShortcutSettingsField",
-      "description": null,
-      "thumbnailURL": null
+      "cardTitle": "ShortcutSettingsField",
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "relationships": {
       "linkedExamples": {

@@ -8,16 +8,16 @@
     },
     "type": "card",
     "attributes": {
-      "title": "Grading Skill",
+      "cardTitle": "Grading Skill",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": null
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null
       },
       "commands": [],
-      "description": null,
-      "instructions": "THE USER ASKING IS THE STUDENT.\n\nGrade the student's homework assignment and provide an overall letter grade (A, B, C, D, E, F) along with detailed feedback. \n\nGrading Process:\n1. Examine each question and award points based on correctness (up to each question's maxPoints)\n2. Create a questionPoints array with the SAME LENGTH as the questions array\n3. Calculate overall letter grade from total points earned vs total possible\n4. Provide constructive feedback\n\nGRADING SCALE (MUST FOLLOW EXACTLY):\n- A: 90-100% (Excellent work)\n- B: 80-89% (Good work)\n- C: 70-79% (Average work)\n- D: 60-69% (Below average work)\n- E: 50-59% (Poor work)\n- F: 0-49% (Failing work)\n\nGRADE CALCULATION:\n1. Sum all questionPoints to get total earned points\n2. Sum all maxPoints from questions to get total possible points\n3. Calculate percentage: (total earned / total possible) × 100\n4. Apply the grading scale above to determine letter grade"
+      "cardDescription": null,
+      "instructions": "THE USER ASKING IS THE STUDENT.\n\nGrade the student's homework assignment and provide an overall letter grade (A, B, C, D, E, F) along with detailed feedback. \n\nGrading Process:\n1. Examine each question and award points based on correctness (up to each question's maxPoints)\n2. Create a questionPoints array with the SAME LENGTH as the questions array\n3. Calculate overall letter grade from total points earned vs total possible\n4. Provide constructive feedback\n\nGRADING SCALE (MUST FOLLOW EXACTLY):\n- A: 90-100% (Excellent work)\n- B: 80-89% (Good work)\n- C: 70-79% (Average work)\n- D: 60-69% (Below average work)\n- E: 50-59% (Poor work)\n- F: 0-49% (Failing work)\n\nGRADE CALCULATION:\n1. Sum all questionPoints to get total earned points\n2. Sum all maxPoints from questions to get total possible points\n3. Calculate percentage: (total earned / total possible) \u00d7 100\n4. Apply the grading scale above to determine letter grade"
     },
     "relationships": {
       "cardInfo.theme": {

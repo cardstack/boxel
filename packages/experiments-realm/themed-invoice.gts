@@ -22,7 +22,7 @@ export class ThemedInvoice extends CardDef {
   @field issueDate = contains(DateField);
   @field dueDate = contains(DateField);
   @field amount = contains(NumberField);
-  @field description = contains(StringField);
+  @field cardDescription = contains(StringField);
 
   // Theme configuration
   @field currentTheme = linksTo(Theme);
@@ -95,7 +95,7 @@ export class ThemedInvoice extends CardDef {
 
             <div class='invoice-description'>
               <h3>Description</h3>
-              <p>{{@model.description}}</p>
+              <p>{{@model.cardDescription}}</p>
             </div>
 
             <div class='invoice-total'>

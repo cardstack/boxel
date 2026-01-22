@@ -409,7 +409,7 @@ export class FlashcardCard extends CardDef {
   @field tags = contains(StringField); // comma-separated: "algorithms,binary-search,complexity"
 
   // ⁸ Computed title from question
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: FlashcardCard) {
       try {
         const question = this.question || 'Untitled Flashcard';

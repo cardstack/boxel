@@ -9,9 +9,9 @@
       },
       "specType": "component",
       "containedExamples": [],
-      "title": "Page Layout",
-      "description": "Spec for Page Layout component",
-      "thumbnailURL": null
+      "cardTitle": "Page Layout",
+      "cardDescription": "Spec for Page Layout component",
+      "cardThumbnailURL": null
     },
     "relationships": {},
     "meta": {

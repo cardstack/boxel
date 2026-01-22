@@ -11,9 +11,9 @@
       "name": "Family & Relationships",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": "Family planning, relationship management, communication tools, special occasions, and shared calendar coordination.",
-        "thumbnailURL": null
+        "name": null,
+        "summary": "Family planning, relationship management, communication tools, special occasions, and shared calendar coordination.",
+        "cardThumbnailURL": null
       }
     },
     "relationships": {

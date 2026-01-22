@@ -6,9 +6,9 @@
       "lon": -73.92165,
       "tileserverUrl": "https://tiles.stadiamaps.com/tiles/stamen_watercolor/{z}/{x}/{y}.jpg",
       "gtfsUrl": "https://s3.gtfs.pro/files/uran/improved-gtfs-nyc-ferry.zip",
-      "title": "NYC ferries",
-      "description": null,
-      "thumbnailURL": null
+      "cardTitle": "NYC ferries",
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "meta": {
       "adoptsFrom": {

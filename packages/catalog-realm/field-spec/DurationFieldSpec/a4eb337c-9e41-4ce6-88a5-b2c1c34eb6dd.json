@@ -9,8 +9,8 @@
     "type": "card",
     "attributes": {
       "ref": {
-        "name": "DurationFieldSpec",
-        "module": "../duration-field-spec"
+        "name": "default",
+        "module": "../../fields/time/duration"
       },
       "full": {
         "days": 31,
@@ -20,7 +20,6 @@
         "minutes": 0,
         "seconds": 0
       },
-      "title": "Duration Field Spec",
       "readMe": null,
       "dayTime": {
         "days": 20,
@@ -31,12 +30,12 @@
         "seconds": 0
       },
       "cardInfo": {
+        "name": null,
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": null
+        "summary": null,
+        "cardThumbnailURL": null
       },
-      "specType": "card",
+      "specType": "field",
       "standard": {
         "days": null,
         "hours": 24,
@@ -45,6 +44,7 @@
         "minutes": 12,
         "seconds": 60
       },
+      "cardTitle": "Duration Field Spec",
       "yearMonth": {
         "days": null,
         "hours": 0,
@@ -53,7 +53,7 @@
         "minutes": 0,
         "seconds": 0
       },
-      "description": null,
+      "cardDescription": null,
       "containedExamples": []
     },
     "relationships": {

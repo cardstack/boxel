@@ -906,11 +906,29 @@ export async function waitUntil<T>(
   throw new Error('Timeout waiting for condition');
 }
 
+async function waitForRealmToken(page: Page, realmURL: string): Promise<void> {
+  await page.waitForFunction(
+    (url) => {
+      try {
+        let session = JSON.parse(
+          window.localStorage.getItem('boxel-session') ?? '{}',
+        ) as Record<string, string | undefined>;
+        return Boolean(session[url]);
+      } catch {
+        return false;
+      }
+    },
+    realmURL,
+    { timeout: 30000 },
+  );
+}
+
 export async function postNewCard(
   page: Page,
   realmURL: string,
   cardData: any,
 ): Promise<string> {
+  await waitForRealmToken(page, realmURL);
   const cardId = await page.evaluate(
     async ({ realmURL, cardData }) => {
       let token = JSON.parse(localStorage['boxel-session'])[realmURL];
@@ -941,6 +959,7 @@ export async function postCardSource(
   filePath: string,
   source: string,
 ): Promise<void> {
+  await waitForRealmToken(page, realmURL);
   await page.evaluate(
     async ({ realmURL, filePath, source }) => {
       let token = JSON.parse(localStorage['boxel-session'])[realmURL];
@@ -966,6 +985,7 @@ export async function patchCardInstance(
   cardURL: string,
   cardData: any,
 ): Promise<void> {
+  await waitForRealmToken(page, realmURL);
   await page.evaluate(
     async ({ realmURL, cardURL, cardData }) => {
       let token = JSON.parse(localStorage['boxel-session'])[realmURL];

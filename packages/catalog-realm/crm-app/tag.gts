@@ -13,7 +13,7 @@ export class Tag extends CardDef {
   static displayName = 'Tag';
   static icon = TagIcon;
   @field name = contains(StringField);
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: Tag) {
       return this.name;
     },

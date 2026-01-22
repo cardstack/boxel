@@ -11,9 +11,9 @@
       "name": "Hardware & IoT",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": "Hardware development, IoT devices, embedded systems, circuit design, and physical computing projects.",
-        "thumbnailURL": null
+        "name": null,
+        "summary": "Hardware development, IoT devices, embedded systems, circuit design, and physical computing projects.",
+        "cardThumbnailURL": null
       }
     },
     "relationships": {
