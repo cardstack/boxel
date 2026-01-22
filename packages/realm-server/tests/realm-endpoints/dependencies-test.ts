@@ -64,6 +64,7 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
     assert.strictEqual(entry.attributes.canonicalUrl, targetUrl);
     assert.strictEqual(entry.attributes.realmUrl, testRealm.url);
     assert.strictEqual(entry.attributes.entryType, 'module');
+    assert.false(entry.attributes.hasError);
     assert.true(
       entry.attributes.dependencies.includes(
         'https://cardstack.com/base/string',

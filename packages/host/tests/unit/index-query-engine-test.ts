@@ -230,6 +230,9 @@ module('Unit | query', function (hooks) {
       async invalidate(_realmURL: string): Promise<void> {
         // no-op for tests
       },
+      async clearRealmCache(_realmURL: string): Promise<void> {
+        // no-op for tests
+      },
       registerRealm() {},
       forRealm() {
         return this;
@@ -275,7 +278,8 @@ module('Unit | query', function (hooks) {
     await setupIndex(dbAdapter, [
       {
         url: `${testRealmURL}1.json`,
-        type: 'instance-error',
+        type: 'instance',
+        has_error: true,
         realm_version: 1,
         realm_url: testRealmURL,
         pristine_doc: undefined,
@@ -2927,7 +2931,8 @@ module('Unit | query', function (hooks) {
       {
         url: `${testRealmURL}donald.json`,
         file_alias: `${testRealmURL}donald`,
-        type: 'instance-error',
+        type: 'instance',
+        has_error: true,
         realm_version: 1,
         realm_url: testRealmURL,
         deps: [],
@@ -2954,7 +2959,8 @@ module('Unit | query', function (hooks) {
       {
         url: `${testRealmURL}paper.json`,
         file_alias: `${testRealmURL}paper`,
-        type: 'instance-error',
+        type: 'instance',
+        has_error: true,
         realm_version: 1,
         realm_url: testRealmURL,
         deps: [],

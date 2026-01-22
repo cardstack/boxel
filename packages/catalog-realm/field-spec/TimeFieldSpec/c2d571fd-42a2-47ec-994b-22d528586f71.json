@@ -12,25 +12,25 @@
         "name": "default",
         "module": "../../fields/time"
       },
-      "title": "Time Field Spec",
       "hour24": {
         "value": "11:25"
       },
       "readMe": null,
       "cardInfo": {
+        "name": null,
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": null
+        "summary": null,
+        "cardThumbnailURL": null
       },
-      "specType": "card",
+      "specType": "field",
       "standard": {
         "value": "06:20"
       },
+      "cardTitle": "Time Field",
       "longStyle": {
         "value": "11:25"
       },
-      "description": null,
+      "cardDescription": null,
       "containedExamples": []
     },
     "relationships": {

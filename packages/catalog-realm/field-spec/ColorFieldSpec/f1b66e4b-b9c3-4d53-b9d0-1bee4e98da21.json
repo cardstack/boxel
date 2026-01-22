@@ -12,22 +12,22 @@
         "name": "default",
         "module": "../../fields/color"
       },
-      "title": "Color Field Spec",
       "wheel": "#ddff00",
       "readMe": null,
       "advanced": "rgb(59, 130, 246)",
       "cardInfo": {
+        "name": null,
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": null
+        "summary": null,
+        "cardThumbnailURL": null
       },
-      "specType": "card",
+      "specType": "field",
       "standard": "#ba6d6d",
+      "cardTitle": "Color Field",
       "sliderHsl": "hsl(79, 91%, 60%)",
       "sliderRgb": "rgb(135, 88, 246)",
-      "description": null,
       "swatchesPicker": "#FCF8A6",
+      "cardDescription": null,
       "containedExamples": [],
       "withContrastChecker": "#c86565"
     },

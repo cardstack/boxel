@@ -1183,6 +1183,21 @@ module(basename(__filename), function () {
           }
         `,
       );
+
+      let pet = await realm.realmIndexQueryEngine.module(
+        new URL(`${testRealm}pet`),
+      );
+      assert.strictEqual(pet?.type, 'module-error', 'Pet module is in error');
+      if (pet?.type === 'module-error') {
+        let errorDeps = new Set(pet.error.deps ?? []);
+        let hasNameDep =
+          errorDeps.has(`${testRealm}name`) ||
+          errorDeps.has(`${testRealm}name.gts`);
+        assert.ok(hasNameDep, 'error deps include missing Name module');
+      } else {
+        assert.ok(false, 'expected pet module error details');
+      }
+
       await realm.write(
         'name.gts',
         `
@@ -1196,7 +1211,7 @@ module(basename(__filename), function () {
         `,
       );
 
-      // Aspect module should be indexed
+      // Name module should be indexed
       let name = await realm.realmIndexQueryEngine.module(
         new URL(`${testRealm}name`),
       );
@@ -1207,8 +1222,7 @@ module(basename(__filename), function () {
       );
 
       // Since the name is ready, the pet should be indexed and not in an error state
-      // Fetch the pet module
-      let pet = await realm.realmIndexQueryEngine.module(
+      pet = await realm.realmIndexQueryEngine.module(
         new URL(`${testRealm}pet`),
       );
       assert.strictEqual(
