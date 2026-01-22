@@ -7,13 +7,14 @@ interface ImageDropzoneUploadArgs {
     onFileSelect: (event: Event) => void;
     onDragOver: (event: DragEvent) => void;
     onDrop: (event: DragEvent) => void;
+    disabled?: boolean;
   };
 }
 
 export default class ImageDropzoneUpload extends GlimmerComponent<ImageDropzoneUploadArgs> {
   <template>
     <label
-      class='dropzone-upload'
+      class='dropzone-upload {{if @disabled "disabled"}}'
       {{on 'dragover' @onDragOver}}
       {{on 'drop' @onDrop}}
     >
@@ -23,12 +24,14 @@ export default class ImageDropzoneUpload extends GlimmerComponent<ImageDropzoneU
         <span class='dropzone-title'>Drag & drop image here</span>
         <span class='dropzone-subtitle'>or click to browse</span>
       </div>
-      <input
-        type='file'
-        class='file-input'
-        accept='image/*'
-        {{on 'change' @onFileSelect}}
-      />
+      {{#unless @disabled}}
+        <input
+          type='file'
+          class='file-input'
+          accept='image/*'
+          {{on 'change' @onFileSelect}}
+        />
+      {{/unless}}
     </label>
 
     <style scoped>
@@ -47,13 +50,18 @@ export default class ImageDropzoneUpload extends GlimmerComponent<ImageDropzoneU
         padding: calc(var(--spacing, 0.25rem) * 8);
       }
 
-      .dropzone-upload:hover {
+      .dropzone-upload:hover:not(.disabled) {
         border-color: var(--accent, #60a5fa);
         background: color-mix(
           in srgb,
           var(--primary, #3b82f6) 10%,
           transparent
         );
+      }
+
+      .dropzone-upload.disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
       }
 
       .dropzone-content {

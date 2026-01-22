@@ -26,7 +26,7 @@ import { AlbumCoverPlayer } from './components/album-cover-player';
 import { TrimEditor } from './components/trim-editor';
 import { PlaylistRow } from './components/playlist-row';
 import { VolumeControl } from './components/volume-control';
-import { eq, or, and, bool } from '@cardstack/boxel-ui/helpers';
+import { eq, or, and, bool, not } from '@cardstack/boxel-ui/helpers';
 import {
   BoxelInput,
   Button,
@@ -99,15 +99,19 @@ class AudioFieldEdit extends Component<typeof AudioField> {
               </div>
             {{/if}}
           </div>
-          <label class='change-button'>
-            Change
-            <input
-              type='file'
-              accept='audio/*'
-              {{on 'change' this.handleFileSelect}}
-              class='hidden-input'
-            />
-          </label>
+          {{#if @canEdit}}
+            <label class='change-button'>
+              Change
+              <BoxelInput
+                @type='file'
+                @value={{null}}
+                @onChange={{this.handleFileSelect}}
+                @disabled={{not @canEdit}}
+                accept='audio/*'
+                class='hidden-input'
+              />
+            </label>
+          {{/if}}
         </div>
 
         <div class='metadata-fields'>
@@ -116,6 +120,7 @@ class AudioFieldEdit extends Component<typeof AudioField> {
               @value={{@model.cardTitle}}
               @onInput={{fn (mut @model.cardTitle)}}
               placeholder='Track title'
+              @disabled={{not @canEdit}}
             />
           </FieldContainer>
 
@@ -124,11 +129,15 @@ class AudioFieldEdit extends Component<typeof AudioField> {
               @value={{@model.artist}}
               @onInput={{fn (mut @model.artist)}}
               placeholder='Artist name'
+              @disabled={{not @canEdit}}
             />
           </FieldContainer>
         </div>
       {{else}}
-        <label class='upload-area' data-test-audio-upload-area>
+        <label
+          class='upload-area {{unless @canEdit "upload-area-disabled"}}'
+          data-test-audio-upload-area
+        >
           <div class='upload-icon'>
             <UploadIcon width='48' height='48' />
           </div>
@@ -136,10 +145,12 @@ class AudioFieldEdit extends Component<typeof AudioField> {
             <div class='upload-title'>Click to upload audio</div>
             <div class='upload-subtitle'>MP3, WAV, OGG, M4A, FLAC</div>
           </div>
-          <input
-            type='file'
+          <BoxelInput
+            @type='file'
+            @value={{null}}
+            @onChange={{this.handleFileSelect}}
+            @disabled={{not @canEdit}}
             accept='audio/*'
-            {{on 'change' this.handleFileSelect}}
             class='hidden-input'
           />
         </label>
@@ -163,9 +174,14 @@ class AudioFieldEdit extends Component<typeof AudioField> {
         background: var(--card, #ffffff);
       }
 
-      .upload-area:hover {
+      .upload-area:hover:not(.upload-area-disabled) {
         border-color: var(--primary, #3b82f6);
         background: var(--accent, #f0f9ff);
+      }
+
+      .upload-area-disabled {
+        cursor: not-allowed;
+        opacity: 0.6;
       }
 
       .upload-icon {
@@ -253,6 +269,7 @@ class AudioFieldEdit extends Component<typeof AudioField> {
         cursor: pointer;
         transition: all 0.2s;
         white-space: nowrap;
+        text-align: center;
       }
 
       .change-button:hover {
