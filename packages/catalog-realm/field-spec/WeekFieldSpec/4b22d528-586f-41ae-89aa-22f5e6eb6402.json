@@ -12,19 +12,19 @@
         "name": "default",
         "module": "../../fields/date/week"
       },
-      "title": "Week Field Spec",
       "readMe": null,
       "cardInfo": {
+        "name": null,
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": null
+        "summary": null,
+        "cardThumbnailURL": null
       },
-      "specType": "card",
+      "specType": "field",
       "standard": {
         "value": "2026-W02"
       },
-      "description": null,
+      "cardTitle": "Week Field Spec",
+      "cardDescription": null,
       "containedExamples": []
     },
     "relationships": {
