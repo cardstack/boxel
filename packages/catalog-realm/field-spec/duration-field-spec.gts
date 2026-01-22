@@ -9,25 +9,9 @@ import {
   field,
   contains,
   Component,
-  CardDef,
-  BaseDef,
-  getCardMeta,
 } from 'https://cardstack.com/base/card-api';
 import DurationField from '../fields/time/duration';
 import CodeSnippet from '../components/code-snippet';
-
-import { action } from '@ember/object';
-import { task } from 'ember-concurrency';
-import { use, resource } from 'ember-resources';
-import { TrackedObject } from 'tracked-built-ins';
-import { isPrimitive, loadCardDef } from '@cardstack/runtime-common';
-import type { Loader } from '@cardstack/runtime-common';
-import GenerateReadmeSpecCommand from '@cardstack/boxel-host/commands/generate-readme-spec';
-
-function myLoader(): Loader {
-  // @ts-ignore
-  return (import.meta as any).loader;
-}
 
 const standardFieldCode = `@field standard = contains(DurationField);`;
 const fullFieldCode = `@field full = contains(DurationField, {
@@ -56,85 +40,14 @@ const yearMonthFieldCode = `@field yearMonth = contains(DurationField, {
   });`;
 
 class DurationFieldSpecIsolated extends Component<typeof DurationFieldSpec> {
-  get defaultIcon() {
-    if (!this.args.model) {
-      return;
-    }
-    return this.args.model.constructor?.icon;
-  }
-
-  @action
-  generateReadme() {
-    this.generateReadmeTask.perform();
-  }
-
-  generateReadmeTask = task(async () => {
-    if (!this.args.model) {
-      return;
-    }
-
-    let commandContext = this.args.context?.commandContext;
-    if (!commandContext) {
-      console.error('Command context not available');
-      return;
-    }
-
-    try {
-      const generateReadmeSpecCommand = new GenerateReadmeSpecCommand(
-        commandContext,
-      );
-      await generateReadmeSpecCommand.execute({
-        spec: this.args.model as Spec,
-      });
-    } catch (error) {
-      console.error('Error generating README:', error);
-    }
-  });
-
-  get icon() {
-    return this.cardDef?.icon;
-  }
-
-  @use private loadCardDef = resource(() => {
-    let cardDefObj = new TrackedObject<{ value: typeof BaseDef | undefined }>({
-      value: undefined,
-    });
-    (async () => {
-      try {
-        if (this.args.model.ref && this.args.model.id) {
-          let cardDef = await loadCardDef(this.args.model.ref, {
-            loader: myLoader(),
-            relativeTo: new URL(this.args.model.id),
-          });
-          cardDefObj.value = cardDef;
-        }
-      } catch (e) {
-        cardDefObj.value = undefined;
-      }
-    })();
-    return cardDefObj;
-  });
-
-  get cardDef() {
-    return this.loadCardDef.value;
-  }
-
-  get isPrimitiveField() {
-    return isPrimitive(this.cardDef);
-  }
-
-  private get realmInfo() {
-    return getCardMeta(this.args.model as CardDef, 'realmInfo');
-  }
-
   <template>
     <article class='container'>
-      <SpecHeader @icon={{this.icon}} @defaultIcon={{this.defaultIcon}}>
+      <SpecHeader @model={{@model}}>
         <:title><@fields.cardTitle /></:title>
         <:description><@fields.cardDescription /></:description>
       </SpecHeader>
 
-      <SpecReadmeSection>
+      <SpecReadmeSection @model={{@model}} @context={{@context}}>
         <@fields.readMe />
       </SpecReadmeSection>
 
@@ -157,12 +70,7 @@ class DurationFieldSpecIsolated extends Component<typeof DurationFieldSpec> {
         </article>
       </ExamplesWithInteractive>
 
-      <SpecModuleSection
-        @moduleHref={{@model.moduleHref}}
-        @refName={{@model.ref.name}}
-        @specType={{@model.specType}}
-        @realmInfo={{this.realmInfo}}
-      />
+      <SpecModuleSection @model={{@model}} />
     </article>
     <style scoped>
       .container {
@@ -189,94 +97,17 @@ class DurationFieldSpecIsolated extends Component<typeof DurationFieldSpec> {
 }
 
 class DurationFieldSpecEdit extends Component<typeof DurationFieldSpec> {
-  get defaultIcon() {
-    if (!this.args.model) {
-      return;
-    }
-    return this.args.model.constructor?.icon;
-  }
-
-  @action
-  generateReadme() {
-    this.generateReadmeTask.perform();
-  }
-
-  generateReadmeTask = task(async () => {
-    if (!this.args.model) {
-      return;
-    }
-
-    let commandContext = this.args.context?.commandContext;
-    if (!commandContext) {
-      console.error('Command context not available');
-      return;
-    }
-
-    try {
-      const generateReadmeSpecCommand = new GenerateReadmeSpecCommand(
-        commandContext,
-      );
-      await generateReadmeSpecCommand.execute({
-        spec: this.args.model as Spec,
-      });
-    } catch (error) {
-      console.error('Error generating README:', error);
-    }
-  });
-
-  get icon() {
-    return this.cardDef?.icon;
-  }
-
-  @use private loadCardDef = resource(() => {
-    let cardDefObject = new TrackedObject<{
-      value: typeof BaseDef | undefined;
-    }>({
-      value: undefined,
-    });
-    (async () => {
-      try {
-        if (this.args.model.ref && this.args.model.id) {
-          let cardDef = await loadCardDef(this.args.model.ref, {
-            loader: myLoader(),
-            relativeTo: new URL(this.args.model.id),
-          });
-          cardDefObject.value = cardDef;
-        }
-      } catch (e) {
-        cardDefObject.value = undefined;
-      }
-    })();
-    return cardDefObject;
-  });
-
-  get cardDef() {
-    return this.loadCardDef.value;
-  }
-
-  get isPrimitiveField() {
-    return isPrimitive(this.cardDef);
-  }
-
-  private get realmInfo() {
-    return getCardMeta(this.args.model as CardDef, 'realmInfo');
-  }
-
   <template>
     <article class='container'>
-      <SpecHeader
-        @icon={{this.icon}}
-        @defaultIcon={{this.defaultIcon}}
-        @isEditMode={{true}}
-      >
+      <SpecHeader @model={{@model}} @isEditMode={{true}}>
         <:title><@fields.cardTitle /></:title>
         <:description><@fields.cardDescription /></:description>
       </SpecHeader>
 
       <SpecReadmeSection
-        @canEdit={{@canEdit}}
-        @onGenerateReadme={{this.generateReadme}}
-        @isGenerating={{this.generateReadmeTask.isRunning}}
+        @model={{@model}}
+        @context={{@context}}
+        @isEditMode={{@canEdit}}
       >
         <@fields.readMe />
       </SpecReadmeSection>
@@ -300,12 +131,7 @@ class DurationFieldSpecEdit extends Component<typeof DurationFieldSpec> {
         </article>
       </ExamplesWithInteractive>
 
-      <SpecModuleSection
-        @moduleHref={{@model.moduleHref}}
-        @refName={{@model.ref.name}}
-        @specType={{@model.specType}}
-        @realmInfo={{this.realmInfo}}
-      />
+      <SpecModuleSection @model={{@model}} />
     </article>
     <style scoped>
       .container {
@@ -334,10 +160,10 @@ class DurationFieldSpecEdit extends Component<typeof DurationFieldSpec> {
 export class DurationFieldSpec extends Spec {
   static displayName = 'Duration Field Spec';
 
-  // Standard DurationField - default configuration
+  // Standard DurationField
   @field standard = contains(DurationField);
 
-  // Full duration - all time units (years, months, days, hours, minutes, seconds)
+  // Full duration breakdown
   @field full = contains(DurationField, {
     configuration: {
       includeYears: true,
@@ -349,7 +175,7 @@ export class DurationFieldSpec extends Spec {
     },
   });
 
-  // Day-time duration - no years/months (avoids month-length ambiguity)
+  // Day + time units
   @field dayTime = contains(DurationField, {
     configuration: {
       includeDays: true,
@@ -359,14 +185,14 @@ export class DurationFieldSpec extends Spec {
     },
   });
 
-  // Year-month duration - calendar-based periods (contracts, subscriptions)
+  // Year + month breakdown
   @field yearMonth = contains(DurationField, {
     configuration: {
       includeYears: true,
       includeMonths: true,
     },
   });
-  static isolated =
-    DurationFieldSpecIsolated as unknown as typeof Spec.isolated;
+
+  static isolated = DurationFieldSpecIsolated as unknown as typeof Spec.isolated;
   static edit = DurationFieldSpecEdit as unknown as typeof Spec.edit;
 }

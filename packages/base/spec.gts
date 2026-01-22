@@ -10,6 +10,8 @@ import {
   getCardMeta,
   type CardOrFieldTypeIcon,
   BaseDef,
+  type CardContext,
+  type PartialBaseInstanceType,
 } from './card-api';
 import StringField from './string';
 import BooleanField from './boolean';
@@ -115,8 +117,7 @@ const PRIMITIVE_INCOMPATIBILITY_MESSAGE =
 interface SpecHeaderSignature {
   Element: HTMLElement;
   Args: {
-    icon?: CardOrFieldTypeIcon;
-    defaultIcon?: CardOrFieldTypeIcon;
+    model: PartialBaseInstanceType<typeof Spec>;
     isEditMode?: boolean;
   };
   Blocks: {
@@ -126,13 +127,48 @@ interface SpecHeaderSignature {
 }
 
 export class SpecHeader extends GlimmerComponent<SpecHeaderSignature> {
+  get defaultIcon() {
+    if (!this.args.model) {
+      return;
+    }
+    return this.args.model.constructor?.icon;
+  }
+
+  get icon() {
+    return this.cardDef?.icon;
+  }
+
+  @use private loadCardDef = resource(() => {
+    let cardDefObj = new TrackedObject<{ value: typeof BaseDef | undefined }>({
+      value: undefined,
+    });
+    (async () => {
+      try {
+        if (this.args.model.ref && this.args.model.id) {
+          let cardDef = await loadCardDef(this.args.model.ref, {
+            loader: myLoader(),
+            relativeTo: new URL(this.args.model.id),
+          });
+          cardDefObj.value = cardDef;
+        }
+      } catch (e) {
+        cardDefObj.value = undefined;
+      }
+    })();
+    return cardDefObj;
+  });
+
+  get cardDef() {
+    return this.loadCardDef.value;
+  }
+
   <template>
     <header class='header' aria-labelledby='title'>
       <div class='box header-icon-container'>
-        {{#if @icon}}
-          <@icon width='35' height='35' role='presentation' />
-        {{else if @defaultIcon}}
-          <@defaultIcon width='35' height='35' role='presentation' />
+        {{#if this.icon}}
+          <this.icon width='35' height='35' role='presentation' />
+        {{else if this.defaultIcon}}
+          <this.defaultIcon width='35' height='35' role='presentation' />
         {{/if}}
       </div>
       <div class='header-info-container'>
@@ -221,9 +257,9 @@ export class SpecHeader extends GlimmerComponent<SpecHeaderSignature> {
 interface SpecReadmeSectionSignature {
   Element: HTMLElement;
   Args: {
-    canEdit?: boolean;
-    onGenerateReadme?: () => void;
-    isGenerating?: boolean;
+    model: PartialBaseInstanceType<typeof Spec>;
+    context?: CardContext;
+    isEditMode?: boolean;
   };
   Blocks: {
     default: [];
@@ -231,6 +267,34 @@ interface SpecReadmeSectionSignature {
 }
 
 export class SpecReadmeSection extends GlimmerComponent<SpecReadmeSectionSignature> {
+  @action
+  generateReadme() {
+    this.generateReadmeTask.perform();
+  }
+
+  generateReadmeTask = task(async () => {
+    if (!this.args.model) {
+      return;
+    }
+
+    let commandContext = this.args.context?.commandContext;
+    if (!commandContext) {
+      console.error('Command context not available');
+      return;
+    }
+
+    try {
+      const generateReadmeSpecCommand = new GenerateReadmeSpecCommand(
+        commandContext,
+      );
+      await generateReadmeSpecCommand.execute({
+        spec: this.args.model as Spec,
+      });
+    } catch (error) {
+      console.error('Error generating README:', error);
+    }
+  });
+
   <template>
     <section class='readme section'>
       <header class='row-header' aria-labelledby='readme'>
@@ -238,22 +302,20 @@ export class SpecReadmeSection extends GlimmerComponent<SpecReadmeSectionSignatu
           <BookOpenText width='20' height='20' role='presentation' />
           <h2 id='readme'>Read Me</h2>
         </div>
-        {{#if @canEdit}}
-          {{#if @onGenerateReadme}}
+        {{#if @isEditMode}}
           <BoxelButton
             @kind='primary'
             @size='extra-small'
-            @loading={{@isGenerating}}
-            {{on 'click' @onGenerateReadme}}
+            @loading={{this.generateReadmeTask.isRunning}}
+            {{on 'click' this.generateReadme}}
             data-test-generate-readme
           >
-            {{#if @isGenerating}}
+            {{#if this.generateReadmeTask.isRunning}}
               Generating...
             {{else}}
               Generate README
             {{/if}}
           </BoxelButton>
-          {{/if}}
         {{/if}}
       </header>
       <div data-test-readme>
@@ -291,8 +353,7 @@ export class SpecReadmeSection extends GlimmerComponent<SpecReadmeSectionSignatu
 interface SpecExamplesSectionSignature {
   Element: HTMLElement;
   Args: {
-    specType?: string;
-    isPrimitiveField: boolean;
+    model: PartialBaseInstanceType<typeof Spec>;
   };
   Blocks: {
     linkedExamples: [];
@@ -301,6 +362,38 @@ interface SpecExamplesSectionSignature {
 }
 
 export class SpecExamplesSection extends GlimmerComponent<SpecExamplesSectionSignature> {
+  get specType() {
+    return this.args.model.specType;
+  }
+
+  get isPrimitiveField() {
+    return isPrimitive(this.cardDef);
+  }
+
+  @use private loadCardDef = resource(() => {
+    let cardDefObj = new TrackedObject<{ value: typeof BaseDef | undefined }>({
+      value: undefined,
+    });
+    (async () => {
+      try {
+        if (this.args.model.ref && this.args.model.id) {
+          let cardDef = await loadCardDef(this.args.model.ref, {
+            loader: myLoader(),
+            relativeTo: new URL(this.args.model.id),
+          });
+          cardDefObj.value = cardDef;
+        }
+      } catch (e) {
+        cardDefObj.value = undefined;
+      }
+    })();
+    return cardDefObj;
+  });
+
+  get cardDef() {
+    return this.loadCardDef.value;
+  }
+
   <template>
     <section class='examples section'>
       <header class='row-header' aria-labelledby='examples'>
@@ -309,8 +402,8 @@ export class SpecExamplesSection extends GlimmerComponent<SpecExamplesSectionSig
           <h2 id='examples'>Examples</h2>
         </div>
       </header>
-      {{#if (eq @specType 'field')}}
-        {{#if @isPrimitiveField}}
+      {{#if (eq this.specType 'field')}}
+        {{#if this.isPrimitiveField}}
           <p
             class='spec-example-incompatible-message'
             data-test-spec-example-incompatible-primitives
@@ -437,14 +530,27 @@ export class ExamplesWithInteractive extends GlimmerComponent<ExamplesWithIntera
 interface SpecModuleSectionSignature {
   Element: HTMLElement;
   Args: {
-    moduleHref?: string;
-    refName?: string;
-    specType?: string;
-    realmInfo: any;
+    model: PartialBaseInstanceType<typeof Spec>;
   };
 }
 
 export class SpecModuleSection extends GlimmerComponent<SpecModuleSectionSignature> {
+  get realmInfo() {
+    return getCardMeta(this.args.model as CardDef, 'realmInfo');
+  }
+
+  get moduleHref() {
+    return this.args.model.moduleHref;
+  }
+
+  get refName() {
+    return this.args.model.ref?.name;
+  }
+
+  get specType() {
+    return this.args.model.specType;
+  }
+
   <template>
     <section class='module section'>
       <header class='row-header' aria-labelledby='module'>
@@ -456,9 +562,9 @@ export class SpecModuleSection extends GlimmerComponent<SpecModuleSectionSignatu
       <div class='code-ref-container'>
         <FieldContainer @label='URL' @vertical={{true}} @labelFontSize='small'>
           <div class='code-ref-row'>
-            <RealmIcon class='realm-icon' @realmInfo={{@realmInfo}} />
+            <RealmIcon class='realm-icon' @realmInfo={{this.realmInfo}} />
             <span class='code-ref-value' data-test-module-href>
-              {{@moduleHref}}
+              {{this.moduleHref}}
             </span>
           </div>
         </FieldContainer>
@@ -470,10 +576,10 @@ export class SpecModuleSection extends GlimmerComponent<SpecModuleSectionSignatu
           <div class='code-ref-row'>
             <ExportArrow class='exported-arrow' width='10' height='10' />
             <div class='code-ref-value' data-test-exported-name>
-              {{@refName}}
+              {{this.refName}}
             </div>
             <div class='exported-type' data-test-exported-type>
-              {{@specType}}
+              {{this.specType}}
             </div>
           </div>
         </FieldContainer>
@@ -546,75 +652,6 @@ export class SpecModuleSection extends GlimmerComponent<SpecModuleSectionSignatu
 }
 
 class Isolated extends Component<typeof Spec> {
-  get defaultIcon() {
-    if (!this.args.model) {
-      return;
-    }
-    return this.args.model.constructor?.icon;
-  }
-
-  @action
-  generateReadme() {
-    this.generateReadmeTask.perform();
-  }
-
-  generateReadmeTask = task(async () => {
-    if (!this.args.model) {
-      return;
-    }
-
-    let commandContext = this.args.context?.commandContext;
-    if (!commandContext) {
-      console.error('Command context not available');
-      return;
-    }
-
-    try {
-      const generateReadmeSpecCommand = new GenerateReadmeSpecCommand(
-        commandContext,
-      );
-      const result = await generateReadmeSpecCommand.execute({
-        spec: this.args.model as Spec,
-      });
-
-      console.log('Generated README:', result.readme);
-    } catch (error) {
-      console.error('Error generating README:', error);
-    }
-  });
-
-  get icon() {
-    return this.cardDef?.icon;
-  }
-
-  @use private loadCardDef = resource(() => {
-    let cardDefObj = new TrackedObject<{ value: typeof BaseDef | undefined }>({
-      value: undefined,
-    });
-    (async () => {
-      try {
-        if (this.args.model.ref && this.args.model.id) {
-          let cardDef = await loadCardDef(this.args.model.ref, {
-            loader: myLoader(),
-            relativeTo: new URL(this.args.model.id),
-          });
-          cardDefObj.value = cardDef;
-        }
-      } catch (e) {
-        cardDefObj.value = undefined;
-      }
-    })();
-    return cardDefObj;
-  });
-
-  get cardDef() {
-    return this.loadCardDef.value;
-  }
-
-  get isPrimitiveField() {
-    return isPrimitive(this.cardDef);
-  }
-
   get absoluteRef() {
     if (!this.args.model.ref || !this.args.model.id) {
       return undefined;
@@ -627,25 +664,18 @@ class Isolated extends Component<typeof Spec> {
     return ref;
   }
 
-  private get realmInfo() {
-    return getCardMeta(this.args.model as CardDef, 'realmInfo');
-  }
-
   <template>
     <article class='container'>
-      <SpecHeader @icon={{this.icon}} @defaultIcon={{this.defaultIcon}}>
+      <SpecHeader @model={{@model}}>
         <:title><@fields.cardTitle /></:title>
         <:description><@fields.cardDescription /></:description>
       </SpecHeader>
 
-      <SpecReadmeSection>
+      <SpecReadmeSection @model={{@model}} @context={{@context}}>
         <@fields.readMe />
       </SpecReadmeSection>
 
-      <SpecExamplesSection
-        @specType={{@model.specType}}
-        @isPrimitiveField={{this.isPrimitiveField}}
-      >
+      <SpecExamplesSection @model={{@model}}>
         <:linkedExamples>
           <@fields.linkedExamples />
         </:linkedExamples>
@@ -654,12 +684,7 @@ class Isolated extends Component<typeof Spec> {
         </:containedExamples>
       </SpecExamplesSection>
 
-      <SpecModuleSection
-        @moduleHref={{@model.moduleHref}}
-        @refName={{@model.ref.name}}
-        @specType={{@model.specType}}
-        @realmInfo={{this.realmInfo}}
-      />
+      <SpecModuleSection @model={{@model}} />
     </article>
     <style scoped>
       .container {
@@ -738,77 +763,6 @@ class Fitted extends Component<typeof Spec> {
 }
 
 class Edit extends Component<typeof Spec> {
-  get defaultIcon() {
-    if (!this.args.model) {
-      return;
-    }
-    return this.args.model.constructor?.icon;
-  }
-
-  @action
-  generateReadme() {
-    this.generateReadmeTask.perform();
-  }
-
-  generateReadmeTask = task(async () => {
-    if (!this.args.model) {
-      return;
-    }
-
-    let commandContext = this.args.context?.commandContext;
-    if (!commandContext) {
-      console.error('Command context not available');
-      return;
-    }
-
-    try {
-      const generateReadmeSpecCommand = new GenerateReadmeSpecCommand(
-        commandContext,
-      );
-      const result = await generateReadmeSpecCommand.execute({
-        spec: this.args.model as Spec,
-      });
-
-      console.log('Generated README:', result.readme);
-    } catch (error) {
-      console.error('Error generating README:', error);
-    }
-  });
-
-  get icon() {
-    return this.cardDef?.icon;
-  }
-
-  @use private loadCardDef = resource(() => {
-    let cardDefObject = new TrackedObject<{
-      value: typeof BaseDef | undefined;
-    }>({
-      value: undefined,
-    });
-    (async () => {
-      try {
-        if (this.args.model.ref && this.args.model.id) {
-          let cardDef = await loadCardDef(this.args.model.ref, {
-            loader: myLoader(),
-            relativeTo: new URL(this.args.model.id),
-          });
-          cardDefObject.value = cardDef;
-        }
-      } catch (e) {
-        cardDefObject.value = undefined;
-      }
-    })();
-    return cardDefObject;
-  });
-
-  get cardDef() {
-    return this.loadCardDef.value;
-  }
-
-  get isPrimitiveField() {
-    return isPrimitive(this.cardDef);
-  }
-
   get absoluteRef() {
     if (!this.args.model.ref || !this.args.model.id) {
       return undefined;
@@ -821,33 +775,22 @@ class Edit extends Component<typeof Spec> {
     return ref;
   }
 
-  private get realmInfo() {
-    return getCardMeta(this.args.model as CardDef, 'realmInfo');
-  }
-
   <template>
     <article class='container'>
-      <SpecHeader
-        @icon={{this.icon}}
-        @defaultIcon={{this.defaultIcon}}
-        @isEditMode={{true}}
-      >
+      <SpecHeader @model={{@model}} @isEditMode={{true}}>
         <:title><@fields.cardTitle /></:title>
         <:description><@fields.cardDescription /></:description>
       </SpecHeader>
 
       <SpecReadmeSection
-        @canEdit={{@canEdit}}
-        @onGenerateReadme={{this.generateReadme}}
-        @isGenerating={{this.generateReadmeTask.isRunning}}
+        @model={{@model}}
+        @context={{@context}}
+        @isEditMode={{@canEdit}}
       >
         <@fields.readMe />
       </SpecReadmeSection>
 
-      <SpecExamplesSection
-        @specType={{@model.specType}}
-        @isPrimitiveField={{this.isPrimitiveField}}
-      >
+      <SpecExamplesSection @model={{@model}}>
         <:linkedExamples>
           <@fields.linkedExamples @typeConstraint={{this.absoluteRef}} />
         </:linkedExamples>
@@ -856,12 +799,7 @@ class Edit extends Component<typeof Spec> {
         </:containedExamples>
       </SpecExamplesSection>
 
-      <SpecModuleSection
-        @moduleHref={{@model.moduleHref}}
-        @refName={{@model.ref.name}}
-        @specType={{@model.specType}}
-        @realmInfo={{this.realmInfo}}
-      />
+      <SpecModuleSection @model={{@model}} />
     </article>
     <style scoped>
       .container {
