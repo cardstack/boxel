@@ -461,6 +461,7 @@ jobs:
             "search-prerendered-test.ts",
             "types-endpoint-test.ts",
             "server-endpoints/authentication-test.ts",
+            "server-endpoints/bot-registration-test.ts",
             "server-endpoints/index-responses-test.ts",
             "server-endpoints/maintenance-endpoints-test.ts",
             "server-endpoints/queue-status-test.ts",

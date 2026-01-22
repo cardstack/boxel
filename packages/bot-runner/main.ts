@@ -1,6 +1,7 @@
 import './setup-logger'; // This should be first
 import { RoomMemberEvent, RoomEvent, createClient } from 'matrix-js-sdk';
 import { PgAdapter, PgQueuePublisher } from '@cardstack/postgres';
+import { query } from '@cardstack/runtime-common';
 import { logger } from '@cardstack/runtime-common';
 
 const log = logger('bot-runner');
@@ -45,6 +46,34 @@ const botPassword = process.env.BOT_RUNNER_PASSWORD || 'password';
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);
 
+  async function getRegisteredUsers() {
+    let rows = await query(dbAdapter, [
+      `SELECT u.matrix_user_id, br.created_at`,
+      `FROM bot_registrations br`,
+      `JOIN users u ON u.id = br.user_id`,
+    ]);
+    let users = new Map<string, number>();
+    for (let row of rows as Array<{ matrix_user_id: string; created_at: string }>) {
+      if (!row.matrix_user_id || !row.created_at) {
+        continue;
+      }
+      let createdAtMs = Date.parse(row.created_at);
+      if (Number.isNaN(createdAtMs)) {
+        continue;
+      }
+      users.set(row.matrix_user_id, createdAtMs);
+    }
+    return users;
+  }
+
+  let registeredUsers = new Map<string, number>();
+  try {
+    registeredUsers = await getRegisteredUsers();
+  } catch (error) {
+    log.error('failed to load bot registrations', error);
+    process.exit(1);
+  }
+
   client.on(RoomMemberEvent.Membership, function (event, member) {
     if (event.event.origin_server_ts! < startTime) {
       return;
@@ -68,9 +97,19 @@ const botPassword = process.env.BOT_RUNNER_PASSWORD || 'password';
     if (!room || toStartOfTimeline) {
       return;
     }
+    if (room.getMyMembership() !== 'join') {
+      return;
+    }
 
     let senderMatrixUserId = event.getSender();
     if (!senderMatrixUserId || senderMatrixUserId === auth.user_id) {
+      return;
+    }
+    let registrationCreatedAt = registeredUsers.get(senderMatrixUserId);
+    if (!registrationCreatedAt) {
+      return;
+    }
+    if (event.event.origin_server_ts! < registrationCreatedAt) {
       return;
     }
 
@@ -82,6 +121,7 @@ const botPassword = process.env.BOT_RUNNER_PASSWORD || 'password';
       eventBody,
     );
 
+    // TODO: filter out events we want to handle (e.g. command messages, system events)
     // TODO: enqueue bot command job via queuePublisher.publish(...)
   });
 
