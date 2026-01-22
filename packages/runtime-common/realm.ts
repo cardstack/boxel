@@ -24,6 +24,7 @@ import {
   badRequest,
   CardError,
   formattedError,
+  notAcceptable,
 } from './error';
 import { v4 as uuidV4 } from 'uuid';
 import { formatRFC7231 } from 'date-fns';
@@ -96,7 +97,6 @@ import {
   AuthorizationError,
   Router,
   SupportedMimeType,
-  extractSupportedMimeType,
   lookupRouteTable,
 } from './router';
 import { InvalidQueryError, assertQuery, parseQuery } from './query';
@@ -1454,16 +1454,6 @@ export class Realm {
       if (!isLocal) {
         await this.checkPermission(request, requestContext, requiredPermission);
       }
-      let acceptedMimeType = extractSupportedMimeType(
-        request.headers.get('Accept') as unknown as null | string | [string],
-      );
-      if (
-        acceptedMimeType === SupportedMimeType.CardJson &&
-        ['POST', 'PATCH', 'PUT', 'DELETE'].includes(request.method) &&
-        (await this.openFileForMetadata(localPath))
-      ) {
-        return methodNotAllowed(request, requestContext);
-      }
       if (!this.#realmIndexQueryEngine) {
         return systemError({
           requestContext,
@@ -2151,6 +2141,13 @@ export class Realm {
     return this.#adapter.openFile(localPath);
   }
 
+  private async nonJsonFileExists(localPath: LocalPath): Promise<boolean> {
+    if (localPath?.endsWith('.json')) {
+      localPath = localPath.slice(0, -5);
+    }
+    return await this.#adapter.exists(localPath);
+  }
+
   private async fileMetaDocument(
     requestContext: RequestContext,
     localPath: LocalPath,
@@ -2310,10 +2307,6 @@ export class Realm {
     request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
-    let localPath = this.paths.local(new URL(request.url));
-    if (await this.openFileForMetadata(localPath)) {
-      return methodNotAllowed(request, requestContext);
-    }
     let body = await request.text();
     let json;
     try {
@@ -2451,8 +2444,11 @@ export class Realm {
     request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
-    let primarySerialization: LooseSingleCardDocument | undefined;
     let localPath = this.paths.local(new URL(request.url));
+    if (await this.nonJsonFileExists(localPath)) {
+      return notAcceptable(request, requestContext);
+    }
+    let primarySerialization: LooseSingleCardDocument | undefined;
     if (localPath.startsWith('_')) {
       return methodNotAllowed(request, requestContext);
     }
@@ -2707,15 +2703,19 @@ export class Realm {
     if (localPath === '') {
       localPath = 'index';
     }
-
-    let url = this.paths.fileURL(localPath.replace(/\.json$/, ''));
+    localPath = localPath.replace(/\.json$/, '');
+    let url = this.paths.fileURL(localPath);
     let maybeError = await this.#realmIndexQueryEngine.cardDocument(url, {
       loadLinks: true,
     });
     let start = Date.now();
     try {
-      if (!maybeError) {
-        return notFound(request, requestContext);
+      if (maybeError === undefined) {
+        if (await this.#adapter.exists(localPath)) {
+          return notAcceptable(request, requestContext);
+        } else {
+          return notFound(request, requestContext);
+        }
       }
       if (maybeError.type === 'error') {
         return systemError({
@@ -2780,10 +2780,14 @@ export class Realm {
     request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
+    let localPath = this.paths.local(new URL(request.url));
+    if (await this.nonJsonFileExists(localPath)) {
+      return notAcceptable(request, requestContext);
+    }
     let reqURL = request.url.replace(/\.json$/, '');
     // strip off query params
     let url = new URL(new URL(reqURL).pathname, reqURL);
-    let localPath = this.paths.local(url);
+    localPath = this.paths.local(url);
     if (await this.openFileForMetadata(localPath)) {
       return methodNotAllowed(request, requestContext);
     }
