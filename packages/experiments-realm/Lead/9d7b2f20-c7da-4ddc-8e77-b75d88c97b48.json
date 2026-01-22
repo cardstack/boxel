@@ -43,8 +43,8 @@
           "value": "https://www.google.com/"
         }
       ],
-      "description": null,
-      "thumbnailURL": "https://images.pexels.com/photos/3785079/pexels-photo-3785079.jpeg?auto=compress&cs=tinysrgb&w=300&h=300&dpr=2"
+      "cardDescription": null,
+      "cardThumbnailURL": "https://images.pexels.com/photos/3785079/pexels-photo-3785079.jpeg?auto=compress&cs=tinysrgb&w=300&h=300&dpr=2"
     },
     "relationships": {
       "crmApp": {

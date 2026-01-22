@@ -35,9 +35,9 @@
       "website": "https://www.pixar.com",
       "cardInfo": {
         "notes": null,
-        "title": "Nemo",
-        "description": "Just keep swimming.",
-        "thumbnailURL": "https://images.squarespace-cdn.com/content/v1/60241cb68df65b530cd84d95/906fc6e5-265f-4118-b2f2-36c97ecc4d77/nemo11.jpg?format=2500w"
+        "name": "Nemo",
+        "summary": "Just keep swimming.",
+        "cardThumbnailURL": "https://images.squarespace-cdn.com/content/v1/60241cb68df65b530cd84d95/906fc6e5-265f-4118-b2f2-36c97ecc4d77/nemo11.jpg?format=2500w"
       },
       "dateRange": {
         "end": "2025-11-01",

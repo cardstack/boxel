@@ -11,9 +11,9 @@
       "name": "Events & Celebrations",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": "Event planning, party themes, guest lists, venue details, celebration timelines, and memorable moments.",
-        "thumbnailURL": null
+        "name": null,
+        "summary": "Event planning, party themes, guest lists, venue details, celebration timelines, and memorable moments.",
+        "cardThumbnailURL": null
       }
     },
     "relationships": {

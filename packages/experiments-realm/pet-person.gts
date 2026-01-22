@@ -16,7 +16,7 @@ export class PetPerson extends CardDef {
   @field firstName = contains(StringField);
   @field pets = linksToMany(Pet);
   @field friend = linksTo(Person);
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: PetPerson) {
       return `${this.firstName} Pet Person`;
     },
@@ -37,7 +37,7 @@ export class PetPerson extends CardDef {
   static isolated = class Isolated extends Component<typeof this> {
     <template>
       <GridContainer class='container'>
-        <h2><@fields.title /></h2>
+        <h2><@fields.cardTitle /></h2>
         <h2><@fields.firstName /></h2>
         Pets:
         <@fields.pets />

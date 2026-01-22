@@ -11,9 +11,9 @@
       "name": "Social Networking",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": "Community building, social media platforms, networking tools, messaging systems, user connections, and social engagement features.",
-        "thumbnailURL": null
+        "name": null,
+        "summary": "Community building, social media platforms, networking tools, messaging systems, user connections, and social engagement features.",
+        "cardThumbnailURL": null
       }
     },
     "relationships": {

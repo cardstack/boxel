@@ -229,7 +229,7 @@ class EditTemplate extends Component<typeof GeoPointField> {
   </template>
 }
 
-export class GeoPointField extends FieldDef {
+export default class GeoPointField extends FieldDef {
   static displayName = 'Geo Point';
   static icon = MapPinIcon;
 

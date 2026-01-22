@@ -48,8 +48,8 @@ class MusicHubIsolated extends Component<typeof MusicHubCard> {
                   @model.hubName
                   'Music Hub'
                 }}</h1>
-              {{#if @model.description}}
-                <p class='hub-description'>{{@model.description}}</p>
+              {{#if @model.cardDescription}}
+                <p class='hub-description'>{{@model.cardDescription}}</p>
               {{else}}
                 <p class='hub-description'>Discover, create, and connect with
                   music in an interactive space designed for artists and music
@@ -828,7 +828,7 @@ export class MusicHubCard extends CardDef {
   static prefersWideFormat = true;
 
   @field hubName = contains(StringField);
-  @field description = contains(StringField);
+  @field cardDescription = contains(StringField);
   @field featuredAlbums = linksToMany(() => MusicAlbumCard);
   @field featuredPlaylists = linksToMany(() => PlaylistCard);
   @field featuredSongs = linksToMany(() => SongCard);
@@ -841,7 +841,7 @@ export class MusicHubCard extends CardDef {
   @field upcomingEvents = linksToMany(() => EventTicketCard);
   @field moodSelector = linksTo(() => MoodSelectorPlaylistCard);
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: MusicHubCard) {
       try {
         return this.hubName ?? 'Music Hub';
@@ -866,8 +866,8 @@ export class MusicHubCard extends CardDef {
                   'Music Hub'
                 }}</h3>
               <p class='hub-tagline'>{{if
-                  @model.description
-                  @model.description
+                  @model.cardDescription
+                  @model.cardDescription
                   'Your creative music platform'
                 }}</p>
             </div>
@@ -1205,8 +1205,8 @@ export class MusicHubCard extends CardDef {
                   'Music Hub'
                 }}</h3>
               <p class='card-description'>{{if
-                  @model.description
-                  @model.description
+                  @model.cardDescription
+                  @model.cardDescription
                   'Your creative music platform'
                 }}</p>
             </div>

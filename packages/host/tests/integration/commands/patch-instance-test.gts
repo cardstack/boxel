@@ -40,6 +40,7 @@ module('Integration | commands | patch-instance', function (hooks) {
 
   setupLocalIndexing(hooks);
   setupOnSave(hooks);
+  const saveWaitTimeoutMs = 5000;
   let mockMatrixUtils = setupMockMatrix(hooks, { autostart: true });
   let commandService: CommandService;
   let PersonDef: typeof CardDefType;
@@ -92,7 +93,10 @@ module('Integration | commands | patch-instance', function (hooks) {
       },
     });
 
-    await waitUntil(() => saves > 0);
+    await waitUntil(() => saves > 0, {
+      timeout: saveWaitTimeoutMs,
+      timeoutMessage: 'timed out waiting for save to complete',
+    });
 
     let result = await indexQuery.instance(url);
     assert.ok(result, 'instance query returned a result');
@@ -108,10 +112,10 @@ module('Integration | commands | patch-instance', function (hooks) {
       instance.attributes,
       {
         name: 'Paper',
-        description: null,
+        cardDescription: null,
         nickNames: [],
-        thumbnailURL: null,
-        title: 'Untitled Card',
+        cardThumbnailURL: null,
+        cardTitle: 'Untitled Card',
         cardInfo,
       },
       'the attributes are correct',
@@ -159,7 +163,10 @@ module('Integration | commands | patch-instance', function (hooks) {
       },
     });
 
-    await waitUntil(() => saves > 0);
+    await waitUntil(() => saves > 0, {
+      timeout: saveWaitTimeoutMs,
+      timeoutMessage: 'timed out waiting for save to complete',
+    });
 
     let result = await indexQuery.instance(url);
     assert.ok(result, 'instance query returned a result');
@@ -175,10 +182,10 @@ module('Integration | commands | patch-instance', function (hooks) {
       instance.attributes,
       {
         name: 'Hassan',
-        description: null,
+        cardDescription: null,
         nickNames: ['Paper'],
-        thumbnailURL: null,
-        title: 'Untitled Card',
+        cardThumbnailURL: null,
+        cardTitle: 'Untitled Card',
         cardInfo,
       },
       'the attributes are correct',
@@ -226,7 +233,10 @@ module('Integration | commands | patch-instance', function (hooks) {
       },
     });
 
-    await waitUntil(() => saves > 0);
+    await waitUntil(() => saves > 0, {
+      timeout: saveWaitTimeoutMs,
+      timeoutMessage: 'timed out waiting for save to complete',
+    });
 
     let result = await indexQuery.instance(url);
     assert.ok(result, 'instance query returned a result');
@@ -242,10 +252,10 @@ module('Integration | commands | patch-instance', function (hooks) {
       instance.attributes,
       {
         name: 'Hassan',
-        description: null,
+        cardDescription: null,
         nickNames: [],
-        thumbnailURL: null,
-        title: 'Untitled Card',
+        cardThumbnailURL: null,
+        cardTitle: 'Untitled Card',
         cardInfo,
       },
       'the attributes are correct',
@@ -294,7 +304,10 @@ module('Integration | commands | patch-instance', function (hooks) {
       },
     });
 
-    await waitUntil(() => saves > 0);
+    await waitUntil(() => saves > 0, {
+      timeout: saveWaitTimeoutMs,
+      timeoutMessage: 'timed out waiting for save to complete',
+    });
 
     let result = await indexQuery.instance(url);
     assert.ok(result, 'instance query returned a result');
@@ -310,10 +323,10 @@ module('Integration | commands | patch-instance', function (hooks) {
       instance.attributes,
       {
         name: 'Hassan',
-        description: null,
+        cardDescription: null,
         nickNames: [],
-        thumbnailURL: null,
-        title: 'Untitled Card',
+        cardThumbnailURL: null,
+        cardTitle: 'Untitled Card',
         cardInfo,
       },
       'the attributes are correct',
@@ -404,7 +417,10 @@ module('Integration | commands | patch-instance', function (hooks) {
       'store.patch invoked with doNotWaitForPersist',
     );
 
-    await waitUntil(() => saves > 0);
+    await waitUntil(() => saves > 0, {
+      timeout: saveWaitTimeoutMs,
+      timeoutMessage: 'timed out waiting for save to complete',
+    });
     assert.strictEqual(
       savedName,
       'Hassan Optimistic',
@@ -459,10 +475,10 @@ module('Integration | commands | patch-instance', function (hooks) {
       instance.attributes,
       {
         name: 'Andrea',
-        description: null,
+        cardDescription: null,
         nickNames: ['Air'],
-        thumbnailURL: null,
-        title: 'Untitled Card',
+        cardThumbnailURL: null,
+        cardTitle: 'Untitled Card',
         cardInfo,
       },
       'the attributes are correct',

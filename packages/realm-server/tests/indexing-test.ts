@@ -1,6 +1,6 @@
 import { module, test } from 'qunit';
 import { dirSync } from 'tmp';
-import { SupportedMimeType } from '@cardstack/runtime-common';
+import { internalKeyFor, SupportedMimeType } from '@cardstack/runtime-common';
 import type {
   DBAdapter,
   LooseSingleCardDocument,
@@ -534,7 +534,7 @@ module(basename(__filename), function () {
         // TODO: restore in CS-9807
         // assert.ok(
         //   cleanedHead.includes('<title data-test-card-head-title>'),
-        //   `head html includes title: ${cleanedHead}`,
+        //   `head html includes cardTitle: ${cleanedHead}`,
         // );
 
         assert.strictEqual(
@@ -706,11 +706,11 @@ module(basename(__filename), function () {
         assert.deepEqual(
           hassan.doc.data.attributes,
           {
-            title: 'Untitled Card',
+            cardTitle: 'Untitled Card',
             nickName: "Ringo's buddy",
             firstName: 'Hassan',
-            description: null,
-            thumbnailURL: null,
+            cardDescription: null,
+            cardThumbnailURL: null,
             cardInfo,
           },
           'doc attributes are correct',
@@ -746,7 +746,7 @@ module(basename(__filename), function () {
             id: hassanId,
             pet: {
               id: `${testRealm}ringo`,
-              title: 'Untitled Card',
+              cardTitle: 'Untitled Card',
               firstName: 'Ringo',
               cardInfo: {
                 theme: null,
@@ -755,7 +755,7 @@ module(basename(__filename), function () {
             nickName: "Ringo's buddy",
             _cardType: 'PetPerson',
             firstName: 'Hassan',
-            title: 'Untitled Card',
+            cardTitle: 'Untitled Card',
             cardInfo: {
               theme: null,
             },
@@ -989,7 +989,7 @@ module(basename(__filename), function () {
       // Mutate the index row so we can validate that the response must come from the index,
       // not from filesystem metadata.
       await testDbAdapter.execute(
-        `UPDATE boxel_index SET search_doc = '{"name":"from-index.txt","contentType":"application/x-index-test"}'::jsonb WHERE url = '${testRealm}random-file.txt'`,
+        `UPDATE boxel_index SET search_doc = '{"name":"from-index.txt","contentType":"application/x-index-test"}'::jsonb, pristine_doc = '{"id":"${testRealm}random-file.txt","type":"file-meta","attributes":{"name":"from-pristine.txt","contentType":"application/x-pristine","custom":"present"},"meta":{"adoptsFrom":{"module":"https://cardstack.com/base/file-api","name":"FileDef"}}}'::jsonb WHERE url = '${testRealm}random-file.txt'`,
       );
       let response = await fetch(`${testRealm}random-file.txt`, {
         headers: { Accept: SupportedMimeType.FileMeta },
@@ -997,19 +997,65 @@ module(basename(__filename), function () {
       assert.strictEqual(response.status, 200, 'file meta response is ok');
       let doc = (await response.json()) as LooseSingleCardDocument;
       assert.strictEqual(doc.data.id, `${testRealm}random-file.txt`);
+      assert.strictEqual(doc.data.type, 'file-meta');
       assert.strictEqual(
         doc.data.attributes?.name,
-        'from-index.txt',
-        'name sourced from index',
+        'from-pristine.txt',
+        'name sourced from pristine file resource',
       );
       assert.strictEqual(
         doc.data.attributes?.contentType,
-        'application/x-index-test',
-        'contentType sourced from index',
+        'application/x-pristine',
+        'contentType sourced from pristine file resource',
+      );
+      assert.strictEqual(
+        doc.data.attributes?.custom,
+        'present',
+        'custom attributes sourced from pristine file resource',
+      );
+      assert.deepEqual(
+        doc.data.meta?.adoptsFrom,
+        {
+          module: 'https://cardstack.com/base/file-api',
+          name: 'FileDef',
+        },
+        'adoptsFrom sourced from pristine file resource',
       );
       assert.ok(
         doc.data.attributes?.lastModified,
         'lastModified sourced from response attributes',
+      );
+    });
+
+    test('file meta adoptsFrom prefers index types', async function (assert) {
+      let fileDefModule = new URL('filedef-mismatch', testRealm).href;
+      let fileDefKey = internalKeyFor(
+        { module: fileDefModule, name: 'FileDef' },
+        undefined,
+      );
+      await testDbAdapter.execute(
+        `UPDATE boxel_index SET types = '${JSON.stringify([
+          fileDefKey,
+        ])}'::jsonb, pristine_doc = NULL WHERE url = '${testRealm}random-file.txt'`,
+      );
+
+      let response = await fetch(`${testRealm}random-file.txt`, {
+        headers: { Accept: SupportedMimeType.FileMeta },
+      });
+      assert.strictEqual(response.status, 200, 'file meta response is ok');
+      let doc = (await response.json()) as LooseSingleCardDocument;
+      let adoptsFrom = doc.data.meta?.adoptsFrom as
+        | { module?: string; name?: string }
+        | undefined;
+      assert.strictEqual(
+        adoptsFrom?.module,
+        fileDefModule,
+        'adoptsFrom module sourced from index types',
+      );
+      assert.strictEqual(
+        adoptsFrom?.name,
+        'FileDef',
+        'adoptsFrom name sourced from index types',
       );
     });
   });
@@ -1137,6 +1183,21 @@ module(basename(__filename), function () {
           }
         `,
       );
+
+      let pet = await realm.realmIndexQueryEngine.module(
+        new URL(`${testRealm}pet`),
+      );
+      assert.strictEqual(pet?.type, 'module-error', 'Pet module is in error');
+      if (pet?.type === 'module-error') {
+        let errorDeps = new Set(pet.error.deps ?? []);
+        let hasNameDep =
+          errorDeps.has(`${testRealm}name`) ||
+          errorDeps.has(`${testRealm}name.gts`);
+        assert.ok(hasNameDep, 'error deps include missing Name module');
+      } else {
+        assert.ok(false, 'expected pet module error details');
+      }
+
       await realm.write(
         'name.gts',
         `
@@ -1150,7 +1211,7 @@ module(basename(__filename), function () {
         `,
       );
 
-      // Aspect module should be indexed
+      // Name module should be indexed
       let name = await realm.realmIndexQueryEngine.module(
         new URL(`${testRealm}name`),
       );
@@ -1161,8 +1222,7 @@ module(basename(__filename), function () {
       );
 
       // Since the name is ready, the pet should be indexed and not in an error state
-      // Fetch the pet module
-      let pet = await realm.realmIndexQueryEngine.module(
+      pet = await realm.realmIndexQueryEngine.module(
         new URL(`${testRealm}pet`),
       );
       assert.strictEqual(
@@ -1372,6 +1432,22 @@ module(basename(__filename), function () {
         'instance',
         'instance is repaired when missing module is added',
       );
+      let rows = (await testDbAdapter.execute(
+        `SELECT error_doc IS NULL AS is_sql_null
+         FROM boxel_index
+         WHERE realm_url = '${testRealm}'
+           AND (
+             url = '${testRealm}deep-card.json'
+             OR file_alias = '${testRealm}deep-card'
+           )
+           AND type = 'instance'`,
+      )) as { is_sql_null: boolean }[];
+      assert.strictEqual(
+        rows.length,
+        1,
+        'index row exists for deep-card instance',
+      );
+      assert.true(rows[0].is_sql_null, 'error_doc is SQL NULL after recovery');
     });
 
     test('can incrementally index deleted instance', async function (assert) {
@@ -1908,8 +1984,8 @@ module(basename(__filename), function () {
   });
 
   module('permissioned realm', function () {
-    let testRealm1URL = 'http://127.0.0.1:4447/';
-    let testRealm2URL = 'http://127.0.0.1:4448/';
+    let testRealm1URL = 'http://127.0.0.1:4447/test/';
+    let testRealm2URL = 'http://127.0.0.1:4448/test/';
     let testRealm2: Realm;
 
     function setupRealms(

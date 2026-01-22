@@ -4,14 +4,14 @@
     "attributes": {
       "readMe": null,
       "ref": {
-        "name": "AmountWithCurrency",
+        "name": "default",
         "module": "../crm-app/fields/amount-with-currency"
       },
       "specType": "field",
       "containedExamples": [],
-      "title": "Amount With Currency",
-      "description": "Spec for Amount With Currency field",
-      "thumbnailURL": null
+      "cardTitle": "Amount With Currency",
+      "cardDescription": "Spec for Amount With Currency field",
+      "cardThumbnailURL": null
     },
     "relationships": {},
     "meta": {

@@ -15,9 +15,9 @@
       "summary": "Professional product showcase with comprehensive specification display - configure product details, pricing, and imagery while viewing tear sheet presentations. Features hero image display, detailed specifications grid, care instructions, designer notes integration, and luxury furniture industry styling for complete product catalog and sales material generation.",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/furniture-tear-sheet-listing/thumbnail.png"
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/furniture-tear-sheet-listing/thumbnail.png"
       }
     },
     "relationships": {

@@ -1,3 +1,4 @@
+import { action } from '@ember/object';
 import Route from '@ember/routing/route';
 import type RouterService from '@ember/routing/router-service';
 import type Transition from '@ember/routing/transition';
@@ -55,6 +56,17 @@ export default class Card extends Route {
   @service declare realmServer: RealmServerService;
 
   didMatrixServiceStart = false;
+  initialLoading = true;
+
+  @action
+  loading(transition: Transition) {
+    transition.finally(() => {
+      // The loading template will be shown only during the initial load of the app
+      this.initialLoading = false;
+    });
+
+    return this.initialLoading;
+  }
 
   // WARNING! Make sure we are _very_ careful with our async in this model. This
   // model hook is called _every_  time

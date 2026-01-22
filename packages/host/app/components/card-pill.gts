@@ -50,7 +50,7 @@ export default class CardPill extends Component<CardPillSignature> {
   };
 
   private get cardTitle() {
-    return this.card?.title || this.cardError?.meta.cardTitle;
+    return this.card?.cardTitle || this.cardError?.meta.cardTitle;
   }
 
   private get card() {

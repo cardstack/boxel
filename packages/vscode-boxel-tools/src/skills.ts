@@ -3,7 +3,6 @@ import type { RealmAuth } from './realm-auth';
 import * as fs from 'fs';
 import * as path from 'path';
 import type { LocalFileSystem } from './local-file-system';
-import { buildQueryParamValue } from '@cardstack/runtime-common';
 
 export interface StoredSkillData {
   skillLists: {
@@ -386,10 +385,12 @@ export class SkillList extends vscode.TreeItem {
         },
       },
     };
-    searchUrl.searchParams.set('query', buildQueryParamValue(query));
-
     const response = await fetch(searchUrl, {
-      headers,
+      method: 'QUERY',
+      headers: {
+        ...headers,
+      },
+      body: JSON.stringify(query),
     });
 
     if (!response.ok) {

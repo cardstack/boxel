@@ -4,17 +4,17 @@
     "attributes": {
       "readMe": null,
       "ref": {
-        "name": "MapConfigField",
+        "name": "default",
         "module": "../fields/leaflet-map-config-field"
       },
       "specType": "field",
       "containedExamples": [],
-      "title": "MapConfigField",
-      "description": null,
+      "cardTitle": "MapConfigField",
+      "cardDescription": null,
       "cardInfo": {
-        "title": null,
-        "description": null,
-        "thumbnailURL": null,
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
         "notes": null
       }
     },

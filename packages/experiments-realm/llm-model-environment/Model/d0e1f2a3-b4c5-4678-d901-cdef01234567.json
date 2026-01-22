@@ -5,8 +5,8 @@
       "modelId": "deepseek/deepseek-r1-0528",
       "modelName": "DeepSeek R1",
       "displayName": "DeepSeek R1 - Advanced Reasoning",
-      "description": null,
-      "thumbnailURL": null
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "meta": {
       "adoptsFrom": {

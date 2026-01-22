@@ -11,9 +11,9 @@
       "name": "Career Development",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": "Career goals, skill assessments, professional development plans, networking strategies, and growth opportunities.",
-        "thumbnailURL": null
+        "name": null,
+        "summary": "Career goals, skill assessments, professional development plans, networking strategies, and growth opportunities.",
+        "cardThumbnailURL": null
       }
     },
     "relationships": {

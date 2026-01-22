@@ -9,9 +9,9 @@
       },
       "specType": "component",
       "containedExamples": [],
-      "title": "Filter Display",
-      "description": "Spec for Filter Display component",
-      "thumbnailURL": null
+      "cardTitle": "Filter Display",
+      "cardDescription": "Spec for Filter Display component",
+      "cardThumbnailURL": null
     },
     "relationships": {},
     "meta": {

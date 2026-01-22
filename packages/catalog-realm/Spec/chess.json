@@ -9,9 +9,9 @@
       },
       "specType": "card",
       "containedExamples": [],
-      "title": "Chess",
-      "description": "Spec of Chess",
-      "thumbnailURL": null
+      "cardTitle": "Chess",
+      "cardDescription": "Spec of Chess",
+      "cardThumbnailURL": null
     },
     "relationships": {
       "linkedExamples.0": {

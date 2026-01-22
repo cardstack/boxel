@@ -60,10 +60,10 @@ module('Integration | ask-ai', function (hooks) {
     const petCard = `import { CardDef, Component, contains, field, StringField } from "https://cardstack.com/base/card-api";
       export class Pet extends CardDef {
         static displayName = 'Pet';
-        @field title = contains(StringField);
+        @field cardTitle = contains(StringField);
         static isolated = class Isolated extends Component<typeof this> {
         <template>
-          <h2><@fields.title /></h2>
+          <h2><@fields.cardTitle /></h2>
         </template>
       };
     }`;
@@ -74,7 +74,7 @@ module('Integration | ask-ai', function (hooks) {
         'pet.gts': petCard,
         'Pet/marco.json': {
           data: {
-            attributes: { title: 'Marco' },
+            attributes: { cardTitle: 'Marco' },
             meta: {
               adoptsFrom: {
                 module: `${testRealmURL}pet`,
@@ -85,7 +85,7 @@ module('Integration | ask-ai', function (hooks) {
         },
         'Pet/mango.json': {
           data: {
-            attributes: { title: 'Mango' },
+            attributes: { cardTitle: 'Mango' },
             meta: {
               adoptsFrom: {
                 module: `${testRealmURL}pet`,
@@ -146,7 +146,7 @@ module('Integration | ask-ai', function (hooks) {
       {
         from: 'testuser',
         message: 'Hello world',
-        cards: [{ id: cardId, title: 'Marco' }],
+        cards: [{ id: cardId, cardTitle: 'Marco' }],
       },
     ]);
     assert.dom('[data-test-ask-ai-input]').doesNotExist();
@@ -220,7 +220,7 @@ module('Integration | ask-ai', function (hooks) {
       {
         from: 'testuser',
         message: 'Change embedded template background to blue',
-        cards: [{ id: marcoId, title: 'Marco' }],
+        cards: [{ id: marcoId, cardTitle: 'Marco' }],
         files: [{ sourceUrl: petCardId, name: 'pet.gts' }],
       },
     ]);
@@ -236,13 +236,13 @@ module('Integration | ask-ai', function (hooks) {
       {
         from: 'testuser',
         message: 'Change embedded template background to blue',
-        cards: [{ id: marcoId, title: 'Marco' }],
+        cards: [{ id: marcoId, cardTitle: 'Marco' }],
         files: [{ sourceUrl: petCardId, name: 'pet.gts' }],
       },
       {
         from: 'testuser',
         message: 'Goodbye',
-        cards: [{ id: marcoId, title: 'Marco' }],
+        cards: [{ id: marcoId, cardTitle: 'Marco' }],
         files: [{ sourceUrl: petCardId, name: 'pet.gts' }],
       },
     ]);

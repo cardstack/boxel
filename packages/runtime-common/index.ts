@@ -1,4 +1,10 @@
-import type { CardResource, LooseCardResource, Meta } from './resource-types';
+import type {
+  CardResource,
+  FileMetaResource,
+  LinkableResource,
+  LooseLinkableResource,
+  Meta,
+} from './resource-types';
 import type { ResolvedCodeRef } from './code-ref';
 import type { RenderRouteOptions } from './render-route-options';
 import type { Definition } from './definitions';
@@ -6,9 +12,14 @@ import type { Definition } from './definitions';
 import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
 import type { ErrorEntry } from './index-writer';
 
+export interface LooseSingleResourceDocument<T extends LinkableResource> {
+  data: LooseLinkableResource<T>;
+  included?: LooseLinkableResource<LinkableResource>[];
+}
+
 export interface LooseSingleCardDocument {
-  data: LooseCardResource;
-  included?: CardResource[];
+  data: LooseLinkableResource<CardResource>;
+  included?: LinkableResource[];
 }
 
 export type PatchData = {
@@ -48,6 +59,8 @@ export interface FileExtractResponse {
   nonce: string;
   status: 'ready' | 'error';
   searchDoc: Record<string, any> | null;
+  resource?: FileMetaResource | null;
+  types?: string[] | null;
   deps: string[];
   error?: RenderError;
   mismatch?: true;
@@ -240,10 +253,12 @@ export * from './serializers';
 export type {
   CardDocument,
   SingleCardDocument,
+  SingleFileMetaDocument,
   CardCollectionDocument,
 } from './document-types';
 export type {
   CardResource,
+  FileMetaResource,
   ModuleResource,
   CardResourceMeta,
   ResourceID,
@@ -251,11 +266,13 @@ export type {
   Saved,
   Relationship,
   CardFields,
+  LooseLinkableResource,
 } from './resource-types';
 export {
   isCardDocument,
   isCardCollectionDocument,
   isSingleCardDocument,
+  isSingleFileMetaDocument,
   isCardDocumentString,
 } from './document-types';
 export {
@@ -457,9 +474,9 @@ export interface Store {
   getSaveState(id: string): AutoSaveState | undefined;
 }
 
-export interface CardCatalogQuery extends Query {
+export type CardCatalogQuery = Query & {
   filter?: CardTypeFilter | EveryFilter;
-}
+};
 
 export interface CardCreator {
   create(

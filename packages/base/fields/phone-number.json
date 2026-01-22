@@ -2,8 +2,8 @@
   "data": {
     "type": "card",
     "attributes": {
-      "title": "Phone Number Field",
-      "description": "A field that validates phone numbers and provides a suitable editor.",
+      "cardTitle": "Phone Number Field",
+      "cardDescription": "A field that validates phone numbers and provides a suitable editor.",
       "specType": "field",
       "ref": {
         "module": "https://cardstack.com/base/phone-number",

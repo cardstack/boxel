@@ -2,41 +2,41 @@
   "data": {
     "type": "card",
     "attributes": {
-      "title": "AI App Generator",
-      "description": "Design your own app UI by describing what you want to build",
+      "cardTitle": "AI App Generator",
+      "cardDescription": "Design your own app UI by describing what you want to build",
       "prompt": "Create a sprint-planning tool that lets users define backlogs, estimate stories, assign owners, and track burndown.",
       "suggestions": [
         {
-          "title": "Link in Bio",
-          "description": "Create a simple link-in-bio page with social media links and a bio section"
+          "cardTitle": "Link in Bio",
+          "cardDescription": "Create a simple link-in-bio page with social media links and a bio section"
         },
         {
-          "title": "About Me",
-          "description": "Build a personal portfolio page with your background, skills, and contact information"
+          "cardTitle": "About Me",
+          "cardDescription": "Build a personal portfolio page with your background, skills, and contact information"
         },
         {
-          "title": "Recipe Database",
-          "description": "Create a recipe management app with search, categories, and cooking instructions"
+          "cardTitle": "Recipe Database",
+          "cardDescription": "Create a recipe management app with search, categories, and cooking instructions"
         },
         {
-          "title": "To Do List",
-          "description": "Build a task management app with lists, priorities, and completion tracking"
+          "cardTitle": "To Do List",
+          "cardDescription": "Build a task management app with lists, priorities, and completion tracking"
         },
         {
-          "title": "Creative Portfolio",
-          "description": "Design a showcase for creative work with galleries, project details, and contact forms"
+          "cardTitle": "Creative Portfolio",
+          "cardDescription": "Design a showcase for creative work with galleries, project details, and contact forms"
         },
         {
-          "title": "Event Calendar",
-          "description": "Build an event management app with calendar views, RSVP tracking, and event details"
+          "cardTitle": "Event Calendar",
+          "cardDescription": "Build an event management app with calendar views, RSVP tracking, and event details"
         },
         {
-          "title": "Fitness Tracker",
-          "description": "Create a workout tracking app with exercise logs, progress charts, and goal setting"
+          "cardTitle": "Fitness Tracker",
+          "cardDescription": "Create a workout tracking app with exercise logs, progress charts, and goal setting"
         },
         {
-          "title": "Budget Manager",
-          "description": "Design a personal finance app with expense tracking, budget categories, and spending insights"
+          "cardTitle": "Budget Manager",
+          "cardDescription": "Design a personal finance app with expense tracking, budget categories, and spending insights"
         }
       ]
     },

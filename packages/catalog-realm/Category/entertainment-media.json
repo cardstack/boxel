@@ -11,9 +11,9 @@
       "name": "Entertainment & Media",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": "Movies, TV shows, music playlists, streaming services, entertainment recommendations, and media collection tracking.",
-        "thumbnailURL": null
+        "name": null,
+        "summary": "Movies, TV shows, music playlists, streaming services, entertainment recommendations, and media collection tracking.",
+        "cardThumbnailURL": null
       }
     },
     "relationships": {

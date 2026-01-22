@@ -6,7 +6,7 @@
       "canonicalSlug": "qwen/qwen-vl-max-2025-01-25",
       "name": "Qwen: Qwen VL Max",
       "created": 1738434304,
-      "description": "Qwen VL Max is a visual understanding model with 7500 tokens context length. It excels in delivering optimal performance for a broader spectrum of complex tasks.\n",
+      "cardDescription": "Qwen VL Max is a visual understanding model with 7500 tokens context length. It excels in delivering optimal performance for a broader spectrum of complex tasks.\n",
       "pricing": {
         "prompt": "0.0000008",
         "completion": "0.0000032",
@@ -48,9 +48,9 @@
         "frequency_penalty": null
       },
       "cardInfo": {
-        "title": null,
-        "description": null,
-        "thumbnailURL": null,
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
         "notes": null
       }
     },

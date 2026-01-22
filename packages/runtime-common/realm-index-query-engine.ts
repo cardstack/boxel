@@ -3,6 +3,9 @@ import { isScopedCSSRequest } from 'glimmer-scoped-css';
 import cloneDeep from 'lodash/cloneDeep';
 import {
   SupportedMimeType,
+  baseRealm,
+  inferContentType,
+  unixTime,
   maxLinkDepth,
   maybeURL,
   IndexQueryEngine,
@@ -17,12 +20,14 @@ import {
   type DefinitionLookup,
   visitInstanceURLs,
   maybeRelativeURL,
+  codeRefFromInternalKey,
 } from '.';
 import type { Realm } from './realm';
+import { FILE_META_RESERVED_KEYS } from './realm';
 import { RealmPaths } from './paths';
 import type { Query } from './query';
 import { CardError, type SerializedError } from './error';
-import { isResolvedCodeRef, visitModuleDeps } from './code-ref';
+import { isCodeRef, isResolvedCodeRef, visitModuleDeps } from './code-ref';
 import {
   isCardCollectionDocument,
   isSingleCardDocument,
@@ -30,7 +35,7 @@ import {
   type CardCollectionDocument,
 } from './document-types';
 import { relationshipEntries } from './relationship-utils';
-import type { CardResource, Saved } from './resource-types';
+import type { CardResource, FileMetaResource, Saved } from './resource-types';
 import type { FieldDefinition } from './definitions';
 import {
   normalizeQueryDefinition,
@@ -134,7 +139,7 @@ export class RealmIndexQueryEngine {
     // fill in the included resources for links that were not cached (e.g.
     // volatile fields)
     if (opts?.loadLinks) {
-      let included: CardResource<Saved>[] = [];
+      let included: (CardResource<Saved> | FileMetaResource)[] = [];
       for (let resource of doc.data) {
         included = await this.loadLinks(
           {
@@ -199,7 +204,7 @@ export class RealmIndexQueryEngine {
           errorDetail: instance.error,
           scopedCssUrls,
           lastKnownGoodHtml: instance.isolatedHtml ?? null,
-          cardTitle: instance.searchDoc?.title ?? null,
+          cardTitle: instance.searchDoc?.cardTitle ?? null,
         },
       };
     }
@@ -247,7 +252,7 @@ export class RealmIndexQueryEngine {
   }
 
   private async populateQueryFields(
-    resource: LooseCardResource,
+    resource: LooseCardResource | FileMetaResource,
     realmURL: URL,
     opts?: Options,
   ): Promise<void> {
@@ -304,7 +309,7 @@ export class RealmIndexQueryEngine {
     fieldDefinition: FieldDefinition;
     fieldName: string;
     queryDefinition: Query;
-    resource: LooseCardResource;
+    resource: LooseCardResource | FileMetaResource;
     realmURL: URL;
     opts?: Options;
   }): Promise<{
@@ -407,7 +412,7 @@ export class RealmIndexQueryEngine {
   }: {
     fieldDefinition: FieldDefinition;
     fieldName: string;
-    resource: LooseCardResource;
+    resource: LooseCardResource | FileMetaResource;
     results: CardResource<Saved>[];
     errors: QueryFieldErrorDetail[];
     searchURL: string;
@@ -499,8 +504,17 @@ export class RealmIndexQueryEngine {
   ): Promise<{ cards: CardResource<Saved>[]; error?: QueryFieldErrorDetail }> {
     try {
       let searchURL = buildQuerySearchURL(realmHref, query);
+      let { realm, realms, ...queryWithoutRealm } = query as Query & {
+        realm?: string;
+        realms?: string[];
+      };
+      let realmList = realms ?? (realm ? [realm] : [realmHref]);
       let response = await this.#fetch(searchURL, {
-        headers: { Accept: SupportedMimeType.CardJson },
+        method: 'QUERY',
+        headers: {
+          Accept: SupportedMimeType.CardJson,
+        },
+        body: JSON.stringify({ ...queryWithoutRealm, realms: realmList }),
       });
       if (!response.ok) {
         let type: QueryFieldErrorType =
@@ -559,14 +573,14 @@ export class RealmIndexQueryEngine {
       stack = [],
     }: {
       realmURL: URL;
-      resource: LooseCardResource;
+      resource: LooseCardResource | FileMetaResource;
       omit?: string[];
-      included?: CardResource<Saved>[];
+      included?: (CardResource<Saved> | FileMetaResource)[];
       visited?: string[];
       stack?: string[];
     },
     opts?: Options,
-  ): Promise<CardResource<Saved>[]> {
+  ): Promise<(CardResource<Saved> | FileMetaResource)[]> {
     if (resource.id != null) {
       if (visited.includes(resource.id)) {
         return [];
@@ -589,14 +603,20 @@ export class RealmIndexQueryEngine {
           relationship.links.self,
           resource.id ? new URL(resource.id) : realmURL,
         );
-        let linkResource: CardResource<Saved> | undefined;
+        let linkResource: CardResource<Saved> | FileMetaResource | undefined;
         if (realmPath.inRealm(linkURL)) {
           let maybeResult = await this.#indexQueryEngine.getInstance(
             linkURL,
             opts,
           );
-          linkResource =
-            maybeResult?.type === 'instance' ? maybeResult.instance : undefined;
+          if (maybeResult?.type === 'instance') {
+            linkResource = maybeResult.instance;
+          } else {
+            let fileEntry = await this.#indexQueryEngine.getFile(linkURL, opts);
+            if (fileEntry) {
+              linkResource = fileResourceFromIndex(linkURL, fileEntry);
+            }
+          }
         } else {
           let response = await this.#fetch(linkURL, {
             headers: { Accept: SupportedMimeType.CardJson },
@@ -672,8 +692,9 @@ export class RealmIndexQueryEngine {
           omit.includes(relationshipId.href) ||
           included.find((i) => i.id === relationshipId!.href)
         ) {
+          let relationshipType = linkResource?.type ?? 'card';
           relationship.data = {
-            type: 'card',
+            type: relationshipType,
             id: relationshipId.href,
           };
         }
@@ -722,4 +743,69 @@ function relativizeResource(
     let absoluteModuleURL = new URL(moduleURL, resource.id ?? primaryURL);
     setModuleURL(maybeRelativeURL(absoluteModuleURL, primaryURL, realmURL));
   });
+}
+
+function fileResourceFromIndex(
+  fileURL: URL,
+  fileEntry: IndexedFile,
+): FileMetaResource {
+  let name = fileURL.pathname.split('/').pop() ?? fileURL.pathname;
+  let inferredContentType = inferContentType(name);
+  let searchDoc = fileEntry.searchDoc ?? {};
+  let contentHash =
+    typeof searchDoc.contentHash === 'string'
+      ? searchDoc.contentHash
+      : undefined;
+  let lastModified = fileEntry.lastModified ?? unixTime(Date.now());
+  let createdAt = fileEntry.resourceCreatedAt ?? lastModified;
+  let adoptsFrom =
+    codeRefFromInternalKey(fileEntry.types?.[0]) ??
+    (isCodeRef(fileEntry.resource?.meta?.adoptsFrom)
+      ? fileEntry.resource?.meta?.adoptsFrom
+      : {
+          module: `${baseRealm.url}file-api`,
+          name: 'FileDef',
+        });
+  let resourceAttributes = fileEntry.resource?.attributes ?? {};
+  let baseAttributes = {
+    name: resourceAttributes.name ?? searchDoc.name ?? name,
+    url: resourceAttributes.url ?? searchDoc.url ?? fileURL.href,
+    sourceUrl:
+      resourceAttributes.sourceUrl ?? searchDoc.sourceUrl ?? fileURL.href,
+    contentType:
+      resourceAttributes.contentType ??
+      searchDoc.contentType ??
+      inferredContentType,
+    contentHash: resourceAttributes.contentHash ?? contentHash,
+    lastModified,
+    createdAt,
+  };
+  let attributes: Record<string, unknown> = { ...baseAttributes };
+  for (let [key, value] of Object.entries(resourceAttributes)) {
+    if (value !== undefined && !(key in attributes)) {
+      attributes[key] = value;
+    }
+  }
+  for (let [key, value] of Object.entries(searchDoc)) {
+    if (
+      key in baseAttributes ||
+      FILE_META_RESERVED_KEYS.has(key) ||
+      value === undefined
+    ) {
+      continue;
+    }
+    attributes[key] = value;
+  }
+  return {
+    id: fileURL.href,
+    type: 'file-meta',
+    attributes: {
+      ...attributes,
+    },
+    meta: {
+      adoptsFrom,
+      realmURL: fileEntry.realmURL,
+    },
+    links: { self: fileURL.href },
+  };
 }

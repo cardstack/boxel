@@ -120,7 +120,7 @@ module('Integration | card-copy', function (hooks) {
     class Pet extends CardDef {
       static displayName = 'Pet';
       @field firstName = contains(StringField);
-      @field title = contains(StringField, {
+      @field cardTitle = contains(StringField, {
         computeVia: function (this: Pet) {
           return this.firstName;
         },
@@ -141,7 +141,7 @@ module('Integration | card-copy', function (hooks) {
       static displayName = 'Person';
       @field firstName = contains(StringField);
       @field pet = linksTo(Pet);
-      @field title = contains(StringField, {
+      @field cardTitle = contains(StringField, {
         computeVia: function (this: Person) {
           return this.firstName;
         },
@@ -162,6 +162,8 @@ module('Integration | card-copy', function (hooks) {
       };
     }
 
+    // Defer matrix startup until all test realms (including read-only) are
+    // registered to avoid _info fetch races during matrix boot.
     ({ realm: realm1 } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
@@ -235,6 +237,7 @@ module('Integration | card-copy', function (hooks) {
           iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
         },
       },
+      startMatrix: false,
     }));
 
     await setupIntegrationTestRealm({
@@ -274,7 +277,37 @@ module('Integration | card-copy', function (hooks) {
           iconURL: 'https://boxel-images.boxel.ai/icons/cardstack.png',
         },
       },
+      startMatrix: false,
     });
+
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      realmURL: readOnlyRealmURL,
+      permissions: { '@testuser:localhost': ['read'] },
+      contents: {
+        ...SYSTEM_CARD_FIXTURE_CONTENTS,
+        'index.json': {
+          data: {
+            type: 'card',
+            meta: {
+              adoptsFrom: {
+                module: 'https://cardstack.com/base/cards-grid',
+                name: 'CardsGrid',
+              },
+            },
+          },
+        },
+        '.realm.json': {
+          name: 'Read Only Workspace',
+          backgroundURL:
+            'https://i.postimg.cc/4xyCDpGq/pawel-czerwinski-5n-L-IMto-KEw-unsplash.jpg',
+          iconURL: 'https://i.postimg.cc/W4fZgT3j/icon.png',
+        },
+      },
+      startMatrix: false,
+    });
+
+    await mockMatrixUtils.start();
 
     // write in the new record last because it's link didn't exist until realm2 was created
     await realm1.write(

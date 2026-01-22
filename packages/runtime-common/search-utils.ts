@@ -1,12 +1,8 @@
 import { ensureTrailingSlash } from './paths';
-import {
-  assertQuery,
-  InvalidQueryError,
-  parseQuery,
-  type Query,
-} from './query';
+import { assertQuery, InvalidQueryError, type Query } from './query';
 import {
   isValidPrerenderedHtmlFormat,
+  PRERENDERED_HTML_FORMATS,
   type PrerenderedHtmlFormat,
 } from './prerendered-html-format';
 import type {
@@ -17,7 +13,6 @@ import { SupportedMimeType } from './router';
 
 export type SearchRequestErrorCode =
   | 'missing-realms'
-  | 'missing-query'
   | 'invalid-json'
   | 'unsupported-method'
   | 'invalid-query'
@@ -54,7 +49,10 @@ function normalizeStringParam(value: unknown): string | undefined {
 
 function normalizeStringArrayParam(value: unknown): string[] | undefined {
   if (Array.isArray(value)) {
-    return value.map((entry) => String(entry));
+    if (!value.every((entry) => typeof entry === 'string')) {
+      return undefined;
+    }
+    return value;
   }
   if (typeof value === 'string') {
     return [value];
@@ -88,6 +86,64 @@ export function parseRealmsParam(url: URL): string[] {
     .map((realm) => ensureTrailingSlash(realm));
 }
 
+export async function parseSearchRequestPayload(
+  request: Request,
+): Promise<unknown> {
+  let method = resolveSearchRequestMethod(request);
+  if (method !== 'QUERY') {
+    throw new SearchRequestError('unsupported-method', 'method must be QUERY');
+  }
+
+  try {
+    return await request.json();
+  } catch (e: any) {
+    throw new SearchRequestError(
+      'invalid-json',
+      `Request body is not valid JSON: ${e?.message ?? e}`,
+    );
+  }
+}
+
+export function parseRealmsFromPayload(payload: unknown): string[] {
+  let payloadRecord =
+    payload && typeof payload === 'object'
+      ? (payload as Record<string, unknown>)
+      : {};
+  if (
+    !('realms' in payloadRecord) ||
+    (Array.isArray(payloadRecord.realms) &&
+      payloadRecord.realms.map((realm) => realm.trim()).filter(Boolean)
+        .length == 0)
+  ) {
+    throw new SearchRequestError(
+      'missing-realms',
+      'realms must be supplied in request body',
+    );
+  }
+  let realmsValue = payloadRecord.realms;
+  if (
+    !Array.isArray(realmsValue) ||
+    !realmsValue.every((realm) => typeof realm === 'string')
+  ) {
+    throw new SearchRequestError(
+      'missing-realms',
+      'realms must be an array of strings',
+    );
+  }
+  let realmList = realmsValue
+    .map((realm) => realm.trim())
+    .filter(Boolean)
+    .map((realm) => ensureTrailingSlash(realm));
+  return realmList;
+}
+
+export async function parseRealmsFromRequest(
+  request: Request,
+): Promise<string[]> {
+  let payload = await parseSearchRequestPayload(request);
+  return parseRealmsFromPayload(payload);
+}
+
 export function resolveSearchRequestMethod(request: Request): string {
   let method = request.method.toUpperCase();
   if (method === 'POST') {
@@ -103,35 +159,12 @@ export function resolveSearchRequestMethod(request: Request): string {
 export async function parseSearchQueryFromRequest(
   request: Request,
 ): Promise<Query> {
-  let method = resolveSearchRequestMethod(request);
-  let cardsQuery: unknown;
+  let payload = await parseSearchRequestPayload(request);
+  return parseSearchQueryFromPayload(payload);
+}
 
-  if (method === 'QUERY') {
-    try {
-      cardsQuery = await request.json();
-    } catch (e: any) {
-      throw new SearchRequestError(
-        'invalid-json',
-        `Request body is not valid JSON: ${e?.message ?? e}`,
-      );
-    }
-  } else if (method === 'GET') {
-    let url = new URL(request.url);
-    let queryParam = url.searchParams.get('query');
-    if (!queryParam) {
-      throw new SearchRequestError(
-        'missing-query',
-        'query param "query" must be supplied',
-      );
-    }
-    cardsQuery = parseQuery(queryParam);
-  } else {
-    throw new SearchRequestError(
-      'unsupported-method',
-      'method must be QUERY or GET',
-    );
-  }
-
+export function parseSearchQueryFromPayload(payload: unknown): Query {
+  let cardsQuery = payload;
   try {
     assertQuery(cardsQuery);
   } catch (e) {
@@ -155,61 +188,47 @@ export async function parsePrerenderedSearchRequestFromRequest(
   cardUrls?: string[];
   renderType?: PrerenderedRenderType;
 }> {
-  let method = resolveSearchRequestMethod(request);
+  let payload = await parseSearchRequestPayload(request);
+  return parsePrerenderedSearchRequestFromPayload(payload);
+}
+
+export function parsePrerenderedSearchRequestFromPayload(payload: unknown): {
+  cardsQuery: Query;
+  htmlFormat: PrerenderedHtmlFormat;
+  cardUrls?: string[];
+  renderType?: PrerenderedRenderType;
+} {
   let cardsQuery: unknown;
   let htmlFormat: string | undefined;
   let cardUrls: string[] | undefined;
   let renderType: PrerenderedRenderType | undefined;
 
-  if (method === 'QUERY') {
-    let payload: unknown;
-    try {
-      payload = await request.json();
-    } catch (e: any) {
-      throw new SearchRequestError(
-        'invalid-json',
-        `Request body is not valid JSON: ${e?.message ?? e}`,
-      );
-    }
-    let payloadRecord =
-      payload && typeof payload === 'object'
-        ? (payload as Record<string, any>)
-        : {};
-    htmlFormat = normalizeStringParam(payloadRecord.prerenderedHtmlFormat);
-    cardUrls = normalizeStringArrayParam(payloadRecord.cardUrls);
-    renderType = normalizeRenderType(payloadRecord.renderType);
-    let {
-      prerenderedHtmlFormat: _remove1,
-      cardUrls: _remove2,
-      renderType: _remove3,
-      ...rest
-    } = payloadRecord;
-    cardsQuery = rest;
-  } else if (method === 'GET') {
-    let url = new URL(request.url);
-    let queryParam = url.searchParams.get('query');
-    if (queryParam === null) {
-      throw new SearchRequestError(
-        'missing-query',
-        'query param "query" must be supplied',
-      );
-    }
-    cardsQuery = parseQuery(queryParam);
-    let params = parseQuery(url.search.slice(1)) as Record<string, unknown>;
-    htmlFormat = normalizeStringParam(params.prerenderedHtmlFormat);
-    cardUrls = normalizeStringArrayParam(params.cardUrls);
-    renderType = normalizeRenderType(params.renderType);
-  } else {
+  let payloadRecord =
+    payload && typeof payload === 'object'
+      ? (payload as Record<string, any>)
+      : {};
+  htmlFormat = normalizeStringParam(payloadRecord.prerenderedHtmlFormat);
+  let hasCardUrls = 'cardUrls' in payloadRecord;
+  cardUrls = normalizeStringArrayParam(payloadRecord.cardUrls);
+  if (hasCardUrls && !cardUrls) {
     throw new SearchRequestError(
-      'unsupported-method',
-      'method must be QUERY or GET',
+      'invalid-query',
+      'cardUrls must be a string or array of strings',
     );
   }
+  renderType = normalizeRenderType(payloadRecord.renderType);
+  let {
+    prerenderedHtmlFormat: _remove1,
+    cardUrls: _remove2,
+    renderType: _remove3,
+    ...rest
+  } = payloadRecord;
+  cardsQuery = rest;
 
   if (!isValidPrerenderedHtmlFormat(htmlFormat)) {
     throw new SearchRequestError(
       'invalid-prerendered-html-format',
-      "Must include a 'prerenderedHtmlFormat' parameter with a value of 'embedded', 'fitted', 'atom', or 'head' to use this endpoint",
+      `Must include a 'prerenderedHtmlFormat' parameter with a value of ${PRERENDERED_HTML_FORMATS.join(', ')} to use this endpoint`,
     );
   }
 

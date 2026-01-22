@@ -2,11 +2,11 @@
   "data": {
     "type": "card",
     "attributes": {
-      "title": "Marigold Academy 2024-2025",
+      "cardTitle": "Marigold Academy 2024-2025",
       "schoolYearStart": "2024-08-15",
       "schoolYearEnd": "2025-06-10",
-      "description": "Official school calendar for Marigold Academy's 2024-2025 academic year. Includes all major academic events, holidays, and special activities. Students and parents should refer to this calendar for important dates throughout the school year.",
-      "thumbnailURL": "https://images.unsplash.com/photo-1503676260728-1c00da094a0b?q=80&w=2022&auto=format&fit=crop"
+      "cardDescription": "Official school calendar for Marigold Academy's 2024-2025 academic year. Includes all major academic events, holidays, and special activities. Students and parents should refer to this calendar for important dates throughout the school year.",
+      "cardThumbnailURL": "https://images.unsplash.com/photo-1503676260728-1c00da094a0b?q=80&w=2022&auto=format&fit=crop"
     },
     "relationships": {
       "events.0": {

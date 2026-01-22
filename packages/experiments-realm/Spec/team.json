@@ -2,8 +2,8 @@
   "data": {
     "type": "card",
     "attributes": {
-      "title": "Team",
-      "description": "Spec for Team",
+      "cardTitle": "Team",
+      "cardDescription": "Spec for Team",
       "ref": {
         "name": "Team",
         "module": "../sprint-task"

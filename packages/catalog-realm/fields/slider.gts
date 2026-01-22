@@ -1,5 +1,6 @@
 import { Component } from 'https://cardstack.com/base/card-api';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
+import { not } from '@cardstack/boxel-ui/helpers';
 
 import NumberField, {
   deserializeForUI,
@@ -66,6 +67,7 @@ export default class SliderField extends NumberField {
           @min={{this.minValue}}
           @max={{this.maxValue}}
           @onInput={{this.handleInput}}
+          @disabled={{not @canEdit}}
         />
         {{#if this.options.showValue}}
           <span class='slider-value'>{{this.displayValue}}</span>
@@ -201,3 +203,4 @@ export default class SliderField extends NumberField {
     </template>
   };
 }
+

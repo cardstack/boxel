@@ -14,12 +14,12 @@
       "tempo": 90,
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": null
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null
       },
       "difficulty": "intermediate",
-      "description": "The foundation of blues music and rock & roll. This 12-bar form uses dominant 7th chords and follows a specific pattern that creates the classic blues sound and feel.",
+      "cardDescription": "The foundation of blues music and rock & roll. This 12-bar form uses dominant 7th chords and follows a specific pattern that creates the classic blues sound and feel.",
       "popularSongs": "\"Sweet Home Chicago\", \"Stormy Monday\", \"The Thrill is Gone\", \"Crossroads\"",
       "timeSignature": "4/4",
       "progressionName": "12-Bar Blues (I-I-I-I-IV-IV-I-I-V-IV-I-V)",

@@ -12,7 +12,7 @@ import StringField from 'https://cardstack.com/base/string';
 export class Person extends CardDef {
   static displayName = 'Person';
   @field firstName = contains(StringField);
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: Person) {
       return this.firstName;
     },
@@ -45,7 +45,7 @@ export class Person extends CardDef {
   }
   #firstName = (dt7948.i(this, "firstName"), void 0);
   static {
-    dt7948.g(this.prototype, "title", [field], function () {
+    dt7948.g(this.prototype, "cardTitle", [field], function () {
       return contains(StringField, {
         computeVia: function () {
           return this.firstName;
@@ -53,7 +53,7 @@ export class Person extends CardDef {
       });
     });
   }
-  #title = (dt7948.i(this, "title"), void 0);
+  #cardTitle = (dt7948.i(this, "cardTitle"), void 0);
   static isolated = class Isolated extends Component {
     static {
       setComponentTemplate(createTemplateFactory(

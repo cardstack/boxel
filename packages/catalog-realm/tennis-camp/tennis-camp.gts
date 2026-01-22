@@ -24,7 +24,7 @@ export class TennisCamp extends CardDef {
 
   @field campName = contains(StringField);
   @field tagline = contains(StringField);
-  @field description = contains(MarkdownField);
+  @field cardDescription = contains(MarkdownField);
   @field ageRange = contains(StringField);
   @field location = contains(StringField);
   @field startDate = contains(DateField);
@@ -38,7 +38,7 @@ export class TennisCamp extends CardDef {
   @field schedule = contains(MarkdownField);
   @field testimonials = contains(MarkdownField);
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: TennisCamp) {
       return this.campName ?? 'Manhattan Kids Tennis Camp';
     },
@@ -91,9 +91,9 @@ export class TennisCamp extends CardDef {
           <section class='about-section'>
             <div class='section-content'>
               <h2>🌟 About Our Camp</h2>
-              {{#if @model.description}}
+              {{#if @model.cardDescription}}
                 <div class='description'>
-                  <@fields.description />
+                  <@fields.cardDescription />
                 </div>
               {{else}}
                 <div class='description'>

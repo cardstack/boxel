@@ -559,5 +559,36 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
         'Response is correct',
       );
     });
+
+    test('responds with 500 when low credit threshold is missing', async function (assert) {
+      delete process.env.LOW_CREDIT_THRESHOLD;
+
+      let response = await request
+        .post(`/_user`)
+        .set('Accept', 'application/vnd.api+json')
+        .set('Content-Type', 'application/vnd.api+json')
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'missing-credits@test', ['read', 'write'])}`,
+        )
+        .send({
+          data: {
+            type: 'user',
+            attributes: {
+              registrationToken: 'reg_token_123',
+            },
+          },
+        });
+
+      assert.strictEqual(response.status, 500, 'HTTP 500 status');
+      assert.deepEqual(
+        response.body.errors,
+        ['LOW_CREDIT_THRESHOLD must be set to run daily-credit-grant'],
+        'Response includes low credit threshold error',
+      );
+
+      let user = await getUserByMatrixUserId(dbAdapter, 'missing-credits@test');
+      assert.notOk(user, 'User was not created');
+    });
   });
 });

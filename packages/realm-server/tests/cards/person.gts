@@ -9,7 +9,7 @@ import StringField from 'https://cardstack.com/base/string';
 export class Person extends CardDef {
   static displayName = 'Person';
   @field firstName = contains(StringField);
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: Person) {
       return this.firstName;
     },

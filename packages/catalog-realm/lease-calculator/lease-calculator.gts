@@ -122,7 +122,7 @@ export class LeaseCalculator extends CardDef {
           </div>
           {{#if @model.vehicleMake}}
             <h1 class='vehicle-name'>{{@model.vehicleMake}}
-              {{#if @model.title}}{{@model.title}}{{else}}Lease Details{{/if}}</h1>
+              {{#if @model.cardTitle}}{{@model.cardTitle}}{{else}}Lease Details{{/if}}</h1>
           {{/if}}
         </header>
 

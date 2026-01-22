@@ -18,7 +18,7 @@ class QRConfigField extends FieldDef {
   @field margin = contains(NumberField);
 }
 
-export class QRField extends FieldDef {
+export default class QRField extends FieldDef {
   static displayName = 'QR Code';
   static icon = QRCodeIcon;
 

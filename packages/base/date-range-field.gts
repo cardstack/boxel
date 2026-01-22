@@ -122,7 +122,7 @@ export default class DateRangeField extends FieldDef {
   static icon = CalendarIcon;
   @field start = contains(DateField);
   @field end = contains(DateField);
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: DateRangeField) {
       return 'Date Range';
     },

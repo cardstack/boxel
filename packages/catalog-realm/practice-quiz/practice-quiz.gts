@@ -1809,7 +1809,7 @@ export class PracticeQuizCard extends CardDef {
   });
 
   // ⁽²⁶⁾ Computed title from quizTitle and subject
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: PracticeQuizCard) {
       try {
         const quiz = this.quizTitle || 'Practice Quiz';

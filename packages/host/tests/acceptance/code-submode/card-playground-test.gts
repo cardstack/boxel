@@ -66,6 +66,17 @@ const codeRefDriverCard = `import { CardDef, field, contains } from 'https://car
     @field ref = contains(CodeRefField);
 }`;
 
+const testSpecCard = `import { Component } from 'https://cardstack.com/base/card-api';
+  import { Spec } from 'https://cardstack.com/base/spec';
+  export class TestSpec extends Spec {
+    static displayName = 'TestSpec';
+    static isolated = class Isolated extends Component<typeof this> {
+      <template>
+        <div data-test-subclass-spec>Spec Subclass</div>
+      </template>
+    }
+  }`;
+
 const authorCard = `import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
   import MarkdownField from 'https://cardstack.com/base/markdown';
   import StringField from "https://cardstack.com/base/string";
@@ -74,7 +85,7 @@ const authorCard = `import { contains, field, CardDef, Component } from "https:/
     @field firstName = contains(StringField);
     @field lastName = contains(StringField);
     @field bio = contains(MarkdownField);
-    @field title = contains(StringField, {
+    @field cardTitle = contains(StringField, {
       computeVia: function (this: Author) {
         return [this.firstName, this.lastName].filter(Boolean).join(' ');
       },
@@ -83,7 +94,7 @@ const authorCard = `import { contains, field, CardDef, Component } from "https:/
     <template>
       <article>
         <header>
-          <h1 data-test-author-title><@fields.title /></h1>
+          <h1 data-test-author-title><@fields.cardTitle /></h1>
         </header>
         <div data-test-author-bio><@fields.bio /></div>
       </article>
@@ -105,7 +116,7 @@ const blogPostCard = `import { contains, field, linksTo, linksToMany, CardDef, C
     static displayName = 'Category';
     static fitted = class Fitted extends Component<typeof this> {
     <template>
-      <div data-test-category-fitted><@fields.title /></div>
+      <div data-test-category-fitted><@fields.cardTitle /></div>
     </template>
     }
   }
@@ -123,13 +134,13 @@ const blogPostCard = `import { contains, field, linksTo, linksToMany, CardDef, C
     @field categories = linksToMany(Category);
     @field localCategories = linksToMany(LocalCategoryCard);
     @field body = contains(MarkdownField);
-    @field title = contains(StringField);
+    @field cardTitle = contains(StringField);
 
     static isolated = class Isolated extends Component<typeof this> {
     <template>
       <article>
         <header>
-          <h1 data-test-post-title><@fields.title /></h1>
+          <h1 data-test-post-title><@fields.cardTitle /></h1>
         </header>
         <div data-test-byline><@fields.author /></div>
         <div data-test-post-body><@fields.body /></div>
@@ -158,14 +169,14 @@ const headPreviewCard = `import { contains, field, CardDef, Component } from "ht
 
   export class HeadPreview extends CardDef {
     static displayName = 'Head Preview';
-    @field title = contains(StringField);
-    @field description = contains(StringField);
+    @field cardTitle = contains(StringField);
+    @field cardDescription = contains(StringField);
     @field url = contains(StringField);
 
     static head = class Head extends Component<typeof this> {
       <template>
-        <title>{{@model.title}}</title>
-        <meta name='description' content={{@model.description}} />
+        <title>{{@model.cardTitle}}</title>
+        <meta name='description' content={{@model.cardDescription}} />
         <meta property='og:url' content={{@model.url}} />
       </template>
     };
@@ -178,8 +189,8 @@ const localStyleReferenceCard = {
     attributes: {
       cardInfo: {
         title: 'Local Style Reference',
-        description: 'Local card instance for style reference tests',
-        thumbnailURL: null,
+        cardDescription: 'Local card instance for style reference tests',
+        cardThumbnailURL: null,
         notes: null,
       },
       styleName: 'Local Style Reference',
@@ -235,6 +246,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
           'author.gts': authorCard,
           'blog-post.gts': blogPostCard,
           'code-ref-driver.gts': codeRefDriverCard,
+          'test-spec.gts': testSpecCard,
           'person.gts': personCard,
           'head-preview.gts': headPreviewCard,
           'Author/jane-doe.json': {
@@ -255,8 +267,8 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
           'HeadPreview/example.json': {
             data: {
               attributes: {
-                title: 'Definition Title',
-                description: 'Definition description',
+                cardTitle: 'Definition Title',
+                cardDescription: 'Definition description',
                 url: 'https://example.com/definition',
               },
               meta: {
@@ -271,7 +283,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
             data: {
               attributes: {
                 title: 'The Ultimate Guide to Remote Work',
-                description:
+                cardDescription:
                   'In today’s digital age, remote work has transformed from a luxury to a necessity. This comprehensive guide will help you navigate the world of remote work, offering tips, tools, and best practices for success.',
               },
               relationships: {
@@ -291,7 +303,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
           },
           'BlogPost/mad-hatter.json': {
             data: {
-              attributes: { title: 'Mad As a Hatter' },
+              attributes: { cardTitle: 'Mad As a Hatter' },
               relationships: {
                 author: {
                   links: {
@@ -310,7 +322,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
           'BlogPost/urban-living.json': {
             data: {
               attributes: {
-                title:
+                cardTitle:
                   'The Future of Urban Living: Skyscrapers or Sustainable Communities?',
               },
               relationships: {
@@ -330,7 +342,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
           },
           'Category/city-design.json': {
             data: {
-              attributes: { cardInfo: { title: 'City Design' } },
+              attributes: { cardInfo: { name: 'City Design' } },
               meta: {
                 adoptsFrom: {
                   module: `${testRealmURL}blog-post`,
@@ -341,7 +353,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
           },
           'Category/future-tech.json': {
             data: {
-              attributes: { cardInfo: { title: 'Future Tech' } },
+              attributes: { cardInfo: { name: 'Future Tech' } },
               meta: {
                 adoptsFrom: {
                   module: `${testRealmURL}blog-post`,
@@ -352,7 +364,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
           },
           'Category/interior-design.json': {
             data: {
-              attributes: { cardInfo: { title: 'Interior Design' } },
+              attributes: { cardInfo: { name: 'Interior Design' } },
               meta: {
                 adoptsFrom: {
                   module: `${testRealmURL}blog-post`,
@@ -363,7 +375,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
           },
           'Category/landscaping.json': {
             data: {
-              attributes: { cardInfo: { title: 'Landscaping' } },
+              attributes: { cardInfo: { name: 'Landscaping' } },
               meta: {
                 adoptsFrom: {
                   module: `${testRealmURL}blog-post`,
@@ -374,7 +386,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
           },
           'Category/home-gym.json': {
             data: {
-              attributes: { cardInfo: { title: 'Home Gym' } },
+              attributes: { cardInfo: { name: 'Home Gym' } },
               meta: {
                 adoptsFrom: {
                   module: `${testRealmURL}blog-post`,
@@ -385,7 +397,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
           },
           'Person/pet-mango.json': {
             data: {
-              attributes: { cardInfo: { title: 'Mango' } },
+              attributes: { cardInfo: { name: 'Mango' } },
               meta: {
                 adoptsFrom: {
                   module: `${testRealmURL}person`,
@@ -459,6 +471,17 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       assert
         .dom('[data-test-playground-panel]')
         .exists('exists for BlogPost (exported card def)');
+    });
+
+    test('playground does not auto-create spec for subclasses of specs', async function (assert) {
+      await visitOperatorMode({
+        submode: 'code',
+        codePath: `${testRealmURL}test-spec.gts`,
+      });
+      await selectDeclaration('TestSpec');
+      await togglePlaygroundPanel();
+      await waitFor('[data-test-playground-panel]');
+      assert.dom('[data-test-subclass-spec]').doesNotExist();
     });
 
     test('can populate instance chooser dropdown from recent files and pre-select the first card', async function (assert) {
@@ -969,7 +992,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
           @field firstName = contains(StringField);
           @field lastName = contains(StringField);
           @field bio = contains(MarkdownField);
-          @field title = contains(StringField, {
+          @field cardTitle = contains(StringField, {
             computeVia: function (this: Author) {
               return [this.firstName, this.lastName].filter(Boolean).join(' ');
             },
@@ -978,7 +1001,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         <template>
           <article>
             <header>
-              <h1 data-test-author-title>Hello <@fields.title /></h1>
+              <h1 data-test-author-title>Hello <@fields.cardTitle /></h1>
             </header>
             <div data-test-author-bio><@fields.bio /></div>
           </article>
@@ -1016,7 +1039,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
           static displayName = 'Category';
           static fitted = class Fitted extends Component<typeof this> {
           <template>
-            <div data-test-category-fitted><@fields.title /></div>
+            <div data-test-category-fitted><@fields.cardTitle /></div>
           </template>
           }
         }
@@ -1042,13 +1065,13 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
               return 'Scheduled';
             },
           });
-          @field title = contains(StringField);
+          @field cardTitle = contains(StringField);
 
           static isolated = class Isolated extends Component<typeof this> {
           <template>
             <article>
               <header>
-                <h1 data-test-post-title>Hello <@fields.title /></h1>
+                <h1 data-test-post-title>Hello <@fields.cardTitle /></h1>
               </header>
               <div data-test-byline><@fields.author /></div>
               <div data-test-post-body><@fields.body /></div>
@@ -1324,7 +1347,10 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
             },
           ],
           cards: [
-            { id: `${testRealmURL}Category/city-design`, title: 'City Design' },
+            {
+              id: `${testRealmURL}Category/city-design`,
+              cardTitle: 'City Design',
+            },
           ],
         },
       ]);
@@ -1628,13 +1654,13 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
     const boomPet = `import { contains, field, CardDef, Component, FieldDef, StringField, serialize } from 'https://cardstack.com/base/card-api';
       // this field explodes when serialized (saved)
       export class BoomField extends FieldDef {
-        @field title = contains(StringField);
+        @field cardTitle = contains(StringField);
         static [serialize](_boom: any) {
           throw new Error('Boom!');
         }
         static embedded = class Embedded extends Component<typeof this> {
           <template>
-            <@fields.title />
+            <@fields.cardTitle />
           </template>
         };
       }
@@ -1657,7 +1683,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
 
       export class FailingField extends FieldDef {
         static displayName = 'Failing Field';
-        @field title = contains(StringField);
+        @field cardTitle = contains(StringField);
         static embedded = class Embedded extends Component<typeof this> {
           <template>
             <p>This will fail.</p> {{this.boom}}
@@ -1707,7 +1733,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
           'syntax-error.gts': syntaxError,
           'Person/delilah.json': {
             data: {
-              attributes: { cardInfo: { title: 'Delilah' } },
+              attributes: { cardInfo: { name: 'Delilah' } },
               meta: {
                 adoptsFrom: {
                   module: `${testRealmURL}person`,
@@ -1764,7 +1790,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         .dom('[data-test-boxel-card-header-title]')
         .containsText('Card Error: Internal Server Error');
       assert
-        .dom('[data-test-playground-panel] [data-test-field="title"]')
+        .dom('[data-test-playground-panel] [data-test-field="cardTitle"]')
         .doesNotExist();
       assert
         .dom('[data-test-card-error]')
@@ -1926,7 +1952,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
           `import { contains, field, CardDef, Component, FieldDef, StringField } from 'https://cardstack.com/base/card-api';
            export class FailingField extends FieldDef {
              static displayName = 'Failing Field';
-             @field title = contains(StringField);
+             @field cardTitle = contains(StringField);
              static embedded = class Embedded extends Component<typeof this> {
                <template>
                  <p>This will not fail.</p>
@@ -1971,7 +1997,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         'Person/delilah.json',
         JSON.stringify({
           data: {
-            attributes: { cardInfo: { title: 'Lila' } },
+            attributes: { cardInfo: { name: 'Lila' } },
             relationships: {
               pet: {
                 links: {
@@ -2006,7 +2032,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         'Person/delilah.json',
         JSON.stringify({
           data: {
-            attributes: { cardInfo: { title: 'Lila' } },
+            attributes: { cardInfo: { name: 'Lila' } },
             relationships: {
               pet: {
                 links: {
@@ -2041,7 +2067,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         .containsText('Card Error: Link Not Found');
       assert.dom('[data-test-card-error]').exists();
       assert
-        .dom('[data-test-playground-panel] [data-test-field="cardTitle"]')
+        .dom('[data-test-playground-panel] [data-test-field="cardInfo-name"]')
         .containsText('Delilah', 'last known good state is rendered');
       assert
         .dom('[data-test-error-message]')
@@ -2059,7 +2085,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         'Person/delilah.json',
         JSON.stringify({
           data: {
-            attributes: { cardInfo: { title: 'Lila' } },
+            attributes: { cardInfo: { name: 'Lila' } },
             meta: {
               adoptsFrom: {
                 module: `${testRealmURL}person`,
@@ -2072,7 +2098,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       await settled();
       assert.dom('[data-test-boxel-card-header-title]').containsText('Person');
       assert
-        .dom('[data-test-playground-panel] [data-test-field="cardTitle"]')
+        .dom('[data-test-playground-panel] [data-test-field="cardInfo-name"]')
         .containsText('Lila');
       assert
         .dom('[data-test-error-container]')

@@ -16,9 +16,9 @@
       "summary": "Immersive art installation showcase with kaleidoscope visual design - explore cosmic garden sections, experience details, and booking information while viewing animated art-deco presentations. Features ornate framing, marquee text animations, section navigation, contact integration, and ethereal space-themed aesthetics for premium experiential art marketing.",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/astral-gardens-listing/thumbnail.png"
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/astral-gardens-listing/thumbnail.png"
       }
     },
     "relationships": {

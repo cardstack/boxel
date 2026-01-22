@@ -37,8 +37,8 @@ import { AdventureScenario } from './adventure-scenario'; // ¹ᵇ Linked Scenar
 import { MultipleChoice } from '../multiple-choice/multiple-choice';
 
 class CustomAdventureField extends FieldDef {
-  @field title = contains(StringField);
-  @field description = contains(StringField);
+  @field cardTitle = contains(StringField);
+  @field cardDescription = contains(StringField);
   @field tags = containsMany(StringField);
   @field imageStyles = containsMany(StringField);
 }
@@ -222,8 +222,8 @@ class AdventureIsolated extends Component<typeof Adventure> {
     const hasLinked = !!this.selectedLinkedScenario;
     const hasDefault = false;
     const hasCustom =
-      !!this.args.model?.customAdventure?.description &&
-      (this.args.model.customAdventure.description.trim?.().length || 0) > 0;
+      !!this.args.model?.customAdventure?.cardDescription &&
+      (this.args.model.customAdventure.cardDescription.trim?.().length || 0) > 0;
 
     if (!hasLinked && !hasDefault && !hasCustom) {
       alert('Please pick a linked Scenario or craft a custom adventure first.');
@@ -239,8 +239,8 @@ class AdventureIsolated extends Component<typeof Adventure> {
       } else if (hasCustom) {
         chosen = {
           key: 'custom',
-          title: this.args.model.customAdventure?.title || 'Custom Adventure',
-          description: this.args.model.customAdventure?.description || '',
+          title: this.args.model.customAdventure?.cardTitle || 'Custom Adventure',
+          description: this.args.model.customAdventure?.cardDescription || '',
         };
       }
 
@@ -564,10 +564,10 @@ class AdventureIsolated extends Component<typeof Adventure> {
       }
 
       const custom = this.args.model?.customAdventure;
-      if (custom?.title || custom?.description) {
+      if (custom?.cardTitle || custom?.cardDescription) {
         return {
-          title: custom.title || 'Custom Adventure',
-          description: custom.description || '',
+          cardTitle: custom.cardTitle || 'Custom Adventure',
+          cardDescription: custom.cardDescription || '',
           tags: custom.tags || [],
           imageStyles: custom.imageStyles || [],
         };
@@ -616,8 +616,8 @@ class AdventureIsolated extends Component<typeof Adventure> {
                       class='card
                         {{if (eq this.selectedScenarioKey sc.key) "selected"}}'
                     >
-                      <div class='card-title'>{{sc.title}}</div>
-                      <div class='card-desc'>{{sc.description}}</div>
+                      <div class='card-title'>{{sc.cardTitle}}</div>
+                      <div class='card-desc'>{{sc.cardDescription}}</div>
                       <div class='card-meta'>
                         {{#if (gt sc.tags.length 0)}}
                           <span class='meta-pill subtle'>{{get
@@ -672,9 +672,9 @@ class AdventureIsolated extends Component<typeof Adventure> {
 
               <div class='card custom-form-card'>
                 <div class='card-title'>Title</div>
-                <@fields.customAdventure.title @format='edit' />
+                <@fields.customAdventure.cardTitle @format='edit' />
                 <div class='card-title'>Description</div>
-                <@fields.customAdventure.description @format='edit' />
+                <@fields.customAdventure.cardDescription @format='edit' />
                 <div class='card-title'>Tags</div>
                 <ChipsEditor
                   @name='Tags'
@@ -931,15 +931,15 @@ class AdventureIsolated extends Component<typeof Adventure> {
               <div class='header-top'>
                 <h1 class='title'>
                   {{if
-                    this.currentScenario.title
-                    this.currentScenario.title
+                    this.currentScenario.cardTitle
+                    this.currentScenario.cardTitle
                     'Create Your Own Adventure'
                   }}
                 </h1>
 
               </div>
-              {{#if this.currentScenario.description}}
-                <p class='subtitle'>{{this.currentScenario.description}}</p>
+              {{#if this.currentScenario.cardDescription}}
+                <p class='subtitle'>{{this.currentScenario.cardDescription}}</p>
               {{/if}}
             </footer>
 
@@ -1827,16 +1827,16 @@ export class Adventure extends CardDef {
 
   @field lastChoiceOffered = linksTo(() => MultipleChoice);
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: Adventure) {
       try {
         if (this.selectedScenario) {
-          return this.selectedScenario.title;
+          return this.selectedScenario.cardTitle;
         }
 
         const custom = this.customAdventure;
-        if (custom?.title) {
-          return custom.title || 'Custom Adventure';
+        if (custom?.cardTitle) {
+          return custom.cardTitle || 'Custom Adventure';
         }
 
         return 'Create Your Own Adventure';
@@ -1857,10 +1857,10 @@ export class Adventure extends CardDef {
         }
 
         const custom = this.args.model?.customAdventure;
-        if (custom?.title || custom?.description) {
+        if (custom?.cardTitle || custom?.cardDescription) {
           return {
-            title: custom.title || 'Custom Adventure',
-            description: custom.description || '',
+            cardTitle: custom.cardTitle || 'Custom Adventure',
+            cardDescription: custom.cardDescription || '',
             tags: custom.tags || [],
             imageStyles: custom.imageStyles || [],
           };
@@ -1881,7 +1881,7 @@ export class Adventure extends CardDef {
       <div class='embedded-card'>
         <div class='top'>
           {{#if this.currentScenario}}
-            <span class='pill'>{{this.currentScenario.title}}</span>
+            <span class='pill'>{{this.currentScenario.cardTitle}}</span>
           {{/if}}
         </div>
 
@@ -1894,8 +1894,8 @@ export class Adventure extends CardDef {
           {{/if}}
         </div>
 
-        {{#if this.currentScenario.description}}
-          <p class='preview'>{{this.currentScenario.description}}</p>
+        {{#if this.currentScenario.cardDescription}}
+          <p class='preview'>{{this.currentScenario.cardDescription}}</p>
         {{/if}}
       </div>
 
@@ -1974,10 +1974,10 @@ export class Adventure extends CardDef {
 
         // If custom adventure has content, create a virtual scenario from it
         const custom = this.args.model?.customAdventure;
-        if (custom?.title || custom?.description) {
+        if (custom?.cardTitle || custom?.cardDescription) {
           return {
-            title: custom.title || 'Custom Adventure',
-            description: custom.description || '',
+            cardTitle: custom.cardTitle || 'Custom Adventure',
+            cardDescription: custom.cardDescription || '',
             tags: custom.tags || [],
             imageStyles: custom.imageStyles || [],
           };
@@ -1997,8 +1997,8 @@ export class Adventure extends CardDef {
           <div class='dot'></div>
           <div class='label'>
             <div class='title'>{{if
-                this.currentScenario.title
-                this.currentScenario.title
+                this.currentScenario.cardTitle
+                this.currentScenario.cardTitle
                 'Adventure'
               }}</div>
             <div class='sub'>
@@ -2013,7 +2013,7 @@ export class Adventure extends CardDef {
         <div class='strip'>
           <div class='strip-main'>
             {{#if this.currentScenario}}
-              <div class='sub'>{{this.currentScenario.title}}</div>
+              <div class='sub'>{{this.currentScenario.cardTitle}}</div>
             {{/if}}
           </div>
           <div class='strip-status'>
@@ -2026,8 +2026,8 @@ export class Adventure extends CardDef {
         <div class='tile'>
           {{#if this.currentScenario}}
             <div class='desc'>
-              <strong>{{this.currentScenario.title}}</strong>
-              <p>{{this.currentScenario.description}}</p>
+              <strong>{{this.currentScenario.cardTitle}}</strong>
+              <p>{{this.currentScenario.cardDescription}}</p>
             </div>
           {{/if}}
           <div class='foot'>
@@ -2044,7 +2044,7 @@ export class Adventure extends CardDef {
         <div class='card'>
           <div class='card-head'>
             <div class='main'>
-              <h3>{{if this.currentScenario.title 'Adventure'}}</h3>
+              <h3>{{if this.currentScenario.cardTitle 'Adventure'}}</h3>
             </div>
             <div class='state'>
               {{#if (eq @model.gameStatus 'playing')}}
@@ -2058,7 +2058,7 @@ export class Adventure extends CardDef {
             </div>
           </div>
           {{#if this.currentScenario}}
-            <div class='card-desc'>{{this.currentScenario.description}}</div>
+            <div class='card-desc'>{{this.currentScenario.cardDescription}}</div>
           {{/if}}
         </div>
       </div>

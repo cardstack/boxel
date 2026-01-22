@@ -21,6 +21,7 @@ import {
   GetCardsContextName,
   GetCardCollectionContextName,
   CommandContextName,
+  type getCard as GetCardType,
 } from '@cardstack/runtime-common';
 
 import Auth from '@cardstack/host/components/matrix/auth';
@@ -74,8 +75,8 @@ export default class OperatorModeContainer extends Component<Signature> {
   }
   @provide(GetCardContextName)
   // @ts-ignore "getCard" is declared but not used
-  private get getCard() {
-    return getCard;
+  private get getCard(): GetCardType {
+    return getCard as unknown as GetCardType;
   }
 
   @provide(GetCardsContextName)

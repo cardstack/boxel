@@ -56,7 +56,7 @@ export class ShortcutSettingsField extends FieldDef {
           <div class='preferred-model'>
             <div class='model-connection'></div>
             <div class='model-info'>
-              <div class='model-name'>{{@model.preferredModel.title}}</div>
+              <div class='model-name'>{{@model.preferredModel.cardTitle}}</div>
               {{#if @model.preferredModel.modelId}}
                 <div class='model-id'>{{@model.preferredModel.modelId}}</div>
               {{/if}}
@@ -97,7 +97,7 @@ export class ShortcutSettingsField extends FieldDef {
                         "custom-skill"
                       }}'
                   >
-                    {{if skill.title skill.title skill.id}}
+                    {{if skill.cardTitle skill.cardTitle skill.id}}
                   </div>
                 {{/if}}
               {{/each}}
@@ -336,7 +336,7 @@ export class ShortcutSettingsField extends FieldDef {
                 'Shortcut'
               }}</div>
             {{#if @model.preferredModel}}
-              <div class='fitted-model'>{{@model.preferredModel.title}}</div>
+              <div class='fitted-model'>{{@model.preferredModel.cardTitle}}</div>
             {{/if}}
             {{#if (gt @model.requiredSkills.length 0)}}
               <div class='fitted-skills'>{{@model.requiredSkills.length}}
@@ -751,8 +751,8 @@ class Fitted extends Component<typeof Environment> {
   get sortedModelSettings() {
     const settings = this.args?.model?.modelsList || [];
     return [...settings].sort((a, b) => {
-      const titleA = a.model?.title || '';
-      const titleB = b.model?.title || '';
+      const titleA = a.model?.cardTitle || '';
+      const titleB = b.model?.cardTitle || '';
       return titleA.localeCompare(titleB);
     });
   }
@@ -763,7 +763,7 @@ class Fitted extends Component<typeof Environment> {
         <div class='badge-format'>
           <div class='badge-panel-header'>
             <div class='badge-header-main'>
-              <div class='badge-env-title'>{{@model.title}}</div>
+              <div class='badge-env-title'>{{@model.cardTitle}}</div>
             </div>
             <div class='badge-header-stats'>
               <div
@@ -777,7 +777,7 @@ class Fitted extends Component<typeof Environment> {
         <div class='strip-format'>
           <div class='strip-panel-header'>
             <div class='strip-header-main'>
-              <div class='strip-env-title'>{{@model.title}}</div>
+              <div class='strip-env-title'>{{@model.cardTitle}}</div>
               {{#if @model.parent}}
                 <div class='strip-env-subtitle'>
                   <span class='strip-inherits-label'>Inherits from parent</span>
@@ -804,7 +804,7 @@ class Fitted extends Component<typeof Environment> {
         <div class='tile-format'>
           <div class='tile-panel-header'>
             <div class='tile-header-main'>
-              <div class='tile-env-title'>{{@model.title}}</div>
+              <div class='tile-env-title'>{{@model.cardTitle}}</div>
               {{#if @model.parent}}
                 <div class='tile-env-subtitle'>
                   <span class='tile-inherits-label'>Inherits from</span>
@@ -865,7 +865,7 @@ class Fitted extends Component<typeof Environment> {
         <div class='card-format'>
           <div class='card-panel-header'>
             <div class='card-header-main'>
-              <div class='card-env-title'>{{@model.title}}</div>
+              <div class='card-env-title'>{{@model.cardTitle}}</div>
               {{#if @model.parent}}
                 <div class='card-env-subtitle'>
                   <span class='card-inherits-label'>Inherits from</span>
@@ -1462,8 +1462,8 @@ class Isolated extends Component<typeof Environment> {
       })
       .filter(Boolean)
       .sort((a, b) => {
-        const nameA = a?.model?.title || '';
-        const nameB = b?.model?.title || '';
+        const nameA = a?.model?.cardTitle || '';
+        const nameB = b?.model?.cardTitle || '';
         return nameA.localeCompare(nameB);
       });
   }
@@ -1513,8 +1513,8 @@ class Isolated extends Component<typeof Environment> {
       })
       .filter(Boolean)
       .sort((a, b) => {
-        const nameA = a?.model?.title || '';
-        const nameB = b?.model?.title || '';
+        const nameA = a?.model?.cardTitle || '';
+        const nameB = b?.model?.cardTitle || '';
         return nameA.localeCompare(nameB);
       });
   }
@@ -1523,7 +1523,7 @@ class Isolated extends Component<typeof Environment> {
     <div class='shortcuts-panel'>
       <div class='panel-header'>
         <div class='header-main'>
-          <div class='env-title'>{{@model.title}}</div>
+          <div class='env-title'>{{@model.cardTitle}}</div>
           {{#if @model.parent}}
             <div class='env-subtitle'>
               <span class='inherits-label'>Inherits from</span>
@@ -1639,7 +1639,7 @@ class Isolated extends Component<typeof Environment> {
                       <div class='model-info'>
                         <div
                           class='model-name'
-                        >{{item.shortcut.preferredModel.title}}</div>
+                        >{{item.shortcut.preferredModel.cardTitle}}</div>
                         {{#if item.shortcut.preferredModel.modelId}}
                           <div
                             class='model-id'
@@ -1670,7 +1670,7 @@ class Isolated extends Component<typeof Environment> {
                                 "custom-skill"
                               }}'
                             {{on 'click' (fn this.viewSkill skill)}}
-                          >{{if skill.title skill.title skill.id}}</button>
+                          >{{if skill.cardTitle skill.cardTitle skill.id}}</button>
                         {{/each}}
                       </div>
                     </div>
@@ -1718,7 +1718,7 @@ class Isolated extends Component<typeof Environment> {
               >
                 <div class='model-content'>
                   <div class='model-header'>
-                    <div class='model-name'>{{item.model.title}}</div>
+                    <div class='model-name'>{{item.model.cardTitle}}</div>
                     {{#if item.isDisabled}}
                       <div class='status-badge disabled'>Disabled</div>
                     {{else if item.isAddition}}
@@ -1841,7 +1841,7 @@ class Isolated extends Component<typeof Environment> {
                 >
                   <div class='model-content'>
                     <div class='model-header'>
-                      <div class='model-name'>{{item.model.title}}</div>
+                      <div class='model-name'>{{item.model.cardTitle}}</div>
                       {{#if item.isDisabledLocally}}
                         <div class='status-badge locally-disabled'>Disabled
                           Locally</div>
@@ -2881,7 +2881,7 @@ class Edit extends Component<typeof Environment> {
 
         <div class='env-stats'>
           <div class='stats-header'>
-            <h2 class='stats-title'>{{@model.title}} Statistics</h2>
+            <h2 class='stats-title'>{{@model.cardTitle}} Statistics</h2>
           </div>
           <div class='stats-grid'>
             <div class='stat-card shortcuts'>
@@ -3612,7 +3612,7 @@ export class Environment extends CardDef {
     return Array.isArray(field) ? [...field] : [];
   }
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: Environment) {
       try {
         if (this.name) {
@@ -3698,7 +3698,7 @@ export class Environment extends CardDef {
       <div class='environment-panel-embedded'>
         <div class='panel-header'>
           <div class='header-main'>
-            <div class='env-title'>{{@model.title}}</div>
+            <div class='env-title'>{{@model.cardTitle}}</div>
             {{#if @model.parent}}
               <div class='env-subtitle'>
                 <span class='inherits-label'>Inherits from</span>

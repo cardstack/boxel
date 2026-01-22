@@ -2,9 +2,9 @@
   "data": {
     "type": "card",
     "attributes": {
-      "title": "Engineering Team Sprint",
-      "description": null,
-      "thumbnailURL": null
+      "cardTitle": "Engineering Team Sprint",
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "relationships": {
       "project": {

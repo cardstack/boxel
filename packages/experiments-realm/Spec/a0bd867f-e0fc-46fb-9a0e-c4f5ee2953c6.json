@@ -10,18 +10,18 @@
       "specType": "field",
       "containedExamples": [
         {
-          "title": "Dragon"
+          "cardTitle": "Dragon"
         },
         {
-          "title": "Tug rope"
+          "cardTitle": "Tug rope"
         },
         {
-          "title": "Lambchop"
+          "cardTitle": "Lambchop"
         }
       ],
-      "title": "Toy Spec I",
-      "description": null,
-      "thumbnailURL": null
+      "cardTitle": "Toy Spec I",
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "relationships": {
       "linkedExamples": {

@@ -9,9 +9,9 @@
       },
       "specType": "field",
       "containedExamples": [],
-      "title": "CRM Shared Helpers",
-      "description": "Spec for CRM Shared Helpers",
-      "thumbnailURL": null
+      "cardTitle": "CRM Shared Helpers",
+      "cardDescription": "Spec for CRM Shared Helpers",
+      "cardThumbnailURL": null
     },
     "relationships": {},
     "meta": {

@@ -9,9 +9,9 @@
       },
       "specType": "card",
       "containedExamples": [],
-      "title": "Mortgage Calculator",
-      "description": "Spec for Mortgage Calculator card",
-      "thumbnailURL": null
+      "cardTitle": "Mortgage Calculator",
+      "cardDescription": "Spec for Mortgage Calculator card",
+      "cardThumbnailURL": null
     },
     "relationships": {
       "linkedExamples.0": {

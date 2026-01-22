@@ -1,7 +1,7 @@
 // External dependencies
 import { Component } from 'https://cardstack.com/base/card-api';
 import { on } from '@ember/modifier';
-import { lte, gte } from '@cardstack/boxel-ui/helpers';
+import { lte, gte, not } from '@cardstack/boxel-ui/helpers';
 
 import NumberField, {
   deserializeForUI,
@@ -75,7 +75,7 @@ export default class QuantityField extends NumberField {
           type='button'
           class='qty-btn'
           {{on 'click' this.decrement}}
-          disabled={{if (lte this.numericValue this.minValue) 'true'}}
+          disabled={{if (not @canEdit) true (if (lte this.numericValue this.minValue) true)}}
         >−</button>
         <input
           id='quantity-input'
@@ -84,13 +84,14 @@ export default class QuantityField extends NumberField {
           value={{this.numericValue}}
           min={{this.minValue}}
           max={{this.maxValue}}
+          disabled={{not @canEdit}}
           {{on 'input' this.handleInput}}
         />
         <button
           type='button'
           class='qty-btn'
           {{on 'click' this.increment}}
-          disabled={{if (gte this.numericValue this.maxValue) 'true'}}
+          disabled={{if (not @canEdit) true (if (gte this.numericValue this.maxValue) true)}}
         >+</button>
       </div>
 

@@ -12,7 +12,7 @@ import { Person } from './person';
 export class Pet extends CardDef {
   @field firstName = contains(StringField);
   @field owner = linksTo(Person);
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: Pet) {
       return this.firstName;
     },
@@ -21,7 +21,7 @@ export class Pet extends CardDef {
     <template>
       <h1><@fields.firstName /></h1>Owned by:
       <@fields.owner />
-      <h1><@fields.title /></h1>
+      <h1><@fields.cardTitle /></h1>
     </template>
   };
 }

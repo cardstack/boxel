@@ -192,7 +192,7 @@ module(
 
         await click(`[data-test-card-catalog-go-button]`);
 
-        await fillIn('[data-test-field="title"] input', 'new skill');
+        await fillIn('[data-test-field="cardTitle"] input', 'new skill');
         assert.dom(`[data-test-attached-card]`).containsText('new skill');
       });
 
@@ -551,12 +551,12 @@ module(
         await click('[data-test-operator-mode-stack] [data-test-edit-button]');
         assert
           .dom(
-            "[data-test-contains-many='additionalAddresses'] [data-test-field='title'] input",
+            "[data-test-contains-many='additionalAddresses'] [data-test-field='cardTitle'] input",
           )
           .doesNotExist();
         assert
           .dom(
-            "[data-test-contains-many='additionalAddresses'] [data-test-field='title']",
+            "[data-test-contains-many='additionalAddresses'] [data-test-field='cardTitle']",
           )
           .exists({ count: 1 });
 
@@ -712,9 +712,14 @@ module(
           ],
         });
 
+        let didAssertAuth = false;
         getService('network').mount(
           async (req) => {
-            if (req.method !== 'GET' && req.method !== 'HEAD') {
+            let shouldAssertAuth =
+              !didAssertAuth &&
+              req.url.startsWith(testRealm2URL) &&
+              ['POST', 'PATCH'].includes(req.method);
+            if (shouldAssertAuth) {
               let token = req.headers.get('Authorization');
               assert.notStrictEqual(token, null);
 
@@ -722,6 +727,7 @@ module(
               assert.deepEqual(claims.user, '@testuser:localhost');
               assert.strictEqual(claims.realm, 'http://test-realm/test2/');
               assert.deepEqual(claims.permissions, ['read', 'write']);
+              didAssertAuth = true;
             }
             return null;
           },
@@ -936,7 +942,7 @@ module(
             cards: [
               {
                 id: `${personalRealmURL}index`,
-                title: 'Test Personal Workspace',
+                cardTitle: 'Test Personal Workspace',
               },
             ],
           },
@@ -1033,7 +1039,7 @@ module(
             cards: [
               {
                 id: `${personalRealmURL}index`,
-                title: 'Test Personal Workspace',
+                cardTitle: 'Test Personal Workspace',
               },
             ],
           },

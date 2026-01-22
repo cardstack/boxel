@@ -4,8 +4,8 @@ import type {
   Tool,
 } from 'https://cardstack.com/base/matrix-event';
 import type { ReasoningEffort } from 'openai/resources/shared';
-import type { LooseCardResource } from '../index';
 import type { ToolChoice } from '../helpers/ai';
+import type { CardResource } from '../resource-types';
 
 export interface ChatCompletionMessageToolCall {
   id: string;
@@ -56,8 +56,8 @@ export interface OpenAIPromptMessage {
 }
 
 export interface RelevantCards {
-  mostRecentlyAttachedCard: LooseCardResource | undefined;
-  attachedCards: LooseCardResource[];
+  mostRecentlyAttachedCard: CardResource | undefined;
+  attachedCards: CardResource[];
 }
 
 export interface CodePatchCorrectnessFile {

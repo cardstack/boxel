@@ -5,8 +5,8 @@
       "modelId": "anthropic/claude-3.7-sonnet",
       "modelName": "Claude 3.7 Sonnet",
       "displayName": "Claude 3.7",
-      "description": null,
-      "thumbnailURL": null
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "meta": {
       "adoptsFrom": {

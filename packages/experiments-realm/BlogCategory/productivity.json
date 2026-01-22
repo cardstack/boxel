@@ -7,9 +7,9 @@
       "slug": "productivity",
       "pillColor": "#9D00FF",
       "cardInfo": {
-        "description": "Tips and tricks for better organization and effectiveness at work",
-        "title": "Productivity",
-        "thumbnailURL": null
+        "summary": "Tips and tricks for better organization and effectiveness at work",
+        "name": "Productivity",
+        "cardThumbnailURL": null
       }
     },
     "relationships": {

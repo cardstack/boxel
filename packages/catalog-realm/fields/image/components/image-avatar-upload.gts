@@ -6,26 +6,31 @@ import ImageIcon from '@cardstack/boxel-icons/image';
 interface ImageAvatarUploadArgs {
   Args: {
     onFileSelect: (event: Event) => void;
+    disabled?: boolean;
   };
 }
 
 export default class ImageAvatarUpload extends GlimmerComponent<ImageAvatarUploadArgs> {
   <template>
-    <label class='avatar-upload'>
+    <label class='avatar-upload {{if @disabled "disabled"}}'>
       {{! Upload trigger }}
       <div class='avatar-placeholder'>
         <ImageIcon class='placeholder-icon' />
-        <div class='avatar-camera-icon'>
-          <CameraIcon class='icon' />
-        </div>
+        {{#unless @disabled}}
+          <div class='avatar-camera-icon'>
+            <CameraIcon class='icon' />
+          </div>
+        {{/unless}}
       </div>
       <span class='avatar-label'>Upload Photo</span>
-      <input
-        type='file'
-        class='file-input'
-        accept='image/*'
-        {{on 'change' @onFileSelect}}
-      />
+      {{#unless @disabled}}
+        <input
+          type='file'
+          class='file-input'
+          accept='image/*'
+          {{on 'change' @onFileSelect}}
+        />
+      {{/unless}}
     </label>
 
     <style scoped>
@@ -56,9 +61,14 @@ export default class ImageAvatarUpload extends GlimmerComponent<ImageAvatarUploa
         justify-content: center;
       }
 
-      .avatar-upload:hover .avatar-placeholder {
+      .avatar-upload:hover:not(.disabled) .avatar-placeholder {
         box-shadow: var(--shadow-xl, 0 20px 25px -5px rgb(0 0 0 / 0.1));
         transform: scale(1.05);
+      }
+
+      .avatar-upload.disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
       }
 
       .avatar-camera-icon {

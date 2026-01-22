@@ -5,7 +5,10 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import { baseRealm, Deferred } from '@cardstack/runtime-common';
-import type { SingleCardDocument } from '@cardstack/runtime-common';
+import type {
+  SingleCardDocument,
+  SingleFileMetaDocument,
+} from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
 import type {
@@ -40,8 +43,13 @@ let loader: Loader;
 
 class DeferredLinkStore implements CardStore {
   private instances = new Map<string, CardDefType>();
-  private readyDocs = new Map<string, SingleCardDocument>();
-  private pendingDocs = new Map<string, Deferred<SingleCardDocument>>();
+  private readyCardDocs = new Map<string, SingleCardDocument>();
+  private pendingCardDocs = new Map<string, Deferred<SingleCardDocument>>();
+  private readyFileMetaDocs = new Map<string, SingleFileMetaDocument>();
+  private pendingFileMetaDocs = new Map<
+    string,
+    Deferred<SingleFileMetaDocument>
+  >();
   private inFlightLoads = new Set<Promise<unknown>>();
   private loadGeneration = 0;
 
@@ -59,16 +67,30 @@ class DeferredLinkStore implements CardStore {
 
   makeTracked(_id: string) {}
 
-  async loadDocument(url: string) {
+  async loadCardDocument(url: string): Promise<SingleCardDocument> {
     let normalized = this.normalize(url);
-    let ready = this.readyDocs.get(normalized);
+    let ready = this.readyCardDocs.get(normalized);
     if (ready) {
-      return ready;
+      return Promise.resolve(ready);
     }
-    let pending = this.pendingDocs.get(normalized);
+    let pending = this.pendingCardDocs.get(normalized);
     if (!pending) {
       pending = new Deferred<SingleCardDocument>();
-      this.pendingDocs.set(normalized, pending);
+      this.pendingCardDocs.set(normalized, pending);
+    }
+    return pending.promise;
+  }
+
+  async loadFileMetaDocument(url: string) {
+    let normalized = this.normalize(url);
+    let ready = this.readyFileMetaDocs.get(normalized);
+    if (ready) {
+      return Promise.resolve(ready);
+    }
+    let pending = this.pendingFileMetaDocs.get(normalized);
+    if (!pending) {
+      pending = new Deferred<SingleFileMetaDocument>();
+      this.pendingFileMetaDocs.set(normalized, pending);
     }
     return pending.promise;
   }
@@ -106,11 +128,11 @@ class DeferredLinkStore implements CardStore {
 
   provideDocument(url: string, doc: SingleCardDocument) {
     let normalized = this.normalize(url);
-    this.readyDocs.set(normalized, doc);
-    let pending = this.pendingDocs.get(normalized);
+    this.readyCardDocs.set(normalized, doc);
+    let pending = this.pendingCardDocs.get(normalized);
     if (pending) {
       pending.fulfill(doc);
-      this.pendingDocs.delete(normalized);
+      this.pendingCardDocs.delete(normalized);
     }
   }
 
@@ -188,7 +210,7 @@ module('Integration | field configuration', function (hooks) {
 
     class ParentCard extends CardDef {
       static displayName = 'Parent';
-      @field title = contains(StringField);
+      @field cardTitle = contains(StringField);
       @field color = contains(ColorField, {
         configuration: {
           presentation: {
@@ -251,7 +273,7 @@ module('Integration | field configuration', function (hooks) {
             type: 'card',
             id: `${testRealmURL}ParentCard/instance`,
             attributes: {
-              title: 'test parent',
+              cardTitle: 'test parent',
               color: {},
             },
             meta: {
@@ -283,7 +305,7 @@ module('Integration | field configuration', function (hooks) {
     // import the card class and create a local instance for rendering
     let mod = await loader.import(`${testRealmURL}parent`);
     let ParentCard = (mod as any).ParentCard;
-    let card = new ParentCard({ title: 'local parent' });
+    let card = new ParentCard({ cardTitle: 'local parent' });
     await renderCard(loader, card, 'isolated');
 
     assert
@@ -297,7 +319,7 @@ module('Integration | field configuration', function (hooks) {
   test('configuration reacts when a linked relationship loads', async function (assert) {
     // Create a ParentReactive instance that links to ThemeCard/main but does not include it
     let resource = {
-      attributes: { color: {}, title: 'parent' },
+      attributes: { color: {}, cardTitle: 'parent' },
       relationships: {
         theme: { links: { self: `${testRealmURL}ThemeCard/main` } },
       },
@@ -339,7 +361,7 @@ module('Integration | field configuration', function (hooks) {
   test('configuration reacts when a consumed linked card field value changes', async function (assert) {
     // Create a ParentReactive instance that links to ThemeCard/main using a cached Theme instance
     let resource = {
-      attributes: { color: {}, title: 'parent' },
+      attributes: { color: {}, cardTitle: 'parent' },
       relationships: {
         theme: { links: { self: `${testRealmURL}ThemeCard/main` } },
       },
@@ -449,7 +471,7 @@ module('Integration | field configuration', function (hooks) {
     }
 
     class ParentWithLink extends CardDef {
-      @field title = contains(StringField);
+      @field cardTitle = contains(StringField);
       @field child = linksTo(InnerCard, {
         configuration: { presentation: { tag: 'from-linksTo' } },
       });
@@ -463,7 +485,7 @@ module('Integration | field configuration', function (hooks) {
     }
 
     let inner = new InnerCard({});
-    let parent = new ParentWithLink({ title: 't', child: inner });
+    let parent = new ParentWithLink({ cardTitle: 't', child: inner });
     await renderCard(loader, parent, 'isolated');
 
     assert
@@ -490,7 +512,7 @@ module('Integration | field configuration', function (hooks) {
     }
 
     class ParentWithLinksMany extends CardDef {
-      @field title = contains(StringField);
+      @field cardTitle = contains(StringField);
       @field children = linksToMany(InnerCardMany, {
         configuration: { presentation: { tag: 'from-linksToMany' } },
       });
@@ -506,7 +528,7 @@ module('Integration | field configuration', function (hooks) {
     let child1 = new InnerCardMany({});
     let child2 = new InnerCardMany({});
     let parent = new ParentWithLinksMany({
-      title: 't',
+      cardTitle: 't',
       children: [child1, child2],
     });
     await renderCard(loader, parent, 'isolated');
@@ -550,7 +572,7 @@ module('Integration | field configuration', function (hooks) {
     }
 
     class ParentWithMergedLink extends CardDef {
-      @field title = contains(StringField);
+      @field cardTitle = contains(StringField);
       @field child = linksTo(InnerCardWithConfig, {
         configuration: {
           presentation: { tag: 'from-linksTo', other: 'present' },
@@ -566,7 +588,7 @@ module('Integration | field configuration', function (hooks) {
     }
 
     let inner = new InnerCardWithConfig({});
-    let parent = new ParentWithMergedLink({ title: 't', child: inner });
+    let parent = new ParentWithMergedLink({ cardTitle: 't', child: inner });
     await renderCard(loader, parent, 'isolated');
 
     // tag should be overridden by per-usage config

@@ -83,7 +83,7 @@ module('Integration | card-catalog', function (hooks) {
 
     class BlogPost extends CardDef {
       static displayName = 'Blog Post';
-      @field title = contains(StringField);
+      @field cardTitle = contains(StringField);
       @field body = contains(TextAreaField);
       @field authorBio = linksTo(Author);
     }
@@ -114,8 +114,8 @@ module('Integration | card-catalog', function (hooks) {
         '.realm.json': `{ "name": "${realmName}", "iconURL": "https://example-icon.test" }`,
         'index.json': new CardsGrid(),
         'Spec/publishing-packet.json': new Spec({
-          title: 'Publishing Packet',
-          description: 'Spec for PublishingPacket',
+          cardTitle: 'Publishing Packet',
+          cardDescription: 'Spec for PublishingPacket',
           specType: 'card',
           ref: {
             module: `${testRealmURL}publishing-packet`,
@@ -123,8 +123,8 @@ module('Integration | card-catalog', function (hooks) {
           },
         }),
         'Spec/author.json': new Spec({
-          title: 'Author',
-          description: 'Spec for Author',
+          cardTitle: 'Author',
+          cardDescription: 'Spec for Author',
           specType: 'card',
           ref: {
             module: `${testRealmURL}author`,
@@ -132,8 +132,8 @@ module('Integration | card-catalog', function (hooks) {
           },
         }),
         'Spec/person.json': new Spec({
-          title: 'Person',
-          description: 'Spec for Person',
+          cardTitle: 'Person',
+          cardDescription: 'Spec for Person',
           specType: 'card',
           ref: {
             module: `${testRealmURL}person`,
@@ -141,8 +141,8 @@ module('Integration | card-catalog', function (hooks) {
           },
         }),
         'Spec/pet.json': new Spec({
-          title: 'Pet',
-          description: 'Spec for Pet',
+          cardTitle: 'Pet',
+          cardDescription: 'Spec for Pet',
           specType: 'card',
           ref: {
             module: `${testRealmURL}pet`,
@@ -150,8 +150,8 @@ module('Integration | card-catalog', function (hooks) {
           },
         }),
         'Spec/tree.json': new Spec({
-          title: 'Tree',
-          description: 'Spec for Tree',
+          cardTitle: 'Tree',
+          cardDescription: 'Spec for Tree',
           specType: 'card',
           ref: {
             module: `${testRealmURL}tree`,
@@ -159,8 +159,8 @@ module('Integration | card-catalog', function (hooks) {
           },
         }),
         'Spec/blog-post.json': new Spec({
-          title: 'BlogPost',
-          description: 'Spec for BlogPost',
+          cardTitle: 'BlogPost',
+          cardDescription: 'Spec for BlogPost',
           specType: 'card',
           ref: {
             module: `${testRealmURL}blog-post`,
@@ -168,8 +168,8 @@ module('Integration | card-catalog', function (hooks) {
           },
         }),
         'Spec/address.json': new Spec({
-          title: 'Address',
-          description: 'Spec for Address field',
+          cardTitle: 'Address',
+          cardDescription: 'Spec for Address field',
           specType: 'field',
           ref: {
             module: `${testRealmURL}address`,
@@ -205,6 +205,9 @@ module('Integration | card-catalog', function (hooks) {
 
   module('realm filters', function () {
     test('displays all realms by default', async function (assert) {
+      await waitFor(`[data-test-realm="${realmName}"]`);
+      await waitFor('[data-test-realm="Base Workspace"]');
+
       assert.dom('[data-test-realm]').exists({ count: 3 });
       assert
         .dom(`[data-test-realm="${realmName}"] [data-test-results-count]`)

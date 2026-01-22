@@ -9,9 +9,9 @@
       },
       "specType": "field",
       "containedExamples": [],
-      "title": "Deal Status",
-      "description": "Spec for Deal Status field",
-      "thumbnailURL": null
+      "cardTitle": "Deal Status",
+      "cardDescription": "Spec for Deal Status field",
+      "cardThumbnailURL": null
     },
     "relationships": {},
     "meta": {

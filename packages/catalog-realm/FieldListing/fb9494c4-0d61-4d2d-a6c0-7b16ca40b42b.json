@@ -16,9 +16,9 @@
       "summary": "The Contact Link Field is a dynamic component that allows users to create and manage contact links such as email, phone, or other web links. This component is designed to be intuitive and flexible, making it easy to integrate into your application.\n\nKey Features\n- Multiple Contact Types: Choose from email, phone, or other link types to suit your needs.\n- Icons and Labels: Each contact type comes with a distinct icon and label for easy identification.\n- Automatic URL Generation: Automatically generates the appropriate URL format for email and phone links.",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/contact-link-listing/thumbnail.png"
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/contact-link-listing/thumbnail.png"
       }
     },
     "relationships": {

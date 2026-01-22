@@ -338,7 +338,7 @@ export class StudyNoteCard extends CardDef {
   @field lastModified = contains(DatetimeField);
 
   // ⁸ Computed title from noteTitle
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: StudyNoteCard) {
       try {
         return this.noteTitle || 'Untitled Note';

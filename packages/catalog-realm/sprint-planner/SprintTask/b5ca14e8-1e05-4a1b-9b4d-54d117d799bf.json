@@ -18,8 +18,8 @@
       },
       "name": "Drag and drop bug",
       "details": "",
-      "description": null,
-      "thumbnailURL": null
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "relationships": {
       "project": {

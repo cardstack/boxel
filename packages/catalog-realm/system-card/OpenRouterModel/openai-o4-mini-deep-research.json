@@ -6,7 +6,7 @@
       "canonicalSlug": "openai/o4-mini-deep-research-2025-06-26",
       "name": "OpenAI: o4 Mini Deep Research",
       "created": 1760129642,
-      "description": "o4-mini-deep-research is OpenAI's faster, more affordable deep research model—ideal for tackling complex, multi-step research tasks.\n\nNote: This model always uses the 'web_search' tool which adds additional cost.",
+      "cardDescription": "o4-mini-deep-research is OpenAI's faster, more affordable deep research model\u2014ideal for tackling complex, multi-step research tasks.\n\nNote: This model always uses the 'web_search' tool which adds additional cost.",
       "pricing": {
         "prompt": "0.000002",
         "completion": "0.000008",
@@ -57,9 +57,9 @@
         "frequency_penalty": null
       },
       "cardInfo": {
-        "title": null,
-        "description": null,
-        "thumbnailURL": null,
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
         "notes": null
       }
     },

@@ -4,8 +4,8 @@
     "attributes": {
       "name": "App",
       "color": "",
-      "description": null,
-      "thumbnailURL": null
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "meta": {
       "adoptsFrom": {

@@ -9,22 +9,22 @@
     "type": "card",
     "attributes": {
       "ref": {
-        "name": "TimePeriodFieldSpec",
-        "module": "../time-period-field-spec"
+        "name": "default",
+        "module": "../../fields/time-period"
       },
-      "title": "Time Period Field Spec",
       "readMe": null,
       "cardInfo": {
+        "name": null,
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": null
+        "summary": null,
+        "cardThumbnailURL": null
       },
-      "specType": "card",
+      "specType": "field",
       "standard": {
         "periodLabel": "Week 12"
       },
-      "description": null,
+      "cardTitle": "Time Period Field",
+      "cardDescription": null,
       "containedExamples": []
     },
     "relationships": {
