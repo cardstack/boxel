@@ -23,7 +23,7 @@
       },
       "specType": "field",
       "standard": "#ba6d6d",
-      "cardTitle": "Color Field Spec",
+      "cardTitle": "Color Field",
       "sliderHsl": "hsl(79, 91%, 60%)",
       "sliderRgb": "rgb(135, 88, 246)",
       "swatchesPicker": "#FCF8A6",
