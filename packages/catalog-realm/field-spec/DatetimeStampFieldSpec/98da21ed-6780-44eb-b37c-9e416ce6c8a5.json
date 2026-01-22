@@ -12,17 +12,17 @@
         "name": "default",
         "module": "../../fields/datetime-stamp"
       },
-      "title": "Datetime Stamp Field Spec",
       "readMe": null,
       "cardInfo": {
+        "name": null,
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": null
+        "summary": null,
+        "cardThumbnailURL": null
       },
-      "specType": "card",
+      "specType": "field",
       "standard": "2026-01-08T08:04:00.000Z",
-      "description": null,
+      "cardTitle": "Datetime Stamp Field Spec",
+      "cardDescription": null,
       "containedExamples": []
     },
     "relationships": {

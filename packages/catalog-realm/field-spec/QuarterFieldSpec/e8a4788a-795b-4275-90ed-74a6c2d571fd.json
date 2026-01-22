@@ -12,20 +12,20 @@
         "name": "default",
         "module": "../../fields/date/quarter"
       },
-      "title": "Quarter Field Spec",
       "readMe": null,
       "cardInfo": {
+        "name": null,
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": null
+        "summary": null,
+        "cardThumbnailURL": null
       },
-      "specType": "card",
+      "specType": "field",
       "standard": {
         "year": 2023,
         "quarter": 2
       },
-      "description": null,
+      "cardTitle": "Quarter Field Spec",
+      "cardDescription": null,
       "containedExamples": []
     },
     "relationships": {
