@@ -2715,7 +2715,7 @@ export class Realm {
     let start = Date.now();
     try {
       if (maybeError === undefined) {
-        if (await this.#adapter.exists(localPath)) {
+        if (await this.nonJsonFileExists(localPath)) {
           return notAcceptable(request, requestContext);
         } else {
           return notFound(request, requestContext);
