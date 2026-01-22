@@ -1,4 +1,5 @@
 import Component from '@glimmer/component';
+import { scheduleOnce } from '@ember/runloop';
 import { cached, tracked } from '@glimmer/tracking';
 
 import { modifier } from 'ember-modifier';
@@ -28,11 +29,59 @@ export default class HeadFormatPreview extends Component<Signature> {
   @tracked private headMarkup = '';
 
   captureHeadMarkup = modifier((element: HTMLElement) => {
-    let container =
-      element.querySelector<HTMLElement>('[data-test-boxel-card-container]') ??
-      element.firstElementChild;
-    let markupSource = container ?? element;
-    this.headMarkup = markupSource.innerHTML.trim();
+    let pendingUpdate = false;
+
+    let getMarkupSource = () => {
+      // Remove the noise of the card container in the raw head preview
+      return (
+        element.querySelector<HTMLElement>(
+          '[data-test-boxel-card-container]',
+        ) ??
+        element.firstElementChild ??
+        element
+      );
+    };
+
+    let updateHeadMarkup = () => {
+      let markupSource = getMarkupSource();
+      let nextMarkup = markupSource.innerHTML.trim();
+
+      if (nextMarkup !== this.headMarkup) {
+        this.headMarkup = nextMarkup;
+      }
+    };
+
+    let scheduleUpdate = () => {
+      if (pendingUpdate) {
+        return;
+      }
+
+      pendingUpdate = true;
+
+      // Prevent updating this.headMarkup twice in one render
+      scheduleOnce('afterRender', this, () => {
+        pendingUpdate = false;
+        updateHeadMarkup();
+      });
+    };
+
+    scheduleUpdate();
+
+    if (typeof MutationObserver === 'undefined') {
+      return;
+    }
+
+    // Watch for updates to head format HTML, update tracked property
+    let observer = new MutationObserver(scheduleUpdate);
+
+    observer.observe(element, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+      attributes: true,
+    });
+
+    return () => observer.disconnect();
   });
 
   private get urlBase() {
