@@ -126,6 +126,7 @@ export default class HostModeContent extends Component<Signature> {
         align-items: center;
         justify-content: center;
         width: 100%;
+        min-height: 100vh;
         overflow: hidden;
         padding: var(--boxel-sp);
         position: relative;
