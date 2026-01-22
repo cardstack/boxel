@@ -447,9 +447,7 @@ export class MyCard extends CardDef {
   @field name = contains(StringField);
 }
 
-<template>
-  <MyComponent @flag={{eq 1 1}} />
-</template>
+<template><MyComponent @flag={{eq 1 1}} /></template>
 `,
         'Mixed JavaScript and template content is properly formatted',
       );
