@@ -742,7 +742,7 @@ export default class RealmServerService extends Service {
     return;
   }
 
-  async getBotRegistrations(matrixUserId?: string) {
+  async getBotRegistrations() {
     await this.login();
 
     let response = await this.network.fetch(

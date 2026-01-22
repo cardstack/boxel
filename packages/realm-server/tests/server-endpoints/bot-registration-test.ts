@@ -18,6 +18,23 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         assert.strictEqual(response.status, 401, 'HTTP 401 status');
       });
 
+      test('requires auth to list bot registrations', async function (assert) {
+        let response = await context.request2.get('/_bot-registrations');
+        assert.strictEqual(response.status, 401, 'HTTP 401 status');
+      });
+
+      test('requires auth to unregister bot', async function (assert) {
+        let response = await context.request2
+          .delete('/_bot-registration')
+          .send({
+            data: {
+              type: 'bot-registration',
+              id: 'bot-reg-1',
+            },
+          });
+        assert.strictEqual(response.status, 401, 'HTTP 401 status');
+      });
+
       test('registers and updates bot registration', async function (assert) {
         let matrixUserId = '@user:localhost';
         await insertUser(
@@ -88,6 +105,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         let rows = await context.dbAdapter.execute(
           `SELECT id, user_id, created_at FROM bot_registrations`,
         );
+        assert.strictEqual(rows.length, 1, 'one bot registration is persisted');
         assert.ok(rows[0].id, 'id is persisted');
         assert.ok(rows[0].user_id, 'user_id is persisted');
         assert.ok(rows[0].created_at, 'created_at is persisted');

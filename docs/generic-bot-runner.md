@@ -8,7 +8,7 @@ The bot runner is a separate Node process that listens to Matrix room events and
 
 The bot runner is a valid matrix user and has admin access. 
 
-In order to use it as, a user must
+In order to use it, a user must
 - invite the bot runner admin to a room 
 - register the bot via the realm-server bot-registration endpoint 
 - register bot commands so the bot runner knows what matrix event to listen to and the corresponding command to fire
@@ -58,7 +58,7 @@ Register via script
 ```sh
 REALM_SERVER_URL="http://localhost:4201" \
 REALM_SERVER_JWT="..." \
-MATRIX_USER_ID="@user:localhost" \
+MATRIX_USER_ID="..." \
 ./packages/realm-server/scripts/register-bot.sh
 ```
 
@@ -78,4 +78,3 @@ Unregister:
       "id": "<botRegistrationId>"
     }
   }
-
