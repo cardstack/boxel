@@ -2145,6 +2145,10 @@ export class Realm {
     if (localPath?.endsWith('.json')) {
       localPath = localPath.slice(0, -5);
     }
+    // Treat the path as JSON-backed if a sibling .json file exists.
+    if (await this.#adapter.exists(`${localPath}.json`)) {
+      return false;
+    }
     return await this.#adapter.exists(localPath);
   }
 
