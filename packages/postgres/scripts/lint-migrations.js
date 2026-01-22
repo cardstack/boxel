@@ -28,7 +28,7 @@ for (const file of files) {
 if (suspicious.length) {
   for (const file of suspicious) {
     console.error(
-      `suspicious migration file ${file}. please use 'pnpm migrate create file_name' to create a db migration file`,
+      `suspicious migration file ${file}. please use 'pnpm migrate create <migration_name>' to create a db migration file`,
     );
   }
   process.exitCode = 1;
