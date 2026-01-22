@@ -95,6 +95,10 @@
   Make sure not to commit `.only` to source control
 - run `pnpm lint` directly in this directory to lint changes made to this package
 
+### packages/postgres
+- If you need to make a database migration use `pnpm create migration_name` to create a migration file so that the correct date timestamp prefix will be added to the file name. Then implement the migration inside the newly created file.
+
+
 ### packages/runtime-common
 
 - Functionality is tested via host and/or realm-server tests

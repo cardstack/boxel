@@ -230,6 +230,9 @@ module('Unit | query', function (hooks) {
       async invalidate(_realmURL: string): Promise<void> {
         // no-op for tests
       },
+      async clearRealmCache(_realmURL: string): Promise<void> {
+        // no-op for tests
+      },
       registerRealm() {},
       forRealm() {
         return this;
