@@ -35,7 +35,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         assert.strictEqual(response.status, 401, 'HTTP 401 status');
       });
 
-      test('registers and updates bot registration', async function (assert) {
+      test('can register bot for user', async function (assert) {
         let matrixUserId = '@user:localhost';
         await insertUser(
           context.dbAdapter,
@@ -111,16 +111,16 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         assert.ok(rows[0].created_at, 'created_at is persisted');
       });
 
-      test('returns 200 when registering an already registered bot', async function (assert) {
+      test('can register more than one bot for a single user', async function (assert) {
         let matrixUserId = '@user:localhost';
-        await insertUser(
+        let user = await insertUser(
           context.dbAdapter,
           matrixUserId,
           'cus_123',
           'user@example.com',
         );
 
-        await context.request2
+        let firstResponse = await context.request2
           .post('/_bot-registration')
           .set('Accept', 'application/vnd.api+json')
           .set('Content-Type', 'application/vnd.api+json')
@@ -136,6 +136,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
               type: 'bot-registration',
               attributes: {
                 matrixUserId,
+                name: 'assistant',
               },
             },
           });
@@ -156,14 +157,22 @@ module(`server-endpoints/${basename(__filename)}`, function () {
               type: 'bot-registration',
               attributes: {
                 matrixUserId,
+                name: 'helper',
               },
             },
           });
 
-        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        assert.strictEqual(firstResponse.status, 201, 'HTTP 201 status');
+        assert.strictEqual(response.status, 201, 'HTTP 201 status');
+
+        let rows = await query(context.dbAdapter, [
+          `SELECT id FROM bot_registrations WHERE user_id = `,
+          param(user.id),
+        ]);
+        assert.strictEqual(rows.length, 2, 'two bot registrations exist');
       });
 
-      test('rejects registering the same bot name for the same user', async function (assert) {
+      test('rejects duplicate bot name for the same user', async function (assert) {
         let matrixUserId = '@user:localhost';
         await insertUser(
           context.dbAdapter,
@@ -515,7 +524,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         );
       });
 
-      test('lists bot registrations created via endpoint', async function (assert) {
+      test('lists bot registrations created via endpoint for the authenticated user', async function (assert) {
         let matrixUserId = '@user:localhost';
         let otherMatrixUserId = '@other-user:localhost';
         await insertUser(

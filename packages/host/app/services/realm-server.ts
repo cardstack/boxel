@@ -780,12 +780,6 @@ export default class RealmServerService extends Service {
       createdAt: entry.attributes.createdAt,
     }));
 
-    if (matrixUserId) {
-      return registrations.filter(
-        (registration) => registration.matrixUserId === matrixUserId,
-      );
-    }
-
     return registrations;
   }
 
