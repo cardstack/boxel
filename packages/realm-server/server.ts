@@ -43,7 +43,11 @@ import { resolve, join } from 'path';
 import merge from 'lodash/merge';
 
 import { extractSupportedMimeType } from '@cardstack/runtime-common/router';
-import { any, type Expression } from '@cardstack/runtime-common/expression';
+import {
+  addExplicitParens,
+  any,
+  type Expression,
+} from '@cardstack/runtime-common/expression';
 import * as Sentry from '@sentry/node';
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import {
@@ -553,17 +557,19 @@ export class RealmServer {
 
   private indexCandidateExpressions(candidates: string[]): Expression {
     // Proxying means the apparent request URL will be http but in the database it’s https
-    return any(
-      candidates.flatMap((candidate) => [
-        [
-          "regexp_replace(url, '^https?://', '') =",
-          param(this.stripProtocol(candidate)),
-        ],
-        [
-          "regexp_replace(file_alias, '^https?://', '') =",
-          param(this.stripProtocol(candidate)),
-        ],
-      ]),
+    return addExplicitParens(
+      any(
+        candidates.flatMap((candidate) => [
+          [
+            "regexp_replace(url, '^https?://', '') =",
+            param(this.stripProtocol(candidate)),
+          ],
+          [
+            "regexp_replace(file_alias, '^https?://', '') =",
+            param(this.stripProtocol(candidate)),
+          ],
+        ]),
+      ) as Expression,
     ) as Expression;
   }
 
