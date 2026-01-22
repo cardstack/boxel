@@ -10,16 +10,8 @@ import { Resource } from 'ember-modify-based-class-resource';
 import { isCardInstance } from '@cardstack/runtime-common';
 
 import type { BaseDef } from 'https://cardstack.com/base/card-api';
-import type { FileDef } from 'https://cardstack.com/base/file-api';
 
 import type StoreService from '../services/store';
-
-function isFileDefInstance(value: unknown): value is FileDef {
-  return Boolean(
-    (value as { constructor?: { isFileDef?: boolean } })?.constructor
-      ?.isFileDef,
-  );
-}
 
 interface Args {
   named: {
@@ -66,9 +58,7 @@ export class CardResource extends Resource<Args> {
       return undefined;
     }
     let maybeCard = this.store.peek(this.#id) as unknown;
-    return isCardInstance(maybeCard) || isFileDefInstance(maybeCard)
-      ? (maybeCard as BaseDef)
-      : undefined;
+    return isCardInstance(maybeCard) ? (maybeCard as BaseDef) : undefined;
   }
 
   get cardError() {

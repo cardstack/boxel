@@ -15,6 +15,7 @@ import type { CodeRef } from '@cardstack/runtime-common';
 import {
   RealmPaths,
   type LocalPath,
+  type StoreReadType,
   isResolvedCodeRef,
   isCardInstance,
   isLocalId,
@@ -92,6 +93,7 @@ export interface OperatorModeState {
 interface CardItem {
   id: string;
   format: 'isolated' | 'edit' | 'head';
+  readType?: StoreReadType;
 }
 
 export type FileView = 'inspector' | 'browser';
@@ -875,11 +877,15 @@ export default class OperatorModeStateService extends Service {
           throw new Error(`Unknown format for card on stack ${item.format}`);
         }
         if (item.id) {
-          let instance = this.store.peek(item.id);
+          let instance = this.store.peek(
+            item.id,
+            item.readType ?? 'card',
+          );
           if (!isLocalId(item.id) || instance?.id) {
             serializedStack.push({
               id: instance?.id ?? item.id,
               format: item.format,
+              readType: item.readType,
             });
           }
         }
@@ -903,12 +909,14 @@ export default class OperatorModeStateService extends Service {
       fieldName?: string;
       fieldType?: 'linksTo' | 'linksToMany';
     },
+    readType?: StoreReadType,
   ) {
     let stackItem = new StackItem({
       id,
       stackIndex,
       format,
       relationshipContext,
+      readType,
     });
     return stackItem;
   }
@@ -955,12 +963,13 @@ export default class OperatorModeStateService extends Service {
     for (let stack of rawState.stacks) {
       let newStack: Stack = new TrackedArray([]);
       for (let item of stack) {
-        let { format } = item;
+        let { format, readType } = item;
         newStack.push(
           new StackItem({
             id: item.id,
             format,
             stackIndex,
+            readType,
           }),
         );
       }
@@ -1129,7 +1138,11 @@ export default class OperatorModeStateService extends Service {
     }));
   });
 
-  openCardInInteractMode(id: string, format: Format = 'isolated') {
+  openCardInInteractMode(
+    id: string,
+    format: Format = 'isolated',
+    readType?: StoreReadType,
+  ) {
     this.clearStacks();
     // Determine realm URL. If id is a localId, look up the instance in the store to read its realm.
     let realmHref: string | undefined;
@@ -1157,6 +1170,7 @@ export default class OperatorModeStateService extends Service {
       id, // keep provided id (may be localId) so later replacement on save works
       stackIndex: 0,
       format,
+      readType,
     });
     this.addItemToStack(indexItem);
     this.addItemToStack(newItem);

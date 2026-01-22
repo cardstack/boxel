@@ -59,12 +59,14 @@ import {
 
 import type { StackItem } from '@cardstack/host/lib/stack-item';
 import { urlForRealmLookup } from '@cardstack/host/lib/utils';
+import { getFileMeta } from '@cardstack/host/resources/file-meta-resource';
 
 import type {
   CardContext,
   CardCrudFunctions,
   CardDef,
 } from 'https://cardstack.com/base/card-api';
+import type { FileDef } from 'https://cardstack.com/base/file-api';
 
 import consumeContext from '../../helpers/consume-context';
 import ElementTracker, {
@@ -147,7 +149,10 @@ export default class OperatorModeStackItem extends Component<Signature> {
     | 'closing'
     | 'movingForward'
     | undefined = 'opening';
-  @tracked private cardResource: ReturnType<getCard> | undefined;
+  @tracked private cardResource:
+    | ReturnType<getCard>
+    | ReturnType<typeof getFileMeta>
+    | undefined;
   private contentEl: HTMLElement | undefined;
   private containerEl: HTMLElement | undefined;
   private itemEl: HTMLElement | undefined;
@@ -179,7 +184,11 @@ export default class OperatorModeStackItem extends Component<Signature> {
   }
 
   private makeCardResource = () => {
-    this.cardResource = this.getCard(this, () => this.args.item.id);
+    if (this.args.item.readType === 'file-meta') {
+      this.cardResource = getFileMeta(this, () => this.args.item.id);
+    } else {
+      this.cardResource = this.getCard(this, () => this.args.item.id);
+    }
   };
 
   private get url() {
@@ -442,7 +451,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
   }
 
   private get headerTitle() {
-    let cardTitle = this.card?.cardTitle;
+    let cardTitle = this.cardTitle;
     if (this.card && cardTitle?.startsWith('Untitled ')) {
       let strippedTitle = cardTitle.slice('Untitled '.length);
       if (strippedTitle === cardTypeDisplayName(this.card)) {
@@ -454,7 +463,13 @@ export default class OperatorModeStackItem extends Component<Signature> {
   }
 
   private get cardTitle() {
-    return this.card ? this.card.cardTitle : undefined;
+    if (!this.card) {
+      return undefined;
+    }
+    if (isCardInstance(this.card)) {
+      return this.card.cardTitle;
+    }
+    return (this.card as FileDef).name ?? undefined;
   }
 
   private get moreOptionsMenuItemsForErrorCard() {
@@ -481,7 +496,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
 
     return toMenuItems(
       this.card?.[getMenuItems]?.({
-        canEdit: this.url ? this.realm.canWrite(this.url as string) : false,
+        canEdit: this.canEdit,
         cardCrudFunctions: this.cardCrudFunctions,
         menuContext: 'interact',
         commandContext: this.args.commandContext,
@@ -491,7 +506,24 @@ export default class OperatorModeStackItem extends Component<Signature> {
 
   @cached
   private get card() {
-    return this.cardResource?.card;
+    if (!this.cardResource) {
+      return undefined;
+    }
+    if (this.args.item.readType === 'file-meta') {
+      return (this.cardResource as ReturnType<typeof getFileMeta>).file;
+    }
+    return (this.cardResource as ReturnType<getCard>).card;
+  }
+
+  @cached
+  private get cardError() {
+    if (!this.cardResource) {
+      return undefined;
+    }
+    if (this.args.item.readType === 'file-meta') {
+      return (this.cardResource as ReturnType<typeof getFileMeta>).fileError;
+    }
+    return (this.cardResource as ReturnType<getCard>).cardError;
   }
 
   private get urlForRealmLookup() {
@@ -500,12 +532,35 @@ export default class OperatorModeStackItem extends Component<Signature> {
         `bug: cannot determine url for card realm lookup when there is no card. this is likely a template error, card must be present before this is invoked in template`,
       );
     }
-    return urlForRealmLookup(this.card);
+    if (isCardInstance(this.card)) {
+      return urlForRealmLookup(this.card);
+    }
+    if (!this.card.id) {
+      throw new Error(
+        `bug: cannot determine url for file realm lookup when there is no id`,
+      );
+    }
+    return this.card.id;
   }
 
-  @cached
-  private get cardError() {
-    return this.cardResource?.cardError;
+  private get isLoaded() {
+    return Boolean(this.cardResource?.isLoaded);
+  }
+
+  private get autoSaveState() {
+    if (this.args.item.readType === 'file-meta') {
+      return undefined;
+    }
+    return (this.cardResource as ReturnType<getCard> | undefined)
+      ?.autoSaveState;
+  }
+
+  private get isSaving() {
+    return Boolean(this.autoSaveState?.isSaving);
+  }
+
+  private get lastSavedMessage() {
+    return this.autoSaveState?.lastSavedErrorMsg;
   }
 
   private get isWideFormat() {
@@ -652,6 +707,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
   private get canEdit() {
     return (
       this.card &&
+      isCardInstance(this.card) &&
       this.card[realmURL] &&
       !this.isBuried &&
       !this.isEditing &&
@@ -739,7 +795,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
         }}
         {{ContentElement onSetup=this.setupContainerEl}}
       >
-        {{#if (not this.cardResource.isLoaded)}}
+        {{#if (not this.isLoaded)}}
           <div class='loading' data-test-stack-item-loading-card>
             <LoadingIndicator @color='var(--boxel-dark)' />
             <span class='loading__message'>Loading card...</span>
@@ -785,9 +841,9 @@ export default class OperatorModeStackItem extends Component<Signature> {
               @cardTypeDisplayName={{this.headerType}}
               @cardTypeIcon={{cardTypeIcon this.card}}
               @cardTitle={{this.headerTitle}}
-              @isSaving={{this.cardResource.autoSaveState.isSaving}}
+              @isSaving={{this.isSaving}}
               @isTopCard={{this.isTopCard}}
-              @lastSavedMessage={{this.cardResource.autoSaveState.lastSavedErrorMsg}}
+              @lastSavedMessage={{this.lastSavedMessage}}
               @moreOptionsMenuItems={{this.moreOptionsMenuItems}}
               @realmInfo={{realmInfo}}
               @utilityMenu={{this.utilityMenu}}

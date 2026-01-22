@@ -81,6 +81,7 @@ export class CardIdCard extends CardDef {
 export class ShowCardInput extends CardDef {
   @field cardId = contains(StringField);
   @field format = contains(StringField);
+  @field readType = contains(StringField);
 }
 
 export class PatchThemeInput extends CardDef {

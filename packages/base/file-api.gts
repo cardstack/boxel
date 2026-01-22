@@ -200,6 +200,7 @@ export function getDefaultFileMenuItems(
         new OpenInInteractModeCommand(params.commandContext).execute({
           cardId: fileDefInstanceId,
           format: params.format === 'edit' ? 'edit' : 'isolated',
+          readType: 'file-meta',
         });
       },
       icon: Eye,

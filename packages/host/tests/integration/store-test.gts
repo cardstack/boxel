@@ -1180,6 +1180,41 @@ module('Integration | Store', function (hooks) {
     );
   });
 
+  test('explicitly loads file-meta via store reads', async function (assert) {
+    await testRealm.write('hero.png', 'mock hero image');
+
+    let fileInstance = await storeService.get(
+      `${testRealmURL}hero.png`,
+      'file-meta',
+    );
+
+    assert.ok(fileInstance, 'file meta instance is returned');
+    assert.strictEqual(
+      (fileInstance as any).id,
+      `${testRealmURL}hero.png`,
+      'file meta uses file url as id',
+    );
+    assert.strictEqual(
+      (fileInstance as any).name,
+      'hero.png',
+      'file meta uses name from file meta',
+    );
+    assert.ok(
+      (fileInstance as any).constructor?.isFileDef,
+      'file meta instance is a FileDef',
+    );
+
+    let peekedFile = storeService.peek(`${testRealmURL}hero.png`, 'file-meta');
+    assert.strictEqual(peekedFile, fileInstance, 'peek returns cached file');
+
+    let cardPeek = storeService.peek(`${testRealmURL}hero.png`);
+    assert.strictEqual(
+      cardPeek,
+      undefined,
+      'default peek does not return file meta',
+    );
+  });
+
   test<TestContextWithSave>('can skip waiting for the save when patching an instance', async function (assert) {
     assert.expect(4);
 

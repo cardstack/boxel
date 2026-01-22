@@ -1,6 +1,6 @@
 import { service } from '@ember/service';
 
-import type { Format } from '@cardstack/runtime-common';
+import type { Format, StoreReadType } from '@cardstack/runtime-common';
 
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
@@ -31,6 +31,14 @@ export default class OpenInInteractModeCommand extends HostBaseCommand<
   ): Promise<undefined> {
     let { operatorModeStateService } = this;
     let format = (input.format ?? 'isolated') as Format;
-    operatorModeStateService.openCardInInteractMode(input.cardId, format);
+    let readType =
+      input.readType === 'file-meta'
+        ? ('file-meta' as StoreReadType)
+        : undefined;
+    operatorModeStateService.openCardInInteractMode(
+      input.cardId,
+      format,
+      readType,
+    );
   }
 }

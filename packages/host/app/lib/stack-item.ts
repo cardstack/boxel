@@ -1,4 +1,4 @@
-import type { Deferred } from '@cardstack/runtime-common';
+import type { Deferred, StoreReadType } from '@cardstack/runtime-common';
 
 import type { Format } from 'https://cardstack.com/base/card-api';
 
@@ -8,6 +8,7 @@ interface Args {
   stackIndex: number;
   id: string;
   closeAfterSaving?: boolean;
+  readType?: StoreReadType;
   relationshipContext?: {
     fieldName?: string;
     fieldType?: 'linksTo' | 'linksToMany';
@@ -19,6 +20,7 @@ export class StackItem {
   request?: Deferred<string>;
   stackIndex: number;
   closeAfterSaving?: boolean;
+  readType?: StoreReadType;
   #id: string;
   relationshipContext?:
     | {
@@ -34,6 +36,7 @@ export class StackItem {
       stackIndex,
       id,
       closeAfterSaving,
+      readType,
       relationshipContext,
     } = args;
 
@@ -42,6 +45,7 @@ export class StackItem {
     this.request = request;
     this.stackIndex = stackIndex;
     this.closeAfterSaving = closeAfterSaving;
+    this.readType = readType;
     this.relationshipContext = relationshipContext;
   }
 
@@ -57,6 +61,7 @@ export class StackItem {
       closeAfterSaving,
       stackIndex,
       relationshipContext,
+      readType,
     } = this;
     return new StackItem({
       format,
@@ -65,6 +70,7 @@ export class StackItem {
       id,
       stackIndex,
       relationshipContext,
+      readType,
       ...args,
     });
   }
