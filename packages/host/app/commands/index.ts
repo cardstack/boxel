@@ -42,6 +42,7 @@ import * as ReadCardForAiAssistantCommandModule from './read-card-for-ai-assista
 import * as ReadFileForAiAssistantCommandModule from './read-file-for-ai-assistant';
 import * as ReadSourceCommandModule from './read-source';
 import * as ReadTextFileCommandModule from './read-text-file';
+import * as RegisterBotCommandModule from './register-bot';
 import * as SaveCardCommandModule from './save-card';
 import * as SearchAndChooseCommandModule from './search-and-choose';
 import * as SearchCardsCommandModule from './search-cards';
@@ -54,6 +55,7 @@ import * as ShowCardCommandModule from './show-card';
 import * as SummarizeSessionCommandModule from './summarize-session';
 import * as SwitchSubmodeCommandModule from './switch-submode';
 import * as TransformCardsCommandModule from './transform-cards';
+import * as UnregisterBotCommandModule from './unregister-bot';
 import * as UpdateCodePathWithSelectionCommandModule from './update-code-path-with-selection';
 import * as UpdatePlaygroundSelectionCommandModule from './update-playground-selection';
 import * as UpdateRoomSkillsCommandModule from './update-room-skills';
@@ -196,6 +198,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
     ReadTextFileCommandModule,
   );
   virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/register-bot',
+    RegisterBotCommandModule,
+  );
+  virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/save-card',
     SaveCardCommandModule,
   );
@@ -234,6 +240,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/transform-cards',
     TransformCardsCommandModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/unregister-bot',
+    UnregisterBotCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/update-code-path-with-selection',
@@ -346,6 +356,7 @@ export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
   ReadFileForAiAssistantCommandModule.default,
   ReadSourceCommandModule.default,
   ReadTextFileCommandModule.default,
+  RegisterBotCommandModule.default,
   SaveCardCommandModule.default,
   SearchAndChooseCommandModule.default,
   SearchCardsCommandModule.SearchCardsByQueryCommand,
@@ -359,6 +370,7 @@ export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
   SummarizeSessionCommandModule.default,
   SwitchSubmodeCommandModule.default,
   TransformCardsCommandModule.default,
+  UnregisterBotCommandModule.default,
   CheckCorrectnessCommandModule.default,
   UpdateCodePathWithSelectionCommandModule.default,
   UpdatePlaygroundSelectionCommandModule.default,
