@@ -10,7 +10,7 @@ const Loading: TemplateOnlyComponent = <template>
       <div class='loading-indicator'>
         <LoadingIndicator @color='#00FFBA' />
       </div>
-      <div class='loading-text'>Loading...</div>
+      <div class='loading-text'>Loading…</div>
     </div>
   </div>
 
