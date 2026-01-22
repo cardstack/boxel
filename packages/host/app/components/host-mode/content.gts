@@ -107,6 +107,7 @@ export default class HostModeContent extends Component<Signature> {
       <HostModeCard
         @cardId={{@primaryCardId}}
         @displayBoundaries={{not this.isWideCard}}
+        @isPrimary={{true}}
         @openInteractSubmode={{@openInteractSubmode}}
         class='current-card'
       />
@@ -125,7 +126,6 @@ export default class HostModeContent extends Component<Signature> {
         align-items: center;
         justify-content: center;
         width: 100%;
-        max-height: 100vh;
         overflow: hidden;
         padding: var(--boxel-sp);
         position: relative;

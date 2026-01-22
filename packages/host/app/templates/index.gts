@@ -232,7 +232,6 @@ export class IndexComponent extends Component<IndexComponentComponentSignature> 
           @stackItemCardIds={{this.hostModeStateService.stackItems}}
           @removeCardFromStack={{this.removeCardFromStack}}
           @viewCard={{this.viewCard}}
-          class='host-mode-content'
           {{this.removeIsolatedMarkup}}
         />
       {{/if}}
@@ -240,15 +239,6 @@ export class IndexComponent extends Component<IndexComponentComponentSignature> 
       {{pageTitle this.operatorModeStateService.title}}
       <OperatorModeContainer @onClose={{this.closeOperatorMode}} />
     {{/if}}
-
-    <style scoped>
-      .host-mode-content {
-        height: 100%;
-        position: fixed;
-        top: 0;
-        left: 0;
-      }
-    </style>
   </template>
 }
 
