@@ -17,7 +17,6 @@ NODE_NO_WARNINGS=1 \
   REALM_SERVER_MATRIX_USERNAME=realm_server \
   PUBLISHED_REALM_BOXEL_SPACE_DOMAIN='staging.boxel.dev' \
   PUBLISHED_REALM_BOXEL_SITE_DOMAIN='staging.boxel.build' \
-  LOG_LEVELS='realm-server:head=debug,realm-server:isolated=debug' \
   ts-node \
   --transpileOnly main \
   --port=3000 \
