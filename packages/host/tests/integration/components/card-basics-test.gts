@@ -701,7 +701,7 @@ module('Integration | card-basics', function (hooks) {
 
       test('linksTo FileDef renders delegated view from realm file meta', async function (assert) {
         class Gallery extends CardDef {
-          @field hero = linksTo(FileDef as unknown as typeof CardDef);
+          @field hero = linksTo(FileDef);
           static fitted = class Fitted extends Component<typeof this> {
             <template>
               <div data-test-gallery-fitted>
