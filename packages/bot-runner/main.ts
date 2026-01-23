@@ -13,9 +13,8 @@ const botPassword = process.env.BOT_RUNNER_PASSWORD || 'password';
 
 interface BotRegistration {
   id: string;
-  name: string | null;
   created_at: string;
-  matrix_user_id: string;
+  username: string;
 }
 
 (async () => {
@@ -53,13 +52,12 @@ interface BotRegistration {
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);
 
-  async function getRegistrationsForUser(matrixUserId: string) {
+  async function getRegistrationsForUser(username: string) {
     let rows = await query(dbAdapter, [
-      `SELECT br.id, br.name, br.created_at, u.matrix_user_id`,
+      `SELECT br.id, br.username, br.created_at`,
       `FROM bot_registrations br`,
-      `JOIN users u ON u.id = br.user_id`,
-      `WHERE u.matrix_user_id = `,
-      param(matrixUserId),
+      `WHERE br.username = `,
+      param(username),
     ]);
     return rows as BotRegistration[];
   }
@@ -91,19 +89,19 @@ interface BotRegistration {
       return;
     }
 
-    let senderMatrixUserId = event.getSender();
-    if (!senderMatrixUserId || senderMatrixUserId === auth.user_id) {
+    let senderUsername = event.getSender();
+    if (!senderUsername || senderUsername === auth.user_id) {
       return;
     }
     let registrations: Awaited<ReturnType<typeof getRegistrationsForUser>>;
     try {
-      registrations = await getRegistrationsForUser(senderMatrixUserId);
+      registrations = await getRegistrationsForUser(senderUsername);
     } catch (error) {
       log.error('failed to load bot registrations', error);
       return;
     }
     if (!registrations.length) {
-      log.info('no registrations found for sender %s', senderMatrixUserId);
+      log.info('no registrations found for sender %s', senderUsername);
       return;
     }
     for (let registration of registrations) {

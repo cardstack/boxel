@@ -35,7 +35,7 @@ module('Integration | commands | bot-registration', function (hooks) {
 
   let botRegistrations: Array<{
     id: string;
-    userId: string;
+    username: string;
     matrixUserId: string;
     createdAt: string;
   }>;
@@ -65,7 +65,7 @@ module('Integration | commands | bot-registration', function (hooks) {
         botRegistrations = [
           {
             id: 'bot-reg-1',
-            userId: 'user-1',
+            username: body.data.attributes.matrixUserId,
             matrixUserId: body.data.attributes.matrixUserId,
             createdAt: '2025-01-01T00:00:00Z',
           },
@@ -76,7 +76,7 @@ module('Integration | commands | bot-registration', function (hooks) {
               type: 'bot-registration',
               id: 'bot-reg-1',
               attributes: {
-                userId: 'user-1',
+                username: body.data.attributes.matrixUserId,
                 matrixUserId: body.data.attributes.matrixUserId,
                 createdAt: '2025-01-01T00:00:00Z',
               },
@@ -98,7 +98,7 @@ module('Integration | commands | bot-registration', function (hooks) {
               type: 'bot-registration',
               id: registration.id,
               attributes: {
-                userId: registration.userId,
+                username: registration.username,
                 matrixUserId: registration.matrixUserId,
                 createdAt: registration.createdAt,
               },

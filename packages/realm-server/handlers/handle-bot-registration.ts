@@ -13,7 +13,6 @@ import {
   sendResponseForForbiddenRequest,
   sendResponseForNotFound,
   sendResponseForSystemError,
-  sendResponseForError,
   setContextResponse,
 } from '../middleware';
 import type { RealmServerTokenClaim } from '../utils/jwt';
@@ -24,7 +23,6 @@ interface BotRegistrationJSON {
     type: 'bot-registration';
     attributes: {
       matrixUserId: string;
-      name?: string;
     };
   };
 }
@@ -43,8 +41,7 @@ export function handleBotRegistrationRequest({
     }
 
     let { user: createdBy } = token;
-    let user = await getUserByMatrixUserId(dbAdapter, createdBy);
-    if (!user) {
+    if (!(await getUserByMatrixUserId(dbAdapter, createdBy))) {
       await sendResponseForNotFound(ctxt, 'user is not found');
       return;
     }
@@ -85,95 +82,25 @@ export function handleBotRegistrationRequest({
       return;
     }
 
-    let name =
-      typeof json.data.attributes.name === 'string'
-        ? json.data.attributes.name.trim()
-        : undefined;
-    if (name !== undefined && !name) {
-      await sendResponseForBadRequest(ctxt, 'name must not be empty');
-      return;
-    }
-
-    if (name !== undefined) {
-      let existingByName = await query(dbAdapter, [
-        `SELECT id FROM bot_registrations WHERE user_id = `,
-        param(user.id),
-        ` AND name = `,
-        param(name),
-        ` LIMIT 1`,
-      ]);
-      if (existingByName.length) {
-        await sendResponseForError(
-          ctxt,
-          409,
-          'Conflict',
-          'bot registration name already exists for user',
-        );
-        return;
-      }
-    } else {
-      let existingDefault = await query(dbAdapter, [
-        `SELECT id, user_id, name, created_at FROM bot_registrations WHERE user_id = `,
-        param(user.id),
-        ` AND name IS NULL LIMIT 1`,
-      ]);
-      if (existingDefault.length) {
-        await setContextResponse(
-          ctxt,
-          new Response(
-            JSON.stringify(
-              {
-                data: {
-                  type: 'bot-registration',
-                  id: existingDefault[0].id,
-                  attributes: {
-                    userId: existingDefault[0].user_id,
-                    matrixUserId,
-                    name: existingDefault[0].name,
-                    createdAt: existingDefault[0].created_at,
-                  },
-                },
-              },
-              null,
-              2,
-            ),
-            {
-              status: 200,
-              headers: {
-                'content-type': SupportedMimeType.JSONAPI,
-              },
-            },
-          ),
-        );
-        return;
-      }
-    }
-
     let rows = await query(dbAdapter, [
       `INSERT INTO bot_registrations`,
-      `(id, user_id, name, created_at) VALUES (`,
+      `(id, username, created_at) VALUES (`,
       param(uuidv4()),
       `,`,
-      param(user.id),
-      `,`,
-      param(name ?? null),
+      param(matrixUserId),
       `,`,
       dbExpression({ pg: 'NOW()', sqlite: 'CURRENT_TIMESTAMP' }),
-      `) ON CONFLICT (user_id, name) DO NOTHING `,
-      `RETURNING id, user_id, name, created_at`,
+      `) `,
+      `RETURNING id, username, created_at`,
     ]);
 
     let row = rows[0];
-    let status = row ? 201 : 200;
     if (!row) {
-      let existing = await query(dbAdapter, [
-        `SELECT id, user_id, name, created_at FROM bot_registrations WHERE user_id = `,
-        param(user.id),
-        name === undefined ? ` AND name IS NULL` : ` AND name = `,
-        name === undefined ? `` : param(name),
-        ` LIMIT 1`,
-      ]);
-      row = existing[0];
+      await sendResponseForSystemError(
+        ctxt,
+        'failed to register bot',
+      );
+      return;
     }
     await setContextResponse(
       ctxt,
@@ -184,9 +111,8 @@ export function handleBotRegistrationRequest({
               type: 'bot-registration',
               id: row.id,
               attributes: {
-                userId: row.user_id,
+                username: row.username,
                 matrixUserId,
-                name: row.name,
                 createdAt: row.created_at,
               },
             },
@@ -195,7 +121,7 @@ export function handleBotRegistrationRequest({
           2,
         ),
         {
-          status,
+          status: 201,
           headers: {
             'content-type': SupportedMimeType.JSONAPI,
           },
@@ -219,18 +145,16 @@ export function handleBotRegistrationsRequest({
     }
 
     let { user: matrixUserId } = token;
-    let user = await getUserByMatrixUserId(dbAdapter, matrixUserId);
-    if (!user) {
+    if (!(await getUserByMatrixUserId(dbAdapter, matrixUserId))) {
       await sendResponseForNotFound(ctxt, 'user is not found');
       return;
     }
 
     let rows = await query(dbAdapter, [
-      `SELECT br.id, br.user_id, br.name, br.created_at, u.matrix_user_id`,
+      `SELECT br.id, br.username, br.created_at`,
       `FROM bot_registrations br`,
-      `JOIN users u ON u.id = br.user_id`,
-      `WHERE br.user_id = `,
-      param(user.id),
+      `WHERE br.username = `,
+      param(matrixUserId),
       `ORDER BY br.created_at ASC`,
     ]);
 
@@ -243,9 +167,8 @@ export function handleBotRegistrationsRequest({
               type: 'bot-registration',
               id: row.id,
               attributes: {
-                userId: row.user_id,
-                matrixUserId: row.matrix_user_id,
-                name: row.name,
+                username: row.username,
+                matrixUserId,
                 createdAt: row.created_at,
               },
             })),
@@ -278,8 +201,7 @@ export function handleBotUnregistrationRequest({
     }
 
     let { user: requestingUserId } = token;
-    let user = await getUserByMatrixUserId(dbAdapter, requestingUserId);
-    if (!user) {
+    if (!(await getUserByMatrixUserId(dbAdapter, requestingUserId))) {
       await sendResponseForNotFound(ctxt, 'user is not found');
       return;
     }
@@ -304,12 +226,12 @@ export function handleBotUnregistrationRequest({
     }
 
     let registrationRows = await query(dbAdapter, [
-      `SELECT user_id FROM bot_registrations WHERE id = `,
+      `SELECT username FROM bot_registrations WHERE id = `,
       param(botRegistrationId),
       ` LIMIT 1`,
     ]);
-    let registrationUserId = registrationRows[0]?.user_id;
-    if (registrationUserId && registrationUserId !== user.id) {
+    let registrationUsername = registrationRows[0]?.username;
+    if (registrationUsername && registrationUsername !== requestingUserId) {
       await sendResponseForForbiddenRequest(
         ctxt,
         'bot registration belongs to a different user',
@@ -346,11 +268,5 @@ function assertIsBotRegistrationJSON(
   }
   if (typeof json.data.attributes.matrixUserId !== 'string') {
     throw new Error(`data.attributes.matrixUserId must be a string`);
-  }
-  if (
-    'name' in json.data.attributes &&
-    typeof json.data.attributes.name !== 'string'
-  ) {
-    throw new Error(`data.attributes.name must be a string`);
   }
 }

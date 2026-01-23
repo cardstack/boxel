@@ -72,48 +72,26 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         );
         assert.ok(response.body.data.id, 'response includes id');
         assert.ok(
-          response.body.data.attributes.userId,
-          'response includes userId',
+          response.body.data.attributes.username,
+          'response includes username',
         );
         assert.ok(
           response.body.data.attributes.createdAt,
           'response includes createdAt',
         );
 
-        let updateResponse = await context.request2
-          .post('/_bot-registration')
-          .set('Accept', 'application/vnd.api+json')
-          .set('Content-Type', 'application/vnd.api+json')
-          .set(
-            'Authorization',
-            `Bearer ${createRealmServerJWT(
-              { user: matrixUserId, sessionRoom: 'session-room-test' },
-              realmSecretSeed,
-            )}`,
-          )
-          .send({
-            data: {
-              type: 'bot-registration',
-              attributes: {
-                matrixUserId,
-              },
-            },
-          });
-
-        assert.strictEqual(updateResponse.status, 200, 'HTTP 200 status');
-
         let rows = await context.dbAdapter.execute(
-          `SELECT id, user_id, created_at FROM bot_registrations`,
+          `SELECT id, username, created_at FROM bot_registrations`,
         );
         assert.strictEqual(rows.length, 1, 'one bot registration is persisted');
         assert.ok(rows[0].id, 'id is persisted');
-        assert.ok(rows[0].user_id, 'user_id is persisted');
+        assert.ok(rows[0].username, 'username is persisted');
         assert.ok(rows[0].created_at, 'created_at is persisted');
       });
 
       test('can register more than one bot for a single user', async function (assert) {
         let matrixUserId = '@user:localhost';
-        let user = await insertUser(
+        await insertUser(
           context.dbAdapter,
           matrixUserId,
           'cus_123',
@@ -136,129 +114,6 @@ module(`server-endpoints/${basename(__filename)}`, function () {
               type: 'bot-registration',
               attributes: {
                 matrixUserId,
-                name: 'assistant',
-              },
-            },
-          });
-
-        let response = await context.request2
-          .post('/_bot-registration')
-          .set('Accept', 'application/vnd.api+json')
-          .set('Content-Type', 'application/vnd.api+json')
-          .set(
-            'Authorization',
-            `Bearer ${createRealmServerJWT(
-              { user: matrixUserId, sessionRoom: 'session-room-test' },
-              realmSecretSeed,
-            )}`,
-          )
-          .send({
-            data: {
-              type: 'bot-registration',
-              attributes: {
-                matrixUserId,
-                name: 'helper',
-              },
-            },
-          });
-
-        assert.strictEqual(firstResponse.status, 201, 'HTTP 201 status');
-        assert.strictEqual(response.status, 201, 'HTTP 201 status');
-
-        let rows = await query(context.dbAdapter, [
-          `SELECT id FROM bot_registrations WHERE user_id = `,
-          param(user.id),
-        ]);
-        assert.strictEqual(rows.length, 2, 'two bot registrations exist');
-      });
-
-      test('rejects duplicate bot name for the same user', async function (assert) {
-        let matrixUserId = '@user:localhost';
-        await insertUser(
-          context.dbAdapter,
-          matrixUserId,
-          'cus_123',
-          'user@example.com',
-        );
-
-        await context.request2
-          .post('/_bot-registration')
-          .set('Accept', 'application/vnd.api+json')
-          .set('Content-Type', 'application/vnd.api+json')
-          .set(
-            'Authorization',
-            `Bearer ${createRealmServerJWT(
-              { user: matrixUserId, sessionRoom: 'session-room-test' },
-              realmSecretSeed,
-            )}`,
-          )
-          .send({
-            data: {
-              type: 'bot-registration',
-              attributes: {
-                matrixUserId,
-                name: 'assistant',
-              },
-            },
-          });
-
-        let response = await context.request2
-          .post('/_bot-registration')
-          .set('Accept', 'application/vnd.api+json')
-          .set('Content-Type', 'application/vnd.api+json')
-          .set(
-            'Authorization',
-            `Bearer ${createRealmServerJWT(
-              { user: matrixUserId, sessionRoom: 'session-room-test' },
-              realmSecretSeed,
-            )}`,
-          )
-          .send({
-            data: {
-              type: 'bot-registration',
-              attributes: {
-                matrixUserId,
-                name: 'assistant',
-              },
-            },
-          });
-
-        assert.strictEqual(response.status, 409, 'HTTP 409 status');
-      });
-
-      test('allows the same bot name for different users', async function (assert) {
-        let matrixUserId = '@user:localhost';
-        let otherMatrixUserId = '@other-user:localhost';
-        await insertUser(
-          context.dbAdapter,
-          matrixUserId,
-          'cus_123',
-          'user@example.com',
-        );
-        await insertUser(
-          context.dbAdapter,
-          otherMatrixUserId,
-          'cus_124',
-          'other@example.com',
-        );
-
-        let firstResponse = await context.request2
-          .post('/_bot-registration')
-          .set('Accept', 'application/vnd.api+json')
-          .set('Content-Type', 'application/vnd.api+json')
-          .set(
-            'Authorization',
-            `Bearer ${createRealmServerJWT(
-              { user: matrixUserId, sessionRoom: 'session-room-test' },
-              realmSecretSeed,
-            )}`,
-          )
-          .send({
-            data: {
-              type: 'bot-registration',
-              attributes: {
-                matrixUserId,
-                name: 'assistant',
               },
             },
           });
@@ -270,7 +125,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           .set(
             'Authorization',
             `Bearer ${createRealmServerJWT(
-              { user: otherMatrixUserId, sessionRoom: 'session-room-test' },
+              { user: matrixUserId, sessionRoom: 'session-room-test' },
               realmSecretSeed,
             )}`,
           )
@@ -278,14 +133,19 @@ module(`server-endpoints/${basename(__filename)}`, function () {
             data: {
               type: 'bot-registration',
               attributes: {
-                matrixUserId: otherMatrixUserId,
-                name: 'assistant',
+                matrixUserId,
               },
             },
           });
 
         assert.strictEqual(firstResponse.status, 201, 'HTTP 201 status');
         assert.strictEqual(secondResponse.status, 201, 'HTTP 201 status');
+
+        let rows = await query(context.dbAdapter, [
+          `SELECT id FROM bot_registrations WHERE username = `,
+          param(matrixUserId),
+        ]);
+        assert.strictEqual(rows.length, 2, 'two bot registrations exist');
       });
 
       test('rejects registration for a different matrix user', async function (assert) {
@@ -464,22 +324,22 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         assert.strictEqual(response.status, 403, 'HTTP 403 status');
 
         let rows = await context.dbAdapter.execute(
-          `SELECT user_id FROM bot_registrations`,
+          `SELECT username FROM bot_registrations`,
         );
         assert.strictEqual(rows.length, 1, 'bot registration preserved');
-        assert.ok(rows[0].user_id, 'user_id is preserved');
+        assert.ok(rows[0].username, 'username is preserved');
       });
 
       test('lists bot registrations for the authenticated user only', async function (assert) {
         let matrixUserId = '@user:localhost';
         let otherMatrixUserId = '@other-user:localhost';
-        let user = await insertUser(
+        await insertUser(
           context.dbAdapter,
           matrixUserId,
           'cus_123',
           'user@example.com',
         );
-        let otherUser = await insertUser(
+        await insertUser(
           context.dbAdapter,
           otherMatrixUserId,
           'cus_124',
@@ -487,19 +347,19 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         );
 
         await query(context.dbAdapter, [
-          `INSERT INTO bot_registrations (id, user_id, created_at) VALUES (`,
+          `INSERT INTO bot_registrations (id, username, created_at) VALUES (`,
           param(uuidv4()),
           `,`,
-          param(user.id),
+          param(matrixUserId),
           `,`,
           `CURRENT_TIMESTAMP`,
           `)`,
         ]);
         await query(context.dbAdapter, [
-          `INSERT INTO bot_registrations (id, user_id, created_at) VALUES (`,
+          `INSERT INTO bot_registrations (id, username, created_at) VALUES (`,
           param(uuidv4()),
           `,`,
-          param(otherUser.id),
+          param(otherMatrixUserId),
           `,`,
           `CURRENT_TIMESTAMP`,
           `)`,

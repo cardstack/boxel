@@ -33,7 +33,6 @@ export default class RegisterBotCommand extends HostBaseCommand<
 
     let registration = (await this.realmServer.registerBot(
       input.matrixUserId,
-      input.name,
     )) as RegisterBotResult;
 
     return new RegisterBotResult({
