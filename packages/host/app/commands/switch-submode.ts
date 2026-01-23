@@ -6,10 +6,10 @@ import { Submodes } from '../components/submode-switcher';
 
 import HostBaseCommand from '../lib/host-base-command';
 
+import WriteTextFileCommand from './write-text-file';
+
 import type OperatorModeStateService from '../services/operator-mode-state-service';
 import type StoreService from '../services/store';
-
-import WriteTextFileCommand from './write-text-file';
 
 export default class SwitchSubmodeCommand extends HostBaseCommand<
   typeof BaseCommandModule.SwitchSubmodeInput,
