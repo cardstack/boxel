@@ -96,10 +96,7 @@ export function handleBotRegistrationRequest({
 
     let row = rows[0];
     if (!row) {
-      await sendResponseForSystemError(
-        ctxt,
-        'failed to register bot',
-      );
+      await sendResponseForSystemError(ctxt, 'failed to register bot');
       return;
     }
     await setContextResponse(
