@@ -809,13 +809,7 @@ async function toResultMessages(
         } else {
           content = `Tool call ${status == 'applied' ? 'executed' : status}.\n`;
         }
-        let switchSubmodeInstruction =
-          getSwitchSubmodeInstruction(commandResult);
-        if (switchSubmodeInstruction) {
-          content = [content, switchSubmodeInstruction]
-            .filter(Boolean)
-            .join('\n\n');
-        }
+
         let attachments = await buildAttachmentsMessagePart(
           client,
           commandResult,
@@ -848,46 +842,6 @@ async function toResultMessages(
       .filter((message): message is OpenAIPromptMessage => Boolean(message)) ??
     [];
   return [...toolMessages, ...followUpMessages];
-}
-
-function getSwitchSubmodeInstruction(
-  commandResult: CommandResultEvent,
-): string | undefined {
-  if (
-    commandResult.content.msgtype !==
-    APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE
-  ) {
-    return undefined;
-  }
-
-  let cardPayload = commandResult.content.data.card;
-  if (!cardPayload) {
-    return undefined;
-  }
-
-  let parsed: { data?: any } | undefined;
-  let cardContent = cardPayload.content ?? cardPayload;
-  try {
-    parsed =
-      typeof cardContent === 'string' ? JSON.parse(cardContent) : cardContent;
-  } catch {
-    return undefined;
-  }
-
-  let data = parsed?.data;
-  if (data?.meta?.adoptsFrom?.name !== 'SwitchSubmodeResult') {
-    return undefined;
-  }
-
-  let { codePath, requestedCodePath } = data.attributes ?? {};
-  if (typeof codePath !== 'string' || typeof requestedCodePath !== 'string') {
-    return undefined;
-  }
-  if (codePath === requestedCodePath) {
-    return undefined;
-  }
-
-  return `Use ${codePath} for the SEARCH/REPLACE block since ${requestedCodePath} already exists.`;
 }
 
 function buildCheckCorrectnessResultContent(
