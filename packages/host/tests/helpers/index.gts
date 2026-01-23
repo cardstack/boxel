@@ -29,6 +29,7 @@ import {
   testRealmURL,
   testRealmURLToUsername,
   Worker,
+  DEFAULT_CARD_SIZE_LIMIT_BYTES,
   type DefinitionLookup,
   type LooseSingleCardDocument,
   type Prerenderer,
@@ -803,6 +804,9 @@ async function setupTestRealm({
     }),
     realmServerURL: ensureTrailingSlash(ENV.realmServerURL),
     definitionLookup,
+    cardSizeLimitBytes: Number(
+      process.env.CARD_SIZE_LIMIT_BYTES ?? DEFAULT_CARD_SIZE_LIMIT_BYTES,
+    ),
   });
 
   // Register the realm early so realm-server mock _info lookups can resolve

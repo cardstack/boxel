@@ -78,6 +78,15 @@ export default class CheckCorrectnessCommand extends HostBaseCommand<
     let errors: string[] = [];
     let lintIssues: string[] = [];
 
+    let sizeLimitError = this.cardService.getSizeLimitError(input.targetRef);
+    if (sizeLimitError) {
+      return new CorrectnessResultCard({
+        correct: false,
+        errors: [sizeLimitError.message],
+        warnings: [],
+      });
+    }
+
     if (
       targetType === 'file' &&
       (await this.isEmptyFileContent(input.targetRef))
