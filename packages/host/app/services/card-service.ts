@@ -350,7 +350,7 @@ export default class CardService extends Service {
       validateWriteSize(content, maxSizeBytes, type);
     } catch (e: any) {
       this.sizeLimitError.set(url, e);
-      throw new Error(e);
+      throw e;
     }
   }
 }
