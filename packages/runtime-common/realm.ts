@@ -615,11 +615,7 @@ export class Realm {
         this.handleAtomicOperations.bind(this),
       )
       .post('(/|/.+/)', SupportedMimeType.CardJson, this.createCard.bind(this))
-      .get(
-        '/|/.+(?<!.json)',
-        SupportedMimeType.CardJson,
-        this.getCard.bind(this),
-      )
+      .get('/.*', SupportedMimeType.CardJson, this.getCard.bind(this))
       .patch(
         '/.+(?<!.json)',
         SupportedMimeType.CardJson,
@@ -2703,7 +2699,9 @@ export class Realm {
     request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
-    let localPath = this.paths.local(new URL(request.url));
+    let requestedLocalPath = this.paths.local(new URL(request.url));
+    let requestedHadJsonExtension = requestedLocalPath.endsWith('.json');
+    let localPath = requestedLocalPath;
     if (localPath === '') {
       localPath = 'index';
     }
@@ -2748,6 +2746,16 @@ export class Realm {
       card.data.links = { self: url.href };
 
       let foundPath = this.paths.local(url);
+      if (requestedHadJsonExtension) {
+        return createResponse({
+          requestContext,
+          body: null,
+          init: {
+            status: 302,
+            headers: { Location: `${new URL(this.url).pathname}${foundPath}` },
+          },
+        });
+      }
       if (localPath !== foundPath) {
         return createResponse({
           requestContext,
