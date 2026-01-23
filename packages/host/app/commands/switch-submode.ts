@@ -6,18 +6,16 @@ import { Submodes } from '../components/submode-switcher';
 
 import HostBaseCommand from '../lib/host-base-command';
 
-import { findNonConflictingFilename } from '../utils/file-name';
-
-import type CardService from '../services/card-service';
 import type OperatorModeStateService from '../services/operator-mode-state-service';
 import type StoreService from '../services/store';
+
+import WriteTextFileCommand from './write-text-file';
 
 export default class SwitchSubmodeCommand extends HostBaseCommand<
   typeof BaseCommandModule.SwitchSubmodeInput,
   typeof BaseCommandModule.SwitchSubmodeResult | undefined
 > {
   @service declare private operatorModeStateService: OperatorModeStateService;
-  @service declare private cardService: CardService;
   @service declare private store: StoreService;
 
   static actionVerb = 'Switch';
@@ -68,30 +66,24 @@ export default class SwitchSubmodeCommand extends HostBaseCommand<
           input.createFile &&
           currentSubmode === Submodes.Interact
         ) {
-          let { status, content } = await this.cardService.getSource(codeUrl);
-          if (status === 404) {
-            await this.cardService.saveSource(codeUrl, '', 'create-file');
-          } else if (status === 200) {
-            if (content.trim() !== '') {
-              let nonConflictingUrl = await findNonConflictingFilename(
-                codeUrl.href,
-                (candidateUrl) => this.fileExists(candidateUrl),
-              );
-              let newCodeUrl = new URL(nonConflictingUrl);
-              await this.cardService.saveSource(newCodeUrl, '', 'create-file');
-              finalCodeUrl = newCodeUrl;
+          let writeTextFileCommand = new WriteTextFileCommand(
+            this.commandContext,
+          );
+          let writeResult = await writeTextFileCommand.execute({
+            path: codeUrl.href,
+            content: '',
+            useNonConflictingFilename: true,
+          });
+          if (writeResult.fileUrl !== codeUrl.href) {
+            let newCodeUrl = new URL(writeResult.fileUrl);
+            finalCodeUrl = newCodeUrl;
 
-              let commandModule = await this.loadCommandModule();
-              const { SwitchSubmodeResult } = commandModule;
-              resultCard = new SwitchSubmodeResult({
-                codePath: newCodeUrl.href,
-                requestedCodePath: codeUrl.href,
-              });
-            }
-          } else {
-            throw new Error(
-              `Error checking if file exists at ${codeUrl}: ${status}`,
-            );
+            let commandModule = await this.loadCommandModule();
+            const { SwitchSubmodeResult } = commandModule;
+            resultCard = new SwitchSubmodeResult({
+              codePath: newCodeUrl.href,
+              requestedCodePath: codeUrl.href,
+            });
           }
         }
         await this.operatorModeStateService.updateCodePath(finalCodeUrl);
@@ -107,10 +99,5 @@ export default class SwitchSubmodeCommand extends HostBaseCommand<
     }
 
     return resultCard;
-  }
-
-  private async fileExists(fileUrl: string): Promise<boolean> {
-    let getSourceResult = await this.cardService.getSource(new URL(fileUrl));
-    return getSourceResult.status !== 404;
   }
 }

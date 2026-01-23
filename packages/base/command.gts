@@ -130,6 +130,7 @@ export class WriteTextFileInput extends CardDef {
   @field realm = contains(StringField);
   @field path = contains(StringField);
   @field overwrite = contains(BooleanField);
+  @field useNonConflictingFilename = contains(BooleanField);
 }
 
 export class CreateInstanceInput extends CardDef {
