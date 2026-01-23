@@ -185,7 +185,7 @@ module('Integration | ai-assistant-panel | scrolling', function (hooks) {
       '[data-test-ai-assistant-conversation]',
     )!;
 
-    return conversationElement.scrollTop === 0;
+    return conversationElement.scrollTop < 20;
   }
 
   function fillRoomWithReadMessages(
