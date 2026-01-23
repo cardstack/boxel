@@ -97,6 +97,31 @@ function addEdit(edits, node, newText) {
   }
 }
 
+function isThisArgsObject(node) {
+  return (
+    node &&
+    node.type === 'MemberExpression' &&
+    !node.computed &&
+    node.object.type === 'ThisExpression' &&
+    node.property.type === 'Identifier' &&
+    node.property.name === 'args'
+  );
+}
+
+function isThisArgsNamed(node, name) {
+  if (
+    !node ||
+    node.type !== 'MemberExpression' ||
+    node.computed ||
+    !node.property ||
+    node.property.type !== 'Identifier'
+  ) {
+    return false;
+  }
+  if (node.property.name !== name) return false;
+  return isThisArgsObject(node.object);
+}
+
 function renameCardInfoObjectKeys(valueNode, edits) {
   if (!valueNode || valueNode.type !== 'ObjectExpression') return;
   for (let prop of valueNode.properties) {
@@ -139,6 +164,11 @@ function collectScriptEdits(source) {
         if (newName) addEdit(edits, node.property, newName);
         return;
       }
+      if (isThisArgsNamed(node.object, 'model') || isThisArgsNamed(node.object, 'field')) {
+        let newName = getOwn(renameMap, node.property.name);
+        if (newName) addEdit(edits, node.property, newName);
+        return;
+      }
 
       if (
         node.object.type === 'MemberExpression' &&
@@ -155,6 +185,11 @@ function collectScriptEdits(source) {
       if (node.computed || node.property.type !== 'Identifier') return;
 
       if (node.object.type === 'ThisExpression') {
+        let newName = getOwn(renameMap, node.property.name);
+        if (newName) addEdit(edits, node.property, newName);
+        return;
+      }
+      if (isThisArgsNamed(node.object, 'model') || isThisArgsNamed(node.object, 'field')) {
         let newName = getOwn(renameMap, node.property.name);
         if (newName) addEdit(edits, node.property, newName);
         return;
