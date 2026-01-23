@@ -44,7 +44,11 @@ import { resolve, join } from 'path';
 import merge from 'lodash/merge';
 
 import { extractSupportedMimeType } from '@cardstack/runtime-common/router';
-import { any, type Expression } from '@cardstack/runtime-common/expression';
+import {
+  addExplicitParens,
+  any,
+  type Expression,
+} from '@cardstack/runtime-common/expression';
 import * as Sentry from '@sentry/node';
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import {
@@ -471,10 +475,14 @@ export class RealmServer {
     }
 
     let rows = await query(this.dbAdapter, [
-      `SELECT head_html, realm_version FROM boxel_index_working WHERE head_html IS NOT NULL AND`,
+      `SELECT head_html, realm_version FROM boxel_index_working WHERE head_html IS NOT NULL AND type =`,
+      param('instance'),
+      'AND',
       ...this.indexCandidateExpressions(candidates),
       `UNION ALL
-       SELECT head_html, realm_version FROM boxel_index WHERE head_html IS NOT NULL AND`,
+       SELECT head_html, realm_version FROM boxel_index WHERE head_html IS NOT NULL AND type =`,
+      param('instance'),
+      'AND',
       ...this.indexCandidateExpressions(candidates),
       `ORDER BY realm_version DESC
        LIMIT 1`,
@@ -511,10 +519,14 @@ export class RealmServer {
     }
 
     let rows = await query(this.dbAdapter, [
-      `SELECT isolated_html, realm_version FROM boxel_index_working WHERE isolated_html IS NOT NULL AND`,
+      `SELECT isolated_html, realm_version FROM boxel_index_working WHERE isolated_html IS NOT NULL AND type =`,
+      param('instance'),
+      'AND',
       ...this.indexCandidateExpressions(candidates),
       `UNION ALL
-       SELECT isolated_html, realm_version FROM boxel_index WHERE isolated_html IS NOT NULL AND`,
+       SELECT isolated_html, realm_version FROM boxel_index WHERE isolated_html IS NOT NULL AND type =`,
+      param('instance'),
+      'AND',
       ...this.indexCandidateExpressions(candidates),
       `ORDER BY realm_version DESC
        LIMIT 1`,
@@ -559,17 +571,19 @@ export class RealmServer {
 
   private indexCandidateExpressions(candidates: string[]): Expression {
     // Proxying means the apparent request URL will be http but in the database it’s https
-    return any(
-      candidates.flatMap((candidate) => [
-        [
-          "regexp_replace(url, '^https?://', '') =",
-          param(this.stripProtocol(candidate)),
-        ],
-        [
-          "regexp_replace(file_alias, '^https?://', '') =",
-          param(this.stripProtocol(candidate)),
-        ],
-      ]),
+    return addExplicitParens(
+      any(
+        candidates.flatMap((candidate) => [
+          [
+            "regexp_replace(url, '^https?://', '') =",
+            param(this.stripProtocol(candidate)),
+          ],
+          [
+            "regexp_replace(file_alias, '^https?://', '') =",
+            param(this.stripProtocol(candidate)),
+          ],
+        ]),
+      ) as Expression,
     ) as Expression;
   }
 
