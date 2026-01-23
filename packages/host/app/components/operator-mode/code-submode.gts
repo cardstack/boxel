@@ -147,6 +147,7 @@ export default class CodeSubmode extends Component<Signature> {
   @tracked private loadFileError: string | null = null;
   @tracked private userHasDismissedURLError = false;
   @tracked private sourceFileIsSaving = false;
+  @tracked private writeError: string | undefined;
   @tracked private isCreateModalOpen = false;
   @tracked private itemToDelete: CardDef | URL | null | undefined;
   @tracked private cardResource: ReturnType<getCard> | undefined;
@@ -371,6 +372,11 @@ export default class CodeSubmode extends Component<Signature> {
   @action
   private onSourceFileSave(status: 'started' | 'finished') {
     this.sourceFileIsSaving = status === 'started';
+  }
+
+  @action
+  private onWriteError(message: string | undefined) {
+    this.writeError = message;
   }
 
   @action
@@ -731,6 +737,7 @@ export default class CodeSubmode extends Component<Signature> {
                       @saveSourceOnClose={{@saveSourceOnClose}}
                       @selectDeclaration={{this.selectDeclaration}}
                       @onFileSave={{this.onSourceFileSave}}
+                      @onWriteError={{this.onWriteError}}
                       @onSetup={{this.setupCodeEditor}}
                       @isReadOnly={{this.isReadOnly}}
                     />
@@ -738,6 +745,7 @@ export default class CodeSubmode extends Component<Signature> {
                     <CodeSubmodeEditorIndicator
                       @isSaving={{this.isSaving}}
                       @isReadOnly={{this.isReadOnly}}
+                      @errorMessage={{this.writeError}}
                     />
                   {{else if this.isLoading}}
                     <LoadingIndicator

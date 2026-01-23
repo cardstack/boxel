@@ -12,6 +12,7 @@ import { randomUUID } from 'crypto';
 test.describe('Host mode', () => {
   let publishedRealmURL: string;
   let publishedCardURL: string;
+  let publishedWhitePaperCardURL: string;
   let connectRouteURL: string;
   let username: string;
   let password: string;
@@ -54,6 +55,54 @@ test.describe('Host mode', () => {
     await postCardSource(
       page,
       realmURL,
+      'white-paper-card.gts',
+      `
+        import { CardDef, Component } from 'https://cardstack.com/base/card-api';
+
+        export class WhitePaperCard extends CardDef {
+          static prefersWideFormat = true;
+
+          static isolated = class Isolated extends Component<typeof this> {
+            <template>
+              <article class='white-paper' data-test-white-paper>
+                <section class='page-block'>Page 1</section>
+                <section class='page-block'>Page 2</section>
+                <section class='page-block'>Page 3</section>
+              </article>
+              <style scoped>
+                .white-paper {
+                  padding: 0;
+                  margin: 0;
+                  font-family: serif;
+                }
+
+                .page-block {
+                  height: 9.5in;
+                  padding: 0.75in;
+                  box-sizing: border-box;
+                }
+
+                @media print {
+                  .page-block {
+                    break-after: page;
+                    page-break-after: always;
+                  }
+
+                  .page-block:last-child {
+                    break-after: auto;
+                    page-break-after: auto;
+                  }
+                }
+              </style>
+            </template>
+          };
+        }
+      `,
+    );
+
+    await postCardSource(
+      page,
+      realmURL,
       'index.json',
       JSON.stringify({
         data: {
@@ -63,6 +112,24 @@ test.describe('Host mode', () => {
             adoptsFrom: {
               module: './host-mode-isolated-card.gts',
               name: 'HostModeIsolatedCard',
+            },
+          },
+        },
+      }),
+    );
+
+    await postCardSource(
+      page,
+      realmURL,
+      'white-paper.json',
+      JSON.stringify({
+        data: {
+          type: 'card',
+          attributes: {},
+          meta: {
+            adoptsFrom: {
+              module: './white-paper-card.gts',
+              name: 'WhitePaperCard',
             },
           },
         },
@@ -107,6 +174,7 @@ test.describe('Host mode', () => {
     );
 
     publishedCardURL = `${publishedRealmURL}index.json`;
+    publishedWhitePaperCardURL = `${publishedRealmURL}white-paper.json`;
     connectRouteURL = `http://localhost:4205/connect/${encodeURIComponent(
       publishedRealmURL,
     )}`;
@@ -133,9 +201,25 @@ test.describe('Host mode', () => {
     expect(html).toContain('data-test-host-mode-isolated');
 
     await page.goto(publishedCardURL);
-    await expect(
-      page.locator('[data-test-host-mode-isolated]'),
-    ).toBeVisible();
+    await expect(page.locator('[data-test-host-mode-isolated]')).toBeVisible();
+  });
+
+  test('printed isolated card produces a stable page count', async ({
+    page,
+  }) => {
+    await page.goto(publishedWhitePaperCardURL);
+    await page.locator('[data-test-white-paper]').waitFor();
+    await waitUntil(
+      async () =>
+        (await page.locator('[data-test-host-loading]').count()) === 0,
+    );
+
+    await page.emulateMedia({ media: 'print' });
+    let pdf = await page.pdf({ format: 'Letter', printBackground: true });
+    let pageCount =
+      pdf.toString('latin1').match(/\/Type\s*\/Page\b/g)?.length ?? 0;
+
+    expect(pageCount).toBe(3);
   });
 
   test.skip('card in a published realm renders in host mode with a connect button', async ({
