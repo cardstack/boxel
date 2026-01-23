@@ -170,7 +170,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           `INSERT INTO boxel_index_working (url, file_alias, type, realm_version, realm_url, head_html, isolated_html)
            VALUES
            ('${cardURL.href}', '${cardURL.href}', 'instance', 1, '${testRealm2URL.href}', '<meta data-test-head-html content="from-db" />', '<div data-test-isolated-html>Injected isolated</div>'),
-           ('${aliasOnlyURL.href}', '${cardURL.href}', 'module', 2, '${testRealm2URL.href}', NULL, NULL)`,
+           ('${aliasOnlyURL.href}', '${cardURL.href}', 'instance', 2, '${testRealm2URL.href}', NULL, NULL)`,
         );
 
         let response = await context.request2
