@@ -3,7 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const DEFAULT_CARD_RENDER_TIMEOUT_MS = 30_000;
-const DEFAULT_CARD_SIZE_LIMIT_BYTES = 64 * 1024;
+const DEFAULT_CARD_SIZE_LIMIT_BYTES = 512 * 1024; // 512KB
 
 let sqlSchema = fs.readFileSync(getLatestSchemaFile(), 'utf8');
 
