@@ -1190,12 +1190,13 @@ export function setupRealmServerEndpoints(
   ];
 
   let handleRealmServerRequest = async (req: Request) => {
-    let endpoint = endpoints?.find((e) => req.url.includes(e.route));
+    let pathname = new URL(req.url).pathname;
+    let endpoint = endpoints?.find((e) => pathname === `/${e.route}`);
     if (endpoint) {
       return await endpoint.getResponse(req);
     }
 
-    endpoint = defaultEndpoints.find((e) => req.url.includes(e.route));
+    endpoint = defaultEndpoints.find((e) => pathname === `/${e.route}`);
     if (endpoint) {
       return await endpoint.getResponse(req);
     }
