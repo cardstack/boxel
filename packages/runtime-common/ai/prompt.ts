@@ -809,7 +809,6 @@ async function toResultMessages(
         } else {
           content = `Tool call ${status == 'applied' ? 'executed' : status}.\n`;
         }
-
         let attachments = await buildAttachmentsMessagePart(
           client,
           commandResult,

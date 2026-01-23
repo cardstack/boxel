@@ -197,6 +197,34 @@ module('Integration | commands | write-text-file', function (hooks) {
     assert.strictEqual(nonConflicting.status, 404);
   });
 
+  test('useNonConflictingFilename writes into an existing blank file when content is provided', async function (assert) {
+    let commandService = getService('command-service');
+    let cardService = getService('card-service');
+    let writeTextFileCommand = new WriteTextFileCommand(
+      commandService.commandContext,
+    );
+    await cardService.saveSource(
+      new URL('empty.txt', testRealmURL),
+      '',
+      'create-file',
+    );
+
+    let result = await writeTextFileCommand.execute({
+      path: 'empty.txt',
+      content: 'Now filled',
+      realm: testRealmURL,
+      useNonConflictingFilename: true,
+    });
+
+    assert.strictEqual(result.fileUrl, `${testRealmURL}empty.txt`);
+
+    let { status, content } = await cardService.getSource(
+      new URL('empty.txt', testRealmURL),
+    );
+    assert.strictEqual(status, 200);
+    assert.strictEqual(content, 'Now filled');
+  });
+
   test('throws an error when an invalid realm is provided', async function (assert) {
     let commandService = getService('command-service');
     let writeTextFileCommand = new WriteTextFileCommand(

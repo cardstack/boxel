@@ -57,7 +57,7 @@ export default class WriteTextFileCommand extends HostBaseCommand<
             );
             finalUrl = new URL(nonConflictingUrl);
           } else {
-            shouldWrite = false;
+            shouldWrite = input.content.trim() !== '';
           }
         } else {
           throw new Error(
