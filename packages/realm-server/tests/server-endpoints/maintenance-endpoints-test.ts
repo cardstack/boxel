@@ -237,14 +237,18 @@ module(`server-endpoints/${basename(__filename)}`, function () {
 
         let outcome = await job1Outcome;
         assert.strictEqual(outcome.outcome, 'rejected', 'running job canceled');
-        assert.deepEqual(
-          outcome.error,
-          {
-            status: 418,
-            message: 'User initiated job cancellation',
-          },
-          'cancellation result is correct',
-        );
+        if (outcome.outcome === 'rejected') {
+          assert.deepEqual(
+            outcome.error,
+            {
+              status: 418,
+              message: 'User initiated job cancellation',
+            },
+            'cancellation result is correct',
+          );
+        } else {
+          assert.ok(false, 'expected running job to be canceled');
+        }
         assert.deepEqual(events, [
           'job1 start',
           'job2 start',
