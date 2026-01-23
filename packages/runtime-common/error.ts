@@ -376,7 +376,7 @@ export function methodNotAllowed(
   );
 }
 
-export function notAcceptable(
+export function unsupportedMediaType(
   request: Request,
   requestContext: RequestContext,
 ): Response {

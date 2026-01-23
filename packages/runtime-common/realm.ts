@@ -24,7 +24,7 @@ import {
   badRequest,
   CardError,
   formattedError,
-  notAcceptable,
+  unsupportedMediaType,
 } from './error';
 import { v4 as uuidV4 } from 'uuid';
 import { formatRFC7231 } from 'date-fns';
@@ -2450,7 +2450,7 @@ export class Realm {
   ): Promise<Response> {
     let localPath = this.paths.local(new URL(request.url));
     if (await this.nonJsonFileExists(localPath)) {
-      return notAcceptable(request, requestContext);
+      return unsupportedMediaType(request, requestContext);
     }
     let primarySerialization: LooseSingleCardDocument | undefined;
     if (localPath.startsWith('_')) {
@@ -2716,7 +2716,7 @@ export class Realm {
     try {
       if (maybeError === undefined) {
         if (await this.nonJsonFileExists(localPath)) {
-          return notAcceptable(request, requestContext);
+          return unsupportedMediaType(request, requestContext);
         } else {
           return notFound(request, requestContext);
         }
@@ -2786,7 +2786,7 @@ export class Realm {
   ): Promise<Response> {
     let localPath = this.paths.local(new URL(request.url));
     if (await this.nonJsonFileExists(localPath)) {
-      return notAcceptable(request, requestContext);
+      return unsupportedMediaType(request, requestContext);
     }
     let reqURL = request.url.replace(/\.json$/, '');
     // strip off query params
