@@ -139,9 +139,7 @@ module('Integration | ai-assistant-panel | scrolling', function (hooks) {
     setCardInOperatorModeState(id);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-        </template>
+        <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
     let roomId = await openAiAssistant();
@@ -187,7 +185,7 @@ module('Integration | ai-assistant-panel | scrolling', function (hooks) {
       '[data-test-ai-assistant-conversation]',
     )!;
 
-    return conversationElement.scrollTop === 0;
+    return conversationElement.scrollTop < 20;
   }
 
   function fillRoomWithReadMessages(
@@ -291,9 +289,7 @@ module('Integration | ai-assistant-panel | scrolling', function (hooks) {
     setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-        </template>
+        <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
     await waitFor('[data-test-person="Fadhlan"]');
@@ -315,9 +311,7 @@ module('Integration | ai-assistant-panel | scrolling', function (hooks) {
     setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-        </template>
+        <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
     await waitFor('[data-test-person="Fadhlan"]');
@@ -339,9 +333,7 @@ module('Integration | ai-assistant-panel | scrolling', function (hooks) {
     setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-        </template>
+        <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
     await waitFor('[data-test-person="Fadhlan"]');

@@ -42,9 +42,9 @@ export default class ChooseFileModal extends Component<Signature> {
   @tracked selectedRealm = this.knownRealms[0];
   @tracked selectedFile?: LocalPath;
 
-  @service private declare operatorModeStateService: OperatorModeStateService;
-  @service private declare realm: RealmService;
-  @service private declare matrixService: MatrixService;
+  @service declare private operatorModeStateService: OperatorModeStateService;
+  @service declare private realm: RealmService;
+  @service declare private matrixService: MatrixService;
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);

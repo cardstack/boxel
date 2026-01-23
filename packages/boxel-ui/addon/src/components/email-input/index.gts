@@ -67,7 +67,7 @@ export default class EmailInput extends Component<Signature> {
       this.validationState = this.hasBlurred ? 'invalid' : 'initial';
       this.errorMessage =
         this.validationState === 'invalid'
-          ? validation.message ?? this.fallbackErrorMessage
+          ? (validation.message ?? this.fallbackErrorMessage)
           : undefined;
     } else {
       this.validationState = 'valid';

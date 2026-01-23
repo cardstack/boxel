@@ -23,8 +23,8 @@ import { FileDef } from 'https://cardstack.com/base/file-api';
 export class FileLinksExample extends CardDef {
   static displayName = 'File Links Example';
 
-  @field title = contains(StringField);
-  @field description = contains(StringField);
+  @field cardTitle = contains(StringField);
+  @field cardDescription = contains(StringField);
 
   // Single file link - e.g., a main document or primary attachment
   @field primaryDocument = linksTo(FileDef);
@@ -36,9 +36,9 @@ export class FileLinksExample extends CardDef {
     <template>
       <article class='file-links-example'>
         <header>
-          <h1>Title: {{@model.title}}</h1>
-          {{#if @model.description}}
-            <p class='description'>{{@model.description}}</p>
+          <h1>Title: {{@model.cardTitle}}</h1>
+          {{#if @model.cardDescription}}
+            <p class='description'>{{@model.cardDescription}}</p>
           {{/if}}
         </header>
 

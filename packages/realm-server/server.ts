@@ -15,6 +15,7 @@ import {
   type DBAdapter,
   type QueuePublisher,
   DEFAULT_PERMISSIONS,
+  DEFAULT_CARD_SIZE_LIMIT_BYTES,
   PUBLISHED_DIRECTORY_NAME,
   RealmPaths,
   fetchSessionRoom,
@@ -83,6 +84,7 @@ export class RealmServer {
     | (() => Promise<string | undefined>)
     | undefined;
   private enableFileWatcher: boolean;
+  private cardSizeLimitBytes: number;
   private domainsForPublishedRealms:
     | {
         boxelSpace?: string;
@@ -142,6 +144,9 @@ export class RealmServer {
     ensureDirSync(realmsRootPath);
 
     this.serverURL = serverURL;
+    this.cardSizeLimitBytes = Number(
+      process.env.CARD_SIZE_LIMIT_BYTES ?? DEFAULT_CARD_SIZE_LIMIT_BYTES,
+    );
     this.virtualNetwork = virtualNetwork;
     this.matrixClient = matrixClient;
 
@@ -439,6 +444,7 @@ export class RealmServer {
           hostsOwnAssets: false,
           assetsURL: this.assetsURL.href,
           realmServerURL: this.serverURL.href,
+          cardSizeLimitBytes: this.cardSizeLimitBytes,
         });
         return `${g1}${encodeURIComponent(JSON.stringify(config))}${g3}`;
       },
@@ -764,6 +770,7 @@ export class RealmServer {
         realmServerMatrixClient: this.matrixClient,
         realmServerURL: this.serverURL.href,
         definitionLookup: this.definitionLookup,
+        cardSizeLimitBytes: this.cardSizeLimitBytes,
       },
       Object.keys(realmOptions).length ? realmOptions : undefined,
     );
@@ -833,6 +840,7 @@ export class RealmServer {
             realmServerMatrixClient: this.matrixClient,
             realmServerURL: this.serverURL.href,
             definitionLookup: this.definitionLookup,
+            cardSizeLimitBytes: this.cardSizeLimitBytes,
           });
           this.virtualNetwork.mount(realm.handle);
           realms.push(realm);
@@ -963,6 +971,7 @@ export class RealmServer {
             realmServerMatrixClient: this.matrixClient,
             realmServerURL: this.serverURL.href,
             definitionLookup: this.definitionLookup,
+            cardSizeLimitBytes: this.cardSizeLimitBytes,
           });
 
           this.virtualNetwork.mount(realm.handle);

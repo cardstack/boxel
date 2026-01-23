@@ -614,10 +614,10 @@ export class AnimationParticipant {
   isInvalid(): boolean {
     return Boolean(
       (!this.uiState.detached && !this.uiState.current) ||
-        (this.uiState.current &&
-          this.uiState.current._stage !== 'AFTER_RENDER') ||
-        (this.uiState.detached &&
-          this.uiState.detached._stage !== 'BEFORE_RENDER'),
+      (this.uiState.current &&
+        this.uiState.current._stage !== 'AFTER_RENDER') ||
+      (this.uiState.detached &&
+        this.uiState.detached._stage !== 'BEFORE_RENDER'),
     );
   }
 
@@ -630,9 +630,9 @@ export class AnimationParticipant {
   } {
     return Boolean(
       this.uiState.current &&
-        this.uiState.current.beforeRender &&
-        this.uiState.current.afterRender &&
-        !this.uiState.detached,
+      this.uiState.current.beforeRender &&
+      this.uiState.current.afterRender &&
+      !this.uiState.detached,
     );
   }
 
