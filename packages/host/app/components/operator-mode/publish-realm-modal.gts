@@ -64,10 +64,10 @@ interface Signature {
 }
 
 export default class PublishRealmModal extends Component<Signature> {
-  @service private declare hostModeService: HostModeService;
-  @service private declare matrixService: MatrixService;
-  @service private declare realm: RealmService;
-  @service private declare realmServer: RealmServerService;
+  @service declare private hostModeService: HostModeService;
+  @service declare private matrixService: MatrixService;
+  @service declare private realm: RealmService;
+  @service declare private realmServer: RealmServerService;
 
   @tracked selectedPublishedRealmURLs: string[] = [];
   @tracked private customSubdomainSelection: CustomSubdomainSelection | null =

@@ -19,7 +19,7 @@ const IconComponent: TemplateOnlyComponent<Signature> = <template>
   ><path stroke='none' d='M0 0h24v24H0z' /><path
       d='M10 12a2 2 0 1 0 4 0 2 2 0 0 0-4 0'
     /><path
-      d='M11.11 17.958C7.901 17.651 5.2 15.665 3 12c2.4-4 5.4-6 9-6 3.6 0 6.6 2 9 6-.21.352-.427.688-.647 1.008M20 21l2-2-2-2M17 17l-2 2 2 2'
+      d='M11.11 17.958Q6.298 17.498 3 12q3.6-6 9-6t9 6q-.316.528-.647 1.008M20 21l2-2-2-2M17 17l-2 2 2 2'
     /></svg>
 </template>;
 

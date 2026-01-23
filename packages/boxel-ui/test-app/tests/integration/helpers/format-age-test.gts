@@ -20,27 +20,27 @@ module('Integration | helpers | formatAge', function (hooks) {
       Date.now() - 1.95 * 365 * 24 * 60 * 60 * 1000,
     );
 
-    await render(<template>
-      {{formatAge almostTwoYearsAgo unit='auto'}}
-    </template>);
+    await render(
+      <template>{{formatAge almostTwoYearsAgo unit='auto'}}</template>,
+    );
     assert.dom().hasText('1 year', 'auto unit selects years');
 
-    await render(<template>
-      {{formatAge almostTwoYearsAgo unit='years'}}
-    </template>);
+    await render(
+      <template>{{formatAge almostTwoYearsAgo unit='years'}}</template>,
+    );
     assert.dom().hasText('1 year', 'explicit years unit');
 
-    await render(<template>
-      {{formatAge almostTwoYearsAgo unit='months'}}
-    </template>);
+    await render(
+      <template>{{formatAge almostTwoYearsAgo unit='months'}}</template>,
+    );
     assert.dom().hasText('23 months', 'explicit months unit');
 
     const almostSixMonthsAgo = new Date(
       Date.now() - 5.9 * 30 * 24 * 60 * 60 * 1000,
     );
-    await render(<template>
-      {{formatAge almostSixMonthsAgo unit='auto'}}
-    </template>);
+    await render(
+      <template>{{formatAge almostSixMonthsAgo unit='auto'}}</template>,
+    );
     assert
       .dom()
       .hasText('5 months', 'auto unit selects months for younger age');
@@ -51,16 +51,20 @@ module('Integration | helpers | formatAge', function (hooks) {
       Date.now() - (365 + 89) * 24 * 60 * 60 * 1000,
     );
 
-    await render(<template>
-      {{formatAge almostOneYearThreeMonthsAgo precise=true}}
-    </template>);
+    await render(
+      <template>
+        {{formatAge almostOneYearThreeMonthsAgo precise=true}}
+      </template>,
+    );
     assert
       .dom()
       .hasText('1 year, 2 months', 'precise mode shows years and months');
 
-    await render(<template>
-      {{formatAge almostOneYearThreeMonthsAgo precise=false}}
-    </template>);
+    await render(
+      <template>
+        {{formatAge almostOneYearThreeMonthsAgo precise=false}}
+      </template>,
+    );
     assert.dom().hasText('1 year', 'non-precise mode shows primary unit only');
   });
 
@@ -70,14 +74,14 @@ module('Integration | helpers | formatAge', function (hooks) {
     await render(<template>{{formatAge justBorn}}</template>);
     assert.dom().hasText('0 days', 'handles newborn age');
 
-    await render(<template>
-      {{formatAge null fallback='Age unknown'}}
-    </template>);
+    await render(
+      <template>{{formatAge null fallback='Age unknown'}}</template>,
+    );
     assert.dom().hasText('Age unknown', 'uses fallback for null');
 
-    await render(<template>
-      {{formatAge undefined fallback='No birthdate'}}
-    </template>);
+    await render(
+      <template>{{formatAge undefined fallback='No birthdate'}}</template>,
+    );
     assert.dom().hasText('No birthdate', 'uses fallback for undefined');
   });
 
@@ -116,24 +120,32 @@ module('Integration | helpers | formatAge', function (hooks) {
       Date.now() - 24.95 * 365 * 24 * 60 * 60 * 1000,
     );
 
-    await render(<template>
-      {{formatAge almostTwentyFiveYearsAgo locale='en-US'}}
-    </template>);
+    await render(
+      <template>
+        {{formatAge almostTwentyFiveYearsAgo locale='en-US'}}
+      </template>,
+    );
     assert.dom().hasText('24 years', 'English age formatting');
 
-    await render(<template>
-      {{formatAge almostTwentyFiveYearsAgo locale='es-ES'}}
-    </template>);
+    await render(
+      <template>
+        {{formatAge almostTwentyFiveYearsAgo locale='es-ES'}}
+      </template>,
+    );
     assert.dom().hasText('24 años', 'Spanish age formatting');
 
-    await render(<template>
-      {{formatAge almostTwentyFiveYearsAgo locale='fr-FR'}}
-    </template>);
+    await render(
+      <template>
+        {{formatAge almostTwentyFiveYearsAgo locale='fr-FR'}}
+      </template>,
+    );
     assert.dom().hasText('24 ans', 'French age formatting');
 
-    await render(<template>
-      {{formatAge almostTwentyFiveYearsAgo locale='zh-CN'}}
-    </template>);
+    await render(
+      <template>
+        {{formatAge almostTwentyFiveYearsAgo locale='zh-CN'}}
+      </template>,
+    );
     assert.dom().hasText('24岁', 'Chinese age formatting');
   });
 
@@ -142,35 +154,41 @@ module('Integration | helpers | formatAge', function (hooks) {
       Date.now() - (365 + 89) * 24 * 60 * 60 * 1000,
     );
 
-    await render(<template>
-      {{formatAge almostOneYearThreeMonthsAgo precise=true locale='es-ES'}}
-    </template>);
+    await render(
+      <template>
+        {{formatAge almostOneYearThreeMonthsAgo precise=true locale='es-ES'}}
+      </template>,
+    );
     assert.dom().hasText('1 año, 2 meses', 'Spanish precise age');
 
-    await render(<template>
-      {{formatAge almostOneYearThreeMonthsAgo precise=true locale='fr-FR'}}
-    </template>);
+    await render(
+      <template>
+        {{formatAge almostOneYearThreeMonthsAgo precise=true locale='fr-FR'}}
+      </template>,
+    );
     assert.dom().hasText('1\u00A0an, 2\u00A0mois', 'French precise age');
   });
 
   test('invalid birthdate handling', async function (assert) {
-    await render(<template>
-      {{formatAge 'invalid-date' fallback='Invalid birthdate'}}
-    </template>);
+    await render(
+      <template>
+        {{formatAge 'invalid-date' fallback='Invalid birthdate'}}
+      </template>,
+    );
     assert.dom().hasText('Invalid birthdate', 'handles invalid date strings');
 
-    await render(<template>
-      {{formatAge 'not-a-date' fallback='Bad date'}}
-    </template>);
+    await render(
+      <template>{{formatAge 'not-a-date' fallback='Bad date'}}</template>,
+    );
     assert.dom().hasText('Bad date', 'handles non-date strings');
   });
 
   test('future birthdate handling', async function (assert) {
     const futureDate = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
 
-    await render(<template>
-      {{formatAge futureDate fallback='Future birthdate'}}
-    </template>);
+    await render(
+      <template>{{formatAge futureDate fallback='Future birthdate'}}</template>,
+    );
     assert.dom().hasText('Future birthdate', 'handles future birthdates');
   });
 

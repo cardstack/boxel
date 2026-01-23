@@ -58,22 +58,24 @@ module('Integration | Component | FormattedAiBotMessage', function (hooks) {
   async function renderFormattedAiBotMessage(testScenario: any) {
     let monacoSDK = await monacoService.getMonacoContext();
 
-    await render(<template>
-      <FormattedAiBotMessage
-        class='test-component'
-        @monacoSDK={{monacoSDK}}
-        @roomId={{testScenario.roomId}}
-        @eventId={{testScenario.eventId}}
-        @htmlParts={{testScenario.htmlParts}}
-        @isStreaming={{testScenario.isStreaming}}
-        @isLastAssistantMessage={{testScenario.isLastAssistantMessage}}
-      />
-      <style scoped>
-        .test-component {
-          max-width: 350px; /* to observe overflow */
-        }
-      </style>
-    </template>);
+    await render(
+      <template>
+        <FormattedAiBotMessage
+          class='test-component'
+          @monacoSDK={{monacoSDK}}
+          @roomId={{testScenario.roomId}}
+          @eventId={{testScenario.eventId}}
+          @htmlParts={{testScenario.htmlParts}}
+          @isStreaming={{testScenario.isStreaming}}
+          @isLastAssistantMessage={{testScenario.isLastAssistantMessage}}
+        />
+        <style scoped>
+          .test-component {
+            max-width: 350px; /* to observe overflow */
+          }
+        </style>
+      </template>,
+    );
   }
 
   test('it renders content with monaco editor in place of pre tags', async function (assert) {
