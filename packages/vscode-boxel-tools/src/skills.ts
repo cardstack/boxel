@@ -23,9 +23,7 @@ export interface SkillStateData {
   lastUpdated: number;
 }
 
-export class SkillsProvider
-  implements vscode.TreeDataProvider<vscode.TreeItem>
-{
+export class SkillsProvider implements vscode.TreeDataProvider<vscode.TreeItem> {
   private _onDidChangeTreeData: vscode.EventEmitter<
     vscode.TreeItem | undefined | null | void
   > = new vscode.EventEmitter<vscode.TreeItem | undefined | null | void>();

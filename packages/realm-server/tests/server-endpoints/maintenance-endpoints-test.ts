@@ -2,6 +2,7 @@ import { module, test } from 'qunit';
 import { basename } from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import sinon from 'sinon';
+import { PgAdapter, PgQueueRunner } from '@cardstack/postgres';
 import { sumUpCreditsLedger } from '@cardstack/billing/billing-queries';
 import * as boxelUIChangeChecker from '../../lib/boxel-ui-change-checker';
 import { grafanaSecret, insertUser, realmSecretSeed } from '../helpers';
@@ -60,19 +61,25 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         ) RETURNING id`)) as { id: string }[];
         let [{ id: reservationId }] = (await context.dbAdapter
           .execute(`INSERT INTO job_reservations
-        (job_id, locked_until ) VALUES (${jobId}, NOW() + INTERVAL '3 minutes') RETURNING id `)) as {
+        (job_id, locked_until ) VALUES (${jobId}, NOW() + INTERVAL '3 minutes') RETURNING id`)) as {
           id: string;
         }[];
+        await context.dbAdapter.execute(`INSERT INTO job_reservations
+        (job_id, locked_until ) VALUES (${jobId}, NOW() + INTERVAL '2 minutes')`);
         let response = await context.request2
           .get(
             `/_grafana-complete-job?authHeader=${grafanaSecret}&reservation_id=${reservationId}`,
           )
           .set('Content-Type', 'application/json');
         assert.strictEqual(response.status, 204, 'HTTP 204 response');
-        let [reservation] = await context.dbAdapter.execute(
-          `SELECT * FROM job_reservations WHERE id = ${reservationId}`,
+        let reservations = await context.dbAdapter.execute(
+          `SELECT * FROM job_reservations WHERE job_id = ${jobId} AND completed_at IS NULL`,
         );
-        assert.ok(reservation.completed_at, 'completed_at time set');
+        assert.strictEqual(
+          reservations.length,
+          0,
+          'all reservations are completed',
+        );
         let [job] = await context.dbAdapter.execute(
           `SELECT * FROM jobs WHERE id = ${jobId}`,
         );
@@ -99,21 +106,24 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           180,
           0
         ) RETURNING id`)) as { id: string }[];
-        let [{ id: reservationId }] = (await context.dbAdapter
-          .execute(`INSERT INTO job_reservations
-        (job_id, locked_until ) VALUES (${jobId}, NOW() + INTERVAL '3 minutes') RETURNING id `)) as {
-          id: string;
-        }[];
+        await context.dbAdapter.execute(`INSERT INTO job_reservations
+        (job_id, locked_until ) VALUES (${jobId}, NOW() + INTERVAL '3 minutes')`);
+        await context.dbAdapter.execute(`INSERT INTO job_reservations
+        (job_id, locked_until ) VALUES (${jobId}, NOW() + INTERVAL '2 minutes')`);
         let response = await context.request2
           .get(
             `/_grafana-complete-job?authHeader=${grafanaSecret}&job_id=${jobId}`,
           )
           .set('Content-Type', 'application/json');
         assert.strictEqual(response.status, 204, 'HTTP 204 response');
-        let [reservation] = await context.dbAdapter.execute(
-          `SELECT * FROM job_reservations WHERE id = ${reservationId}`,
+        let reservations = await context.dbAdapter.execute(
+          `SELECT * FROM job_reservations WHERE job_id = ${jobId} AND completed_at IS NULL`,
         );
-        assert.ok(reservation.completed_at, 'completed_at time set');
+        assert.strictEqual(
+          reservations.length,
+          0,
+          'all reservations are completed',
+        );
         let [job] = await context.dbAdapter.execute(
           `SELECT * FROM jobs WHERE id = ${jobId}`,
         );
@@ -127,6 +137,124 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           'job result is correct',
         );
         assert.ok(job.finished_at, 'job was marked with finish time');
+      });
+
+      test('can cancel a running job by reservation_id and allow the next job to run', async function (assert) {
+        let jobStartedResolve: (() => void) | undefined;
+        let jobFinishedResolve: (() => void) | undefined;
+        let releaseJobResolve: (() => void) | undefined;
+        let jobStarted = new Promise<void>((resolve) => {
+          jobStartedResolve = resolve;
+        });
+        let jobFinished = new Promise<void>((resolve) => {
+          jobFinishedResolve = resolve;
+        });
+        let releaseJob = new Promise<void>((resolve) => {
+          releaseJobResolve = resolve;
+        });
+        let events: string[] = [];
+
+        context.runner.register(
+          'blocking-job',
+          async ({ jobNum }: { jobNum: number }) => {
+            events.push(`job${jobNum} start`);
+            if (jobNum === 1) {
+              jobStartedResolve?.();
+              await releaseJob;
+            }
+            events.push(`job${jobNum} finish`);
+            if (jobNum === 1) {
+              jobFinishedResolve?.();
+            }
+            return jobNum;
+          },
+        );
+
+        let job1 = await context.publisher.publish({
+          jobType: 'blocking-job',
+          concurrencyGroup: 'grafana-cancel-group',
+          timeout: 30,
+          args: { jobNum: 1 },
+        });
+        let job1Outcome = job1.done.then(
+          (result) => ({ outcome: 'resolved' as const, result }),
+          (error) => ({ outcome: 'rejected' as const, error }),
+        );
+
+        await jobStarted;
+        let [reservation] = await context.dbAdapter.execute(
+          `SELECT id FROM job_reservations WHERE job_id = ${job1.id} AND completed_at IS NULL`,
+        );
+        let reservationId = reservation?.id;
+        assert.ok(reservationId, 'reservation exists for running job');
+
+        let response = await context.request2
+          .get(
+            `/_grafana-complete-job?authHeader=${grafanaSecret}&reservation_id=${reservationId}`,
+          )
+          .set('Content-Type', 'application/json');
+        assert.strictEqual(response.status, 204, 'HTTP 204 response');
+
+        let reservations = await context.dbAdapter.execute(
+          `SELECT id FROM job_reservations WHERE job_id = ${job1.id} AND completed_at IS NULL`,
+        );
+        assert.strictEqual(
+          reservations.length,
+          0,
+          'running reservation cleared',
+        );
+
+        let adapter2 = new PgAdapter();
+        let runner2 = new PgQueueRunner({
+          adapter: adapter2,
+          workerId: 'test-worker-2',
+        });
+        runner2.register(
+          'blocking-job',
+          async ({ jobNum }: { jobNum: number }) => {
+            events.push(`job${jobNum} start`);
+            events.push(`job${jobNum} finish`);
+            return jobNum;
+          },
+        );
+        await runner2.start();
+
+        try {
+          let job2 = await context.publisher.publish({
+            jobType: 'blocking-job',
+            concurrencyGroup: 'grafana-cancel-group',
+            timeout: 30,
+            args: { jobNum: 2 },
+          });
+          let job2Result = await job2.done;
+          assert.strictEqual(job2Result, 2, 'next job completed');
+        } finally {
+          releaseJobResolve?.();
+          await jobFinished;
+          await runner2.destroy();
+          await adapter2.close();
+        }
+
+        let outcome = await job1Outcome;
+        assert.strictEqual(outcome.outcome, 'rejected', 'running job canceled');
+        if (outcome.outcome === 'rejected') {
+          assert.deepEqual(
+            outcome.error,
+            {
+              status: 418,
+              message: 'User initiated job cancellation',
+            },
+            'cancellation result is correct',
+          );
+        } else {
+          assert.ok(false, 'expected running job to be canceled');
+        }
+        assert.deepEqual(events, [
+          'job1 start',
+          'job2 start',
+          'job2 finish',
+          'job1 finish',
+        ]);
       });
 
       test('returns 401 when calling grafana job completion endpoint without a grafana secret', async function (assert) {

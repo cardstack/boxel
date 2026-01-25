@@ -8,7 +8,7 @@ export const testRealmSecretSeed = "shhh! it's a secret";
 
 export function createJWT(
   claims: TokenClaims | RealmServerTokenClaims,
-  expiration: string,
+  expiration: ms.StringValue,
   secret: string,
 ) {
   let nowInSeconds = unixTime(Date.now());

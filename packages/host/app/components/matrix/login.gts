@@ -148,7 +148,7 @@ export default class Login extends Component<Signature> {
   @tracked private error: string | undefined;
   @tracked private username: string | undefined;
   @tracked private password: string | undefined;
-  @service private declare matrixService: MatrixService;
+  @service declare private matrixService: MatrixService;
   @service declare router: RouterService;
 
   private get isLoginButtonDisabled() {

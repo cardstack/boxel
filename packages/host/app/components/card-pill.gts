@@ -41,8 +41,8 @@ interface CardPillSignature {
 }
 
 export default class CardPill extends Component<CardPillSignature> {
-  @consume(GetCardContextName) private declare getCard: getCard;
-  @service private declare realm: RealmService;
+  @consume(GetCardContextName) declare private getCard: getCard;
+  @service declare private realm: RealmService;
   @tracked private cardResource: ReturnType<getCard> | undefined;
 
   private makeCardResource = () => {

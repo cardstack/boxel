@@ -152,7 +152,7 @@ export default class SubmodeSwitcher extends Component<Signature> {
     </style>
   </template>
 
-  @service private declare operatorModeStateService: OperatorModeStateService;
+  @service declare private operatorModeStateService: OperatorModeStateService;
 
   submodeIcons = {
     [Submodes.Interact]: Eye,

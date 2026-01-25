@@ -168,6 +168,8 @@ const employeeCardSource = `
   }
 `;
 
+const erroringModuleSource = `throw new Error('boom');`;
+
 const inThisFileSource = `
   import {
     contains,
@@ -468,6 +470,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
         're-export.gts': reExportSource,
         'local-inherit.gts': localInheritSource,
         'command-module.gts': commandModuleSource,
+        'erroring-module.gts': erroringModuleSource,
         'empty-file.gts': '',
         'person-entry.json': {
           data: {
@@ -2159,6 +2162,27 @@ export class ExportedCard extends ExportedCardParent {
     assert.dom('[data-test-in-this-file-selector]').doesNotExist();
     assert.dom('[data-test-inheritance-panel-header]').doesNotExist();
     assert.dom('[data-test-delete-module-button]').exists();
+  });
+
+  test('can delete an erroring module file', async function (assert) {
+    await visitOperatorMode({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}erroring-module.gts`,
+    });
+
+    await waitFor('[data-test-syntax-error]');
+    await waitFor('[data-test-action-button="Delete"]');
+
+    await click('[data-test-action-button="Delete"]');
+    await waitFor(
+      `[data-test-delete-modal="${testRealmURL}erroring-module.gts"]`,
+    );
+    await click('[data-test-confirm-delete-button]');
+    await waitFor('[data-test-empty-code-mode]');
+
+    let notFound = await adapter.openFile('erroring-module.gts');
+    assert.strictEqual(notFound, undefined, 'file ref does not exist');
   });
 
   module('when the user lacks write permissions', function (hooks) {

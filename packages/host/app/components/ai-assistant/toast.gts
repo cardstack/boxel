@@ -156,8 +156,8 @@ export default class AiAssistantToast extends Component<Signature> {
     </style>
   </template>
 
-  @service private declare matrixService: MatrixService;
-  @service private declare localPersistenceService: LocalPersistenceService;
+  @service declare private matrixService: MatrixService;
+  @service declare private localPersistenceService: LocalPersistenceService;
   _pollToken: ReturnType<typeof pollTask> | null = null;
 
   private get state() {

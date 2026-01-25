@@ -223,9 +223,7 @@ module('Integration | serialization', function (hooks) {
     class Item extends CardDef {
       @field priceRenamed = contains(NumberField); // Simulating the scenario where someone renamed the price field to priceRenamed and did not also update the field in the instance data
       static isolated = class Isolated extends Component<typeof this> {
-        <template>
-          <@fields.priceRenamed />
-        </template>
+        <template><@fields.priceRenamed /></template>
       };
     }
     await setupIntegrationTestRealm({
@@ -2563,9 +2561,7 @@ module('Integration | serialization', function (hooks) {
       @field cardTitle = contains(StringField);
       @field author = contains(Person);
       static isolated = class Isolated extends Component<typeof this> {
-        <template>
-          <@fields.author />
-        </template>
+        <template><@fields.author /></template>
       };
     }
     await setupIntegrationTestRealm({
@@ -2998,9 +2994,7 @@ module('Integration | serialization', function (hooks) {
         computeVia: () => null,
       });
       static embedded = class Embedded extends Component<typeof this> {
-        <template>
-          <@fields.firstName />
-        </template>
+        <template><@fields.firstName /></template>
       };
     }
 
@@ -3554,9 +3548,7 @@ module('Integration | serialization', function (hooks) {
     class Schedule extends CardDef {
       @field dates = containsMany(DateField);
       static isolated = class Isolated extends Component<typeof this> {
-        <template>
-          <@fields.dates />
-        </template>
+        <template><@fields.dates /></template>
       };
     }
     await setupIntegrationTestRealm({
@@ -3609,9 +3601,7 @@ module('Integration | serialization', function (hooks) {
     class Schedule extends CardDef {
       @field appointments = containsMany(Appointment);
       static isolated = class Isolated extends Component<typeof this> {
-        <template>
-          <@fields.appointments />
-        </template>
+        <template><@fields.appointments /></template>
       };
     }
     await setupIntegrationTestRealm({

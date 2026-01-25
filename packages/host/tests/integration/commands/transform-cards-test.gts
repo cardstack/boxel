@@ -258,9 +258,8 @@ module('Integration | commands | transform-cards', function (hooks) {
     });
 
     // Verify that all Person cards were transformed
-    let { SearchCardsByQueryCommand } = await import(
-      '@cardstack/host/commands/search-cards'
-    );
+    let { SearchCardsByQueryCommand } =
+      await import('@cardstack/host/commands/search-cards');
     let searchCommand = new SearchCardsByQueryCommand(
       commandService.commandContext,
     );
