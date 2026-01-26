@@ -577,7 +577,11 @@ module(`Integration | realm querying`, function (hooks) {
   hooks.beforeEach(async function () {
     let { realm } = await setupIntegrationTestRealm({
       mockMatrixUtils,
-      contents: sampleCards,
+      contents: {
+        ...sampleCards,
+        'files/sample.txt': 'Hello world',
+        'files/sample.md': 'Hello markdown',
+      },
     });
     queryEngine = realm.realmIndexQueryEngine;
   });
@@ -716,6 +720,69 @@ module(`Integration | realm querying`, function (hooks) {
     assert.deepEqual(
       matching.map((m) => m.id),
       [`${paths.url}spec-1`],
+    );
+  });
+
+  test('can search for file-meta entries by FileDef type', async function (assert) {
+    let fileDefRef = { module: `${baseRealm.url}file-api`, name: 'FileDef' };
+    let result = (await queryEngine.search({
+      filter: {
+        type: fileDefRef,
+      },
+    })) as unknown as {
+      data: { id?: string; type: string }[];
+    };
+    let fileEntry = result.data.find(
+      (entry) => entry.id === `${testRealmURL}files/sample.txt`,
+    );
+    assert.ok(fileEntry, 'file-meta entry is returned');
+    assert.strictEqual(
+      fileEntry?.type,
+      'file-meta',
+      'search results include file-meta resource',
+    );
+  });
+
+  test('can search for file-meta entries by url', async function (assert) {
+    let fileDefRef = { module: `${baseRealm.url}file-api`, name: 'FileDef' };
+    let targetUrl = `${testRealmURL}files/sample.txt`;
+    let result = (await queryEngine.search({
+      filter: {
+        on: fileDefRef,
+        eq: { url: targetUrl },
+      },
+    })) as unknown as {
+      data: { id?: string; type: string }[];
+    };
+    assert.deepEqual(
+      result.data.map((entry) => entry.id),
+      [targetUrl],
+      'filters file-meta entries by url',
+    );
+    assert.strictEqual(
+      result.data[0]?.type,
+      'file-meta',
+      'url filter returns file-meta resource',
+    );
+  });
+
+  test('can search for file-meta entries by FileDef subclass type', async function (assert) {
+    let markdownRef = {
+      module: `${baseRealm.url}markdown-file-def`,
+      name: 'MarkdownDef',
+    };
+    let result = (await queryEngine.search({
+      filter: {
+        type: markdownRef,
+      },
+    })) as unknown as {
+      data: { id?: string; type: string }[];
+    };
+    assert.ok(
+      result.data.some(
+        (entry) => entry.id === `${testRealmURL}files/sample.md`,
+      ),
+      'returns file-meta entries for subclass FileDef type',
     );
   });
 

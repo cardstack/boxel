@@ -27,14 +27,23 @@ import {
 import type { Realm } from './realm';
 import { FILE_META_RESERVED_KEYS } from './realm';
 import { RealmPaths } from './paths';
-import type { Query } from './query';
+import type { Filter, Query } from './query';
 import { CardError, type SerializedError } from './error';
-import { isCodeRef, isResolvedCodeRef, visitModuleDeps } from './code-ref';
+import {
+  isCodeRef,
+  isResolvedCodeRef,
+  ResolvedCodeRef,
+  visitModuleDeps,
+  type CodeRef,
+} from './code-ref';
 import {
   isCardCollectionDocument,
   isSingleCardDocument,
   type SingleCardDocument,
   type CardCollectionDocument,
+  type FileMetaCollectionDocument,
+  type LinkableCollectionDocument,
+  isLinkableCollectionDocument,
 } from './document-types';
 import { relationshipEntries } from './relationship-utils';
 import type { CardResource, FileMetaResource, Saved } from './resource-types';
@@ -121,7 +130,45 @@ export class RealmIndexQueryEngine {
     return new URL(this.#realm.url);
   }
 
-  async search(query: Query, opts?: Options): Promise<CardCollectionDocument> {
+  async search(
+    query: Query,
+    opts?: Options,
+  ): Promise<LinkableCollectionDocument> {
+    if (await this.queryTargetsFileMeta(query.filter, opts)) {
+      let { files, meta } = await this.#indexQueryEngine.searchFiles(
+        new URL(this.#realm.url),
+        query,
+        opts,
+      );
+      let data = files.map((fileEntry) =>
+        fileResourceFromIndex(new URL(fileEntry.canonicalURL), fileEntry),
+      );
+      let doc: FileMetaCollectionDocument = {
+        data,
+        meta,
+      };
+
+      let omit = doc.data.map((r) => r.id).filter(Boolean) as string[];
+      if (opts?.loadLinks) {
+        let included: (CardResource<Saved> | FileMetaResource)[] = [];
+        for (let resource of doc.data) {
+          included = await this.loadLinks(
+            {
+              realmURL: this.realmURL,
+              resource,
+              omit,
+              included,
+            },
+            opts,
+          );
+        }
+        if (included.length > 0) {
+          doc.included = included;
+        }
+      }
+      return doc;
+    }
+
     let doc: CardCollectionDocument;
     let { cards: data, meta } = await this.#indexQueryEngine.search(
       new URL(this.#realm.url),
@@ -158,6 +205,30 @@ export class RealmIndexQueryEngine {
       }
     }
     return doc;
+  }
+
+  private async queryTargetsFileMeta(
+    filter: Filter | undefined,
+    opts?: Options,
+  ): Promise<boolean> {
+    if (!filter) {
+      return false;
+    }
+    let refs: CodeRef[] = [];
+    collectFilterRefs(filter, refs);
+    let fileMatch = false;
+    let instanceMatch = false;
+    for (let ref of refs) {
+      if (await this.#indexQueryEngine.hasFileType(this.realmURL, ref, opts)) {
+        fileMatch = true;
+      }
+      if (
+        await this.#indexQueryEngine.hasInstanceType(this.realmURL, ref, opts)
+      ) {
+        instanceMatch = true;
+      }
+    }
+    return fileMatch && !instanceMatch;
   }
 
   async fetchCardTypeSummary() {
@@ -537,7 +608,7 @@ export class RealmIndexQueryEngine {
         };
       }
       let json = await response.json();
-      if (!isCardCollectionDocument(json)) {
+      if (!isLinkableCollectionDocument(json)) {
         return {
           cards: [],
           error: {
@@ -723,6 +794,25 @@ export class RealmIndexQueryEngine {
     await this.populateQueryFields(resource, realmURL, opts);
     await processRelationships();
     return included;
+  }
+}
+
+function collectFilterRefs(filter: Filter, refs: CodeRef[]) {
+  let filterWithType = filter as { type?: CodeRef; on?: CodeRef };
+  if (filterWithType.type) {
+    refs.push(filterWithType.type);
+  }
+  if (filterWithType.on) {
+    refs.push(filterWithType.on);
+  }
+  if ('every' in filter) {
+    filter.every.forEach((inner) => collectFilterRefs(inner, refs));
+  }
+  if ('any' in filter) {
+    filter.any.forEach((inner) => collectFilterRefs(inner, refs));
+  }
+  if ('not' in filter) {
+    collectFilterRefs(filter.not, refs);
   }
 }
 

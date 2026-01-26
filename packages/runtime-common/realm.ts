@@ -4,7 +4,7 @@ import {
   transformResultsToPrerenderedCardsDoc,
   type SingleCardDocument,
   type SingleFileMetaDocument,
-  type CardCollectionDocument,
+  type LinkableCollectionDocument,
   type PrerenderedCardCollectionDocument,
 } from './document-types';
 import { isMeta, type CardResource, type Relationship } from './resource-types';
@@ -2965,9 +2965,9 @@ export class Realm {
     return this.#realmIndexUpdater.isIgnored(url);
   }
 
-  public async search(cardsQuery: Query): Promise<CardCollectionDocument> {
-    assertQuery(cardsQuery);
-    return await this.#realmIndexQueryEngine.search(cardsQuery, {
+  public async search(query: Query): Promise<LinkableCollectionDocument> {
+    assertQuery(query);
+    return await this.#realmIndexQueryEngine.search(query, {
       loadLinks: true,
     });
   }
