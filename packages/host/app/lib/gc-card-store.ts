@@ -130,7 +130,7 @@ export default class CardStoreWithGarbageCollection implements CardStore {
   #nonTrackedInstances = new Map<string, StoredInstance>();
   #nonTrackedInstanceErrors = new Map<string, CardErrorJSONAPI>();
 
-  #cards = new TrackedMap<string, StoredInstance>();
+  #instances = new TrackedMap<string, StoredInstance>();
   #instanceErrors = new TrackedMap<string, CardErrorJSONAPI>();
   #gcCandidates: Set<LocalId> = new Set();
   #referenceCount: ReferenceCount;
@@ -298,7 +298,7 @@ export default class CardStoreWithGarbageCollection implements CardStore {
   }
 
   reset() {
-    this.#cards.clear();
+    this.#instances.clear();
     this.#clearEphemeralErrors(this.#instanceErrors);
     this.#nonTrackedInstances.clear();
     this.#clearEphemeralErrors(this.#nonTrackedInstanceErrors);
@@ -337,7 +337,7 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     let visited = new WeakSet<StoredInstance>();
     let rootLocalIds: string[] = [];
 
-    for (let instance of this.#cards.values()) {
+    for (let instance of this.#instances.values()) {
       if (!instance || visited.has(instance)) {
         continue;
       }
@@ -374,7 +374,7 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     }
 
     visited = new WeakSet<StoredInstance>();
-    for (let instance of this.#cards.values()) {
+    for (let instance of this.#instances.values()) {
       if (!instance || visited.has(instance)) {
         continue;
       }
@@ -444,7 +444,7 @@ export default class CardStoreWithGarbageCollection implements CardStore {
 
   private deleteFromAll(id: string) {
     id = id.replace(/\.json$/, '');
-    this.#cards.delete(id);
+    this.#instances.delete(id);
     this.#instanceErrors.delete(id);
     this.#nonTrackedInstances.delete(id);
     this.#nonTrackedInstanceErrors.delete(id);
@@ -479,7 +479,7 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     item: StoredInstance | CardErrorJSONAPI | undefined;
     localId: string | undefined;
   } {
-    let bucket = type === 'instance' ? this.#cards : this.#instanceErrors;
+    let bucket = type === 'instance' ? this.#instances : this.#instanceErrors;
     let silentBucket =
       type === 'instance'
         ? this.#nonTrackedInstances
@@ -521,7 +521,7 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     notTracked?: true,
   ) {
     id = id.replace(/\.json$/, '');
-    let cardBucket = notTracked ? this.#nonTrackedInstances : this.#cards;
+    let cardBucket = notTracked ? this.#nonTrackedInstances : this.#instances;
     let errorBucket = notTracked
       ? this.#nonTrackedInstanceErrors
       : this.#instanceErrors;
@@ -603,7 +603,7 @@ export default class CardStoreWithGarbageCollection implements CardStore {
 
   private makeConsumptionGraph(api: typeof CardAPI): InstanceGraph {
     let consumptionGraph: InstanceGraph = new Map();
-    for (let instance of this.#cards.values()) {
+    for (let instance of this.#instances.values()) {
       if (!instance || !isCardInstance(instance)) {
         continue;
       }
@@ -622,7 +622,7 @@ export default class CardStoreWithGarbageCollection implements CardStore {
 
   private makeDependencyGraph(api: typeof CardAPI): InstanceGraph {
     let dependencyGraph: InstanceGraph = new Map();
-    for (let instance of this.#cards.values()) {
+    for (let instance of this.#instances.values()) {
       if (!instance || !isCardInstance(instance)) {
         continue;
       }
