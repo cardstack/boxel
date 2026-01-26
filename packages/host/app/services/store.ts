@@ -1099,10 +1099,24 @@ export default class StoreService extends Service implements StoreInterface {
       let errorResponse = processCardError(id, error);
       let cardError = errorResponse.errors[0];
       deferred?.fulfill(cardError);
-      console.error(
-        `error getting instance ${JSON.stringify(idOrDoc, null, 2)}: ${JSON.stringify(error, null, 2)}`,
-        error,
+      let status = cardError?.status ?? error?.status;
+      let isSystemCardDefault = isSystemCardDefaultId(
+        id,
+        idOrDoc,
+        cardError?.id,
       );
+      // suppress logging of 404s for system card defaults during tests
+      let shouldLogAsError = !(
+        isTesting() &&
+        status === 404 &&
+        isSystemCardDefault
+      );
+      let message = `error getting instance ${JSON.stringify(idOrDoc, null, 2)}: ${JSON.stringify(error, null, 2)}`;
+      if (shouldLogAsError) {
+        storeLogger.error(message, error);
+      } else {
+        storeLogger.debug(message, error);
+      }
       return cardError;
     } finally {
       if (id) {
@@ -1587,6 +1601,21 @@ function looksLikeFileURL(url: string): boolean {
   } catch {
     return false;
   }
+}
+
+function isSystemCardDefaultId(
+  id: string | undefined,
+  idOrDoc: string | LooseSingleCardDocument,
+  errorId: string | undefined,
+): boolean {
+  let candidates = [
+    id,
+    typeof idOrDoc === 'string' ? idOrDoc : idOrDoc?.data?.id,
+    errorId,
+  ].filter(Boolean) as string[];
+  return candidates.some((candidate) =>
+    candidate.includes('/SystemCard/default'),
+  );
 }
 
 async function withStubbedRenderTimers<T>(cb: () => Promise<T>): Promise<T> {
