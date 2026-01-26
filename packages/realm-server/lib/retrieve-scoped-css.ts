@@ -1,5 +1,5 @@
 import type { DBAdapter } from '@cardstack/runtime-common';
-import { query } from '@cardstack/runtime-common';
+import { expressionToSql, query } from '@cardstack/runtime-common';
 import { parseDeps } from '@cardstack/runtime-common/realm';
 import type { Expression } from '@cardstack/runtime-common/expression';
 import { decodeScopedCSSRequest, isScopedCSSRequest } from 'glimmer-scoped-css';
@@ -9,11 +9,13 @@ export async function retrieveScopedCSS({
   dbAdapter,
   indexURLCandidates,
   indexCandidateExpressions,
+  log,
 }: {
   cardURL: URL;
   dbAdapter: DBAdapter;
   indexURLCandidates: (cardURL: URL) => string[];
   indexCandidateExpressions: (candidates: string[]) => Expression;
+  log?: { debug: (...args: unknown[]) => void; trace: (...args: unknown[]) => void };
 }): Promise<string | null> {
   let candidates = indexURLCandidates(cardURL);
 
@@ -21,7 +23,7 @@ export async function retrieveScopedCSS({
     return null;
   }
 
-  let rows = await query(dbAdapter, [
+  let scopedCSSQuery: Expression = [
     `SELECT deps, realm_version FROM boxel_index_working WHERE deps IS NOT NULL AND`,
     ...indexCandidateExpressions(candidates),
     `UNION ALL
@@ -29,7 +31,17 @@ export async function retrieveScopedCSS({
     ...indexCandidateExpressions(candidates),
     `ORDER BY realm_version DESC
      LIMIT 1`,
-  ]);
+  ];
+
+  if (log) {
+    let sql = expressionToSql(dbAdapter.kind, scopedCSSQuery);
+    log.trace('Scoped CSS query for %s: %s', cardURL.href, sql.text);
+    if (sql.values.length > 0) {
+      log.trace('Scoped CSS query values for %s', cardURL.href, sql.values);
+    }
+  }
+
+  let rows = await query(dbAdapter, scopedCSSQuery);
 
   let depsRow = rows[0] as
     | { deps?: string[] | string | null; realm_version?: string | number }

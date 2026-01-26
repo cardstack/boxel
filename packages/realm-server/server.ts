@@ -350,6 +350,7 @@ export class RealmServer {
           indexURLCandidates: (url) => this.indexURLCandidates(url),
           indexCandidateExpressions: (candidates) =>
             this.indexCandidateExpressions(candidates),
+          log: this.scopedCSSLog,
         }),
       ]);
 
