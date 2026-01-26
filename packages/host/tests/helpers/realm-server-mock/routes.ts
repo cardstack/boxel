@@ -15,7 +15,7 @@ import {
 } from '@cardstack/runtime-common';
 
 import type {
-  CardCollectionDocument,
+  LinkableCollectionDocument,
   PrerenderedCardCollectionDocument,
 } from '@cardstack/runtime-common/document-types';
 
@@ -33,7 +33,7 @@ const TEST_MATRIX_USER = '@testuser:localhost';
 
 type SearchableRealm = {
   url?: string;
-  search: (query: Query) => Promise<CardCollectionDocument>;
+  search: (query: Query) => Promise<LinkableCollectionDocument>;
   searchPrerendered: (
     query: Query,
     opts: Pick<
@@ -315,7 +315,7 @@ function getSearchableRealmForURL(
           `Remote realm search failed for ${resolvedRealmURL}: ${response.status} ${responseText}`,
         );
       }
-      return (await response.json()) as CardCollectionDocument;
+      return (await response.json()) as LinkableCollectionDocument;
     },
     async searchPrerendered(query: Query, opts) {
       let url = new URL('_search-prerendered', resolvedRealmURL);

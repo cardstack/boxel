@@ -1,7 +1,7 @@
 import { module, test } from 'qunit';
 import type { Test, SuperTest } from 'supertest';
 import { basename } from 'path';
-import type { Realm } from '@cardstack/runtime-common';
+import { baseRealm, type Realm } from '@cardstack/runtime-common';
 import type { Query } from '@cardstack/runtime-common/query';
 import { setupPermissionedRealm, createJWT } from '../helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
@@ -38,6 +38,18 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
         },
       };
     }
+
+    function buildFileDefQuery(): Query {
+      return {
+        filter: {
+          type: {
+            module: `${baseRealm.url}file-api`,
+            name: 'FileDef',
+          },
+        },
+      };
+    }
+
 
     module('QUERY request (public realm)', function (_hooks) {
       let query = () => buildPersonQuery('Mango');
@@ -176,6 +188,82 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
             json.data[0].id,
             json2.data[0].id,
             'different pages should return different results',
+          );
+        });
+
+        test('serves file-meta results when querying for FileDef', async function (assert) {
+          let response = await request
+            .post(searchPath)
+            .set('Accept', 'application/vnd.card+json')
+            .set('X-HTTP-Method-Override', 'QUERY')
+            .send(buildFileDefQuery());
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          let json = response.body as { data: { id?: string; type: string }[] };
+
+          assert.ok(json.data.length > 0, 'file-meta results are returned');
+          assert.ok(
+            json.data.every((entry) => entry.type === 'file-meta'),
+            'all results are file-meta resources',
+          );
+          assert.ok(
+            json.data.some((entry) => entry.id === `${realmHref}dir/foo.txt`),
+            'expected file-meta entry is present',
+          );
+        });
+
+        test('filters file-meta results by url', async function (assert) {
+          let response = await request
+            .post(searchPath)
+            .set('Accept', 'application/vnd.card+json')
+            .set('X-HTTP-Method-Override', 'QUERY')
+            .send({
+              filter: {
+                on: {
+                  module: `${baseRealm.url}file-api`,
+                  name: 'FileDef',
+                },
+                eq: {
+                  url: `${realmHref}dir/foo.txt`,
+                },
+              },
+            });
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          let json = response.body as { data: { id?: string; type: string }[] };
+
+          assert.deepEqual(
+            json.data.map((entry) => entry.id),
+            [`${realmHref}dir/foo.txt`],
+            'url filter returns matching file-meta entry',
+          );
+          assert.strictEqual(
+            json.data[0]?.type,
+            'file-meta',
+            'url filter returns file-meta resource',
+          );
+        });
+
+        test('filters file-meta results by FileDef subclass type', async function (assert) {
+          let response = await request
+            .post(searchPath)
+            .set('Accept', 'application/vnd.card+json')
+            .set('X-HTTP-Method-Override', 'QUERY')
+            .send({
+              filter: {
+                type: {
+                  module: `${baseRealm.url}markdown-file-def`,
+                  name: 'MarkdownDef',
+                },
+              },
+            });
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          let json = response.body as { data: { id?: string; type: string }[] };
+
+          assert.ok(
+            json.data.some((entry) => entry.id === `${realmHref}sample.md`),
+            'returns file-meta entries for subclass FileDef type',
           );
         });
       });
