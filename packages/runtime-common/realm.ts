@@ -11,6 +11,8 @@ import { isMeta, type CardResource, type Relationship } from './resource-types';
 import { normalizeRelationships } from './relationship-utils';
 import type { LocalPath } from './paths';
 import { RealmPaths, ensureTrailingSlash, join } from './paths';
+import type ms from 'ms';
+import { DEFAULT_CARD_SIZE_LIMIT_BYTES } from './constants';
 import {
   persistFileMeta,
   removeFileMeta,
@@ -23,6 +25,7 @@ import {
   methodNotAllowed,
   badRequest,
   CardError,
+  responseWithError,
   formattedError,
 } from './error';
 import { v4 as uuidV4 } from 'uuid';
@@ -121,6 +124,7 @@ import { fetcher } from './fetcher';
 import { RealmIndexQueryEngine } from './realm-index-query-engine';
 import { RealmIndexUpdater } from './realm-index-updater';
 import serialize from './file-serializer';
+import { validateWriteSize } from './write-size-validation';
 import { md5 } from 'super-fast-md5';
 
 import type { Utils } from './matrix-backend-authentication';
@@ -325,7 +329,11 @@ export interface RealmAdapter {
 
   remove(path: LocalPath): Promise<void>;
 
-  createJWT(claims: TokenClaims, expiration: string, secret: string): string;
+  createJWT(
+    claims: TokenClaims,
+    expiration: ms.StringValue,
+    secret: string,
+  ): string;
 
   // throws if token cannot be verified or expired
   verifyJWT(
@@ -405,6 +413,7 @@ export class Realm {
   #copiedFromRealm: URL | undefined;
   #sourceCache = new AliasCache<SourceCacheEntry>();
   #moduleCache = new AliasCache<ModuleCacheEntry>();
+  #cardSizeLimitBytes: number;
 
   #publicEndpoints: RouteTable<true> = new Map([
     [
@@ -455,6 +464,7 @@ export class Realm {
       realmServerMatrixClient,
       realmServerURL,
       definitionLookup,
+      cardSizeLimitBytes,
     }: {
       url: string;
       adapter: RealmAdapter;
@@ -466,6 +476,7 @@ export class Realm {
       realmServerMatrixClient: MatrixClient;
       realmServerURL: string;
       definitionLookup: DefinitionLookup;
+      cardSizeLimitBytes?: number;
     },
     opts?: Options,
   ) {
@@ -480,6 +491,8 @@ export class Realm {
       opts?.fromScratchIndexPriority ?? systemInitiatedPriority;
     this.#realmServerMatrixClient = realmServerMatrixClient;
     this.#realmServerURL = ensureTrailingSlash(realmServerURL);
+    this.#cardSizeLimitBytes =
+      cardSizeLimitBytes ?? DEFAULT_CARD_SIZE_LIMIT_BYTES;
     this.#realmServerMatrixUserId = userIdFromUsername(
       realmServerMatrixClient.username,
       realmServerMatrixClient.matrixURL.href,
@@ -735,7 +748,7 @@ export class Realm {
     this.#moduleCache.clear();
   }
 
-  createJWT(claims: TokenClaims, expiration: string): string {
+  createJWT(claims: TokenClaims, expiration: ms.StringValue): string {
     return this.#adapter.createJWT(claims, expiration, this.#realmSecretSeed);
   }
 
@@ -805,6 +818,11 @@ export class Realm {
           throw e;
         }
       }
+      let sizeType: 'card' | 'file' =
+        path.endsWith('.json') && isCardDocumentString(content)
+          ? 'card'
+          : 'file';
+      this.assertWriteSize(content, sizeType);
       let existingFile = await readFileAsText(path, (p) =>
         this.#adapter.openFile(p),
       );
@@ -1073,12 +1091,16 @@ export class Realm {
         });
       }
       if (isModuleResource(resource)) {
-        files.set(localPath, resource.attributes?.content ?? '');
+        let content = resource.attributes?.content ?? '';
+        this.assertWriteSize(content, 'file');
+        files.set(localPath, content);
       } else if (isCardResource(resource)) {
         let doc = {
           data: resource,
         };
-        files.set(localPath, JSON.stringify(doc, null, 2));
+        let jsonString = JSON.stringify(doc, null, 2);
+        this.assertWriteSize(jsonString, 'card');
+        files.set(localPath, jsonString);
       } else {
         return createResponse({
           body: JSON.stringify({
@@ -1106,6 +1128,9 @@ export class Realm {
           serializeFile: true,
         });
       } catch (e: any) {
+        if (e instanceof CardError) {
+          return responseWithError(e, requestContext);
+        }
         return createResponse({
           body: JSON.stringify({
             errors: [{ title: 'Write Error', detail: e.message }],
@@ -1259,7 +1284,7 @@ export class Realm {
 
   async reindex() {
     await this.#realmIndexUpdater.fullIndex();
-    await this.#definitionLookup.invalidate(this.url);
+    await this.#definitionLookup.clearRealmCache(this.url);
     this.#moduleCache.clear();
     this.broadcastRealmEvent({
       eventName: 'index',
@@ -1922,6 +1947,17 @@ export class Realm {
     });
   }
 
+  private assertWriteSize(content: string, type: 'card' | 'file') {
+    try {
+      validateWriteSize(content, this.#cardSizeLimitBytes, type);
+    } catch (error: any) {
+      throw new CardError(error?.message ?? 'Payload too large', {
+        status: 413,
+        title: 'Payload Too Large',
+      });
+    }
+  }
+
   private async getSourceOrRedirect(
     request: Request,
     requestContext: RequestContext,
@@ -2125,15 +2161,17 @@ export class Realm {
   private async handleExecutableInvalidations(
     invalidatedURLs: URL[],
   ): Promise<void> {
-    let definitionsInvalidated = false;
+    let definitionInvalidations: Promise<void>[] = [];
     for (const invalidatedURL of invalidatedURLs) {
       if (hasExecutableExtension(invalidatedURL.href)) {
-        definitionsInvalidated = true;
         this.#moduleCache.invalidate(this.paths.local(invalidatedURL));
+        definitionInvalidations.push(
+          this.#definitionLookup.invalidate(invalidatedURL.href),
+        );
       }
     }
-    if (definitionsInvalidated) {
-      await this.#definitionLookup.invalidate(this.url);
+    if (definitionInvalidations.length > 0) {
+      await Promise.all(definitionInvalidations);
     }
   }
 
@@ -4205,7 +4243,7 @@ export class Realm {
 
       if (hasExecutableExtension(localPath)) {
         this.#moduleCache.invalidate(localPath);
-        await this.#definitionLookup.invalidate(this.url);
+        await this.#definitionLookup.invalidate(tracked.url.href);
       }
 
       this.broadcastRealmEvent(data);

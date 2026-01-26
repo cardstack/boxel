@@ -36,9 +36,9 @@ interface SkillToggleSignature {
 }
 
 export default class SkillToggle extends Component<SkillToggleSignature> {
-  @consume(GetCardContextName) private declare getCard: getCard;
-  @service private declare realm: RealmService;
-  @service private declare commandService: CommandService;
+  @consume(GetCardContextName) declare private getCard: getCard;
+  @service declare private realm: RealmService;
+  @service declare private commandService: CommandService;
   @tracked private cardResource: ReturnType<getCard> | undefined;
 
   private makeCardResource = () => {

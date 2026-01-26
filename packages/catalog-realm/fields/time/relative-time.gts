@@ -9,6 +9,7 @@ import NumberField from 'https://cardstack.com/base/number';
 import { action } from '@ember/object';
 import ClockIcon from '@cardstack/boxel-icons/clock';
 import { BoxelSelect } from '@cardstack/boxel-ui/components';
+import { not } from '@cardstack/boxel-ui/helpers';
 
 class RelativeTimeFieldEdit extends Component<typeof RelativeTimeField> {
   unitOptions = [
@@ -43,6 +44,7 @@ class RelativeTimeFieldEdit extends Component<typeof RelativeTimeField> {
           @options={{this.unitOptions}}
           @onChange={{this.updateUnit}}
           @placeholder='Select unit'
+          @disabled={{not @canEdit}}
           data-test-relative-unit
           as |option|
         >

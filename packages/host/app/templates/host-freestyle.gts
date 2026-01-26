@@ -44,7 +44,7 @@ interface HostFreestyleSignature {
 }
 
 class HostFreestyleComponent extends Component<HostFreestyleSignature> {
-  @service private declare store: StoreService;
+  @service declare private store: StoreService;
   formatComponentName = formatComponentName;
 
   @provide(GetCardContextName)

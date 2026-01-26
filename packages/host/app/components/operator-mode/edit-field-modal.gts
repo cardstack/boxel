@@ -73,8 +73,8 @@ export default class EditFieldModal extends Component<Signature> {
   @tracked fieldNameErrorMessage: string | undefined;
   @service declare loaderService: LoaderService;
   @service declare operatorModeStateService: OperatorModeStateService;
-  @service private declare realm: RealmService;
-  @service private declare store: StoreService;
+  @service declare private realm: RealmService;
+  @service declare private store: StoreService;
 
   cardinalityItems = [
     {

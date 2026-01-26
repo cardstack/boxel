@@ -12,15 +12,14 @@
         "name": "default",
         "module": "../../fields/time/time-range"
       },
-      "title": "Time Range Field Spec",
       "readMe": null,
       "cardInfo": {
+        "name": null,
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": null
+        "summary": null,
+        "cardThumbnailURL": null
       },
-      "specType": "card",
+      "specType": "field",
       "standard": {
         "end": {
           "value": "22:20"
@@ -29,7 +28,8 @@
           "value": "20:20"
         }
       },
-      "description": null,
+      "cardTitle": "Time Range Field",
+      "cardDescription": null,
       "containedExamples": []
     },
     "relationships": {

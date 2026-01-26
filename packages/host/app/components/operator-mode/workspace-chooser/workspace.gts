@@ -120,8 +120,8 @@ export default class Workspace extends Component<Signature> {
     </style>
   </template>
 
-  @service private declare operatorModeStateService: OperatorModeStateService;
-  @service private declare realm: RealmService;
+  @service declare private operatorModeStateService: OperatorModeStateService;
+  @service declare private realm: RealmService;
 
   constructor(...args: [any, any]) {
     super(...args);

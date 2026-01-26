@@ -12,19 +12,19 @@
         "name": "default",
         "module": "../../fields/date/month"
       },
-      "title": "Month Field Spec",
       "readMe": null,
       "cardInfo": {
+        "name": null,
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": null
+        "summary": null,
+        "cardThumbnailURL": null
       },
-      "specType": "card",
+      "specType": "field",
       "standard": {
         "value": 2
       },
-      "description": null,
+      "cardTitle": "Month Field",
+      "cardDescription": null,
       "containedExamples": []
     },
     "relationships": {

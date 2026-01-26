@@ -12,20 +12,20 @@
         "name": "default",
         "module": "../../fields/time/relative-time"
       },
-      "title": "Relative Time Field Spec",
       "readMe": null,
       "cardInfo": {
+        "name": null,
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": null
+        "summary": null,
+        "cardThumbnailURL": null
       },
-      "specType": "card",
+      "specType": "field",
       "standard": {
         "unit": "hours",
         "amount": 12
       },
-      "description": null,
+      "cardTitle": "Relative Time Field",
+      "cardDescription": null,
       "containedExamples": []
     },
     "relationships": {

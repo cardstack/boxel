@@ -16,8 +16,8 @@ interface Signature {
 }
 
 export default class SyntaxErrorDisplay extends Component<Signature> {
-  @service private declare operatorModeStateService: OperatorModeStateService;
-  @service private declare matrixService: MatrixService;
+  @service declare private operatorModeStateService: OperatorModeStateService;
+  @service declare private matrixService: MatrixService;
 
   get stack() {
     let maybeCardError = this.removeSourceMappingURL(this.args.syntaxErrors);
