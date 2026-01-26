@@ -60,6 +60,7 @@ export class RealmServer {
   private log = logger('realm-server');
   private headLog = logger('realm-server:head');
   private isolatedLog = logger('realm-server:isolated');
+  private scopedCSSLog = logger('realm-server:scoped-css');
   private realms: Realm[];
   private virtualNetwork: VirtualNetwork;
   private matrixClient: MatrixClient;
@@ -334,6 +335,7 @@ export class RealmServer {
 
       this.headLog.debug(`Fetching head HTML for ${cardURL.href}`);
       this.isolatedLog.debug(`Fetching isolated HTML for ${cardURL.href}`);
+      this.scopedCSSLog.debug(`Fetching scoped CSS for ${cardURL.href}`);
 
       let [headHTML, isolatedHTML, scopedCSS] = await Promise.all([
         this.retrieveHeadHTML(cardURL),
@@ -357,6 +359,16 @@ export class RealmServer {
         );
       }
 
+      if (scopedCSS != null) {
+        this.scopedCSSLog.debug(
+          `Using scoped CSS for ${cardURL.href} (length ${scopedCSS.length})`,
+        );
+      } else {
+        this.scopedCSSLog.debug(
+          `No scoped CSS returned from database for ${cardURL.href}`,
+        );
+      }
+
       let responseHTML = indexHTML;
       let headFragments: string[] = [];
 
@@ -365,6 +377,7 @@ export class RealmServer {
       }
 
       if (scopedCSS != null) {
+        this.scopedCSSLog.debug(`Injecting scoped CSS for ${cardURL.href}`);
         headFragments.push(
           `<style data-boxel-scoped-css>\n${scopedCSS}\n</style>`,
         );
