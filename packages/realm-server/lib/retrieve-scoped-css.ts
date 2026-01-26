@@ -15,7 +15,10 @@ export async function retrieveScopedCSS({
   dbAdapter: DBAdapter;
   indexURLCandidates: (cardURL: URL) => string[];
   indexCandidateExpressions: (candidates: string[]) => Expression;
-  log?: { debug: (...args: unknown[]) => void; trace: (...args: unknown[]) => void };
+  log?: {
+    debug: (...args: unknown[]) => void;
+    trace: (...args: unknown[]) => void;
+  };
 }): Promise<string | null> {
   let candidates = indexURLCandidates(cardURL);
 
@@ -35,10 +38,14 @@ export async function retrieveScopedCSS({
 
   if (log) {
     let sql = expressionToSql(dbAdapter.kind, scopedCSSQuery);
-    log.trace('Scoped CSS query for %s: %s', cardURL.href, sql.text);
-    if (sql.values.length > 0) {
-      log.trace('Scoped CSS query values for %s', cardURL.href, sql.values);
-    }
+    let compactSql = sql.text.replace(/\s+/g, ' ').trim();
+    let values = JSON.stringify(sql.values);
+    log.trace(
+      'Scoped CSS query for %s: %s; values=%s',
+      cardURL.href,
+      compactSql,
+      values,
+    );
   }
 
   let rows = await query(dbAdapter, scopedCSSQuery);
