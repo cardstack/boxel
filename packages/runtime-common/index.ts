@@ -10,6 +10,7 @@ import type { RenderRouteOptions } from './render-route-options';
 import type { Definition } from './definitions';
 
 import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
+import type { FileDef } from 'https://cardstack.com/base/file-api';
 import type { ErrorEntry } from './index-writer';
 
 export interface LooseSingleResourceDocument<T extends LinkableResource> {
@@ -443,6 +444,8 @@ export interface AddOptions extends CreateOptions {
   doNotWaitForPersist?: boolean;
 }
 
+export type StoreReadType = 'card' | 'file-meta';
+
 export interface Store {
   save(id: string): void;
   create(
@@ -461,10 +464,27 @@ export interface Store {
     instanceOrDoc: T | LooseSingleCardDocument,
     opts?: CreateOptions,
   ): Promise<T | CardErrorJSONAPI>;
-  peek<T extends CardDef>(id: string): T | CardErrorJSONAPI | undefined;
-  peekLive<T extends CardDef>(id: string): T | CardErrorJSONAPI | undefined;
-  peekError(id: string): CardErrorJSONAPI | undefined;
-  get<T extends CardDef>(id: string): Promise<T | CardErrorJSONAPI>;
+  peek<T extends CardDef>(
+    id: string,
+    opts?: { type?: 'card' },
+  ): T | CardErrorJSONAPI | undefined;
+  peek<T extends FileDef>(
+    id: string,
+    opts: { type: 'file-meta' },
+  ): T | CardErrorJSONAPI | undefined;
+  peekError(id: string, opts?: { type?: 'card' }): CardErrorJSONAPI | undefined;
+  peekError(
+    id: string,
+    opts: { type: 'file-meta' },
+  ): CardErrorJSONAPI | undefined;
+  get<T extends CardDef>(
+    id: string,
+    opts?: { type?: 'card' },
+  ): Promise<T | CardErrorJSONAPI>;
+  get<T extends FileDef>(
+    id: string,
+    opts: { type: 'file-meta' },
+  ): Promise<T | CardErrorJSONAPI>;
   delete(id: string): Promise<void>;
   patch<T extends CardDef>(
     id: string,
