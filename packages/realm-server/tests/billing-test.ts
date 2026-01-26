@@ -703,7 +703,13 @@ module(basename(__filename), function () {
                   data: [
                     {
                       amount: 1200,
+                      type: 'subscription',
+                      proration: false,
                       price: { product: 'prod_creator' },
+                      period: {
+                        start: 20,
+                        end: 30,
+                      },
                     },
                   ],
                 },
@@ -735,8 +741,8 @@ module(basename(__filename), function () {
           // Assert both subscription cycles have the correct period start and end
           assert.strictEqual(subscriptionCycles[0].periodStart, 1);
           assert.strictEqual(subscriptionCycles[0].periodEnd, 2);
-          assert.strictEqual(subscriptionCycles[1].periodStart, 2);
-          assert.strictEqual(subscriptionCycles[1].periodEnd, 3);
+          assert.strictEqual(subscriptionCycles[1].periodStart, 20);
+          assert.strictEqual(subscriptionCycles[1].periodEnd, 30);
 
           // Assert that the ledger has the correct sum of credits going in and out
           availableCredits = await sumUpCreditsLedger(dbAdapter, {
