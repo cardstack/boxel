@@ -50,8 +50,12 @@
       "@embroider/webpack": "patches/@embroider__webpack.patch"
     },
     "onlyBuiltDependencies": [
+      "@percy/core",
+      "@vscode/vsce-sign",
+      "aws-sdk",
       "esbuild",
       "fsevents",
+      "keytar",
       "puppeteer"
     ]
   },
