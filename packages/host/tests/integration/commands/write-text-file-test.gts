@@ -244,4 +244,26 @@ module('Integration | commands | write-text-file', function (hooks) {
       );
     }
   });
+
+  test('throws when overwrite and useNonConflictingFilename are both true', async function (assert) {
+    let commandService = getService('command-service');
+    let writeTextFileCommand = new WriteTextFileCommand(
+      commandService.commandContext,
+    );
+    try {
+      await writeTextFileCommand.execute({
+        path: 'test.txt',
+        content: 'Hello!',
+        realm: testRealmURL,
+        overwrite: true,
+        useNonConflictingFilename: true,
+      });
+      assert.notOk(true, 'Should have thrown an error');
+    } catch (error: any) {
+      assert.ok(
+        error.message.includes('overwrite and useNonConflictingFilename'),
+        'Error message should mention conflicting flags',
+      );
+    }
+  });
 });

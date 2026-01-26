@@ -30,6 +30,11 @@ export default class WriteTextFileCommand extends HostBaseCommand<
   protected async run(
     input: BaseCommandModule.WriteTextFileInput,
   ): Promise<BaseCommandModule.FileUrlCard> {
+    if (input.overwrite && input.useNonConflictingFilename) {
+      throw new Error(
+        'Cannot use both overwrite and useNonConflictingFilename.',
+      );
+    }
     let realm;
     if (input.realm) {
       realm = this.realm.realmOfURL(new URL(input.realm));
