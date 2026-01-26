@@ -1,9 +1,7 @@
-import type { MatrixEvent, RoomMember } from 'matrix-js-sdk';
+import type { MatrixClient, MatrixEvent, RoomMember } from 'matrix-js-sdk';
 
 export interface MembershipHandlerOptions {
-  client: {
-    joinRoom: (roomId: string) => Promise<unknown>;
-  };
+  client: MatrixClient;
   authUserId: string;
   startTime: number;
 }
