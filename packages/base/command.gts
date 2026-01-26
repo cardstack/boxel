@@ -122,7 +122,6 @@ export class SwitchSubmodeInput extends CardDef {
 
 export class SwitchSubmodeResult extends CardDef {
   @field codePath = contains(StringField);
-  @field requestedCodePath = contains(StringField);
 }
 
 export class WriteTextFileInput extends CardDef {

@@ -82,7 +82,6 @@ export default class SwitchSubmodeCommand extends HostBaseCommand<
             const { SwitchSubmodeResult } = commandModule;
             resultCard = new SwitchSubmodeResult({
               codePath: newCodeUrl.href,
-              requestedCodePath: codeUrl.href,
             });
           }
         }

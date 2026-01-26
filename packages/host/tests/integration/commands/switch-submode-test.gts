@@ -184,7 +184,6 @@ module('Integration | commands | switch-submode', function (hooks) {
 
     assert.ok(result, 'returns a result card with the new filename');
     assert.strictEqual(result?.codePath, newFileUrl);
-    assert.strictEqual(result?.requestedCodePath, fileUrl);
     assert.strictEqual(
       operatorModeStateService.state?.codePath?.href,
       newFileUrl,
