@@ -53,6 +53,7 @@ import {
 
 import {
   CardDef,
+  FileDef,
   contains,
   field,
   linksTo,
@@ -381,7 +382,7 @@ module('Integration | Store', function (hooks) {
     await testRealm.write('hero.png', 'mock hero image');
     let fileUrl = `${testRealmURL}hero.png`;
 
-    let fileInstance = await storeService.get(fileUrl);
+    let fileInstance = await storeService.get(fileUrl, { type: 'file-meta' });
     assert.ok(fileInstance, 'file meta instance is loaded');
     assert.ok(
       (fileInstance as any).constructor?.isFileDef,
@@ -391,7 +392,7 @@ module('Integration | Store', function (hooks) {
     storeService.addReference(fileUrl);
     forceGC();
 
-    let peekedInstance = cardStore.get(fileUrl) as unknown;
+    let peekedInstance = cardStore.getFileMeta(fileUrl) as unknown;
     assert.strictEqual(
       peekedInstance,
       fileInstance,
@@ -403,15 +404,63 @@ module('Integration | Store', function (hooks) {
     await testRealm.write('hero.png', 'mock hero image');
     let fileUrl = `${testRealmURL}hero.png`;
 
-    await storeService.get(fileUrl);
+    await storeService.get(fileUrl, { type: 'file-meta' });
     storeService.addReference(fileUrl);
     storeService.dropReference(fileUrl);
     forceGC();
 
     assert.strictEqual(
-      cardStore.get(fileUrl),
+      cardStore.getFileMeta(fileUrl),
       undefined,
       'file meta instance is garbage collected after reference drop',
+    );
+  });
+
+  test('add stores FileDef dependencies', async function (assert) {
+    class FileCard extends CardDef {
+      @field attachment = linksTo(FileDef);
+    }
+
+    let fileUrl = `${testRealmURL}hero.png`;
+    let fileDef = new FileDef({
+      id: fileUrl,
+      sourceUrl: fileUrl,
+      url: fileUrl,
+      name: 'hero.png',
+      contentType: 'image/png',
+    });
+    let card = new FileCard({ attachment: fileDef });
+
+    await storeService.add(card, { doNotPersist: true });
+
+    assert.strictEqual(
+      storeService.peek(fileUrl, { type: 'file-meta' }),
+      fileDef,
+      'file meta dependency is cached in file-meta store',
+    );
+  });
+
+  test('file-meta reads do not reuse card errors for the same id', async function (assert) {
+    await testRealm.write('hero.png', 'mock hero image');
+    let fileUrl = `${testRealmURL}hero.png`;
+
+    let cardError = await storeService.get(fileUrl);
+    assert.false(
+      isCardInstance(cardError),
+      'card read returns an error for file url',
+    );
+
+    let fileInstance = await storeService.get(fileUrl, { type: 'file-meta' });
+    assert.ok(
+      (fileInstance as any).constructor?.isFileDef,
+      'file meta instance is a FileDef',
+    );
+
+    assert.ok(storeService.peekError(fileUrl), 'card error remains cached');
+    assert.strictEqual(
+      storeService.peekError(fileUrl, { type: 'file-meta' }),
+      undefined,
+      'file-meta error cache remains clear',
     );
   });
 

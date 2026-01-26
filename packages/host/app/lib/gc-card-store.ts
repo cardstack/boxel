@@ -127,11 +127,15 @@ export default class CardStoreWithGarbageCollection implements CardStore {
   // importantly these properties are not tracked so that we are able
   // to deserialize an instance without glimmer rendering the inner workings of
   // the deserialization process.
-  #nonTrackedInstances = new Map<string, StoredInstance>();
-  #nonTrackedInstanceErrors = new Map<string, CardErrorJSONAPI>();
+  #nonTrackedCardInstances = new Map<string, CardDef>();
+  #nonTrackedCardInstanceErrors = new Map<string, CardErrorJSONAPI>();
 
-  #instances = new TrackedMap<string, StoredInstance>();
-  #instanceErrors = new TrackedMap<string, CardErrorJSONAPI>();
+  #cardInstances = new TrackedMap<string, CardDef>();
+  #cardInstanceErrors = new TrackedMap<string, CardErrorJSONAPI>();
+  #nonTrackedFileMetaInstances = new Map<string, FileDef>();
+  #nonTrackedFileMetaInstanceErrors = new Map<string, CardErrorJSONAPI>();
+  #fileMetaInstances = new TrackedMap<string, FileDef>();
+  #fileMetaInstanceErrors = new TrackedMap<string, CardErrorJSONAPI>();
   #gcCandidates: Set<LocalId> = new Set();
   #referenceCount: ReferenceCount;
   #idResolver = new IDResolver();
@@ -157,20 +161,32 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     this.#storeHooks = storeHooks;
   }
 
-  get(id: string): CardDef | undefined {
-    return this.getItem('instance', id) as CardDef | undefined;
+  getCard(id: string): CardDef | undefined {
+    return this.getCardItem('instance', id) as CardDef | undefined;
+  }
+
+  getFileMeta(id: string): FileDef | undefined {
+    return this.getFileMetaItem('instance', id) as FileDef | undefined;
   }
 
   getRemoteIds(localId: string) {
     return this.#idResolver.getRemoteIds(localId);
   }
 
-  set(id: string, instance: CardDef): void {
-    this.setItem(id, instance);
+  setCard(id: string, instance: CardDef): void {
+    this.setCardItem(id, instance);
   }
 
-  setNonTracked(id: string, instance: CardDef): void {
-    this.setItem(id, instance, true);
+  setFileMeta(id: string, instance: FileDef): void {
+    this.setFileMetaItem(id, instance);
+  }
+
+  setCardNonTracked(id: string, instance: CardDef): void {
+    this.setCardItem(id, instance, true);
+  }
+
+  setFileMetaNonTracked(id: string, instance: FileDef): void {
+    this.setFileMetaItem(id, instance, true);
   }
 
   async loadCardDocument(url: string) {
@@ -246,21 +262,38 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     }
   }
 
-  addInstanceOrError(
+  addCardInstanceOrError(
     id: string,
-    instanceOrError: StoredInstance | CardErrorJSONAPI,
+    instanceOrError: CardDef | CardErrorJSONAPI,
   ) {
-    this.setItem(id, instanceOrError);
+    this.setCardItem(id, instanceOrError);
   }
 
-  getInstanceOrError(id: string) {
+  getCardInstanceOrError<T extends CardDef>(id: string) {
     // favor instances over errors so that we can get stale values when the
     // server goes into an error state
-    return this.getItem('instance', id) ?? this.getItem('error', id);
+    return (this.getCardItem('instance', id) ??
+      this.getCardItem('error', id)) as T | CardErrorJSONAPI | undefined;
   }
 
-  getError(id: string) {
-    return this.getItem('error', id);
+  addFileMetaInstanceOrError(
+    id: string,
+    instanceOrError: FileDef | CardErrorJSONAPI,
+  ) {
+    this.setFileMetaItem(id, instanceOrError);
+  }
+
+  getFileMetaInstanceOrError<T extends FileDef>(id: string) {
+    return (this.getFileMetaItem('instance', id) ??
+      this.getFileMetaItem('error', id)) as T | CardErrorJSONAPI | undefined;
+  }
+
+  getCardError(id: string) {
+    return this.getCardItem('error', id);
+  }
+
+  getFileMetaError(id: string) {
+    return this.getFileMetaItem('error', id);
   }
 
   delete(id: string): void {
@@ -298,10 +331,14 @@ export default class CardStoreWithGarbageCollection implements CardStore {
   }
 
   reset() {
-    this.#instances.clear();
-    this.#clearEphemeralErrors(this.#instanceErrors);
-    this.#nonTrackedInstances.clear();
-    this.#clearEphemeralErrors(this.#nonTrackedInstanceErrors);
+    this.#cardInstances.clear();
+    this.#clearEphemeralErrors(this.#cardInstanceErrors);
+    this.#nonTrackedCardInstances.clear();
+    this.#clearEphemeralErrors(this.#nonTrackedCardInstanceErrors);
+    this.#fileMetaInstances.clear();
+    this.#clearEphemeralErrors(this.#fileMetaInstanceErrors);
+    this.#nonTrackedFileMetaInstances.clear();
+    this.#clearEphemeralErrors(this.#nonTrackedFileMetaInstanceErrors);
     this.#gcCandidates.clear();
     this.#cardDocsInFlight.clear();
     this.#fileMetaDocsInFlight.clear();
@@ -337,7 +374,7 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     let visited = new WeakSet<StoredInstance>();
     let rootLocalIds: string[] = [];
 
-    for (let instance of this.#instances.values()) {
+    for (let instance of this.#cardInstances.values()) {
       if (!instance || visited.has(instance)) {
         continue;
       }
@@ -347,6 +384,11 @@ export default class CardStoreWithGarbageCollection implements CardStore {
         if (this.hasReferences(localId)) {
           rootLocalIds.push(localId);
         }
+      }
+    }
+
+    for (let instance of this.#fileMetaInstances.values()) {
+      if (!instance) {
         continue;
       }
       if (isFileDefInstance(instance)) {
@@ -374,7 +416,7 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     }
 
     visited = new WeakSet<StoredInstance>();
-    for (let instance of this.#instances.values()) {
+    for (let instance of this.#cardInstances.values()) {
       if (!instance || visited.has(instance)) {
         continue;
       }
@@ -386,8 +428,6 @@ export default class CardStoreWithGarbageCollection implements CardStore {
         if (instance.id) {
           extraDeleteIds.push(instance.id);
         }
-      } else if (isFileDefInstance(instance)) {
-        gcId = instance.id;
       }
       if (!gcId) {
         continue; // we should alwyays have a gcId by this point, but this helps TypeScript know that
@@ -409,28 +449,63 @@ export default class CardStoreWithGarbageCollection implements CardStore {
         this.#gcCandidates.delete(gcId);
       }
     }
+
+    for (let instance of this.#fileMetaInstances.values()) {
+      if (!instance) {
+        continue;
+      }
+      let gcId = instance.id;
+      if (!gcId) {
+        continue;
+      }
+      if (!reachable.has(gcId)) {
+        if (this.#gcCandidates.has(gcId)) {
+          destroy(instance);
+          (instance as unknown as any)[
+            Symbol.for('__instance_detached_from_store')
+          ] = true;
+          this.delete(gcId);
+        } else {
+          this.#gcCandidates.add(gcId);
+        }
+      } else {
+        this.#gcCandidates.delete(gcId);
+      }
+    }
   }
 
   makeTracked(remoteId: string) {
     remoteId = remoteId.replace(/\.json$/, '');
-    let instance = this.#nonTrackedInstances.get(remoteId);
+    let instance = this.#nonTrackedCardInstances.get(remoteId);
     if (instance) {
-      this.setItem(remoteId, instance);
+      this.setCardItem(remoteId, instance);
     }
-    this.#nonTrackedInstances.delete(remoteId);
+    this.#nonTrackedCardInstances.delete(remoteId);
 
-    let error = this.#nonTrackedInstanceErrors.get(remoteId);
+    let error = this.#nonTrackedCardInstanceErrors.get(remoteId);
     if (error) {
-      this.addInstanceOrError(remoteId, error);
+      this.addCardInstanceOrError(remoteId, error);
     }
-    this.#nonTrackedInstanceErrors.delete(remoteId);
+    this.#nonTrackedCardInstanceErrors.delete(remoteId);
+
+    let fileMetaInstance = this.#nonTrackedFileMetaInstances.get(remoteId);
+    if (fileMetaInstance) {
+      this.setFileMetaItem(remoteId, fileMetaInstance);
+    }
+    this.#nonTrackedFileMetaInstances.delete(remoteId);
+
+    let fileMetaError = this.#nonTrackedFileMetaInstanceErrors.get(remoteId);
+    if (fileMetaError) {
+      this.addFileMetaInstanceOrError(remoteId, fileMetaError);
+    }
+    this.#nonTrackedFileMetaInstanceErrors.delete(remoteId);
   }
 
   consumersOf(api: typeof CardAPI, instance: CardDef) {
     let consumptionGraph = this.makeConsumptionGraph(api);
     let consumers = consumptionGraph.get(instance[localIdSymbol]);
     return [...(consumers ?? [])]
-      .map((id) => this.get(id))
+      .map((id) => this.getCard(id))
       .filter(Boolean) as CardDef[];
   }
 
@@ -438,31 +513,35 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     let dependencyGraph = this.makeDependencyGraph(api);
     let deps = dependencyGraph.get(instance[localIdSymbol]);
     return [...(deps ?? [])]
-      .map((id) => this.get(id))
+      .map((id) => this.getCard(id))
       .filter(Boolean) as CardDef[];
   }
 
   private deleteFromAll(id: string) {
     id = id.replace(/\.json$/, '');
-    this.#instances.delete(id);
-    this.#instanceErrors.delete(id);
-    this.#nonTrackedInstances.delete(id);
-    this.#nonTrackedInstanceErrors.delete(id);
+    this.#cardInstances.delete(id);
+    this.#cardInstanceErrors.delete(id);
+    this.#nonTrackedCardInstances.delete(id);
+    this.#nonTrackedCardInstanceErrors.delete(id);
+    this.#fileMetaInstances.delete(id);
+    this.#fileMetaInstanceErrors.delete(id);
+    this.#nonTrackedFileMetaInstances.delete(id);
+    this.#nonTrackedFileMetaInstanceErrors.delete(id);
   }
 
-  private getItem(type: 'instance', id: string): StoredInstance | undefined;
-  private getItem(type: 'error', id: string): CardErrorJSONAPI | undefined;
-  private getItem(
+  private getCardItem(type: 'instance', id: string): CardDef | undefined;
+  private getCardItem(type: 'error', id: string): CardErrorJSONAPI | undefined;
+  private getCardItem(
     type: 'instance' | 'error',
     id: string,
-  ): StoredInstance | CardErrorJSONAPI | undefined {
+  ): CardDef | CardErrorJSONAPI | undefined {
     id = id.replace(/\.json$/, '');
-    let { item, localId } = this.tryFindingItem(type, id);
+    let { item, localId } = this.tryFindingCardItem(type, id);
 
     if (!item && isLocalId(id)) {
       let maybeRemoteId = this.#idResolver.findRemoteId(id);
       if (maybeRemoteId) {
-        ({ item, localId } = this.tryFindingItem(type, maybeRemoteId));
+        ({ item, localId } = this.tryFindingCardItem(type, maybeRemoteId));
       }
     }
 
@@ -472,21 +551,47 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     return item;
   }
 
-  private tryFindingItem(
+  private getFileMetaItem(type: 'instance', id: string): FileDef | undefined;
+  private getFileMetaItem(
+    type: 'error',
+    id: string,
+  ): CardErrorJSONAPI | undefined;
+  private getFileMetaItem(
+    type: 'instance' | 'error',
+    id: string,
+  ): FileDef | CardErrorJSONAPI | undefined {
+    id = id.replace(/\.json$/, '');
+    let bucket =
+      type === 'instance'
+        ? this.#fileMetaInstances
+        : this.#fileMetaInstanceErrors;
+    let silentBucket =
+      type === 'instance'
+        ? this.#nonTrackedFileMetaInstances
+        : this.#nonTrackedFileMetaInstanceErrors;
+    let item = bucket.get(id) ?? silentBucket.get(id);
+    if (item) {
+      this.#gcCandidates.delete(id);
+    }
+    return item;
+  }
+
+  private tryFindingCardItem(
     type: 'instance' | 'error',
     localOrRemoteId: string,
   ): {
-    item: StoredInstance | CardErrorJSONAPI | undefined;
+    item: CardDef | CardErrorJSONAPI | undefined;
     localId: string | undefined;
   } {
-    let bucket = type === 'instance' ? this.#instances : this.#instanceErrors;
+    let bucket =
+      type === 'instance' ? this.#cardInstances : this.#cardInstanceErrors;
     let silentBucket =
       type === 'instance'
-        ? this.#nonTrackedInstances
-        : this.#nonTrackedInstanceErrors;
+        ? this.#nonTrackedCardInstances
+        : this.#nonTrackedCardInstanceErrors;
     let localId = isLocalId(localOrRemoteId) ? localOrRemoteId : undefined;
     let remoteId = !isLocalId(localOrRemoteId) ? localOrRemoteId : undefined;
-    let item: StoredInstance | CardErrorJSONAPI | undefined;
+    let item: CardDef | CardErrorJSONAPI | undefined;
     if (remoteId) {
       if (localId) {
         remoteId = this.#idResolver.getRemoteIds(localId)?.[0];
@@ -515,16 +620,18 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     return { item, localId };
   }
 
-  private setItem(
+  private setCardItem(
     id: string,
-    item: StoredInstance | CardErrorJSONAPI,
+    item: CardDef | CardErrorJSONAPI,
     notTracked?: true,
   ) {
     id = id.replace(/\.json$/, '');
-    let cardBucket = notTracked ? this.#nonTrackedInstances : this.#instances;
+    let cardBucket = notTracked
+      ? this.#nonTrackedCardInstances
+      : this.#cardInstances;
     let errorBucket = notTracked
-      ? this.#nonTrackedInstanceErrors
-      : this.#instanceErrors;
+      ? this.#nonTrackedCardInstanceErrors
+      : this.#cardInstanceErrors;
     let isRemoteId = !isLocalId(id);
     if (isRemoteId) {
       if (isCardInstance(item)) {
@@ -539,8 +646,8 @@ export default class CardStoreWithGarbageCollection implements CardStore {
         }
       }
     }
-    let instance = isCardOrFileInstance(item) ? item : undefined;
-    let error = !isCardOrFileInstance(item) ? item : undefined;
+    let instance = isCardInstance(item) ? item : undefined;
+    let error = !isCardInstance(item) ? item : undefined;
     if (error && isRemoteId && error.id && isLocalId(error.id)) {
       this.#idResolver.addIdPair(error.id, id);
     }
@@ -590,6 +697,32 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     }
   }
 
+  private setFileMetaItem(
+    id: string,
+    item: StoredInstance | CardErrorJSONAPI,
+    notTracked?: true,
+  ) {
+    id = id.replace(/\.json$/, '');
+    let instanceBucket = notTracked
+      ? this.#nonTrackedFileMetaInstances
+      : this.#fileMetaInstances;
+    let errorBucket = notTracked
+      ? this.#nonTrackedFileMetaInstanceErrors
+      : this.#fileMetaInstanceErrors;
+    let instance = isFileDefInstance(item) ? item : undefined;
+    let error = !isFileDefInstance(item) ? item : undefined;
+
+    if (instance) {
+      setIfDifferent(instanceBucket, id, instance);
+      errorBucket.delete(id);
+      this.#gcCandidates.delete(id);
+    }
+
+    if (error) {
+      setIfDifferent(errorBucket, id, error);
+    }
+  }
+
   private hasReferences(id: string): boolean {
     let idsToCheck = new Set<string>([id]);
     let localId = isLocalId(id) ? id : this.#idResolver.getLocalId(id);
@@ -608,12 +741,15 @@ export default class CardStoreWithGarbageCollection implements CardStore {
 
   private makeConsumptionGraph(api: typeof CardAPI): InstanceGraph {
     let consumptionGraph: InstanceGraph = new Map();
-    for (let instance of this.#instances.values()) {
+    for (let instance of this.#cardInstances.values()) {
       if (!instance || !isCardInstance(instance)) {
         continue;
       }
       let deps = getDeps(api, instance);
       for (let dep of deps) {
+        if (!isCardInstance(dep)) {
+          continue;
+        }
         let consumers = consumptionGraph.get(dep[localIdSymbol]);
         if (!consumers) {
           consumers = new Set();
@@ -627,14 +763,18 @@ export default class CardStoreWithGarbageCollection implements CardStore {
 
   private makeDependencyGraph(api: typeof CardAPI): InstanceGraph {
     let dependencyGraph: InstanceGraph = new Map();
-    for (let instance of this.#instances.values()) {
+    for (let instance of this.#cardInstances.values()) {
       if (!instance || !isCardInstance(instance)) {
         continue;
       }
       let deps = getDeps(api, instance);
       dependencyGraph.set(
         instance[localIdSymbol],
-        new Set(deps.map((d) => d[localIdSymbol])),
+        new Set(
+          deps
+            .map((dep) => (isCardInstance(dep) ? dep[localIdSymbol] : dep.id))
+            .filter(Boolean) as string[],
+        ),
       );
     }
     return dependencyGraph;
@@ -664,32 +804,38 @@ export default class CardStoreWithGarbageCollection implements CardStore {
   }
 }
 
-export function getDeps(api: typeof CardAPI, instance: CardDef): CardDef[] {
+export function getDeps(
+  api: typeof CardAPI,
+  instance: CardDef,
+): Array<CardDef | FileDef> {
   let fields = api.getFields(
     Reflect.getPrototypeOf(instance)!.constructor as typeof CardDef,
     { includeComputeds: true },
   );
-  let deps: CardDef[] = [];
+  let deps: Array<CardDef | FileDef> = [];
   for (let [fieldName, field] of Object.entries(fields)) {
     let value = (instance as any)[fieldName];
     if (isPrimitive(field.card) || !value || typeof value !== 'object') {
       continue;
     }
-    deps.push(...findCardInstances(value));
+    deps.push(...findInstances(value));
   }
   return deps;
 }
 
-function findCardInstances(obj: object): CardDef[] {
+function findInstances(obj: object): Array<CardDef | FileDef> {
   if (isCardInstance(obj)) {
     return [obj];
   }
+  if (isFileDefInstance(obj)) {
+    return [obj];
+  }
   if (Array.isArray(obj)) {
-    return obj.reduce((acc, item) => acc.concat(findCardInstances(item)), []);
+    return obj.reduce((acc, item) => acc.concat(findInstances(item)), []);
   }
   if (obj && typeof obj === 'object') {
     return Object.values(obj).reduce(
-      (acc, value) => acc.concat(findCardInstances(value)),
+      (acc, value) => acc.concat(findInstances(value)),
       [],
     );
   }

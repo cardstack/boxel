@@ -394,9 +394,11 @@ export type GetSearchResourceFunc<T extends CardDef = CardDef> = (
 ) => StoreSearchResource<T>;
 
 export interface CardStore {
-  get(url: string): CardDef | undefined;
-  set(url: string, instance: CardDef): void;
-  setNonTracked(id: string, instance: CardDef): void;
+  getCard(url: string): CardDef | undefined;
+  getFileMeta(url: string): FileDef | undefined;
+  setCard(url: string, instance: CardDef): void;
+  setFileMeta(url: string, instance: FileDef): void;
+  setCardNonTracked(id: string, instance: CardDef): void;
   makeTracked(id: string): void;
   loadCardDocument(url: string): Promise<SingleCardDocument | CardError>;
   loadFileMetaDocument(
@@ -1190,8 +1192,11 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
     if (reference == null || reference === '') {
       return null;
     }
-    let cachedInstance = store.get(new URL(reference, relativeTo).href);
-    if (cachedInstance) {
+    let href = new URL(reference, relativeTo).href;
+    let cachedInstance = isFileDef(this.card)
+      ? store.getFileMeta(href)
+      : store.getCard(href);
+    if (cachedInstance && isCardInstance(cachedInstance)) {
       cachedInstance[isSavedInstance] = true;
       return cachedInstance as BaseInstanceType<CardT>;
     }
@@ -1682,10 +1687,12 @@ class LinksToMany<FieldT extends LinkableDefConstructor>
           return null;
         }
         let normalizedReference = new URL(reference, relativeTo).href;
-        let cachedInstance = store.get(normalizedReference);
+        let cachedInstance = isFileDef(this.card)
+          ? store.getFileMeta(normalizedReference)
+          : store.getCard(normalizedReference);
 
-        if (cachedInstance) {
-          (cachedInstance as CardDef)[isSavedInstance] = true;
+        if (cachedInstance && isCardInstance(cachedInstance)) {
+          cachedInstance[isSavedInstance] = true;
           return cachedInstance;
         }
         // links.self is used to tell the consumer of this payload how to get the resource via HTTP.
@@ -3046,9 +3053,12 @@ async function _createFromSerialized<T extends BaseDefConstructor>(
   }
   let instance: BaseInstanceType<T> | undefined;
   if (resource.id != null || resource.lid != null) {
-    instance = store.get((resource.id ?? resource.lid)!) as
-      | BaseInstanceType<T>
-      | undefined;
+    let resourceId = (resource.id ?? resource.lid)!;
+    let cachedInstance =
+      isFileMetaResource(resource) || isFileDef(card)
+        ? store.getFileMeta(resourceId)
+        : store.getCard(resourceId);
+    instance = cachedInstance as BaseInstanceType<T> | undefined;
   }
   if (!instance) {
     instance = new card({
@@ -3085,7 +3095,7 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
   // add the actual instance silently in a non-tracked way and only track it at
   // the very end.
   if (resource.id != null) {
-    store.setNonTracked(resource.id, instance as CardDef);
+    store.setCardNonTracked(resource.id, instance as CardDef);
   }
   let deferred = new Deferred<BaseDef>();
   let card = Reflect.getPrototypeOf(instance)!.constructor as T;
@@ -3676,18 +3686,27 @@ function myLoader(): Loader {
 
 class FallbackCardStore implements CardStore {
   #instances: Map<string, CardDef> = new Map();
+  #fileMetaInstances: Map<string, FileDef> = new Map();
   #inFlight: Set<Promise<unknown>> = new Set();
   #loadGeneration = 0; // mirrors host store tracking to detect new loads
 
-  get(id: string) {
+  getCard(id: string) {
     id = id.replace(/\.json$/, '');
     return this.#instances.get(id);
   }
-  set(id: string, instance: CardDef) {
+  getFileMeta(id: string) {
+    id = id.replace(/\.json$/, '');
+    return this.#fileMetaInstances.get(id);
+  }
+  setCard(id: string, instance: CardDef) {
     id = id.replace(/\.json$/, '');
     return this.#instances.set(id, instance);
   }
-  setNonTracked(id: string, instance: CardDef) {
+  setFileMeta(id: string, instance: FileDef) {
+    id = id.replace(/\.json$/, '');
+    return this.#fileMetaInstances.set(id, instance);
+  }
+  setCardNonTracked(id: string, instance: CardDef) {
     id = id.replace(/\.json$/, '');
     return this.#instances.set(id, instance);
   }
