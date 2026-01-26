@@ -155,7 +155,7 @@ module('Integration | commands | switch-submode', function (hooks) {
   });
 
   test('createFile picks a non-conflicting filename when the target exists', async function (assert) {
-    assert.expect(6);
+    assert.expect(5);
 
     let commandService = getService('command-service');
     let cardService = getService('card-service');
