@@ -198,7 +198,6 @@ export default class ListingCreateCommand extends HostBaseCommand<
       if (
         maybeType === 'app' ||
         maybeType === 'skill' ||
-        maybeType === 'field' ||
         maybeType === 'theme'
       ) {
         return maybeType;
