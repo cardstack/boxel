@@ -57,7 +57,7 @@ export const STREAMING_TIMEOUT_MINUTES = STREAMING_TIMEOUT_MS / 60_000;
 
 export default class RoomMessage extends Component<Signature> {
   @consume(GetCardCollectionContextName)
-  private declare getCardCollection: getCardCollection;
+  declare private getCardCollection: getCardCollection;
   @tracked private attachedCardCollection:
     | ReturnType<getCardCollection>
     | undefined;

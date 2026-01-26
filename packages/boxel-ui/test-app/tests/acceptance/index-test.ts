@@ -21,6 +21,10 @@ module('Acceptance | Docs', function (hooks) {
         rules: {
           'aria-allowed-role': { enabled: false },
           'color-contrast': { enabled: false },
+
+          // our demos contain example elements like <aside> that would normally
+          // only be allowed at the top level
+          'landmark-complementary-is-top-level': { enabled: false },
         },
       },
     );

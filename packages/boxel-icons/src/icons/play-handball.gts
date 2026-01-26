@@ -22,7 +22,7 @@ const IconComponent: TemplateOnlyComponent<Signature> = <template>
       d='m7 6 2 4 5 .5 4 2.5 2.5 3M4 20l5-1 1.5-2M15 7a1 1 0 1 0 2 0 1 1 0 0 0-2 0'
     /><path
       fill='currentColor'
-      d='M9.5 5a.5.5 0 1 0 0-1 .5.5 0 0 0 0 1z'
+      d='M9.5 5a.5.5 0 1 0 0-1 .5.5 0 0 0 0 1'
     /></svg>
 </template>;
 

@@ -1,4 +1,5 @@
 import GlimmerComponent from '@glimmer/component';
+import { hash } from '@ember/helper';
 import { on } from '@ember/modifier';
 import {
   restartableTask,
@@ -32,7 +33,6 @@ import {
 import { Button, IconButton } from '@cardstack/boxel-ui/components';
 import { IconMinusCircle } from '@cardstack/boxel-ui/icons';
 import { consume } from 'ember-provide-consume-context';
-import { hash } from '@ember/helper';
 
 interface Signature {
   Element: HTMLElement;

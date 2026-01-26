@@ -111,19 +111,19 @@ interface Signature {
 }
 
 export default class PlaygroundPanel extends Component<Signature> {
-  @consume(GetCardContextName) private declare getCard: getCard;
-  @consume(CardContextName) private declare cardContext: CardContext;
-  @service private declare aiAssistantPanelService: AiAssistantPanelService;
-  @service private declare commandService: CommandService;
-  @service private declare loaderService: LoaderService;
-  @service private declare matrixService: MatrixService;
-  @service private declare operatorModeStateService: OperatorModeStateService;
-  @service private declare realm: RealmService;
-  @service private declare realmServer: RealmServerService;
-  @service private declare recentFilesService: RecentFilesService;
-  @service private declare recentCardsService: RecentCardsService;
-  @service private declare playgroundPanelService: PlaygroundPanelService;
-  @service private declare store: StoreService;
+  @consume(GetCardContextName) declare private getCard: getCard;
+  @consume(CardContextName) declare private cardContext: CardContext;
+  @service declare private aiAssistantPanelService: AiAssistantPanelService;
+  @service declare private commandService: CommandService;
+  @service declare private loaderService: LoaderService;
+  @service declare private matrixService: MatrixService;
+  @service declare private operatorModeStateService: OperatorModeStateService;
+  @service declare private realm: RealmService;
+  @service declare private realmServer: RealmServerService;
+  @service declare private recentFilesService: RecentFilesService;
+  @service declare private recentCardsService: RecentCardsService;
+  @service declare private playgroundPanelService: PlaygroundPanelService;
+  @service declare private store: StoreService;
 
   @tracked private cardResource: ReturnType<getCard> | undefined;
   @tracked private fieldChooserIsOpen = false;
@@ -290,8 +290,8 @@ export default class PlaygroundPanel extends Component<Signature> {
     let { constructor } = this.card;
     return Boolean(
       constructor &&
-        'prefersWideFormat' in constructor &&
-        constructor.prefersWideFormat,
+      'prefersWideFormat' in constructor &&
+      constructor.prefersWideFormat,
     );
   }
 

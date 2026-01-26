@@ -16,13 +16,11 @@ const IconComponent: TemplateOnlyComponent<Signature> = <template>
     class='icon icon-tabler icons-tabler-outline icon-tabler-receipt-tax'
     viewBox='0 0 24 24'
     ...attributes
-  ><path stroke='none' d='M0 0h24v24H0z' /><path d='m9 14 6-6' /><circle
-      cx='9.5'
-      cy='8.5'
-      r='.5'
+  ><path stroke='none' d='M0 0h24v24H0z' /><path d='m9 14 6-6' /><path
       fill='currentColor'
-    /><circle cx='14.5' cy='13.5' r='.5' fill='currentColor' /><path
-      d='M5 21V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16l-3-2-2 2-2-2-2 2-2-2-3 2'
+      d='M9 8.5a.5.5 0 1 0 1 0 .5.5 0 1 0-1 0M14 13.5a.5.5 0 1 0 1 0 .5.5 0 1 0-1 0'
+    /><path
+      d='M5 21V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16l-3-2-2 2-2-2-2 2-2-2z'
     /></svg>
 </template>;
 

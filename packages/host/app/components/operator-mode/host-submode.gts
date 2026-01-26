@@ -38,10 +38,10 @@ interface HostSubmodeSignature {
 }
 
 export default class HostSubmode extends Component<HostSubmodeSignature> {
-  @service private declare operatorModeStateService: OperatorModeStateService;
-  @service private declare store: StoreService;
-  @service private declare realm: RealmService;
-  @service private declare hostModeService: HostModeService;
+  @service declare private operatorModeStateService: OperatorModeStateService;
+  @service declare private store: StoreService;
+  @service declare private realm: RealmService;
+  @service declare private hostModeService: HostModeService;
 
   @tracked isPublishRealmModalOpen = false;
   @tracked isPublishingRealmPopoverOpen = false;

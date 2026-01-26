@@ -182,7 +182,7 @@ interface Signature {
 }
 
 export default class AddWorkspace extends Component<Signature> {
-  @service private declare matrixService: MatrixService;
+  @service declare private matrixService: MatrixService;
   @tracked private isModalOpen: boolean = false;
   @tracked private endpoint = '';
   @tracked private displayName = '';

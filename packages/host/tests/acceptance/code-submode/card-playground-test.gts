@@ -26,6 +26,7 @@ import {
   setupAcceptanceTestRealm,
   setupAuthEndpoints,
   setupLocalIndexing,
+  setMonacoContent,
   setupOnSave,
   setupUserSubscription,
   testRealmURL,
@@ -572,6 +573,11 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       assert.dom('.google-title').hasText('Definition Title');
       assert.dom('.google-description').hasText('Definition description');
       assert.dom('.google-site-name').hasText('example.com');
+
+      setMonacoContent(headPreviewCard.replace('</title>', '!!</title>'));
+      await settled();
+
+      assert.dom('.google-title').hasText('Definition Title!!');
     });
 
     test('can populate instance chooser options from recent-files and recent-cards, ordered by last viewed timestamp', async function (assert) {

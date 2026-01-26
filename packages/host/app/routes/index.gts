@@ -44,14 +44,14 @@ export default class Card extends Route {
     clientSecret: { refreshModel: true },
   } as const;
 
-  @service private declare billingService: BillingService;
-  @service private declare cardService: CardService;
-  @service private declare hostModeService: HostModeService;
-  @service private declare hostModeStateService: HostModeStateService;
-  @service private declare matrixService: MatrixService;
-  @service private declare operatorModeStateService: OperatorModeStateService;
-  @service private declare router: RouterService;
-  @service private declare store: StoreService;
+  @service declare private billingService: BillingService;
+  @service declare private cardService: CardService;
+  @service declare private hostModeService: HostModeService;
+  @service declare private hostModeStateService: HostModeStateService;
+  @service declare private matrixService: MatrixService;
+  @service declare private operatorModeStateService: OperatorModeStateService;
+  @service declare private router: RouterService;
+  @service declare private store: StoreService;
   @service declare realm: RealmService;
   @service declare realmServer: RealmServerService;
 

@@ -386,7 +386,7 @@ export default class RegisterUser extends Component<Signature> {
         session: string;
       } = { type: 'initial' };
 
-  @service private declare matrixService: MatrixService;
+  @service declare private matrixService: MatrixService;
 
   private get currentPage() {
     if (['initial', 'validateEmail', 'register'].includes(this.state.type)) {

@@ -234,9 +234,7 @@ export function setupOperatorModeTests(
       @field name = contains(StringField);
       @field friend = linksTo(() => Friend);
       static fitted = class Fitted extends Component<typeof this> {
-        <template>
-          <@fields.name />
-        </template>
+        <template><@fields.name /></template>
       };
     }
 
@@ -288,9 +286,7 @@ export function setupOperatorModeTests(
         throw new Error('Boom!');
       }
       static embedded = class Embedded extends Component<typeof this> {
-        <template>
-          {{@model}}
-        </template>
+        <template>{{@model}}</template>
       };
     }
     class BoomPet extends Pet {
@@ -361,9 +357,7 @@ export function setupOperatorModeTests(
       @field body = contains(TextAreaField);
       @field authorBio = linksTo(Author);
       static fitted = class Fitted extends Component<typeof this> {
-        <template>
-          <@fields.cardTitle /> by <@fields.authorBio />
-        </template>
+        <template><@fields.cardTitle /> by <@fields.authorBio /></template>
       };
       static isolated = class Isolated extends Component<typeof this> {
         <template>

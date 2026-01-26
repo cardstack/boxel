@@ -123,9 +123,7 @@ module('Integration | ask-ai', function (hooks) {
     });
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-        </template>
+        <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
 
@@ -161,9 +159,7 @@ module('Integration | ask-ai', function (hooks) {
     });
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-        </template>
+        <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
     await click('[data-test-close-button]'); // close last card
@@ -205,9 +201,7 @@ module('Integration | ask-ai', function (hooks) {
     });
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-        </template>
+        <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
 

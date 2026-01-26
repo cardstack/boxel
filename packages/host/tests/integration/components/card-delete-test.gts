@@ -185,9 +185,7 @@ module('Integration | card-delete', function (hooks) {
     setCardInOperatorModeState([`${testRealmURL}index`]);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-        </template>
+        <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
     let fileRef = await adapter.openFile('Pet/mango.json');
@@ -226,9 +224,7 @@ module('Integration | card-delete', function (hooks) {
     setCardInOperatorModeState([`${testRealmURL}index`]);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-        </template>
+        <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
     let fileRef = await adapter.openFile('Pet/mango.json');
@@ -265,9 +261,7 @@ module('Integration | card-delete', function (hooks) {
     ]);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-        </template>
+        <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
     let fileRef = await adapter.openFile('Pet/mango.json');
@@ -311,9 +305,7 @@ module('Integration | card-delete', function (hooks) {
     ]);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-        </template>
+        <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
     let fileRef = await adapter.openFile('Pet/mango.json');
@@ -360,9 +352,7 @@ module('Integration | card-delete', function (hooks) {
     );
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-        </template>
+        <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
     let fileRef = await adapter.openFile('Pet/mango.json');
@@ -417,9 +407,7 @@ module('Integration | card-delete', function (hooks) {
     );
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-        </template>
+        <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
     let fileRef = await adapter.openFile('Pet/mango.json');
@@ -468,9 +456,7 @@ module('Integration | card-delete', function (hooks) {
     );
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-        </template>
+        <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
     let fileRef = await adapter.openFile('Pet/mango.json');
@@ -535,9 +521,7 @@ module('Integration | card-delete', function (hooks) {
     setCardInOperatorModeState([`${testRealmURL}index`]);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-        </template>
+        <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
     let fileRef = await adapter.openFile('Pet/mango.json');
@@ -587,9 +571,7 @@ module('Integration | card-delete', function (hooks) {
     );
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-        </template>
+        <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
     let fileRef = await adapter.openFile('Pet/mango.json');

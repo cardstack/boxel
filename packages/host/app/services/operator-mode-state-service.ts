@@ -91,7 +91,7 @@ export interface OperatorModeState {
 
 interface CardItem {
   id: string;
-  format: 'isolated' | 'edit';
+  format: 'isolated' | 'edit' | 'head';
 }
 
 export type FileView = 'inspector' | 'browser';
@@ -867,7 +867,11 @@ export default class OperatorModeStateService extends Service {
     for (let stack of this._state.stacks) {
       let serializedStack: SerializedStack = [];
       for (let item of stack) {
-        if (item.format !== 'isolated' && item.format !== 'edit') {
+        if (
+          item.format !== 'isolated' &&
+          item.format !== 'edit' &&
+          item.format !== 'head'
+        ) {
           throw new Error(`Unknown format for card on stack ${item.format}`);
         }
         if (item.id) {

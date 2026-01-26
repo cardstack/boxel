@@ -107,15 +107,15 @@ export default class SubmodeLayout extends Component<Signature> {
     defaultWidth: 30,
     minWidth: 25,
   });
-  @service private declare operatorModeStateService: OperatorModeStateService;
-  @service private declare matrixService: MatrixService;
-  @service private declare store: StoreService;
-  @service private declare aiAssistantPanelService: AiAssistantPanelService;
-  @service private declare recentCardsService: RecentCardsService;
+  @service declare private operatorModeStateService: OperatorModeStateService;
+  @service declare private matrixService: MatrixService;
+  @service declare private store: StoreService;
+  @service declare private aiAssistantPanelService: AiAssistantPanelService;
+  @service declare private recentCardsService: RecentCardsService;
 
   private searchElement: HTMLElement | null = null;
   private suppressSearchClose = false;
-  private declare doSearch: (term: string) => void;
+  declare private doSearch: (term: string) => void;
 
   @action
   private onLayoutChange(layout: number[]) {

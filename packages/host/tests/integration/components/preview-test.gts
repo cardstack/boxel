@@ -49,9 +49,7 @@ module('Integration | preview', function (hooks) {
     let card = new TestCard({ firstName: 'Mango ' });
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <CardRenderer @card={{card}} />
-        </template>
+        <template><CardRenderer @card={{card}} /></template>
       },
     );
     await waitFor('[data-test-firstName]'); // we need to wait for the card instance to load

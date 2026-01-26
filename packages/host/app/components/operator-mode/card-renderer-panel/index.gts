@@ -62,10 +62,10 @@ interface Signature {
 }
 
 export default class CardRendererPanel extends Component<Signature> {
-  @consume(CardContextName) private declare cardContext: CardContext;
-  @service private declare commandService: CommandService;
-  @service private declare operatorModeStateService: OperatorModeStateService;
-  @service private declare realm: RealmService;
+  @consume(CardContextName) declare private cardContext: CardContext;
+  @service declare private commandService: CommandService;
+  @service declare private operatorModeStateService: OperatorModeStateService;
+  @service declare private realm: RealmService;
 
   private scrollPositions = new Map<string, number>();
   private cardTracker = new ElementTracker();

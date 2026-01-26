@@ -21,7 +21,7 @@ const IconComponent: TemplateOnlyComponent<Signature> = <template>
     /><path
       d='M4 6v6c0 1.657 3.582 3 8 3 1.118 0 2.183-.086 3.15-.241M20 12V6'
     /><path
-      d='M4 12v6c0 1.657 3.582 3 8 3 .157 0 .312-.002.466-.005M16 19h6M19 16l3 3-3 3'
+      d='M4 12v6c0 1.657 3.582 3 8 3q.235 0 .466-.005M16 19h6M19 16l3 3-3 3'
     /></svg>
 </template>;
 

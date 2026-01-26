@@ -39,14 +39,14 @@ module('Integration | helpers | formatOrdinal', function (hooks) {
     await render(<template>{{formatOrdinal -1}}</template>);
     assert.dom().hasText('-1st', 'handles negative numbers');
 
-    await render(<template>
-      {{formatOrdinal null fallback='No position'}}
-    </template>);
+    await render(
+      <template>{{formatOrdinal null fallback='No position'}}</template>,
+    );
     assert.dom().hasText('No position', 'uses fallback for null');
 
-    await render(<template>
-      {{formatOrdinal undefined fallback='No ordinal'}}
-    </template>);
+    await render(
+      <template>{{formatOrdinal undefined fallback='No ordinal'}}</template>,
+    );
     assert.dom().hasText('No ordinal', 'uses fallback for undefined');
   });
 
@@ -98,21 +98,25 @@ module('Integration | helpers | formatOrdinal', function (hooks) {
   });
 
   test('invalid number handling', async function (assert) {
-    await render(<template>
-      {{! @glint-expect-error: invalid input type }}
-      {{formatOrdinal 'not-a-number' fallback='Invalid ordinal'}}
-    </template>);
+    await render(
+      <template>
+        {{! @glint-expect-error: invalid input type }}
+        {{formatOrdinal 'not-a-number' fallback='Invalid ordinal'}}
+      </template>,
+    );
     assert.dom().hasText('Invalid ordinal', 'handles non-numeric input');
 
-    await render(<template>
-      {{formatOrdinal 123.45 fallback='Decimal ordinal'}}
-    </template>);
+    await render(
+      <template>{{formatOrdinal 123.45 fallback='Decimal ordinal'}}</template>,
+    );
     assert.dom().hasText('Decimal ordinal', 'handles decimal numbers');
 
     let PosInfinity = Number.POSITIVE_INFINITY;
-    await render(<template>
-      {{formatOrdinal PosInfinity fallback='Infinite ordinal'}}
-    </template>);
+    await render(
+      <template>
+        {{formatOrdinal PosInfinity fallback='Infinite ordinal'}}
+      </template>,
+    );
     assert.dom().hasText('Infinite ordinal', 'handles infinity');
   });
 

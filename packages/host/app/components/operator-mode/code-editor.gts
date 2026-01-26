@@ -64,18 +64,19 @@ interface Signature {
     onSetup: (
       updateCursorByName: (name: string, fieldName?: string) => void,
     ) => void;
+    onWriteError?: (message: string | undefined) => void;
   };
 }
 
 const log = logger('component:code-editor');
 
 export default class CodeEditor extends Component<Signature> {
-  @service private declare monacoService: MonacoService;
-  @service private declare operatorModeStateService: OperatorModeStateService;
-  @service private declare environmentService: EnvironmentService;
-  @service private declare recentFilesService: RecentFilesService;
-  @service private declare store: StoreService;
-  @service private declare commandService: CommandService;
+  @service declare private monacoService: MonacoService;
+  @service declare private operatorModeStateService: OperatorModeStateService;
+  @service declare private environmentService: EnvironmentService;
+  @service declare private recentFilesService: RecentFilesService;
+  @service declare private store: StoreService;
+  @service declare private commandService: CommandService;
 
   @tracked private maybeMonacoSDK: MonacoSDK | undefined;
   @tracked private isFormatting = false;
@@ -350,6 +351,7 @@ export default class CodeEditor extends Component<Signature> {
     this.syncWithStore.perform(content);
 
     await timeout(this.environmentService.autoSaveDelayMs);
+    this.args.onWriteError?.(undefined);
     this.writeSourceCodeToFile(
       this.args.file,
       content,
@@ -433,7 +435,11 @@ export default class CodeEditor extends Component<Signature> {
   private waitForSourceCodeWrite = restartableTask(async () => {
     if (isReady(this.args.file)) {
       this.args.onFileSave('started');
-      await all([this.args.file.writing, timeout(500)]);
+      try {
+        await all([this.args.file.writing, timeout(500)]);
+      } catch {
+        // Errors are surfaced via writeError banners, so don't rethrow.
+      }
       this.args.onFileSave('finished');
     }
   });
@@ -459,10 +465,21 @@ export default class CodeEditor extends Component<Signature> {
 
     // flush the loader so that the preview (when card instance data is shown),
     // or schema editor (when module code is shown) gets refreshed on save
-    return file.write(content, {
-      flushLoader: hasExecutableExtension(file.name),
-      saveType,
-    });
+    return file
+      .write(content, {
+        flushLoader: hasExecutableExtension(file.name),
+        saveType,
+      })
+      .catch((error) => {
+        if (error?.status === 413 && error?.title) {
+          this.args.onWriteError?.(error.title);
+          return;
+        }
+        let message =
+          error?.message ??
+          (error?.title ? `${error.title}: ${error.message ?? ''}` : undefined);
+        this.args.onWriteError?.(message ? message.trim() : String(error));
+      });
   }
 
   private safeJSONParse(content: string) {

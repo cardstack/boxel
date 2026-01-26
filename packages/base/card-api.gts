@@ -16,7 +16,6 @@ import { getLinksToManyComponent } from './links-to-many-component';
 import {
   assertIsSerializerName,
   baseRef,
-  baseRealm,
   CardContextName,
   CardError,
   CodeRef,
@@ -32,12 +31,12 @@ import {
   getSerializer,
   humanReadable,
   identifyCard,
-  normalizeCodeRef,
   isBaseInstance,
   isCardError,
   isCardInstance as _isCardInstance,
   isCardResource,
   isFileMetaResource,
+  isFileDef,
   isField,
   isFieldInstance,
   isRelationship,
@@ -167,6 +166,7 @@ export {
   getFields,
   isCard,
   isField,
+  isFileDef,
   localId,
   meta,
   primitive,
@@ -330,28 +330,6 @@ export function instanceOf(instance: BaseDef, clazz: typeof BaseDef): boolean {
     }
     instanceClazz = instanceClazz ? getAncestor(instanceClazz) ?? null : null;
   } while (codeRefInstance && !isEqual(codeRefInstance, baseRef));
-  return false;
-}
-
-export function isFileDefConstructor(card: typeof BaseDef): boolean {
-  let baseFileDefRef = {
-    module: `${baseRealm.url}file-api`,
-    name: 'FileDef',
-  };
-  let current: typeof BaseDef | undefined = card;
-  while (current) {
-    let ref = identifyCard(current);
-    if (ref) {
-      let normalized = normalizeCodeRef(ref);
-      if (
-        normalized.module === baseFileDefRef.module &&
-        normalized.name === baseFileDefRef.name
-      ) {
-        return true;
-      }
-    }
-    current = getAncestor(current) as typeof BaseDef | undefined;
-  }
   return false;
 }
 
@@ -1087,7 +1065,7 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
     visited: Set<string>,
     opts?: SerializeOpts,
   ) {
-    let relationshipType = isFileDefConstructor(this.card as typeof BaseDef)
+    let relationshipType = isFileDef(this.card)
       ? FileMetaResourceType
       : CardResourceType;
     if (isNotLoadedValue(value)) {
@@ -1110,7 +1088,7 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
         },
       };
     }
-    if (isFileDefConstructor(this.card as typeof BaseDef) && !value.id) {
+    if (isFileDef(this.card) && !value.id) {
       throw new Error(
         `linksTo field '${this.name}' cannot serialize a FileDef without an id`,
       );
@@ -1266,7 +1244,7 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
       if (isNotLoadedValue(value)) {
         return value;
       }
-      if (isFileDefConstructor(this.card as typeof BaseDef) && !value.id) {
+      if (isFileDef(this.card) && !value.id) {
         throw new Error(
           `field validation error: the linksTo field '${this.name}' cannot reference a FileDef without an id`,
         );
@@ -1310,7 +1288,7 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
       let innerModel = model.field(fieldName);
       return innerModel as unknown as Box<CardDef | null>;
     };
-    let isFileDef = isFileDefConstructor(linksToField.card as typeof BaseDef);
+    let isFileDefField = isFileDef(linksToField.card);
     function shouldRenderEditor(
       format: Format | undefined,
       defaultFormat: Format,
@@ -1323,14 +1301,14 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
       format: Format | undefined,
       defaultFormat: Format,
       model: Box<FieldDef>,
-      isFileDef: boolean,
+      isFileDefField: boolean,
     ) {
       let effectiveFormat = format ?? defaultFormat;
       if (
         effectiveFormat === 'edit' &&
         (('isCardDef' in model.value.constructor &&
           model.value.constructor.isCardDef) ||
-          isFileDef)
+          isFileDefField)
       ) {
         return 'fitted';
       }
@@ -1352,7 +1330,7 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
           <DefaultFormatsConsumer as |defaultFormats|>
             {{#if
               (shouldRenderEditor
-                @format defaultFormats.cardDef isComputed isFileDef
+                @format defaultFormats.cardDef isComputed isFileDefField
               )
             }}
               <LinksToEditor
@@ -1369,7 +1347,7 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
                     @format
                     defaultFormats.cardDef
                     model
-                    isFileDef
+                    isFileDefField
                   }}
                   @displayContainer={{@displayContainer}}
                   ...attributes
@@ -1580,7 +1558,7 @@ class LinksToMany<FieldT extends LinkableDefConstructor>
       throw new Error(`Expected array for field value ${this.name}`);
     }
 
-    let relationshipType = isFileDefConstructor(this.card as typeof BaseDef)
+    let relationshipType = isFileDef(this.card)
       ? FileMetaResourceType
       : CardResourceType;
     let relationships: Record<string, Relationship> = {};
@@ -1603,7 +1581,7 @@ class LinksToMany<FieldT extends LinkableDefConstructor>
         };
         return;
       }
-      if (isFileDefConstructor(this.card as typeof BaseDef) && !value.id) {
+      if (isFileDef(this.card) && !value.id) {
         throw new Error(
           `linksToMany field '${this.name}' cannot serialize a FileDef without an id`,
         );
@@ -1815,7 +1793,7 @@ class LinksToMany<FieldT extends LinkableDefConstructor>
       if (
         !isNotLoadedValue(value) &&
         value != null &&
-        isFileDefConstructor(expectedCard as typeof BaseDef) &&
+        isFileDef(expectedCard) &&
         !value.id
       ) {
         throw new Error(
@@ -2770,7 +2748,7 @@ function lazilyLoadLink(
     ),
   );
   (async () => {
-    let isFileLink = isFileDefConstructor(field.card as typeof BaseDef);
+    let isFileLink = isFileDef(field.card);
     try {
       let fieldValue: CardDef | FileDef;
       if (isFileLink) {

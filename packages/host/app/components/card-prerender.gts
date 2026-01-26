@@ -61,12 +61,12 @@ import type RenderStoreService from '../services/render-store';
 
 // This component is used to perform rendering for indexing in Ember test contexts
 export default class CardPrerender extends Component {
-  @service('render-store') private declare store: RenderStoreService;
-  @service private declare network: NetworkService;
-  @service private declare router: RouterService;
-  @service private declare renderService: RenderService;
-  @service private declare localIndexer: LocalIndexer;
-  @service private declare loaderService: LoaderService;
+  @service('render-store') declare private store: RenderStoreService;
+  @service declare private network: NetworkService;
+  @service declare private router: RouterService;
+  @service declare private renderService: RenderService;
+  @service declare private localIndexer: LocalIndexer;
+  @service declare private loaderService: LoaderService;
   #nonce = 0;
   #shouldClearCacheForNextRender = true;
   #prerendererDelegate!: Prerenderer;

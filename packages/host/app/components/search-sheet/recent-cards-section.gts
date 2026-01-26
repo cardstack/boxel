@@ -20,7 +20,7 @@ interface Signature {
 }
 
 export default class RecentCardsSection extends Component<Signature> {
-  @service private declare recentCardsService: RecentCards;
+  @service declare private recentCardsService: RecentCards;
   @tracked private recentCardCollection = getCardCollection(
     this,
     () => this.recentCardsService.recentCardIds,

@@ -31,7 +31,7 @@ class GetCardsContextProvider extends GlimmerComponent<{
   Args: {};
   Blocks: { default: [] };
 }> {
-  @service private declare store: StoreService;
+  @service declare private store: StoreService;
 
   @provide(GetCardContextName)
   // @ts-ignore "getCard" is declared but not used
@@ -141,21 +141,23 @@ module('Integration | Component | RoomMessage', function (hooks) {
   async function renderRoomMessageComponent(testScenario: any) {
     function noop() {}
 
-    await render(<template>
-      {{! @glint-ignore }}
-      <GetCardsContextProvider>
-        <RoomMessage
-          @roomId={{testScenario.roomId}}
-          @roomResource={{testScenario}}
-          @monacoSDK={{testScenario.monacoSDK}}
-          @isStreaming={{testScenario.isStreaming}}
-          @registerScroller={{noop}}
-          @index={{testScenario.renderIndex}}
-          @retryAction={{testScenario.maybeRetryAction}}
-          data-test-message-idx='{{testScenario.renderIndex}}'
-        />
-      </GetCardsContextProvider>
-    </template>);
+    await render(
+      <template>
+        {{! @glint-ignore }}
+        <GetCardsContextProvider>
+          <RoomMessage
+            @roomId={{testScenario.roomId}}
+            @roomResource={{testScenario}}
+            @monacoSDK={{testScenario.monacoSDK}}
+            @isStreaming={{testScenario.isStreaming}}
+            @registerScroller={{noop}}
+            @index={{testScenario.renderIndex}}
+            @retryAction={{testScenario.maybeRetryAction}}
+            data-test-message-idx='{{testScenario.renderIndex}}'
+          />
+        </GetCardsContextProvider>
+      </template>,
+    );
   }
 
   test('it shows an error when AI bot message streaming timeouts', async function (assert) {

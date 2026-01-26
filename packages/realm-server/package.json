@@ -27,6 +27,7 @@
     "@types/koa__router": "catalog:",
     "@types/lodash": "catalog:",
     "@types/mime-types": "catalog:",
+    "@types/ms": "catalog:",
     "@types/node": "catalog:",
     "@types/pluralize": "catalog:",
     "@types/qs": "catalog:",

@@ -32,7 +32,7 @@ export default class SpecSearch extends Component<Signature> {
     {{/if}}
   </template>
 
-  @consume(GetCardsContextName) private declare getCards: getCards;
+  @consume(GetCardsContextName) declare private getCards: getCards;
 
   @tracked private specResults: ReturnType<getCards> | undefined;
 

@@ -20,13 +20,14 @@
   "scripts": {
     "start:pg": "./scripts/start-pg.sh",
     "stop:pg": "./scripts/stop-pg.sh",
-    "migrate": "PGDATABASE=boxel ./scripts/ensure-db-exists.sh && PGPORT=5435 PGDATABASE=boxel PGUSER=postgres node-pg-migrate --migrations-table migrations",
+    "migrate": "PGDATABASE=boxel ./scripts/ensure-db-exists.sh && PGPORT=5435 PGDATABASE=boxel PGUSER=postgres ts-node --transpileOnly ./scripts/fix-migration-names.ts && PGPORT=5435 PGDATABASE=boxel PGUSER=postgres node-pg-migrate --migrations-table migrations",
     "make-schema": "./scripts/schema-dump.sh",
     "drop-db": "docker exec boxel-pg dropdb --if-exists -U postgres -w",
     "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\"",
     "lint:fix": "concurrently \"pnpm:lint:*:fix\" --names \"fix:\"",
     "lint:js": "eslint . --report-unused-disable-directives --cache",
     "lint:js:fix": "eslint . --report-unused-disable-directives --fix",
+    "lint:migrations": "node ./scripts/lint-migrations.js",
     "lint:glint": "glint"
   },
   "volta": {

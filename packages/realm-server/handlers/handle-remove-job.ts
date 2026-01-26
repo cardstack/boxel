@@ -15,11 +15,7 @@ export default function handleReindex({
     return await _query(dbAdapter, expression);
   }
 
-  async function forceJobCompletion(jobId: string, jobReservationId?: string) {
-    async function query(expression: Expression) {
-      return await _query(dbAdapter, expression);
-    }
-
+  async function forceJobCompletion(jobId: string) {
     await query([
       `UPDATE jobs SET `,
       ...separatedByCommas([
@@ -36,12 +32,11 @@ export default function handleReindex({
       'WHERE id =',
       param(jobId),
     ] as Expression);
-    if (jobReservationId) {
-      await query([
-        `UPDATE job_reservations SET completed_at = NOW() WHERE id =`,
-        param(jobReservationId),
-      ]);
-    }
+    await query([
+      `UPDATE job_reservations SET completed_at = NOW() WHERE job_id =`,
+      param(jobId),
+      `AND completed_at IS NULL`,
+    ]);
     await query([`NOTIFY jobs_finished`]);
   }
 
@@ -68,18 +63,9 @@ export default function handleReindex({
         );
         return;
       }
-      await forceJobCompletion(jobId, jobReservationId);
+      await forceJobCompletion(jobId);
     } else if (jobId) {
-      let results = (await query([
-        'SELECT id FROM job_reservations WHERE job_id =',
-        param(jobId),
-        'AND completed_at IS NULL',
-      ])) as { id: string }[];
-      let reservationId: string | undefined;
-      if (results.length > 0) {
-        reservationId = results[0].id;
-      }
-      await forceJobCompletion(jobId, reservationId);
+      await forceJobCompletion(jobId);
     }
     return setContextResponse(ctxt, new Response(null, { status: 204 }));
   };

@@ -5,6 +5,7 @@ import { TrackedMap } from 'tracked-built-ins';
 import {
   isPrimitive,
   isCardInstance,
+  isFileDefInstance,
   isLocalId,
   localId as localIdSymbol,
   loadCardDocument,
@@ -53,12 +54,6 @@ type StoreHooks = {
     },
   ): StoreSearchResource<T>;
 };
-
-function isFileDefInstance(item: unknown): item is FileDef {
-  return Boolean(
-    (item as { constructor?: { isFileDef?: boolean } })?.constructor?.isFileDef,
-  );
-}
 
 function isCardOrFileInstance(item: unknown): item is StoredInstance {
   return isCardInstance(item) || isFileDefInstance(item);

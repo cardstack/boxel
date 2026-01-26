@@ -88,8 +88,8 @@ export default class Overlays extends Component<OverlaySignature> {
     </style>
   </template>
 
-  @service protected declare cardService: CardService;
-  @service protected declare realm: RealmService;
+  @service declare protected cardService: CardService;
+  @service declare protected realm: RealmService;
 
   @tracked
   protected currentlyHoveredCard: RenderedCardForOverlayActions | null = null;

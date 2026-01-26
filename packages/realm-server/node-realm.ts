@@ -212,7 +212,11 @@ export class NodeAdapter implements RealmAdapter {
     return { response, writable: s as unknown as WritableStream };
   }
 
-  createJWT(claims: TokenClaims, expiration: string, secret: string): string {
+  createJWT(
+    claims: TokenClaims,
+    expiration: Parameters<typeof createJWT>[1],
+    secret: string,
+  ): string {
     return createJWT(claims, expiration, secret);
   }
 

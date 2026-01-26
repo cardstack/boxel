@@ -83,6 +83,7 @@
     "@typescript-eslint/parser": "catalog:",
     "@universal-ember/test-support": "catalog:",
     "ajv": "catalog:",
+    "assert": "^2.1.0",
     "awesome-phonenumber": "catalog:",
     "broccoli-asset-rev": "catalog:",
     "broccoli-funnel": "catalog:",

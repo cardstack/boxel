@@ -70,12 +70,12 @@ let elementCallback = modifier(
 );
 
 export default class SearchSheet extends Component<Signature> {
-  @consume(GetCardContextName) private declare getCard: getCard;
+  @consume(GetCardContextName) declare private getCard: getCard;
 
   @tracked private searchKey = '';
 
-  @service private declare realmServer: RealmServerService;
-  @service private declare store: StoreService;
+  @service declare private realmServer: RealmServerService;
+  @service declare private store: StoreService;
 
   constructor(owner: Owner, args: any) {
     super(owner, args);
