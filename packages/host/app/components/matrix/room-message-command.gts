@@ -135,9 +135,11 @@ export default class RoomMessageCommand extends Component<Signature> {
   }
 
   private get shouldDisplayResultCard() {
+    let commandName = this.args.messageCommand.name ?? '';
     return (
       !!this.commandResultCard.card &&
-      this.args.messageCommand.name !== 'checkCorrectness'
+      commandName !== 'checkCorrectness' &&
+      !commandName.startsWith('switch-submode')
     );
   }
 
