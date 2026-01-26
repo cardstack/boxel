@@ -18,9 +18,12 @@ import BoxelMultiSelectDefaultTrigger, {
 } from './trigger.gts';
 
 export interface BoxelMultiSelectArgs<ItemT> extends PowerSelectArgs {
+  afterOptionsComponent?: ComponentLike<any>;
   ariaLabel?: string;
+  beforeOptionsComponent?: ComponentLike<any>;
   closeOnSelect?: boolean;
   disabled?: boolean;
+  dropdownClass?: string;
   extra?: any;
   matchTriggerWidth?: boolean;
   onBlur?: (select: Select, e: Event) => boolean | undefined;
@@ -75,7 +78,11 @@ export class BoxelMultiSelectBasic<ItemT> extends Component<Signature<ItemT>> {
       @registerAPI={{@registerAPI}}
       @initiallyOpened={{@initiallyOpened}}
       @extra={{@extra}}
-      @dropdownClass='boxel-multi-select__dropdown'
+      @dropdownClass={{if
+        @dropdownClass
+        @dropdownClass
+        'boxel-multi-select__dropdown'
+      }}
       {{! actions  }}
       @onOpen={{@onOpen}}
       @onClose={{@onClose}}
@@ -84,7 +91,11 @@ export class BoxelMultiSelectBasic<ItemT> extends Component<Signature<ItemT>> {
       @selectedItemComponent={{@selectedItemComponent}}
       @triggerComponent={{@triggerComponent}}
       @afterOptionsComponent={{@afterOptionsComponent}}
-      @beforeOptionsComponent={{component BeforeOptions}}
+      @beforeOptionsComponent={{if
+        @beforeOptionsComponent
+        (component @beforeOptionsComponent)
+        (component BeforeOptions)
+      }}
       ...attributes
       as |option|
     >
