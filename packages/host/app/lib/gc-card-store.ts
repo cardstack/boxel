@@ -525,22 +525,27 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     let errorBucket = notTracked
       ? this.#nonTrackedInstanceErrors
       : this.#instanceErrors;
-    if (!isLocalId(id) && isCardInstance(item)) {
-      this.#idResolver.addIdPair(item[localIdSymbol], id);
-    } else if (!isLocalId(id)) {
-      let maybeLocalId = id.split('/').pop()!;
-      let item = cardBucket.get(maybeLocalId) ?? errorBucket.get(maybeLocalId);
-      if (item) {
-        this.#idResolver.addIdPair(maybeLocalId, id);
+    let isRemoteId = !isLocalId(id);
+    if (isRemoteId) {
+      if (isCardInstance(item)) {
+        this.#idResolver.addIdPair(item[localIdSymbol], id);
+      } else {
+        // Non-card instances (e.g. FileDef) never carry a local ID on the item.
+        // We only attempt a tail match against ids already present in buckets.
+        let tailId = id.split('/').pop()!;
+        let bucketItem = cardBucket.get(tailId) ?? errorBucket.get(tailId);
+        if (bucketItem) {
+          this.#idResolver.addIdPair(tailId, id);
+        }
       }
     }
     let instance = isCardOrFileInstance(item) ? item : undefined;
     let error = !isCardOrFileInstance(item) ? item : undefined;
-    if (error && !isLocalId(id) && error.id && isLocalId(error.id)) {
+    if (error && isRemoteId && error.id && isLocalId(error.id)) {
       this.#idResolver.addIdPair(error.id, id);
     }
     let localId = isLocalId(id) ? id : undefined;
-    let remoteIds = !isLocalId(id) ? [id] : [];
+    let remoteIds = isRemoteId ? [id] : [];
     if (localId) {
       remoteIds = this.#idResolver.getRemoteIds(localId);
     }
