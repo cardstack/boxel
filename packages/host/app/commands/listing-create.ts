@@ -413,10 +413,8 @@ export default class ListingCreateCommand extends HostBaseCommand<
           error,
         });
       }
-    }
-
-    // If no openCardId was provided, attempt to find any existing instance of this type.
-    if (!exampleCard) {
+    } else {
+      // If no openCardId was provided, attempt to find any existing instance of this type.
       try {
         const search = new SearchCardsByTypeAndTitleCommand(
           this.commandContext,
