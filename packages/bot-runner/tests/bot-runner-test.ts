@@ -4,7 +4,7 @@ import type {
   ExecuteOptions,
   PgPrimitive,
 } from '@cardstack/runtime-common';
-import type { MatrixEvent, Room, RoomMember } from 'matrix-js-sdk';
+import type { MatrixClient, MatrixEvent, Room, RoomMember } from 'matrix-js-sdk';
 import { onMembershipEvent } from '../lib/membership-handler';
 import { onTimelineEvent } from '../lib/timeline-handler';
 
@@ -35,14 +35,19 @@ function makeMember(member: Partial<RoomMember>): RoomMember {
   return member as RoomMember;
 }
 
+function makeMatrixClient(client: Partial<MatrixClient>): MatrixClient {
+  return client as MatrixClient;
+}
+
 module('membership handler', () => {
   let joinedRooms: string[] = [];
   let handleMembershipEvent = onMembershipEvent({
-    client: {
+    client: makeMatrixClient({
       joinRoom: async (roomId: string) => {
         joinedRooms.push(roomId);
+        return makeRoom('join');
       },
-    },
+    }),
     authUserId: '@bot-runner:localhost',
     startTime: 1000,
   });
