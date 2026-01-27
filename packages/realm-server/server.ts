@@ -356,7 +356,9 @@ export class RealmServer {
 
       if (headHTML != null) {
         this.headLog.debug(
-          `Injecting head HTML for ${cardURL.href} (length ${headHTML.length})`,
+          `Injecting head HTML for ${cardURL.href} (length ${headHTML.length})\n${this.truncateLogLines(
+            headHTML,
+          )}`,
         );
       } else {
         this.headLog.debug(
@@ -396,6 +398,11 @@ export class RealmServer {
       }
 
       if (isolatedHTML != null) {
+        this.isolatedLog.debug(
+          `Injecting isolated HTML for ${cardURL.href} (length ${isolatedHTML.length})\n${this.truncateLogLines(
+            isolatedHTML,
+          )}`,
+        );
         responseHTML = this.injectIsolatedHTML(responseHTML, isolatedHTML);
       }
 
@@ -599,6 +606,16 @@ export class RealmServer {
         ]),
       ) as Expression,
     ) as Expression;
+  }
+
+  private truncateLogLines(value: string, maxLines = 3): string {
+    let lines = value.split(/\r?\n/);
+    if (lines.length <= maxLines) {
+      return value;
+    }
+    let truncated = lines.slice(0, maxLines);
+    truncated[maxLines - 1] = `${truncated[maxLines - 1]} ...`;
+    return truncated.join('\n');
   }
 
   private injectHeadHTML(indexHTML: string, headHTML: string): string {
