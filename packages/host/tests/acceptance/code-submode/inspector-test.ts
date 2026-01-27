@@ -25,6 +25,8 @@ import {
 
 import { Submodes } from '@cardstack/host/components/submode-switcher';
 
+import ENV from '@cardstack/host/config/environment';
+
 import type MonacoService from '@cardstack/host/services/monaco-service';
 import type { SerializedState } from '@cardstack/host/services/operator-mode-state-service';
 
@@ -44,6 +46,7 @@ import {
   setupUserSubscription,
   type TestContextWithSave,
   setMonacoContent,
+  setupRealmServerEndpoints,
 } from '../../helpers';
 
 import { setupMockMatrix } from '../../helpers/mock-matrix';
@@ -2086,6 +2089,59 @@ export class ExportedCard extends ExportedCardParent {
       .doesNotExist('field defs do not display a create instance button');
   });
 
+  test('Create listing action is displayed for exported card definition', async function (assert) {
+    await visitOperatorMode({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}in-this-file.gts`,
+    });
+
+    await waitFor('[data-boxel-selector-item-text="ExportedCard"]');
+
+    await click('[data-boxel-selector-item-text="ExportedCard"]');
+    await waitFor('[data-test-card-module-definition]');
+
+    assert
+      .dom('[data-test-action-button="Create listing"]')
+      .exists('exported card defs display a Create listing button');
+  });
+
+  test('Create listing action is displayed for exported field definition', async function (assert) {
+    await visitOperatorMode({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}in-this-file.gts`,
+    });
+
+    await waitFor('[data-boxel-selector-item-text="ExportedField"]');
+
+    await click('[data-boxel-selector-item-text="ExportedField"]');
+    await waitFor('[data-test-card-module-definition]');
+
+    assert
+      .dom('[data-test-action-button="Create listing"]')
+      .exists('exported field defs display a Create listing button');
+  });
+
+  test('Create listing action is not displayed for non-exported Card definition', async function (assert) {
+    await visitOperatorMode({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}in-this-file.gts`,
+    });
+
+    await waitFor('[data-boxel-selector-item-text="LocalCard"]');
+
+    await click('[data-boxel-selector-item-text="LocalCard"]');
+    await waitFor('[data-test-card-module-definition]');
+
+    assert
+      .dom('[data-test-action-button="Create listing"]')
+      .doesNotExist(
+        'non-exported card defs do not display a Create listing button',
+      );
+  });
+
   test('can find instances of an exported card definition', async function (assert) {
     await visitOperatorMode({
       stacks: [[]],
@@ -2224,6 +2280,25 @@ export class ExportedCard extends ExportedCardParent {
       });
       await waitFor('[data-test-current-module-name="empty-file.gts"]');
       assert.dom('[data-test-delete-module-button]').doesNotExist();
+    });
+
+    test('Create listing action is not displayed when user does not have permission to write to realm', async function (assert) {
+      await visitOperatorMode({
+        stacks: [[]],
+        submode: 'code',
+        codePath: `${testRealmURL}in-this-file.gts`,
+      });
+
+      await waitFor('[data-boxel-selector-item-text="ExportedCard"]');
+
+      await click('[data-boxel-selector-item-text="ExportedCard"]');
+      await waitFor('[data-test-card-module-definition]');
+
+      assert
+        .dom('[data-test-action-button="Create listing"]')
+        .doesNotExist(
+          'Create listing button is not displayed when user lacks write permissions',
+        );
     });
   });
 });

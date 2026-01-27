@@ -1831,13 +1831,9 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
                   } else {
                     content = 'card';
                   }
-                } else if (
-                  systemLower.includes('catalog listing title')
-                ) {
+                } else if (systemLower.includes('catalog listing title')) {
                   content = 'Mock Listing Title';
-                } else if (
-                  systemLower.includes('spec-style summary')
-                ) {
+                } else if (systemLower.includes('spec-style summary')) {
                   content = 'Mock listing summary sentence.';
                 } else if (
                   systemLower.includes("boxel's sample data assistant")
