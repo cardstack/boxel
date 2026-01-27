@@ -1309,7 +1309,7 @@ module('Integration | Store', function (hooks) {
 
     let cachedFile = (await storeService.get(`${testRealmURL}hero.png`, {
       type: 'file-meta',
-    })) as FileDef;
+    })) as unknown as FileDef;
 
     let gallery = (await storeService.get(
       `${testRealmURL}Gallery/cached`,

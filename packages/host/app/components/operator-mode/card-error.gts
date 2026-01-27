@@ -156,7 +156,7 @@ export default class CardErrorComponent extends Component<Signature> {
 
   @cached
   get lastKnownGoodHtml() {
-    let lastKnownGoodHtml = this.args.error?.meta.lastKnownGoodHtml;
+    let lastKnownGoodHtml = this.args.error?.meta?.lastKnownGoodHtml;
     if (lastKnownGoodHtml) {
       this.loadScopedCSS.perform();
       return htmlComponent(lastKnownGoodHtml);
@@ -165,7 +165,7 @@ export default class CardErrorComponent extends Component<Signature> {
   }
 
   private loadScopedCSS = restartableTask(async () => {
-    let scopedCssUrls = this.args.error?.meta.scopedCssUrls;
+    let scopedCssUrls = this.args.error?.meta?.scopedCssUrls;
     if (scopedCssUrls) {
       await Promise.all(
         scopedCssUrls.map((cssModuleUrl) =>
