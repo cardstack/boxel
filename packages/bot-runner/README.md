@@ -20,7 +20,7 @@ Environment variables:
 - `BOT_RUNNER_USERNAME` (default: `bot-runner`)
 - `BOT_RUNNER_PASSWORD` (default: `password`)
 - `LOG_LEVELS` (default: `*=info`)
-- `SENTRY_DSN` (optional)
+- `BOT_RUNNER_SENTRY_DSN` (optional)
 - `SENTRY_ENVIRONMENT` (optional, default: `development`)
 
 ```
