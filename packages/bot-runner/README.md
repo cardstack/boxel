@@ -67,7 +67,7 @@ USERNAME="@bot-runner:localhost" \
 Defaults and requirements:
 - `REALM_SERVER_URL` (default: `http://localhost:4201`)
 - `REALM_SERVER_JWT` (required)
-- `USERNAME` (required, Matrix user id)
+- `USERNAME` (default: `@user:localhost`, Matrix user id)
 
 ### Unregister
 

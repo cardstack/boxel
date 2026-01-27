@@ -1,4 +1,5 @@
 import { logger, param, query } from '@cardstack/runtime-common';
+import * as Sentry from '@sentry/node';
 import type { DBAdapter, PgPrimitive } from '@cardstack/runtime-common';
 import type { MatrixEvent, Room } from 'matrix-js-sdk';
 
@@ -23,36 +24,44 @@ export function onTimelineEvent({
     room: Room | undefined,
     toStartOfTimeline: boolean | undefined,
   ) {
-    if (!room || toStartOfTimeline) {
-      return;
-    }
-    if (room.getMyMembership() !== 'join') {
-      return;
-    }
-
-    let senderUsername = event.getSender();
-    if (!senderUsername || senderUsername === authUserId) {
-      return;
-    }
-
-    let registrations = await getRegistrationsForUser(dbAdapter, senderUsername);
-    if (!registrations.length) {
-      return;
-    }
-    log.debug(
-      `received event from ${senderUsername} in room ${room.roomId} with ${registrations.length} registrations`,
-    );
-    for (let registration of registrations) {
-      let createdAt = Date.parse(registration.created_at);
-      if (Number.isNaN(createdAt)) {
-        continue;
+    try {
+      if (!room || toStartOfTimeline) {
+        return;
       }
-      let eventTimestamp = event.event.origin_server_ts;
-      if (eventTimestamp == null || eventTimestamp < createdAt) {
-        continue;
+      if (room.getMyMembership() !== 'join') {
+        return;
       }
-      // TODO: filter out events we want to handle based on the registration (e.g. command messages, system events)
-      // TODO: handle the event for this registration (e.g. enqueue a job).
+
+      let senderUsername = event.getSender();
+      if (!senderUsername || senderUsername === authUserId) {
+        return;
+      }
+
+      let registrations = await getRegistrationsForUser(
+        dbAdapter,
+        senderUsername,
+      );
+      if (!registrations.length) {
+        return;
+      }
+      log.debug(
+        `received event from ${senderUsername} in room ${room.roomId} with ${registrations.length} registrations`,
+      );
+      for (let registration of registrations) {
+        let createdAt = Date.parse(registration.created_at);
+        if (Number.isNaN(createdAt)) {
+          continue;
+        }
+        let eventTimestamp = event.event.origin_server_ts;
+        if (eventTimestamp == null || eventTimestamp < createdAt) {
+          continue;
+        }
+        // TODO: filter out events we want to handle based on the registration (e.g. command messages, system events)
+        // TODO: handle the event for this registration (e.g. enqueue a job).
+      }
+    } catch (error) {
+      log.error('error handling timeline event', error);
+      Sentry.captureException(error);
     }
   };
 }

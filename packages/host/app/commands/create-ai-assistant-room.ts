@@ -89,7 +89,6 @@ export default class CreateAiAssistantRoomCommand extends HostBaseCommand<
     const [roomResult, commandModule] = await Promise.all([
       await matrixService.createRoom({
         preset: matrixService.privateChatPreset,
-        //TODO: botRunner is here for testing purposes. Remove once finished
         invite: [aiBotFullId, botRunnerFullId],
         name: input.name,
         room_alias_name: encodeURIComponent(
