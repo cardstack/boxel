@@ -59,10 +59,12 @@ export default class PatchCodeCommand extends HostBaseCommand<
       codeBlocks,
     );
     let finalFileUrl = fileUrl;
+    let lintIssues: string[] = [];
     if (results.some((r) => r.status === 'applied')) {
       if (patchedCode.trim() !== '') {
         let lintResult = await this.lintAndFix(fileUrl, patchedCode);
         patchedCode = lintResult.output;
+        lintIssues = lintResult.lintIssues ?? [];
       }
 
       finalFileUrl = await this.determineFinalFileUrl(
@@ -100,6 +102,7 @@ export default class PatchCodeCommand extends HostBaseCommand<
     return new PatchCodeCommandResult({
       patchedContent: patchedCode,
       finalFileUrl,
+      lintIssues,
       results: results.map((result) => {
         return new PatchCodeResultField({
           status: result.status,
