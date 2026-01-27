@@ -25,8 +25,6 @@ import {
 
 import { Submodes } from '@cardstack/host/components/submode-switcher';
 
-import ENV from '@cardstack/host/config/environment';
-
 import type MonacoService from '@cardstack/host/services/monaco-service';
 import type { SerializedState } from '@cardstack/host/services/operator-mode-state-service';
 
@@ -46,7 +44,6 @@ import {
   setupUserSubscription,
   type TestContextWithSave,
   setMonacoContent,
-  setupRealmServerEndpoints,
 } from '../../helpers';
 
 import { setupMockMatrix } from '../../helpers/mock-matrix';
