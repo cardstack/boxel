@@ -49,7 +49,7 @@ class Isolated extends Component<typeof GamingHub> {
     if (this.gameSearchQuery) {
       filters.push({
         on: moduleRef,
-        contains: { 'game.title': this.gameSearchQuery },
+        contains: { 'game.cardTitle': this.gameSearchQuery },
       });
     }
 
