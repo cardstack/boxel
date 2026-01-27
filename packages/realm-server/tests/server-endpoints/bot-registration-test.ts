@@ -59,16 +59,16 @@ module(`server-endpoints/${basename(__filename)}`, function () {
             data: {
               type: 'bot-registration',
               attributes: {
-                matrixUserId,
+                username: matrixUserId,
               },
             },
           });
 
         assert.strictEqual(response.status, 201, 'HTTP 201 status');
         assert.strictEqual(
-          response.body.data.attributes.matrixUserId,
+          response.body.data.attributes.username,
           matrixUserId,
-          'response includes bot matrix user id',
+          'response includes username',
         );
         assert.ok(response.body.data.id, 'response includes id');
         assert.ok(
@@ -113,7 +113,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
             data: {
               type: 'bot-registration',
               attributes: {
-                matrixUserId,
+                username: matrixUserId,
               },
             },
           });
@@ -133,7 +133,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
             data: {
               type: 'bot-registration',
               attributes: {
-                matrixUserId,
+                username: matrixUserId,
               },
             },
           });
@@ -172,7 +172,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
             data: {
               type: 'bot-registration',
               attributes: {
-                matrixUserId: '@other-user:localhost',
+                username: '@other-user:localhost',
               },
             },
           });
@@ -204,7 +204,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
             data: {
               type: 'bot-registration',
               attributes: {
-                matrixUserId,
+                username: matrixUserId,
               },
             },
           });
@@ -297,7 +297,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
             data: {
               type: 'bot-registration',
               attributes: {
-                matrixUserId: ownerUserId,
+                username: ownerUserId,
               },
             },
           });
@@ -377,16 +377,16 @@ module(`server-endpoints/${basename(__filename)}`, function () {
 
         assert.strictEqual(response.status, 200, 'HTTP 200 status');
         assert.strictEqual(response.body.data.length, 1, 'returns one row');
-        let matrixUserIds = response.body.data.map(
-          (entry: any) => entry.attributes.matrixUserId,
+        let usernames = response.body.data.map(
+          (entry: any) => entry.attributes.username,
         );
         assert.ok(
-          matrixUserIds.includes(matrixUserId),
-          'includes first matrix user id',
+          usernames.includes(matrixUserId),
+          'includes first username',
         );
         assert.notOk(
-          matrixUserIds.includes(otherMatrixUserId),
-          'does not include other matrix user id',
+          usernames.includes(otherMatrixUserId),
+          'does not include other username',
         );
       });
 
@@ -421,7 +421,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
             data: {
               type: 'bot-registration',
               attributes: {
-                matrixUserId,
+                username: matrixUserId,
               },
             },
           });
@@ -441,7 +441,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
             data: {
               type: 'bot-registration',
               attributes: {
-                matrixUserId: otherMatrixUserId,
+                username: otherMatrixUserId,
               },
             },
           });

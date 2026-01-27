@@ -22,7 +22,7 @@ interface BotRegistrationJSON {
   data: {
     type: 'bot-registration';
     attributes: {
-      matrixUserId: string;
+      username: string;
     };
   };
 }
@@ -69,15 +69,15 @@ export function handleBotRegistrationRequest({
       return;
     }
 
-    let matrixUserId = json.data.attributes.matrixUserId.trim();
-    if (!matrixUserId) {
-      await sendResponseForBadRequest(ctxt, 'matrixUserId is required');
+    let username = json.data.attributes.username.trim();
+    if (!username) {
+      await sendResponseForBadRequest(ctxt, 'username is required');
       return;
     }
-    if (matrixUserId !== createdBy) {
+    if (username !== createdBy) {
       await sendResponseForForbiddenRequest(
         ctxt,
-        'matrixUserId must match authenticated user',
+        'username must match authenticated user',
       );
       return;
     }
@@ -87,7 +87,7 @@ export function handleBotRegistrationRequest({
       `(id, username, created_at) VALUES (`,
       param(uuidv4()),
       `,`,
-      param(matrixUserId),
+      param(username),
       `,`,
       dbExpression({ pg: 'NOW()', sqlite: 'CURRENT_TIMESTAMP' }),
       `) `,
@@ -109,7 +109,6 @@ export function handleBotRegistrationRequest({
               id: row.id,
               attributes: {
                 username: row.username,
-                matrixUserId,
                 createdAt: row.created_at,
               },
             },
@@ -141,8 +140,8 @@ export function handleBotRegistrationsRequest({
       return;
     }
 
-    let { user: matrixUserId } = token;
-    if (!(await getUserByMatrixUserId(dbAdapter, matrixUserId))) {
+    let { user: username } = token;
+    if (!(await getUserByMatrixUserId(dbAdapter, username))) {
       await sendResponseForNotFound(ctxt, 'user is not found');
       return;
     }
@@ -151,7 +150,7 @@ export function handleBotRegistrationsRequest({
       `SELECT br.id, br.username, br.created_at`,
       `FROM bot_registrations br`,
       `WHERE br.username = `,
-      param(matrixUserId),
+      param(username),
       `ORDER BY br.created_at ASC`,
     ]);
 
@@ -165,7 +164,6 @@ export function handleBotRegistrationsRequest({
               id: row.id,
               attributes: {
                 username: row.username,
-                matrixUserId,
                 createdAt: row.created_at,
               },
             })),
@@ -263,7 +261,7 @@ function assertIsBotRegistrationJSON(
   ) {
     throw new Error(`data.attributes must be an object`);
   }
-  if (typeof json.data.attributes.matrixUserId !== 'string') {
-    throw new Error(`data.attributes.matrixUserId must be a string`);
+  if (typeof json.data.attributes.username !== 'string') {
+    throw new Error(`data.attributes.username must be a string`);
   }
 }

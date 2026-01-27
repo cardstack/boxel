@@ -241,7 +241,7 @@ export class CreateAIAssistantRoomResult extends CardDef {
 }
 
 export class RegisterBotInput extends CardDef {
-  @field matrixUserId = contains(StringField);
+  @field username = contains(StringField);
   @field name = contains(StringField);
 }
 

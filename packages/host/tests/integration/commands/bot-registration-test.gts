@@ -36,7 +36,6 @@ module('Integration | commands | bot-registration', function (hooks) {
   let botRegistrations: Array<{
     id: string;
     username: string;
-    matrixUserId: string;
     createdAt: string;
   }>;
 
@@ -65,8 +64,7 @@ module('Integration | commands | bot-registration', function (hooks) {
         botRegistrations = [
           {
             id: 'bot-reg-1',
-            username: body.data.attributes.matrixUserId,
-            matrixUserId: body.data.attributes.matrixUserId,
+            username: body.data.attributes.username,
             createdAt: '2025-01-01T00:00:00Z',
           },
         ];
@@ -76,8 +74,7 @@ module('Integration | commands | bot-registration', function (hooks) {
               type: 'bot-registration',
               id: 'bot-reg-1',
               attributes: {
-                username: body.data.attributes.matrixUserId,
-                matrixUserId: body.data.attributes.matrixUserId,
+                username: body.data.attributes.username,
                 createdAt: '2025-01-01T00:00:00Z',
               },
             },
@@ -99,7 +96,6 @@ module('Integration | commands | bot-registration', function (hooks) {
               id: registration.id,
               attributes: {
                 username: registration.username,
-                matrixUserId: registration.matrixUserId,
                 createdAt: registration.createdAt,
               },
             })),
@@ -131,7 +127,7 @@ module('Integration | commands | bot-registration', function (hooks) {
     );
 
     let result = await registerBotCommand.execute({
-      matrixUserId: '@testuser:localhost',
+      username: '@testuser:localhost',
     });
 
     assert.strictEqual(result.botRegistrationId, 'bot-reg-1');
@@ -148,7 +144,7 @@ module('Integration | commands | bot-registration', function (hooks) {
     );
 
     let registerResult = await registerBotCommand.execute({
-      matrixUserId: '@testuser:localhost',
+      username: '@testuser:localhost',
     });
     await unregisterBotCommand.execute({
       botRegistrationId: registerResult.botRegistrationId,
