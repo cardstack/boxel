@@ -2,6 +2,8 @@ import './setup-logger'; // This should be first
 import { RoomMemberEvent, RoomEvent, createClient } from 'matrix-js-sdk';
 import { PgAdapter, PgQueuePublisher } from '@cardstack/postgres';
 import { logger } from '@cardstack/runtime-common';
+import { onMembershipEvent } from './lib/membership-handler';
+import { onTimelineEvent } from './lib/timeline-handler';
 
 const log = logger('bot-runner');
 const startTime = Date.now();
@@ -15,15 +17,15 @@ const botPassword = process.env.BOT_RUNNER_PASSWORD || 'password';
     baseUrl: matrixUrl,
   });
 
-  let auth = await client.loginWithPassword(botUsername, botPassword).catch(
-    (error) => {
+  let auth = await client
+    .loginWithPassword(botUsername, botPassword)
+    .catch((error) => {
       log.error(error);
       log.error(
         `Bot runner could not login to Matrix at ${matrixUrl}. Check credentials and server availability.`,
       );
       process.exit(1);
-    },
-  );
+    });
 
   log.info(`logged in as ${auth.user_id}`);
 
@@ -45,44 +47,21 @@ const botPassword = process.env.BOT_RUNNER_PASSWORD || 'password';
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);
 
-  client.on(RoomMemberEvent.Membership, function (event, member) {
-    if (event.event.origin_server_ts! < startTime) {
-      return;
-    }
-    if (member.membership === 'invite' && member.userId === auth.user_id) {
-      client
-        .joinRoom(member.roomId)
-        .then(function () {
-          log.info('%s auto-joined %s', member.name, member.roomId);
-        })
-        .catch(function (err) {
-          log.info(
-            'Error joining room after invite (user may have left before join)',
-            err,
-          );
-        });
-    }
+  client.on(
+    RoomMemberEvent.Membership,
+    onMembershipEvent({
+      client,
+      authUserId: auth.user_id,
+      startTime,
+    }),
+  );
+
+  let handleTimelineEvent = onTimelineEvent({
+    authUserId: auth.user_id,
+    dbAdapter,
   });
-
   client.on(RoomEvent.Timeline, async (event, room, toStartOfTimeline) => {
-    if (!room || toStartOfTimeline) {
-      return;
-    }
-
-    let senderMatrixUserId = event.getSender();
-    if (!senderMatrixUserId || senderMatrixUserId === auth.user_id) {
-      return;
-    }
-
-    let eventBody = event.getContent()?.body || '';
-    log.info(
-      'received event in room %s (%s): %s',
-      room.name,
-      room.roomId,
-      eventBody,
-    );
-
-    // TODO: enqueue bot command job via queuePublisher.publish(...)
+    await handleTimelineEvent(event, room, toStartOfTimeline);
   });
 
   client.startClient();

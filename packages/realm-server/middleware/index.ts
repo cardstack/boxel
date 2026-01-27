@@ -112,7 +112,7 @@ export async function fetchRequestFromContext(
   ctxt: Koa.Context,
 ): Promise<Request> {
   let reqBody: string | undefined;
-  if (['POST', 'PATCH', 'PUT', 'QUERY'].includes(ctxt.method)) {
+  if (['POST', 'PATCH', 'PUT', 'QUERY', 'DELETE'].includes(ctxt.method)) {
     let state = ctxt.state as Record<string, unknown>;
     if (REQUEST_BODY_STATE in state) {
       reqBody = state[REQUEST_BODY_STATE] as string;
