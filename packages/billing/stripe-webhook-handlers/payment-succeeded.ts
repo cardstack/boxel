@@ -47,10 +47,9 @@ function getInvoiceSubscriptionPeriod(
     };
   }
 
-  return {
-    periodStart: event.data.object.period_start,
-    periodEnd: event.data.object.period_end,
-  };
+  throw new Error(
+    'Expected subscription period to be present in payment succeeded webhook event',
+  );
 }
 
 export async function handlePaymentSucceeded(
