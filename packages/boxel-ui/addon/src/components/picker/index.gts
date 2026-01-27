@@ -162,7 +162,7 @@ export default class Picker extends Component<PickerSignature> {
       {{/if}}
     </BoxelMultiSelectBasic>
 
-    <style scoped>
+    <style>
       .picker-divider {
         height: 1px;
         background-color: var(--boxel-200);
