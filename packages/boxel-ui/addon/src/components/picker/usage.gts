@@ -66,25 +66,36 @@ export default class PickerUsage extends Component {
         </p>
         <p>
           A picker option is a plain object with the shape:
-          <code>{ id: string; name: string; icon?: Icon | string; type?: 'select-all' | 'option'; }</code>.
-          To create a search-all / select-all row, set <code>type: 'select-all'</code> and include it
-          as the first element in your <code>@options</code> array; the component will keep this option
-          at the top, even when searching or when options are re-grouped.
+          <code>{ id: string; name: string; icon?: Icon | string; type?:
+            'select-all' | 'option'; }</code>. To create a search-all /
+          select-all row, set
+          <code>type: 'select-all'</code>
+          and include it as the first element in your
+          <code>@options</code>
+          array; the component will keep this option at the top, even when
+          searching or when options are re-grouped.
         </p>
         <p>
           Options can use:
-          <code>icon</code> as an icon component (e.g. <code>IconGlobe</code>),
-          a URL string (rendered as an image),
-          or an inline SVG string (rendered via <code>addClassToSVG</code>).
+          <code>icon</code>
+          as an icon component (e.g.
+          <code>IconGlobe</code>), a URL string (rendered as an image), or an
+          inline SVG string (rendered via
+          <code>addClassToSVG</code>).
         </p>
         <p>
           In consumer code, import the component and its type from
           <code>@cardstack/boxel-ui/components</code>, for example:
-          <code>import { Picker, type PickerOption } from '@cardstack/boxel-ui/components';</code>
+          <code>import { Picker, type PickerOption } from
+            '@cardstack/boxel-ui/components';</code>
           then define your options and selected values:
-          <code>const options: PickerOption[] = [...]; const selected: PickerOption[] = [...];</code>
+          <code>const options: PickerOption[] = [...]; const selected:
+            PickerOption[] = [...];</code>
           and render something like:
-          <code>&lt;Picker @options=&#123;&#123;this.realmOptions&#125;&#125; @selected=&#123;&#123;this.selectedRealms&#125;&#125; @onChange=&#123;&#123;this.onRealmChange&#125;&#125; @label='Realm' /&gt;</code>.
+          <code>&lt;Picker @options=&#123;&#123;this.realmOptions&#125;&#125;
+            @selected=&#123;&#123;this.selectedRealms&#125;&#125;
+            @onChange=&#123;&#123;this.onRealmChange&#125;&#125; @label='Realm'
+            /&gt;</code>.
         </p>
         <p>Key features include:</p>
         <ol>

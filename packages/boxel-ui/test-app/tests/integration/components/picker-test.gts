@@ -32,7 +32,9 @@ module('Integration | Component | picker', function (hooks) {
     );
 
     assert.dom('[data-test-boxel-picker-trigger-label]').hasText('Test Label');
-    assert.dom('[data-test-boxel-picker-trigger-placeholder]').hasText('Select items');
+    assert
+      .dom('[data-test-boxel-picker-trigger-placeholder]')
+      .hasText('Select items');
   });
 
   test('picker shows selected items in trigger', async function (assert) {
@@ -91,13 +93,21 @@ module('Integration | Component | picker', function (hooks) {
 
     // First two should be selected
     assert
-      .dom(`[data-test-boxel-picker-option-row="2"][data-test-boxel-picker-option-selected]`).exists();
+      .dom(
+        `[data-test-boxel-picker-option-row="2"][data-test-boxel-picker-option-selected]`,
+      )
+      .exists();
     assert
-      .dom(`[data-test-boxel-picker-option-row="3"][data-test-boxel-picker-option-selected]`).exists();
+      .dom(
+        `[data-test-boxel-picker-option-row="3"][data-test-boxel-picker-option-selected]`,
+      )
+      .exists();
 
     // Check for divider after selected items
     const divider = document.querySelector('[data-test-boxel-picker-divider]');
-    assert.dom(divider).exists('Divider should exist between selected and unselected');
+    assert
+      .dom(divider)
+      .exists('Divider should exist between selected and unselected');
   });
 
   test('picker toggles selection when option is clicked', async function (assert) {
@@ -126,15 +136,29 @@ module('Integration | Component | picker', function (hooks) {
     await waitFor('[data-test-boxel-picker-option-row]');
 
     // Click first option
-    const firstOption = document.querySelectorAll('[data-test-boxel-picker-option-row]')[0];
+    const firstOption = document.querySelectorAll(
+      '[data-test-boxel-picker-option-row]',
+    )[0];
     await click(firstOption as HTMLElement);
 
-    assert.strictEqual(controller.selected.length, 1, 'Should have one selected item');
-    assert.strictEqual(controller.selected[0].id, '1', 'Should have selected first option');
+    assert.strictEqual(
+      controller.selected.length,
+      1,
+      'Should have one selected item',
+    );
+    assert.strictEqual(
+      controller.selected[0].id,
+      '1',
+      'Should have selected first option',
+    );
 
     // Click again to deselect
     await click(firstOption as HTMLElement);
-    assert.strictEqual(controller.selected.length, 0, 'Should have no selected items');
+    assert.strictEqual(
+      controller.selected.length,
+      0,
+      'Should have no selected items',
+    );
   });
 
   test('picker shows search input when searchEnabled is true', async function (assert) {
@@ -154,7 +178,9 @@ module('Integration | Component | picker', function (hooks) {
     await waitFor('[data-test-boxel-picker-before-options]');
 
     assert.dom('[data-test-boxel-picker-search]').exists();
-    assert.dom('[data-test-boxel-picker-search] input').hasAttribute('placeholder', 'Search...');
+    assert
+      .dom('[data-test-boxel-picker-search] input')
+      .hasAttribute('placeholder', 'Search...');
   });
 
   test('picker keeps select-all and selected options first when searching', async function (assert) {
@@ -184,7 +210,9 @@ module('Integration | Component | picker', function (hooks) {
 
     const optionIds = Array.from(
       document.querySelectorAll('[data-test-boxel-picker-option-row]'),
-    ).map((el) => (el as HTMLElement).getAttribute('data-test-boxel-picker-option-row'));
+    ).map((el) =>
+      (el as HTMLElement).getAttribute('data-test-boxel-picker-option-row'),
+    );
 
     assert.deepEqual(
       optionIds,
