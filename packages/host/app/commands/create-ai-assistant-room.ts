@@ -54,7 +54,6 @@ export default class CreateAiAssistantRoomCommand extends HostBaseCommand<
     let { matrixService } = this;
     let userId = matrixService.userId;
     let aiBotFullId = matrixService.aiBotUserId;
-    let botRunnerFullId = matrixService.botRunnerUserId;
 
     if (!userId) {
       throw new Error(
@@ -89,7 +88,7 @@ export default class CreateAiAssistantRoomCommand extends HostBaseCommand<
     const [roomResult, commandModule] = await Promise.all([
       await matrixService.createRoom({
         preset: matrixService.privateChatPreset,
-        invite: [aiBotFullId, botRunnerFullId],
+        invite: [aiBotFullId],
         name: input.name,
         room_alias_name: encodeURIComponent(
           `${input.name} - ${format(
