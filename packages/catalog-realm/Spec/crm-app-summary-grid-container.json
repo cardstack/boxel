@@ -9,9 +9,9 @@
       },
       "specType": "component",
       "containedExamples": [],
-      "title": "Summary Grid Container",
-      "description": "Spec for Summary Grid Container component",
-      "thumbnailURL": null
+      "cardTitle": "Summary Grid Container",
+      "cardDescription": "Spec for Summary Grid Container component",
+      "cardThumbnailURL": null
     },
     "relationships": {},
     "meta": {

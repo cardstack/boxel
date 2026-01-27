@@ -14,6 +14,7 @@ import BooleanField from './boolean';
 import MarkdownField from './markdown';
 import NumberField from './number';
 import ResponseField from './response-field';
+import RealmField from './realm';
 import { Skill } from './skill';
 import { Spec } from './spec';
 import {
@@ -336,6 +337,20 @@ export class ListingInstallResult extends CardDef {
   @field exampleCardId = contains(StringField);
   @field skillCardId = contains(StringField);
   @field selectedCodeRef = contains(CodeRefField);
+}
+
+export class CreateListingPRInput extends CardDef {
+  @field roomId = contains(StringField);
+  @field realm = contains(RealmField);
+  @field listing = linksTo(CardDef);
+}
+
+export class CreateListingPRResult extends CardDef {
+  @field snapshotId = contains(StringField);
+  @field branch = contains(StringField);
+  @field fileCount = contains(NumberField);
+  @field prUrl = contains(StringField);
+  @field prNumber = contains(NumberField);
 }
 
 export class ListingCreateInput extends CardDef {

@@ -96,9 +96,9 @@
       ],
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": null
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null
       },
       "sections": [
         {
@@ -271,7 +271,7 @@
         },
         {
           "sectionName": "chorus",
-          "lyrics": "**Chorus:**\n\nPlease, please, please—don't do it to me\nDon't make me explain you out in public, baby\nPlease, please, please—if you love me, don't embarrass me\nOh, I can beg so pretty, but I won't say pretty please\n\nPlease, please, please, (don't ruin this for me)",
+          "lyrics": "**Chorus:**\n\nPlease, please, please\u2014don't do it to me\nDon't make me explain you out in public, baby\nPlease, please, please\u2014if you love me, don't embarrass me\nOh, I can beg so pretty, but I won't say pretty please\n\nPlease, please, please, (don't ruin this for me)",
           "chords": [
             {
               "chordName": "E",
@@ -327,7 +327,7 @@
         },
         {
           "sectionName": "verse 2",
-          "lyrics": "**Verse 2:**\n\nYou know I've got standards but my patience runs thin\nI let you get away with things—again, again\nLove your bad behavior when it's just for me\nBut save the headlines, keep it low-key",
+          "lyrics": "**Verse 2:**\n\nYou know I've got standards but my patience runs thin\nI let you get away with things\u2014again, again\nLove your bad behavior when it's just for me\nBut save the headlines, keep it low-key",
           "chords": [
             {
               "chordName": "E",
@@ -439,7 +439,7 @@
         },
         {
           "sectionName": "final chorus",
-          "lyrics": "**Final Chorus:**\n\nPlease, please, please—make me believe\nDon't give them headlines, just give them jealousy\nPlease, please, please—don't play with my pride\n(If you keep me guessing, you won't stay tonight)\n\nPlease, please, please, (don't ruin this for me)",
+          "lyrics": "**Final Chorus:**\n\nPlease, please, please\u2014make me believe\nDon't give them headlines, just give them jealousy\nPlease, please, please\u2014don't play with my pride\n(If you keep me guessing, you won't stay tonight)\n\nPlease, please, please, (don't ruin this for me)",
           "chords": [
             {
               "chordName": "E",
@@ -558,7 +558,7 @@
         }
       ],
       "songTitle": "Please Please Please (Style Demo)",
-      "description": "A sassy, tongue-in-cheek pop banger with attitude, repetitive hooks, and minimalist production",
+      "cardDescription": "A sassy, tongue-in-cheek pop banger with attitude, repetitive hooks, and minimalist production",
       "masterVolume": 92,
       "songDuration": 150,
       "timeSignature": "4/4"

@@ -9,9 +9,9 @@
       },
       "specType": "card",
       "containedExamples": [],
-      "title": "FurnitureTearSheet",
-      "description": "Spec of FurnitureTearSheet",
-      "thumbnailURL": null
+      "cardTitle": "FurnitureTearSheet",
+      "cardDescription": "Spec of FurnitureTearSheet",
+      "cardThumbnailURL": null
     },
     "relationships": {
       "linkedExamples": {

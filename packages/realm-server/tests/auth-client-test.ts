@@ -8,9 +8,10 @@ import {
 import { VirtualNetwork } from '@cardstack/runtime-common';
 import jwt from 'jsonwebtoken';
 import { basename } from 'path';
+import type ms from 'ms';
 
 function createJWT(
-  expiresIn: string | number,
+  expiresIn: ms.StringValue,
   payload: Record<string, unknown> = {},
 ) {
   return jwt.sign(payload, 'secret', { expiresIn });
@@ -70,7 +71,10 @@ module(basename(__filename), function () {
         new Response(null, {
           status: 201,
           headers: {
-            Authorization: createJWT('1h', { sessionRoom: 'room' }),
+            Authorization: createJWT('1h', {
+              sessionRoom: 'room',
+              realmServerURL: 'http://testrealm.com/',
+            }),
           },
         });
 
@@ -115,12 +119,26 @@ module(basename(__filename), function () {
     });
 
     test('it refreshes the jwt if it expired in the client', async function (assert) {
-      let jwtFromClient = createJWT(-1); // Expired 1 second ago
+      let jwtFromClient = createJWT('-1s'); // Expired 1 second ago
       client['_jwt'] = jwtFromClient;
       assert.notEqual(
         jwtFromClient,
         await client.getJWT(),
         'jwt got refreshed',
+      );
+    });
+
+    test('it includes the realm server url in the jwt claims', async function (assert) {
+      let jwtFromClient = await client.getJWT();
+      let [_header, payload] = jwtFromClient.split('.');
+      let claims = JSON.parse(atob(payload)) as {
+        realmServerURL: string;
+      };
+
+      assert.strictEqual(
+        claims.realmServerURL,
+        'http://testrealm.com/',
+        'realmServerURL is included in the jwt claims',
       );
     });
 
@@ -136,7 +154,10 @@ module(basename(__filename), function () {
         return new Response(null, {
           status: 201,
           headers: {
-            Authorization: createJWT('1h', { sessionRoom: 'room' }),
+            Authorization: createJWT('1h', {
+              sessionRoom: 'room',
+              realmServerURL: 'http://testrealm.com/',
+            }),
           },
         });
       };

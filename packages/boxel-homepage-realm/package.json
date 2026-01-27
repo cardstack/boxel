@@ -1,0 +1,13 @@
+{
+  "name": "@cardstack/boxel-homepage-realm",
+  "version": "1.0.0",
+  "license": "MIT",
+  "scripts": {
+    "boxel-homepage:setup": "sh ./scripts/boxel-homepage-setup.sh",
+    "boxel-homepage:update": "pnpm boxel-homepage:setup && cd contents && git pull",
+    "boxel-homepage:reset": "rm -rf contents && pnpm boxel-homepage:setup"
+  },
+  "volta": {
+    "extends": "../../package.json"
+  }
+}

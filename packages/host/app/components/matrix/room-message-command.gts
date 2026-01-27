@@ -21,7 +21,7 @@ import { bool, cn, eq, not, toMenuItems } from '@cardstack/boxel-ui/helpers';
 import {
   cardTypeDisplayName,
   cardTypeIcon,
-  getCardMenuItems,
+  getMenuItems,
 } from '@cardstack/runtime-common';
 
 import type { CommandRequest } from '@cardstack/runtime-common/commands';
@@ -33,6 +33,7 @@ import type CommandService from '@cardstack/host/services/command-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 
 import type { MonacoSDK } from '@cardstack/host/services/monaco-service';
+import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
@@ -51,15 +52,17 @@ interface Signature {
     runCommand: () => void;
     isError?: boolean;
     isPending?: boolean;
+    isCompact?: boolean;
     isStreaming: boolean;
     monacoSDK: MonacoSDK;
   };
 }
 
 export default class RoomMessageCommand extends Component<Signature> {
-  @service private declare commandService: CommandService;
-  @service private declare matrixService: MatrixService;
-  @service private declare realm: RealmService;
+  @service declare private commandService: CommandService;
+  @service declare private matrixService: MatrixService;
+  @service declare private realm: RealmService;
+  @service declare private operatorModeStateService: OperatorModeStateService;
 
   private get previewCommandCode() {
     let { name, arguments: payload } = this.args.messageCommand;
@@ -156,13 +159,26 @@ export default class RoomMessageCommand extends Component<Signature> {
 
   private get moreOptionsMenuItems() {
     let menuItems =
-      this.commandResultCard.card?.[getCardMenuItems]?.({
+      this.commandResultCard.card?.[getMenuItems]?.({
         canEdit: false,
         cardCrudFunctions: {},
         menuContext: 'ai-assistant',
+        menuContextParams: {
+          activeRealmURL: this.activeRealmURL,
+          canEditActiveRealm: this.canEditActiveRealm,
+        },
         commandContext: this.commandService.commandContext,
       }) ?? [];
     return toMenuItems(menuItems);
+  }
+
+  private get canEditActiveRealm() {
+    let activeRealmURL = this.activeRealmURL;
+    return activeRealmURL ? this.realm.canWrite(activeRealmURL) : false;
+  }
+
+  private get activeRealmURL() {
+    return this.operatorModeStateService.realmURL;
   }
 
   private get commandResultCardForRendering(): CardDef {
@@ -204,13 +220,14 @@ export default class RoomMessageCommand extends Component<Signature> {
         is-pending=@isPending
         is-error=@isError
         is-failed=(bool this.hasFailedState)
+        compact=@isCompact
       }}
       data-test-command-id={{@messageCommand.commandRequest.id}}
       ...attributes
     >
       {{#if @isStreaming}}
         <CodeBlock
-          class='command-code-block'
+          class={{cn 'command-code-block' compact=@isCompact}}
           @monacoSDK={{@monacoSDK}}
           @codeData={{hash code=this.previewCommandCode language='json'}}
           data-test-command-card-idle={{not
@@ -223,12 +240,13 @@ export default class RoomMessageCommand extends Component<Signature> {
             @action={{@runCommand}}
             @actionVerb={{@messageCommand.actionVerb}}
             @code={{this.previewCommandCode}}
+            @isCompact={{@isCompact}}
             @commandState='preparing'
           />
         </CodeBlock>
       {{else}}
         <CodeBlock
-          class='command-code-block'
+          class={{cn 'command-code-block' compact=@isCompact}}
           {{this.scrollBottomIntoView}}
           @monacoSDK={{@monacoSDK}}
           @codeData={{hash code=this.previewCommandCode language='json'}}
@@ -243,6 +261,7 @@ export default class RoomMessageCommand extends Component<Signature> {
             @actionVerb={{@messageCommand.actionVerb}}
             @code={{this.previewCommandCode}}
             @commandState={{this.applyButtonState}}
+            @isCompact={{@isCompact}}
             @isDisplayingCode={{this.isDisplayingCode}}
             @toggleCode={{this.toggleViewCode}}
           />

@@ -16,9 +16,9 @@
       "summary": "This listing defines a module for generating historical-style photographs based on user-input images, time periods, and creative notes, enabling users to create, view, and export collections of era-specific images through an interactive UI.",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/time-machine-image-generator-listing/thumbnail.png"
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/time-machine-image-generator-listing/thumbnail.png"
       }
     },
     "relationships": {
@@ -59,7 +59,7 @@
       },
       "specs.3": {
         "links": {
-          "self": "../Spec/16320d37-fac6-417c-ae20-c583ea0c8a2e"
+          "self": "../field-spec/ImageFieldSpec/7c9e416c-e6c8-45b2-81c3-4eb6ddd219dc"
         }
       },
       "specs.4": {
@@ -195,71 +195,6 @@
       "examples.0": {
         "links": {
           "self": "../time-machine/TimeMachineImageGenerator/1ba331d0-a3d0-4f0c-9b21-23b076419732"
-        }
-      },
-      "examples.1": {
-        "links": {
-          "self": "../PolaroidImage/13453a4b-cf53-4796-a29a-2a96be626ef0"
-        }
-      },
-      "examples.2": {
-        "links": {
-          "self": "../PolaroidImage/65b3d342-1345-4a4b-8f53-9796e29a2a96"
-        }
-      },
-      "examples.3": {
-        "links": {
-          "self": "../PolaroidImage/cf539796-e29a-4a96-be62-6ef095fcd847"
-        }
-      },
-      "examples.4": {
-        "links": {
-          "self": "../PolaroidImage/e29a2a96-be62-4ef0-95fc-d847e3851c21"
-        }
-      },
-      "examples.5": {
-        "links": {
-          "self": "../PolaroidImage/fe2c79f8-d173-42af-a94d-5ded65b3d342"
-        }
-      },
-      "examples.6": {
-        "links": {
-          "self": "../PolaroidImage/914de3ac-5fa3-4497-97a3-b390e3dae99d"
-        }
-      },
-      "examples.7": {
-        "links": {
-          "self": "../Image/0c28db0a-3535-4cba-a22a-f278cee887f3"
-        }
-      },
-      "examples.8": {
-        "links": {
-          "self": "../CloudflareImage/a2dbef5d-bd66-4d8f-ba15-f646fa1dd073"
-        }
-      },
-      "examples.9": {
-        "links": {
-          "self": "../CloudflareImage/1805babe-f85f-49b8-9c51-183596fca2db"
-        }
-      },
-      "examples.10": {
-        "links": {
-          "self": "../CloudflareImage/1c511835-96fc-42db-af5d-bd66fd8ffa15"
-        }
-      },
-      "examples.11": {
-        "links": {
-          "self": "../CloudflareImage/e0272271-efb1-4218-85ba-bef85fc9b81c"
-        }
-      },
-      "examples.12": {
-        "links": {
-          "self": "../CloudflareImage/bd66fd8f-fa15-4646-ba1d-d073914de3ac"
-        }
-      },
-      "examples.13": {
-        "links": {
-          "self": "../CloudflareImage/ef5dbd66-fd8f-4a15-b646-fa1dd073914d"
         }
       },
       "categories.0": {

@@ -3,6 +3,7 @@ import { on } from '@ember/modifier';
 import { htmlSafe } from '@ember/template';
 import CameraIcon from '@cardstack/boxel-icons/camera';
 import { Button } from '@cardstack/boxel-ui/components';
+import { or } from '@cardstack/boxel-ui/helpers';
 import ReadingProgress from './reading-progress';
 
 interface ImageAvatarPreviewArgs {
@@ -14,6 +15,7 @@ interface ImageAvatarPreviewArgs {
     hasPendingUpload?: boolean;
     isReading?: boolean;
     readProgress?: number;
+    disabled?: boolean;
   };
 }
 
@@ -29,7 +31,10 @@ export default class ImageAvatarPreview extends GlimmerComponent<ImageAvatarPrev
   <template>
     <div class='avatar-preview'>
       {{! Avatar container }}
-      <label class='avatar-image-wrapper' for='avatar-file-input'>
+      <label
+        class='avatar-image-wrapper {{if @disabled "disabled"}}'
+        for={{unless @disabled 'avatar-file-input'}}
+      >
         {{#if @isReading}}
           {{! Progress indicator during file reading }}
           <div class='avatar-reading-overlay'>
@@ -43,22 +48,24 @@ export default class ImageAvatarPreview extends GlimmerComponent<ImageAvatarPrev
             style={{this.imageStyle}}
           />
         {{/if}}
-        <div class='avatar-camera-icon'>
-          <CameraIcon class='icon' />
-        </div>
-        <input
-          type='file'
-          id='avatar-file-input'
-          class='file-input'
-          accept='image/*'
-          {{on 'change' @onFileSelect}}
-        />
+        {{#unless @disabled}}
+          <div class='avatar-camera-icon'>
+            <CameraIcon class='icon' />
+          </div>
+          <input
+            type='file'
+            id='avatar-file-input'
+            class='file-input'
+            accept='image/*'
+            {{on 'change' @onFileSelect}}
+          />
+        {{/unless}}
       </label>
       <div class='avatar-info'>{{@fileName}}</div>
       {{! File name display }}
 
-      {{! Remove button - only show when no pending upload }}
-      {{#unless @hasPendingUpload}}
+      {{! Remove button - only show when no pending upload and not disabled }}
+      {{#unless (or @hasPendingUpload @disabled)}}
         <Button
           class='avatar-remove-button'
           @kind='danger-dark'

@@ -5,19 +5,17 @@ import { jobIdentity } from '../index';
 
 import { resolvePrettierConfig } from '../prettier-config';
 
-export { lintSource };
+export type LintMode = 'lint' | 'lintAndAutofix';
 
 export interface LintArgs {
   source: string;
   filename?: string; // Added to support parser detection
+  lintMode?: LintMode;
 }
 
 export type LintResult = Linter.FixReport;
 
-const lintSource: Task<LintArgs, Pick<LintResult, 'output'>> = ({
-  reportStatus,
-  log,
-}) =>
+export const lintSource: Task<LintArgs, LintResult> = ({ reportStatus, log }) =>
   async function (args) {
     let { source: _remove, ...displayableArgs } = args;
     let { jobInfo } = displayableArgs;
@@ -36,7 +34,8 @@ const lintSource: Task<LintArgs, Pick<LintResult, 'output'>> = ({
 async function lintFix({
   source,
   filename = 'input.gts',
-}: LintArgs): Promise<Pick<LintResult, 'output'>> {
+  lintMode = 'lintAndAutofix',
+}: LintArgs): Promise<LintResult> {
   if (typeof (globalThis as any).document !== 'undefined') {
     throw new Error(
       'Linting is not supported in the browser environment. Please run this in a Node.js environment.',
@@ -62,6 +61,36 @@ async function lintFix({
     /* webpackIgnore: true */ '../etc/eslint/missing-card-api-import-config.js'
   );
 
+  const baseRules: Linter.RulesRecord = {
+    'no-undef': 'off',
+    'no-unused-vars': [
+      'error',
+      {
+        argsIgnorePattern: '^this$',
+      },
+    ],
+    '@cardstack/boxel/template-missing-invokable': [
+      'error',
+      {
+        invokables: missingInvokablesConfig.default.invokables,
+      },
+    ],
+    '@cardstack/boxel/missing-card-api-import': [
+      'error',
+      {
+        importMappings: missingCardApiImportConfig.default.importMappings,
+      },
+    ],
+    '@cardstack/boxel/no-duplicate-imports': 'error',
+  };
+
+  const eslintJsModule = await import(/* webpackIgnore: true */ '@eslint/js');
+  const recommendedRules =
+    (eslintJsModule as any)?.default?.configs?.recommended?.rules ??
+    (eslintJsModule as any)?.configs?.recommended?.rules ??
+    {};
+  const rules = { ...recommendedRules, ...baseRules };
+
   const LINT_CONFIG: any = [
     {
       files: ['**/*.gts', '**/*.ts'],
@@ -85,29 +114,22 @@ async function lintFix({
       plugins: {
         '@cardstack/boxel': pluginModule.default,
       },
-      rules: {
-        'no-undef': 'off',
-        '@cardstack/boxel/template-missing-invokable': [
-          'error',
-          {
-            invokables: missingInvokablesConfig.default.invokables,
-          },
-        ],
-        '@cardstack/boxel/missing-card-api-import': [
-          'error',
-          {
-            importMappings: missingCardApiImportConfig.default.importMappings,
-          },
-        ],
-        '@cardstack/boxel/no-duplicate-imports': 'error',
-      },
+      rules,
     },
   ];
 
   // Step 1: Run existing ESLint fixes (preserving current functionality)
   const linter = new eslintModule.Linter({ configType: 'flat' });
+  if (lintMode === 'lint') {
+    const messages = linter.verify(source, LINT_CONFIG, filename);
+    return {
+      fixed: false,
+      output: source,
+      messages,
+    };
+  }
   let eslintResult = linter.verifyAndFix(source, LINT_CONFIG, filename);
-  let { output: eslintOutput } = eslintResult;
+  let eslintOutput = eslintResult.output ?? source;
 
   // Step 2: Apply Prettier formatting to the ESLint output
   try {
@@ -120,7 +142,10 @@ async function lintFix({
     const formattedOutput = await prettier.format(eslintOutput, prettierConfig);
 
     // Step 4: Return combined result with properly formatted code
-    return { output: formattedOutput };
+    return {
+      ...eslintResult,
+      output: formattedOutput,
+    };
   } catch (error) {
     // Step 5: Handle errors gracefully with fallback behavior
     console.warn(
@@ -129,6 +154,9 @@ async function lintFix({
         ? (error as any).message
         : error,
     );
-    return { output: eslintOutput };
+    return {
+      ...eslintResult,
+      output: eslintOutput,
+    };
   }
 }

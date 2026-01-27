@@ -15,9 +15,9 @@
       "summary": "A comprehensive music album management application for organizing and discovering your music collection",
       "cardInfo": {
         "notes": null,
-        "title": "Music Album Manager",
-        "description": "",
-        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/music-album-listing/thumbnail.png"
+        "name": "Music Album Manager",
+        "summary": "",
+        "cardThumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/music-album-listing/thumbnail.png"
       }
     },
     "relationships": {
@@ -64,21 +64,6 @@
       "examples.0": {
         "links": {
           "self": "../music-album/MusicAlbumCard/midnight-reveries"
-        }
-      },
-      "examples.1": {
-        "links": {
-          "self": "../song/SongCard/funky-suspense"
-        }
-      },
-      "examples.2": {
-        "links": {
-          "self": "../song/SongCard/carefree"
-        }
-      },
-      "examples.3": {
-        "links": {
-          "self": "../song/SongCard/monkeys-spinning-monkeys"
         }
       },
       "categories.0": {

@@ -17,9 +17,9 @@
       "summary": "Interactive music playlist selector based on your current mood",
       "cardInfo": {
         "notes": "Perfect for music apps, wellness platforms, or any application that wants to provide personalized music experiences",
-        "title": "Mood Selector Playlist",
-        "description": "An interactive card that helps users discover the perfect playlist based on their current mood. Features beautiful gradient mood cards with emojis and connects to curated playlists.",
-        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/mood-selector-playlist-listing/thumbnail.png"
+        "name": "Mood Selector Playlist",
+        "summary": "An interactive card that helps users discover the perfect playlist based on their current mood. Features beautiful gradient mood cards with emojis and connects to curated playlists.",
+        "cardThumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/mood-selector-playlist-listing/thumbnail.png"
       }
     },
     "relationships": {
@@ -71,71 +71,6 @@
       "examples.0": {
         "links": {
           "self": "../mood-selector-playlist/MoodSelectorPlaylistCard/music-mood-finder"
-        }
-      },
-      "examples.1": {
-        "links": {
-          "self": "../playlist/PlaylistCard/energetic-workout"
-        }
-      },
-      "examples.2": {
-        "links": {
-          "self": "../playlist/PlaylistCard/relaxed-chill"
-        }
-      },
-      "examples.3": {
-        "links": {
-          "self": "../playlist/PlaylistCard/focused-instrumental"
-        }
-      },
-      "examples.4": {
-        "links": {
-          "self": "../playlist/PlaylistCard/energy-boost"
-        }
-      },
-      "examples.5": {
-        "links": {
-          "self": "../playlist/PlaylistCard/midnight-chill"
-        }
-      },
-      "examples.6": {
-        "links": {
-          "self": "../playlist/PlaylistCard/focus-flow"
-        }
-      },
-      "examples.7": {
-        "links": {
-          "self": "../song/SongCard/funky-suspense"
-        }
-      },
-      "examples.8": {
-        "links": {
-          "self": "../song/SongCard/carefree"
-        }
-      },
-      "examples.9": {
-        "links": {
-          "self": "../song/SongCard/monkeys-spinning-monkeys"
-        }
-      },
-      "examples.10": {
-        "links": {
-          "self": "../song/SongCard/cipher"
-        }
-      },
-      "examples.11": {
-        "links": {
-          "self": "../song/SongCard/ambient-flow"
-        }
-      },
-      "examples.12": {
-        "links": {
-          "self": "../song/SongCard/digital-dawn"
-        }
-      },
-      "examples.13": {
-        "links": {
-          "self": "../song/SongCard/neon-nights"
         }
       },
       "categories.0": {

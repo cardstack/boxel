@@ -2,7 +2,7 @@ import { Component } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
 import { Swatch } from '@cardstack/boxel-ui/components';
 import PaletteIcon from '@cardstack/boxel-icons/palette';
-import ColorFieldEdit from './color-field/components/color-field-edit';
+import ColorPickerField from './color-field/components/color-picker-field';
 
 class View extends Component<typeof ColorField> {
   <template>
@@ -12,7 +12,7 @@ class View extends Component<typeof ColorField> {
 
 class EditView extends Component<typeof ColorField> {
   <template>
-    <ColorFieldEdit
+    <ColorPickerField
       @model={{@model}}
       @set={{@set}}
       @canEdit={{@canEdit}}

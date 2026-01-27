@@ -10,9 +10,9 @@
     "attributes": {
       "cardInfo": {
         "notes": null,
-        "title": "Paul McCartney",
-        "description": null,
-        "thumbnailURL": null
+        "name": "Paul McCartney",
+        "summary": null,
+        "cardThumbnailURL": null
       },
       "yearRange": {
         "endValue": 2020,

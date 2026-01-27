@@ -13,10 +13,12 @@ import { tokenize } from 'simple-html-tokenizer';
 
 import type { RealmPaths } from '@cardstack/runtime-common';
 import {
-  loadDocument,
+  loadCardDocument,
+  loadFileMetaDocument,
   type CardError,
   type CodeRef,
   type SingleCardDocument,
+  type SingleFileMetaDocument,
 } from '@cardstack/runtime-common';
 
 import config from '@cardstack/host/config/environment';
@@ -43,8 +45,12 @@ export class CardStoreWithErrors implements CardStore {
   #cards = new Map<string, CardDef>();
   #fetch: typeof globalThis.fetch;
   #inFlight: Promise<unknown>[] = [];
-  #docsInFlight: Map<string, Promise<SingleCardDocument | CardError>> =
+  #cardDocsInFlight: Map<string, Promise<SingleCardDocument | CardError>> =
     new Map();
+  #fileMetaDocsInFlight: Map<
+    string,
+    Promise<SingleFileMetaDocument | CardError>
+  > = new Map();
 
   constructor(fetch: typeof globalThis.fetch) {
     this.#fetch = fetch;
@@ -66,19 +72,34 @@ export class CardStoreWithErrors implements CardStore {
 
   readonly errors = new Set<string>();
 
-  async loadDocument(url: string) {
-    let promise = this.#docsInFlight.get(url);
+  async loadCardDocument(url: string) {
+    let promise = this.#cardDocsInFlight.get(url);
     if (promise) {
       return await promise;
     }
     try {
-      promise = loadDocument(this.#fetch, url);
-      this.#docsInFlight.set(url, promise);
+      promise = loadCardDocument(this.#fetch, url);
+      this.#cardDocsInFlight.set(url, promise);
       return await promise;
     } finally {
-      this.#docsInFlight.delete(url);
+      this.#cardDocsInFlight.delete(url);
     }
   }
+
+  async loadFileMetaDocument(url: string) {
+    let promise = this.#fileMetaDocsInFlight.get(url);
+    if (promise) {
+      return await promise;
+    }
+    try {
+      promise = loadFileMetaDocument(this.#fetch, url);
+      this.#fileMetaDocsInFlight.set(url, promise);
+      return await promise;
+    } finally {
+      this.#fileMetaDocsInFlight.delete(url);
+    }
+  }
+
   trackLoad(load: Promise<unknown>) {
     this.#inFlight.push(load);
   }

@@ -2,14 +2,14 @@
   "data": {
     "type": "card",
     "attributes": {
-      "title": "Math Class",
+      "cardTitle": "Math Class",
       "dayOfWeek": "Monday",
       "startTime": "09:00 AM",
       "endTime": "10:00 AM",
       "location": "Room 101",
-      "description": "Algebra and geometry topics. Bring your textbook and calculator.",
+      "cardDescription": "Algebra and geometry topics. Bring your textbook and calculator.",
       "color": "#3498db",
-      "thumbnailURL": null
+      "cardThumbnailURL": null
     },
     "meta": {
       "adoptsFrom": {

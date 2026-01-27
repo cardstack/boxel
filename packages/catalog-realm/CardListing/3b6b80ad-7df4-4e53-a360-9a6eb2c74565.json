@@ -15,9 +15,9 @@
       "summary": "An interactive music coding component that enables users to create, play, and visualize synthesizer and drum pattern sequences, with preset options, pattern editing, and real-time waveform visualization. Its primary purpose is to facilitate coding-based music composition and live performance within a customizable web interface.",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/music-coder-listing/thumbnail.png"
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/music-coder-listing/thumbnail.png"
       }
     },
     "relationships": {

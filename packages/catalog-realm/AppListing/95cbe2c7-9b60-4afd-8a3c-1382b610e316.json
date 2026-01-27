@@ -17,9 +17,9 @@
       "summary": "A modern, card-based blogging platform built with Cardstack framework.\n\n### Features\n\n- Create and manage blog posts, author profiles, and categories\n- Track publish dates, update history, word counts, and content status\n- Easy content creation with one-click \"New\" button",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/blog-app-listing/thumbnail.png"
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/blog-app-listing/thumbnail.png"
       }
     },
     "relationships": {
@@ -131,21 +131,6 @@
       "examples.4": {
         "links": {
           "self": "../blog-app/BlogPost/ultimate-guide-remote-work"
-        }
-      },
-      "examples.5": {
-        "links": {
-          "self": "../blog-app/BlogCategory/urban-work"
-        }
-      },
-      "examples.6": {
-        "links": {
-          "self": "../blog-app/BlogCategory/city-design"
-        }
-      },
-      "examples.7": {
-        "links": {
-          "self": "../blog-app/BlogCategory/future-tech"
         }
       },
       "categories.0": {

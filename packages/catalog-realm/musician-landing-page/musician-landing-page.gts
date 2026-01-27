@@ -577,7 +577,7 @@ export class MusicianLandingPage extends CardDef {
   @field musicSamples = containsMany(UrlField);
   @field contactEmail = contains(StringField);
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: MusicianLandingPage) {
       return this.artistName ?? 'Musician Landing Page';
     },

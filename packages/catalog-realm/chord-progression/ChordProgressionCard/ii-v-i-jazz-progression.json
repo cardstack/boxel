@@ -3,7 +3,7 @@
     "type": "card",
     "attributes": {
       "progressionName": "ii-V-I (Jazz Standard)",
-      "description": "The cornerstone of jazz harmony. This progression creates strong forward motion through circle-of-fifths root movement and is the foundation of countless jazz standards.",
+      "cardDescription": "The cornerstone of jazz harmony. This progression creates strong forward motion through circle-of-fifths root movement and is the foundation of countless jazz standards.",
       "key": "C major",
       "scale": "major",
       "timeSignature": "4/4",
@@ -52,7 +52,7 @@
           }
         ]
       },
-      "title": "ii-V-I (Jazz Standard)"
+      "cardTitle": "ii-V-I (Jazz Standard)"
     },
     "relationships": {},
     "meta": {

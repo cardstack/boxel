@@ -1,11 +1,18 @@
 import { expect, test } from './fixtures';
-import { createRealm, createSubscribedUserAndLogin, logout } from '../helpers';
+import {
+  createRealm,
+  createSubscribedUserAndLogin,
+  logout,
+  postCardSource,
+  waitUntil,
+} from '../helpers';
 import { appURL } from '../helpers/isolated-realm-server';
 import { randomUUID } from 'crypto';
 
-test.skip('Host mode', () => {
+test.describe('Host mode', () => {
   let publishedRealmURL: string;
   let publishedCardURL: string;
+  let publishedWhitePaperCardURL: string;
   let connectRouteURL: string;
   let username: string;
   let password: string;
@@ -27,6 +34,110 @@ test.skip('Host mode', () => {
 
     await page.goto(realmURL);
     await page.locator('[data-test-stack-item-content]').first().waitFor();
+
+    await postCardSource(
+      page,
+      realmURL,
+      'host-mode-isolated-card.gts',
+      `
+        import { CardDef, Component } from 'https://cardstack.com/base/card-api';
+
+        export class HostModeIsolatedCard extends CardDef {
+          static isolated = class Isolated extends Component<typeof this> {
+            <template>
+              <p data-test-host-mode-isolated>Host mode isolated</p>
+            </template>
+          };
+        }
+      `,
+    );
+
+    await postCardSource(
+      page,
+      realmURL,
+      'white-paper-card.gts',
+      `
+        import { CardDef, Component } from 'https://cardstack.com/base/card-api';
+
+        export class WhitePaperCard extends CardDef {
+          static prefersWideFormat = true;
+
+          static isolated = class Isolated extends Component<typeof this> {
+            <template>
+              <article class='white-paper' data-test-white-paper>
+                <section class='page-block'>Page 1</section>
+                <section class='page-block'>Page 2</section>
+                <section class='page-block'>Page 3</section>
+              </article>
+              <style scoped>
+                .white-paper {
+                  padding: 0;
+                  margin: 0;
+                  font-family: serif;
+                }
+
+                .page-block {
+                  height: 9.5in;
+                  padding: 0.75in;
+                  box-sizing: border-box;
+                }
+
+                @media print {
+                  .page-block {
+                    break-after: page;
+                    page-break-after: always;
+                  }
+
+                  .page-block:last-child {
+                    break-after: auto;
+                    page-break-after: auto;
+                  }
+                }
+              </style>
+            </template>
+          };
+        }
+      `,
+    );
+
+    await postCardSource(
+      page,
+      realmURL,
+      'index.json',
+      JSON.stringify({
+        data: {
+          type: 'card',
+          attributes: {},
+          meta: {
+            adoptsFrom: {
+              module: './host-mode-isolated-card.gts',
+              name: 'HostModeIsolatedCard',
+            },
+          },
+        },
+      }),
+    );
+
+    await postCardSource(
+      page,
+      realmURL,
+      'white-paper.json',
+      JSON.stringify({
+        data: {
+          type: 'card',
+          attributes: {},
+          meta: {
+            adoptsFrom: {
+              module: './white-paper-card.gts',
+              name: 'WhitePaperCard',
+            },
+          },
+        },
+      }),
+    );
+
+    await page.reload();
+    await page.locator('[data-test-host-mode-isolated]').waitFor();
 
     publishedRealmURL = `http://published.localhost:4205/${username}/${realmName}/`;
 
@@ -63,6 +174,7 @@ test.skip('Host mode', () => {
     );
 
     publishedCardURL = `${publishedRealmURL}index.json`;
+    publishedWhitePaperCardURL = `${publishedRealmURL}white-paper.json`;
     connectRouteURL = `http://localhost:4205/connect/${encodeURIComponent(
       publishedRealmURL,
     )}`;
@@ -70,7 +182,47 @@ test.skip('Host mode', () => {
     await logout(page);
   });
 
-  test('card in a published realm renders in host mode with a connect button', async ({
+  test('published card response includes isolated template markup', async ({
+    page,
+  }) => {
+    let html = await waitUntil(async () => {
+      let response = await page.request.get(publishedCardURL, {
+        headers: { Accept: 'text/html' },
+      });
+
+      if (!response.ok()) {
+        return false;
+      }
+
+      let text = await response.text();
+      return text.includes('data-test-host-mode-isolated') ? text : false;
+    });
+
+    expect(html).toContain('data-test-host-mode-isolated');
+
+    await page.goto(publishedCardURL);
+    await expect(page.locator('[data-test-host-mode-isolated]')).toBeVisible();
+  });
+
+  test('printed isolated card produces a stable page count', async ({
+    page,
+  }) => {
+    await page.goto(publishedWhitePaperCardURL);
+    await page.locator('[data-test-white-paper]').waitFor();
+    await waitUntil(
+      async () =>
+        (await page.locator('[data-test-host-loading]').count()) === 0,
+    );
+
+    await page.emulateMedia({ media: 'print' });
+    let pdf = await page.pdf({ format: 'Letter', printBackground: true });
+    let pageCount =
+      pdf.toString('latin1').match(/\/Type\s*\/Page\b/g)?.length ?? 0;
+
+    expect(pageCount).toBe(3);
+  });
+
+  test.skip('card in a published realm renders in host mode with a connect button', async ({
     page,
   }) => {
     await page.goto(publishedCardURL);
@@ -83,7 +235,7 @@ test.skip('Host mode', () => {
     await expect(connectIframe.locator('[data-test-connect]')).toBeVisible();
   });
 
-  test('clicking connect button logs in on main site and redirects back to host mode', async ({
+  test.skip('clicking connect button logs in on main site and redirects back to host mode', async ({
     page,
   }) => {
     await page.goto(publishedCardURL);

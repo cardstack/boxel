@@ -9,12 +9,17 @@ import {
 import type { RealmServerTokenClaim } from '../utils/jwt';
 import {
   getCurrentActiveSubscription,
+  getLastDailyCreditGrantAt,
   getMostRecentSubscriptionCycle,
   getPlanById,
   getUserByMatrixUserId,
   sumUpCreditsLedger,
 } from '@cardstack/billing/billing-queries';
 import type { CreateRoutesArgs } from '../routes';
+import {
+  getLowCreditThreshold,
+  getNextDailyCreditGrantAt,
+} from '../lib/daily-credit-grant-config';
 
 type FetchUserResponse = {
   data: {
@@ -27,6 +32,9 @@ type FetchUserResponse = {
       creditsAvailableInPlanAllowance: number;
       creditsIncludedInPlanAllowance: number;
       extraCreditsAvailableInBalance: number;
+      lowCreditThreshold: number | null;
+      lastDailyCreditGrantAt: number | null;
+      nextDailyCreditGrantAt: number | null;
     };
     relationships: {
       subscription: {
@@ -102,6 +110,10 @@ export default function handleFetchUserRequest({
     let creditsAvailableInPlanAllowance: number | null = null;
     let creditsIncludedInPlanAllowance: number | null = null;
     let extraCreditsAvailableInBalance: number | null = null;
+    let [lastDailyCreditGrantAt, lowCreditThreshold] = await Promise.all([
+      getLastDailyCreditGrantAt(dbAdapter, user.id),
+      Promise.resolve(getLowCreditThreshold()),
+    ]);
 
     if (currentSubscriptionCycle) {
       [
@@ -118,16 +130,29 @@ export default function handleFetchUserRequest({
           subscriptionCycleId: currentSubscriptionCycle.id,
         }),
         sumUpCreditsLedger(dbAdapter, {
-          creditType: ['extra_credit', 'extra_credit_used'],
+          creditType: [
+            'extra_credit',
+            'extra_credit_used',
+            'daily_credit',
+            'daily_credit_used',
+          ],
           userId: user.id,
         }),
       ]);
     } else {
       extraCreditsAvailableInBalance = await sumUpCreditsLedger(dbAdapter, {
-        creditType: ['extra_credit', 'extra_credit_used'],
+        creditType: [
+          'extra_credit',
+          'extra_credit_used',
+          'daily_credit',
+          'daily_credit_used',
+        ],
         userId: user.id,
       });
     }
+
+    let nextDailyCreditGrantAt =
+      lowCreditThreshold == null ? null : getNextDailyCreditGrantAt();
 
     let responseBody = {
       data: {
@@ -140,6 +165,9 @@ export default function handleFetchUserRequest({
           creditsAvailableInPlanAllowance,
           creditsIncludedInPlanAllowance,
           extraCreditsAvailableInBalance,
+          lowCreditThreshold,
+          lastDailyCreditGrantAt,
+          nextDailyCreditGrantAt,
         },
         relationships: {
           subscription: currentActiveSubscription

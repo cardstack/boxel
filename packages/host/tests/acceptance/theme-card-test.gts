@@ -187,9 +187,9 @@ module('Acceptance | theme-card-test', function (hooks) {
             type: 'card',
             attributes: {
               cardInfo: {
-                title: 'Starry Night',
-                description: 'A celestial theme',
-                thumbnailURL:
+                name: 'Starry Night',
+                summmary: 'A celestial theme',
+                cardThumbnailURL:
                   'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?q=80&w=400&auto=format&fit=crop',
               },
               cssImports: [
@@ -215,10 +215,10 @@ module('Acceptance | theme-card-test', function (hooks) {
               cardInfo: {
                 notes:
                   'Color palette extracted from the famous painting: deep Prussian blue (#0a0f23), golden yellow (#ffd700), warm amber (#ffb347), and creamy highlights (#f4f1e8). Uses elegant serif fonts to match the artistic, classical nature of the inspiration.',
-                title: 'Starry Night',
-                description:
+                name: 'Starry Night',
+                summary:
                   "A celestial theme inspired by Van Gogh's masterpiece, featuring deep midnight blues swirling with golden yellows and warm amber accents.",
-                thumbnailURL:
+                cardThumbnailURL:
                   'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?q=80&w=400&auto=format&fit=crop',
               },
               styleName: 'Starry Night',
@@ -260,8 +260,8 @@ module('Acceptance | theme-card-test', function (hooks) {
             type: 'card',
             attributes: {
               cardInfo: {
-                title: 'Soft Pop',
-                description: 'A theme with soft color pops',
+                name: 'Soft Pop',
+                summary: 'A theme with soft color pops',
               },
             },
           },
@@ -307,7 +307,7 @@ module('Acceptance | theme-card-test', function (hooks) {
       assert
         .dom(`[data-test-card="${themeCardId}"] h1`)
         .hasText('Starry Night');
-      assert.dom('[data-test-css-vars]').containsText('--radius: 0.75rem;');
+      assert.dom('[data-test-css-field]').containsText('--radius: 0.75rem;');
       assert
         .dom(`[data-test-card="${themeCardId}"]`)
         .hasClass('boxel-card-container--themed');
@@ -352,7 +352,7 @@ module('Acceptance | theme-card-test', function (hooks) {
       assert
         .dom(`[data-test-card="${themeCardId}"] h1`)
         .hasText('Starry Night');
-      assert.dom('[data-test-css-vars]').containsText('--radius: 0.75rem;');
+      assert.dom('[data-test-css-field]').containsText('--radius: 0.75rem;');
       assert
         .dom(`[data-test-card="${themeCardId}"]`)
         .hasAttribute('style', ROOT_STYLE_ATTRS);
@@ -391,22 +391,23 @@ module('Acceptance | theme-card-test', function (hooks) {
         deferred.fulfill();
       });
 
-      assert.dom('[data-test-css-vars]').containsText('No CSS defined');
+      assert.dom('[data-test-css-field]').containsText('No CSS defined');
 
       await fillIn('[data-test-custom-css-variables]', SOFT_POP_VARS);
-
       assert
         .dom('[data-test-root-vars] [data-test-var-value="secondary"]')
         .containsText('oklch(0.7038 0.1230 182.5025)');
       assert
-        .dom('[data-test-dark-vars] [data-test-var-value="muted"]')
-        .containsText('oklch(0.3211 0 0)');
-      assert
-        .dom('[data-test-css-vars]')
+        .dom('[data-test-css-field]')
         .containsText('--background: oklch(0.9789 0.0082 121.6272);');
       assert
-        .dom('[data-test-css-vars]')
+        .dom('[data-test-css-field]')
         .containsText('--background: oklch(0 0 0);');
+
+      await click('[data-test-mode="toggle-dark"]');
+      assert
+        .dom('[data-test-dark-vars] [data-test-var-value="muted"]')
+        .containsText('oklch(0.3211 0 0)');
 
       await click('[data-test-edit-button]');
 
@@ -476,9 +477,11 @@ module('Acceptance | theme-card-test', function (hooks) {
       assert
         .dom('[data-test-root-vars] [data-test-var-value="card"]')
         .containsText('#1a1f3a');
+      await click('[data-test-mode="toggle-dark"]');
       assert
         .dom('[data-test-dark-vars] [data-test-var-value="background"]')
         .containsText('#050813');
+      await click('[data-test-mode="toggle-light"]');
 
       await fillIn(
         '[data-test-custom-css-variables]',
@@ -491,8 +494,10 @@ module('Acceptance | theme-card-test', function (hooks) {
       assert
         .dom('[data-test-root-vars] [data-test-var-value="card"]')
         .containsText('#1a1f3a', 'existing value remains');
-      assert.dom('[data-test-css-vars]').containsText('--background: #455A68;');
-      assert.dom('[data-test-css-vars]').containsText('--card: #1a1f3a;');
+      assert
+        .dom('[data-test-css-field]')
+        .containsText('--background: #455A68;');
+      assert.dom('[data-test-css-field]').containsText('--card: #1a1f3a;');
 
       await click('[data-test-edit-button]');
 
@@ -553,8 +558,29 @@ module('Acceptance | theme-card-test', function (hooks) {
       });
 
       assert
-        .dom('[data-test-css-vars]')
+        .dom('[data-test-css-field]')
         .containsText(` --foreground: ${NEW_FOREGROUND}; `);
+    });
+
+    test('can reset all css variables', async function (assert) {
+      await visitOperatorMode({
+        stacks: [[{ id: themeCardId, format: 'isolated' }]],
+      });
+      assert
+        .dom('[data-test-var-value="accent"] [data-test-swatch="#ffb347"]')
+        .exists();
+
+      await click('[data-test-reset]');
+      assert
+        .dom('[data-test-var-value="accent"]')
+        .containsText('/* not set */');
+      assert.dom('[data-test-css-field]').containsText('/* No CSS defined */');
+
+      await click('[data-test-mode="toggle-dark"]');
+      assert
+        .dom('[data-test-var-value="accent"]')
+        .containsText('/* not set */');
+      assert.dom('[data-test-css-field]').containsText('/* No CSS defined */');
     });
   });
 });

@@ -24,7 +24,8 @@ import { Folder, IconPlusThin } from '@cardstack/boxel-ui/icons';
 import {
   CardContextName,
   cardTypeDisplayName,
-  getCardMenuItems,
+  getMenuItems,
+  isSpecCard,
   type Permissions,
   PermissionsContextName,
 } from '@cardstack/runtime-common';
@@ -110,19 +111,19 @@ interface Signature {
 }
 
 export default class PlaygroundPanel extends Component<Signature> {
-  @consume(GetCardContextName) private declare getCard: getCard;
-  @consume(CardContextName) private declare cardContext: CardContext;
-  @service private declare aiAssistantPanelService: AiAssistantPanelService;
-  @service private declare commandService: CommandService;
-  @service private declare loaderService: LoaderService;
-  @service private declare matrixService: MatrixService;
-  @service private declare operatorModeStateService: OperatorModeStateService;
-  @service private declare realm: RealmService;
-  @service private declare realmServer: RealmServerService;
-  @service private declare recentFilesService: RecentFilesService;
-  @service private declare recentCardsService: RecentCardsService;
-  @service private declare playgroundPanelService: PlaygroundPanelService;
-  @service private declare store: StoreService;
+  @consume(GetCardContextName) declare private getCard: getCard;
+  @consume(CardContextName) declare private cardContext: CardContext;
+  @service declare private aiAssistantPanelService: AiAssistantPanelService;
+  @service declare private commandService: CommandService;
+  @service declare private loaderService: LoaderService;
+  @service declare private matrixService: MatrixService;
+  @service declare private operatorModeStateService: OperatorModeStateService;
+  @service declare private realm: RealmService;
+  @service declare private realmServer: RealmServerService;
+  @service declare private recentFilesService: RecentFilesService;
+  @service declare private recentCardsService: RecentCardsService;
+  @service declare private playgroundPanelService: PlaygroundPanelService;
+  @service declare private store: StoreService;
 
   @tracked private cardResource: ReturnType<getCard> | undefined;
   @tracked private fieldChooserIsOpen = false;
@@ -176,7 +177,7 @@ export default class PlaygroundPanel extends Component<Signature> {
       return [];
     }
     return toMenuItems(
-      this.card?.[getCardMenuItems]?.({
+      this.card?.[getMenuItems]?.({
         canEdit: this.canEditCard,
         cardCrudFunctions: {},
         menuContext: 'code-mode-playground',
@@ -230,6 +231,9 @@ export default class PlaygroundPanel extends Component<Signature> {
     let entries = this.cardTracker.filter(
       [{ fieldType: 'linksTo' }, { fieldType: 'linksToMany' }],
       'or',
+      // the only linksTo field with isolated format is in the index card,
+      // we don't want to show overlays for those cards here
+      { exclude: [{ fieldType: 'linksTo', format: 'isolated' }] },
     );
     return entries.length ? entries : undefined;
   }
@@ -286,8 +290,8 @@ export default class PlaygroundPanel extends Component<Signature> {
     let { constructor } = this.card;
     return Boolean(
       constructor &&
-        'prefersWideFormat' in constructor &&
-        constructor.prefersWideFormat,
+      'prefersWideFormat' in constructor &&
+      constructor.prefersWideFormat,
     );
   }
 
@@ -503,7 +507,7 @@ export default class PlaygroundPanel extends Component<Signature> {
   }
 
   private get currentRealm() {
-    return this.operatorModeStateService.realmURL.href;
+    return this.operatorModeStateService.realmURL;
   }
 
   private get canWriteRealm() {
@@ -581,10 +585,14 @@ export default class PlaygroundPanel extends Component<Signature> {
 
   private autoGenerateInstance = restartableTask(async () => {
     this.#creationError = false;
-    if (this.args.isFieldDef && this.specCard) {
-      await this.createNewField.perform(this.specCard);
-    } else {
-      await this.createNewCard.perform();
+    try {
+      if (this.args.isFieldDef && this.specCard) {
+        await this.createNewField.perform(this.specCard);
+      } else {
+        await this.createNewCard.perform();
+      }
+    } catch {
+      this.#creationError = true;
     }
   });
 
@@ -624,7 +632,7 @@ export default class PlaygroundPanel extends Component<Signature> {
           attributes: {
             specType: 'field',
             ref: this.args.codeRef,
-            title: this.args.codeRef.name,
+            cardTitle: this.args.codeRef.name,
             containedExamples: [new fieldCard()],
           },
           meta: {
@@ -641,6 +649,7 @@ export default class PlaygroundPanel extends Component<Signature> {
         },
       };
     } else {
+      await this.assertNotSpecCard();
       newCardJSON = {
         data: {
           lid: localId,
@@ -691,6 +700,15 @@ export default class PlaygroundPanel extends Component<Signature> {
     this.persistSelections(specCard.id, 'edit', index);
     this.closeInstanceChooser();
   });
+
+  private async assertNotSpecCard() {
+    let cardDef = await loadCardDef(this.args.codeRef, {
+      loader: this.loaderService.loader,
+    });
+    if (isSpecCard(cardDef)) {
+      throw new Error('Cannot create a spec from another spec');
+    }
+  }
 
   private closeInstanceChooser = () =>
     (
@@ -930,7 +948,9 @@ export default class PlaygroundPanel extends Component<Signature> {
                   />
                 </section>
               {{else if this.createNewIsRunning}}
-                <LoadingIndicator @color='var(--boxel-light)' />
+                <div class='loading'>
+                  <LoadingIndicator @color='var(--boxel-light)' />
+                </div>
               {{else if this.maybeGenerateFieldSpec}}
                 <SpecSearch
                   @query={{this.specQuery}}
@@ -1012,8 +1032,11 @@ export default class PlaygroundPanel extends Component<Signature> {
       }
       .loading {
         display: flex;
+        align-items: center;
         justify-content: center;
-        margin: 30vh auto;
+        flex: 1;
+        min-height: 100%;
+        width: 100%;
       }
 
       .playground-panel-content:has(.social-preview-container) {

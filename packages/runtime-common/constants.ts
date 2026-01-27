@@ -4,6 +4,9 @@ import type { RealmPermissions } from './index';
 
 export const baseRealm = new RealmPaths(new URL('https://cardstack.com/base/'));
 
+export const devSkillLocalPath = 'Skill/boxel-development';
+export const envSkillLocalPath = 'Skill/boxel-environment';
+
 export const baseRef: ResolvedCodeRef = {
   module: `${baseRealm.url}card-api`,
   name: 'BaseDef',
@@ -26,11 +29,12 @@ export const skillCardRef: ResolvedCodeRef = {
 };
 
 export const isField = Symbol('cardstack-field');
+export const isSpec = Symbol('is-spec');
 export const primitive = Symbol('cardstack-primitive');
 export const fields = Symbol.for('cardstack-fields');
 export const fieldSerializer = Symbol.for('cardstack-field-serializer');
 export const fieldsUntracked = Symbol.for('cardstack-fields-untracked');
-export const getCardMenuItems = Symbol.for('cardstack-get-card-menu-items');
+export const getMenuItems = Symbol.for('cardstack-get-menu-items');
 export const isBaseInstance = Symbol.for('isBaseInstance');
 export const localId = Symbol.for('cardstack-local-id');
 export const meta = Symbol.for('cardstack-meta');
@@ -63,6 +67,9 @@ export const SEPARATOR_MARKER: string = '╠════════════
 export const REPLACE_MARKER: string = '╚═══ REPLACE ═══╝';
 
 export const MINIMUM_AI_CREDITS_TO_CONTINUE = 10;
+
+// Default max card payload size, in bytes.
+export const DEFAULT_CARD_SIZE_LIMIT_BYTES = 512 * 1024; //512 KB
 
 export const EXTRA_TOKENS_PRICING: Record<number, number> = {
   2500: 5,

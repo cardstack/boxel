@@ -3,8 +3,8 @@
     "type": "card",
     "attributes": {
       "key": "undersea-kingdom",
-      "title": "The Sunken Kingdom",
-      "description": "An ancient realm beneath the waves stirs once more.",
+      "cardTitle": "The Sunken Kingdom",
+      "cardDescription": "An ancient realm beneath the waves stirs once more.",
       "tags": [],
       "imageStyles": []
     },

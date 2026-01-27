@@ -97,7 +97,7 @@ const personCardSource = `
     static displayName = 'Person';
     @field firstName = contains(StringField);
     @field lastName = contains(StringField);
-    @field title = contains(StringField, {
+    @field cardTitle = contains(StringField, {
       computeVia: function (this: Person) {
         return [this.firstName, this.lastName].filter(Boolean).join(' ');
       },
@@ -109,7 +109,7 @@ const personCardSource = `
         <div data-test-person>
           <p>First name: <@fields.firstName /></p>
           <p>Last name: <@fields.lastName /></p>
-          <p>Title: <@fields.title /></p>
+          <p>Title: <@fields.cardTitle /></p>
           <p>Address List: <@fields.address /></p>
           <p>Friends: <@fields.friends /></p>
         </div>
@@ -130,7 +130,7 @@ const petCardSource = `
   export class Pet extends CardDef {
     static displayName = 'Pet';
     @field name = contains(StringField);
-    @field title = contains(StringField, {
+    @field cardTitle = contains(StringField, {
       computeVia: function (this: Pet) {
         return this.name;
       },
@@ -167,6 +167,8 @@ const employeeCardSource = `
     };
   }
 `;
+
+const erroringModuleSource = `throw new Error('boom');`;
 
 const inThisFileSource = `
   import {
@@ -245,7 +247,7 @@ const friendCardSource = `
     static displayName = 'Friend';
     @field name = contains(StringField);
     @field friend = linksTo(() => Friend);
-    @field title = contains(StringField, {
+    @field cardTitle = contains(StringField, {
       computeVia: function (this: Person) {
         return name;
       },
@@ -255,7 +257,7 @@ const friendCardSource = `
         <div data-test-person>
           <p>First name: <@fields.firstName /></p>
           <p>Last name: <@fields.lastName /></p>
-          <p>Title: <@fields.title /></p>
+          <p>Title: <@fields.cardTitle /></p>
         </div>
         <style scoped>
           div {
@@ -468,13 +470,14 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
         're-export.gts': reExportSource,
         'local-inherit.gts': localInheritSource,
         'command-module.gts': commandModuleSource,
+        'erroring-module.gts': erroringModuleSource,
         'empty-file.gts': '',
         'person-entry.json': {
           data: {
             type: 'card',
             attributes: {
-              title: 'Person',
-              description: 'Spec',
+              cardTitle: 'Person',
+              cardDescription: 'Spec',
               specType: 'card',
               ref: {
                 module: `./person`,
@@ -2159,6 +2162,27 @@ export class ExportedCard extends ExportedCardParent {
     assert.dom('[data-test-in-this-file-selector]').doesNotExist();
     assert.dom('[data-test-inheritance-panel-header]').doesNotExist();
     assert.dom('[data-test-delete-module-button]').exists();
+  });
+
+  test('can delete an erroring module file', async function (assert) {
+    await visitOperatorMode({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}erroring-module.gts`,
+    });
+
+    await waitFor('[data-test-syntax-error]');
+    await waitFor('[data-test-action-button="Delete"]');
+
+    await click('[data-test-action-button="Delete"]');
+    await waitFor(
+      `[data-test-delete-modal="${testRealmURL}erroring-module.gts"]`,
+    );
+    await click('[data-test-confirm-delete-button]');
+    await waitFor('[data-test-empty-code-mode]');
+
+    let notFound = await adapter.openFile('erroring-module.gts');
+    assert.strictEqual(notFound, undefined, 'file ref does not exist');
   });
 
   module('when the user lacks write permissions', function (hooks) {

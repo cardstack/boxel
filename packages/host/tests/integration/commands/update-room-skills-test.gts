@@ -14,7 +14,6 @@ import { basicMappings } from '@cardstack/runtime-common/helpers/ai';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
 import UpdateRoomSkillsCommand from '@cardstack/host/commands/update-room-skills';
-import { skillCardURL } from '@cardstack/host/lib/utils';
 import RealmService from '@cardstack/host/services/realm';
 
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
@@ -138,14 +137,28 @@ export class DoThing extends Command {
   }
 }`,
           'skill-with-commands.json': new Skill({
-            title: 'Skill with invalid command',
-            description: 'test',
+            cardTitle: 'Skill with invalid command',
+            cardDescription: 'test',
             instructions: 'test',
             commands: [
               new CommandField({
                 codeRef: { module: '', name: '' },
                 requiresApproval: false,
               }),
+              new CommandField({
+                codeRef: {
+                  module: `${testRealmURL}test-command.gts`,
+                  name: 'DoThing',
+                },
+                requiresApproval: false,
+              }),
+            ],
+          }),
+          'Skill/boxel-environment.json': new Skill({
+            title: 'Boxel Environment',
+            description: 'Test environment skill',
+            instructions: 'Test skill card for environment commands',
+            commands: [
               new CommandField({
                 codeRef: {
                   module: `${testRealmURL}test-command.gts`,
@@ -168,7 +181,7 @@ export class DoThing extends Command {
       let command = new UpdateRoomSkillsCommand(
         getService('command-service').commandContext,
       );
-      let skillCardId = skillCardURL('boxel-environment');
+      let skillCardId = `${testRealmURL}Skill/boxel-environment`;
       await command.execute({
         roomId: matrixRoomId,
         skillCardIdsToActivate: [skillCardId],
@@ -211,7 +224,7 @@ export class DoThing extends Command {
       let command = new UpdateRoomSkillsCommand(
         getService('command-service').commandContext,
       );
-      let skillCardId = skillCardURL('boxel-environment');
+      let skillCardId = `${testRealmURL}Skill/boxel-environment`;
       mockMatrixUtils.setRoomState(
         matrixRoomId,
         APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
@@ -259,7 +272,7 @@ export class DoThing extends Command {
       let command = new UpdateRoomSkillsCommand(
         getService('command-service').commandContext,
       );
-      let skillCardId = skillCardURL('boxel-environment');
+      let skillCardId = `${testRealmURL}Skill/boxel-environment`;
       await command.execute({
         roomId: matrixRoomId,
         skillCardIdsToActivate: [skillCardId],

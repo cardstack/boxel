@@ -133,20 +133,21 @@ function urlToFilename(url: URL) {
 }
 
 export default class CodeSubmode extends Component<Signature> {
-  @consume(GetCardContextName) private declare getCard: getCard;
-  @consume(CardContextName) private declare cardContext: CardContext;
+  @consume(GetCardContextName) declare private getCard: getCard;
+  @consume(CardContextName) declare private cardContext: CardContext;
 
-  @service private declare cardService: CardService;
-  @service private declare codeSemanticsService: CodeSemanticsService;
-  @service private declare operatorModeStateService: OperatorModeStateService;
-  @service private declare playgroundPanelService: PlaygroundPanelService;
-  @service private declare recentFilesService: RecentFilesService;
-  @service private declare realm: RealmService;
-  @service private declare specPanelService: SpecPanelService;
+  @service declare private cardService: CardService;
+  @service declare private codeSemanticsService: CodeSemanticsService;
+  @service declare private operatorModeStateService: OperatorModeStateService;
+  @service declare private playgroundPanelService: PlaygroundPanelService;
+  @service declare private recentFilesService: RecentFilesService;
+  @service declare private realm: RealmService;
+  @service declare private specPanelService: SpecPanelService;
 
   @tracked private loadFileError: string | null = null;
   @tracked private userHasDismissedURLError = false;
   @tracked private sourceFileIsSaving = false;
+  @tracked private writeError: string | undefined;
   @tracked private isCreateModalOpen = false;
   @tracked private itemToDelete: CardDef | URL | null | undefined;
   @tracked private cardResource: ReturnType<getCard> | undefined;
@@ -374,6 +375,11 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   @action
+  private onWriteError(message: string | undefined) {
+    this.writeError = message;
+  }
+
+  @action
   private onHorizontalLayoutChange(layout: number[]) {
     if (layout.length > 2) {
       this.defaultPanelWidths.leftPanel = layout[0];
@@ -471,7 +477,7 @@ export default class CodeSubmode extends Component<Signature> {
         // TODO: This is a side effect of the recent-file service making assumptions about
         // what realm we are in. we should refactor that so that callers have to tell
         // it the realm of the file in question
-        let realmURL = this.operatorModeStateService.realmURL;
+        let realmURL = new URL(this.operatorModeStateService.realmURL);
 
         if (realmURL) {
           let realmPaths = new RealmPaths(realmURL);
@@ -731,6 +737,7 @@ export default class CodeSubmode extends Component<Signature> {
                       @saveSourceOnClose={{@saveSourceOnClose}}
                       @selectDeclaration={{this.selectDeclaration}}
                       @onFileSave={{this.onSourceFileSave}}
+                      @onWriteError={{this.onWriteError}}
                       @onSetup={{this.setupCodeEditor}}
                       @isReadOnly={{this.isReadOnly}}
                     />
@@ -738,6 +745,7 @@ export default class CodeSubmode extends Component<Signature> {
                     <CodeSubmodeEditorIndicator
                       @isSaving={{this.isSaving}}
                       @isReadOnly={{this.isReadOnly}}
+                      @errorMessage={{this.writeError}}
                     />
                   {{else if this.isLoading}}
                     <LoadingIndicator
@@ -804,7 +812,7 @@ export default class CodeSubmode extends Component<Signature> {
             <:content>
               {{#if this.isCard}}
                 Delete the card
-                <strong>{{this.itemToDeleteAsCard.title}}</strong>?
+                <strong>{{this.itemToDeleteAsCard.cardTitle}}</strong>?
               {{else}}
                 Delete the file
                 <strong>{{urlToFilename this.itemToDeleteAsFile}}</strong>?

@@ -56,10 +56,12 @@ export function setupInteractSubmodeTests(
     let string: typeof import('https://cardstack.com/base/string');
     let spec: typeof import('https://cardstack.com/base/spec');
     let cardsGrid: typeof import('https://cardstack.com/base/cards-grid');
+    let fileApi: typeof import('https://cardstack.com/base/file-api');
     cardApi = await loader.import(`${baseRealm.url}card-api`);
     string = await loader.import(`${baseRealm.url}string`);
     spec = await loader.import(`${baseRealm.url}spec`);
     cardsGrid = await loader.import(`${baseRealm.url}cards-grid`);
+    fileApi = await loader.import(`${baseRealm.url}file-api`);
 
     let {
       field,
@@ -74,13 +76,14 @@ export function setupInteractSubmodeTests(
     let { default: StringField } = string;
     let { Spec } = spec;
     let { CardsGrid } = cardsGrid;
+    let { FileDef } = fileApi;
 
     class Pet extends CardDef {
       static displayName = 'Pet';
       @field name = contains(StringField);
       @field favoriteTreat = contains(StringField);
 
-      @field title = contains(StringField, {
+      @field cardTitle = contains(StringField, {
         computeVia: function (this: Pet) {
           return this.name;
         },
@@ -95,15 +98,15 @@ export function setupInteractSubmodeTests(
       static isolated = class Isolated extends Component<typeof this> {
         <template>
           <GridContainer class='container'>
-            <h2 data-test-pet-title><@fields.title /></h2>
+            <h2 data-test-pet-title><@fields.cardTitle /></h2>
             <div>
               <div>Favorite Treat: <@fields.favoriteTreat /></div>
               <div data-test-editable-meta>
                 {{#if @canEdit}}
-                  <@fields.title />
+                  <@fields.cardTitle />
                   is editable.
                 {{else}}
-                  <@fields.title />
+                  <@fields.cardTitle />
                   is NOT editable.
                 {{/if}}
               </div>
@@ -122,7 +125,7 @@ export function setupInteractSubmodeTests(
       static displayName = 'Shipping Info';
       @field preferredCarrier = contains(StringField);
       @field remarks = contains(StringField);
-      @field title = contains(StringField, {
+      @field cardTitle = contains(StringField, {
         computeVia: function (this: ShippingInfo) {
           return this.preferredCarrier;
         },
@@ -190,7 +193,7 @@ export function setupInteractSubmodeTests(
           return this.firstName[0];
         },
       });
-      @field title = contains(StringField, {
+      @field cardTitle = contains(StringField, {
         computeVia: function (this: Person) {
           return this.firstName;
         },
@@ -239,18 +242,49 @@ export function setupInteractSubmodeTests(
       };
     }
 
+    class FileLinkCard extends CardDef {
+      static displayName = 'File Link Card';
+      @field title = contains(StringField);
+      @field attachment = linksTo(FileDef);
+
+      static isolated = class Isolated extends Component<typeof this> {
+        <template>
+          <h2 data-test-file-link-card-title><@fields.title /></h2>
+          <div data-test-file-link-attachment>
+            <@fields.attachment />
+          </div>
+        </template>
+      };
+    }
+
     class Personnel extends Person {
       static displayName = 'Personnel';
     }
 
+    class FocusTest extends CardDef {
+      static displayName = 'Focus test';
+      @field names = containsMany(StringField);
+    }
+
+    class FocusNestedItem extends FieldDef {
+      static displayName = 'Focus nested item';
+      @field label = contains(StringField);
+      @field pets = linksToMany(Pet);
+    }
+
+    class FocusNested extends CardDef {
+      static displayName = 'Focus nested';
+      @field items = containsMany(FocusNestedItem);
+    }
+
     let generateSpec = (
       fileName: string,
-      title: string,
+      cardTitle: string,
       ref: { module: string; name: string },
     ) => ({
       [`${fileName}.json`]: new Spec({
-        title,
-        description: `Spec for ${title}`,
+        title: cardTitle,
+        cardDescription: `Spec for ${cardTitle}`,
         specType: 'card',
         ref,
       }),
@@ -272,14 +306,18 @@ export function setupInteractSubmodeTests(
       contents: {
         ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'address.gts': { Address },
+        'focus-test.gts': { FocusTest },
+        'focus-nested.gts': { FocusNested, FocusNestedItem },
+        'file-link-card.gts': { FileLinkCard },
         'person.gts': { Person },
         'personnel.gts': { Personnel },
         'pet.gts': { Pet, Puppy },
         'shipping-info.gts': { ShippingInfo },
         'README.txt': `Hello World`,
+        'FileLinkCard/notes.txt': 'Hello from a file link',
         'person-entry.json': new Spec({
-          title: 'Person Card',
-          description: 'Spec for Person Card',
+          cardTitle: 'Person Card',
+          cardDescription: 'Spec for Person Card',
           specType: 'card',
           ref: {
             module: `${testRealmURL}person`,
@@ -287,8 +325,8 @@ export function setupInteractSubmodeTests(
           },
         }),
         'pet-entry.json': new Spec({
-          title: 'Pet Card',
-          description: 'Spec for Pet Card',
+          cardTitle: 'Pet Card',
+          cardDescription: 'Spec for Pet Card',
           specType: 'card',
           ref: {
             module: `${testRealmURL}pet`,
@@ -297,8 +335,8 @@ export function setupInteractSubmodeTests(
         }),
         ...catalogEntries,
         'puppy-entry.json': new Spec({
-          title: 'Puppy Card',
-          description: 'Spec for Puppy Card',
+          cardTitle: 'Puppy Card',
+          cardDescription: 'Spec for Puppy Card',
           specType: 'card',
           ref: {
             module: `${testRealmURL}pet`,
@@ -307,6 +345,13 @@ export function setupInteractSubmodeTests(
         }),
         'Pet/mango.json': mangoPet,
         'Pet/vangogh.json': new Pet({ name: 'Van Gogh' }),
+        'FocusTest/1.json': new FocusTest({ names: [] }),
+        'FocusNested/1.json': new FocusNested({
+          items: [
+            new FocusNestedItem({ label: 'Plain', pets: [] }),
+            new FocusNestedItem({ label: 'With Pet', pets: [mangoPet] }),
+          ],
+        }),
         'Person/fadhlan.json': new Person({
           firstName: 'Fadhlan',
           address: new Address({
@@ -338,6 +383,31 @@ export function setupInteractSubmodeTests(
           pet: mangoPet,
           friends: [mangoPet],
         }),
+        'FileLinkCard/with-file.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              title: 'Linked file example',
+            },
+            relationships: {
+              attachment: {
+                links: {
+                  self: './notes.txt',
+                },
+                data: {
+                  type: 'file-meta',
+                  id: './notes.txt',
+                },
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: '../file-link-card',
+                name: 'FileLinkCard',
+              },
+            },
+          },
+        },
         'Puppy/marco.json': new Puppy({ name: 'Marco', age: '5 months' }),
         'grid.json': new CardsGrid(),
         'index.json': new CardsGrid(),

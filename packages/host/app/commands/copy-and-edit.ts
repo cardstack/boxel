@@ -47,7 +47,7 @@ export default class CopyAndEditCommand extends HostBaseCommand<
       throw new Error('copy-and-edit requires a card with an id');
     }
 
-    let targetRealm = this.operatorModeStateService.realmURL?.href;
+    let targetRealm = this.operatorModeStateService.realmURL;
     if (!targetRealm) {
       throw new Error('Could not determine interact realm for card copy');
     }
@@ -105,10 +105,10 @@ export default class CopyAndEditCommand extends HostBaseCommand<
     let renamed = false;
     if (
       newCard.cardInfo &&
-      typeof (newCard as any).cardInfo?.title === 'string'
+      typeof (newCard as any).cardInfo?.name === 'string'
     ) {
-      let currentTitle = (newCard as any).cardInfo.title;
-      (newCard as any).cardInfo.title = `${currentTitle} (Copy ${suffix})`;
+      let currentTitle = (newCard as any).cardInfo.name;
+      (newCard as any).cardInfo.name = `${currentTitle} (Copy ${suffix})`;
       renamed = true;
     }
     if (renamed && newCard.id) {

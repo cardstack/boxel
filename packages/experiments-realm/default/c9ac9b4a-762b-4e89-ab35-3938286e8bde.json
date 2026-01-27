@@ -8,17 +8,55 @@
     },
     "type": "card",
     "attributes": {
+      "version": null,
       "cardInfo": {
         "notes": "Perfect for applications that want to evoke wonder, magic, and a deep connection to nature. The color palette balances earthiness with ethereal gold accents, while typography flows like ancient forest spells.",
-        "title": "Forest Fairy",
-        "description": "An enchanting design system inspired by the magical beauty of woodland fairy realms, featuring organic curves, nature-inspired colors, and ethereal typography.",
-        "thumbnailURL": "https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=400&h=300&fit=crop&crop=center"
+        "name": "Forest Fairy",
+        "summary": "An enchanting design system inspired by the magical beauty of woodland fairy realms, featuring organic curves, nature-inspired colors, and ethereal typography.",
+        "cardThumbnailURL": "https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=400&h=300&fit=crop&crop=center"
       },
       "styleName": "Forest Fairy",
       "visualDNA": "A magical design language that captures the ethereal beauty of an enchanted woodland realm. Soft, organic curves mirror the gentle bend of fern fronds and flower petals. Deep forest greens dance with luminous golds that catch like sunlight filtering through ancient canopy leaves. Delicate textures evoke morning dew on spider webs and the velvety softness of moss-covered logs. Typography flows like handwritten spells in an ancient grimoire, while gentle animations suggest the flutter of fairy wings and the sway of wildflowers in a hidden glade.",
       "cssImports": [
         "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Crimson+Text:wght@400;600&display=swap"
       ],
+      "typography": {
+        "body": {
+          "fontSize": "1rem",
+          "fontFamily": "Inter, sans-serif",
+          "fontWeight": "400",
+          "lineHeight": "1.6",
+          "sampleText": "Deep in the ancient woodland, where sunlight filters through emerald canopy and moss covers forgotten stones, the fairy folk dance among dewdrops and wildflowers."
+        },
+        "caption": {
+          "fontSize": "0.875rem",
+          "fontFamily": "Inter, sans-serif",
+          "fontWeight": "400",
+          "lineHeight": "1.5",
+          "sampleText": "Whispered secrets of the forest realm"
+        },
+        "heading": {
+          "fontSize": "2.5rem",
+          "fontFamily": "Crimson Text, serif",
+          "fontWeight": "600",
+          "lineHeight": "1.2",
+          "sampleText": "Whispers of the Enchanted Forest"
+        },
+        "subheading": {
+          "fontSize": "1.25rem",
+          "fontFamily": "Inter, sans-serif",
+          "fontWeight": "500",
+          "lineHeight": "1.4",
+          "sampleText": "Where magic dwells among the ferns"
+        },
+        "sectionHeading": {
+          "fontSize": "1.875rem",
+          "fontFamily": "Crimson Text, serif",
+          "fontWeight": "600",
+          "lineHeight": "1.3",
+          "sampleText": "Moonlit Woodland Paths"
+        }
+      },
       "inspirations": [
         "Miyazaki Studio Ghibli films",
         "Enchanted forest photography",

@@ -20,7 +20,7 @@ export class CocktailRecipe extends CardDef {
   static prefersWideFormat = true;
 
   @field cocktailName = contains(StringField);
-  @field description = contains(TextAreaField);
+  @field cardDescription = contains(TextAreaField);
   @field difficulty = contains(StringField);
   @field preparationTime = contains(NumberField);
   @field glassType = contains(StringField);
@@ -30,7 +30,7 @@ export class CocktailRecipe extends CardDef {
   @field bartenderNotes = contains(TextAreaField);
   @field origin = contains(StringField);
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: CocktailRecipe) {
       return this.cocktailName ?? 'Unnamed Cocktail';
     },
@@ -41,10 +41,10 @@ export class CocktailRecipe extends CardDef {
       <div class='speakeasy-stage'>
         <div class='recipe-mat'>
           <header class='cocktail-header'>
-            {{#if @model.thumbnailURL}}
+            {{#if @model.cardThumbnailURL}}
               <div class='cocktail-hero'>
                 <img
-                  src={{@model.thumbnailURL}}
+                  src={{@model.cardThumbnailURL}}
                   alt={{if
                     @model.cocktailName
                     (concat @model.cocktailName ' cocktail')
@@ -94,9 +94,9 @@ export class CocktailRecipe extends CardDef {
             {{/if}}
           </header>
 
-          {{#if @model.description}}
+          {{#if @model.cardDescription}}
             <div class='description-section'>
-              <@fields.description />
+              <@fields.cardDescription />
             </div>
           {{else}}
             <div class='description-placeholder'>
@@ -570,8 +570,8 @@ export class CocktailRecipe extends CardDef {
           </div>
         </div>
 
-        {{#if @model.description}}
-          <p class='card-description'>{{@model.description}}</p>
+        {{#if @model.cardDescription}}
+          <p class='card-description'>{{@model.cardDescription}}</p>
         {{else}}
           <p class='card-placeholder'>A mysterious cocktail recipe...</p>
         {{/if}}

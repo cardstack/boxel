@@ -16,9 +16,9 @@
       "summary": "This software defines a customizable, interactive 2D layout board for visualizing and managing spatial items such as images, notes, timers, and external links, supporting both canvas and list views, zooming, item positioning, and external card integration. Its primary purpose is to enable dynamic, visually organized content arrangements with user interactions, including adding, deleting, selecting, and linking items within a responsive, extendable interface.",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/layout-board-listing/thumbnail.png"
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/layout-board-listing/thumbnail.png"
       }
     },
     "relationships": {
@@ -120,11 +120,6 @@
       "examples.0": {
         "links": {
           "self": "../AILayoutBoard/e478c721-53b2-4464-8b6e-a8b89410a4c5"
-        }
-      },
-      "examples.1": {
-        "links": {
-          "self": "../piano/Piano/20dfd090-15bd-45e3-bd0d-b2fe8c3dcc8d"
         }
       },
       "categories.0": {

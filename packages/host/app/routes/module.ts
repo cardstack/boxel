@@ -123,7 +123,9 @@ export default class ModuleRoute extends Route<Model> {
   #releaseTimerBlock: (() => void) | undefined;
 
   deactivate() {
-    (globalThis as any).__boxelRenderContext = undefined;
+    if (isTesting()) {
+      (globalThis as any).__boxelRenderContext = undefined;
+    }
     this.lastStoreResetKey = undefined;
     this.#authGuard.unregister();
     this.#restoreRenderTimers?.();
@@ -368,7 +370,7 @@ async function makeDefinition(
         `encountered error indexing definition  "${url.href}/${name}": ${typesMaybeError.error.message}`,
       );
       return {
-        type: 'error',
+        type: 'module-error',
         error:
           typesMaybeError.error.status == null
             ? { ...typesMaybeError.error, status: 500 }
@@ -386,7 +388,7 @@ async function makeDefinition(
       `encountered error indexing definition "${url.href}/${name}": ${err.message}`,
     );
     return {
-      type: 'error',
+      type: 'module-error',
       error: toSerializedError(
         err,
         `encountered error indexing definition "${url.href}/${name}": ${describeError(err)}`,
@@ -555,7 +557,7 @@ export function modelWithError({
     createdAt: 0,
     definitions: {},
     error: {
-      type: 'error',
+      type: 'module-error',
       error: baseError,
     },
   };

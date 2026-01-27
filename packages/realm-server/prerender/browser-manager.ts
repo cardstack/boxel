@@ -126,11 +126,19 @@ export class BrowserManager {
     if (!this.#browser) {
       return;
     }
+    let proc = this.#browser.process();
     try {
       await this.#browser.close();
     } catch (e) {
       log.warn('Error closing browser:', e);
     } finally {
+      if (proc && proc.exitCode === null && !proc.killed) {
+        try {
+          proc.kill('SIGKILL');
+        } catch (_e) {
+          // best-effort cleanup
+        }
+      }
       this.#browser = null;
       this.#browserUserDataDir = undefined;
     }

@@ -10,8 +10,10 @@ import {
   type Field,
   type FieldDef,
   type Format,
+  type LinkableDefConstructor,
   CreateCardFn,
   CardCrudFunctions,
+  isFileDef,
 } from './card-api';
 import {
   BoxComponentSignature,
@@ -60,7 +62,7 @@ interface Signature {
   Args: {
     model: Box<CardDef>;
     arrayField: Box<CardDef[]>;
-    field: Field<typeof CardDef>;
+    field: Field<LinkableDefConstructor>;
     cardTypeFor(
       field: Field<typeof BaseDef>,
       boxedElement: Box<BaseDef>,
@@ -157,7 +159,7 @@ interface LinksToManyStandardEditorSignature {
   Args: {
     model: Box<CardDef>;
     arrayField: Box<CardDef[]>;
-    field: Field<typeof CardDef>;
+    field: Field<LinkableDefConstructor>;
     cardTypeFor(
       field: Field<typeof BaseDef>,
       boxedElement: Box<BaseDef>,
@@ -351,7 +353,7 @@ interface LinksToManyCompactEditorSignature {
   Args: {
     model: Box<CardDef>;
     arrayField: Box<CardDef[]>;
-    field: Field<typeof CardDef>;
+    field: Field<LinkableDefConstructor>;
     cardTypeFor(
       field: Field<typeof BaseDef>,
       boxedElement: Box<BaseDef>,
@@ -456,11 +458,16 @@ function getEditorChildFormat(
   return 'fitted';
 }
 
-function getPluralChildFormat(effectiveFormat: Format, model: Box<FieldDef>) {
+function getPluralChildFormat(
+  effectiveFormat: Format,
+  model: Box<FieldDef>,
+  isFileDef: boolean,
+) {
   if (
     effectiveFormat === 'edit' &&
-    'isCardDef' in model.value.constructor &&
-    model.value.constructor.isCardDef
+    (('isCardDef' in model.value.constructor &&
+      model.value.constructor.isCardDef) ||
+      isFileDef)
   ) {
     return 'fitted';
   }
@@ -475,8 +482,9 @@ function shouldRenderEditor(
   format: Format | undefined,
   defaultFormat: Format,
   isComputed: boolean,
+  isFileDef: boolean,
 ) {
-  return (format ?? defaultFormat) === 'edit' && !isComputed;
+  return (format ?? defaultFormat) === 'edit' && !isComputed && !isFileDef;
 }
 const componentCache = initSharedState(
   'linksToManyComponentCache',
@@ -491,7 +499,7 @@ export function getLinksToManyComponent({
 }: {
   model: Box<CardDef>;
   arrayField: Box<CardDef[]>;
-  field: Field<typeof CardDef>;
+  field: Field<LinkableDefConstructor>;
   cardTypeFor(
     field: Field<typeof BaseDef>,
     boxedElement: Box<BaseDef>,
@@ -507,10 +515,15 @@ export function getLinksToManyComponent({
       getBoxComponent(cardTypeFor(field, child), child, field),
     ); // Wrap the the components in a function so that the template is reactive to changes in the model (this is essentially a helper)
   let isComputed = !!field.computeVia || !!field.queryDefinition;
+  let isFileDefField = isFileDef(field.card);
   let linksToManyComponent = class LinksToManyComponent extends GlimmerComponent<BoxComponentSignature> {
     <template>
       <DefaultFormatsConsumer as |defaultFormats|>
-        {{#if (shouldRenderEditor @format defaultFormats.cardDef isComputed)}}
+        {{#if
+          (shouldRenderEditor
+            @format defaultFormats.cardDef isComputed isFileDefField
+          )
+        }}
           <LinksToManyEditor
             @model={{model}}
             @arrayField={{arrayField}}
@@ -543,7 +556,11 @@ export function getLinksToManyComponent({
               {{#each (getComponents) as |Item i|}}
                 <div class='linksToMany-itemContainer'>
                   <Item
-                    @format={{getPluralChildFormat effectiveFormat model}}
+                    @format={{getPluralChildFormat
+                      effectiveFormat
+                      model
+                      isFileDefField
+                    }}
                     @displayContainer={{@displayContainer}}
                     class='linksToMany-item'
                     data-test-plural-view-item={{i}}

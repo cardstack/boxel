@@ -1,4 +1,10 @@
-import type { CardResource, LooseCardResource, Meta } from './resource-types';
+import type {
+  CardResource,
+  FileMetaResource,
+  LinkableResource,
+  LooseLinkableResource,
+  Meta,
+} from './resource-types';
 import type { ResolvedCodeRef } from './code-ref';
 import type { RenderRouteOptions } from './render-route-options';
 import type { Definition } from './definitions';
@@ -6,9 +12,14 @@ import type { Definition } from './definitions';
 import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
 import type { ErrorEntry } from './index-writer';
 
+export interface LooseSingleResourceDocument<T extends LinkableResource> {
+  data: LooseLinkableResource<T>;
+  included?: LooseLinkableResource<LinkableResource>[];
+}
+
 export interface LooseSingleCardDocument {
-  data: LooseCardResource;
-  included?: CardResource[];
+  data: LooseLinkableResource<CardResource>;
+  included?: LinkableResource[];
 }
 
 export type PatchData = {
@@ -41,6 +52,18 @@ export interface RenderResponse extends PrerenderMeta {
 
 export interface RenderError extends ErrorEntry {
   evict?: boolean;
+}
+
+export interface FileExtractResponse {
+  id: string;
+  nonce: string;
+  status: 'ready' | 'error';
+  searchDoc: Record<string, any> | null;
+  resource?: FileMetaResource | null;
+  types?: string[] | null;
+  deps: string[];
+  error?: RenderError;
+  mismatch?: true;
 }
 
 export interface ModuleDefinitionResult {
@@ -76,6 +99,7 @@ export type PrerenderCardArgs = ModulePrerenderArgs;
 export interface Prerenderer {
   prerenderCard(args: PrerenderCardArgs): Promise<RenderResponse>;
   prerenderModule(args: ModulePrerenderArgs): Promise<ModuleRenderResponse>;
+  prerenderFileExtract(args: ModulePrerenderArgs): Promise<FileExtractResponse>;
 }
 
 export type RealmAction = 'read' | 'write' | 'realm-owner' | 'assume-user';
@@ -93,6 +117,7 @@ export {
   type CardErrorsJSONAPI,
   isCardErrorJSONAPI,
 } from './error';
+export { validateWriteSize } from './write-size-validation';
 
 export interface ResourceObject {
   type: string;
@@ -146,11 +171,13 @@ export * from './definitions';
 export * from './catalog';
 export * from './commands';
 export * from './constants';
+export * from './helpers/const';
 export * from './document';
 export * from './matrix-constants';
 export * from './matrix-client';
 export * from './queue';
 export * from './expression';
+export * from './infer-content-type';
 export * from './index-query-engine';
 export * from './index-writer';
 export * from './definitions';
@@ -168,8 +195,12 @@ export * from './utils';
 export * from './authorization-middleware';
 export * from './resource-types';
 export * from './query';
+export * from './search-utils';
+export * from './prerendered-html-format';
 export * from './query-field-utils';
+export * from './relationship-utils';
 export * from './formats';
+export { getCreatedTime } from './file-meta';
 export { mergeRelationships } from './merge-relationships';
 export { makeLogDefinitions, logger } from './log';
 export { Loader };
@@ -182,6 +213,7 @@ export * from './helpers/ensure-extension';
 export * from './url';
 export * from './render-route-options';
 export * from './publishability';
+export * from './pr-manifest';
 
 export const executableExtensions = ['.js', '.gjs', '.ts', '.gts'];
 export { createResponse } from './create-response';
@@ -219,9 +251,15 @@ export type { CodeRef };
 export * from './code-ref';
 export * from './serializers';
 
-export type { CardDocument, SingleCardDocument } from './document-types';
+export type {
+  CardDocument,
+  SingleCardDocument,
+  SingleFileMetaDocument,
+  CardCollectionDocument,
+} from './document-types';
 export type {
   CardResource,
+  FileMetaResource,
   ModuleResource,
   CardResourceMeta,
   ResourceID,
@@ -229,11 +267,13 @@ export type {
   Saved,
   Relationship,
   CardFields,
+  LooseLinkableResource,
 } from './resource-types';
 export {
   isCardDocument,
   isCardCollectionDocument,
   isSingleCardDocument,
+  isSingleFileMetaDocument,
   isCardDocumentString,
 } from './document-types';
 export {
@@ -245,7 +285,12 @@ export {
 
 export type { JWTPayload } from './realm-auth-client';
 export { sanitizeHtml } from './dompurify-runtime';
-export { markedSync, markdownToHtml } from './marked-sync';
+export {
+  hasCodeBlocks,
+  markedSync,
+  markdownToHtml,
+  preloadMarkdownLanguages,
+} from './marked-sync';
 export { getPlural } from './pluralize-runtime';
 
 import type {
@@ -426,13 +471,13 @@ export interface Store {
     patchData: PatchData,
     opts?: { doNotPersist?: boolean; clientRequestId?: string },
   ): Promise<T | CardErrorJSONAPI | undefined>;
-  search(query: Query, realmURL?: URL): Promise<CardDef[]>;
+  search(query: Query, realmURLs?: string[]): Promise<CardDef[]>;
   getSaveState(id: string): AutoSaveState | undefined;
 }
 
-export interface CardCatalogQuery extends Query {
+export type CardCatalogQuery = Query & {
   filter?: CardTypeFilter | EveryFilter;
-}
+};
 
 export interface CardCreator {
   create(
@@ -513,6 +558,28 @@ export function internalKeyFor(
     case 'fieldOf':
       return `${internalKeyFor(ref.card, relativeTo)}/fields/${ref.field}`;
   }
+}
+
+export function codeRefFromInternalKey(
+  internalKey: string | null | undefined,
+): ResolvedCodeRef | undefined {
+  if (!internalKey) {
+    return;
+  }
+  if (internalKey.includes('/fields/')) {
+    return;
+  }
+  if (internalKey.endsWith('/ancestor')) {
+    return;
+  }
+  let lastSlash = internalKey.lastIndexOf('/');
+  if (lastSlash <= 0 || lastSlash === internalKey.length - 1) {
+    return;
+  }
+  return {
+    module: internalKey.slice(0, lastSlash),
+    name: internalKey.slice(lastSlash + 1),
+  };
 }
 
 export function loaderFor(cardOrField: CardDef | FieldDef) {

@@ -94,7 +94,11 @@ Instead of running `pnpm start:base`, you can alternatively use `pnpm start:all`
 
 #### Using `start:development`
 
-You can also use `start:development` if you want the functionality of `start:all`, but without running the test realms. `start:development` will enable you to open http://localhost:4201 and allow to select between the cards in the /base and /experiments realm. In order to use `start:development` you must also make sure to run `start:worker-development` in order to start the workers (which are normally started in `start:all`.
+You can also use `start:development` if you want the functionality of `start:all`, but without running the test realms. `start:development` will enable you to open http://localhost:4201 and allow to select between the cards in the /base and /experiments realm. In order to use `start:development` you must also make sure to run `start:worker-development` in order to start the workers which are normally started in `start:all`.
+
+Optional environment variables for `start:development`:
+
+- `USE_EXTERNAL_CATALOG=1` to load `/catalog` from `packages/catalog/contents` (cloned from the `boxel-catalog` repo). 
 
 ### Card Pre-rendering
 
@@ -126,6 +130,7 @@ Prerender server:
 - BOXEL_HOST_URL (optional): URL of the host app that serves the /render routes. Defaults to http://localhost:4200 in dev scripts.
 - PRERENDER_MANAGER_URL (optional): Base URL of the prerender manager to register with. Defaults to http://localhost:4222.
 - PRERENDER_PAGE_POOL_SIZE (optional): Max number of per-realm pages to keep open in the pool. Default 4.
+- PRERENDER_REALM_TAB_MAX (optional): Max number of tabs per realm per prerender server. Default 1 (clamped to PRERENDER_PAGE_POOL_SIZE).
 - BOXEL_SHOW_PRERENDER (optional): If set to 'true', opens a visible browser (useful for debugging locally). Headless otherwise.
 
 Prerender manager:

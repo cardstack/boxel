@@ -8,13 +8,30 @@ import { htmlSafe } from '@ember/template';
 
 import { parseCssColor } from '../util/color-utils';
 import type { ColorFieldSignature } from '../util/color-field-signature';
+import type { ColorFieldConfiguration } from '../util/color-utils';
 
 type LevelToken = 'aaa' | 'aa' | 'fail';
 
 export default class ContrastCheckerAddon extends Component<ColorFieldSignature> {
+  get contrastColor(): string {
+    const configuration = this.args.configuration as
+      | ColorFieldConfiguration
+      | undefined;
+    const options = configuration?.options;
+
+    if (options && 'contrastColor' in options && options.contrastColor) {
+      return options.contrastColor;
+    }
+
+    return '#ffffff';
+  }
+
   get contrastRatio(): number | null {
     if (!this.args.model) return null;
-    const ratio = this.computeContrastRatio(this.args.model, '#ffffff');
+    const ratio = this.computeContrastRatio(
+      this.args.model,
+      this.contrastColor,
+    );
     return Number(ratio.toFixed(2));
   }
 
@@ -63,7 +80,8 @@ export default class ContrastCheckerAddon extends Component<ColorFieldSignature>
       <label class='addon-label'>Accessibility Check</label>
       {{#if @model}}
         <div
-          class='contrast-card {{if this.contrastLevelToken this.contrastLevelToken}}'
+          class='contrast-card
+            {{if this.contrastLevelToken this.contrastLevelToken}}'
         >
           <div class='contrast-header'>
             <div class='contrast-ratio-group'>
@@ -80,8 +98,7 @@ export default class ContrastCheckerAddon extends Component<ColorFieldSignature>
               <div class='requirement'>
                 <span class='requirement-label'>AA (Normal Text):</span>
                 <span
-                  class='requirement-status
-                    {{if this.meetsAa "met" "unmet"}}'
+                  class='requirement-status {{if this.meetsAa "met" "unmet"}}'
                 >
                   {{if this.meetsAa '✓ Pass' '✗ Fail'}}
                 </span>
@@ -89,8 +106,7 @@ export default class ContrastCheckerAddon extends Component<ColorFieldSignature>
               <div class='requirement'>
                 <span class='requirement-label'>AAA (Normal Text):</span>
                 <span
-                  class='requirement-status
-                    {{if this.meetsAaa "met" "unmet"}}'
+                  class='requirement-status {{if this.meetsAaa "met" "unmet"}}'
                 >
                   {{if this.meetsAaa '✓ Pass' '✗ Fail'}}
                 </span>
@@ -101,9 +117,11 @@ export default class ContrastCheckerAddon extends Component<ColorFieldSignature>
               <div class='preview-label'>Preview</div>
               <div
                 class='preview-text'
-                style={{htmlSafe (concat 'color:' @model)}}
+                style={{htmlSafe
+                  (concat 'color:' @model ';background:' this.contrastColor)
+                }}
               >
-                Sample text on white background
+                Sample text
               </div>
             </div>
           </div>
@@ -279,7 +297,6 @@ export default class ContrastCheckerAddon extends Component<ColorFieldSignature>
 
       .preview-text {
         padding: calc(var(--spacing, 0.25rem) * 3);
-        background: var(--background, #ffffff);
         border: 1px solid var(--border, #e2e8f0);
         border-radius: calc(var(--radius, 0.5rem) * 0.75);
         font-size: 0.875rem;

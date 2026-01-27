@@ -24,9 +24,9 @@ interface Signature {
 }
 
 export default class AskAiContainer extends Component<Signature> {
-  @service private declare commandService: CommandService;
-  @service private declare matrixService: MatrixService;
-  @service private declare operatorModeStateService: OperatorModeStateService;
+  @service declare private commandService: CommandService;
+  @service declare private matrixService: MatrixService;
+  @service declare private operatorModeStateService: OperatorModeStateService;
   @tracked private aiPrompt = '';
 
   @action private onInput(value: string) {
@@ -70,7 +70,7 @@ export default class AskAiContainer extends Component<Signature> {
             ? [this.operatorModeStateService.openFileURL]
             : undefined,
           openCardIds: openCards?.map((c) => c.id),
-          realmUrl: this.operatorModeStateService.realmURL.href,
+          realmUrl: this.operatorModeStateService.realmURL,
         }),
       ]);
 

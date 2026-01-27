@@ -10,25 +10,25 @@ import {
 
 import {
   createJWT,
-  matrixURL,
-  setupBaseRealmServer,
   setupPermissionedRealm,
   setupPermissionedRealms,
+  type RealmRequest,
+  withRealmPath,
 } from '../helpers';
 
 const ownerUserId = '@mango:localhost';
 
-module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
-  setupBaseRealmServer(hooks, matrixURL);
-
+module(`realm-endpoints/${basename(__filename)}`, function () {
   module('with a publishable realm', function (hooks) {
-    let request: SuperTest<Test>;
+    let realmURL = new URL('http://127.0.0.1:4444/test/');
+    let request: RealmRequest;
     let testRealm: Realm;
 
     setupPermissionedRealm(hooks, {
       permissions: {
         [ownerUserId]: ['read', 'write', 'realm-owner'],
       },
+      realmURL,
       fileSystem: {
         'source-card.gts': `
               import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
@@ -69,7 +69,7 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
       },
       onRealmSetup({ testRealm: realm, request: req }) {
         testRealm = realm;
-        request = req;
+        request = withRealmPath(req, realmURL);
       },
     });
 
@@ -87,10 +87,127 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
         response.body.data.attributes.publishable,
         'Realm is publishable',
       );
+      assert.strictEqual(
+        response.body.data.type,
+        'realm-publishability',
+        'Response has the realm-publishability type',
+      );
       assert.deepEqual(
         response.body.data.attributes.violations,
         [],
         'No violations reported',
+      );
+      let warningTypes = response.body.data.attributes.warningTypes ?? [];
+      assert.deepEqual(warningTypes, [], 'No warning types reported');
+    });
+  });
+
+  module('with error documents', function (hooks) {
+    let sourceRealm: Realm;
+    let request: SuperTest<Test>;
+    let sourceRealmURL = new URL('http://127.0.0.1:4800/source/');
+    let dbAdapter: import('@cardstack/postgres').PgAdapter;
+
+    setupPermissionedRealms(hooks, {
+      realms: [
+        {
+          realmURL: sourceRealmURL.href,
+          permissions: {
+            [ownerUserId]: DEFAULT_PERMISSIONS,
+          },
+          fileSystem: {
+            'broken-card.gts': `
+        import { CardDef, field, contains } from "https://cardstack.com/base/card-api";
+        import StringField from "https://cardstack.com/base/string";
+
+        // Intentionally broken: references an undefined symbol
+        export class BrokenCard extends CardDef {
+          @field title = contains(StringField);
+        }
+      `,
+            'broken-instance.json': {
+              data: {
+                type: 'card',
+                attributes: {
+                  cardTitle: 'Broken',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: './broken-card.gts',
+                    name: 'BrokenCard',
+                  },
+                },
+              },
+            },
+          },
+        },
+      ],
+      onRealmSetup({ realms, dbAdapter: adapter }) {
+        dbAdapter = adapter;
+        sourceRealm = realms.find(
+          ({ realm }) => realm.url === sourceRealmURL.href,
+        )!.realm;
+        request = supertest(
+          realms.find(({ realm }) => realm.url === sourceRealmURL.href)!
+            .realmHttpServer,
+        );
+      },
+    });
+
+    test('marks realm as not publishable when error documents exist', async function (assert) {
+      // Ensure realm is indexed so that any broken cards are reflected in boxel_index
+      await sourceRealm.realmIndexUpdater.fullIndex();
+
+      // Force an error entry into the index to simulate a failed card
+      let errorDoc = {
+        message: 'render failed',
+        status: 500,
+        additionalErrors: null,
+      };
+      let cardURL = `${sourceRealm.url}broken-instance.json`;
+      for (let table of ['boxel_index', 'boxel_index_working']) {
+        await dbAdapter.execute(
+          `UPDATE ${table}
+           SET has_error = TRUE, error_doc = $1::jsonb
+           WHERE url = $2 AND type = 'instance'`,
+          {
+            bind: [JSON.stringify(errorDoc), cardURL],
+          },
+        );
+      }
+
+      let response = await request
+        .get(`${new URL(sourceRealm.url).pathname}_publishability`)
+        .set('Accept', SupportedMimeType.JSONAPI)
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(sourceRealm, ownerUserId, DEFAULT_PERMISSIONS)}`,
+        );
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      assert.false(
+        response.body.data.attributes.publishable,
+        'Realm is not publishable when error documents are present',
+      );
+
+      assert.ok(
+        Array.isArray(response.body.data.attributes.violations),
+        'Violations array is present',
+      );
+
+      assert.ok(
+        response.body.data.attributes.violations.some(
+          (violation: any) =>
+            violation.kind === 'error-document' &&
+            violation.resource === `${sourceRealm.url}broken-instance.json`,
+        ),
+        'Includes an error-document violation for the broken instance',
+      );
+
+      assert.deepEqual(
+        (response.body.data.attributes.warningTypes ?? []).sort(),
+        ['has-error-card-documents'],
+        'warningTypes includes has-error-card-documents',
       );
     });
   });
@@ -100,8 +217,8 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
       let sourceRealm: Realm;
       let privateRealm: Realm;
       let request: SuperTest<Test>;
-      let sourceRealmURL = new URL('http://127.0.0.1:4700/');
-      let privateRealmURL = new URL('http://127.0.0.1:4701/');
+      let sourceRealmURL = new URL('http://127.0.0.1:4700/source/');
+      let privateRealmURL = new URL('http://127.0.0.1:4701/private/');
 
       setupPermissionedRealms(hooks, {
         realms: [
@@ -196,6 +313,12 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
           response.body.data.attributes.violations.length,
           1,
           'one violating resource is reported',
+        );
+        let warningTypes = response.body.data.attributes.warningTypes ?? [];
+        assert.deepEqual(
+          warningTypes,
+          ['has-private-dependencies'],
+          'warningTypes includes has-private-dependencies',
         );
         let violation = response.body.data.attributes.violations[0];
         assert.strictEqual(

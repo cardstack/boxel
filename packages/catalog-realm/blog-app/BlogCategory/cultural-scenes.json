@@ -7,9 +7,9 @@
       "slug": "cultural-scenes",
       "pillColor": "#FA7F01",
       "cardInfo": {
-        "description": "Capturing the vibrant art, food, and music of cities.",
-        "title": "Cultural Scenes",
-        "thumbnailURL": null
+        "summary": "Capturing the vibrant art, food, and music of cities.",
+        "name": "Cultural Scenes",
+        "cardThumbnailURL": null
       }
     },
     "relationships": {

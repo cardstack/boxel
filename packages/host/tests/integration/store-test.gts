@@ -854,9 +854,7 @@ module('Integration | Store', function (hooks) {
     setCardInOperatorModeState(`${testRealmURL}Person/hassan`, 'edit');
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-        </template>
+        <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
 
@@ -1021,6 +1019,162 @@ module('Integration | Store', function (hooks) {
       (instance as any).friends,
       [germaine],
       'the linksToMany field was patched',
+    );
+  });
+
+  test('loads FileDef links from included resources', async function (assert) {
+    await testRealm.writeMany(
+      new Map<string, string>([
+        [
+          'gallery.gts',
+          `
+            import { CardDef, field, linksTo, linksToMany } from "https://cardstack.com/base/card-api";
+            import { FileDef } from "https://cardstack.com/base/file-api";
+
+            export class Gallery extends CardDef {
+              @field hero = linksTo(FileDef);
+              @field attachments = linksToMany(FileDef);
+            }
+          `,
+        ],
+        [
+          'Gallery/hero.json',
+          JSON.stringify({
+            data: {
+              attributes: {
+                cardInfo: {},
+              },
+              relationships: {
+                hero: {
+                  links: {
+                    self: `${testRealmURL}hero.png`,
+                  },
+                  data: { type: 'file-meta', id: `${testRealmURL}hero.png` },
+                },
+                'attachments.0': {
+                  links: {
+                    self: `${testRealmURL}first.png`,
+                  },
+                  data: { type: 'file-meta', id: `${testRealmURL}first.png` },
+                },
+                'attachments.1': {
+                  links: {
+                    self: `${testRealmURL}second.png`,
+                  },
+                  data: { type: 'file-meta', id: `${testRealmURL}second.png` },
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `${testRealmURL}gallery`,
+                  name: 'Gallery',
+                },
+              },
+            },
+            included: [
+              {
+                type: 'file-meta',
+                id: `${testRealmURL}hero.png`,
+                attributes: {
+                  name: 'hero.png',
+                  url: `${testRealmURL}hero.png`,
+                  sourceUrl: `${testRealmURL}hero.png`,
+                  contentType: 'image/png',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: 'https://cardstack.com/base/file-api',
+                    name: 'FileDef',
+                  },
+                },
+              },
+              {
+                type: 'file-meta',
+                id: `${testRealmURL}first.png`,
+                attributes: {
+                  name: 'first.png',
+                  url: `${testRealmURL}first.png`,
+                  sourceUrl: `${testRealmURL}first.png`,
+                  contentType: 'image/png',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: 'https://cardstack.com/base/file-api',
+                    name: 'FileDef',
+                  },
+                },
+              },
+              {
+                type: 'file-meta',
+                id: `${testRealmURL}second.png`,
+                attributes: {
+                  name: 'second.png',
+                  url: `${testRealmURL}second.png`,
+                  sourceUrl: `${testRealmURL}second.png`,
+                  contentType: 'image/png',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: 'https://cardstack.com/base/file-api',
+                    name: 'FileDef',
+                  },
+                },
+              },
+            ],
+          }),
+        ],
+        ['hero.png', 'mock hero image'],
+        ['first.png', 'mock first image'],
+        ['second.png', 'mock second image'],
+      ]),
+    );
+
+    let gallery = (await storeService.get(
+      `${testRealmURL}Gallery/hero`,
+    )) as CardDefType;
+
+    assert.ok((gallery as any).hero, 'hero is loaded from included resources');
+    assert.strictEqual(
+      (gallery as any).hero?.id,
+      `${testRealmURL}hero.png`,
+      'hero FileDef has id set from file meta',
+    );
+    assert.strictEqual(
+      (gallery as any).hero?.name,
+      'hero.png',
+      'hero FileDef uses file meta name',
+    );
+    assert.strictEqual(
+      (gallery as any).hero?.url,
+      `${testRealmURL}hero.png`,
+      'hero FileDef uses file meta url',
+    );
+
+    let attachments = (gallery as any).attachments ?? [];
+    assert.strictEqual(
+      attachments.length,
+      2,
+      'attachments are loaded from included resources',
+    );
+    assert.strictEqual(
+      attachments[0]?.id,
+      `${testRealmURL}first.png`,
+      'first attachment has id set from file meta',
+    );
+    assert.strictEqual(
+      attachments[0]?.name,
+      'first.png',
+      'first attachment uses file meta name',
+    );
+    assert.strictEqual(
+      attachments[1]?.id,
+      `${testRealmURL}second.png`,
+      'second attachment has id set from file meta',
+    );
+    assert.strictEqual(
+      attachments[1]?.name,
+      'second.png',
+      'second attachment uses file meta name',
     );
   });
 
@@ -1192,7 +1346,7 @@ module('Integration | Store', function (hooks) {
           },
         },
       },
-      new URL(testRealmURL),
+      [testRealmURL],
     );
 
     assert.strictEqual(
@@ -1207,13 +1361,16 @@ module('Integration | Store', function (hooks) {
     );
   });
 
-  test('an instance live updates from indexing events for an instance update', async function (assert) {
+  test<TestContextWithSave>('an instance live updates from indexing events for an instance update', async function (assert) {
+    assert.expect(2);
+    let didSave = false;
+    this.onSave(() => {
+      didSave = true;
+    });
     setCardInOperatorModeState(`${testRealmURL}Person/hassan`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-        </template>
+        <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
 
@@ -1238,18 +1395,18 @@ module('Integration | Store', function (hooks) {
         (storeService.peek(`${testRealmURL}Person/hassan`) as any)?.name ===
         'Hassan updated',
     );
+    await storeService.flushSaves();
     assert
       .dom('[data-test-stack-card] [data-test-field="name"]')
       .containsText('Hassan updated', 'card live updated');
+    assert.false(didSave, 'indexing updates do not auto save instances');
   });
 
   test('an instance live updates from indexing events for a code update', async function (assert) {
     setCardInOperatorModeState(`${testRealmURL}Person/hassan`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-        </template>
+        <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
     let instance = (await storeService.get(
@@ -1289,9 +1446,7 @@ module('Integration | Store', function (hooks) {
     setCardInOperatorModeState(`${testRealmURL}Person/hassan`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-        </template>
+        <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
 
@@ -1351,9 +1506,7 @@ module('Integration | Store', function (hooks) {
     setCardInOperatorModeState(`${testRealmURL}Person/hassan`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-        </template>
+        <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
     assert
@@ -1392,9 +1545,7 @@ module('Integration | Store', function (hooks) {
     setCardInOperatorModeState(newInstance[localId]);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-        </template>
+        <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
     assert
@@ -1554,9 +1705,7 @@ module('Integration | Store', function (hooks) {
     setCardInOperatorModeState(hassan, 'edit');
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-        </template>
+        <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
 
@@ -1797,9 +1946,7 @@ module('Integration | Store', function (hooks) {
 
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <ResourceConsumer />
-        </template>
+        <template><ResourceConsumer /></template>
       },
     );
 
@@ -1891,9 +2038,7 @@ module('Integration | Store', function (hooks) {
 
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <ResourceConsumer />
-        </template>
+        <template><ResourceConsumer /></template>
       },
     );
 
@@ -1982,9 +2127,7 @@ module('Integration | Store', function (hooks) {
 
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <ResourceConsumer />
-        </template>
+        <template><ResourceConsumer /></template>
       },
     );
 

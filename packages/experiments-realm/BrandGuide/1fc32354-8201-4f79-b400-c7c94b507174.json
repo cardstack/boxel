@@ -1,0 +1,235 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "default",
+        "module": "https://cardstack.com/base/brand-guide"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "spacing": "1rem",
+      "version": null,
+      "cardInfo": {
+        "notes": null,
+        "name": "Kate Spade",
+        "summary": "Complete brand identity system for Kate Spade New York - capturing the essence of playful sophistication, modern femininity, and joyful living.",
+        "cardThumbnailURL": null
+      },
+      "markUsage": {
+        "primaryMark1": "https://cdn.brandfetch.io/idQFy1secH/theme/dark/logo.svg?c=1bxid64Mup7aczewSAYMX&t=1676358645840",
+        "primaryMark2": "https://cdn.brandfetch.io/idQFy1secH/theme/light/logo.svg?c=1bxid64Mup7aczewSAYMX&t=1676358646541",
+        "secondaryMark1": "https://cdn.brandfetch.io/idQFy1secH/theme/dark/symbol.svg?c=1bxid64Mup7aczewSAYMX&t=1668079173640",
+        "secondaryMark2": "https://cdn.brandfetch.io/idQFy1secH/w/399/h/399/theme/dark/icon.jpeg?c=1bxid64Mup7aczewSAYMX&t=1667811397017",
+        "primaryMarkMinHeight": null,
+        "primaryMarkGreyscale1": "https://cdn.brandfetch.io/idQFy1secH/theme/dark/logo.svg?c=1bxid64Mup7aczewSAYMX&t=1676358645840",
+        "primaryMarkGreyscale2": "https://cdn.brandfetch.io/idQFy1secH/theme/light/logo.svg?c=1bxid64Mup7aczewSAYMX&t=1676358646541",
+        "secondaryMarkMinHeight": null,
+        "socialMediaProfileIcon": "https://cdn.brandfetch.io/idQFy1secH/w/399/h/399/theme/dark/icon.jpeg?c=1bxid64Mup7aczewSAYMX&t=1667811397017",
+        "secondaryMarkGreyscale1": "",
+        "secondaryMarkGreyscale2": null,
+        "primaryMarkClearanceRatio": null,
+        "secondaryMarkClearanceRatio": null
+      },
+      "styleName": null,
+      "visualDNA": "Kate Spade's visual language is defined by **playful sophistication** - a careful balance of feminine charm and modern sensibility. The aesthetic embraces:\n\n- **Color Confidence**: Bold, saturated hues paired fearlessly\n- **Graphic Clarity**: Clean lines, geometric precision, structured silhouettes\n- **Whimsical Details**: Unexpected touches, clever prints, charming embellishments\n- **Polished Simplicity**: Refined elegance without pretension\n- **Joyful Optimism**: Light-hearted spirit in every expression",
+      "cssImports": [
+        "https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Lora:ital,wght@0,400;0,500;1,400&display=swap"
+      ],
+      "typography": {
+        "body": {
+          "fontSize": "0.875rem",
+          "fontFamily": "DM Sans, Plus Jakarta Sans, Inter, -apple-system, sans-serif",
+          "fontWeight": "400",
+          "lineHeight": "1.4",
+          "sampleText": "Our designs celebrate the curiosity and courage it takes to live a little brighter every day."
+        },
+        "caption": {
+          "fontSize": "0.75rem",
+          "fontFamily": "DM Sans, Inter, -apple-system, sans-serif",
+          "fontWeight": "400",
+          "lineHeight": "1.5",
+          "sampleText": "kate spade new york"
+        },
+        "heading": {
+          "fontSize": "3rem",
+          "fontFamily": "Lora, Merriweather, Crimson Pro, Georgia, serif",
+          "fontWeight": "400",
+          "lineHeight": "1.2",
+          "sampleText": "live colorfully"
+        },
+        "subheading": {
+          "fontSize": "1.25rem",
+          "fontFamily": "DM Sans, Plus Jakarta Sans, Inter, -apple-system, sans-serif",
+          "fontWeight": "400",
+          "lineHeight": "1.4",
+          "sampleText": "she leaves a little sparkle"
+        },
+        "sectionHeading": {
+          "fontSize": "1.75rem",
+          "fontFamily": "Lora, Merriweather, Georgia, serif",
+          "fontWeight": "500",
+          "lineHeight": "1.3",
+          "sampleText": "adventures fill your soul"
+        }
+      },
+      "colorPalette": "## Signature Colors\n\n### Primary Palette\n\n**Kate Spade Pink** (`#FF5FA0`)\n- The iconic signature pink - bold, feminine, joyful\n- Primary brand identifier\n- Use generously but thoughtfully\n\n**Black** (`#000000`)\n- Sophisticated anchor\n- Logo color, typography, structure\n- Creates crisp contrast\n\n**Cream/Off-White** (`#F8F5F0`)\n- Soft, elegant background\n- Warmth without starkness\n- Primary light background\n\n### Accent Colors\n\n**Vibrant Coral** (`#FF6B6B`)\n**Sunny Yellow** (`#FFD93D`)\n**Turquoise** (`#6BCB77`)\n**Lavender** (`#C996CC`)\n**Bright Red** (`#E63946`)\n\n### Usage Principles\n\n- **Color Blocking**: Bold, graphic color combinations\n- **High Contrast**: Crisp, clear pairings\n- **Joyful Saturation**: Embrace vibrant, saturated tones\n- **Strategic Restraint**: Colorful doesn't mean chaotic\n- **Seasonal Variation**: Palette can expand with collections while maintaining core DNA",
+      "contentVoice": "## Tone of Voice\n\n**Characteristics**: Warm, witty, intelligent, optimistic, conversational\n\n**Voice Attributes**:\n- **Playful but Polished**: Fun without being frivolous\n- **Confident but Approachable**: Assured yet welcoming\n- **Charming but Smart**: Delightful with substance\n- **Personal but Universal**: Intimate yet inclusive\n\n## Writing Guidelines\n\n- Use conversational language with a wink\n- Embrace lowercase for a friendly, modern feel (when appropriate)\n- Include clever wordplay and literary references\n- Keep sentences crisp and clear\n- Celebrate individuality and personal style\n- Maintain warmth and optimism\n\n## Example Messaging\n\n\u2713 \"she leaves a little sparkle wherever she goes\"\n\u2713 \"eat cake for breakfast\"\n\u2713 \"live colorfully\"\n\u2713 \"adventures fill your soul\"\n\n\u2717 Overly formal corporate speak\n\u2717 Trying too hard to be trendy\n\u2717 Generic luxury language",
+      "cornerRadius": "4px",
+      "inspirations": [],
+      "designMindset": "## Core Principles\n\n1. **Live Colorfully**: Embrace bold, joyful color combinations that spark delight\n2. **Sophisticated Playfulness**: Balance wit and whimsy with refined execution\n3. **Feminine Confidence**: Celebrate modern femininity with strength and grace\n4. **Unexpected Details**: Delight in the details - hidden messages, clever touches\n5. **Effortless Elegance**: Make polish feel approachable, never intimidating\n\n## Design Philosophy\n\n> \"She is quick and curious and playful and strong. She is the girl who is confident enough to dress in a way that makes her happy.\"\n> \u2014 Kate Spade design ethos\n\nEvery design decision should feel optimistic, intelligent, and just a bit unexpected.",
+      "rootVariables": {
+        "card": "#FCF7E6",
+        "ring": "#FF5FA0",
+        "input": "#F8F5F0",
+        "muted": "#fcf7e6",
+        "accent": "#427e2b",
+        "border": "#E0E0E0",
+        "chart1": "#FF5FA0",
+        "chart2": "#427e2b",
+        "chart3": "#6BCB77",
+        "chart4": "#C996CC",
+        "chart5": "#FF6B6B",
+        "radius": "0.25rem",
+        "shadow": null,
+        "popover": "#FFFFFF",
+        "primary": "#F8BACA",
+        "sidebar": null,
+        "spacing": "0.25rem",
+        "fontMono": "ui-monospace, monospace",
+        "fontSans": "DM Sans, Plus Jakarta Sans, Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+        "shadowLg": null,
+        "shadowMd": null,
+        "shadowSm": null,
+        "shadowXl": null,
+        "shadowXs": null,
+        "fontSerif": "Lora, Merriweather, Crimson Pro, Georgia, serif",
+        "secondary": "#223628",
+        "shadow2xl": null,
+        "shadow2xs": null,
+        "background": "#FFFFFF",
+        "foreground": "#000000",
+        "destructive": "#E63946",
+        "sidebarRing": null,
+        "sidebarAccent": null,
+        "sidebarBorder": null,
+        "cardForeground": "#000000",
+        "sidebarPrimary": null,
+        "trackingNormal": "0.03em",
+        "mutedForeground": "#666666",
+        "accentForeground": "#FFFFFF",
+        "popoverForeground": "#000000",
+        "primaryForeground": "#000000",
+        "sidebarForeground": null,
+        "secondaryForeground": "#FCF7E6",
+        "destructiveForeground": "#FFFFFF",
+        "sidebarAccentForeground": null,
+        "sidebarPrimaryForeground": null
+      },
+      "motionLanguage": null,
+      "technicalSpecs": "## Digital Specifications\n\n### Responsive Breakpoints\n\n- **Mobile**: 320px - 767px\n- **Tablet**: 768px - 1023px\n- **Desktop**: 1024px - 1439px\n- **Large Desktop**: 1440px+\n\n### Accessibility Standards\n\n- **WCAG 2.1 AA compliance** minimum\n- **Color contrast**: 4.5:1 for body text, 3:1 for large text\n- **Focus indicators**: Clear pink ring on all interactive elements\n- **Alt text**: Descriptive, personality-infused where appropriate\n- **Keyboard navigation**: Full support required\n\n### Typography Specifications\n\n**Web Fonts**:\n- Proxima Nova: Load weights 300, 400, 600, 700\n- Mrs Eaves: Load Regular and Italic\n- Font-display: swap for performance\n\n**Base Settings**:\n- Root font size: 16px\n- Line height: 1.6 for body, 1.2-1.4 for headings\n- Letter spacing: 0.01em base, adjust per size\n\n### Color Implementation\n\n**CSS Variables**:\n```css\n--ks-pink: #FF5FA0;\n--ks-black: #000000;\n--ks-cream: #F8F5F0;\n--ks-yellow: #FFD93D;\n--ks-radius: 4px;\n--ks-spacing: 1rem;\n```\n\n### Asset Requirements\n\n**Logo Formats**: SVG (preferred), PNG (2x retina)\n**Minimum Logo Size**: 120px width\n**Image Formats**: WebP with JPG fallback\n**Icon System**: SVG, 24px grid base",
+      "wallpaperImages": [],
+      "compositionRules": "## Layout Principles\n\n### Grid System\n\n- **12-column grid** for flexibility\n- **16px baseline grid** for vertical rhythm\n- **Generous gutters** (24-32px) for breathing room\n- **Asymmetric layouts** encouraged for dynamism\n\n### Spacing Scale\n\n- **4px base unit** for micro-spacing\n- **8px, 16px, 24px, 32px, 48px, 64px** progression\n- **White space is design**: Never be afraid of emptiness\n- **Padding > Borders**: Space over lines when possible\n\n### Visual Hierarchy\n\n1. **Hero Moments**: Bold, confident, often full-bleed\n2. **Primary Content**: Clear, generous spacing\n3. **Supporting Details**: Subtle, refined, never cramped\n4. **Accents & Delight**: Strategic sparkle moments\n\n### Image Guidelines\n\n**Photography Style**:\n- Bright, naturally lit\n- Crisp focus, vibrant colors\n- Lifestyle moments, not sterile\n- Diverse, joyful subjects\n- Often shot from above (flat lays)\n- Product as hero, styled with personality\n\n**Image Treatments**:\n- Clean edges (no heavy filters)\n- Color should feel true and vibrant\n- White or cream backgrounds for product\n- Environmental shots for lifestyle\n- Generous margins around images\n\n### Compositional Balance\n\n- **Asymmetry with purpose**: Dynamic but stable\n- **Rule of thirds**: Natural, pleasing placement\n- **Scale contrast**: Mix large and small confidently\n- **Directional flow**: Guide the eye with intention",
+      "qualityStandards": "## Brand Execution Checklist\n\n### Visual Quality\n- [ ] Colors match brand palette exactly\n- [ ] Typography uses approved typefaces and hierarchy\n- [ ] Spacing follows grid system\n- [ ] Images are bright, crisp, on-brand\n- [ ] White space feels generous, not cramped\n\n### Brand Voice\n- [ ] Tone is warm, optimistic, intelligent\n- [ ] Copy includes personality without being forced\n- [ ] Messaging feels authentic to Kate Spade POV\n- [ ] Lowercase used appropriately for modern feel\n\n### Technical Excellence\n- [ ] Responsive across all breakpoints\n- [ ] Accessible (WCAG AA minimum)\n- [ ] Performance optimized\n- [ ] Cross-browser tested\n\n### Brand Integrity\n- [ ] Feels sophisticated yet playful\n- [ ] Balances femininity with strength\n- [ ] Sparks joy without being frivolous\n- [ ] Would Kate herself approve?\n\n## Red Flags\n\n\u274c **Avoid**:\n- Generic luxury language\n- Heavy, ornate treatments\n- Overly corporate tone\n- Cluttered layouts\n- Dull, muted colors\n- Taking ourselves too seriously\n- Copying competitors\n- Losing the playful spirit",
+      "typographySystem": "## Primary Typefaces\n\n### **Lora** (Serif)\n- **Primary Headline Typeface**\n- Elegant, contemporary serif with calligraphic roots\n- Sophisticated yet approachable personality\n- Use for: Headlines, hero text, editorial moments\n- Weights: Regular (400), Medium (500), Semibold (600), Bold (700)\n- Beautiful italics for emphasis and signature style\n\n### **DM Sans** (Sans-Serif)\n- **Body & UI Typeface**\n- Modern, geometric, highly legible\n- Clean precision with subtle warmth\n- Use for: Body copy, UI elements, captions, navigation\n- Weights: Regular (400), Medium (500), Bold (700)\n- **Alternatives**: \"Plus Jakarta Sans\", \"Inter\"\n\n## Typography Hierarchy\n\n**Headlines**: Lora Semibold/Bold\n- Elegant, refined, editorial quality\n- Generous letter spacing for grace\n- Often lowercase for modern sophistication (\"live colorfully\")\n- Serif details add feminine elegance\n- Balances playfulness with polish\n\n**Section Headings**: Lora Medium\n- Structured yet warm\n- Clear hierarchy while maintaining elegance\n- Slightly lighter weight than main headlines\n\n**Subheadings**: DM Sans Medium\n- Clean, modern contrast to serif headlines\n- Provides visual breathing room\n- Approachable and functional\n\n**Body Copy**: DM Sans Regular\n- Highly legible with comfortable spacing\n- Line height 1.6 for easy reading\n- Neutral, accessible foundation\n\n**Captions & UI**: DM Sans Regular\n- Small-scale legibility\n- Functional clarity\n- Consistent with body for cohesion\n\n## Typographic Voice\n\n- **Serif headlines**: Add sophistication, editorial quality, feminine grace\n- **Sans-serif body**: Ensures readability, modern clarity, approachability\n- **Lowercase preference**: \"live colorfully\" not \"Live Colorfully\"\n- **Strategic capitalization**: For proper nouns and emphasis only\n- **Open letter spacing**: Headlines get +0.03em for elegant breathing room\n- **Playful hierarchy**: Dramatic scale contrast (large serif vs. small sans)\n- **Italic accents**: Lora Italic for special moments, quotes, signature touches\n\n## Web Font Loading\n\n**Google Fonts** (Current Implementation):\n```css\n/* Headline Serif Stack */\nfont-family: 'Lora', 'Merriweather', 'Crimson Pro', Georgia, serif;\n\n/* Body Sans-Serif Stack */\nfont-family: 'DM Sans', 'Plus Jakarta Sans', 'Inter', -apple-system, sans-serif;\n```\n\n**Why This Pairing Works**:\n- **Contrast**: Serif elegance vs. geometric simplicity\n- **Harmony**: Both have contemporary, refined personalities\n- **Hierarchy**: Clear visual distinction between levels\n- **Kate Spade DNA**: Sophisticated playfulness, feminine confidence",
+      "brandColorPalette": [
+        {
+          "name": "Kate Spade Pink",
+          "value": "#F8BACA"
+        },
+        {
+          "name": "Black",
+          "value": "#000000"
+        },
+        {
+          "name": "Cream",
+          "value": "#FCF7E6"
+        },
+        {
+          "name": "Vibrant Coral",
+          "value": "#FF6B6B"
+        },
+        {
+          "name": "Green",
+          "value": "#427e2b"
+        },
+        {
+          "name": "Light Green",
+          "value": "#6BCB77"
+        },
+        {
+          "name": "Lavender",
+          "value": "#C996CC"
+        },
+        {
+          "name": "Bright Red",
+          "value": "#E63946"
+        },
+        {
+          "name": "Green Kelp",
+          "value": "#223628"
+        }
+      ],
+      "darkModeVariables": {
+        "card": "#252525",
+        "ring": "#FF6FB5",
+        "input": "#2A2A2A",
+        "muted": "#2A2A2A",
+        "accent": "#427e2b",
+        "border": "#3A3A3A",
+        "chart1": "#FF6FB5",
+        "chart2": "#427e2b",
+        "chart3": "#7DD88F",
+        "chart4": "#D4A6D6",
+        "chart5": "#FF8888",
+        "radius": "0.25rem",
+        "shadow": "0 1px 3px 0 rgba(0, 0, 0, 0.5)",
+        "popover": "#2A2A2A",
+        "primary": "#F8BACA",
+        "sidebar": "#1F1F1F",
+        "spacing": "0.25rem",
+        "fontMono": "ui-monospace, monospace",
+        "fontSans": "DM Sans, Plus Jakarta Sans, Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+        "shadowLg": "0 10px 15px -3px rgba(0, 0, 0, 0.5)",
+        "shadowMd": "0 4px 6px -1px rgba(0, 0, 0, 0.5)",
+        "shadowSm": "0 1px 2px 0 rgba(0, 0, 0, 0.3)",
+        "shadowXl": "0 20px 25px -5px rgba(0, 0, 0, 0.5)",
+        "shadowXs": null,
+        "fontSerif": "Lora, Merriweather, Crimson Pro, Georgia, serif",
+        "secondary": "#3A3A3A",
+        "shadow2xl": "0 25px 50px -12px rgba(0, 0, 0, 0.6)",
+        "shadow2xs": null,
+        "background": "#1A1A1A",
+        "foreground": "#F8F5F0",
+        "destructive": "#FF5C5C",
+        "sidebarRing": "#FF6FB5",
+        "sidebarAccent": "#2A2A2A",
+        "sidebarBorder": "#333333",
+        "cardForeground": "#FCF7E6",
+        "sidebarPrimary": "#FF6FB5",
+        "trackingNormal": "0.03em",
+        "mutedForeground": "#B8B8B8",
+        "accentForeground": "#FFFFFF",
+        "popoverForeground": "#F8F5F0",
+        "primaryForeground": "#000000",
+        "sidebarForeground": "#E0E0E0",
+        "secondaryForeground": "#F8F5F0",
+        "destructiveForeground": "#FFFFFF",
+        "sidebarAccentForeground": "#F8F5F0",
+        "sidebarPrimaryForeground": "#FFFFFF"
+      },
+      "functionalPalette": {
+        "dark": "#000000",
+        "light": "#F8F5F0",
+        "accent": "#427e2b",
+        "primary": "#F8BACA",
+        "secondary": "#000000"
+      },
+      "geometricLanguage": "## Core Geometric Elements\n\n### **Spade Motif**\n- The iconic spade symbol - brand signature\n- Derived from playing card suit\n- Can be stylized, repeated, scaled\n- Hardware detail and graphic element\n\n### **Stripes**\n- Classic, graphic, versatile\n- Various widths: from pinstripe to bold\n- Horizontal, vertical, diagonal applications\n- Black/white or color combinations\n\n### **Polka Dots**\n- Playful, feminine, timeless\n- Various scales: confetti to bold\n- Regular or scattered patterns\n- Adds whimsy without chaos\n\n### **Bows & Ribbons**\n- Signature feminine detail\n- Structured, grosgrain-inspired\n- Graphic interpretation, not overly fussy\n- Hardware and embellishment motif\n\n### **Geometric Shapes**\n- Clean squares, circles, rectangles\n- Color blocking frameworks\n- Strong structure with soft edges\n- Grid-based compositions\n\n## Layout Proportions\n\n- **Generous white space**: Let elements breathe\n- **Asymmetric balance**: Dynamic but grounded\n- **Grid discipline**: Structure enables playfulness\n- **Golden ratio**: Natural, elegant proportions",
+      "historicalContext": "Founded in 1993 by Kate Brosnahan Spade and her husband Andy Spade, Kate Spade New York began with a simple philosophy: to create the perfect handbag that was both functional and stylish. The brand quickly became synonymous with color, wit, and optimistic femininity.\n\nThe original launch featured six silhouettes of sleek, utilitarian bags in vibrant colors and signature nylon fabric - a stark contrast to the logomania of the era. Kate's design ethos centered on \"live colorfully\" - an invitation to embrace joy, curiosity, and personal style.\n\nToday, Kate Spade New York has evolved into a global lifestyle brand encompassing handbags, clothing, jewelry, shoes, home d\u00e9cor, and more - all unified by a spirit of optimism and the belief that personal style should be fun, never fussy.",
+      "materialVocabulary": "## Signature Materials & Textures\n\n### **Saffiano Leather**\n- Crosshatch texture\n- Structured, durable, refined\n- Signature handbag material\n- Represents quality and craft\n\n### **Grosgrain Ribbon**\n- Ribbed texture\n- Bows, trims, accents\n- Classic prep detail\n- Adds dimension and charm\n\n### **Patent Leather**\n- High-shine finish\n- Bold, confident, playful\n- Statement pieces\n- Amplifies color vibrancy\n\n### **Canvas & Nylon**\n- Original Kate Spade material\n- Functional, modern, accessible\n- Casual sophistication\n- Heritage connection\n\n### **Gold Hardware**\n- Warm gold tone (not brassy)\n- Spade-shaped details\n- Polished finish\n- Adds refined touch\n\n## Texture Principles\n\n- **Tactile Quality**: Materials should invite touch\n- **Structured Polish**: Refined without stiffness\n- **Playful Mixing**: Combine textures confidently\n- **Quality Signals**: Details reveal craftsmanship",
+      "componentVocabulary": "## UI Component Patterns\n\n### Buttons\n\n**Primary CTA**\n- Kate Spade Pink background (#FF5FA0)\n- White text, Proxima Nova Semibold\n- 4px border radius (slightly rounded)\n- Generous padding for confidence\n- Hover: Slightly darker pink\n\n**Secondary**\n- Black border, transparent background\n- Black text\n- Same proportions as primary\n- Hover: Black background, white text\n\n**Accent**\n- Sunny yellow or other accent colors\n- For special moments and seasonal campaigns\n\n### Cards & Containers\n\n- Cream background (#F8F5F0) for warmth\n- Subtle shadows (not heavy drop shadows)\n- Clean edges with slight radius\n- Generous internal padding\n- Optional playful borders (stripe detail, color block)\n\n### Forms & Inputs\n\n- Clean, minimal styling\n- Cream background when inactive\n- Pink focus ring\n- Clear labels in Proxima Nova Regular\n- Helpful, friendly error messages\n\n### Navigation\n\n- Horizontal, clean layout\n- Black text on white or cream\n- Minimal hover states\n- Spade icon as home/brand marker\n- Lowercase for modern approachability\n\n### Iconography\n\n- **Spade symbol**: Primary brand icon\n- **Line-based**: Simple, geometric icons\n- **Playful touches**: Slight personality without distraction\n- **Consistent weight**: Match typography weight\n\n### Patterns & Backgrounds\n\n- **Stripes**: As dividers, backgrounds, accents\n- **Polka dots**: Playful scattered or regular patterns\n- **Color blocks**: Bold geometric sections\n- **White space**: Generous, confident breathing room",
+      "applicationScenarios": null
+    }
+  }
+}

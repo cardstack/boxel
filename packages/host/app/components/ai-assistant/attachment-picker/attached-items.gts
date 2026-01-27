@@ -46,7 +46,7 @@ interface Signature {
 export default class AttachedItems extends Component<Signature> {
   @tracked areAllItemsDisplayed = false;
 
-  @service private declare operatorModeStateService: OperatorModeStateService;
+  @service declare private operatorModeStateService: OperatorModeStateService;
 
   get itemsToDisplay() {
     return this.areAllItemsDisplayed
@@ -76,7 +76,7 @@ export default class AttachedItems extends Component<Signature> {
   }
 
   private getCardErrorRealm(cardError: CardErrorJSONAPI) {
-    return cardError.realm ?? this.operatorModeStateService.realmURL.href;
+    return cardError.realm ?? this.operatorModeStateService.realmURL;
   }
 
   @action

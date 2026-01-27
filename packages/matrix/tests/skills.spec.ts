@@ -52,9 +52,8 @@ test.describe('Skills', () => {
 
   const environmentSkillCardId = `http://localhost:4205/skills/Skill/boxel-environment`;
   const defaultSkillCardsForCodeMode = [
-    `http://localhost:4205/skills/Skill/source-code-editing`,
     `http://localhost:4205/skills/Skill/boxel-development`,
-    `http://localhost:4205/skills/Skill/boxel-environment`,
+    environmentSkillCardId,
   ];
   const skillCard1 = `${appURL}/skill-pirate-speak`;
   const skillCard2 = `${appURL}/skill-seo`;
@@ -371,7 +370,7 @@ test.describe('Skills', () => {
       .click();
     await page.locator('[data-test-card-catalog-go-button]').click();
     await page
-      .locator('[data-test-field="title"] input')
+      .locator('[data-test-field="cardTitle"] input')
       .fill('Automatic Switch Command');
     await page
       .locator('[data-test-field="instructions"] textarea')

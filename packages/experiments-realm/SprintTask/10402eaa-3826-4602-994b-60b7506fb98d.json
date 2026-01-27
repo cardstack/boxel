@@ -18,8 +18,8 @@
       },
       "name": "Create Pill Picker Example",
       "details": "Implementation of a multi-select component using pills UI pattern, intended for use in the multi-filter feature. Users can select multiple pills simultaneously.\n\n**Note:** *This ticket is no longer relevant*",
-      "description": null,
-      "thumbnailURL": null
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "relationships": {
       "project": {

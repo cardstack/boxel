@@ -21,6 +21,7 @@ import {
   GetCardsContextName,
   GetCardCollectionContextName,
   CommandContextName,
+  type getCard as GetCardType,
 } from '@cardstack/runtime-common';
 
 import Auth from '@cardstack/host/components/matrix/auth';
@@ -56,13 +57,13 @@ interface Signature {
 }
 
 export default class OperatorModeContainer extends Component<Signature> {
-  @service private declare cardService: CardService;
+  @service declare private cardService: CardService;
   @service declare matrixService: MatrixService;
-  @service private declare operatorModeStateService: OperatorModeStateService;
-  @service private declare messageService: MessageService;
+  @service declare private operatorModeStateService: OperatorModeStateService;
+  @service declare private messageService: MessageService;
   @service declare realmServer: RealmServerService;
-  @service private declare commandService: CommandService;
-  @service private declare store: StoreService;
+  @service declare private commandService: CommandService;
+  @service declare private store: StoreService;
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
@@ -74,8 +75,8 @@ export default class OperatorModeContainer extends Component<Signature> {
   }
   @provide(GetCardContextName)
   // @ts-ignore "getCard" is declared but not used
-  private get getCard() {
-    return getCard;
+  private get getCard(): GetCardType {
+    return getCard as unknown as GetCardType;
   }
 
   @provide(GetCardsContextName)
@@ -105,6 +106,8 @@ export default class OperatorModeContainer extends Component<Signature> {
       store: this.store,
       commandContext: this.commandContext,
       prerenderedCardSearchComponent: PrerenderedCardSearch,
+      mode: 'operator',
+      submode: this.operatorModeStateService.state?.submode,
     };
   }
 

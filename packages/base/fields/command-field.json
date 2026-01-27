@@ -2,8 +2,8 @@
   "data": {
     "type": "card",
     "attributes": {
-      "title": "Command Field",
-      "description": "A field that represents an executable command within a skill",
+      "cardTitle": "Command Field",
+      "cardDescription": "A field that represents an executable command within a skill",
       "specType": "field",
       "ref": {
         "module": "https://cardstack.com/base/skill",

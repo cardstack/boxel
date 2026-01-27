@@ -8,6 +8,7 @@ import {
   param,
   separatedByCommas,
   IndexWriter,
+  hasExecutableExtension,
   type Expression,
   type StatusArgs,
 } from '@cardstack/runtime-common';
@@ -21,6 +22,13 @@ import Router from '@koa/router';
 import { ecsMetadata, fullRequestURL, livenessCheck } from './middleware';
 import type { Server } from 'http';
 import { PgAdapter } from '@cardstack/postgres';
+import type { CronJob } from 'cron';
+import { enqueueDailyCreditGrant } from './scripts/daily-credit-grant';
+import {
+  DAILY_CREDIT_GRANT_CRON_TZ,
+  createDailyCreditGrantCronJob,
+  parseLowCreditThreshold,
+} from './lib/daily-credit-grant-config';
 
 /* About the Worker Manager
  *
@@ -103,6 +111,7 @@ let {
 let isReady = false;
 let isExiting = false;
 let workers: ChildProcess[] = [];
+let dailyCreditGrantJob: CronJob | undefined;
 
 process.on('SIGINT', () => (isExiting = true));
 process.on('SIGTERM', () => (isExiting = true));
@@ -161,6 +170,11 @@ if (port) {
 
 const shutdown = (onShutdown?: () => void) => {
   log.info(`Shutting down server for worker manager...`);
+
+  if (dailyCreditGrantJob) {
+    log.info('Stopping daily-credit-grant cron job...');
+    dailyCreditGrantJob.stop();
+  }
 
   // Stop all workers
   if (workers.length > 0) {
@@ -249,6 +263,7 @@ let adapter: PgAdapter;
   }
   isReady = true;
   log.info('All workers have been started');
+  dailyCreditGrantJob = startDailyCreditGrantCron();
 })().catch((e: any) => {
   Sentry.captureException(e);
   log.error(
@@ -319,8 +334,14 @@ async function markFailedIndexEntry({
   await batch.invalidate([new URL(url)]);
   let invalidations = batch.invalidations;
   for (let file of [url, ...invalidations]) {
+    let entryType: 'module-error' | 'instance-error' | 'file-error' =
+      hasExecutableExtension(file)
+        ? 'module-error'
+        : file.endsWith('.json')
+          ? 'instance-error'
+          : 'file-error';
     await batch.updateEntry(new URL(file), {
-      type: 'error',
+      type: entryType,
       error: {
         message,
         status: 500,
@@ -511,6 +532,30 @@ async function startWorker(priority: number, urlMappings: URL[][]) {
 
 async function query(expression: Expression) {
   return await _query(adapter, expression);
+}
+
+function startDailyCreditGrantCron() {
+  let lowCreditThreshold = parseLowCreditThreshold();
+  let job = createDailyCreditGrantCronJob(
+    async () => {
+      try {
+        await enqueueDailyCreditGrant({
+          lowCreditThreshold,
+          priority: 4,
+        });
+      } catch (error) {
+        Sentry.captureException(error);
+        log.error('daily-credit-grant cron failed to enqueue job', error);
+      }
+    },
+    { runOnInit: true },
+  );
+
+  job.start();
+  log.info(
+    `daily-credit-grant cron scheduled for 3:00am ${DAILY_CREDIT_GRANT_CRON_TZ}`,
+  );
+  return job;
 }
 
 interface IndexState {

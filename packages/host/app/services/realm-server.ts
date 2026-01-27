@@ -2,6 +2,8 @@ import type Owner from '@ember/owner';
 import Service from '@ember/service';
 import { service } from '@ember/service';
 
+import { isTesting } from '@embroider/macros';
+
 import { cached } from '@glimmer/tracking';
 
 import { restartableTask, rawTimeout, task } from 'ember-concurrency';
@@ -12,8 +14,12 @@ import { TrackedArray } from 'tracked-built-ins';
 
 import {
   baseRealm,
+  ensureTrailingSlash,
   SupportedMimeType,
   Deferred,
+  testRealmURL,
+  type RealmInfo,
+  type JWTPayload,
 } from '@cardstack/runtime-common';
 import {
   joinDMRoom,
@@ -21,6 +27,7 @@ import {
 } from '@cardstack/runtime-common/realm-auth-client';
 
 import ENV from '@cardstack/host/config/environment';
+import { SessionLocalStorageKey } from '@cardstack/host/utils/local-storage-keys';
 
 import type { ExtendedClient } from './matrix-sdk-loader';
 import type NetworkService from './network';
@@ -237,6 +244,86 @@ export default class RealmServerService extends Service {
     return this.availableRealms.map((r) => r.url);
   }
 
+  assertOwnRealmServer(realmServerURLs: string[]): void {
+    let normalizedOwnRealmServerURL = this.normalizeRealmServerURL(
+      this.realmServer.url.href,
+    );
+    let normalizedRealmServerURLs = [
+      ...new Set(
+        realmServerURLs.map((url) => this.normalizeRealmServerURL(url)),
+      ),
+    ];
+    if (realmServerURLs.length === 0) {
+      throw new Error(`Unable to determine realm server to use`);
+    }
+    if (
+      normalizedRealmServerURLs.length > 1 ||
+      normalizedRealmServerURLs[0] !== normalizedOwnRealmServerURL
+    ) {
+      throw new Error(
+        `Multi-realm server support is not yet implemented: don't know how to provide auth token for different realm servers: ${normalizedRealmServerURLs.join()} (own realm server: ${normalizedOwnRealmServerURL})`,
+      );
+    }
+  }
+
+  getRealmServersForRealms(realms: string[]) {
+    let testRealmOrigin = isTesting()
+      ? new URL(testRealmURL).origin
+      : undefined;
+    let sessionTokens: Record<string, string> = {};
+    let sessionStr =
+      window.localStorage.getItem(SessionLocalStorageKey) ?? '{}';
+
+    try {
+      sessionTokens = JSON.parse(sessionStr) as Record<string, string>;
+    } catch {
+      sessionTokens = {};
+    }
+
+    let realmServerURLs = new Set<string>();
+
+    for (let realmURL of realms) {
+      let normalizedRealmURL = ensureTrailingSlash(realmURL);
+      if (
+        testRealmOrigin &&
+        new URL(normalizedRealmURL).origin === testRealmOrigin
+      ) {
+        continue;
+      }
+      let token = sessionTokens[normalizedRealmURL] ?? sessionTokens[realmURL];
+      if (!token) {
+        continue;
+      }
+
+      let claims = realmClaimsFromRawToken(token);
+      if (claims?.realmServerURL) {
+        realmServerURLs.add(
+          this.normalizeRealmServerURL(claims.realmServerURL),
+        );
+      }
+    }
+
+    if (realmServerURLs.size === 0) {
+      realmServerURLs.add(this.normalizeRealmServerURL(this.url.href));
+    }
+
+    return [...realmServerURLs];
+  }
+
+  private normalizeRealmServerURL(url: string): string {
+    let normalizedURL = ensureTrailingSlash(url);
+    if (isTesting()) {
+      let testRealmOrigin = new URL(testRealmURL).origin;
+      // In tests, realm URLs are often rooted at the test realm origin but
+      // are served by the base realm server; remap to the base origin so
+      // federated requests hit the active test server.
+      if (new URL(normalizedURL).origin === testRealmOrigin) {
+        return ensureTrailingSlash(new URL(resolvedBaseRealmURL).origin);
+      }
+    }
+    return normalizedURL;
+  }
+
   @cached
   get userRealmURLs() {
     return this.availableRealms
@@ -333,6 +420,59 @@ export default class RealmServerService extends Service {
     this._ready.fulfill();
   }
 
+  async fetchRealmInfos(realmUrls: string[]): Promise<{
+    data: { id: string; type: 'realm-info'; attributes: RealmInfo }[];
+    publicReadableRealms: Set<string>;
+  }> {
+    if (realmUrls.length === 0) {
+      return { data: [], publicReadableRealms: new Set() };
+    }
+
+    let uniqueRealmUrls = Array.from(new Set(realmUrls));
+    let realmServerURLs = this.getRealmServersForRealms(uniqueRealmUrls);
+    // TODO remove this assertion after multi-realm server/federated identity is supported
+    this.assertOwnRealmServer(realmServerURLs);
+    let [realmServerURL] = realmServerURLs;
+
+    await this.login();
+
+    let infoURL = new URL('_info', realmServerURL);
+
+    let response = await this.authedFetch(infoURL.href, {
+      method: 'QUERY',
+      headers: {
+        Accept: SupportedMimeType.RealmInfo,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ realms: uniqueRealmUrls }),
+    });
+
+    if (!response.ok) {
+      let responseText = await response.text();
+      throw new Error(
+        `Failed to fetch federated realm info: ${response.status} - ${responseText}`,
+      );
+    }
+
+    let publicReadableRealms = new Set<string>();
+    let publicReadableHeader = response.headers.get(
+      'x-boxel-realms-public-readable',
+    );
+    if (publicReadableHeader) {
+      for (let value of publicReadableHeader.split(',')) {
+        let trimmed = value.trim();
+        if (trimmed) {
+          publicReadableRealms.add(ensureTrailingSlash(trimmed));
+        }
+      }
+    }
+
+    let json = (await response.json()) as {
+      data: { id: string; type: 'realm-info'; attributes: RealmInfo }[];
+    };
+    return { data: json.data ?? [], publicReadableRealms };
+  }
+
   async handleEvent(event: Partial<IEvent>) {
     let claims = await this.getClaims();
     if (event.room_id !== claims.sessionRoom || !event.content) {
@@ -355,6 +495,10 @@ export default class RealmServerService extends Service {
   }
 
   get url() {
+    if (isTesting()) {
+      return new URL(ENV.realmServerURL);
+    }
+
     let url;
     if (hostsOwnAssets) {
       url = new URL(resolvedBaseRealmURL).origin;
@@ -473,6 +617,17 @@ export default class RealmServerService extends Service {
     });
 
     return response;
+  }
+
+  maybeAuthedFetch(url: string, options: RequestInit = {}) {
+    const headers = new Headers(options.headers);
+    if (this.token) {
+      headers.set('Authorization', `Bearer ${this.token}`);
+    }
+    return this.network.fetch(url, {
+      ...options,
+      headers,
+    });
   }
 
   // args is of type `RequestForwardBody` in realm-server/handlers/handle-request-forward
@@ -689,6 +844,67 @@ export default class RealmServerService extends Service {
     return response.json();
   }
 
+  async createGitHubPR(params: {
+    listingName: string;
+    listingId?: string;
+    snapshotId: string;
+    branch: string;
+    baseBranch?: string;
+    files: Array<{ path: string; content: string }>;
+  }): Promise<{
+    prUrl: string;
+    prNumber: number;
+    branch: string;
+    sha: string;
+    status: 'open' | 'merged' | 'closed' | 'failed';
+  }> {
+    await this.login();
+
+    const response = await this.authedFetch(`${this.url.href}_github-pr`, {
+      method: 'POST',
+      headers: {
+        Accept: SupportedMimeType.JSONAPI,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        data: {
+          type: 'github-pr',
+          attributes: params,
+        },
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      let errorMessage: string;
+      try {
+        const errorJson = JSON.parse(errorText);
+        errorMessage = errorJson.errors?.[0]?.detail || errorText;
+      } catch {
+        errorMessage = errorText;
+      }
+      throw new Error(
+        `GitHub PR creation failed: ${response.status} - ${errorMessage}`,
+      );
+    }
+
+    const { data } = (await response.json()) as {
+      data: {
+        type: string;
+        id: string;
+        attributes: {
+          prUrl: string;
+          prNumber: number;
+          branch: string;
+          sha: string;
+          status: 'open' | 'merged' | 'closed' | 'failed';
+        };
+      };
+    };
+
+    return data.attributes;
+  }
+
   private async getToken() {
     if (!this.token) {
       await this.login();
@@ -708,6 +924,15 @@ const sessionLocalStorageKey = 'boxel-realm-server-session';
 function claimsFromRawToken(rawToken: string): RealmServerJWTPayload {
   let [_header, payload] = rawToken.split('.');
   return JSON.parse(atob(payload)) as RealmServerJWTPayload;
+}
+
+function realmClaimsFromRawToken(rawToken: string): JWTPayload | undefined {
+  try {
+    let [_header, payload] = rawToken.split('.');
+    return JSON.parse(atob(payload)) as JWTPayload;
+  } catch {
+    return undefined;
+  }
 }
 
 declare module '@ember/service' {

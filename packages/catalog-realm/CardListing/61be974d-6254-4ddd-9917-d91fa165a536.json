@@ -18,9 +18,9 @@
       "summary": "A comprehensive interactive adventure card component enabling scenario selection, custom storytelling, image generation, and real-time management of game state and user interactions for immersive narrative experiences.",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/adventure-listing/thumbnail.png"
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/adventure-listing/thumbnail.png"
       }
     },
     "relationships": {
@@ -107,31 +107,6 @@
       "examples.0": {
         "links": {
           "self": "../adventure/Adventure/10b5949d-2617-4d18-a2a5-0a7087c50e8c"
-        }
-      },
-      "examples.1": {
-        "links": {
-          "self": "../adventure/AdventureScenario/example-scenario-detective-mystery"
-        }
-      },
-      "examples.2": {
-        "links": {
-          "self": "../adventure/AdventureScenario/example-scenario-enchanted-forest"
-        }
-      },
-      "examples.3": {
-        "links": {
-          "self": "../adventure/AdventureScenario/example-scenario-space-station"
-        }
-      },
-      "examples.4": {
-        "links": {
-          "self": "../adventure/AdventureScenario/example-scenario-undersea-kingdom"
-        }
-      },
-      "examples.5": {
-        "links": {
-          "self": "../adventure/AdventureScenario/example-scenario-time-traveler"
         }
       },
       "categories.0": {

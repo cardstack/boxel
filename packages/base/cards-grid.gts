@@ -20,6 +20,7 @@ import {
   isCardInstance,
   SupportedMimeType,
   subscribeToRealm,
+  codeRefFromInternalKey,
   type Query,
   CardErrorJSONAPI,
 } from '@cardstack/runtime-common';
@@ -160,11 +161,22 @@ class Isolated extends Component<typeof CardsGrid> {
       icon: AllCardsIcon,
       query: {
         filter: {
-          not: {
-            eq: {
-              _cardType: 'Cards Grid',
+          every: [
+            {
+              not: {
+                eq: {
+                  _cardType: 'Cards Grid',
+                },
+              },
             },
-          },
+            {
+              not: {
+                eq: {
+                  _cardType: 'Index',
+                },
+              },
+            },
+          ],
         },
       },
       filters: this.cardTypeFilters,
@@ -296,24 +308,25 @@ class Isolated extends Component<typeof CardsGrid> {
     let excludedCardTypeIds = [
       `${baseRealm.url}card-api/CardDef`,
       `${baseRealm.url}cards-grid/CardsGrid`,
+      `${baseRealm.url}index/IndexCard`,
     ];
 
     this.cardTypeFilters.splice(0, this.cardTypeFilters.length);
 
     cardTypeSummaries.forEach((summary) => {
-      if (excludedCardTypeIds.includes(summary.id)) {
+      if (!summary.id || excludedCardTypeIds.includes(summary.id)) {
         return;
       }
-      const lastIndex = summary.id.lastIndexOf('/');
+      let codeRef = codeRefFromInternalKey(summary.id);
+      if (!codeRef) {
+        return;
+      }
       this.cardTypeFilters.push({
-        displayName: summary.attributes.displayName,
+        displayName: summary.attributes.displayName ?? codeRef.name,
         icon: summary.attributes.iconHTML ?? Captions,
         query: {
           filter: {
-            type: {
-              module: summary.id.substring(0, lastIndex),
-              name: summary.id.substring(lastIndex + 1),
-            },
+            type: codeRef,
           },
         },
       });
@@ -398,7 +411,7 @@ export class CardsGrid extends CardDef {
       return this[realmInfo]?.name;
     },
   });
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: CardsGrid) {
       return this.realmName;
     },

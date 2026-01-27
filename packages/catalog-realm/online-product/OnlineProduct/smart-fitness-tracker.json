@@ -11,15 +11,15 @@
       "inventory": 24,
       "inStock": true,
       "imageUrl": "https://images.pexels.com/photos/437037/pexels-photo-437037.jpeg",
-      "title": "Smart Fitness Tracker Pro",
+      "cardTitle": "Smart Fitness Tracker Pro",
       "cardInfo": {
-        "title": "Smart Fitness Tracker Pro",
-        "description": "Advanced fitness tracker with heart rate monitoring, GPS tracking, and 7-day battery life. Category: Wearable Technology. SKU: SFT-PRO-2024",
-        "thumbnailURL": "https://images.pexels.com/photos/437037/pexels-photo-437037.jpeg",
+        "name": "Smart Fitness Tracker Pro",
+        "summary": "Advanced fitness tracker with heart rate monitoring, GPS tracking, and 7-day battery life. Category: Wearable Technology. SKU: SFT-PRO-2024",
+        "cardThumbnailURL": "https://images.pexels.com/photos/437037/pexels-photo-437037.jpeg",
         "notes": null
       },
-      "description": "Advanced fitness tracker with heart rate monitoring, GPS tracking, and 7-day battery life. Category: Wearable Technology. SKU: SFT-PRO-2024",
-      "thumbnailURL": "https://images.pexels.com/photos/437037/pexels-photo-437037.jpeg"
+      "cardDescription": "Advanced fitness tracker with heart rate monitoring, GPS tracking, and 7-day battery life. Category: Wearable Technology. SKU: SFT-PRO-2024",
+      "cardThumbnailURL": "https://images.pexels.com/photos/437037/pexels-photo-437037.jpeg"
     },
     "relationships": {
       "cardInfo.theme": {

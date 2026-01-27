@@ -15,9 +15,9 @@
       "summary": "Professional beat maker and rhythm sequencer for creating music beats, patterns, and drum sequences with customizable instruments and sound kits.",
       "cardInfo": {
         "notes": "Includes multiple instrument kits, pattern sequencing, and real-time beat creation capabilities",
-        "title": "Beat Maker Studio",
-        "description": "A comprehensive beat making application that allows users to create custom drum patterns, sequence beats, and mix audio with various instrument kits. Features include BPM control, swing settings, pattern management, and multiple sound libraries for professional music production.",
-        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/beat-maker-listing/thumbnail.png"
+        "name": "Beat Maker Studio",
+        "summary": "A comprehensive beat making application that allows users to create custom drum patterns, sequence beats, and mix audio with various instrument kits. Features include BPM control, swing settings, pattern management, and multiple sound libraries for professional music production.",
+        "cardThumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/beat-maker-listing/thumbnail.png"
       }
     },
     "relationships": {
@@ -69,76 +69,6 @@
       "examples.0": {
         "links": {
           "self": "../beat-maker/BeatMakerCard/rhythm-studio"
-        }
-      },
-      "examples.1": {
-        "links": {
-          "self": "../beat-maker/DrumKitCard/808-analog-kit"
-        }
-      },
-      "examples.2": {
-        "links": {
-          "self": "../beat-maker/DrumKitCard/trap-kit"
-        }
-      },
-      "examples.3": {
-        "links": {
-          "self": "../beat-maker/DrumKitCard/house-kit"
-        }
-      },
-      "examples.4": {
-        "links": {
-          "self": "../beat-maker/DrumKitCard/techno-kit"
-        }
-      },
-      "examples.5": {
-        "links": {
-          "self": "../beat-maker/DrumKitCard/jazz-kit"
-        }
-      },
-      "examples.6": {
-        "links": {
-          "self": "../beat-maker/DrumKitCard/rock-kit"
-        }
-      },
-      "examples.7": {
-        "links": {
-          "self": "../beat-maker/BeatPatternCard/basic-4-4-beat"
-        }
-      },
-      "examples.8": {
-        "links": {
-          "self": "../beat-maker/BeatPatternCard/trap-pattern"
-        }
-      },
-      "examples.9": {
-        "links": {
-          "self": "../beat-maker/BeatPatternCard/jazz-swing"
-        }
-      },
-      "examples.10": {
-        "links": {
-          "self": "../beat-maker/BeatPatternCard/house-groove"
-        }
-      },
-      "examples.11": {
-        "links": {
-          "self": "../beat-maker/BeatPatternCard/breakbeat"
-        }
-      },
-      "examples.12": {
-        "links": {
-          "self": "../beat-maker/BeatPatternCard/rock-beat"
-        }
-      },
-      "examples.13": {
-        "links": {
-          "self": "../beat-maker/BeatPatternCard/jazz-swing"
-        }
-      },
-      "examples.14": {
-        "links": {
-          "self": "../beat-maker/BeatPatternCard/rock-beat"
         }
       },
       "categories.0": {

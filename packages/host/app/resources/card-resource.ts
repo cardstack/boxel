@@ -7,7 +7,9 @@ import { service } from '@ember/service';
 
 import { Resource } from 'ember-modify-based-class-resource';
 
-import { isCardInstance } from '@cardstack/runtime-common';
+import { isCardInstance, isFileDefInstance } from '@cardstack/runtime-common';
+
+import type { BaseDef } from 'https://cardstack.com/base/card-api';
 
 import type StoreService from '../services/store';
 
@@ -51,12 +53,14 @@ export class CardResource extends Resource<Args> {
   // Note that this will return a stale instance when the server state for this
   // id becomes an error. use this.cardError to see the live server state for
   // this instance.
-  get card() {
+  get card(): BaseDef | undefined {
     if (!this.#id) {
       return undefined;
     }
-    let maybeCard = this.store.peek(this.#id);
-    return maybeCard && isCardInstance(maybeCard) ? maybeCard : undefined;
+    let maybeCard = this.store.peek(this.#id) as unknown;
+    return isCardInstance(maybeCard) || isFileDefInstance(maybeCard)
+      ? (maybeCard as BaseDef)
+      : undefined;
   }
 
   get cardError() {

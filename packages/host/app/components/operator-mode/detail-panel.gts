@@ -100,8 +100,8 @@ interface Signature {
 }
 
 export default class DetailPanel extends Component<Signature> {
-  @service private declare operatorModeStateService: OperatorModeStateService;
-  @service private declare realm: RealmService;
+  @service declare private operatorModeStateService: OperatorModeStateService;
+  @service declare private realm: RealmService;
 
   private lastModified = lastModifiedDate(this, () => this.args.readyFile);
 
@@ -146,6 +146,7 @@ export default class DetailPanel extends Component<Signature> {
   private get showDetailsPanel() {
     return (
       this.args.cardError ||
+      this.args.moduleAnalysis.moduleError ||
       (!this.isModule && !isCardDocumentString(this.args.readyFile.content))
     );
   }
@@ -306,8 +307,8 @@ export default class DetailPanel extends Component<Signature> {
     )
       ? 'card-definition'
       : isFieldDef(this.args.selectedDeclaration.cardOrField)
-      ? 'field-definition'
-      : undefined;
+        ? 'field-definition'
+        : undefined;
     if (!id) {
       throw new Error(`Can only call inherit() on card def or field def`);
     }
@@ -485,7 +486,7 @@ export default class DetailPanel extends Component<Signature> {
             {{! JSON case when visting, eg Author/1.json }}
             <InstanceDefinitionContainer
               @fileURL={{@readyFile.url}}
-              @name={{@cardInstance.title}}
+              @name={{@cardInstance.cardTitle}}
               @fileExtension='.JSON'
               @infoText={{this.lastModified.value}}
               @actions={{this.instanceActions}}

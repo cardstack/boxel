@@ -3,6 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const DEFAULT_CARD_RENDER_TIMEOUT_MS = 30_000;
+const DEFAULT_CARD_SIZE_LIMIT_BYTES = 512 * 1024; // 512KB
 
 let sqlSchema = fs.readFileSync(getLatestSchemaFile(), 'utf8');
 
@@ -39,6 +40,9 @@ module.exports = function (environment) {
     minSaveTaskDurationMs: 1000,
     cardRenderTimeout: Number(
       process.env.RENDER_TIMEOUT_MS ?? DEFAULT_CARD_RENDER_TIMEOUT_MS,
+    ),
+    cardSizeLimitBytes: Number(
+      process.env.CARD_SIZE_LIMIT_BYTES ?? DEFAULT_CARD_SIZE_LIMIT_BYTES,
     ),
     iconsURL: process.env.ICONS_URL || 'https://boxel-icons.boxel.ai',
     publishedRealmBoxelSpaceDomain:

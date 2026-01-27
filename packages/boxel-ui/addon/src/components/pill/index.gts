@@ -191,10 +191,7 @@ const Pill: TemplateOnlyComponent<PillSignature> = <template>
         --icon-color: var(--pill-font-color, currentColor);
         flex-shrink: 0;
         display: inline-flex;
-        min-width: var(
-          --boxel-pill-icon-size,
-          var(--pill-icon-size, var(--boxel-icon-xxs))
-        );
+        min-width: var(--pill-icon-size);
         margin-block: 0;
         margin-inline: 0;
       }

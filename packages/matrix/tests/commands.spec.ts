@@ -153,8 +153,8 @@ test.describe('Commands', () => {
       data: {
         attributes: {
           cardInfo: {
-            title: 'Test card title',
-            description: 'Test card description',
+            name: 'Test card title',
+            summary: 'Test card description',
           },
         },
         meta: {
@@ -298,7 +298,7 @@ test.describe('Commands', () => {
       .click();
     await page.locator('[data-test-card-catalog-go-button]').click();
     await page
-      .locator('[data-test-field="title"] input')
+      .locator('[data-test-field="cardTitle"] input')
       .fill('Automatic Switch Command');
     await page
       .locator('[data-test-field="instructions"] textarea')

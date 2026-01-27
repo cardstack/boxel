@@ -22,7 +22,7 @@ import {
   LoadingIndicator,
 } from '@cardstack/boxel-ui/components';
 import { not } from '@cardstack/boxel-ui/helpers';
-import { IconX } from '@cardstack/boxel-ui/icons';
+import { IconX, Warning as WarningIcon } from '@cardstack/boxel-ui/icons';
 
 import ModalContainer from '@cardstack/host/components/modal-container';
 import PrivateDependencyViolationComponent from '@cardstack/host/components/operator-mode/private-dependency-violation';
@@ -33,7 +33,10 @@ import config from '@cardstack/host/config/environment';
 import type HostModeService from '@cardstack/host/services/host-mode-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type RealmService from '@cardstack/host/services/realm';
-import type { PrivateDependencyViolation } from '@cardstack/host/services/realm';
+import type {
+  PrivateDependencyViolation,
+  ErrorDocumentViolation,
+} from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 import type {
   ClaimedDomain,
@@ -61,10 +64,10 @@ interface Signature {
 }
 
 export default class PublishRealmModal extends Component<Signature> {
-  @service private declare hostModeService: HostModeService;
-  @service private declare matrixService: MatrixService;
-  @service private declare realm: RealmService;
-  @service private declare realmServer: RealmServerService;
+  @service declare private hostModeService: HostModeService;
+  @service declare private matrixService: MatrixService;
+  @service declare private realm: RealmService;
+  @service declare private realmServer: RealmServerService;
 
   @tracked selectedPublishedRealmURLs: string[] = [];
   @tracked private customSubdomainSelection: CustomSubdomainSelection | null =
@@ -82,6 +85,9 @@ export default class PublishRealmModal extends Component<Signature> {
   @tracked private privateDependencyViolations:
     | PrivateDependencyViolation[]
     | null = null;
+  @tracked private errorDocumentViolations: ErrorDocumentViolation[] | null =
+    null;
+  @tracked private warningTypes: string[] | null = null;
 
   @tracked private initialSelectionsSet = false;
 
@@ -106,8 +112,17 @@ export default class PublishRealmModal extends Component<Signature> {
 
   get shouldShowPrivateDependencyWarning() {
     return (
+      this.warningTypes?.includes('has-private-dependencies') &&
       Array.isArray(this.privateDependencyViolations) &&
       this.privateDependencyViolations.length > 0
+    );
+  }
+
+  get shouldShowErrorDocumentWarning() {
+    return (
+      this.warningTypes?.includes('has-error-card-documents') &&
+      Array.isArray(this.errorDocumentViolations) &&
+      this.errorDocumentViolations.length > 0
     );
   }
 
@@ -331,13 +346,19 @@ export default class PublishRealmModal extends Component<Signature> {
 
   private checkPrivateDependenciesTask = restartableTask(async () => {
     this.privateDependencyCheckError = null;
+    this.warningTypes = null;
     try {
       let report = await this.realm.fetchPrivateDependencyReport(
         this.currentRealmURL,
       );
-      this.privateDependencyViolations = report.publishable
-        ? []
-        : report.violations;
+      this.warningTypes = report.warningTypes ?? [];
+      let violations = report.publishable ? [] : report.violations;
+      this.privateDependencyViolations = violations.filter(
+        (violation) => violation.kind === 'private-dependency',
+      ) as PrivateDependencyViolation[];
+      this.errorDocumentViolations = violations.filter(
+        (violation) => violation.kind === 'error-document',
+      ) as ErrorDocumentViolation[];
     } catch (error) {
       console.error(
         'Failed to check for private dependencies before publishing',
@@ -346,6 +367,8 @@ export default class PublishRealmModal extends Component<Signature> {
       this.privateDependencyCheckError =
         'Unable to verify private dependencies. Publishing may cause errors.';
       this.privateDependencyViolations = null;
+      this.errorDocumentViolations = null;
+      this.warningTypes = null;
     }
   });
 
@@ -645,23 +668,6 @@ export default class PublishRealmModal extends Component<Signature> {
           <div class='publish-warning error' data-test-private-dependency-error>
             {{this.privateDependencyCheckError}}
           </div>
-        {{else if this.shouldShowPrivateDependencyWarning}}
-          <div class='publish-warning' data-test-private-dependency-warning>
-            <div>
-              This workspace will have rendering errors when published because
-              of private external dependencies.
-            </div>
-            <ul class='violation-list'>
-              {{#each this.privateDependencyViolations as |violation|}}
-                <PrivateDependencyViolationComponent
-                  @violation={{violation}}
-                  @privateRealmURLs={{this.privateRealmURLsForViolation
-                    violation
-                  }}
-                />
-              {{/each}}
-            </ul>
-          </div>
         {{else if this.isCheckingPrivateDependencies}}
           <div
             class='publish-warning info'
@@ -670,6 +676,62 @@ export default class PublishRealmModal extends Component<Signature> {
             <LoadingIndicator />
             Checking for private dependencies…
           </div>
+        {{else}}
+          {{#if this.shouldShowPrivateDependencyWarning}}
+            <div
+              class='publish-warning warning'
+              data-test-private-dependency-warning
+            >
+              <WarningIcon
+                class='publish-warning-icon'
+                width='20'
+                height='20'
+                role='presentation'
+              />
+              <div class='publish-warning-body'>
+                <div>
+                  This workspace will have rendering errors when published
+                  because of private external dependencies.
+                </div>
+                <ul class='violation-list'>
+                  {{#each this.privateDependencyViolations as |violation|}}
+                    <PrivateDependencyViolationComponent
+                      @violation={{violation}}
+                      @privateRealmURLs={{this.privateRealmURLsForViolation
+                        violation
+                      }}
+                    />
+                  {{/each}}
+                </ul>
+              </div>
+            </div>
+          {{/if}}
+          {{#if this.shouldShowErrorDocumentWarning}}
+            <div
+              class='publish-warning warning'
+              data-test-error-document-warning
+            >
+              <WarningIcon
+                class='publish-warning-icon'
+                width='20'
+                height='20'
+                role='presentation'
+              />
+              <div class='publish-warning-body'>
+                <div>
+                  This workspace contains cards that failed to index and cannot
+                  be safely published.
+                </div>
+                <ul class='violation-list'>
+                  {{#each this.errorDocumentViolations as |violation|}}
+                    <li>
+                      {{violation.resource}}
+                    </li>
+                  {{/each}}
+                </ul>
+              </div>
+            </div>
+          {{/if}}
         {{/if}}
 
         <div class='domain-options'>
@@ -1027,20 +1089,36 @@ export default class PublishRealmModal extends Component<Signature> {
         gap: var(--boxel-sp-xs);
         margin-bottom: var(--boxel-sp);
         padding: var(--boxel-sp-sm);
-        border: 1px solid var(--boxel-warning-200);
-        background-color: rgb(from var(--boxel-warning-200) r g b / 12%);
         border-radius: var(--boxel-border-radius-lg);
         font-size: var(--boxel-font-size-sm);
       }
 
+      .publish-warning.warning {
+        flex-direction: row;
+        align-items: flex-start;
+        gap: var(--boxel-sp-sm);
+        background-color: var(--boxel-warning-200);
+        color: var(--boxel-dark);
+      }
+
+      .publish-warning-body {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-xs);
+      }
+
+      .publish-warning-icon {
+        flex-shrink: 0;
+      }
+
       .publish-warning.error {
-        border-color: var(--boxel-error-200);
+        border: 1px solid var(--boxel-error-200);
         background-color: rgb(from var(--boxel-error-200) r g b / 8%);
         color: var(--boxel-error-200);
       }
 
       .publish-warning.info {
-        border-color: var(--boxel-300);
+        border: 1px solid var(--boxel-300);
         background-color: var(--boxel-50);
         color: var(--boxel-500);
         align-items: center;

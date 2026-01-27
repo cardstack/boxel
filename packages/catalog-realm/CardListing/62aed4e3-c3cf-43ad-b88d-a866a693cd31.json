@@ -17,9 +17,9 @@
       "summary": "Professional school calendar management system with event and schedule integration - organize academic events, weekly schedules, and school year planning while viewing clean grid-based layouts. Features date range management, embedded event cards, schedule item organization, hover animations, and educational institution styling for comprehensive academic calendar coordination.",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/school-calendar-listing/thumbnail.png"
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/school-calendar-listing/thumbnail.png"
       }
     },
     "relationships": {
@@ -66,41 +66,6 @@
       "examples.0": {
         "links": {
           "self": "../school-calendar/SchoolCalendar/01541fcf-020e-4f78-8141-25e9c307a195"
-        }
-      },
-      "examples.1": {
-        "links": {
-          "self": "../school-calendar/CalendarEvent/4a39e583-ce46-4b44-9d40-303aec3dfe60"
-        }
-      },
-      "examples.2": {
-        "links": {
-          "self": "../school-calendar/CalendarEvent/a93a4a39-e583-4e46-9b44-9d40303aec3d"
-        }
-      },
-      "examples.3": {
-        "links": {
-          "self": "../school-calendar/CalendarEvent/e583ce46-5b44-4d40-b03a-ec3dfe60eef5"
-        }
-      },
-      "examples.4": {
-        "links": {
-          "self": "../school-calendar/CalendarEvent/ef0ea93a-4a39-4583-8e46-5b449d40303a"
-        }
-      },
-      "examples.5": {
-        "links": {
-          "self": "../school-calendar/ScheduleItem/2fc799ef-ef0e-493a-8a39-e583ce465b44"
-        }
-      },
-      "examples.6": {
-        "links": {
-          "self": "../school-calendar/ScheduleItem/4cacfd06-d018-4fc7-99ef-ef0ea93a4a39"
-        }
-      },
-      "examples.7": {
-        "links": {
-          "self": "../school-calendar/EventRsvp/e82da6e0-cae9-4bcc-acf7-fa61fc6cc354"
         }
       },
       "categories.0": {

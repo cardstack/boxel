@@ -23,6 +23,7 @@ import { IconPlus } from '@cardstack/boxel-ui/icons';
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
 
+import { generateRandomWorkspaceName } from '../../../lib/random-name';
 import {
   getRandomBackgroundURL,
   iconURLFor,
@@ -181,7 +182,7 @@ interface Signature {
 }
 
 export default class AddWorkspace extends Component<Signature> {
-  @service private declare matrixService: MatrixService;
+  @service declare private matrixService: MatrixService;
   @tracked private isModalOpen: boolean = false;
   @tracked private endpoint = '';
   @tracked private displayName = '';
@@ -201,6 +202,10 @@ export default class AddWorkspace extends Component<Signature> {
   private closeModal = () => {
     this.isModalOpen = false;
   };
+  private initializeSuggestedName() {
+    this.hasUserEditedEndpoint = false;
+    this.setDisplayName(generateRandomWorkspaceName());
+  }
   private createWorkspaceTask = task(async () => {
     this.error = null;
     try {
@@ -217,10 +222,14 @@ export default class AddWorkspace extends Component<Signature> {
   });
   private setIsModalOpen = (value: boolean) => {
     this.isModalOpen = value;
+    if (value) {
+      this.error = null;
+      this.initializeSuggestedName();
+    }
   };
   <template>
     <ItemContainer
-      {{on 'click' (fn (mut this.isModalOpen) true)}}
+      {{on 'click' (fn this.setIsModalOpen true)}}
       class='container'
       data-test-add-workspace
     >

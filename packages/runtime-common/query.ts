@@ -18,7 +18,7 @@ export class InvalidQueryError extends Error {
   }
 }
 
-export interface Query {
+interface QueryBase {
   filter?: Filter;
   sort?: Sort;
   page?: {
@@ -26,10 +26,13 @@ export interface Query {
     size: number;
     realmVersion?: number;
   };
-  realm?: string;
 }
 
-export interface QueryWithInterpolations {
+export type Query =
+  | (QueryBase & { realm?: string; realms?: never })
+  | (QueryBase & { realms?: string[]; realm?: never });
+
+interface QueryWithInterpolationsBase {
   filter?: Filter;
   sort?: SortWithInterpolations;
   page?: {
@@ -37,8 +40,11 @@ export interface QueryWithInterpolations {
     size: number | string;
     realmVersion?: number;
   };
-  realm?: string;
 }
+
+export type QueryWithInterpolations =
+  | (QueryWithInterpolationsBase & { realm?: string; realms?: never })
+  | (QueryWithInterpolationsBase & { realms?: string[]; realm?: never });
 
 export type CardURL = string;
 export type Filter =
@@ -148,8 +154,8 @@ export function isAnyFilter(filter: Filter): filter is AnyFilter {
   return (filter as AnyFilter).any !== undefined;
 }
 
-export function buildQueryString(query: Query): string {
-  return `?${qs.stringify(query, { strictNullHandling: true })}`;
+export function buildQueryParamValue(query: Query): string {
+  return qs.stringify(query, { strictNullHandling: true, encode: false });
 }
 
 export function assertQuery(
@@ -159,6 +165,12 @@ export function assertQuery(
   if (typeof query !== 'object' || query == null) {
     throw new InvalidQueryError(
       `${pointer.join('/') || '/'}: missing query object`,
+    );
+  }
+
+  if ('realm' in query && 'realms' in query) {
+    throw new InvalidQueryError(
+      `${pointer.join('/') || '/'}: query cannot specify both realm and realms`,
     );
   }
 
@@ -192,6 +204,9 @@ export function assertQuery(
       case 'realm':
         assertRealm(value, pointer.concat('realm'));
         break;
+      case 'realms':
+        assertRealms(value, pointer.concat('realms'));
+        break;
 
       default:
         throw new InvalidQueryError(`unknown field in query: ${key}`);
@@ -204,6 +219,24 @@ function assertRealm(realm: any, pointer: string[]): asserts realm is string {
     throw new InvalidQueryError(
       `${pointer.join('/') || '/'}: realm must be a string`,
     );
+  }
+}
+
+function assertRealms(
+  realms: any,
+  pointer: string[],
+): asserts realms is string[] {
+  if (!Array.isArray(realms)) {
+    throw new InvalidQueryError(
+      `${pointer.join('/') || '/'}: realms must be an array of strings`,
+    );
+  }
+  for (let realm of realms) {
+    if (typeof realm !== 'string') {
+      throw new InvalidQueryError(
+        `${pointer.join('/') || '/'}: realms must be an array of strings`,
+      );
+    }
   }
 }
 
@@ -555,7 +588,10 @@ export function parseSearchURL(searchURL: string | URL): {
   realm: URL;
 } {
   let url = new URL(searchURL);
-  let query = parseQuery(url.search.slice(1));
+  let queryParam = url.searchParams.get('query');
+  let query = queryParam
+    ? parseQuery(queryParam)
+    : parseQuery(url.search.slice(1));
 
   // strip the trailing "_search" path segment to recover the realm URL
   if (url.pathname.endsWith('_search')) {

@@ -100,9 +100,7 @@ module('Integration | create app module via ai-assistant', function (hooks) {
     setCardInOperatorModeState(id);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-        </template>
+        <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
     let roomId = await openAiAssistant();
@@ -111,7 +109,7 @@ module('Integration | create app module via ai-assistant', function (hooks) {
 
   async function getModule(realm: Realm, url: URL) {
     let maybeInstance = await realm.realmIndexQueryEngine.module(url);
-    if (maybeInstance?.type === 'error') {
+    if (maybeInstance?.type === 'module-error') {
       return undefined;
     }
     return maybeInstance;
@@ -145,7 +143,7 @@ module('Integration | create app module via ai-assistant', function (hooks) {
               layoutAndNavigation:
                 "The layout of the Preschool CRM will have a clean and intuitive interface, with the following primary sections accessible from a navigation bar:\n1. **Dashboard**: Overview of the day's tours, tasks, and alerts.\n2. **Tours**: A section to schedule, view, and manage tours.\n3. **Students**: A comprehensive database of all students, with options for adding, editing, and viewing student profiles.\n4. **Parents**: A database of parents linked to their respective students, with contact information and interaction history.\n5. **Staff**: A section to manage staff information and schedules.\n6. **Classes**: Manage class schedules and rosters.\n7. **Communications**: Log and review communications with parents and staff.",
               moduleURL: null,
-              thumbnailURL: null,
+              cardThumbnailURL: null,
             },
             meta: {
               adoptsFrom: {
@@ -213,7 +211,7 @@ module('Integration | create app module via ai-assistant', function (hooks) {
           name: 'Generate App Module',
           arguments: JSON.stringify({
             attached_card_id: prdCardId,
-            description:
+            cardDescription:
               'Generate code for Preschool CRM based on product requirement document.',
             appTitle: 'Preschool CRM',
             moduleCode,
@@ -233,6 +231,8 @@ module('Integration | create app module via ai-assistant', function (hooks) {
       document.querySelector('[data-test-view-module]') as HTMLElement
     )?.innerText;
     let module = await getModule(realm, new URL(moduleURL));
+    assert.ok(module, 'module entry exists');
+    assert.strictEqual(module?.type, 'module');
     assert.strictEqual(module?.canonicalURL, moduleURL);
 
     await click('[data-test-view-module]');

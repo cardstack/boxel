@@ -57,7 +57,7 @@ module('Integration | commands | search', function (hooks) {
       static displayName = 'Author';
       @field firstName = contains(StringField);
       @field lastName = contains(StringField);
-      @field title = contains(StringField, {
+      @field cardTitle = contains(StringField, {
         computeVia: function (this: Author) {
           return [this.firstName, this.lastName].filter(Boolean).join(' ');
         },
@@ -83,7 +83,7 @@ module('Integration | commands | search', function (hooks) {
       commandService.commandContext,
     );
     let result = await searchCommand.execute({
-      title: 'Mark Jackson',
+      cardTitle: 'Mark Jackson',
       cardType: undefined,
     });
     assert.strictEqual(result.cardIds.length, 1);
@@ -97,7 +97,7 @@ module('Integration | commands | search', function (hooks) {
     );
     let result = await searchCommand.execute({
       cardType: 'Author',
-      title: undefined,
+      cardTitle: undefined,
     });
     assert.ok(result.cardIds.length > 0, 'Should return at least one result');
     assert.ok(

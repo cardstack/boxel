@@ -9,9 +9,9 @@
       },
       "specType": "component",
       "containedExamples": [],
-      "title": "Account Header",
-      "description": "Spec for Account Header component",
-      "thumbnailURL": null
+      "cardTitle": "Account Header",
+      "cardDescription": "Spec for Account Header component",
+      "cardThumbnailURL": null
     },
     "relationships": {},
     "meta": {

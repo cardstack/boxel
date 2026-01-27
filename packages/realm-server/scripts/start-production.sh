@@ -3,11 +3,15 @@ pnpm setup:base-in-deployment
 pnpm setup:experiments-in-deployment
 pnpm setup:catalog-in-deployment
 pnpm setup:skills-in-deployment
+pnpm setup:boxel-homepage-in-deployment
 
 DEFAULT_CATALOG_REALM_URL='https://app.boxel.ai/catalog/'
 CATALOG_REALM_URL="${RESOLVED_CATALOG_REALM_URL:-$DEFAULT_CATALOG_REALM_URL}"
+DEFAULT_BOXEL_HOMEPAGE_REALM_URL='https://app.boxel.ai/boxel-homepage/'
+BOXEL_HOMEPAGE_REALM_URL="${RESOLVED_BOXEL_HOMEPAGE_REALM_URL:-$DEFAULT_BOXEL_HOMEPAGE_REALM_URL}"
 
 NODE_NO_WARNINGS=1 \
+  LOW_CREDIT_THRESHOLD=2000 \
   MATRIX_URL=https://matrix.boxel.ai \
   BOXEL_HOST_URL=https://app.boxel.ai \
   REALM_SERVER_MATRIX_USERNAME=realm_server \
@@ -36,6 +40,11 @@ NODE_NO_WARNINGS=1 \
   --username='skills_realm' \
   --fromUrl='https://app.boxel.ai/skills/' \
   --toUrl='https://app.boxel.ai/skills/' \
+  \
+  --path='/persistent/boxel-homepage' \
+  --username='boxel_homepage_realm' \
+  --fromUrl="${BOXEL_HOMEPAGE_REALM_URL}" \
+  --toUrl="${BOXEL_HOMEPAGE_REALM_URL}" \
   \
   --path='/persistent/experiments' \
   --username='experiments_realm' \

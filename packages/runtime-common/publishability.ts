@@ -4,6 +4,8 @@ import type { RealmVisibility } from './realm';
 export interface ResourceIndexEntry {
   canonicalUrl: string;
   realmUrl: string;
+  entryType: 'instance' | 'module' | 'file';
+  hasError: boolean;
   dependencies: string[];
 }
 
@@ -14,14 +16,32 @@ export interface ExternalDependencySummary {
   realmVisibility: RealmVisibility;
 }
 
-export interface PublishabilityViolation {
+export type PublishabilityWarningType =
+  | 'has-private-dependencies'
+  | 'has-error-card-documents';
+
+export type PublishabilityViolation =
+  | PrivateDependencyPublishabilityViolation
+  | ErrorDocumentPublishabilityViolation;
+
+export interface BasePublishabilityViolation {
   resource: string;
+}
+
+export interface PrivateDependencyPublishabilityViolation extends BasePublishabilityViolation {
+  kind: 'private-dependency';
   externalDependencies: ExternalDependencySummary[];
+}
+
+export interface ErrorDocumentPublishabilityViolation extends BasePublishabilityViolation {
+  kind: 'error-document';
+  errorDocUrl?: string;
 }
 
 export interface PublishabilityResult {
   publishable: boolean;
   violations: PublishabilityViolation[];
+  warningTypes?: PublishabilityWarningType[];
 }
 
 export interface PublishabilityGraph {
@@ -178,14 +198,21 @@ export async function analyzeRealmPublishability({
   let violations: PublishabilityViolation[] = [];
   for (let [resource, summaries] of violationsByResource.entries()) {
     violations.push({
+      kind: 'private-dependency',
       resource,
       externalDependencies: [...summaries.values()],
     });
   }
 
+  let warningTypes: PublishabilityWarningType[] = [];
+  if (violations.length > 0) {
+    warningTypes.push('has-private-dependencies');
+  }
+
   return {
     publishable: violations.length === 0,
     violations,
+    warningTypes: warningTypes.length ? warningTypes : undefined,
   };
 }
 

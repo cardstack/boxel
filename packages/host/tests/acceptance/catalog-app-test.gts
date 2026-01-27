@@ -54,6 +54,7 @@ const pirateSkillListingId = `${mockCatalogURL}SkillListing/pirate-skill`;
 const incompleteSkillListingId = `${mockCatalogURL}Listing/incomplete-skill`;
 const apiDocumentationStubListingId = `${mockCatalogURL}Listing/api-documentation-stub`;
 const themeListingId = `${mockCatalogURL}ThemeListing/cardstack-theme`;
+const blogPostListingId = `${mockCatalogURL}Listing/blog-post`;
 //license
 const mitLicenseId = `${mockCatalogURL}License/mit`;
 //category
@@ -75,13 +76,14 @@ const unknownSpecId = `${mockCatalogURL}Spec/unknown-no-type`;
 
 //examples
 const authorExampleId = `${mockCatalogURL}author/Author/example`;
+const authorCompanyExampleId = `${mockCatalogURL}author/AuthorCompany/example`;
 
 const authorCardSource = `
-  import { field, contains, CardDef, FieldDef } from 'https://cardstack.com/base/card-api';
+  import { field, contains, linksTo, CardDef } from 'https://cardstack.com/base/card-api';
   import StringField from 'https://cardstack.com/base/string';
 
 
-  export class AuthorCompany extends FieldDef {
+  export class AuthorCompany extends CardDef {
     static displayName = 'AuthorCompany';
     @field name = contains(StringField);
     @field address = contains(StringField);
@@ -94,25 +96,25 @@ const authorCardSource = `
     static displayName = 'Author';
     @field firstName = contains(StringField);
     @field lastName = contains(StringField);
-    @field title = contains(StringField, {
+    @field cardTitle = contains(StringField, {
       computeVia: function (this: Author) {
         return [this.firstName, this.lastName].filter(Boolean).join(' ');
       },
     });
-    @field company = contains(AuthorCompany);
+    @field company = linksTo(AuthorCompany);
   }
 `;
 
 const blogPostCardSource = `
-  import { field, contains, CardDef, FieldDef } from 'https://cardstack.com/base/card-api';
+  import { field, contains, CardDef, linksTo } from 'https://cardstack.com/base/card-api';
   import StringField from 'https://cardstack.com/base/string';
   import { Author } from '../author/author';
 
   export class BlogPost extends CardDef {
     static displayName = 'BlogPost';
-    @field title = contains(StringField);
+    @field cardTitle = contains(StringField);
     @field content = contains(StringField);
-    @field author = contains(Author);
+    @field author = linksTo(Author);
   }
 `;
 
@@ -145,7 +147,7 @@ const blogAppCardSource = `
 
   export class BlogApp extends AppCard {
     static displayName = 'Blog App';
-    @field title = contains(StringField);
+    @field cardTitle = contains(StringField);
     @field posts = containsMany(BlogPost);
   }
 `;
@@ -201,9 +203,9 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
                 ':root { --background: #ffffff; } .dark { --background: #000000; }',
               cssImports: [],
               cardInfo: {
-                title: 'Sample Theme',
-                description: 'A sample theme for testing remix.',
-                thumbnailURL: null,
+                cardTitle: 'Sample Theme',
+                cardDescription: 'A sample theme for testing remix.',
+                cardThumbnailURL: null,
                 notes: null,
               },
             },
@@ -276,10 +278,35 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
               lastName: 'Dane',
               summary: 'Author',
             },
+            relationships: {
+              company: {
+                links: {
+                  self: authorCompanyExampleId,
+                },
+              },
+            },
             meta: {
               adoptsFrom: {
                 module: `${mockCatalogURL}author/author`,
                 name: 'Author',
+              },
+            },
+          },
+        },
+        'author/AuthorCompany/example.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              name: 'Cardstack Labs',
+              address: '123 Main St',
+              city: 'Portland',
+              state: 'OR',
+              zip: '97205',
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${mockCatalogURL}author/author`,
+                name: 'AuthorCompany',
               },
             },
           },
@@ -300,7 +327,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
           data: {
             type: 'card',
             attributes: {
-              title: 'Blog Post',
+              cardTitle: 'Blog Post',
               content: 'Blog Post Content',
             },
             relationships: {
@@ -322,7 +349,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
           data: {
             type: 'card',
             attributes: {
-              title: 'My Blog App',
+              cardTitle: 'My Blog App',
             },
             meta: {
               adoptsFrom: {
@@ -344,8 +371,8 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
             },
             specType: 'card',
             containedExamples: [],
-            title: 'Author',
-            description: 'Spec for Author card',
+            cardTitle: 'Author',
+            cardDescription: 'Spec for Author card',
             meta: {
               adoptsFrom: {
                 module: 'https://cardstack.com/base/spec',
@@ -365,8 +392,8 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
             },
             specType: 'field',
             containedExamples: [],
-            title: 'ContactLink',
-            description: 'Spec for ContactLink field',
+            cardTitle: 'ContactLink',
+            cardDescription: 'Spec for ContactLink field',
             meta: {
               adoptsFrom: {
                 module: 'https://cardstack.com/base/spec',
@@ -387,8 +414,8 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
             },
             // intentionally omitting specType so it falls into 'unknown'
             containedExamples: [],
-            title: 'UnknownNoType',
-            description: 'Spec lacking specType',
+            cardTitle: 'UnknownNoType',
+            cardDescription: 'Spec lacking specType',
             meta: {
               adoptsFrom: {
                 module: 'https://cardstack.com/base/spec',
@@ -402,7 +429,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
             type: 'card',
             attributes: {
               name: 'Author',
-              title: 'Author', // hardcoding title otherwise test will be flaky when waiting for a computed
+              cardTitle: 'Author', // hardcoding title otherwise test will be flaky when waiting for a computed
               summary: 'A card for representing an author.',
             },
             relationships: {
@@ -434,6 +461,28 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
               publisher: {
                 links: {
                   self: publisherId,
+                },
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${catalogRealmURL}catalog-app/listing/listing`,
+                name: 'CardListing',
+              },
+            },
+          },
+        },
+        'Listing/blog-post.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              name: 'Blog Post',
+              cardTitle: 'Blog Post',
+            },
+            relationships: {
+              'examples.0': {
+                links: {
+                  self: `${mockCatalogURL}blog-post/BlogPost/example`,
                 },
               },
             },
@@ -479,7 +528,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
             type: 'card',
             attributes: {
               name: 'Person',
-              title: 'Person', // hardcoding title otherwise test will be flaky when waiting for a computed
+              cardTitle: 'Person', // hardcoding title otherwise test will be flaky when waiting for a computed
               images: [
                 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400',
                 'https://images.unsplash.com/photo-1494790108755-2616b332db29?w=400',
@@ -525,7 +574,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
             type: 'card',
             attributes: {
               name: 'Blog App',
-              title: 'Blog App', // hardcoding title otherwise test will be flaky when waiting for a computed
+              cardTitle: 'Blog App', // hardcoding title otherwise test will be flaky when waiting for a computed
             },
             meta: {
               adoptsFrom: {
@@ -540,7 +589,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
             type: 'card',
             attributes: {
               name: 'Empty',
-              title: 'Empty', // hardcoding title otherwise test will be flaky when waiting for a computed
+              cardTitle: 'Empty', // hardcoding title otherwise test will be flaky when waiting for a computed
             },
             meta: {
               adoptsFrom: {
@@ -555,7 +604,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
             type: 'card',
             attributes: {
               name: 'Pirate Skill',
-              title: 'Pirate Skill', // hardcoding title otherwise test will be flaky when waiting for a computed
+              cardTitle: 'Pirate Skill', // hardcoding title otherwise test will be flaky when waiting for a computed
             },
             relationships: {
               'skills.0': {
@@ -596,7 +645,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
             type: 'card',
             attributes: {
               name: 'Incomplete Skill',
-              title: 'Incomplete Skill', // hardcoding title otherwise test will be flaky when waiting for a computed
+              cardTitle: 'Incomplete Skill', // hardcoding title otherwise test will be flaky when waiting for a computed
             },
             meta: {
               adoptsFrom: {
@@ -610,7 +659,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
           data: {
             type: 'card',
             attributes: {
-              title: 'Talk Like a Pirate',
+              cardTitle: 'Talk Like a Pirate',
               name: 'Pirate Speak',
             },
             meta: {
@@ -668,7 +717,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
             type: 'card',
             attributes: {
               name: 'API Documentation',
-              title: 'API Documentation', // hardcoding title otherwise test will be flaky when waiting for a computed
+              cardTitle: 'API Documentation', // hardcoding title otherwise test will be flaky when waiting for a computed
             },
             relationships: {
               'tags.0': {
@@ -690,7 +739,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
             type: 'card',
             attributes: {
               name: 'Contact Link',
-              title: 'Contact Link', // hardcoding title otherwise test will be flaky when waiting for a computed
+              cardTitle: 'Contact Link', // hardcoding title otherwise test will be flaky when waiting for a computed
               summary:
                 'A field for creating and managing contact links such as email, phone, or other web links.',
             },
@@ -2253,6 +2302,42 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
         let examplePath = `${outerFolder}${listingName}/Author/example.json`;
         await openDir(assert, examplePath);
         await verifyFileInFileTree(assert, examplePath);
+      });
+
+      test('listing installs relationships of examples and its modules', async function (assert) {
+        const listingName = 'blog-post';
+
+        await executeCommand(
+          ListingInstallCommand,
+          blogPostListingId,
+          testDestinationRealmURL,
+        );
+        await visitOperatorMode({
+          submode: 'code',
+          fileView: 'browser',
+          codePath: `${testDestinationRealmURL}index`,
+        });
+
+        let outerFolder = await verifyFolderWithUUIDInFileTree(
+          assert,
+          listingName,
+        );
+        let blogPostModulePath = `${outerFolder}blog-post/blog-post.gts`;
+        let authorModulePath = `${outerFolder}author/author.gts`;
+        await openDir(assert, blogPostModulePath);
+        await verifyFileInFileTree(assert, blogPostModulePath);
+        await openDir(assert, authorModulePath);
+        await verifyFileInFileTree(assert, authorModulePath);
+
+        let blogPostExamplePath = `${outerFolder}blog-post/BlogPost/example.json`;
+        let authorExamplePath = `${outerFolder}author/Author/example.json`;
+        let authorCompanyExamplePath = `${outerFolder}author/AuthorCompany/example.json`;
+        await openDir(assert, blogPostExamplePath);
+        await verifyFileInFileTree(assert, blogPostExamplePath);
+        await openDir(assert, authorExamplePath);
+        await verifyFileInFileTree(assert, authorExamplePath);
+        await openDir(assert, authorCompanyExamplePath);
+        await verifyFileInFileTree(assert, authorCompanyExamplePath);
       });
 
       test('field listing', async function (assert) {

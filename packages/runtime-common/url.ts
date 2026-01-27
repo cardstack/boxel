@@ -1,4 +1,5 @@
-import type { LooseCardResource } from './index';
+import type { LooseCardResource, FileMetaResource } from './index';
+import { relationshipEntries } from './relationship-utils';
 import { RealmPaths } from './paths';
 
 export function maybeURL(
@@ -73,13 +74,27 @@ export function removeFileExtension(fileURL: string | undefined) {
   return fileURL?.replace(/\.[^/.]+$/, '');
 }
 
+export function hasExtension(value: string) {
+  try {
+    let pathname = new URL(value).pathname;
+    let lastSegment = pathname.split('/').pop() ?? '';
+    let lastDotIndex = lastSegment.lastIndexOf('.');
+    return lastDotIndex > 0 && lastDotIndex < lastSegment.length - 1;
+  } catch {
+    let path = value.split(/[?#]/)[0];
+    let lastSegment = path.split('/').pop() ?? '';
+    let lastDotIndex = lastSegment.lastIndexOf('.');
+    return lastDotIndex > 0 && lastDotIndex < lastSegment.length - 1;
+  }
+}
+
 type VisitInstanceURL = (
   instanceURL: string,
   setInstanceURL: (newURL: string) => void,
 ) => void;
 
 export function visitInstanceURLs(
-  resourceJson: LooseCardResource,
+  resourceJson: LooseCardResource | FileMetaResource,
   visit: VisitInstanceURL,
 ): void {
   if (resourceJson.links) {
@@ -92,7 +107,7 @@ export function visitInstanceURLs(
   }
   let relationships = resourceJson.relationships;
   if (relationships) {
-    for (let relationship of Object.values(relationships)) {
+    for (let { relationship } of relationshipEntries(relationships)) {
       let links = relationship.links;
       if (links && links.self) {
         visit(links.self, (newURL) => {

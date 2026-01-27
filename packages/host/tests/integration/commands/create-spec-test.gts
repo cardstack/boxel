@@ -106,6 +106,11 @@ export default class TestComponent extends Component {
 export default class TestCommand extends Command {
   static displayName = 'Test Command';
 }`,
+        'test-spec.gts': `import { Spec } from 'https://cardstack.com/base/spec';
+
+export class TestSpec extends Spec {
+  static displayName = 'Test Spec';
+}`,
         '.realm.json': `{ "name": "${realmName}" }`,
       },
     });
@@ -129,7 +134,7 @@ export default class TestCommand extends Command {
 
     assert.strictEqual(savedSpec.specType, 'card', 'Spec type is card');
     assert.strictEqual(
-      savedSpec.title,
+      savedSpec.cardTitle,
       'Test Card',
       'Spec title matches display name',
     );
@@ -216,7 +221,7 @@ export default class TestCommand extends Command {
 
     assert.strictEqual(savedSpec.specType, 'command', 'Spec type is command');
     assert.strictEqual(
-      savedSpec.title,
+      savedSpec.cardTitle,
       'TestCommand',
       'Spec title falls back to export name for commands',
     );
@@ -243,6 +248,27 @@ export default class TestCommand extends Command {
     }
   });
 
+  test('throws error when creating a spec from another spec', async function (assert) {
+    try {
+      await createSpecCommand.execute({
+        codeRef: {
+          module: `${testRealmURL}test-spec.gts`,
+          name: 'TestSpec',
+        },
+        targetRealm: testRealmURL,
+      });
+      assert.ok(false, 'Should have thrown an error');
+    } catch (error) {
+      assert.ok(error instanceof Error, 'Error is thrown');
+      if (error instanceof Error) {
+        assert.strictEqual(
+          error.message,
+          'Cannot create a spec from another spec',
+        );
+      }
+    }
+  });
+
   test('creates multiple specs when codeRef.name is not provided', async function (assert) {
     const result = await createSpecCommand.execute({
       module: `${testRealmURL}test-card.gts`,
@@ -260,7 +286,7 @@ export default class TestCommand extends Command {
       assert.ok(spec.id, 'Spec has an ID');
       const savedSpec = (await store.get(spec.id!)) as Spec;
       assert.ok(savedSpec.specType, 'Spec has a type');
-      assert.ok(savedSpec.title, 'Spec has a title');
+      assert.ok(savedSpec.cardTitle, 'Spec has a title');
       assert.ok(savedSpec.ref?.module, 'Spec has a module reference');
     }
   });

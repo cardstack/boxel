@@ -1,12 +1,13 @@
 import { codeRefWithAbsoluteURL } from './code-ref';
 import type { FieldDefinition } from './definitions';
 import type {
+  FileMetaResource,
   LooseCardResource,
   Relationship,
   ResourceID,
 } from './resource-types';
 import {
-  buildQueryString,
+  buildQueryParamValue,
   normalizeQueryForSignature,
   type Query,
   type QueryWithInterpolations,
@@ -30,7 +31,7 @@ export interface NormalizeQueryDefinitionParams {
   fieldName: string;
   fieldPath?: string;
   resolvePathValue: (path: string) => any;
-  resource?: LooseCardResource;
+  resource?: LooseCardResource | FileMetaResource;
   relativeTo?: URL;
 }
 
@@ -265,7 +266,7 @@ export function normalizeQueryDefinition({
 }
 
 export function getValueForResourcePath(
-  resource: LooseCardResource,
+  resource: LooseCardResource | FileMetaResource,
   path: string,
 ): any {
   let root: any = {
@@ -308,8 +309,9 @@ export function getValueForResourcePath(
 export function buildQuerySearchURL(realmHref: string, query: Query): string {
   let baseHref = realmHref.endsWith('/') ? realmHref : `${realmHref}/`;
   let searchURL = new URL('./_search', baseHref);
+  searchURL.searchParams.set('realms', baseHref);
   let normalizedQuery = normalizeQueryForSignature(query);
-  searchURL.search = buildQueryString(normalizedQuery);
+  searchURL.searchParams.set('query', buildQueryParamValue(normalizedQuery));
   return searchURL.href;
 }
 

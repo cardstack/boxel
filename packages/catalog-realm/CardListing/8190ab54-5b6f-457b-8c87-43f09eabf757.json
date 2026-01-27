@@ -17,9 +17,9 @@
       "summary": "An interactive card for playing and exploring musical chord progressions with customizable player settings and multiple progression options.",
       "cardInfo": {
         "notes": "Perfect for music education, composition, and practice. Supports various chord progressions and player customization.",
-        "title": "Chord Progression Player",
-        "description": "",
-        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/chord-progression-listing/thumbnail.png"
+        "name": "Chord Progression Player",
+        "summary": "",
+        "cardThumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/chord-progression-listing/thumbnail.png"
       }
     },
     "relationships": {
@@ -66,36 +66,6 @@
       "examples.0": {
         "links": {
           "self": "../chord-progression/ChordProgressionPlayerCard/43a76bb7-8d83-468e-a062-ced1850a65f4"
-        }
-      },
-      "examples.1": {
-        "links": {
-          "self": "../chord-progression/ChordProgressionCard/vi-iv-i-v-progression"
-        }
-      },
-      "examples.2": {
-        "links": {
-          "self": "../chord-progression/ChordProgressionCard/ii-v-i-jazz-progression"
-        }
-      },
-      "examples.3": {
-        "links": {
-          "self": "../chord-progression/ChordProgressionCard/i-v-vi-iv-progression"
-        }
-      },
-      "examples.4": {
-        "links": {
-          "self": "../chord-progression/ChordProgressionCard/circle-of-fifths-progression"
-        }
-      },
-      "examples.5": {
-        "links": {
-          "self": "../chord-progression/ChordProgressionCard/blues-twelve-bar-progression"
-        }
-      },
-      "examples.6": {
-        "links": {
-          "self": "../chord-progression/ChordProgressionCard/andalusian-cadence-progression"
         }
       },
       "categories.0": {

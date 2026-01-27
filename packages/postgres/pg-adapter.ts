@@ -11,8 +11,17 @@ import { join } from 'path';
 import { Pool, Client, type Notification } from 'pg';
 
 import { postgresConfig } from './pg-config';
+import migrationNameFixes from './scripts/migration-name-fixes.js';
 
 const log = logger('pg-adapter');
+
+type MigrationNameFixes = {
+  migrationRenames: Array<[string, string]>;
+  buildUpdateMigrationSql: (mapping: Array<[string, string]>) => string;
+};
+
+const { migrationRenames, buildUpdateMigrationSql } =
+  migrationNameFixes as MigrationNameFixes;
 
 function config() {
   return postgresConfig({
@@ -175,6 +184,10 @@ export class PgAdapter implements DBAdapter {
       client.end();
     }
 
+    // Temporary migration-name fix so renamed files don't rerun; remove after all environments
+    // have picked up the corrected filenames and run the fix migration.
+    await this.fixMigrationNames(config);
+
     // eslint-disable-next-line no-constant-condition
     while (true) {
       try {
@@ -203,6 +216,29 @@ export class PgAdapter implements DBAdapter {
         log.info(`saw another migration running, will retry`);
         await new Promise<void>((resolve) => setTimeout(() => resolve(), 500));
       }
+    }
+  }
+
+  private async fixMigrationNames(config: Config) {
+    if (!migrationRenames.length) {
+      return;
+    }
+
+    let client = new Client(config);
+    try {
+      await client.connect();
+      let { rows } = await client.query(
+        'SELECT to_regclass($1) AS table_name',
+        ['migrations'],
+      );
+
+      if (!rows[0]?.table_name) {
+        return;
+      }
+
+      await client.query(buildUpdateMigrationSql(migrationRenames));
+    } finally {
+      await client.end();
     }
   }
 }

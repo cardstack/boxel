@@ -15,9 +15,9 @@ import {
 import type { Args as SearchResourceArgs } from '@cardstack/host/resources/search';
 import { SearchResource } from '@cardstack/host/resources/search';
 
-import type CardService from '@cardstack/host/services/card-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import RealmService from '@cardstack/host/services/realm';
+import type RealmServerService from '@cardstack/host/services/realm-server';
 import type StoreService from '@cardstack/host/services/store';
 
 import {
@@ -94,7 +94,7 @@ module(`Integration | search resource`, function (hooks) {
     class Post extends CardDef {
       static displayName = 'Post';
       @field article = linksTo(Article);
-      @field title = contains(StringField);
+      @field cardTitle = contains(StringField);
     }
 
     class BlogPost extends Post {
@@ -112,8 +112,8 @@ module(`Integration | search resource`, function (hooks) {
         data: {
           type: 'card',
           attributes: {
-            title: 'Card 1',
-            description: 'Sample post',
+            cardTitle: 'Card 1',
+            cardDescription: 'Sample post',
             author: {
               firstName: 'Cardy',
               lastName: 'Stackington Jr. III',
@@ -148,8 +148,8 @@ module(`Integration | search resource`, function (hooks) {
         data: {
           type: 'card',
           attributes: {
-            title: 'Card 1',
-            description: 'Sample post',
+            cardTitle: 'Card 1',
+            cardDescription: 'Sample post',
             author: {
               firstName: 'Carl',
               lastName: 'Stack',
@@ -170,8 +170,8 @@ module(`Integration | search resource`, function (hooks) {
         data: {
           type: 'card',
           attributes: {
-            title: 'Card 2',
-            description: 'Sample post',
+            cardTitle: 'Card 2',
+            cardDescription: 'Sample post',
             author: {
               firstName: 'Carl',
               lastName: 'Deck',
@@ -249,8 +249,8 @@ module(`Integration | search resource`, function (hooks) {
         data: {
           type: 'card',
           attributes: {
-            title: 'Post',
-            description: 'A card that represents a blog post',
+            cardTitle: 'Post',
+            cardDescription: 'A card that represents a blog post',
             specType: 'card',
             ref: {
               module: `${testRealmURL}post`,
@@ -269,8 +269,8 @@ module(`Integration | search resource`, function (hooks) {
         data: {
           type: 'card',
           attributes: {
-            title: 'Article',
-            description: 'A card that represents an online article ',
+            cardTitle: 'Article',
+            cardDescription: 'A card that represents an online article ',
             specType: 'card',
             ref: {
               module: `${testRealmURL}article`,
@@ -327,13 +327,14 @@ module(`Integration | search resource`, function (hooks) {
   });
 
   test(`search is not re-run when query and realms are unchanged`, async function (assert) {
-    let cardService = getService('card-service') as CardService;
+    let realmServer = getService('realm-server') as RealmServerService;
     let fetchCalls = 0;
-    let originalFetchJSON = cardService.fetchJSON.bind(cardService);
-    cardService.fetchJSON = (async (...args) => {
+    let originalMaybeAuthedFetch =
+      realmServer.maybeAuthedFetch.bind(realmServer);
+    realmServer.maybeAuthedFetch = (async (...args) => {
       fetchCalls++;
-      return await originalFetchJSON(...args);
-    }) as CardService['fetchJSON'];
+      return await originalMaybeAuthedFetch(...args);
+    }) as RealmServerService['maybeAuthedFetch'];
 
     try {
       let query: Query = {
@@ -373,7 +374,7 @@ module(`Integration | search resource`, function (hooks) {
         'search is not invoked again when query/realms are unchanged',
       );
     } finally {
-      cardService.fetchJSON = originalFetchJSON;
+      realmServer.maybeAuthedFetch = originalMaybeAuthedFetch;
     }
   });
 

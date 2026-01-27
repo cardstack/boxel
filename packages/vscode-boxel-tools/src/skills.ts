@@ -23,9 +23,7 @@ export interface SkillStateData {
   lastUpdated: number;
 }
 
-export class SkillsProvider
-  implements vscode.TreeDataProvider<vscode.TreeItem>
-{
+export class SkillsProvider implements vscode.TreeDataProvider<vscode.TreeItem> {
   private _onDidChangeTreeData: vscode.EventEmitter<
     vscode.TreeItem | undefined | null | void
   > = new vscode.EventEmitter<vscode.TreeItem | undefined | null | void>();
@@ -370,22 +368,29 @@ export class SkillList extends vscode.TreeItem {
     }
 
     const searchUrl = new URL('./_search', this.realmUrl);
-
-    // Update search parameters to match the example URL
-    searchUrl.searchParams.set(
-      'sort[0][on][module]',
-      'https://cardstack.com/base/card-api',
-    );
-    searchUrl.searchParams.set('sort[0][on][name]', 'CardDef');
-    searchUrl.searchParams.set('sort[0][by]', 'title');
-    searchUrl.searchParams.set(
-      'filter[type][module]',
-      'https://cardstack.com/base/skill',
-    );
-    searchUrl.searchParams.set('filter[type][name]', 'Skill');
-
+    const query = {
+      sort: [
+        {
+          by: 'title',
+          on: {
+            module: 'https://cardstack.com/base/card-api',
+            name: 'CardDef',
+          },
+        },
+      ],
+      filter: {
+        type: {
+          module: 'https://cardstack.com/base/skill',
+          name: 'Skill',
+        },
+      },
+    };
     const response = await fetch(searchUrl, {
-      headers,
+      method: 'QUERY',
+      headers: {
+        ...headers,
+      },
+      body: JSON.stringify(query),
     });
 
     if (!response.ok) {

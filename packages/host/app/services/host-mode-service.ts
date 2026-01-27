@@ -6,6 +6,7 @@ import config from '@cardstack/host/config/environment';
 import type HostModeStateService from '@cardstack/host/services/host-mode-state-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
+import type RealmServerService from '@cardstack/host/services/realm-server';
 
 interface PublishedRealmMetadata {
   urlString: string;
@@ -17,6 +18,7 @@ export default class HostModeService extends Service {
   @service declare hostModeStateService: HostModeStateService;
   @service declare operatorModeStateService: OperatorModeStateService;
   @service declare realm: RealmService;
+  @service declare realmServer: RealmServerService;
 
   // increasing token to ignore stale async head fetches
   private headUpdateRequestId = 0;
@@ -72,7 +74,7 @@ export default class HostModeService extends Service {
   }
 
   get realmURL() {
-    return this.operatorModeStateService.realmURL.href;
+    return this.operatorModeStateService.realmURL;
   }
 
   get currentCardId() {
@@ -203,15 +205,32 @@ export default class HostModeService extends Service {
         card.pathname.replace(/[^/]+$/, ''),
         `${card.protocol}//${card.host}`,
       ).href;
-    let searchURL = new URL('_search-prerendered', realmRoot);
+    let realmServerURLs = this.realmServer.getRealmServersForRealms([
+      realmRoot,
+    ]);
+    // TODO remove this assertion after multi-realm server/federated identity is supported
+    this.realmServer.assertOwnRealmServer(realmServerURLs);
+    let [realmServerURL] = realmServerURLs;
+    let hostModeOrigin = this.hostModeOrigin;
+    if (
+      hostModeOrigin &&
+      new URL(realmServerURL).origin !== new URL(hostModeOrigin).origin
+    ) {
+      realmServerURL = hostModeOrigin;
+    }
+    let searchURL = new URL('_search-prerendered', realmServerURL);
     let cardJsonURL = cardURL.endsWith('.json') ? cardURL : `${cardURL}.json`;
-
-    searchURL.searchParams.set('prerenderedHtmlFormat', 'head');
-    searchURL.searchParams.append('cardUrls[]', cardJsonURL);
-
     let response = await fetch(searchURL.toString(), {
-      headers: { Accept: 'application/vnd.card+json' },
+      method: 'QUERY',
+      headers: {
+        Accept: 'application/vnd.card+json',
+      },
       credentials: 'include',
+      body: JSON.stringify({
+        realms: [realmRoot],
+        prerenderedHtmlFormat: 'head',
+        cardUrls: [cardJsonURL],
+      }),
     });
 
     if (!response.ok) {

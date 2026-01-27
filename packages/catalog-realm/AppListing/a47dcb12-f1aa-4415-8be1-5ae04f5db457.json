@@ -15,9 +15,9 @@
       "summary": "Manage songs in a playlist",
       "cardInfo": {
         "notes": null,
-        "title": "Playlist",
-        "description": "Manage songs in a playlist",
-        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/playlist-listing/thumbnail.png"
+        "name": "Playlist",
+        "summary": "Manage songs in a playlist",
+        "cardThumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/playlist-listing/thumbnail.png"
       }
     },
     "relationships": {
@@ -64,21 +64,6 @@
       "examples.1": {
         "links": {
           "self": "../playlist/PlaylistCard/focus-flow"
-        }
-      },
-      "examples.2": {
-        "links": {
-          "self": "../song/SongCard/funky-suspense"
-        }
-      },
-      "examples.3": {
-        "links": {
-          "self": "../song/SongCard/carefree"
-        }
-      },
-      "examples.4": {
-        "links": {
-          "self": "../song/SongCard/monkeys-spinning-monkeys"
         }
       },
       "categories.0": {

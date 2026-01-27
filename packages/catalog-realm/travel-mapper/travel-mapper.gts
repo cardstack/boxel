@@ -9,14 +9,14 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import { MapRender, type Coordinate } from '../components/map-render';
 import { Route } from '../route/route';
-import { LeafletMapConfigField } from '../fields/leaflet-map-config-field';
+import LeafletMapConfigField from '../fields/leaflet-map-config-field';
 
 class AtomTemplate extends Component<typeof TravelMapper> {
   <template>
     <div class='routes-display'>
       <MapIcon class='map-icon' />
       <div class='routes-info'>
-        <span class='routes-title'>{{@model.title}}</span>
+        <span class='routes-title'>{{@model.cardTitle}}</span>
         <span class='routes-count'>{{@model.routes.length}} routes</span>
       </div>
     </div>
@@ -370,7 +370,7 @@ class EmbeddedTemplate extends Component<typeof TravelMapper> {
   }
 
   get routesTitle() {
-    return this.args.model?.title || 'Routes Collection';
+    return this.args.model?.cardTitle || 'Routes Collection';
   }
 
   get routesCount() {
@@ -501,7 +501,7 @@ export class TravelMapper extends CardDef {
   @field routes = linksToMany(Route);
   @field mapConfig = contains(LeafletMapConfigField);
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: TravelMapper) {
       const routes = this.routes || [];
       if (routes.length === 0) {

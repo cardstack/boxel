@@ -13,11 +13,11 @@
       },
       "cardInfo": {
         "notes": null,
-        "title": "Blue Bottle 6",
-        "description": null,
-        "thumbnailURL": null
+        "name": "Blue Bottle 6",
+        "summary": null,
+        "cardThumbnailURL": null
       },
-      "angleLabel": "300° view",
+      "angleLabel": "300\u00b0 view",
       "angleDegrees": 300
     },
     "relationships": {

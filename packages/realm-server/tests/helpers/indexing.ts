@@ -12,6 +12,7 @@ interface IncrementalIndexEventTestContext {
   assert: Assert;
   getMessagesSince: (since: number) => Promise<MatrixEvent[]>;
   realm: string;
+  type?: string;
 }
 
 export async function waitForIncrementalIndexEvent(
@@ -35,7 +36,9 @@ export async function expectIncrementalIndexEvent(
   since: number,
   opts: IncrementalIndexEventTestContext,
 ) {
-  let { assert, getMessagesSince, realm } = opts;
+  let { assert, getMessagesSince, realm, type } = opts;
+
+  type = type ?? 'CardDef';
 
   let endsWithSlash = url.endsWith('/'); // new card def is being created
 
@@ -63,9 +66,9 @@ export async function expectIncrementalIndexEvent(
     assert.true(uuidValidate(maybeLocalId!), 'card identifier is a UUID');
     assert.strictEqual(
       incrementalEventContent.invalidations[0],
-      `${realm}CardDef/${maybeLocalId}`,
+      `${realm}${type}/${maybeLocalId}`,
     );
-    targetUrl = `${realm}CardDef/${maybeLocalId}.json`;
+    targetUrl = `${realm}${type}/${maybeLocalId}.json`;
   }
 
   // For instances, the updatedFile includes .json extension but invalidations don't

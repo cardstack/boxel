@@ -200,6 +200,7 @@ class RecurringPatternFieldEdit extends Component<
         @selected={{this.selectedPattern}}
         @options={{this.patterns}}
         @onChange={{this.updatePattern}}
+        @disabled={{not @canEdit}}
         class='pattern-select'
         data-test-pattern-select
         as |option|
@@ -259,6 +260,7 @@ class RecurringPatternFieldEdit extends Component<
                 @selected={{this.selectedMonth}}
                 @onChange={{this.updateMonthOfYear}}
                 @placeholder='Select month'
+                @disabled={{not @canEdit}}
                 data-test-month-of-year
                 as |option|
               >
@@ -410,7 +412,7 @@ class RecurringPatternFieldEdit extends Component<
   </template>
 }
 
-export class RecurringPatternField extends FieldDef {
+export default class RecurringPatternField extends FieldDef {
   static displayName = 'Recurring Pattern';
   static icon = CalendarEventIcon;
 
@@ -548,5 +550,3 @@ export class RecurringPatternField extends FieldDef {
 
   static edit = RecurringPatternFieldEdit;
 }
-
-export default RecurringPatternField;

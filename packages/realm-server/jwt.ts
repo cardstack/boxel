@@ -3,7 +3,7 @@ import type { TokenClaims } from '@cardstack/runtime-common';
 
 export function createJWT(
   claims: TokenClaims,
-  expiration: string,
+  expiration: jwt.SignOptions['expiresIn'],
   secret: string,
 ): string {
   let token = jwt.sign(claims, secret, { expiresIn: expiration });

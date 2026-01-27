@@ -91,7 +91,7 @@ export interface OperatorModeState {
 
 interface CardItem {
   id: string;
-  format: 'isolated' | 'edit';
+  format: 'isolated' | 'edit' | 'head';
 }
 
 export type FileView = 'inspector' | 'browser';
@@ -484,9 +484,9 @@ export default class OperatorModeStateService extends Service {
   private getRealmURLFromItemId(itemId: string): string {
     try {
       const url = new URL(itemId);
-      return this.realm.realmOfURL(url)?.href ?? this.realmURL.href;
+      return this.realm.realmOfURL(url)?.href ?? this.realmURL;
     } catch (error) {
-      return this.realmURL.href;
+      return this.realmURL;
     }
   }
 
@@ -590,12 +590,7 @@ export default class OperatorModeStateService extends Service {
     this.schedulePersist();
 
     if (submode === Submodes.Code) {
-      await Promise.all([
-        this.matrixService.setLLMForCodeMode(),
-        this.matrixService.activateCodingSkill(),
-      ]);
-    } else if (submode === Submodes.Interact) {
-      await this.matrixService.setLLMForInteractMode();
+      await this.matrixService.activateCodingSkill();
     }
   }
 
@@ -646,7 +641,7 @@ export default class OperatorModeStateService extends Service {
 
   get codePathRelativeToRealm() {
     if (this._state.codePath && this.realmURL) {
-      let realmPath = new RealmPaths(this.realmURL);
+      let realmPath = new RealmPaths(new URL(this.realmURL));
 
       if (realmPath.inRealm(this._state.codePath)) {
         try {
@@ -668,7 +663,7 @@ export default class OperatorModeStateService extends Service {
   }
 
   onFileSelected = async (entryPath: LocalPath) => {
-    let fileUrl = new RealmPaths(this.realmURL).fileURL(entryPath);
+    let fileUrl = new RealmPaths(new URL(this.realmURL)).fileURL(entryPath);
     await this.updateCodePath(fileUrl);
   };
 
@@ -754,7 +749,7 @@ export default class OperatorModeStateService extends Service {
   get title() {
     if (this._state.submode === Submodes.Code) {
       return `${this.codePathRelativeToRealm} in ${
-        this.realm.info(this.realmURL.href).name
+        this.realm.info(this.realmURL).name
       }`;
     } else {
       let itemForTitle = this.topMostStackItems().pop(); // top-most card of right stack
@@ -785,7 +780,7 @@ export default class OperatorModeStateService extends Service {
 
   get currentRealmOpenDirs() {
     if (this.realmURL) {
-      let currentRealmOpenDirs = this.openDirs.get(this.realmURL.href);
+      let currentRealmOpenDirs = this.openDirs.get(this.realmURL);
 
       if (currentRealmOpenDirs) {
         return currentRealmOpenDirs;
@@ -872,7 +867,11 @@ export default class OperatorModeStateService extends Service {
     for (let stack of this._state.stacks) {
       let serializedStack: SerializedStack = [];
       for (let item of stack) {
-        if (item.format !== 'isolated' && item.format !== 'edit') {
+        if (
+          item.format !== 'isolated' &&
+          item.format !== 'edit' &&
+          item.format !== 'head'
+        ) {
           throw new Error(`Unknown format for card on stack ${item.format}`);
         }
         if (item.id) {
@@ -991,7 +990,7 @@ export default class OperatorModeStateService extends Service {
       dirs.push(dirPath);
     }
 
-    this.openDirs.set(this.realmURL.href, new TrackedArray(dirs));
+    this.openDirs.set(this.realmURL, new TrackedArray(dirs));
     this.schedulePersist();
   };
 
@@ -1008,11 +1007,12 @@ export default class OperatorModeStateService extends Service {
     return isReady(this.openFile.current);
   }
 
-  get realmURL(): URL {
+  @cached
+  get realmURL(): string {
     let { submode } = this._state;
     if (submode === Submodes.Code) {
       if (isReady(this.openFile.current)) {
-        return new URL(this.readyFile.realmURL);
+        return this.readyFile.realmURL;
       }
     }
 
@@ -1034,7 +1034,7 @@ export default class OperatorModeStateService extends Service {
         if (cardId) {
           let realm = this.realm.url(cardId);
           if (realm) {
-            return new URL(realm);
+            return realm;
           }
         }
       }
@@ -1048,20 +1048,20 @@ export default class OperatorModeStateService extends Service {
         let cardId = this._state.hostModePrimaryCard.replace(/\.json$/, '');
         let realm = this.realm.url(cardId);
         if (realm) {
-          return new URL(realm);
+          return realm;
         }
       }
     }
 
     if (this.cachedRealmURL) {
-      return this.cachedRealmURL;
+      return this.cachedRealmURL.href;
     }
 
-    return new URL(this.realm.defaultReadableRealm.path);
+    return this.realm.defaultReadableRealm.path;
   }
 
   get currentRealmInfo() {
-    return this.realm.info(this.realmURL.href);
+    return this.realm.info(this.realmURL);
   }
 
   getWritableRealmURL = (preferredURLs: string[] = []) => {
@@ -1072,7 +1072,7 @@ export default class OperatorModeStateService extends Service {
     // 3. Otherwise, fallback to the last opened writable realm, especially if the opening click is from dashboard.
     let urlsToCheck = [
       ...preferredURLs,
-      this.realmURL.href,
+      this.realmURL,
       this.cachedRealmURL?.href,
     ].filter(Boolean) as string[];
 
@@ -1317,7 +1317,7 @@ export default class OperatorModeStateService extends Service {
     }
 
     let openCardIds = this.makeRemoteIdsList([...openCardIdsSet]);
-    let realmUrl = this.realmURL.href;
+    let realmUrl = this.realmURL;
     let realmPermissions = {
       canRead: this.realm.canRead(realmUrl),
       canWrite: this.realm.canWrite(realmUrl),

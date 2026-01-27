@@ -535,7 +535,7 @@ export class Task extends Todo {
   @field assignee = linksTo(() => User);
   @field priority = contains(TaskPriority);
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: Task) {
       return this.name ?? `Untitled ${this.constructor.displayName}`;
     },

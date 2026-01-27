@@ -255,16 +255,38 @@ export default class ListingCreateCommand extends HostBaseCommand<
     targetRealm: string,
   ): Promise<Spec[]> {
     const response = await this.network.authedFetch(
-      `${targetRealm}_dependencies?url=${openCardId}`,
-      { headers: { Accept: SupportedMimeType.CardDependencies } },
+      `${targetRealm}_dependencies?url=${encodeURIComponent(openCardId)}`,
+      { headers: { Accept: SupportedMimeType.JSONAPI } },
     );
     if (!response.ok) {
       console.warn('Failed to fetch dependencies for specs');
       (listing as any).specs = [];
       return [];
     }
-    const deps = (await response.json()) as string[];
-    const sanitizedDeps = this.sanitizeDeps(deps ?? []);
+    const jsonApiResponse = (await response.json()) as {
+      data?: Array<{
+        type: string;
+        id: string;
+        attributes?: {
+          dependencies?: string[];
+        };
+      }>;
+    };
+
+    // Extract dependencies from all entries in the JSONAPI response
+    const deps: string[] = [];
+    if (jsonApiResponse.data && Array.isArray(jsonApiResponse.data)) {
+      for (const entry of jsonApiResponse.data) {
+        if (
+          entry.attributes?.dependencies &&
+          Array.isArray(entry.attributes.dependencies)
+        ) {
+          deps.push(...entry.attributes.dependencies);
+        }
+      }
+    }
+
+    const sanitizedDeps = this.sanitizeDeps(deps);
     if (!sanitizedDeps.length) {
       (listing as any).specs = [];
       return [];

@@ -11,6 +11,10 @@ import {
   baseRealm,
   getSerializer,
 } from './index';
+import {
+  isValidPrerenderedHtmlFormat,
+  type PrerenderedHtmlFormat,
+} from './prerendered-html-format';
 import type { DBSpecificExpression, Param } from './expression';
 import {
   type Expression,
@@ -60,6 +64,7 @@ import {
   type DefinitionLookup,
 } from './definition-lookup';
 import { isScopedCSSRequest } from 'glimmer-scoped-css';
+import type { FileMetaResource } from './resource-types';
 
 interface IndexedModule {
   type: 'module';
@@ -67,6 +72,21 @@ interface IndexedModule {
   lastModified: number | null;
   resourceCreatedAt: number;
   deps: string[] | null;
+}
+
+export interface IndexedFile {
+  type: 'file';
+  canonicalURL: string;
+  lastModified: number | null;
+  resourceCreatedAt: number | null;
+  searchDoc: Record<string, any> | null;
+  resource: FileMetaResource | null;
+  types: string[] | null;
+  displayNames: string[] | null;
+  deps: string[] | null;
+  realmVersion: number;
+  realmURL: string;
+  indexedAt: number | null;
 }
 
 export interface IndexedInstance {
@@ -88,23 +108,22 @@ export interface IndexedInstance {
   indexedAt: number | null;
 }
 interface IndexedError {
-  type: 'error';
+  type: 'module-error';
   error: SerializedError;
 }
 
-interface InstanceError
-  extends Partial<
-    Omit<
-      IndexedInstance,
-      | 'type'
-      | 'realmVersion'
-      | 'realmURL'
-      | 'instance'
-      | 'lastModified'
-      | 'resourceCreatedAt'
-    >
-  > {
-  type: 'error';
+interface InstanceError extends Partial<
+  Omit<
+    IndexedInstance,
+    | 'type'
+    | 'realmVersion'
+    | 'realmURL'
+    | 'instance'
+    | 'lastModified'
+    | 'resourceCreatedAt'
+  >
+> {
+  type: 'instance-error';
   error: SerializedError;
   realmVersion: number;
   realmURL: string;
@@ -120,7 +139,7 @@ type GetEntryOptions = WIPOptions;
 export type QueryOptions = WIPOptions & PrerenderedCardOptions;
 
 interface PrerenderedCardOptions {
-  htmlFormat?: 'embedded' | 'fitted' | 'atom' | 'head';
+  htmlFormat?: PrerenderedHtmlFormat;
   renderType?: ResolvedCodeRef;
   includeErrors?: true;
   cardUrls?: string[];
@@ -152,14 +171,7 @@ export const generalSortFields: Record<string, string> = {
   cardURL: 'url COLLATE "POSIX"',
 };
 
-export function isValidPrerenderedHtmlFormat(
-  format: string | undefined,
-): format is PrerenderedCardOptions['htmlFormat'] {
-  return (
-    format !== undefined &&
-    ['embedded', 'fitted', 'atom', 'head'].includes(format)
-  );
-}
+export { isValidPrerenderedHtmlFormat };
 
 export class IndexQueryEngine {
   #dbAdapter: DBAdapter;
@@ -191,10 +203,8 @@ export class IndexQueryEngine {
           [`i.url =`, param(url.href)],
           [`i.file_alias =`, param(url.href)],
         ]),
-        any([
-          ['i.type =', param('module')],
-          ['i.type =', param('error')],
-        ]),
+        ['i.type =', param('module')],
+        any([['i.is_deleted = FALSE'], ['i.is_deleted IS NULL']]),
       ]),
     ] as Expression)) as unknown as BoxelIndexTable[];
     let maybeResult: BoxelIndexTable | undefined = rows[0];
@@ -205,8 +215,8 @@ export class IndexQueryEngine {
       return undefined;
     }
     let result = maybeResult;
-    if (result.type === 'error') {
-      return { type: 'error', error: result.error_doc! };
+    if (result.has_error) {
+      return { type: 'module-error', error: result.error_doc! };
     }
     let moduleEntry = assertIndexEntry(result);
     let {
@@ -236,10 +246,8 @@ export class IndexQueryEngine {
           [`i.url =`, param(url.href)],
           [`i.file_alias =`, param(url.href)],
         ]),
-        any([
-          ['i.type =', param('instance')],
-          ['i.type =', param('error')],
-        ]),
+        ['i.type =', param('instance')],
+        any([['i.is_deleted = FALSE'], ['i.is_deleted IS NULL']]),
       ]),
     ] as Expression)) as unknown as (BoxelIndexTable & {
       default_embedded_html: string | null;
@@ -287,8 +295,12 @@ export class IndexQueryEngine {
       realmVersion,
     };
 
-    if (maybeResult.error_doc) {
-      return { ...baseResult, type: 'error', error: maybeResult.error_doc };
+    if (maybeResult.has_error) {
+      return {
+        ...baseResult,
+        type: 'instance-error',
+        error: maybeResult.error_doc!,
+      };
     }
     let instanceEntry = assertIndexEntry(maybeResult);
     if (!instance) {
@@ -307,6 +319,61 @@ export class IndexQueryEngine {
           ? parseInt(instanceEntry.last_modified)
           : null,
       resourceCreatedAt: parseInt(instanceEntry.resource_created_at),
+    };
+  }
+
+  async getFile(
+    url: URL,
+    opts?: GetEntryOptions,
+  ): Promise<IndexedFile | undefined> {
+    let result = (await this.#query([
+      `SELECT i.*`,
+      `FROM ${tableFromOpts(opts)} as i
+       WHERE`,
+      ...every([
+        any([
+          [`i.url =`, param(url.href)],
+          [`i.file_alias =`, param(url.href)],
+        ]),
+        ['i.type =', param('file')],
+        any([['i.has_error = FALSE'], ['i.has_error IS NULL']]),
+        any([['i.is_deleted = FALSE'], ['i.is_deleted IS NULL']]),
+      ]),
+    ] as Expression)) as unknown as BoxelIndexTable[];
+    let maybeResult: BoxelIndexTable | undefined = result[0];
+    if (!maybeResult) {
+      return undefined;
+    }
+    if (maybeResult.is_deleted) {
+      return undefined;
+    }
+    let {
+      url: canonicalURL,
+      pristine_doc: resource,
+      search_doc: searchDoc,
+      realm_version: realmVersion,
+      realm_url: realmURL,
+      indexed_at: indexedAt,
+      last_modified: lastModified,
+      resource_created_at: resourceCreatedAt,
+      deps,
+      types,
+      display_names: displayNames,
+    } = maybeResult;
+    return {
+      type: 'file',
+      canonicalURL,
+      searchDoc,
+      resource: (resource as FileMetaResource | null) ?? null,
+      types,
+      displayNames,
+      deps,
+      lastModified: lastModified != null ? parseInt(lastModified) : null,
+      resourceCreatedAt:
+        resourceCreatedAt != null ? parseInt(resourceCreatedAt) : null,
+      realmVersion,
+      realmURL,
+      indexedAt: indexedAt != null ? parseInt(indexedAt) : null,
     };
   }
 
@@ -339,17 +406,14 @@ export class IndexQueryEngine {
       ];
 
       if (opts.includeErrors) {
+        conditions.push(['i.type =', param('instance')]);
+      } else {
         conditions.push(
-          any([
+          every([
             ['i.type =', param('instance')],
-            every([
-              ['i.type =', param('error')],
-              ['i.url ILIKE', param('%.json')],
-            ]),
+            any([['i.has_error = FALSE'], ['i.has_error IS NULL']]),
           ]),
         );
-      } else {
-        conditions.push(['i.type =', param('instance')]);
       }
 
       if (opts.cardUrls && opts.cardUrls.length > 0) {
@@ -494,7 +558,7 @@ export class IndexQueryEngine {
       { filter, sort, page },
       opts,
       [
-        'SELECT url, ANY_VALUE(i.type) as type, ANY_VALUE(file_alias) as file_alias, ',
+        'SELECT url, ANY_VALUE(i.type) as type, ANY_VALUE(i.has_error) as has_error, ANY_VALUE(file_alias) as file_alias, ',
         ...htmlColumnExpression,
         ' as html,',
         ...usedRenderTypeColumnExpression,
@@ -541,7 +605,7 @@ export class IndexQueryEngine {
         url: card.url!,
         html: card.html,
         ...(usedRenderType ? { usedRenderType } : {}),
-        ...(card.type === 'error' ? { isError: true as const } : {}),
+        ...(card.has_error ? { isError: true as const } : {}),
       };
     });
 

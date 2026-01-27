@@ -17,9 +17,9 @@
       "summary": "Interactive mapping application for creating and visualizing routes between locations worldwide",
       "cardInfo": {
         "notes": "Perfect for travel planning, logistics, and educational purposes. Supports multiple coordinate systems and custom map tile servers.",
-        "title": "Route Mapper - Interactive Travel Planning",
-        "description": "A comprehensive route mapping application that allows users to create, visualize, and manage travel routes between global destinations. Features interactive maps with coordinate tracking and customizable map configurations.",
-        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/route-listing/thumbnail.png"
+        "name": "Route Mapper - Interactive Travel Planning",
+        "summary": "A comprehensive route mapping application that allows users to create, visualize, and manage travel routes between global destinations. Features interactive maps with coordinate tracking and customizable map configurations.",
+        "cardThumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/route-listing/thumbnail.png"
       }
     },
     "relationships": {

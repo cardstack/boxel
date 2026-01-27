@@ -15,9 +15,9 @@
       "summary": "Create and display esports tournaments with prize pools, schedules, participant tracking, and game integration",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/tournament-listing/thumbnail.png"
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/tournament-listing/thumbnail.png"
       }
     },
     "relationships": {
@@ -59,11 +59,6 @@
       "examples.0": {
         "links": {
           "self": "../tournament/Tournament/valorant-championship"
-        }
-      },
-      "examples.1": {
-        "links": {
-          "self": "../video-game/VideoGame/valorant"
         }
       },
       "categories.0": {

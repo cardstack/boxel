@@ -39,6 +39,7 @@ import { WebMessageStream, messageCloseHandler } from './stream';
 import { createJWT, testRealmURL } from '.';
 
 import type { MockUtils } from './mock-matrix/_utils';
+import type ms from 'ms';
 
 interface Dir {
   kind: 'directory';
@@ -174,7 +175,7 @@ export class TestRealmAdapter implements RealmAdapter {
     this.prepareInstances();
   }
 
-  createJWT(claims: TokenClaims, expiration: string, secret: string) {
+  createJWT(claims: TokenClaims, expiration: ms.StringValue, secret: string) {
     return createJWT(claims, expiration, secret);
   }
 

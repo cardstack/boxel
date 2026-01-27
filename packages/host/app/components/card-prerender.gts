@@ -21,6 +21,7 @@ import {
   type RenderResponse,
   type RenderError,
   type ModuleRenderResponse,
+  type FileExtractResponse,
   type Prerenderer,
   type Format,
   type PrerenderMeta,
@@ -60,12 +61,12 @@ import type RenderStoreService from '../services/render-store';
 
 // This component is used to perform rendering for indexing in Ember test contexts
 export default class CardPrerender extends Component {
-  @service('render-store') private declare store: RenderStoreService;
-  @service private declare network: NetworkService;
-  @service private declare router: RouterService;
-  @service private declare renderService: RenderService;
-  @service private declare localIndexer: LocalIndexer;
-  @service private declare loaderService: LoaderService;
+  @service('render-store') declare private store: RenderStoreService;
+  @service declare private network: NetworkService;
+  @service declare private router: RouterService;
+  @service declare private renderService: RenderService;
+  @service declare private localIndexer: LocalIndexer;
+  @service declare private loaderService: LoaderService;
   #nonce = 0;
   #shouldClearCacheForNextRender = true;
   #prerendererDelegate!: Prerenderer;
@@ -91,6 +92,7 @@ export default class CardPrerender extends Component {
     this.#prerendererDelegate = {
       prerenderCard: this.prerender.bind(this),
       prerenderModule: this.prerenderModule.bind(this),
+      prerenderFileExtract: this.prerenderFileExtract.bind(this),
     };
     this.localIndexer.setup(this.#prerendererDelegate);
     window.addEventListener('boxel-render-error', this.#handleRenderErrorEvent);
@@ -165,6 +167,38 @@ export default class CardPrerender extends Component {
       }
       throw new Error(
         `card-prerender component is missing or being destroyed before module prerender of url ${url} was completed`,
+      );
+    });
+  }
+
+  private async prerenderFileExtract({
+    url,
+    realm,
+    auth,
+    renderOptions,
+  }: {
+    realm: string;
+    url: string;
+    auth: string;
+    renderOptions?: RenderRouteOptions;
+  }): Promise<FileExtractResponse> {
+    return await withRenderContext(async () => {
+      try {
+        let run = () =>
+          this.fileExtractPrerenderTask.perform({
+            url,
+            realm,
+            auth,
+            renderOptions,
+          });
+        return isTesting() ? await run() : await withTimersBlocked(run);
+      } catch (e: any) {
+        if (!didCancel(e)) {
+          throw e;
+        }
+      }
+      throw new Error(
+        `card-prerender component is missing or being destroyed before file extract prerender of url ${url} was completed`,
       );
     });
   }
@@ -263,7 +297,7 @@ export default class CardPrerender extends Component {
           }
         } catch (e: any) {
           try {
-            error = { ...JSON.parse(e.message), type: 'error' };
+            error = { ...JSON.parse(e.message), type: 'instance-error' };
           } catch (err) {
             let cardErr = new CardError(e.message);
             cardErr.stack = e.stack;
@@ -273,7 +307,7 @@ export default class CardPrerender extends Component {
                 deps: [url.replace(/\.json$/, '')],
                 additionalErrors: null,
               },
-              type: 'error',
+              type: 'instance-error',
             };
           }
           this.store.resetCache();
@@ -332,6 +366,41 @@ export default class CardPrerender extends Component {
         this.#moduleModelContext(),
       );
       return result as ModuleRenderResponse;
+    },
+  );
+
+  private fileExtractPrerenderTask = enqueueTask(
+    async ({
+      url,
+      renderOptions,
+    }: {
+      realm: string;
+      url: string;
+      auth: string;
+      renderOptions?: RenderRouteOptions;
+    }): Promise<FileExtractResponse> => {
+      this.#nonce++;
+      let shouldClearCache = this.#consumeClearCacheForRender(
+        Boolean(renderOptions?.clearCache),
+      );
+      let initialRenderOptions: RenderRouteOptions = {
+        ...(renderOptions ?? {}),
+        fileExtract: true,
+      };
+      if (shouldClearCache) {
+        initialRenderOptions.clearCache = true;
+      } else {
+        delete initialRenderOptions.clearCache;
+      }
+
+      let routeInfo = await this.router.recognizeAndLoad(
+        `${this.#renderBasePath(url, initialRenderOptions)}/file-extract`,
+      );
+      if (this.localIndexer.renderError) {
+        throw new Error(this.localIndexer.renderError);
+      }
+      await this.#ensureRenderReady(routeInfo);
+      return routeInfo.attributes as FileExtractResponse;
     },
   );
 

@@ -16,7 +16,7 @@ const IconComponent: TemplateOnlyComponent<Signature> = <template>
     class='lucide lucide-codepen'
     viewBox='0 0 24 24'
     ...attributes
-  ><path d='m12 2 10 6.5v7L12 22 2 15.5v-7L12 2zM12 22v-6.5' /><path
+  ><path d='m12 2 10 6.5v7L12 22 2 15.5v-7zM12 22v-6.5' /><path
       d='m22 8.5-10 7-10-7'
     /><path d='m2 15.5 10-7 10 7M12 2v6.5' /></svg>
 </template>;

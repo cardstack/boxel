@@ -8,13 +8,13 @@
       },
       "tileserverUrl": "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
       "cardInfo": {
-        "title": "Tokyo Station Central",
-        "description": "Interactive map of Tokyo Station, Japan's busiest railway terminal and surrounding Imperial Palace district",
-        "thumbnailURL": null,
+        "name": "Tokyo Station Central",
+        "summary": "Interactive map of Tokyo Station, Japan's busiest railway terminal and surrounding Imperial Palace district",
+        "cardThumbnailURL": null,
         "notes": "High-density urban area with excellent rail connectivity and historic landmarks"
       },
-      "title": "Tokyo Station Central",
-      "description": "Interactive map of Tokyo Station, Japan's busiest railway terminal and surrounding Imperial Palace district"
+      "cardTitle": "Tokyo Station Central",
+      "cardDescription": "Interactive map of Tokyo Station, Japan's busiest railway terminal and surrounding Imperial Palace district"
     },
     "relationships": {
       "cardInfo.theme": {

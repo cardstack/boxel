@@ -54,8 +54,6 @@ import {
   APP_BOXEL_REALMS_EVENT_TYPE,
   APP_BOXEL_ACTIVE_LLM,
   APP_BOXEL_LLM_MODE,
-  DEFAULT_CODING_LLM,
-  DEFAULT_LLM,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
   APP_BOXEL_STOP_GENERATING_EVENT_TYPE,
   SLIDING_SYNC_AI_ROOM_LIST_NAME,
@@ -109,7 +107,7 @@ import UpdateRoomSkillsCommand from '../commands/update-room-skills';
 import { addPatchTools } from '../commands/utils';
 import { getUniqueValidCommandDefinitions } from '../lib/command-definitions';
 import { isSkillCard } from '../lib/file-def-manager';
-import { skillCardURL } from '../lib/utils';
+import { skillCardURL, devSkillId, envSkillId } from '../lib/utils';
 import { importResource } from '../resources/import';
 
 import { getRoom } from '../resources/room';
@@ -178,6 +176,7 @@ export default class MatrixService extends Service {
   // wants one--resources are tied to the lifetime of their owner, who knows
   // which owner made these and who is consuming these. we need to refactor this out..
   roomResourcesCache: TrackedMap<string, RoomResource> = new TrackedMap();
+  canceledActionMessageIdByRoom: TrackedMap<string, string> = new TrackedMap();
   messagesToSend: TrackedMap<string, string | undefined> = new TrackedMap();
   cardsToSend: TrackedMap<string, string[] | undefined> = new TrackedMap();
   filesToSend: TrackedMap<string, FileDef[] | undefined> = new TrackedMap();
@@ -638,6 +637,7 @@ export default class MatrixService extends Service {
 
     if (this.client.isLoggedIn()) {
       this.realmServer.setClient(this.client);
+      await this.realmServer.login();
       this.saveAuth(auth);
       this.bindEventListeners();
 
@@ -666,6 +666,10 @@ export default class MatrixService extends Service {
             accountDataContent?.realms ?? [],
           ),
         ]);
+
+        await this.realm.prefetchRealmInfos(
+          this.realmServer.availableRealmURLs,
+        );
 
         await this.initSlidingSync(accountDataContent);
         await this.client.startClient({ slidingSync: this.slidingSync });
@@ -1193,11 +1197,11 @@ export default class MatrixService extends Service {
   }
 
   async loadDefaultSkills(submode: Submode) {
-    let interactModeDefaultSkills = [skillCardURL('boxel-environment')];
+    let interactModeDefaultSkills = [envSkillId];
 
     let codeModeDefaultSkills = [
-      skillCardURL('boxel-environment'),
-      skillCardURL('boxel-development'),
+      devSkillId,
+      envSkillId,
       skillCardURL('source-code-editing'),
     ];
 
@@ -1236,6 +1240,7 @@ export default class MatrixService extends Service {
     this.roomMembershipQueue = [];
     this.roomStateQueue = [];
     this.roomResourcesCache.clear();
+    this.canceledActionMessageIdByRoom.clear();
     this.timelineQueue = [];
     this.flushMembership = undefined;
     this.flushTimeline = undefined;
@@ -1253,6 +1258,14 @@ export default class MatrixService extends Service {
     // because it is possible that
     // there are some services that are not initialized yet
     clearLocalStorage(this.storage);
+  }
+
+  markActionAsCanceled(roomId: string, eventId: string) {
+    this.canceledActionMessageIdByRoom.set(roomId, eventId);
+  }
+
+  getLastCanceledActionEventId(roomId: string): string | undefined {
+    return this.canceledActionMessageIdByRoom.get(roomId);
   }
 
   private bindEventListeners() {
@@ -1744,6 +1757,11 @@ export default class MatrixService extends Service {
   }
 
   private async processDecryptedEvent(event: TempEvent, oldEventId?: string) {
+    // Graceful test teardown: ignore late events after the service is destroyed.
+    if (this.isDestroying || this.isDestroyed) {
+      return;
+    }
+
     let { room_id: roomId } = event;
     if (!roomId) {
       throw new Error(
@@ -1861,34 +1879,6 @@ export default class MatrixService extends Service {
       roomId: this.currentRoomId,
       skillCardIdsToActivate: defaultSkills.map((s) => s.id),
     });
-  }
-
-  async setLLMForCodeMode() {
-    let preferredModel =
-      this.systemCard?.defaultModelConfiguration?.modelId ??
-      this.systemCard?.modelConfigurations?.[0]?.modelId ??
-      DEFAULT_CODING_LLM;
-    return this.setLLMModel(preferredModel);
-  }
-
-  async setLLMForInteractMode() {
-    let preferredModel =
-      this.systemCard?.defaultModelConfiguration?.modelId ??
-      this.systemCard?.modelConfigurations?.[0]?.modelId ??
-      DEFAULT_LLM;
-
-    return this.setLLMModel(preferredModel);
-  }
-
-  private async setLLMModel(model: string) {
-    if (!this.currentRoomId) {
-      return;
-    }
-    let roomResource = this.roomResources.get(this.currentRoomId);
-    if (!roomResource) {
-      return;
-    }
-    return roomResource.activateLLMTask.perform(model);
   }
 
   loadMoreAIRooms() {

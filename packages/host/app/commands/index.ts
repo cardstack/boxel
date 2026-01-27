@@ -11,6 +11,7 @@ import * as CopyCardToRealmModule from './copy-card';
 import * as CopyCardToStackCommandModule from './copy-card-to-stack';
 import * as CopySourceCommandModule from './copy-source';
 import * as CreateAIAssistantRoomCommandModule from './create-ai-assistant-room';
+import * as CreateListingPRCommandModule from './create-listing-pr';
 import * as CreateSpecCommandModule from './create-specs';
 import * as GenerateExampleCardsCommandModule from './generate-example-cards';
 import * as GenerateReadmeSpecCommandModule from './generate-readme-spec';
@@ -48,7 +49,6 @@ import * as SearchGoogleImagesCommandModule from './search-google-images';
 import * as SendAiAssistantMessageModule from './send-ai-assistant-message';
 import * as SendRequestViaProxyCommandModule from './send-request-via-proxy';
 import * as SetActiveLlmModule from './set-active-llm';
-import * as SetSiteConfigCommandModule from './set-site-config';
 import * as SetUserSystemCardCommandModule from './set-user-system-card';
 import * as ShowCardCommandModule from './show-card';
 import * as SummarizeSessionCommandModule from './summarize-session';
@@ -146,6 +146,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/listing-update-specs',
     ListingUpdateSpecsCommandModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/create-listing-pr',
+    CreateListingPRCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/listing-generate-example',
@@ -299,10 +303,6 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
     '@cardstack/boxel-host/commands/set-user-system-card',
     SetUserSystemCardCommandModule,
   );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/set-site-config',
-    SetSiteConfigCommandModule,
-  );
 }
 
 // Note - this is used for the tests
@@ -329,6 +329,7 @@ export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
   ListingGenerateExampleCommandModule.default,
   ListingInstallCommandModule.default,
   ListingRemixCommandModule.default,
+  CreateListingPRCommandModule.default,
   ListingUpdateSpecsCommandModule.default,
   ListingUseCommandModule.default,
   OneShotLlmRequestCommandModule.default,
@@ -353,7 +354,6 @@ export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
   SendAiAssistantMessageModule.default,
   SendRequestViaProxyCommandModule.default,
   SetActiveLlmModule.default,
-  SetSiteConfigCommandModule.default,
   SetUserSystemCardCommandModule.default,
   ShowCardCommandModule.default,
   SummarizeSessionCommandModule.default,

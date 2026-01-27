@@ -6,7 +6,7 @@
       "canonicalSlug": "openai/gpt-4-1106-preview",
       "name": "OpenAI: GPT-4 Turbo (older v1106)",
       "created": 1699228800,
-      "description": "The latest GPT-4 Turbo model with vision capabilities. Vision requests can now use JSON mode and function calling.\n\nTraining data: up to April 2023.",
+      "cardDescription": "The latest GPT-4 Turbo model with vision capabilities. Vision requests can now use JSON mode and function calling.\n\nTraining data: up to April 2023.",
       "pricing": {
         "prompt": "0.00001",
         "completion": "0.00003",
@@ -49,9 +49,9 @@
       ],
       "defaultParameters": {},
       "cardInfo": {
-        "title": null,
-        "description": null,
-        "thumbnailURL": null,
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
         "notes": null
       }
     },

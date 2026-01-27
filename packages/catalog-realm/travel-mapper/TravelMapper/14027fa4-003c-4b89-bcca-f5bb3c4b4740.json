@@ -1,21 +1,21 @@
 {
   "data": {
+    "type": "card",
     "meta": {
       "adoptsFrom": {
-        "name": "TravelMapper",
-        "module": "../travel-mapper"
+        "module": "../travel-mapper",
+        "name": "TravelMapper"
       }
     },
-    "type": "card",
     "attributes": {
-      "cardInfo": {
-        "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": null
-      },
       "mapConfig": {
         "tileserverUrl": null
+      },
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
       }
     },
     "relationships": {

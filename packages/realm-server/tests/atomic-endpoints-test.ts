@@ -9,21 +9,22 @@ import {
   SupportedMimeType,
 } from '@cardstack/runtime-common';
 import {
-  setupBaseRealmServer,
   setupPermissionedRealm,
-  matrixURL,
-  testRealmHref,
   createJWT,
+  type RealmRequest,
+  withRealmPath,
 } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
 module(basename(__filename), function () {
   module(
     'Realm-specific Endpoints: can make request to post /_atomic',
-    function (hooks) {
+    function () {
+      let realmURL = new URL('http://127.0.0.1:4444/test/');
+      let testRealmHref = realmURL.href;
       let testRealm: Realm;
       let testRealmAdapter: RealmAdapter;
-      let request: SuperTest<Test>;
+      let request: RealmRequest;
 
       function onRealmSetup(args: {
         testRealm: Realm;
@@ -34,16 +35,15 @@ module(basename(__filename), function () {
       }) {
         testRealm = args.testRealm;
         testRealmAdapter = args.testRealmAdapter;
-        request = args.request;
+        request = withRealmPath(args.request, realmURL);
       }
-
-      setupBaseRealmServer(hooks, matrixURL);
 
       module('writes', function (hooks) {
         setupPermissionedRealm(hooks, {
           permissions: {
             '*': ['read', 'write'],
           },
+          realmURL,
           onRealmSetup,
         });
         test('can write single new module', async function (assert) {
@@ -59,7 +59,7 @@ module(basename(__filename), function () {
             'atomic:operations': [
               {
                 op: 'add',
-                href: '/place-modules/place.gts',
+                href: 'place-modules/place.gts',
                 data: {
                   type: 'source',
                   attributes: {
@@ -133,7 +133,7 @@ module(basename(__filename), function () {
             'atomic:operations': [
               {
                 op: 'add',
-                href: '/place-modules/place1.gts',
+                href: 'place-modules/place1.gts',
                 data: {
                   type: 'source',
                   attributes: {
@@ -144,7 +144,7 @@ module(basename(__filename), function () {
               },
               {
                 op: 'add',
-                href: '/place-modules/place2.gts',
+                href: 'place-modules/place2.gts',
                 data: {
                   type: 'source',
                   attributes: {
@@ -154,7 +154,7 @@ module(basename(__filename), function () {
               },
               {
                 op: 'add',
-                href: '/country.gts',
+                href: 'country.gts',
                 data: {
                   type: 'source',
                   attributes: {
@@ -240,7 +240,7 @@ module(basename(__filename), function () {
             'atomic:operations': [
               {
                 op: 'add',
-                href: '/new-person-1.json',
+                href: 'new-person-1.json',
                 data: {
                   type: 'card',
                   attributes: {
@@ -248,7 +248,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: '/person',
+                      module: './person',
                       name: 'Person',
                     },
                   },
@@ -277,7 +277,7 @@ module(basename(__filename), function () {
             'atomic:operations': [
               {
                 op: 'add',
-                href: '/new-person-1.json',
+                href: 'new-person-1.json',
                 data: {
                   type: 'card',
                   attributes: {
@@ -285,7 +285,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: '/person',
+                      module: './person',
                       name: 'Person',
                     },
                   },
@@ -293,7 +293,7 @@ module(basename(__filename), function () {
               },
               {
                 op: 'add',
-                href: '/new-person-2.json',
+                href: 'new-person-2.json',
                 data: {
                   type: 'card',
                   attributes: {
@@ -301,7 +301,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: '/person',
+                      module: './person',
                       name: 'Person',
                     },
                   },
@@ -353,7 +353,7 @@ module(basename(__filename), function () {
             'atomic:operations': [
               {
                 op: 'add',
-                href: '/place-modules/place1.gts',
+                href: 'place-modules/place1.gts',
                 data: {
                   type: 'source',
                   attributes: {
@@ -364,7 +364,7 @@ module(basename(__filename), function () {
               },
               {
                 op: 'add',
-                href: '/place-modules/place2.gts',
+                href: 'place-modules/place2.gts',
                 data: {
                   type: 'source',
                   attributes: {
@@ -448,7 +448,7 @@ module(basename(__filename), function () {
             'atomic:operations': [
               {
                 op: 'add',
-                href: '/place.gts',
+                href: 'place.gts',
                 data: {
                   type: 'source',
                   attributes: {
@@ -459,7 +459,7 @@ module(basename(__filename), function () {
               },
               {
                 op: 'add',
-                href: '/country.gts',
+                href: 'country.gts',
                 data: {
                   type: 'source',
                   attributes: {
@@ -502,7 +502,7 @@ module(basename(__filename), function () {
             'atomic:operations': [
               {
                 op: 'add',
-                href: '/malaysia.json',
+                href: 'malaysia.json',
                 data: {
                   type: 'card',
                   attributes: {
@@ -510,7 +510,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: '/country',
+                      module: './country',
                       name: 'Country',
                     },
                   },
@@ -518,7 +518,7 @@ module(basename(__filename), function () {
               },
               {
                 op: 'add',
-                href: '/menara-kuala-lumpur.json',
+                href: 'menara-kuala-lumpur.json',
                 data: {
                   type: 'card',
                   attributes: {
@@ -537,7 +537,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: '/place',
+                      module: './place',
                       name: 'Place',
                     },
                   },
@@ -569,7 +569,7 @@ module(basename(__filename), function () {
             'atomic:operations': [
               {
                 op: 'add',
-                href: '/place-modules/place.gts',
+                href: 'place-modules/place.gts',
                 data: {
                   type: 'source',
                   attributes: {
@@ -580,7 +580,7 @@ module(basename(__filename), function () {
               },
               {
                 op: 'add',
-                href: '/place.json',
+                href: 'place.json',
                 data: {
                   type: 'card',
                   attributes: {
@@ -588,7 +588,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: '/place-modules/place.gts',
+                      module: './place-modules/place.gts',
                       name: 'Place',
                     },
                   },
@@ -635,7 +635,7 @@ module(basename(__filename), function () {
             'atomic:operations': [
               {
                 op: 'add',
-                href: '/place-modules/place-noop.gts',
+                href: 'place-modules/place-noop.gts',
                 data: {
                   type: 'source',
                   attributes: {
@@ -679,7 +679,7 @@ module(basename(__filename), function () {
               'atomic:operations': [
                 {
                   op: 'update',
-                  href: '/place-modules/place-noop.gts',
+                  href: 'place-modules/place-noop.gts',
                   data: {
                     type: 'source',
                     attributes: {
@@ -732,6 +732,7 @@ module(basename(__filename), function () {
           permissions: {
             '*': ['read', 'write'],
           },
+          realmURL,
           onRealmSetup,
         });
         test('returns error when resource already exists', async function (assert) {
@@ -747,7 +748,7 @@ module(basename(__filename), function () {
             'atomic:operations': [
               {
                 op: 'add',
-                href: '/person.gts',
+                href: 'person.gts',
                 data: {
                   type: 'source',
                   attributes: {
@@ -774,7 +775,7 @@ module(basename(__filename), function () {
           );
           assert.strictEqual(
             response.body.errors[0].detail,
-            `Resource /person.gts already exists`,
+            `Resource person.gts already exists`,
           );
         });
         test('returns error when failing to serialize a card resource', async function (assert) {
@@ -782,7 +783,7 @@ module(basename(__filename), function () {
             'atomic:operations': [
               {
                 op: 'add',
-                href: '/place.json',
+                href: 'place.json',
                 data: {
                   type: 'card',
                   attributes: {
@@ -790,7 +791,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: '/missing-place/does-not-exist',
+                      module: './missing-place/does-not-exist',
                       name: 'Place',
                     },
                   },
@@ -821,7 +822,7 @@ module(basename(__filename), function () {
             'atomic:operations': [
               {
                 op: 'add',
-                href: '/update-person.json',
+                href: 'update-person.json',
                 data: {
                   type: 'card',
                   attributes: {
@@ -829,7 +830,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: '/person',
+                      module: './person',
                       name: 'Person',
                     },
                   },
@@ -852,7 +853,7 @@ module(basename(__filename), function () {
             'atomic:operations': [
               {
                 op: 'update',
-                href: '/update-person.json',
+                href: 'update-person.json',
                 data: {
                   type: 'card',
                   attributes: {
@@ -860,7 +861,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: '/person',
+                      module: './person',
                       name: 'Person',
                     },
                   },
@@ -893,6 +894,7 @@ module(basename(__filename), function () {
           permissions: {
             '*': ['read', 'write'],
           },
+          realmURL,
           onRealmSetup,
         });
         test('rejects non-array atomic:operations', async function (assert) {
@@ -976,7 +978,7 @@ module(basename(__filename), function () {
             .set('Accept', SupportedMimeType.JSONAPI)
             .send({
               'atomic:operations': [
-                { op: 'add', href: '/file.json', data: { type: 'file' } },
+                { op: 'add', href: 'file.json', data: { type: 'file' } },
               ],
             })
             .expect(400);
@@ -998,7 +1000,7 @@ module(basename(__filename), function () {
               'atomic:operations': [
                 {
                   op: 'update',
-                  href: '/missing.json',
+                  href: 'missing.json',
                   data: { type: 'card' },
                 },
               ],
@@ -1011,7 +1013,7 @@ module(basename(__filename), function () {
           assert.strictEqual(error.status, 404);
           assert.strictEqual(
             error.detail,
-            'Resource /missing.json does not exist',
+            'Resource missing.json does not exist',
           );
         });
       });

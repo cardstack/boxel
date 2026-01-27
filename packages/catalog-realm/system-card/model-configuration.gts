@@ -47,11 +47,11 @@ export class ModelConfiguration extends BaseModelConfiguration {
     },
   });
 
-  // Override inherited title to respect cardInfo.title
-  @field title = contains(StringField, {
+  // Override inherited title to respect cardInfo.name
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: ModelConfiguration) {
       return (
-        this.cardInfo?.title ||
+        this.cardInfo?.name ||
         this.name ||
         this.modelId ||
         'Model Configuration'
@@ -114,7 +114,7 @@ export class ModelConfiguration extends BaseModelConfiguration {
                 <div class='strip-title'>{{if
                     @model.name
                     @model.name
-                    (if @model.title @model.title 'Model')
+                    (if @model.cardTitle @model.cardTitle 'Model')
                   }}</div>
               </div>
               <div class='strip-spacer'></div>
@@ -204,7 +204,7 @@ export class ModelConfiguration extends BaseModelConfiguration {
           <h4 class='tile-title'>{{if
               @model.name
               @model.name
-              (if @model.title @model.title 'Model')
+              (if @model.cardTitle @model.cardTitle 'Model')
             }}</h4>
           {{#if @model.modelId}}
             <div class='tile-id'>{{@model.modelId}}</div>
@@ -301,7 +301,7 @@ export class ModelConfiguration extends BaseModelConfiguration {
             <h4 class='card-title'>{{if
                 @model.name
                 @model.name
-                (if @model.title @model.title 'Model')
+                (if @model.cardTitle @model.cardTitle 'Model')
               }}</h4>
             {{#if @model.modelId}}
               <div class='card-id'>{{@model.modelId}}</div>

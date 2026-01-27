@@ -20,7 +20,7 @@ import { Eye, IconCode } from '@cardstack/boxel-ui/icons';
 import {
   cardTypeDisplayName,
   cardTypeIcon,
-  getCardMenuItems,
+  getMenuItems,
   identifyCard,
   isResolvedCodeRef,
 } from '@cardstack/runtime-common';
@@ -62,10 +62,10 @@ interface Signature {
 }
 
 export default class CardRendererPanel extends Component<Signature> {
-  @consume(CardContextName) private declare cardContext: CardContext;
-  @service private declare commandService: CommandService;
-  @service private declare operatorModeStateService: OperatorModeStateService;
-  @service private declare realm: RealmService;
+  @consume(CardContextName) declare private cardContext: CardContext;
+  @service declare private commandService: CommandService;
+  @service declare private operatorModeStateService: OperatorModeStateService;
+  @service declare private realm: RealmService;
 
   private scrollPositions = new Map<string, number>();
   private cardTracker = new ElementTracker();
@@ -112,7 +112,7 @@ export default class CardRendererPanel extends Component<Signature> {
       return [];
     }
     return toMenuItems(
-      this.args.card[getCardMenuItems]({
+      this.args.card[getMenuItems]({
         canEdit: this.realm.canWrite(this.args.card.id),
         cardCrudFunctions: {},
         menuContext: 'code-mode-preview',
@@ -145,6 +145,9 @@ export default class CardRendererPanel extends Component<Signature> {
     let entries = this.cardTracker.filter(
       [{ fieldType: 'linksTo' }, { fieldType: 'linksToMany' }],
       'or',
+      // the only linksTo field with isolated format is in the index card,
+      // we don't want to show overlays for those cards here
+      { exclude: [{ fieldType: 'linksTo', format: 'isolated' }] },
     );
     return entries.length ? entries : undefined;
   }
@@ -188,7 +191,7 @@ export default class CardRendererPanel extends Component<Signature> {
             class='card-renderer-header'
             @cardTypeDisplayName={{cardTypeDisplayName @card}}
             @cardTypeIcon={{cardTypeIcon @card}}
-            @cardTitle={{@card.title}}
+            @cardTitle={{@card.cardTitle}}
             @realmInfo={{this.realmInfo}}
             @onEdit={{if this.canEditCard (fn @setFormat 'edit')}}
             @onFinishEditing={{if

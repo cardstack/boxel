@@ -20,7 +20,7 @@ import ToggleButton from './toggle-button';
 interface Signature {
   Element: HTMLDivElement;
   Args: {
-    realmURL: URL;
+    realmURL: string;
     fileView: FileView | undefined;
     setFileView: (view: FileView) => void;
     isFileOpen: boolean;
@@ -34,7 +34,7 @@ interface Signature {
 
 export default class CodeSubmodeLeftPanelToggle extends Component<Signature> {
   @service declare operatorModeStateService: OperatorModeStateService;
-  @service private declare recentFilesService: RecentFilesService;
+  @service declare private recentFilesService: RecentFilesService;
 
   private notifyFileBrowserIsVisible: (() => void) | undefined;
 

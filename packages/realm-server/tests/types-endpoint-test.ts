@@ -7,7 +7,6 @@ import { copySync, ensureDirSync } from 'fs-extra';
 import type { Realm } from '@cardstack/runtime-common';
 import type { QueuePublisher, QueueRunner } from '@cardstack/runtime-common';
 import {
-  setupBaseRealmServer,
   setupPermissionedRealm,
   runTestRealmServer,
   setupDB,
@@ -15,6 +14,8 @@ import {
   createVirtualNetwork,
   matrixURL,
   closeServer,
+  type RealmRequest,
+  withRealmPath,
 } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import type { PgAdapter } from '@cardstack/postgres';
@@ -24,9 +25,11 @@ const testRealm2URL = new URL('http://127.0.0.1:4445/test/');
 
 module(basename(__filename), function () {
   module('Realm-specific Endpoints | GET _types', function (hooks) {
+    let realmURL = new URL('http://127.0.0.1:4444/test/');
     let testRealm: Realm;
     let testRealmHttpServer: Server;
-    let request: SuperTest<Test>;
+    let request: RealmRequest;
+    let serverRequest: SuperTest<Test>;
     let dir: DirResult;
     let dbAdapter: PgAdapter;
     let testRealmHttpServer2: Server;
@@ -45,7 +48,8 @@ module(basename(__filename), function () {
     }) {
       testRealm = args.testRealm;
       testRealmHttpServer = args.testRealmHttpServer;
-      request = args.request;
+      serverRequest = args.request;
+      request = withRealmPath(args.request, realmURL);
       dir = args.dir;
       dbAdapter = args.dbAdapter;
     }
@@ -55,11 +59,11 @@ module(basename(__filename), function () {
         testRealm,
         testRealmHttpServer,
         request,
+        serverRequest,
         dir,
         dbAdapter,
       };
     }
-    setupBaseRealmServer(hooks, matrixURL);
 
     hooks.afterEach(async function () {
       await closeServer(testRealmHttpServer);
@@ -70,6 +74,7 @@ module(basename(__filename), function () {
       permissions: {
         '*': ['read', 'write'],
       },
+      realmURL,
       onRealmSetup,
     });
 
@@ -144,7 +149,7 @@ module(basename(__filename), function () {
         },
         {
           type: 'card-type-summary',
-          id: 'http://127.0.0.1:4444/family_photo_card/FamilyPhotoCard',
+          id: `${testRealm.url}family_photo_card/FamilyPhotoCard`,
           attributes: {
             displayName: 'Family Photo Card',
             total: 2,
@@ -189,7 +194,7 @@ module(basename(__filename), function () {
         },
         {
           type: 'card-type-summary',
-          id: 'http://127.0.0.1:4444/person-with-error/PersonCard',
+          id: `${testRealm.url}person-with-error/PersonCard`,
           attributes: {
             displayName: 'Person',
             total: 4,

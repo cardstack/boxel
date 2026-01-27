@@ -1,0 +1,49 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "NumberFieldSpec",
+        "module": "../number-field-spec"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "default",
+        "module": "../../fields/number"
+      },
+      "stat": 100,
+      "gauge": 30,
+      "score": 50,
+      "readMe": null,
+      "cardInfo": {
+        "name": null,
+        "notes": null,
+        "summary": null,
+        "cardThumbnailURL": null
+      },
+      "specType": "field",
+      "standard": 100,
+      "cardTitle": "Number Field",
+      "badgeMetric": 100,
+      "progressBar": 30,
+      "badgeCounter": 100,
+      "progressCircle": 50,
+      "cardDescription": null,
+      "badgeNotification": 99,
+      "containedExamples": []
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "linkedExamples": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

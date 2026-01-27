@@ -13,7 +13,66 @@ on:
         required: true
         type: string
 
+permissions:
+  contents: read
+  deployments: write
+  id-token: write
+
 jobs:
+  create-deployment:
+    name: Create GitHub deployment
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    outputs:
+      deployment-id: ${{ steps.create.outputs.deployment_id }}
+      environment-url: ${{ steps.env.outputs.environment_url }}
+    steps:
+      - id: env
+        run: |
+          if [ "${{ inputs.environment }}" = "production" ]; then
+            echo "environment_url=https://app.boxel.ai" >> "$GITHUB_OUTPUT"
+          elif [ "${{ inputs.environment }}" = "staging" ]; then
+            echo "environment_url=https://realms-staging.stack.cards" >> "$GITHUB_OUTPUT"
+          else
+            echo "environment_url=" >> "$GITHUB_OUTPUT"
+          fi
+      - id: create
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const environment = '${{ inputs.environment }}';
+            const response = await github.rest.repos.createDeployment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: context.sha,
+              required_contexts: [],
+              auto_merge: false,
+              environment,
+              description: `Manual deploy to ${environment}`,
+              transient_environment: false,
+              production_environment: environment === 'production',
+            });
+            core.setOutput('deployment_id', response.data.id.toString());
+      - name: Mark deployment in progress
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const deployment_id = Number('${{ steps.create.outputs.deployment_id }}');
+            const environmentUrlValue = '${{ steps.env.outputs.environment_url }}';
+            const environment_url =
+              environmentUrlValue && environmentUrlValue.length > 0
+                ? environmentUrlValue
+                : undefined;
+            await github.rest.repos.createDeploymentStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              deployment_id,
+              state: 'in_progress',
+              environment_url,
+              log_url: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              description: 'Deployment started',
+            });
+
   build-ai-bot:
     name: Build ai-bot Docker image
     uses: cardstack/gh-actions/.github/workflows/docker-ecr.yml@main
@@ -157,18 +216,12 @@ jobs:
       cluster: ${{ inputs.environment }}
       service-name: "boxel-prerender-server-${{ inputs.environment }}"
       image: ${{ needs.build-prerender.outputs.image }}
-      wait-for-service-stability: false
-
-  post-deploy-prerender:
-    name: Wait for prerender
-    needs: [deploy-prerender]
-    runs-on: ubuntu-latest
-    steps:
-      - run: sleep 180
+      timeout-minutes: 10
+      wait-for-service-stability: true
 
   deploy-prerender-manager:
     name: Deploy prerender manager
-    needs: [build-prerender-manager, post-deploy-prerender]
+    needs: [build-prerender-manager, deploy-prerender]
     uses: cardstack/gh-actions/.github/workflows/ecs-deploy.yml@main
     secrets: inherit
     with:
@@ -177,24 +230,13 @@ jobs:
       cluster: ${{ inputs.environment }}
       service-name: "boxel-prerender-manager-${{ inputs.environment }}"
       image: ${{ needs.build-prerender-manager.outputs.image }}
-      wait-for-service-stability: false
-
-  post-deploy-prerender-manager:
-    name: Wait for prerender manager
-    needs: [deploy-prerender-manager]
-    runs-on: ubuntu-latest
-    steps:
-      - run: sleep 180
+      timeout-minutes: 10
+      wait-for-service-stability: true
 
   deploy-worker:
     name: Deploy worker
     needs:
-      [
-        build-worker,
-        deploy-host,
-        post-migrate-db,
-        post-deploy-prerender-manager,
-      ]
+      [build-worker, deploy-host, post-migrate-db, deploy-prerender-manager]
     uses: cardstack/gh-actions/.github/workflows/ecs-deploy.yml@main
     secrets: inherit
     with:
@@ -227,6 +269,7 @@ jobs:
       cluster: ${{ inputs.environment }}
       service-name: "boxel-realm-server-${{ inputs.environment }}"
       image: ${{ needs.build-realm-server.outputs.image }}
+      timeout-minutes: 10
       wait-for-service-stability: true
 
   post-deploy-realm-server:
@@ -256,3 +299,70 @@ jobs:
             echo "Response body: $response_body"
             exit 1
           fi
+
+  finalize-deployment:
+    name: Update GitHub deployment status
+    needs:
+      [
+        create-deployment,
+        build-ai-bot,
+        deploy-ai-bot,
+        build-host,
+        deploy-host,
+        build-realm-server,
+        build-prerender-manager,
+        build-prerender,
+        build-worker,
+        build-pg-migration,
+        migrate-db,
+        post-migrate-db,
+        deploy-prerender,
+        deploy-prerender-manager,
+        deploy-worker,
+        post-deploy-worker,
+        deploy-realm-server,
+        post-deploy-realm-server,
+      ]
+    if: github.event_name == 'workflow_dispatch' && always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set deployment status
+        uses: actions/github-script@v7
+        env:
+          NEEDS: ${{ toJson(needs) }}
+          DEPLOYMENT_ID: ${{ needs.create-deployment.outputs.deployment-id }}
+          ENVIRONMENT_URL: ${{ needs.create-deployment.outputs.environment-url }}
+        with:
+          script: |
+            const deploymentIdRaw = process.env.DEPLOYMENT_ID;
+            if (!deploymentIdRaw) {
+              core.info('No deployment id found; skipping status update.');
+              return;
+            }
+
+            const needs = JSON.parse(process.env.NEEDS);
+            const results = Object.values(needs).map((job) => job.result);
+            let state = 'success';
+            if (results.includes('failure')) {
+              state = 'failure';
+            } else if (results.includes('cancelled')) {
+              state = 'inactive';
+            }
+
+            const environment_url =
+              process.env.ENVIRONMENT_URL &&
+              process.env.ENVIRONMENT_URL.length > 0
+                ? process.env.ENVIRONMENT_URL
+                : undefined;
+            await github.rest.repos.createDeploymentStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              deployment_id: Number(deploymentIdRaw),
+              state,
+              environment_url,
+              log_url: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              description:
+                state === 'success'
+                  ? 'Deployment finished'
+                  : 'Deployment finished with errors',
+            });

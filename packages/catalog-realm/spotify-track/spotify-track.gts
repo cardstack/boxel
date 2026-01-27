@@ -231,10 +231,10 @@ class IsolatedTemplate extends Component<typeof SpotifyTrack> {
             {{/if}}
           </div>
 
-          {{#if @model.description}}
+          {{#if @model.cardDescription}}
             <div class='description'>
               <h3>About this track</h3>
-              <p>{{@model.description}}</p>
+              <p>{{@model.cardDescription}}</p>
             </div>
           {{/if}}
         </div>
@@ -566,9 +566,9 @@ export class SpotifyTrack extends CardDef {
     },
   });
   @field tags = containsMany(StringField); // ¹⁰ Genre tags
-  @field description = contains(StringField);
+  @field cardDescription = contains(StringField);
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     // ¹¹ Computed title
     computeVia: function (this: SpotifyTrack) {
       try {

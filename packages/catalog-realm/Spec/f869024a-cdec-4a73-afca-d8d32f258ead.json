@@ -5,16 +5,16 @@
       "readMe": null,
       "ref": {
         "name": "Listing",
-        "module": "http://localhost:4201/catalog/catalog-app/listing/listing"
+        "module": "../catalog-app/listing/listing"
       },
       "specType": "card",
       "containedExamples": [],
-      "title": "Listing",
-      "description": null,
+      "cardTitle": "Listing",
+      "cardDescription": null,
       "cardInfo": {
-        "title": null,
-        "description": null,
-        "thumbnailURL": null,
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
         "notes": null
       }
     },
