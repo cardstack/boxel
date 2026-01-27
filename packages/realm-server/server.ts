@@ -936,7 +936,6 @@ export class RealmServer {
           }
 
           let adapter = new NodeAdapter(realmPath, this.enableFileWatcher);
-          let username = publishedRealmRow.owner_username;
 
           let realm = new Realm({
             url: publishedRealmUrl,
@@ -945,11 +944,7 @@ export class RealmServer {
             virtualNetwork: this.virtualNetwork,
             dbAdapter: this.dbAdapter,
             queue: this.queue,
-            matrix: {
-              url: this.matrixClient.matrixURL,
-              username,
-            },
-            realmServerMatrixClient: this.matrixClient,
+            matrixClient: this.matrixClient,
             realmServerURL: this.serverURL.href,
             definitionLookup: this.definitionLookup,
             cardSizeLimitBytes: this.cardSizeLimitBytes,
