@@ -269,7 +269,6 @@ export class NodeAdapter implements RealmAdapter {
       realmUrl,
       realmUserId,
     );
-    console.log('Dm rooms for realm: ', realmUrl, dmRooms);
 
     realmEventsLog.debug('Sending to dm rooms', Object.values(dmRooms));
 

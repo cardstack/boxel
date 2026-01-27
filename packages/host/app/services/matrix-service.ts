@@ -1828,7 +1828,6 @@ export default class MatrixService extends Service {
       event.type === 'm.room.message' &&
       event.content?.msgtype === APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE
     ) {
-      console.log('Received realm server event', event);
       await this.realmServer.handleEvent(event);
     } else if (
       event.type === APP_BOXEL_REALM_EVENT_TYPE &&

@@ -47,16 +47,13 @@ export default function handleCreateSessionRequest({
             'Realm server Matrix user ID is not available, unable to create session room',
           );
         }
-        console.log('Realm server user ID:', realmServerUserId);
         let sessionRoom = await fetchSessionRoom(
           dbAdapter,
           realmServerUserId,
           userId,
         );
-        console.log('Fetched session room from DB:', sessionRoom);
 
         if (!sessionRoom) {
-          console.log('No session room???', userId);
           sessionRoom = await matrixClient.createDM(userId);
           await upsertSessionRoom(
             dbAdapter,

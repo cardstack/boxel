@@ -70,12 +70,6 @@ export async function fetchAllSessionRooms(
   realmURL: string,
   realmUserId: string,
 ) {
-  console.log(
-    'Fetching all session rooms for realmURL:',
-    realmURL,
-    'and realmUserId:',
-    realmUserId,
-  );
   let rows = await query(dbAdapter, [
     'SELECT sr.matrix_user_id, sr.room_id',
     'FROM session_rooms sr',
@@ -89,8 +83,6 @@ export async function fetchAllSessionRooms(
     'AND sr.realm_url =',
     param(REALM_SERVER_REALM),
   ]);
-
-  console.log('Fetched session rooms:', rows);
 
   let result: Record<string, string> = {};
   for (let row of rows) {

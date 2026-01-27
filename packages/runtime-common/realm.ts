@@ -671,21 +671,14 @@ export class Realm {
   }
 
   async ensureSessionRoom(matrixUserId: string): Promise<string> {
-    console.log('realm.ts - Ensuring session room for user:', matrixUserId);
     let sessionRoom = await fetchSessionRoom(
       this.#dbAdapter,
       this.#matrixClient.getUserId(),
       matrixUserId,
     );
-    console.log('Fetched session room from DB:', sessionRoom);
 
     if (!sessionRoom) {
-      console.log('No session room, creating one for user:', matrixUserId);
       await this.#matrixClient.login();
-      console.log(
-        'Logged into matrix as realm server user',
-        this.#matrixClient.getUserId(),
-      );
       sessionRoom = await this.#matrixClient.createDM(matrixUserId);
       await upsertSessionRoom(
         this.#dbAdapter,
