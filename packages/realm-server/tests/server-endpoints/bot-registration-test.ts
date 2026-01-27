@@ -380,10 +380,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         let usernames = response.body.data.map(
           (entry: any) => entry.attributes.username,
         );
-        assert.ok(
-          usernames.includes(matrixUserId),
-          'includes first username',
-        );
+        assert.ok(usernames.includes(matrixUserId), 'includes first username');
         assert.notOk(
           usernames.includes(otherMatrixUserId),
           'does not include other username',
