@@ -73,9 +73,7 @@ module('Integration | text-input-validator', function (hooks) {
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         noop = () => {};
-        <template>
-          <OperatorMode @onClose={{this.noop}} />
-        </template>
+        <template><OperatorMode @onClose={{this.noop}} /></template>
       },
     );
   });

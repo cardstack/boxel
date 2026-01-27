@@ -79,9 +79,7 @@ module('Integration | EmailField', function (hooks) {
     class ContactCard extends CardDef {
       @field email = contains(EmailField);
       static isolated = class Isolated extends Component<typeof this> {
-        <template>
-          <@fields.email @format='atom' />
-        </template>
+        <template><@fields.email @format='atom' /></template>
       };
     }
 

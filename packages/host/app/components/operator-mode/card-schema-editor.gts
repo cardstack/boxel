@@ -482,7 +482,7 @@ export default class CardSchemaEditor extends Component<Signature> {
   @service declare loaderService: LoaderService;
   @service declare cardService: CardService;
   @service declare operatorModeStateService: OperatorModeStateService;
-  @service private declare realm: RealmService;
+  @service declare private realm: RealmService;
 
   @tracked editFieldModalShown = false;
   @tracked removeFieldModalShown = false;

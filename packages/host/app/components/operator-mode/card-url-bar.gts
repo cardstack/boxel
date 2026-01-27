@@ -177,8 +177,8 @@ export default class CardURLBar extends Component<Signature> {
     </style>
   </template>
 
-  @service private declare operatorModeStateService: OperatorModeStateService;
-  @service private declare realm: RealmService;
+  @service declare private operatorModeStateService: OperatorModeStateService;
+  @service declare private realm: RealmService;
 
   private urlBar: URLBarResource = urlBarResource(this, () => ({
     getValue: () => (this.codePath ? decodeURI(this.codePath) : ''),

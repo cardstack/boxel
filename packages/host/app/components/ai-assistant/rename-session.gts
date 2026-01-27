@@ -93,7 +93,7 @@ export default class RenameSession extends Component<Signature> {
     </style>
   </template>
 
-  @service private declare matrixService: MatrixService;
+  @service declare private matrixService: MatrixService;
   @tracked private newRoomName = this.args.room.name;
   @tracked private roomNameError: string | undefined = undefined;
 

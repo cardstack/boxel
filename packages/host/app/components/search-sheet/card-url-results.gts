@@ -22,7 +22,7 @@ interface Signature {
   Blocks: {};
 }
 export default class CardURLResults extends Component<Signature> {
-  @consume(GetCardContextName) private declare getCard: getCard;
+  @consume(GetCardContextName) declare private getCard: getCard;
   @tracked private cardResource: ReturnType<getCard> | undefined;
 
   private makeCardResource = () => {

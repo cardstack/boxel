@@ -340,7 +340,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       return {
         isPublic: Boolean(
           publicReadable &&
-            ['true', '1', 'yes'].includes(publicReadable.toLowerCase()),
+          ['true', '1', 'yes'].includes(publicReadable.toLowerCase()),
         ),
         resolvedRealmURL,
       };

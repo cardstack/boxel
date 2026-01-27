@@ -12,9 +12,9 @@ import {
   type RealmInfo,
   type Loader,
 } from '@cardstack/runtime-common';
-
 import type { AtomicOperation } from '@cardstack/runtime-common/atomic-document';
 import { createAtomicDocument } from '@cardstack/runtime-common/atomic-document';
+import { validateWriteSize } from '@cardstack/runtime-common/write-size-validation';
 
 import type {
   BaseDef,
@@ -27,6 +27,7 @@ import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
 import LimitedSet from '../lib/limited-set';
 
+import type EnvironmentService from './environment-service';
 import type LoaderService from './loader-service';
 import type MessageService from './message-service';
 import type NetworkService from './network';
@@ -57,10 +58,13 @@ export default class CardService extends Service {
   @service declare private loaderService: LoaderService;
   @service declare private messageService: MessageService;
   @service declare private network: NetworkService;
+  @service declare private environmentService: EnvironmentService;
   @service declare private realm: Realm;
   @service declare private reset: ResetService;
 
   private subscriber: CardSaveSubscriber | undefined;
+  // This error will be used by check-correctness command to report size limit errors
+  private sizeLimitError = new Map<string, Error>();
   // For tracking requests during the duration of this service. Used for being able to tell when to ignore an incremental indexing realm event.
   // We want to ignore it when it is a result of our own request so that we don't reload the card and overwrite any unsaved changes made during auto save request and realm event.
   declare private loaderToCardAPILoadingCache: WeakMap<
@@ -103,6 +107,10 @@ export default class CardService extends Service {
     this.subscriber = undefined;
   }
 
+  getSizeLimitError(url: string): Error | undefined {
+    return this.sizeLimitError.get(url);
+  }
+
   async fetchJSON(
     url: string | URL,
     args?: CardServiceRequestInit,
@@ -140,6 +148,20 @@ export default class CardService extends Service {
       requestInit.method = 'POST';
       requestHeaders.set('X-HTTP-Method-Override', 'QUERY');
     }
+    let urlString = url instanceof URL ? url.href : url;
+    let method = requestInit.method?.toUpperCase?.();
+    if (
+      !isReadOperation &&
+      (method === 'POST' || method === 'PATCH') &&
+      requestInit.body
+    ) {
+      let jsonString =
+        typeof requestInit.body === 'string'
+          ? requestInit.body
+          : JSON.stringify(requestInit.body, null, 2);
+      this.validateSizeLimit(urlString, jsonString, 'card');
+    }
+
     let response = await this.network.authedFetch(url, requestInit);
     if (!response.ok) {
       let responseText = await response.text();
@@ -191,6 +213,7 @@ export default class CardService extends Service {
     options?: SaveSourceOptions,
   ) {
     try {
+      this.validateSizeLimit(url.href, content, 'file');
       let clientRequestId = options?.clientRequestId ?? `${type}:${uuidv4()}`;
       this.clientRequestIds.add(clientRequestId);
 
@@ -294,6 +317,17 @@ export default class CardService extends Service {
   }
 
   async executeAtomicOperations(operations: AtomicOperation[], realmURL: URL) {
+    for (let operation of operations) {
+      if (operation.data?.type === 'source') {
+        let content = operation.data.attributes?.content;
+        if (typeof content === 'string') {
+          this.validateSizeLimit(operation.href, content, 'file');
+        }
+      } else if (operation.data?.type === 'card') {
+        let jsonString = JSON.stringify(operation.data, null, 2);
+        this.validateSizeLimit(operation.href, jsonString, 'card');
+      }
+    }
     let doc = createAtomicDocument(operations);
     let response = await this.network.authedFetch(`${realmURL.href}_atomic`, {
       method: 'POST',
@@ -303,6 +337,21 @@ export default class CardService extends Service {
       body: JSON.stringify(doc),
     });
     return response.json();
+  }
+
+  private validateSizeLimit(
+    url: string,
+    content: string,
+    type: 'card' | 'file',
+  ) {
+    let maxSizeBytes = this.environmentService.cardSizeLimitBytes;
+    try {
+      this.sizeLimitError.delete(url);
+      validateWriteSize(content, maxSizeBytes, type);
+    } catch (e: any) {
+      this.sizeLimitError.set(url, e);
+      throw e;
+    }
   }
 }
 

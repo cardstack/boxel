@@ -271,7 +271,7 @@ export default class ForgotPassword extends Component<Signature> {
     | { type: 'resetPasswordSuccess' } = {
     type: 'initial',
   };
-  @service private declare matrixService: MatrixService;
+  @service declare private matrixService: MatrixService;
 
   constructor(owner: Owner, args: any) {
     super(owner, args);

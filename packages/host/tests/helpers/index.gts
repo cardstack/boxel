@@ -29,6 +29,7 @@ import {
   testRealmURL,
   testRealmURLToUsername,
   Worker,
+  DEFAULT_CARD_SIZE_LIMIT_BYTES,
   type DefinitionLookup,
   type LooseSingleCardDocument,
   type Prerenderer,
@@ -402,9 +403,7 @@ export async function makeRenderer() {
 
   renderIntoElement(
     class CardPrerenderHost extends GlimmerComponent {
-      <template>
-        <CardPrerender />
-      </template>
+      <template><CardPrerender /></template>
     },
     element as unknown as SimpleElement,
     owner,
@@ -803,6 +802,9 @@ async function setupTestRealm({
     }),
     realmServerURL: ensureTrailingSlash(ENV.realmServerURL),
     definitionLookup,
+    cardSizeLimitBytes: Number(
+      process.env.CARD_SIZE_LIMIT_BYTES ?? DEFAULT_CARD_SIZE_LIMIT_BYTES,
+    ),
   });
 
   // Register the realm early so realm-server mock _info lookups can resolve
@@ -819,12 +821,12 @@ async function setupTestRealm({
 
   // TODO this is the only use of Realm.maybeHandle left--can we get rid of it?
   virtualNetwork.mount(realm.maybeHandle);
-  if (startMatrix) {
-    await mockMatrixUtils.start();
-  }
   await adapter.ready;
   await worker.run();
   await realm.start();
+  if (startMatrix) {
+    await mockMatrixUtils.start();
+  }
 
   let realmServer = getService('realm-server');
   if (!realmServer.availableRealmURLs.includes(realmURL)) {
