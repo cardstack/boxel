@@ -34,12 +34,7 @@ export function onTimelineEvent({
       return;
     }
 
-    let registrations: BotRegistration[];
-    try {
-      registrations = await getRegistrationsForUser(dbAdapter, senderUsername);
-    } catch (error) {
-      return;
-    }
+    let registrations = await getRegistrationsForUser(dbAdapter, senderUsername);
     if (!registrations.length) {
       return;
     }

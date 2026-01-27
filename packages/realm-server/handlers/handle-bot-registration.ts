@@ -82,17 +82,23 @@ export function handleBotRegistrationRequest({
       return;
     }
 
-    let rows = await query(dbAdapter, [
-      `INSERT INTO bot_registrations`,
-      `(id, username, created_at) VALUES (`,
-      param(uuidv4()),
-      `,`,
-      param(username),
-      `,`,
-      dbExpression({ pg: 'NOW()', sqlite: 'CURRENT_TIMESTAMP' }),
-      `) `,
-      `RETURNING id, username, created_at`,
-    ]);
+    let rows;
+    try {
+      rows = await query(dbAdapter, [
+        `INSERT INTO bot_registrations`,
+        `(id, username, created_at) VALUES (`,
+        param(uuidv4()),
+        `,`,
+        param(username),
+        `,`,
+        dbExpression({ pg: 'NOW()', sqlite: 'CURRENT_TIMESTAMP' }),
+        `) `,
+        `RETURNING id, username, created_at`,
+      ]);
+    } catch (error) {
+      await sendResponseForSystemError(ctxt, 'failed to register bot');
+      return;
+    }
 
     let row = rows[0];
     if (!row) {
@@ -146,13 +152,22 @@ export function handleBotRegistrationsRequest({
       return;
     }
 
-    let rows = await query(dbAdapter, [
-      `SELECT br.id, br.username, br.created_at`,
-      `FROM bot_registrations br`,
-      `WHERE br.username = `,
-      param(username),
-      `ORDER BY br.created_at ASC`,
-    ]);
+    let rows;
+    try {
+      rows = await query(dbAdapter, [
+        `SELECT br.id, br.username, br.created_at`,
+        `FROM bot_registrations br`,
+        `WHERE br.username = `,
+        param(username),
+        `ORDER BY br.created_at ASC`,
+      ]);
+    } catch (error) {
+      await sendResponseForSystemError(
+        ctxt,
+        'failed to fetch bot registrations',
+      );
+      return;
+    }
 
     await setContextResponse(
       ctxt,
@@ -220,11 +235,17 @@ export function handleBotUnregistrationRequest({
       return;
     }
 
-    let registrationRows = await query(dbAdapter, [
-      `SELECT username FROM bot_registrations WHERE id = `,
-      param(botRegistrationId),
-      ` LIMIT 1`,
-    ]);
+    let registrationRows;
+    try {
+      registrationRows = await query(dbAdapter, [
+        `SELECT username FROM bot_registrations WHERE id = `,
+        param(botRegistrationId),
+        ` LIMIT 1`,
+      ]);
+    } catch (error) {
+      await sendResponseForSystemError(ctxt, 'failed to lookup bot registration');
+      return;
+    }
     let registrationUsername = registrationRows[0]?.username;
     if (registrationUsername && registrationUsername !== requestingUserId) {
       await sendResponseForForbiddenRequest(
@@ -234,10 +255,15 @@ export function handleBotUnregistrationRequest({
       return;
     }
 
-    await query(dbAdapter, [
-      `DELETE FROM bot_registrations WHERE id = `,
-      param(botRegistrationId),
-    ]);
+    try {
+      await query(dbAdapter, [
+        `DELETE FROM bot_registrations WHERE id = `,
+        param(botRegistrationId),
+      ]);
+    } catch (error) {
+      await sendResponseForSystemError(ctxt, 'failed to unregister bot');
+      return;
+    }
 
     await setContextResponse(ctxt, new Response(null, { status: 204 }));
   };

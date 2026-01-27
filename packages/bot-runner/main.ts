@@ -56,13 +56,13 @@ const botPassword = process.env.BOT_RUNNER_PASSWORD || 'password';
     }),
   );
 
-  client.on(
-    RoomEvent.Timeline,
-    onTimelineEvent({
-      authUserId: auth.user_id,
-      dbAdapter,
-    }),
-  );
+  let handleTimelineEvent = onTimelineEvent({
+    authUserId: auth.user_id,
+    dbAdapter,
+  });
+  client.on(RoomEvent.Timeline, async (event, room, toStartOfTimeline) => {
+    await handleTimelineEvent(event, room, toStartOfTimeline);
+  });
 
   client.startClient();
   log.info('bot runner listening for Matrix events');

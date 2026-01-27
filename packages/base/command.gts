@@ -242,7 +242,6 @@ export class CreateAIAssistantRoomResult extends CardDef {
 
 export class RegisterBotInput extends CardDef {
   @field username = contains(StringField);
-  @field name = contains(StringField);
 }
 
 export class RegisterBotResult extends CardDef {

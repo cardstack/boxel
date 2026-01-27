@@ -52,10 +52,10 @@ module('membership handler', () => {
     startTime: 1000,
   });
 
-  test('auto-joins room after membership invite event for bot-runner', (assert) => {
+  test('auto-joins room after membership invite event for bot-runner', async (assert) => {
     joinedRooms = [];
 
-    handleMembershipEvent(makeMembershipEvent(1001), makeMember({
+    await handleMembershipEvent(makeMembershipEvent(1001), makeMember({
       membership: 'invite',
       userId: '@bot-runner:localhost',
       roomId: '!room-id:localhost',

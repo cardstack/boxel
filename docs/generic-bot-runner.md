@@ -39,12 +39,12 @@ Register (JSON:API):
     "data": {
       "type": "bot-registration",
       "attributes": {
-        "matrixUserId": "@bot-runner:localhost"
+        "username": "@bot-runner:localhost"
       }
     }
   }
 - The request must be authenticated with a realm server JWT.
-- The `matrixUserId` must match the authenticated user id.
+- The `username` is the Matrix user id and must match the authenticated user id.
 
 ### List
 
@@ -58,14 +58,14 @@ Register via script
 ```sh
 REALM_SERVER_URL="http://localhost:4201" \
 REALM_SERVER_JWT="..." \
-MATRIX_USER_ID="..." \
+USERNAME="@bot-runner:localhost" \
 ./packages/realm-server/scripts/register-bot.sh
 ```
 
 Defaults and requirements:
 - `REALM_SERVER_URL` (default: `http://localhost:4201`)
 - `REALM_SERVER_JWT` (required)
-- `MATRIX_USER_ID` (required)
+- `USERNAME` (required, Matrix user id)
 
 ### Unregister
 

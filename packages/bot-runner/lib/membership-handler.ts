@@ -11,15 +11,16 @@ export function onMembershipEvent({
   authUserId,
   startTime,
 }: MembershipHandlerOptions) {
-  return function handleMembershipEvent(
+  return async function handleMembershipEvent(
     membershipEvent: MatrixEvent,
     member: RoomMember,
   ) {
-    if (membershipEvent.event.origin_server_ts! < startTime) {
+    let originServerTs = membershipEvent.event.origin_server_ts;
+    if (originServerTs == null || originServerTs < startTime) {
       return;
     }
     if (member.membership === 'invite' && member.userId === authUserId) {
-      client.joinRoom(member.roomId);
+      await client.joinRoom(member.roomId);
     }
   };
 }
