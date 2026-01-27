@@ -2,7 +2,11 @@ import GlimmerComponent from '@glimmer/component';
 import { type BaseDef } from 'https://cardstack.com/base/card-api';
 import { on } from '@ember/modifier';
 import { BoxelSelect, BoxelButton } from '@cardstack/boxel-ui/components';
-import { type PostType } from '../news-feed/communication-log';
+
+export interface PostType {
+  value: string;
+  label: string;
+}
 
 interface PostComposerArgs {
   Args: {
