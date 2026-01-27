@@ -78,6 +78,10 @@ export class CardStoreWithErrors implements CardStore {
     id = id.replace(/\.json$/, '');
     return this.#cards.set(id, instance);
   }
+  setFileMetaNonTracked(id: string, instance: FileDef) {
+    id = id.replace(/\.json$/, '');
+    return this.#fileMetaInstances.set(id, instance);
+  }
   makeTracked(_id: string) {}
 
   readonly errors = new Set<string>();

@@ -207,8 +207,8 @@ type PartialFields<T> = {
   [Property in keyof T]: Property extends symbol
     ? T[Property]
     : Property extends 'constructor'
-    ? T[Property]
-    : T[Property] | undefined;
+      ? T[Property]
+      : T[Property] | undefined;
 };
 
 export type PartialBaseInstanceType<T extends BaseDefConstructor> = T extends {
@@ -224,8 +224,8 @@ export type FieldsTypeFor<T extends BaseDef> = {
     (T[Field] extends ArrayLike<unknown>
       ? BoxComponent[]
       : T[Field] extends BaseDef
-      ? FieldsTypeFor<T[Field]>
-      : unknown);
+        ? FieldsTypeFor<T[Field]>
+        : unknown);
 };
 export { formats, type Format };
 export type FieldType = 'contains' | 'containsMany' | 'linksTo' | 'linksToMany';
@@ -326,7 +326,7 @@ export function instanceOf(instance: BaseDef, clazz: typeof BaseDef): boolean {
     if (isEqual(codeRefInstance, codeRefClazz)) {
       return true;
     }
-    instanceClazz = instanceClazz ? getAncestor(instanceClazz) ?? null : null;
+    instanceClazz = instanceClazz ? (getAncestor(instanceClazz) ?? null) : null;
   } while (codeRefInstance && !isEqual(codeRefInstance, baseRef));
   return false;
 }
@@ -397,6 +397,7 @@ export interface CardStore {
   setCard(url: string, instance: CardDef): void;
   setFileMeta(url: string, instance: FileDef): void;
   setCardNonTracked(id: string, instance: CardDef): void;
+  setFileMetaNonTracked(id: string, instance: FileDef): void;
   makeTracked(id: string): void;
   loadCardDocument(url: string): Promise<SingleCardDocument | CardError>;
   loadFileMetaDocument(
@@ -482,9 +483,10 @@ function cardTypeFor(
     .constructor as typeof BaseDef;
 }
 
-class ContainsMany<FieldT extends FieldDefConstructor>
-  implements Field<FieldT, any[] | null>
-{
+class ContainsMany<FieldT extends FieldDefConstructor> implements Field<
+  FieldT,
+  any[] | null
+> {
   readonly fieldType = 'containsMany';
   private cardThunk: () => FieldT;
   readonly computeVia: undefined | (() => unknown);
@@ -1364,9 +1366,10 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
   }
 }
 
-class LinksToMany<FieldT extends LinkableDefConstructor>
-  implements Field<FieldT, any[] | null>
-{
+class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
+  FieldT,
+  any[] | null
+> {
   readonly fieldType = 'linksToMany';
   private cardThunk: () => FieldT;
   private declaredCardThunk: () => FieldT;
@@ -2232,14 +2235,10 @@ export class ReadOnlyField extends FieldDef {
   static [primitive]: string;
   static [useIndexBasedKey]: never;
   static embedded = class Embedded extends Component<typeof this> {
-    <template>
-      {{@model}}
-    </template>
+    <template>{{@model}}</template>
   };
   static edit = class Edit extends Component<typeof this> {
-    <template>
-      {{@model}}
-    </template>
+    <template>{{@model}}</template>
   };
 }
 
@@ -2249,9 +2248,7 @@ export class StringField extends FieldDef {
   static [primitive]: string;
   static [useIndexBasedKey]: never;
   static embedded = class Embedded extends Component<typeof this> {
-    <template>
-      {{@model}}
-    </template>
+    <template>{{@model}}</template>
   };
   static edit = class Edit extends Component<typeof this> {
     <template>
@@ -2263,9 +2260,7 @@ export class StringField extends FieldDef {
     </template>
   };
   static atom = class Atom extends Component<typeof this> {
-    <template>
-      {{@model}}
-    </template>
+    <template>{{@model}}</template>
   };
 }
 
@@ -2362,16 +2357,12 @@ export class MarkdownField extends StringField {
   static embedded = class MarkdownViewTemplate extends Component<
     typeof MarkdownField
   > {
-    <template>
-      <MarkdownTemplate @content={{@model}} />
-    </template>
+    <template><MarkdownTemplate @content={{@model}} /></template>
   };
   static atom = class MarkdownViewTemplate extends Component<
     typeof MarkdownField
   > {
-    <template>
-      <MarkdownTemplate @content={{@model}} />
-    </template>
+    <template><MarkdownTemplate @content={{@model}} /></template>
   };
 
   static edit = class Edit extends Component<typeof this> {
@@ -2829,11 +2820,11 @@ function lazilyLoadLink(
       } = {
         title: isMissingFile
           ? 'Link Not Found'
-          : error?.message ?? 'Card Error',
-        status: isMissingFile ? 404 : (error as any)?.status ?? 500,
+          : (error?.message ?? 'Card Error'),
+        status: isMissingFile ? 404 : ((error as any)?.status ?? 500),
         message: isMissingFile
           ? `missing file ${referenceForMissingFile}`
-          : error?.message ?? String(e),
+          : (error?.message ?? String(e)),
         stack: error?.stack,
       };
       if (isCardError(error) && error.deps?.length) {
@@ -3092,11 +3083,15 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
   // work that we are doing to deserialize the instance below is "live". so we
   // add the actual instance silently in a non-tracked way and only track it at
   // the very end.
+  let card = Reflect.getPrototypeOf(instance)!.constructor as T;
   if (resource.id != null) {
-    store.setCardNonTracked(resource.id, instance as CardDef);
+    if (isFileMetaResource(resource) || isFileDef(card)) {
+      store.setFileMetaNonTracked(resource.id, instance as FileDef);
+    } else {
+      store.setCardNonTracked(resource.id, instance as CardDef);
+    }
   }
   let deferred = new Deferred<BaseDef>();
-  let card = Reflect.getPrototypeOf(instance)!.constructor as T;
   let nonNestedRelationships = Object.fromEntries(
     Object.entries(resource.relationships ?? {}).filter(
       ([fieldName]) => !fieldName.includes('.'),
@@ -3707,6 +3702,10 @@ class FallbackCardStore implements CardStore {
   setCardNonTracked(id: string, instance: CardDef) {
     id = id.replace(/\.json$/, '');
     return this.#instances.set(id, instance);
+  }
+  setFileMetaNonTracked(id: string, instance: FileDef) {
+    id = id.replace(/\.json$/, '');
+    return this.#fileMetaInstances.set(id, instance);
   }
   makeTracked(_id: string) {}
   trackLoad(load: Promise<unknown>) {

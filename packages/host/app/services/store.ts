@@ -1171,6 +1171,7 @@ export default class StoreService extends Service implements StoreInterface {
       let errorResponse = processCardError(id, error);
       let cardError = errorResponse.errors[0];
       deferred?.fulfill(cardError);
+      this.setIdentityContext(cardError);
       let status = cardError?.status ?? error?.status;
       let isSystemCardDefault = isSystemCardDefaultId(
         id,

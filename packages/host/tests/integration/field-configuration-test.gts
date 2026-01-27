@@ -74,6 +74,9 @@ class DeferredLinkStore implements CardStore {
   setCardNonTracked(url: string, instance: CardDefType) {
     this.cardInstances.set(this.normalize(url), instance);
   }
+  setFileMetaNonTracked(url: string, instance: FileDef) {
+    this.fileMetaInstances.set(this.normalize(url), instance);
+  }
 
   makeTracked(_id: string) {}
 
