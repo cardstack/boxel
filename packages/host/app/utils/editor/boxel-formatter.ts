@@ -2,7 +2,10 @@ export type LintAndFixFn = (input: {
   realm: string;
   filename: string;
   fileContent: string;
-}) => Promise<{ output: string } | { output?: undefined }>; // allow undefined for safety
+}) => Promise<
+  | { output: string; lintIssues?: string[] }
+  | { output?: undefined; lintIssues?: string[] }
+>; // allow undefined for safety
 
 export interface EditorLike {
   pushUndoStop(): void;

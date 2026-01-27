@@ -354,6 +354,7 @@ export interface CodePatchResultContent {
     context?: BoxelContext;
     attachedFiles?: (SerializedFile & { content?: string; error?: string })[];
     attachedCards?: (SerializedFile & { content?: string; error?: string })[];
+    lintIssues?: string[];
   };
 }
 

@@ -717,6 +717,7 @@ export default class CommandService extends Service {
             [],
             [fileDef],
             context,
+            patchCodeResult.lintIssues,
             result.failureReason,
           ),
         );
