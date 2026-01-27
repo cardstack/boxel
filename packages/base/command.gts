@@ -117,6 +117,11 @@ export class FileContents extends CardDef {
 export class SwitchSubmodeInput extends CardDef {
   @field submode = contains(StringField);
   @field codePath = contains(StringField);
+  @field createFile = contains(BooleanField);
+}
+
+export class SwitchSubmodeResult extends CardDef {
+  @field codePath = contains(StringField);
 }
 
 export class WriteTextFileInput extends CardDef {
@@ -124,6 +129,7 @@ export class WriteTextFileInput extends CardDef {
   @field realm = contains(StringField);
   @field path = contains(StringField);
   @field overwrite = contains(BooleanField);
+  @field useNonConflictingFilename = contains(BooleanField);
 }
 
 export class CreateInstanceInput extends CardDef {
@@ -355,7 +361,8 @@ export class CreateListingPRResult extends CardDef {
 
 export class ListingCreateInput extends CardDef {
   @field openCardId = contains(StringField);
-  @field targetRealm = contains(StringField);
+  @field codeRef = contains(CodeRefField);
+  @field targetRealm = contains(RealmField);
 }
 
 export class ListingCreateResult extends CardDef {
