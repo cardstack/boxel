@@ -31,6 +31,8 @@ import * as eaTransitionsMoveOver from 'ember-animated/transitions/move-over';
 import * as emberConcurrency from 'ember-concurrency';
 import * as emberConcurrencyAsyncArrowRuntime from 'ember-concurrency/-private/async-arrow-runtime';
 import * as cssUrl from 'ember-css-url';
+import * as FromElsewhere from 'ember-elsewhere/components/from-elsewhere';
+import * as ToElsewhere from 'ember-elsewhere/components/to-elsewhere';
 import * as emberModifier2 from 'ember-modifier';
 import * as emberModifyClassBasedResource from 'ember-modify-based-class-resource';
 import * as emberProvideConsumeContext from 'ember-provide-consume-context';
@@ -110,6 +112,14 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule('@cardstack/view-transitions', viewTransitions);
 
   virtualNetwork.shimModule('ember-css-url', cssUrl);
+  virtualNetwork.shimModule(
+    'ember-elsewhere/components/from-elsewhere',
+    FromElsewhere,
+  );
+  virtualNetwork.shimModule(
+    'ember-elsewhere/components/to-elsewhere',
+    ToElsewhere,
+  );
   virtualNetwork.shimModule('@ember/template-factory', emberTemplateFactory);
   virtualNetwork.shimModule('@ember/template', emberTemplate);
   virtualNetwork.shimModule('@glimmer/tracking', glimmerTracking);
