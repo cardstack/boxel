@@ -98,7 +98,7 @@ export default class PickerUsage extends Component {
       <:example>
         <div class='picker-usage-examples'>
           <div class='picker-usage-example'>
-            <h3>Realm Picker (with icons and search)</h3>
+            <h3>Realm Picker (with icons)</h3>
             <Picker
               @options={{this.realmOptions}}
               @selected={{this.selectedRealms}}
@@ -110,7 +110,7 @@ export default class PickerUsage extends Component {
           </div>
 
           <div class='picker-usage-example'>
-            <h3>Type Picker (no icons, no search)</h3>
+            <h3>Type Picker (no icons)</h3>
             <Picker
               @options={{this.typeOptions}}
               @selected={{this.selectedTypes}}
