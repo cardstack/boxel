@@ -68,6 +68,36 @@ export async function renderHTML(
   opts?: CaptureOptions,
 ): Promise<string | RenderError> {
   await transitionTo(page, 'render.html', format, String(ancestorLevel));
+
+  let markerInfo = await page.evaluate(() => {
+    let el = document.querySelector('[data-prerender]') as HTMLElement | null;
+    if (!el) return { hasContainer: false };
+    let comments = Array.from(el.childNodes)
+      .filter((n) => n.nodeType === 8)
+      .map((n) => (n as Comment).nodeValue);
+    return {
+      hasContainer: true,
+      hasMarkerInContainer: el.innerHTML.includes('%+b:'),
+      commentSamples: comments.slice(0, 5),
+    };
+  });
+  log.info('container markers', markerInfo);
+
+  let around = await page.evaluate(() => {
+    let el = document.querySelector('[data-prerender]');
+    if (!el || !el.parentElement) return { hasParent: false };
+    let parent = el.parentElement;
+    let prev = el.previousSibling;
+    let next = el.nextSibling;
+    return {
+      hasParent: true,
+      parentHasMarkers: parent.innerHTML.includes('%+b:'),
+      prevComment: prev?.nodeType === 8 ? prev.nodeValue : null,
+      nextComment: next?.nodeType === 8 ? next.nodeValue : null,
+    };
+  });
+  log.info('marker siblings', around);
+
   let result = await captureResult(
     page,
     ['isolated', 'atom', 'head'].includes(format) ? 'innerHTML' : 'outerHTML',
@@ -710,6 +740,10 @@ export async function captureResult(
             undefined,
         } as RenderCapture;
       } else {
+        // Serialize mode emits rehydrate markers as siblings of the container.
+        let useParentCapture =
+          capture !== 'textContent' &&
+          (globalThis as any).__boxelRenderMode === 'serialize';
         const firstChild = resolvedElement.children[0] as
           | (HTMLElement & {
               textContent: string;
@@ -731,6 +765,35 @@ export async function captureResult(
                 additionalErrors: null,
               },
             }),
+            alive,
+            id: resolvedElement.dataset.prerenderId ?? undefined,
+            nonce: resolvedElement.dataset.prerenderNonce ?? undefined,
+          } as RenderCapture;
+        }
+        if (useParentCapture) {
+          let parent = resolvedElement.parentElement;
+
+          // Collect elements and Glimmer serialisation comments
+          let pieces: string[] = [];
+          if (parent) {
+            let nodes = Array.from(parent.childNodes);
+            for (let node of nodes) {
+              if (node === resolvedElement) {
+                pieces.push(resolvedElement.innerHTML);
+                continue;
+              }
+              if (node.nodeType === 8) {
+                let value = (node as Comment).nodeValue ?? '';
+                if (value.includes('%+') || value.includes('%-')) {
+                  pieces.push(`<!--${value}-->`);
+                }
+              }
+            }
+          }
+          return {
+            status: finalStatus,
+            value:
+              pieces.length > 0 ? pieces.join('') : resolvedElement.innerHTML,
             alive,
             id: resolvedElement.dataset.prerenderId ?? undefined,
             nonce: resolvedElement.dataset.prerenderNonce ?? undefined,
