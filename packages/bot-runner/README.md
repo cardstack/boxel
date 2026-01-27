@@ -30,7 +30,7 @@ pnpm start:development
 
 ## Bot Registration
 
-The realm server stores bot registration rows. This does not create a Matrix user; it records the internal `userId` (from the users table) and assigns a bot registration `id`.
+The realm server stores bot registration rows. This does not create a Matrix user; it records the Matrix user ID (e.g. `@user:localhost`, which is also validated against the users table) and assigns a bot registration `id`.
 
 ### Register
 
