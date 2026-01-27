@@ -133,6 +133,7 @@ async function lintFix({
     return {
       ...eslintResult,
       output: formattedOutput,
+      messages: linter.verify(formattedOutput, LINT_CONFIG, filename),
     };
   } catch (error) {
     // Step 5: Handle errors gracefully with fallback behavior
@@ -145,6 +146,7 @@ async function lintFix({
     return {
       ...eslintResult,
       output: eslintOutput,
+      messages: linter.verify(eslintOutput, LINT_CONFIG, filename),
     };
   }
 }
