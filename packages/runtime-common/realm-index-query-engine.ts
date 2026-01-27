@@ -11,6 +11,8 @@ import {
   IndexQueryEngine,
   codeRefWithAbsoluteURL,
   logger,
+  CardResourceType,
+  FileMetaResourceType,
   type LooseCardResource,
   type DBAdapter,
   type QueryOptions,
@@ -598,6 +600,14 @@ export class RealmIndexQueryEngine {
         if (!relationship.links?.self) {
           continue;
         }
+        if (Array.isArray(relationship.data)) {
+          throw new Error(
+            `bug: relationship ${key} cannot be a list when loading links`,
+          );
+        }
+        let relationshipType = relationship.data?.type;
+        let expectsFileMeta = relationshipType === FileMetaResourceType;
+        let expectsCard = relationshipType === CardResourceType;
         processedRelationships.add(key);
         let linkURL = new URL(
           relationship.links.self,
@@ -605,17 +615,25 @@ export class RealmIndexQueryEngine {
         );
         let linkResource: CardResource<Saved> | FileMetaResource | undefined;
         if (realmPath.inRealm(linkURL)) {
-          let maybeResult = await this.#indexQueryEngine.getInstance(
-            linkURL,
-            opts,
-          );
-          if (maybeResult?.type === 'instance') {
-            linkResource = maybeResult.instance;
-          } else {
+          if (expectsCard || !relationshipType) {
+            let maybeResult = await this.#indexQueryEngine.getInstance(
+              linkURL,
+              opts,
+            );
+            if (maybeResult?.type === 'instance') {
+              linkResource = maybeResult.instance;
+            }
+          }
+          if (!linkResource && (expectsFileMeta || !relationshipType)) {
             let fileEntry = await this.#indexQueryEngine.getFile(linkURL, opts);
             if (fileEntry) {
               linkResource = fileResourceFromIndex(linkURL, fileEntry);
             }
+          }
+          if (!relationshipType && !linkResource) {
+            throw new Error(
+              `bug: relationship ${key} is missing a resource type when loading links`,
+            );
           }
         } else {
           let response = await this.#fetch(linkURL, {

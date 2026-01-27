@@ -1077,6 +1077,7 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
             links: {
               self: makeRelativeURL(value.reference, opts),
             },
+            data: { type: relationshipType, id: value.reference },
           },
         },
       };
@@ -2065,8 +2066,9 @@ export class BaseDef {
       if (value == null) {
         return null;
       }
+      let valueId = (value as { id?: string }).id;
       if (stack.includes(value)) {
-        return { id: value.id };
+        return { id: valueId };
       }
       function makeAbsoluteURL(maybeRelativeURL: string) {
         if (!value[relativeTo]) {
