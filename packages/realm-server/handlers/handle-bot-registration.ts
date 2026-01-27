@@ -243,7 +243,10 @@ export function handleBotUnregistrationRequest({
         ` LIMIT 1`,
       ]);
     } catch (error) {
-      await sendResponseForSystemError(ctxt, 'failed to lookup bot registration');
+      await sendResponseForSystemError(
+        ctxt,
+        'failed to lookup bot registration',
+      );
       return;
     }
     let registrationUsername = registrationRows[0]?.username;
