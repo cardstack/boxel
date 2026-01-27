@@ -5,12 +5,9 @@ import { jobIdentity } from '../index';
 
 import { resolvePrettierConfig } from '../prettier-config';
 
-export type LintMode = 'lint' | 'lintAndAutofix';
-
 export interface LintArgs {
   source: string;
   filename?: string; // Added to support parser detection
-  lintMode?: LintMode;
 }
 
 export type LintResult = Linter.FixReport;
@@ -34,7 +31,6 @@ export const lintSource: Task<LintArgs, LintResult> = ({ reportStatus, log }) =>
 async function lintFix({
   source,
   filename = 'input.gts',
-  lintMode = 'lintAndAutofix',
 }: LintArgs): Promise<LintResult> {
   if (typeof (globalThis as any).document !== 'undefined') {
     throw new Error(
@@ -120,14 +116,6 @@ async function lintFix({
 
   // Step 1: Run existing ESLint fixes (preserving current functionality)
   const linter = new eslintModule.Linter({ configType: 'flat' });
-  if (lintMode === 'lint') {
-    const messages = linter.verify(source, LINT_CONFIG, filename);
-    return {
-      fixed: false,
-      output: source,
-      messages,
-    };
-  }
   let eslintResult = linter.verifyAndFix(source, LINT_CONFIG, filename);
   let eslintOutput = eslintResult.output ?? source;
 

@@ -204,6 +204,7 @@ export class LintAndFixInput extends CardDef {
 
 export class LintAndFixResult extends CardDef {
   @field output = contains(StringField);
+  @field lintIssues = containsMany(StringField);
 }
 
 export class PatchCodeResultField extends FieldDef {
@@ -214,6 +215,7 @@ export class PatchCodeResultField extends FieldDef {
 export class PatchCodeCommandResult extends CardDef {
   @field patchedContent = contains(StringField);
   @field finalFileUrl = contains(StringField);
+  @field lintIssues = containsMany(StringField);
   @field results = containsMany(PatchCodeResultField);
 }
 
@@ -227,6 +229,7 @@ export class CheckCorrectnessInput extends CardDef {
   @field targetType = contains(StringField);
   @field targetRef = contains(StringField);
   @field roomId = contains(StringField);
+  @field lintIssues = containsMany(StringField);
 }
 
 export class CorrectnessResultCard extends CardDef {
