@@ -1,4 +1,7 @@
+import { logger } from '@cardstack/runtime-common';
 import type { MatrixClient, MatrixEvent, RoomMember } from 'matrix-js-sdk';
+
+const log = logger('bot-runner');
 
 export interface MembershipHandlerOptions {
   client: MatrixClient;
@@ -20,6 +23,7 @@ export function onMembershipEvent({
       return;
     }
     if (member.membership === 'invite' && member.userId === authUserId) {
+      log.info(`joining room ${member.roomId} from invite`);
       await client.joinRoom(member.roomId);
     }
   };

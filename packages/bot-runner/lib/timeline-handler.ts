@@ -1,7 +1,8 @@
-import { param, query } from '@cardstack/runtime-common';
+import { logger, param, query } from '@cardstack/runtime-common';
 import type { DBAdapter, PgPrimitive } from '@cardstack/runtime-common';
 import type { MatrixEvent, Room } from 'matrix-js-sdk';
 
+const log = logger('bot-runner');
 export interface BotRegistration {
   id: string;
   created_at: string;
@@ -38,6 +39,9 @@ export function onTimelineEvent({
     if (!registrations.length) {
       return;
     }
+    log.debug(
+      `received event from ${senderUsername} in room ${room.roomId} with ${registrations.length} registrations`,
+    );
     for (let registration of registrations) {
       let createdAt = Date.parse(registration.created_at);
       if (Number.isNaN(createdAt)) {

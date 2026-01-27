@@ -963,12 +963,15 @@ importers:
       '@cardstack/runtime-common':
         specifier: workspace:*
         version: link:../runtime-common
+      '@sentry/node':
+        specifier: 'catalog:'
+        version: 8.55.0
       matrix-js-sdk:
         specifier: 'catalog:'
         version: 38.3.0(patch_hash=0472d34281d936a5dcdacff67d2851d88c1df9593cd06b7725ee8414c12aa1d5)
       ts-node:
         specifier: ^10.9.2
-        version: 10.9.2(@types/node@24.3.0)(typescript@5.8.3)
+        version: 10.9.2(@types/node@24.10.8)(typescript@5.8.3)
       typescript:
         specifier: 'catalog:'
         version: 5.8.3
@@ -978,13 +981,13 @@ importers:
         version: link:../local-types
       '@types/node':
         specifier: 'catalog:'
-        version: 24.3.0
+        version: 24.10.8
       '@types/qunit':
         specifier: 'catalog:'
-        version: 2.11.3
+        version: 2.19.13
       qunit:
         specifier: 'catalog:'
-        version: 2.24.1
+        version: 2.25.0
 
   packages/boxel-homepage-realm: {}
 
@@ -2068,7 +2071,7 @@ importers:
         version: link:../runtime-common
       '@cardstack/view-transitions':
         specifier: 'catalog:'
-        version: 0.2.0(@babel/core@7.28.6)(ember-modifier@4.1.0(ember-source@5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.28.6)(@glimmer/component@2.0.0)(@glint/template@1.3.0)(rsvp@4.8.5)(webpack@5.104.1)))
+        version: 0.2.0(@babel/core@7.28.6)(ember-modifier@4.1.0(ember-source@5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.28.6)(@glimmer/component@2.0.0)(@glint/template@1.3.0)(rsvp@4.8.5)))
       '@types/lodash':
         specifier: 'catalog:'
         version: 4.17.23
@@ -2144,7 +2147,7 @@ importers:
         version: link:../runtime-common
       '@cardstack/view-transitions':
         specifier: 'catalog:'
-        version: 0.2.0(@babel/core@7.28.6)(ember-modifier@4.1.0(ember-source@5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.28.6)(@glimmer/component@2.0.0)(@glint/template@1.3.0)(rsvp@4.8.5)(webpack@5.104.1)))
+        version: 0.2.0(@babel/core@7.28.6)(ember-modifier@4.1.0(ember-source@5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.28.6)(@glimmer/component@2.0.0)(@glint/template@1.3.0)(rsvp@4.8.5)))
       '@ember/optional-features':
         specifier: ^2.0.0
         version: 2.3.0
@@ -15083,7 +15086,7 @@ snapshots:
 
   '@cardstack/requirejs-monaco-ember-polyfill@0.0.1': {}
 
-  '@cardstack/view-transitions@0.2.0(@babel/core@7.28.6)(ember-modifier@4.1.0(ember-source@5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.28.6)(@glimmer/component@2.0.0)(@glint/template@1.3.0)(rsvp@4.8.5)(webpack@5.104.1)))':
+  '@cardstack/view-transitions@0.2.0(@babel/core@7.28.6)(ember-modifier@4.1.0(ember-source@5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.28.6)(@glimmer/component@2.0.0)(@glint/template@1.3.0)(rsvp@4.8.5)))':
     dependencies:
       '@embroider/addon-shim': 1.10.2
       decorator-transforms: 2.3.1(@babel/core@7.28.6)
@@ -17319,7 +17322,7 @@ snapshots:
 
   '@types/accepts@1.3.7':
     dependencies:
-      '@types/node': 24.10.8
+      '@types/node': 25.0.8
 
   '@types/babel__code-frame@7.27.0': {}
 
@@ -17357,11 +17360,11 @@ snapshots:
 
   '@types/connect@3.4.36':
     dependencies:
-      '@types/node': 24.10.8
+      '@types/node': 25.0.8
 
   '@types/connect@3.4.38':
     dependencies:
-      '@types/node': 24.10.8
+      '@types/node': 25.0.8
 
   '@types/content-disposition@0.5.9': {}
 
@@ -17372,7 +17375,7 @@ snapshots:
       '@types/connect': 3.4.38
       '@types/express': 5.0.6
       '@types/keygrip': 1.0.6
-      '@types/node': 24.10.8
+      '@types/node': 25.0.8
 
   '@types/cors@2.8.19':
     dependencies:
@@ -17411,7 +17414,7 @@ snapshots:
 
   '@types/express-serve-static-core@5.1.1':
     dependencies:
-      '@types/node': 24.10.8
+      '@types/node': 25.0.8
       '@types/qs': 6.14.0
       '@types/range-parser': 1.2.7
       '@types/send': 1.2.1
@@ -17471,7 +17474,7 @@ snapshots:
 
   '@types/jsdom@21.1.7':
     dependencies:
-      '@types/node': 24.10.8
+      '@types/node': 25.0.8
       '@types/tough-cookie': 4.0.5
       parse5: 7.3.0
 
@@ -17481,12 +17484,12 @@ snapshots:
 
   '@types/jsonfile@6.1.4':
     dependencies:
-      '@types/node': 24.10.8
+      '@types/node': 25.0.8
 
   '@types/jsonwebtoken@9.0.10':
     dependencies:
       '@types/ms': 2.1.0
-      '@types/node': 24.10.8
+      '@types/node': 25.0.8
 
   '@types/keygrip@1.0.6': {}
 
@@ -17507,7 +17510,7 @@ snapshots:
       '@types/http-errors': 2.0.5
       '@types/keygrip': 1.0.6
       '@types/koa-compose': 3.2.9
-      '@types/node': 24.10.8
+      '@types/node': 25.0.8
 
   '@types/koa__cors@4.0.3':
     dependencies:
@@ -17547,7 +17550,7 @@ snapshots:
 
   '@types/mysql@2.15.26':
     dependencies:
-      '@types/node': 24.10.8
+      '@types/node': 25.0.8
 
   '@types/node@20.19.29':
     dependencies:
@@ -17579,7 +17582,7 @@ snapshots:
 
   '@types/pg@8.6.1':
     dependencies:
-      '@types/node': 24.10.8
+      '@types/node': 25.0.8
       pg-protocol: 1.10.3
       pg-types: 2.2.0
 
@@ -17606,7 +17609,7 @@ snapshots:
 
   '@types/sane@2.0.9':
     dependencies:
-      '@types/node': 24.10.8
+      '@types/node': 25.0.8
 
   '@types/sarif@2.1.7': {}
 
@@ -17630,7 +17633,7 @@ snapshots:
   '@types/serve-static@2.2.0':
     dependencies:
       '@types/http-errors': 2.0.5
-      '@types/node': 24.10.8
+      '@types/node': 25.0.8
 
   '@types/shimmer@1.2.0': {}
 
@@ -17657,7 +17660,7 @@ snapshots:
     dependencies:
       '@types/cookiejar': 2.1.5
       '@types/methods': 1.1.4
-      '@types/node': 24.10.8
+      '@types/node': 25.0.8
       form-data: 4.0.5
 
   '@types/supertest@2.0.16':
@@ -17670,7 +17673,7 @@ snapshots:
 
   '@types/tedious@4.0.14':
     dependencies:
-      '@types/node': 24.10.8
+      '@types/node': 25.0.8
 
   '@types/tmp@0.2.6': {}
 
@@ -17693,7 +17696,7 @@ snapshots:
 
   '@types/yauzl@2.10.3':
     dependencies:
-      '@types/node': 24.10.8
+      '@types/node': 25.0.8
     optional: true
 
   '@typescript-eslint/eslint-plugin@7.18.0(@typescript-eslint/parser@7.18.0(eslint@8.57.1)(typescript@5.8.3))(eslint@8.57.1)(typescript@5.8.3)':

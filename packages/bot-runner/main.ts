@@ -1,3 +1,4 @@
+import './instrument';
 import './setup-logger'; // This should be first
 import { RoomMemberEvent, RoomEvent, createClient } from 'matrix-js-sdk';
 import { PgAdapter, PgQueuePublisher } from '@cardstack/postgres';
