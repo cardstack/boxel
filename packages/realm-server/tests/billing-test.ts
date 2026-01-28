@@ -147,7 +147,13 @@ module(basename(__filename), function () {
                   data: [
                     {
                       amount: 0,
+                      type: 'subscription',
+                      proration: false,
                       price: { product: 'prod_free' },
+                      period: {
+                        start: 1635873600,
+                        end: 1638465600,
+                      },
                     },
                   ],
                 },
@@ -310,6 +316,8 @@ module(basename(__filename), function () {
                   data: [
                     {
                       amount: creatorPlan.monthlyPrice * 100,
+                      type: 'subscription',
+                      proration: false,
                       price: { product: 'prod_creator' },
                       period: { start: 1, end: 2 },
                     },
@@ -405,12 +413,16 @@ module(basename(__filename), function () {
                     {
                       amount: -amountCreditedForUnusedTimeOnPreviousPlan,
                       description: 'Unused time on Creator plan',
+                      type: 'subscription',
+                      proration: false,
                       price: { product: 'prod_creator' },
                       period: { start: 3, end: 4 },
                     },
                     {
                       amount: amountCreditedForRemainingTimeOnNewPlan,
                       description: 'Remaining time on Power User plan',
+                      type: 'subscription',
+                      proration: false,
                       price: { product: 'prod_power_user' },
                       period: { start: 4, end: 5 },
                     },
@@ -500,6 +512,8 @@ module(basename(__filename), function () {
                   data: [
                     {
                       amount: creatorPlan.monthlyPrice * 100,
+                      type: 'subscription',
+                      proration: false,
                       price: { product: 'prod_creator' },
                       period: { start: 5, end: 6 },
                     },
@@ -578,7 +592,13 @@ module(basename(__filename), function () {
                   data: [
                     {
                       amount: 0,
+                      type: 'subscription',
+                      proration: false,
                       price: { product: 'prod_free' },
+                      period: {
+                        start: 1635873600,
+                        end: 1638465600,
+                      },
                     },
                   ],
                 },
