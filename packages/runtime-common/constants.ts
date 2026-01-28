@@ -129,7 +129,7 @@ export function getPublishedRealmDomainOverrides(
   let envOverrides =
     typeof rawOverrides === 'string'
       ? parsePublishedRealmDomainOverrides(rawOverrides)
-      : rawOverrides ?? {};
+      : (rawOverrides ?? {});
   return {
     ...PUBLISHED_REALM_DOMAIN_OVERRIDES,
     ...envOverrides,
