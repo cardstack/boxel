@@ -399,10 +399,7 @@ export class RealmIndexQueryEngine {
             opts,
           );
           realmResults = files.map((fileEntry) =>
-            fileResourceFromIndex(
-              new URL(fileEntry.canonicalURL),
-              fileEntry,
-            ),
+            fileResourceFromIndex(new URL(fileEntry.canonicalURL), fileEntry),
           );
         } else {
           let collection = await this.#indexQueryEngine.searchCards(
