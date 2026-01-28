@@ -249,6 +249,18 @@ export class CreateAIAssistantRoomResult extends CardDef {
   @field roomId = contains(StringField);
 }
 
+export class RegisterBotInput extends CardDef {
+  @field username = contains(StringField);
+}
+
+export class RegisterBotResult extends CardDef {
+  @field botRegistrationId = contains(StringField);
+}
+
+export class UnregisterBotInput extends CardDef {
+  @field botRegistrationId = contains(StringField);
+}
+
 export class SetActiveLLMInput extends CardDef {
   @field roomId = contains(StringField);
   @field model = contains(StringField);
