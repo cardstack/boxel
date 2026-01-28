@@ -47,13 +47,6 @@ async function maybeOverridePublishedRealmURL(
     return publishedRealmURL;
   }
 
-  let publishedURL: URL;
-  try {
-    publishedURL = new URL(publishedRealmURL);
-  } catch {
-    return publishedRealmURL;
-  }
-
   let overriddenURL = new URL(publishedRealmURL);
   overriddenURL.host = overrideDomain;
 

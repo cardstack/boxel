@@ -25,9 +25,7 @@ import { not } from '@cardstack/boxel-ui/helpers';
 import { IconX, Warning as WarningIcon } from '@cardstack/boxel-ui/icons';
 
 import { ensureTrailingSlash } from '@cardstack/runtime-common';
-import {
-  PUBLISHED_REALM_DOMAIN_OVERRIDES,
-} from '@cardstack/runtime-common/constants';
+import { PUBLISHED_REALM_DOMAIN_OVERRIDES } from '@cardstack/runtime-common/constants';
 
 import ModalContainer from '@cardstack/host/components/modal-container';
 import PrivateDependencyViolationComponent from '@cardstack/host/components/operator-mode/private-dependency-violation';
@@ -231,19 +229,14 @@ export default class PublishRealmModal extends Component<Signature> {
     publishedRealmURL: string | null,
   ): string | null {
     let overrideDomain =
-      PUBLISHED_REALM_DOMAIN_OVERRIDES[ensureTrailingSlash(this.currentRealmURL)];
+      PUBLISHED_REALM_DOMAIN_OVERRIDES[
+        ensureTrailingSlash(this.currentRealmURL)
+      ];
     if (!overrideDomain) {
       return null;
     }
 
     if (!publishedRealmURL) {
-      return null;
-    }
-
-    let publishedURL: URL;
-    try {
-      publishedURL = new URL(publishedRealmURL);
-    } catch {
       return null;
     }
 
