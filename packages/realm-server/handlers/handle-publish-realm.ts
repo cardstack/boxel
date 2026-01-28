@@ -11,12 +11,12 @@ import {
   asExpressions,
   param,
   PUBLISHED_DIRECTORY_NAME,
-  PUBLISHED_REALM_DOMAIN_OVERRIDES,
   type DBAdapter,
   type PublishedRealmTable,
   fetchRealmPermissions,
   uuidv4,
 } from '@cardstack/runtime-common';
+import { getPublishedRealmDomainOverrides } from '@cardstack/runtime-common/constants';
 import { ensureDirSync, copySync, readJsonSync, writeJsonSync } from 'fs-extra';
 import { resolve, join } from 'path';
 import {
@@ -34,6 +34,10 @@ import { registerUser } from '../synapse';
 import { passwordFromSeed } from '@cardstack/runtime-common/matrix-client';
 
 const log = logger('handle-publish');
+
+const PUBLISHED_REALM_DOMAIN_OVERRIDES = getPublishedRealmDomainOverrides(
+  process.env.PUBLISHED_REALM_DOMAIN_OVERRIDES,
+);
 
 async function maybeOverridePublishedRealmURL(
   dbAdapter: DBAdapter,

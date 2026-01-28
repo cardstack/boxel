@@ -98,4 +98,40 @@ export const PUBLISHED_REALM_DOMAIN_OVERRIDES: Record<string, string> = {
   'https://app.boxel.ai/official/boxel-whitepaper/': 'whitepaper.boxel.ai',
 };
 
+export function parsePublishedRealmDomainOverrides(
+  rawOverrides: string | undefined,
+): Record<string, string> {
+  if (!rawOverrides) {
+    return {};
+  }
+
+  try {
+    let parsed = JSON.parse(rawOverrides);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return {};
+    }
+
+    return Object.fromEntries(
+      Object.entries(parsed).filter(
+        ([key, value]) => typeof key === 'string' && typeof value === 'string',
+      ),
+    );
+  } catch {
+    return {};
+  }
+}
+
+export function getPublishedRealmDomainOverrides(
+  rawOverrides?: string | Record<string, string>,
+): Record<string, string> {
+  let envOverrides =
+    typeof rawOverrides === 'string'
+      ? parsePublishedRealmDomainOverrides(rawOverrides)
+      : rawOverrides ?? {};
+  return {
+    ...PUBLISHED_REALM_DOMAIN_OVERRIDES,
+    ...envOverrides,
+  };
+}
+
 export const PUBLISHED_DIRECTORY_NAME = '_published';
