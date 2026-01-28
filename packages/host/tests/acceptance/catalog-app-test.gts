@@ -1511,9 +1511,9 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
         .exists('Listing card dropdown renders menu items');
       assert
         .dom(
-          `[data-test-boxel-dropdown-content] [data-test-boxel-menu-item-text="Generate example with AI"]`,
+          `[data-test-boxel-dropdown-content] [data-test-boxel-menu-item-text="Generate Example with AI"]`,
         )
-        .exists('Generate example with AI action is present');
+        .exists('Generate Example with AI action is present');
     });
 
     test('after clicking "Remix" button, current realm (particularly catalog realm) is never displayed in realm options', async function (assert) {

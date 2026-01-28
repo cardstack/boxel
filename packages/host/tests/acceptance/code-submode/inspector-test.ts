@@ -2099,8 +2099,8 @@ export class ExportedCard extends ExportedCardParent {
     await waitFor('[data-test-card-module-definition]');
 
     assert
-      .dom('[data-test-action-button="Create listing"]')
-      .exists('exported card defs display a Create listing button');
+      .dom('[data-test-action-button="Create Listing"]')
+      .exists('exported card defs display a Create Listing button');
   });
 
   test('Create listing action is displayed for exported field definition', async function (assert) {
@@ -2116,8 +2116,8 @@ export class ExportedCard extends ExportedCardParent {
     await waitFor('[data-test-card-module-definition]');
 
     assert
-      .dom('[data-test-action-button="Create listing"]')
-      .exists('exported field defs display a Create listing button');
+      .dom('[data-test-action-button="Create Listing"]')
+      .exists('exported field defs display a Create Listing button');
   });
 
   test('Create listing action is not displayed for non-exported Card definition', async function (assert) {
@@ -2133,9 +2133,9 @@ export class ExportedCard extends ExportedCardParent {
     await waitFor('[data-test-card-module-definition]');
 
     assert
-      .dom('[data-test-action-button="Create listing"]')
+      .dom('[data-test-action-button="Create Listing"]')
       .doesNotExist(
-        'non-exported card defs do not display a Create listing button',
+        'non-exported card defs do not display a Create Listing button',
       );
   });
 
@@ -2292,9 +2292,9 @@ export class ExportedCard extends ExportedCardParent {
       await waitFor('[data-test-card-module-definition]');
 
       assert
-        .dom('[data-test-action-button="Create listing"]')
+        .dom('[data-test-action-button="Create Listing"]')
         .doesNotExist(
-          'Create listing button is not displayed when user lacks write permissions',
+          'Create Listing button is not displayed when user lacks write permissions',
         );
     });
   });
