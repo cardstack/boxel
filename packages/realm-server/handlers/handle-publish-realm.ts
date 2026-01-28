@@ -38,18 +38,19 @@ const log = logger('handle-publish');
 async function maybeOverridePublishedRealmURL(
   dbAdapter: DBAdapter,
   ownerUserId: string,
+  sourceRealmURL: string,
   publishedRealmURL: string,
 ): Promise<string> {
+  let overrideDomain =
+    PUBLISHED_REALM_DOMAIN_OVERRIDES[ensureTrailingSlash(sourceRealmURL)];
+  if (!overrideDomain) {
+    return publishedRealmURL;
+  }
+
   let publishedURL: URL;
   try {
     publishedURL = new URL(publishedRealmURL);
   } catch {
-    return publishedRealmURL;
-  }
-
-  let overrideDomain =
-    PUBLISHED_REALM_DOMAIN_OVERRIDES[publishedURL.host.toLowerCase()];
-  if (!overrideDomain) {
     return publishedRealmURL;
   }
 
@@ -167,6 +168,7 @@ export default function handlePublishRealm({
     let overriddenPublishedRealmURL = await maybeOverridePublishedRealmURL(
       dbAdapter,
       ownerUserId,
+      sourceRealmURL,
       publishedRealmURL,
     );
     let permissions = await fetchRealmPermissions(

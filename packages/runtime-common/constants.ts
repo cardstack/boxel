@@ -89,17 +89,13 @@ export const DEFAULT_PERMISSIONS = Object.freeze([
 // Workaround to override published realm URLs to support custom domains. Remove in CS-9061.
 export const PUBLISHED_REALM_DOMAIN_OVERRIDES: Record<string, string> = {
   // staging
-  'custombuck.staging.boxel.build': 'custombuck.stack.cards',
-  'docs.staging.boxel.build': 'docs.stack.cards',
-  'home.staging.boxel.build': 'home.stack.cards',
-  'whitepaper.staging.boxel.build': 'whitepaper.stack.cards',
+  'https://realms-staging.stack.cards/buck/load-testing/':
+    'custombuck.stack.cards',
 
   // production
-  'custombuck.boxel.site': 'custombuck.boxel.ai',
-  'docs.boxel.site': 'docs.boxel.ai',
-  'home.boxel.site': 'home.boxel.ai',
-  'tealpaper.boxel.site': 'tealpaper.cardstack.com',
-  'whitepaper.boxel.site': 'whitepaper.boxel.ai',
+  'https://app.boxel.ai/bucktest/20251216/': 'custombuck.boxel.ai',
+  'https://app.boxel.ai/official/cardstack-reward/': 'tealpaper.cardstack.com',
+  'https://app.boxel.ai/official/boxel-whitepaper/': 'whitepaper.boxel.ai',
 };
 
 export const PUBLISHED_DIRECTORY_NAME = '_published';

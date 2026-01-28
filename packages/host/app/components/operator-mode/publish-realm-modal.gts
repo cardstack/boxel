@@ -25,7 +25,9 @@ import { not } from '@cardstack/boxel-ui/helpers';
 import { IconX, Warning as WarningIcon } from '@cardstack/boxel-ui/icons';
 
 import { ensureTrailingSlash } from '@cardstack/runtime-common';
-import { PUBLISHED_REALM_DOMAIN_OVERRIDES } from '@cardstack/runtime-common/constants';
+import {
+  PUBLISHED_REALM_DOMAIN_OVERRIDES,
+} from '@cardstack/runtime-common/constants';
 
 import ModalContainer from '@cardstack/host/components/modal-container';
 import PrivateDependencyViolationComponent from '@cardstack/host/components/operator-mode/private-dependency-violation';
@@ -228,6 +230,12 @@ export default class PublishRealmModal extends Component<Signature> {
   private getPublishedRealmOverrideUrl(
     publishedRealmURL: string | null,
   ): string | null {
+    let overrideDomain =
+      PUBLISHED_REALM_DOMAIN_OVERRIDES[ensureTrailingSlash(this.currentRealmURL)];
+    if (!overrideDomain) {
+      return null;
+    }
+
     if (!publishedRealmURL) {
       return null;
     }
@@ -239,19 +247,18 @@ export default class PublishRealmModal extends Component<Signature> {
       return null;
     }
 
-    let overrideDomain =
-      PUBLISHED_REALM_DOMAIN_OVERRIDES[publishedURL.host.toLowerCase()];
-    if (!overrideDomain) {
-      return null;
-    }
-
     let overriddenURL = new URL(publishedRealmURL);
     overriddenURL.host = overrideDomain;
     return ensureTrailingSlash(overriddenURL.toString());
   }
 
   get customSubdomainOverrideUrl() {
-    return this.getPublishedRealmOverrideUrl(this.claimedDomainPublishedUrl);
+    let publishedRealmURL =
+      this.claimedDomainPublishedUrl ??
+      this.buildPublishedRealmUrl(
+        `${this.customSubdomainDisplay}.${this.customSubdomainBase}`,
+      );
+    return this.getPublishedRealmOverrideUrl(publishedRealmURL);
   }
 
   get shouldShowCustomSubdomainOverride() {
