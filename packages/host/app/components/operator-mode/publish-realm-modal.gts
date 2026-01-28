@@ -228,10 +228,9 @@ export default class PublishRealmModal extends Component<Signature> {
   private getPublishedRealmOverrideUrl(
     publishedRealmURL: string | null,
   ): string | null {
-    let overrideDomain =
-      getPublishedRealmDomainOverrides(config.publishedRealmDomainOverrides)[
-        ensureTrailingSlash(this.currentRealmURL)
-      ];
+    let overrideDomain = getPublishedRealmDomainOverrides(
+      config.publishedRealmDomainOverrides,
+    )[ensureTrailingSlash(this.currentRealmURL)];
     if (!overrideDomain) {
       return null;
     }
