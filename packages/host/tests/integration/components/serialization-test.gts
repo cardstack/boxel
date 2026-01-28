@@ -1456,6 +1456,10 @@ module('Integration | serialization', function (hooks) {
             links: {
               self: `${testRealmURL}Pet/mango`,
             },
+            data: {
+              type: 'card',
+              id: `${testRealmURL}Pet/mango`,
+            },
           },
         },
         meta: {
@@ -1501,6 +1505,10 @@ module('Integration | serialization', function (hooks) {
           pet: {
             links: {
               self: `${testRealmURL}Pet/mango`,
+            },
+            data: {
+              type: 'card',
+              id: `${testRealmURL}Pet/mango`,
             },
           },
         },
@@ -7209,7 +7217,13 @@ module('Integration | serialization', function (hooks) {
           type: 'card',
           attributes: { firstName: 'Burcu' },
           relationships: {
-            friend: { links: { self: `${testRealmURL}Friend/hassan` } },
+            friend: {
+              links: { self: `${testRealmURL}Friend/hassan` },
+              data: {
+                type: 'card',
+                id: `${testRealmURL}Friend/hassan`,
+              },
+            },
             'ownPets.0': {
               links: { self: `${testRealmURL}Pet/mango` },
               data: {
@@ -7278,7 +7292,10 @@ module('Integration | serialization', function (hooks) {
         includeComputeds: true,
       });
       assert.deepEqual(serialized.data.relationships, {
-        friend: { links: { self: `${testRealmURL}Friend/hassan` } },
+        friend: {
+          links: { self: `${testRealmURL}Friend/hassan` },
+          data: { type: 'card', id: `${testRealmURL}Friend/hassan` },
+        },
         friendPets: { links: { self: null } },
         'ownPets.0': {
           links: { self: `${testRealmURL}Pet/mango` },

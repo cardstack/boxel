@@ -90,7 +90,7 @@ let { data: matching } = await indexer.search({
       name: 'Post',
     },
     every: [
-      { eq: { title: 'Card 1' } },
+      { eq: { cardTitle: 'Card 1' } },
       { not: { eq: { 'author.firstName': 'Cardy' } } },
     ],
   },

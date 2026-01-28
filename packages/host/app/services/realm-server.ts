@@ -663,6 +663,123 @@ export default class RealmServerService extends Service {
     return response;
   }
 
+  async registerBot(username: string) {
+    await this.login();
+
+    let response = await this.network.fetch(
+      `${this.url.href}_bot-registration`,
+      {
+        method: 'POST',
+        headers: {
+          Accept: SupportedMimeType.JSONAPI,
+          'Content-Type': 'application/vnd.api+json',
+          Authorization: `Bearer ${this.token}`,
+        },
+        body: JSON.stringify({
+          data: {
+            type: 'bot-registration',
+            attributes: {
+              username,
+            },
+          },
+        }),
+      },
+    );
+
+    if (!response.ok) {
+      let err = `Could not register bot: ${response.status} - ${await response.text()}`;
+      console.error(err);
+      throw new Error(err);
+    }
+
+    let body = (await response.json()) as {
+      data: {
+        id: string;
+        attributes: {
+          username: string;
+          createdAt: string;
+        };
+      };
+    };
+
+    return {
+      botRegistrationId: body.data.id,
+    };
+  }
+
+  async unregisterBot(botRegistrationId: string) {
+    await this.login();
+
+    if (!botRegistrationId) {
+      throw new Error('botRegistrationId is required');
+    }
+
+    let response = await this.network.fetch(
+      `${this.url.href}_bot-registration`,
+      {
+        method: 'DELETE',
+        headers: {
+          Accept: SupportedMimeType.JSONAPI,
+          'Content-Type': 'application/vnd.api+json',
+          Authorization: `Bearer ${this.token}`,
+        },
+        body: JSON.stringify({
+          data: {
+            type: 'bot-registration',
+            id: botRegistrationId,
+          },
+        }),
+      },
+    );
+
+    if (!response.ok) {
+      let err = `Could not unregister bot: ${response.status} - ${await response.text()}`;
+      console.error(err);
+      throw new Error(err);
+    }
+
+    return;
+  }
+
+  async getBotRegistrations() {
+    await this.login();
+
+    let response = await this.network.fetch(
+      `${this.url.href}_bot-registrations`,
+      {
+        method: 'GET',
+        headers: {
+          Accept: SupportedMimeType.JSONAPI,
+          Authorization: `Bearer ${this.token}`,
+        },
+      },
+    );
+
+    if (!response.ok) {
+      let err = `Could not fetch bot registrations: ${response.status} - ${await response.text()}`;
+      console.error(err);
+      throw new Error(err);
+    }
+
+    let body = (await response.json()) as {
+      data: Array<{
+        id: string;
+        attributes: {
+          username: string;
+          createdAt: string;
+        };
+      }>;
+    };
+
+    let registrations = body.data.map((entry) => ({
+      botRegistrationId: entry.id,
+      username: entry.attributes.username,
+      createdAt: entry.attributes.createdAt,
+    }));
+
+    return registrations;
+  }
+
   async publishRealm(sourceRealmURL: string, publishedRealmURL: string) {
     await this.login();
 

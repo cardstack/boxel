@@ -1,0 +1,37 @@
+name: Manual Deploy [bot-runner]
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Deployment environment
+        required: false
+        default: staging
+
+permissions:
+  contents: read
+  deployments: write
+  id-token: write
+
+jobs:
+  build-bot-runner:
+    name: Build bot-runner Docker image
+    uses: cardstack/gh-actions/.github/workflows/docker-ecr.yml@main
+    secrets: inherit
+    with:
+      repository: "boxel-bot-runner-${{ inputs.environment }}"
+      environment: ${{ inputs.environment }}
+      dockerfile: "packages/bot-runner/Dockerfile"
+
+  deploy-bot-runner:
+    needs: [build-bot-runner]
+    name: Deploy bot-runner to AWS ECS
+    uses: cardstack/gh-actions/.github/workflows/ecs-deploy.yml@main
+    secrets: inherit
+    with:
+      container-name: "boxel-bot-runner"
+      environment: ${{ inputs.environment }}
+      cluster: ${{ inputs.environment }}
+      service-name: "boxel-bot-runner-${{ inputs.environment }}"
+      image: ${{ needs.build-bot-runner.outputs.image }}
+      wait-for-service-stability: false

@@ -19,15 +19,10 @@ import StringField from 'https://cardstack.com/base/string';
 import { not } from '@cardstack/boxel-ui/helpers';
 
 import { Post, EventPost, ReminderPost } from './post';
-import { PostComposer } from '../components/post-composer';
+import { PostComposer, PostType } from '../components/post-composer';
 import { CardList } from '../components/card-list';
 import { Author } from './author';
 import ProfileEditButton from './components/profile-edit-button';
-
-export interface PostType {
-  value: string;
-  label: string;
-}
 
 export const POST_TYPES: PostType[] = [
   { value: 'post', label: 'Default' },

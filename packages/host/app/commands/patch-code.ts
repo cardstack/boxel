@@ -8,6 +8,8 @@ import HostBaseCommand from '../lib/host-base-command';
 import { parseSearchReplace } from '../lib/search-replace-block-parsing';
 import { isReady } from '../resources/file';
 
+import { findNonConflictingFilename } from '../utils/file-name';
+
 import ApplySearchReplaceBlockCommand from './apply-search-replace-block';
 import LintAndFixCommand from './lint-and-fix';
 
@@ -57,10 +59,12 @@ export default class PatchCodeCommand extends HostBaseCommand<
       codeBlocks,
     );
     let finalFileUrl = fileUrl;
+    let lintIssues: string[] = [];
     if (results.some((r) => r.status === 'applied')) {
-      if (patchedCode.trim() !== '') {
+      if (patchedCode.trim() !== '' && this.isLintableFile(fileUrl)) {
         let lintResult = await this.lintAndFix(fileUrl, patchedCode);
         patchedCode = lintResult.output;
+        lintIssues = lintResult.lintIssues ?? [];
       }
 
       finalFileUrl = await this.determineFinalFileUrl(
@@ -98,6 +102,7 @@ export default class PatchCodeCommand extends HostBaseCommand<
     return new PatchCodeCommandResult({
       patchedContent: patchedCode,
       finalFileUrl,
+      lintIssues,
       results: results.map((result) => {
         return new PatchCodeResultField({
           status: result.status,
@@ -209,6 +214,14 @@ export default class PatchCodeCommand extends HostBaseCommand<
     });
   }
 
+  private isLintableFile(fileUrl: string): boolean {
+    try {
+      return /\.(gts|ts)$/.test(new URL(fileUrl).pathname);
+    } catch {
+      return /\.(gts|ts)$/.test(fileUrl);
+    }
+  }
+
   private async determineFinalFileUrl(
     originalUrl: string,
     fileInfo: FileInfo,
@@ -218,34 +231,9 @@ export default class PatchCodeCommand extends HostBaseCommand<
       return originalUrl;
     }
 
-    return await this.findNonConflictingFilename(originalUrl);
-  }
-
-  private async findNonConflictingFilename(fileUrl: string): Promise<string> {
-    let MAX_ATTEMPTS = 100;
-    let { baseName, extension } = this.parseFilename(fileUrl);
-
-    for (let counter = 1; counter < MAX_ATTEMPTS; counter++) {
-      let candidateUrl = `${baseName}-${counter}${extension}`;
-      let exists = await this.fileExists(candidateUrl);
-
-      if (!exists) {
-        return candidateUrl;
-      }
-    }
-
-    return `${baseName}-${MAX_ATTEMPTS}${extension}`;
-  }
-
-  private parseFilename(fileUrl: string): {
-    baseName: string;
-    extension: string;
-  } {
-    let extensionMatch = fileUrl.match(/\.([^.]+)$/);
-    let extension = extensionMatch?.[0] || '';
-    let baseName = fileUrl.replace(/\.([^.]+)$/, '');
-
-    return { baseName, extension };
+    return await findNonConflictingFilename(originalUrl, (candidateUrl) =>
+      this.fileExists(candidateUrl),
+    );
   }
 
   private async fileExists(fileUrl: string): Promise<boolean> {

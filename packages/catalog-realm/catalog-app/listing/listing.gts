@@ -596,7 +596,7 @@ export class Listing extends CardDef {
       return undefined;
     }
     return {
-      label: 'Generate example with AI',
+      label: 'Generate Example with AI',
       action: async () => {
         const command = new ListingGenerateExampleCommand(
           params.commandContext,

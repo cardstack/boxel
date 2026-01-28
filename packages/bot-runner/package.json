@@ -1,0 +1,26 @@
+{
+  "name": "@cardstack/bot-runner",
+  "dependencies": {
+    "@cardstack/postgres": "workspace:*",
+    "@cardstack/runtime-common": "workspace:*",
+    "@sentry/node": "catalog:",
+    "matrix-js-sdk": "catalog:",
+    "ts-node": "^10.9.2",
+    "typescript": "catalog:"
+  },
+  "devDependencies": {
+    "@cardstack/local-types": "workspace:*",
+    "@types/node": "catalog:",
+    "@types/qunit": "catalog:",
+    "qunit": "catalog:"
+  },
+  "scripts": {
+    "start": "NODE_NO_WARNINGS=1 ts-node --transpileOnly main",
+    "start:development": "NODE_NO_WARNINGS=1 PGDATABASE=boxel PGPORT=5435 ts-node --transpileOnly main",
+    "test": "NODE_NO_WARNINGS=1 qunit --require ts-node/register/transpile-only tests/index.ts",
+    "lint": "glint"
+  },
+  "volta": {
+    "extends": "../../package.json"
+  }
+}

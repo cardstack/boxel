@@ -314,7 +314,7 @@ class Isolated extends Component<typeof Catalog> {
       return;
     }
     return {
-      any: [{ contains: { title: this.searchValue } }],
+      any: [{ contains: { cardTitle: this.searchValue } }],
     };
   }
 

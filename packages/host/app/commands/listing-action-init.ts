@@ -58,7 +58,7 @@ export default class ListingActionInitCommand extends HostBaseCommand<
         roomName = `Install of ${listing.name}`;
         break;
       case 'create':
-        roomName = `Create listing`;
+        roomName = `Create Listing`;
         break;
       default:
         throw new Error(`Invalid listing action type: ${actionType}`);

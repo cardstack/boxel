@@ -191,7 +191,7 @@ export function isFileMetaResource(
   if ('id' in resource && typeof resource.id !== 'string') {
     return false;
   }
-  if ('type' in resource && resource.type !== FileMetaResourceType) {
+  if (!('type' in resource) || resource.type !== FileMetaResourceType) {
     return false;
   }
   if ('attributes' in resource && typeof resource.attributes !== 'object') {

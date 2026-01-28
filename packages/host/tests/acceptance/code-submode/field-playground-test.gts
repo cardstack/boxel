@@ -1036,7 +1036,7 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
 
     test('can request AI assistant to fill in sample data', async function (assert) {
       const prompt = `Fill in sample data for this example on the card's spec.`;
-      const menuItem = 'Fill in sample data with AI';
+      const menuItem = 'Fill in Sample Data with AI';
       const commandMessage = {
         from: 'testuser',
         message: prompt,

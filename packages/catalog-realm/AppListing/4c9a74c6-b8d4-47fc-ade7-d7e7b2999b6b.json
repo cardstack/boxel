@@ -16,8 +16,8 @@
       ],
       "summary": "A comprehensive e-commerce management system that provides everything needed to run an online store. Features include real-time dashboard metrics, product catalog management with inventory tracking, order processing and status management, customer relationship management with loyalty tiers, and customizable branding options. \n\nThe interface offers tabbed navigation between Products, Orders, and Customers sections, with responsive design that adapts from compact views to full dashboard layouts. \n\nPerfect for small to medium businesses looking to manage their online retail operations efficiently.",
       "cardInfo": {
-        "notes": null,
         "name": null,
+        "notes": null,
         "summary": null,
         "cardThumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/online-store-listing/thumbnail.png"
       }
@@ -58,6 +58,11 @@
           "self": "../Spec/3a7a139d-cc13-4a07-80f4-b8aa264f8eba"
         }
       },
+      "specs.4": {
+        "links": {
+          "self": "../Spec/contact-link"
+        }
+      },
       "publisher": {
         "links": {
           "self": "../Publisher/9d3ca05b-684b-408f-8d8c-dd353d9956e0"
@@ -66,6 +71,76 @@
       "examples.0": {
         "links": {
           "self": "../online-store/OnlineStore/stellar-vintage-books"
+        }
+      },
+      "examples.1": {
+        "links": {
+          "self": "../online-customer/OnlineCustomer/elena-vasquez"
+        }
+      },
+      "examples.2": {
+        "links": {
+          "self": "../online-customer/OnlineCustomer/james-mitchell-brown"
+        }
+      },
+      "examples.3": {
+        "links": {
+          "self": "../online-customer/OnlineCustomer/zara-ahmed"
+        }
+      },
+      "examples.4": {
+        "links": {
+          "self": "../online-order/OnlineOrder/order-ast-2024-001"
+        }
+      },
+      "examples.5": {
+        "links": {
+          "self": "../online-order/OnlineOrder/order-ast-2024-002"
+        }
+      },
+      "examples.6": {
+        "links": {
+          "self": "../online-order/OnlineOrder/order-ast-2024-003"
+        }
+      },
+      "examples.7": {
+        "links": {
+          "self": "../online-product/OnlineProduct/bluetooth-speaker-mini"
+        }
+      },
+      "examples.8": {
+        "links": {
+          "self": "../online-product/OnlineProduct/canvas-backpack-travel"
+        }
+      },
+      "examples.9": {
+        "links": {
+          "self": "../online-product/OnlineProduct/ceramic-coffee-mug-set"
+        }
+      },
+      "examples.10": {
+        "links": {
+          "self": "../online-product/OnlineProduct/eco-water-bottle"
+        }
+      },
+      "examples.11": {
+        "links": {
+          "self": "../online-product/OnlineProduct/gaming-keyboard"
+        }
+      },
+      "examples.12": {
+        "links": {
+          "self": "../online-product/OnlineProduct/organic-cotton-tshirt"
+        }
+      },
+      "examples.13": {
+        "links": {
+          "self": "../online-product/OnlineProduct/professional-laptop-stand"
+        }
+      },
+      "examples.14": {
+        "links": {
+          "self": "../online-product/OnlineProduct/smart-fitness-tracker"
         }
       },
       "categories.0": {

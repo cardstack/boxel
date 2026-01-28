@@ -123,4 +123,110 @@ module('Integration | commands | switch-submode', function (hooks) {
       'Workspace chooser should be closed after switching submode',
     );
   });
+
+  test('createFile creates a blank file when it does not exist', async function (assert) {
+    assert.expect(5);
+
+    let commandService = getService('command-service');
+    let cardService = getService('card-service');
+    let operatorModeStateService = getService('operator-mode-state-service');
+    operatorModeStateService.restore({
+      stacks: [[]],
+      submode: 'interact',
+    });
+    let switchSubmodeCommand = new SwitchSubmodeCommand(
+      commandService.commandContext,
+    );
+    let fileUrl = `${testRealmURL}new-file.gts`;
+
+    let result = await switchSubmodeCommand.execute({
+      submode: 'code',
+      codePath: fileUrl,
+      createFile: true,
+    });
+
+    assert.strictEqual(operatorModeStateService.state?.submode, 'code');
+    assert.strictEqual(operatorModeStateService.state?.codePath?.href, fileUrl);
+    assert.notOk(result, 'no result card when using requested path');
+
+    let { status, content } = await cardService.getSource(new URL(fileUrl));
+    assert.strictEqual(status, 200);
+    assert.strictEqual(content, '');
+  });
+
+  test('createFile picks a non-conflicting filename when the target exists', async function (assert) {
+    assert.expect(5);
+
+    let commandService = getService('command-service');
+    let cardService = getService('card-service');
+    let operatorModeStateService = getService('operator-mode-state-service');
+    operatorModeStateService.restore({
+      stacks: [[]],
+      submode: 'interact',
+    });
+    let switchSubmodeCommand = new SwitchSubmodeCommand(
+      commandService.commandContext,
+    );
+    let fileUrl = `${testRealmURL}existing-file.gts`;
+    let newFileUrl = `${testRealmURL}existing-file-1.gts`;
+
+    await cardService.saveSource(
+      new URL(fileUrl),
+      'existing content',
+      'create-file',
+    );
+
+    let result = await switchSubmodeCommand.execute({
+      submode: 'code',
+      codePath: fileUrl,
+      createFile: true,
+    });
+
+    assert.ok(result, 'returns a result card with the new filename');
+    assert.strictEqual(result?.codePath, newFileUrl);
+    assert.strictEqual(
+      operatorModeStateService.state?.codePath?.href,
+      newFileUrl,
+    );
+
+    let { status, content } = await cardService.getSource(new URL(newFileUrl));
+    assert.strictEqual(status, 200);
+    assert.strictEqual(content, '');
+  });
+
+  test('createFile reuses an existing blank file', async function (assert) {
+    assert.expect(5);
+
+    let commandService = getService('command-service');
+    let cardService = getService('card-service');
+    let operatorModeStateService = getService('operator-mode-state-service');
+    operatorModeStateService.restore({
+      stacks: [[]],
+      submode: 'interact',
+    });
+    let switchSubmodeCommand = new SwitchSubmodeCommand(
+      commandService.commandContext,
+    );
+    let fileUrl = `${testRealmURL}empty-file.gts`;
+
+    await cardService.saveSource(new URL(fileUrl), '', 'create-file');
+
+    let result = await switchSubmodeCommand.execute({
+      submode: 'code',
+      codePath: fileUrl,
+      createFile: true,
+    });
+
+    assert.strictEqual(operatorModeStateService.state?.codePath?.href, fileUrl);
+    assert.notOk(result, 'no result card when using existing blank file');
+
+    let { status, content } = await cardService.getSource(new URL(fileUrl));
+    assert.strictEqual(status, 200);
+    assert.strictEqual(content, '');
+
+    let nonConflicting = await cardService.getSource(
+      new URL(`${testRealmURL}empty-file-1.gts`),
+    );
+    assert.strictEqual(nonConflicting.status, 404);
+  });
 });

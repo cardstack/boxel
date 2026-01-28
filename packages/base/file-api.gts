@@ -24,6 +24,7 @@ import OpenInInteractModeCommand from '@cardstack/boxel-host/commands/open-in-in
 import Eye from '@cardstack/boxel-icons/eye';
 import SwitchSubmodeCommand from '@cardstack/boxel-host/commands/switch-submode';
 import CodeIcon from '@cardstack/boxel-icons/code';
+import { isSavedInstance } from './-private';
 
 class View extends Component<typeof FileDef> {
   <template>
@@ -71,6 +72,7 @@ export class FileDef extends BaseDef {
   static displayName = 'File';
   static isFileDef = true;
   static icon = FileIcon;
+  [isSavedInstance] = true;
 
   static assignInitialFieldValue(
     instance: BaseDef,

@@ -1511,9 +1511,9 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
         .exists('Listing card dropdown renders menu items');
       assert
         .dom(
-          `[data-test-boxel-dropdown-content] [data-test-boxel-menu-item-text="Generate example with AI"]`,
+          `[data-test-boxel-dropdown-content] [data-test-boxel-menu-item-text="Generate Example with AI"]`,
         )
-        .exists('Generate example with AI action is present');
+        .exists('Generate Example with AI action is present');
     });
 
     test('after clicking "Remix" button, current realm (particularly catalog realm) is never displayed in realm options', async function (assert) {
@@ -1831,15 +1831,9 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
                   } else {
                     content = 'card';
                   }
-                } else if (
-                  systemLower.includes('concise human-friendly title')
-                ) {
+                } else if (systemLower.includes('catalog listing title')) {
                   content = 'Mock Listing Title';
-                } else if (
-                  systemLower.includes(
-                    'one or two sentence concise readme-style summary',
-                  )
-                ) {
+                } else if (systemLower.includes('spec-style summary')) {
                   content = 'Mock listing summary sentence.';
                 } else if (
                   systemLower.includes("boxel's sample data assistant")
@@ -1907,6 +1901,11 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
         const command = new ListingCreateCommand(commandService.commandContext);
         const result = await command.execute({
           openCardId: cardId,
+          codeRef: {
+            module: `${mockCatalogURL}author/author.gts`,
+            name: 'Author',
+          },
+          targetRealm: mockCatalogURL,
         });
         const interim = result?.listing as any;
         assert.ok(interim, 'Interim listing exists');
@@ -1987,6 +1986,11 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
         const command = new ListingCreateCommand(commandService.commandContext);
         await command.execute({
           openCardId: cardId,
+          codeRef: {
+            module: `${mockCatalogURL}card-with-unrecognised-imports.gts`,
+            name: 'UnrecognisedImports',
+          },
+          targetRealm: mockCatalogURL,
         });
         await visitOperatorMode({
           submode: 'code',
@@ -2021,6 +2025,10 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
         const command = new ListingCreateCommand(commandService.commandContext);
         const createResult = await command.execute({
           openCardId: cardId,
+          codeRef: {
+            module: `${mockCatalogURL}blog-app/blog-app.gts`,
+            name: 'BlogApp',
+          },
           targetRealm: testDestinationRealmURL,
         });
         // Assert store-level (in-memory) results BEFORE navigating to code mode
@@ -2239,6 +2247,11 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
 
         let r = await command.execute({
           openCardId: cardId,
+          codeRef: {
+            module: `${mockCatalogURL}author/author.gts`,
+            name: 'Author',
+          },
+          targetRealm: mockCatalogURL,
         });
 
         await verifySubmode(assert, 'interact');

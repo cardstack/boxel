@@ -10,8 +10,8 @@
     "attributes": {
       "name": "Personal Finance",
       "cardInfo": {
-        "notes": null,
         "name": null,
+        "notes": null,
         "summary": "Budget planning, investment portfolios, savings goals, financial statements, insurance policies, and retirement planning.",
         "cardThumbnailURL": null
       }

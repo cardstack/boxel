@@ -946,7 +946,7 @@ export class Spec extends CardDef {
       sampleDataItemCount,
       ...[
         {
-          label: 'Fill in sample data with AI',
+          label: 'Fill in Sample Data with AI',
           action: async () => {
             await new PopulateFieldSpecExampleCommand(
               params.commandContext,

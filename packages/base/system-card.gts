@@ -40,7 +40,7 @@ export class SystemCard extends CardDef {
     let menuItems = super[getMenuItems](params);
     menuItems = [
       {
-        label: 'Set as my system card',
+        label: 'Set as My System Card',
         action: async () => {
           await new SetUserSystemCardCommand(params.commandContext).execute({
             cardId: this.id,

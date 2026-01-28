@@ -10,8 +10,8 @@
     "attributes": {
       "name": "Shopping & Consumer",
       "cardInfo": {
-        "notes": null,
         "name": null,
+        "notes": null,
         "summary": "Product research, price comparison, wish lists, purchase tracking, and consumer review management.",
         "cardThumbnailURL": null
       }
