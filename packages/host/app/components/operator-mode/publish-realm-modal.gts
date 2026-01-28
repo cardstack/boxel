@@ -30,6 +30,9 @@ import WithLoadedRealm from '@cardstack/host/components/with-loaded-realm';
 
 import config from '@cardstack/host/config/environment';
 
+import { ensureTrailingSlash } from '@cardstack/runtime-common';
+import { PUBLISHED_REALM_DOMAIN_OVERRIDES } from '@cardstack/runtime-common/constants';
+
 import type HostModeService from '@cardstack/host/services/host-mode-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type RealmService from '@cardstack/host/services/realm';
@@ -219,6 +222,43 @@ export default class PublishRealmModal extends Component<Signature> {
 
   get customSubdomainBase() {
     return config.publishedRealmBoxelSiteDomain;
+  }
+
+  // TODO: Remove with CS-9061 once published realm domain overrides are removed.
+  private getPublishedRealmOverrideUrl(
+    publishedRealmURL: string | null,
+  ): string | null {
+    if (!publishedRealmURL) {
+      return null;
+    }
+
+    let publishedURL: URL;
+    try {
+      publishedURL = new URL(publishedRealmURL);
+    } catch {
+      return null;
+    }
+
+    let overrideDomain =
+      PUBLISHED_REALM_DOMAIN_OVERRIDES[publishedURL.host.toLowerCase()];
+    if (!overrideDomain) {
+      return null;
+    }
+
+    let overriddenURL = new URL(publishedRealmURL);
+    overriddenURL.host = overrideDomain;
+    return ensureTrailingSlash(overriddenURL.toString());
+  }
+
+  get customSubdomainOverrideUrl() {
+    return this.getPublishedRealmOverrideUrl(this.claimedDomainPublishedUrl);
+  }
+
+  get shouldShowCustomSubdomainOverride() {
+    return (
+      !!this.customSubdomainOverrideUrl &&
+      this.realm.canWrite(this.currentRealmURL)
+    );
   }
 
   get customSubdomainDisplay() {
@@ -1027,6 +1067,19 @@ export default class PublishRealmModal extends Component<Signature> {
               </div>
             {{/if}}
           </div>
+
+          {{#if this.shouldShowCustomSubdomainOverride}}
+            <div class='domain-override' data-test-custom-subdomain-override>
+              <div class='domain-override-title'>
+                This site will publish to
+              </div>
+              <div class='domain-override-url'>
+                <span
+                  class='domain-url'
+                >{{this.customSubdomainOverrideUrl}}</span>
+              </div>
+            </div>
+          {{/if}}
         </div>
       </:content>
 
@@ -1157,6 +1210,30 @@ export default class PublishRealmModal extends Component<Signature> {
 
       .domain-option:not(:last-child) {
         border-bottom: 1px solid var(--boxel-200);
+      }
+
+      .domain-override {
+        margin-left: calc(18px + var(--boxel-sp-sm));
+        margin-top: calc(var(--boxel-sp-xs) * -1);
+        padding: var(--boxel-sp-sm);
+        border-radius: var(--boxel-border-radius-lg);
+        background-color: var(--boxel-50);
+        border: 1px dashed var(--boxel-200);
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-xxs);
+      }
+
+      .domain-override-title {
+        font-size: var(--boxel-font-size-xs);
+        color: var(--boxel-450);
+        font-weight: 600;
+      }
+
+      .domain-override-url {
+        font-size: var(--boxel-font-size-sm);
+        color: var(--boxel-dark);
+        word-break: break-word;
       }
 
       .cancel {
