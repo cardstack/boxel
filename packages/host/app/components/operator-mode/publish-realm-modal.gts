@@ -1217,7 +1217,9 @@ export default class PublishRealmModal extends Component<Signature> {
         margin-top: calc(var(--boxel-sp-xs) * -1);
         padding: var(--boxel-sp-sm);
         border-radius: var(--boxel-border-radius-lg);
-        background-color: var(--boxel-50);
+        border: 1px solid var(--boxel-error-200);
+        background-color: rgb(from var(--boxel-error-200) r g b / 8%);
+        color: var(--boxel-error-200);
         border: 1px dashed var(--boxel-200);
         display: flex;
         flex-direction: column;
@@ -1226,13 +1228,11 @@ export default class PublishRealmModal extends Component<Signature> {
 
       .domain-override-title {
         font-size: var(--boxel-font-size-xs);
-        color: var(--boxel-450);
         font-weight: 600;
       }
 
       .domain-override-url {
         font-size: var(--boxel-font-size-sm);
-        color: var(--boxel-dark);
         word-break: break-word;
       }
 
