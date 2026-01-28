@@ -32,16 +32,12 @@ import { CardError, type SerializedError } from './error';
 import {
   isCodeRef,
   isResolvedCodeRef,
-  ResolvedCodeRef,
   visitModuleDeps,
   type CodeRef,
 } from './code-ref';
 import {
-  isCardCollectionDocument,
   isSingleCardDocument,
   type SingleCardDocument,
-  type CardCollectionDocument,
-  type FileMetaCollectionDocument,
   type LinkableCollectionDocument,
   isLinkableCollectionDocument,
 } from './document-types';
@@ -130,64 +126,44 @@ export class RealmIndexQueryEngine {
     return new URL(this.#realm.url);
   }
 
-  async search(
+  async searchCards(
     query: Query,
     opts?: Options,
   ): Promise<LinkableCollectionDocument> {
+    let doc: LinkableCollectionDocument;
+
     if (await this.queryTargetsFileMeta(query.filter, opts)) {
       let { files, meta } = await this.#indexQueryEngine.searchFiles(
         new URL(this.#realm.url),
         query,
         opts,
       );
-      let data = files.map((fileEntry) =>
-        fileResourceFromIndex(new URL(fileEntry.canonicalURL), fileEntry),
-      );
-      let doc: FileMetaCollectionDocument = {
-        data,
+      doc = {
+        data: files.map((fileEntry) =>
+          fileResourceFromIndex(new URL(fileEntry.canonicalURL), fileEntry),
+        ),
         meta,
       };
-
-      let omit = doc.data.map((r) => r.id).filter(Boolean) as string[];
-      if (opts?.loadLinks) {
-        let included: (CardResource<Saved> | FileMetaResource)[] = [];
-        for (let resource of doc.data) {
-          included = await this.loadLinks(
-            {
-              realmURL: this.realmURL,
-              resource,
-              omit,
-              included,
-            },
-            opts,
-          );
-        }
-        if (included.length > 0) {
-          doc.included = included;
-        }
-      }
-      return doc;
+    } else {
+      let { cards, meta } = await this.#indexQueryEngine.searchCards(
+        new URL(this.#realm.url),
+        query,
+        opts,
+      );
+      doc = {
+        data: cards.map((resource) => ({
+          ...resource,
+          ...{ links: { self: resource.id } },
+        })),
+        meta,
+      };
     }
 
-    let doc: CardCollectionDocument;
-    let { cards: data, meta } = await this.#indexQueryEngine.search(
-      new URL(this.#realm.url),
-      query,
-      opts,
-    );
-    doc = {
-      data: data.map((resource) => ({
-        ...resource,
-        ...{ links: { self: resource.id } },
-      })),
-      meta,
-    };
-
-    let omit = doc.data.map((r) => r.id).filter(Boolean) as string[];
     // TODO eventually the links will be cached in the index, and this will only
     // fill in the included resources for links that were not cached (e.g.
     // volatile fields)
     if (opts?.loadLinks) {
+      let omit = doc.data.map((r) => r.id).filter(Boolean) as string[];
       let included: (CardResource<Saved> | FileMetaResource)[] = [];
       for (let resource of doc.data) {
         included = await this.loadLinks(
@@ -386,7 +362,7 @@ export class RealmIndexQueryEngine {
     realmURL: URL;
     opts?: Options;
   }): Promise<{
-    results: CardResource<Saved>[];
+    results: (CardResource<Saved> | FileMetaResource)[];
     errors: QueryFieldErrorDetail[];
     searchURL: string;
   }> {
@@ -409,14 +385,14 @@ export class RealmIndexQueryEngine {
 
     let { query, realm } = normalized;
     let searchURL = buildQuerySearchURL(realm, query);
-    let aggregated: CardResource<Saved>[] = [];
+    let aggregated: (CardResource<Saved> | FileMetaResource)[] = [];
     let seen = new Set<string>();
     let errors: QueryFieldErrorDetail[] = [];
 
-    let realmResults: CardResource<Saved>[] = [];
+    let realmResults: (CardResource<Saved> | FileMetaResource)[] = [];
     if (realm === this.realmURL.href) {
       try {
-        let collection = await this.#indexQueryEngine.search(
+        let collection = await this.#indexQueryEngine.searchCards(
           this.realmURL,
           query,
           opts,
@@ -445,12 +421,12 @@ export class RealmIndexQueryEngine {
       realmResults = remoteResult.cards;
     }
 
-    for (let card of realmResults) {
-      if (!card?.id || seen.has(card.id)) {
+    for (let result of realmResults) {
+      if (!result?.id || seen.has(result.id)) {
         continue;
       }
-      seen.add(card.id);
-      aggregated.push(card);
+      seen.add(result.id);
+      aggregated.push(result);
     }
 
     if (
@@ -486,7 +462,7 @@ export class RealmIndexQueryEngine {
     fieldDefinition: FieldDefinition;
     fieldName: string;
     resource: LooseCardResource | FileMetaResource;
-    results: CardResource<Saved>[];
+    results: (CardResource<Saved> | FileMetaResource)[];
     errors: QueryFieldErrorDetail[];
     searchURL: string;
   }): void {
@@ -574,7 +550,10 @@ export class RealmIndexQueryEngine {
   private async fetchRemoteQueryResults(
     realmHref: string,
     query: Query,
-  ): Promise<{ cards: CardResource<Saved>[]; error?: QueryFieldErrorDetail }> {
+  ): Promise<{
+    cards: (CardResource<Saved> | FileMetaResource)[];
+    error?: QueryFieldErrorDetail;
+  }> {
     try {
       let searchURL = buildQuerySearchURL(realmHref, query);
       let { realm, realms, ...queryWithoutRealm } = query as Query & {

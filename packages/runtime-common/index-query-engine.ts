@@ -527,7 +527,7 @@ export class IndexQueryEngine {
     }
   }
 
-  async search(
+  async searchCards(
     realmURL: URL,
     { filter, sort, page }: Query,
     opts: QueryOptions = {},

@@ -2967,7 +2967,7 @@ export class Realm {
 
   public async search(query: Query): Promise<LinkableCollectionDocument> {
     assertQuery(query);
-    return await this.#realmIndexQueryEngine.search(query, {
+    return await this.#realmIndexQueryEngine.searchCards(query, {
       loadLinks: true,
     });
   }
@@ -3095,23 +3095,20 @@ export class Realm {
   }
 
   public async searchPrerendered(
-    cardsQuery: Query,
+    query: Query,
     opts: {
       htmlFormat: PrerenderedHtmlFormat;
       cardUrls?: string[];
       renderType?: ResolvedCodeRef;
     },
   ): Promise<PrerenderedCardCollectionDocument> {
-    assertQuery(cardsQuery);
-    let results = await this.#realmIndexQueryEngine.searchPrerendered(
-      cardsQuery,
-      {
-        htmlFormat: opts.htmlFormat,
-        cardUrls: opts.cardUrls,
-        renderType: opts.renderType,
-        includeErrors: true,
-      },
-    );
+    assertQuery(query);
+    let results = await this.#realmIndexQueryEngine.searchPrerendered(query, {
+      htmlFormat: opts.htmlFormat,
+      cardUrls: opts.cardUrls,
+      renderType: opts.renderType,
+      includeErrors: true,
+    });
 
     return transformResultsToPrerenderedCardsDoc(results);
   }
@@ -3124,7 +3121,7 @@ export class Realm {
     let htmlFormat: string | undefined;
     let cardUrls: string[] | string | undefined;
     let renderType: CodeRef | undefined;
-    let cardsQuery: unknown;
+    let query: unknown;
 
     if (request.method !== 'QUERY') {
       return createResponse({
@@ -3172,7 +3169,7 @@ export class Realm {
     delete payload.prerenderedHtmlFormat;
     delete payload.cardUrls;
     delete payload.renderType;
-    cardsQuery = payload;
+    query = payload;
 
     if (!isValidPrerenderedHtmlFormat(htmlFormat)) {
       return createResponse({
@@ -3222,7 +3219,7 @@ export class Realm {
       : undefined;
 
     try {
-      assertQuery(cardsQuery);
+      assertQuery(query);
     } catch (e) {
       if (e instanceof InvalidQueryError) {
         return createResponse({
@@ -3245,7 +3242,7 @@ export class Realm {
       throw e;
     }
 
-    let doc = await this.searchPrerendered(cardsQuery as Query, {
+    let doc = await this.searchPrerendered(query as Query, {
       htmlFormat,
       cardUrls: normalizedCardUrls,
       renderType: normalizedRenderType,
