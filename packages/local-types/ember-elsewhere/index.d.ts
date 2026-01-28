@@ -1,3 +1,16 @@
+declare module 'ember-elsewhere/components/from-elsewhere' {
+  import Component from '@glimmer/component';
+
+  type Signature = {
+    Args: {
+      name: string;
+    };
+    Element: HTMLDivElement;
+  };
+
+  export default class FromElsewhere extends Component<Signature> {}
+}
+
 declare module 'ember-elsewhere/components/to-elsewhere' {
   import Component from '@glimmer/component';
   import { ComponentLike } from '@glint/template';

@@ -28,7 +28,8 @@ import type EmberContextTemplateRegistry from 'ember-provide-consume-context/tem
 
 declare module '@glint/environment-ember-loose/registry' {
   export default interface Registry
-    extends EmberContextTemplateRegistry,
+    extends
+      EmberContextTemplateRegistry,
       EmberAnimatedRegistry /* other addon registries */ {
     // local entries
   }
@@ -51,4 +52,5 @@ declare module '@ember/component' {
 // incorporate
 import '../../runtime-common/global';
 
+import './ember-elsewhere';
 import './matrix-js-sdk';
