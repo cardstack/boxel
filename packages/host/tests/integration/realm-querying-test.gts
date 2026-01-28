@@ -581,6 +581,20 @@ module(`Integration | realm querying`, function (hooks) {
         ...sampleCards,
         'files/sample.txt': 'Hello world',
         'files/sample.md': 'Hello markdown',
+        'file-query-card-instance.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              nameFilter: '',
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testModuleRealm}file-query-card`,
+                name: 'FileQueryCard',
+              },
+            },
+          },
+        },
       },
     });
     queryEngine = realm.realmIndexQueryEngine;
@@ -1136,6 +1150,7 @@ module(`Integration | realm querying`, function (hooks) {
         `${paths.url}vangogh`, // dog
         `${paths.url}event-1`, // event
         `${paths.url}event-2`, // event
+        `${paths.url}file-query-card-instance`, // file query card
         `${paths.url}friend1`, // friend
         `${paths.url}friend2`, // friend
         `${paths.url}empty`, // friends
@@ -1346,13 +1361,14 @@ module(`Integration | realm querying`, function (hooks) {
         contains: { cardTitle: 'ca' },
       },
     });
-    assert.strictEqual(matching.length, 5);
+    assert.strictEqual(matching.length, 6);
     assert.deepEqual(
       matching.map((m) => m.id),
       [
         `${paths.url}card-1`,
         `${paths.url}cards/1`,
         `${paths.url}cards/2`,
+        `${paths.url}file-query-card-instance`,
         `${paths.url}person-card1`,
         `${paths.url}person-card2`,
       ],
@@ -1393,5 +1409,59 @@ module(`Integration | realm querying`, function (hooks) {
       },
     });
     assert.strictEqual(matching.length, 3);
+  });
+
+  test('query field with linksToMany(FileDef) populates file-meta relationships', async function (assert) {
+    let result = await queryEngine.cardDocument(
+      new URL(`${testRealmURL}file-query-card-instance`),
+      { loadLinks: true },
+    );
+    assert.strictEqual(result?.type, 'doc', 'result is a doc');
+
+    let { data } = (result as { type: 'doc'; doc: { data: any } }).doc;
+    let relationships = data.relationships ?? {};
+
+    // The query field should have a top-level matchingFiles relationship with data array
+    let matchingFiles = relationships['matchingFiles'] as {
+      links?: Record<string, string | null>;
+      data?: { type: string; id: string }[];
+    };
+    assert.ok(matchingFiles, 'matchingFiles relationship exists');
+    assert.ok(
+      Array.isArray(matchingFiles?.data),
+      'matchingFiles has a data array',
+    );
+    assert.ok(
+      (matchingFiles?.data?.length ?? 0) >= 2,
+      'matchingFiles contains at least 2 file results',
+    );
+
+    // Each entry in the data array should have type 'file-meta'
+    for (let entry of matchingFiles?.data ?? []) {
+      assert.strictEqual(
+        entry.type,
+        'file-meta',
+        `relationship data entry ${entry.id} has type file-meta`,
+      );
+    }
+
+    // Individual indexed relationships should also have type 'file-meta'
+    let indexedKeys = Object.keys(relationships).filter((k) =>
+      k.startsWith('matchingFiles.'),
+    );
+    assert.ok(
+      indexedKeys.length >= 2,
+      'individual file relationships are present',
+    );
+    for (let key of indexedKeys) {
+      let rel = relationships[key] as {
+        data?: { type: string; id: string };
+      };
+      assert.strictEqual(
+        rel?.data?.type,
+        'file-meta',
+        `${key} relationship data has type file-meta`,
+      );
+    }
   });
 });

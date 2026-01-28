@@ -392,12 +392,28 @@ export class RealmIndexQueryEngine {
     let realmResults: (CardResource<Saved> | FileMetaResource)[] = [];
     if (realm === this.realmURL.href) {
       try {
-        let collection = await this.#indexQueryEngine.searchCards(
-          this.realmURL,
-          query,
-          opts,
-        );
-        realmResults = Array.isArray(collection.cards) ? collection.cards : [];
+        if (await this.queryTargetsFileMeta(query.filter, opts)) {
+          let { files } = await this.#indexQueryEngine.searchFiles(
+            this.realmURL,
+            query,
+            opts,
+          );
+          realmResults = files.map((fileEntry) =>
+            fileResourceFromIndex(
+              new URL(fileEntry.canonicalURL),
+              fileEntry,
+            ),
+          );
+        } else {
+          let collection = await this.#indexQueryEngine.searchCards(
+            this.realmURL,
+            query,
+            opts,
+          );
+          realmResults = Array.isArray(collection.cards)
+            ? collection.cards
+            : [];
+        }
       } catch (err: unknown) {
         let message =
           err instanceof Error ? err.message : String(err ?? 'unknown error');
@@ -501,7 +517,7 @@ export class RealmIndexQueryEngine {
       if (first && first.id) {
         relationship.links.self = first.id;
         if (searchURL) {
-          relationship.data = { type: 'card', id: first.id };
+          relationship.data = { type: first.type ?? 'card', id: first.id };
         }
       } else {
         relationship.links.self = null;
@@ -527,7 +543,7 @@ export class RealmIndexQueryEngine {
               (card): card is CardResource<Saved> & { id: string } =>
                 typeof card.id === 'string',
             )
-            .map((card) => ({ type: 'card', id: card.id }))
+            .map((card) => ({ type: card.type ?? 'card', id: card.id }))
         : undefined;
 
     resource.relationships[fieldName] = {
@@ -542,7 +558,7 @@ export class RealmIndexQueryEngine {
       }
       resource.relationships![`${fieldName}.${index}`] = {
         links: { self: card.id },
-        data: { type: 'card', id: card.id },
+        data: { type: card.type ?? 'card', id: card.id },
       };
     });
   }

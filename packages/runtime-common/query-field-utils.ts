@@ -234,7 +234,7 @@ export function normalizeQueryDefinition({
   let filter = queryAny.filter as Record<string, any> | undefined;
   if (!filter || Object.keys(filter).length === 0) {
     queryAny.filter = { type: targetRef };
-  } else if (!filter.on) {
+  } else if (!filter.on && !filter.type) {
     filter.on = targetRef;
   }
 

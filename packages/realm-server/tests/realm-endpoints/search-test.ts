@@ -50,7 +50,6 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
       };
     }
 
-
     module('QUERY request (public realm)', function (_hooks) {
       let query = () => buildPersonQuery('Mango');
 

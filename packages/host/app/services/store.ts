@@ -644,7 +644,7 @@ export default class StoreService extends Service implements StoreInterface {
     ).filter(Boolean) as CardDef[];
   }
 
-  getSearchResource<T extends CardDef = CardDef>(
+  getSearchResource<T extends CardDef | FileDef = CardDef>(
     parent: object,
     getQuery: () => Query | undefined,
     getRealms?: () => string[] | undefined,
@@ -742,6 +742,16 @@ export default class StoreService extends Service implements StoreInterface {
       this.newReferencePromises.push(deferred.promise);
       try {
         await this.ready;
+        // Check file-meta map as well as card map — file-meta instances
+        // are loaded into their own map by store.get(id, { type: 'file-meta' })
+        let fileMetaInstance =
+          this.peekError(url, { type: 'file-meta' }) ??
+          this.peek(url, { type: 'file-meta' });
+        if (fileMetaInstance) {
+          // File-meta instances don't need auto-saving or card wiring
+          deferred.fulfill();
+          return;
+        }
         let instanceOrError = this.peekError(url) ?? this.peek(url);
         if (!instanceOrError) {
           instanceOrError = await this.getCardInstance({
