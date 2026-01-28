@@ -82,6 +82,17 @@ module(basename(__filename), function () {
             deps: [],
           };
         },
+        async prerenderFileRender(args) {
+          renderCalls.push({ kind: 'file-render', args });
+          return {
+            isolatedHTML: null,
+            headHTML: null,
+            atomHTML: null,
+            embeddedHTML: null,
+            fittedHTML: null,
+            iconHTML: null,
+          };
+        },
       };
 
       return { prerenderer, renderCalls };

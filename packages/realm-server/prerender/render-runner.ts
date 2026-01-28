@@ -4,6 +4,8 @@ import {
   type RenderResponse,
   type ModuleRenderResponse,
   type FileExtractResponse,
+  type FileRenderResponse,
+  type FileRenderArgs,
   type RenderRouteOptions,
   serializeRenderRouteOptions,
   logger,
@@ -688,8 +690,277 @@ export class RenderRunner {
     }
   }
 
+  async prerenderFileRenderAttempt({
+    realm,
+    url,
+    auth,
+    fileData,
+    types,
+    opts,
+    renderOptions,
+  }: {
+    realm: string;
+    url: string;
+    auth: string;
+    fileData: FileRenderArgs['fileData'];
+    types: string[];
+    opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
+    renderOptions?: RenderRouteOptions;
+  }): Promise<{
+    response: FileRenderResponse;
+    timings: { launchMs: number; renderMs: number };
+    pool: {
+      pageId: string;
+      realm: string;
+      reused: boolean;
+      evicted: boolean;
+      timedOut: boolean;
+    };
+  }> {
+    this.#nonce++;
+    log.info(
+      `file render prerendering url ${url}, nonce=${this.#nonce} realm=${realm}`,
+    );
+
+    const { page, reused, launchMs, pageId, release } =
+      await this.#getPageForRealm(realm, auth);
+    const poolInfo = {
+      pageId: pageId ?? 'unknown',
+      realm,
+      reused,
+      evicted: false,
+      timedOut: false,
+    };
+    this.#pagePool.resetConsoleErrors(pageId);
+    const markTimeout = (err?: RenderError) => {
+      if (!poolInfo.timedOut && err?.error?.title === 'Render timeout') {
+        poolInfo.timedOut = true;
+      }
+    };
+    try {
+      await page.evaluate((sessionAuth) => {
+        localStorage.setItem('boxel-session', sessionAuth);
+      }, auth);
+
+      // Stash file data on globalThis for the render route to consume
+      await page.evaluate((data) => {
+        (globalThis as any).__boxelFileRenderData = data;
+      }, fileData);
+
+      let renderStart = Date.now();
+      let error: RenderError | undefined;
+      let shortCircuit = false;
+      let options: RenderRouteOptions = {
+        ...(renderOptions ?? {}),
+        fileRender: true,
+        fileDefCodeRef: fileData.fileDefCodeRef,
+      };
+      let serializedOptions = serializeRenderRouteOptions(options);
+      let optionsSegment = encodeURIComponent(serializedOptions);
+      const captureOptions: CaptureOptions = {
+        expectedId: url.replace(/\.json$/i, ''),
+        expectedNonce: String(this.#nonce),
+        simulateTimeoutMs: opts?.simulateTimeoutMs,
+      };
+
+      log.debug(
+        `file render: visit ${url} at: ${this.#boxelHostURL}/render/${encodeURIComponent(url)}/${this.#nonce}/${optionsSegment}/html/isolated/0`,
+      );
+
+      // Render isolated HTML first
+      let result = await withTimeout(
+        page,
+        async () => {
+          await transitionTo(
+            page,
+            'render.html',
+            url,
+            String(this.#nonce),
+            serializedOptions,
+            'isolated',
+            '0',
+          );
+          return await captureResult(page, 'innerHTML', captureOptions);
+        },
+        opts?.timeoutMs,
+      );
+      let isolatedHTML: string | null = null;
+      if (isRenderError(result)) {
+        error = result;
+        markTimeout(error);
+        let evicted = await this.#maybeEvict(
+          realm,
+          'file isolated render',
+          result as RenderError,
+        );
+        if (evicted) {
+          poolInfo.evicted = true;
+          shortCircuit = true;
+        }
+        if (this.#isAuthError(error)) {
+          shortCircuit = true;
+        }
+      } else {
+        let capture = result as RenderCapture;
+        if (capture.status === 'ready') {
+          isolatedHTML = capture.value;
+        } else {
+          let capErr = this.#captureToError(capture);
+          if (!error && capErr) {
+            error = capErr;
+          }
+          markTimeout(capErr);
+          let evicted = await this.#maybeEvict(
+            realm,
+            'file isolated render',
+            capErr,
+          );
+          if (evicted) {
+            poolInfo.evicted = true;
+            shortCircuit = true;
+          }
+          if (this.#isAuthError(error)) {
+            shortCircuit = true;
+          }
+        }
+      }
+
+      if (shortCircuit) {
+        let response: FileRenderResponse = {
+          ...(error ? { error } : {}),
+          iconHTML: null,
+          isolatedHTML,
+          headHTML: null,
+          atomHTML: null,
+          embeddedHTML: null,
+          fittedHTML: null,
+        };
+        response.error = this.#mergeConsoleErrors(pageId, response.error);
+        return {
+          response,
+          timings: { launchMs, renderMs: Date.now() - renderStart },
+          pool: poolInfo,
+        };
+      }
+
+      // Render remaining formats (no meta step needed for files)
+      let headHTML: string | null = null,
+        atomHTML: string | null = null,
+        iconHTML: string | null = null,
+        embeddedHTML: Record<string, string> | null = null,
+        fittedHTML: Record<string, string> | null = null;
+
+      if (!shortCircuit) {
+        let headHTMLResult = await this.#step(realm, 'file head render', () =>
+          withTimeout(
+            page,
+            () => renderHTML(page, 'head', 0, captureOptions),
+            opts?.timeoutMs,
+          ),
+        );
+        if (headHTMLResult.ok) {
+          headHTML = headHTMLResult.value as string;
+        } else {
+          error = error ?? headHTMLResult.error;
+          markTimeout(headHTMLResult.error);
+          if (headHTMLResult.evicted) {
+            poolInfo.evicted = true;
+            shortCircuit = true;
+          }
+        }
+      }
+
+      if (!shortCircuit && types.length > 0) {
+        const steps: Array<{
+          name: string;
+          cb: () => Promise<string | Record<string, string> | RenderError>;
+          assign: (value: string | Record<string, string>) => void;
+        }> = [
+          {
+            name: 'file fitted render',
+            cb: () =>
+              renderAncestors(page, 'fitted', types, captureOptions),
+            assign: (v: string | Record<string, string>) => {
+              fittedHTML = v as Record<string, string>;
+            },
+          },
+          {
+            name: 'file embedded render',
+            cb: () =>
+              renderAncestors(page, 'embedded', types, captureOptions),
+            assign: (v: string | Record<string, string>) => {
+              embeddedHTML = v as Record<string, string>;
+            },
+          },
+          {
+            name: 'file atom render',
+            cb: () => renderHTML(page, 'atom', 0, captureOptions),
+            assign: (v: string | Record<string, string>) => {
+              atomHTML = v as string;
+            },
+          },
+          {
+            name: 'file icon render',
+            cb: () => renderIcon(page, captureOptions),
+            assign: (v: string | Record<string, string>) => {
+              iconHTML = v as string;
+            },
+          },
+        ];
+
+        for (let step of steps) {
+          if (shortCircuit) break;
+          let res = await this.#step(realm, step.name, () =>
+            withTimeout(page, step.cb, opts?.timeoutMs),
+          );
+          if (res.ok) {
+            step.assign(res.value);
+          } else {
+            error = error ?? res.error;
+            markTimeout(res.error);
+            if (res.evicted) {
+              poolInfo.evicted = true;
+              shortCircuit = true;
+              break;
+            }
+            if (this.#isAuthError(error)) {
+              shortCircuit = true;
+              break;
+            }
+          }
+        }
+      }
+
+      let response: FileRenderResponse = {
+        ...(error ? { error } : {}),
+        iconHTML,
+        isolatedHTML,
+        headHTML,
+        atomHTML,
+        embeddedHTML,
+        fittedHTML,
+      };
+      response.error = this.#mergeConsoleErrors(pageId, response.error);
+      return {
+        response,
+        timings: { launchMs, renderMs: Date.now() - renderStart },
+        pool: poolInfo,
+      };
+    } finally {
+      // Clean up globalThis data
+      await page
+        .evaluate(() => {
+          delete (globalThis as any).__boxelFileRenderData;
+        })
+        .catch(() => {
+          /* best-effort cleanup */
+        });
+      release();
+    }
+  }
+
   shouldRetryWithClearCache(
-    response: RenderResponse | ModuleRenderResponse | FileExtractResponse,
+    response: RenderResponse | ModuleRenderResponse | FileExtractResponse | FileRenderResponse,
   ): readonly string[] | undefined {
     let renderError = response.error?.error;
     if (!renderError) {

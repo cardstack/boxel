@@ -20,6 +20,7 @@ import {
   type RenderResponse,
   type ModuleRenderResponse,
   type FileExtractResponse,
+  type FileRenderResponse,
   type ResolvedCodeRef,
   type Batch,
   type LooseCardResource,
@@ -967,6 +968,40 @@ export class IndexRunner {
     );
     let fileTypes = extractResult.types ?? fallbackTypes;
 
+    // Phase 2: Render HTML for file entry (non-fatal)
+    let renderResult: FileRenderResponse | undefined;
+    if (extractResult.resource) {
+      try {
+        let renderClearCache = this.#consumeClearCacheForRender();
+        let fileRenderOptions: RenderRouteOptions = {
+          fileRender: true,
+          fileDefCodeRef,
+          ...(renderClearCache ? { clearCache: true as const } : {}),
+        };
+        renderResult = await this.#prerenderer.prerenderFileRender({
+          url: fileURL,
+          realm: this.#realmURL.href,
+          auth: this.#auth,
+          fileData: {
+            resource: extractResult.resource,
+            fileDefCodeRef,
+          },
+          types: fileTypes,
+          renderOptions: fileRenderOptions,
+        });
+        if (renderResult?.error) {
+          this.#log.warn(
+            `${jobIdentity(this.#jobInfo)} file render produced error for ${path}, continuing without HTML: ${renderResult.error.error?.message}`,
+          );
+          renderResult = undefined;
+        }
+      } catch (err: any) {
+        this.#log.warn(
+          `${jobIdentity(this.#jobInfo)} file render failed for ${path}, continuing without HTML: ${err.message}`,
+        );
+      }
+    }
+
     await this.batch.updateEntry(entryURL, {
       type: 'file',
       lastModified,
@@ -982,6 +1017,12 @@ export class IndexRunner {
       },
       types: fileTypes,
       displayNames: [],
+      isolatedHtml: renderResult?.isolatedHTML ?? undefined,
+      headHtml: renderResult?.headHTML ?? undefined,
+      atomHtml: renderResult?.atomHTML ?? undefined,
+      embeddedHtml: renderResult?.embeddedHTML ?? undefined,
+      fittedHtml: renderResult?.fittedHTML ?? undefined,
+      iconHTML: renderResult?.iconHTML ?? undefined,
     });
     this.stats.filesIndexed++;
   }
