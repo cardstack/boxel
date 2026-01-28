@@ -1017,6 +1017,7 @@ export default class MatrixService extends Service {
     attachedCards: CardDef[] = [],
     attachedFiles: FileDef[] = [],
     context: BoxelContext,
+    lintIssues?: string[],
     failureReason?: string | undefined,
   ) {
     let contentData = await this.withContextAndAttachments(
@@ -1024,6 +1025,13 @@ export default class MatrixService extends Service {
       attachedCards,
       attachedFiles,
     );
+    let normalizedLintIssues = lintIssues || [];
+    let data: CodePatchResultContent['data'] = {
+      ...contentData,
+      ...(normalizedLintIssues.length
+        ? { lintIssues: normalizedLintIssues }
+        : {}),
+    };
     let content: CodePatchResultContent = {
       msgtype: APP_BOXEL_CODE_PATCH_RESULT_MSGTYPE,
       codeBlockIndex,
@@ -1033,7 +1041,7 @@ export default class MatrixService extends Service {
         key: resultKey,
         rel_type: APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE,
       },
-      data: contentData,
+      data,
     };
     try {
       return await this.sendEvent(

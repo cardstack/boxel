@@ -3063,17 +3063,6 @@ export class Realm {
       // Get source from plain text request body
       const source = await request.text();
       const filename = request.headers.get('X-Filename') || 'input.gts';
-      let lintMode: LintArgs['lintMode'] = 'lintAndAutofix';
-      try {
-        let searchParams = new URL(request.url).searchParams;
-        let requestedMode = searchParams.get('lintMode');
-        if (requestedMode === 'lint' || requestedMode === 'lintAndAutofix') {
-          lintMode = requestedMode;
-        }
-      } catch {
-        // ignore malformed URLs and keep default lint mode
-      }
-
       if (!source || source.trim() === '') {
         return createResponse({
           body: JSON.stringify({
@@ -3092,7 +3081,7 @@ export class Realm {
         concurrencyGroup: `lint:${this.url}:${Math.random().toString().slice(-1)}`,
         timeout: 10,
         priority: userInitiatedPriority,
-        args: { source, filename, lintMode } satisfies LintArgs,
+        args: { source, filename } satisfies LintArgs,
       });
       result = await job.done;
     }

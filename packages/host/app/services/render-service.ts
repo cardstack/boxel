@@ -29,6 +29,7 @@ import type {
   CardStore,
   BoxComponent,
 } from 'https://cardstack.com/base/card-api';
+import type { FileDef } from 'https://cardstack.com/base/file-api';
 
 import { render } from '../lib/isolated-render';
 
@@ -43,6 +44,7 @@ const { environment } = config;
 
 export class CardStoreWithErrors implements CardStore {
   #cards = new Map<string, CardDef>();
+  #fileMetaInstances = new Map<string, FileDef>();
   #fetch: typeof globalThis.fetch;
   #inFlight: Promise<unknown>[] = [];
   #cardDocsInFlight: Map<string, Promise<SingleCardDocument | CardError>> =
@@ -56,17 +58,29 @@ export class CardStoreWithErrors implements CardStore {
     this.#fetch = fetch;
   }
 
-  get(id: string): CardDef | undefined {
+  getCard(id: string): CardDef | undefined {
     id = id.replace(/\.json$/, '');
     return this.#cards.get(id);
   }
-  set(id: string, instance: CardDef): void {
+  getFileMeta(id: string): FileDef | undefined {
+    id = id.replace(/\.json$/, '');
+    return this.#fileMetaInstances.get(id);
+  }
+  setCard(id: string, instance: CardDef): void {
     id = id.replace(/\.json$/, '');
     this.#cards.set(id, instance);
   }
-  setNonTracked(id: string, instance: CardDef) {
+  setFileMeta(id: string, instance: FileDef): void {
+    id = id.replace(/\.json$/, '');
+    this.#fileMetaInstances.set(id, instance);
+  }
+  setCardNonTracked(id: string, instance: CardDef) {
     id = id.replace(/\.json$/, '');
     return this.#cards.set(id, instance);
+  }
+  setFileMetaNonTracked(id: string, instance: FileDef) {
+    id = id.replace(/\.json$/, '');
+    return this.#fileMetaInstances.set(id, instance);
   }
   makeTracked(_id: string) {}
 
