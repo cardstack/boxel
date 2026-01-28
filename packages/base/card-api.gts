@@ -2538,7 +2538,7 @@ export class Theme extends CardDef {
           disabled: !this.id,
         },
         {
-          label: 'Modify theme via AI',
+          label: 'Modify Theme via AI',
           action: async () => {
             let cmd = new PatchThemeCommand(params.commandContext);
             await cmd.execute({

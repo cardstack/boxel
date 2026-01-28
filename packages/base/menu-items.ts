@@ -155,7 +155,7 @@ export function getDefaultCardMenuItems(
     });
     menuItems = [...menuItems, ...getSampleDataMenuItems(card, params)];
     menuItems.push({
-      label: `Create listing with AI`,
+      label: `Create Listing with AI`,
       action: async () => {
         const codeRef = resolveAdoptsFrom(card);
         if (!codeRef) {
@@ -186,7 +186,7 @@ function getSampleDataMenuItems(
   let menuItems: MenuItemOptions[] = [];
   if (cardId) {
     menuItems.push({
-      label: `Fill in sample data with AI`,
+      label: `Fill in Sample Data with AI`,
       action: async () =>
         await new PopulateWithSampleDataCommand(commandContext).execute({
           cardId: card.id,

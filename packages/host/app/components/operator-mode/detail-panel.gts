@@ -203,7 +203,7 @@ export default class DetailPanel extends Component<Signature> {
       this.args.selectedDeclaration?.exportName
         ? [
             {
-              label: 'Create listing',
+              label: 'Create Listing',
               icon: Package,
               handler: this.createListingWithAI,
             },
