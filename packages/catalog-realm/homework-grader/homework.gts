@@ -203,7 +203,7 @@ class GradeField extends FieldDef {
 class QuestionField extends FieldDef {
   static displayName = 'Question';
 
-  @field title = contains(StringField);
+  @field cardTitle = contains(StringField);
   @field questionText = contains(MarkdownField);
   @field answer = contains(MarkdownField);
   @field maxPoints = contains(NumberField);
@@ -252,7 +252,7 @@ class QuestionField extends FieldDef {
       <div class='fitted-question'>
         <div class='question-content'>
           <div class='question-header'>
-            <span class='title'>{{@model.title}}</span>
+            <span class='title'>{{@model.cardTitle}}</span>
           </div>
           <div class='question-text'>
             <@fields.questionText />
@@ -323,7 +323,7 @@ class HomeworkIsolated extends Component<typeof Homework> {
     if (!this.roomId) {
       let useAiAssistantCommand = new UseAiAssistantCommand(commandContext);
       let result = await useAiAssistantCommand.execute({
-        roomName: `Grading: ${this.args.model.title}`,
+        roomName: `Grading: ${this.args.model.cardTitle}`,
         openRoom: true,
         skillCards: [this.args.model.gradingSkill],
         attachedCards: [this.args.model as CardDef],
@@ -371,8 +371,8 @@ class HomeworkIsolated extends Component<typeof Homework> {
   <template>
     <header class='course-header'>
       <div class='course-info'>
-        <h2>{{@model.title}}</h2>
-        <p class='description'>{{@model.description}}</p>
+        <h2>{{@model.cardTitle}}</h2>
+        <p class='description'>{{@model.cardDescription}}</p>
       </div>
       <div class='header-actions'>
         {{#if @model.gradingSkill}}
@@ -667,8 +667,8 @@ class HomeworkFitted extends Component<typeof Homework> {
     <div class='fitted-homework'>
       <header class='homework-header'>
         <h3 class='homework-title'>{{if
-            @model.title
-            @model.title
+            @model.cardTitle
+            @model.cardTitle
             'Untitled Homework'
           }}</h3>
         {{#if this.hasGrade}}

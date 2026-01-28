@@ -1,7 +1,6 @@
 import type { RenderingTestContext } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
-import { stringify } from 'qs';
 import { module, test } from 'qunit';
 
 import { validate as uuidValidate } from 'uuid';
@@ -108,9 +107,9 @@ module('Integration | realm', function (hooks) {
         id: `${testRealmURL}dir/empty`,
         attributes: {
           cardInfo,
-          description: null,
-          thumbnailURL: null,
-          title: 'Untitled Card',
+          cardDescription: null,
+          cardThumbnailURL: null,
+          cardTitle: 'Untitled Card',
         },
         relationships: {
           'cardInfo.theme': { links: { self: null } },
@@ -146,8 +145,8 @@ module('Integration | realm', function (hooks) {
               firstName: 'Hassan',
               lastName: 'Abdel-Rahman',
               cardInfo,
-              description: null,
-              thumbnailURL: null,
+              cardDescription: null,
+              cardThumbnailURL: null,
             },
             relationships: {
               'cardInfo.theme': { links: { self: null } },
@@ -166,8 +165,8 @@ module('Integration | realm', function (hooks) {
             attributes: {
               firstName: 'Mango',
               cardInfo,
-              description: null,
-              thumbnailURL: null,
+              cardDescription: null,
+              cardThumbnailURL: null,
             },
             relationships: {
               owner: {
@@ -206,10 +205,10 @@ module('Integration | realm', function (hooks) {
         id: `${testRealmURL}dir/mango`,
         attributes: {
           firstName: 'Mango',
-          title: 'Mango',
+          cardTitle: 'Mango',
           cardInfo,
-          description: null,
-          thumbnailURL: null,
+          cardDescription: null,
+          cardThumbnailURL: null,
         },
         relationships: {
           owner: {
@@ -244,13 +243,13 @@ module('Integration | realm', function (hooks) {
           type: 'card',
           id: `${testRealmURL}dir/owner`,
           attributes: {
-            description: 'Person',
+            cardDescription: 'Person',
             email: null,
             posts: null,
-            thumbnailURL: null,
+            cardThumbnailURL: null,
             firstName: 'Hassan',
             lastName: 'Abdel-Rahman',
-            title: 'Hassan Abdel-Rahman',
+            cardTitle: 'Hassan Abdel-Rahman',
             fullName: 'Hassan Abdel-Rahman',
             cardInfo,
           },
@@ -285,8 +284,8 @@ module('Integration | realm', function (hooks) {
           data: {
             id: `${testRealmURL}dir/mango`,
             attributes: {
-              description: null,
-              thumbnailURL: null,
+              cardDescription: null,
+              cardThumbnailURL: null,
               firstName: 'Mango',
             },
             relationships: {
@@ -327,9 +326,9 @@ module('Integration | realm', function (hooks) {
         id: `${testRealmURL}dir/mango`,
         attributes: {
           firstName: 'Mango',
-          title: 'Mango',
-          description: null,
-          thumbnailURL: null,
+          cardTitle: 'Mango',
+          cardDescription: null,
+          cardThumbnailURL: null,
           cardInfo,
         },
         relationships: {
@@ -365,14 +364,14 @@ module('Integration | realm', function (hooks) {
           type: 'card',
           id: `http://localhost:4202/test/hassan`,
           attributes: {
-            description: 'Person',
+            cardDescription: 'Person',
             email: null,
             posts: null,
-            thumbnailURL: null,
+            cardThumbnailURL: null,
             firstName: 'Hassan',
             lastName: 'Abdel-Rahman',
             fullName: 'Hassan Abdel-Rahman',
-            title: 'Hassan Abdel-Rahman',
+            cardTitle: 'Hassan Abdel-Rahman',
             cardInfo,
           },
           relationships: { 'cardInfo.theme': { links: { self: null } } },
@@ -442,9 +441,11 @@ module('Integration | realm', function (hooks) {
       let response = await handle(
         realm,
         new Request(`${testRealmURL}root/_search`, {
+          method: 'QUERY',
           headers: {
             Accept: 'application/vnd.card+json',
           },
+          body: JSON.stringify({}),
         }),
       );
       let json = await response.json();
@@ -716,9 +717,9 @@ module('Integration | realm', function (hooks) {
         id: `${testRealmURL}Pet/${id}`,
         attributes: {
           firstName: 'Mango',
-          title: 'Mango',
-          description: null,
-          thumbnailURL: null,
+          cardTitle: 'Mango',
+          cardDescription: null,
+          cardThumbnailURL: null,
           cardInfo,
         },
         relationships: {
@@ -754,13 +755,13 @@ module('Integration | realm', function (hooks) {
           type: 'card',
           id: `${testRealmURL}dir/owner`,
           attributes: {
-            description: 'Person',
+            cardDescription: 'Person',
             email: null,
             posts: null,
-            thumbnailURL: null,
+            cardThumbnailURL: null,
             firstName: 'Hassan',
             lastName: 'Abdel-Rahman',
-            title: 'Hassan Abdel-Rahman',
+            cardTitle: 'Hassan Abdel-Rahman',
             fullName: 'Hassan Abdel-Rahman',
             cardInfo,
           },
@@ -1033,7 +1034,7 @@ module('Integration | realm', function (hooks) {
         'ski-trip.json': {
           data: {
             attributes: {
-              title: 'Gore Mountain Ski Trip',
+              cardTitle: 'Gore Mountain Ski Trip',
               venue: 'Gore Mountain',
               startTime: '2023-02-18T10:00:00.000Z',
               endTime: '2023-02-19T02:00:00.000Z',
@@ -1095,25 +1096,25 @@ module('Integration | realm', function (hooks) {
           self: `${testRealmURL}ski-trip`,
         },
         attributes: {
-          title: 'Gore Mountain Ski Trip',
+          cardTitle: 'Gore Mountain Ski Trip',
           venue: 'Gore Mountain',
           startTime: '2023-02-18T10:00:00.000Z',
           endTime: '2023-02-19T02:00:00.000Z',
           hosts: [
             {
-              description: 'Person',
+              cardDescription: 'Person',
               firstName: 'Hassan',
               lastName: null,
               fullName: 'Hassan ',
-              title: 'Hassan ',
+              cardTitle: 'Hassan ',
               email: null,
               posts: null,
             },
           ],
           sponsors: ['Burton'],
           posts: [],
-          description: 'Gore Mountain',
-          thumbnailURL: null,
+          cardDescription: 'Gore Mountain',
+          cardThumbnailURL: null,
           cardInfo,
         },
         relationships: {
@@ -1143,7 +1144,7 @@ module('Integration | realm', function (hooks) {
         data: {
           type: 'card',
           attributes: {
-            title: 'Gore Mountain Ski Trip',
+            cardTitle: 'Gore Mountain Ski Trip',
             venue: 'Gore Mountain',
             startTime: '2023-02-18T10:00:00.000Z',
             endTime: '2023-02-19T02:00:00.000Z',
@@ -1275,9 +1276,9 @@ module('Integration | realm', function (hooks) {
         links: { self: `${testRealmURL}jackie` },
         attributes: {
           firstName: 'Jackie',
-          title: 'Jackie Pet Person',
-          description: 'A person with pets',
-          thumbnailURL: null,
+          cardTitle: 'Jackie Pet Person',
+          cardDescription: 'A person with pets',
+          cardThumbnailURL: null,
           cardInfo,
         },
         relationships: {
@@ -1316,14 +1317,14 @@ module('Integration | realm', function (hooks) {
           id: `${testRealmURL}dir/friend`,
           links: { self: `./dir/friend` },
           attributes: {
-            description: 'Person',
+            cardDescription: 'Person',
             email: null,
             posts: null,
-            thumbnailURL: null,
+            cardThumbnailURL: null,
             firstName: 'Hassan',
             lastName: 'Abdel-Rahman',
             fullName: 'Hassan Abdel-Rahman',
-            title: 'Hassan Abdel-Rahman',
+            cardTitle: 'Hassan Abdel-Rahman',
             cardInfo,
           },
           relationships: {
@@ -1348,9 +1349,9 @@ module('Integration | realm', function (hooks) {
           links: { self: `./dir/van-gogh` },
           attributes: {
             firstName: 'Van Gogh',
-            title: 'Van Gogh',
-            description: null,
-            thumbnailURL: null,
+            cardTitle: 'Van Gogh',
+            cardDescription: null,
+            cardThumbnailURL: null,
             cardInfo,
           },
           relationships: {
@@ -1500,9 +1501,9 @@ module('Integration | realm', function (hooks) {
       links: { self: `${testRealmURL}jackie` },
       attributes: {
         firstName: 'Jackie',
-        title: 'Jackie Pet Person',
-        description: 'A person with pets',
-        thumbnailURL: null,
+        cardTitle: 'Jackie Pet Person',
+        cardDescription: 'A person with pets',
+        cardThumbnailURL: null,
         cardInfo,
       },
       relationships: {
@@ -1628,9 +1629,9 @@ module('Integration | realm', function (hooks) {
       links: { self: `${testRealmURL}jackie` },
       attributes: {
         firstName: 'Jackie',
-        title: 'Jackie Pet Person',
-        description: 'A person with pets',
-        thumbnailURL: null,
+        cardTitle: 'Jackie Pet Person',
+        cardDescription: 'A person with pets',
+        cardThumbnailURL: null,
         cardInfo,
       },
       relationships: {
@@ -1668,9 +1669,7 @@ module('Integration | realm', function (hooks) {
       @field message = contains(StringField);
       @field other = linksTo(Other);
       static embedded = class Embedded extends Component<typeof this> {
-        <template>
-          x: {{@model.other.name}}
-        </template>
+        <template>x: {{@model.other.name}}</template>
       };
     }
 
@@ -1860,9 +1859,9 @@ module('Integration | realm', function (hooks) {
       links: { self: `${testRealmURL}jackie` },
       attributes: {
         firstName: 'Jackie',
-        title: 'Jackie Pet Person',
-        description: 'A person with pets',
-        thumbnailURL: null,
+        cardTitle: 'Jackie Pet Person',
+        cardDescription: 'A person with pets',
+        cardThumbnailURL: null,
         cardInfo,
       },
       relationships: {
@@ -1983,9 +1982,9 @@ module('Integration | realm', function (hooks) {
       links: { self: `${testRealmURL}jackie` },
       attributes: {
         firstName: 'Jackie',
-        title: 'Jackie Pet Person',
-        description: 'A person with pets',
-        thumbnailURL: null,
+        cardTitle: 'Jackie Pet Person',
+        cardDescription: 'A person with pets',
+        cardThumbnailURL: null,
         cardInfo,
       },
       relationships: {
@@ -2130,9 +2129,9 @@ module('Integration | realm', function (hooks) {
       links: { self: `${testRealmURL}jackie` },
       attributes: {
         firstName: 'Jackie',
-        title: 'Jackie Pet Person',
-        description: 'A person with pets',
-        thumbnailURL: null,
+        cardTitle: 'Jackie Pet Person',
+        cardDescription: 'A person with pets',
+        cardThumbnailURL: null,
         cardInfo,
       },
       relationships: {
@@ -2199,8 +2198,8 @@ module('Integration | realm', function (hooks) {
           data: {
             id: `${testRealmURL}dir/mango`,
             attributes: {
-              description: null,
-              thumbnailURL: null,
+              cardDescription: null,
+              cardThumbnailURL: null,
               firstName: 'Mango',
             },
             relationships: {
@@ -2262,9 +2261,9 @@ module('Integration | realm', function (hooks) {
         id: `${testRealmURL}dir/mango`,
         attributes: {
           firstName: 'Mango',
-          title: 'Mango',
-          description: null,
-          thumbnailURL: null,
+          cardTitle: 'Mango',
+          cardDescription: null,
+          cardThumbnailURL: null,
           cardInfo,
         },
         relationships: {
@@ -2303,11 +2302,11 @@ module('Integration | realm', function (hooks) {
             firstName: 'Mariko',
             lastName: 'Abdel-Rahman',
             fullName: 'Mariko Abdel-Rahman',
-            title: 'Mariko Abdel-Rahman',
-            description: 'Person',
+            cardTitle: 'Mariko Abdel-Rahman',
+            cardDescription: 'Person',
             email: null,
             posts: null,
-            thumbnailURL: null,
+            cardThumbnailURL: null,
             cardInfo,
           },
           relationships: {
@@ -2462,9 +2461,9 @@ module('Integration | realm', function (hooks) {
             model: 'C300',
             year: '2024',
           },
-          description: null,
-          thumbnailURL: null,
-          title: 'Untitled Card',
+          cardDescription: null,
+          cardThumbnailURL: null,
+          cardTitle: 'Untitled Card',
           cardInfo,
         },
         relationships: {
@@ -3040,9 +3039,11 @@ module('Integration | realm', function (hooks) {
     let response = await handle(
       realm,
       new Request(`${testRealmURL}_search`, {
+        method: 'QUERY',
         headers: {
           Accept: 'application/vnd.card+json',
         },
+        body: JSON.stringify({}),
       }),
     );
     let json = await response.json();
@@ -3081,8 +3082,8 @@ module('Integration | realm', function (hooks) {
           data: {
             id: `${testRealmURL}dir/mango`,
             attributes: {
-              description: null,
-              thumbnailURL: null,
+              cardDescription: null,
+              cardThumbnailURL: null,
               firstName: 'Mango',
             },
             relationships: {
@@ -3126,21 +3127,20 @@ module('Integration | realm', function (hooks) {
 
     let response = await handle(
       realm,
-      new Request(
-        `${testRealmURL}_search?${stringify({
+      new Request(`${testRealmURL}_search`, {
+        method: 'QUERY',
+        headers: {
+          Accept: 'application/vnd.card+json',
+        },
+        body: JSON.stringify({
           sort: [
             {
               by: 'id',
               on: { module: `${baseRealm.url}card-api`, name: 'CardDef' },
             },
           ],
-        })}`,
-        {
-          headers: {
-            Accept: 'application/vnd.card+json',
-          },
-        },
-      ),
+        }),
+      }),
     );
     let json = await response.json();
     delete json.included?.[0].meta.lastModified;
@@ -3154,10 +3154,10 @@ module('Integration | realm', function (hooks) {
           type: 'card',
           id: `${testRealmURL}dir/mango`,
           attributes: {
-            description: null,
+            cardDescription: null,
             firstName: 'Mango',
-            title: 'Mango',
-            thumbnailURL: null,
+            cardTitle: 'Mango',
+            cardThumbnailURL: null,
             cardInfo,
           },
           relationships: {
@@ -3195,11 +3195,11 @@ module('Integration | realm', function (hooks) {
             firstName: 'Mariko',
             lastName: 'Abdel-Rahman',
             fullName: 'Mariko Abdel-Rahman',
-            title: 'Mariko Abdel-Rahman',
-            description: 'Person',
+            cardTitle: 'Mariko Abdel-Rahman',
+            cardDescription: 'Person',
             email: null,
             posts: null,
-            thumbnailURL: null,
+            cardThumbnailURL: null,
             cardInfo,
           },
           relationships: {
@@ -3225,10 +3225,10 @@ module('Integration | realm', function (hooks) {
           type: 'card',
           id: `${testRealmURL}dir/vanGogh`,
           attributes: {
-            description: null,
+            cardDescription: null,
             firstName: 'Van Gogh',
-            title: 'Van Gogh',
-            thumbnailURL: null,
+            cardTitle: 'Van Gogh',
+            cardThumbnailURL: null,
             cardInfo,
           },
           relationships: {
@@ -3265,13 +3265,13 @@ module('Integration | realm', function (hooks) {
           type: 'card',
           id: `${testModuleRealm}hassan`,
           attributes: {
-            description: 'Person',
+            cardDescription: 'Person',
             email: null,
             posts: null,
-            thumbnailURL: null,
+            cardThumbnailURL: null,
             firstName: 'Hassan',
             lastName: 'Abdel-Rahman',
-            title: 'Hassan Abdel-Rahman',
+            cardTitle: 'Hassan Abdel-Rahman',
             fullName: 'Hassan Abdel-Rahman',
             cardInfo,
           },
@@ -3558,6 +3558,7 @@ posts/ignore-me.gts
     let response = await handle(
       realm,
       new Request(`${testRealmURL}_info`, {
+        method: 'QUERY',
         headers: {
           Accept: 'application/vnd.api+json',
         },
@@ -3596,6 +3597,7 @@ posts/ignore-me.gts
     let response = await handle(
       realm,
       new Request(`${testRealmURL}_info`, {
+        method: 'QUERY',
         headers: {
           Accept: 'application/vnd.api+json',
         },
@@ -3625,6 +3627,7 @@ posts/ignore-me.gts
     let response = await handle(
       realm,
       new Request(`${testRealmURL}_info`, {
+        method: 'QUERY',
         headers: {
           Accept: 'application/vnd.api+json',
         },

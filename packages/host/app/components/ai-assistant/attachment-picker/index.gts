@@ -71,7 +71,7 @@ export default class AiAssistantAttachmentPicker extends Component<Signature> {
   </template>
 
   @consume(GetCardCollectionContextName)
-  private declare getCardCollection: getCardCollection;
+  declare private getCardCollection: getCardCollection;
 
   @tracked private cardCollection: ReturnType<getCardCollection> | undefined;
 

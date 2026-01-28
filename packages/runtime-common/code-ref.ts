@@ -6,9 +6,11 @@ import type {
   FieldDef,
   FieldConstructor,
 } from 'https://cardstack.com/base/card-api';
+import type { FileDef } from 'https://cardstack.com/base/file-api';
 import { Loader } from './loader';
 import {
   isField,
+  isSpec,
   primitive,
   fields,
   fieldsUntracked,
@@ -16,7 +18,7 @@ import {
 } from './constants';
 import { CardError } from './error';
 import { meta, relativeTo } from './constants';
-import type { LooseCardResource } from './index';
+import type { LooseCardResource, FileMetaResource } from './index';
 import { isUrlLike, trimExecutableExtension } from './index';
 
 export type ResolvedCodeRef = {
@@ -108,14 +110,28 @@ export function isFieldDef(field: any): field is typeof FieldDef {
   return isBaseDef(field) && 'isFieldDef' in field;
 }
 
+export function isFileDef(def: any): def is typeof FileDef {
+  return isBaseDef(def) && 'isFileDef' in def;
+}
+
 export function isFieldInstance<T extends FieldDef>(
   fieldInstance: any,
 ): fieldInstance is T {
   return isFieldDef(fieldInstance?.constructor);
 }
 
+export function isFileDefInstance<T extends FileDef>(
+  fileInstance: any,
+): fileInstance is T {
+  return isFileDef(fileInstance?.constructor);
+}
+
 export function isPrimitive(def: any) {
   return isBaseDef(def) && primitive in def;
+}
+
+export function isSpecCard(def: any) {
+  return isBaseDef(def) && isSpec in def;
 }
 
 export function codeRefWithAbsoluteURL(
@@ -289,6 +305,16 @@ export function getField<T extends BaseDef>(
   return undefined;
 }
 
+export function normalizeCodeRef(ref: CodeRef): {
+  module: string;
+  name: string;
+} {
+  if (!('type' in ref)) {
+    return { module: ref.module, name: ref.name };
+  }
+  return normalizeCodeRef(ref.card);
+}
+
 export function getAncestor(
   card: BaseDefConstructor,
 ): BaseDefConstructor | undefined {
@@ -441,7 +467,7 @@ function visitCodeRef(codeRef: CodeRef, visit: VisitModuleDep): void {
 }
 
 export function visitModuleDeps(
-  resourceJson: LooseCardResource,
+  resourceJson: LooseCardResource | FileMetaResource,
   visit: VisitModuleDep,
 ): void {
   let resourceMeta = resourceJson.meta;

@@ -16,9 +16,9 @@
       "summary": "A modern story sharing platform inspired by Hacker News. Features include story submission with title and URL, upvote/downvote system with animated feedback, real-time sorting by Hot/New/Top stories, comment system with count tracking, clean modern UI with smooth transitions, responsive design, and individual story view mode. Built with modern web technologies following best practices for user experience and performance.",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/story-board-listing/thumbnail.png"
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/story-board-listing/thumbnail.png"
       }
     },
     "relationships": {

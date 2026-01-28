@@ -34,7 +34,7 @@ import { DealEvent } from './deal-event';
 import { DealPriority } from './deal-priority';
 import { DealStatus } from './deal-status';
 
-import { AmountWithCurrency as AmountWithCurrencyField } from './fields/amount-with-currency';
+import AmountWithCurrencyField from './fields/amount-with-currency';
 
 import AccountHeader from './components/account-header';
 import { ContactRow } from './components/contact-row';
@@ -114,7 +114,7 @@ class EditTemplate extends Component<typeof Deal> {
         <@fields.crmApp />
       </FieldContainer>
       <FieldContainer @label='Logo URL'>
-        <@fields.thumbnailURL />
+        <@fields.cardThumbnailURL />
       </FieldContainer>
     </div>
     <style scoped>
@@ -131,9 +131,9 @@ class EditTemplate extends Component<typeof Deal> {
 class IsolatedTemplate extends Component<typeof Deal> {
   get logoURL() {
     //We default to account thumbnail
-    return this.args.model?.thumbnailURL?.length
-      ? this.args.model.thumbnailURL
-      : this.args.model.account?.thumbnailURL;
+    return this.args.model?.cardThumbnailURL?.length
+      ? this.args.model.cardThumbnailURL
+      : this.args.model.account?.cardThumbnailURL;
   }
   get primaryContactName() {
     return this.args.model.account?.primaryContact?.name;
@@ -331,7 +331,7 @@ class IsolatedTemplate extends Component<typeof Deal> {
           <AccountHeader @logoURL={{this.logoURL}} @name={{@model.name}}>
             <:name>
               <h1 class={{cn 'account-name' default-value=(not @model.name)}}>
-                {{#if @model.title}}<@fields.title />{{else}}Missing Deal Name{{/if}}
+                {{#if @model.cardTitle}}<@fields.cardTitle />{{else}}Missing Deal Name{{/if}}
               </h1>
             </:name>
             <:content>
@@ -522,7 +522,7 @@ class IsolatedTemplate extends Component<typeof Deal> {
                   <ContactRow
                     @userID={{@model.primaryStakeholder.id}}
                     @name={{@model.primaryStakeholder.name}}
-                    @thumbnailURL={{@model.primaryStakeholder.thumbnailURL}}
+                    @thumbnailURL={{@model.primaryStakeholder.cardThumbnailURL}}
                     @tagLabel='primary'
                   />
                 {{/if}}
@@ -530,7 +530,7 @@ class IsolatedTemplate extends Component<typeof Deal> {
                   <ContactRow
                     @userID={{stakeholder.id}}
                     @name={{stakeholder.name}}
-                    @thumbnailURL={{stakeholder.thumbnailURL}}
+                    @thumbnailURL={{stakeholder.cardThumbnailURL}}
                     @tagLabel={{stakeholder.position}}
                   />
                 {{/each}}
@@ -755,9 +755,9 @@ class IsolatedTemplate extends Component<typeof Deal> {
 
 class EmbeddedTemplate extends Component<typeof Deal> {
   get logoURL() {
-    return this.args.model?.thumbnailURL?.length
-      ? this.args.model.thumbnailURL
-      : this.args.model.account?.thumbnailURL;
+    return this.args.model?.cardThumbnailURL?.length
+      ? this.args.model.cardThumbnailURL
+      : this.args.model.account?.cardThumbnailURL;
   }
 
   get primaryContactName() {
@@ -788,7 +788,7 @@ class EmbeddedTemplate extends Component<typeof Deal> {
         >
           <:name>
             <h1 class={{cn 'account-name' default-value=(not @model.name)}}>
-              {{#if @model.title}}<@fields.title />{{else}}Missing Deal Name{{/if}}
+              {{#if @model.cardTitle}}<@fields.cardTitle />{{else}}Missing Deal Name{{/if}}
             </h1>
           </:name>
           <:content>
@@ -1035,9 +1035,9 @@ class EmbeddedTemplate extends Component<typeof Deal> {
 class FittedTemplate extends Component<typeof Deal> {
   get logoURL() {
     //We default to account thumbnail
-    return this.args.model?.thumbnailURL?.length
-      ? this.args.model.thumbnailURL
-      : this.args.model.account?.thumbnailURL;
+    return this.args.model?.cardThumbnailURL?.length
+      ? this.args.model.cardThumbnailURL
+      : this.args.model.account?.cardThumbnailURL;
   }
 
   get primaryContactName() {
@@ -1068,7 +1068,7 @@ class FittedTemplate extends Component<typeof Deal> {
         >
           <:name>
             <h1 class={{cn 'account-name' default-value=(not @model.name)}}>
-              {{#if @model.title}}<@fields.title />{{else}}Missing Deal Name{{/if}}
+              {{#if @model.cardTitle}}<@fields.cardTitle />{{else}}Missing Deal Name{{/if}}
             </h1>
           </:name>
           <:content>
@@ -1637,7 +1637,7 @@ export class Deal extends CardDef {
       return this.account?.company;
     },
   });
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: Deal) {
       return this.name;
     },

@@ -17,9 +17,9 @@
       "summary": "Professional artist portfolio with Spotify-inspired streaming aesthetics - showcase music samples, tour dates, and social links while viewing authentic music industry presentations. Features hero image overlays, embedded audio players, show booking integration, contact management, and dark theme streaming platform design for complete artist brand presence.",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/musician-landing-page-listing/thumbnail.png"
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/musician-landing-page-listing/thumbnail.png"
       }
     },
     "relationships": {

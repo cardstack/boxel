@@ -96,7 +96,7 @@ const authorCardSource = `
     static displayName = 'Author';
     @field firstName = contains(StringField);
     @field lastName = contains(StringField);
-    @field title = contains(StringField, {
+    @field cardTitle = contains(StringField, {
       computeVia: function (this: Author) {
         return [this.firstName, this.lastName].filter(Boolean).join(' ');
       },
@@ -112,7 +112,7 @@ const blogPostCardSource = `
 
   export class BlogPost extends CardDef {
     static displayName = 'BlogPost';
-    @field title = contains(StringField);
+    @field cardTitle = contains(StringField);
     @field content = contains(StringField);
     @field author = linksTo(Author);
   }
@@ -147,7 +147,7 @@ const blogAppCardSource = `
 
   export class BlogApp extends AppCard {
     static displayName = 'Blog App';
-    @field title = contains(StringField);
+    @field cardTitle = contains(StringField);
     @field posts = containsMany(BlogPost);
   }
 `;
@@ -203,9 +203,9 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
                 ':root { --background: #ffffff; } .dark { --background: #000000; }',
               cssImports: [],
               cardInfo: {
-                title: 'Sample Theme',
-                description: 'A sample theme for testing remix.',
-                thumbnailURL: null,
+                cardTitle: 'Sample Theme',
+                cardDescription: 'A sample theme for testing remix.',
+                cardThumbnailURL: null,
                 notes: null,
               },
             },
@@ -327,7 +327,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
           data: {
             type: 'card',
             attributes: {
-              title: 'Blog Post',
+              cardTitle: 'Blog Post',
               content: 'Blog Post Content',
             },
             relationships: {
@@ -349,7 +349,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
           data: {
             type: 'card',
             attributes: {
-              title: 'My Blog App',
+              cardTitle: 'My Blog App',
             },
             meta: {
               adoptsFrom: {
@@ -371,8 +371,8 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
             },
             specType: 'card',
             containedExamples: [],
-            title: 'Author',
-            description: 'Spec for Author card',
+            cardTitle: 'Author',
+            cardDescription: 'Spec for Author card',
             meta: {
               adoptsFrom: {
                 module: 'https://cardstack.com/base/spec',
@@ -392,8 +392,8 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
             },
             specType: 'field',
             containedExamples: [],
-            title: 'ContactLink',
-            description: 'Spec for ContactLink field',
+            cardTitle: 'ContactLink',
+            cardDescription: 'Spec for ContactLink field',
             meta: {
               adoptsFrom: {
                 module: 'https://cardstack.com/base/spec',
@@ -414,8 +414,8 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
             },
             // intentionally omitting specType so it falls into 'unknown'
             containedExamples: [],
-            title: 'UnknownNoType',
-            description: 'Spec lacking specType',
+            cardTitle: 'UnknownNoType',
+            cardDescription: 'Spec lacking specType',
             meta: {
               adoptsFrom: {
                 module: 'https://cardstack.com/base/spec',
@@ -429,7 +429,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
             type: 'card',
             attributes: {
               name: 'Author',
-              title: 'Author', // hardcoding title otherwise test will be flaky when waiting for a computed
+              cardTitle: 'Author', // hardcoding title otherwise test will be flaky when waiting for a computed
               summary: 'A card for representing an author.',
             },
             relationships: {
@@ -477,7 +477,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
             type: 'card',
             attributes: {
               name: 'Blog Post',
-              title: 'Blog Post',
+              cardTitle: 'Blog Post',
             },
             relationships: {
               'examples.0': {
@@ -528,7 +528,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
             type: 'card',
             attributes: {
               name: 'Person',
-              title: 'Person', // hardcoding title otherwise test will be flaky when waiting for a computed
+              cardTitle: 'Person', // hardcoding title otherwise test will be flaky when waiting for a computed
               images: [
                 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400',
                 'https://images.unsplash.com/photo-1494790108755-2616b332db29?w=400',
@@ -574,7 +574,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
             type: 'card',
             attributes: {
               name: 'Blog App',
-              title: 'Blog App', // hardcoding title otherwise test will be flaky when waiting for a computed
+              cardTitle: 'Blog App', // hardcoding title otherwise test will be flaky when waiting for a computed
             },
             meta: {
               adoptsFrom: {
@@ -589,7 +589,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
             type: 'card',
             attributes: {
               name: 'Empty',
-              title: 'Empty', // hardcoding title otherwise test will be flaky when waiting for a computed
+              cardTitle: 'Empty', // hardcoding title otherwise test will be flaky when waiting for a computed
             },
             meta: {
               adoptsFrom: {
@@ -604,7 +604,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
             type: 'card',
             attributes: {
               name: 'Pirate Skill',
-              title: 'Pirate Skill', // hardcoding title otherwise test will be flaky when waiting for a computed
+              cardTitle: 'Pirate Skill', // hardcoding title otherwise test will be flaky when waiting for a computed
             },
             relationships: {
               'skills.0': {
@@ -645,7 +645,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
             type: 'card',
             attributes: {
               name: 'Incomplete Skill',
-              title: 'Incomplete Skill', // hardcoding title otherwise test will be flaky when waiting for a computed
+              cardTitle: 'Incomplete Skill', // hardcoding title otherwise test will be flaky when waiting for a computed
             },
             meta: {
               adoptsFrom: {
@@ -659,7 +659,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
           data: {
             type: 'card',
             attributes: {
-              title: 'Talk Like a Pirate',
+              cardTitle: 'Talk Like a Pirate',
               name: 'Pirate Speak',
             },
             meta: {
@@ -717,7 +717,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
             type: 'card',
             attributes: {
               name: 'API Documentation',
-              title: 'API Documentation', // hardcoding title otherwise test will be flaky when waiting for a computed
+              cardTitle: 'API Documentation', // hardcoding title otherwise test will be flaky when waiting for a computed
             },
             relationships: {
               'tags.0': {
@@ -739,7 +739,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
             type: 'card',
             attributes: {
               name: 'Contact Link',
-              title: 'Contact Link', // hardcoding title otherwise test will be flaky when waiting for a computed
+              cardTitle: 'Contact Link', // hardcoding title otherwise test will be flaky when waiting for a computed
               summary:
                 'A field for creating and managing contact links such as email, phone, or other web links.',
             },
@@ -1511,9 +1511,9 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
         .exists('Listing card dropdown renders menu items');
       assert
         .dom(
-          `[data-test-boxel-dropdown-content] [data-test-boxel-menu-item-text="Generate example with AI"]`,
+          `[data-test-boxel-dropdown-content] [data-test-boxel-menu-item-text="Generate Example with AI"]`,
         )
-        .exists('Generate example with AI action is present');
+        .exists('Generate Example with AI action is present');
     });
 
     test('after clicking "Remix" button, current realm (particularly catalog realm) is never displayed in realm options', async function (assert) {
@@ -1831,15 +1831,9 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
                   } else {
                     content = 'card';
                   }
-                } else if (
-                  systemLower.includes('concise human-friendly title')
-                ) {
+                } else if (systemLower.includes('catalog listing title')) {
                   content = 'Mock Listing Title';
-                } else if (
-                  systemLower.includes(
-                    'one or two sentence concise readme-style summary',
-                  )
-                ) {
+                } else if (systemLower.includes('spec-style summary')) {
                   content = 'Mock listing summary sentence.';
                 } else if (
                   systemLower.includes("boxel's sample data assistant")
@@ -1907,6 +1901,11 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
         const command = new ListingCreateCommand(commandService.commandContext);
         const result = await command.execute({
           openCardId: cardId,
+          codeRef: {
+            module: `${mockCatalogURL}author/author.gts`,
+            name: 'Author',
+          },
+          targetRealm: mockCatalogURL,
         });
         const interim = result?.listing as any;
         assert.ok(interim, 'Interim listing exists');
@@ -1987,6 +1986,11 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
         const command = new ListingCreateCommand(commandService.commandContext);
         await command.execute({
           openCardId: cardId,
+          codeRef: {
+            module: `${mockCatalogURL}card-with-unrecognised-imports.gts`,
+            name: 'UnrecognisedImports',
+          },
+          targetRealm: mockCatalogURL,
         });
         await visitOperatorMode({
           submode: 'code',
@@ -2021,6 +2025,10 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
         const command = new ListingCreateCommand(commandService.commandContext);
         const createResult = await command.execute({
           openCardId: cardId,
+          codeRef: {
+            module: `${mockCatalogURL}blog-app/blog-app.gts`,
+            name: 'BlogApp',
+          },
           targetRealm: testDestinationRealmURL,
         });
         // Assert store-level (in-memory) results BEFORE navigating to code mode
@@ -2239,6 +2247,11 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
 
         let r = await command.execute({
           openCardId: cardId,
+          codeRef: {
+            module: `${mockCatalogURL}author/author.gts`,
+            name: 'Author',
+          },
+          targetRealm: mockCatalogURL,
         });
 
         await verifySubmode(assert, 'interact');

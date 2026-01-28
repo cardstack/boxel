@@ -10,6 +10,8 @@ import {
   getCardMeta,
   type CardOrFieldTypeIcon,
   BaseDef,
+  type CardContext,
+  type PartialBaseInstanceType,
 } from './card-api';
 import StringField from './string';
 import BooleanField from './boolean';
@@ -24,18 +26,23 @@ import {
   BasicFitted,
 } from '@cardstack/boxel-ui/components';
 import {
-  getCardMenuItems,
+  getMenuItems,
   codeRefWithAbsoluteURL,
   ensureExtension,
   isPrimitive,
   isResolvedCodeRef,
+  isSpec,
   loadCardDef,
   Loader,
   realmURL,
   type CommandContext,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
-import { eq, type MenuItemOptions } from '@cardstack/boxel-ui/helpers';
+import {
+  eq,
+  not,
+  type MenuItemOptions,
+} from '@cardstack/boxel-ui/helpers';
 import { AiBw as AiBwIcon } from '@cardstack/boxel-ui/icons';
 
 import GlimmerComponent from '@glimmer/component';
@@ -55,7 +62,12 @@ import { TrackedObject } from 'tracked-built-ins';
 import GenerateReadmeSpecCommand from '@cardstack/boxel-host/commands/generate-readme-spec';
 import PopulateWithSampleDataCommand from '@cardstack/boxel-host/commands/populate-with-sample-data';
 import GenerateExampleCardsCommand from '@cardstack/boxel-host/commands/generate-example-cards';
-import { type GetCardMenuItemParams } from './card-menu-items';
+import { type GetMenuItemParams } from './menu-items';
+import { provide } from 'ember-provide-consume-context';
+import {
+  PermissionsContextName,
+  type Permissions,
+} from '@cardstack/runtime-common';
 
 export type SpecType = 'card' | 'field' | 'component' | 'app' | 'command';
 
@@ -101,43 +113,26 @@ class SpecTypeField extends StringField {
 const PRIMITIVE_INCOMPATIBILITY_MESSAGE =
   'Examples are not currently supported for primitive fields';
 
-class Isolated extends Component<typeof Spec> {
+// Exported Header Component
+interface SpecHeaderSignature {
+  Element: HTMLElement;
+  Args: {
+    model: PartialBaseInstanceType<typeof Spec>;
+    isEditMode?: boolean;
+  };
+  Blocks: {
+    title: [];
+    description: [];
+  };
+}
+
+export class SpecHeader extends GlimmerComponent<SpecHeaderSignature> {
   get defaultIcon() {
     if (!this.args.model) {
       return;
     }
     return this.args.model.constructor?.icon;
   }
-
-  @action
-  generateReadme() {
-    this.generateReadmeTask.perform();
-  }
-
-  generateReadmeTask = task(async () => {
-    if (!this.args.model) {
-      return;
-    }
-
-    let commandContext = this.args.context?.commandContext;
-    if (!commandContext) {
-      console.error('Command context not available');
-      return;
-    }
-
-    try {
-      const generateReadmeSpecCommand = new GenerateReadmeSpecCommand(
-        commandContext,
-      );
-      const result = await generateReadmeSpecCommand.execute({
-        spec: this.args.model as Spec,
-      });
-
-      console.log('Generated README:', result.readme);
-    } catch (error) {
-      console.error('Error generating README:', error);
-    }
-  });
 
   get icon() {
     return this.cardDef?.icon;
@@ -167,152 +162,39 @@ class Isolated extends Component<typeof Spec> {
     return this.loadCardDef.value;
   }
 
-  get isPrimitiveField() {
-    return isPrimitive(this.cardDef);
-  }
-
-  get absoluteRef() {
-    if (!this.args.model.ref || !this.args.model.id) {
-      return undefined;
-    }
-    let url = new URL(this.args.model.id);
-    let ref = codeRefWithAbsoluteURL(this.args.model.ref, url);
-    if (!isResolvedCodeRef(ref)) {
-      throw new Error('ref is not a resolved code ref');
-    }
-    return ref;
-  }
-
-  private get realmInfo() {
-    return getCardMeta(this.args.model as CardDef, 'realmInfo');
-  }
-
   <template>
-    <article class='container'>
-      <header class='header' aria-labelledby='title'>
-        <div class='box header-icon-container'>
-          {{#if this.icon}}
-            <this.icon width='35' height='35' role='presentation' />
-          {{else if this.defaultIcon}}
-            <this.defaultIcon width='35' height='35' role='presentation' />
-          {{/if}}
-        </div>
-        <div class='header-info-container'>
+    <header class='header' aria-labelledby='title'>
+      <div class='box header-icon-container'>
+        {{#if this.icon}}
+          <this.icon width='35' height='35' role='presentation' />
+        {{else if this.defaultIcon}}
+          <this.defaultIcon width='35' height='35' role='presentation' />
+        {{/if}}
+      </div>
+      <div class='header-info-container'>
+        {{#if @isEditMode}}
+          <div class='header-title-container' data-test-title>
+            <label for='spec-title' class='boxel-sr-only'>Title</label>
+            {{yield to='title'}}
+          </div>
+          <div class='header-description-container' data-test-description>
+            <label
+              for='spec-description'
+              class='boxel-sr-only'
+            >Description</label>
+            {{yield to='description'}}
+          </div>
+        {{else}}
           <h1 class='title' id='title' data-test-title>
-            <@fields.title />
+            {{yield to='title'}}
           </h1>
           <p class='description' data-test-description>
-            <@fields.description />
+            {{yield to='description'}}
           </p>
-        </div>
-      </header>
-      <section class='readme section'>
-        <header class='row-header' aria-labelledby='readme'>
-          <div class='row-header-left'>
-            <BookOpenText width='20' height='20' role='presentation' />
-            <h2 id='readme'>Read Me</h2>
-          </div>
-        </header>
-        <div data-test-readme>
-          <@fields.readMe />
-        </div>
-      </section>
-      <section class='examples section'>
-        <header class='row-header' aria-labelledby='examples'>
-          <LayersSubtract width='20' height='20' role='presentation' />
-          <h2 id='examples'>Examples</h2>
-        </header>
-        {{#if (eq @model.specType 'field')}}
-          {{#if this.isPrimitiveField}}
-            <p
-              class='spec-example-incompatible-message'
-              data-test-spec-example-incompatible-primitives
-            >
-              <span>{{PRIMITIVE_INCOMPATIBILITY_MESSAGE}}</span>
-            </p>
-          {{else}}
-            <@fields.containedExamples />
-          {{/if}}
-        {{else}}
-          <@fields.linkedExamples />
         {{/if}}
-      </section>
-      <section class='module section'>
-        <header class='row-header' aria-labelledby='module'>
-          <GitBranch width='20' height='20' role='presentation' />
-          <h2 id='module'>Module</h2>
-        </header>
-        <div class='code-ref-container'>
-          <FieldContainer
-            @label='URL'
-            @vertical={{true}}
-            @labelFontSize='small'
-          >
-            <div class='code-ref-row'>
-              <RealmIcon class='realm-icon' @realmInfo={{this.realmInfo}} />
-              <span class='code-ref-value' data-test-module-href>
-                {{@model.moduleHref}}
-              </span>
-            </div>
-          </FieldContainer>
-          <FieldContainer
-            @label='Module Name'
-            @vertical={{true}}
-            @labelFontSize='small'
-          >
-            <div class='code-ref-row'>
-              <ExportArrow class='exported-arrow' width='10' height='10' />
-              <div class='code-ref-value' data-test-exported-name>
-                {{@model.ref.name}}
-              </div>
-              <div class='exported-type' data-test-exported-type>
-                {{@model.specType}}
-              </div>
-            </div>
-          </FieldContainer>
-        </div>
-      </section>
-    </article>
+      </div>
+    </header>
     <style scoped>
-      .container {
-        --boxel-spec-background-color: #ebeaed;
-        --boxel-spec-code-ref-background-color: #e2e2e2;
-        --boxel-spec-code-ref-text-color: #646464;
-
-        height: 100%;
-        min-height: max-content;
-        padding: var(--boxel-sp);
-        background-color: var(--boxel-spec-background-color);
-      }
-      .section {
-        margin-top: var(--boxel-sp);
-        padding-top: var(--boxel-sp);
-        border-top: 1px solid var(--boxel-400);
-      }
-      h1 {
-        margin: 0;
-        font-size: 18px;
-        font-weight: 600;
-        letter-spacing: var(--boxel-lsp-xs);
-        line-height: 1.2;
-      }
-      h2 {
-        margin: 0;
-        font: 600 var(--boxel-font-sm);
-        letter-spacing: var(--boxel-lsp-xs);
-      }
-      p {
-        margin-top: var(--boxel-sp-4xs);
-        margin-bottom: 0;
-      }
-      .title,
-      .description {
-        display: -webkit-box;
-        -webkit-box-orient: vertical;
-        -webkit-line-clamp: 2;
-        overflow: hidden;
-        text-wrap: pretty;
-      }
       .box {
         border: 1px solid var(--boxel-border-color);
         border-radius: var(--boxel-border-radius-lg);
@@ -335,6 +217,122 @@ class Isolated extends Component<typeof Spec> {
         flex: 1;
         align-self: center;
       }
+      /* Edit mode specific styles */
+      .header-info-container:has(.header-title-container) {
+        background-color: var(--boxel-light);
+        border-radius: var(--boxel-border-radius);
+      }
+      .header-info-container > div + div {
+        border-top: 1px solid var(--boxel-spec-background-color);
+      }
+      .header-title-container,
+      .header-description-container {
+        padding: var(--boxel-sp-xs);
+      }
+      /* Isolated mode specific styles */
+      h1.title {
+        margin: 0;
+        font-size: 18px;
+        font-weight: 600;
+        letter-spacing: var(--boxel-lsp-xs);
+        line-height: 1.2;
+      }
+      p.description {
+        margin-top: var(--boxel-sp-4xs);
+        margin-bottom: 0;
+      }
+      .title,
+      .description {
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
+        overflow: hidden;
+        text-wrap: pretty;
+      }
+    </style>
+  </template>
+}
+
+// Exported Readme Section Component
+interface SpecReadmeSectionSignature {
+  Element: HTMLElement;
+  Args: {
+    model: PartialBaseInstanceType<typeof Spec>;
+    context?: CardContext;
+    isEditMode?: boolean;
+  };
+  Blocks: {
+    default: [];
+  };
+}
+
+export class SpecReadmeSection extends GlimmerComponent<SpecReadmeSectionSignature> {
+  @action
+  generateReadme() {
+    this.generateReadmeTask.perform();
+  }
+
+  generateReadmeTask = task(async () => {
+    if (!this.args.model) {
+      return;
+    }
+
+    let commandContext = this.args.context?.commandContext;
+    if (!commandContext) {
+      console.error('Command context not available');
+      return;
+    }
+
+    try {
+      const generateReadmeSpecCommand = new GenerateReadmeSpecCommand(
+        commandContext,
+      );
+      await generateReadmeSpecCommand.execute({
+        spec: this.args.model as Spec,
+      });
+    } catch (error) {
+      console.error('Error generating README:', error);
+    }
+  });
+
+  <template>
+    <section class='readme section'>
+      <header class='row-header' aria-labelledby='readme'>
+        <div class='row-header-left'>
+          <BookOpenText width='20' height='20' role='presentation' />
+          <h2 id='readme'>Read Me</h2>
+        </div>
+        {{#if @isEditMode}}
+          <BoxelButton
+            @kind='primary'
+            @size='extra-small'
+            @loading={{this.generateReadmeTask.isRunning}}
+            {{on 'click' this.generateReadme}}
+            data-test-generate-readme
+          >
+            {{#if this.generateReadmeTask.isRunning}}
+              Generating...
+            {{else}}
+              Generate README
+            {{/if}}
+          </BoxelButton>
+        {{/if}}
+      </header>
+      <div data-test-readme>
+        {{yield}}
+      </div>
+    </section>
+    <style scoped>
+      .section {
+        margin-top: var(--boxel-sp);
+        padding-top: var(--boxel-sp);
+        border-top: 1px solid var(--boxel-400);
+      }
+      h2 {
+        margin: 0;
+        font: 600 var(--boxel-font-sm);
+        letter-spacing: var(--boxel-lsp-xs);
+      }
       .row-header {
         display: flex;
         align-items: center;
@@ -347,11 +345,268 @@ class Isolated extends Component<typeof Spec> {
         align-items: center;
         gap: var(--boxel-sp-xs);
       }
-      .row-content {
-        margin-top: var(--boxel-sp-sm);
-      }
+    </style>
+  </template>
+}
 
-      /* code ref container styles */
+// Exported Examples Section Component
+interface SpecExamplesSectionSignature {
+  Element: HTMLElement;
+  Args: {
+    model: PartialBaseInstanceType<typeof Spec>;
+  };
+  Blocks: {
+    linkedExamples: [];
+    containedExamples: [];
+  };
+}
+
+export class SpecExamplesSection extends GlimmerComponent<SpecExamplesSectionSignature> {
+  get specType() {
+    return this.args.model.specType;
+  }
+
+  get isPrimitiveField() {
+    return isPrimitive(this.cardDef);
+  }
+
+  @use private loadCardDef = resource(() => {
+    let cardDefObj = new TrackedObject<{ value: typeof BaseDef | undefined }>({
+      value: undefined,
+    });
+    (async () => {
+      try {
+        if (this.args.model.ref && this.args.model.id) {
+          let cardDef = await loadCardDef(this.args.model.ref, {
+            loader: myLoader(),
+            relativeTo: new URL(this.args.model.id),
+          });
+          cardDefObj.value = cardDef;
+        }
+      } catch (e) {
+        cardDefObj.value = undefined;
+      }
+    })();
+    return cardDefObj;
+  });
+
+  get cardDef() {
+    return this.loadCardDef.value;
+  }
+
+  <template>
+    <section class='examples section'>
+      <header class='row-header' aria-labelledby='examples'>
+        <div class='row-header-left'>
+          <LayersSubtract width='20' height='20' role='presentation' />
+          <h2 id='examples'>Examples</h2>
+        </div>
+      </header>
+      {{#if (eq this.specType 'field')}}
+        {{#if this.isPrimitiveField}}
+          <p
+            class='spec-example-incompatible-message'
+            data-test-spec-example-incompatible-primitives
+          >
+            <span>{{PRIMITIVE_INCOMPATIBILITY_MESSAGE}}</span>
+          </p>
+        {{else}}
+          {{yield to='containedExamples'}}
+        {{/if}}
+      {{else}}
+        {{yield to='linkedExamples'}}
+      {{/if}}
+    </section>
+    <style scoped>
+      .section {
+        margin-top: var(--boxel-sp);
+        padding-top: var(--boxel-sp);
+        border-top: 1px solid var(--boxel-400);
+      }
+      h2 {
+        margin: 0;
+        font: 600 var(--boxel-font-sm);
+        letter-spacing: var(--boxel-lsp-xs);
+      }
+      .row-header {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-xs);
+        padding-bottom: var(--boxel-sp-lg);
+      }
+      .row-header-left {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-xs);
+      }
+      .spec-example-incompatible-message {
+        font: var(--boxel-font-sm);
+        color: var(--boxel-450);
+        font-weight: 500;
+        margin-block: 0;
+      }
+    </style>
+  </template>
+}
+
+// This component (ExamplesWithInteractive) renders interactive examples for field configuration, shown only in subclass spec UIs.
+// It allows users to interact with the field examples in the UI, but does not permit any data to be written to the server—even if users lack write permissions.
+interface ExamplesWithInteractiveSignature {
+  Args: {};
+  Element: HTMLElement;
+  Blocks: {
+    default: [];
+  };
+}
+
+export class ExamplesWithInteractive extends GlimmerComponent<ExamplesWithInteractiveSignature> {
+  @provide(PermissionsContextName)
+  get permissions(): Permissions | undefined {
+    return { canWrite: true, canRead: true };
+  }
+
+  <template>
+    <section class='examples-with-interactive-preview section'>
+      <header
+        class='row-header'
+        aria-labelledby='examples-with-interactive-preview'
+      >
+        <div class='row-header-left'>
+          <LayoutList width='20' height='20' role='presentation' />
+          <h2 id='examples-with-interactive-preview'>Field Usage Examples</h2>
+        </div>
+      </header>
+      <div class='examples-with-interactive-grid'>
+        {{yield}}
+      </div>
+    </section>
+    <style scoped>
+      .section {
+        margin-top: var(--boxel-sp);
+        padding-top: var(--boxel-sp);
+        border-top: 1px solid var(--boxel-400);
+      }
+      h2 {
+        margin: 0;
+        font: 600 var(--boxel-font-sm);
+        letter-spacing: var(--boxel-lsp-xs);
+      }
+      .row-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--boxel-sp-xs);
+        padding-bottom: var(--boxel-sp-lg);
+      }
+      .row-header-left {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-xs);
+      }
+      .examples-with-interactive-preview {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp);
+      }
+      .examples-with-interactive-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+        gap: var(--boxel-sp);
+      }
+      .examples-with-interactive-card {
+        border: var(--boxel-border);
+        border-radius: var(--boxel-border-radius);
+        background-color: var(--boxel-100);
+        padding: var(--boxel-sp-xs);
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-xs);
+      }
+    </style>
+  </template>
+}
+
+// Exported Module Section Component
+interface SpecModuleSectionSignature {
+  Element: HTMLElement;
+  Args: {
+    model: PartialBaseInstanceType<typeof Spec>;
+  };
+}
+
+export class SpecModuleSection extends GlimmerComponent<SpecModuleSectionSignature> {
+  get realmInfo() {
+    return getCardMeta(this.args.model as CardDef, 'realmInfo');
+  }
+
+  get moduleHref() {
+    return this.args.model.moduleHref;
+  }
+
+  get refName() {
+    return this.args.model.ref?.name;
+  }
+
+  get specType() {
+    return this.args.model.specType;
+  }
+
+  <template>
+    <section class='module section'>
+      <header class='row-header' aria-labelledby='module'>
+        <div class='row-header-left'>
+          <GitBranch width='20' height='20' role='presentation' />
+          <h2 id='module'>Module</h2>
+        </div>
+      </header>
+      <div class='code-ref-container'>
+        <FieldContainer @label='URL' @vertical={{true}} @labelFontSize='small'>
+          <div class='code-ref-row'>
+            <RealmIcon class='realm-icon' @realmInfo={{this.realmInfo}} />
+            <span class='code-ref-value' data-test-module-href>
+              {{this.moduleHref}}
+            </span>
+          </div>
+        </FieldContainer>
+        <FieldContainer
+          @label='Module Name'
+          @vertical={{true}}
+          @labelFontSize='small'
+        >
+          <div class='code-ref-row'>
+            <ExportArrow class='exported-arrow' width='10' height='10' />
+            <div class='code-ref-value' data-test-exported-name>
+              {{this.refName}}
+            </div>
+            <div class='exported-type' data-test-exported-type>
+              {{this.specType}}
+            </div>
+          </div>
+        </FieldContainer>
+      </div>
+    </section>
+    <style scoped>
+      .section {
+        margin-top: var(--boxel-sp);
+        padding-top: var(--boxel-sp);
+        border-top: 1px solid var(--boxel-400);
+      }
+      h2 {
+        margin: 0;
+        font: 600 var(--boxel-font-sm);
+        letter-spacing: var(--boxel-lsp-xs);
+      }
+      .row-header {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-xs);
+        padding-bottom: var(--boxel-sp-lg);
+      }
+      .row-header-left {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-xs);
+      }
       .code-ref-container {
         display: flex;
         flex-direction: column;
@@ -392,11 +647,55 @@ class Isolated extends Component<typeof Spec> {
         height: 18px;
         border: 1px solid var(--boxel-dark);
       }
-      .spec-example-incompatible-message {
-        font: var(--boxel-font-sm);
-        color: var(--boxel-450);
-        font-weight: 500;
-        margin-block: 0;
+    </style>
+  </template>
+}
+
+class Isolated extends Component<typeof Spec> {
+  get absoluteRef() {
+    if (!this.args.model.ref || !this.args.model.id) {
+      return undefined;
+    }
+    let url = new URL(this.args.model.id);
+    let ref = codeRefWithAbsoluteURL(this.args.model.ref, url);
+    if (!isResolvedCodeRef(ref)) {
+      throw new Error('ref is not a resolved code ref');
+    }
+    return ref;
+  }
+
+  <template>
+    <article class='container'>
+      <SpecHeader @model={{@model}}>
+        <:title><@fields.cardTitle /></:title>
+        <:description><@fields.cardDescription /></:description>
+      </SpecHeader>
+
+      <SpecReadmeSection @model={{@model}} @context={{@context}}>
+        <@fields.readMe />
+      </SpecReadmeSection>
+
+      <SpecExamplesSection @model={{@model}}>
+        <:linkedExamples>
+          <@fields.linkedExamples />
+        </:linkedExamples>
+        <:containedExamples>
+          <@fields.containedExamples />
+        </:containedExamples>
+      </SpecExamplesSection>
+
+      <SpecModuleSection @model={{@model}} />
+    </article>
+    <style scoped>
+      .container {
+        --boxel-spec-background-color: #ebeaed;
+        --boxel-spec-code-ref-background-color: #e2e2e2;
+        --boxel-spec-code-ref-text-color: #646464;
+
+        height: 100%;
+        min-height: max-content;
+        padding: var(--boxel-sp);
+        background-color: var(--boxel-spec-background-color);
       }
     </style>
   </template>
@@ -437,8 +736,8 @@ class Fitted extends Component<typeof Spec> {
   <template>
     <BasicFitted
       class='spec-fitted'
-      @primary={{@model.title}}
-      @secondary={{@model.description}}
+      @primary={{@model.cardTitle}}
+      @secondary={{@model.cardDescription}}
     >
       <:thumbnail>
         {{#if this.icon}}
@@ -464,77 +763,6 @@ class Fitted extends Component<typeof Spec> {
 }
 
 class Edit extends Component<typeof Spec> {
-  get defaultIcon() {
-    if (!this.args.model) {
-      return;
-    }
-    return this.args.model.constructor?.icon;
-  }
-
-  @action
-  generateReadme() {
-    this.generateReadmeTask.perform();
-  }
-
-  generateReadmeTask = task(async () => {
-    if (!this.args.model) {
-      return;
-    }
-
-    let commandContext = this.args.context?.commandContext;
-    if (!commandContext) {
-      console.error('Command context not available');
-      return;
-    }
-
-    try {
-      const generateReadmeSpecCommand = new GenerateReadmeSpecCommand(
-        commandContext,
-      );
-      const result = await generateReadmeSpecCommand.execute({
-        spec: this.args.model as Spec,
-      });
-
-      console.log('Generated README:', result.readme);
-    } catch (error) {
-      console.error('Error generating README:', error);
-    }
-  });
-
-  get icon() {
-    return this.cardDef?.icon;
-  }
-
-  @use private loadCardDef = resource(() => {
-    let cardDefObject = new TrackedObject<{
-      value: typeof BaseDef | undefined;
-    }>({
-      value: undefined,
-    });
-    (async () => {
-      try {
-        if (this.args.model.ref && this.args.model.id) {
-          let cardDef = await loadCardDef(this.args.model.ref, {
-            loader: myLoader(),
-            relativeTo: new URL(this.args.model.id),
-          });
-          cardDefObject.value = cardDef;
-        }
-      } catch (e) {
-        cardDefObject.value = undefined;
-      }
-    })();
-    return cardDefObject;
-  });
-
-  get cardDef() {
-    return this.loadCardDef.value;
-  }
-
-  get isPrimitiveField() {
-    return isPrimitive(this.cardDef);
-  }
-
   get absoluteRef() {
     if (!this.args.model.ref || !this.args.model.id) {
       return undefined;
@@ -547,117 +775,31 @@ class Edit extends Component<typeof Spec> {
     return ref;
   }
 
-  private get realmInfo() {
-    return getCardMeta(this.args.model as CardDef, 'realmInfo');
-  }
-
   <template>
     <article class='container'>
-      <header class='header' aria-labelledby='title'>
-        <div class='box header-icon-container'>
-          {{#if this.icon}}
-            <this.icon width='35' height='35' role='presentation' />
-          {{else if this.defaultIcon}}
-            <this.defaultIcon width='35' height='35' role='presentation' />
-          {{/if}}
-        </div>
-        <div class='header-info-container'>
-          <div class='header-title-container' data-test-title>
-            <label for='spec-title' class='boxel-sr-only'>Title</label>
-            <@fields.title />
-          </div>
-          <div class='header-description-container' data-test-description>
-            <label
-              for='spec-description'
-              class='boxel-sr-only'
-            >Description</label>
-            <@fields.description />
-          </div>
-        </div>
-      </header>
-      <section class='readme section'>
-        <header class='row-header' aria-labelledby='readme'>
-          <div class='row-header-left'>
-            <BookOpenText width='20' height='20' role='presentation' />
-            <h2 id='readme'>Read Me</h2>
-          </div>
-          <BoxelButton
-            @kind='primary'
-            @size='extra-small'
-            @loading={{this.generateReadmeTask.isRunning}}
-            {{on 'click' this.generateReadme}}
-            data-test-generate-readme
-          >
-            {{#if this.generateReadmeTask.isRunning}}
-              Generating...
-            {{else}}
-              Generate README
-            {{/if}}
-          </BoxelButton>
-        </header>
-        <div data-test-readme>
-          <@fields.readMe />
-        </div>
-      </section>
-      <section class='examples section'>
-        <header class='row-header' aria-labelledby='examples'>
-          <div class='row-header-left'>
-            <LayersSubtract width='20' height='20' role='presentation' />
-            <h2 id='examples'>Examples</h2>
-          </div>
-        </header>
-        {{#if (eq @model.specType 'field')}}
-          {{#if this.isPrimitiveField}}
-            <p
-              class='spec-example-incompatible-message'
-              data-test-spec-example-incompatible-primitives
-            >
-              <span>{{PRIMITIVE_INCOMPATIBILITY_MESSAGE}}</span>
-            </p>
-          {{else}}
-            <@fields.containedExamples @typeConstraint={{this.absoluteRef}} />
-          {{/if}}
-        {{else}}
+      <SpecHeader @model={{@model}} @isEditMode={{true}}>
+        <:title><@fields.cardTitle /></:title>
+        <:description><@fields.cardDescription /></:description>
+      </SpecHeader>
+
+      <SpecReadmeSection
+        @model={{@model}}
+        @context={{@context}}
+        @isEditMode={{@canEdit}}
+      >
+        <@fields.readMe />
+      </SpecReadmeSection>
+
+      <SpecExamplesSection @model={{@model}}>
+        <:linkedExamples>
           <@fields.linkedExamples @typeConstraint={{this.absoluteRef}} />
-        {{/if}}
-      </section>
-      <section class='module section'>
-        <header class='row-header' aria-labelledby='module'>
-          <div class='row-header-left'>
-            <GitBranch width='20' height='20' role='presentation' />
-            <h2 id='module'>Module</h2>
-          </div>
-        </header>
-        <div class='code-ref-container'>
-          <FieldContainer
-            @label='URL'
-            @vertical={{true}}
-            @labelFontSize='small'
-          >
-            <div class='code-ref-row'>
-              <RealmIcon class='realm-icon' @realmInfo={{this.realmInfo}} />
-              <span class='code-ref-value' data-test-module-href>
-                {{@model.moduleHref}}
-              </span>
-            </div>
-          </FieldContainer>
-          <FieldContainer
-            @label='Module Name'
-            @vertical={{true}}
-            @labelFontSize='small'
-          >
-            <div class='code-ref-row'>
-              <ExportArrow class='exported-arrow' width='10' height='10' />
-              <div class='code-ref-value' data-test-exported-name>
-                {{@model.ref.name}}
-              </div>
-              <div class='exported-type' data-test-exported-type>
-                {{@model.specType}}
-              </div>
-            </div>
-          </FieldContainer>
-        </div>
-      </section>
+        </:linkedExamples>
+        <:containedExamples>
+          <@fields.containedExamples @typeConstraint={{this.absoluteRef}} />
+        </:containedExamples>
+      </SpecExamplesSection>
+
+      <SpecModuleSection @model={{@model}} />
     </article>
     <style scoped>
       .container {
@@ -669,111 +811,6 @@ class Edit extends Component<typeof Spec> {
         min-height: max-content;
         padding: var(--boxel-sp);
         background-color: var(--boxel-spec-background-color);
-      }
-      .section {
-        margin-top: var(--boxel-sp);
-        padding-top: var(--boxel-sp);
-        border-top: 1px solid var(--boxel-400);
-      }
-      h2 {
-        margin: 0;
-        font: 600 var(--boxel-font-sm);
-        letter-spacing: var(--boxel-lsp-xs);
-      }
-      .box {
-        border: 1px solid var(--boxel-border-color);
-        border-radius: var(--boxel-border-radius-lg);
-        background-color: var(--boxel-light);
-      }
-      .header {
-        display: flex;
-        gap: var(--boxel-sp-sm);
-      }
-      .header-icon-container {
-        flex-shrink: 0;
-        height: var(--boxel-icon-xxl);
-        width: var(--boxel-icon-xxl);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        background-color: var(--boxel-100);
-      }
-      .header-info-container {
-        background-color: var(--boxel-light);
-        border-radius: var(--boxel-border-radius);
-        flex: 1;
-        align-self: center;
-      }
-      .header-info-container > div + div {
-        border-top: 1px solid var(--boxel-spec-background-color);
-      }
-      .header-title-container,
-      .header-description-container {
-        padding: var(--boxel-sp-xs);
-      }
-
-      .row-header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: var(--boxel-sp-xs);
-        padding-bottom: var(--boxel-sp-lg);
-      }
-      .row-header-left {
-        display: flex;
-        align-items: center;
-        gap: var(--boxel-sp-xs);
-      }
-      .row-content {
-        margin-top: var(--boxel-sp-sm);
-      }
-
-      /* code ref container styles */
-      .code-ref-container {
-        display: flex;
-        flex-direction: column;
-        gap: var(--boxel-sp-xs);
-      }
-      .code-ref-row {
-        display: flex;
-        align-items: center;
-        gap: var(--boxel-sp-xs);
-        min-height: var(--boxel-form-control-height);
-        padding: var(--boxel-sp-xs);
-        background-color: var(
-          --boxel-spec-code-ref-background-color,
-          var(--boxel-100)
-        );
-        border: var(--boxel-border);
-        border-radius: var(--boxel-border-radius);
-        color: var(--boxel-spec-code-ref-text-color, var(--boxel-450));
-      }
-      .code-ref-value {
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
-      .exported-type {
-        margin-left: auto;
-        color: var(--boxel-450);
-        font: 500 var(--boxel-font-xs);
-        letter-spacing: var(--boxel-lsp);
-        text-transform: uppercase;
-      }
-      .exported-arrow {
-        min-width: 8px;
-        min-height: 8px;
-      }
-      .realm-icon {
-        width: 18px;
-        height: 18px;
-        border: 1px solid var(--boxel-dark);
-      }
-      .spec-example-incompatible-message {
-        font: var(--boxel-font-sm);
-        color: var(--boxel-450);
-        font-weight: 500;
-        margin-block: 0;
       }
       :deep(.add-new) {
         border: 1px solid var(--border, var(--boxel-border-color));
@@ -801,6 +838,7 @@ class SpecTitleField extends StringField {
         @value={{@model}}
         @onInput={{@set}}
         @placeholder={{this.placeholder}}
+        @disabled={{not @canEdit}}
         class='spec-title-input'
       />
       <style scoped>
@@ -837,6 +875,7 @@ class SpecDescriptionField extends StringField {
         @value={{@model}}
         @onInput={{@set}}
         @placeholder={{this.placeholder}}
+        @disabled={{not @canEdit}}
         class='spec-description-input'
       />
       <style scoped>
@@ -853,6 +892,7 @@ class SpecDescriptionField extends StringField {
 
 export class Spec extends CardDef {
   static displayName = 'Spec';
+  static [isSpec] = true;
   static icon = BoxModel;
   @field readMe = contains(MarkdownField);
 
@@ -887,11 +927,11 @@ export class Spec extends CardDef {
   });
   @field linkedExamples = linksToMany(CardDef);
   @field containedExamples = containsMany(FieldDef, { isUsed: true });
-  @field title = contains(SpecTitleField);
-  @field description = contains(SpecDescriptionField);
+  @field cardTitle = contains(SpecTitleField);
+  @field cardDescription = contains(SpecDescriptionField);
 
-  [getCardMenuItems](params: GetCardMenuItemParams): MenuItemOptions[] {
-    let menuItems = super[getCardMenuItems](params);
+  [getMenuItems](params: GetMenuItemParams): MenuItemOptions[] {
+    let menuItems = super[getMenuItems](params);
     if (this.specType !== 'field') {
       return menuItems;
     }
@@ -906,7 +946,7 @@ export class Spec extends CardDef {
       sampleDataItemCount,
       ...[
         {
-          label: 'Fill in sample data with AI',
+          label: 'Fill in Sample Data with AI',
           action: async () => {
             await new PopulateFieldSpecExampleCommand(
               params.commandContext,
@@ -952,8 +992,8 @@ export class Spec extends CardDef {
           <this.icon width='30' height='30' role='presentation' />
         </div>
         <div class='header-info-container'>
-          <h3 class='title'><@fields.title /></h3>
-          <p class='description'><@fields.description /></p>
+          <h3 class='title'><@fields.cardTitle /></h3>
+          <p class='description'><@fields.cardDescription /></p>
         </div>
         {{#if @model.specType}}
           <SpecTag @specType={{@model.specType}} />

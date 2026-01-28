@@ -130,6 +130,7 @@ Prerender server:
 - BOXEL_HOST_URL (optional): URL of the host app that serves the /render routes. Defaults to http://localhost:4200 in dev scripts.
 - PRERENDER_MANAGER_URL (optional): Base URL of the prerender manager to register with. Defaults to http://localhost:4222.
 - PRERENDER_PAGE_POOL_SIZE (optional): Max number of per-realm pages to keep open in the pool. Default 4.
+- PRERENDER_REALM_TAB_MAX (optional): Max number of tabs per realm per prerender server. Default 1 (clamped to PRERENDER_PAGE_POOL_SIZE).
 - BOXEL_SHOW_PRERENDER (optional): If set to 'true', opens a visible browser (useful for debugging locally). Headless otherwise.
 
 Prerender manager:

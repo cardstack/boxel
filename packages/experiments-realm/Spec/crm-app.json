@@ -2,8 +2,8 @@
   "data": {
     "type": "card",
     "attributes": {
-      "title": "CrmApp",
-      "description": "Spec for CRM App",
+      "cardTitle": "CrmApp",
+      "cardDescription": "Spec for CRM App",
       "specType": "app",
       "ref": {
         "module": "../crm-app",

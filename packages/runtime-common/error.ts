@@ -376,6 +376,21 @@ export function methodNotAllowed(
   );
 }
 
+export function unsupportedMediaType(
+  request: Request,
+  requestContext: RequestContext,
+): Response {
+  return responseWithError(
+    new CardError(
+      `request for ${request.url} can't be fulfilled for accept header ${request.headers.get('accept')}`,
+      {
+        status: 415,
+      },
+    ),
+    requestContext,
+  );
+}
+
 export function notFound(
   request: Request,
   requestContext: RequestContext,

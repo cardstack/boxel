@@ -6,6 +6,7 @@ import {
   logger,
   Deferred,
   CachingDefinitionLookup,
+  DEFAULT_CARD_SIZE_LIMIT_BYTES,
 } from '@cardstack/runtime-common';
 import { NodeAdapter } from './node-realm';
 import yargs from 'yargs';
@@ -202,6 +203,13 @@ let hrefs = urlMappings.map(([from, to]) => [from.href, to.href]);
 let dist: URL = new URL(distURL);
 let autoMigrate = migrateDB || undefined;
 
+log.info(
+  `Realm server boot config: port=${port} serverURL=${serverURL} distURL=${distURL} matrixURL=${matrixURL} realmsRootPath=${realmsRootPath} migrateDB=${Boolean(
+    migrateDB,
+  )} workerManagerPort=${workerManagerPort ?? 'none'} prerendererUrl=${prerendererUrl} enableFileWatcher=${ENABLE_FILE_WATCHER}`,
+);
+log.info(`Realm paths: ${paths.map(String).join(', ')}`);
+
 const getIndexHTML = async () => {
   let response = await fetch(distURL);
   if (!response.ok) {
@@ -272,6 +280,9 @@ const getIndexHTML = async () => {
         realmServerMatrixClient,
         realmServerURL: serverURL,
         definitionLookup,
+        cardSizeLimitBytes: Number(
+          process.env.CARD_SIZE_LIMIT_BYTES ?? DEFAULT_CARD_SIZE_LIMIT_BYTES,
+        ),
       },
       {
         fullIndexOnStartup: true,

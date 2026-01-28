@@ -1525,7 +1525,7 @@ export class ChordProgressionCard extends CardDef {
   static icon = MusicIcon;
 
   @field progressionName = contains(StringField);
-  @field description = contains(StringField);
+  @field cardDescription = contains(StringField);
   @field key = contains(StringField);
   @field scale = contains(StringField); // e.g., "major", "minor", "dorian"
   @field timeSignature = contains(StringField);
@@ -1535,7 +1535,7 @@ export class ChordProgressionCard extends CardDef {
   @field chordProgression = contains(ChordProgressionField);
   @field popularSongs = contains(StringField); // Examples that use this progression
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: ChordProgressionCard) {
       try {
         return this.progressionName ?? 'Chord Progression';
@@ -1596,8 +1596,8 @@ export class ChordProgressionCard extends CardDef {
           </div>
         </div>
 
-        {{#if @model.description}}
-          <p class='progression-description'>{{@model.description}}</p>
+        {{#if @model.cardDescription}}
+          <p class='progression-description'>{{@model.cardDescription}}</p>
         {{/if}}
 
         {{#if @fields.chordProgression}}
@@ -1757,7 +1757,7 @@ export class ChordProgressionPlayerCard extends CardDef {
   @field availableProgressions = linksToMany(() => ChordProgressionCard);
   @field playerName = contains(StringField);
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: ChordProgressionPlayerCard) {
       try {
         return this.playerName ?? 'Chord Progression Player';

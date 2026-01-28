@@ -96,7 +96,7 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
     class Pet extends CardDef {
       static displayName = 'Pet';
       @field name = contains(StringField);
-      @field title = contains(StringField, {
+      @field cardTitle = contains(StringField, {
         computeVia: function (this: Pet) {
           return this.name;
         },
@@ -138,7 +138,7 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
           return this.firstName[0];
         },
       });
-      @field title = contains(StringField, {
+      @field cardTitle = contains(StringField, {
         computeVia: function (this: Person) {
           return this.firstName;
         },
@@ -229,8 +229,8 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
         'Skill/example.json': {
           data: {
             attributes: {
-              title: 'Exanple Skill',
-              description: 'This skill card is for testing purposes',
+              cardTitle: 'Exanple Skill',
+              cardDescription: 'This skill card is for testing purposes',
               instructions: 'This is an example skill card',
               commands: [
                 {
@@ -250,8 +250,8 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
         'Skill/example2.json': {
           data: {
             attributes: {
-              title: 'Exanple 2 Skill',
-              description: 'This skill card is also for testing purposes',
+              cardTitle: 'Exanple 2 Skill',
+              cardDescription: 'This skill card is also for testing purposes',
               instructions: 'This is a second example skill card',
               commands: [
                 {
@@ -308,9 +308,7 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
     await setCardInOperatorModeState(id);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-        </template>
+        <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
     let roomId = await openAiAssistant();
@@ -820,7 +818,7 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
           name: 'SearchCardsByTypeAndTitleCommand_a959',
           arguments: JSON.stringify({
             attributes: {
-              description: 'Searching for card',
+              cardDescription: 'Searching for card',
               type: {
                 module: `${testRealmURL}person`,
                 name: 'Person',

@@ -314,7 +314,7 @@ class Isolated extends Component<typeof Catalog> {
       return;
     }
     return {
-      any: [{ contains: { title: this.searchValue } }],
+      any: [{ contains: { cardTitle: this.searchValue } }],
     };
   }
 
@@ -595,7 +595,7 @@ export class Catalog extends CardDef {
       return this[realmInfo]?.name;
     },
   });
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: Catalog) {
       return this.realmName;
     },

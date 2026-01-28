@@ -27,6 +27,7 @@ const copy: Task<CopyArgs, CopyResult> = ({
     reportStatus(jobInfo, 'start');
     let authedFetch = await getAuthedFetch(args);
     let realmInfoResponse = await authedFetch(`${realmURL}_info`, {
+      method: 'QUERY',
       headers: { Accept: SupportedMimeType.RealmInfo },
     });
     let realmInfo: RealmInfo = (await realmInfoResponse.json())?.data

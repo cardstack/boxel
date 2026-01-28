@@ -6,6 +6,7 @@ import {
   typeIn,
   triggerKeyEvent,
   settled,
+  waitUntil,
 } from '@ember/test-helpers';
 
 import { triggerEvent } from '@ember/test-helpers';
@@ -508,6 +509,45 @@ module('Acceptance | interact submode tests', function (hooks) {
           `[data-test-stack-card="${testRealmURL}Pet/mango"] [data-test-card-format="edit"]`,
         )
         .exists('linked card now rendered as a stack item in edit format');
+    });
+
+    test('clicking a linked file opens it as a new isolated stack item', async function (assert) {
+      let fileId = `${testRealmURL}FileLinkCard/notes.txt`;
+      await visitOperatorMode({
+        stacks: [
+          [
+            {
+              id: `${testRealmURL}FileLinkCard/with-file`,
+              format: 'isolated',
+            },
+          ],
+        ],
+      });
+
+      assert
+        .dom(
+          `[data-test-stack-card="${testRealmURL}FileLinkCard/with-file"] [data-test-card="${fileId}"]`,
+        )
+        .exists('linked file is rendered in the card');
+
+      await click(
+        `[data-test-stack-card="${testRealmURL}FileLinkCard/with-file"] [data-test-card="${fileId}"]`,
+      );
+
+      assert.operatorModeParametersMatch(currentURL(), {
+        stacks: [
+          [
+            {
+              id: `${testRealmURL}FileLinkCard/with-file`,
+              format: 'isolated',
+            },
+            {
+              id: fileId,
+              format: 'isolated',
+            },
+          ],
+        ],
+      });
     });
 
     test('can save mutated card without having opened in stack', async function (assert) {
@@ -1158,6 +1198,50 @@ module('Acceptance | interact submode tests', function (hooks) {
         .exists('linksToMany field has a linked card');
       assert.dom(withLinksSelector).hasValue('With Pet');
       await assertFocusPreserved(withLinksSelector, `With Pet${typedText}`);
+    });
+  });
+
+  module('size limit errors', function () {
+    test('edit view shows size limit error when save exceeds limit', async function (assert) {
+      let environmentService = getService('environment-service') as any;
+      let originalMaxSize = environmentService.cardSizeLimitBytes;
+      environmentService.cardSizeLimitBytes = 1000;
+
+      try {
+        await visitOperatorMode({
+          stacks: [
+            [
+              {
+                id: `${testRealmURL}Pet/mango`,
+                format: 'edit',
+              },
+            ],
+          ],
+        });
+
+        await fillIn(
+          `[data-test-stack-card="${testRealmURL}Pet/mango"] [data-test-field="name"] input`,
+          'x'.repeat(5000),
+        );
+
+        await waitUntil(() =>
+          Boolean(
+            !find(
+              `[data-test-stack-card="${testRealmURL}Pet/mango"] [data-test-auto-save-indicator]`,
+            )?.textContent?.includes('Saving'),
+          ),
+        );
+
+        assert
+          .dom(
+            `[data-test-stack-card="${testRealmURL}Pet/mango"] [data-test-auto-save-indicator]`,
+          )
+          .includesText(
+            `exceeds maximum allowed size (${environmentService.cardSizeLimitBytes} bytes)`,
+          );
+      } finally {
+        environmentService.cardSizeLimitBytes = originalMaxSize;
+      }
     });
   });
 });

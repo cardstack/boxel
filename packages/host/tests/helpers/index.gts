@@ -29,6 +29,7 @@ import {
   testRealmURL,
   testRealmURLToUsername,
   Worker,
+  DEFAULT_CARD_SIZE_LIMIT_BYTES,
   type DefinitionLookup,
   type LooseSingleCardDocument,
   type Prerenderer,
@@ -402,9 +403,7 @@ export async function makeRenderer() {
 
   renderIntoElement(
     class CardPrerenderHost extends GlimmerComponent {
-      <template>
-        <CardPrerender />
-      </template>
+      <template><CardPrerender /></template>
     },
     element as unknown as SimpleElement,
     owner,
@@ -510,9 +509,10 @@ export const SYSTEM_CARD_FIXTURE_CONTENTS: RealmContents = {
       type: 'card',
       attributes: {
         cardInfo: {
-          title: 'OpenAI: GPT-5',
-          description: 'Test fixture model configuration referencing GPT-5.',
-          thumbnailURL: null,
+          cardTitle: 'OpenAI: GPT-5',
+          cardDescription:
+            'Test fixture model configuration referencing GPT-5.',
+          cardThumbnailURL: null,
           notes: null,
         },
         modelId: 'openai/gpt-5',
@@ -539,10 +539,10 @@ export const SYSTEM_CARD_FIXTURE_CONTENTS: RealmContents = {
       type: 'card',
       attributes: {
         cardInfo: {
-          title: 'Anthropic: Claude Sonnet 4.5',
-          description:
+          cardTitle: 'Anthropic: Claude Sonnet 4.5',
+          cardDescription:
             'Test fixture model configuration referencing Claude Sonnet 4.5.',
-          thumbnailURL: null,
+          cardThumbnailURL: null,
           notes: null,
         },
         modelId: 'anthropic/claude-sonnet-4.5',
@@ -568,10 +568,10 @@ export const SYSTEM_CARD_FIXTURE_CONTENTS: RealmContents = {
       type: 'card',
       attributes: {
         cardInfo: {
-          title: 'Anthropic: Claude 3.7 Sonnet',
-          description:
+          cardTitle: 'Anthropic: Claude 3.7 Sonnet',
+          cardDescription:
             'Test fixture model configuration referencing Claude 3.7 Sonnet.',
-          thumbnailURL: null,
+          cardThumbnailURL: null,
           notes: null,
         },
         modelId: 'anthropic/claude-3.7-sonnet',
@@ -632,11 +632,13 @@ export async function setupAcceptanceTestRealm({
   realmURL,
   permissions,
   mockMatrixUtils,
+  startMatrix = true,
 }: {
   contents: RealmContents;
   realmURL?: string;
   permissions?: RealmPermissions;
   mockMatrixUtils: MockUtils;
+  startMatrix?: boolean;
 }) {
   let resolvedRealmURL = ensureTrailingSlash(realmURL ?? testRealmURL);
   setupAuthEndpoints({
@@ -648,6 +650,7 @@ export async function setupAcceptanceTestRealm({
     isAcceptanceTest: true,
     permissions,
     mockMatrixUtils,
+    startMatrix,
   });
   getTestRealmRegistry().set(result.realm.url, {
     realm: result.realm,
@@ -661,11 +664,13 @@ export async function setupIntegrationTestRealm({
   realmURL,
   permissions,
   mockMatrixUtils,
+  startMatrix = true,
 }: {
   contents: RealmContents;
   realmURL?: string;
   permissions?: RealmPermissions;
   mockMatrixUtils: MockUtils;
+  startMatrix?: boolean;
 }) {
   let resolvedRealmURL = ensureTrailingSlash(realmURL ?? testRealmURL);
   setupAuthEndpoints({
@@ -677,6 +682,7 @@ export async function setupIntegrationTestRealm({
     isAcceptanceTest: false,
     permissions: permissions as RealmPermissions,
     mockMatrixUtils,
+    startMatrix,
   });
   getTestRealmRegistry().set(result.realm.url, {
     realm: result.realm,
@@ -707,12 +713,14 @@ async function setupTestRealm({
   isAcceptanceTest,
   permissions = { '*': ['read', 'write'] },
   mockMatrixUtils,
+  startMatrix = true,
 }: {
   contents: RealmContents;
   realmURL?: string;
   isAcceptanceTest?: boolean;
   permissions?: RealmPermissions;
   mockMatrixUtils: MockUtils;
+  startMatrix?: boolean;
 }) {
   let owner = (getContext() as TestContext).owner;
   let { virtualNetwork } = getService('network');
@@ -794,6 +802,16 @@ async function setupTestRealm({
     }),
     realmServerURL: ensureTrailingSlash(ENV.realmServerURL),
     definitionLookup,
+    cardSizeLimitBytes: Number(
+      process.env.CARD_SIZE_LIMIT_BYTES ?? DEFAULT_CARD_SIZE_LIMIT_BYTES,
+    ),
+  });
+
+  // Register the realm early so realm-server mock _info lookups can resolve
+  // without falling back to real network fetches.
+  getTestRealmRegistry().set(realm.url, {
+    realm,
+    adapter,
   });
 
   // we use this to run cards that were added to the test filesystem
@@ -803,10 +821,12 @@ async function setupTestRealm({
 
   // TODO this is the only use of Realm.maybeHandle left--can we get rid of it?
   virtualNetwork.mount(realm.maybeHandle);
-  await mockMatrixUtils.start();
   await adapter.ready;
   await worker.run();
   await realm.start();
+  if (startMatrix) {
+    await mockMatrixUtils.start();
+  }
 
   let realmServer = getService('realm-server');
   if (!realmServer.availableRealmURLs.includes(realmURL)) {
@@ -1172,12 +1192,13 @@ export function setupRealmServerEndpoints(
   ];
 
   let handleRealmServerRequest = async (req: Request) => {
-    let endpoint = endpoints?.find((e) => req.url.includes(e.route));
+    let pathname = new URL(req.url).pathname;
+    let endpoint = endpoints?.find((e) => pathname === `/${e.route}`);
     if (endpoint) {
       return await endpoint.getResponse(req);
     }
 
-    endpoint = defaultEndpoints.find((e) => req.url.includes(e.route));
+    endpoint = defaultEndpoints.find((e) => pathname === `/${e.route}`);
     if (endpoint) {
       return await endpoint.getResponse(req);
     }
@@ -1195,7 +1216,7 @@ export async function assertMessages(
   messages: {
     from: string;
     message?: string;
-    cards?: { id: string; title?: string; realmIconUrl?: string }[];
+    cards?: { id: string; cardTitle?: string; realmIconUrl?: string }[];
     files?: { name: string; sourceUrl: string }[];
   }[],
 ) {
@@ -1219,17 +1240,17 @@ export async function assertMessages(
         .dom(`[data-test-message-idx="${index}"] [data-test-attached-card]`)
         .exists({ count: cards.length });
       cards.map((card) => {
-        if (card.title) {
-          if (message != null && card.title.includes(message)) {
+        if (card.cardTitle) {
+          if (message != null && card.cardTitle.includes(message)) {
             throw new Error(
-              `This is not a good test since the message '${message}' overlaps with the asserted card text '${card.title}'`,
+              `This is not a good test since the message '${message}' overlaps with the asserted card text '${card.cardTitle}'`,
             );
           }
           assert
             .dom(
               `[data-test-message-idx="${index}"] [data-test-attached-card="${card.id}"]`,
             )
-            .containsText(card.title);
+            .containsText(card.cardTitle);
         }
 
         if (card.realmIconUrl) {
@@ -1267,9 +1288,9 @@ export async function assertMessages(
 }
 
 export const cardInfo = Object.freeze({
-  title: null,
-  description: null,
-  thumbnailURL: null,
+  name: null,
+  summary: null,
+  cardThumbnailURL: null,
   notes: null,
 });
 

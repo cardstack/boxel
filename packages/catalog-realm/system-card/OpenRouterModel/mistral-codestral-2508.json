@@ -6,7 +6,7 @@
       "canonicalSlug": "mistralai/codestral-2508",
       "name": "Mistral: Codestral 2508",
       "created": 1754079630,
-      "description": "Mistral's cutting-edge language model for coding released end of July 2025. Codestral specializes in low-latency, high-frequency tasks such as fill-in-the-middle (FIM), code correction and test generation.\n\n[Blog Post](https://mistral.ai/news/codestral-25-08)",
+      "cardDescription": "Mistral's cutting-edge language model for coding released end of July 2025. Codestral specializes in low-latency, high-frequency tasks such as fill-in-the-middle (FIM), code correction and test generation.\n\n[Blog Post](https://mistral.ai/news/codestral-25-08)",
       "pricing": {
         "prompt": "0.0000003",
         "completion": "0.0000009",
@@ -48,9 +48,9 @@
         "temperature": 0.3
       },
       "cardInfo": {
-        "title": null,
-        "description": null,
-        "thumbnailURL": null,
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
         "notes": null
       }
     },

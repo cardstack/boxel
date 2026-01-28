@@ -67,6 +67,7 @@ export function buildCheckCorrectnessCommandRequests(
     if (correctnessCheckAttempt > MAX_CORRECTNESS_FIX_ATTEMPTS) {
       continue;
     }
+    let lintIssues = file.lintIssues;
     requests.push({
       id: `check-${uuidv4()}`,
       name: CHECK_CORRECTNESS_COMMAND_NAME,
@@ -78,6 +79,7 @@ export function buildCheckCorrectnessCommandRequests(
           roomId: summary.roomId,
           targetEventId: summary.targetEventId,
           correctnessCheckAttempt,
+          ...(lintIssues !== undefined ? { lintIssues } : {}),
         },
       },
     });

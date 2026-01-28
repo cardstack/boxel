@@ -49,7 +49,7 @@ class Isolated extends Component<typeof GamingHub> {
     if (this.gameSearchQuery) {
       filters.push({
         on: moduleRef,
-        contains: { 'game.title': this.gameSearchQuery },
+        contains: { 'game.cardTitle': this.gameSearchQuery },
       });
     }
 
@@ -2855,7 +2855,7 @@ export class GamingHub extends CardDef {
   @field player = linksTo(() => GamingPlayer);
 
   // Computed title from player
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: GamingHub) {
       try {
         const gamerTag = this.player?.gamerTag ?? 'Gaming Hub';

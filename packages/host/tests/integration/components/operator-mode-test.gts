@@ -28,10 +28,12 @@ module('Integration | operator-mode | basics', function (hooks) {
     ctx.setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-        </template>
+        <template><OperatorMode @onClose={{noop}} /></template>
       },
+    );
+    await waitFor('[data-test-boxel-card-header-title]');
+    await waitFor(
+      `[data-test-card-header-realm-icon="https://boxel-images.boxel.ai/icons/Letter-o.png"]`,
     );
     assert
       .dom('[data-test-boxel-card-header-title]')
@@ -57,9 +59,7 @@ module('Integration | operator-mode | basics', function (hooks) {
     ctx.setCardInOperatorModeState(`${testRealmURL}FriendWithCSS/missing-link`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-        </template>
+        <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
 
@@ -131,9 +131,7 @@ module('Integration | operator-mode | basics', function (hooks) {
         ctx.setCardInOperatorModeState(`${testRealmURL}FriendWithCSS/friend-a`);
         await renderComponent(
           class TestDriver extends GlimmerComponent {
-            <template>
-              <OperatorMode @onClose={{noop}} />
-            </template>
+            <template><OperatorMode @onClose={{noop}} /></template>
           },
         );
 
@@ -178,9 +176,7 @@ module('Integration | operator-mode | basics', function (hooks) {
         ctx.setCardInOperatorModeState(`${testRealmURL}FriendWithCSS/friend-a`);
         await renderComponent(
           class TestDriver extends GlimmerComponent {
-            <template>
-              <OperatorMode @onClose={{noop}} />
-            </template>
+            <template><OperatorMode @onClose={{noop}} /></template>
           },
         );
 
@@ -205,9 +201,7 @@ module('Integration | operator-mode | basics', function (hooks) {
 
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-        </template>
+        <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
     await waitFor('[data-test-person]');
@@ -250,9 +244,7 @@ module('Integration | operator-mode | basics', function (hooks) {
 
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-        </template>
+        <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
     await waitFor('[data-test-pet]');
@@ -301,9 +293,7 @@ module('Integration | operator-mode | basics', function (hooks) {
 
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-        </template>
+        <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
     await waitFor('[data-test-field="name"]');
@@ -337,9 +327,7 @@ module('Integration | operator-mode | basics', function (hooks) {
 
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-        </template>
+        <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
     await waitFor('[data-test-person]');
@@ -358,9 +346,7 @@ module('Integration | operator-mode | basics', function (hooks) {
 
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-        </template>
+        <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
 
@@ -389,9 +375,7 @@ module('Integration | operator-mode | basics', function (hooks) {
     ctx.setCardInOperatorModeState(`${testRealmURL}grid`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-        </template>
+        <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
     let saved = new Deferred<void>();
@@ -449,9 +433,7 @@ module('Integration | operator-mode | basics', function (hooks) {
     ctx.setCardInOperatorModeState(`${testRealmURL}grid`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-        </template>
+        <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
 
@@ -481,9 +463,7 @@ module('Integration | operator-mode | basics', function (hooks) {
     ctx.setCardInOperatorModeState(`${testRealmURL}grid`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-        </template>
+        <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
 
@@ -524,7 +504,7 @@ module('Integration | operator-mode | basics', function (hooks) {
       .exists();
 
     await fillIn(
-      '[data-test-stack-card-index="2"] [data-test-field="title"] [data-test-boxel-input]',
+      '[data-test-stack-card-index="2"] [data-test-field="cardTitle"] [data-test-boxel-input]',
       'Mad As a Hatter',
     );
 
@@ -595,9 +575,7 @@ module('Integration | operator-mode | basics', function (hooks) {
     ctx.setCardInOperatorModeState(`${testRealmURL}grid`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-        </template>
+        <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
     await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
@@ -628,9 +606,7 @@ module('Integration | operator-mode | basics', function (hooks) {
     ctx.setCardInOperatorModeState(`${testRealmURL}grid`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-        </template>
+        <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
     await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);

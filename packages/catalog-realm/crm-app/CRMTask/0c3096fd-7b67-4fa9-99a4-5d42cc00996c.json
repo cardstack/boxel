@@ -18,8 +18,8 @@
       },
       "name": "Quotation Adjustment",
       "details": null,
-      "description": null,
-      "thumbnailURL": null
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "relationships": {
       "crmApp": {

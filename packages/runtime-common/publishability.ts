@@ -4,13 +4,8 @@ import type { RealmVisibility } from './realm';
 export interface ResourceIndexEntry {
   canonicalUrl: string;
   realmUrl: string;
-  entryType:
-    | 'instance'
-    | 'instance-error'
-    | 'module'
-    | 'module-error'
-    | 'file'
-    | 'file-error';
+  entryType: 'instance' | 'module' | 'file';
+  hasError: boolean;
   dependencies: string[];
 }
 
@@ -33,14 +28,12 @@ export interface BasePublishabilityViolation {
   resource: string;
 }
 
-export interface PrivateDependencyPublishabilityViolation
-  extends BasePublishabilityViolation {
+export interface PrivateDependencyPublishabilityViolation extends BasePublishabilityViolation {
   kind: 'private-dependency';
   externalDependencies: ExternalDependencySummary[];
 }
 
-export interface ErrorDocumentPublishabilityViolation
-  extends BasePublishabilityViolation {
+export interface ErrorDocumentPublishabilityViolation extends BasePublishabilityViolation {
   kind: 'error-document';
   errorDocUrl?: string;
 }

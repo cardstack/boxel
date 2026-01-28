@@ -9,27 +9,27 @@
     "type": "card",
     "attributes": {
       "ref": {
-        "name": "NumberFieldSpec",
-        "module": "../number-field-spec"
+        "name": "default",
+        "module": "../../fields/number"
       },
       "stat": 100,
       "gauge": 30,
       "score": 50,
-      "title": "Number Field Spec",
       "readMe": null,
       "cardInfo": {
+        "name": null,
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": null
+        "summary": null,
+        "cardThumbnailURL": null
       },
-      "specType": "card",
+      "specType": "field",
       "standard": 100,
+      "cardTitle": "Number Field",
       "badgeMetric": 100,
-      "description": null,
       "progressBar": 30,
       "badgeCounter": 100,
       "progressCircle": 50,
+      "cardDescription": null,
       "badgeNotification": 99,
       "containedExamples": []
     },

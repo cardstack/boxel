@@ -1361,7 +1361,7 @@ export class OnlineOrder extends CardDef {
   @field paymentMethod = contains(StringField);
   @field trackingNumber = contains(StringField);
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: OnlineOrder) {
       try {
         const number = this.orderNumber ?? 'Order';

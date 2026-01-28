@@ -159,9 +159,9 @@ class IsolatedTemplate extends Component<typeof AstralGardens> {
                 class='experience-detail'
               >{{this.currentSection.description}}</p>
 
-              {{#if @model.description}}
+              {{#if @model.cardDescription}}
                 <div class='experience-description'>
-                  <@fields.description />
+                  <@fields.cardDescription />
                 </div>
               {{/if}}
 
@@ -1031,9 +1031,9 @@ class FittedTemplate extends Component<typeof AstralGardens> {
           </div>
 
           <div class='card-body'>
-            {{#if @model.description}}
+            {{#if @model.cardDescription}}
               <div class='card-description'>
-                <@fields.description />
+                <@fields.cardDescription />
               </div>
             {{/if}}
           </div>
@@ -1426,7 +1426,7 @@ export class AstralGardens extends CardDef {
   static displayName = 'The Astral Gardens';
   static icon = SparklesIcon;
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: AstralGardens) {
       return this.installationName;
     },
@@ -1434,7 +1434,7 @@ export class AstralGardens extends CardDef {
 
   @field installationName = contains(StringField);
   @field tagline = contains(StringField);
-  @field description = contains(MarkdownField);
+  @field cardDescription = contains(MarkdownField);
   @field experienceDuration = contains(StringField);
   @field nextShowingDate = contains(DateField);
   @field ticketPrice = contains(StringField);

@@ -28,6 +28,7 @@ import type {
 } from '@cardstack/runtime-common';
 import {
   aiBotUsername,
+  botRunnerUsername,
   logger,
   isCardInstance,
   Deferred,
@@ -176,6 +177,7 @@ export default class MatrixService extends Service {
   // wants one--resources are tied to the lifetime of their owner, who knows
   // which owner made these and who is consuming these. we need to refactor this out..
   roomResourcesCache: TrackedMap<string, RoomResource> = new TrackedMap();
+  canceledActionMessageIdByRoom: TrackedMap<string, string> = new TrackedMap();
   messagesToSend: TrackedMap<string, string | undefined> = new TrackedMap();
   cardsToSend: TrackedMap<string, string[] | undefined> = new TrackedMap();
   filesToSend: TrackedMap<string, FileDef[] | undefined> = new TrackedMap();
@@ -397,6 +399,11 @@ export default class MatrixService extends Service {
   get aiBotUserId() {
     let server = this.userId!.split(':')[1];
     return `@${aiBotUsername}:${server}`;
+  }
+
+  get botRunnerUserId() {
+    let server = this.userId!.split(':')[1];
+    return `@${botRunnerUsername}:${server}`;
   }
 
   get userName() {
@@ -636,6 +643,7 @@ export default class MatrixService extends Service {
 
     if (this.client.isLoggedIn()) {
       this.realmServer.setClient(this.client);
+      await this.realmServer.login();
       this.saveAuth(auth);
       this.bindEventListeners();
 
@@ -664,6 +672,10 @@ export default class MatrixService extends Service {
             accountDataContent?.realms ?? [],
           ),
         ]);
+
+        await this.realm.prefetchRealmInfos(
+          this.realmServer.availableRealmURLs,
+        );
 
         await this.initSlidingSync(accountDataContent);
         await this.client.startClient({ slidingSync: this.slidingSync });
@@ -1005,6 +1017,7 @@ export default class MatrixService extends Service {
     attachedCards: CardDef[] = [],
     attachedFiles: FileDef[] = [],
     context: BoxelContext,
+    lintIssues?: string[],
     failureReason?: string | undefined,
   ) {
     let contentData = await this.withContextAndAttachments(
@@ -1012,6 +1025,13 @@ export default class MatrixService extends Service {
       attachedCards,
       attachedFiles,
     );
+    let normalizedLintIssues = lintIssues || [];
+    let data: CodePatchResultContent['data'] = {
+      ...contentData,
+      ...(normalizedLintIssues.length
+        ? { lintIssues: normalizedLintIssues }
+        : {}),
+    };
     let content: CodePatchResultContent = {
       msgtype: APP_BOXEL_CODE_PATCH_RESULT_MSGTYPE,
       codeBlockIndex,
@@ -1021,7 +1041,7 @@ export default class MatrixService extends Service {
         key: resultKey,
         rel_type: APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE,
       },
-      data: contentData,
+      data,
     };
     try {
       return await this.sendEvent(
@@ -1234,6 +1254,7 @@ export default class MatrixService extends Service {
     this.roomMembershipQueue = [];
     this.roomStateQueue = [];
     this.roomResourcesCache.clear();
+    this.canceledActionMessageIdByRoom.clear();
     this.timelineQueue = [];
     this.flushMembership = undefined;
     this.flushTimeline = undefined;
@@ -1251,6 +1272,14 @@ export default class MatrixService extends Service {
     // because it is possible that
     // there are some services that are not initialized yet
     clearLocalStorage(this.storage);
+  }
+
+  markActionAsCanceled(roomId: string, eventId: string) {
+    this.canceledActionMessageIdByRoom.set(roomId, eventId);
+  }
+
+  getLastCanceledActionEventId(roomId: string): string | undefined {
+    return this.canceledActionMessageIdByRoom.get(roomId);
   }
 
   private bindEventListeners() {
@@ -1742,6 +1771,11 @@ export default class MatrixService extends Service {
   }
 
   private async processDecryptedEvent(event: TempEvent, oldEventId?: string) {
+    // Graceful test teardown: ignore late events after the service is destroyed.
+    if (this.isDestroying || this.isDestroyed) {
+      return;
+    }
+
     let { room_id: roomId } = event;
     if (!roomId) {
       throw new Error(

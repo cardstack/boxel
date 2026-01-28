@@ -32,6 +32,7 @@ import {
   uuidv4,
   RealmPaths,
   PUBLISHED_DIRECTORY_NAME,
+  DEFAULT_CARD_SIZE_LIMIT_BYTES,
   clearSessionRooms,
   upsertSessionRoom,
   type MatrixConfig,
@@ -76,6 +77,42 @@ const testRealmHref = testRealmURL.href;
 
 export const testRealmServerMatrixUsername = 'node-test_realm-server';
 export const testRealmServerMatrixUserId = `@${testRealmServerMatrixUsername}:localhost`;
+
+export type RealmRequest = {
+  get(path: string): Test;
+  post(path: string): Test;
+  put(path: string): Test;
+  patch(path: string): Test;
+  delete(path: string): Test;
+  head(path: string): Test;
+};
+
+export function withRealmPath(
+  request: SuperTest<Test>,
+  realmURL: URL,
+): RealmRequest {
+  let realmPath = realmURL.pathname.replace(/\/?$/, '/');
+  let prefixPath = (path: string) => {
+    if (path.startsWith('http://') || path.startsWith('https://')) {
+      return path;
+    }
+    if (path.startsWith(realmPath)) {
+      return path;
+    }
+    if (path.startsWith('/')) {
+      return `${realmPath}${path.slice(1)}`;
+    }
+    return `${realmPath}${path}`;
+  };
+  return {
+    get: (path: string) => request.get(prefixPath(path)),
+    post: (path: string) => request.post(prefixPath(path)),
+    put: (path: string) => request.put(prefixPath(path)),
+    patch: (path: string) => request.patch(prefixPath(path)),
+    delete: (path: string) => request.delete(prefixPath(path)),
+    head: (path: string) => request.head(prefixPath(path)),
+  };
+}
 
 export { testRealmHref, testRealmURL };
 
@@ -283,10 +320,25 @@ async function startTestPrerenderServer(): Promise<string> {
 
 async function stopTestPrerenderServer() {
   if (prerenderServer && prerenderServer.listening) {
+    if (hasStopPrerenderer(prerenderServer)) {
+      await prerenderServer.__stopPrerenderer?.();
+    }
     await closeServer(prerenderServer);
   }
   prerenderServer = undefined;
   prerenderServerStart = undefined;
+}
+
+interface StoppablePrerenderServer extends Server {
+  __stopPrerenderer?: () => Promise<void>;
+}
+
+function hasStopPrerenderer(
+  server: Server,
+): server is StoppablePrerenderServer {
+  return (
+    typeof (server as StoppablePrerenderServer).__stopPrerenderer === 'function'
+  );
 }
 
 export async function getTestPrerenderer(): Promise<Prerenderer> {
@@ -400,6 +452,7 @@ export async function createRealm({
   matrixConfig = testMatrix,
   withWorker,
   enableFileWatcher = false,
+  cardSizeLimitBytes,
 }: {
   dir: string;
   definitionLookup: DefinitionLookup;
@@ -413,6 +466,7 @@ export async function createRealm({
   dbAdapter: PgAdapter;
   deferStartUp?: true;
   enableFileWatcher?: boolean;
+  cardSizeLimitBytes?: number;
   // if you are creating a realm  to test it directly without a server, you can
   // also specify `withWorker: true` to also include a worker with your realm
   withWorker?: true;
@@ -463,6 +517,11 @@ export async function createRealm({
     realmServerMatrixClient,
     realmServerURL: new URL(new URL(realmURL).origin).href,
     definitionLookup,
+    cardSizeLimitBytes:
+      cardSizeLimitBytes ??
+      Number(
+        process.env.CARD_SIZE_LIMIT_BYTES ?? DEFAULT_CARD_SIZE_LIMIT_BYTES,
+      ),
   });
   if (worker) {
     virtualNetwork.mount(realm.handle);
@@ -484,6 +543,7 @@ export async function runTestRealmServer({
   matrixURL,
   permissions = { '*': ['read'] },
   enableFileWatcher = false,
+  cardSizeLimitBytes,
   domainsForPublishedRealms = {
     boxelSpace: 'localhost',
     boxelSite: 'localhost',
@@ -501,6 +561,7 @@ export async function runTestRealmServer({
   matrixURL: URL;
   matrixConfig?: MatrixConfig;
   enableFileWatcher?: boolean;
+  cardSizeLimitBytes?: number;
   domainsForPublishedRealms?: {
     boxelSpace?: string;
     boxelSite?: string;
@@ -537,6 +598,7 @@ export async function runTestRealmServer({
     dbAdapter,
     enableFileWatcher,
     definitionLookup,
+    cardSizeLimitBytes,
   });
 
   await testRealm.logInToMatrix();
@@ -939,7 +1001,8 @@ export function setupMatrixRoom(
   getRealmSetup: () => {
     testRealm: Realm;
     testRealmHttpServer: Server;
-    request: SuperTest<Test>;
+    request: { post(path: string): Test };
+    serverRequest?: SuperTest<Test>;
     dir: DirResult;
     dbAdapter: PgAdapter;
   },
@@ -962,7 +1025,7 @@ export function setupMatrixRoom(
       throw new Error('matrixClient did not return an OpenID token');
     }
 
-    let response = await realmSetup.request
+    let response = await (realmSetup.serverRequest ?? realmSetup.request)
       .post('/_server-session')
       .send(JSON.stringify(openIdToken))
       .set('Accept', 'application/json')
@@ -1084,6 +1147,7 @@ export function setupPermissionedRealm(
     subscribeToRealmEvents = false,
     mode = 'beforeEach',
     published = false,
+    cardSizeLimitBytes,
   }: {
     permissions: RealmPermissions;
     realmURL?: URL;
@@ -1100,6 +1164,7 @@ export function setupPermissionedRealm(
     subscribeToRealmEvents?: boolean;
     mode?: 'beforeEach' | 'before';
     published?: boolean;
+    cardSizeLimitBytes?: number;
   },
 ) {
   let testRealmServer: Awaited<ReturnType<typeof runTestRealmServer>>;
@@ -1164,6 +1229,7 @@ export function setupPermissionedRealm(
         matrixURL,
         fileSystem,
         enableFileWatcher: subscribeToRealmEvents,
+        cardSizeLimitBytes,
       });
 
       let request = supertest(testRealmServer.testRealmHttpServer);
@@ -1190,6 +1256,17 @@ export function setupPermissionedRealm(
   });
 }
 
+export function setupPermissionedRealmAtURL(
+  hooks: NestedHooks,
+  realmURL: URL,
+  options: Omit<Parameters<typeof setupPermissionedRealm>[1], 'realmURL'>,
+) {
+  return setupPermissionedRealm(hooks, {
+    ...options,
+    realmURL,
+  });
+}
+
 // Spins up one RealmServer per realm. Use for cross-realm behavior that doesn't
 // require a shared server (authorization, permissions, etc.).
 
@@ -1212,9 +1289,9 @@ export function createJWT(
 
 export const cardInfo = {
   notes: null,
-  title: null,
-  description: null,
-  thumbnailURL: null,
+  name: null,
+  summary: null,
+  cardThumbnailURL: null,
 };
 
 export const cardDefinition: Definition['fields'] = {
@@ -1227,7 +1304,7 @@ export const cardDefinition: Definition['fields'] = {
     },
     isPrimitive: true,
   },
-  title: {
+  cardTitle: {
     type: 'contains',
     isComputed: true,
     fieldOrCard: {
@@ -1236,7 +1313,7 @@ export const cardDefinition: Definition['fields'] = {
     },
     isPrimitive: true,
   },
-  description: {
+  cardDescription: {
     type: 'contains',
     isComputed: true,
     fieldOrCard: {
@@ -1245,7 +1322,7 @@ export const cardDefinition: Definition['fields'] = {
     },
     isPrimitive: true,
   },
-  thumbnailURL: {
+  cardThumbnailURL: {
     type: 'contains',
     isComputed: true,
     fieldOrCard: {
@@ -1263,7 +1340,7 @@ export const cardDefinition: Definition['fields'] = {
     },
     isPrimitive: false,
   },
-  'cardInfo.title': {
+  'cardInfo.name': {
     type: 'contains',
     isComputed: false,
     fieldOrCard: {
@@ -1272,7 +1349,7 @@ export const cardDefinition: Definition['fields'] = {
     },
     isPrimitive: true,
   },
-  'cardInfo.description': {
+  'cardInfo.summary': {
     type: 'contains',
     isComputed: false,
     fieldOrCard: {
@@ -1281,7 +1358,7 @@ export const cardDefinition: Definition['fields'] = {
     },
     isPrimitive: true,
   },
-  'cardInfo.thumbnailURL': {
+  'cardInfo.cardThumbnailURL': {
     type: 'contains',
     isComputed: false,
     fieldOrCard: {
@@ -1317,7 +1394,7 @@ export const cardDefinition: Definition['fields'] = {
     },
     isPrimitive: true,
   },
-  'cardInfo.theme.title': {
+  'cardInfo.theme.cardTitle': {
     type: 'contains',
     isComputed: true,
     fieldOrCard: {
@@ -1326,7 +1403,7 @@ export const cardDefinition: Definition['fields'] = {
     },
     isPrimitive: true,
   },
-  'cardInfo.theme.description': {
+  'cardInfo.theme.cardDescription': {
     type: 'contains',
     isComputed: true,
     fieldOrCard: {
@@ -1335,7 +1412,7 @@ export const cardDefinition: Definition['fields'] = {
     },
     isPrimitive: true,
   },
-  'cardInfo.theme.thumbnailURL': {
+  'cardInfo.theme.cardThumbnailURL': {
     type: 'contains',
     isComputed: true,
     fieldOrCard: {
@@ -1353,7 +1430,7 @@ export const cardDefinition: Definition['fields'] = {
     },
     isPrimitive: false,
   },
-  'cardInfo.theme.cardInfo.title': {
+  'cardInfo.theme.cardInfo.name': {
     type: 'contains',
     isComputed: false,
     fieldOrCard: {
@@ -1362,7 +1439,7 @@ export const cardDefinition: Definition['fields'] = {
     },
     isPrimitive: true,
   },
-  'cardInfo.theme.cardInfo.description': {
+  'cardInfo.theme.cardInfo.summary': {
     type: 'contains',
     isComputed: false,
     fieldOrCard: {
@@ -1371,7 +1448,7 @@ export const cardDefinition: Definition['fields'] = {
     },
     isPrimitive: true,
   },
-  'cardInfo.theme.cardInfo.thumbnailURL': {
+  'cardInfo.theme.cardInfo.cardThumbnailURL': {
     type: 'contains',
     isComputed: false,
     fieldOrCard: {
@@ -1425,7 +1502,7 @@ export const cardDefinition: Definition['fields'] = {
     },
     isPrimitive: true,
   },
-  'cardInfo.theme.cardInfo.theme.title': {
+  'cardInfo.theme.cardInfo.theme.cardTitle': {
     type: 'contains',
     isComputed: true,
     fieldOrCard: {
@@ -1443,7 +1520,7 @@ export const cardDefinition: Definition['fields'] = {
     },
     isPrimitive: false,
   },
-  'cardInfo.theme.cardInfo.theme.cardInfo.title': {
+  'cardInfo.theme.cardInfo.theme.cardInfo.name': {
     type: 'contains',
     isComputed: false,
     fieldOrCard: {
@@ -1452,7 +1529,7 @@ export const cardDefinition: Definition['fields'] = {
     },
     isPrimitive: true,
   },
-  'cardInfo.theme.cardInfo.theme.cardInfo.description': {
+  'cardInfo.theme.cardInfo.theme.cardInfo.summary': {
     type: 'contains',
     isComputed: false,
     fieldOrCard: {
@@ -1461,7 +1538,7 @@ export const cardDefinition: Definition['fields'] = {
     },
     isPrimitive: true,
   },
-  'cardInfo.theme.cardInfo.theme.cardInfo.thumbnailURL': {
+  'cardInfo.theme.cardInfo.theme.cardInfo.cardThumbnailURL': {
     type: 'contains',
     isComputed: false,
     fieldOrCard: {
@@ -1479,7 +1556,7 @@ export const cardDefinition: Definition['fields'] = {
     },
     isPrimitive: true,
   },
-  'cardInfo.theme.cardInfo.theme.description': {
+  'cardInfo.theme.cardInfo.theme.cardDescription': {
     type: 'contains',
     isComputed: true,
     fieldOrCard: {
@@ -1506,7 +1583,7 @@ export const cardDefinition: Definition['fields'] = {
     },
     isPrimitive: true,
   },
-  'cardInfo.theme.cardInfo.theme.thumbnailURL': {
+  'cardInfo.theme.cardInfo.theme.cardThumbnailURL': {
     type: 'contains',
     isComputed: true,
     fieldOrCard: {
@@ -1533,7 +1610,7 @@ export const cardDefinition: Definition['fields'] = {
     },
     isPrimitive: true,
   },
-  'cardInfo.theme.cardInfo.theme.cardInfo.theme.title': {
+  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardTitle': {
     type: 'contains',
     isComputed: true,
     fieldOrCard: {
@@ -1551,7 +1628,7 @@ export const cardDefinition: Definition['fields'] = {
     },
     isPrimitive: false,
   },
-  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.title': {
+  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.name': {
     type: 'contains',
     isComputed: false,
     fieldOrCard: {
@@ -1560,7 +1637,7 @@ export const cardDefinition: Definition['fields'] = {
     },
     isPrimitive: true,
   },
-  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.description': {
+  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.summary': {
     type: 'contains',
     isComputed: false,
     fieldOrCard: {
@@ -1569,7 +1646,7 @@ export const cardDefinition: Definition['fields'] = {
     },
     isPrimitive: true,
   },
-  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.thumbnailURL': {
+  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.cardThumbnailURL': {
     type: 'contains',
     isComputed: false,
     fieldOrCard: {
@@ -1587,7 +1664,7 @@ export const cardDefinition: Definition['fields'] = {
     },
     isPrimitive: true,
   },
-  'cardInfo.theme.cardInfo.theme.cardInfo.theme.description': {
+  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardDescription': {
     type: 'contains',
     isComputed: true,
     fieldOrCard: {
@@ -1614,7 +1691,7 @@ export const cardDefinition: Definition['fields'] = {
     },
     isPrimitive: true,
   },
-  'cardInfo.theme.cardInfo.theme.cardInfo.theme.thumbnailURL': {
+  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardThumbnailURL': {
     type: 'contains',
     isComputed: true,
     fieldOrCard: {
@@ -1641,7 +1718,7 @@ export const cardDefinition: Definition['fields'] = {
     },
     isPrimitive: true,
   },
-  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.title': {
+  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardTitle': {
     type: 'contains',
     isComputed: true,
     fieldOrCard: {
@@ -1659,7 +1736,16 @@ export const cardDefinition: Definition['fields'] = {
     },
     isPrimitive: false,
   },
-  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.title':
+  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.name': {
+    type: 'contains',
+    isComputed: false,
+    fieldOrCard: {
+      name: 'StringField',
+      module: 'https://cardstack.com/base/card-api',
+    },
+    isPrimitive: true,
+  },
+  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.summary':
     {
       type: 'contains',
       isComputed: false,
@@ -1669,17 +1755,7 @@ export const cardDefinition: Definition['fields'] = {
       },
       isPrimitive: true,
     },
-  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.description':
-    {
-      type: 'contains',
-      isComputed: false,
-      fieldOrCard: {
-        name: 'StringField',
-        module: 'https://cardstack.com/base/card-api',
-      },
-      isPrimitive: true,
-    },
-  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.thumbnailURL':
+  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.cardThumbnailURL':
     {
       type: 'contains',
       isComputed: false,
@@ -1689,15 +1765,16 @@ export const cardDefinition: Definition['fields'] = {
       },
       isPrimitive: true,
     },
-  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.description': {
-    type: 'contains',
-    isComputed: true,
-    fieldOrCard: {
-      name: 'StringField',
-      module: 'https://cardstack.com/base/card-api',
+  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardDescription':
+    {
+      type: 'contains',
+      isComputed: true,
+      fieldOrCard: {
+        name: 'StringField',
+        module: 'https://cardstack.com/base/card-api',
+      },
+      isPrimitive: true,
     },
-    isPrimitive: true,
-  },
   'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.cssVariables': {
     type: 'contains',
     isComputed: false,
@@ -1716,15 +1793,16 @@ export const cardDefinition: Definition['fields'] = {
     },
     isPrimitive: true,
   },
-  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.thumbnailURL': {
-    type: 'contains',
-    isComputed: true,
-    fieldOrCard: {
-      name: 'MaybeBase64Field',
-      module: 'https://cardstack.com/base/card-api',
+  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardThumbnailURL':
+    {
+      type: 'contains',
+      isComputed: true,
+      fieldOrCard: {
+        name: 'MaybeBase64Field',
+        module: 'https://cardstack.com/base/card-api',
+      },
+      isPrimitive: true,
     },
-    isPrimitive: true,
-  },
   'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme':
     {
       type: 'linksTo',

@@ -10,12 +10,12 @@
     "attributes": {
       "name": "Cardstack Theme",
       "images": [],
-      "summary": "Cardstack’s house style theme with IBM Plex typography, vibrant purple accents, and paired light/dark tokens for backgrounds, borders, charts, and sidebars—ready to brand your cards with the official Cardstack look.",
+      "summary": "Cardstack\u2019s house style theme with IBM Plex typography, vibrant purple accents, and paired light/dark tokens for backgrounds, borders, charts, and sidebars\u2014ready to brand your cards with the official Cardstack look.",
       "cardInfo": {
         "notes": null,
-        "title": "Cardstack Theme",
-        "description": "IBM Plex-driven Cardstack brand theme with balanced light/dark palettes, chart colors, and sidebar tokens.",
-        "thumbnailURL": null
+        "name": "Cardstack Theme",
+        "summary": "IBM Plex-driven Cardstack brand theme with balanced light/dark palettes, chart colors, and sidebar tokens.",
+        "cardThumbnailURL": null
       }
     },
     "relationships": {

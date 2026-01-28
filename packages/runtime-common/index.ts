@@ -1,14 +1,26 @@
-import type { CardResource, LooseCardResource, Meta } from './resource-types';
+import type {
+  CardResource,
+  FileMetaResource,
+  LinkableResource,
+  LooseLinkableResource,
+  Meta,
+} from './resource-types';
 import type { ResolvedCodeRef } from './code-ref';
 import type { RenderRouteOptions } from './render-route-options';
 import type { Definition } from './definitions';
 
 import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
+import type { FileDef } from 'https://cardstack.com/base/file-api';
 import type { ErrorEntry } from './index-writer';
 
+export interface LooseSingleResourceDocument<T extends LinkableResource> {
+  data: LooseLinkableResource<T>;
+  included?: LooseLinkableResource<LinkableResource>[];
+}
+
 export interface LooseSingleCardDocument {
-  data: LooseCardResource;
-  included?: CardResource[];
+  data: LooseLinkableResource<CardResource>;
+  included?: LinkableResource[];
 }
 
 export type PatchData = {
@@ -48,6 +60,8 @@ export interface FileExtractResponse {
   nonce: string;
   status: 'ready' | 'error';
   searchDoc: Record<string, any> | null;
+  resource?: FileMetaResource | null;
+  types?: string[] | null;
   deps: string[];
   error?: RenderError;
   mismatch?: true;
@@ -104,6 +118,7 @@ export {
   type CardErrorsJSONAPI,
   isCardErrorJSONAPI,
 } from './error';
+export { validateWriteSize } from './write-size-validation';
 
 export interface ResourceObject {
   type: string;
@@ -240,10 +255,12 @@ export * from './serializers';
 export type {
   CardDocument,
   SingleCardDocument,
+  SingleFileMetaDocument,
   CardCollectionDocument,
 } from './document-types';
 export type {
   CardResource,
+  FileMetaResource,
   ModuleResource,
   CardResourceMeta,
   ResourceID,
@@ -251,11 +268,13 @@ export type {
   Saved,
   Relationship,
   CardFields,
+  LooseLinkableResource,
 } from './resource-types';
 export {
   isCardDocument,
   isCardCollectionDocument,
   isSingleCardDocument,
+  isSingleFileMetaDocument,
   isCardDocumentString,
 } from './document-types';
 export {
@@ -425,6 +444,8 @@ export interface AddOptions extends CreateOptions {
   doNotWaitForPersist?: boolean;
 }
 
+export type StoreReadType = 'card' | 'file-meta';
+
 export interface Store {
   save(id: string): void;
   create(
@@ -443,10 +464,27 @@ export interface Store {
     instanceOrDoc: T | LooseSingleCardDocument,
     opts?: CreateOptions,
   ): Promise<T | CardErrorJSONAPI>;
-  peek<T extends CardDef>(id: string): T | CardErrorJSONAPI | undefined;
-  peekLive<T extends CardDef>(id: string): T | CardErrorJSONAPI | undefined;
-  peekError(id: string): CardErrorJSONAPI | undefined;
-  get<T extends CardDef>(id: string): Promise<T | CardErrorJSONAPI>;
+  peek<T extends CardDef>(
+    id: string,
+    opts?: { type?: 'card' },
+  ): T | CardErrorJSONAPI | undefined;
+  peek<T extends FileDef>(
+    id: string,
+    opts: { type: 'file-meta' },
+  ): T | CardErrorJSONAPI | undefined;
+  peekError(id: string, opts?: { type?: 'card' }): CardErrorJSONAPI | undefined;
+  peekError(
+    id: string,
+    opts: { type: 'file-meta' },
+  ): CardErrorJSONAPI | undefined;
+  get<T extends CardDef>(
+    id: string,
+    opts?: { type?: 'card' },
+  ): Promise<T | CardErrorJSONAPI>;
+  get<T extends FileDef>(
+    id: string,
+    opts: { type: 'file-meta' },
+  ): Promise<T | CardErrorJSONAPI>;
   delete(id: string): Promise<void>;
   patch<T extends CardDef>(
     id: string,
@@ -457,9 +495,9 @@ export interface Store {
   getSaveState(id: string): AutoSaveState | undefined;
 }
 
-export interface CardCatalogQuery extends Query {
+export type CardCatalogQuery = Query & {
   filter?: CardTypeFilter | EveryFilter;
-}
+};
 
 export interface CardCreator {
   create(

@@ -654,7 +654,7 @@ class Isolated extends Component<typeof AILayoutBoard> {
               const selectedCard = await this.args.context.store.get(cardId);
               if (selectedCard instanceof CardDef) {
                 newItem.externalCard = selectedCard;
-                newItem.caption = selectedCard.title || 'External Card';
+                newItem.caption = selectedCard.cardTitle || 'External Card';
               } else {
                 console.warn(
                   'Selected card is not a CardDef; skipping external link',
@@ -743,12 +743,12 @@ class Isolated extends Component<typeof AILayoutBoard> {
       <header class='board-header'>
         <div class='header-left'>
           <h1 class='board-title'>{{if
-              @model.title
-              @model.title
+              @model.cardTitle
+              @model.cardTitle
               'Layout Board'
             }}</h1>
-          {{#if @model.description}}
-            <span class='board-description'>{{@model.description}}</span>
+          {{#if @model.cardDescription}}
+            <span class='board-description'>{{@model.cardDescription}}</span>
           {{/if}}
         </div>
 
@@ -1993,8 +1993,8 @@ class Embedded extends Component<typeof AILayoutBoard> {
     <div class='layout-board-embedded'>
       <div class='embedded-header'>
         <h3 class='embedded-title'>{{if
-            @model.title
-            @model.title
+            @model.cardTitle
+            @model.cardTitle
             '2D Layout Board'
           }}</h3>
         <div class='embedded-counts'>
@@ -2205,8 +2205,8 @@ class Fitted extends Component<typeof AILayoutBoard> {
           <div class='badge-icon'>🎨</div>
           <div class='badge-text'>
             <div class='primary-text'>{{if
-                @model.title
-                @model.title
+                @model.cardTitle
+                @model.cardTitle
                 'Layout'
               }}</div>
           </div>
@@ -2219,8 +2219,8 @@ class Fitted extends Component<typeof AILayoutBoard> {
         <div class='strip-icon'>🎨</div>
         <div class='strip-content'>
           <div class='primary-text'>{{if
-              @model.title
-              @model.title
+              @model.cardTitle
+              @model.cardTitle
               '2D Layout Board'
             }}</div>
           <div class='tertiary-text'>{{this.allItemsLength}}
@@ -2233,8 +2233,8 @@ class Fitted extends Component<typeof AILayoutBoard> {
         <div class='tile-layout'>
           <div class='tile-header'>
             <div class='primary-text'>{{if
-                @model.title
-                @model.title
+                @model.cardTitle
+                @model.cardTitle
                 'Layout'
               }}</div>
             <div class='layout-icon'>🎨</div>
@@ -2299,8 +2299,8 @@ class Fitted extends Component<typeof AILayoutBoard> {
         <div class='card-layout'>
           <div class='card-header'>
             <div class='primary-text'>{{if
-                @model.title
-                @model.title
+                @model.cardTitle
+                @model.cardTitle
                 '2D Layout Board'
               }}</div>
             <div class='layout-icon'>🎨</div>

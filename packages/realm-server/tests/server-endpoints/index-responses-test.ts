@@ -1,0 +1,246 @@
+import { module, test } from 'qunit';
+import { join, basename } from 'path';
+import { systemInitiatedPriority } from '@cardstack/runtime-common';
+import { setupServerEndpointsTest, testRealm2URL } from './helpers';
+import { ensureDirSync, writeFileSync, writeJSONSync } from 'fs-extra';
+import '@cardstack/runtime-common/helpers/code-equality-assertion';
+
+module(`server-endpoints/${basename(__filename)}`, function () {
+  module(
+    'Realm Server Endpoints (not specific to one realm)',
+    function (hooks) {
+      let context = setupServerEndpointsTest(hooks, {
+        beforeStartRealmServer: async (context) => {
+          let subdirectoryPath = join(context.testRealmDir, 'subdirectory');
+          ensureDirSync(subdirectoryPath);
+          writeJSONSync(join(subdirectoryPath, 'index.json'), {
+            data: {
+              type: 'card',
+              attributes: {
+                firstName: 'Subdirectory Index',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: '../person.gts',
+                  name: 'Person',
+                },
+              },
+            },
+          });
+
+          writeFileSync(
+            join(context.testRealmDir, 'isolated-card.gts'),
+            `
+              import { Component, CardDef } from 'https://cardstack.com/base/card-api';
+
+              export class IsolatedCard extends CardDef {
+                static isolated = class Isolated extends Component<typeof this> {
+                  <template>
+                    <div data-test-isolated-html>Isolated HTML</div>
+                  </template>
+                };
+              }
+              `,
+          );
+
+          writeJSONSync(join(context.testRealmDir, 'isolated-test.json'), {
+            data: {
+              type: 'card',
+              attributes: {},
+              meta: {
+                adoptsFrom: {
+                  module: './isolated-card.gts',
+                  name: 'IsolatedCard',
+                },
+              },
+            },
+          });
+
+          writeFileSync(
+            join(context.testRealmDir, 'head-card.gts'),
+            `
+            import { Component, CardDef } from 'https://cardstack.com/base/card-api';
+
+            export class HeadCard extends CardDef {
+              static isolated = class Isolated extends Component<typeof this> {
+                <template>
+                  <div data-test-isolated-html>Private isolated HTML</div>
+                </template>
+              };
+
+              static head = class Head extends Component<typeof this> {
+                <template>
+                  <meta data-test-head-html content="private-head" />
+                </template>
+              };
+            }
+            `,
+          );
+
+          writeJSONSync(join(context.testRealmDir, 'private-index-test.json'), {
+            data: {
+              type: 'card',
+              attributes: {},
+              meta: {
+                adoptsFrom: {
+                  module: './head-card.gts',
+                  name: 'HeadCard',
+                },
+              },
+            },
+          });
+
+          writeFileSync(
+            join(context.testRealmDir, 'scoped-css-card.gts'),
+            `
+            import { Component, CardDef } from 'https://cardstack.com/base/card-api';
+
+            export class ScopedCssCard extends CardDef {
+              static isolated = class Isolated extends Component<typeof this> {
+                <template>
+                  <div class="scoped-css-marker" data-test-scoped-css>Scoped CSS</div>
+                  <style scoped>
+                    .scoped-css-marker {
+                      --scoped-css-marker: 1;
+                    }
+                  </style>
+                </template>
+              };
+            }
+            `,
+          );
+
+          writeJSONSync(join(context.testRealmDir, 'scoped-css-test.json'), {
+            data: {
+              type: 'card',
+              attributes: {},
+              meta: {
+                adoptsFrom: {
+                  module: './scoped-css-card.gts',
+                  name: 'ScopedCssCard',
+                },
+              },
+            },
+          });
+        },
+      });
+
+      test('startup indexing uses system initiated queue priority', async function (assert) {
+        let [job] = (await context.dbAdapter.execute(
+          `SELECT priority FROM jobs WHERE job_type = 'from-scratch-index' AND args->>'realmURL' = '${testRealm2URL.href}' ORDER BY created_at DESC LIMIT 1`,
+        )) as { priority: number }[];
+
+        assert.ok(job, 'found startup from-scratch index job for realm');
+        assert.strictEqual(
+          job.priority,
+          systemInitiatedPriority,
+          'realm startup uses system initiated priority',
+        );
+      });
+
+      test('serves isolated HTML for realm index request', async function (assert) {
+        let response = await context.request2
+          .get('/test')
+          .set('Accept', 'text/html');
+
+        assert.strictEqual(response.status, 200, 'serves HTML response');
+        assert.ok(
+          response.text.includes('data-test-home-card'),
+          'isolated HTML for index card is injected into the HTML response',
+        );
+      });
+
+      test('serves isolated HTML in index responses for card URLs', async function (assert) {
+        let response = await context.request2
+          .get('/test/isolated-test')
+          .set('Accept', 'text/html');
+
+        assert.strictEqual(response.status, 200, 'serves HTML response');
+        assert.ok(
+          response.text.includes('data-test-isolated-html'),
+          'isolated HTML is injected into the HTML response',
+        );
+      });
+
+      test('prefers non-null head and isolated HTML when matches are present', async function (assert) {
+        let cardURL = new URL('head-isolated-candidate', testRealm2URL);
+        let aliasOnlyURL = new URL('alias-only-candidate', testRealm2URL);
+
+        await context.dbAdapter.execute(
+          `INSERT INTO boxel_index_working (url, file_alias, type, realm_version, realm_url, head_html, isolated_html)
+           VALUES
+           ('${cardURL.href}', '${cardURL.href}', 'instance', 1, '${testRealm2URL.href}', '<meta data-test-head-html content="from-db" />', '<div data-test-isolated-html>Injected isolated</div>'),
+           ('${aliasOnlyURL.href}', '${cardURL.href}', 'instance', 2, '${testRealm2URL.href}', NULL, NULL)`,
+        );
+
+        let response = await context.request2
+          .get('/test/head-isolated-candidate')
+          .set('Accept', 'text/html');
+
+        assert.strictEqual(response.status, 200, 'serves HTML response');
+        assert.ok(
+          response.text.includes('data-test-head-html'),
+          'head HTML is injected into the HTML response',
+        );
+        assert.ok(
+          response.text.includes('data-test-isolated-html'),
+          'isolated HTML is injected into the HTML response',
+        );
+      });
+
+      test('serves isolated HTML for /subdirectory/index.json at /subdirectory/', async function (assert) {
+        let response = await context.request2
+          .get('/test/subdirectory/')
+          .set('Accept', 'text/html');
+
+        assert.strictEqual(response.status, 200, 'serves HTML response');
+
+        assert.ok(
+          response.text.includes('Subdirectory Index'),
+          'isolated HTML is injected into the HTML response',
+        );
+      });
+
+      test('does not inject head or isolated HTML when realm is not public', async function (assert) {
+        await context.dbAdapter.execute(
+          `DELETE FROM realm_user_permissions WHERE realm_url = '${testRealm2URL.href}' AND username = '*'`,
+        );
+
+        let response = await context.request2
+          .get('/test/private-index-test')
+          .set('Accept', 'text/html');
+
+        assert.strictEqual(response.status, 200, 'serves HTML response');
+        assert.notOk(
+          response.text.includes('data-test-head-html'),
+          'head HTML is not injected into the HTML response',
+        );
+        assert.notOk(
+          response.text.includes('data-test-isolated-html'),
+          'isolated HTML is not injected into the HTML response',
+        );
+      });
+
+      test('serves scoped CSS in index responses for card URLs', async function (assert) {
+        let response = await context.request2
+          .get('/test/scoped-css-test')
+          .set('Accept', 'text/html');
+
+        assert.strictEqual(response.status, 200, 'serves HTML response');
+        assert.ok(
+          response.text.includes('data-boxel-scoped-css'),
+          'scoped CSS style tag is injected into the HTML response',
+        );
+        assert.ok(
+          response.text.includes('--scoped-css-marker: 1'),
+          'scoped CSS is included in the HTML response',
+        );
+      });
+
+      test('returns 404 for request that has malformed URI', async function (assert) {
+        let response = await context.request2.get('/%c0').set('Accept', '*/*');
+        assert.strictEqual(response.status, 404, 'HTTP 404 status');
+      });
+    },
+  );
+});

@@ -6,7 +6,7 @@
       "canonicalSlug": "mistralai/mistral-nemo",
       "name": "Mistral: Mistral Nemo",
       "created": 1721347200,
-      "description": "A 12B parameter model with a 128k token context length built by Mistral in collaboration with NVIDIA.\n\nThe model is multilingual, supporting English, French, German, Spanish, Italian, Portuguese, Chinese, Japanese, Korean, Arabic, and Hindi.\n\nIt supports function calling and is released under the Apache 2.0 license.",
+      "cardDescription": "A 12B parameter model with a 128k token context length built by Mistral in collaboration with NVIDIA.\n\nThe model is multilingual, supporting English, French, German, Spanish, Italian, Portuguese, Chinese, Japanese, Korean, Arabic, and Hindi.\n\nIt supports function calling and is released under the Apache 2.0 license.",
       "pricing": {
         "prompt": "0.00000002",
         "completion": "0.00000004",
@@ -51,9 +51,9 @@
         "temperature": 0.3
       },
       "cardInfo": {
-        "title": null,
-        "description": null,
-        "thumbnailURL": null,
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
         "notes": null
       }
     },

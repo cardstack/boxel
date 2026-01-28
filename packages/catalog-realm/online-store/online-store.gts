@@ -37,7 +37,7 @@ const orderSource = {
 };
 
 const customerSource = {
-  module: new URL('../online-custmomer/online-customer', import.meta.url).href,
+  module: new URL('../online-customer/online-customer', import.meta.url).href,
   name: 'OnlineCustomer',
 };
 
@@ -591,9 +591,7 @@ class IsolatedTemplate extends Component<typeof OnlineStore> {
                               <p>Failed to load: {{card.url}}</p>
                             </div>
                           {{else}}
-                            <card.component
-                              class='product-card-container'
-                            />
+                            <card.component class='product-card-container' />
                           {{/if}}
                         {{/each}}
                       </div>
@@ -669,9 +667,7 @@ class IsolatedTemplate extends Component<typeof OnlineStore> {
                               <p>Failed to load: {{card.url}}</p>
                             </div>
                           {{else}}
-                            <card.component
-                              class='order-card-container'
-                            />
+                            <card.component class='order-card-container' />
                           {{/if}}
                         {{/each}}
                       </div>
@@ -749,9 +745,7 @@ class IsolatedTemplate extends Component<typeof OnlineStore> {
                               <p>Failed to load: {{card.url}}</p>
                             </div>
                           {{else}}
-                            <card.component
-                              class='customer-card-container'
-                            />
+                            <card.component class='customer-card-container' />
                           {{/if}}
                         {{/each}}
                       </div>
@@ -1424,7 +1418,7 @@ export class OnlineStore extends CardDef {
   @field contactEmail = contains(EmailField);
   @field storePhysicalAddress = contains(TextAreaField);
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: OnlineStore) {
       try {
         const name = this.storeName ?? 'Online Store';

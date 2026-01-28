@@ -88,7 +88,7 @@ module('Integration | ai-assistant-panel | sending', function (hooks) {
           return this.firstName[0];
         },
       });
-      @field title = contains(StringField, {
+      @field cardTitle = contains(StringField, {
         computeVia: function (this: Person) {
           return this.firstName;
         },
@@ -143,9 +143,7 @@ module('Integration | ai-assistant-panel | sending', function (hooks) {
     setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-        </template>
+        <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
     await openAiAssistant();
@@ -185,9 +183,7 @@ module('Integration | ai-assistant-panel | sending', function (hooks) {
     setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-        </template>
+        <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
 
@@ -235,9 +231,7 @@ module('Integration | ai-assistant-panel | sending', function (hooks) {
     setCardInOperatorModeState();
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-        </template>
+        <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
     await openAiAssistant();
@@ -264,9 +258,7 @@ module('Integration | ai-assistant-panel | sending', function (hooks) {
     setCardInOperatorModeState();
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-        </template>
+        <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
     await openAiAssistant();
@@ -312,9 +304,7 @@ module('Integration | ai-assistant-panel | sending', function (hooks) {
 
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-        </template>
+        <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
 

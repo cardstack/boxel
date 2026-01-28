@@ -2,13 +2,15 @@ import {
   buildSearchErrorResponse,
   baseRealm,
   ensureTrailingSlash,
-  parseRealmsParam,
-  parsePrerenderedSearchRequestFromRequest,
-  parseSearchQueryFromRequest,
+  parsePrerenderedSearchRequestFromPayload,
+  parseRealmsFromPayload,
+  parseSearchQueryFromPayload,
+  parseSearchRequestPayload,
   SearchRequestError,
   searchPrerenderedRealms,
   searchRealms,
   SupportedMimeType,
+  type RealmInfo,
   type Query,
 } from '@cardstack/runtime-common';
 
@@ -23,6 +25,8 @@ import { getRoomIdForRealmAndUser } from '../mock-matrix/_utils';
 import { createJWT, testRealmSecretSeed } from '../test-auth';
 import { getTestRealmRegistry } from '../test-realm-registry';
 
+import type { TestRealmAdapter } from '../adapter';
+
 import type { RealmServerMockRoute, RealmServerMockState } from './types';
 
 const TEST_MATRIX_USER = '@testuser:localhost';
@@ -33,7 +37,7 @@ type SearchableRealm = {
   searchPrerendered: (
     query: Query,
     opts: Pick<
-      Awaited<ReturnType<typeof parsePrerenderedSearchRequestFromRequest>>,
+      ReturnType<typeof parsePrerenderedSearchRequestFromPayload>,
       'htmlFormat' | 'cardUrls' | 'renderType'
     >,
   ) => Promise<PrerenderedCardCollectionDocument>;
@@ -59,6 +63,7 @@ export function getRealmServerRoute(
 
 export function registerDefaultRoutes() {
   registerSearchRoutes();
+  registerInfoRoutes();
   registerCatalogRoutes();
   registerAuthRoutes();
 }
@@ -66,16 +71,22 @@ export function registerDefaultRoutes() {
 function registerSearchRoutes() {
   registerRealmServerRoute({
     path: '/_search',
-    handler: async (req, url) => {
-      let realmList = parseRealmsParam(url);
-
-      if (realmList.length === 0) {
-        return buildSearchErrorResponse('realms query param must be supplied');
+    handler: async (req, _url) => {
+      let realmList: string[];
+      let payload: unknown;
+      try {
+        payload = await parseSearchRequestPayload(req);
+        realmList = parseRealmsFromPayload(payload);
+      } catch (e) {
+        if (e instanceof SearchRequestError) {
+          return buildSearchErrorResponse(e.message);
+        }
+        throw e;
       }
 
       let cardsQuery;
       try {
-        cardsQuery = await parseSearchQueryFromRequest(req.clone());
+        cardsQuery = parseSearchQueryFromPayload(payload);
       } catch (e) {
         if (e instanceof SearchRequestError) {
           return buildSearchErrorResponse(e.message);
@@ -97,16 +108,22 @@ function registerSearchRoutes() {
 
   registerRealmServerRoute({
     path: '/_search-prerendered',
-    handler: async (req, url) => {
-      let realmList = parseRealmsParam(url);
-
-      if (realmList.length === 0) {
-        return buildSearchErrorResponse('realms query param must be supplied');
+    handler: async (req, _url) => {
+      let realmList: string[];
+      let payload: unknown;
+      try {
+        payload = await parseSearchRequestPayload(req);
+        realmList = parseRealmsFromPayload(payload);
+      } catch (e) {
+        if (e instanceof SearchRequestError) {
+          return buildSearchErrorResponse(e.message);
+        }
+        throw e;
       }
 
       let parsed;
       try {
-        parsed = await parsePrerenderedSearchRequestFromRequest(req.clone());
+        parsed = parsePrerenderedSearchRequestFromPayload(payload);
       } catch (e) {
         if (e instanceof SearchRequestError) {
           return buildSearchErrorResponse(e.message);
@@ -127,6 +144,61 @@ function registerSearchRoutes() {
       return new Response(JSON.stringify(combined), {
         status: 200,
         headers: { 'content-type': SupportedMimeType.CardJson },
+      });
+    },
+  });
+}
+
+function registerInfoRoutes() {
+  registerRealmServerRoute({
+    path: '/_info',
+    handler: async (req) => {
+      let payload;
+      try {
+        payload = await parseSearchRequestPayload(req.clone());
+      } catch (e) {
+        if (e instanceof SearchRequestError) {
+          return buildSearchErrorResponse(e.message);
+        }
+        throw e;
+      }
+
+      let realmList: string[];
+      try {
+        realmList = parseRealmsFromPayload(payload);
+      } catch (e) {
+        if (e instanceof SearchRequestError) {
+          return buildSearchErrorResponse(e.message);
+        }
+        throw e;
+      }
+
+      let data: { id: string; type: 'realm-info'; attributes: RealmInfo }[] =
+        [];
+      let publicReadableRealms: string[] = [];
+
+      for (let realmURL of realmList) {
+        let info = await getRealmInfoForURL(realmURL);
+        if (!info) {
+          continue;
+        }
+        if (info.visibility === 'public') {
+          publicReadableRealms.push(ensureTrailingSlash(realmURL));
+        }
+        data.push({ id: realmURL, type: 'realm-info', attributes: info });
+      }
+
+      let headers: Record<string, string> = {
+        'content-type': SupportedMimeType.RealmInfo,
+      };
+      if (publicReadableRealms.length > 0) {
+        headers['x-boxel-realms-public-readable'] =
+          publicReadableRealms.join(',');
+      }
+
+      return new Response(JSON.stringify({ data }), {
+        status: 200,
+        headers,
       });
     },
   });
@@ -272,6 +344,93 @@ function getSearchableRealmForURL(
 
   remoteRealmCache.set(realmURL, remoteRealm);
   return remoteRealm;
+}
+
+async function getRealmInfoForURL(realmURL: string): Promise<RealmInfo | null> {
+  let registry = getTestRealmRegistry();
+  let normalizedRealmURL = ensureTrailingSlash(realmURL);
+  let registryEntry = registry.get(normalizedRealmURL);
+  if (registryEntry?.realm) {
+    let owner = registryEntry.adapter.owner as
+      | { isDestroying?: boolean; isDestroyed?: boolean }
+      | undefined;
+    if (owner?.isDestroying || owner?.isDestroyed) {
+      registry.delete(normalizedRealmURL);
+    } else {
+      let info = await registryEntry.realm.getRealmInfo();
+      let realmConfig = await readRealmConfigFromAdapter(registryEntry.adapter);
+      if (realmConfig) {
+        info = applyRealmConfigOverrides(info, realmConfig);
+      }
+      return info;
+    }
+  }
+
+  let resolvedRealmURL = resolveRemoteRealmURL(realmURL);
+  try {
+    let response = await globalThis.fetch(`${resolvedRealmURL}_info`, {
+      method: 'QUERY',
+      headers: { Accept: SupportedMimeType.RealmInfo },
+    });
+    if (!response.ok) {
+      return null;
+    }
+    let json = await response.json();
+    return json.data.attributes as RealmInfo;
+  } catch (error) {
+    return null;
+  }
+}
+
+async function readRealmConfigFromAdapter(
+  adapter: TestRealmAdapter,
+): Promise<Record<string, unknown> | null> {
+  await adapter.ready;
+  let fileRef = await adapter.openFile('.realm.json');
+  if (!fileRef || typeof fileRef.content !== 'string') {
+    return null;
+  }
+  try {
+    return JSON.parse(fileRef.content) as Record<string, unknown>;
+  } catch (error) {
+    console.warn(
+      `[realm-server-mock] _info invalid realm config ${JSON.stringify({
+        error: String(error),
+      })}`,
+    );
+    return null;
+  }
+}
+
+function applyRealmConfigOverrides(
+  info: RealmInfo,
+  realmConfig: Record<string, unknown>,
+): RealmInfo {
+  return {
+    ...info,
+    name: (realmConfig.name as string | null | undefined) ?? info.name,
+    backgroundURL:
+      (realmConfig.backgroundURL as string | null | undefined) ??
+      info.backgroundURL,
+    iconURL: (realmConfig.iconURL as string | null | undefined) ?? info.iconURL,
+    showAsCatalog:
+      (realmConfig.showAsCatalog as boolean | null | undefined) ??
+      info.showAsCatalog,
+    interactHome:
+      (realmConfig.interactHome as string | null | undefined) ??
+      info.interactHome,
+    hostHome:
+      (realmConfig.hostHome as string | null | undefined) ?? info.hostHome,
+    realmUserId:
+      (realmConfig.realmUserId as string | null | undefined) ??
+      info.realmUserId,
+    publishable:
+      (realmConfig.publishable as boolean | null | undefined) ??
+      info.publishable,
+    lastPublishedAt:
+      (realmConfig.lastPublishedAt as string | Record<string, string> | null) ||
+      info.lastPublishedAt,
+  };
 }
 
 function resolveRemoteRealmURL(realmURL: string): string {

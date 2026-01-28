@@ -2,12 +2,9 @@ import { module, test } from 'qunit';
 import type { Test, SuperTest } from 'supertest';
 import { basename } from 'path';
 import type { Realm } from '@cardstack/runtime-common';
-import {
-  buildQueryParamValue,
-  PRERENDERED_HTML_FORMATS,
-} from '@cardstack/runtime-common';
-import type { Query } from '@cardstack/runtime-common/query';
 import { setupPermissionedRealm, createJWT } from './helpers';
+import { PRERENDERED_HTML_FORMATS } from '@cardstack/runtime-common';
+import type { Query } from '@cardstack/runtime-common/query';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
 const missingPrerenderedHtmlFormatMessage = `Must include a 'prerenderedHtmlFormat' parameter with a value of ${PRERENDERED_HTML_FORMATS.join()} to use this endpoint`;
@@ -31,33 +28,7 @@ module(basename(__filename), function () {
       searchPath = `${realmURLFromTest.pathname.replace(/\/$/, '')}/_search-prerendered`;
     }
 
-    type PrerenderedSearchQuery = Query & {
-      prerenderedHtmlFormat?: string;
-      cardUrls?: string[];
-      renderType?: { module: string; name: string };
-    };
-
-    function buildPrerenderedSearchPath(query: PrerenderedSearchQuery) {
-      let { prerenderedHtmlFormat, cardUrls, renderType, ...cardsQuery } =
-        query;
-      let searchParams = new URLSearchParams();
-      searchParams.set('query', buildQueryParamValue(cardsQuery));
-      if (prerenderedHtmlFormat) {
-        searchParams.set('prerenderedHtmlFormat', prerenderedHtmlFormat);
-      }
-      if (cardUrls) {
-        for (let url of cardUrls) {
-          searchParams.append('cardUrls[]', url);
-        }
-      }
-      if (renderType) {
-        searchParams.set('renderType[module]', renderType.module);
-        searchParams.set('renderType[name]', renderType.name);
-      }
-      return `${searchPath}?${searchParams.toString()}`;
-    }
-
-    module('GET request', function (_hooks) {
+    module('QUERY request (formerly GET)', function (_hooks) {
       module(
         'instances with no embedded template css of its own',
         function (hooks) {
@@ -109,8 +80,10 @@ module(basename(__filename), function () {
 
           test('endpoint will respond with a bad request if html format is not provided', async function (assert) {
             let response = await request
-              .get(buildPrerenderedSearchPath({}))
-              .set('Accept', 'application/vnd.card+json');
+              .post(searchPath)
+              .set('Accept', 'application/vnd.card+json')
+              .set('X-HTTP-Method-Override', 'QUERY')
+              .send({});
 
             assert.strictEqual(response.status, 400, 'HTTP 200 status');
 
@@ -135,8 +108,10 @@ module(basename(__filename), function () {
               prerenderedHtmlFormat: 'embedded',
             };
             let response = await request
-              .get(buildPrerenderedSearchPath(query))
-              .set('Accept', 'application/vnd.card+json');
+              .post(searchPath)
+              .set('Accept', 'application/vnd.card+json')
+              .set('X-HTTP-Method-Override', 'QUERY')
+              .send(query);
 
             assert.strictEqual(response.status, 200, 'HTTP 200 status');
             assert.strictEqual(
@@ -237,7 +212,7 @@ module(basename(__filename), function () {
               data: {
                 attributes: {
                   firstName: 'Aaron',
-                  title: 'Person Aaron',
+                  cardTitle: 'Person Aaron',
                 },
                 meta: {
                   adoptsFrom: {
@@ -251,7 +226,7 @@ module(basename(__filename), function () {
               data: {
                 attributes: {
                   firstName: 'Craig',
-                  title: 'Person Craig',
+                  cardTitle: 'Person Craig',
                 },
                 meta: {
                   adoptsFrom: {
@@ -266,7 +241,7 @@ module(basename(__filename), function () {
                 attributes: {
                   firstName: 'Jane',
                   favoriteColor: 'blue',
-                  title: 'FancyPerson Jane',
+                  cardTitle: 'FancyPerson Jane',
                 },
                 meta: {
                   adoptsFrom: {
@@ -281,7 +256,7 @@ module(basename(__filename), function () {
                 attributes: {
                   firstName: 'Jimmy',
                   favoriteColor: 'black',
-                  title: 'FancyPerson Jimmy',
+                  cardTitle: 'FancyPerson Jimmy',
                 },
                 meta: {
                   adoptsFrom: {
@@ -297,12 +272,12 @@ module(basename(__filename), function () {
 
         test('returns instances with CardDef prerendered embedded html + css when there is no "on" filter', async function (assert) {
           let response = await request
-            .get(
-              buildPrerenderedSearchPath({
-                prerenderedHtmlFormat: 'embedded',
-              }),
-            )
-            .set('Accept', 'application/vnd.card+json');
+            .post(searchPath)
+            .set('Accept', 'application/vnd.card+json')
+            .set('X-HTTP-Method-Override', 'QUERY')
+            .send({
+              prerenderedHtmlFormat: 'embedded',
+            });
 
           assert.strictEqual(response.status, 200, 'HTTP 200 status');
           assert.strictEqual(
@@ -385,8 +360,10 @@ module(basename(__filename), function () {
           };
 
           let response = await request
-            .get(buildPrerenderedSearchPath(query))
-            .set('Accept', 'application/vnd.card+json');
+            .post(searchPath)
+            .set('Accept', 'application/vnd.card+json')
+            .set('X-HTTP-Method-Override', 'QUERY')
+            .send(query);
 
           let json = response.body;
 
@@ -432,8 +409,10 @@ module(basename(__filename), function () {
             prerenderedHtmlFormat: 'embedded',
           };
           let response = await request
-            .get(buildPrerenderedSearchPath(query))
-            .set('Accept', 'application/vnd.card+json');
+            .post(searchPath)
+            .set('Accept', 'application/vnd.card+json')
+            .set('X-HTTP-Method-Override', 'QUERY')
+            .send(query);
 
           let json = response.body;
 
@@ -454,8 +433,10 @@ module(basename(__filename), function () {
             cardUrls: [`${realmHref}jimmy.json`],
           };
           let response = await request
-            .get(buildPrerenderedSearchPath(query))
-            .set('Accept', 'application/vnd.card+json');
+            .post(searchPath)
+            .set('Accept', 'application/vnd.card+json')
+            .set('X-HTTP-Method-Override', 'QUERY')
+            .send(query);
 
           let json = response.body;
 
@@ -471,8 +452,10 @@ module(basename(__filename), function () {
             cardUrls: [`${realmHref}jimmy.json`, `${realmHref}jane.json`],
           };
           response = await request
-            .get(buildPrerenderedSearchPath(query))
-            .set('Accept', 'application/vnd.card+json');
+            .post(searchPath)
+            .set('Accept', 'application/vnd.card+json')
+            .set('X-HTTP-Method-Override', 'QUERY')
+            .send(query);
 
           json = response.body;
 
@@ -497,8 +480,10 @@ module(basename(__filename), function () {
             prerenderedHtmlFormat: 'embedded',
           };
           let response = await request
-            .get(buildPrerenderedSearchPath(query))
-            .set('Accept', 'application/vnd.card+json');
+            .post(searchPath)
+            .set('Accept', 'application/vnd.card+json')
+            .set('X-HTTP-Method-Override', 'QUERY')
+            .send(query);
 
           let json = response.body;
 
@@ -529,8 +514,10 @@ module(basename(__filename), function () {
           };
 
           let response = await request
-            .get(buildPrerenderedSearchPath(query))
-            .set('Accept', 'application/vnd.card+json');
+            .post(searchPath)
+            .set('Accept', 'application/vnd.card+json')
+            .set('X-HTTP-Method-Override', 'QUERY')
+            .send(query);
 
           let json = response.body;
 
@@ -542,8 +529,10 @@ module(basename(__filename), function () {
           // Second page
           query.page = { number: 1, size: 2 };
           response = await request
-            .get(buildPrerenderedSearchPath(query))
-            .set('Accept', 'application/vnd.card+json');
+            .post(searchPath)
+            .set('Accept', 'application/vnd.card+json')
+            .set('X-HTTP-Method-Override', 'QUERY')
+            .send(query);
 
           json = response.body;
 
@@ -739,7 +728,7 @@ module(basename(__filename), function () {
               data: {
                 attributes: {
                   firstName: 'Aaron',
-                  title: 'Person Aaron',
+                  cardTitle: 'Person Aaron',
                 },
                 meta: {
                   adoptsFrom: {
@@ -753,7 +742,7 @@ module(basename(__filename), function () {
               data: {
                 attributes: {
                   firstName: 'Craig',
-                  title: 'Person Craig',
+                  cardTitle: 'Person Craig',
                 },
                 meta: {
                   adoptsFrom: {
@@ -768,7 +757,7 @@ module(basename(__filename), function () {
                 attributes: {
                   firstName: 'Jane',
                   favoriteColor: 'blue',
-                  title: 'FancyPerson Jane',
+                  cardTitle: 'FancyPerson Jane',
                 },
                 meta: {
                   adoptsFrom: {
@@ -783,7 +772,7 @@ module(basename(__filename), function () {
                 attributes: {
                   firstName: 'Jimmy',
                   favoriteColor: 'black',
-                  title: 'FancyPerson Jimmy',
+                  cardTitle: 'FancyPerson Jimmy',
                 },
                 meta: {
                   adoptsFrom: {

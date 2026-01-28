@@ -14,6 +14,7 @@ export default async function visitOperatorMode({
   moduleInspector,
   workspaceChooserOpened,
   trail,
+  cardPreviewFormat,
 }: Partial<SerializedState> & { selectAllCardsFilter?: boolean }) {
   let operatorModeState = {
     stacks: stacks || [],
@@ -27,6 +28,7 @@ export default async function visitOperatorMode({
     ...(openDirs ? { openDirs } : {}),
     ...(moduleInspector ? { moduleInspector } : {}),
     ...(trail ? { trail } : {}),
+    ...(cardPreviewFormat ? { cardPreviewFormat } : {}),
   };
 
   let operatorModeStateParam = stringify(operatorModeState)!;

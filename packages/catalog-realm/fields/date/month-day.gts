@@ -8,6 +8,7 @@ import NumberField from 'https://cardstack.com/base/number';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import { BoxelSelect } from '@cardstack/boxel-ui/components';
+import { not } from '@cardstack/boxel-ui/helpers';
 import GiftIcon from '@cardstack/boxel-icons/gift';
 
 class MonthDayFieldEdit extends Component<typeof MonthDayField> {
@@ -78,6 +79,7 @@ class MonthDayFieldEdit extends Component<typeof MonthDayField> {
           @onChange={{this.updateMonth}}
           @placeholder='Select month'
           @dropdownClass='month-dropdown'
+          @disabled={{not @canEdit}}
           data-test-month-select
           as |option|
         >
@@ -92,6 +94,7 @@ class MonthDayFieldEdit extends Component<typeof MonthDayField> {
           @onChange={{this.updateDay}}
           @placeholder='Day'
           @dropdownClass='day-dropdown'
+          @disabled={{not @canEdit}}
           data-test-day-select
           as |option|
         >
@@ -118,7 +121,7 @@ class MonthDayFieldEdit extends Component<typeof MonthDayField> {
   </template>
 }
 
-export class MonthDayField extends FieldDef {
+export default class MonthDayField extends FieldDef {
   static displayName = 'Month-Day';
   static icon = GiftIcon;
 
@@ -238,5 +241,3 @@ export class MonthDayField extends FieldDef {
 
   static edit = MonthDayFieldEdit;
 }
-
-export default MonthDayField;

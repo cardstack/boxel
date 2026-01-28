@@ -2,8 +2,8 @@
   "data": {
     "type": "card",
     "attributes": {
-      "title": "Email Field",
-      "description": "An email field that validates email addresses and provides a suitable editor.",
+      "cardTitle": "Email Field",
+      "cardDescription": "An email field that validates email addresses and provides a suitable editor.",
       "specType": "field",
       "ref": {
         "module": "https://cardstack.com/base/email",

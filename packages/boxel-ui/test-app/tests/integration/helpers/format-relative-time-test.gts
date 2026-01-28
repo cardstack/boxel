@@ -26,9 +26,11 @@ module('Integration | helpers | formatRelativeTime', function (hooks) {
   test('formats past times using default options', async function (assert) {
     const past = new Date(REFERENCE_TIME.getTime() - 2 * HOUR);
 
-    await render(<template>
-      {{formatRelativeTime past locale='en-US' now=REFERENCE_TIME}}
-    </template>);
+    await render(
+      <template>
+        {{formatRelativeTime past locale='en-US' now=REFERENCE_TIME}}
+      </template>,
+    );
 
     assert.dom().hasText('2 hours ago', 'shows localized relative time');
   });
@@ -36,14 +38,16 @@ module('Integration | helpers | formatRelativeTime', function (hooks) {
   test('supports future times and tiny size', async function (assert) {
     const future = new Date(REFERENCE_TIME.getTime() + 2 * HOUR);
 
-    await render(<template>
-      {{formatRelativeTime
-        future
-        locale='en-US'
-        now=REFERENCE_TIME
-        size='tiny'
-      }}
-    </template>);
+    await render(
+      <template>
+        {{formatRelativeTime
+          future
+          locale='en-US'
+          now=REFERENCE_TIME
+          size='tiny'
+        }}
+      </template>,
+    );
 
     assert.dom().hasText('+2h', 'tiny size uses abbreviated format with sign');
   });
@@ -51,15 +55,17 @@ module('Integration | helpers | formatRelativeTime', function (hooks) {
   test('long size with numeric always', async function (assert) {
     const future = new Date(REFERENCE_TIME.getTime() + HOUR);
 
-    await render(<template>
-      {{formatRelativeTime
-        future
-        locale='en-US'
-        now=REFERENCE_TIME
-        size='long'
-        numeric='always'
-      }}
-    </template>);
+    await render(
+      <template>
+        {{formatRelativeTime
+          future
+          locale='en-US'
+          now=REFERENCE_TIME
+          size='long'
+          numeric='always'
+        }}
+      </template>,
+    );
 
     assert.dom().hasText('in 1 hour', 'long size spells out units');
   });
@@ -67,14 +73,16 @@ module('Integration | helpers | formatRelativeTime', function (hooks) {
   test('short style uses narrow relative time output', async function (assert) {
     const future = new Date(REFERENCE_TIME.getTime() + 3 * HOUR);
 
-    await render(<template>
-      {{formatRelativeTime
-        future
-        locale='en-US'
-        now=REFERENCE_TIME
-        size='short'
-      }}
-    </template>);
+    await render(
+      <template>
+        {{formatRelativeTime
+          future
+          locale='en-US'
+          now=REFERENCE_TIME
+          size='short'
+        }}
+      </template>,
+    );
 
     assert
       .dom()
@@ -176,24 +184,28 @@ module('Integration | helpers | formatRelativeTime', function (hooks) {
     );
     const twoHours = new Date(REFERENCE_TIME.getTime() - 2 * HOUR);
 
-    await render(<template>
-      {{formatRelativeTime
-        almostThreeHours
-        locale='en-US'
-        now=REFERENCE_TIME
-        round='ceil'
-      }}
-    </template>);
+    await render(
+      <template>
+        {{formatRelativeTime
+          almostThreeHours
+          locale='en-US'
+          now=REFERENCE_TIME
+          round='ceil'
+        }}
+      </template>,
+    );
     assert.dom().hasText('3 hours ago', 'ceil rounding bumps to next hour');
 
-    await render(<template>
-      {{formatRelativeTime
-        twoHours
-        locale='en-US'
-        now=REFERENCE_TIME
-        unitCeil='minute'
-      }}
-    </template>);
+    await render(
+      <template>
+        {{formatRelativeTime
+          twoHours
+          locale='en-US'
+          now=REFERENCE_TIME
+          unitCeil='minute'
+        }}
+      </template>,
+    );
     assert
       .dom()
       .hasText('120 minutes ago', 'unit ceiling restricts to minutes');
@@ -288,14 +300,16 @@ module('Integration | helpers | formatRelativeTime', function (hooks) {
   test('now threshold collapses near events', async function (assert) {
     const recent = new Date(REFERENCE_TIME.getTime() - 4 * 1000);
 
-    await render(<template>
-      {{formatRelativeTime
-        recent
-        locale='en-US'
-        now=REFERENCE_TIME
-        nowThresholdMs=5000
-      }}
-    </template>);
+    await render(
+      <template>
+        {{formatRelativeTime
+          recent
+          locale='en-US'
+          now=REFERENCE_TIME
+          nowThresholdMs=5000
+        }}
+      </template>,
+    );
 
     assert.dom().hasText('now', 'values within threshold render as now');
   });
@@ -309,15 +323,17 @@ module('Integration | helpers | formatRelativeTime', function (hooks) {
       timeZone: 'UTC',
     };
 
-    await render(<template>
-      {{formatRelativeTime
-        past
-        locale='en-US'
-        now=REFERENCE_TIME
-        switchToAbsoluteAfterMs=switchToAbsoluteAfterMs
-        absoluteOptions=absoluteOptions
-      }}
-    </template>);
+    await render(
+      <template>
+        {{formatRelativeTime
+          past
+          locale='en-US'
+          now=REFERENCE_TIME
+          switchToAbsoluteAfterMs=switchToAbsoluteAfterMs
+          absoluteOptions=absoluteOptions
+        }}
+      </template>,
+    );
 
     assert
       .dom()
@@ -328,36 +344,40 @@ module('Integration | helpers | formatRelativeTime', function (hooks) {
     const pastSeconds = Math.floor(REFERENCE_TIME.getTime() / 1000) - 60 * 60;
     const excelSerial = 45412; // 2024-04-30 (Excel 1900 system)
 
-    await render(<template>
-      {{formatRelativeTime
-        pastSeconds
-        locale='en-US'
-        now=REFERENCE_TIME
-        unit='s'
-      }}
-    </template>);
+    await render(
+      <template>
+        {{formatRelativeTime
+          pastSeconds
+          locale='en-US'
+          now=REFERENCE_TIME
+          unit='s'
+        }}
+      </template>,
+    );
     assert.dom().hasText('1 hour ago', 'interprets numeric seconds timestamps');
 
-    await render(<template>
-      {{formatRelativeTime
-        excelSerial
-        locale='en-US'
-        now=REFERENCE_TIME
-        parse=(hash serialOrigin='excel1900')
-      }}
-    </template>);
+    await render(
+      <template>
+        {{formatRelativeTime
+          excelSerial
+          locale='en-US'
+          now=REFERENCE_TIME
+          parse=(hash serialOrigin='excel1900')
+        }}
+      </template>,
+    );
     assert.dom().hasText('yesterday', 'parses Excel serial values');
   });
 
   test('falls back for invalid values', async function (assert) {
-    await render(<template>
-      {{formatRelativeTime 'invalid' fallback='Unknown'}}
-    </template>);
+    await render(
+      <template>{{formatRelativeTime 'invalid' fallback='Unknown'}}</template>,
+    );
     assert.dom().hasText('Unknown', 'uses fallback for invalid strings');
 
-    await render(<template>
-      {{formatRelativeTime null fallback='Missing'}}
-    </template>);
+    await render(
+      <template>{{formatRelativeTime null fallback='Missing'}}</template>,
+    );
     assert.dom().hasText('Missing', 'uses fallback for null');
   });
 
@@ -393,15 +413,17 @@ module('Integration | helpers | formatRelativeTime', function (hooks) {
     } as const;
     const expected = formatDateTime(past, absoluteOptions);
 
-    await render(<template>
-      {{formatRelativeTime
-        past
-        locale='en-US'
-        now=REFERENCE_TIME
-        switchToAbsoluteAfterMs=DAY
-        absoluteOptions=absoluteOptions
-      }}
-    </template>);
+    await render(
+      <template>
+        {{formatRelativeTime
+          past
+          locale='en-US'
+          now=REFERENCE_TIME
+          switchToAbsoluteAfterMs=DAY
+          absoluteOptions=absoluteOptions
+        }}
+      </template>,
+    );
 
     assert.dom().hasText(expected, 'uses absolute formatting at the threshold');
   });
@@ -417,15 +439,17 @@ module('Integration | helpers | formatRelativeTime', function (hooks) {
 
     const expected = formatDateTime(past, absoluteOptions);
 
-    await render(<template>
-      {{formatRelativeTime
-        past
-        locale='en-US'
-        now=REFERENCE_TIME
-        switchToAbsoluteAfterMs=switchToAbsoluteAfterMs
-        absoluteOptions=absoluteOptions
-      }}
-    </template>);
+    await render(
+      <template>
+        {{formatRelativeTime
+          past
+          locale='en-US'
+          now=REFERENCE_TIME
+          switchToAbsoluteAfterMs=switchToAbsoluteAfterMs
+          absoluteOptions=absoluteOptions
+        }}
+      </template>,
+    );
 
     assert.dom().hasText(expected, 'uses formatDateTime for absolute fallback');
   });
@@ -433,15 +457,17 @@ module('Integration | helpers | formatRelativeTime', function (hooks) {
   test('unit ceiling can force seconds granularity', async function (assert) {
     const past = new Date(REFERENCE_TIME.getTime() - 1500);
 
-    await render(<template>
-      {{formatRelativeTime
-        past
-        locale='en-US'
-        now=REFERENCE_TIME
-        unitCeil='second'
-        nowThresholdMs=0
-      }}
-    </template>);
+    await render(
+      <template>
+        {{formatRelativeTime
+          past
+          locale='en-US'
+          now=REFERENCE_TIME
+          unitCeil='second'
+          nowThresholdMs=0
+        }}
+      </template>,
+    );
 
     assert.dom().hasText('1 second ago', 'respects smallest unit ceiling');
   });

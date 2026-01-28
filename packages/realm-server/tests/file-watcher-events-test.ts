@@ -6,9 +6,11 @@ import type { DirResult } from 'tmp';
 import { removeSync, writeJSONSync, writeFileSync } from 'fs-extra';
 import type { Realm } from '@cardstack/runtime-common';
 import {
-  setupPermissionedRealm,
+  setupPermissionedRealmAtURL,
   setupMatrixRoom,
   waitForRealmEvent,
+  type RealmRequest,
+  withRealmPath,
 } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import type { PgAdapter } from '@cardstack/postgres';
@@ -19,9 +21,11 @@ import type {
 
 module(basename(__filename), function () {
   module('file watcher realm events', function (hooks) {
+    let realmURL = new URL('http://127.0.0.1:4444/test/');
     let testRealm: Realm;
     let testRealmHttpServer: Server;
-    let request: SuperTest<Test>;
+    let request: RealmRequest;
+    let serverRequest: SuperTest<Test>;
     let dir: DirResult;
     let dbAdapter: PgAdapter;
     let realmEventTimestampStart: number;
@@ -35,7 +39,8 @@ module(basename(__filename), function () {
     }) {
       testRealm = args.testRealm;
       testRealmHttpServer = args.testRealmHttpServer;
-      request = args.request;
+      serverRequest = args.request;
+      request = withRealmPath(args.request, realmURL);
       dir = args.dir;
       dbAdapter = args.dbAdapter;
     }
@@ -45,12 +50,13 @@ module(basename(__filename), function () {
         testRealm,
         testRealmHttpServer,
         request,
+        serverRequest,
         dir,
         dbAdapter,
       };
     }
 
-    setupPermissionedRealm(hooks, {
+    setupPermissionedRealmAtURL(hooks, realmURL, {
       permissions: {
         '*': ['read'],
       },
@@ -163,7 +169,7 @@ module(basename(__filename), function () {
         data: {
           type: 'card',
           attributes: {
-            title: 'Mango',
+            cardTitle: 'Mango',
             name: 'Mango',
           },
           meta: {

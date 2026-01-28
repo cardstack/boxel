@@ -6,6 +6,7 @@ import { service } from '@ember/service';
 import { capitalize } from '@ember/string';
 import Component from '@glimmer/component';
 
+import Package from '@cardstack/boxel-icons/package';
 import { use, resource } from 'ember-resources';
 
 import startCase from 'lodash/startCase';
@@ -34,6 +35,7 @@ import {
   type CardErrorJSONAPI,
 } from '@cardstack/runtime-common';
 
+import ListingCreateCommand from '@cardstack/host/commands/listing-create';
 import { getCardType } from '@cardstack/host/resources/card-type';
 import type { Ready } from '@cardstack/host/resources/file';
 
@@ -45,6 +47,7 @@ import {
 } from '@cardstack/host/resources/module-contents';
 
 import { getResolvedCodeRefFromType } from '@cardstack/host/services/card-type-service';
+import type CommandService from '@cardstack/host/services/command-service';
 import type RealmService from '@cardstack/host/services/realm';
 
 import type { CardDef, BaseDef } from 'https://cardstack.com/base/card-api';
@@ -100,8 +103,9 @@ interface Signature {
 }
 
 export default class DetailPanel extends Component<Signature> {
-  @service private declare operatorModeStateService: OperatorModeStateService;
-  @service private declare realm: RealmService;
+  @service declare private operatorModeStateService: OperatorModeStateService;
+  @service declare private realm: RealmService;
+  @service declare private commandService: CommandService;
 
   private lastModified = lastModifiedDate(this, () => this.args.readyFile);
 
@@ -146,6 +150,7 @@ export default class DetailPanel extends Component<Signature> {
   private get showDetailsPanel() {
     return (
       this.args.cardError ||
+      this.args.moduleAnalysis.moduleError ||
       (!this.isModule && !isCardDocumentString(this.args.readyFile.content))
     );
   }
@@ -191,6 +196,16 @@ export default class DetailPanel extends Component<Signature> {
               label: 'Create Instance',
               icon: IconPlus,
               handler: this.createInstance,
+            },
+          ]
+        : []),
+      ...(this.realm.canWrite(this.args.readyFile.url) &&
+      this.args.selectedDeclaration?.exportName
+        ? [
+            {
+              label: 'Create Listing',
+              icon: Package,
+              handler: this.createListingWithAI,
             },
           ]
         : []),
@@ -306,8 +321,8 @@ export default class DetailPanel extends Component<Signature> {
     )
       ? 'card-definition'
       : isFieldDef(this.args.selectedDeclaration.cardOrField)
-      ? 'field-definition'
-      : undefined;
+        ? 'field-definition'
+        : undefined;
     if (!id) {
       throw new Error(`Can only call inherit() on card def or field def`);
     }
@@ -339,6 +354,24 @@ export default class DetailPanel extends Component<Signature> {
       this.operatorModeStateService.state.codePath!,
     );
     this.args.openSearch(`carddef:${refURL}`);
+  }
+
+  @action private async createListingWithAI() {
+    const command = new ListingCreateCommand(
+      this.commandService.commandContext,
+    );
+    let codeRef: ResolvedCodeRef = this.selectedDeclarationAsCodeRef;
+    if (!codeRef) {
+      throw new Error('codeRef is required to create listing');
+    }
+    const targetRealm = this.operatorModeStateService.realmURL;
+    if (!targetRealm) {
+      throw new Error('targetRealm is required to create listing');
+    }
+    await command.execute({
+      codeRef,
+      targetRealm,
+    });
   }
 
   private get selectedDeclarationAsCodeRef(): ResolvedCodeRef {
@@ -485,7 +518,7 @@ export default class DetailPanel extends Component<Signature> {
             {{! JSON case when visting, eg Author/1.json }}
             <InstanceDefinitionContainer
               @fileURL={{@readyFile.url}}
-              @name={{@cardInstance.title}}
+              @name={{@cardInstance.cardTitle}}
               @fileExtension='.JSON'
               @infoText={{this.lastModified.value}}
               @actions={{this.instanceActions}}

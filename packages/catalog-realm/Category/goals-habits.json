@@ -10,10 +10,10 @@
     "attributes": {
       "name": "Goals & Habits",
       "cardInfo": {
+        "name": null,
         "notes": null,
-        "title": null,
-        "description": "Personal goal setting, habit tracking, self-improvement plans, milestone celebrations, and progress monitoring.",
-        "thumbnailURL": null
+        "summary": "Personal goal setting, habit tracking, self-improvement plans, milestone celebrations, and progress monitoring.",
+        "cardThumbnailURL": null
       }
     },
     "relationships": {

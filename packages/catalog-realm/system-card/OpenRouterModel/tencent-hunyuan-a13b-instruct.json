@@ -6,7 +6,7 @@
       "canonicalSlug": "tencent/hunyuan-a13b-instruct",
       "name": "Tencent: Hunyuan A13B Instruct",
       "created": 1751987664,
-      "description": "Hunyuan-A13B is a 13B active parameter Mixture-of-Experts (MoE) language model developed by Tencent, with a total parameter count of 80B and support for reasoning via Chain-of-Thought. It offers competitive benchmark performance across mathematics, science, coding, and multi-turn reasoning tasks, while maintaining high inference efficiency via Grouped Query Attention (GQA) and quantization support (FP8, GPTQ, etc.).",
+      "cardDescription": "Hunyuan-A13B is a 13B active parameter Mixture-of-Experts (MoE) language model developed by Tencent, with a total parameter count of 80B and support for reasoning via Chain-of-Thought. It offers competitive benchmark performance across mathematics, science, coding, and multi-turn reasoning tasks, while maintaining high inference efficiency via Grouped Query Attention (GQA) and quantization support (FP8, GPTQ, etc.).",
       "pricing": {
         "prompt": "0.00000014",
         "completion": "0.00000057",
@@ -43,9 +43,9 @@
       ],
       "defaultParameters": {},
       "cardInfo": {
-        "title": null,
-        "description": null,
-        "thumbnailURL": null,
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
         "notes": null
       }
     },

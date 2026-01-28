@@ -19,8 +19,8 @@
       "phone": 12065554444,
       "website": "https://techflow.io",
       "stockSymbol": null,
-      "description": "Early-stage startup developing productivity tools for remote teams. Looking to improve their market presence and lead generation through digital marketing.",
-      "thumbnailURL": "https://example.com/techflow-logo.png"
+      "cardDescription": "Early-stage startup developing productivity tools for remote teams. Looking to improve their market presence and lead generation through digital marketing.",
+      "cardThumbnailURL": "https://example.com/techflow-logo.png"
     },
     "relationships": {
       "crmApp": {

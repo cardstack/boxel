@@ -143,9 +143,9 @@ export default class CommandService extends Service {
       (event) => {
         return Boolean(
           event &&
-            event.eventName === 'index' &&
-            event.indexType === 'incremental' &&
-            event.clientRequestId === clientRequestId,
+          event.eventName === 'index' &&
+          event.indexType === 'incremental' &&
+          event.clientRequestId === clientRequestId,
         );
       },
       { timeoutMs: 5 * 60 * 1000, keepRealmSubscription: true }, // we don't wanna close the realm subscription since other places could be subscribed, like the store service
@@ -717,6 +717,7 @@ export default class CommandService extends Service {
             [],
             [fileDef],
             context,
+            patchCodeResult.lintIssues,
             result.failureReason,
           ),
         );

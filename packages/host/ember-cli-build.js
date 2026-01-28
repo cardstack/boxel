@@ -98,6 +98,7 @@ module.exports = function (defaults) {
               path: require.resolve('path-browserify'),
               crypto: require.resolve('crypto-browserify'),
               stream: require.resolve('stream-browserify'),
+              assert: require.resolve('assert/'),
             },
             alias: {
               // Exclude the rust-crypto module from the bundle because we don't use it

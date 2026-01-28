@@ -18,6 +18,7 @@ import {
   SupportedMimeType,
   Deferred,
   testRealmURL,
+  type RealmInfo,
   type JWTPayload,
 } from '@cardstack/runtime-common';
 import {
@@ -313,6 +314,9 @@ export default class RealmServerService extends Service {
     let normalizedURL = ensureTrailingSlash(url);
     if (isTesting()) {
       let testRealmOrigin = new URL(testRealmURL).origin;
+      // In tests, realm URLs are often rooted at the test realm origin but
+      // are served by the base realm server; remap to the base origin so
+      // federated requests hit the active test server.
       if (new URL(normalizedURL).origin === testRealmOrigin) {
         return ensureTrailingSlash(new URL(resolvedBaseRealmURL).origin);
       }
@@ -414,6 +418,59 @@ export default class RealmServerService extends Service {
       }
     });
     this._ready.fulfill();
+  }
+
+  async fetchRealmInfos(realmUrls: string[]): Promise<{
+    data: { id: string; type: 'realm-info'; attributes: RealmInfo }[];
+    publicReadableRealms: Set<string>;
+  }> {
+    if (realmUrls.length === 0) {
+      return { data: [], publicReadableRealms: new Set() };
+    }
+
+    let uniqueRealmUrls = Array.from(new Set(realmUrls));
+    let realmServerURLs = this.getRealmServersForRealms(uniqueRealmUrls);
+    // TODO remove this assertion after multi-realm server/federated identity is supported
+    this.assertOwnRealmServer(realmServerURLs);
+    let [realmServerURL] = realmServerURLs;
+
+    await this.login();
+
+    let infoURL = new URL('_info', realmServerURL);
+
+    let response = await this.authedFetch(infoURL.href, {
+      method: 'QUERY',
+      headers: {
+        Accept: SupportedMimeType.RealmInfo,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ realms: uniqueRealmUrls }),
+    });
+
+    if (!response.ok) {
+      let responseText = await response.text();
+      throw new Error(
+        `Failed to fetch federated realm info: ${response.status} - ${responseText}`,
+      );
+    }
+
+    let publicReadableRealms = new Set<string>();
+    let publicReadableHeader = response.headers.get(
+      'x-boxel-realms-public-readable',
+    );
+    if (publicReadableHeader) {
+      for (let value of publicReadableHeader.split(',')) {
+        let trimmed = value.trim();
+        if (trimmed) {
+          publicReadableRealms.add(ensureTrailingSlash(trimmed));
+        }
+      }
+    }
+
+    let json = (await response.json()) as {
+      data: { id: string; type: 'realm-info'; attributes: RealmInfo }[];
+    };
+    return { data: json.data ?? [], publicReadableRealms };
   }
 
   async handleEvent(event: Partial<IEvent>) {
@@ -604,6 +661,123 @@ export default class RealmServerService extends Service {
     }
 
     return response;
+  }
+
+  async registerBot(username: string) {
+    await this.login();
+
+    let response = await this.network.fetch(
+      `${this.url.href}_bot-registration`,
+      {
+        method: 'POST',
+        headers: {
+          Accept: SupportedMimeType.JSONAPI,
+          'Content-Type': 'application/vnd.api+json',
+          Authorization: `Bearer ${this.token}`,
+        },
+        body: JSON.stringify({
+          data: {
+            type: 'bot-registration',
+            attributes: {
+              username,
+            },
+          },
+        }),
+      },
+    );
+
+    if (!response.ok) {
+      let err = `Could not register bot: ${response.status} - ${await response.text()}`;
+      console.error(err);
+      throw new Error(err);
+    }
+
+    let body = (await response.json()) as {
+      data: {
+        id: string;
+        attributes: {
+          username: string;
+          createdAt: string;
+        };
+      };
+    };
+
+    return {
+      botRegistrationId: body.data.id,
+    };
+  }
+
+  async unregisterBot(botRegistrationId: string) {
+    await this.login();
+
+    if (!botRegistrationId) {
+      throw new Error('botRegistrationId is required');
+    }
+
+    let response = await this.network.fetch(
+      `${this.url.href}_bot-registration`,
+      {
+        method: 'DELETE',
+        headers: {
+          Accept: SupportedMimeType.JSONAPI,
+          'Content-Type': 'application/vnd.api+json',
+          Authorization: `Bearer ${this.token}`,
+        },
+        body: JSON.stringify({
+          data: {
+            type: 'bot-registration',
+            id: botRegistrationId,
+          },
+        }),
+      },
+    );
+
+    if (!response.ok) {
+      let err = `Could not unregister bot: ${response.status} - ${await response.text()}`;
+      console.error(err);
+      throw new Error(err);
+    }
+
+    return;
+  }
+
+  async getBotRegistrations() {
+    await this.login();
+
+    let response = await this.network.fetch(
+      `${this.url.href}_bot-registrations`,
+      {
+        method: 'GET',
+        headers: {
+          Accept: SupportedMimeType.JSONAPI,
+          Authorization: `Bearer ${this.token}`,
+        },
+      },
+    );
+
+    if (!response.ok) {
+      let err = `Could not fetch bot registrations: ${response.status} - ${await response.text()}`;
+      console.error(err);
+      throw new Error(err);
+    }
+
+    let body = (await response.json()) as {
+      data: Array<{
+        id: string;
+        attributes: {
+          username: string;
+          createdAt: string;
+        };
+      }>;
+    };
+
+    let registrations = body.data.map((entry) => ({
+      botRegistrationId: entry.id,
+      username: entry.attributes.username,
+      createdAt: entry.attributes.createdAt,
+    }));
+
+    return registrations;
   }
 
   async publishRealm(sourceRealmURL: string, publishedRealmURL: string) {

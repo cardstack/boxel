@@ -26,7 +26,7 @@ let sendReadyMessage = modifier((_element: HTMLElement) => {
 });
 
 class ConnectComponent extends Component<ConnectComponentSignature> {
-  @service private declare matrixService: MatrixService;
+  @service declare private matrixService: MatrixService;
 
   @tracked storageAccess: boolean | undefined = undefined;
 

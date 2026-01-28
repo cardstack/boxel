@@ -9,23 +9,23 @@
     "type": "card",
     "attributes": {
       "ref": {
-        "name": "DateRangeFieldSpec",
-        "module": "../date-range-field-spec"
+        "name": "default",
+        "module": "../../fields/date/date-range"
       },
-      "title": "Date Range Field Spec",
       "readMe": null,
       "cardInfo": {
+        "name": null,
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": null
+        "summary": null,
+        "cardThumbnailURL": null
       },
-      "specType": "card",
+      "specType": "field",
       "standard": {
         "end": "2026-02-11",
         "start": "2026-01-08"
       },
-      "description": null,
+      "cardTitle": "Date Range Field",
+      "cardDescription": null,
       "containedExamples": []
     },
     "relationships": {

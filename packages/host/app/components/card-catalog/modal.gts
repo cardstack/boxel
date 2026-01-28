@@ -4,6 +4,7 @@ import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
+import { isTesting } from '@embroider/macros';
 import Component from '@glimmer/component';
 
 import { restartableTask, task, timeout } from 'ember-concurrency';
@@ -228,11 +229,11 @@ export default class CardCatalogModal extends Component<Signature> {
 
   private stateStack: State[] = new TrackedArray<State>();
   private stateId = 0;
-  @service private declare loaderService: LoaderService;
-  @service private declare operatorModeStateService: OperatorModeStateService;
-  @service private declare realmServer: RealmServerService;
-  @service private declare realm: RealmService;
-  @service private declare store: StoreService;
+  @service declare private loaderService: LoaderService;
+  @service declare private operatorModeStateService: OperatorModeStateService;
+  @service declare private realmServer: RealmServerService;
+  @service declare private realm: RealmService;
+  @service declare private store: StoreService;
 
   constructor(owner: Owner, args: {}) {
     super(owner, args);
@@ -314,7 +315,7 @@ export default class CardCatalogModal extends Component<Signature> {
   ): Promise<undefined | string> {
     return await this._chooseCard.perform(
       {
-        // default to title sort so that we can maintain stability in
+        // default to cardTitle sort so that we can maintain stability in
         // the ordering of the search results (server sorts results
         // by order indexed by default)
         sort: [
@@ -323,7 +324,7 @@ export default class CardCatalogModal extends Component<Signature> {
               module: `${baseRealm.url}card-api`,
               name: 'CardDef',
             },
-            by: 'title',
+            by: 'cardTitle',
           },
         ],
         ...query,
@@ -348,16 +349,27 @@ export default class CardCatalogModal extends Component<Signature> {
     ) => {
       await this.realmServer.ready;
       // Preload realm info without blocking the modal from opening.
-      void Promise.all(
+      let prefetchRealmInfo = Promise.all(
         this.realmServer.availableRealmURLs.map(async (realmURL) => {
           let resource = this.realm.getOrCreateRealmResource(realmURL);
           try {
             await resource.fetchInfo();
-          } catch {
-            // Leave realm info as fallback if it cannot be fetched.
+          } catch (error) {
+            // Keep any existing realm info if the fetch fails; non-fatal for modal.
+
+            console.warn(
+              'Failed to fetch realm info for',
+              realmURL.toString?.() ?? realmURL,
+              error,
+            );
           }
         }),
       );
+      if (isTesting()) {
+        await prefetchRealmInfo;
+      } else {
+        void prefetchRealmInfo;
+      }
       this.stateId++;
       let title = await chooseCardTitle(
         query.filter,
@@ -480,14 +492,14 @@ export default class CardCatalogModal extends Component<Signature> {
       if (_isCardTypeFilter) {
         newFilter = {
           on: (this.state.originalQuery.filter as CardTypeFilter).type,
-          every: [{ contains: { title: this.state.searchKey } }],
+          every: [{ contains: { cardTitle: this.state.searchKey } }],
         };
       } else if (_isEveryFilter) {
         newFilter = {
           ...(this.state.originalQuery.filter as EveryFilter),
           every: [
             ...(this.state.originalQuery.filter as EveryFilter).every,
-            { contains: { title: this.state.searchKey } },
+            { contains: { cardTitle: this.state.searchKey } },
           ],
         };
       } else {
@@ -497,6 +509,7 @@ export default class CardCatalogModal extends Component<Signature> {
         );
       }
     }
+    console.log(newFilter);
     if (newFilter) {
       this.state.query = { ...this.state.query, filter: newFilter };
     }

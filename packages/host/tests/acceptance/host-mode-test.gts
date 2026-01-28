@@ -12,8 +12,10 @@ import { getPageTitle } from 'ember-page-title/test-support';
 import { module, test } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
+import { Deferred } from '@cardstack/runtime-common';
 
 import HostModeService from '@cardstack/host/services/host-mode-service';
+import type StoreService from '@cardstack/host/services/store';
 
 import {
   percySnapshot,
@@ -95,7 +97,7 @@ module('Acceptance | host mode tests', function (hooks) {
       static displayName = 'Pet';
       static headerColor = '#355e3b';
       @field name = contains(StringField);
-      @field title = contains(StringField, {
+      @field cardTitle = contains(StringField, {
         computeVia: function (this: Pet) {
           return this.name;
         },
@@ -156,7 +158,7 @@ module('Acceptance | host mode tests', function (hooks) {
           data: {
             type: 'card',
             attributes: {
-              title: 'Primary View Demo',
+              cardTitle: 'Primary View Demo',
               targetCardURL: `${testHostModeRealmURL}ViewCardDemo/secondary.json`,
             },
             meta: {
@@ -171,7 +173,7 @@ module('Acceptance | host mode tests', function (hooks) {
           data: {
             type: 'card',
             attributes: {
-              title: 'Secondary View Demo',
+              cardTitle: 'Secondary View Demo',
               targetCardURL: `${testHostModeRealmURL}ViewCardDemo/tertiary.json`,
             },
             meta: {
@@ -186,7 +188,7 @@ module('Acceptance | host mode tests', function (hooks) {
           data: {
             type: 'card',
             attributes: {
-              title: 'Tertiary View Demo',
+              cardTitle: 'Tertiary View Demo',
               targetCardURL: `${testHostModeRealmURL}ViewCardDemo/index.json`,
             },
             meta: {
@@ -251,8 +253,24 @@ module('Acceptance | host mode tests', function (hooks) {
   });
 
   test('visiting a non-existent card shows an error', async function (assert) {
-    await visit('/test/Pet/non-existent.json');
+    let store = getService('store') as StoreService;
+    let originalGet = store.get.bind(store);
+    let gate = new Deferred<void>();
+    let targetId = `${testHostModeRealmURL}Pet/non-existent.json`;
+    store.get = (async (...args: Parameters<StoreService['get']>) => {
+      let [id] = args;
+      if (id === targetId) {
+        await gate.promise;
+      }
+      return (originalGet as StoreService['get'])(...args);
+    }) as StoreService['get'];
 
+    let visitPromise = visit('/test/Pet/non-existent.json');
+    await waitFor('[data-test-host-loading]');
+    assert.dom('[data-test-host-loading]').exists();
+    gate.fulfill();
+
+    await visitPromise;
     assert
       .dom('[data-test-error="not-found"]')
       .hasText(`Card not found: ${testHostModeRealmURL}Pet/non-existent`);
@@ -260,6 +278,9 @@ module('Acceptance | host mode tests', function (hooks) {
       getPageTitle(),
       `Card not found: ${testHostModeRealmURL}Pet/non-existent`,
     );
+    assert.dom('[data-test-host-loading]').doesNotExist();
+
+    store.get = originalGet;
   });
 
   test('invoking viewCard from a card stacks the linked card', async function (assert) {

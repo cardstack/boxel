@@ -5,8 +5,8 @@
       "reportDate": "2025-07-24",
       "summary": null,
       "recommendations": null,
-      "description": null,
-      "thumbnailURL": null
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "relationships": {
       "policyManual": {

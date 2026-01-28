@@ -39,8 +39,14 @@ import handleDeleteBoxelClaimedDomainRequest from './handlers/handle-delete-boxe
 import handlePrerenderProxy from './handlers/handle-prerender-proxy';
 import handleSearch from './handlers/handle-search';
 import handleSearchPrerendered from './handlers/handle-search-prerendered';
+import handleRealmInfo from './handlers/handle-realm-info';
 import { multiRealmAuthorization } from './middleware/multi-realm-authorization';
 import handleGitHubPRRequest from './handlers/handle-github-pr';
+import {
+  handleBotRegistrationRequest,
+  handleBotRegistrationsRequest,
+  handleBotUnregistrationRequest,
+} from './handlers/handle-bot-registration';
 import { buildCreatePrerenderAuth } from './prerender/auth';
 
 export type CreateRoutesArgs = {
@@ -132,6 +138,11 @@ export function createRoutes(args: CreateRoutesArgs) {
     }),
   );
   router.all('/_search', multiRealmAuthorization(args), handleSearch());
+  router.all(
+    '/_info',
+    multiRealmAuthorization(args),
+    handleRealmInfo({ dbAdapter: args.dbAdapter }),
+  );
   router.all(
     '/_search-prerendered',
     multiRealmAuthorization(args),
@@ -229,6 +240,21 @@ export function createRoutes(args: CreateRoutesArgs) {
     '/_github-pr',
     jwtMiddleware(args.realmSecretSeed),
     handleGitHubPRRequest(args),
+  );
+  router.post(
+    '/_bot-registration',
+    jwtMiddleware(args.realmSecretSeed),
+    handleBotRegistrationRequest(args),
+  );
+  router.get(
+    '/_bot-registrations',
+    jwtMiddleware(args.realmSecretSeed),
+    handleBotRegistrationsRequest(args),
+  );
+  router.delete(
+    '/_bot-registration',
+    jwtMiddleware(args.realmSecretSeed),
+    handleBotUnregistrationRequest(args),
   );
 
   return router.routes();

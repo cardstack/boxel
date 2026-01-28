@@ -9,18 +9,17 @@
     "type": "card",
     "attributes": {
       "ref": {
-        "name": "RecurringPatternFieldSpec",
-        "module": "../recurring-pattern-field-spec"
+        "name": "default",
+        "module": "../../fields/recurring-pattern"
       },
-      "title": "Recurring Pattern Field Spec",
       "readMe": null,
       "cardInfo": {
+        "name": null,
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": null
+        "summary": null,
+        "cardThumbnailURL": null
       },
-      "specType": "card",
+      "specType": "field",
       "standard": {
         "endDate": "2026-01-29",
         "pattern": "weekdays",
@@ -32,7 +31,8 @@
         "monthOfYear": null,
         "occurrences": 2
       },
-      "description": null,
+      "cardTitle": "Recurring Pattern Field",
+      "cardDescription": null,
       "containedExamples": []
     },
     "relationships": {

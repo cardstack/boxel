@@ -191,7 +191,7 @@ function wrapWithModifier(
 }
 
 export default class PrerenderedCardSearch extends Component<PrerenderedCardComponentSignature> {
-  @consume(CardContextName) private declare cardContext?: CardContext;
+  @consume(CardContextName) declare private cardContext?: CardContext;
   @service declare loaderService: LoaderService;
   @service declare realmServer: RealmServerService;
   _lastSearchQuery: Query | null = null;
@@ -235,9 +235,6 @@ export default class PrerenderedCardSearch extends Component<PrerenderedCardComp
     this.realmServer.assertOwnRealmServer(realmServerURLs);
     let [realmServerURL] = realmServerURLs;
     let searchURL = new URL('_search-prerendered', realmServerURL);
-    for (let realm of realms) {
-      searchURL.searchParams.append('realms', realm);
-    }
 
     let response = await this.realmServer.maybeAuthedFetch(searchURL.href, {
       method: 'QUERY',
@@ -247,6 +244,7 @@ export default class PrerenderedCardSearch extends Component<PrerenderedCardComp
       },
       body: JSON.stringify({
         ...query,
+        realms,
         prerenderedHtmlFormat: format,
         cardUrls,
       }),

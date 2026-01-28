@@ -15,9 +15,9 @@
       "price": 1899,
       "cabinClass": "Economy",
       "airlineLogo": "https://logos-world.net/wp-content/uploads/2020/03/Emirates-Logo.png",
-      "title": null,
-      "description": null,
-      "thumbnailURL": null
+      "cardTitle": null,
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "meta": {
       "adoptsFrom": {

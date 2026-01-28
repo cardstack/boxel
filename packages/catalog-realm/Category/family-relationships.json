@@ -10,10 +10,10 @@
     "attributes": {
       "name": "Family & Relationships",
       "cardInfo": {
+        "name": null,
         "notes": null,
-        "title": null,
-        "description": "Family planning, relationship management, communication tools, special occasions, and shared calendar coordination.",
-        "thumbnailURL": null
+        "summary": "Family planning, relationship management, communication tools, special occasions, and shared calendar coordination.",
+        "cardThumbnailURL": null
       }
     },
     "relationships": {

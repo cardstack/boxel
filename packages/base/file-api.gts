@@ -1,7 +1,10 @@
 import { concat } from '@ember/helper';
 import FileIcon from '@cardstack/boxel-icons/file';
+import type { MenuItemOptions } from '@cardstack/boxel-ui/helpers';
+import { copyCardURLToClipboard } from '@cardstack/boxel-ui/helpers';
 import {
   byteStreamToUint8Array,
+  getMenuItems,
   inferContentType,
 } from '@cardstack/runtime-common';
 import { md5 } from 'super-fast-md5';
@@ -9,11 +12,19 @@ import {
   BaseDef,
   BaseDefComponent,
   Component,
+  GetMenuItemParams,
   ReadOnlyField,
   StringField,
   contains,
   field,
+  getDataBucket,
 } from './card-api';
+import LinkIcon from '@cardstack/boxel-icons/link';
+import OpenInInteractModeCommand from '@cardstack/boxel-host/commands/open-in-interact-mode';
+import Eye from '@cardstack/boxel-icons/eye';
+import SwitchSubmodeCommand from '@cardstack/boxel-host/commands/switch-submode';
+import CodeIcon from '@cardstack/boxel-icons/code';
+import { isSavedInstance } from './-private';
 
 class View extends Component<typeof FileDef> {
   <template>
@@ -41,13 +52,13 @@ class Edit extends Component<typeof FileDef> {
   </template>
 }
 
-export type SerializedFile = {
+export type SerializedFile<Extra extends object = {}> = {
   sourceUrl: string;
   url: string;
   name: string;
   contentType: string;
   contentHash?: string;
-};
+} & Extra;
 
 export type ByteStream = ReadableStream<Uint8Array> | Uint8Array;
 
@@ -59,7 +70,24 @@ export class FileContentMismatchError extends Error {
 
 export class FileDef extends BaseDef {
   static displayName = 'File';
+  static isFileDef = true;
   static icon = FileIcon;
+  [isSavedInstance] = true;
+
+  static assignInitialFieldValue(
+    instance: BaseDef,
+    fieldName: string,
+    value: any,
+  ) {
+    if (fieldName === 'id') {
+      // Similar to CardDef, set 'id' directly in the deserialized cache
+      // to avoid triggering recomputes during instantiation
+      let deserialized = getDataBucket(instance);
+      deserialized.set('id', value);
+    } else {
+      super.assignInitialFieldValue(instance, fieldName, value);
+    }
+  }
 
   @field id = contains(ReadOnlyField);
   @field sourceUrl = contains(StringField);
@@ -110,6 +138,10 @@ export class FileDef extends BaseDef {
       contentHash: this.contentHash,
     };
   }
+
+  [getMenuItems](params: GetMenuItemParams): MenuItemOptions[] {
+    return getDefaultFileMenuItems(this, params);
+  }
 }
 
 export interface SerializedFileDef {
@@ -130,4 +162,64 @@ export function createFileDef({
   contentHash,
 }: SerializedFileDef) {
   return new FileDef({ url, sourceUrl, name, contentType, contentHash });
+}
+
+export function getDefaultFileMenuItems(
+  fileDefInstance: FileDef,
+  params: GetMenuItemParams,
+): MenuItemOptions[] {
+  let fileDefInstanceId = fileDefInstance.id as unknown as string;
+  let menuItems: MenuItemOptions[] = [];
+  if (
+    ['interact', 'code-mode-preview', 'code-mode-playground'].includes(
+      params.menuContext,
+    )
+  ) {
+    menuItems.push({
+      label: 'Copy File URL',
+      action: () => copyCardURLToClipboard(fileDefInstanceId),
+      icon: LinkIcon,
+      disabled: !fileDefInstanceId,
+    });
+  }
+  if (params.menuContext === 'interact') {
+    if (fileDefInstanceId && params.canEdit) {
+      // TODO: add menu item to delete the file
+    }
+  }
+  if (
+    params.menuContext === 'ai-assistant' &&
+    params.menuContextParams.canEditActiveRealm
+  ) {
+    // TODO: add a CopyFileCommand menu item once we have that command
+  }
+  if (
+    ['code-mode-preview', 'code-mode-playground'].includes(params.menuContext)
+  ) {
+    menuItems.push({
+      label: 'Open in Interact Mode',
+      action: () => {
+        new OpenInInteractModeCommand(params.commandContext).execute({
+          cardId: fileDefInstanceId,
+          format: params.format === 'edit' ? 'edit' : 'isolated',
+        });
+      },
+      icon: Eye,
+    });
+  }
+  if (params.menuContext === 'code-mode-playground') {
+    menuItems.push({
+      label: 'Open in Code Mode',
+      action: async () => {
+        await new SwitchSubmodeCommand(params.commandContext).execute({
+          submode: 'code',
+          codePath: fileDefInstanceId
+            ? new URL(fileDefInstanceId).href
+            : undefined,
+        });
+      },
+      icon: CodeIcon,
+    });
+  }
+  return menuItems;
 }

@@ -25,9 +25,9 @@
       "bedrooms": 3,
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": null
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null
       },
       "location": "Malibu, California",
       "amenities": [
@@ -48,7 +48,7 @@
       "bathrooms": 2.5,
       "superhost": "Yes",
       "listedDate": "2025-12-01",
-      "description": "Wake up to stunning ocean views in this beautifully renovated beachfront villa. Features an open-concept living space, chef's kitchen, private pool, and direct beach access. Perfect for families or groups looking for a luxurious coastal retreat. The master suite offers panoramic ocean views and a private balcony. Located in prestigious Malibu with easy access to restaurants, shopping, and hiking trails.",
+      "cardDescription": "Wake up to stunning ocean views in this beautifully renovated beachfront villa. Features an open-concept living space, chef's kitchen, private pool, and direct beach access. Perfect for families or groups looking for a luxurious coastal retreat. The master suite offers panoramic ocean views and a private balcony. Located in prestigious Malibu with easy access to restaurants, shopping, and hiking trails.",
       "reviewCount": 127,
       "propertyName": "Cozy Beachfront Villa",
       "propertyType": "Entire home",

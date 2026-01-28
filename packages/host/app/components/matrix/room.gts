@@ -429,7 +429,7 @@ export default class Room extends Component<Signature> {
     </style>
   </template>
 
-  @consume(GetCardContextName) private declare getCard: getCard;
+  @consume(GetCardContextName) declare private getCard: getCard;
   @tracked private selectedBottomAction:
     | 'skill-menu'
     | 'llm-select'
@@ -437,14 +437,14 @@ export default class Room extends Component<Signature> {
   @tracked lastCanceledActionMessageId: string | undefined;
   @tracked acceptingAllLabel: string | undefined;
 
-  @service private declare store: StoreService;
-  @service private declare cardService: CardService;
-  @service private declare commandService: CommandService;
-  @service private declare matrixService: MatrixService;
-  @service private declare operatorModeStateService: OperatorModeStateService;
-  @service private declare playgroundPanelService: PlaygroundPanelService;
-  @service private declare specPanelService: SpecPanelService;
-  @service private declare aiAssistantPanelService: AiAssistantPanelService;
+  @service declare private store: StoreService;
+  @service declare private cardService: CardService;
+  @service declare private commandService: CommandService;
+  @service declare private matrixService: MatrixService;
+  @service declare private operatorModeStateService: OperatorModeStateService;
+  @service declare private playgroundPanelService: PlaygroundPanelService;
+  @service declare private specPanelService: SpecPanelService;
+  @service declare private aiAssistantPanelService: AiAssistantPanelService;
 
   private autoAttachmentResource = getAutoAttachment(this, {
     submode: () => this.operatorModeStateService.state.submode,
@@ -843,7 +843,7 @@ export default class Room extends Component<Signature> {
       for (let modelConfig of systemCard.modelConfigurations) {
         if (modelConfig.modelId) {
           options[modelConfig.modelId] =
-            modelConfig.title || modelConfig.modelId;
+            modelConfig.cardTitle || modelConfig.modelId;
         }
       }
       // Add any used LLMs that aren't already in the options
@@ -1166,8 +1166,8 @@ export default class Room extends Component<Signature> {
       !this.doSendMessage.isRunning &&
       Boolean(
         this.messageToSend?.trim() ||
-          this.cardIdsToAttach?.length ||
-          this.autoAttachedCardIds.size !== 0,
+        this.cardIdsToAttach?.length ||
+        this.autoAttachedCardIds.size !== 0,
       ) &&
       !!this.room &&
       !this.messages.some((m) => this.isPendingMessage(m)) &&
@@ -1311,6 +1311,10 @@ export default class Room extends Component<Signature> {
     let lastMessage = this.messages[this.messages.length - 1];
     if (lastMessage) {
       this.lastCanceledActionMessageId = lastMessage.eventId;
+      this.matrixService.markActionAsCanceled(
+        this.args.roomId,
+        lastMessage.eventId,
+      );
     }
   }
 
