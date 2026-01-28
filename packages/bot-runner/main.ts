@@ -3,6 +3,7 @@ import './setup-logger'; // This should be first
 import { RoomMemberEvent, RoomEvent, createClient } from 'matrix-js-sdk';
 import { PgAdapter, PgQueuePublisher } from '@cardstack/postgres';
 import { logger } from '@cardstack/runtime-common';
+import * as Sentry from '@sentry/node';
 import { onMembershipEvent } from './lib/membership-handler';
 import { onTimelineEvent } from './lib/timeline-handler';
 
@@ -18,15 +19,15 @@ const botPassword = process.env.BOT_RUNNER_PASSWORD || 'password';
     baseUrl: matrixUrl,
   });
 
-  let auth = await client
-    .loginWithPassword(botUsername, botPassword)
-    .catch((error) => {
-      log.error(error);
-      log.error(
-        `Bot runner could not login to Matrix at ${matrixUrl}. Check credentials and server availability.`,
-      );
-      process.exit(1);
-    });
+  let auth;
+  try {
+    auth = await client.loginWithPassword(botUsername, botPassword);
+  } catch (error) {
+    throw new Error(
+      `Bot runner could not login to Matrix at ${matrixUrl}. Check credentials and server availability.`,
+      { cause: error },
+    );
+  }
 
   log.info(`logged in as ${auth.user_id}`);
 
@@ -69,5 +70,6 @@ const botPassword = process.env.BOT_RUNNER_PASSWORD || 'password';
   log.info('bot runner listening for Matrix events');
 })().catch((error) => {
   log.error('bot runner failed to start', error);
+  Sentry.captureException(error);
   process.exit(1);
 });
