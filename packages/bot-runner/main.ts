@@ -71,5 +71,4 @@ const botPassword = process.env.BOT_RUNNER_PASSWORD || 'password';
 })().catch((error) => {
   log.error('bot runner failed to start', error);
   Sentry.captureException(error);
-  process.exit(1);
 });
