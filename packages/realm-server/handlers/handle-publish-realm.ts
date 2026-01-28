@@ -36,13 +36,17 @@ const log = logger('handle-publish');
 
 // Workaround to override published realm URLs to support custom domains. Remove in CS-9061.
 const PUBLISHED_REALM_DOMAIN_OVERRIDES: Record<string, string> = {
+  // staging
   'custombuck.staging.boxel.build': 'custombuck.stack.cards',
   'docs.staging.boxel.build': 'docs.stack.cards',
   'home.staging.boxel.build': 'home.stack.cards',
   'whitepaper.staging.boxel.build': 'whitepaper.stack.cards',
+
+  // production
   'custombuck.boxel.site': 'custombuck.boxel.ai',
   'docs.boxel.site': 'docs.boxel.ai',
   'home.boxel.site': 'home.boxel.ai',
+  'tealpaper.boxel.site': 'tealpaper.cardstack.com',
   'whitepaper.boxel.site': 'whitepaper.boxel.ai',
 };
 
