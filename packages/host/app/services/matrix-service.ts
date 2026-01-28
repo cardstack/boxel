@@ -600,6 +600,11 @@ export default class MatrixService extends Service {
       iconURL,
       backgroundURL,
     });
+
+    await this.appendRealmToAccountData(personalRealmURL.href);
+  }
+
+  public async appendRealmToAccountData(realmURLString: string) {
     let { realms = [] } =
       ((await this.client.getAccountDataFromServer(
         APP_BOXEL_REALMS_EVENT_TYPE,
@@ -608,7 +613,7 @@ export default class MatrixService extends Service {
     // Clone the account data instead of using it directly,
     // since mutating the original object would modify the Matrix client’s store
     // and prevent updates from being sent back to the server.
-    let newRealms = [...realms, personalRealmURL.href];
+    let newRealms = [...realms, realmURLString];
     await this.client.setAccountData(APP_BOXEL_REALMS_EVENT_TYPE, {
       realms: newRealms,
     });
