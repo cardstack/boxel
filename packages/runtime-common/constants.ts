@@ -111,11 +111,13 @@ export function parsePublishedRealmDomainOverrides(
       return {};
     }
 
-    return Object.fromEntries(
-      Object.entries(parsed).filter(
-        ([key, value]) => typeof key === 'string' && typeof value === 'string',
-      ),
-    );
+    let overrides: Record<string, string> = {};
+    for (let [key, value] of Object.entries(parsed)) {
+      if (typeof key === 'string' && typeof value === 'string') {
+        overrides[key] = value;
+      }
+    }
+    return overrides;
   } catch {
     return {};
   }
