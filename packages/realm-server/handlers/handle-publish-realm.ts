@@ -1,6 +1,5 @@
 import type Koa from 'koa';
 import {
-  ensureTrailingSlash,
   fetchUserPermissions,
   query,
   SupportedMimeType,
@@ -11,6 +10,7 @@ import {
   asExpressions,
   param,
   PUBLISHED_DIRECTORY_NAME,
+  ensureTrailingSlash,
   type DBAdapter,
   type PublishedRealmTable,
   fetchRealmPermissions,
@@ -39,25 +39,30 @@ const PUBLISHED_REALM_DOMAIN_OVERRIDES = getPublishedRealmDomainOverrides(
   process.env.PUBLISHED_REALM_DOMAIN_OVERRIDES,
 );
 
-async function maybeOverridePublishedRealmURL(
+async function maybeApplyPublishedRealmOverride(
   dbAdapter: DBAdapter,
   ownerUserId: string,
   sourceRealmURL: string,
   publishedRealmURL: string,
-): Promise<string> {
-  let overrideDomain =
-    PUBLISHED_REALM_DOMAIN_OVERRIDES[ensureTrailingSlash(sourceRealmURL)];
+): Promise<{ applied: boolean; publishedRealmURL: string }> {
+  let overrideDomain = PUBLISHED_REALM_DOMAIN_OVERRIDES[sourceRealmURL];
   if (!overrideDomain) {
-    return publishedRealmURL;
+    return { applied: false, publishedRealmURL };
   }
 
-  let overriddenURL = new URL(publishedRealmURL);
-  overriddenURL.host = overrideDomain;
+  let publishedURL: URL;
+  try {
+    publishedURL = new URL(publishedRealmURL);
+  } catch {
+    return { applied: false, publishedRealmURL };
+  }
+  if (publishedURL.host.toLowerCase() !== overrideDomain.toLowerCase()) {
+    return { applied: false, publishedRealmURL };
+  }
 
-  let overriddenRealmURL = ensureTrailingSlash(overriddenURL.toString());
   let permissions = await fetchRealmPermissions(
     dbAdapter,
-    new URL(overriddenRealmURL),
+    new URL(sourceRealmURL),
   );
   let effectivePermissions = new Set([
     ...(permissions['*'] ?? []),
@@ -65,10 +70,15 @@ async function maybeOverridePublishedRealmURL(
     ...(permissions[ownerUserId] ?? []),
   ]);
   if (!effectivePermissions.has('write')) {
-    return publishedRealmURL;
+    return { applied: false, publishedRealmURL };
   }
 
-  return overriddenRealmURL;
+  let overriddenURL = new URL(publishedRealmURL);
+  overriddenURL.host = overrideDomain;
+  return {
+    applied: true,
+    publishedRealmURL: ensureTrailingSlash(overriddenURL.toString()),
+  };
 }
 
 function rewriteHostHomeForPublishedRealm(
@@ -136,61 +146,62 @@ export default function handlePublishRealm({
       ? json.publishedRealmURL
       : `${json.publishedRealmURL}/`;
 
-    let validPublishedRealmDomains = Object.values(
-      domainsForPublishedRealms || {},
-    );
-    try {
-      let publishedURL = new URL(publishedRealmURL);
-      if (validPublishedRealmDomains && validPublishedRealmDomains.length > 0) {
-        let isValidDomain = validPublishedRealmDomains.some((domain) =>
-          publishedURL.host.endsWith(domain),
-        );
-        if (!isValidDomain) {
-          await sendResponseForBadRequest(
-            ctxt,
-            `publishedRealmURL must use a valid domain ending with one of: ${validPublishedRealmDomains.join(', ')}`,
-          );
-          return;
-        }
-      }
-    } catch (e) {
-      await sendResponseForBadRequest(
-        ctxt,
-        'publishedRealmURL is not a valid URL',
-      );
-      return;
-    }
-
     let { user: ownerUserId, sessionRoom: tokenSessionRoom } = token;
-    let overriddenPublishedRealmURL = await maybeOverridePublishedRealmURL(
+
+    let overrideResult = await maybeApplyPublishedRealmOverride(
       dbAdapter,
       ownerUserId,
       sourceRealmURL,
       publishedRealmURL,
     );
-    let permissions = await fetchRealmPermissions(
-      dbAdapter,
-      new URL(sourceRealmURL),
-    );
-    let hasOverrideWithWritePermission =
-      overriddenPublishedRealmURL !== publishedRealmURL;
-    if (
-      !permissions[ownerUserId]?.includes('realm-owner') &&
-      // TODO: Remove with CS-9061 once custom domain overrides are no longer needed.
-      !hasOverrideWithWritePermission
-    ) {
-      await sendResponseForForbiddenRequest(
-        ctxt,
-        `${ownerUserId} does not have enough permission to publish this realm`,
+
+    if (overrideResult.applied) {
+      log.info(
+        `Overriding publishedRealmURL for ${ownerUserId} from ${publishedRealmURL} to ${overrideResult.publishedRealmURL}`,
       );
-      return;
+      publishedRealmURL = overrideResult.publishedRealmURL;
     }
 
-    if (overriddenPublishedRealmURL !== publishedRealmURL) {
-      log.info(
-        `Overriding publishedRealmURL for ${ownerUserId} from ${publishedRealmURL} to ${overriddenPublishedRealmURL}`,
+    if (!overrideResult.applied) {
+      let validPublishedRealmDomains = Object.values(
+        domainsForPublishedRealms || {},
       );
-      publishedRealmURL = overriddenPublishedRealmURL;
+      try {
+        let publishedURL = new URL(publishedRealmURL);
+        if (
+          validPublishedRealmDomains &&
+          validPublishedRealmDomains.length > 0
+        ) {
+          let isValidDomain = validPublishedRealmDomains.some((domain) =>
+            publishedURL.host.endsWith(domain),
+          );
+          if (!isValidDomain) {
+            await sendResponseForBadRequest(
+              ctxt,
+              `publishedRealmURL must use a valid domain ending with one of: ${validPublishedRealmDomains.join(', ')}`,
+            );
+            return;
+          }
+        }
+      } catch (e) {
+        await sendResponseForBadRequest(
+          ctxt,
+          'publishedRealmURL is not a valid URL',
+        );
+        return;
+      }
+
+      let permissions = await fetchRealmPermissions(
+        dbAdapter,
+        new URL(sourceRealmURL),
+      );
+      if (!permissions[ownerUserId]?.includes('realm-owner')) {
+        await sendResponseForForbiddenRequest(
+          ctxt,
+          `${ownerUserId} does not have enough permission to publish this realm`,
+        );
+        return;
+      }
     }
 
     try {
