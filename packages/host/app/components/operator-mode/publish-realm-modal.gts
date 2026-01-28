@@ -24,14 +24,14 @@ import {
 import { not } from '@cardstack/boxel-ui/helpers';
 import { IconX, Warning as WarningIcon } from '@cardstack/boxel-ui/icons';
 
+import { ensureTrailingSlash } from '@cardstack/runtime-common';
+import { PUBLISHED_REALM_DOMAIN_OVERRIDES } from '@cardstack/runtime-common/constants';
+
 import ModalContainer from '@cardstack/host/components/modal-container';
 import PrivateDependencyViolationComponent from '@cardstack/host/components/operator-mode/private-dependency-violation';
 import WithLoadedRealm from '@cardstack/host/components/with-loaded-realm';
 
 import config from '@cardstack/host/config/environment';
-
-import { ensureTrailingSlash } from '@cardstack/runtime-common';
-import { PUBLISHED_REALM_DOMAIN_OVERRIDES } from '@cardstack/runtime-common/constants';
 
 import type HostModeService from '@cardstack/host/services/host-mode-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
