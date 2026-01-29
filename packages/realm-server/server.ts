@@ -499,21 +499,19 @@ export class RealmServer {
     }
 
     let rows = await query(this.dbAdapter, [
-      `SELECT head_html, realm_version FROM boxel_index_working WHERE head_html IS NOT NULL AND type =`,
-      param('instance'),
-      'AND',
-      'is_deleted IS NOT TRUE',
-      'AND',
+      `
+        SELECT head_html, realm_version
+        FROM boxel_index
+        WHERE type = 'instance'
+         AND head_html IS NOT NULL
+         AND is_deleted IS NOT TRUE
+         AND
+      `,
       ...this.indexCandidateExpressions(candidates),
-      `UNION ALL
-       SELECT head_html, realm_version FROM boxel_index WHERE head_html IS NOT NULL AND type =`,
-      param('instance'),
-      'AND',
-      'is_deleted IS NOT TRUE',
-      'AND',
-      ...this.indexCandidateExpressions(candidates),
-      `ORDER BY realm_version DESC
-       LIMIT 1`,
+      `
+        ORDER BY realm_version DESC
+        LIMIT 1
+      `,
     ]);
 
     this.headLog.debug('Head query result for %s', cardURL.href, rows);
@@ -547,21 +545,19 @@ export class RealmServer {
     }
 
     let rows = await query(this.dbAdapter, [
-      `SELECT isolated_html, realm_version FROM boxel_index_working WHERE isolated_html IS NOT NULL AND type =`,
-      param('instance'),
-      'AND',
-      'is_deleted IS NOT TRUE',
-      'AND',
+      `
+        SELECT isolated_html, realm_version
+        FROM boxel_index
+        WHERE isolated_html IS NOT NULL
+          AND type = 'instance'
+          AND is_deleted IS NOT TRUE
+          AND
+        `,
       ...this.indexCandidateExpressions(candidates),
-      `UNION ALL
-       SELECT isolated_html, realm_version FROM boxel_index WHERE isolated_html IS NOT NULL AND type =`,
-      param('instance'),
-      'AND',
-      'is_deleted IS NOT TRUE',
-      'AND',
-      ...this.indexCandidateExpressions(candidates),
-      `ORDER BY realm_version DESC
-       LIMIT 1`,
+      `
+        ORDER BY realm_version DESC
+        LIMIT 1
+      `,
     ]);
 
     this.isolatedLog.debug('Isolated query result for %s', cardURL.href, rows);
