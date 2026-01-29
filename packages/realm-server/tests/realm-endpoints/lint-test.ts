@@ -510,6 +510,83 @@ export class MyCard extends CardDef {
       );
     });
 
+    test('warns about position: fixed in card CSS', async function (assert) {
+      let response = await request
+        .post('/_lint')
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'john', ['read', 'write'])}`,
+        )
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .set('Accept', 'application/json')
+        .send(`import { CardDef } from 'https://cardstack.com/base/card-api';
+export class MyCard extends CardDef {
+}
+<template>
+  <div class="my-card">Hello</div>
+  <style scoped>
+    .my-card {
+      position: fixed;
+      top: 0;
+    }
+  </style>
+</template>
+`);
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      let responseJson = JSON.parse(response.text);
+      let messages = responseJson.messages;
+      let positionFixedWarning = messages.find(
+        (m: any) =>
+          m.ruleId === '@cardstack/boxel/no-css-position-fixed',
+      );
+      assert.ok(
+        positionFixedWarning,
+        'Should have a warning about position: fixed',
+      );
+      assert.strictEqual(
+        positionFixedWarning.severity,
+        1,
+        'Should be a warning (severity 1), not an error',
+      );
+    });
+
+    test('does not warn about position: fixed when not present', async function (assert) {
+      let response = await request
+        .post('/_lint')
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'john', ['read', 'write'])}`,
+        )
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .set('Accept', 'application/json')
+        .send(`import { CardDef } from 'https://cardstack.com/base/card-api';
+export class MyCard extends CardDef {
+}
+<template>
+  <div class="my-card">Hello</div>
+  <style scoped>
+    .my-card {
+      position: relative;
+      top: 0;
+    }
+  </style>
+</template>
+`);
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      let responseJson = JSON.parse(response.text);
+      let messages = responseJson.messages;
+      let positionFixedWarning = messages.find(
+        (m: any) =>
+          m.ruleId === '@cardstack/boxel/no-css-position-fixed',
+      );
+      assert.notOk(
+        positionFixedWarning,
+        'Should not warn when position: fixed is not used',
+      );
+    });
+
     test('handles nested template structures correctly', async function (assert) {
       let response = await request
         .post('/_lint')
