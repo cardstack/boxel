@@ -257,12 +257,13 @@ module('Acceptance | host mode tests', function (hooks) {
     let originalGet = store.get.bind(store);
     let gate = new Deferred<void>();
     let targetId = `${testHostModeRealmURL}Pet/non-existent.json`;
-    store.get = async (id: string, ...rest: unknown[]) => {
+    store.get = (async (...args: Parameters<StoreService['get']>) => {
+      let [id] = args;
       if (id === targetId) {
         await gate.promise;
       }
-      return originalGet(id, ...(rest as []));
-    };
+      return (originalGet as StoreService['get'])(...args);
+    }) as StoreService['get'];
 
     let visitPromise = visit('/test/Pet/non-existent.json');
     await waitFor('[data-test-host-loading]');

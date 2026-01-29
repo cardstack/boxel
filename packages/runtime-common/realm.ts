@@ -27,6 +27,7 @@ import {
   CardError,
   responseWithError,
   formattedError,
+  unsupportedMediaType,
 } from './error';
 import { v4 as uuidV4 } from 'uuid';
 import { formatRFC7231 } from 'date-fns';
@@ -99,7 +100,6 @@ import {
   AuthorizationError,
   Router,
   SupportedMimeType,
-  extractSupportedMimeType,
   lookupRouteTable,
 } from './router';
 import { InvalidQueryError, assertQuery, parseQuery } from './query';
@@ -628,11 +628,7 @@ export class Realm {
         this.handleAtomicOperations.bind(this),
       )
       .post('(/|/.+/)', SupportedMimeType.CardJson, this.createCard.bind(this))
-      .get(
-        '/|/.+(?<!.json)',
-        SupportedMimeType.CardJson,
-        this.getCard.bind(this),
-      )
+      .get('/.*', SupportedMimeType.CardJson, this.getCard.bind(this))
       .patch(
         '/.+(?<!.json)',
         SupportedMimeType.CardJson,
@@ -1479,16 +1475,6 @@ export class Realm {
       if (!isLocal) {
         await this.checkPermission(request, requestContext, requiredPermission);
       }
-      let acceptedMimeType = extractSupportedMimeType(
-        request.headers.get('Accept') as unknown as null | string | [string],
-      );
-      if (
-        acceptedMimeType === SupportedMimeType.CardJson &&
-        ['POST', 'PATCH', 'PUT', 'DELETE'].includes(request.method) &&
-        (await this.openFileForMetadata(localPath))
-      ) {
-        return methodNotAllowed(request, requestContext);
-      }
       if (!this.#realmIndexQueryEngine) {
         return systemError({
           requestContext,
@@ -2187,6 +2173,17 @@ export class Realm {
     return this.#adapter.openFile(localPath);
   }
 
+  private async nonJsonFileExists(localPath: LocalPath): Promise<boolean> {
+    if (localPath?.endsWith('.json')) {
+      localPath = localPath.slice(0, -5);
+    }
+    // Treat the path as JSON-backed if a sibling .json file exists.
+    if (await this.#adapter.exists(`${localPath}.json`)) {
+      return false;
+    }
+    return await this.#adapter.exists(localPath);
+  }
+
   private async fileMetaDocument(
     requestContext: RequestContext,
     localPath: LocalPath,
@@ -2346,10 +2343,6 @@ export class Realm {
     request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
-    let localPath = this.paths.local(new URL(request.url));
-    if (await this.openFileForMetadata(localPath)) {
-      return methodNotAllowed(request, requestContext);
-    }
     let body = await request.text();
     let json;
     try {
@@ -2487,8 +2480,11 @@ export class Realm {
     request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
-    let primarySerialization: LooseSingleCardDocument | undefined;
     let localPath = this.paths.local(new URL(request.url));
+    if (await this.nonJsonFileExists(localPath)) {
+      return unsupportedMediaType(request, requestContext);
+    }
+    let primarySerialization: LooseSingleCardDocument | undefined;
     if (localPath.startsWith('_')) {
       return methodNotAllowed(request, requestContext);
     }
@@ -2739,19 +2735,25 @@ export class Realm {
     request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
-    let localPath = this.paths.local(new URL(request.url));
+    let requestedLocalPath = this.paths.local(new URL(request.url));
+    let requestedHadJsonExtension = requestedLocalPath.endsWith('.json');
+    let localPath = requestedLocalPath;
     if (localPath === '') {
       localPath = 'index';
     }
-
-    let url = this.paths.fileURL(localPath.replace(/\.json$/, ''));
+    localPath = localPath.replace(/\.json$/, '');
+    let url = this.paths.fileURL(localPath);
     let maybeError = await this.#realmIndexQueryEngine.cardDocument(url, {
       loadLinks: true,
     });
     let start = Date.now();
     try {
-      if (!maybeError) {
-        return notFound(request, requestContext);
+      if (maybeError === undefined) {
+        if (await this.nonJsonFileExists(localPath)) {
+          return unsupportedMediaType(request, requestContext);
+        } else {
+          return notFound(request, requestContext);
+        }
       }
       if (maybeError.type === 'error') {
         return systemError({
@@ -2780,6 +2782,16 @@ export class Realm {
       card.data.links = { self: url.href };
 
       let foundPath = this.paths.local(url);
+      if (requestedHadJsonExtension) {
+        return createResponse({
+          requestContext,
+          body: null,
+          init: {
+            status: 302,
+            headers: { Location: `${new URL(this.url).pathname}${foundPath}` },
+          },
+        });
+      }
       if (localPath !== foundPath) {
         return createResponse({
           requestContext,
@@ -2816,10 +2828,14 @@ export class Realm {
     request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
+    let localPath = this.paths.local(new URL(request.url));
+    if (await this.nonJsonFileExists(localPath)) {
+      return unsupportedMediaType(request, requestContext);
+    }
     let reqURL = request.url.replace(/\.json$/, '');
     // strip off query params
     let url = new URL(new URL(reqURL).pathname, reqURL);
-    let localPath = this.paths.local(url);
+    localPath = this.paths.local(url);
     if (await this.openFileForMetadata(localPath)) {
       return methodNotAllowed(request, requestContext);
     }
@@ -3047,17 +3063,6 @@ export class Realm {
       // Get source from plain text request body
       const source = await request.text();
       const filename = request.headers.get('X-Filename') || 'input.gts';
-      let lintMode: LintArgs['lintMode'] = 'lintAndAutofix';
-      try {
-        let searchParams = new URL(request.url).searchParams;
-        let requestedMode = searchParams.get('lintMode');
-        if (requestedMode === 'lint' || requestedMode === 'lintAndAutofix') {
-          lintMode = requestedMode;
-        }
-      } catch {
-        // ignore malformed URLs and keep default lint mode
-      }
-
       if (!source || source.trim() === '') {
         return createResponse({
           body: JSON.stringify({
@@ -3076,7 +3081,7 @@ export class Realm {
         concurrencyGroup: `lint:${this.url}:${Math.random().toString().slice(-1)}`,
         timeout: 10,
         priority: userInitiatedPriority,
-        args: { source, filename, lintMode } satisfies LintArgs,
+        args: { source, filename } satisfies LintArgs,
       });
       result = await job.done;
     }

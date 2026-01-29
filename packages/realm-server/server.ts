@@ -44,7 +44,11 @@ import { resolve, join } from 'path';
 import merge from 'lodash/merge';
 
 import { extractSupportedMimeType } from '@cardstack/runtime-common/router';
-import { any, type Expression } from '@cardstack/runtime-common/expression';
+import {
+  addExplicitParens,
+  any,
+  type Expression,
+} from '@cardstack/runtime-common/expression';
 import * as Sentry from '@sentry/node';
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import {
@@ -346,12 +350,15 @@ export class RealmServer {
           indexURLCandidates: (url) => this.indexURLCandidates(url),
           indexCandidateExpressions: (candidates) =>
             this.indexCandidateExpressions(candidates),
+          log: this.scopedCSSLog,
         }),
       ]);
 
       if (headHTML != null) {
         this.headLog.debug(
-          `Injecting head HTML for ${cardURL.href} (length ${headHTML.length})`,
+          `Injecting head HTML for ${cardURL.href} (length ${headHTML.length})\n${this.truncateLogLines(
+            headHTML,
+          )}`,
         );
       } else {
         this.headLog.debug(
@@ -391,6 +398,11 @@ export class RealmServer {
       }
 
       if (isolatedHTML != null) {
+        this.isolatedLog.debug(
+          `Injecting isolated HTML for ${cardURL.href} (length ${isolatedHTML.length})\n${this.truncateLogLines(
+            isolatedHTML,
+          )}`,
+        );
         responseHTML = this.injectIsolatedHTML(responseHTML, isolatedHTML);
       }
 
@@ -484,10 +496,14 @@ export class RealmServer {
     }
 
     let rows = await query(this.dbAdapter, [
-      `SELECT head_html, realm_version FROM boxel_index_working WHERE head_html IS NOT NULL AND`,
+      `SELECT head_html, realm_version FROM boxel_index_working WHERE head_html IS NOT NULL AND type =`,
+      param('instance'),
+      'AND',
       ...this.indexCandidateExpressions(candidates),
       `UNION ALL
-       SELECT head_html, realm_version FROM boxel_index WHERE head_html IS NOT NULL AND`,
+       SELECT head_html, realm_version FROM boxel_index WHERE head_html IS NOT NULL AND type =`,
+      param('instance'),
+      'AND',
       ...this.indexCandidateExpressions(candidates),
       `ORDER BY realm_version DESC
        LIMIT 1`,
@@ -524,10 +540,14 @@ export class RealmServer {
     }
 
     let rows = await query(this.dbAdapter, [
-      `SELECT isolated_html, realm_version FROM boxel_index_working WHERE isolated_html IS NOT NULL AND`,
+      `SELECT isolated_html, realm_version FROM boxel_index_working WHERE isolated_html IS NOT NULL AND type =`,
+      param('instance'),
+      'AND',
       ...this.indexCandidateExpressions(candidates),
       `UNION ALL
-       SELECT isolated_html, realm_version FROM boxel_index WHERE isolated_html IS NOT NULL AND`,
+       SELECT isolated_html, realm_version FROM boxel_index WHERE isolated_html IS NOT NULL AND type =`,
+      param('instance'),
+      'AND',
       ...this.indexCandidateExpressions(candidates),
       `ORDER BY realm_version DESC
        LIMIT 1`,
@@ -572,18 +592,30 @@ export class RealmServer {
 
   private indexCandidateExpressions(candidates: string[]): Expression {
     // Proxying means the apparent request URL will be http but in the database it’s https
-    return any(
-      candidates.flatMap((candidate) => [
-        [
-          "regexp_replace(url, '^https?://', '') =",
-          param(this.stripProtocol(candidate)),
-        ],
-        [
-          "regexp_replace(file_alias, '^https?://', '') =",
-          param(this.stripProtocol(candidate)),
-        ],
-      ]),
+    return addExplicitParens(
+      any(
+        candidates.flatMap((candidate) => [
+          [
+            "regexp_replace(url, '^https?://', '') =",
+            param(this.stripProtocol(candidate)),
+          ],
+          [
+            "regexp_replace(file_alias, '^https?://', '') =",
+            param(this.stripProtocol(candidate)),
+          ],
+        ]),
+      ) as Expression,
     ) as Expression;
+  }
+
+  private truncateLogLines(value: string, maxLines = 3): string {
+    let lines = value.split(/\r?\n/);
+    if (lines.length <= maxLines) {
+      return value;
+    }
+    let truncated = lines.slice(0, maxLines);
+    truncated[maxLines - 1] = `${truncated[maxLines - 1]} ...`;
+    return truncated.join('\n');
   }
 
   private injectHeadHTML(indexHTML: string, headHTML: string): string {

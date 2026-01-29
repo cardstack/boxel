@@ -10,8 +10,8 @@
     "attributes": {
       "name": "Travel Experiences",
       "cardInfo": {
-        "notes": null,
         "name": null,
+        "notes": null,
         "summary": "Trip planning, destination guides, accommodation booking, travel itineraries, local experiences, and adventure activities.",
         "cardThumbnailURL": null
       }

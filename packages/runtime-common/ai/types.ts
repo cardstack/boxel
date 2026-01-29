@@ -63,6 +63,7 @@ export interface RelevantCards {
 export interface CodePatchCorrectnessFile {
   sourceUrl: string;
   displayName: string;
+  lintIssues?: string[];
 }
 
 export interface CodePatchCorrectnessCard {

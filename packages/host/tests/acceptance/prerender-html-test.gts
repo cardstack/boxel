@@ -707,11 +707,25 @@ module('Acceptance | prerender | html', function (hooks) {
   test('can prerender instance with a cycle in a linksToMany field', async function (assert) {
     let url = `${testRealmURL}Person/germaine.json`;
     await visit(renderPath(url, '/html/isolated/0'));
-    let { value } = await capturePrerenderResult('innerHTML');
-    assert.ok(
-      /data-test-field="friends"?.*Queenzy?.*Hassan/s.test(value),
-      `failed to find "Queenzy" and "Hassan" field values in isolated HTML`,
-    );
+    let result = await capturePrerenderResult('innerHTML');
+    if (result.status === 'error') {
+      let message = result.value;
+      try {
+        let parsed = JSON.parse(result.value);
+        if (parsed?.error?.message) {
+          message = parsed.error.message;
+        }
+      } catch {
+        // leave message as-is if not valid JSON
+      }
+      assert.ok(false, `prerender error: ${message}`);
+    } else {
+      let { value } = result;
+      assert.ok(
+        /data-test-field="friends"?.*Queenzy?.*Hassan/s.test(value),
+        `failed to find "Queenzy" and "Hassan" field values in isolated HTML`,
+      );
+    }
   });
 
   test('can prerender instance with compound contains field that includes a linksTo field', async function (assert) {

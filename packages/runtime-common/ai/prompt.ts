@@ -1562,40 +1562,65 @@ function isCardPatchCommand(name?: string) {
 function gatherPatchedFiles(
   codePatchResults: CodePatchResultEvent[],
 ): CodePatchCorrectnessFile[] {
-  let seen = new Set<string>();
-  let files: CodePatchCorrectnessFile[] = [];
+  let filesByKey = new Map<string, CodePatchCorrectnessFile>();
   for (let result of codePatchResults) {
     let status = result.content['m.relates_to']?.key;
     if (status !== 'applied') {
       continue;
     }
+    let lintIssues = result.content.data?.lintIssues || [];
     let attachments = result.content.data?.attachedFiles ?? [];
     if (attachments.length === 0) {
       let fallback = result.content.data?.context?.codeMode?.currentFile;
-      if (fallback && !seen.has(fallback)) {
-        seen.add(fallback);
-        files.push({
+      if (fallback) {
+        let entry = filesByKey.get(fallback) ?? {
           sourceUrl: fallback,
           displayName: formatFileDisplayName(fallback),
-        });
+        };
+        if (lintIssues.length) {
+          entry.lintIssues = mergeLintIssues(entry.lintIssues, lintIssues);
+        }
+        filesByKey.set(fallback, entry);
       }
       continue;
     }
     for (let file of attachments) {
       let sourceUrl = file.sourceUrl ?? file.url ?? file.name ?? '';
       let key = sourceUrl || file.name || `${result.event_id}-${file.name}`;
-      if (seen.has(key)) {
-        continue;
-      }
-      seen.add(key);
       let labelSource = sourceUrl || file.name || '';
-      files.push({
+      let entry = filesByKey.get(key) ?? {
         sourceUrl: sourceUrl || labelSource,
         displayName: formatFileDisplayName(labelSource),
-      });
+      };
+      if (lintIssues.length) {
+        entry.lintIssues = mergeLintIssues(entry.lintIssues, lintIssues);
+      }
+      filesByKey.set(key, entry);
     }
   }
-  return files;
+  return Array.from(filesByKey.values());
+}
+
+function mergeLintIssues(
+  existing: string[] | undefined,
+  next: string[],
+): string[] {
+  if (!existing) {
+    return [...next];
+  }
+  if (next.length === 0) {
+    return existing;
+  }
+  let seen = new Set(existing);
+  let merged = [...existing];
+  for (let issue of next) {
+    if (seen.has(issue)) {
+      continue;
+    }
+    seen.add(issue);
+    merged.push(issue);
+  }
+  return merged;
 }
 
 function gatherPatchedCards(

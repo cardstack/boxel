@@ -42,6 +42,7 @@ export const realmURL = Symbol.for('cardstack-realm-url');
 export const relativeTo = Symbol.for('cardstack-relative-to');
 
 export const aiBotUsername = 'aibot';
+export const botRunnerUsername = 'bot-runner';
 
 export const CardContextName = 'card-context';
 export const CardCrudFunctionsContextName = 'card-crud-functions-context';
@@ -69,7 +70,7 @@ export const REPLACE_MARKER: string = '╚═══ REPLACE ═══╝';
 export const MINIMUM_AI_CREDITS_TO_CONTINUE = 10;
 
 // Default max card payload size, in bytes.
-export const DEFAULT_CARD_SIZE_LIMIT_BYTES = 64 * 1024;
+export const DEFAULT_CARD_SIZE_LIMIT_BYTES = 512 * 1024; //512 KB
 
 export const EXTRA_TOKENS_PRICING: Record<number, number> = {
   2500: 5,

@@ -167,7 +167,7 @@ computeVia.call({ title: 'Tic Tac Toe' });
 `;
 
       const response = await request
-        .post('/_lint?lintMode=lint')
+        .post('/_lint')
         .set(
           'Authorization',
           `Bearer ${createJWT(testRealm, 'john', ['read', 'write'])}`,
