@@ -27,10 +27,7 @@ export async function retrieveScopedCSS({
   }
 
   let scopedCSSQuery: Expression = [
-    `SELECT deps, realm_version FROM boxel_index_working WHERE type = 'instance' AND deps IS NOT NULL AND`,
-    ...indexCandidateExpressions(candidates),
-    `UNION ALL
-     SELECT deps, realm_version FROM boxel_index WHERE type = 'instance' AND deps IS NOT NULL AND`,
+    `SELECT deps, realm_version FROM boxel_index WHERE type = 'instance' AND deps IS NOT NULL AND`,
     ...indexCandidateExpressions(candidates),
     `ORDER BY realm_version DESC
      LIMIT 1`,

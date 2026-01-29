@@ -496,12 +496,7 @@ export class RealmServer {
     }
 
     let rows = await query(this.dbAdapter, [
-      `SELECT head_html, realm_version FROM boxel_index_working WHERE head_html IS NOT NULL AND type =`,
-      param('instance'),
-      'AND',
-      ...this.indexCandidateExpressions(candidates),
-      `UNION ALL
-       SELECT head_html, realm_version FROM boxel_index WHERE head_html IS NOT NULL AND type =`,
+      `SELECT head_html, realm_version FROM boxel_index WHERE head_html IS NOT NULL AND type =`,
       param('instance'),
       'AND',
       ...this.indexCandidateExpressions(candidates),
@@ -540,12 +535,7 @@ export class RealmServer {
     }
 
     let rows = await query(this.dbAdapter, [
-      `SELECT isolated_html, realm_version FROM boxel_index_working WHERE isolated_html IS NOT NULL AND type =`,
-      param('instance'),
-      'AND',
-      ...this.indexCandidateExpressions(candidates),
-      `UNION ALL
-       SELECT isolated_html, realm_version FROM boxel_index WHERE isolated_html IS NOT NULL AND type =`,
+      `SELECT isolated_html, realm_version FROM boxel_index WHERE isolated_html IS NOT NULL AND type =`,
       param('instance'),
       'AND',
       ...this.indexCandidateExpressions(candidates),
