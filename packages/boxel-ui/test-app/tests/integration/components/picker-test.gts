@@ -220,4 +220,107 @@ module('Integration | Component | picker', function (hooks) {
       'select-all stays first, then selected option, then matching unselected option',
     );
   });
+
+  test('picker removes select-all when another option is selected', async function (assert) {
+    const selectAllOption: PickerOption = {
+      id: 'select-all',
+      name: 'All options',
+      type: 'select-all',
+    };
+    const optionsWithSelectAll: PickerOption[] = [
+      selectAllOption,
+      ...testOptions,
+    ];
+
+    class SelectionController {
+      @tracked selected: PickerOption[] = [selectAllOption];
+    }
+
+    const controller = new SelectionController();
+
+    const onChange = (newSelected: PickerOption[]) => {
+      controller.selected = newSelected;
+    };
+
+    await render(
+      <template>
+        <Picker
+          @options={{optionsWithSelectAll}}
+          @selected={{controller.selected}}
+          @onChange={{onChange}}
+          @label='Test'
+        />
+      </template>,
+    );
+
+    await click('[data-test-boxel-picker-trigger]');
+    await waitFor('[data-test-boxel-picker-option-row]');
+
+    const secondOption = document.querySelectorAll(
+      '[data-test-boxel-picker-option-row]',
+    )[1];
+    await click(secondOption as HTMLElement);
+
+    assert.deepEqual(
+      controller.selected.map((option) => option.id),
+      ['1'],
+      'select-all is removed once another option is selected',
+    );
+  });
+
+  test('picker selects select-all when all options are selected', async function (assert) {
+    const selectAllOption: PickerOption = {
+      id: 'select-all',
+      name: 'All options',
+      type: 'select-all',
+    };
+    const optionsWithSelectAll: PickerOption[] = [
+      selectAllOption,
+      ...testOptions,
+    ];
+
+    class SelectionController {
+      @tracked selected: PickerOption[] = [];
+    }
+
+    const controller = new SelectionController();
+
+    const onChange = (newSelected: PickerOption[]) => {
+      controller.selected = newSelected;
+    };
+
+    await render(
+      <template>
+        <Picker
+          @options={{optionsWithSelectAll}}
+          @selected={{controller.selected}}
+          @onChange={{onChange}}
+          @label='Test'
+        />
+      </template>,
+    );
+
+    await click('[data-test-boxel-picker-trigger]');
+    await waitFor('[data-test-boxel-picker-option-row]');
+
+    const optionRows = Array.from(
+      document.querySelectorAll('[data-test-boxel-picker-option-row]'),
+    );
+    const nonSelectAllRows = optionRows.filter(
+      (row) =>
+        (row as HTMLElement).getAttribute(
+          'data-test-boxel-picker-option-row',
+        ) !== 'select-all',
+    );
+
+    for (const row of nonSelectAllRows) {
+      await click(row as HTMLElement);
+    }
+
+    assert.deepEqual(
+      controller.selected.map((option) => option.id),
+      ['select-all'],
+      'select-all replaces individual selections when all are selected',
+    );
+  });
 });

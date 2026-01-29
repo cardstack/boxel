@@ -125,6 +125,35 @@ export default class Picker extends Component<PickerSignature> {
     };
   }
 
+  onChange = (selected: PickerOption[]) => {
+    const selectAllOptions = selected.filter((option) => {
+      return option.type === 'select-all';
+    });
+    const nonSelectAllOptions = selected.filter((option) => {
+      return option.type !== 'select-all';
+    });
+    const allSelectAllOptions = this.args.options.filter(
+      (option) => option.type === 'select-all',
+    );
+    const allNonSelectAllOptions = this.args.options.filter(
+      (option) => option.type !== 'select-all',
+    );
+    if (selectAllOptions.length > 0 && nonSelectAllOptions.length > 0) {
+      this.args.onChange(nonSelectAllOptions);
+      return;
+    }
+    if (
+      selectAllOptions.length === 0 &&
+      nonSelectAllOptions.length > 0 &&
+      allSelectAllOptions.length > 0 &&
+      nonSelectAllOptions.length === allNonSelectAllOptions.length
+    ) {
+      this.args.onChange(allSelectAllOptions);
+      return;
+    }
+    this.args.onChange(selected);
+  };
+
   displayDivider = (option: PickerOption) => {
     return (
       (this.isLastSelected(option) && this.hasUnselected) ||
@@ -137,7 +166,7 @@ export default class Picker extends Component<PickerSignature> {
     <BoxelMultiSelectBasic
       @options={{this.sortedOptions}}
       @selected={{@selected}}
-      @onChange={{@onChange}}
+      @onChange={{this.onChange}}
       @placeholder={{@placeholder}}
       @disabled={{@disabled}}
       @renderInPlace={{@renderInPlace}}
@@ -163,7 +192,7 @@ export default class Picker extends Component<PickerSignature> {
       {{/if}}
     </BoxelMultiSelectBasic>
 
-    <style scoped>
+    <style>
       .picker-divider {
         height: 1px;
         background-color: var(--boxel-200);
