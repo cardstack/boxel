@@ -17,7 +17,7 @@ module.exports = {
 
   create: (context) => {
     return {
-      GlimmerElement(node) {
+      GlimmerElementNode(node) {
         if (node.tag !== 'style') {
           return;
         }
