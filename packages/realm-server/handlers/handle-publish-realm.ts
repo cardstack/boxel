@@ -39,6 +39,27 @@ const PUBLISHED_REALM_DOMAIN_OVERRIDES = getPublishedRealmDomainOverrides(
   process.env.PUBLISHED_REALM_DOMAIN_OVERRIDES,
 );
 
+type OverrideHost = {
+  host: string;
+  hostname: string;
+  port: string;
+};
+
+function parseOverrideHost(rawOverride: string): OverrideHost | null {
+  try {
+    let overrideURL = rawOverride.includes('://')
+      ? new URL(rawOverride)
+      : new URL(`https://${rawOverride}`);
+    return {
+      host: overrideURL.host.toLowerCase(),
+      hostname: overrideURL.hostname.toLowerCase(),
+      port: overrideURL.port,
+    };
+  } catch {
+    return null;
+  }
+}
+
 async function maybeApplyPublishedRealmOverride(
   dbAdapter: DBAdapter,
   ownerUserId: string,
@@ -50,13 +71,24 @@ async function maybeApplyPublishedRealmOverride(
     return { applied: false, publishedRealmURL };
   }
 
+  let overrideHost = parseOverrideHost(overrideDomain);
+  if (!overrideHost) {
+    return { applied: false, publishedRealmURL };
+  }
+
   let publishedURL: URL;
   try {
     publishedURL = new URL(publishedRealmURL);
   } catch {
     return { applied: false, publishedRealmURL };
   }
-  if (publishedURL.host.toLowerCase() !== overrideDomain.toLowerCase()) {
+
+  let publishedHost = publishedURL.host.toLowerCase();
+  let publishedHostname = publishedURL.hostname.toLowerCase();
+  let matchesOverride = overrideHost.port
+    ? publishedHost === overrideHost.host
+    : publishedHostname === overrideHost.hostname;
+  if (!matchesOverride) {
     return { applied: false, publishedRealmURL };
   }
 
@@ -74,7 +106,7 @@ async function maybeApplyPublishedRealmOverride(
   }
 
   let overriddenURL = new URL(publishedRealmURL);
-  overriddenURL.host = overrideDomain;
+  overriddenURL.host = overrideHost.host;
   return {
     applied: true,
     publishedRealmURL: ensureTrailingSlash(overriddenURL.toString()),
