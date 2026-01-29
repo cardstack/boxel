@@ -295,7 +295,10 @@ test.describe('Room messages', () => {
       .click();
     await page.locator(`[data-test-boxel-menu-item-text="Code"]`).click();
 
-    await expect(page.locator(`[data-test-attached-file]`)).toHaveCount(1);
+    await expect(page.locator(`[data-test-attached-file]`)).toHaveCount(2);
+    await expect(
+      page.locator(`[data-test-attached-card="${appURL}/person.gts"]`),
+    ).toHaveCount(1);
     await expect(
       page.locator(`[data-test-attached-file="${appURL}/hassan.json"]`),
     ).toHaveCount(1);
@@ -357,6 +360,9 @@ test.describe('Room messages', () => {
       page.locator(`[data-test-attached-card="${appURL}/hassan"]`),
     ).toHaveCount(1);
     await expect(page.locator(`[data-test-attached-file]`)).toHaveCount(1);
+    await expect(
+      page.locator(`[data-test-attached-file="${appURL}/person.gts"]`),
+    ).toHaveCount(1);
     await expect(
       page.locator(`[data-test-attached-file="${appURL}/hassan.json"]`),
     ).toHaveCount(1);
