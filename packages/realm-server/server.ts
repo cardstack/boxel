@@ -542,32 +542,19 @@ export class RealmServer {
     }
 
     let rows = await query(this.dbAdapter, [
-<<<<<<< HEAD
-      `SELECT isolated_html, realm_version FROM boxel_index WHERE isolated_html IS NOT NULL AND type =`,
-||||||| 538c47c4b2
-      `SELECT isolated_html, realm_version FROM boxel_index_working WHERE isolated_html IS NOT NULL AND type =`,
-      param('instance'),
-      'AND',
+      `
+        SELECT isolated_html, realm_version
+        FROM boxel_index
+        WHERE isolated_html IS NOT NULL
+          AND type = 'instance'
+          AND is_deleted IS NOT TRUE
+          AND
+        `,
       ...this.indexCandidateExpressions(candidates),
-      `UNION ALL
-       SELECT isolated_html, realm_version FROM boxel_index WHERE isolated_html IS NOT NULL AND type =`,
-=======
-      `SELECT isolated_html, realm_version FROM boxel_index_working WHERE isolated_html IS NOT NULL AND type =`,
-      param('instance'),
-      'AND',
-      'is_deleted IS NOT TRUE',
-      'AND',
-      ...this.indexCandidateExpressions(candidates),
-      `UNION ALL
-       SELECT isolated_html, realm_version FROM boxel_index WHERE isolated_html IS NOT NULL AND type =`,
->>>>>>> main
-      param('instance'),
-      'AND',
-      'is_deleted IS NOT TRUE',
-      'AND',
-      ...this.indexCandidateExpressions(candidates),
-      `ORDER BY realm_version DESC
-       LIMIT 1`,
+      `
+        ORDER BY realm_version DESC
+        LIMIT 1
+      `,
     ]);
 
     this.isolatedLog.debug('Isolated query result for %s', cardURL.href, rows);
