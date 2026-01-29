@@ -537,8 +537,7 @@ export class MyCard extends CardDef {
       let responseJson = JSON.parse(response.text);
       let messages = responseJson.messages;
       let positionFixedWarning = messages.find(
-        (m: any) =>
-          m.ruleId === '@cardstack/boxel/no-css-position-fixed',
+        (m: any) => m.ruleId === '@cardstack/boxel/no-css-position-fixed',
       );
       assert.ok(
         positionFixedWarning,
@@ -578,8 +577,7 @@ export class MyCard extends CardDef {
       let responseJson = JSON.parse(response.text);
       let messages = responseJson.messages;
       let positionFixedWarning = messages.find(
-        (m: any) =>
-          m.ruleId === '@cardstack/boxel/no-css-position-fixed',
+        (m: any) => m.ruleId === '@cardstack/boxel/no-css-position-fixed',
       );
       assert.notOk(
         positionFixedWarning,
