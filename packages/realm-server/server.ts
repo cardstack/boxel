@@ -466,6 +466,9 @@ export class RealmServer {
           assetsURL: this.assetsURL.href,
           realmServerURL: this.serverURL.href,
           cardSizeLimitBytes: this.cardSizeLimitBytes,
+          publishedRealmDomainOverrides:
+            process.env.PUBLISHED_REALM_DOMAIN_OVERRIDES ??
+            config.publishedRealmDomainOverrides,
         });
         return `${g1}${encodeURIComponent(JSON.stringify(config))}${g3}`;
       },
