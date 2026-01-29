@@ -558,13 +558,8 @@ export class IndexRunner {
     let { content, lastModified } = fileRef;
     // ensure created_at exists for this file and use it for resourceCreatedAt
     let resourceCreatedAt = await this.batch.ensureFileCreatedAt(localPath);
-    // Track whether this file is already rendered through another path
-    // (modules get their own prerender, card instances get full card prerender).
-    // Files that are only indexed as file entries benefit from FileDef HTML rendering.
-    let skipHtmlRender = false;
     if (hasExecutableExtension(url.href)) {
       await this.indexModule(url);
-      skipHtmlRender = true;
     } else if (url.href.endsWith('.json')) {
       let resource;
 
@@ -590,7 +585,6 @@ export class IndexRunner {
           resourceCreatedAt,
           resource,
         });
-        skipHtmlRender = true;
         // Intentionally fall through so card JSON files also get a file entry.
       }
     }
@@ -605,7 +599,6 @@ export class IndexRunner {
       path: localPath,
       lastModified,
       resourceCreatedAt,
-      skipHtmlRender,
     });
     this.#log.debug(
       `${jobIdentity(this.#jobInfo)} completed visiting file ${url.href} in ${Date.now() - start}ms`,
@@ -877,12 +870,10 @@ export class IndexRunner {
     path,
     lastModified,
     resourceCreatedAt,
-    skipHtmlRender,
   }: {
     path: LocalPath;
     lastModified: number;
     resourceCreatedAt: number;
-    skipHtmlRender?: boolean;
   }): Promise<void> {
     let fileURL = this.#realmPaths.fileURL(path).href;
     let entryURL = new URL(fileURL);
@@ -978,9 +969,8 @@ export class IndexRunner {
     let fileTypes = extractResult.types ?? fallbackTypes;
 
     // Phase 2: Render HTML for file entry (non-fatal)
-    // Skip for files already rendered through another path (modules, card instances).
     let renderResult: FileRenderResponse | undefined;
-    if (extractResult.resource && !skipHtmlRender) {
+    if (extractResult.resource) {
       try {
         let fileRenderOptions: RenderRouteOptions = {
           fileRender: true,
