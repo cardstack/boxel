@@ -138,15 +138,23 @@ export default class Picker extends Component<PickerSignature> {
     const allNonSelectAllOptions = this.args.options.filter(
       (option) => option.type !== 'select-all',
     );
+
+    // Deselect select-all if there are other options selected
     if (selectAllOptions.length > 0 && nonSelectAllOptions.length > 0) {
       this.args.onChange(nonSelectAllOptions);
       return;
     }
-    if (
-      selectAllOptions.length === 0 &&
+
+    // Select select-all if all other options are selected
+    // and deselect all other options
+    // or if no options are selected
+    let isAllOptionsSelected =
       nonSelectAllOptions.length > 0 &&
+      nonSelectAllOptions.length === allNonSelectAllOptions.length;
+    let isNoOptionSelected = nonSelectAllOptions.length === 0;
+    if (
       allSelectAllOptions.length > 0 &&
-      nonSelectAllOptions.length === allNonSelectAllOptions.length
+      (isAllOptionsSelected || isNoOptionSelected)
     ) {
       this.args.onChange(allSelectAllOptions);
       return;
