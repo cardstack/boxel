@@ -58,6 +58,37 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           });
 
           writeFileSync(
+            join(context.testRealmDir, 'dollar-sign-card.gts'),
+            `
+            import { Component, CardDef } from 'https://cardstack.com/base/card-api';
+
+            export class DollarSignCard extends CardDef {
+              static isolated = class Isolated extends Component<typeof this> {
+                <template>
+                  <div data-test-dollar-sign>Price: $0.50 per unit</div>
+                </template>
+              };
+            }
+            `,
+          );
+
+          writeJSONSync(
+            join(context.testRealmDir, 'dollar-sign-test.json'),
+            {
+              data: {
+                type: 'card',
+                attributes: {},
+                meta: {
+                  adoptsFrom: {
+                    module: './dollar-sign-card.gts',
+                    name: 'DollarSignCard',
+                  },
+                },
+              },
+            },
+          );
+
+          writeFileSync(
             join(context.testRealmDir, 'head-card.gts'),
             `
             import { Component, CardDef } from 'https://cardstack.com/base/card-api';
@@ -235,6 +266,26 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         assert.ok(
           response.text.includes('--scoped-css-marker: 1'),
           'scoped CSS is included in the HTML response',
+        );
+      });
+
+      test('serves isolated HTML containing dollar signs without corruption', async function (assert) {
+        let response = await context.request2
+          .get('/test/dollar-sign-test')
+          .set('Accept', 'text/html');
+
+        assert.strictEqual(response.status, 200, 'serves HTML response');
+        assert.ok(
+          response.text.includes('data-test-dollar-sign'),
+          'isolated HTML with dollar signs is injected into the HTML response',
+        );
+        assert.ok(
+          response.text.includes('$0.50'),
+          'dollar sign content is preserved without regex replacement pattern corruption',
+        );
+        assert.ok(
+          response.text.includes('boxel-isolated-end'),
+          'isolated end boundary marker is present (not corrupted by $0 backreference)',
         );
       });
 
