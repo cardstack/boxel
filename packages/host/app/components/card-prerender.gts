@@ -429,7 +429,6 @@ export default class CardPrerender extends Component {
     async ({
       url,
       fileData,
-      types,
       renderOptions,
     }: FileRenderArgs): Promise<FileRenderResponse> => {
       this.#nonce++;
@@ -457,47 +456,16 @@ export default class CardPrerender extends Component {
 
       let error: RenderError | undefined;
       let isolatedHTML: string | null = null;
-      let headHTML: string | null = null;
-      let atomHTML: string | null = null;
-      let iconHTML: string | null = null;
-      let embeddedHTML: Record<string, string> | null = null;
-      let fittedHTML: Record<string, string> | null = null;
 
+      // Render isolated HTML only – additional formats (head, atom, icon,
+      // fitted, embedded) are deferred to keep boot-indexing fast.
       try {
-        let subsequentRenderOptions = omitOneTimeOptions(initialRenderOptions);
         isolatedHTML = await this.renderHTML.perform(
           url,
           'isolated',
           0,
           initialRenderOptions,
         );
-        headHTML = await this.renderHTML.perform(
-          url,
-          'head',
-          0,
-          subsequentRenderOptions,
-        );
-        atomHTML = await this.renderHTML.perform(
-          url,
-          'atom',
-          0,
-          subsequentRenderOptions,
-        );
-        iconHTML = await this.renderIcon.perform(url, subsequentRenderOptions);
-        if (types.length > 0) {
-          embeddedHTML = await this.renderAncestors.perform(
-            url,
-            'embedded',
-            types,
-            subsequentRenderOptions,
-          );
-          fittedHTML = await this.renderAncestors.perform(
-            url,
-            'fitted',
-            types,
-            subsequentRenderOptions,
-          );
-        }
       } catch (e: any) {
         try {
           error = { ...JSON.parse(e.message), type: 'file-error' };
@@ -520,11 +488,11 @@ export default class CardPrerender extends Component {
 
       return {
         isolatedHTML,
-        headHTML,
-        atomHTML,
-        embeddedHTML,
-        fittedHTML,
-        iconHTML,
+        headHTML: null,
+        atomHTML: null,
+        embeddedHTML: null,
+        fittedHTML: null,
+        iconHTML: null,
         ...(error ? { error } : {}),
       };
     },
