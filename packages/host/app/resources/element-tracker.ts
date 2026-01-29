@@ -78,7 +78,8 @@ export default class ElementTracker {
       if (found) {
         this.elements.splice(this.elements.indexOf(found), 1);
       }
-      Array.from(this.observers.values()).forEach((v) => v.disconnect());
+      this.observers.get(element)?.disconnect();
+      this.observers.delete(element);
     };
   });
 
