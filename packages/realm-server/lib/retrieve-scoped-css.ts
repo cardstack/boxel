@@ -27,13 +27,19 @@ export async function retrieveScopedCSS({
   }
 
   let scopedCSSQuery: Expression = [
-    `SELECT deps, realm_version FROM boxel_index_working WHERE type = 'instance' AND deps IS NOT NULL AND is_deleted IS NOT TRUE AND`,
+    `
+      SELECT deps, realm_version
+      FROM boxel_index
+      WHERE type = 'instance'
+        AND is_deleted IS NOT TRUE
+        AND deps IS NOT NULL
+        AND
+    `,
     ...indexCandidateExpressions(candidates),
-    `UNION ALL
-     SELECT deps, realm_version FROM boxel_index WHERE type = 'instance' AND deps IS NOT NULL AND is_deleted IS NOT TRUE AND`,
-    ...indexCandidateExpressions(candidates),
-    `ORDER BY realm_version DESC
-     LIMIT 1`,
+    `
+      ORDER BY realm_version DESC
+      LIMIT 1
+    `,
   ];
 
   if (log) {
