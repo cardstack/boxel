@@ -61,7 +61,7 @@ export default class PatchCodeCommand extends HostBaseCommand<
     let finalFileUrl = fileUrl;
     let lintIssues: string[] = [];
     if (results.some((r) => r.status === 'applied')) {
-      if (patchedCode.trim() !== '') {
+      if (patchedCode.trim() !== '' && this.isLintableFile(fileUrl)) {
         let lintResult = await this.lintAndFix(fileUrl, patchedCode);
         patchedCode = lintResult.output;
         lintIssues = lintResult.lintIssues ?? [];
@@ -212,6 +212,14 @@ export default class PatchCodeCommand extends HostBaseCommand<
       fileContent: content,
       filename: filename,
     });
+  }
+
+  private isLintableFile(fileUrl: string): boolean {
+    try {
+      return /\.(gts|ts)$/.test(new URL(fileUrl).pathname);
+    } catch {
+      return /\.(gts|ts)$/.test(fileUrl);
+    }
   }
 
   private async determineFinalFileUrl(
