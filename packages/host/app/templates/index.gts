@@ -5,8 +5,6 @@ import { inject as service } from '@ember/service';
 import { isDevelopingApp } from '@embroider/macros';
 import Component from '@glimmer/component';
 
-import FromElsewhere from 'ember-elsewhere/components/from-elsewhere';
-
 import { modifier } from 'ember-modifier';
 import { pageTitle } from 'ember-page-title';
 
@@ -241,8 +239,6 @@ export class IndexComponent extends Component<IndexComponentComponentSignature> 
       {{pageTitle this.operatorModeStateService.title}}
       <OperatorModeContainer @onClose={{this.closeOperatorMode}} />
     {{/if}}
-
-    <FromElsewhere @name='boxel-transmute' />
   </template>
 }
 
