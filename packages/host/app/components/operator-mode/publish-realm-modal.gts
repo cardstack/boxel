@@ -1149,9 +1149,7 @@ export default class PublishRealmModal extends Component<Signature> {
                         class='unpublish-button'
                         {{on
                           'click'
-                          (fn
-                            @handleUnpublish this.customSubdomainOverrideUrl
-                          )
+                          (fn @handleUnpublish this.customSubdomainOverrideUrl)
                         }}
                         data-test-unpublish-custom-subdomain-override-button
                       >
