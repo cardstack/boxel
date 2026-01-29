@@ -8,9 +8,7 @@ import { isTesting } from '@embroider/macros';
 import Component from '@glimmer/component';
 import { cached, tracked } from '@glimmer/tracking';
 
-import X from '@cardstack/boxel-icons/x';
-
-import { IconButton } from '@cardstack/boxel-ui/components';
+import { ContextButton } from '@cardstack/boxel-ui/components';
 
 import { getCard } from '@cardstack/host/resources/card-resource';
 
@@ -159,11 +157,9 @@ export default class HostModeStackItem extends Component<Signature> {
         />
         {{#if @close}}
           <div class='close-button-container'>
-            <IconButton
-              class='close-button'
-              @icon={{X}}
-              @width='16px'
-              @height='16px'
+            <ContextButton
+              @icon='close'
+              @label='close stack item'
               {{on 'click' this.handleClose}}
             />
           </div>
@@ -269,12 +265,7 @@ export default class HostModeStackItem extends Component<Signature> {
         position: absolute;
         top: var(--boxel-sp-xs);
         right: var(--boxel-sp-xs);
-        padding: var(--boxel-sp-xs);
-      }
-
-      .close-button {
-        height: 18px;
-        width: 18px;
+        z-index: 1;
       }
 
       .host-mode-stack-item-card {
@@ -282,6 +273,7 @@ export default class HostModeStackItem extends Component<Signature> {
         box-shadow: none;
         overflow: auto;
         height: 100%;
+        z-index: 0;
       }
     </style>
   </template>
