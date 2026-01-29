@@ -1112,96 +1112,89 @@ export default class PublishRealmModal extends Component<Signature> {
           </div>
 
           {{#if this.shouldShowCustomSubdomainOverride}}
-            <div class='domain-option'>
-              <input
-                type='checkbox'
-                id='custom-subdomain-override-checkbox'
-                class='domain-checkbox'
-                checked={{this.isCustomSubdomainOverrideSelected}}
-                {{on 'change' this.toggleCustomSubdomainOverride}}
-                data-test-custom-subdomain-override-checkbox
-                disabled={{this.isUnpublishingAnyRealms}}
-              />
-              <label
-                class='option-title'
-                for='custom-subdomain-override-checkbox'
-              >Custom Domain Override</label>
-              <div class='domain-details'>
-                <WithLoadedRealm @realmURL={{this.currentRealmURL}} as |realm|>
-                  <RealmIcon @realmInfo={{realm.info}} class='realm-icon' />
-                </WithLoadedRealm>
-                <div class='domain-url-container'>
-                  <span
-                    class='domain-url'
-                  >{{this.customSubdomainOverrideUrl}}</span>
-                  {{#if this.isCustomSubdomainOverridePublished}}
-                    <div class='domain-info'>
-                      {{#if this.customSubdomainOverrideLastPublishedTime}}
-                        <span class='last-published-at'>Published
-                          {{this.customSubdomainOverrideLastPublishedTime}}</span>
+            {{#let this.customSubdomainOverrideUrl as |overrideUrl|}}
+              {{#if overrideUrl}}
+                <div class='domain-option'>
+                  <input
+                    type='checkbox'
+                    id='custom-subdomain-override-checkbox'
+                    class='domain-checkbox'
+                    checked={{this.isCustomSubdomainOverrideSelected}}
+                    {{on 'change' this.toggleCustomSubdomainOverride}}
+                    data-test-custom-subdomain-override-checkbox
+                    disabled={{this.isUnpublishingAnyRealms}}
+                  />
+                  <label
+                    class='option-title'
+                    for='custom-subdomain-override-checkbox'
+                  >Custom Domain Override</label>
+                  <div class='domain-details'>
+                    <WithLoadedRealm @realmURL={{this.currentRealmURL}} as |realm|>
+                      <RealmIcon @realmInfo={{realm.info}} class='realm-icon' />
+                    </WithLoadedRealm>
+                    <div class='domain-url-container'>
+                      <span class='domain-url'>{{overrideUrl}}</span>
+                      {{#if this.isCustomSubdomainOverridePublished}}
+                        <div class='domain-info'>
+                          {{#if this.customSubdomainOverrideLastPublishedTime}}
+                            <span class='last-published-at'>Published
+                              {{this.customSubdomainOverrideLastPublishedTime}}</span>
+                          {{/if}}
+                          <BoxelButton
+                            @kind='text-only'
+                            @size='extra-small'
+                            @disabled={{this.isUnpublishingRealm overrideUrl}}
+                            class='unpublish-button'
+                            {{on 'click' (fn @handleUnpublish overrideUrl)}}
+                            data-test-unpublish-custom-subdomain-override-button
+                          >
+                            {{#if (this.isUnpublishingRealm overrideUrl)}}
+                              <LoadingIndicator />
+                              Unpublishing…
+                            {{else}}
+                              <Undo2
+                                width='11'
+                                height='11'
+                                class='unpublish-icon'
+                              />
+                              Unpublish
+                            {{/if}}
+                          </BoxelButton>
+                        </div>
+                      {{else}}
+                        <span class='not-published-yet'>Not published yet</span>
                       {{/if}}
-                      <BoxelButton
-                        @kind='text-only'
-                        @size='extra-small'
-                        @disabled={{this.isUnpublishingRealm
-                          this.customSubdomainOverrideUrl
-                        }}
-                        class='unpublish-button'
-                        {{on
-                          'click'
-                          (fn @handleUnpublish this.customSubdomainOverrideUrl)
-                        }}
-                        data-test-unpublish-custom-subdomain-override-button
-                      >
-                        {{#if
-                          (this.isUnpublishingRealm
-                            this.customSubdomainOverrideUrl
-                          )
-                        }}
-                          <LoadingIndicator />
-                          Unpublishing…
-                        {{else}}
-                          <Undo2
-                            width='11'
-                            height='11'
-                            class='unpublish-icon'
-                          />
-                          Unpublish
-                        {{/if}}
-                      </BoxelButton>
                     </div>
-                  {{else}}
-                    <span class='not-published-yet'>Not published yet</span>
+                  </div>
+                  {{#if this.isCustomSubdomainOverridePublished}}
+                    <BoxelButton
+                      @as='anchor'
+                      @kind='secondary-light'
+                      @size='small'
+                      @href={{overrideUrl}}
+                      @disabled={{this.isUnpublishingAnyRealms}}
+                      class='action'
+                      target='_blank'
+                      rel='noopener noreferrer'
+                      data-test-open-custom-subdomain-override-button
+                    >
+                      <ExternalLink width='16' height='16' class='button-icon' />
+                      Open Site
+                    </BoxelButton>
+                  {{/if}}
+                  {{#if this.publishErrorForCustomSubdomainOverride}}
+                    <div
+                      class='domain-publish-error'
+                      data-test-domain-publish-error={{overrideUrl}}
+                    >
+                      <span
+                        class='error-text'
+                      >{{this.publishErrorForCustomSubdomainOverride}}</span>
+                    </div>
                   {{/if}}
                 </div>
-              </div>
-              {{#if this.isCustomSubdomainOverridePublished}}
-                <BoxelButton
-                  @as='anchor'
-                  @kind='secondary-light'
-                  @size='small'
-                  @href={{this.customSubdomainOverrideUrl}}
-                  @disabled={{this.isUnpublishingAnyRealms}}
-                  class='action'
-                  target='_blank'
-                  rel='noopener noreferrer'
-                  data-test-open-custom-subdomain-override-button
-                >
-                  <ExternalLink width='16' height='16' class='button-icon' />
-                  Open Site
-                </BoxelButton>
               {{/if}}
-              {{#if this.publishErrorForCustomSubdomainOverride}}
-                <div
-                  class='domain-publish-error'
-                  data-test-domain-publish-error={{this.customSubdomainOverrideUrl}}
-                >
-                  <span
-                    class='error-text'
-                  >{{this.publishErrorForCustomSubdomainOverride}}</span>
-                </div>
-              {{/if}}
-            </div>
+            {{/let}}
           {{/if}}
         </div>
       </:content>
