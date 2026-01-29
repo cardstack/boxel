@@ -629,14 +629,14 @@ export class RealmServer {
   private injectHeadHTML(indexHTML: string, headHTML: string): string {
     return indexHTML.replace(
       /(<meta[^>]+data-boxel-head-start[^>]*>)([\s\S]*?)(<meta[^>]+data-boxel-head-end[^>]*>)/,
-      `$1\n${headHTML}\n$3`,
+      (_match, start, _content, end) => `${start}\n${headHTML}\n${end}`,
     );
   }
 
   private injectIsolatedHTML(indexHTML: string, isolatedHTML: string): string {
     return indexHTML.replace(
       /(<script[^>]+id="boxel-isolated-start"[^>]*>\s*<\/script>)([\s\S]*?)(<script[^>]+id="boxel-isolated-end"[^>]*>\s*<\/script>)/,
-      `$1\n${isolatedHTML}\n$3`,
+      (_match, start, _content, end) => `${start}\n${isolatedHTML}\n${end}`,
     );
   }
 
