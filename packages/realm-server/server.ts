@@ -502,10 +502,14 @@ export class RealmServer {
       `SELECT head_html, realm_version FROM boxel_index_working WHERE head_html IS NOT NULL AND type =`,
       param('instance'),
       'AND',
+      'is_deleted IS NOT TRUE',
+      'AND',
       ...this.indexCandidateExpressions(candidates),
       `UNION ALL
        SELECT head_html, realm_version FROM boxel_index WHERE head_html IS NOT NULL AND type =`,
       param('instance'),
+      'AND',
+      'is_deleted IS NOT TRUE',
       'AND',
       ...this.indexCandidateExpressions(candidates),
       `ORDER BY realm_version DESC
@@ -546,10 +550,14 @@ export class RealmServer {
       `SELECT isolated_html, realm_version FROM boxel_index_working WHERE isolated_html IS NOT NULL AND type =`,
       param('instance'),
       'AND',
+      'is_deleted IS NOT TRUE',
+      'AND',
       ...this.indexCandidateExpressions(candidates),
       `UNION ALL
        SELECT isolated_html, realm_version FROM boxel_index WHERE isolated_html IS NOT NULL AND type =`,
       param('instance'),
+      'AND',
+      'is_deleted IS NOT TRUE',
       'AND',
       ...this.indexCandidateExpressions(candidates),
       `ORDER BY realm_version DESC
