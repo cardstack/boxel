@@ -1129,7 +1129,10 @@ export default class PublishRealmModal extends Component<Signature> {
                     for='custom-subdomain-override-checkbox'
                   >Custom Domain Override</label>
                   <div class='domain-details'>
-                    <WithLoadedRealm @realmURL={{this.currentRealmURL}} as |realm|>
+                    <WithLoadedRealm
+                      @realmURL={{this.currentRealmURL}}
+                      as |realm|
+                    >
                       <RealmIcon @realmInfo={{realm.info}} class='realm-icon' />
                     </WithLoadedRealm>
                     <div class='domain-url-container'>
@@ -1178,7 +1181,11 @@ export default class PublishRealmModal extends Component<Signature> {
                       rel='noopener noreferrer'
                       data-test-open-custom-subdomain-override-button
                     >
-                      <ExternalLink width='16' height='16' class='button-icon' />
+                      <ExternalLink
+                        width='16'
+                        height='16'
+                        class='button-icon'
+                      />
                       Open Site
                     </BoxelButton>
                   {{/if}}
