@@ -72,21 +72,18 @@ module(`server-endpoints/${basename(__filename)}`, function () {
             `,
           );
 
-          writeJSONSync(
-            join(context.testRealmDir, 'dollar-sign-test.json'),
-            {
-              data: {
-                type: 'card',
-                attributes: {},
-                meta: {
-                  adoptsFrom: {
-                    module: './dollar-sign-card.gts',
-                    name: 'DollarSignCard',
-                  },
+          writeJSONSync(join(context.testRealmDir, 'dollar-sign-test.json'), {
+            data: {
+              type: 'card',
+              attributes: {},
+              meta: {
+                adoptsFrom: {
+                  module: './dollar-sign-card.gts',
+                  name: 'DollarSignCard',
                 },
               },
             },
-          );
+          });
 
           writeFileSync(
             join(context.testRealmDir, 'head-card.gts'),
