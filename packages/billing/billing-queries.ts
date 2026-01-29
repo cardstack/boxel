@@ -562,14 +562,17 @@ export async function spendCredits(
   if (!subscriptionCycle) {
     throw new Error('subscription cycle not found');
   }
-  let availablePlanAllowanceCredits = await sumUpCreditsLedger(dbAdapter, {
-    creditType: [
-      'plan_allowance',
-      'plan_allowance_used',
-      'plan_allowance_expired',
-    ],
-    userId,
-  });
+  let availablePlanAllowanceCredits = Math.max(
+    0,
+    await sumUpCreditsLedger(dbAdapter, {
+      creditType: [
+        'plan_allowance',
+        'plan_allowance_used',
+        'plan_allowance_expired',
+      ],
+      subscriptionCycleId: subscriptionCycle.id,
+    }),
+  );
 
   if (availablePlanAllowanceCredits >= creditsToSpend) {
     await addToCreditsLedger(dbAdapter, {
