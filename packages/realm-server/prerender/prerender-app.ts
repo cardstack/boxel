@@ -454,8 +454,7 @@ export function buildPrerenderApp(options: {
         .filter(([, value]) => value === true)
         .map(([key]) => key)
         .join(', ');
-      let poolFlagSuffix =
-        poolFlags.length > 0 ? ` flags=[${poolFlags}]` : '';
+      let poolFlagSuffix = poolFlags.length > 0 ? ` flags=[${poolFlags}]` : '';
       log.info(
         'file render prerendered %s total=%dms launch=%dms render=%dms pageId=%s realm=%s%s',
         url,

@@ -464,8 +464,7 @@ export default class CardPrerender extends Component {
       let fittedHTML: Record<string, string> | null = null;
 
       try {
-        let subsequentRenderOptions =
-          omitOneTimeOptions(initialRenderOptions);
+        let subsequentRenderOptions = omitOneTimeOptions(initialRenderOptions);
         isolatedHTML = await this.renderHTML.perform(
           url,
           'isolated',
@@ -484,10 +483,7 @@ export default class CardPrerender extends Component {
           0,
           subsequentRenderOptions,
         );
-        iconHTML = await this.renderIcon.perform(
-          url,
-          subsequentRenderOptions,
-        );
+        iconHTML = await this.renderIcon.perform(url, subsequentRenderOptions);
         if (types.length > 0) {
           embeddedHTML = await this.renderAncestors.perform(
             url,

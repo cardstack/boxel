@@ -878,16 +878,14 @@ export class RenderRunner {
         }> = [
           {
             name: 'file fitted render',
-            cb: () =>
-              renderAncestors(page, 'fitted', types, captureOptions),
+            cb: () => renderAncestors(page, 'fitted', types, captureOptions),
             assign: (v: string | Record<string, string>) => {
               fittedHTML = v as Record<string, string>;
             },
           },
           {
             name: 'file embedded render',
-            cb: () =>
-              renderAncestors(page, 'embedded', types, captureOptions),
+            cb: () => renderAncestors(page, 'embedded', types, captureOptions),
             assign: (v: string | Record<string, string>) => {
               embeddedHTML = v as Record<string, string>;
             },
@@ -960,7 +958,11 @@ export class RenderRunner {
   }
 
   shouldRetryWithClearCache(
-    response: RenderResponse | ModuleRenderResponse | FileExtractResponse | FileRenderResponse,
+    response:
+      | RenderResponse
+      | ModuleRenderResponse
+      | FileExtractResponse
+      | FileRenderResponse,
   ): readonly string[] | undefined {
     let renderError = response.error?.error;
     if (!renderError) {

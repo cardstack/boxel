@@ -33,7 +33,7 @@ module(basename(__filename), function () {
 
     function makePrerenderer() {
       let renderCalls: Array<{
-        kind: 'card' | 'module' | 'file-extract';
+        kind: 'card' | 'module' | 'file-extract' | 'file-render';
         args: {
           realm: string;
           url: string;
