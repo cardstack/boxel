@@ -2,6 +2,7 @@ import { module, test } from 'qunit';
 import { join, basename } from 'path';
 import { systemInitiatedPriority } from '@cardstack/runtime-common';
 import { setupServerEndpointsTest, testRealm2URL } from './helpers';
+import { waitUntil } from '../helpers';
 import { ensureDirSync, writeFileSync, writeJSONSync } from 'fs-extra';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
@@ -234,6 +235,92 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         assert.ok(
           response.text.includes('--scoped-css-marker: 1'),
           'scoped CSS is included in the HTML response',
+        );
+      });
+
+      test('ignores deleted index entries for head, isolated, and scoped CSS injection', async function (assert) {
+        let deleteSlugs = ['private-index-test', 'scoped-css-test'];
+
+        for (let slug of deleteSlugs) {
+          let deleteResponse = await context.request2
+            .delete(`/test/${slug}`)
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(
+            deleteResponse.status,
+            204,
+            `deleted ${slug} via card API`,
+          );
+        }
+
+        await waitUntil(
+          async () => {
+            let realmURLNoProtocol = testRealm2URL.href.replace(
+              /^https?:\/\//,
+              '',
+            );
+
+            for (let slug of deleteSlugs) {
+              for (let table of ['boxel_index', 'boxel_index_working']) {
+                let rows = (await context.dbAdapter.execute(
+                  `SELECT COUNT(*) AS count
+                   FROM ${table}
+                   WHERE type = 'instance'
+                     AND is_deleted IS NOT TRUE
+                     AND (regexp_replace(url, '^https?://', '') LIKE '${realmURLNoProtocol}%${slug}%'
+                          OR regexp_replace(file_alias, '^https?://', '') LIKE '${realmURLNoProtocol}%${slug}%')`,
+                )) as { count: string | number }[];
+
+                if (Number(rows[0]?.count ?? 0) > 0) {
+                  return false;
+                }
+              }
+            }
+
+            return true;
+          },
+          {
+            timeout: 5000,
+            interval: 200,
+            timeoutMessage:
+              'Timed out waiting for deleted index entries to be tombstoned',
+          },
+        );
+
+        let headResponse = await context.request2
+          .get('/test/private-index-test')
+          .set('Accept', 'text/html');
+
+        assert.strictEqual(headResponse.status, 200, 'serves HTML response');
+        assert.notOk(
+          headResponse.text.includes('data-test-head-html'),
+          'deleted head HTML is not injected into the HTML response',
+        );
+        assert.notOk(
+          headResponse.text.includes('data-test-isolated-html'),
+          'deleted isolated HTML is not injected into the HTML response',
+        );
+
+        let scopedCSSResponse = await context.request2
+          .get('/test/scoped-css-test')
+          .set('Accept', 'text/html');
+
+        assert.strictEqual(
+          scopedCSSResponse.status,
+          200,
+          'serves HTML response',
+        );
+        assert.notOk(
+          scopedCSSResponse.text.includes('data-boxel-scoped-css'),
+          'deleted scoped CSS is not injected into the HTML response',
+        );
+        assert.notOk(
+          scopedCSSResponse.text.includes('--scoped-css-marker: 1'),
+          'deleted scoped CSS contents are not included in the HTML response',
+        );
+        assert.notOk(
+          scopedCSSResponse.text.includes('data-test-scoped-css'),
+          'deleted isolated HTML is not injected for scoped CSS card',
         );
       });
 
