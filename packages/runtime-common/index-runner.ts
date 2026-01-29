@@ -972,11 +972,9 @@ export class IndexRunner {
     let renderResult: FileRenderResponse | undefined;
     if (extractResult.resource) {
       try {
-        let renderClearCache = this.#consumeClearCacheForRender();
         let fileRenderOptions: RenderRouteOptions = {
           fileRender: true,
           fileDefCodeRef,
-          ...(renderClearCache ? { clearCache: true as const } : {}),
         };
         renderResult = await this.#prerenderer.prerenderFileRender({
           url: fileURL,
