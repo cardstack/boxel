@@ -558,7 +558,8 @@ export class IndexRunner {
     let { content, lastModified } = fileRef;
     // ensure created_at exists for this file and use it for resourceCreatedAt
     let resourceCreatedAt = await this.batch.ensureFileCreatedAt(localPath);
-    if (hasExecutableExtension(url.href)) {
+    let isModule = hasExecutableExtension(url.href);
+    if (isModule) {
       await this.indexModule(url);
     } else if (url.href.endsWith('.json')) {
       let resource;
@@ -599,6 +600,7 @@ export class IndexRunner {
       path: localPath,
       lastModified,
       resourceCreatedAt,
+      hasModulePrerender: isModule,
     });
     this.#log.debug(
       `${jobIdentity(this.#jobInfo)} completed visiting file ${url.href} in ${Date.now() - start}ms`,
@@ -870,10 +872,12 @@ export class IndexRunner {
     path,
     lastModified,
     resourceCreatedAt,
+    hasModulePrerender,
   }: {
     path: LocalPath;
     lastModified: number;
     resourceCreatedAt: number;
+    hasModulePrerender?: boolean;
   }): Promise<void> {
     let fileURL = this.#realmPaths.fileURL(path).href;
     let entryURL = new URL(fileURL);
@@ -968,9 +972,12 @@ export class IndexRunner {
     );
     let fileTypes = extractResult.types ?? fallbackTypes;
 
-    // Phase 2: Render HTML for file entry (non-fatal)
+    // Phase 2: Render HTML for file entry (non-fatal).
+    // Skip for files that already have their own prerender (modules) since
+    // they add significant per-file Puppeteer overhead and already produce HTML
+    // through their module prerender path.
     let renderResult: FileRenderResponse | undefined;
-    if (extractResult.resource) {
+    if (extractResult.resource && !hasModulePrerender) {
       try {
         let fileRenderOptions: RenderRouteOptions = {
           fileRender: true,

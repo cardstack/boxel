@@ -756,8 +756,11 @@ export class RenderRunner {
       };
       let serializedOptions = serializeRenderRouteOptions(options);
       let optionsSegment = encodeURIComponent(serializedOptions);
+      // File render uses the full file URL (including extension) as the ID,
+      // unlike card render which strips .json. The render route's fileRender
+      // branch sets cardId to the raw url parameter, so expectedId must match.
       const captureOptions: CaptureOptions = {
-        expectedId: url.replace(/\.json$/i, ''),
+        expectedId: url,
         expectedNonce: String(this.#nonce),
         simulateTimeoutMs: opts?.simulateTimeoutMs,
       };
