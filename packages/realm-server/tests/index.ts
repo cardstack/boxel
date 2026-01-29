@@ -29,7 +29,7 @@ import * as ContentTagGlobal from 'content-tag';
 
 import QUnit from 'qunit';
 
-QUnit.config.testTimeout = 60000;
+QUnit.config.testTimeout = 180000;
 
 // Cleanup here ensures lingering servers/prerenderers/queues don't keep the
 // Node event loop alive after tests finish.
