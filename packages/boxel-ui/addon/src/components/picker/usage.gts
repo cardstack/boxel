@@ -24,8 +24,8 @@ export default class PickerUsage extends Component {
     name: 'Any Type',
     type: 'select-all',
   };
-  @tracked selectedRealms: PickerOption[] = [this.selectAllOption];
-  @tracked selectedTypes: PickerOption[] = [this.anyTypeOption];
+  @tracked selectedRealms: PickerOption[] = [];
+  @tracked selectedTypes: PickerOption[] = [];
 
   @tracked realmOptions: PickerOption[] = [
     this.selectAllOption,
@@ -61,8 +61,8 @@ export default class PickerUsage extends Component {
       <:description>
         <p>
           Picker is a reusable multi-select component that provides a labeled
-          trigger, grouped options (selected first), search functionality, and
-          an optional "Select All" option.
+          trigger, grouped options (selected first), search functionality, and a
+          required "Select All" option.
         </p>
         <p>
           A picker option is a plain object with the shape:
@@ -73,7 +73,15 @@ export default class PickerUsage extends Component {
           and include it as the first element in your
           <code>@options</code>
           array; the component will keep this option at the top, even when
-          searching or when options are re-grouped.
+          searching or when options are re-grouped. The select-all option is
+          required: the component throws an error if it is missing.
+        </p>
+        <p>
+          When no selections are provided (<code>@selected</code>
+          is empty), the component automatically selects the select-all option
+          and calls
+          <code>@onChange</code>
+          so your state stays in sync.
         </p>
         <p>
           Options can use:
@@ -90,7 +98,7 @@ export default class PickerUsage extends Component {
             '@cardstack/boxel-ui/components';</code>
           then define your options and selected values:
           <code>const options: PickerOption[] = [...]; const selected:
-            PickerOption[] = [...];</code>
+            PickerOption[] = [];</code>
           and render something like:
           <code>&lt;Picker @options=&#123;&#123;this.realmOptions&#125;&#125;
             @selected=&#123;&#123;this.selectedRealms&#125;&#125;
@@ -100,7 +108,8 @@ export default class PickerUsage extends Component {
         <p>Key features include:</p>
         <ol>
           <li>Labeled trigger with selected items displayed as pills</li>
-          <li>Optional search input with "Select All" functionality</li>
+          <li>Required select-all option with default selection behavior</li>
+          <li>Optional search input</li>
           <li>Grouped options (selected items appear first, then unselected)</li>
           <li>Option rows with checkbox, optional icon, and text</li>
           <li>Support for both Icon components and string URLs for icons</li>

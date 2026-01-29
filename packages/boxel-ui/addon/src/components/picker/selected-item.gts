@@ -137,8 +137,8 @@ export default class PickerSelectedItem extends Component<PickerSelectedItemSign
         gap: var(--boxel-sp-2xs);
         padding: 1px 8px 3px 4px;
         border-radius: var(--boxel-border-radius-xs);
-        border: solid 1px #d9d9d9;
-        background-color: #d9d9d9;
+        border: solid 1px var(--boxel-300);
+        background-color: var(--boxel-300);
       }
 
       .picker-selected-item__icon {

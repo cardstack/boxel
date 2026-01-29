@@ -1,3 +1,5 @@
+import type Owner from '@ember/owner';
+import { scheduleOnce } from '@ember/runloop';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import type { Select } from 'ember-power-select/components/power-select';
@@ -42,6 +44,34 @@ export interface PickerSignature {
 
 export default class Picker extends Component<PickerSignature> {
   @tracked searchTerm = '';
+
+  constructor(owner: Owner, args: PickerSignature['Args']) {
+    super(owner, args);
+    this.validateSelectAllOption();
+    scheduleOnce('afterRender', this, this.ensureDefaultSelection);
+  }
+
+  private validateSelectAllOption() {
+    const hasSelectAll = this.args.options.some(
+      (option) => option.type === 'select-all',
+    );
+    if (!hasSelectAll) {
+      throw new Error(
+        'Picker requires a select-all option in @options (type: "select-all").',
+      );
+    }
+  }
+
+  private ensureDefaultSelection() {
+    if (this.args.selected.length === 0) {
+      const selectAllOptions = this.args.options.filter(
+        (option) => option.type === 'select-all',
+      );
+      if (selectAllOptions.length > 0) {
+        this.args.onChange(selectAllOptions);
+      }
+    }
+  }
 
   // When there is a search term:
   // - Always keep any "select-all" (search-all) option at the very top
@@ -132,6 +162,9 @@ export default class Picker extends Component<PickerSignature> {
     const nonSelectAllOptions = selected.filter((option) => {
       return option.type !== 'select-all';
     });
+    const previouslyHadSelectAll = this.args.selected.some(
+      (option) => option.type === 'select-all',
+    );
     const allSelectAllOptions = this.args.options.filter(
       (option) => option.type === 'select-all',
     );
@@ -141,7 +174,11 @@ export default class Picker extends Component<PickerSignature> {
 
     // Deselect select-all if there are other options selected
     if (selectAllOptions.length > 0 && nonSelectAllOptions.length > 0) {
-      this.args.onChange(nonSelectAllOptions);
+      if (previouslyHadSelectAll) {
+        this.args.onChange(nonSelectAllOptions);
+        return;
+      }
+      this.args.onChange(selectAllOptions);
       return;
     }
 
@@ -200,7 +237,7 @@ export default class Picker extends Component<PickerSignature> {
       {{/if}}
     </BoxelMultiSelectBasic>
 
-    <style>
+    <style scoped>
       .picker-divider {
         height: 1px;
         background-color: var(--boxel-200);

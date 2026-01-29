@@ -3,6 +3,7 @@ import { setupRenderingTest } from 'test-app/tests/helpers';
 import { click, render, waitFor, fillIn } from '@ember/test-helpers';
 import { tracked } from '@glimmer/tracking';
 import { Picker, type PickerOption } from '@cardstack/boxel-ui/components';
+import Ember from 'ember';
 
 function noop() {}
 
@@ -15,16 +16,35 @@ module('Integration | Component | picker', function (hooks) {
     { id: '3', name: 'Option 3' },
     { id: '4', name: 'Option 4' },
   ];
+  const selectAllOption: PickerOption = {
+    id: 'select-all',
+    name: 'All options',
+    type: 'select-all',
+  };
+  const testOptionsWithSelectAll: PickerOption[] = [
+    selectAllOption,
+    ...testOptions,
+  ];
 
   const emptyArray: PickerOption[] = [];
 
-  test('picker renders with label and placeholder', async function (assert) {
+  test('picker renders with label and defaults to select-all', async function (assert) {
+    class SelectionController {
+      @tracked selected: PickerOption[] = [];
+    }
+
+    const controller = new SelectionController();
+
+    const onChange = (newSelected: PickerOption[]) => {
+      controller.selected = newSelected;
+    };
+
     await render(
       <template>
         <Picker
-          @options={{testOptions}}
-          @selected={{emptyArray}}
-          @onChange={{noop}}
+          @options={{testOptionsWithSelectAll}}
+          @selected={{controller.selected}}
+          @onChange={{onChange}}
           @label='Test Label'
           @placeholder='Select items'
         />
@@ -32,9 +52,7 @@ module('Integration | Component | picker', function (hooks) {
     );
 
     assert.dom('[data-test-boxel-picker-trigger-label]').hasText('Test Label');
-    assert
-      .dom('[data-test-boxel-picker-trigger-placeholder]')
-      .hasText('Select items');
+    assert.dom('[data-test-boxel-picker-trigger-placeholder]').doesNotExist();
   });
 
   test('picker shows selected items in trigger', async function (assert) {
@@ -43,7 +61,7 @@ module('Integration | Component | picker', function (hooks) {
     await render(
       <template>
         <Picker
-          @options={{testOptions}}
+          @options={{testOptionsWithSelectAll}}
           @selected={{selected}}
           @onChange={{noop}}
           @label='Test'
@@ -57,12 +75,22 @@ module('Integration | Component | picker', function (hooks) {
   });
 
   test('picker opens dropdown when clicked', async function (assert) {
+    class SelectionController {
+      @tracked selected: PickerOption[] = [];
+    }
+
+    const controller = new SelectionController();
+
+    const onChange = (newSelected: PickerOption[]) => {
+      controller.selected = newSelected;
+    };
+
     await render(
       <template>
         <Picker
-          @options={{testOptions}}
-          @selected={{emptyArray}}
-          @onChange={{noop}}
+          @options={{testOptionsWithSelectAll}}
+          @selected={{controller.selected}}
+          @onChange={{onChange}}
           @label='Test'
         />
       </template>,
@@ -71,7 +99,7 @@ module('Integration | Component | picker', function (hooks) {
     await click('[data-test-boxel-picker-trigger]');
     await waitFor('[data-test-boxel-picker-option-row]');
 
-    assert.dom('[data-test-boxel-picker-option-row]').exists({ count: 4 });
+    assert.dom('[data-test-boxel-picker-option-row]').exists({ count: 5 });
   });
 
   test('picker groups selected items first when groupSelected is true', async function (assert) {
@@ -80,7 +108,7 @@ module('Integration | Component | picker', function (hooks) {
     await render(
       <template>
         <Picker
-          @options={{testOptions}}
+          @options={{testOptionsWithSelectAll}}
           @selected={{selected}}
           @onChange={{noop}}
           @label='Test'
@@ -124,7 +152,7 @@ module('Integration | Component | picker', function (hooks) {
     await render(
       <template>
         <Picker
-          @options={{testOptions}}
+          @options={{testOptionsWithSelectAll}}
           @selected={{controller.selected}}
           @onChange={{onChange}}
           @label='Test'
@@ -138,7 +166,7 @@ module('Integration | Component | picker', function (hooks) {
     // Click first option
     const firstOption = document.querySelectorAll(
       '[data-test-boxel-picker-option-row]',
-    )[0];
+    )[1];
     await click(firstOption as HTMLElement);
 
     assert.strictEqual(
@@ -152,22 +180,31 @@ module('Integration | Component | picker', function (hooks) {
       'Should have selected first option',
     );
 
-    // Click again to deselect
     await click(firstOption as HTMLElement);
     assert.strictEqual(
       controller.selected.length,
-      0,
-      'Should have no selected items',
+      1,
+      'Select-all option cannot be deselected',
     );
   });
 
   test('picker shows search input when searchEnabled is true', async function (assert) {
+    class SelectionController {
+      @tracked selected: PickerOption[] = [];
+    }
+
+    const controller = new SelectionController();
+
+    const onChange = (newSelected: PickerOption[]) => {
+      controller.selected = newSelected;
+    };
+
     await render(
       <template>
         <Picker
-          @options={{testOptions}}
-          @selected={{emptyArray}}
-          @onChange={{noop}}
+          @options={{testOptionsWithSelectAll}}
+          @selected={{controller.selected}}
+          @onChange={{onChange}}
           @label='Test'
           @searchPlaceholder='Search...'
         />
@@ -184,16 +221,12 @@ module('Integration | Component | picker', function (hooks) {
   });
 
   test('picker keeps select-all and selected options first when searching', async function (assert) {
-    const optionsWithSelectAll: PickerOption[] = [
-      { id: 'select-all', name: 'All options', type: 'select-all' },
-      ...testOptions,
-    ];
-    const selected = [optionsWithSelectAll[2]]; // Option 2
+    const selected = [testOptionsWithSelectAll[2]]; // Option 2
 
     await render(
       <template>
         <Picker
-          @options={{optionsWithSelectAll}}
+          @options={{testOptionsWithSelectAll}}
           @selected={{selected}}
           @onChange={{noop}}
           @label='Test'
@@ -222,16 +255,6 @@ module('Integration | Component | picker', function (hooks) {
   });
 
   test('picker removes select-all when another option is selected', async function (assert) {
-    const selectAllOption: PickerOption = {
-      id: 'select-all',
-      name: 'All options',
-      type: 'select-all',
-    };
-    const optionsWithSelectAll: PickerOption[] = [
-      selectAllOption,
-      ...testOptions,
-    ];
-
     class SelectionController {
       @tracked selected: PickerOption[] = [selectAllOption];
     }
@@ -245,7 +268,7 @@ module('Integration | Component | picker', function (hooks) {
     await render(
       <template>
         <Picker
-          @options={{optionsWithSelectAll}}
+          @options={{testOptionsWithSelectAll}}
           @selected={{controller.selected}}
           @onChange={{onChange}}
           @label='Test'
@@ -268,17 +291,65 @@ module('Integration | Component | picker', function (hooks) {
     );
   });
 
-  test('picker selects select-all when all options are selected', async function (assert) {
-    const selectAllOption: PickerOption = {
-      id: 'select-all',
-      name: 'All options',
-      type: 'select-all',
-    };
-    const optionsWithSelectAll: PickerOption[] = [
-      selectAllOption,
-      ...testOptions,
-    ];
+  test('picker selects select-all when it is chosen after other options', async function (assert) {
+    class SelectionController {
+      @tracked selected: PickerOption[] = [testOptionsWithSelectAll[1]];
+    }
 
+    const controller = new SelectionController();
+
+    const onChange = (newSelected: PickerOption[]) => {
+      controller.selected = newSelected;
+    };
+
+    await render(
+      <template>
+        <Picker
+          @options={{testOptionsWithSelectAll}}
+          @selected={{controller.selected}}
+          @onChange={{onChange}}
+          @label='Test'
+        />
+      </template>,
+    );
+
+    await click('[data-test-boxel-picker-trigger]');
+    await waitFor('[data-test-boxel-picker-option-row]');
+
+    const selectAllRow = document.querySelectorAll(
+      '[data-test-boxel-picker-option-row]',
+    )[0];
+    await click(selectAllRow as HTMLElement);
+
+    assert.deepEqual(
+      controller.selected.map((option) => option.id),
+      ['select-all'],
+      'select-all replaces existing selections when selected',
+    );
+  });
+
+  test('picker hides remove button for select-all pill', async function (assert) {
+    const selecteOptions: PickerOption[] = [selectAllOption];
+
+    await render(
+      <template>
+        <Picker
+          @options={{testOptionsWithSelectAll}}
+          @selected={{selecteOptions}}
+          @onChange={{noop}}
+          @label='Test'
+        />
+      </template>,
+    );
+
+    assert
+      .dom(
+        '[data-test-boxel-picker-selected-item] button[aria-label="Remove item"]',
+      )
+      .doesNotExist('select-all pill should not render a remove button');
+  });
+
+  test('picker selects select-all when all options are selected', async function (assert) {
     class SelectionController {
       @tracked selected: PickerOption[] = [];
     }
@@ -292,7 +363,7 @@ module('Integration | Component | picker', function (hooks) {
     await render(
       <template>
         <Picker
-          @options={{optionsWithSelectAll}}
+          @options={{testOptionsWithSelectAll}}
           @selected={{controller.selected}}
           @onChange={{onChange}}
           @label='Test'
@@ -322,5 +393,101 @@ module('Integration | Component | picker', function (hooks) {
       ['select-all'],
       'select-all replaces individual selections when all are selected',
     );
+  });
+
+  test('picker selects select-all when no options are selected', async function (assert) {
+    class SelectionController {
+      @tracked selected: PickerOption[] = [];
+    }
+
+    const controller = new SelectionController();
+
+    const onChange = (newSelected: PickerOption[]) => {
+      controller.selected = newSelected;
+    };
+
+    await render(
+      <template>
+        <Picker
+          @options={{testOptionsWithSelectAll}}
+          @selected={{controller.selected}}
+          @onChange={{onChange}}
+          @label='Test'
+        />
+      </template>,
+    );
+
+    await click('[data-test-boxel-picker-trigger]');
+    await waitFor('[data-test-boxel-picker-option-row]');
+
+    const firstOption = document.querySelectorAll(
+      '[data-test-boxel-picker-option-row]',
+    )[1];
+
+    await click(firstOption as HTMLElement);
+    await click(firstOption as HTMLElement);
+
+    assert.deepEqual(
+      controller.selected.map((option) => option.id),
+      ['select-all'],
+      'select-all is selected when no options remain selected',
+    );
+  });
+
+  test('picker selects select-all by default when selected is empty', async function (assert) {
+    class SelectionController {
+      @tracked selected: PickerOption[] = [];
+    }
+
+    const controller = new SelectionController();
+
+    const onChange = (newSelected: PickerOption[]) => {
+      controller.selected = newSelected;
+    };
+
+    await render(
+      <template>
+        <Picker
+          @options={{testOptionsWithSelectAll}}
+          @selected={{controller.selected}}
+          @onChange={{onChange}}
+          @label='Test'
+        />
+      </template>,
+    );
+
+    assert.deepEqual(
+      controller.selected.map((option) => option.id),
+      ['select-all'],
+      'select-all is chosen when no initial selection is provided',
+    );
+  });
+
+  test('picker throws when select-all option is missing', async function (assert) {
+    let original = Ember.onerror;
+
+    Ember.onerror = (error) => {
+      assert.ok(
+        /select-all option/i.test(error.message),
+        'throws expected select-all option error',
+      );
+      // swallow so it doesn't become a "global failure"
+      return true;
+    };
+
+    try {
+      await render(
+        <template>
+          <Picker
+            @options={{testOptions}}
+            @selected={{emptyArray}}
+            @onChange={{noop}}
+            @label='Test'
+          />
+        </template>,
+      );
+    } finally {
+      Ember.onerror = original;
+    }
   });
 });
