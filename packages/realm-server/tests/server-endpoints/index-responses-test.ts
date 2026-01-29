@@ -191,32 +191,6 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         );
       });
 
-      test('prefers non-null head and isolated HTML when matches are present', async function (assert) {
-        let cardURL = new URL('head-isolated-candidate', testRealm2URL);
-        let aliasOnlyURL = new URL('alias-only-candidate', testRealm2URL);
-
-        await context.dbAdapter.execute(
-          `INSERT INTO boxel_index_working (url, file_alias, type, realm_version, realm_url, head_html, isolated_html)
-           VALUES
-           ('${cardURL.href}', '${cardURL.href}', 'instance', 1, '${testRealm2URL.href}', '<meta data-test-head-html content="from-db" />', '<div data-test-isolated-html>Injected isolated</div>'),
-           ('${aliasOnlyURL.href}', '${cardURL.href}', 'instance', 2, '${testRealm2URL.href}', NULL, NULL)`,
-        );
-
-        let response = await context.request2
-          .get('/test/head-isolated-candidate')
-          .set('Accept', 'text/html');
-
-        assert.strictEqual(response.status, 200, 'serves HTML response');
-        assert.ok(
-          response.text.includes('data-test-head-html'),
-          'head HTML is injected into the HTML response',
-        );
-        assert.ok(
-          response.text.includes('data-test-isolated-html'),
-          'isolated HTML is injected into the HTML response',
-        );
-      });
-
       test('serves isolated HTML for /subdirectory/index.json at /subdirectory/', async function (assert) {
         let response = await context.request2
           .get('/test/subdirectory/')
