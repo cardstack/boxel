@@ -1,4 +1,3 @@
-import Modifier from 'ember-modifier';
 import GlimmerComponent from '@glimmer/component';
 import { isEqual } from 'lodash';
 import { WatchedArray } from './watched-array';
@@ -83,7 +82,7 @@ import {
   validateRelationshipQuery,
 } from './query-field-support';
 import { isSavedInstance } from './-private';
-import type { ComponentLike } from '@glint/template';
+import type { ComponentLike, ModifierLike } from '@glint/template';
 import { initSharedState } from './shared-state';
 import DefaultFittedTemplate from './default-templates/fitted';
 import DefaultEmbeddedTemplate from './default-templates/embedded';
@@ -260,15 +259,21 @@ interface RelationshipOptions extends Options {
 
 export interface CardContext<T extends CardDef = CardDef> {
   commandContext?: CommandContext;
-  cardComponentModifier?: typeof Modifier<{
+  cardComponentModifier?: ModifierLike<{
+    Element: HTMLElement;
     Args: {
       Named: {
-        card?: CardDef;
-        cardId?: string;
         format: Format | 'data';
         fieldType: FieldType | undefined;
         fieldName: string | undefined;
-      };
+      } & (
+        | {
+            card: CardDef;
+          }
+        | {
+            cardId: string;
+          }
+      );
     };
   }>;
   prerenderedCardSearchComponent: typeof GlimmerComponent<PrerenderedCardComponentSignature>;

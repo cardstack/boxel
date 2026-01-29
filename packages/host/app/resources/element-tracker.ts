@@ -1,8 +1,7 @@
-import { registerDestructor } from '@ember/destroyable';
 import { schedule } from '@ember/runloop';
 import type { SafeString } from '@ember/template';
 
-import Modifier from 'ember-modifier';
+import { modifier } from 'ember-modifier';
 import { TrackedArray } from 'tracked-built-ins';
 
 import type {
@@ -11,13 +10,13 @@ import type {
   FieldType,
 } from 'https://cardstack.com/base/card-api';
 
-interface Meta {
+type Meta = {
   cardId?: string;
   card?: CardDef;
   format: Format | 'data';
   fieldType: FieldType | undefined;
   fieldName: string | undefined;
-}
+};
 
 export interface RenderedCardForOverlayActions {
   element: HTMLElement;
@@ -31,63 +30,57 @@ export interface RenderedCardForOverlayActions {
 export default class ElementTracker {
   elements: { element: HTMLElement; meta: Meta }[] = new TrackedArray();
 
-  get trackElement(): typeof Modifier<{ Args: { Named: Meta } }> {
-    const tracker = this;
-    let observers = new Map<HTMLElement, MutationObserver>();
-    return class TrackElement extends Modifier<{ Args: { Named: Meta } }> {
-      modify(element: HTMLElement, _pos: unknown, meta: Meta) {
-        if (!('card' in meta) && !('cardId' in meta)) {
-          throw new Error(
-            'ElementTracker: meta.card or meta.cardId is required',
-          );
+  private observers = new Map<HTMLElement, MutationObserver>();
+
+  trackElement = modifier((element: HTMLElement, _pos: unknown, meta: Meta) => {
+    if (!('card' in meta) && !('cardId' in meta)) {
+      throw new Error('ElementTracker: meta.card or meta.cardId is required');
+    }
+    // Without scheduling this after render, this produces the "attempted to update value, but it had already been used previously in the same computation" type error
+    schedule('afterRender', () => {
+      let updateTracker = () => {
+        let found = this.elements.find((e) => e.element === element);
+        if (found) {
+          this.elements.splice(this.elements.indexOf(found), 1, {
+            element,
+            meta: { ...meta },
+          });
+        } else {
+          this.elements.push({
+            element,
+            meta: { ...meta },
+          });
         }
-        // Without scheduling this after render, this produces the "attempted to update value, but it had already been used previously in the same computation" type error
-        schedule('afterRender', () => {
-          let updateTracker = () => {
-            let found = tracker.elements.find((e) => e.element === element);
-            if (found) {
-              tracker.elements.splice(tracker.elements.indexOf(found), 1, {
-                element,
-                meta: { ...meta },
-              });
-            } else {
-              tracker.elements.push({
-                element,
-                meta: { ...meta },
-              });
-            }
-          };
-          updateTracker();
+      };
+      updateTracker();
 
-          // This observer is currently used to track the activity of dragging an item
-          // within the linksToMany field for reordering purposes.
-          let parentElement = element.parentElement;
-          if (
-            parentElement &&
-            Array.from(parentElement.classList).includes('sortable-item')
-          ) {
-            let observer = new MutationObserver(updateTracker);
-            observer.observe(element.parentElement!, {
-              attributes: true,
-              attributeFilter: ['class'],
-              childList: true,
-              subtree: true,
-              characterData: true,
-            });
-            observers.set(element, observer);
-          }
+      // This observer is currently used to track the activity of dragging an item
+      // within the linksToMany field for reordering purposes.
+      let parentElement = element.parentElement;
+      if (
+        parentElement &&
+        Array.from(parentElement.classList).includes('sortable-item')
+      ) {
+        let observer = new MutationObserver(updateTracker);
+        observer.observe(element.parentElement!, {
+          attributes: true,
+          attributeFilter: ['class'],
+          childList: true,
+          subtree: true,
+          characterData: true,
         });
-
-        registerDestructor(this, () => {
-          let found = tracker.elements.find((e) => e.element === element);
-          if (found) {
-            tracker.elements.splice(tracker.elements.indexOf(found), 1);
-          }
-          Array.from(observers.values()).forEach((v) => v.disconnect());
-        });
+        this.observers.set(element, observer);
       }
+    });
+
+    return () => {
+      let found = this.elements.find((e) => e.element === element);
+      if (found) {
+        this.elements.splice(this.elements.indexOf(found), 1);
+      }
+      Array.from(this.observers.values()).forEach((v) => v.disconnect());
     };
-  }
+  });
 
   filter(
     conditions: Partial<Meta>[],
