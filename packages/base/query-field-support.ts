@@ -59,7 +59,7 @@ export function ensureQueryFieldSearchResource(
   let fieldState = queryFieldState?.get(field.name);
   let searchResource = fieldState?.searchResource;
   if (searchResource) {
-    log.info(
+    log.debug(
       `ensureQueryFieldSearchResource: reusing existing resource from fieldState for field=${field.name}`,
     );
     return searchResource;

@@ -1531,6 +1531,14 @@ module(basename(__filename), function () {
                   kind: 'file',
                 },
               },
+              'sample.md': {
+                links: {
+                  related: `${testRealmHref}sample.md`,
+                },
+                meta: {
+                  kind: 'file',
+                },
+              },
               'timers-card.gts': {
                 links: {
                   related: `${testRealmHref}timers-card.gts`,

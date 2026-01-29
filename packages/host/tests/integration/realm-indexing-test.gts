@@ -134,7 +134,7 @@ module(`Integration | realm indexing`, function (hooks) {
       },
     });
     let queryEngine = realm.realmIndexQueryEngine;
-    let { data: cards } = await queryEngine.search({});
+    let { data: cards } = await queryEngine.searchCards({});
     assert.deepEqual(cards, [
       {
         id: `${testRealmURL}empty`,

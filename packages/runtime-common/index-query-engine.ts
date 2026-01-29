@@ -360,6 +360,10 @@ export class IndexQueryEngine {
       types,
       display_names: displayNames,
     } = maybeResult;
+    realmVersion =
+      typeof realmVersion === 'string'
+        ? parseInt(realmVersion)
+        : (realmVersion ?? 0);
     return {
       type: 'file',
       canonicalURL,
@@ -375,6 +379,52 @@ export class IndexQueryEngine {
       realmURL,
       indexedAt: indexedAt != null ? parseInt(indexedAt) : null,
     };
+  }
+
+  async hasFileType(
+    realmURL: URL,
+    ref: CodeRef,
+    opts?: GetEntryOptions,
+  ): Promise<boolean> {
+    if (!isResolvedCodeRef(ref)) {
+      return false;
+    }
+    let typeKey = internalKeyFor(ref, undefined);
+    let rows = (await this.#query([
+      'SELECT 1',
+      `FROM ${tableFromOpts(opts)} AS i ${tableValuedFunctionsPlaceholder}`,
+      'WHERE',
+      ...every([
+        ['i.realm_url =', param(realmURL.href)],
+        ['i.type =', param('file')],
+        [tableValuedEach('types'), '=', param(typeKey)],
+      ]),
+      'LIMIT 1',
+    ] as Expression)) as unknown as { 1: number }[];
+    return rows.length > 0;
+  }
+
+  async hasInstanceType(
+    realmURL: URL,
+    ref: CodeRef,
+    opts?: GetEntryOptions,
+  ): Promise<boolean> {
+    if (!isResolvedCodeRef(ref)) {
+      return false;
+    }
+    let typeKey = internalKeyFor(ref, undefined);
+    let rows = (await this.#query([
+      'SELECT 1',
+      `FROM ${tableFromOpts(opts)} AS i ${tableValuedFunctionsPlaceholder}`,
+      'WHERE',
+      ...every([
+        ['i.realm_url =', param(realmURL.href)],
+        ['i.type =', param('instance')],
+        [tableValuedEach('types'), '=', param(typeKey)],
+      ]),
+      'LIMIT 1',
+    ] as Expression)) as unknown as { 1: number }[];
+    return rows.length > 0;
   }
 
   private async getDefinition(codeRef: CodeRef): Promise<Definition> {
@@ -395,6 +445,7 @@ export class IndexQueryEngine {
     { filter, sort, page }: Query,
     opts: QueryOptions,
     selectClauseExpression: CardExpression,
+    entryType: 'instance' | 'file' = 'instance',
   ): Promise<{
     meta: QueryResultsMeta;
     results: Partial<BoxelIndexTable>[];
@@ -406,17 +457,21 @@ export class IndexQueryEngine {
       ];
 
       if (opts.includeErrors) {
-        conditions.push(['i.type =', param('instance')]);
+        conditions.push(['i.type =', param(entryType)]);
       } else {
         conditions.push(
           every([
-            ['i.type =', param('instance')],
+            ['i.type =', param(entryType)],
             any([['i.has_error = FALSE'], ['i.has_error IS NULL']]),
           ]),
         );
       }
 
-      if (opts.cardUrls && opts.cardUrls.length > 0) {
+      if (
+        entryType === 'instance' &&
+        opts.cardUrls &&
+        opts.cardUrls.length > 0
+      ) {
         conditions.push([
           'i.url IN',
           ...addExplicitParens(
@@ -472,7 +527,7 @@ export class IndexQueryEngine {
     }
   }
 
-  async search(
+  async searchCards(
     realmURL: URL,
     { filter, sort, page }: Query,
     opts: QueryOptions = {},
@@ -486,6 +541,7 @@ export class IndexQueryEngine {
       [
         'SELECT url, ANY_VALUE(pristine_doc) AS pristine_doc, ANY_VALUE(error_doc) AS error_doc',
       ],
+      'instance',
     );
 
     let cards = results
@@ -493,6 +549,58 @@ export class IndexQueryEngine {
       .filter(Boolean) as CardResource[];
 
     return { cards, meta };
+  }
+
+  async searchFiles(
+    realmURL: URL,
+    { filter, sort, page }: Query,
+    opts: QueryOptions = {},
+  ): Promise<{ files: IndexedFile[]; meta: QueryResultsMeta }> {
+    let { results, meta } = await this._search(
+      realmURL,
+      { filter, sort, page },
+      opts,
+      [
+        'SELECT url, ANY_VALUE(pristine_doc) AS pristine_doc, ANY_VALUE(search_doc) AS search_doc, ANY_VALUE(types) AS types, ANY_VALUE(display_names) AS display_names, ANY_VALUE(deps) AS deps, ANY_VALUE(last_modified) AS last_modified, ANY_VALUE(resource_created_at) AS resource_created_at, ANY_VALUE(realm_version) AS realm_version, ANY_VALUE(realm_url) AS realm_url, ANY_VALUE(indexed_at) AS indexed_at',
+      ],
+      'file',
+    );
+
+    let files = results.map((result) => this.fileEntryFromResult(result));
+    return { files, meta };
+  }
+
+  private fileEntryFromResult(result: Partial<BoxelIndexTable>): IndexedFile {
+    let canonicalURL = result.url;
+    if (!canonicalURL) {
+      throw new Error('expected file search result to include url');
+    }
+    let lastModified =
+      typeof result.last_modified === 'string'
+        ? parseInt(result.last_modified)
+        : (result.last_modified ?? null);
+    let resourceCreatedAt =
+      typeof result.resource_created_at === 'string'
+        ? parseInt(result.resource_created_at)
+        : (result.resource_created_at ?? null);
+    let indexedAt =
+      typeof result.indexed_at === 'string'
+        ? parseInt(result.indexed_at)
+        : (result.indexed_at ?? null);
+    return {
+      type: 'file',
+      canonicalURL,
+      searchDoc: (result.search_doc as Record<string, any> | null) ?? null,
+      resource: (result.pristine_doc as FileMetaResource | null) ?? null,
+      types: (result.types as string[] | null) ?? null,
+      displayNames: (result.display_names as string[] | null) ?? null,
+      deps: (result.deps as string[] | null) ?? null,
+      lastModified,
+      resourceCreatedAt,
+      realmVersion: result.realm_version ?? 0,
+      realmURL: result.realm_url ?? '',
+      indexedAt,
+    };
   }
 
   private generalFieldSortColumn(field: string) {
@@ -565,6 +673,7 @@ export class IndexQueryEngine {
         ' as used_render_type,',
         'ANY_VALUE(deps) as deps',
       ],
+      'instance',
     )) as {
       meta: QueryResultsMeta;
       results: (Partial<BoxelIndexTable> & {
