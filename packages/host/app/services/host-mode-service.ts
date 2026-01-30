@@ -1,4 +1,5 @@
 import Service, { service } from '@ember/service';
+import { tracked } from '@glimmer/tracking';
 
 import window from 'ember-window-mock';
 
@@ -22,6 +23,11 @@ export default class HostModeService extends Service {
 
   // increasing token to ignore stale async head fetches
   private headUpdateRequestId = 0;
+  @tracked private headIncludesTitle = false;
+
+  get hasHeadTitleApplied() {
+    return this.headIncludesTitle;
+  }
 
   get isActive() {
     if (this.simulatingHostMode) {
@@ -167,6 +173,7 @@ export default class HostModeService extends Service {
 
     if (normalizedCardURL === null) {
       // If there is no card, clear the head content
+      this.headIncludesTitle = false;
       this.replaceHeadTemplate(null);
       return;
     }
@@ -192,6 +199,7 @@ export default class HostModeService extends Service {
       return;
     }
 
+    this.headIncludesTitle = this.headTemplateIncludesTitle(headHTML);
     this.replaceHeadTemplate(headHTML);
   }
 
@@ -274,8 +282,28 @@ export default class HostModeService extends Service {
       return;
     }
 
+    if (this.headIncludesTitle) {
+      this.removeExistingTitle();
+    }
     let fragment = document.createRange().createContextualFragment(headHTML);
     parent.insertBefore(fragment, end);
+  }
+
+  private removeExistingTitle() {
+    let existingTitle = document.head?.querySelector('title');
+    if (existingTitle) {
+      existingTitle.remove();
+    }
+  }
+
+  private headTemplateIncludesTitle(headHTML: string | null) {
+    if (!headHTML || headHTML.trim().length === 0) {
+      return false;
+    }
+
+    let template = document.createElement('template');
+    template.innerHTML = headHTML;
+    return Boolean(template.content.querySelector('title'));
   }
 
   private findHeadMarkers(): [Element, Element] | null {

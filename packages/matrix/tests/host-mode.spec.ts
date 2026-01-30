@@ -12,6 +12,7 @@ import { randomUUID } from 'crypto';
 test.describe('Host mode', () => {
   let publishedRealmURL: string;
   let publishedCardURL: string;
+  let publishedHeadNoTitleCardURL: string;
   let publishedWhitePaperCardURL: string;
   let connectRouteURL: string;
   let username: string;
@@ -55,12 +56,71 @@ test.describe('Host mode', () => {
     await postCardSource(
       page,
       realmURL,
+      'head-no-title-card.gts',
+      `
+        import { CardDef, Component, field, StringField } from 'https://cardstack.com/base/card-api';
+
+        export class HeadNoTitleCard extends CardDef {
+          static head = class Head extends Component<typeof this> {
+            <template>
+              <meta name="description" content="Head without title" />
+            </template>
+          };
+
+          static isolated = class Isolated extends Component<typeof this> {
+            <template>
+              <p data-test-head-no-title-card>Head no title card</p>
+            </template>
+          };
+        }
+      `,
+    );
+
+    await postCardSource(
+      page,
+      realmURL,
       'white-paper-card.gts',
       `
         import { CardDef, Component } from 'https://cardstack.com/base/card-api';
 
         export class WhitePaperCard extends CardDef {
           static prefersWideFormat = true;
+
+          static head = class Head extends Component<typeof this> {
+            get title() {
+              return 'Static Custom Title';
+            }
+
+            get description(): string | undefined {
+              return this.args.model?.cardDescription;
+            }
+
+            get image(): string | undefined {
+              return this.args.model?.cardThumbnailURL;
+            }
+              
+            <template>
+              <title data-test-card-head-title>{{this.title}}</title>
+              <meta property='og:title' content={{this.title}} />
+              <meta name='twitter:title' content={{this.title}} />
+
+              {{#if this.description}}
+                <meta name='description' content={{this.description}} />
+                <meta property='og:description' content={{this.description}} />
+                <meta name='twitter:description' content={{this.description}} />
+              {{/if}}
+
+              {{#if this.image}}
+                <meta property='og:image' content={{this.image}} />
+                <meta name='twitter:image' content={{this.image}} />
+                <meta name='twitter:card' content='summary_large_image' />
+              {{else}}
+                <meta name='twitter:card' content='summary' />
+              {{/if}}
+
+              <meta property='og:type' content='website' />
+            </template>
+          }
 
           static isolated = class Isolated extends Component<typeof this> {
             <template>
@@ -112,6 +172,28 @@ test.describe('Host mode', () => {
             adoptsFrom: {
               module: './host-mode-isolated-card.gts',
               name: 'HostModeIsolatedCard',
+            },
+          },
+        },
+      }),
+    );
+
+    await postCardSource(
+      page,
+      realmURL,
+      'head-no-title-card.json',
+      JSON.stringify({
+        data: {
+          type: 'card',
+          attributes: {
+            cardInfo: {
+              name: 'Card Without Title in Head',
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: './head-no-title-card.gts',
+              name: 'HeadNoTitleCard',
             },
           },
         },
@@ -174,6 +256,7 @@ test.describe('Host mode', () => {
     );
 
     publishedCardURL = `${publishedRealmURL}index.json`;
+    publishedHeadNoTitleCardURL = `${publishedRealmURL}head-no-title-card.json`;
     publishedWhitePaperCardURL = `${publishedRealmURL}white-paper.json`;
     connectRouteURL = `http://localhost:4205/connect/${encodeURIComponent(
       publishedRealmURL,
@@ -202,6 +285,20 @@ test.describe('Host mode', () => {
 
     await page.goto(publishedCardURL);
     await expect(page.locator('[data-test-host-mode-isolated]')).toBeVisible();
+  });
+
+  test('published white paper card has static title from head template', async ({
+    page,
+  }) => {
+    await page.goto(publishedWhitePaperCardURL);
+    await expect(page).toHaveTitle('Static Custom Title');
+  });
+
+  test('published card without title in head format template keeps default card title', async ({
+    page,
+  }) => {
+    await page.goto(publishedHeadNoTitleCardURL);
+    await expect(page).toHaveTitle('Card Without Title in Head');
   });
 
   test('printed isolated card produces a stable page count', async ({
