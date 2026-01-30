@@ -1278,7 +1278,17 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await click('[data-test-file="Person/fadhlan.json"]');
     assert.dom('[data-test-attached-card]').exists({ count: 2 });
     assert.dom('[data-test-autoattached-card]').exists({ count: 1 });
-    assert.dom('[data-test-autoattached-file]').exists({ count: 1 });
+    assert.dom('[data-test-autoattached-file]').exists({ count: 2 });
+    assert
+      .dom(
+        `[data-test-attached-file="${testRealmURL}Person/fadhlan.json"][data-test-autoattached-file]`,
+      )
+      .exists();
+    assert
+      .dom(
+        `[data-test-attached-file="${testRealmURL}person.gts"][data-test-autoattached-file]`,
+      )
+      .exists();
     assert.dom(`[data-test-attached-card="${testRealmURL}Pet/mango"]`).exists();
     assert
       .dom(
