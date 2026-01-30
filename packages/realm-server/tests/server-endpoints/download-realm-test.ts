@@ -26,7 +26,9 @@ module(`server-endpoints/${basename(__filename)}`, function (hooks) {
       .buffer(true)
       .parse(binaryParser);
 
-    assert.strictEqual(response.status, 200, 'returns 200');
+    let bodyPreview =
+      response.body?.toString?.('utf8') ?? response.text ?? '';
+    assert.strictEqual(response.status, 200, bodyPreview.slice(0, 200));
     assert.strictEqual(
       response.headers['content-type'],
       'application/zip',

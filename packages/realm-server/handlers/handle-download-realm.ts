@@ -29,7 +29,6 @@ import {
   sendResponseForUnauthorizedRequest,
   setContextResponse,
 } from '../middleware';
-import type { ResponseWithNodeStream } from '@cardstack/runtime-common';
 
 const log = logger('download-realm');
 
@@ -160,15 +159,12 @@ export default function handleDownloadRealm({
       ctxt.res.destroy(error as Error);
     });
 
-    let response = new Response(null, {
-      status: 200,
-      headers: {
-        'content-type': 'application/zip',
-        'content-disposition': `attachment; filename="${filename}"`,
-      },
-    }) as ResponseWithNodeStream;
-    response.nodeStream = archive;
-    await setContextResponse(ctxt, response);
+    ctxt.status = 200;
+    ctxt.set('content-type', 'application/zip');
+    ctxt.set('content-disposition', `attachment; filename="${filename}"`);
+    ctxt.respond = false;
+
+    archive.pipe(ctxt.res);
 
     try {
       archive.directory(realmPath, false);
