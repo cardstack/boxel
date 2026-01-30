@@ -234,8 +234,8 @@ export function normalizeQueryDefinition({
   let filter = queryAny.filter as Record<string, any> | undefined;
   if (!filter || Object.keys(filter).length === 0) {
     queryAny.filter = { type: targetRef };
-  } else if (!filter.on) {
-    filter.on = targetRef;
+  } else {
+    injectOnIntoLeafFilters(filter, targetRef);
   }
 
   if (Array.isArray(queryAny.sort)) {
@@ -313,6 +313,38 @@ export function buildQuerySearchURL(realmHref: string, query: Query): string {
   let normalizedQuery = normalizeQueryForSignature(query);
   searchURL.searchParams.set('query', buildQueryParamValue(normalizedQuery));
   return searchURL.href;
+}
+
+function injectOnIntoLeafFilters(
+  filter: Record<string, any>,
+  targetRef: any,
+): void {
+  if ('type' in filter) {
+    return;
+  }
+  if ('not' in filter && filter.not && typeof filter.not === 'object') {
+    injectOnIntoLeafFilters(filter.not, targetRef);
+    return;
+  }
+  if ('any' in filter && Array.isArray(filter.any)) {
+    for (let child of filter.any) {
+      if (child && typeof child === 'object') {
+        injectOnIntoLeafFilters(child, targetRef);
+      }
+    }
+    return;
+  }
+  if ('every' in filter && Array.isArray(filter.every)) {
+    for (let child of filter.every) {
+      if (child && typeof child === 'object') {
+        injectOnIntoLeafFilters(child, targetRef);
+      }
+    }
+    return;
+  }
+  if (!filter.on) {
+    filter.on = targetRef;
+  }
 }
 
 export function cloneRelationship(
