@@ -144,6 +144,7 @@ import './realm-endpoints/user-test';
 import './search-prerendered-test';
 import './server-endpoints/authentication-test';
 import './server-endpoints/bot-registration-test';
+import './server-endpoints/download-realm-test';
 import './server-endpoints/index-responses-test';
 import './server-endpoints/maintenance-endpoints-test';
 import './server-endpoints/queue-status-test';
