@@ -8,9 +8,8 @@ import { isTesting } from '@embroider/macros';
 import Component from '@glimmer/component';
 import { cached, tracked } from '@glimmer/tracking';
 
-import X from '@cardstack/boxel-icons/x';
-
-import { IconButton } from '@cardstack/boxel-ui/components';
+import { ContextButton } from '@cardstack/boxel-ui/components';
+import { and, bool } from '@cardstack/boxel-ui/helpers';
 
 import { getCard } from '@cardstack/host/resources/card-resource';
 
@@ -74,7 +73,7 @@ export default class HostModeStackItem extends Component<Signature> {
 
     let maxWidthPercent = 100 - invertedIndex * maxWidthReductionPercent;
     let width = this.isItemFullWidth
-      ? '100%'
+      ? 'calc(100% - var(--boxel-sp-xxl) * 2)'
       : `${stackItemMaxWidth / Math.pow(RATIO, invertedIndex)}rem`;
 
     let styles = `
@@ -85,6 +84,10 @@ export default class HostModeStackItem extends Component<Signature> {
       margin-top: ${marginTopPx}px;
       transition: margin-top var(--boxel-transition), width var(--boxel-transition);
     `; // using margin-top instead of padding-top to hide scrolled content from view
+
+    if (this.isTopCard) {
+      styles += `height: auto;`;
+    }
 
     return htmlSafe(styles);
   }
@@ -157,13 +160,11 @@ export default class HostModeStackItem extends Component<Signature> {
           @displayBoundaries={{if this.isItemFullWidth false true}}
           class='host-mode-stack-item-card'
         />
-        {{#if @close}}
+        {{#if (and this.isTopCard (bool @close))}}
           <div class='close-button-container'>
-            <IconButton
-              class='close-button'
-              @icon={{X}}
-              @width='16px'
-              @height='16px'
+            <ContextButton
+              @icon='close'
+              @label='close'
               {{on 'click' this.handleClose}}
             />
           </div>
@@ -210,12 +211,22 @@ export default class HostModeStackItem extends Component<Signature> {
         position: absolute;
         width: 89%;
         height: inherit;
+        padding-top: var(--boxel-sp-xxl);
         z-index: 0;
         pointer-events: none;
       }
 
+      @media screen {
+        .host-mode-stack-item {
+          min-height: 80cqh;
+        }
+      }
+
+      .host-mode-stack-item:not(.buried) {
+        padding-bottom: var(--boxel-sp-xxl);
+      }
+
       .host-mode-stack-item.full-width {
-        width: 100%;
         max-width: 100%;
       }
 
@@ -269,19 +280,32 @@ export default class HostModeStackItem extends Component<Signature> {
         position: absolute;
         top: var(--boxel-sp-xs);
         right: var(--boxel-sp-xs);
-        padding: var(--boxel-sp-xs);
+        z-index: 1;
       }
-
-      .close-button {
-        height: 18px;
-        width: 18px;
+      .close-button-container :deep(.boxel-context-button:not(:hover)) {
+        background-color: var(--boxel-100);
+      }
+      .close-button-container :deep(.boxel-context-button) {
+        box-shadow: var(--boxel-box-shadow);
       }
 
       .host-mode-stack-item-card {
         border-radius: 0;
         box-shadow: none;
-        overflow: auto;
-        height: 100%;
+        z-index: 0;
+      }
+
+      @media print {
+        .host-mode-stack-item {
+          height: 100% !important;
+        }
+        .host-mode-stack-item-card {
+          height: 100%;
+          overflow: auto;
+        }
+        .close-button-container {
+          display: none;
+        }
       }
     </style>
   </template>
