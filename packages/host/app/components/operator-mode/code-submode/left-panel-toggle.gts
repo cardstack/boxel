@@ -220,6 +220,7 @@ export default class CodeSubmodeLeftPanelToggle extends Component<Signature> {
         <BoxelButton
           @kind='secondary'
           @size='extra-small'
+          class='realm-download-button'
           {{on 'click' this.downloadRealm}}
           data-test-download-realm-button
         >
@@ -258,7 +259,15 @@ export default class CodeSubmodeLeftPanelToggle extends Component<Signature> {
         background-color: #f4f4f6;
       }
       .realm-download-button {
-        width: 100%;
+        --boxel-button-min-height: 1.5rem;
+        --boxel-button-padding: 0 var(--boxel-sp-5xs);
+        --boxel-button-font: 600 var(--boxel-font-xs);
+        justify-content: flex-start;
+        gap: var(--boxel-sp-xxxs);
+        align-self: flex-start;
+        text-transform: capitalize;
+        margin: var(--boxel-sp-xxxs);
+
         padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
         border-radius: var(--boxel-radius);
         border: 1px solid var(--boxel-400);
