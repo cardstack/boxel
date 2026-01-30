@@ -278,7 +278,34 @@ export class RealmServer {
   }
 
   private serveIndex = async (ctxt: Koa.Context, next: Koa.Next) => {
-    if (ctxt.header.accept?.includes('text/html')) {
+    let acceptHeader = ctxt.header.accept ?? '';
+    let lowerAcceptHeader = acceptHeader.toLowerCase();
+    let includesVndMimeType = lowerAcceptHeader.includes('application/vnd.');
+    let includesHtmlMimeType = lowerAcceptHeader.includes('text/html');
+
+    let requestURL = new URL(
+      `${ctxt.protocol}://${ctxt.host}${ctxt.originalUrl}`,
+    );
+
+    if (includesHtmlMimeType) {
+      if (includesVndMimeType) {
+        let isPublishedRealmRequest =
+          await this.isPublishedRealmRequest(requestURL);
+        if (isPublishedRealmRequest) {
+          return next();
+        }
+      }
+    } else {
+      if (includesVndMimeType) {
+        return next();
+      }
+      let isPublishedRealmRequest =
+        await this.isPublishedRealmRequest(requestURL);
+      if (!isPublishedRealmRequest) {
+        return next();
+      }
+    }
+
       // If this is a /connect iframe request, is the origin a valid published realm?
 
       let connectMatch = ctxt.request.path.match(/\/connect\/(.+)$/);
@@ -320,9 +347,6 @@ export class RealmServer {
 
       ctxt.type = 'html';
 
-      let requestURL = new URL(
-        `${ctxt.protocol}://${ctxt.host}${ctxt.originalUrl}`,
-      );
       let cardURL = requestURL;
       let isIndexRequest = requestURL.pathname.endsWith('/');
       if (isIndexRequest) {
@@ -408,16 +432,33 @@ export class RealmServer {
 
       ctxt.body = responseHTML;
       return;
-    }
-    return next();
+    return;
   };
 
-  private async hasPublicPermissions(cardURL: URL): Promise<boolean> {
-    let realm = this.realms.find((candidate) => {
+  private findRealmForRequestURL(requestURL: URL): Realm | undefined {
+    return this.realms.find((candidate) => {
       let realmURL = new URL(candidate.url);
-      realmURL.protocol = cardURL.protocol;
-      return new RealmPaths(realmURL).inRealm(cardURL);
+      realmURL.protocol = requestURL.protocol;
+      return new RealmPaths(realmURL).inRealm(requestURL);
     });
+  }
+
+  private async isPublishedRealmRequest(requestURL: URL): Promise<boolean> {
+    let realm = this.findRealmForRequestURL(requestURL);
+    if (!realm) {
+      return false;
+    }
+
+    let rows = await query(this.dbAdapter, [
+      `SELECT published_realm_url FROM published_realms WHERE published_realm_url =`,
+      param(realm.url),
+    ]);
+
+    return rows.length > 0;
+  }
+
+  private async hasPublicPermissions(cardURL: URL): Promise<boolean> {
+    let realm = this.findRealmForRequestURL(cardURL);
 
     if (!realm) {
       return false;

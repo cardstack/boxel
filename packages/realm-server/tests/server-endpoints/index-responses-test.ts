@@ -1,8 +1,9 @@
 import { module, test } from 'qunit';
 import { join, basename } from 'path';
+import type { Test, SuperTest } from 'supertest';
 import { systemInitiatedPriority } from '@cardstack/runtime-common';
 import { setupServerEndpointsTest, testRealm2URL } from './helpers';
-import { waitUntil } from '../helpers';
+import { setupPermissionedRealmAtURL, waitUntil } from '../helpers';
 import { ensureDirSync, writeFileSync, writeJSONSync } from 'fs-extra';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
@@ -330,4 +331,49 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       });
     },
   );
+
+  module('Published realm index responses', function (hooks) {
+    let realmURL = new URL('http://127.0.0.1:4444/');
+    let request: SuperTest<Test>;
+
+    function onRealmSetup(args: {
+      request: SuperTest<Test>;
+    }) {
+      request = args.request;
+    }
+
+    setupPermissionedRealmAtURL(hooks, realmURL, {
+      permissions: {
+        '*': ['read'],
+      },
+      published: true,
+      onRealmSetup,
+    });
+
+    test('serves index HTML by default for published realm', async function (assert) {
+      let response = await request.get('/').set('Accept', 'application/json');
+
+      assert.strictEqual(response.status, 200, 'serves HTML response');
+      assert.ok(
+        response.headers['content-type']?.includes('text/html'),
+        'content type is text/html',
+      );
+      assert.ok(
+        response.text.includes('data-test-home-card'),
+        'index HTML is served',
+      );
+    });
+
+    test('skips index HTML when vendor mime type is requested', async function (assert) {
+      let response = await request
+        .get('/person-1')
+        .set('Accept', 'application/vnd.card+json');
+
+      assert.strictEqual(response.status, 200, 'serves JSON response');
+      assert.ok(
+        response.headers['content-type']?.includes('application/vnd.card+json'),
+        'content type is vendor JSON',
+      );
+    });
+  });
 });
