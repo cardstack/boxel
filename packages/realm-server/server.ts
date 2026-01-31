@@ -278,146 +278,187 @@ export class RealmServer {
   }
 
   private serveIndex = async (ctxt: Koa.Context, next: Koa.Next) => {
-    if (ctxt.header.accept?.includes('text/html')) {
-      // If this is a /connect iframe request, is the origin a valid published realm?
+    let acceptHeader = ctxt.header.accept ?? '';
+    let lowerAcceptHeader = acceptHeader.toLowerCase();
+    let includesVndMimeType = lowerAcceptHeader.includes('application/vnd.');
+    let includesHtmlMimeType = lowerAcceptHeader.includes('text/html');
 
-      let connectMatch = ctxt.request.path.match(/\/connect\/(.+)$/);
+    let requestURL = new URL(
+      `${ctxt.protocol}://${ctxt.host}${ctxt.originalUrl}`,
+    );
 
-      if (connectMatch) {
-        try {
-          let originParameter = new URL(decodeURIComponent(connectMatch[1]))
-            .href;
+    if (includesHtmlMimeType) {
+      if (includesVndMimeType) {
+        let isHostModeRequest = await this.isHostModeRequest(requestURL);
 
-          let publishedRealms = await query(this.dbAdapter, [
-            `SELECT published_realm_url FROM published_realms WHERE published_realm_url LIKE `,
-            param(`${originParameter}%`),
-          ]);
+        if (isHostModeRequest) {
+          return next();
+        }
+      }
+    } else {
+      if (includesVndMimeType) {
+        return next();
+      }
 
-          if (publishedRealms.length === 0) {
-            ctxt.status = 404;
-            ctxt.body = `Not Found: No published realm found for origin ${originParameter}`;
+      let isHostModeRequest = await this.isHostModeRequest(requestURL);
 
-            this.log.debug(
-              `Ignoring /connect request for origin ${originParameter}: no matching published realm`,
-            );
+      if (!isHostModeRequest) {
+        return next();
+      }
+    }
 
-            return;
-          }
+    // If this is a /connect iframe request, is the origin a valid published realm?
 
-          ctxt.set(
-            'Content-Security-Policy',
-            `frame-ancestors ${originParameter}`,
+    let connectMatch = ctxt.request.path.match(/\/connect\/(.+)$/);
+
+    if (connectMatch) {
+      try {
+        let originParameter = new URL(decodeURIComponent(connectMatch[1])).href;
+
+        let publishedRealms = await query(this.dbAdapter, [
+          `SELECT published_realm_url FROM published_realms WHERE published_realm_url LIKE `,
+          param(`${originParameter}%`),
+        ]);
+
+        if (publishedRealms.length === 0) {
+          ctxt.status = 404;
+          ctxt.body = `Not Found: No published realm found for origin ${originParameter}`;
+
+          this.log.debug(
+            `Ignoring /connect request for origin ${originParameter}: no matching published realm`,
           );
-        } catch (error) {
-          ctxt.status = 400;
-          ctxt.body = 'Bad Request';
-
-          this.log.info(`Error processing /connect request: ${error}`);
 
           return;
         }
-      }
 
-      ctxt.type = 'html';
+        ctxt.set(
+          'Content-Security-Policy',
+          `frame-ancestors ${originParameter}`,
+        );
+      } catch (error) {
+        ctxt.status = 400;
+        ctxt.body = 'Bad Request';
 
-      let requestURL = new URL(
-        `${ctxt.protocol}://${ctxt.host}${ctxt.originalUrl}`,
-      );
-      let cardURL = requestURL;
-      let isIndexRequest = requestURL.pathname.endsWith('/');
-      if (isIndexRequest) {
-        cardURL = new URL('index', requestURL);
-      }
+        this.log.info(`Error processing /connect request: ${error}`);
 
-      let indexHTML = await this.retrieveIndexHTML();
-      let hasPublicPermissions = await this.hasPublicPermissions(cardURL);
-
-      if (!hasPublicPermissions) {
-        ctxt.body = indexHTML;
         return;
       }
+    }
 
-      this.headLog.debug(`Fetching head HTML for ${cardURL.href}`);
-      this.isolatedLog.debug(`Fetching isolated HTML for ${cardURL.href}`);
-      this.scopedCSSLog.debug(`Fetching scoped CSS for ${cardURL.href}`);
+    ctxt.type = 'html';
 
-      let [headHTML, isolatedHTML, scopedCSS] = await Promise.all([
-        this.retrieveHeadHTML(cardURL),
-        this.retrieveIsolatedHTML(cardURL),
-        retrieveScopedCSS({
-          cardURL,
-          dbAdapter: this.dbAdapter,
-          indexURLCandidates: (url) => this.indexURLCandidates(url),
-          indexCandidateExpressions: (candidates) =>
-            this.indexCandidateExpressions(candidates),
-          log: this.scopedCSSLog,
-        }),
-      ]);
+    let cardURL = requestURL;
+    let isIndexRequest = requestURL.pathname.endsWith('/');
+    if (isIndexRequest) {
+      cardURL = new URL('index', requestURL);
+    }
 
-      if (headHTML != null) {
-        this.headLog.debug(
-          `Injecting head HTML for ${cardURL.href} (length ${headHTML.length})\n${this.truncateLogLines(
-            headHTML,
-          )}`,
-        );
-      } else {
-        this.headLog.debug(
-          `No head HTML found for ${cardURL.href}, serving base index.html`,
-        );
-      }
+    let indexHTML = await this.retrieveIndexHTML();
+    let hasPublicPermissions = await this.hasPublicPermissions(cardURL);
 
-      if (scopedCSS != null) {
-        this.scopedCSSLog.debug(
-          `Using scoped CSS for ${cardURL.href} (length ${scopedCSS.length})`,
-        );
-      } else {
-        this.scopedCSSLog.debug(
-          `No scoped CSS returned from database for ${cardURL.href}`,
-        );
-      }
-
-      let responseHTML = indexHTML;
-      let headFragments: string[] = [];
-
-      if (headHTML != null) {
-        headFragments.push(headHTML);
-      }
-
-      if (scopedCSS != null) {
-        this.scopedCSSLog.debug(`Injecting scoped CSS for ${cardURL.href}`);
-        headFragments.push(
-          `<style data-boxel-scoped-css>\n${scopedCSS}\n</style>`,
-        );
-      }
-
-      if (headFragments.length > 0) {
-        responseHTML = this.injectHeadHTML(
-          responseHTML,
-          headFragments.join('\n'),
-        );
-      }
-
-      if (isolatedHTML != null) {
-        this.isolatedLog.debug(
-          `Injecting isolated HTML for ${cardURL.href} (length ${isolatedHTML.length})\n${this.truncateLogLines(
-            isolatedHTML,
-          )}`,
-        );
-        responseHTML = this.injectIsolatedHTML(responseHTML, isolatedHTML);
-      }
-
-      ctxt.body = responseHTML;
+    if (!hasPublicPermissions) {
+      ctxt.body = indexHTML;
       return;
     }
-    return next();
+
+    this.headLog.debug(`Fetching head HTML for ${cardURL.href}`);
+    this.isolatedLog.debug(`Fetching isolated HTML for ${cardURL.href}`);
+    this.scopedCSSLog.debug(`Fetching scoped CSS for ${cardURL.href}`);
+
+    let [headHTML, isolatedHTML, scopedCSS] = await Promise.all([
+      this.retrieveHeadHTML(cardURL),
+      this.retrieveIsolatedHTML(cardURL),
+      retrieveScopedCSS({
+        cardURL,
+        dbAdapter: this.dbAdapter,
+        indexURLCandidates: (url) => this.indexURLCandidates(url),
+        indexCandidateExpressions: (candidates) =>
+          this.indexCandidateExpressions(candidates),
+        log: this.scopedCSSLog,
+      }),
+    ]);
+
+    if (headHTML != null) {
+      this.headLog.debug(
+        `Injecting head HTML for ${cardURL.href} (length ${headHTML.length})\n${this.truncateLogLines(
+          headHTML,
+        )}`,
+      );
+    } else {
+      this.headLog.debug(
+        `No head HTML found for ${cardURL.href}, serving base index.html`,
+      );
+    }
+
+    if (scopedCSS != null) {
+      this.scopedCSSLog.debug(
+        `Using scoped CSS for ${cardURL.href} (length ${scopedCSS.length})`,
+      );
+    } else {
+      this.scopedCSSLog.debug(
+        `No scoped CSS returned from database for ${cardURL.href}`,
+      );
+    }
+
+    let responseHTML = indexHTML;
+    let headFragments: string[] = [];
+
+    if (headHTML != null) {
+      headFragments.push(headHTML);
+    }
+
+    if (scopedCSS != null) {
+      this.scopedCSSLog.debug(`Injecting scoped CSS for ${cardURL.href}`);
+      headFragments.push(
+        `<style data-boxel-scoped-css>\n${scopedCSS}\n</style>`,
+      );
+    }
+
+    if (headFragments.length > 0) {
+      responseHTML = this.injectHeadHTML(
+        responseHTML,
+        headFragments.join('\n'),
+      );
+    }
+
+    if (isolatedHTML != null) {
+      this.isolatedLog.debug(
+        `Injecting isolated HTML for ${cardURL.href} (length ${isolatedHTML.length})\n${this.truncateLogLines(
+          isolatedHTML,
+        )}`,
+      );
+      responseHTML = this.injectIsolatedHTML(responseHTML, isolatedHTML);
+    }
+
+    ctxt.body = responseHTML;
+    return;
+    return;
   };
 
-  private async hasPublicPermissions(cardURL: URL): Promise<boolean> {
-    let realm = this.realms.find((candidate) => {
+  private findRealmForRequestURL(requestURL: URL): Realm | undefined {
+    return this.realms.find((candidate) => {
       let realmURL = new URL(candidate.url);
-      realmURL.protocol = cardURL.protocol;
-      return new RealmPaths(realmURL).inRealm(cardURL);
+      realmURL.protocol = requestURL.protocol;
+      return new RealmPaths(realmURL).inRealm(requestURL);
     });
+  }
+
+  private async isHostModeRequest(requestURL: URL): Promise<boolean> {
+    let realm = this.findRealmForRequestURL(requestURL);
+    if (!realm) {
+      return false;
+    }
+
+    let rows = await query(this.dbAdapter, [
+      `SELECT published_realm_url FROM published_realms WHERE published_realm_url =`,
+      param(realm.url),
+    ]);
+
+    return rows.length > 0;
+  }
+
+  private async hasPublicPermissions(cardURL: URL): Promise<boolean> {
+    let realm = this.findRealmForRequestURL(cardURL);
 
     if (!realm) {
       return false;
