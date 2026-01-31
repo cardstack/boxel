@@ -27,7 +27,6 @@ import {
   sendResponseForNotFound,
   sendResponseForSystemError,
   sendResponseForUnauthorizedRequest,
-  setContextResponse,
 } from '../middleware';
 
 const log = logger('download-realm');
@@ -107,10 +106,7 @@ export default function handleDownloadRealm({
           userId: token.user,
           onlyOwnRealms: false,
         });
-        readableRealms = buildReadableRealms(
-          permissions,
-          publishedRealmURLs,
-        );
+        readableRealms = buildReadableRealms(permissions, publishedRealmURLs);
         if (!readableRealms.has(realmURL)) {
           await sendResponseForForbiddenRequest(
             ctxt,
@@ -257,7 +253,7 @@ function buildArchiveName(realmURL: URL): string {
   let base =
     segments.length >= 2
       ? segments.slice(-2).join('-')
-      : segments[0] ?? realmURL.hostname;
+      : (segments[0] ?? realmURL.hostname);
   base = base.replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '');
   return base.length > 0 ? base : 'realm';
 }
