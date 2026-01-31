@@ -191,6 +191,7 @@ export default class CodeSubmodeLeftPanelToggle extends Component<Signature> {
         </ToggleButton>
       </header>
       {{#if this.isFileTreeShowing}}
+
         <RealmDropdown
           @selectedRealmURL={{@realmURL}}
           @onSelect={{this.handleRealmSelect}}
@@ -198,7 +199,23 @@ export default class CodeSubmodeLeftPanelToggle extends Component<Signature> {
           @displayReadOnlyTag={{true}}
           @contentClass='realm-dropdown-menu'
         />
+
+        <div class='realm-download'>
+          <BoxelButton
+            @kind='text-only'
+            @size='extra-small'
+            class='realm-download-button'
+            title='Download an archive of this workspace'
+            {{on 'click' this.downloadRealm}}
+            data-test-download-realm-button
+          >
+            <Download width='13' height='13' />
+            Download
+          </BoxelButton>
+        </div>
+
       {{/if}}
+
       <InnerContainerContent
         class='content'
         data-test-togglable-left-panel
@@ -216,18 +233,6 @@ export default class CodeSubmodeLeftPanelToggle extends Component<Signature> {
           {{yield to='inspector'}}
         {{/if}}
       </InnerContainerContent>
-      {{#if this.isFileTreeShowing}}
-        <BoxelButton
-          @kind='secondary'
-          @size='extra-small'
-          class='realm-download-button'
-          {{on 'click' this.downloadRealm}}
-          data-test-download-realm-button
-        >
-          <Download width='16' height='16' />
-          Download Realm
-        </BoxelButton>
-      {{/if}}
 
     </InnerContainer>
 
@@ -251,32 +256,40 @@ export default class CodeSubmodeLeftPanelToggle extends Component<Signature> {
         border: none;
         border-bottom: 1px solid var(--boxel-400);
         padding: var(--boxel-sp-xs);
+        padding-bottom: var(--boxel-sp);
         height: fit-content;
       }
+
       .realm-download {
-        padding: var(--boxel-sp-xs);
         border-bottom: var(--boxel-border);
-        background-color: #f4f4f6;
+        background-color: var(--boxel-light-100);
+        padding: var(--boxel-sp-xxs);
       }
+
       .realm-download-button {
         --boxel-button-min-height: 1.5rem;
-        --boxel-button-padding: 0 var(--boxel-sp-5xs);
+        --boxel-button-padding: var(--boxel-sp-5xs) var(--boxel-sp-5xs)
+          var(--boxel-sp-5xs) var(--boxel-sp-xxxs);
         --boxel-button-font: 600 var(--boxel-font-xs);
+
         justify-content: flex-start;
         gap: var(--boxel-sp-xxxs);
         align-self: flex-start;
-        text-transform: capitalize;
-        margin: var(--boxel-sp-xxxs);
 
-        padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
+        border: 0;
+        background: transparent;
         border-radius: var(--boxel-radius);
-        border: 1px solid var(--boxel-400);
-        background-color: var(--boxel-light);
         cursor: pointer;
         font: inherit;
+        width: 100%;
+
+        svg {
+          margin-bottom: var(--boxel-sp-6xs);
+        }
       }
+
       .realm-download-button:hover {
-        background-color: #ededf0;
+        background-color: var(--boxel-light-200);
       }
     </style>
   </template>
