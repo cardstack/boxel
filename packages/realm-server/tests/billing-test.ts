@@ -995,6 +995,63 @@ module(basename(__filename), function () {
         );
       });
 
+      test('does not spend previous cycle plan allowance in current cycle', async function (assert) {
+        await addToCreditsLedger(dbAdapter, {
+          userId: user.id,
+          creditAmount: 100,
+          creditType: 'plan_allowance',
+          subscriptionCycleId: subscriptionCycle.id,
+        });
+
+        let nextSubscriptionCycle = await insertSubscriptionCycle(dbAdapter, {
+          subscriptionId: subscription.id,
+          periodStart: 2,
+          periodEnd: 3,
+        });
+        await addToCreditsLedger(dbAdapter, {
+          userId: user.id,
+          creditAmount: 50,
+          creditType: 'plan_allowance',
+          subscriptionCycleId: nextSubscriptionCycle.id,
+        });
+
+        await spendCredits(dbAdapter, user.id, 80);
+
+        assert.strictEqual(
+          await sumUpCreditsLedger(dbAdapter, {
+            subscriptionCycleId: subscriptionCycle.id,
+            creditType: [
+              'plan_allowance',
+              'plan_allowance_used',
+              'plan_allowance_expired',
+            ],
+          }),
+          100,
+        );
+        assert.strictEqual(
+          await sumUpCreditsLedger(dbAdapter, {
+            subscriptionCycleId: nextSubscriptionCycle.id,
+            creditType: [
+              'plan_allowance',
+              'plan_allowance_used',
+              'plan_allowance_expired',
+            ],
+          }),
+          0,
+        );
+        assert.strictEqual(
+          await sumUpCreditsLedger(dbAdapter, {
+            userId: user.id,
+            creditType: [
+              'plan_allowance',
+              'plan_allowance_used',
+              'plan_allowance_expired',
+            ],
+          }),
+          100,
+        );
+      });
+
       test('spends ai credits correctly when extra credits are available', async function (assert) {
         // User receives 2500 credits for the creator plan and spends 2490 credits
         await addToCreditsLedger(dbAdapter, {
