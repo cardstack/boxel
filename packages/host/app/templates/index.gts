@@ -219,7 +219,9 @@ export class IndexComponent extends Component<IndexComponentComponentSignature> 
 
   <template>
     {{#if this.hostModeService.isActive}}
-      {{pageTitle this.title}}
+      {{#unless this.hostModeService.hasHeadTitleApplied}}
+        {{pageTitle this.title}}
+      {{/unless}}
 
       {{#if this.isError}}
         <div data-test-error='not-found'>

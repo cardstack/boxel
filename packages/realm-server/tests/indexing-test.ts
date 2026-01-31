@@ -530,12 +530,12 @@ module(basename(__filename), function () {
         );
 
         assert.ok(entry.headHtml, 'pre-rendered head format html is present');
-
-        // TODO: restore in CS-9807
-        // assert.ok(
-        //   cleanedHead.includes('<title data-test-card-head-title>'),
-        //   `head html includes cardTitle: ${cleanedHead}`,
-        // );
+        7;
+        let cleanedHead = cleanWhiteSpace(entry.headHtml!);
+        assert.ok(
+          cleanedHead.includes('<title data-test-card-head-title>'),
+          `head html includes cardTitle: ${cleanedHead}`,
+        );
 
         assert.strictEqual(
           trimCardContainer(
