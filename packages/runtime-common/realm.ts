@@ -325,7 +325,10 @@ export interface RealmAdapter {
 
   exists(path: LocalPath): Promise<boolean>;
 
-  write(path: LocalPath, contents: string): Promise<AdapterWriteResult>;
+  write(
+    path: LocalPath,
+    contents: string | Uint8Array,
+  ): Promise<AdapterWriteResult>;
 
   remove(path: LocalPath): Promise<void>;
 
@@ -644,6 +647,11 @@ export class Realm {
         SupportedMimeType.CardSource,
         this.upsertCardSource.bind(this),
       )
+      .post(
+        '/.*',
+        SupportedMimeType.OctetStream,
+        this.upsertBinaryFile.bind(this),
+      )
       .get('/.*', SupportedMimeType.FileMeta, this.getFileMeta.bind(this))
       .head(
         '/.*',
@@ -750,7 +758,7 @@ export class Realm {
 
   async write(
     path: LocalPath,
-    contents: string,
+    contents: string | Uint8Array,
     options?: WriteOptions,
   ): Promise<FileWriteResult> {
     let results = await this._batchWrite(new Map([[path, contents]]), options);
@@ -758,14 +766,14 @@ export class Realm {
   }
 
   async writeMany(
-    files: Map<LocalPath, string>,
+    files: Map<LocalPath, string | Uint8Array>,
     options?: WriteOptions,
   ): Promise<FileWriteResult[]> {
     return this._batchWrite(files, options);
   }
 
   private async _batchWrite(
-    files: Map<LocalPath, string>,
+    files: Map<LocalPath, string | Uint8Array>,
     options?: WriteOptions,
   ): Promise<FileWriteResult[]> {
     await this.indexing();
@@ -794,38 +802,46 @@ export class Realm {
       let currentWriteType: 'module' | 'instance' | undefined =
         hasExecutableExtension(path)
           ? 'module'
-          : path.endsWith('.json') && isCardDocumentString(content)
+          : typeof content === 'string' &&
+              path.endsWith('.json') &&
+              isCardDocumentString(content)
             ? 'instance'
             : undefined;
-      try {
-        let doc = JSON.parse(content);
-        if (isCardResource(doc.data) && options?.serializeFile) {
-          let serialized = await this.fileSerialization(
-            { data: merge(doc.data, { meta: { realmURL: this.url } }) },
-            url,
-          );
-          content = JSON.stringify(serialized, null, 2);
-        }
-      } catch (e: any) {
-        if (
-          e.message?.includes?.('not found') ||
-          isFilterRefersToNonexistentTypeError(e)
-        ) {
-          throw e;
+      if (typeof content === 'string') {
+        try {
+          let doc = JSON.parse(content);
+          if (isCardResource(doc.data) && options?.serializeFile) {
+            let serialized = await this.fileSerialization(
+              { data: merge(doc.data, { meta: { realmURL: this.url } }) },
+              url,
+            );
+            content = JSON.stringify(serialized, null, 2);
+          }
+        } catch (e: any) {
+          if (
+            e.message?.includes?.('not found') ||
+            isFilterRefersToNonexistentTypeError(e)
+          ) {
+            throw e;
+          }
         }
       }
       let sizeType: 'card' | 'file' =
-        path.endsWith('.json') && isCardDocumentString(content)
+        typeof content === 'string' &&
+        path.endsWith('.json') &&
+        isCardDocumentString(content)
           ? 'card'
           : 'file';
       this.assertWriteSize(content, sizeType);
-      let existingFile = await readFileAsText(path, (p) =>
-        this.#adapter.openFile(p),
-      );
-      if (existingFile?.content === content) {
-        results.push({ path, lastModified: existingFile.lastModified });
-        fileMetaRows.push({ path });
-        continue;
+      if (typeof content === 'string') {
+        let existingFile = await readFileAsText(path, (p) =>
+          this.#adapter.openFile(p),
+        );
+        if (existingFile?.content === content) {
+          results.push({ path, lastModified: existingFile.lastModified });
+          fileMetaRows.push({ path });
+          continue;
+        }
       }
       let contentHash = computeContentHash(content);
       if (lastWriteType === 'module' && currentWriteType === 'instance') {
@@ -1933,7 +1949,33 @@ export class Realm {
     });
   }
 
-  private assertWriteSize(content: string, type: 'card' | 'file') {
+  private async upsertBinaryFile(
+    request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response> {
+    let bytes = new Uint8Array(await request.arrayBuffer());
+    let { lastModified, created } = await this.write(
+      this.paths.local(new URL(request.url)),
+      bytes,
+      {
+        clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
+        serializeFile: false,
+      },
+    );
+    return createResponse({
+      body: null,
+      init: {
+        status: 204,
+        headers: {
+          'last-modified': formatRFC7231(lastModified * 1000),
+          ...(created ? { 'x-created': formatRFC7231(created * 1000) } : {}),
+        },
+      },
+      requestContext,
+    });
+  }
+
+  private assertWriteSize(content: string | Uint8Array, type: 'card' | 'file') {
     try {
       validateWriteSize(content, this.#cardSizeLimitBytes, type);
     } catch (error: any) {
