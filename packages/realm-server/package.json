@@ -35,6 +35,7 @@
     "@types/qunit": "catalog:",
     "@types/sane": "catalog:",
     "@types/sinon": "catalog:",
+    "@types/superagent": "catalog:",
     "@types/supertest": "catalog:",
     "@types/tmp": "catalog:",
     "@types/uuid": "catalog:",

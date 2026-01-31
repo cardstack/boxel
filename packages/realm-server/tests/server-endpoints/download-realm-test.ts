@@ -1,16 +1,20 @@
 import { module, test } from 'qunit';
 import { basename } from 'path';
 import { setupServerEndpointsTest, testRealm2URL } from './helpers';
+import type { Response } from 'superagent';
 
 function binaryParser(
-  res: NodeJS.ReadableStream,
+  res: Response,
   callback: (err: Error | null, body: Buffer) => void,
 ) {
-  res.setEncoding('binary');
   let data = '';
-  res.on('data', (chunk) => {
+
+  res.setEncoding('binary');
+
+  res.on('data', (chunk: string) => {
     data += chunk;
   });
+
   res.on('end', () => {
     callback(null, Buffer.from(data, 'binary'));
   });

@@ -86,6 +86,7 @@ catalog:
   "@types/sinonjs__fake-timers": ^8.1.5
   "@types/statuses": ^2.0.5
   "@types/stream-chain": ^2.0.1
+  "@types/superagent": ^8.1.9
   "@types/stream-json": ^1.7.3
   "@types/string.prototype.matchall": ^4.0.1
   "@types/supertest": ^2.0.12
