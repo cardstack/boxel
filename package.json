@@ -41,13 +41,13 @@
       "style-loader@2.0.0": "patches/style-loader@2.0.0.patch",
       "ember-css-url@1.0.0": "patches/ember-css-url@1.0.0.patch",
       "ember-basic-dropdown@8.0.4": "patches/ember-basic-dropdown@8.0.4.patch",
-      "ember-source@5.4.1": "patches/ember-source@5.4.1.patch",
       "monaco-editor@0.52.2": "patches/monaco-editor@0.52.2.patch",
       "@embroider/compat": "patches/@embroider__compat.patch",
       "ember-eslint-parser": "patches/ember-eslint-parser.patch",
       "openai": "patches/openai.patch",
       "matrix-js-sdk@38.3.0": "patches/matrix-js-sdk@38.3.0.patch",
-      "@embroider/webpack": "patches/@embroider__webpack.patch"
+      "@embroider/webpack": "patches/@embroider__webpack.patch",
+      "ember-source": "patches/ember-source.patch"
     },
     "onlyBuiltDependencies": [
       "@percy/core",
