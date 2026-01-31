@@ -12,6 +12,7 @@ export const APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE =
 export const APP_BOXEL_CODE_PATCH_CORRECTNESS_REL_TYPE =
   'app.boxel.codePatchCorrectnessAnnotation';
 export const APP_BOXEL_COMMAND_RESULT_EVENT_TYPE = 'app.boxel.commandResult';
+export const APP_BOXEL_COMMAND_INPUT_EVENT_TYPE = 'app.boxel.commandInput';
 export const APP_BOXEL_COMMAND_RESULT_REL_TYPE = 'app.boxel.commandAnnotation';
 export const APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE =
   'app.boxel.commandResultWithOutput';
