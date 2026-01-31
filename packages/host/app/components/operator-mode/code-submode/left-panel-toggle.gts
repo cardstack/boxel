@@ -190,6 +190,7 @@ export default class CodeSubmodeLeftPanelToggle extends Component<Signature> {
           Inspector
         </ToggleButton>
       </header>
+
       {{#if this.isFileTreeShowing}}
 
         <RealmDropdown
