@@ -417,7 +417,7 @@ module('Acceptance | host mode tests', function (hooks) {
       .dom(`[data-test-host-mode-stack-item="${testHostModeRealmURL}index"]`)
       .exists();
     await click(
-      `[data-test-host-mode-stack-item="${testHostModeRealmURL}index"] .close-button`,
+      `[data-test-host-mode-stack-item="${testHostModeRealmURL}index"] [data-test-host-stack-item-close-button]`,
     );
 
     assert.strictEqual(currentURL(), '/test/Pet/mango.json');
