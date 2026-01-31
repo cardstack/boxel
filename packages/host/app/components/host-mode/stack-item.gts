@@ -166,6 +166,7 @@ export default class HostModeStackItem extends Component<Signature> {
               @icon='close'
               @label='close'
               {{on 'click' this.handleClose}}
+              data-test-host-stack-item-close-button
             />
           </div>
         {{/if}}
