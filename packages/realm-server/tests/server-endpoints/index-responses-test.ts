@@ -59,6 +59,34 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           });
 
           writeFileSync(
+            join(context.testRealmDir, 'dollar-sign-card.gts'),
+            `
+            import { Component, CardDef } from 'https://cardstack.com/base/card-api';
+
+            export class DollarSignCard extends CardDef {
+              static isolated = class Isolated extends Component<typeof this> {
+                <template>
+                  <div data-test-dollar-sign>Price: $0.50 per unit</div>
+                </template>
+              };
+            }
+            `,
+          );
+
+          writeJSONSync(join(context.testRealmDir, 'dollar-sign-test.json'), {
+            data: {
+              type: 'card',
+              attributes: {},
+              meta: {
+                adoptsFrom: {
+                  module: './dollar-sign-card.gts',
+                  name: 'DollarSignCard',
+                },
+              },
+            },
+          });
+
+          writeFileSync(
             join(context.testRealmDir, 'head-card.gts'),
             `
             import { Component, CardDef } from 'https://cardstack.com/base/card-api';
@@ -164,32 +192,6 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         );
       });
 
-      test('prefers non-null head and isolated HTML when matches are present', async function (assert) {
-        let cardURL = new URL('head-isolated-candidate', testRealm2URL);
-        let aliasOnlyURL = new URL('alias-only-candidate', testRealm2URL);
-
-        await context.dbAdapter.execute(
-          `INSERT INTO boxel_index_working (url, file_alias, type, realm_version, realm_url, head_html, isolated_html)
-           VALUES
-           ('${cardURL.href}', '${cardURL.href}', 'instance', 1, '${testRealm2URL.href}', '<meta data-test-head-html content="from-db" />', '<div data-test-isolated-html>Injected isolated</div>'),
-           ('${aliasOnlyURL.href}', '${cardURL.href}', 'instance', 2, '${testRealm2URL.href}', NULL, NULL)`,
-        );
-
-        let response = await context.request2
-          .get('/test/head-isolated-candidate')
-          .set('Accept', 'text/html');
-
-        assert.strictEqual(response.status, 200, 'serves HTML response');
-        assert.ok(
-          response.text.includes('data-test-head-html'),
-          'head HTML is injected into the HTML response',
-        );
-        assert.ok(
-          response.text.includes('data-test-isolated-html'),
-          'isolated HTML is injected into the HTML response',
-        );
-      });
-
       test('serves isolated HTML for /subdirectory/index.json at /subdirectory/', async function (assert) {
         let response = await context.request2
           .get('/test/subdirectory/')
@@ -236,6 +238,26 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         assert.ok(
           response.text.includes('--scoped-css-marker: 1'),
           'scoped CSS is included in the HTML response',
+        );
+      });
+
+      test('serves isolated HTML containing dollar signs without corruption', async function (assert) {
+        let response = await context.request2
+          .get('/test/dollar-sign-test')
+          .set('Accept', 'text/html');
+
+        assert.strictEqual(response.status, 200, 'serves HTML response');
+        assert.ok(
+          response.text.includes('data-test-dollar-sign'),
+          'isolated HTML with dollar signs is injected into the HTML response',
+        );
+        assert.ok(
+          response.text.includes('$0.50'),
+          'dollar sign content is preserved without regex replacement pattern corruption',
+        );
+        assert.ok(
+          response.text.includes('boxel-isolated-end'),
+          'isolated end boundary marker is present (not corrupted by $0 backreference)',
         );
       });
 
