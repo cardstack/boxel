@@ -282,10 +282,10 @@ export default class CodeSubmodeLeftPanelToggle extends Component<Signature> {
         cursor: pointer;
         font: inherit;
         width: 100%;
+      }
 
-        svg {
-          margin-bottom: var(--boxel-sp-6xs);
-        }
+      .realm-download-button :deep(svg) {
+        margin-bottom: var(--boxel-sp-6xs);
       }
 
       .realm-download-button:hover {
