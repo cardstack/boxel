@@ -82,7 +82,6 @@ export default class HostModeStackItem extends Component<Signature> {
       max-width: ${maxWidthPercent}%;
       z-index: calc(${this.args.index} + 1);
       margin-top: ${marginTopPx}px;
-      transition: margin-top var(--boxel-transition), width var(--boxel-transition);
     `; // using margin-top instead of padding-top to hide scrolled content from view
 
     if (this.isTopCard) {
