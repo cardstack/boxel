@@ -37,6 +37,8 @@ export type StripeInvoicePaymentSucceededWebhookEvent = StripeEvent & {
         data: Array<{
           amount: number;
           description: string;
+          type?: string;
+          proration?: boolean;
           price: {
             product: string;
           };
