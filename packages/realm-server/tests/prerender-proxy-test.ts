@@ -33,7 +33,7 @@ module(basename(__filename), function () {
 
     function makePrerenderer() {
       let renderCalls: Array<{
-        kind: 'card' | 'module' | 'file-extract';
+        kind: 'card' | 'module' | 'file-extract' | 'file-render';
         args: {
           realm: string;
           url: string;
@@ -80,6 +80,17 @@ module(basename(__filename), function () {
             status: 'ready',
             searchDoc: { url: args.url, title: 'through proxy' },
             deps: [],
+          };
+        },
+        async prerenderFileRender(args) {
+          renderCalls.push({ kind: 'file-render', args });
+          return {
+            isolatedHTML: null,
+            headHTML: null,
+            atomHTML: null,
+            embeddedHTML: null,
+            fittedHTML: null,
+            iconHTML: null,
           };
         },
       };

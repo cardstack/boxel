@@ -3,6 +3,8 @@ import {
   type RenderResponse,
   type ModuleRenderResponse,
   type FileExtractResponse,
+  type FileRenderResponse,
+  type FileRenderArgs,
   type RenderRouteOptions,
   logger,
 } from '@cardstack/runtime-common';
@@ -60,6 +62,7 @@ export function createRemotePrerenderer(
       url: string;
       auth: string;
       renderOptions?: RenderRouteOptions;
+      [key: string]: any;
     },
   ): Promise<T> {
     validatePrerenderAttributes(type, attributes);
@@ -184,6 +187,27 @@ export function createRemotePrerenderer(
           realm,
           url,
           auth,
+          renderOptions: renderOptions ?? {},
+        },
+      );
+    },
+    async prerenderFileRender({
+      realm,
+      url,
+      auth,
+      fileData,
+      types,
+      renderOptions,
+    }: FileRenderArgs) {
+      return await requestWithRetry<FileRenderResponse>(
+        'prerender-file-render',
+        'prerender-file-render-request',
+        {
+          realm,
+          url,
+          auth,
+          fileData,
+          types,
           renderOptions: renderOptions ?? {},
         },
       );

@@ -111,6 +111,12 @@ export interface FileEntry {
   resource?: FileMetaResource | null;
   types?: string[];
   displayNames?: string[];
+  isolatedHtml?: string;
+  headHtml?: string;
+  embeddedHtml?: Record<string, string>;
+  fittedHtml?: Record<string, string>;
+  atomHtml?: string;
+  iconHTML?: string;
 }
 
 export class Batch {
@@ -341,6 +347,12 @@ export class Batch {
           search_doc: entry.searchData ?? null,
           types: entry.types ?? null,
           display_names: entry.displayNames ?? null,
+          isolated_html: entry.isolatedHtml ?? null,
+          head_html: entry.headHtml ?? null,
+          embedded_html: entry.embeddedHtml ?? null,
+          fitted_html: entry.fittedHtml ?? null,
+          atom_html: entry.atomHtml ?? null,
+          icon_html: entry.iconHTML ?? null,
           last_modified: entry.lastModified,
           resource_created_at: entry.resourceCreatedAt,
           error_doc: null,
