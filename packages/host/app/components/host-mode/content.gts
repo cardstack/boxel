@@ -126,7 +126,6 @@ export default class HostModeContent extends Component<Signature> {
         align-items: center;
         justify-content: center;
         width: 100%;
-        min-height: 100vh;
         overflow: hidden;
         padding: var(--boxel-sp);
         position: relative;
@@ -134,6 +133,19 @@ export default class HostModeContent extends Component<Signature> {
         background-position: center;
         background-size: cover;
         background-repeat: no-repeat;
+      }
+
+      @media screen {
+        .host-mode-content {
+          height: 100%;
+          overscroll-behavior: none;
+        }
+      }
+
+      @media print {
+        .host-mode-content {
+          min-height: 100vh;
+        }
       }
 
       .breadcrumb-container {
