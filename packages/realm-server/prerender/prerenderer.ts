@@ -3,6 +3,8 @@ import {
   type RenderResponse,
   type ModuleRenderResponse,
   type FileExtractResponse,
+  type FileRenderResponse,
+  type FileRenderArgs,
   logger,
 } from '@cardstack/runtime-common';
 import { BrowserManager } from './browser-manager';
@@ -458,6 +460,137 @@ export class Prerenderer {
       return lastResult;
     }
     throw new Error(`file extract prerender attempts exhausted for ${url}`);
+  }
+
+  async prerenderFileRender({
+    realm,
+    url,
+    auth,
+    fileData,
+    types,
+    opts,
+    renderOptions,
+  }: {
+    realm: string;
+    url: string;
+    auth: string;
+    fileData: FileRenderArgs['fileData'];
+    types: string[];
+    opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
+    renderOptions?: RenderRouteOptions;
+  }): Promise<{
+    response: FileRenderResponse;
+    timings: { launchMs: number; renderMs: number };
+    pool: {
+      pageId: string;
+      realm: string;
+      reused: boolean;
+      evicted: boolean;
+      timedOut: boolean;
+    };
+  }> {
+    if (this.#stopped) {
+      throw new Error('Prerenderer has been stopped and cannot be used');
+    }
+    let attemptOptions = renderOptions;
+    let lastResult:
+      | {
+          response: FileRenderResponse;
+          timings: { launchMs: number; renderMs: number };
+          pool: {
+            pageId: string;
+            realm: string;
+            reused: boolean;
+            evicted: boolean;
+            timedOut: boolean;
+          };
+        }
+      | undefined;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      let result: {
+        response: FileRenderResponse;
+        timings: { launchMs: number; renderMs: number };
+        pool: {
+          pageId: string;
+          realm: string;
+          reused: boolean;
+          evicted: boolean;
+          timedOut: boolean;
+        };
+      };
+      try {
+        result = await this.#renderRunner.prerenderFileRenderAttempt({
+          realm,
+          url,
+          auth,
+          fileData,
+          types,
+          opts,
+          renderOptions: attemptOptions,
+        });
+      } catch (e) {
+        log.error(
+          `file render prerender attempt for ${url} (realm ${realm}) failed with error, restarting browser`,
+          e,
+        );
+        await this.#restartBrowser();
+        try {
+          result = await this.#renderRunner.prerenderFileRenderAttempt({
+            realm,
+            url,
+            auth,
+            fileData,
+            types,
+            opts,
+            renderOptions: attemptOptions,
+          });
+        } catch (e2) {
+          log.error(
+            `file render prerender attempt for ${url} (realm ${realm}) failed again after browser restart`,
+            e2,
+          );
+          throw e2;
+        }
+      }
+      lastResult = result;
+
+      let retrySignature = this.#renderRunner.shouldRetryWithClearCache(
+        result.response,
+      );
+      let isClearCacheAttempt = attemptOptions?.clearCache === true;
+
+      if (!isClearCacheAttempt && retrySignature) {
+        log.warn(
+          `retrying file render prerender for ${url} with clearCache due to error signature: ${retrySignature.join(
+            ' | ',
+          )}`,
+        );
+        attemptOptions = {
+          ...(attemptOptions ?? {}),
+          clearCache: true,
+        };
+        continue;
+      }
+
+      if (isClearCacheAttempt && retrySignature && result.response.error) {
+        log.warn(
+          `file render prerender retry with clearCache did not resolve error signature ${retrySignature.join(
+            ' | ',
+          )} for ${url}`,
+        );
+      }
+
+      return result;
+    }
+    if (lastResult) {
+      if (lastResult.response.error) {
+        log.error(
+          `file render prerender attempts exhausted for ${url} in realm ${realm}, returning last error response`,
+        );
+      }
+      return lastResult;
+    }
+    throw new Error(`file render prerender attempts exhausted for ${url}`);
   }
 
   async #restartBrowser(): Promise<void> {

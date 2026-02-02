@@ -4,6 +4,8 @@ import {
   type RenderResponse,
   type ModuleRenderResponse,
   type FileExtractResponse,
+  type FileRenderResponse,
+  type FileRenderArgs,
   type RenderRouteOptions,
   serializeRenderRouteOptions,
   logger,
@@ -688,8 +690,173 @@ export class RenderRunner {
     }
   }
 
+  async prerenderFileRenderAttempt({
+    realm,
+    url,
+    auth,
+    fileData,
+    types: _types,
+    opts,
+    renderOptions,
+  }: {
+    realm: string;
+    url: string;
+    auth: string;
+    fileData: FileRenderArgs['fileData'];
+    types: string[];
+    opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
+    renderOptions?: RenderRouteOptions;
+  }): Promise<{
+    response: FileRenderResponse;
+    timings: { launchMs: number; renderMs: number };
+    pool: {
+      pageId: string;
+      realm: string;
+      reused: boolean;
+      evicted: boolean;
+      timedOut: boolean;
+    };
+  }> {
+    this.#nonce++;
+    log.info(
+      `file render prerendering url ${url}, nonce=${this.#nonce} realm=${realm}`,
+    );
+
+    const { page, reused, launchMs, pageId, release } =
+      await this.#getPageForRealm(realm, auth);
+    const poolInfo = {
+      pageId: pageId ?? 'unknown',
+      realm,
+      reused,
+      evicted: false,
+      timedOut: false,
+    };
+    this.#pagePool.resetConsoleErrors(pageId);
+    const markTimeout = (err?: RenderError) => {
+      if (!poolInfo.timedOut && err?.error?.title === 'Render timeout') {
+        poolInfo.timedOut = true;
+      }
+    };
+    try {
+      await page.evaluate((sessionAuth) => {
+        localStorage.setItem('boxel-session', sessionAuth);
+      }, auth);
+
+      // Stash file data on globalThis for the render route to consume
+      await page.evaluate((data) => {
+        (globalThis as any).__boxelFileRenderData = data;
+      }, fileData);
+
+      let renderStart = Date.now();
+      let error: RenderError | undefined;
+      let options: RenderRouteOptions = {
+        ...(renderOptions ?? {}),
+        fileRender: true,
+        fileDefCodeRef: fileData.fileDefCodeRef,
+      };
+      let serializedOptions = serializeRenderRouteOptions(options);
+      let optionsSegment = encodeURIComponent(serializedOptions);
+      // File render uses the full file URL (including extension) as the ID,
+      // unlike card render which strips .json. The render route's fileRender
+      // branch sets cardId to the raw url parameter, so expectedId must match.
+      const captureOptions: CaptureOptions = {
+        expectedId: url,
+        expectedNonce: String(this.#nonce),
+        simulateTimeoutMs: opts?.simulateTimeoutMs,
+      };
+
+      log.debug(
+        `file render: visit ${url} at: ${this.#boxelHostURL}/render/${encodeURIComponent(url)}/${this.#nonce}/${optionsSegment}/html/isolated/0`,
+      );
+
+      // Render isolated HTML only – additional formats (head, atom, icon,
+      // fitted, embedded) are deferred to keep boot-indexing fast.  Each
+      // Puppeteer transition costs 2-3 s, so rendering all formats for every
+      // file would make boot-time O(files × formats × 3 s) which easily
+      // exceeds test timeouts.
+      let result = await withTimeout(
+        page,
+        async () => {
+          await transitionTo(
+            page,
+            'render.html',
+            url,
+            String(this.#nonce),
+            serializedOptions,
+            'isolated',
+            '0',
+          );
+          return await captureResult(page, 'innerHTML', captureOptions);
+        },
+        opts?.timeoutMs,
+      );
+      let isolatedHTML: string | null = null;
+      if (isRenderError(result)) {
+        error = result;
+        markTimeout(error);
+        let evicted = await this.#maybeEvict(
+          realm,
+          'file isolated render',
+          result as RenderError,
+        );
+        if (evicted) {
+          poolInfo.evicted = true;
+        }
+      } else {
+        let capture = result as RenderCapture;
+        if (capture.status === 'ready') {
+          isolatedHTML = capture.value;
+        } else {
+          let capErr = this.#captureToError(capture);
+          if (!error && capErr) {
+            error = capErr;
+          }
+          markTimeout(capErr);
+          let evicted = await this.#maybeEvict(
+            realm,
+            'file isolated render',
+            capErr,
+          );
+          if (evicted) {
+            poolInfo.evicted = true;
+          }
+        }
+      }
+
+      let response: FileRenderResponse = {
+        ...(error ? { error } : {}),
+        iconHTML: null,
+        isolatedHTML,
+        headHTML: null,
+        atomHTML: null,
+        embeddedHTML: null,
+        fittedHTML: null,
+      };
+      response.error = this.#mergeConsoleErrors(pageId, response.error);
+      return {
+        response,
+        timings: { launchMs, renderMs: Date.now() - renderStart },
+        pool: poolInfo,
+      };
+    } finally {
+      // Clean up globalThis data
+      await page
+        .evaluate(() => {
+          delete (globalThis as any).__boxelFileRenderData;
+        })
+        .catch(() => {
+          /* best-effort cleanup */
+        });
+      release();
+    }
+  }
+
   shouldRetryWithClearCache(
-    response: RenderResponse | ModuleRenderResponse | FileExtractResponse,
+    response:
+      | RenderResponse
+      | ModuleRenderResponse
+      | FileExtractResponse
+      | FileRenderResponse,
   ): readonly string[] | undefined {
     let renderError = response.error?.error;
     if (!renderError) {

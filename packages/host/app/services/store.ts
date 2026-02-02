@@ -49,6 +49,9 @@ import {
   type CardErrorJSONAPI,
   type CardErrorsJSONAPI,
   type ErrorEntry,
+  type FileMetaResource,
+  type LooseLinkableResource,
+  type LooseSingleResourceDocument,
   type StoreReadType,
 } from '@cardstack/runtime-common';
 
@@ -1032,6 +1035,19 @@ export default class StoreService extends Service implements StoreInterface {
       instance ? (instance.id ?? instance[localIdSymbol]) : instanceOrError.id!, // we checked above to make sure errors have id's
       instanceOrError as CardDef | CardErrorJSONAPI,
     );
+  }
+
+  protected async createFileMetaFromSerialized(
+    resource: LooseLinkableResource<FileMetaResource>,
+    doc: LooseSingleResourceDocument<FileMetaResource>,
+    relativeTo: URL | undefined,
+  ): Promise<FileDef> {
+    let api = await this.cardService.getAPI();
+    let instance = (await api.createFromSerialized(resource, doc, relativeTo, {
+      store: this.store,
+    })) as unknown as FileDef;
+    this.setIdentityContext(instance, 'file-meta');
+    return instance;
   }
 
   private async startAutoSaving(instanceOrError: CardDef | CardErrorJSONAPI) {
