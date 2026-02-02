@@ -11,7 +11,15 @@ import { cn, not } from '@cardstack/boxel-ui/helpers';
 import { Download } from '@cardstack/boxel-ui/icons';
 
 import RealmDropdown from '@cardstack/host/components/realm-dropdown';
+
+// These were inline but caused the template to have spurious Glint errors
+import {
+  extractFilename,
+  fallbackDownloadName,
+} from '@cardstack/host/lib/download-realm';
+
 import RestoreScrollPosition from '@cardstack/host/modifiers/restore-scroll-position';
+
 import type { FileView } from '@cardstack/host/services/operator-mode-state-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
@@ -105,29 +113,6 @@ export default class CodeSubmodeLeftPanelToggle extends Component<Signature> {
     return downloadURL.href;
   }
 
-  private get fallbackDownloadName() {
-    let realmURL = new URL(this.args.realmURL);
-    let segments = realmURL.pathname.split('/').filter(Boolean);
-    let base =
-      segments.length >= 2
-        ? segments.slice(-2).join('-')
-        : (segments[0] ?? realmURL.hostname);
-    base = base.replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '');
-    return base.length > 0 ? `${base}.zip` : 'realm.zip';
-  }
-
-  private extractFilename(contentDisposition: string | null): string | null {
-    if (!contentDisposition) {
-      return null;
-    }
-    let utf8Match = contentDisposition.match(/filename\\*=UTF-8''([^;]+)/i);
-    if (utf8Match?.[1]) {
-      return decodeURIComponent(utf8Match[1]);
-    }
-    let match = contentDisposition.match(/filename=\"?([^\";]+)\"?/i);
-    return match?.[1] ?? null;
-  }
-
   private triggerDownload(blob: Blob, filename: string) {
     let blobUrl = URL.createObjectURL(blob);
     let downloadLink = document.createElement('a');
@@ -153,8 +138,8 @@ export default class CodeSubmodeLeftPanelToggle extends Component<Signature> {
       }
       let blob = await response.blob();
       let filename =
-        this.extractFilename(response.headers.get('content-disposition')) ??
-        this.fallbackDownloadName;
+        extractFilename(response.headers.get('content-disposition')) ??
+        fallbackDownloadName(new URL(this.args.realmURL));
       this.triggerDownload(blob, filename);
     } catch (error) {
       console.error('Error downloading realm:', error);
