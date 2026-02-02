@@ -64,4 +64,26 @@ module(`server-endpoints/${basename(__filename)}`, function (hooks) {
 
     assert.strictEqual(response.status, 401, 'returns unauthorized');
   });
+
+  test('returns 400 when realm is missing from query params', async function (assert) {
+    let response = await context.request2.get('/_download-realm');
+
+    assert.strictEqual(response.status, 400, 'returns bad request');
+    assert.ok(
+      response.body.errors?.[0]?.includes('single realm must be specified'),
+      'explains required realm parameter',
+    );
+  });
+
+  test('returns 404 when realm is not registered on the server', async function (assert) {
+    let response = await context.request2
+      .get('/_download-realm')
+      .query({ realm: 'http://127.0.0.1:4445/missing/' });
+
+    assert.strictEqual(response.status, 404, 'returns not found');
+    assert.ok(
+      response.body.errors?.[0]?.includes('Realm not found'),
+      'explains missing realm',
+    );
+  });
 });
