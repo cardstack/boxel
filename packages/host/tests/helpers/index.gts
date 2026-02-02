@@ -500,7 +500,8 @@ interface RealmContents {
     | LooseSingleCardDocument
     | RealmInfo
     | Record<string, unknown>
-    | string;
+    | string
+    | Uint8Array;
 }
 
 export const SYSTEM_CARD_FIXTURE_CONTENTS: RealmContents = {
