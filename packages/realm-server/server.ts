@@ -466,6 +466,9 @@ export class RealmServer {
           assetsURL: this.assetsURL.href,
           realmServerURL: this.serverURL.href,
           cardSizeLimitBytes: this.cardSizeLimitBytes,
+          publishedRealmDomainOverrides:
+            process.env.PUBLISHED_REALM_DOMAIN_OVERRIDES ??
+            config.publishedRealmDomainOverrides,
         });
         return `${g1}${encodeURIComponent(JSON.stringify(config))}${g3}`;
       },
@@ -496,17 +499,19 @@ export class RealmServer {
     }
 
     let rows = await query(this.dbAdapter, [
-      `SELECT head_html, realm_version FROM boxel_index_working WHERE head_html IS NOT NULL AND type =`,
-      param('instance'),
-      'AND',
+      `
+        SELECT head_html, realm_version
+        FROM boxel_index
+        WHERE type = 'instance'
+         AND head_html IS NOT NULL
+         AND is_deleted IS NOT TRUE
+         AND
+      `,
       ...this.indexCandidateExpressions(candidates),
-      `UNION ALL
-       SELECT head_html, realm_version FROM boxel_index WHERE head_html IS NOT NULL AND type =`,
-      param('instance'),
-      'AND',
-      ...this.indexCandidateExpressions(candidates),
-      `ORDER BY realm_version DESC
-       LIMIT 1`,
+      `
+        ORDER BY realm_version DESC
+        LIMIT 1
+      `,
     ]);
 
     this.headLog.debug('Head query result for %s', cardURL.href, rows);
@@ -540,17 +545,19 @@ export class RealmServer {
     }
 
     let rows = await query(this.dbAdapter, [
-      `SELECT isolated_html, realm_version FROM boxel_index_working WHERE isolated_html IS NOT NULL AND type =`,
-      param('instance'),
-      'AND',
+      `
+        SELECT isolated_html, realm_version
+        FROM boxel_index
+        WHERE isolated_html IS NOT NULL
+          AND type = 'instance'
+          AND is_deleted IS NOT TRUE
+          AND
+        `,
       ...this.indexCandidateExpressions(candidates),
-      `UNION ALL
-       SELECT isolated_html, realm_version FROM boxel_index WHERE isolated_html IS NOT NULL AND type =`,
-      param('instance'),
-      'AND',
-      ...this.indexCandidateExpressions(candidates),
-      `ORDER BY realm_version DESC
-       LIMIT 1`,
+      `
+        ORDER BY realm_version DESC
+        LIMIT 1
+      `,
     ]);
 
     this.isolatedLog.debug('Isolated query result for %s', cardURL.href, rows);
@@ -621,14 +628,14 @@ export class RealmServer {
   private injectHeadHTML(indexHTML: string, headHTML: string): string {
     return indexHTML.replace(
       /(<meta[^>]+data-boxel-head-start[^>]*>)([\s\S]*?)(<meta[^>]+data-boxel-head-end[^>]*>)/,
-      `$1\n${headHTML}\n$3`,
+      (_match, start, _content, end) => `${start}\n${headHTML}\n${end}`,
     );
   }
 
   private injectIsolatedHTML(indexHTML: string, isolatedHTML: string): string {
     return indexHTML.replace(
       /(<script[^>]+id="boxel-isolated-start"[^>]*>\s*<\/script>)([\s\S]*?)(<script[^>]+id="boxel-isolated-end"[^>]*>\s*<\/script>)/,
-      `$1\n${isolatedHTML}\n$3`,
+      (_match, start, _content, end) => `${start}\n${isolatedHTML}\n${end}`,
     );
   }
 

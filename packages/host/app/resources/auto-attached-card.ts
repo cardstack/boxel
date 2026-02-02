@@ -23,7 +23,7 @@ interface Args {
   named: {
     submode: Submode;
     moduleInspectorPanel: string | undefined; // 'preview' | 'spec' | 'schema' | 'card-renderer'
-    autoAttachedFileUrl: string | undefined;
+    autoAttachedFileUrls: string[] | undefined;
     playgroundPanelCardId: string | undefined;
     activeSpecId: string | null | undefined; // selected spec card ID from SpecPanelService
     topMostStackItems: StackItem[];
@@ -45,7 +45,7 @@ export class AutoAttachment extends Resource<Args> {
     const {
       submode,
       moduleInspectorPanel,
-      autoAttachedFileUrl,
+      autoAttachedFileUrls,
       playgroundPanelCardId,
       activeSpecId,
       topMostStackItems,
@@ -55,7 +55,7 @@ export class AutoAttachment extends Resource<Args> {
     this.calculateAutoAttachments.perform(
       submode,
       moduleInspectorPanel,
-      autoAttachedFileUrl,
+      autoAttachedFileUrls,
       playgroundPanelCardId,
       activeSpecId,
       topMostStackItems,
@@ -68,7 +68,7 @@ export class AutoAttachment extends Resource<Args> {
     async (
       submode: Submode,
       moduleInspectorPanel: string | undefined,
-      autoAttachedFileUrl: string | undefined,
+      autoAttachedFileUrls: string[] | undefined,
       playgroundPanelCardId: string | undefined,
       activeSpecId: string | null | undefined,
       topMostStackItems: StackItem[],
@@ -97,8 +97,11 @@ export class AutoAttachment extends Resource<Args> {
           this.cardIds.add(item.id);
         }
       } else if (submode === Submodes.Code) {
-        let cardId = autoAttachedFileUrl?.endsWith('.json')
-          ? autoAttachedFileUrl?.replace(/\.json$/, '')
+        let cardFileUrl = autoAttachedFileUrls?.find((url) =>
+          url.endsWith('.json'),
+        );
+        let cardId = cardFileUrl
+          ? cardFileUrl.replace(/\.json$/, '')
           : undefined;
         if (
           cardId &&
@@ -133,7 +136,7 @@ export function getAutoAttachment(
   args: {
     submode: () => Submode;
     moduleInspectorPanel: () => string | undefined;
-    autoAttachedFileUrl: () => string | undefined;
+    autoAttachedFileUrls: () => string[] | undefined;
     playgroundPanelCardId: () => string | undefined;
     activeSpecId: () => string | null | undefined;
     topMostStackItems: () => StackItem[];
@@ -145,7 +148,7 @@ export function getAutoAttachment(
     named: {
       submode: args.submode(),
       moduleInspectorPanel: args.moduleInspectorPanel(),
-      autoAttachedFileUrl: args.autoAttachedFileUrl(),
+      autoAttachedFileUrls: args.autoAttachedFileUrls(),
       playgroundPanelCardId: args.playgroundPanelCardId(),
       activeSpecId: args.activeSpecId(),
       topMostStackItems: args.topMostStackItems(),

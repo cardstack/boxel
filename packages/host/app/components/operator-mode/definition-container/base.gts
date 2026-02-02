@@ -209,6 +209,7 @@ const Active: TemplateOnlyComponent<ActiveSignature> = <template>
       justify-content: flex-start;
       gap: var(--boxel-sp-xxxs);
       align-self: flex-start;
+      text-transform: capitalize;
     }
     .info-footer {
       color: var(--boxel-450);

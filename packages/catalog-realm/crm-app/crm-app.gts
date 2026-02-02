@@ -664,6 +664,8 @@ class CrmAppTemplate extends Component<typeof CrmApp> {
             @searchFilter={{this.searchFilter}}
             @taskFilter={{this.taskFilter}}
             @sort={{this.taskSort}}
+            @createCard={{@createCard}}
+            @saveCard={{@saveCard}}
           />
         {{else if this.query}}
           {{#if (eq this.selectedView 'card')}}
