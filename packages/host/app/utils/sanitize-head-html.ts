@@ -1,6 +1,25 @@
-const ALLOWED_HEAD_TAGS = new Set(['meta', 'title']);
+const ALLOWED_HEAD_TAGS = new Set(['meta', 'title', 'link']);
 const ALLOWED_META_ATTRS = new Set(['name', 'property', 'content']);
 const ALLOWED_TITLE_ATTRS = new Set<string>([]);
+const ALLOWED_LINK_ATTRS = new Set([
+  'rel',
+  'href',
+  'type',
+  'sizes',
+  'media',
+  'crossorigin',
+  'integrity',
+  'referrerpolicy',
+  'fetchpriority',
+]);
+const SAFE_LINK_REL_TOKENS = new Set([
+  'canonical',
+  'icon',
+  'shortcut',
+  'apple-touch-icon',
+  'mask-icon',
+  'manifest',
+]);
 
 // Allowlist head markup before inserting into the document to reduce XSS risk.
 export function sanitizeHeadHTML(
@@ -37,6 +56,8 @@ function sanitizeHeadNode(node: Node, doc: Document): Node | null {
       return sanitizeMetaElement(element, doc);
     case 'title':
       return sanitizeTitleElement(element, doc);
+    case 'link':
+      return sanitizeLinkElement(element, doc);
     default:
       return null;
   }
@@ -56,6 +77,50 @@ function sanitizeTitleElement(
   copyAllowedAttributes(element, title, ALLOWED_TITLE_ATTRS);
   title.textContent = element.textContent ?? '';
   return title;
+}
+
+function sanitizeLinkElement(
+  element: Element,
+  doc: Document,
+): HTMLLinkElement | null {
+  let relValue = element.getAttribute('rel') ?? '';
+  if (!isSafeLinkRel(relValue)) {
+    return null;
+  }
+
+  let href = element.getAttribute('href');
+  if (href && !isSafeLinkHref(href, doc)) {
+    return null;
+  }
+
+  let link = doc.createElement('link');
+  copyAllowedAttributes(element, link, ALLOWED_LINK_ATTRS);
+  return link;
+}
+
+function isSafeLinkRel(relValue: string): boolean {
+  let tokens = relValue
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(Boolean);
+  if (tokens.length === 0) {
+    return false;
+  }
+  return tokens.every((token) => SAFE_LINK_REL_TOKENS.has(token));
+}
+
+function isSafeLinkHref(href: string, doc: Document): boolean {
+  let trimmed = href.trim();
+  if (!trimmed) {
+    return false;
+  }
+
+  try {
+    let url = new URL(trimmed, doc.baseURI ?? window.location.origin);
+    return url.protocol === 'http:' || url.protocol === 'https:';
+  } catch {
+    return false;
+  }
 }
 
 function copyAllowedAttributes(
