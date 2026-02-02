@@ -380,7 +380,7 @@ export class RealmServer {
       let headFragments: string[] = [];
 
       if (headHTML != null) {
-        headFragments.push(headHTML);
+        headFragments.push(this.ensureSingleTitle(headHTML));
       }
 
       if (scopedCSS != null) {
@@ -613,6 +613,13 @@ export class RealmServer {
         ]),
       ) as Expression,
     ) as Expression;
+  }
+
+  private ensureSingleTitle(headHTML: string): string {
+    if (/<title[\s>]/.test(headHTML)) {
+      return headHTML;
+    }
+    return `<title>Boxel</title>\n${headHTML}`;
   }
 
   private truncateLogLines(value: string, maxLines = 3): string {

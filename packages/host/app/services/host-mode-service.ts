@@ -3,6 +3,18 @@ import Service, { service } from '@ember/service';
 import window from 'ember-window-mock';
 
 import config from '@cardstack/host/config/environment';
+
+const DEFAULT_HEAD_HTML = '<title>Boxel</title>';
+
+function headContainsTitle(html: string): boolean {
+  return /<title[\s>]/.test(html);
+}
+
+function ensureSingleTitle(headHTML: string): string {
+  return headContainsTitle(headHTML)
+    ? headHTML
+    : `${DEFAULT_HEAD_HTML}\n${headHTML}`;
+}
 import type HostModeStateService from '@cardstack/host/services/host-mode-state-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
@@ -192,7 +204,9 @@ export default class HostModeService extends Service {
       return;
     }
 
-    this.replaceHeadTemplate(headHTML);
+    this.replaceHeadTemplate(
+      headHTML !== null ? ensureSingleTitle(headHTML) : null,
+    );
   }
 
   private async fetchPrerenderedHead(
@@ -270,11 +284,11 @@ export default class HostModeService extends Service {
       node = next;
     }
 
-    if (!headHTML || headHTML.trim().length === 0) {
-      return;
-    }
-
-    let fragment = document.createRange().createContextualFragment(headHTML);
+    let contentToInsert =
+      !headHTML || headHTML.trim().length === 0 ? DEFAULT_HEAD_HTML : headHTML;
+    let fragment = document
+      .createRange()
+      .createContextualFragment(contentToInsert);
     parent.insertBefore(fragment, end);
   }
 
