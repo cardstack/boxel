@@ -20,11 +20,11 @@ import {
 
 import RestoreScrollPosition from '@cardstack/host/modifiers/restore-scroll-position';
 
+import type NetworkService from '@cardstack/host/services/network';
 import type { FileView } from '@cardstack/host/services/operator-mode-state-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-import type RecentFilesService from '@cardstack/host/services/recent-files-service';
-import type NetworkService from '@cardstack/host/services/network';
 import type RealmService from '@cardstack/host/services/realm';
+import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 
 import InnerContainer from './inner-container';
 import ToggleButton from './toggle-button';
