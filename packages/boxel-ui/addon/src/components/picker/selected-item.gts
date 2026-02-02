@@ -7,6 +7,7 @@ import Component from '@glimmer/component';
 import type { Select } from 'ember-power-select/components/power-select';
 
 import IconX from '../../icons/icon-x.gts';
+import SelectAll from '../../icons/select-all.gts';
 import type { Icon } from '../../icons/types.ts';
 import IconButton from '../icon-button/index.gts';
 import Pill from '../pill/index.gts';
@@ -33,7 +34,10 @@ export interface PickerSelectedItemSignature {
 
 export default class PickerSelectedItem extends Component<PickerSelectedItemSignature> {
   get icon() {
-    return this.args.option.icon;
+    return (
+      this.args.option.icon ??
+      (this.args.option.type === 'select-all' ? SelectAll : undefined)
+    );
   }
 
   get text() {
@@ -134,17 +138,18 @@ export default class PickerSelectedItem extends Component<PickerSelectedItemSign
       .picker-selected-item__pill {
         display: flex;
         align-items: center;
-        gap: var(--boxel-sp-2xs);
-        padding: 1px 8px 3px 4px;
+        gap: var(--boxel-sp-4xs);
+        padding: var(--boxel-sp-4xs);
         border-radius: var(--boxel-border-radius-xs);
         border: solid 1px var(--boxel-300);
         background-color: var(--boxel-300);
+        min-height: 30px;
       }
 
       .picker-selected-item__icon {
-        width: 16px;
-        height: 16px;
-        min-width: 16px;
+        width: 18px;
+        height: 18px;
+        min-width: 18px;
         flex-shrink: 0;
         display: flex;
         align-items: center;
@@ -160,8 +165,8 @@ export default class PickerSelectedItem extends Component<PickerSelectedItemSign
       }
 
       .picker-selected-item__icon-component {
-        width: 16px;
-        height: 16px;
+        width: 18px;
+        height: 18px;
         flex-shrink: 0;
       }
 

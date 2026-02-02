@@ -237,15 +237,20 @@ export default class Picker extends Component<PickerSignature> {
       {{/if}}
     </BoxelMultiSelectBasic>
 
-    <style scoped>
+    {{! template-lint-disable require-scoped-style }}
+    <style>
       .picker-divider {
         height: 1px;
         background-color: var(--boxel-200);
         margin: var(--boxel-sp-2xs) 0;
+        width: 100%;
       }
 
       .boxel-picker__dropdown .ember-power-select-option {
         padding: 0 var(--boxel-sp-2xs);
+        display: flex;
+        flex-direction: column;
+        gap: 0;
       }
       .boxel-picker__dropdown .ember-power-select-option[aria-current='true'],
       .boxel-picker__dropdown .ember-power-select-option[aria-selected='true'] {

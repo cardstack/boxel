@@ -5,6 +5,7 @@ import type { Select } from 'ember-power-select/components/power-select';
 
 import { cn } from '../../helpers.ts';
 import CheckMark from '../../icons/check-mark.gts';
+import SelectAll from '../../icons/select-all.gts';
 import type { Icon } from '../../icons/types.ts';
 import type { PickerOption } from './index.gts';
 
@@ -20,7 +21,10 @@ export interface OptionRowSignature {
 
 export default class PickerOptionRow extends Component<OptionRowSignature> {
   get icon() {
-    return this.args.option.icon;
+    return (
+      this.args.option.icon ??
+      (this.args.option.type === 'select-all' ? SelectAll : undefined)
+    );
   }
 
   get label() {
@@ -65,7 +69,7 @@ export default class PickerOptionRow extends Component<OptionRowSignature> {
             picker-option-row__check-icon--selected=@isSelected
           }}
         >
-          <CheckMark width='12' height='12' />
+          <CheckMark width='16' height='16' />
         </span>
       </div>
       {{#if this.icon}}
@@ -103,9 +107,11 @@ export default class PickerOptionRow extends Component<OptionRowSignature> {
       .picker-option-row {
         display: flex;
         align-items: center;
-        gap: var(--boxel-sp-xs);
+        gap: var(--boxel-sp-3xs);
         cursor: pointer;
-        padding: var(--boxel-sp-2xs);
+        padding: var(--boxel-sp-3xs);
+        border-radius: var(--boxel-border-radius-xs);
+        width: 100%;
       }
 
       .picker-option-row:hover {
@@ -115,8 +121,8 @@ export default class PickerOptionRow extends Component<OptionRowSignature> {
       }
 
       .picker-option-row__checkbox {
-        width: 14px;
-        height: 14px;
+        width: 16px;
+        height: 16px;
         border: 1px solid var(--boxel-500);
         border-radius: 3px;
         display: flex;
