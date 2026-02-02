@@ -67,6 +67,24 @@ export interface FileExtractResponse {
   mismatch?: true;
 }
 
+export interface FileRenderResponse {
+  isolatedHTML: string | null;
+  headHTML: string | null;
+  atomHTML: string | null;
+  embeddedHTML: Record<string, string> | null;
+  fittedHTML: Record<string, string> | null;
+  iconHTML: string | null;
+  error?: RenderError;
+}
+
+export type FileRenderArgs = ModulePrerenderArgs & {
+  fileData: {
+    resource: FileMetaResource;
+    fileDefCodeRef: ResolvedCodeRef;
+  };
+  types: string[];
+};
+
 export interface ModuleDefinitionResult {
   type: 'definition';
   moduleURL: string; // node resolution w/o extension
@@ -101,6 +119,7 @@ export interface Prerenderer {
   prerenderCard(args: PrerenderCardArgs): Promise<RenderResponse>;
   prerenderModule(args: ModulePrerenderArgs): Promise<ModuleRenderResponse>;
   prerenderFileExtract(args: ModulePrerenderArgs): Promise<FileExtractResponse>;
+  prerenderFileRender(args: FileRenderArgs): Promise<FileRenderResponse>;
 }
 
 export type RealmAction = 'read' | 'write' | 'realm-owner' | 'assume-user';
