@@ -8,7 +8,7 @@ export function extractFilename(
   if (utf8Match?.[1]) {
     return decodeURIComponent(utf8Match[1]);
   }
-  let match = contentDisposition.match(/filename=\"?([^\";]+)\"?/i);
+  let match = contentDisposition.match(/filename="?([^";]+)"?/i);
   return match?.[1] ?? null;
 }
 
