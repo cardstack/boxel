@@ -333,7 +333,7 @@ export async function startServer({
       };
       realmServer.on('message', onMessage);
     }),
-    new Promise<true>((r) => setTimeout(() => r(true), 30000_000)),
+    new Promise<true>((r) => setTimeout(() => r(true), 60_000)),
   ]);
   if (timeout) {
     throw new Error(
