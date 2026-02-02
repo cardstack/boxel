@@ -257,11 +257,8 @@ export default class RenderRoute extends Route<Model> {
         throw new Error('fileRender mode requires __boxelFileRenderData');
       }
       let { resource } = fileRenderData;
-      let cardApi = await this.loaderService.loader.import<typeof CardAPI>(
-        `${baseRealm.url}card-api`,
-      );
       let doc = { data: resource };
-      let instance = (await cardApi.createFromSerialized(
+      let instance = (await this.store.addFileMeta(
         resource,
         doc,
         resource.id ? new URL(resource.id) : undefined,
