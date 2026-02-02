@@ -7,6 +7,7 @@ import type HostModeStateService from '@cardstack/host/services/host-mode-state-
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
+import { sanitizeHeadHTML } from '@cardstack/host/utils/sanitize-head-html';
 
 interface PublishedRealmMetadata {
   urlString: string;
@@ -274,7 +275,11 @@ export default class HostModeService extends Service {
       return;
     }
 
-    let fragment = document.createRange().createContextualFragment(headHTML);
+    let fragment = sanitizeHeadHTML(headHTML, document);
+    if (!fragment) {
+      return;
+    }
+
     parent.insertBefore(fragment, end);
   }
 
