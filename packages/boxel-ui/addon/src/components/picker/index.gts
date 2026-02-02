@@ -51,6 +51,10 @@ export default class Picker extends Component<PickerSignature> {
     scheduleOnce('afterRender', this, this.ensureDefaultSelection);
   }
 
+  get renderInPlace() {
+    return this.args.renderInPlace ?? true;
+  }
+
   private validateSelectAllOption() {
     const hasSelectAll = this.args.options.some(
       (option) => option.type === 'select-all',
@@ -214,8 +218,8 @@ export default class Picker extends Component<PickerSignature> {
       @onChange={{this.onChange}}
       @placeholder={{@placeholder}}
       @disabled={{@disabled}}
-      @renderInPlace={{@renderInPlace}}
-      @matchTriggerWidth={{@matchTriggerWidth}}
+      @renderInPlace={{this.renderInPlace}}
+      @matchTriggerWidth={{true}}
       @searchEnabled={{false}}
       @closeOnSelect={{false}}
       @eventType='click'
@@ -256,6 +260,10 @@ export default class Picker extends Component<PickerSignature> {
       .boxel-picker__dropdown .ember-power-select-option[aria-selected='true'] {
         background-color: transparent;
         color: var(--boxel-dark);
+      }
+
+      .fitted-template :deep(.ember-basic-dropdown-content-wormhole-origin) {
+        position: absolute;
       }
     </style>
   </template>
