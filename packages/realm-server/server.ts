@@ -21,6 +21,7 @@ import {
   fetchSessionRoom,
   REALM_SERVER_REALM,
   userInitiatedPriority,
+  hasExtension,
 } from '@cardstack/runtime-common';
 import {
   ensureDirSync,
@@ -297,6 +298,10 @@ export class RealmServer {
       }
     } else {
       if (includesVndMimeType) {
+        return next();
+      }
+
+      if (hasExtension(requestURL.pathname)) {
         return next();
       }
 
