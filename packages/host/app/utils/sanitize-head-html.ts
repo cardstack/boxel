@@ -58,9 +58,9 @@ function sanitizeHeadNode(node: Node, doc: Document): Node | null {
       return sanitizeTitleElement(element, doc);
     case 'link':
       return sanitizeLinkElement(element, doc);
-    default:
-      return null;
   }
+
+  return null;
 }
 
 function sanitizeMetaElement(element: Element, doc: Document): HTMLMetaElement {
