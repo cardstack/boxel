@@ -432,7 +432,6 @@ export class RealmServer {
 
     ctxt.body = responseHTML;
     return;
-    return;
   };
 
   private findRealmForRequestURL(requestURL: URL): Realm | undefined {

@@ -358,9 +358,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
     let realmURL = new URL('http://127.0.0.1:4444/');
     let request: SuperTest<Test>;
 
-    function onRealmSetup(args: {
-      request: SuperTest<Test>;
-    }) {
+    function onRealmSetup(args: { request: SuperTest<Test> }) {
       request = args.request;
     }
 
