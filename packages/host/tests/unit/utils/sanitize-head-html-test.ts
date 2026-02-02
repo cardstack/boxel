@@ -7,6 +7,7 @@ module('Unit | Utils | sanitizeHeadHTML', function () {
     let input = `
       <title data-test-title="ok" onclick="alert(1)">Hello</title>
       <meta name="description" content="desc" charset="utf-8" onload="bad">
+      <meta property="og:title" content="OG Title">
       <link rel="canonical" href="https://example.com" onclick="bad" data-test-link="ok">
       <link rel="preload" href="https://example.com/app.js" as="script">
       <link rel="icon" href="javascript:alert(1)">
@@ -24,17 +25,17 @@ module('Unit | Utils | sanitizeHeadHTML', function () {
     }
 
     let elements = Array.from(container.children);
-    assert.strictEqual(elements.length, 3, 'only allowed elements remain');
+    assert.strictEqual(elements.length, 4, 'only allowed elements remain');
 
     let title = container.querySelector('title');
     assert.ok(title, 'title is preserved');
     assert.strictEqual(title?.textContent, 'Hello');
     assert.false(
-      title?.hasAttribute('data-test-title') ?? false,
+      Boolean(title?.hasAttribute('data-test-title')),
       'data attributes are removed',
     );
     assert.false(
-      title?.hasAttribute('onclick') ?? false,
+      Boolean(title?.hasAttribute('onclick')),
       'event handler attributes are removed',
     );
 
@@ -42,23 +43,27 @@ module('Unit | Utils | sanitizeHeadHTML', function () {
     assert.ok(meta, 'meta element is preserved');
     assert.strictEqual(meta?.getAttribute('content'), 'desc');
     assert.false(
-      meta?.hasAttribute('charset') ?? false,
+      Boolean(meta?.hasAttribute('charset')),
       'disallowed meta attributes are removed',
     );
     assert.false(
-      meta?.hasAttribute('onload') ?? false,
+      Boolean(meta?.hasAttribute('onload')),
       'disallowed meta attributes are removed',
     );
+
+    let ogMeta = container.querySelector('meta[property="og:title"]');
+    assert.ok(ogMeta, 'meta property is preserved');
+    assert.strictEqual(ogMeta?.getAttribute('content'), 'OG Title');
 
     let link = container.querySelector('link[rel="canonical"]');
     assert.ok(link, 'safe link rel is preserved');
     assert.strictEqual(link?.getAttribute('href'), 'https://example.com');
     assert.false(
-      link?.hasAttribute('data-test-link') ?? false,
+      Boolean(link?.hasAttribute('data-test-link')),
       'data attributes are removed',
     );
     assert.false(
-      link?.hasAttribute('onclick') ?? false,
+      Boolean(link?.hasAttribute('onclick')),
       'disallowed link attributes are removed',
     );
     assert.strictEqual(
@@ -149,10 +154,6 @@ module('Unit | Utils | sanitizeHeadHTML', function () {
       '<link rel="icon" href="java&#x73;cript:alert(1)">',
       document,
     );
-    assert.strictEqual(
-      fragment,
-      null,
-      'encoded javascript href is rejected',
-    );
+    assert.strictEqual(fragment, null, 'encoded javascript href is rejected');
   });
 });

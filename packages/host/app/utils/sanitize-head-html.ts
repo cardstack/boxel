@@ -21,11 +21,14 @@ const SAFE_LINK_REL_TOKENS = new Set([
   'manifest',
 ]);
 
-// Allowlist head markup before inserting into the document to reduce XSS risk.
 export function sanitizeHeadHTML(
   headHTML: string,
   doc: Document,
 ): DocumentFragment | null {
+  if (typeof headHTML !== 'string') {
+    return null;
+  }
+
   let template = doc.createElement('template');
   template.innerHTML = headHTML;
 
@@ -40,6 +43,8 @@ export function sanitizeHeadHTML(
   return fragment.childNodes.length > 0 ? fragment : null;
 }
 
+// Reject any non-element nodes (text nodes, comments, document fragments, etc.)
+// so that only explicit, allowlisted <head> elements are inserted
 function sanitizeHeadNode(node: Node, doc: Document): Node | null {
   if (node.nodeType !== Node.ELEMENT_NODE) {
     return null;
@@ -99,10 +104,7 @@ function sanitizeLinkElement(
 }
 
 function isSafeLinkRel(relValue: string): boolean {
-  let tokens = relValue
-    .toLowerCase()
-    .split(/\s+/)
-    .filter(Boolean);
+  let tokens = relValue.toLowerCase().split(/\s+/).filter(Boolean);
   if (tokens.length === 0) {
     return false;
   }
