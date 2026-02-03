@@ -329,4 +329,62 @@ module('Acceptance | png image def', function (hooks) {
       'file meta uses PNG def',
     );
   });
+
+  test('authenticated images display in browser', async function (assert) {
+    let url = makeFileURL('sample.png');
+
+    // First extract the file to get the resource
+    await visit(
+      fileExtractPath(url, {
+        fileExtract: true,
+        fileDefCodeRef: pngDefCodeRef(),
+      }),
+    );
+    let result = await captureFileExtractResult('ready');
+    assert.ok(result.resource, 'extraction produced a resource');
+
+    // Set up file render data and visit the HTML render route
+    (globalThis as any).__boxelFileRenderData = {
+      resource: result.resource,
+      fileDefCodeRef: pngDefCodeRef(),
+    };
+
+    await visit(
+      fileRenderPath(url, {
+        fileRender: true,
+        fileDefCodeRef: pngDefCodeRef(),
+      }),
+    );
+
+    let { status } = await capturePrerenderResult('innerHTML');
+    assert.strictEqual(status, 'ready', 'render completed');
+
+    let img = document.querySelector(
+      '[data-prerender] .image-isolated__img',
+    ) as HTMLImageElement | null;
+    assert.ok(img, 'img element is rendered');
+    assert.ok(
+      img?.getAttribute('src')?.includes('sample.png'),
+      'img src references the PNG file',
+    );
+
+    // Wait for the image to actually load and verify it has non-zero dimensions.
+    // This assertion will fail if the browser cannot fetch the image (e.g., 401 errors
+    // due to missing authentication cookies). Once cookie-based auth is implemented,
+    // this test should pass.
+    await waitUntil(() => img!.naturalWidth > 0, {
+      timeout: 5000,
+      timeoutMessage:
+        'Image failed to load - naturalWidth remained 0. This likely indicates an authentication issue preventing the browser from fetching the image.',
+    });
+
+    assert.ok(
+      img!.naturalWidth > 0,
+      'Image loaded successfully with non-zero width',
+    );
+    assert.ok(
+      img!.naturalHeight > 0,
+      'Image loaded successfully with non-zero height',
+    );
+  });
 });
