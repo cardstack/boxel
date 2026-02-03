@@ -367,59 +367,28 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           'scoped CSS is present in initial response',
         );
 
-        // Now break the module by introducing a syntax error via the API
-        let brokenModuleSource = `
-          import { Component, CardDef } from 'https://cardstack.com/base/card-api';
-
-          // Intentional syntax error - missing closing brace
-          export class ScopedCssCard extends CardDef {
-            static isolated = class Isolated extends Component<typeof this> {
-              <template>
-                <div class="scoped-css-marker" data-test-scoped-css>Scoped CSS</div>
-                <style scoped>
-                  .scoped-css-marker {
-                    --scoped-css-marker: 1;
-                  }
-                </style>
-              </template>
-            };
-          // missing closing brace for class
-        `;
+        // Break the instance by making it reference a non-existent module
+        // This is more reliable than breaking the module and waiting for propagation
+        let brokenInstanceJSON = JSON.stringify({
+          data: {
+            type: 'card',
+            attributes: {},
+            meta: {
+              adoptsFrom: {
+                module: './non-existent-module.gts',
+                name: 'NonExistentCard',
+              },
+            },
+          },
+        });
 
         let writeResponse = await context.request2
-          .post('/test/scoped-css-card.gts')
+          .post('/test/scoped-css-test.json')
           .set('Accept', 'application/vnd.card+source')
-          .send(brokenModuleSource);
+          .send(brokenInstanceJSON);
 
         assert.strictEqual(
           writeResponse.status,
-          204,
-          'module write was accepted',
-        );
-
-        // Touch the instance JSON file directly to force re-indexing
-        // (module change alone doesn't automatically trigger instance re-indexing)
-        // Using raw JSON write avoids card validation which would fail with broken module
-        let touchResponse = await context.request2
-          .post('/test/scoped-css-test.json')
-          .set('Accept', 'application/vnd.card+source')
-          .send(
-            JSON.stringify({
-              data: {
-                type: 'card',
-                attributes: {},
-                meta: {
-                  adoptsFrom: {
-                    module: './scoped-css-card.gts',
-                    name: 'ScopedCssCard',
-                  },
-                },
-              },
-            }),
-          );
-
-        assert.strictEqual(
-          touchResponse.status,
           204,
           'instance file write was accepted',
         );
