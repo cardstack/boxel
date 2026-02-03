@@ -234,7 +234,10 @@ export default class SearchSheet extends Component<Signature> {
       id='search-sheet'
       class='search-sheet {{this.sheetSize}}'
       data-test-search-sheet={{@mode}}
-      {{onClickOutside @onBlur exceptSelector='.add-card-to-neighbor-stack,.boxel-picker__dropdown,.picker-before-options-with-search,.picker-option-row'}}
+      {{onClickOutside
+        @onBlur
+        exceptSelector='.add-card-to-neighbor-stack,.boxel-picker__dropdown,.picker-before-options-with-search,.picker-option-row'
+      }}
     >
       {{#if (eq @mode 'closed')}}
         <IconButton

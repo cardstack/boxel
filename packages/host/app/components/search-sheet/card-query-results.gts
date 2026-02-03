@@ -80,41 +80,41 @@ export default class CardQueryResults extends Component<Signature> {
         @format='fitted'
         @realms={{this.realms}}
       >
-      <:loading>
-        <ResultsSection
-          @label={{concat 'Searching for “' @searchKey '”'}}
-          @isCompact={{@isCompact}}
-        />
-      </:loading>
-      <:response as |cards|>
-        {{#if (or (gt cards.length 0) this.isSearchKeyNotEmpty)}}
+        <:loading>
           <ResultsSection
-            @label={{concat
-              cards.length
-              ' Result'
-              (if (eq cards.length 1) '' 's')
-              ' for “'
-              @searchKey
-              '”'
-            }}
+            @label={{concat 'Searching for “' @searchKey '”'}}
             @isCompact={{@isCompact}}
-            as |SearchResult|
-          >
-            {{#each cards as |card i|}}
-              {{#unless card.isError}}
-                <SearchResult
-                  @component={{card.component}}
-                  @cardId={{card.url}}
-                  @isCompact={{@isCompact}}
-                  {{on 'click' (fn @handleCardSelect card.url)}}
-                  data-test-search-sheet-search-result={{i}}
-                />
-              {{/unless}}
-            {{/each}}
-          </ResultsSection>
-        {{/if}}
-      </:response>
-    </PrerenderedCardSearch>
+          />
+        </:loading>
+        <:response as |cards|>
+          {{#if (or (gt cards.length 0) this.isSearchKeyNotEmpty)}}
+            <ResultsSection
+              @label={{concat
+                cards.length
+                ' Result'
+                (if (eq cards.length 1) '' 's')
+                ' for “'
+                @searchKey
+                '”'
+              }}
+              @isCompact={{@isCompact}}
+              as |SearchResult|
+            >
+              {{#each cards as |card i|}}
+                {{#unless card.isError}}
+                  <SearchResult
+                    @component={{card.component}}
+                    @cardId={{card.url}}
+                    @isCompact={{@isCompact}}
+                    {{on 'click' (fn @handleCardSelect card.url)}}
+                    data-test-search-sheet-search-result={{i}}
+                  />
+                {{/unless}}
+              {{/each}}
+            </ResultsSection>
+          {{/if}}
+        </:response>
+      </PrerenderedCardSearch>
     </div>
   </template>
 }

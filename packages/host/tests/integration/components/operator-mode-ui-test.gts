@@ -7,7 +7,6 @@ import {
   triggerEvent,
   triggerKeyEvent,
   blur,
-  settled,
 } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
@@ -448,12 +447,9 @@ module('Integration | operator-mode | ui', function (hooks) {
       const testRealmOption = Array.from(options).find((el) =>
         el.textContent?.includes(ctx.realmName),
       );
-      assert.ok(
-        testRealmOption,
-        `option for "${ctx.realmName}" should exist`,
-      );
+      assert.ok(testRealmOption, `option for "${ctx.realmName}" should exist`);
       await click(testRealmOption as HTMLElement);
-      await settled();
+
       await waitUntil(
         () => {
           const attr = document
@@ -476,9 +472,7 @@ module('Integration | operator-mode | ui', function (hooks) {
       'search should be scoped to at least one realm',
     );
     assert.ok(
-      finalRealms.some(
-        (r) => r.includes('test-realm') && r.includes('/test'),
-      ),
+      finalRealms.some((r) => r.includes('test-realm') && r.includes('/test')),
       'realms should include the test realm (filter is applied)',
     );
   });
