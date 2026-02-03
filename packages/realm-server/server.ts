@@ -479,9 +479,38 @@ export class RealmServer {
   // Check if the URL corresponds to an indexed card instance.
   // This is used to distinguish card URLs from module URLs when deciding
   // whether to serve HTML for published realms.
+  //
+  // IMPORTANT: Card instances have their file_alias set to the URL without
+  // the .json extension. This means an instance at /foo/bar.json has
+  // file_alias /foo/bar. When a module request comes in for /foo/bar (no
+  // extension), we must check if it's actually a module before assuming it's
+  // an instance. Modules take precedence over instance aliases.
   private async isIndexedCardInstance(cardURL: URL): Promise<boolean> {
     let candidates = this.indexURLCandidates(cardURL);
     if (candidates.length === 0) {
+      return false;
+    }
+
+    // First check if there's a module at this URL - modules take precedence
+    // over instance aliases. This handles the case where:
+    // - Module: /foo/bar.gts (file_alias: /foo/bar)
+    // - Instance: /foo/bar.json (file_alias: /foo/bar)
+    // A request for /foo/bar should serve the module, not HTML for the instance.
+    let moduleRows = await query(this.dbAdapter, [
+      `
+        SELECT 1
+        FROM boxel_index
+        WHERE type = 'module'
+          AND is_deleted IS NOT TRUE
+          AND
+        `,
+      ...this.indexCandidateExpressions(candidates),
+      `
+        LIMIT 1
+      `,
+    ]);
+
+    if (moduleRows.length > 0) {
       return false;
     }
 
