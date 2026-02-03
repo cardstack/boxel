@@ -1381,7 +1381,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         'recent file count is correct',
       );
 
-      let { data: results } = await realm.realmIndexQueryEngine.search({
+      let { data: results } = await realm.realmIndexQueryEngine.searchCards({
         filter: { type: { module: `${testRealmURL}person`, name: 'Person' } },
       });
       assert.strictEqual(results.length, 0);
@@ -1407,7 +1407,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         .dom('[data-option-index]')
         .exists({ count: 1 }, 'new card shows up in instance chooser dropdown');
 
-      ({ data: results } = await realm.realmIndexQueryEngine.search({
+      ({ data: results } = await realm.realmIndexQueryEngine.searchCards({
         filter: { type: { module: `${testRealmURL}person`, name: 'Person' } },
       }));
       assert.strictEqual(results.length, 1);
@@ -1417,7 +1417,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
     test('does not autogenerate card instance if one exists in the realm but is not in recent cards', async function (assert) {
       removeRecentFiles();
       const cardId = `${testRealmURL}Person/pet-mango`;
-      let { data: results } = await realm.realmIndexQueryEngine.search({
+      let { data: results } = await realm.realmIndexQueryEngine.searchCards({
         filter: { type: { module: `${testRealmURL}person`, name: 'Pet' } },
       });
       assert.strictEqual(results.length, 1);
@@ -1436,7 +1436,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       assert.dom('[data-option-index]').exists({ count: 1 });
       assert.dom('[data-option-index="0"]').containsText('Mango');
 
-      ({ data: results } = await realm.realmIndexQueryEngine.search({
+      ({ data: results } = await realm.realmIndexQueryEngine.searchCards({
         filter: { type: { module: `${testRealmURL}person`, name: 'Pet' } },
       }));
       assert.strictEqual(results.length, 1);
@@ -1445,7 +1445,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
 
     test('can request AI assistant to fill in sample data', async function (assert) {
       const prompt = `Fill in sample data for the attached card instance.`;
-      const menuItem = 'Fill in sample data with AI';
+      const menuItem = 'Fill in Sample Data with AI';
       const commandMessage = {
         from: 'testuser',
         message: prompt,

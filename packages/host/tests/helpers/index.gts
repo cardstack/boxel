@@ -821,12 +821,12 @@ async function setupTestRealm({
 
   // TODO this is the only use of Realm.maybeHandle left--can we get rid of it?
   virtualNetwork.mount(realm.maybeHandle);
-  if (startMatrix) {
-    await mockMatrixUtils.start();
-  }
   await adapter.ready;
   await worker.run();
   await realm.start();
+  if (startMatrix) {
+    await mockMatrixUtils.start();
+  }
 
   let realmServer = getService('realm-server');
   if (!realmServer.availableRealmURLs.includes(realmURL)) {

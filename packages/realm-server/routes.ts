@@ -42,6 +42,12 @@ import handleSearchPrerendered from './handlers/handle-search-prerendered';
 import handleRealmInfo from './handlers/handle-realm-info';
 import { multiRealmAuthorization } from './middleware/multi-realm-authorization';
 import handleGitHubPRRequest from './handlers/handle-github-pr';
+import handleDownloadRealm from './handlers/handle-download-realm';
+import {
+  handleBotRegistrationRequest,
+  handleBotRegistrationsRequest,
+  handleBotUnregistrationRequest,
+} from './handlers/handle-bot-registration';
 import { buildCreatePrerenderAuth } from './prerender/auth';
 
 export type CreateRoutesArgs = {
@@ -234,6 +240,22 @@ export function createRoutes(args: CreateRoutesArgs) {
     '/_github-pr',
     jwtMiddleware(args.realmSecretSeed),
     handleGitHubPRRequest(args),
+  );
+  router.get('/_download-realm', handleDownloadRealm(args));
+  router.post(
+    '/_bot-registration',
+    jwtMiddleware(args.realmSecretSeed),
+    handleBotRegistrationRequest(args),
+  );
+  router.get(
+    '/_bot-registrations',
+    jwtMiddleware(args.realmSecretSeed),
+    handleBotRegistrationsRequest(args),
+  );
+  router.delete(
+    '/_bot-registration',
+    jwtMiddleware(args.realmSecretSeed),
+    handleBotUnregistrationRequest(args),
   );
 
   return router.routes();

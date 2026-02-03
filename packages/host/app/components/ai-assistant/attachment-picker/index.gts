@@ -23,7 +23,7 @@ interface Signature {
   Args: {
     autoAttachedCardIds?: TrackedSet<string>;
     cardIdsToAttach: string[] | undefined;
-    autoAttachedFile?: FileDef;
+    autoAttachedFiles?: FileDef[];
     filesToAttach: FileDef[] | undefined;
     chooseCard: (cardId: string) => void;
     removeCard: (cardId: string) => void;
@@ -37,7 +37,7 @@ interface Signature {
         typeof AttachedItems,
         | 'items'
         | 'autoAttachedCardIds'
-        | 'autoAttachedFile'
+        | 'autoAttachedFiles'
         | 'removeCard'
         | 'removeFile'
         | 'chooseCard'
@@ -59,7 +59,7 @@ export default class AiAssistantAttachmentPicker extends Component<Signature> {
         isLoaded=this.isLoaded
         items=this.items
         autoAttachedCardIds=@autoAttachedCardIds
-        autoAttachedFile=@autoAttachedFile
+        autoAttachedFiles=@autoAttachedFiles
         removeCard=@removeCard
         removeFile=@removeFile
         chooseCard=@chooseCard
@@ -109,18 +109,20 @@ export default class AiAssistantAttachmentPicker extends Component<Signature> {
   private get files() {
     let files = this.args.filesToAttach ?? [];
 
-    if (!this.args.autoAttachedFile) {
+    let autoAttachedFiles = this.args.autoAttachedFiles ?? [];
+
+    if (autoAttachedFiles.length === 0) {
       return files;
     }
 
-    if (
-      files.some(
-        (file) => file.sourceUrl === this.args.autoAttachedFile?.sourceUrl,
-      )
-    ) {
+    let autoFilesToPrepend = autoAttachedFiles.filter(
+      (file) => !files.some((item) => item.sourceUrl === file.sourceUrl),
+    );
+
+    if (autoFilesToPrepend.length === 0) {
       return files;
     }
 
-    return [this.args.autoAttachedFile, ...files];
+    return [...autoFilesToPrepend, ...files];
   }
 }

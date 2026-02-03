@@ -42,6 +42,7 @@ export const realmURL = Symbol.for('cardstack-realm-url');
 export const relativeTo = Symbol.for('cardstack-relative-to');
 
 export const aiBotUsername = 'aibot';
+export const botRunnerUsername = 'bot-runner';
 
 export const CardContextName = 'card-context';
 export const CardCrudFunctionsContextName = 'card-crud-functions-context';
@@ -84,5 +85,46 @@ export const DEFAULT_PERMISSIONS = Object.freeze([
   'write',
   'realm-owner',
 ]) as RealmPermissions['user'];
+
+// Workaround to override published realm URLs to support custom domains. Remove in CS-9061.
+export const PUBLISHED_REALM_DOMAIN_OVERRIDES: Record<string, string> = {};
+
+export function parsePublishedRealmDomainOverrides(
+  rawOverrides: string | undefined,
+): Record<string, string> {
+  if (!rawOverrides) {
+    return {};
+  }
+
+  try {
+    let parsed = JSON.parse(rawOverrides);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return {};
+    }
+
+    let overrides: Record<string, string> = {};
+    for (let [key, value] of Object.entries(parsed)) {
+      if (typeof key === 'string' && typeof value === 'string') {
+        overrides[key] = value;
+      }
+    }
+    return overrides;
+  } catch {
+    return {};
+  }
+}
+
+export function getPublishedRealmDomainOverrides(
+  rawOverrides?: string | Record<string, string>,
+): Record<string, string> {
+  let envOverrides =
+    typeof rawOverrides === 'string'
+      ? parsePublishedRealmDomainOverrides(rawOverrides)
+      : (rawOverrides ?? {});
+  return {
+    ...PUBLISHED_REALM_DOMAIN_OVERRIDES,
+    ...envOverrides,
+  };
+}
 
 export const PUBLISHED_DIRECTORY_NAME = '_published';

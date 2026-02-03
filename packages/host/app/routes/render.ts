@@ -249,6 +249,47 @@ export default class RenderRoute extends Route<Model> {
       this.currentTransition = undefined;
       return model;
     }
+    if (parsedOptions.fileRender) {
+      let fileRenderData = (globalThis as any).__boxelFileRenderData as
+        | { resource: any; fileDefCodeRef: { module: string; name: string } }
+        | undefined;
+      if (!fileRenderData) {
+        throw new Error('fileRender mode requires __boxelFileRenderData');
+      }
+      let { resource } = fileRenderData;
+      let doc = { data: resource };
+      let instance = (await this.store.addFileMeta(
+        resource,
+        doc,
+        resource.id ? new URL(resource.id) : undefined,
+      )) as unknown as CardDef;
+
+      let state = new TrackedMap<string, unknown>();
+      state.set('status', 'ready');
+      let readyDeferred = new Deferred<void>();
+      readyDeferred.fulfill();
+      let model: Model = {
+        instance,
+        nonce,
+        cardId: id,
+        renderOptions: parsedOptions,
+        get status(): RenderStatus {
+          return (state.get('status') as RenderStatus) ?? 'loading';
+        },
+        get ready(): boolean {
+          return (state.get('status') as RenderStatus) === 'ready';
+        },
+        readyPromise: readyDeferred.promise,
+      };
+      this.#modelStates.set(model, {
+        state,
+        readyDeferred,
+        isReady: true,
+      });
+      (globalThis as any).__renderModel = model;
+      this.currentTransition = undefined;
+      return model;
+    }
     // This is for host tests
     (globalThis as any).__renderModel = undefined;
 

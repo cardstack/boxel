@@ -10,8 +10,8 @@
     "attributes": {
       "name": "Health & Wellness",
       "cardInfo": {
-        "notes": null,
         "name": null,
+        "notes": null,
         "summary": "Fitness tracking, nutrition planning, medical records, mental health support, and wellness goal management.",
         "cardThumbnailURL": null
       }

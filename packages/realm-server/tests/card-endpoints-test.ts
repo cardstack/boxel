@@ -786,26 +786,6 @@ module(basename(__filename), function () {
           );
         });
       });
-
-      module('public readable realm with file', function (hooks) {
-        setupPermissionedRealmAtURL(hooks, realmURL, {
-          permissions: {
-            '*': ['read'],
-          },
-          fileSystem: {
-            'greeting.txt': 'hello',
-          },
-          onRealmSetup,
-        });
-
-        test('does not return card JSON for file urls', async function (assert) {
-          let response = await request
-            .get('/greeting.txt')
-            .set('Accept', 'application/vnd.card+json');
-
-          assert.strictEqual(response.status, 404, 'HTTP 404 status');
-        });
-      });
     });
 
     module('card POST request', function (_hooks) {
@@ -1859,73 +1839,7 @@ module(basename(__filename), function () {
       });
     });
 
-    module('card POST request | file URL', function (_hooks) {
-      module('public writable realm with file', function (hooks) {
-        setupPermissionedRealmAtURL(hooks, realmURL, {
-          permissions: {
-            '*': ['read', 'write'],
-          },
-          fileSystem: {
-            'greeting.txt': 'hello',
-          },
-          onRealmSetup,
-        });
-
-        test('rejects POST to a file URL', async function (assert) {
-          let response = await request
-            .post('/greeting.txt')
-            .send({
-              data: {
-                type: 'card',
-                attributes: {},
-                meta: {
-                  adoptsFrom: {
-                    module: 'https://cardstack.com/base/card-api',
-                    name: 'CardDef',
-                  },
-                },
-              },
-            })
-            .set('Accept', 'application/vnd.card+json');
-
-          assert.strictEqual(response.status, 405, 'HTTP 405 status');
-        });
-      });
-    });
-
     module('card PATCH request', function (_hooks) {
-      module('public writable realm with file', function (hooks) {
-        setupPermissionedRealmAtURL(hooks, realmURL, {
-          permissions: {
-            '*': ['read', 'write'],
-          },
-          fileSystem: {
-            'greeting.txt': 'hello',
-          },
-          onRealmSetup,
-        });
-
-        test('rejects PATCH to a file URL', async function (assert) {
-          let response = await request
-            .patch('/greeting.txt')
-            .send({
-              data: {
-                type: 'card',
-                attributes: {},
-                meta: {
-                  adoptsFrom: {
-                    module: 'https://cardstack.com/base/card-api',
-                    name: 'CardDef',
-                  },
-                },
-              },
-            })
-            .set('Accept', 'application/vnd.card+json');
-
-          assert.strictEqual(response.status, 405, 'HTTP 405 status');
-        });
-      });
-
       module('public writable realm', function (hooks) {
         setupPermissionedRealmAtURL(hooks, realmURL, {
           permissions: {
@@ -3463,61 +3377,7 @@ module(basename(__filename), function () {
       });
     });
 
-    module('card PUT request | file URL', function (_hooks) {
-      module('public writable realm with file', function (hooks) {
-        setupPermissionedRealmAtURL(hooks, realmURL, {
-          permissions: {
-            '*': ['read', 'write'],
-          },
-          fileSystem: {
-            'greeting.txt': 'hello',
-          },
-          onRealmSetup,
-        });
-
-        test('rejects PUT to a file URL', async function (assert) {
-          let response = await request
-            .put('/greeting.txt')
-            .send({
-              data: {
-                type: 'card',
-                attributes: {},
-                meta: {
-                  adoptsFrom: {
-                    module: 'https://cardstack.com/base/card-api',
-                    name: 'CardDef',
-                  },
-                },
-              },
-            })
-            .set('Accept', 'application/vnd.card+json');
-
-          assert.strictEqual(response.status, 405, 'HTTP 405 status');
-        });
-      });
-    });
-
     module('card DELETE request', function (_hooks) {
-      module('public writable realm with file', function (hooks) {
-        setupPermissionedRealmAtURL(hooks, realmURL, {
-          permissions: {
-            '*': ['read', 'write'],
-          },
-          fileSystem: {
-            'greeting.txt': 'hello',
-          },
-          onRealmSetup,
-        });
-
-        test('rejects DELETE to a file URL', async function (assert) {
-          let response = await request
-            .delete('/greeting.txt')
-            .set('Accept', 'application/vnd.card+json');
-
-          assert.strictEqual(response.status, 405, 'HTTP 405 status');
-        });
-      });
-
       module('public writable realm', function (hooks) {
         setupPermissionedRealmAtURL(hooks, realmURL, {
           permissions: {
@@ -3590,7 +3450,7 @@ module(basename(__filename), function () {
           assert.false(existsSync(cardFile), 'card json does not exist');
         });
 
-        test('removes file meta when card is deleted', async function (assert) {
+        test('removes card JSON file meta when card is deleted', async function (assert) {
           // confirm meta.resourceCreatedAt exists prior to deletion
           let initial = await request
             .get('/person-1')
@@ -3667,6 +3527,63 @@ module(basename(__filename), function () {
 
           assert.strictEqual(response.status, 204, 'HTTP 204 status');
         });
+      });
+    });
+
+    module('file URLs', function (hooks) {
+      setupPermissionedRealmAtURL(hooks, realmURL, {
+        permissions: {
+          '*': ['read', 'write'],
+        },
+        fileSystem: {
+          'greeting.txt': 'hello',
+        },
+        onRealmSetup,
+      });
+
+      test('rejects HTTP requests to file URLs', async function (assert) {
+        let response;
+        response = await request
+          .get('/greeting.txt')
+          .set('Accept', 'application/vnd.card+json');
+
+        assert.strictEqual(
+          response.status,
+          415,
+          'rejects GET for a file URL with 415 status',
+        );
+
+        response = await request
+          .patch('/greeting.txt')
+          .send({
+            data: {
+              type: 'card',
+              attributes: {},
+              meta: {
+                adoptsFrom: {
+                  module: 'https://cardstack.com/base/card-api',
+                  name: 'CardDef',
+                },
+              },
+            },
+          })
+          .set('Accept', 'application/vnd.card+json');
+
+        assert.strictEqual(
+          response.status,
+          415,
+          'rejects PATCH to a file URL with 415 status',
+        );
+
+        response = await request
+          .delete('/greeting.txt')
+          .set('Accept', 'application/vnd.card+json');
+
+        assert.strictEqual(
+          response.status,
+          415,
+          'rejects DELETE to a file URL with 415 status',
+        );
       });
     });
   });

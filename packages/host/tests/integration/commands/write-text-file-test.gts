@@ -134,6 +134,97 @@ module('Integration | commands | write-text-file', function (hooks) {
     assert.strictEqual(content, 'Hello with slash!');
   });
 
+  test('useNonConflictingFilename writes to a new file when content exists', async function (assert) {
+    let commandService = getService('command-service');
+    let cardService = getService('card-service');
+    let writeTextFileCommand = new WriteTextFileCommand(
+      commandService.commandContext,
+    );
+    await cardService.saveSource(
+      new URL('test.txt', testRealmURL),
+      'Already here',
+      'create-file',
+    );
+
+    let result = await writeTextFileCommand.execute({
+      path: 'test.txt',
+      content: 'Hello!',
+      realm: testRealmURL,
+      useNonConflictingFilename: true,
+    });
+
+    assert.strictEqual(result.fileUrl, `${testRealmURL}test-1.txt`);
+
+    let originalResponse = await fetch(new URL('test.txt', testRealmURL));
+    let originalContent = await originalResponse.text();
+    assert.strictEqual(originalContent, 'Already here');
+
+    let newResponse = await fetch(new URL('test-1.txt', testRealmURL));
+    let newContent = await newResponse.text();
+    assert.strictEqual(newContent, 'Hello!');
+  });
+
+  test('useNonConflictingFilename reuses an existing blank file', async function (assert) {
+    let commandService = getService('command-service');
+    let cardService = getService('card-service');
+    let writeTextFileCommand = new WriteTextFileCommand(
+      commandService.commandContext,
+    );
+    await cardService.saveSource(
+      new URL('empty.txt', testRealmURL),
+      '',
+      'create-file',
+    );
+
+    let result = await writeTextFileCommand.execute({
+      path: 'empty.txt',
+      content: '',
+      realm: testRealmURL,
+      useNonConflictingFilename: true,
+    });
+
+    assert.strictEqual(result.fileUrl, `${testRealmURL}empty.txt`);
+
+    let { status, content } = await cardService.getSource(
+      new URL('empty.txt', testRealmURL),
+    );
+    assert.strictEqual(status, 200);
+    assert.strictEqual(content, '');
+
+    let nonConflicting = await cardService.getSource(
+      new URL('empty-1.txt', testRealmURL),
+    );
+    assert.strictEqual(nonConflicting.status, 404);
+  });
+
+  test('useNonConflictingFilename writes into an existing blank file when content is provided', async function (assert) {
+    let commandService = getService('command-service');
+    let cardService = getService('card-service');
+    let writeTextFileCommand = new WriteTextFileCommand(
+      commandService.commandContext,
+    );
+    await cardService.saveSource(
+      new URL('empty.txt', testRealmURL),
+      '',
+      'create-file',
+    );
+
+    let result = await writeTextFileCommand.execute({
+      path: 'empty.txt',
+      content: 'Now filled',
+      realm: testRealmURL,
+      useNonConflictingFilename: true,
+    });
+
+    assert.strictEqual(result.fileUrl, `${testRealmURL}empty.txt`);
+
+    let { status, content } = await cardService.getSource(
+      new URL('empty.txt', testRealmURL),
+    );
+    assert.strictEqual(status, 200);
+    assert.strictEqual(content, 'Now filled');
+  });
+
   test('throws an error when an invalid realm is provided', async function (assert) {
     let commandService = getService('command-service');
     let writeTextFileCommand = new WriteTextFileCommand(
@@ -150,6 +241,28 @@ module('Integration | commands | write-text-file', function (hooks) {
       assert.ok(
         error.message.includes('Invalid or unknown realm provided'),
         'Error message should mention invalid realm',
+      );
+    }
+  });
+
+  test('throws when overwrite and useNonConflictingFilename are both true', async function (assert) {
+    let commandService = getService('command-service');
+    let writeTextFileCommand = new WriteTextFileCommand(
+      commandService.commandContext,
+    );
+    try {
+      await writeTextFileCommand.execute({
+        path: 'test.txt',
+        content: 'Hello!',
+        realm: testRealmURL,
+        overwrite: true,
+        useNonConflictingFilename: true,
+      });
+      assert.notOk(true, 'Should have thrown an error');
+    } catch (error: any) {
+      assert.ok(
+        error.message.includes('overwrite and useNonConflictingFilename'),
+        'Error message should mention conflicting flags',
       );
     }
   });

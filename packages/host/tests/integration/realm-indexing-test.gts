@@ -134,7 +134,7 @@ module(`Integration | realm indexing`, function (hooks) {
       },
     });
     let queryEngine = realm.realmIndexQueryEngine;
-    let { data: cards } = await queryEngine.search({});
+    let { data: cards } = await queryEngine.searchCards({});
     assert.deepEqual(cards, [
       {
         id: `${testRealmURL}empty`,
@@ -3026,6 +3026,10 @@ module(`Integration | realm indexing`, function (hooks) {
                 links: {
                   self: `./mango`,
                 },
+                data: {
+                  type: 'card',
+                  id: `${testRealmURL}Friend/mango`,
+                },
               },
             },
             meta: {
@@ -3200,6 +3204,10 @@ module(`Integration | realm indexing`, function (hooks) {
               friend: {
                 links: {
                   self: `./hassan`,
+                },
+                data: {
+                  type: 'card',
+                  id: `${testRealmURL}Friend/hassan`,
                 },
               },
             },
@@ -3589,7 +3597,12 @@ module(`Integration | realm indexing`, function (hooks) {
         'Friends/vanGogh.json': {
           data: {
             attributes: { firstName: 'Van Gogh' },
-            relationships: { 'friends.0': { links: { self: hassanID } } },
+            relationships: {
+              'friends.0': {
+                links: { self: hassanID },
+                data: { type: 'card', id: hassanID },
+              },
+            },
             meta: { adoptsFrom: friendsRef },
           },
         },
@@ -3597,8 +3610,14 @@ module(`Integration | realm indexing`, function (hooks) {
           data: {
             attributes: { firstName: 'Hassan' },
             relationships: {
-              'friends.0': { links: { self: mangoID } },
-              'friends.1': { links: { self: vanGoghID } },
+              'friends.0': {
+                links: { self: mangoID },
+                data: { type: 'card', id: mangoID },
+              },
+              'friends.1': {
+                links: { self: vanGoghID },
+                data: { type: 'card', id: vanGoghID },
+              },
             },
             meta: { adoptsFrom: friendsRef },
           },
@@ -3606,7 +3625,12 @@ module(`Integration | realm indexing`, function (hooks) {
         'Friends/mango.json': {
           data: {
             attributes: { firstName: 'Mango' },
-            relationships: { 'friends.0': { links: { self: hassanID } } },
+            relationships: {
+              'friends.0': {
+                links: { self: hassanID },
+                data: { type: 'card', id: hassanID },
+              },
+            },
             meta: { adoptsFrom: friendsRef },
           },
         },
@@ -4124,6 +4148,7 @@ module(`Integration | realm indexing`, function (hooks) {
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/rectangle-ellipsis.js',
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/trash-2.js',
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/wand.js',
+        'https://cardstack.com/base/-private',
         'https://cardstack.com/base/card-api',
         'https://cardstack.com/base/card-serialization',
         'https://cardstack.com/base/contains-many-component',
@@ -4254,6 +4279,7 @@ module(`Integration | realm indexing`, function (hooks) {
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/toggle-left.js',
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/trash-2.js',
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/wand.js',
+        'https://cardstack.com/base/-private',
         'https://cardstack.com/base/boolean',
         'https://cardstack.com/base/card-api',
         'https://cardstack.com/base/card-serialization',
