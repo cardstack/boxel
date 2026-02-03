@@ -31,6 +31,7 @@
    icon_html TEXT,
    head_html TEXT,
    has_error BOOLEAN DEFAULT false NOT NULL,
+   last_known_good_deps BLOB,
    PRIMARY KEY ( url, realm_url, type ) 
 );
 
@@ -57,6 +58,7 @@
    resource_created_at,
    head_html TEXT,
    has_error BOOLEAN DEFAULT false NOT NULL,
+   last_known_good_deps BLOB,
    PRIMARY KEY ( url, realm_url, type ) 
 );
 
