@@ -397,22 +397,31 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           'module write was accepted',
         );
 
-        // Touch the instance to force re-indexing (module change alone doesn't
-        // automatically trigger instance re-indexing in all cases)
-        let patchResponse = await context.request2
-          .patch('/test/scoped-css-test')
-          .set('Accept', 'application/vnd.card+json')
-          .send({
-            data: {
-              type: 'card',
-              attributes: {},
-            },
-          });
+        // Touch the instance JSON file directly to force re-indexing
+        // (module change alone doesn't automatically trigger instance re-indexing)
+        // Using raw JSON write avoids card validation which would fail with broken module
+        let touchResponse = await context.request2
+          .post('/test/scoped-css-test.json')
+          .set('Accept', 'application/vnd.card+source')
+          .send(
+            JSON.stringify({
+              data: {
+                type: 'card',
+                attributes: {},
+                meta: {
+                  adoptsFrom: {
+                    module: './scoped-css-card.gts',
+                    name: 'ScopedCssCard',
+                  },
+                },
+              },
+            }),
+          );
 
         assert.strictEqual(
-          patchResponse.status,
-          200,
-          'instance patch was accepted',
+          touchResponse.status,
+          204,
+          'instance file write was accepted',
         );
 
         // Wait for the index to reflect the error state
