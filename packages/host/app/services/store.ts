@@ -659,6 +659,12 @@ export default class StoreService extends Service implements StoreInterface {
         searchURL?: string;
         meta?: QueryResultsMeta;
         errors?: ErrorEntry[];
+        queryErrors?: Array<{
+          realm: string;
+          type: string;
+          message: string;
+          status?: number;
+        }>;
       };
     },
   ): SearchResource<T> {

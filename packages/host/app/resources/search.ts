@@ -53,6 +53,12 @@ export interface Args<T extends CardDef | FileDef = CardDef> {
           realms?: string[];
           meta?: QueryResultsMeta;
           errors?: ErrorEntry[];
+          queryErrors?: Array<{
+            realm: string;
+            type: string;
+            message: string;
+            status?: number;
+          }>;
         }
       | undefined;
     owner: Owner;
@@ -117,7 +123,8 @@ export class SearchResource<
     if (seed && !this.#seedApplied) {
       this.loaded = this.applySeed.perform(seed);
       this.#seedApplied = true;
-      if (seed.searchURL) {
+      let hasQueryErrors = seed.queryErrors && seed.queryErrors.length > 0;
+      if (seed.searchURL && !hasQueryErrors) {
         let { query: seedQuery } = parseSearchURL(seed.searchURL);
         this.#previousQueryString = buildQueryParamValue(
           normalizeQueryForSignature(seedQuery),
@@ -376,6 +383,12 @@ export function getSearch<T extends CardDef | FileDef = CardDef>(
           searchURL?: string;
           meta?: QueryResultsMeta;
           errors?: ErrorEntry[];
+          queryErrors?: Array<{
+            realm: string;
+            type: string;
+            message: string;
+            status?: number;
+          }>;
         }
       | undefined;
   },
