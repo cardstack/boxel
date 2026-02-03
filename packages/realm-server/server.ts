@@ -39,6 +39,7 @@ import {
 import { registerUser } from './synapse';
 import convertAcceptHeaderQueryParam from './middleware/convert-accept-header-qp';
 import convertAuthHeaderQueryParam from './middleware/convert-auth-header-qp';
+import cookieAuthMiddleware from './middleware/cookie-auth';
 import { NodeAdapter } from './node-realm';
 import { resolve, join } from 'path';
 import merge from 'lodash/merge';
@@ -175,7 +176,8 @@ export class RealmServer {
       .use(ecsMetadata)
       .use(
         cors({
-          origin: '*',
+          origin: (ctx) => ctx.request.headers.origin || '*',
+          credentials: true,
           allowHeaders:
             'Authorization, Content-Type, If-Match, If-None-Match, X-Requested-With, X-Boxel-Client-Request-Id, X-Boxel-Assume-User, X-HTTP-Method-Override, X-Boxel-Disable-Module-Cache, X-Filename',
           allowMethods: 'GET,HEAD,PUT,POST,DELETE,PATCH,OPTIONS,QUERY',
@@ -200,6 +202,7 @@ export class RealmServer {
 
         await next();
       })
+      .use(cookieAuthMiddleware)
       .use(convertAcceptHeaderQueryParam)
       .use(convertAuthHeaderQueryParam)
       .use(methodOverrideSupport)

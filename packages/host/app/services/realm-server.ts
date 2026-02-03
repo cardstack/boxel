@@ -212,6 +212,7 @@ export default class RealmServerService extends Service {
     await this.login();
     let response = await this.network.fetch(`${this.url.href}_realm-auth`, {
       method: 'POST',
+      credentials: 'include', // Store returned cookies for authenticated image loading
       headers: {
         Accept: SupportedMimeType.JSONAPI,
         'Content-Type': 'application/json',
