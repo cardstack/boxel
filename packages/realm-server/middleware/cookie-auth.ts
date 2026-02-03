@@ -1,6 +1,9 @@
 import type { Context, Next } from 'koa';
 import { findAuthCookieForPath } from '../utils/auth-cookie';
 
+// State key for injected authorization header - used by fetchRequestFromContext
+export const INJECTED_AUTH_HEADER_STATE = 'injectedAuthorizationHeader';
+
 /**
  * Middleware that converts auth cookies to Authorization headers
  * ONLY for GET and HEAD requests (read-only operations)
@@ -33,10 +36,13 @@ const cookieAuthMiddleware = async (
   let token = findAuthCookieForPath(cookieHeader, ctx.request.path);
 
   if (token) {
-    // Inject the token as an Authorization header for downstream middleware
-    // We need to set it on both ctx.request.headers (Koa) and ctx.req.headers (Node.js)
-    // because fetchRequestFromContext uses ctx.req.headers when building the Request
     let authHeader = `Bearer ${token}`;
+    // Store in state for reliable passing to fetchRequestFromContext
+    // This is more reliable than mutating ctx.req.headers which may not persist
+    // in all Node.js environments
+    (ctx.state as Record<string, unknown>)[INJECTED_AUTH_HEADER_STATE] =
+      authHeader;
+    // Also set on headers for any middleware that reads directly
     ctx.request.headers.authorization = authHeader;
     ctx.req.headers.authorization = authHeader;
   }

@@ -181,8 +181,8 @@ module(basename(__filename), function () {
     });
 
     test('GET request with valid auth cookie succeeds', async function (assert) {
-      // Create a JWT for the user
-      let token = createJWT(testRealm, userId, ['read']);
+      // Create a JWT for the user (must include all user's permissions to pass realm validation)
+      let token = createJWT(testRealm, userId, ['read', 'write']);
 
       // Create the Cookie header (name=value format)
       let cookieName = getAuthCookieName(testRealmHref);
@@ -251,8 +251,8 @@ module(basename(__filename), function () {
     });
 
     test('Authorization header takes precedence over cookie', async function (assert) {
-      // Create a valid token for cookie
-      let cookieToken = createJWT(testRealm, userId, ['read']);
+      // Create a valid token for cookie (must include all user's permissions)
+      let cookieToken = createJWT(testRealm, userId, ['read', 'write']);
       let cookieName = getAuthCookieName(testRealmHref);
       let cookieHeader = `${cookieName}=${encodeURIComponent(cookieToken)}`;
 
@@ -272,8 +272,8 @@ module(basename(__filename), function () {
     });
 
     test('HEAD request with valid auth cookie succeeds', async function (assert) {
-      // Create a JWT for the user
-      let token = createJWT(testRealm, userId, ['read']);
+      // Create a JWT for the user (must include all user's permissions)
+      let token = createJWT(testRealm, userId, ['read', 'write']);
 
       // Create the cookie header
       let cookieName = getAuthCookieName(testRealmHref);
