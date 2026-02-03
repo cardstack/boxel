@@ -397,6 +397,24 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           'module write was accepted',
         );
 
+        // Touch the instance to force re-indexing (module change alone doesn't
+        // automatically trigger instance re-indexing in all cases)
+        let patchResponse = await context.request2
+          .patch('/test/scoped-css-test')
+          .set('Accept', 'application/vnd.card+json')
+          .send({
+            data: {
+              type: 'card',
+              attributes: {},
+            },
+          });
+
+        assert.strictEqual(
+          patchResponse.status,
+          200,
+          'instance patch was accepted',
+        );
+
         // Wait for the index to reflect the error state
         await waitUntil(
           async () => {
