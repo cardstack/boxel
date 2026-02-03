@@ -34,7 +34,11 @@ const cookieAuthMiddleware = async (
 
   if (token) {
     // Inject the token as an Authorization header for downstream middleware
-    ctx.request.headers.authorization = `Bearer ${token}`;
+    // We need to set it on both ctx.request.headers (Koa) and ctx.req.headers (Node.js)
+    // because fetchRequestFromContext uses ctx.req.headers when building the Request
+    let authHeader = `Bearer ${token}`;
+    ctx.request.headers.authorization = authHeader;
+    ctx.req.headers.authorization = authHeader;
   }
 
   await next();
