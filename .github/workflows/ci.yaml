@@ -23,6 +23,7 @@ jobs:
       boxel: ${{ steps.filter.outputs.boxel }}
       ai-bot: ${{ steps.filter.outputs.ai-bot }}
       bot-runner: ${{ steps.filter.outputs.bot-runner }}
+      eslint-plugin-boxel: ${{ steps.filter.outputs.eslint-plugin-boxel }}
       postgres-migrations: ${{ steps.filter.outputs.postgres-migrations }}
       boxel-icons: ${{ steps.filter.outputs.boxel-icons }}
       boxel-motion: ${{ steps.filter.outputs.boxel-motion }}
@@ -67,6 +68,9 @@ jobs:
               - *shared
               - 'packages/bot-runner/**'
               - 'packages/postgres/**'
+            eslint-plugin-boxel:
+              - *shared
+              - 'packages/eslint-plugin-boxel/**'
             postgres-migrations:
               - 'packages/postgres/migrations/**'
             boxel-icons:
@@ -161,6 +165,21 @@ jobs:
       - name: Bot Runner test suite
         run: pnpm test
         working-directory: packages/bot-runner
+
+  eslint-plugin-boxel-test:
+    name: ESLint Plugin Boxel Tests
+    needs: change-check
+    if: needs.change-check.outputs.eslint-plugin-boxel == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: eslint-plugin-boxel-test-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
+      - uses: ./.github/actions/init
+      - name: ESLint Plugin Boxel test suite
+        run: pnpm test
+        working-directory: packages/eslint-plugin-boxel
 
   postgres-migration-test:
     name: Postgres Migration Test

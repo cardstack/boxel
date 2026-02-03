@@ -32,15 +32,12 @@ const HostModeStack: TemplateOnlyComponent<Signature> = <template>
       background-color: rgba(0, 0, 0, 0.35);
       background-position: center;
       background-size: cover;
-      padding-top: var(--boxel-sp-xxl);
-      padding-inline: var(--boxel-sp-xxl);
-      padding-bottom: var(--boxel-sp-xxl);
+      padding: 0;
       position: absolute;
       top: 0;
       left: 0;
       right: 0;
       bottom: 0;
-      transition: padding-top var(--boxel-transition);
     }
 
     .inner {
@@ -51,6 +48,17 @@ const HostModeStack: TemplateOnlyComponent<Signature> = <template>
       margin: 0 auto;
       border-bottom-left-radius: var(--boxel-border-radius);
       border-bottom-right-radius: var(--boxel-border-radius);
+    }
+
+    @media screen {
+      .inner {
+        overflow: auto;
+      }
+      /* .inner will handle overflow in host mode stack */
+      .host-mode-stack :deep(.host-mode-card, .card) {
+        overflow: hidden;
+        min-height: 80cqh;
+      }
     }
   </style>
 </template>;

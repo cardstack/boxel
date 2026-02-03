@@ -94,6 +94,7 @@ export default class HostModeCard extends Component<Signature> {
         padding: var(--host-mode-card-padding);
         border-radius: var(--host-mode-card-border-radius, 20px);
         flex: 1;
+        z-index: 0;
         overflow: auto;
       }
 

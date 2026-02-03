@@ -525,8 +525,10 @@ export default class SubmodeLayout extends Component<Signature> {
         --submode-bar-item-border-radius: var(--boxel-border-radius);
         --boxel-icon-button-width: var(--container-button-size);
         --boxel-icon-button-height: var(--container-button-size);
+        position: relative;
         display: flex;
         height: 100%;
+        z-index: 0;
       }
 
       .submode-layout > .boxel-panel-group {
@@ -651,6 +653,12 @@ export default class SubmodeLayout extends Component<Signature> {
       :deep(.open-search-field) {
         box-shadow: var(--submode-bar-item-box-shadow);
         outline: var(--submode-bar-item-outline);
+      }
+
+      @media print {
+        .submode-layout-top-bar {
+          display: none;
+        }
       }
     </style>
   </template>
