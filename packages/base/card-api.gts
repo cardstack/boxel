@@ -367,7 +367,7 @@ export async function flushLogs() {
   await logger.flush();
 }
 
-export interface StoreSearchResource<T extends CardDef = CardDef> {
+export interface StoreSearchResource<T extends CardDef | FileDef = CardDef> {
   readonly instances: T[];
   readonly instancesByRealm: { realm: string; cards: T[] }[];
   readonly isLoading: boolean;
@@ -384,7 +384,7 @@ export type GetSearchResourceFuncOpts = {
     realms?: string[];
   };
 };
-export type GetSearchResourceFunc<T extends CardDef = CardDef> = (
+export type GetSearchResourceFunc<T extends CardDef | FileDef = CardDef> = (
   parent: object,
   getQuery: () => Query | undefined,
   getRealms?: () => string[] | undefined,

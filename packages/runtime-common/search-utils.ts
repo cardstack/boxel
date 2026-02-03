@@ -6,7 +6,7 @@ import {
   type PrerenderedHtmlFormat,
 } from './prerendered-html-format';
 import type {
-  CardCollectionDocument,
+  LinkableCollectionDocument,
   PrerenderedCardCollectionDocument,
 } from './document-types';
 import { SupportedMimeType } from './router';
@@ -253,13 +253,13 @@ export function parsePrerenderedSearchRequestFromPayload(payload: unknown): {
 }
 
 export function combineSearchResults(
-  docs: CardCollectionDocument[],
-): CardCollectionDocument {
-  let combined: CardCollectionDocument = {
+  docs: LinkableCollectionDocument[],
+): LinkableCollectionDocument {
+  let combined: LinkableCollectionDocument = {
     data: [],
     meta: { page: { total: 0 } },
   };
-  let included: NonNullable<CardCollectionDocument['included']> = [];
+  let included: NonNullable<LinkableCollectionDocument['included']> = [];
   let includedById = new Set<string>();
 
   for (let doc of docs) {
@@ -313,14 +313,14 @@ export function combinePrerenderedSearchResults(
 }
 
 type SearchableRealm = {
-  search: (query: Query) => Promise<CardCollectionDocument>;
+  search: (query: Query) => Promise<LinkableCollectionDocument>;
   url?: string;
 };
 
 export async function searchRealms(
   realms: Array<SearchableRealm | null | undefined>,
   query: Query,
-): Promise<CardCollectionDocument> {
+): Promise<LinkableCollectionDocument> {
   let realmEntries = realms
     .filter((realm): realm is SearchableRealm => Boolean(realm))
     .map((realm) => ({
