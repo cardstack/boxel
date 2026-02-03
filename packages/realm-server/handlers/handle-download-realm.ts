@@ -81,7 +81,9 @@ export default function handleDownloadRealm({
     }
 
     let publishedRealmURLs = await getPublishedRealmURLs(dbAdapter, [realmURL]);
-    let authorization = ctxt.req.headers['authorization'];
+    // Support token via query param for streaming downloads (browser navigates directly)
+    let authorization =
+      ctxt.req.headers['authorization'] ?? url.searchParams.get('token');
     let readableRealms: Set<string>;
     if (!authorization) {
       let publicPermissions = await fetchUserPermissions(dbAdapter, {

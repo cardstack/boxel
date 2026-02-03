@@ -13,14 +13,10 @@ import { Download } from '@cardstack/boxel-ui/icons';
 import RealmDropdown from '@cardstack/host/components/realm-dropdown';
 
 // These were inline but caused the template to have spurious Glint errors
-import {
-  extractFilename,
-  fallbackDownloadName,
-} from '@cardstack/host/lib/download-realm';
+import { fallbackDownloadName } from '@cardstack/host/lib/download-realm';
 
 import RestoreScrollPosition from '@cardstack/host/modifiers/restore-scroll-position';
 
-import type NetworkService from '@cardstack/host/services/network';
 import type { FileView } from '@cardstack/host/services/operator-mode-state-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
@@ -47,7 +43,6 @@ interface Signature {
 export default class CodeSubmodeLeftPanelToggle extends Component<Signature> {
   @service declare operatorModeStateService: OperatorModeStateService;
   @service declare private recentFilesService: RecentFilesService;
-  @service declare private network: NetworkService;
   @service declare private realm: RealmService;
 
   private notifyFileBrowserIsVisible: (() => void) | undefined;
@@ -110,40 +105,23 @@ export default class CodeSubmodeLeftPanelToggle extends Component<Signature> {
   private get downloadRealmURL() {
     let downloadURL = new URL('/_download-realm', this.args.realmURL);
     downloadURL.searchParams.set('realm', this.args.realmURL);
+    // Include token for authenticated streaming download (browser handles natively)
+    let token = this.realm.token(this.args.realmURL);
+    if (token) {
+      downloadURL.searchParams.set('token', token);
+    }
     return downloadURL.href;
   }
 
-  private triggerDownload(blob: Blob, filename: string) {
-    let blobUrl = URL.createObjectURL(blob);
+  downloadRealm = (event: Event) => {
+    event.preventDefault();
+    // Use an anchor element to trigger native browser download (streams without loading into memory)
     let downloadLink = document.createElement('a');
-    downloadLink.href = blobUrl;
-    downloadLink.download = filename;
+    downloadLink.href = this.downloadRealmURL;
+    downloadLink.download = fallbackDownloadName(new URL(this.args.realmURL));
     document.body.appendChild(downloadLink);
     downloadLink.click();
     document.body.removeChild(downloadLink);
-    URL.revokeObjectURL(blobUrl);
-  }
-
-  downloadRealm = async (event: Event) => {
-    event.preventDefault();
-    try {
-      let token = this.realm.token(this.args.realmURL);
-      let response = await this.network.authedFetch(this.downloadRealmURL, {
-        headers: token ? { Authorization: token } : {},
-      });
-      if (!response.ok) {
-        throw new Error(
-          `Failed to download realm: ${response.status} ${response.statusText}`,
-        );
-      }
-      let blob = await response.blob();
-      let filename =
-        extractFilename(response.headers.get('content-disposition')) ??
-        fallbackDownloadName(new URL(this.args.realmURL));
-      this.triggerDownload(blob, filename);
-    } catch (error) {
-      console.error('Error downloading realm:', error);
-    }
   };
 
   <template>

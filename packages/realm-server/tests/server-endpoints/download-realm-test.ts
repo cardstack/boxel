@@ -1,6 +1,8 @@
 import { module, test } from 'qunit';
 import { basename } from 'path';
 import { setupServerEndpointsTest, testRealm2URL } from './helpers';
+import { realmSecretSeed } from '../helpers';
+import { createJWT } from '../../utils/jwt';
 import type { Response } from 'superagent';
 
 function binaryParser(
@@ -85,5 +87,53 @@ module(`server-endpoints/${basename(__filename)}`, function (hooks) {
       response.body.errors?.[0]?.includes('Realm not found'),
       'explains missing realm',
     );
+  });
+
+  test('accepts auth token via query param for streaming downloads', async function (assert) {
+    // Remove public permissions to require authentication
+    await context.dbAdapter.execute(
+      `DELETE FROM realm_user_permissions WHERE realm_url = '${testRealm2URL.href}' AND username = '*'`,
+    );
+
+    // Add read permission for the test user
+    let testUser = '@test:localhost';
+    await context.dbAdapter.execute(
+      `INSERT INTO realm_user_permissions (realm_url, username, read, write, realm_owner)
+       VALUES ('${testRealm2URL.href}', '${testUser}', true, false, false)`,
+    );
+
+    // Create a valid JWT token
+    let token = createJWT(
+      { user: testUser, sessionRoom: '!test:localhost' },
+      realmSecretSeed,
+    );
+
+    // Request with token in query param (used for browser streaming downloads)
+    let response = await context.request2
+      .get('/_download-realm')
+      .query({ realm: testRealm2URL.href, token })
+      .buffer(true)
+      .parse(binaryParser);
+
+    let bodyPreview = response.body?.toString?.('utf8') ?? response.text ?? '';
+    assert.strictEqual(response.status, 200, bodyPreview.slice(0, 200));
+    assert.strictEqual(
+      response.headers['content-type'],
+      'application/zip',
+      'serves a zip archive with token auth',
+    );
+  });
+
+  test('rejects invalid token via query param', async function (assert) {
+    // Remove public permissions to require authentication
+    await context.dbAdapter.execute(
+      `DELETE FROM realm_user_permissions WHERE realm_url = '${testRealm2URL.href}' AND username = '*'`,
+    );
+
+    let response = await context.request2
+      .get('/_download-realm')
+      .query({ realm: testRealm2URL.href, token: 'invalid-token' });
+
+    assert.strictEqual(response.status, 401, 'returns unauthorized for invalid token');
   });
 });
