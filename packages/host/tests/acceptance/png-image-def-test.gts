@@ -46,7 +46,9 @@ function makeMinimalPng(width: number, height: number): Uint8Array {
   let ihdrChunk = buildChunk('IHDR', ihdrData);
 
   // Minimal IDAT chunk (empty compressed data — deflate stored block)
-  let idatData = new Uint8Array([0x08, 0xd7, 0x01, 0x00, 0x00, 0xff, 0xff, 0x00, 0x01, 0x00, 0x01]);
+  let idatData = new Uint8Array([
+    0x08, 0xd7, 0x01, 0x00, 0x00, 0xff, 0xff, 0x00, 0x01, 0x00, 0x01,
+  ]);
   let idatChunk = buildChunk('IDAT', idatData);
 
   // IEND chunk (empty)
@@ -54,10 +56,7 @@ function makeMinimalPng(width: number, height: number): Uint8Array {
 
   // Combine all parts
   let totalLength =
-    signature.length +
-    ihdrChunk.length +
-    idatChunk.length +
-    iendChunk.length;
+    signature.length + ihdrChunk.length + idatChunk.length + iendChunk.length;
   let png = new Uint8Array(totalLength);
   let offset = 0;
 
@@ -265,10 +264,20 @@ module('Acceptance | png image def', function (hooks) {
     let { status } = await capturePrerenderResult('innerHTML');
     assert.strictEqual(status, 'ready', 'render completed');
 
-    let img = document.querySelector('[data-prerender] img') as HTMLImageElement | null;
+    let img = document.querySelector(
+      '[data-prerender] img',
+    ) as HTMLImageElement | null;
     assert.ok(img, 'img element is rendered');
-    assert.strictEqual(img?.getAttribute('width'), '2', 'img has correct width attribute');
-    assert.strictEqual(img?.getAttribute('height'), '3', 'img has correct height attribute');
+    assert.strictEqual(
+      img?.getAttribute('width'),
+      '2',
+      'img has correct width attribute',
+    );
+    assert.strictEqual(
+      img?.getAttribute('height'),
+      '3',
+      'img has correct height attribute',
+    );
     assert.ok(
       img?.getAttribute('src')?.includes('sample.png'),
       'img src references the PNG file',
