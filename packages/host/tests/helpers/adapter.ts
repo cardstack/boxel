@@ -48,7 +48,7 @@ interface Dir {
 
 interface File {
   kind: 'file';
-  content: string | object;
+  content: string | object | Uint8Array;
 }
 
 type CardAPI = typeof import('https://cardstack.com/base/card-api');
@@ -253,7 +253,7 @@ export class TestRealmAdapter implements RealmAdapter {
 
     let value = content.content;
 
-    let fileRefContent = '';
+    let fileRefContent: string | Uint8Array = '';
 
     if (path.endsWith('.json')) {
       let cardApi = await this.#loader.import<CardAPI>(
@@ -272,6 +272,8 @@ export class TestRealmAdapter implements RealmAdapter {
       } else {
         fileRefContent = shimmedModuleIndicator;
       }
+    } else if (value instanceof Uint8Array) {
+      fileRefContent = value;
     } else {
       fileRefContent = value as string;
     }
@@ -291,7 +293,7 @@ export class TestRealmAdapter implements RealmAdapter {
 
   async write(
     path: LocalPath,
-    contents: string | object,
+    contents: string | object | Uint8Array,
   ): Promise<AdapterWriteResult> {
     let segments = path.split('/');
     let name = segments.pop()!;
@@ -326,9 +328,11 @@ export class TestRealmAdapter implements RealmAdapter {
     dir.contents[name] = {
       kind: 'file',
       content:
-        typeof contents === 'string'
+        contents instanceof Uint8Array
           ? contents
-          : JSON.stringify(contents, null, 2),
+          : typeof contents === 'string'
+            ? contents
+            : JSON.stringify(contents, null, 2),
     };
 
     this.postUpdateEvent(updateEvent);
