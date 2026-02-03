@@ -51,6 +51,7 @@ import {
   testModuleRealm,
   setupIntegrationTestRealm,
   setupLocalIndexing,
+  makeMinimalPng,
 } from '../../helpers';
 import {
   Base64ImageField,
@@ -715,7 +716,7 @@ module('Integration | card-basics', function (hooks) {
           mockMatrixUtils,
           contents: {
             'test-cards.gts': { Gallery },
-            'hero.png': 'mock image bytes',
+            'hero.png': makeMinimalPng(),
             'Gallery/hero.json': {
               data: {
                 type: 'card',
@@ -781,8 +782,8 @@ module('Integration | card-basics', function (hooks) {
           mockMatrixUtils,
           contents: {
             'test-cards.gts': { Gallery },
-            'first.png': 'first mock image',
-            'second.png': 'second mock image',
+            'first.png': makeMinimalPng(),
+            'second.png': makeMinimalPng(),
             'Gallery/attachments.json': {
               data: {
                 type: 'card',
