@@ -382,6 +382,12 @@ export type GetSearchResourceFuncOpts = {
     cards: CardDef[];
     searchURL?: string;
     realms?: string[];
+    queryErrors?: Array<{
+      realm: string;
+      type: string;
+      message: string;
+      status?: number;
+    }>;
   };
 };
 export type GetSearchResourceFunc<T extends CardDef | FileDef = CardDef> = (
