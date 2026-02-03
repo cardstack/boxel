@@ -22,6 +22,7 @@ interface Signature {
     searchKey: string;
     isCompact: boolean;
     handleCardSelect: (cardId: string) => void;
+    realms?: string[];
   };
   Blocks: {};
 }
@@ -30,8 +31,14 @@ export default class CardQueryResults extends Component<Signature> {
   @service declare realmServer: RealmServerService;
 
   get realms() {
-    return this.realmServer.availableRealmURLs;
+    return this.args.realms ?? this.realmServer.availableRealmURLs;
   }
+
+  /** Serialized for data-test-search-realms (testing realm filter) */
+  get realmsForTest(): string {
+    return this.realms.join(',');
+  }
+
   get query() {
     let { searchKey } = this.args;
     let type = getCodeRefFromSearchKey(searchKey);
@@ -67,11 +74,12 @@ export default class CardQueryResults extends Component<Signature> {
   }
 
   <template>
-    <PrerenderedCardSearch
-      @query={{this.query}}
-      @format='fitted'
-      @realms={{this.realms}}
-    >
+    <div data-test-search-realms={{this.realmsForTest}}>
+      <PrerenderedCardSearch
+        @query={{this.query}}
+        @format='fitted'
+        @realms={{this.realms}}
+      >
       <:loading>
         <ResultsSection
           @label={{concat 'Searching for “' @searchKey '”'}}
@@ -107,5 +115,6 @@ export default class CardQueryResults extends Component<Signature> {
         {{/if}}
       </:response>
     </PrerenderedCardSearch>
+    </div>
   </template>
 }

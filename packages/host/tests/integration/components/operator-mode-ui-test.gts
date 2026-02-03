@@ -7,6 +7,7 @@ import {
   triggerEvent,
   triggerKeyEvent,
   blur,
+  settled,
 } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
@@ -388,6 +389,98 @@ module('Integration | operator-mode | ui', function (hooks) {
 
     await click(`[data-test-operator-mode-stack]`);
     assert.dom(`[data-test-search-sheet="closed"]`).exists();
+  });
+
+  test('search sheet shows realm picker when expanded and filters by selected realm', async function (assert) {
+    ctx.setCardInOperatorModeState(`${testRealmURL}grid`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+    await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
+    await click(`[data-test-boxel-filter-list-button="All Cards"]`);
+    await waitFor(`[data-test-cards-grid-item]`);
+
+    await click(`[data-test-open-search-field]`);
+    assert.dom(`[data-test-search-sheet="search-prompt"]`).exists();
+    assert.dom('[data-test-search-sheet-search-bar]').exists();
+    assert.dom('[data-test-realm-picker]').exists();
+
+    // Type a search term to trigger search results; search receives realms from the picker
+    await typeIn('[data-test-search-field]', 'Person');
+    await click('[data-test-search-sheet] .search-sheet-content');
+    await waitFor('[data-test-search-label]', { timeout: 8000 });
+    await waitFor('[data-test-search-realms]', { timeout: 3000 });
+
+    // Assert the search is using a realms list that includes the test realm (filter is connected)
+    const realmsAttr = document
+      .querySelector('[data-test-search-realms]')
+      ?.getAttribute('data-test-search-realms');
+    assert.ok(
+      realmsAttr,
+      'search should receive realms (data-test-search-realms)',
+    );
+    const realmsList = realmsAttr?.split(',').map((r) => r.trim()) ?? [];
+    assert.ok(
+      realmsList.some((r) => r.includes('test-realm') && r.includes('/test')),
+      'realms list should include the test realm',
+    );
+
+    // When only one realm is available, "All Realms" and selecting that realm both yield one realm
+    const alreadySingleRealm = realmsList.length === 1;
+    if (!alreadySingleRealm) {
+      // Multiple realms: open picker and select only the test realm to verify filter updates
+      const trigger =
+        document.querySelector(
+          '[data-test-realm-picker] .ember-power-select-trigger',
+        ) ?? document.querySelector('[data-test-realm-picker]');
+      assert.ok(trigger, 'realm picker trigger should exist');
+      await click(trigger as HTMLElement);
+      await waitFor('.ember-power-select-option', { timeout: 3000 });
+      const options = document.querySelectorAll('.ember-power-select-option');
+      const allRealmsOption = Array.from(options).find((el) =>
+        el.textContent?.includes('All Realms'),
+      );
+      if (allRealmsOption?.getAttribute('aria-selected') === 'true') {
+        await click(allRealmsOption as HTMLElement);
+      }
+      const testRealmOption = Array.from(options).find((el) =>
+        el.textContent?.includes(ctx.realmName),
+      );
+      assert.ok(
+        testRealmOption,
+        `option for "${ctx.realmName}" should exist`,
+      );
+      await click(testRealmOption as HTMLElement);
+      await settled();
+      await waitUntil(
+        () => {
+          const attr = document
+            .querySelector('[data-test-search-realms]')
+            ?.getAttribute('data-test-search-realms');
+          if (!attr) return false;
+          const list = attr.split(',').map((r) => r.trim());
+          return list.length === 1 && list[0].includes('test-realm');
+        },
+        { timeout: 5000 },
+      );
+    }
+
+    const finalAttr = document
+      .querySelector('[data-test-search-realms]')
+      ?.getAttribute('data-test-search-realms');
+    const finalRealms = finalAttr?.split(',').map((r) => r.trim()) ?? [];
+    assert.ok(
+      finalRealms.length >= 1,
+      'search should be scoped to at least one realm',
+    );
+    assert.ok(
+      finalRealms.some(
+        (r) => r.includes('test-realm') && r.includes('/test'),
+      ),
+      'realms should include the test realm (filter is applied)',
+    );
   });
 
   test('displays card in interact mode when clicking `Open in Interact Mode` menu in preview panel', async function (assert) {

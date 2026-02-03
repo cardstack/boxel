@@ -8,17 +8,16 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
 import onClickOutside from 'ember-click-outside/modifiers/on-click-outside';
-import { modifier } from 'ember-modifier';
 import { consume } from 'ember-provide-consume-context';
 
 import { trackedFunction } from 'reactiveweb/function';
 
 import {
   Button,
-  BoxelInput,
   IconButton,
   BoxelInputBottomTreatments,
 } from '@cardstack/boxel-ui/components';
+import type { PickerOption } from '@cardstack/boxel-ui/components';
 
 import { eq } from '@cardstack/boxel-ui/helpers';
 import { IconSearch } from '@cardstack/boxel-ui/icons';
@@ -29,8 +28,8 @@ import type RealmServerService from '@cardstack/host/services/realm-server';
 
 import CardQueryResults from './card-query-results';
 import CardURLResults from './card-url-results';
-
 import RecentCardsSection from './recent-cards-section';
+import SearchBar from './search-bar';
 import { getCodeRefFromSearchKey } from './utils';
 
 import type StoreService from '../../services/store';
@@ -61,18 +60,11 @@ interface Signature {
   Blocks: {};
 }
 
-let elementCallback = modifier(
-  (element, [callback]: [((element: HTMLElement) => void) | undefined]) => {
-    if (callback) {
-      callback(element as HTMLElement);
-    }
-  },
-);
-
 export default class SearchSheet extends Component<Signature> {
   @consume(GetCardContextName) declare private getCard: getCard;
 
   @tracked private searchKey = '';
+  @tracked selectedRealms: PickerOption[] = [];
 
   @service declare private realmServer: RealmServerService;
   @service declare private store: StoreService;
@@ -144,6 +136,22 @@ export default class SearchSheet extends Component<Signature> {
 
   private resetState() {
     this.searchKey = '';
+    this.selectedRealms = [];
+  }
+
+  private get selectedRealmURLs(): string[] {
+    const hasSelectAll = this.selectedRealms.some(
+      (opt) => opt.type === 'select-all',
+    );
+    if (hasSelectAll || this.selectedRealms.length === 0) {
+      return this.realmServer.availableRealmURLs;
+    }
+    return this.selectedRealms.map((opt) => opt.id).filter(Boolean);
+  }
+
+  @action
+  private onRealmChange(selected: PickerOption[]) {
+    this.selectedRealms = selected;
   }
 
   @action private debouncedSetSearchKey(searchKey: string) {
@@ -226,7 +234,7 @@ export default class SearchSheet extends Component<Signature> {
       id='search-sheet'
       class='search-sheet {{this.sheetSize}}'
       data-test-search-sheet={{@mode}}
-      {{onClickOutside @onBlur exceptSelector='.add-card-to-neighbor-stack'}}
+      {{onClickOutside @onBlur exceptSelector='.add-card-to-neighbor-stack,.boxel-picker__dropdown,.picker-before-options-with-search,.picker-option-row'}}
     >
       {{#if (eq @mode 'closed')}}
         <IconButton
@@ -240,20 +248,19 @@ export default class SearchSheet extends Component<Signature> {
           data-test-open-search-field
         />
       {{else}}
-        <BoxelInput
-          @type='search'
-          @size='large'
-          @bottomTreatment={{this.inputBottomTreatment}}
+        <SearchBar
           @value={{this.searchKey}}
-          @state={{this.inputValidationState}}
           @placeholder={{this.placeholderText}}
+          @state={{this.inputValidationState}}
+          @bottomTreatment={{this.inputBottomTreatment}}
           @onFocus={{@onFocus}}
           @onInput={{this.debouncedSetSearchKey}}
-          {{elementCallback @onInputInsertion}}
-          {{on 'keydown' this.onSearchInputKeyDown}}
+          @onKeyDown={{this.onSearchInputKeyDown}}
+          @onInputInsertion={{@onInputInsertion}}
+          @selectedRealms={{this.selectedRealms}}
+          @onRealmChange={{this.onRealmChange}}
           class='search-sheet__search-input-group'
           autocomplete='off'
-          data-test-search-field
         />
         <div class='search-sheet-content'>
           {{#if this.searchKeyIsURL}}
@@ -268,6 +275,7 @@ export default class SearchSheet extends Component<Signature> {
           {{else}}
             <CardQueryResults
               @searchKey={{this.searchKey}}
+              @realms={{this.selectedRealmURLs}}
               @handleCardSelect={{this.handleCardSelect}}
               @isCompact={{this.isCompact}}
             />
@@ -326,11 +334,13 @@ export default class SearchSheet extends Component<Signature> {
         overflow: hidden;
       }
       .search-sheet:not(.closed):deep(.input-container),
-      .search-sheet:not(.closed):deep(.search-sheet__search-input-group) {
+      .search-sheet:not(.closed):deep(.search-sheet__search-input-group),
+      .search-sheet:not(.closed):deep(.search-sheet__search-bar) {
         border-radius: inherit;
       }
 
-      .search-sheet__search-input-group {
+      .search-sheet__search-input-group,
+      .search-sheet__search-bar {
         transition:
           height var(--boxel-transition),
           width var(--boxel-transition);

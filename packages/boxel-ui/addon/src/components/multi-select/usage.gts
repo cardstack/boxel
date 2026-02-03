@@ -16,6 +16,8 @@ import cssVar from '../../helpers/css-var.ts';
 import CheckMark from '../../icons/check-mark.gts';
 import BoxelField from '../field-container/index.gts';
 import BoxelMultiSelect, { BoxelMultiSelectBasic } from './index.gts';
+import BoxelMultiSelectLabeledTrigger from './trigger-labeled.gts';
+import BoxelMultiSelectOptionRow from './option-row.gts';
 import BoxelSelectedItem from './selected-item.gts';
 
 export function getPlural(s: string, count?: number) {
@@ -170,6 +172,8 @@ export default class BoxelMultiSelectUsage extends Component {
 
   @tracked selectedFilter: string | undefined = undefined;
   @tracked publicAPI: Select | undefined = undefined;
+
+  realmExtra = { label: 'Realm' };
 
   @cssVariable({ cssClassName: 'boxel-multi-select-usage-container' })
   declare boxelSelectedPillBackgroundColor: CSSVariableInfo;
@@ -413,6 +417,46 @@ export default class BoxelMultiSelectUsage extends Component {
               {{option.name}}
             </BoxelMultiSelect>
           </BoxelField>
+        </:example>
+      </FreestyleUsage>
+
+      <FreestyleUsage @name='Labeled Trigger with Option Row'>
+        <:description>
+          <p>
+            This example demonstrates the labeled trigger pattern with option
+            rows. The trigger displays a label on the left and selected items on
+            the right. Each option row includes a checkbox, optional icon, and
+            label.
+          </p>
+          <p>
+            To group selected options above unselected ones, you can use the
+            <code>BoxelMultiSelectGroupedOptions</code>
+            component in a custom beforeOptions component, or sort your options
+            array before passing it to the multi-select.
+          </p>
+        </:description>
+        <:example>
+          <BoxelMultiSelectBasic
+            @options={{this.items}}
+            @selected={{this.selectedItems}}
+            @onChange={{this.onSelectItems}}
+            @placeholder='Select countries'
+            @disabled={{this.disabled}}
+            @renderInPlace={{this.renderInPlace}}
+            @matchTriggerWidth={{this.matchTriggerWidth}}
+            @searchField='name'
+            @searchEnabled={{true}}
+            @closeOnSelect={{false}}
+            @ariaLabel='Select countries'
+            @triggerComponent={{component BoxelMultiSelectLabeledTrigger}}
+            @extra={{this.realmExtra}}
+            as |option|
+          >
+            <BoxelMultiSelectOptionRow
+              @label={{option.name}}
+              @isSelected={{includes this.selectedItems option}}
+            />
+          </BoxelMultiSelectBasic>
         </:example>
       </FreestyleUsage>
     </div>

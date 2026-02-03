@@ -51,10 +51,6 @@ export default class Picker extends Component<PickerSignature> {
     scheduleOnce('afterRender', this, this.ensureDefaultSelection);
   }
 
-  get renderInPlace() {
-    return this.args.renderInPlace ?? true;
-  }
-
   private validateSelectAllOption() {
     const hasSelectAll = this.args.options.some(
       (option) => option.type === 'select-all',
@@ -218,8 +214,8 @@ export default class Picker extends Component<PickerSignature> {
       @onChange={{this.onChange}}
       @placeholder={{@placeholder}}
       @disabled={{@disabled}}
-      @renderInPlace={{this.renderInPlace}}
-      @matchTriggerWidth={{true}}
+      @renderInPlace={{@renderInPlace}}
+      @matchTriggerWidth={{@matchTriggerWidth}}
       @searchEnabled={{false}}
       @closeOnSelect={{false}}
       @eventType='click'
