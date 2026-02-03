@@ -662,6 +662,7 @@ module('Unit | index-writer', function (hooks) {
         },
         display_names: [`Person`],
         deps: [`${testRealmURL2}person`],
+        last_known_good_deps: [`${testRealmURL2}person`],
         types: destTypes,
         last_modified: String(modified),
         resource_created_at: String(modified),
@@ -703,6 +704,7 @@ module('Unit | index-writer', function (hooks) {
         search_doc: null,
         display_names: null,
         deps: [`https://cardstack.com/base/card-api.gts`],
+        last_known_good_deps: [`https://cardstack.com/base/card-api.gts`],
         types: null,
         last_modified: String(modified),
         resource_created_at: String(modified),
@@ -825,6 +827,7 @@ module('Unit | index-writer', function (hooks) {
         search_doc: { name: 'Mango' },
         display_names: [`Person`],
         deps: [`${testRealmURL}person`],
+        last_known_good_deps: [`${testRealmURL}person`],
         types,
         embedded_html: Object.fromEntries(
           types.map((type) => [
@@ -890,6 +893,7 @@ module('Unit | index-writer', function (hooks) {
         search_doc: null,
         display_names: null,
         deps: [],
+        last_known_good_deps: null,
         types: null,
         embedded_html: null,
         fitted_html: null,
