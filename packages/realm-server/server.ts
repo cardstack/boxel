@@ -310,6 +310,21 @@ export class RealmServer {
       if (!isHostModeRequest) {
         return next();
       }
+
+      // For published realms with generic Accept headers (like */*), we need to
+      // distinguish card URLs from module URLs. Module imports (e.g., "./person")
+      // resolve to URLs without extensions and would incorrectly get HTML served.
+      // Only serve HTML if:
+      // 1. This is a directory index request (path ends with /), OR
+      // 2. The URL corresponds to an indexed card instance
+      let isIndexRequest = requestURL.pathname.endsWith('/');
+      if (!isIndexRequest) {
+        let cardURL = requestURL;
+        let isCardInstance = await this.isIndexedCardInstance(cardURL);
+        if (!isCardInstance) {
+          return next();
+        }
+      }
     }
 
     // If this is a /connect iframe request, is the origin a valid published realm?
@@ -456,6 +471,32 @@ export class RealmServer {
     let rows = await query(this.dbAdapter, [
       `SELECT published_realm_url FROM published_realms WHERE published_realm_url =`,
       param(realm.url),
+    ]);
+
+    return rows.length > 0;
+  }
+
+  // Check if the URL corresponds to an indexed card instance.
+  // This is used to distinguish card URLs from module URLs when deciding
+  // whether to serve HTML for published realms.
+  private async isIndexedCardInstance(cardURL: URL): Promise<boolean> {
+    let candidates = this.indexURLCandidates(cardURL);
+    if (candidates.length === 0) {
+      return false;
+    }
+
+    let rows = await query(this.dbAdapter, [
+      `
+        SELECT 1
+        FROM boxel_index
+        WHERE type = 'instance'
+          AND is_deleted IS NOT TRUE
+          AND
+        `,
+      ...this.indexCandidateExpressions(candidates),
+      `
+        LIMIT 1
+      `,
     ]);
 
     return rows.length > 0;
