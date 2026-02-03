@@ -274,8 +274,6 @@ export class TestRealmAdapter implements RealmAdapter {
       } else {
         fileRefContent = shimmedModuleIndicator;
       }
-    } else if (value instanceof Uint8Array) {
-      fileRefContent = value;
     } else {
       fileRefContent = value as string;
     }
