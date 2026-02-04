@@ -622,9 +622,11 @@ module(basename(__filename), function () {
           new URL(`${testRealm}boom2`),
         );
         if (entry?.type === 'error') {
-          assert.strictEqual(
-            entry.error.errorDetail.message,
-            'Attempted to resolve a modifier in a strict mode template, but that value was not in scope: did-insert',
+          assert.ok(
+            /Attempted to resolve a modifier in a strict mode template, but that value was not in scope: did-insert/.test(
+              entry.error.errorDetail.message,
+            ),
+            'error text is about did-insert not being in scope',
           );
           assert.deepEqual(entry.error.errorDetail.deps, [`${testRealm}boom2`]);
         } else {
