@@ -134,6 +134,10 @@ module(`server-endpoints/${basename(__filename)}`, function (hooks) {
       .get('/_download-realm')
       .query({ realm: testRealm2URL.href, token: 'invalid-token' });
 
-    assert.strictEqual(response.status, 401, 'returns unauthorized for invalid token');
+    assert.strictEqual(
+      response.status,
+      401,
+      'returns unauthorized for invalid token',
+    );
   });
 });
