@@ -12,6 +12,8 @@ import { Download } from '@cardstack/boxel-ui/icons';
 
 import RealmDropdown from '@cardstack/host/components/realm-dropdown';
 
+import { createURLSignature } from '@cardstack/runtime-common/url-signature';
+
 // This was inline but caused the template to have spurious Glint errors
 import { fallbackDownloadName } from '@cardstack/host/lib/download-realm';
 
@@ -102,20 +104,32 @@ export default class CodeSubmodeLeftPanelToggle extends Component<Signature> {
     this.switchRealm(realmItem.path);
   };
 
-  private get downloadRealmURL() {
-    let downloadURL = new URL('/_download-realm', this.args.realmURL);
-    downloadURL.searchParams.set('realm', this.args.realmURL);
-    // Include token for authenticated streaming download (browser navigates directly)
-    let token = this.realm.token(this.args.realmURL);
-    if (token) {
-      downloadURL.searchParams.set('token', token);
-    }
-    return downloadURL.href;
-  }
-
   private get downloadFilename() {
     return fallbackDownloadName(new URL(this.args.realmURL));
   }
+
+  downloadRealm = async (event: Event) => {
+    event.preventDefault();
+
+    let downloadURL = new URL('/_download-realm', this.args.realmURL);
+    downloadURL.searchParams.set('realm', this.args.realmURL);
+
+    let token = this.realm.token(this.args.realmURL);
+    if (token) {
+      downloadURL.searchParams.set('token', token);
+      // Add signature binding the token to this specific URL
+      let sig = await createURLSignature(token, downloadURL);
+      downloadURL.searchParams.set('sig', sig);
+    }
+
+    // Use an anchor element to trigger native browser download (streams without loading into memory)
+    let downloadLink = document.createElement('a');
+    downloadLink.href = downloadURL.href;
+    downloadLink.download = this.downloadFilename;
+    document.body.appendChild(downloadLink);
+    downloadLink.click();
+    document.body.removeChild(downloadLink);
+  };
 
   <template>
     <InnerContainer
@@ -159,13 +173,11 @@ export default class CodeSubmodeLeftPanelToggle extends Component<Signature> {
 
         <div class='realm-download'>
           <BoxelButton
-            @as='anchor'
-            @href={{this.downloadRealmURL}}
             @kind='text-only'
             @size='extra-small'
             class='realm-download-button'
             title='Download an archive of this workspace'
-            download={{this.downloadFilename}}
+            {{on 'click' this.downloadRealm}}
             data-test-download-realm-button
           >
             <Download width='13' height='13' />

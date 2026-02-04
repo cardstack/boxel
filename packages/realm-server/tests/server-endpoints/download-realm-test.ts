@@ -3,6 +3,7 @@ import { basename } from 'path';
 import { setupServerEndpointsTest, testRealm2URL } from './helpers';
 import { realmSecretSeed } from '../helpers';
 import { createJWT } from '../../utils/jwt';
+import { createURLSignatureSync } from '@cardstack/runtime-common/url-signature';
 import type { Response } from 'superagent';
 
 function binaryParser(
@@ -89,7 +90,7 @@ module(`server-endpoints/${basename(__filename)}`, function (hooks) {
     );
   });
 
-  test('accepts auth token via query param for streaming downloads', async function (assert) {
+  test('accepts auth token via query param with valid signature', async function (assert) {
     // Remove public permissions to require authentication
     await context.dbAdapter.execute(
       `DELETE FROM realm_user_permissions WHERE realm_url = '${testRealm2URL.href}' AND username = '*'`,
@@ -108,10 +109,16 @@ module(`server-endpoints/${basename(__filename)}`, function (hooks) {
       realmSecretSeed,
     );
 
-    // Request with token in query param (used for browser streaming downloads)
+    // Build the URL and compute signature
+    let downloadURL = new URL('http://127.0.0.1:4445/_download-realm');
+    downloadURL.searchParams.set('realm', testRealm2URL.href);
+    downloadURL.searchParams.set('token', token);
+    let sig = createURLSignatureSync(token, downloadURL);
+
+    // Request with token and signature in query params
     let response = await context.request2
       .get('/_download-realm')
-      .query({ realm: testRealm2URL.href, token })
+      .query({ realm: testRealm2URL.href, token, sig })
       .buffer(true)
       .parse(binaryParser);
 
@@ -124,15 +131,60 @@ module(`server-endpoints/${basename(__filename)}`, function (hooks) {
     );
   });
 
+  test('rejects token via query param without signature', async function (assert) {
+    // Remove public permissions to require authentication
+    await context.dbAdapter.execute(
+      `DELETE FROM realm_user_permissions WHERE realm_url = '${testRealm2URL.href}' AND username = '*'`,
+    );
+
+    let token = createJWT(
+      { user: '@test:localhost', sessionRoom: '!test:localhost' },
+      realmSecretSeed,
+    );
+
+    let response = await context.request2
+      .get('/_download-realm')
+      .query({ realm: testRealm2URL.href, token });
+
+    assert.strictEqual(
+      response.status,
+      400,
+      'returns bad request when signature is missing',
+    );
+  });
+
+  test('rejects token via query param with invalid signature', async function (assert) {
+    // Remove public permissions to require authentication
+    await context.dbAdapter.execute(
+      `DELETE FROM realm_user_permissions WHERE realm_url = '${testRealm2URL.href}' AND username = '*'`,
+    );
+
+    let token = createJWT(
+      { user: '@test:localhost', sessionRoom: '!test:localhost' },
+      realmSecretSeed,
+    );
+
+    let response = await context.request2
+      .get('/_download-realm')
+      .query({ realm: testRealm2URL.href, token, sig: 'invalid-signature' });
+
+    assert.strictEqual(
+      response.status,
+      401,
+      'returns unauthorized for invalid signature',
+    );
+  });
+
   test('rejects invalid token via query param', async function (assert) {
     // Remove public permissions to require authentication
     await context.dbAdapter.execute(
       `DELETE FROM realm_user_permissions WHERE realm_url = '${testRealm2URL.href}' AND username = '*'`,
     );
 
+    // Invalid token with a signature (signature doesn't matter since token is invalid)
     let response = await context.request2
       .get('/_download-realm')
-      .query({ realm: testRealm2URL.href, token: 'invalid-token' });
+      .query({ realm: testRealm2URL.href, token: 'invalid-token', sig: 'any' });
 
     assert.strictEqual(
       response.status,
