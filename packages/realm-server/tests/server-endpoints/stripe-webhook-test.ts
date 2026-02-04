@@ -153,7 +153,10 @@ module(`server-endpoints/${basename(__filename)}`, function () {
                 data: [
                   {
                     amount: 12,
+                    type: 'subscription',
+                    proration: false,
                     price: { product: 'prod_creator' },
+                    period: { start: 1635873600, end: 1638465600 },
                   },
                 ],
               },
@@ -210,7 +213,10 @@ module(`server-endpoints/${basename(__filename)}`, function () {
                   data: [
                     {
                       amount: 0,
+                      type: 'subscription',
+                      proration: false,
                       price: { product: 'prod_free' },
+                      period: { start: 1635873600, end: 1638465600 },
                     },
                   ],
                 },
@@ -377,7 +383,10 @@ module(`server-endpoints/${basename(__filename)}`, function () {
                 data: [
                   {
                     amount: 12,
+                    type: 'subscription',
+                    proration: false,
                     price: { product: 'prod_creator' },
+                    period: { start: 1635873600, end: 1638465600 },
                   },
                 ],
               },
@@ -561,7 +570,10 @@ module(`server-endpoints/${basename(__filename)}`, function () {
                 data: [
                   {
                     amount: 0,
+                    type: 'subscription',
+                    proration: false,
                     price: { product: 'prod_free' },
+                    period: { start: 1635873600, end: 1638465600 },
                   },
                 ],
               },

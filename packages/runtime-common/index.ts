@@ -276,6 +276,8 @@ export type {
   SingleCardDocument,
   SingleFileMetaDocument,
   CardCollectionDocument,
+  FileMetaCollectionDocument,
+  LinkableCollectionDocument,
 } from './document-types';
 export type {
   CardResource,
@@ -294,6 +296,8 @@ export {
   isCardCollectionDocument,
   isSingleCardDocument,
   isSingleFileMetaDocument,
+  isFileMetaCollectionDocument,
+  isLinkableCollectionDocument,
   isCardDocumentString,
 } from './document-types';
 export {
