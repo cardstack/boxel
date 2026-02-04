@@ -8,6 +8,7 @@ import { module, test } from 'qunit';
 import type { Loader, Query } from '@cardstack/runtime-common';
 import {
   baseRealm,
+  isFileDefInstance,
   type Realm,
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
@@ -295,6 +296,8 @@ module(`Integration | search resource`, function (hooks) {
         'book.gts': { Book },
         'post.gts': { Post },
         ...sampleCards,
+        'files/hello.txt': 'Hello world',
+        'files/notes.txt': 'Some notes',
       },
     }));
   });
@@ -585,6 +588,89 @@ module(`Integration | search resource`, function (hooks) {
       search.meta.page?.total,
       4,
       'meta.page.total remains correct on empty page',
+    );
+  });
+
+  test(`can search for file-meta instances using SearchResource`, async function (assert) {
+    let query: Query = {
+      filter: {
+        type: {
+          module: `${baseRealm.url}file-api`,
+          name: 'FileDef',
+        },
+      },
+    };
+    let search = getSearchResourceForTest(loaderService, () => ({
+      named: {
+        query,
+        realms: [testRealmURL],
+        isLive: false,
+        isAutoSaved: false,
+        storeService,
+        owner: this.owner,
+      },
+    }));
+    await search.loaded;
+
+    assert.ok(search.instances.length >= 2, 'returns file-meta instances');
+    let ids = search.instances.map((i) => i.id);
+    assert.ok(
+      ids.includes(`${testRealmURL}files/hello.txt`),
+      'hello.txt is in results',
+    );
+    assert.ok(
+      ids.includes(`${testRealmURL}files/notes.txt`),
+      'notes.txt is in results',
+    );
+    for (let instance of search.instances) {
+      assert.ok(
+        isFileDefInstance(instance),
+        `${instance.id} is a FileDef instance`,
+      );
+    }
+  });
+
+  test(`can perform a live search for file-meta instances`, async function (assert) {
+    let query: Query = {
+      filter: {
+        type: {
+          module: `${baseRealm.url}file-api`,
+          name: 'FileDef',
+        },
+      },
+    };
+    let search = getSearchResourceForTest(loaderService, () => ({
+      named: {
+        query,
+        realms: [testRealmURL],
+        isLive: true,
+        isAutoSaved: false,
+        storeService,
+        owner: this.owner,
+      },
+    }));
+    await search.loaded;
+
+    let initialCount = search.instances.length;
+    assert.ok(initialCount >= 2, 'initial results include file-meta instances');
+
+    // Write a new file to trigger a live update
+    await realm.write('files/new-file.txt', 'New content');
+
+    await waitUntil(() => search.instances.length > initialCount);
+
+    let ids = search.instances.map((i) => i.id);
+    assert.ok(
+      ids.includes(`${testRealmURL}files/new-file.txt`),
+      'new file appears in live search results',
+    );
+    assert.ok(
+      isFileDefInstance(
+        search.instances.find(
+          (i) => i.id === `${testRealmURL}files/new-file.txt`,
+        ),
+      ),
+      'new file is a FileDef instance',
     );
   });
 });

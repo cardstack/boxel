@@ -64,6 +64,7 @@ export class RealmServer {
   private log = logger('realm-server');
   private headLog = logger('realm-server:head');
   private isolatedLog = logger('realm-server:isolated');
+  private scopedCSSLog = logger('realm-server:scoped-css');
   private realms: Realm[];
   private virtualNetwork: VirtualNetwork;
   private matrixClient: MatrixClient;
@@ -338,6 +339,7 @@ export class RealmServer {
 
       this.headLog.debug(`Fetching head HTML for ${cardURL.href}`);
       this.isolatedLog.debug(`Fetching isolated HTML for ${cardURL.href}`);
+      this.scopedCSSLog.debug(`Fetching scoped CSS for ${cardURL.href}`);
 
       let [headHTML, isolatedHTML, scopedCSS] = await Promise.all([
         this.retrieveHeadHTML(cardURL),
@@ -348,16 +350,29 @@ export class RealmServer {
           indexURLCandidates: (url) => this.indexURLCandidates(url),
           indexCandidateExpressions: (candidates) =>
             this.indexCandidateExpressions(candidates),
+          log: this.scopedCSSLog,
         }),
       ]);
 
       if (headHTML != null) {
         this.headLog.debug(
-          `Injecting head HTML for ${cardURL.href} (length ${headHTML.length})`,
+          `Injecting head HTML for ${cardURL.href} (length ${headHTML.length})\n${this.truncateLogLines(
+            headHTML,
+          )}`,
         );
       } else {
         this.headLog.debug(
           `No head HTML found for ${cardURL.href}, serving base index.html`,
+        );
+      }
+
+      if (scopedCSS != null) {
+        this.scopedCSSLog.debug(
+          `Using scoped CSS for ${cardURL.href} (length ${scopedCSS.length})`,
+        );
+      } else {
+        this.scopedCSSLog.debug(
+          `No scoped CSS returned from database for ${cardURL.href}`,
         );
       }
 
@@ -369,6 +384,7 @@ export class RealmServer {
       }
 
       if (scopedCSS != null) {
+        this.scopedCSSLog.debug(`Injecting scoped CSS for ${cardURL.href}`);
         headFragments.push(
           `<style data-boxel-scoped-css>\n${scopedCSS}\n</style>`,
         );
@@ -382,6 +398,11 @@ export class RealmServer {
       }
 
       if (isolatedHTML != null) {
+        this.isolatedLog.debug(
+          `Injecting isolated HTML for ${cardURL.href} (length ${isolatedHTML.length})\n${this.truncateLogLines(
+            isolatedHTML,
+          )}`,
+        );
         responseHTML = this.injectIsolatedHTML(responseHTML, isolatedHTML);
       }
 
@@ -445,6 +466,9 @@ export class RealmServer {
           assetsURL: this.assetsURL.href,
           realmServerURL: this.serverURL.href,
           cardSizeLimitBytes: this.cardSizeLimitBytes,
+          publishedRealmDomainOverrides:
+            process.env.PUBLISHED_REALM_DOMAIN_OVERRIDES ??
+            config.publishedRealmDomainOverrides,
         });
         return `${g1}${encodeURIComponent(JSON.stringify(config))}${g3}`;
       },
@@ -475,17 +499,19 @@ export class RealmServer {
     }
 
     let rows = await query(this.dbAdapter, [
-      `SELECT head_html, realm_version FROM boxel_index_working WHERE head_html IS NOT NULL AND type =`,
-      param('instance'),
-      'AND',
+      `
+        SELECT head_html, realm_version
+        FROM boxel_index
+        WHERE type = 'instance'
+         AND head_html IS NOT NULL
+         AND is_deleted IS NOT TRUE
+         AND
+      `,
       ...this.indexCandidateExpressions(candidates),
-      `UNION ALL
-       SELECT head_html, realm_version FROM boxel_index WHERE head_html IS NOT NULL AND type =`,
-      param('instance'),
-      'AND',
-      ...this.indexCandidateExpressions(candidates),
-      `ORDER BY realm_version DESC
-       LIMIT 1`,
+      `
+        ORDER BY realm_version DESC
+        LIMIT 1
+      `,
     ]);
 
     this.headLog.debug('Head query result for %s', cardURL.href, rows);
@@ -519,17 +545,19 @@ export class RealmServer {
     }
 
     let rows = await query(this.dbAdapter, [
-      `SELECT isolated_html, realm_version FROM boxel_index_working WHERE isolated_html IS NOT NULL AND type =`,
-      param('instance'),
-      'AND',
+      `
+        SELECT isolated_html, realm_version
+        FROM boxel_index
+        WHERE isolated_html IS NOT NULL
+          AND type = 'instance'
+          AND is_deleted IS NOT TRUE
+          AND
+        `,
       ...this.indexCandidateExpressions(candidates),
-      `UNION ALL
-       SELECT isolated_html, realm_version FROM boxel_index WHERE isolated_html IS NOT NULL AND type =`,
-      param('instance'),
-      'AND',
-      ...this.indexCandidateExpressions(candidates),
-      `ORDER BY realm_version DESC
-       LIMIT 1`,
+      `
+        ORDER BY realm_version DESC
+        LIMIT 1
+      `,
     ]);
 
     this.isolatedLog.debug('Isolated query result for %s', cardURL.href, rows);
@@ -587,17 +615,27 @@ export class RealmServer {
     ) as Expression;
   }
 
+  private truncateLogLines(value: string, maxLines = 3): string {
+    let lines = value.split(/\r?\n/);
+    if (lines.length <= maxLines) {
+      return value;
+    }
+    let truncated = lines.slice(0, maxLines);
+    truncated[maxLines - 1] = `${truncated[maxLines - 1]} ...`;
+    return truncated.join('\n');
+  }
+
   private injectHeadHTML(indexHTML: string, headHTML: string): string {
     return indexHTML.replace(
       /(<meta[^>]+data-boxel-head-start[^>]*>)([\s\S]*?)(<meta[^>]+data-boxel-head-end[^>]*>)/,
-      `$1\n${headHTML}\n$3`,
+      (_match, start, _content, end) => `${start}\n${headHTML}\n${end}`,
     );
   }
 
   private injectIsolatedHTML(indexHTML: string, isolatedHTML: string): string {
     return indexHTML.replace(
       /(<script[^>]+id="boxel-isolated-start"[^>]*>\s*<\/script>)([\s\S]*?)(<script[^>]+id="boxel-isolated-end"[^>]*>\s*<\/script>)/,
-      `$1\n${isolatedHTML}\n$3`,
+      (_match, start, _content, end) => `${start}\n${isolatedHTML}\n${end}`,
     );
   }
 

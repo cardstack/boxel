@@ -5,6 +5,7 @@ import type { ResolvedCodeRef } from './code-ref';
 export interface RenderRouteOptions {
   clearCache?: true;
   fileExtract?: true;
+  fileRender?: true;
   fileDefCodeRef?: ResolvedCodeRef;
   fileContentHash?: string;
 }
@@ -30,6 +31,12 @@ export function parseRenderRouteOptions(
         options.fileContentHash = parsed.fileContentHash;
       }
     }
+    if (parsed.fileRender) {
+      options.fileRender = true;
+      if (isResolvedCodeRef(parsed.fileDefCodeRef)) {
+        options.fileDefCodeRef = parsed.fileDefCodeRef;
+      }
+    }
     return options;
   } catch {
     return {};
@@ -50,6 +57,12 @@ export function serializeRenderRouteOptions(
     }
     if (options.fileContentHash) {
       serialized.fileContentHash = options.fileContentHash;
+    }
+  }
+  if (options.fileRender) {
+    serialized.fileRender = true;
+    if (options.fileDefCodeRef) {
+      serialized.fileDefCodeRef = options.fileDefCodeRef;
     }
   }
   return stringify(serialized) ?? '{}';

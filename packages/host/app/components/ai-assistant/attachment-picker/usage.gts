@@ -18,7 +18,7 @@ export default class AiAssistantCardPickerUsage extends Component {
   cardIds: TrackedArray<string> = new TrackedArray([]);
   @tracked maxNumberOfCards: number | undefined = undefined;
   @tracked autoAttachedCardIds?: TrackedSet<string> = new TrackedSet();
-  @tracked autoAttachedFile?: FileDef | undefined;
+  @tracked autoAttachedFiles?: FileDef[];
   @tracked filesToAttach: TrackedArray<FileDef> = new TrackedArray([]);
 
   @action chooseCard(cardId: string) {
@@ -60,7 +60,7 @@ export default class AiAssistantCardPickerUsage extends Component {
           @removeCard={{this.removeCard}}
           @chooseFile={{this.chooseFile}}
           @removeFile={{this.removeFile}}
-          @autoAttachedFile={{this.autoAttachedFile}}
+          @autoAttachedFiles={{this.autoAttachedFiles}}
           @filesToAttach={{this.filesToAttach}}
           as |AttachedItems AttachButton|
         >
@@ -81,9 +81,9 @@ export default class AiAssistantCardPickerUsage extends Component {
           @value={{this.autoAttachedCardIds}}
         />
         <Args.Object
-          @name='autoAttachedFile'
-          @description='A file automatically attached to the message.'
-          @value={{this.autoAttachedFile}}
+          @name='autoAttachedFiles'
+          @description='Files automatically attached to the message.'
+          @value={{this.autoAttachedFiles}}
         />
         <Args.Object
           @name='filesToAttach'

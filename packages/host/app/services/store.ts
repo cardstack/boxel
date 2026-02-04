@@ -49,6 +49,9 @@ import {
   type CardErrorJSONAPI,
   type CardErrorsJSONAPI,
   type ErrorEntry,
+  type FileMetaResource,
+  type LooseLinkableResource,
+  type LooseSingleResourceDocument,
   type StoreReadType,
 } from '@cardstack/runtime-common';
 
@@ -644,7 +647,7 @@ export default class StoreService extends Service implements StoreInterface {
     ).filter(Boolean) as CardDef[];
   }
 
-  getSearchResource<T extends CardDef = CardDef>(
+  getSearchResource<T extends CardDef | FileDef = CardDef>(
     parent: object,
     getQuery: () => Query | undefined,
     getRealms?: () => string[] | undefined,
@@ -656,6 +659,12 @@ export default class StoreService extends Service implements StoreInterface {
         searchURL?: string;
         meta?: QueryResultsMeta;
         errors?: ErrorEntry[];
+        queryErrors?: Array<{
+          realm: string;
+          type: string;
+          message: string;
+          status?: number;
+        }>;
       };
     },
   ): SearchResource<T> {
@@ -742,6 +751,16 @@ export default class StoreService extends Service implements StoreInterface {
       this.newReferencePromises.push(deferred.promise);
       try {
         await this.ready;
+        // Check file-meta map as well as card map — file-meta instances
+        // are loaded into their own map by store.get(id, { type: 'file-meta' })
+        let fileMetaInstance =
+          this.peekError(url, { type: 'file-meta' }) ??
+          this.peek(url, { type: 'file-meta' });
+        if (fileMetaInstance) {
+          // File-meta instances don't need auto-saving or card wiring
+          deferred.fulfill();
+          return;
+        }
         let instanceOrError = this.peekError(url) ?? this.peek(url);
         if (!instanceOrError) {
           instanceOrError = await this.getCardInstance({
@@ -1032,6 +1051,19 @@ export default class StoreService extends Service implements StoreInterface {
       instance ? (instance.id ?? instance[localIdSymbol]) : instanceOrError.id!, // we checked above to make sure errors have id's
       instanceOrError as CardDef | CardErrorJSONAPI,
     );
+  }
+
+  protected async createFileMetaFromSerialized(
+    resource: LooseLinkableResource<FileMetaResource>,
+    doc: LooseSingleResourceDocument<FileMetaResource>,
+    relativeTo: URL | undefined,
+  ): Promise<FileDef> {
+    let api = await this.cardService.getAPI();
+    let instance = (await api.createFromSerialized(resource, doc, relativeTo, {
+      store: this.store,
+    })) as unknown as FileDef;
+    this.setIdentityContext(instance, 'file-meta');
+    return instance;
   }
 
   private async startAutoSaving(instanceOrError: CardDef | CardErrorJSONAPI) {

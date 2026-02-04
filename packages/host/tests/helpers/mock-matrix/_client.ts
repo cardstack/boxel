@@ -345,11 +345,27 @@ export class MockClient implements ExtendedClient {
   }
 
   invite(
-    _roomId: string,
-    _userId: string,
+    roomId: string,
+    userId: string,
     _reason?: string | undefined,
   ): Promise<{}> {
-    throw new Error('Method not implemented.');
+    let sender =
+      this.loggedInAs ?? this.clientOpts.userId ?? '@test_user:localhost';
+    let timestamp = Date.now();
+    this.serverState.setRoomState(
+      sender,
+      roomId,
+      'm.room.member',
+      {
+        displayname: userId,
+        membership: 'invite',
+        membershipTs: timestamp,
+        membershipInitiator: sender,
+      },
+      userId,
+      timestamp,
+    );
+    return Promise.resolve({});
   }
 
   joinRoom(

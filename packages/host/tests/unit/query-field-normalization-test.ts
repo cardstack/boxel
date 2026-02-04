@@ -52,6 +52,193 @@ module('normalizeQueryDefinition', function () {
     assert.strictEqual(normalized?.realm, 'https://other.realm/');
   });
 
+  test('injects on into leaf filter inside not', function (assert) {
+    let realmURL = new URL('https://realm.example/');
+    let relativeTo = new URL('https://realm.example/cards/1');
+    let targetRef = codeRefWithAbsoluteURL(
+      fieldDefinition.fieldOrCard,
+      relativeTo,
+    );
+
+    let normalized = normalizeQueryDefinition({
+      fieldDefinition,
+      queryDefinition: {
+        filter: { not: { eq: { name: 'foo' } } },
+      },
+      realmURL,
+      fieldName: 'testField',
+      resolvePathValue: () => undefined,
+      relativeTo,
+    });
+
+    assert.ok(normalized, 'normalization succeeded');
+    assert.deepEqual(normalized?.query.filter, {
+      not: { eq: { name: 'foo' }, on: targetRef },
+    });
+  });
+
+  test('injects on into each leaf filter inside any', function (assert) {
+    let realmURL = new URL('https://realm.example/');
+    let relativeTo = new URL('https://realm.example/cards/1');
+    let targetRef = codeRefWithAbsoluteURL(
+      fieldDefinition.fieldOrCard,
+      relativeTo,
+    );
+
+    let normalized = normalizeQueryDefinition({
+      fieldDefinition,
+      queryDefinition: {
+        filter: {
+          any: [{ eq: { name: 'foo' } }, { contains: { title: 'bar' } }],
+        },
+      },
+      realmURL,
+      fieldName: 'testField',
+      resolvePathValue: () => undefined,
+      relativeTo,
+    });
+
+    assert.ok(normalized, 'normalization succeeded');
+    assert.deepEqual(normalized?.query.filter, {
+      any: [
+        { eq: { name: 'foo' }, on: targetRef },
+        { contains: { title: 'bar' }, on: targetRef },
+      ],
+    });
+  });
+
+  test('injects on into each leaf filter inside every', function (assert) {
+    let realmURL = new URL('https://realm.example/');
+    let relativeTo = new URL('https://realm.example/cards/1');
+    let targetRef = codeRefWithAbsoluteURL(
+      fieldDefinition.fieldOrCard,
+      relativeTo,
+    );
+
+    let normalized = normalizeQueryDefinition({
+      fieldDefinition,
+      queryDefinition: {
+        filter: {
+          every: [{ eq: { name: 'foo' } }, { range: { age: { gte: 18 } } }],
+        },
+      },
+      realmURL,
+      fieldName: 'testField',
+      resolvePathValue: () => undefined,
+      relativeTo,
+    });
+
+    assert.ok(normalized, 'normalization succeeded');
+    assert.deepEqual(normalized?.query.filter, {
+      every: [
+        { eq: { name: 'foo' }, on: targetRef },
+        { range: { age: { gte: 18 } }, on: targetRef },
+      ],
+    });
+  });
+
+  test('injects on into deeply nested combinator filters', function (assert) {
+    let realmURL = new URL('https://realm.example/');
+    let relativeTo = new URL('https://realm.example/cards/1');
+    let targetRef = codeRefWithAbsoluteURL(
+      fieldDefinition.fieldOrCard,
+      relativeTo,
+    );
+
+    let normalized = normalizeQueryDefinition({
+      fieldDefinition,
+      queryDefinition: {
+        filter: {
+          every: [
+            {
+              any: [{ eq: { name: 'foo' } }, { eq: { name: 'bar' } }],
+            },
+            { not: { contains: { title: 'baz' } } },
+          ],
+        },
+      },
+      realmURL,
+      fieldName: 'testField',
+      resolvePathValue: () => undefined,
+      relativeTo,
+    });
+
+    assert.ok(normalized, 'normalization succeeded');
+    assert.deepEqual(normalized?.query.filter, {
+      every: [
+        {
+          any: [
+            { eq: { name: 'foo' }, on: targetRef },
+            { eq: { name: 'bar' }, on: targetRef },
+          ],
+        },
+        { not: { contains: { title: 'baz' }, on: targetRef } },
+      ],
+    });
+  });
+
+  test('skips type filters inside combinators', function (assert) {
+    let realmURL = new URL('https://realm.example/');
+    let relativeTo = new URL('https://realm.example/cards/1');
+    let targetRef = codeRefWithAbsoluteURL(
+      fieldDefinition.fieldOrCard,
+      relativeTo,
+    );
+    let typeRef = { module: 'https://example.com/other', name: 'Other' };
+
+    let normalized = normalizeQueryDefinition({
+      fieldDefinition,
+      queryDefinition: {
+        filter: {
+          any: [{ eq: { name: 'foo' } }, { type: typeRef }],
+        },
+      },
+      realmURL,
+      fieldName: 'testField',
+      resolvePathValue: () => undefined,
+      relativeTo,
+    });
+
+    assert.ok(normalized, 'normalization succeeded');
+    assert.deepEqual(normalized?.query.filter, {
+      any: [{ eq: { name: 'foo' }, on: targetRef }, { type: typeRef }],
+    });
+  });
+
+  test('does not overwrite existing on in leaf filters', function (assert) {
+    let realmURL = new URL('https://realm.example/');
+    let relativeTo = new URL('https://realm.example/cards/1');
+    let existingOn = { module: 'https://example.com/custom', name: 'Custom' };
+
+    let normalized = normalizeQueryDefinition({
+      fieldDefinition,
+      queryDefinition: {
+        filter: {
+          any: [
+            { eq: { name: 'foo' }, on: existingOn },
+            { eq: { name: 'bar' } },
+          ],
+        },
+      },
+      realmURL,
+      fieldName: 'testField',
+      resolvePathValue: () => undefined,
+      relativeTo,
+    });
+
+    assert.ok(normalized, 'normalization succeeded');
+    let targetRef = codeRefWithAbsoluteURL(
+      fieldDefinition.fieldOrCard,
+      relativeTo,
+    );
+    assert.deepEqual(normalized?.query.filter, {
+      any: [
+        { eq: { name: 'foo' }, on: existingOn },
+        { eq: { name: 'bar' }, on: targetRef },
+      ],
+    });
+  });
+
   test('resolves live instances via custom path resolver', function (assert) {
     let realmURL = new URL('https://realm.example/');
     let instance = { address: { city: 'Paris' } };

@@ -65,14 +65,14 @@ export default class CreateListingPRCommand extends HostBaseCommand<
     return CreateListingPRResult;
   }
 
-  requireInputFields = ['realm', 'listing'];
+  requireInputFields = ['realm', 'listingId'];
 
   protected async run(
     input: BaseCommandModule.CreateListingPRInput,
   ): Promise<BaseCommandModule.CreateListingPRResult> {
     await this.matrixService.ready;
 
-    let { listing: listingInput, realm } = input;
+    let { listingId, realm } = input;
     let realmUrls = this.realmServer.availableRealmURLs;
     let realmUrl = new RealmPaths(new URL(realm)).url;
 
@@ -80,8 +80,15 @@ export default class CreateListingPRCommand extends HostBaseCommand<
       throw new Error(`Invalid realm: ${realmUrl}`);
     }
 
+    if (!listingId) {
+      throw new Error('Missing listingId for CreateListingPR');
+    }
+
     // Listing type is from catalog; base command cannot express that type
-    const listing = listingInput as Listing;
+    const listing = (await this.store.get(listingId)) as Listing;
+    if (!listing) {
+      throw new Error(`Listing not found: ${listingId}`);
+    }
     const snapshotId = uuidv4();
     const branch = this.generateBranchName(listing, snapshotId);
 
