@@ -12,7 +12,7 @@ import { Download } from '@cardstack/boxel-ui/icons';
 
 import RealmDropdown from '@cardstack/host/components/realm-dropdown';
 
-// These were inline but caused the template to have spurious Glint errors
+// This was inline but caused the template to have spurious Glint errors
 import { fallbackDownloadName } from '@cardstack/host/lib/download-realm';
 
 import RestoreScrollPosition from '@cardstack/host/modifiers/restore-scroll-position';
