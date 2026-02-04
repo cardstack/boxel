@@ -41,7 +41,6 @@ import handleSearch from './handlers/handle-search';
 import handleSearchPrerendered from './handlers/handle-search-prerendered';
 import handleRealmInfo from './handlers/handle-realm-info';
 import { multiRealmAuthorization } from './middleware/multi-realm-authorization';
-import handleGitHubPRRequest from './handlers/handle-github-pr';
 import handleDownloadRealm from './handlers/handle-download-realm';
 import {
   handleBotRegistrationRequest,
@@ -236,11 +235,6 @@ export function createRoutes(args: CreateRoutesArgs) {
     '/_boxel-claimed-domains/:claimedDomainId',
     jwtMiddleware(args.realmSecretSeed),
     handleDeleteBoxelClaimedDomainRequest(args),
-  );
-  router.post(
-    '/_github-pr',
-    jwtMiddleware(args.realmSecretSeed),
-    handleGitHubPRRequest(args),
   );
   router.get('/_download-realm', handleDownloadRealm(args));
   router.post(
