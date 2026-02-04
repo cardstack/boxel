@@ -45,11 +45,6 @@ import { resolve, join } from 'path';
 import merge from 'lodash/merge';
 
 import { extractSupportedMimeType } from '@cardstack/runtime-common/router';
-import {
-  addExplicitParens,
-  any,
-  type Expression,
-} from '@cardstack/runtime-common/expression';
 import * as Sentry from '@sentry/node';
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import {
@@ -60,6 +55,16 @@ import { createRoutes } from './routes';
 import { APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE } from '@cardstack/runtime-common/matrix-constants';
 import type { Prerenderer } from '@cardstack/runtime-common';
 import { retrieveScopedCSS } from './lib/retrieve-scoped-css';
+import {
+  indexURLCandidates,
+  indexCandidateExpressions,
+} from './lib/index-url-utils';
+import {
+  retrieveHeadHTML,
+  retrieveIsolatedHTML,
+  injectHeadHTML,
+  injectIsolatedHTML,
+} from './lib/index-html-injection';
 
 export class RealmServer {
   private log = logger('realm-server');
@@ -386,14 +391,19 @@ export class RealmServer {
     this.scopedCSSLog.debug(`Fetching scoped CSS for ${cardURL.href}`);
 
     let [headHTML, isolatedHTML, scopedCSS] = await Promise.all([
-      this.retrieveHeadHTML(cardURL),
-      this.retrieveIsolatedHTML(cardURL),
+      retrieveHeadHTML({
+        cardURL,
+        dbAdapter: this.dbAdapter,
+        log: this.headLog,
+      }),
+      retrieveIsolatedHTML({
+        cardURL,
+        dbAdapter: this.dbAdapter,
+        log: this.isolatedLog,
+      }),
       retrieveScopedCSS({
         cardURL,
         dbAdapter: this.dbAdapter,
-        indexURLCandidates: (url) => this.indexURLCandidates(url),
-        indexCandidateExpressions: (candidates) =>
-          this.indexCandidateExpressions(candidates),
         log: this.scopedCSSLog,
       }),
     ]);
@@ -435,10 +445,7 @@ export class RealmServer {
     }
 
     if (headFragments.length > 0) {
-      responseHTML = this.injectHeadHTML(
-        responseHTML,
-        headFragments.join('\n'),
-      );
+      responseHTML = injectHeadHTML(responseHTML, headFragments.join('\n'));
     }
 
     if (isolatedHTML != null) {
@@ -447,7 +454,7 @@ export class RealmServer {
           isolatedHTML,
         )}`,
       );
-      responseHTML = this.injectIsolatedHTML(responseHTML, isolatedHTML);
+      responseHTML = injectIsolatedHTML(responseHTML, isolatedHTML);
     }
 
     ctxt.body = responseHTML;
@@ -486,7 +493,7 @@ export class RealmServer {
   // extension), we must check if it's actually a module before assuming it's
   // an instance. Modules take precedence over instance aliases.
   private async isIndexedCardInstance(cardURL: URL): Promise<boolean> {
-    let candidates = this.indexURLCandidates(cardURL);
+    let candidates = indexURLCandidates(cardURL);
     if (candidates.length === 0) {
       return false;
     }
@@ -504,7 +511,7 @@ export class RealmServer {
           AND is_deleted IS NOT TRUE
           AND
         `,
-      ...this.indexCandidateExpressions(candidates),
+      ...indexCandidateExpressions(candidates),
       `
         LIMIT 1
       `,
@@ -522,7 +529,7 @@ export class RealmServer {
           AND is_deleted IS NOT TRUE
           AND
         `,
-      ...this.indexCandidateExpressions(candidates),
+      ...indexCandidateExpressions(candidates),
       `
         LIMIT 1
       `,
@@ -601,135 +608,6 @@ export class RealmServer {
     return indexHTML;
   }
 
-  private async retrieveHeadHTML(cardURL: URL): Promise<string | null> {
-    let candidates = this.indexURLCandidates(cardURL);
-
-    this.headLog.debug(
-      `Head URL candidates for ${cardURL.href}: ${candidates.join(', ')}`,
-    );
-
-    if (candidates.length === 0) {
-      this.headLog.debug(`No head candidates for ${cardURL.href}`);
-      return null;
-    }
-
-    let rows = await query(this.dbAdapter, [
-      `
-        SELECT head_html, realm_version
-        FROM boxel_index
-        WHERE type = 'instance'
-         AND head_html IS NOT NULL
-         AND is_deleted IS NOT TRUE
-         AND
-      `,
-      ...this.indexCandidateExpressions(candidates),
-      `
-        ORDER BY realm_version DESC
-        LIMIT 1
-      `,
-    ]);
-
-    this.headLog.debug('Head query result for %s', cardURL.href, rows);
-
-    let headRow = rows[0] as
-      | { head_html?: string | null; realm_version?: string | number }
-      | undefined;
-
-    if (headRow?.head_html != null) {
-      this.headLog.debug(
-        `Using head HTML from realm version ${headRow.realm_version} for ${cardURL.href}`,
-      );
-    } else {
-      this.headLog.debug(
-        `No head HTML returned from database for ${cardURL.href}`,
-      );
-    }
-    return headRow?.head_html ?? null;
-  }
-
-  private async retrieveIsolatedHTML(cardURL: URL): Promise<string | null> {
-    let candidates = this.indexURLCandidates(cardURL);
-
-    this.isolatedLog.debug(
-      `Isolated URL candidates for ${cardURL.href}: ${candidates.join(', ')}`,
-    );
-
-    if (candidates.length === 0) {
-      this.isolatedLog.debug(`No isolated candidates for ${cardURL.href}`);
-      return null;
-    }
-
-    let rows = await query(this.dbAdapter, [
-      `
-        SELECT isolated_html, realm_version
-        FROM boxel_index
-        WHERE isolated_html IS NOT NULL
-          AND type = 'instance'
-          AND is_deleted IS NOT TRUE
-          AND
-        `,
-      ...this.indexCandidateExpressions(candidates),
-      `
-        ORDER BY realm_version DESC
-        LIMIT 1
-      `,
-    ]);
-
-    this.isolatedLog.debug('Isolated query result for %s', cardURL.href, rows);
-
-    let isolatedRow = rows[0] as
-      | { isolated_html?: string | null; realm_version?: string | number }
-      | undefined;
-
-    if (isolatedRow?.isolated_html != null) {
-      this.isolatedLog.debug(
-        `Using isolated HTML from realm version ${isolatedRow.realm_version} for ${cardURL.href}`,
-      );
-    } else {
-      this.isolatedLog.debug(
-        `No isolated HTML returned from database for ${cardURL.href}`,
-      );
-    }
-
-    return isolatedRow?.isolated_html ?? null;
-  }
-
-  private stripProtocol(href: string): string {
-    return href.replace(/^https?:\/\//, '');
-  }
-
-  private indexURLCandidates(cardURL: URL): string[] {
-    let href = cardURL.href.replace(/\?.*/, '');
-    let candidates = [href].flatMap((url) => {
-      // strip trailing slash, but keep root realm URLs that end with slash
-      let trimmed = url.endsWith('/') ? url.slice(0, -1) : url;
-      let withIndex = url.endsWith('/') ? `${trimmed}/index` : `${url}/index`;
-      let withJson = `${url.replace(/\/?$/, '')}.json`;
-      let withIndexJson = `${withIndex}.json`;
-      return [url, trimmed, withIndex, withJson, withIndexJson];
-    });
-
-    return [...new Set(candidates)];
-  }
-
-  private indexCandidateExpressions(candidates: string[]): Expression {
-    // Proxying means the apparent request URL will be http but in the database it’s https
-    return addExplicitParens(
-      any(
-        candidates.flatMap((candidate) => [
-          [
-            "regexp_replace(url, '^https?://', '') =",
-            param(this.stripProtocol(candidate)),
-          ],
-          [
-            "regexp_replace(file_alias, '^https?://', '') =",
-            param(this.stripProtocol(candidate)),
-          ],
-        ]),
-      ) as Expression,
-    ) as Expression;
-  }
-
   private truncateLogLines(value: string, maxLines = 3): string {
     let lines = value.split(/\r?\n/);
     if (lines.length <= maxLines) {
@@ -738,20 +616,6 @@ export class RealmServer {
     let truncated = lines.slice(0, maxLines);
     truncated[maxLines - 1] = `${truncated[maxLines - 1]} ...`;
     return truncated.join('\n');
-  }
-
-  private injectHeadHTML(indexHTML: string, headHTML: string): string {
-    return indexHTML.replace(
-      /(<meta[^>]+data-boxel-head-start[^>]*>)([\s\S]*?)(<meta[^>]+data-boxel-head-end[^>]*>)/,
-      (_match, start, _content, end) => `${start}\n${headHTML}\n${end}`,
-    );
-  }
-
-  private injectIsolatedHTML(indexHTML: string, isolatedHTML: string): string {
-    return indexHTML.replace(
-      /(<script[^>]+id="boxel-isolated-start"[^>]*>\s*<\/script>)([\s\S]*?)(<script[^>]+id="boxel-isolated-end"[^>]*>\s*<\/script>)/,
-      (_match, start, _content, end) => `${start}\n${isolatedHTML}\n${end}`,
-    );
   }
 
   private serveFromRealm = async (ctxt: Koa.Context, _next: Koa.Next) => {

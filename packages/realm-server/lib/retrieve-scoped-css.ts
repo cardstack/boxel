@@ -3,18 +3,18 @@ import { expressionToSql, query } from '@cardstack/runtime-common';
 import { parseDeps } from '@cardstack/runtime-common/realm';
 import type { Expression } from '@cardstack/runtime-common/expression';
 import { decodeScopedCSSRequest, isScopedCSSRequest } from 'glimmer-scoped-css';
+import {
+  indexURLCandidates,
+  indexCandidateExpressions,
+} from './index-url-utils';
 
 export async function retrieveScopedCSS({
   cardURL,
   dbAdapter,
-  indexURLCandidates,
-  indexCandidateExpressions,
   log,
 }: {
   cardURL: URL;
   dbAdapter: DBAdapter;
-  indexURLCandidates: (cardURL: URL) => string[];
-  indexCandidateExpressions: (candidates: string[]) => Expression;
   log?: {
     debug: (...args: unknown[]) => void;
     trace: (...args: unknown[]) => void;
