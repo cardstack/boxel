@@ -1,7 +1,7 @@
 import type Owner from '@ember/owner';
+import { next } from '@ember/runloop';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { next } from '@ember/runloop';
 
 import { consume } from 'ember-provide-consume-context';
 
