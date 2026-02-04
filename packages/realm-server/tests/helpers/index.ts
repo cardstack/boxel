@@ -1192,7 +1192,7 @@ export function setupPermissionedRealm(
           publishedRealmId,
         );
 
-        dbAdapter.execute(
+        await dbAdapter.execute(
           `INSERT INTO
             published_realms
             (id, owner_username, source_realm_url, published_realm_url)
