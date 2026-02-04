@@ -105,7 +105,7 @@ export default class CodeSubmodeLeftPanelToggle extends Component<Signature> {
   private get downloadRealmURL() {
     let downloadURL = new URL('/_download-realm', this.args.realmURL);
     downloadURL.searchParams.set('realm', this.args.realmURL);
-    // Include token for authenticated streaming download (browser handles natively)
+    // Include token for authenticated streaming download (browser navigates directly)
     let token = this.realm.token(this.args.realmURL);
     if (token) {
       downloadURL.searchParams.set('token', token);
@@ -113,16 +113,9 @@ export default class CodeSubmodeLeftPanelToggle extends Component<Signature> {
     return downloadURL.href;
   }
 
-  downloadRealm = (event: Event) => {
-    event.preventDefault();
-    // Use an anchor element to trigger native browser download (streams without loading into memory)
-    let downloadLink = document.createElement('a');
-    downloadLink.href = this.downloadRealmURL;
-    downloadLink.download = fallbackDownloadName(new URL(this.args.realmURL));
-    document.body.appendChild(downloadLink);
-    downloadLink.click();
-    document.body.removeChild(downloadLink);
-  };
+  private get downloadFilename() {
+    return fallbackDownloadName(new URL(this.args.realmURL));
+  }
 
   <template>
     <InnerContainer
@@ -166,11 +159,13 @@ export default class CodeSubmodeLeftPanelToggle extends Component<Signature> {
 
         <div class='realm-download'>
           <BoxelButton
+            @as='anchor'
+            @href={{this.downloadRealmURL}}
             @kind='text-only'
             @size='extra-small'
             class='realm-download-button'
             title='Download an archive of this workspace'
-            {{on 'click' this.downloadRealm}}
+            download={{this.downloadFilename}}
             data-test-download-realm-button
           >
             <Download width='13' height='13' />
