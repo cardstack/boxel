@@ -406,6 +406,27 @@ export default class MatrixService extends Service {
     return `@${botRunnerUsername}:${server}`;
   }
 
+  getFullUserId(username: string) {
+    if (username.includes(':')) {
+      return username;
+    }
+    let server = this.userId?.split(':')[1];
+    if (!server) {
+      throw new Error('Matrix server is unavailable for user id');
+    }
+    let localpart = username.startsWith('@') ? username.slice(1) : username;
+    return `@${localpart}:${server}`;
+  }
+
+  async isUserInRoom(roomId: string, userId: string) {
+    try {
+      let state = await this.getStateEvent(roomId, 'm.room.member', userId);
+      return state?.membership === 'invite' || state?.membership === 'join';
+    } catch (_error) {
+      return false;
+    }
+  }
+
   get userName() {
     return this.userId ? getMatrixUsername(this.userId) : null;
   }
