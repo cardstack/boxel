@@ -787,15 +787,11 @@ async function setupTestRealm({
   realm = new Realm({
     url: realmURL,
     adapter,
-    matrix: {
-      ...baseTestMatrix,
-      username: testRealmURLToUsername(realmURL),
-    },
     secretSeed: testRealmSecretSeed,
     virtualNetwork,
     dbAdapter,
     queue,
-    realmServerMatrixClient: new MatrixClient({
+    matrixClient: new MatrixClient({
       matrixURL: baseTestMatrix.url,
       username: testRealmServerMatrixUsername,
       seed: testRealmSecretSeed,
