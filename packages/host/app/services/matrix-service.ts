@@ -90,6 +90,7 @@ import type * as FileAPI from 'https://cardstack.com/base/file-api';
 import type { FileDef } from 'https://cardstack.com/base/file-api';
 import type {
   BoxelContext,
+  BotTriggerContent,
   CardMessageContent,
   MatrixEvent as DiscreteMatrixEvent,
   CodePatchResultContent,
@@ -837,6 +838,7 @@ export default class MatrixService extends Service {
     roomId: string,
     eventType: string,
     content:
+      | BotTriggerContent
       | CardMessageContent
       | CodePatchResultContent
       | CommandResultWithNoOutputContent
