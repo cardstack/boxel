@@ -70,6 +70,10 @@ const FILEDEF_CODE_REF_BY_EXTENSION: Record<string, ResolvedCodeRef> = {
     module: `${baseRealm.url}jpg-image-def`,
     name: 'JpgDef',
   },
+  '.svg': {
+    module: `${baseRealm.url}svg-image-def`,
+    name: 'SvgDef',
+  },
   '.mismatch': { module: './filedef-mismatch', name: 'FileDef' },
 };
 const BASE_FILE_DEF_CODE_REF: ResolvedCodeRef = {
