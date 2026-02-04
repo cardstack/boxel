@@ -1,4 +1,5 @@
 import Service, { service } from '@ember/service';
+import { tracked } from '@glimmer/tracking';
 
 import window from 'ember-window-mock';
 
@@ -34,6 +35,9 @@ export default class HostModeService extends Service {
 
   // increasing token to ignore stale async head fetches
   private headUpdateRequestId = 0;
+
+  // tracks whether the current head template contains a title tag
+  @tracked headTemplateContainsTitle = false;
 
   get isActive() {
     if (this.simulatingHostMode) {
@@ -179,6 +183,7 @@ export default class HostModeService extends Service {
 
     if (normalizedCardURL === null) {
       // If there is no card, clear the head content
+      this.headTemplateContainsTitle = false;
       this.replaceHeadTemplate(null);
       return;
     }
@@ -203,6 +208,10 @@ export default class HostModeService extends Service {
     if (requestId !== this.headUpdateRequestId) {
       return;
     }
+
+    // Track whether the fetched head HTML contains a title
+    this.headTemplateContainsTitle =
+      headHTML !== null && headContainsTitle(headHTML);
 
     this.replaceHeadTemplate(
       headHTML !== null ? ensureSingleTitle(headHTML) : null,
