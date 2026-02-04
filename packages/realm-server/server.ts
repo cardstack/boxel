@@ -183,6 +183,26 @@ export class RealmServer {
         }),
       )
       .use(async (ctx, next) => {
+        // For cross-origin image/binary requests, upgrade CORS to support
+        // cookie-based authentication. Images loaded via <img> tags cannot
+        // send Authorization headers, so they rely on cookies set by the
+        // _realm-auth endpoint. The CORS spec requires a specific origin
+        // (not '*') when credentials are enabled.
+        await next();
+        let requestOrigin = ctx.get('Origin');
+        if (requestOrigin) {
+          let contentType = ctx.response.get('Content-Type') || '';
+          if (
+            contentType.startsWith('image/') ||
+            contentType === 'application/octet-stream'
+          ) {
+            ctx.set('Access-Control-Allow-Origin', requestOrigin);
+            ctx.set('Access-Control-Allow-Credentials', 'true');
+            ctx.vary('Origin');
+          }
+        }
+      })
+      .use(async (ctx, next) => {
         // Disable browser cache for all data requests to the realm server. The condition captures our supported mime types but not others,
         // such as assets, which we probably want to cache.
         let mimeType = extractSupportedMimeType(
