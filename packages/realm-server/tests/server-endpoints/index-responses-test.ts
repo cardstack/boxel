@@ -363,7 +363,10 @@ module(`server-endpoints/${basename(__filename)}`, function () {
     let request: SuperTest<Test>;
     let testRealm: Realm;
 
-    function onRealmSetup(args: { request: SuperTest<Test>; testRealm: Realm }) {
+    function onRealmSetup(args: {
+      request: SuperTest<Test>;
+      testRealm: Realm;
+    }) {
       request = args.request;
       testRealm = args.testRealm;
     }
