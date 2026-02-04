@@ -31,7 +31,7 @@ import type RealmService from '@cardstack/host/services/realm';
 
 import type { FileDef } from 'https://cardstack.com/base/file-api';
 
-import FileTree from '../editor/file-tree';
+import IndexedFileTree from '../editor/indexed-file-tree';
 
 interface Signature {
   Args: {};
@@ -218,7 +218,7 @@ export default class ChooseFileModal extends Component<Signature> {
             @label='Choose File'
             @tag='div'
           >
-            <FileTree
+            <IndexedFileTree
               @realmURL={{this.selectedRealm.url.href}}
               @onFileSelected={{this.selectFile}}
             />
