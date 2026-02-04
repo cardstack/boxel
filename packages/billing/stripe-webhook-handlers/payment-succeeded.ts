@@ -26,6 +26,32 @@ import type { PgAdapter } from '@cardstack/postgres';
 import { TransactionManager } from '@cardstack/postgres';
 import { ProrationCalculator } from '../proration-calculator';
 
+function getInvoiceSubscriptionPeriod(
+  event: StripeInvoicePaymentSucceededWebhookEvent,
+  planStripeId: string,
+) {
+  let lineItem = event.data.object.lines.data.find(
+    (line) =>
+      line.amount >= 0 &&
+      line.type === 'subscription' &&
+      line.proration !== true &&
+      line.price?.product === planStripeId &&
+      line.period?.start &&
+      line.period?.end,
+  );
+
+  if (lineItem?.period) {
+    return {
+      periodStart: lineItem.period.start,
+      periodEnd: lineItem.period.end,
+    };
+  }
+
+  throw new Error(
+    `Expected subscription period to be present in payment succeeded webhook event (event id: ${event.id}, invoice id: ${event.data.object.id}, subscription id: ${event.data.object.subscription}, plan stripe id: ${planStripeId})`,
+  );
+}
+
 export async function handlePaymentSucceeded(
   dbAdapter: DBAdapter,
   event: StripeInvoicePaymentSucceededWebhookEvent,
@@ -48,6 +74,11 @@ export async function handlePaymentSucceeded(
     if (!plan) {
       throw new Error(`No plan found for product id: ${productId}`);
     }
+
+    let { periodStart, periodEnd } = getInvoiceSubscriptionPeriod(
+      event,
+      plan.stripePlanId,
+    );
 
     // When user first signs up for a plan, our checkout.session.completed handler takes care of assigning the user a stripe customer id.
     // Stripe customer id is needed so that we can recognize the user when their subscription is renewed, or canceled.
@@ -75,12 +106,18 @@ export async function handlePaymentSucceeded(
         user,
         plan,
         creditAllowance: plan.creditsIncluded,
-        periodStart: event.data.object.period_start,
-        periodEnd: event.data.object.period_end,
+        periodStart,
+        periodEnd,
         event,
       });
     } else if (billingReason === 'subscription_cycle') {
-      await createSubscriptionCycle(dbAdapter, user, plan, event);
+      await createSubscriptionCycle(
+        dbAdapter,
+        user,
+        plan,
+        periodStart,
+        periodEnd,
+      );
     } else if (billingReason === 'subscription_update') {
       await updateSubscription(dbAdapter, user, plan, event);
     }
@@ -193,8 +230,9 @@ async function updateSubscription(
 async function createSubscriptionCycle(
   dbAdapter: DBAdapter,
   user: { id: string },
-  plan: { creditsIncluded: number },
-  event: StripeInvoicePaymentSucceededWebhookEvent,
+  plan: Plan,
+  periodStart: number,
+  periodEnd: number,
 ) {
   let currentActiveSubscription = await getCurrentActiveSubscription(
     dbAdapter,
@@ -226,8 +264,8 @@ async function createSubscriptionCycle(
 
   let newSubscriptionCycle = await insertSubscriptionCycle(dbAdapter, {
     subscriptionId: currentActiveSubscription.id,
-    periodStart: event.data.object.period_start,
-    periodEnd: event.data.object.period_end,
+    periodStart,
+    periodEnd,
   });
 
   await addToCreditsLedger(dbAdapter, {
