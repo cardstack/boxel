@@ -703,4 +703,5 @@ export function isBrowserTestEnv() {
 }
 
 export * from './prerendered-card-search';
+export { isBotTriggerEvent, isBotTriggerCommand } from './bot-trigger';
 export { DEFAULT_LLM_ID_TO_NAME } from './matrix-constants';
