@@ -1388,6 +1388,13 @@ export default class MatrixService extends Service {
     });
   }
 
+  async inviteUserToRoom(roomId: string, userId: string) {
+    let roomData = this.ensureRoomData(roomId);
+    await roomData.mutex.dispatch(async () => {
+      return this.client.invite(roomId, userId);
+    });
+  }
+
   async getStateEvent(
     roomId: string,
     eventType: string,
