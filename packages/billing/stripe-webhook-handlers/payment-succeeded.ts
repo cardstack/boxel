@@ -48,7 +48,7 @@ function getInvoiceSubscriptionPeriod(
   }
 
   throw new Error(
-    'Expected subscription period to be present in payment succeeded webhook event',
+    `Expected subscription period to be present in payment succeeded webhook event (event id: ${event.id}, invoice id: ${event.data.object.id}, subscription id: ${event.data.object.subscription}, plan stripe id: ${planStripeId})`,
   );
 }
 
