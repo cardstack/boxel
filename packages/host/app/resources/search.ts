@@ -12,11 +12,16 @@ import difference from 'lodash/difference';
 import isEqual from 'lodash/isEqual';
 import { TrackedArray } from 'tracked-built-ins';
 
-import type { QueryResultsMeta, ErrorEntry } from '@cardstack/runtime-common';
+import type {
+  QueryResultsMeta,
+  ErrorEntry,
+  SingleCardDocument,
+} from '@cardstack/runtime-common';
 import {
   subscribeToRealm,
-  isCardCollectionDocument,
+  isLinkableCollectionDocument,
   isCardInstance,
+  isFileDefInstance,
   logger as runtimeLogger,
   normalizeQueryForSignature,
   buildQueryParamValue,
@@ -25,6 +30,7 @@ import {
 import type { Query } from '@cardstack/runtime-common/query';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
+import type { FileDef } from 'https://cardstack.com/base/file-api';
 import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
 
 import type RealmServerService from '../services/realm-server';
@@ -32,7 +38,7 @@ import type StoreService from '../services/store';
 
 const waiter = buildWaiter('search-resource:search-waiter');
 
-export interface Args<T extends CardDef = CardDef> {
+export interface Args<T extends CardDef | FileDef = CardDef> {
   named: {
     query: Query | undefined;
     realms: string[] | undefined;
@@ -47,14 +53,20 @@ export interface Args<T extends CardDef = CardDef> {
           realms?: string[];
           meta?: QueryResultsMeta;
           errors?: ErrorEntry[];
+          queryErrors?: Array<{
+            realm: string;
+            type: string;
+            message: string;
+            status?: number;
+          }>;
         }
       | undefined;
     owner: Owner;
   };
 }
-export class SearchResource<T extends CardDef = CardDef> extends Resource<
-  Args<T>
-> {
+export class SearchResource<
+  T extends CardDef | FileDef = CardDef,
+> extends Resource<Args<T>> {
   @service declare private realmServer: RealmServerService;
   @service declare private store: StoreService;
   @tracked private realmsToSearch: string[] = [];
@@ -111,7 +123,8 @@ export class SearchResource<T extends CardDef = CardDef> extends Resource<
     if (seed && !this.#seedApplied) {
       this.loaded = this.applySeed.perform(seed);
       this.#seedApplied = true;
-      if (seed.searchURL) {
+      let hasQueryErrors = seed.queryErrors && seed.queryErrors.length > 0;
+      if (seed.searchURL && !hasQueryErrors) {
         let { query: seedQuery } = parseSearchURL(seed.searchURL);
         this.#previousQueryString = buildQueryParamValue(
           normalizeQueryForSignature(seedQuery),
@@ -228,15 +241,24 @@ export class SearchResource<T extends CardDef = CardDef> extends Resource<
     }
     let newReferences = this._instances.map((i) => i.id);
     for (let card of this._instances) {
-      let maybeInstance = card?.id ? this.store.peek(card.id) : undefined;
+      let isFileMeta = isFileDefInstance(card);
+      let maybeInstance = card?.id
+        ? isFileMeta
+          ? this.store.peek(card.id, { type: 'file-meta' })
+          : this.store.peek(card.id)
+        : undefined;
       if (
         !maybeInstance &&
         (card as unknown as { type?: string })?.type !== 'not-loaded' // TODO: under what circumstances could this happen?
       ) {
-        await this.store.add(
-          card,
-          { doNotPersist: true }, // search results always have id's
-        );
+        if (isFileMeta) {
+          await this.store.get(card.id, { type: 'file-meta' });
+        } else {
+          await this.store.add(
+            card as CardDef,
+            { doNotPersist: true }, // search results always have id's
+          );
+        }
       }
     }
     let referencesToDrop = difference(oldReferences, newReferences);
@@ -293,25 +315,37 @@ export class SearchResource<T extends CardDef = CardDef> extends Resource<
         throw err;
       }
       let json = await response.json();
-      if (!isCardCollectionDocument(json)) {
+      if (!isLinkableCollectionDocument(json)) {
         throw new Error(
-          `The realm search response was not a card collection document:
+          `The realm search response was not a valid collection document:
         ${JSON.stringify(json, null, 2)}`,
         );
       }
       let collectionDoc = json;
       for (let data of collectionDoc.data) {
-        let maybeInstance = this.store.peek(data.id!);
+        let isFileMeta = data.type === 'file-meta';
+        let maybeInstance = isFileMeta
+          ? this.store.peek(data.id!, { type: 'file-meta' })
+          : this.store.peek(data.id!);
         if (!maybeInstance) {
-          await this.store.add(
-            { data },
-            { doNotPersist: true, relativeTo: new URL(data.id!) }, // search results always have id's
-          );
+          if (isFileMeta) {
+            await this.store.get(data.id!, { type: 'file-meta' });
+          } else {
+            await this.store.add(
+              { data } as SingleCardDocument,
+              { doNotPersist: true, relativeTo: new URL(data.id!) }, // search results always have id's
+            );
+          }
         }
       }
       let results = collectionDoc.data
-        .map((r) => this.store.peek(r.id!)) // all results will have id's
-        .filter((i) => isCardInstance(i)) as T[];
+        .map((r) => {
+          let isFileMeta = r.type === 'file-meta';
+          return isFileMeta
+            ? this.store.peek(r.id!, { type: 'file-meta' })
+            : this.store.peek(r.id!);
+        })
+        .filter((i) => isCardInstance(i) || isFileDefInstance(i)) as T[];
       this.#log.info(
         `search task complete; total instances=${results.length}; refs=${results
           .map((r) => r.id)
@@ -335,7 +369,7 @@ export class SearchResource<T extends CardDef = CardDef> extends Resource<
 // ```
 // If you need to use `getSearch()`/`getCards()` in something that is not a Component, then
 // let's talk.
-export function getSearch<T extends CardDef = CardDef>(
+export function getSearch<T extends CardDef | FileDef = CardDef>(
   parent: object,
   owner: Owner,
   getQuery: () => Query | undefined,
@@ -349,6 +383,12 @@ export function getSearch<T extends CardDef = CardDef>(
           searchURL?: string;
           meta?: QueryResultsMeta;
           errors?: ErrorEntry[];
+          queryErrors?: Array<{
+            realm: string;
+            type: string;
+            message: string;
+            status?: number;
+          }>;
         }
       | undefined;
   },

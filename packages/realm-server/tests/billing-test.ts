@@ -147,7 +147,13 @@ module(basename(__filename), function () {
                   data: [
                     {
                       amount: 0,
+                      type: 'subscription',
+                      proration: false,
                       price: { product: 'prod_free' },
+                      period: {
+                        start: 1635873600,
+                        end: 1638465600,
+                      },
                     },
                   ],
                 },
@@ -310,6 +316,8 @@ module(basename(__filename), function () {
                   data: [
                     {
                       amount: creatorPlan.monthlyPrice * 100,
+                      type: 'subscription',
+                      proration: false,
                       price: { product: 'prod_creator' },
                       period: { start: 1, end: 2 },
                     },
@@ -405,12 +413,16 @@ module(basename(__filename), function () {
                     {
                       amount: -amountCreditedForUnusedTimeOnPreviousPlan,
                       description: 'Unused time on Creator plan',
+                      type: 'subscription',
+                      proration: false,
                       price: { product: 'prod_creator' },
                       period: { start: 3, end: 4 },
                     },
                     {
                       amount: amountCreditedForRemainingTimeOnNewPlan,
                       description: 'Remaining time on Power User plan',
+                      type: 'subscription',
+                      proration: false,
                       price: { product: 'prod_power_user' },
                       period: { start: 4, end: 5 },
                     },
@@ -500,6 +512,8 @@ module(basename(__filename), function () {
                   data: [
                     {
                       amount: creatorPlan.monthlyPrice * 100,
+                      type: 'subscription',
+                      proration: false,
                       price: { product: 'prod_creator' },
                       period: { start: 5, end: 6 },
                     },
@@ -578,7 +592,13 @@ module(basename(__filename), function () {
                   data: [
                     {
                       amount: 0,
+                      type: 'subscription',
+                      proration: false,
                       price: { product: 'prod_free' },
+                      period: {
+                        start: 1635873600,
+                        end: 1638465600,
+                      },
                     },
                   ],
                 },
@@ -703,7 +723,13 @@ module(basename(__filename), function () {
                   data: [
                     {
                       amount: 1200,
+                      type: 'subscription',
+                      proration: false,
                       price: { product: 'prod_creator' },
+                      period: {
+                        start: 20,
+                        end: 30,
+                      },
                     },
                   ],
                 },
@@ -735,8 +761,8 @@ module(basename(__filename), function () {
           // Assert both subscription cycles have the correct period start and end
           assert.strictEqual(subscriptionCycles[0].periodStart, 1);
           assert.strictEqual(subscriptionCycles[0].periodEnd, 2);
-          assert.strictEqual(subscriptionCycles[1].periodStart, 2);
-          assert.strictEqual(subscriptionCycles[1].periodEnd, 3);
+          assert.strictEqual(subscriptionCycles[1].periodStart, 20);
+          assert.strictEqual(subscriptionCycles[1].periodEnd, 30);
 
           // Assert that the ledger has the correct sum of credits going in and out
           availableCredits = await sumUpCreditsLedger(dbAdapter, {
