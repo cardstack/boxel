@@ -176,15 +176,7 @@ export class RealmServer {
       .use(ecsMetadata)
       .use(
         cors({
-          // Return the request origin for cross-origin requests, or false
-          // when no Origin header is present. We must NOT fall back to '*'
-          // because @koa/cors converts '*' to an empty string when
-          // credentials:true is set, producing an invalid CORS response.
-          // Returning false is safe: requests without an Origin header are
-          // either same-origin (no CORS needed) or non-browser (no CORS
-          // enforcement).
-          origin: (ctx) => ctx.request.headers.origin || false,
-          credentials: true,
+          origin: '*',
           allowHeaders:
             'Authorization, Content-Type, If-Match, If-None-Match, X-Requested-With, X-Boxel-Client-Request-Id, X-Boxel-Assume-User, X-HTTP-Method-Override, X-Boxel-Disable-Module-Cache, X-Filename',
           allowMethods: 'GET,HEAD,PUT,POST,DELETE,PATCH,OPTIONS,QUERY',
