@@ -68,6 +68,7 @@ export default class RealmPicker extends Component<Signature> {
           @selected={{@selected}}
           @onChange={{@onChange}}
           @placeholder={{@placeholder}}
+          @maxSelectedDisplay={{3}}
           data-test-realm-picker
         />
       </:default>

@@ -490,4 +490,123 @@ module('Integration | Component | picker', function (hooks) {
       Ember.onerror = original;
     }
   });
+
+  test('picker limits displayed items when maxSelectedDisplay is set', async function (assert) {
+    const selected = [testOptions[0], testOptions[1], testOptions[2]];
+
+    await render(
+      <template>
+        <Picker
+          @options={{testOptionsWithSelectAll}}
+          @selected={{selected}}
+          @onChange={{noop}}
+          @label='Test'
+          @maxSelectedDisplay={{2}}
+        />
+      </template>,
+    );
+
+    // Only 2 items should be visible
+    assert.dom('[data-test-boxel-picker-selected-item]').exists({ count: 2 });
+  });
+
+  test('picker shows +X more pill when items exceed maxSelectedDisplay', async function (assert) {
+    const selected = [
+      testOptions[0],
+      testOptions[1],
+      testOptions[2],
+      testOptions[3],
+    ];
+
+    await render(
+      <template>
+        <Picker
+          @options={{testOptionsWithSelectAll}}
+          @selected={{selected}}
+          @onChange={{noop}}
+          @label='Test'
+          @maxSelectedDisplay={{2}}
+        />
+      </template>,
+    );
+
+    // 2 items + 1 more pill
+    assert.dom('[data-test-boxel-picker-selected-item]').exists({ count: 2 });
+    assert.dom('[data-test-boxel-picker-more-items]').exists();
+    assert.dom('[data-test-boxel-picker-more-items]').hasText('+2 more');
+  });
+
+  test('picker does not show +X more pill when items do not exceed maxSelectedDisplay', async function (assert) {
+    const selected = [testOptions[0], testOptions[1]];
+
+    await render(
+      <template>
+        <Picker
+          @options={{testOptionsWithSelectAll}}
+          @selected={{selected}}
+          @onChange={{noop}}
+          @label='Test'
+          @maxSelectedDisplay={{3}}
+        />
+      </template>,
+    );
+
+    // Only 2 items should be visible, no more pill
+    assert.dom('[data-test-boxel-picker-selected-item]').exists({ count: 2 });
+    assert.dom('[data-test-boxel-picker-more-items]').doesNotExist();
+  });
+
+  test('clicking +X more pill opens the dropdown', async function (assert) {
+    const selected = [
+      testOptions[0],
+      testOptions[1],
+      testOptions[2],
+      testOptions[3],
+    ];
+
+    await render(
+      <template>
+        <Picker
+          @options={{testOptionsWithSelectAll}}
+          @selected={{selected}}
+          @onChange={{noop}}
+          @label='Test'
+          @maxSelectedDisplay={{2}}
+        />
+      </template>,
+    );
+
+    assert.dom('[data-test-boxel-picker-more-items]').exists();
+
+    // Click the more items pill
+    await click('[data-test-boxel-picker-more-items]');
+    await waitFor('[data-test-boxel-picker-option-row]');
+
+    // Dropdown should be open and show all options
+    assert.dom('[data-test-boxel-picker-option-row]').exists({ count: 5 });
+  });
+
+  test('picker shows all items when maxSelectedDisplay is not set', async function (assert) {
+    const selected = [
+      testOptions[0],
+      testOptions[1],
+      testOptions[2],
+      testOptions[3],
+    ];
+
+    await render(
+      <template>
+        <Picker
+          @options={{testOptionsWithSelectAll}}
+          @selected={{selected}}
+          @onChange={{noop}}
+          @label='Test'
+        />
+      </template>,
+    );
+
+    // All 4 items should be visible
+    assert.dom('[data-test-boxel-picker-selected-item]').exists({ count: 4 });
+    assert.dom('[data-test-boxel-picker-more-items]').doesNotExist();
+  });
 });

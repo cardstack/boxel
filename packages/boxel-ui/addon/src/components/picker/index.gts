@@ -25,6 +25,7 @@ export interface PickerSignature {
     // Display
     label: string;
     matchTriggerWidth?: boolean;
+    maxSelectedDisplay?: number;
 
     onChange: (selected: PickerOption[]) => void;
     // Data
@@ -152,6 +153,7 @@ export default class Picker extends Component<PickerSignature> {
       searchTerm: this.searchTerm,
       searchPlaceholder: this.args.searchPlaceholder,
       onSearchTermChange: this.onSearchTermChange,
+      maxSelectedDisplay: this.args.maxSelectedDisplay,
     };
   }
 
