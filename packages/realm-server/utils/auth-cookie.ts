@@ -135,7 +135,13 @@ export function parseCookies(
     let [name, ...valueParts] = pair.trim().split('=');
     if (name) {
       let value = valueParts.join('='); // Handle values that contain '='
-      cookies.set(name.trim(), decodeURIComponent(value.trim()));
+      let trimmedValue = value.trim();
+      try {
+        trimmedValue = decodeURIComponent(trimmedValue);
+      } catch {
+        // leave value undecoded if it contains invalid percent-encoding
+      }
+      cookies.set(name.trim(), trimmedValue);
     }
   }
 
@@ -152,13 +158,27 @@ export function findAuthCookieForPath(
 ): string | null {
   let cookies = parseCookies(cookieHeader);
 
-  // Find all auth cookies and check if any match the request path
+  // Find the most specific (longest) matching auth cookie.
+  // Use path-boundary matching so /foo does not match /foobar.
+  let bestMatch: { path: string; token: string } | null = null;
+
   for (let [name, value] of Array.from(cookies.entries())) {
     let realmPath = parseAuthCookieName(name);
-    if (realmPath && requestPath.startsWith(realmPath)) {
-      return value;
+    if (!realmPath) {
+      continue;
+    }
+    // Require the request path to equal the realm path or continue past a
+    // path separator so that realm path "/foo/" matches "/foo/bar" but not
+    // "/foobar". Realm paths typically end with "/" but we handle both cases.
+    let isMatch =
+      requestPath === realmPath ||
+      requestPath.startsWith(
+        realmPath.endsWith('/') ? realmPath : `${realmPath}/`,
+      );
+    if (isMatch && (!bestMatch || realmPath.length > bestMatch.path.length)) {
+      bestMatch = { path: realmPath, token: value };
     }
   }
 
-  return null;
+  return bestMatch?.token ?? null;
 }
