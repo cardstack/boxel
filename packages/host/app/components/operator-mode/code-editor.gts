@@ -6,7 +6,13 @@ import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { cached, tracked } from '@glimmer/tracking';
 
-import { task, restartableTask, timeout, all } from 'ember-concurrency';
+import {
+  task,
+  restartableTask,
+  timeout,
+  all,
+  didCancel,
+} from 'ember-concurrency';
 
 import perform from 'ember-concurrency/helpers/perform';
 
@@ -471,6 +477,11 @@ export default class CodeEditor extends Component<Signature> {
         saveType,
       })
       .catch((error) => {
+        // Task cancellations are expected when the restartable writeTask is
+        // performed again while still running - this is normal behavior, not an error
+        if (didCancel(error)) {
+          return;
+        }
         if (error?.status === 413 && error?.title) {
           this.args.onWriteError?.(error.title);
           return;
