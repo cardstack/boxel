@@ -62,6 +62,14 @@ const FILEDEF_CODE_REF_BY_EXTENSION: Record<string, ResolvedCodeRef> = {
     module: `${baseRealm.url}png-image-def`,
     name: 'PngDef',
   },
+  '.jpg': {
+    module: `${baseRealm.url}jpg-image-def`,
+    name: 'JpgDef',
+  },
+  '.jpeg': {
+    module: `${baseRealm.url}jpg-image-def`,
+    name: 'JpgDef',
+  },
   '.mismatch': { module: './filedef-mismatch', name: 'FileDef' },
 };
 const BASE_FILE_DEF_CODE_REF: ResolvedCodeRef = {
