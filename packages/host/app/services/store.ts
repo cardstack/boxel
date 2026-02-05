@@ -654,7 +654,7 @@ export default class StoreService extends Service implements StoreInterface {
       await Promise.all(
         collectionDoc.data.map(async (resource) => {
           try {
-            return await this._addResourceFromSearchData<T>(resource);
+            return await this.addResourceFromSearchData<T>(resource);
           } catch (error) {
             storeLogger.warn(
               `Failed to hydrate resource from search results (id: ${'id' in resource ? resource.id : 'unknown'})`,
@@ -1091,7 +1091,7 @@ export default class StoreService extends Service implements StoreInterface {
   // Internal method for hydrating a resource from search response data.
   // This avoids N+1 queries when search results include card or file-meta resources.
   // Not part of the public API since it's meant for internal search result processing.
-  async _addResourceFromSearchData<T extends CardDef | FileDef>(
+  private async addResourceFromSearchData<T extends CardDef | FileDef>(
     resource: CardResource<Saved> | FileMetaResource,
   ): Promise<T | undefined> {
     if (!resource.id) {
