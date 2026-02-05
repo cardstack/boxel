@@ -477,11 +477,12 @@ export default class CodeEditor extends Component<Signature> {
         saveType,
       })
       .catch((error) => {
-        // Task cancellations are expected when the restartable writeTask is
+        // Task cancellations are expected when the restartable contentChangedTask is
         // performed again while still running - this is normal behaviour, not an error
         if (didCancel(error)) {
           return;
         }
+
         if (error?.status === 413 && error?.title) {
           this.args.onWriteError?.(error.title);
           return;
