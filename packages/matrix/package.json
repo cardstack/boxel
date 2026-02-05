@@ -31,7 +31,7 @@
     "start:admin": "ts-node --transpileOnly ./scripts/admin-console",
     "stop:admin": "docker stop synapse-admin && docker rm synapse-admin",
     "register-bot-user": "MATRIX_USERNAME=aibot MATRIX_PASSWORD=pass ts-node --transpileOnly ./scripts/register-test-user.ts",
-    "register-submission-bot": "MATRIX_IS_ADMIN=TRUE MATRIX_USERNAME=submission-bot MATRIX_PASSWORD=password ts-node --transpileOnly ./scripts/register-submission-bot.ts",
+    "register-submission-bot": "MATRIX_IS_ADMIN=TRUE MATRIX_USERNAME=submissionbot MATRIX_PASSWORD=password ts-node --transpileOnly ./scripts/register-submission-bot.ts",
     "register-test-user": "MATRIX_USERNAME=user MATRIX_PASSWORD=password ts-node --transpileOnly ./scripts/register-test-user.ts",
     "register-skills-writer": "MATRIX_USERNAME=skills_writer MATRIX_PASSWORD=password ts-node --transpileOnly ./scripts/register-test-user.ts",
     "register-homepage-writer": "MATRIX_USERNAME=homepage_writer MATRIX_PASSWORD=password ts-node --transpileOnly ./scripts/register-test-user.ts",

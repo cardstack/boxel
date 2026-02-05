@@ -73,9 +73,9 @@ module('membership handler', () => {
       makeMembershipEvent(1001),
       makeMember({
         membership: 'invite',
-        userId: '@submission-bot:localhost',
+        userId: '@submissionbot:localhost',
         roomId: '!room-id:localhost',
-        name: 'submission-bot',
+        name: 'submissionbot',
       }),
     );
 
