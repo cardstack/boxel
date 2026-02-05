@@ -20,7 +20,7 @@ const baseRealmDir = resolve(join(__dirname, '..', '..', 'base'));
 const matrixDir = resolve(join(__dirname, '..'));
 export const appURL = 'http://localhost:4205/test';
 
-const DEFAULT_PRERENDER_PORT = 4221;
+const DEFAULT_PRERENDER_PORT = 4231;
 
 export interface PrerenderServerConfig {
   port?: number;
@@ -214,7 +214,7 @@ export async function startServer({
   copySync(testRealmCards, testRealmDir);
 
   let testDBName = `test_db_${Math.floor(10000000 * Math.random())}`;
-  let workerManagerPort = await findAvailablePort(4212);
+  let workerManagerPort = await findAvailablePort(4232);
 
   process.env.PGPORT = '5435';
   process.env.PGDATABASE = testDBName;
@@ -333,7 +333,7 @@ export async function startServer({
       };
       realmServer.on('message', onMessage);
     }),
-    new Promise<true>((r) => setTimeout(() => r(true), 60_000)),
+    new Promise<true>((r) => setTimeout(() => r(true), 180_000)),
   ]);
   if (timeout) {
     throw new Error(
