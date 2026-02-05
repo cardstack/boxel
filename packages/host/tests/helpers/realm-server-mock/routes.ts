@@ -209,7 +209,10 @@ function registerCatalogRoutes() {
     path: '/_catalog-realms',
     handler: async () => {
       let catalogURLs = [
-        ENV.resolvedCatalogRealmURL,
+        // Only include catalog if not skipped
+        ...(process.env.SKIP_CATALOG !== 'true'
+          ? [ENV.resolvedCatalogRealmURL]
+          : []),
         ENV.resolvedSkillsRealmURL,
       ]
         .filter(Boolean)

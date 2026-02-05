@@ -59,7 +59,10 @@ type Plural<T> = {
 
 const publicRealmURLs = [
   baseRealm.url,
-  ensureTrailingSlash(ENV.resolvedCatalogRealmURL),
+  // Only include catalog if it's actually available (not skipped)
+  ...(process.env.SKIP_CATALOG !== 'true'
+    ? [ensureTrailingSlash(ENV.resolvedCatalogRealmURL)]
+    : []),
   ensureTrailingSlash(ENV.resolvedSkillsRealmURL),
 ];
 
