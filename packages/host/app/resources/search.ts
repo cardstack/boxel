@@ -12,15 +12,9 @@ import difference from 'lodash/difference';
 import isEqual from 'lodash/isEqual';
 import { TrackedArray } from 'tracked-built-ins';
 
-import type {
-  QueryResultsMeta,
-  ErrorEntry,
-  SingleCardDocument,
-} from '@cardstack/runtime-common';
+import type { QueryResultsMeta, ErrorEntry } from '@cardstack/runtime-common';
 import {
   subscribeToRealm,
-  isLinkableCollectionDocument,
-  isCardInstance,
   isFileDefInstance,
   logger as runtimeLogger,
   normalizeQueryForSignature,
@@ -289,71 +283,20 @@ export class SearchResource<
     // the Task instance to a promise which makes it uncancellable. When this is
     // uncancellable it results in a flaky test.
     let token = waiter.beginAsync();
-    let realmServerURLs = this.realmServer.getRealmServersForRealms(
-      this.realmsToSearch,
-    );
-    // TODO remove this assertion after multi-realm server/federated identity is supported
-    this.realmServer.assertOwnRealmServer(realmServerURLs);
-    let [realmServerURL] = realmServerURLs;
     try {
-      let searchURL = new URL('_search', realmServerURL);
-      let response = await this.realmServer.maybeAuthedFetch(searchURL.href, {
-        method: 'QUERY',
-        headers: {
-          Accept: 'application/vnd.card+json',
-        },
-        body: JSON.stringify({ ...query, realms: this.realmsToSearch }),
-      });
-      if (!response.ok) {
-        let responseText = await response.text();
-        let err = new Error(
-          `status: ${response.status} - ${response.statusText}. ${responseText}`,
-        ) as any;
-        err.status = response.status;
-        err.responseText = responseText;
-        err.responseHeaders = response.headers;
-        throw err;
-      }
-      let json = await response.json();
-      if (!isLinkableCollectionDocument(json)) {
-        throw new Error(
-          `The realm search response was not a valid collection document:
-        ${JSON.stringify(json, null, 2)}`,
-        );
-      }
-      let collectionDoc = json;
-      for (let data of collectionDoc.data) {
-        let isFileMeta = data.type === 'file-meta';
-        let maybeInstance = isFileMeta
-          ? this.store.peek(data.id!, { type: 'file-meta' })
-          : this.store.peek(data.id!);
-        if (!maybeInstance) {
-          if (isFileMeta) {
-            await this.store.get(data.id!, { type: 'file-meta' });
-          } else {
-            await this.store.add(
-              { data } as SingleCardDocument,
-              { doNotPersist: true, relativeTo: new URL(data.id!) }, // search results always have id's
-            );
-          }
-        }
-      }
-      let results = collectionDoc.data
-        .map((r) => {
-          let isFileMeta = r.type === 'file-meta';
-          return isFileMeta
-            ? this.store.peek(r.id!, { type: 'file-meta' })
-            : this.store.peek(r.id!);
-        })
-        .filter((i) => isCardInstance(i) || isFileDefInstance(i)) as T[];
+      let { instances, meta } = await this.store.search<T>(
+        query,
+        this.realmsToSearch,
+        { includeMeta: true },
+      );
       this.#log.info(
-        `search task complete; total instances=${results.length}; refs=${results
+        `search task complete; total instances=${instances.length}; refs=${instances
           .map((r) => r.id)
           .join(',')}`,
       );
-      this._meta = collectionDoc.meta;
+      this._meta = meta;
       this._errors = undefined;
-      await this.updateInstances(results);
+      await this.updateInstances(instances);
     } finally {
       waiter.endAsync(token);
     }
