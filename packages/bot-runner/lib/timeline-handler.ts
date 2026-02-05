@@ -28,11 +28,6 @@ export function onTimelineEvent({
       if (!room || toStartOfTimeline) {
         return;
       }
-      //TODO: Race condition between joining and processing event
-      // if (room.getMyMembership() !== 'join') {
-      //   return;
-      // }
-
       let eventType = event.getType?.() ?? event.event?.type;
       if (eventType !== 'app.boxel.bot-trigger') {
         return;
