@@ -478,7 +478,7 @@ export default class CodeEditor extends Component<Signature> {
       })
       .catch((error) => {
         // Task cancellations are expected when the restartable writeTask is
-        // performed again while still running - this is normal behavior, not an error
+        // performed again while still running - this is normal behaviour, not an error
         if (didCancel(error)) {
           return;
         }
