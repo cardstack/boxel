@@ -1,4 +1,5 @@
 import type Owner from '@ember/owner';
+import { next } from '@ember/runloop';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
@@ -59,6 +60,11 @@ interface CreateCardSignature {
 class CreateCard extends Component<CreateCardSignature> {
   constructor(owner: Owner, args: CreateCardSignature['Args']) {
     super(owner, args);
-    this.args.createNewCard();
+    // "next" here is a workaround. This code should be refactored to not mutate
+    // tracked state during rendering. I'm adding the workaround instead because
+    // I'm in the middle of trying to upgrade deps.
+    next(() => {
+      this.args.createNewCard();
+    });
   }
 }
