@@ -33,11 +33,15 @@ export function onTimelineEvent({
       //   return;
       // }
 
-      if (event.getType() != 'app.boxel.bot-trigger') {
+      let eventType = event.getType?.() ?? event.event?.type;
+      if (eventType !== 'app.boxel.bot-trigger') {
         return;
       }
 
       let eventContent = event.getContent?.() ?? event.event?.content;
+      if (eventContent == null) {
+        return;
+      }
       log.debug('event content', eventContent);
       let senderUsername = getRoomCreator(room);
       if (!senderUsername) {
