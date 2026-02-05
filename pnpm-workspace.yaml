@@ -24,7 +24,6 @@ catalog:
   "@babel/preset-typescript": ^7.24.7
   "@babel/runtime": ^7.22.11
   "@babel/traverse": 7.27.0
-  "@cardstack/requirejs-monaco-ember-polyfill": ^0.0.1
   "@cardstack/view-transitions": ^0.2.0
   "@codemirror/autocomplete": ^6.20.1
   "@codemirror/commands": ^6.10.3
