@@ -39,7 +39,7 @@ export function onTimelineEvent({
 
       let eventContent = event.getContent?.() ?? event.event?.content;
       log.debug('event content', eventContent);
-      let senderUsername = getRoomCreator(room) ?? event.getSender();
+      let senderUsername = getRoomCreator(room);
       if (!senderUsername) {
         return;
       }
