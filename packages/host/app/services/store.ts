@@ -652,9 +652,17 @@ export default class StoreService extends Service implements StoreInterface {
     // Hydrate each result into the store
     let instances = (
       await Promise.all(
-        collectionDoc.data.map((resource) =>
-          this._addResourceFromSearchData<T>(resource),
-        ),
+        collectionDoc.data.map(async (resource) => {
+          try {
+            return await this._addResourceFromSearchData<T>(resource);
+          } catch (error) {
+            logger.warn(
+              `Failed to hydrate resource from search results (id: ${'id' in resource ? resource.id : 'unknown'})`,
+              error,
+            );
+            return undefined;
+          }
+        }),
       )
     ).filter(Boolean) as T[];
 
