@@ -1,5 +1,5 @@
 import { registerDestructor } from '@ember/destroyable';
-import { fn } from '@ember/helper';
+import { array, fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
@@ -218,10 +218,13 @@ export default class ChooseFileModal extends Component<Signature> {
             @label='Choose File'
             @tag='div'
           >
-            <IndexedFileTree
-              @realmURL={{this.selectedRealm.url.href}}
-              @onFileSelected={{this.selectFile}}
-            />
+            {{! Use #each with single-element array to force component recreation when realm changes }}
+            {{#each (array this.selectedRealm.url.href) as |realmURL|}}
+              <IndexedFileTree
+                @realmURL={{realmURL}}
+                @onFileSelected={{this.selectFile}}
+              />
+            {{/each}}
           </FieldContainer>
         </:content>
         <:footer>
