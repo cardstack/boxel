@@ -1,12 +1,13 @@
 import { getOwner } from '@ember/owner';
 import type Owner from '@ember/owner';
-import { tracked, cached } from '@glimmer/tracking';
+import { cached } from '@glimmer/tracking';
 
 import { Resource } from 'ember-modify-based-class-resource';
 
 import { ensureTrailingSlash } from '@cardstack/runtime-common';
 import type { Query } from '@cardstack/runtime-common/query';
 
+import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type { FileDef } from 'https://cardstack.com/base/file-api';
 
 import { getSearch, type SearchResource } from './search';
@@ -25,32 +26,34 @@ export interface FileTreeNode {
 }
 
 export class FileTreeFromIndexResource extends Resource<Args> {
-  @tracked private realmURL: string | undefined;
-  private search: SearchResource<FileDef> | undefined;
+  // Use private field to avoid Glimmer autotracking - this prevents the error:
+  // "You attempted to update `realmURL` but it had already been used previously in the same computation"
+  #realmURL: string | undefined;
+  private search: SearchResource<CardDef | FileDef> | undefined;
 
   modify(_positional: never[], named: Args['named']) {
     let { realmURL } = named;
     let normalizedURL = ensureTrailingSlash(realmURL);
 
-    if (this.realmURL === normalizedURL) {
+    if (this.#realmURL === normalizedURL) {
       return;
     }
 
-    this.realmURL = normalizedURL;
+    this.#realmURL = normalizedURL;
 
     // Create search resource for FileDef type in this realm
     let owner = getOwner(this) as Owner;
-    this.search = getSearch<FileDef>(
+    this.search = getSearch(
       this,
       owner,
       () => this.query,
-      () => (this.realmURL ? [this.realmURL] : undefined),
+      () => (this.#realmURL ? [this.#realmURL] : undefined),
       { isLive: true },
     );
   }
 
   private get query(): Query | undefined {
-    if (!this.realmURL) {
+    if (!this.#realmURL) {
       return undefined;
     }
     return {
@@ -69,11 +72,12 @@ export class FileTreeFromIndexResource extends Resource<Args> {
 
   @cached
   get entries(): FileTreeNode[] {
-    if (!this.search || !this.realmURL) {
+    if (!this.search || !this.#realmURL) {
       return [];
     }
 
-    let files = this.search.instances;
+    // We query with FileDef type filter, so instances are FileDef
+    let files = this.search.instances as FileDef[];
     let tree = this.buildTreeFromFiles(files);
     return this.sortEntries(tree);
   }
@@ -85,7 +89,7 @@ export class FileTreeFromIndexResource extends Resource<Args> {
       // Extract relative path from file URL
       // The file id is the full URL like "http://localhost:4200/myworkspace/path/to/file.txt"
       // We need just "path/to/file.txt"
-      let relativePath = file.id.replace(this.realmURL!, '');
+      let relativePath = file.id.replace(this.#realmURL!, '');
 
       // Skip if the path is empty or just the realm root
       if (!relativePath || relativePath === '/') {
