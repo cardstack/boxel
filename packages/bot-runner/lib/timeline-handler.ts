@@ -28,25 +28,51 @@ export function onTimelineEvent({
       if (!room || toStartOfTimeline) {
         return;
       }
-      if (room.getMyMembership() !== 'join') {
+      //TODO: Race condition between joining and processing event
+      // if (room.getMyMembership() !== 'join') {
+      //   return;
+      // }
+
+      if (event.getType() != 'app.boxel.bot-trigger') {
         return;
       }
 
-      let senderUsername = event.getSender();
-      if (!senderUsername || senderUsername === authUserId) {
+      let eventContent = event.getContent?.() ?? event.event?.content;
+      log.debug('event content', eventContent);
+      let senderUsername = getRoomCreator(room) ?? event.getSender();
+      if (!senderUsername) {
         return;
       }
+      let botRunnerUsername = authUserId;
 
       let registrations = await getRegistrationsForUser(
         dbAdapter,
         senderUsername,
       );
-      if (!registrations.length) {
+      let botRunnerRegistrations = await getRegistrationsForUser(
+        dbAdapter,
+        botRunnerUsername,
+      );
+      if (!registrations.length && !botRunnerRegistrations.length) {
         return;
       }
       log.debug(
         `received event from ${senderUsername} in room ${room.roomId} with ${registrations.length} registrations`,
       );
+      for (let registration of botRunnerRegistrations) {
+        let createdAt = Date.parse(registration.created_at);
+        if (Number.isNaN(createdAt)) {
+          continue;
+        }
+        let eventTimestamp = event.event.origin_server_ts;
+        if (eventTimestamp == null || eventTimestamp < createdAt) {
+          continue;
+        }
+        log.debug(
+          `handling event for bot runner registration ${registration.id} in room ${room.roomId}`,
+          eventContent,
+        );
+      }
       for (let registration of registrations) {
         let createdAt = Date.parse(registration.created_at);
         if (Number.isNaN(createdAt)) {
@@ -57,13 +83,24 @@ export function onTimelineEvent({
           continue;
         }
         // TODO: filter out events we want to handle based on the registration (e.g. command messages, system events)
-        // TODO: handle the event for this registration (e.g. enqueue a job).
+        log.debug(
+          `handling event for registration ${registration.id} in room ${room.roomId}`,
+          eventContent,
+        );
       }
     } catch (error) {
       log.error('error handling timeline event', error);
       Sentry.captureException(error);
     }
   };
+}
+
+function getRoomCreator(room: Room | undefined): string | undefined {
+  if (!room) {
+    return;
+  }
+  let createEvent = room.currentState.getStateEvents('m.room.create', '');
+  return createEvent?.getContent?.()?.creator;
 }
 
 async function getRegistrationsForUser(

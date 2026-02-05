@@ -676,10 +676,9 @@ export class Listing extends CardDef {
     return {
       label: 'Make a PR',
       action: async () => {
-        await new CreateListingPRCommand(commandContext).execute({
+        await new CreateListingPRRequestCommand(commandContext).execute({
           listingId: this.id,
           realm: this[realmURL]!.href,
-          listingId,
         });
       },
       icon: Package,

@@ -6,7 +6,7 @@ import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import HostBaseCommand from '../lib/host-base-command';
 
-import CreateAiAssistantRoomCommand from './create-ai-assistant-room';
+import UseAiAssistantCommand from './ai-assistant';
 import SendBotTriggerEventCommand from './send-bot-trigger-event';
 
 import type MatrixService from '../services/matrix-service';
@@ -44,10 +44,13 @@ export default class CreateListingPRRequestCommand extends HostBaseCommand<
       if (listing && isCardInstance(listing)) {
         listingName = listing.name ?? listing.id;
       }
-      let createRoomResult = await new CreateAiAssistantRoomCommand(
+      let useAiAssistantCommand = new UseAiAssistantCommand(
         this.commandContext,
-      ).execute({
-        name: `PR: ${listingName ?? listingId ?? 'Listing'}`,
+      );
+      let createRoomResult = await useAiAssistantCommand.execute({
+        roomId: 'new',
+        roomName: `PR: ${listingName ?? listingId ?? 'Listing'}`,
+        openRoom: true,
       });
       roomId = createRoomResult.roomId;
     }
