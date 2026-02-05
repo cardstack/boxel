@@ -35,10 +35,7 @@ export class FileTreeFromIndexResource extends Resource<Args> {
     let { realmURL } = named;
     let normalizedURL = ensureTrailingSlash(realmURL);
 
-    if (this.#realmURL === normalizedURL) {
-      return;
-    }
-
+    // Always update - the search resource handles deduplication internally
     this.#realmURL = normalizedURL;
 
     // Create search resource for FileDef type in this realm
