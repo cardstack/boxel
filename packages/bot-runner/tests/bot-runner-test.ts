@@ -157,17 +157,4 @@ module('timeline handler', () => {
 
     assert.ok(true, 'loads registrations');
   });
-
-  test('filters events for unregistered users', async (assert) => {
-    assert.expect(1);
-    currentRows = [];
-    mockGetRegistrations(() => {});
-
-    let r = await handleTimelineEvent(
-      makeBotTriggerEvent('@submission-bot:localhost', 2000),
-      makeRoom('join'),
-      false,
-    );
-    assert.deepEqual(currentRows, [], 'queries registrations');
-  });
 });

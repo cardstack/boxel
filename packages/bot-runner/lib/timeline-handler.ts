@@ -95,7 +95,7 @@ export function onTimelineEvent({
 }
 
 function getRoomCreator(room: Room | undefined): string | undefined {
-  return room?.getCreator?.();
+  return room?.getCreator?.() ?? undefined;
 }
 
 async function getRegistrationsForUser(
