@@ -290,6 +290,10 @@ test.describe('Room messages', () => {
     await showAllCards(page);
     const testCard = `${appURL}/hassan`;
     await page.locator(`[data-test-cards-grid-item="${testCard}"]`).click();
+    // Wait for the card to be attached before switching to Code mode
+    await expect(
+      page.locator(`[data-test-attached-card="${appURL}/hassan"]`),
+    ).toHaveCount(1);
     await page
       .locator(`[data-test-submode-switcher] > [data-test-boxel-button]`)
       .click();
@@ -303,6 +307,10 @@ test.describe('Room messages', () => {
       page.locator(`[data-test-attached-file="${appURL}/hassan.json"]`),
     ).toHaveCount(1);
 
+    // Wait for the card type to load (renders the clickable definition container)
+    await expect(
+      page.locator(`[data-test-clickable-definition-container]`),
+    ).toBeVisible({ timeout: 30000 });
     await page.locator(`[data-test-clickable-definition-container]`).click();
     await expect(page.locator(`[data-test-attached-file]`)).toHaveCount(1);
     await expect(
