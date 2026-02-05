@@ -176,6 +176,6 @@ async function registerBot(jwt: string, matrixUserId: string) {
 
   console.log(`Registered bot runner user ${userId}`);
 })().catch((error) => {
-  console.error('register-bot-runner failed', error);
+  console.error('register-submission-bot failed', error);
   process.exit(1);
 });
