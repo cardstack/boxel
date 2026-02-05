@@ -4,7 +4,7 @@ import { loginUser } from '../docker/synapse';
 
 const matrixURL = process.env.MATRIX_URL || 'http://localhost:8008';
 const realmServerURL = process.env.REALM_SERVER_URL || 'http://localhost:4201';
-const username = process.env.MATRIX_USERNAME || 'bot-runner';
+const username = process.env.MATRIX_USERNAME || 'submissionbot';
 const password = process.env.MATRIX_PASSWORD || 'password';
 const isAdmin = process.env.MATRIX_IS_ADMIN === 'TRUE';
 const registrationToken = process.env.REALM_REGISTRATION_TOKEN ?? null;

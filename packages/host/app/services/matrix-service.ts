@@ -28,7 +28,7 @@ import type {
 } from '@cardstack/runtime-common';
 import {
   aiBotUsername,
-  botRunnerUsername,
+  submissionBotUsername,
   logger,
   isCardInstance,
   Deferred,
@@ -402,9 +402,9 @@ export default class MatrixService extends Service {
     return `@${aiBotUsername}:${server}`;
   }
 
-  get botRunnerUserId() {
+  get submissionBotUserId() {
     let server = this.userId!.split(':')[1];
-    return `@${botRunnerUsername}:${server}`;
+    return `@${submissionBotUsername}:${server}`;
   }
 
   getFullUserId(username: string) {

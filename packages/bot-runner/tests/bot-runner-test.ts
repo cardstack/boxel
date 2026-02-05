@@ -62,11 +62,11 @@ module('membership handler', () => {
         return makeRoom('join');
       },
     }),
-    authUserId: '@bot-runner:localhost',
+    authUserId: '@submissionbot:localhost',
     startTime: 1000,
   });
 
-  test('auto-joins room after membership invite event for bot-runner', async (assert) => {
+  test('auto-joins room after membership invite event for submissionbot', async (assert) => {
     joinedRooms = [];
 
     await handleMembershipEvent(
@@ -107,7 +107,7 @@ module('timeline handler', () => {
   } as DBAdapter;
 
   handleTimelineEvent = onTimelineEvent({
-    authUserId: '@bot-runner:localhost',
+    authUserId: '@submissionbot:localhost',
     dbAdapter,
   });
 
