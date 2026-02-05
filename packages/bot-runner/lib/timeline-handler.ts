@@ -95,11 +95,7 @@ export function onTimelineEvent({
 }
 
 function getRoomCreator(room: Room | undefined): string | undefined {
-  if (!room) {
-    return;
-  }
-  let createEvent = room.currentState.getStateEvents('m.room.create', '');
-  return createEvent?.getContent?.()?.creator;
+  return room?.getCreator?.();
 }
 
 async function getRegistrationsForUser(
