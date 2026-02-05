@@ -33,7 +33,7 @@ interface Signature {
   Args: {
     items: (CardDef | FileDef | CardErrorJSONAPI)[];
     autoAttachedCardIds?: TrackedSet<string>;
-    autoAttachedFile?: FileDef;
+    autoAttachedFiles?: FileDef[];
     removeCard: (cardId: string) => void;
     removeFile: (file: FileDef) => void;
     chooseCard?: (cardId: string) => void;
@@ -46,7 +46,7 @@ interface Signature {
 export default class AttachedItems extends Component<Signature> {
   @tracked areAllItemsDisplayed = false;
 
-  @service private declare operatorModeStateService: OperatorModeStateService;
+  @service declare private operatorModeStateService: OperatorModeStateService;
 
   get itemsToDisplay() {
     return this.areAllItemsDisplayed
@@ -63,7 +63,11 @@ export default class AttachedItems extends Component<Signature> {
   };
 
   private isAutoAttachedFile = (file: FileDef): boolean => {
-    return this.args.autoAttachedFile?.sourceUrl === file.sourceUrl;
+    return (
+      this.args.autoAttachedFiles?.some(
+        (autoFile) => autoFile.sourceUrl === file.sourceUrl,
+      ) ?? false
+    );
   };
 
   @action

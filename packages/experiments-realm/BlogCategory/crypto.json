@@ -7,9 +7,9 @@
       "slug": "crypto",
       "pillColor": "#FA2200",
       "cardInfo": {
-        "description": "News about cryptocurrencies, price predictions, charts and everything about Satoshi Nakamoto",
-        "title": "Cryptocurrency",
-        "thumbnailURL": null
+        "summary": "News about cryptocurrencies, price predictions, charts and everything about Satoshi Nakamoto",
+        "name": "Cryptocurrency",
+        "cardThumbnailURL": null
       }
     },
     "relationships": {

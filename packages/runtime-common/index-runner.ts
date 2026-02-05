@@ -12,12 +12,15 @@ import {
   unixTime,
   jobIdentity,
   modulesConsumedInMeta,
+  trimExecutableExtension,
   Deferred,
   RealmPaths,
   isIgnored,
   type IndexWriter,
   type RenderResponse,
   type ModuleRenderResponse,
+  type FileExtractResponse,
+  type FileRenderResponse,
   type ResolvedCodeRef,
   type Batch,
   type LooseCardResource,
@@ -34,9 +37,52 @@ import {
   type LocalPath,
   type Reader,
   type Stats,
+  baseRealm,
+  internalKeyFor,
 } from './index';
 import { inferContentType } from './infer-content-type';
-import { CardError, isCardError, serializableError } from './error';
+import {
+  CardError,
+  isCardError,
+  serializableError,
+  type SerializedError,
+} from './error';
+
+const FILEDEF_CODE_REF_BY_EXTENSION: Record<string, ResolvedCodeRef> = {
+  // TODO: Replace with realm metadata configuration.
+  '.markdown': {
+    module: `${baseRealm.url}markdown-file-def`,
+    name: 'MarkdownDef',
+  },
+  '.md': {
+    module: `${baseRealm.url}markdown-file-def`,
+    name: 'MarkdownDef',
+  },
+  '.mismatch': { module: './filedef-mismatch', name: 'FileDef' },
+};
+const BASE_FILE_DEF_CODE_REF: ResolvedCodeRef = {
+  module: `${baseRealm.url}file-api`,
+  name: 'FileDef',
+};
+
+function resolveFileDefCodeRef(fileURL: URL): ResolvedCodeRef {
+  let name = fileURL.pathname.split('/').pop() ?? '';
+  let dot = name.lastIndexOf('.');
+  let extension = dot === -1 ? '' : name.slice(dot).toLowerCase();
+  let mapping = extension
+    ? FILEDEF_CODE_REF_BY_EXTENSION[extension]
+    : undefined;
+  if (!mapping) {
+    return BASE_FILE_DEF_CODE_REF;
+  }
+  if (mapping.module.includes('://')) {
+    return mapping;
+  }
+  return {
+    ...mapping,
+    module: new URL(mapping.module, fileURL).href,
+  };
+}
 
 function canonicalURL(url: string, relativeTo?: string): string {
   try {
@@ -72,8 +118,10 @@ export class IndexRunner {
   readonly stats: Stats = {
     instancesIndexed: 0,
     modulesIndexed: 0,
+    filesIndexed: 0,
     instanceErrors: 0,
     moduleErrors: 0,
+    fileErrors: 0,
     totalIndexEntries: 0,
   };
   #shouldClearCacheForNextRender = true;
@@ -264,6 +312,135 @@ export class IndexRunner {
     return true;
   }
 
+  private normalizeDependencyForLookup(dep: string, relativeTo: URL): string {
+    let canonical = canonicalURL(dep, relativeTo.href);
+    try {
+      return trimExecutableExtension(new URL(canonical)).href;
+    } catch (_err) {
+      return canonical;
+    }
+  }
+
+  private errorKey(error: SerializedError): string {
+    return JSON.stringify({
+      id: error.id ?? null,
+      message: error.message ?? null,
+      status: error.status ?? null,
+    });
+  }
+
+  private async collectModuleErrors(
+    deps: string[],
+    relativeTo: URL,
+  ): Promise<SerializedError[]> {
+    let pending = new Set<string>();
+    let visited = new Set<string>();
+    let enqueue = (dep: string, base: URL) => {
+      let normalized = this.normalizeDependencyForLookup(dep, base);
+      if (!normalized || normalized.endsWith('.json')) {
+        return;
+      }
+      if (visited.has(normalized)) {
+        return;
+      }
+      visited.add(normalized);
+      pending.add(normalized);
+    };
+
+    for (let dep of deps) {
+      enqueue(dep, relativeTo);
+    }
+
+    let collected: SerializedError[] = [];
+    let seenErrors = new Set<string>();
+
+    while (pending.size > 0) {
+      let batchDeps = [...pending];
+      pending.clear();
+      let errors = await this.batch.getModuleErrors(batchDeps);
+      for (let error of errors) {
+        let key = this.errorKey(error);
+        if (!seenErrors.has(key)) {
+          collected.push(error);
+          seenErrors.add(key);
+        }
+        let base = relativeTo;
+        if (error.id) {
+          try {
+            base = new URL(error.id);
+          } catch (_err) {
+            base = relativeTo;
+          }
+        }
+        for (let dep of error.deps ?? []) {
+          enqueue(dep, base);
+        }
+      }
+    }
+
+    return collected;
+  }
+
+  private async appendDependencyErrors(
+    entry: ErrorEntry,
+    entryURL: URL,
+  ): Promise<ErrorEntry> {
+    let deps = entry.error.deps ?? [];
+    if (deps.length === 0) {
+      return entry;
+    }
+    let dependencyErrors = await this.collectModuleErrors(deps, entryURL);
+    if (dependencyErrors.length === 0) {
+      return entry;
+    }
+
+    let existing = Array.isArray(entry.error.additionalErrors)
+      ? [...entry.error.additionalErrors]
+      : [];
+    let seen = new Set(existing.map((error) => this.errorKey(error)));
+    seen.add(this.errorKey(entry.error));
+    let added = false;
+    for (let error of dependencyErrors) {
+      let key = this.errorKey(error);
+      if (!seen.has(key)) {
+        existing.push(error);
+        seen.add(key);
+        added = true;
+      }
+    }
+    if (!added) {
+      return entry;
+    }
+    return {
+      ...entry,
+      error: {
+        ...entry.error,
+        additionalErrors: existing,
+      },
+    };
+  }
+
+  private mergeErrorDeps(
+    entry: ErrorEntry,
+    deps: string[] | undefined,
+    relativeTo: URL,
+  ): ErrorEntry {
+    if (!deps || deps.length === 0) {
+      return entry;
+    }
+    let normalizedDeps = deps.map((dep) =>
+      this.normalizeDependencyForLookup(dep, relativeTo),
+    );
+    let merged = new Set([...(entry.error.deps ?? []), ...normalizedDeps]);
+    return {
+      ...entry,
+      error: {
+        ...entry.error,
+        deps: [...merged],
+      },
+    };
+  }
+
   @Memoize()
   private get ignoreMap() {
     let ignoreMap = new Map<string, Ignore>();
@@ -315,7 +492,7 @@ export class IndexRunner {
 
       if (
         !indexEntry ||
-        indexEntry.type.endsWith('-error') ||
+        indexEntry.hasError ||
         indexEntry.lastModified == null ||
         lastModified !== indexEntry.lastModified
       ) {
@@ -381,50 +558,50 @@ export class IndexRunner {
     let { content, lastModified } = fileRef;
     // ensure created_at exists for this file and use it for resourceCreatedAt
     let resourceCreatedAt = await this.batch.ensureFileCreatedAt(localPath);
-    if (hasExecutableExtension(url.href)) {
+    let isModule = hasExecutableExtension(url.href);
+    if (isModule) {
       await this.indexModule(url);
-    } else {
-      if (url.href.endsWith('.json')) {
-        let resource;
+    } else if (url.href.endsWith('.json')) {
+      let resource;
 
-        try {
-          let { data } = JSON.parse(content);
-          resource = data;
-        } catch (e) {
-          this.#log.warn(
-            `${jobIdentity(this.#jobInfo)} unable to parse ${url.href} as card JSON`,
-          );
-        }
-
-        if (resource && isCardResource(resource)) {
-          if (lastModified == null) {
-            this.#log.warn(
-              `${jobIdentity(this.#jobInfo)} No lastModified date available for ${url.href}, using current time`,
-            );
-            lastModified = unixTime(Date.now());
-          }
-          await this.indexCard({
-            path: localPath,
-            lastModified,
-            resourceCreatedAt,
-            resource,
-          });
-          return;
-        }
-      }
-
-      if (lastModified == null) {
+      try {
+        let { data } = JSON.parse(content);
+        resource = data;
+      } catch (e) {
         this.#log.warn(
-          `${jobIdentity(this.#jobInfo)} No lastModified date available for ${url.href}, using current time`,
+          `${jobIdentity(this.#jobInfo)} unable to parse ${url.href} as card JSON`,
         );
-        lastModified = unixTime(Date.now());
       }
-      await this.indexFile({
-        path: localPath,
-        lastModified,
-        resourceCreatedAt,
-      });
+
+      if (resource && isCardResource(resource)) {
+        if (lastModified == null) {
+          this.#log.warn(
+            `${jobIdentity(this.#jobInfo)} No lastModified date available for ${url.href}, using current time`,
+          );
+          lastModified = unixTime(Date.now());
+        }
+        await this.indexCard({
+          path: localPath,
+          lastModified,
+          resourceCreatedAt,
+          resource,
+        });
+        // Intentionally fall through so card JSON files also get a file entry.
+      }
     }
+
+    if (lastModified == null) {
+      this.#log.warn(
+        `${jobIdentity(this.#jobInfo)} No lastModified date available for ${url.href}, using current time`,
+      );
+      lastModified = unixTime(Date.now());
+    }
+    await this.indexFile({
+      path: localPath,
+      lastModified,
+      resourceCreatedAt,
+      hasModulePrerender: isModule,
+    });
     this.#log.debug(
       `${jobIdentity(this.#jobInfo)} completed visiting file ${url.href} in ${Date.now() - start}ms`,
     );
@@ -448,14 +625,16 @@ export class IndexRunner {
       this.#log.warn(
         `${jobIdentity(this.#jobInfo)} encountered error rendering module "${url.href}": ${err.message}`,
       );
-      await this.batch.updateEntry(url, {
+      let errorEntry: ErrorEntry = {
         type: 'module-error',
         error: {
           status: err.status ?? 500,
           message: `encountered error rendering module "${url.href}": ${err.message}`,
           additionalErrors: [serializableError(err)],
         },
-      });
+      };
+      errorEntry = await this.appendDependencyErrors(errorEntry, url);
+      await this.batch.updateEntry(url, errorEntry);
       return;
     }
 
@@ -469,7 +648,13 @@ export class IndexRunner {
 
     if (error) {
       this.stats.moduleErrors++;
-      await this.batch.updateEntry(url, { ...error, type: 'module-error' });
+      let errorEntry = this.mergeErrorDeps(
+        { ...error, type: 'module-error' },
+        deps,
+        url,
+      );
+      errorEntry = await this.appendDependencyErrors(errorEntry, url);
+      await this.batch.updateEntry(url, errorEntry);
       return;
     }
 
@@ -544,6 +729,7 @@ export class IndexRunner {
         // we tack on data that can only be determined via access to underlying filesystem/DB
         if (!this.#realmInfo) {
           let realmInfoResponse = await this.#fetch(`${this.realmURL}_info`, {
+            method: 'QUERY',
             headers: { Accept: SupportedMimeType.RealmInfo },
           });
           this.#realmInfo = (await realmInfoResponse.json())?.data?.attributes;
@@ -634,6 +820,11 @@ export class IndexRunner {
           };
         }
 
+        renderError = await this.appendDependencyErrors(
+          renderError,
+          instanceURL,
+        );
+
         this.#log.warn(
           `${jobIdentity(this.#jobInfo)} encountered error indexing card instance ${path}: ${renderError.error.message}`,
         );
@@ -681,29 +872,164 @@ export class IndexRunner {
     path,
     lastModified,
     resourceCreatedAt,
+    hasModulePrerender,
   }: {
     path: LocalPath;
     lastModified: number;
     resourceCreatedAt: number;
+    hasModulePrerender?: boolean;
   }): Promise<void> {
     let fileURL = this.#realmPaths.fileURL(path).href;
+    let entryURL = new URL(fileURL);
     let name = path.split('/').pop() ?? path;
     let contentType = inferContentType(name);
-    await this.batch.updateEntry(new URL(fileURL), {
-      // Temporary: will be replaced once FileDef extractors populate richer metadata.
+    let fileDefCodeRef = resolveFileDefCodeRef(new URL(fileURL));
+    let fileTypeRefs = [fileDefCodeRef];
+    if (
+      fileDefCodeRef.module !== BASE_FILE_DEF_CODE_REF.module ||
+      fileDefCodeRef.name !== BASE_FILE_DEF_CODE_REF.name
+    ) {
+      fileTypeRefs.push(BASE_FILE_DEF_CODE_REF);
+    }
+    let clearCache = this.#consumeClearCacheForRender();
+    let renderOptions: RenderRouteOptions = {
+      fileExtract: true,
+      fileDefCodeRef,
+      ...(clearCache ? { clearCache } : {}),
+    };
+
+    let extractResult: FileExtractResponse | undefined;
+    let uncaughtError: Error | undefined;
+    try {
+      extractResult = await this.#prerenderer.prerenderFileExtract({
+        url: fileURL,
+        realm: this.#realmURL.href,
+        auth: this.#auth,
+        renderOptions,
+      });
+    } catch (err: any) {
+      uncaughtError = err;
+    }
+
+    let normalizeToErrorEntry = (
+      entry: ErrorEntry | undefined,
+      err: unknown,
+    ): ErrorEntry => {
+      if (entry?.error) {
+        let normalizedError = { ...entry.error };
+        normalizedError.additionalErrors =
+          normalizedError.additionalErrors ?? null;
+        normalizedError.status = normalizedError.status ?? 500;
+        return {
+          ...entry,
+          error: normalizedError,
+        };
+      }
+      if (entry && !entry.error) {
+        throw new CardError('ErrorEntry missing error payload', {
+          status: 500,
+        });
+      }
+      if (isCardError(err)) {
+        return { type: 'file-error', error: serializableError(err) };
+      }
+      let fallback = new CardError(
+        (err as Error)?.message ?? 'unknown file extract error',
+        { status: 500 },
+      );
+      fallback.stack = (err as Error)?.stack;
+      return { type: 'file-error', error: serializableError(fallback) };
+    };
+
+    if (!extractResult || extractResult.status === 'error') {
+      let renderError = normalizeToErrorEntry(
+        extractResult?.error,
+        uncaughtError,
+      );
+      renderError.error.deps = renderError.error.deps ?? [];
+      renderError.error.deps.push(fileURL, fileDefCodeRef.module);
+      if (extractResult?.deps) {
+        renderError.error.deps.push(...extractResult.deps);
+      }
+      renderError.error.deps = [...new Set(renderError.error.deps)];
+
+      this.#log.warn(
+        `${jobIdentity(this.#jobInfo)} encountered error indexing file ${path}: ${renderError.error.message}`,
+      );
+      await this.batch.updateEntry(entryURL, renderError);
+      this.stats.fileErrors++;
+      return;
+    }
+
+    if (extractResult.error) {
+      this.#log.warn(
+        `${jobIdentity(this.#jobInfo)} extractor fallback while indexing file ${path}: ${extractResult.error.error.message}`,
+      );
+    }
+
+    let fallbackTypes = fileTypeRefs.map((ref) =>
+      internalKeyFor(ref, undefined),
+    );
+    let fileTypes = extractResult.types ?? fallbackTypes;
+
+    // Phase 2: Render HTML for file entry (non-fatal).
+    // Skip for files that already have their own prerender (modules) since
+    // they add significant per-file Puppeteer overhead and already produce HTML
+    // through their module prerender path.
+    let renderResult: FileRenderResponse | undefined;
+    if (extractResult.resource && !hasModulePrerender) {
+      try {
+        let fileRenderOptions: RenderRouteOptions = {
+          fileRender: true,
+          fileDefCodeRef,
+        };
+        renderResult = await this.#prerenderer.prerenderFileRender({
+          url: fileURL,
+          realm: this.#realmURL.href,
+          auth: this.#auth,
+          fileData: {
+            resource: extractResult.resource,
+            fileDefCodeRef,
+          },
+          types: fileTypes,
+          renderOptions: fileRenderOptions,
+        });
+        if (renderResult?.error) {
+          this.#log.warn(
+            `${jobIdentity(this.#jobInfo)} file render produced error for ${path}, continuing without HTML: ${renderResult.error.error?.message}`,
+          );
+          renderResult = undefined;
+        }
+      } catch (err: any) {
+        this.#log.warn(
+          `${jobIdentity(this.#jobInfo)} file render failed for ${path}, continuing without HTML: ${err.message}`,
+        );
+      }
+    }
+
+    await this.batch.updateEntry(entryURL, {
       type: 'file',
       lastModified,
       resourceCreatedAt,
-      deps: new Set(),
+      deps: new Set([...(extractResult.deps ?? []), fileURL]),
+      resource: extractResult.resource ?? null,
       searchData: {
         url: fileURL,
         sourceUrl: fileURL,
         name,
         contentType,
+        ...(extractResult.searchDoc ?? {}),
       },
-      types: [],
+      types: fileTypes,
       displayNames: [],
+      isolatedHtml: renderResult?.isolatedHTML ?? undefined,
+      headHtml: renderResult?.headHTML ?? undefined,
+      atomHtml: renderResult?.atomHTML ?? undefined,
+      embeddedHtml: renderResult?.embeddedHTML ?? undefined,
+      fittedHtml: renderResult?.fittedHTML ?? undefined,
+      iconHTML: renderResult?.iconHTML ?? undefined,
     });
+    this.stats.filesIndexed++;
   }
 
   private async updateEntry(

@@ -46,8 +46,8 @@ export default class ErrorDisplay
 {
   @tracked private showDetails = this.args.openDetails ?? false;
 
-  @service private declare commandService: CommandService;
-  @service private declare errorDisplay: ErrorDisplayService;
+  @service declare private commandService: CommandService;
+  @service declare private errorDisplay: ErrorDisplayService;
 
   constructor(owner: any, args: any) {
     super(owner, args);

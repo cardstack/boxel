@@ -13,10 +13,12 @@ import { tokenize } from 'simple-html-tokenizer';
 
 import type { RealmPaths } from '@cardstack/runtime-common';
 import {
-  loadDocument,
+  loadCardDocument,
+  loadFileMetaDocument,
   type CardError,
   type CodeRef,
   type SingleCardDocument,
+  type SingleFileMetaDocument,
 } from '@cardstack/runtime-common';
 
 import config from '@cardstack/host/config/environment';
@@ -27,6 +29,7 @@ import type {
   CardStore,
   BoxComponent,
 } from 'https://cardstack.com/base/card-api';
+import type { FileDef } from 'https://cardstack.com/base/file-api';
 
 import { render } from '../lib/isolated-render';
 
@@ -41,44 +44,76 @@ const { environment } = config;
 
 export class CardStoreWithErrors implements CardStore {
   #cards = new Map<string, CardDef>();
+  #fileMetaInstances = new Map<string, FileDef>();
   #fetch: typeof globalThis.fetch;
   #inFlight: Promise<unknown>[] = [];
-  #docsInFlight: Map<string, Promise<SingleCardDocument | CardError>> =
+  #cardDocsInFlight: Map<string, Promise<SingleCardDocument | CardError>> =
     new Map();
+  #fileMetaDocsInFlight: Map<
+    string,
+    Promise<SingleFileMetaDocument | CardError>
+  > = new Map();
 
   constructor(fetch: typeof globalThis.fetch) {
     this.#fetch = fetch;
   }
 
-  get(id: string): CardDef | undefined {
+  getCard(id: string): CardDef | undefined {
     id = id.replace(/\.json$/, '');
     return this.#cards.get(id);
   }
-  set(id: string, instance: CardDef): void {
+  getFileMeta(id: string): FileDef | undefined {
+    id = id.replace(/\.json$/, '');
+    return this.#fileMetaInstances.get(id);
+  }
+  setCard(id: string, instance: CardDef): void {
     id = id.replace(/\.json$/, '');
     this.#cards.set(id, instance);
   }
-  setNonTracked(id: string, instance: CardDef) {
+  setFileMeta(id: string, instance: FileDef): void {
+    id = id.replace(/\.json$/, '');
+    this.#fileMetaInstances.set(id, instance);
+  }
+  setCardNonTracked(id: string, instance: CardDef) {
     id = id.replace(/\.json$/, '');
     return this.#cards.set(id, instance);
+  }
+  setFileMetaNonTracked(id: string, instance: FileDef) {
+    id = id.replace(/\.json$/, '');
+    return this.#fileMetaInstances.set(id, instance);
   }
   makeTracked(_id: string) {}
 
   readonly errors = new Set<string>();
 
-  async loadDocument(url: string) {
-    let promise = this.#docsInFlight.get(url);
+  async loadCardDocument(url: string) {
+    let promise = this.#cardDocsInFlight.get(url);
     if (promise) {
       return await promise;
     }
     try {
-      promise = loadDocument(this.#fetch, url);
-      this.#docsInFlight.set(url, promise);
+      promise = loadCardDocument(this.#fetch, url);
+      this.#cardDocsInFlight.set(url, promise);
       return await promise;
     } finally {
-      this.#docsInFlight.delete(url);
+      this.#cardDocsInFlight.delete(url);
     }
   }
+
+  async loadFileMetaDocument(url: string) {
+    let promise = this.#fileMetaDocsInFlight.get(url);
+    if (promise) {
+      return await promise;
+    }
+    try {
+      promise = loadFileMetaDocument(this.#fetch, url);
+      this.#fileMetaDocsInFlight.set(url, promise);
+      return await promise;
+    } finally {
+      this.#fileMetaDocsInFlight.delete(url);
+    }
+  }
+
   trackLoad(load: Promise<unknown>) {
     this.#inFlight.push(load);
   }

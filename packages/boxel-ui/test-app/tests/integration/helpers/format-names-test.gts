@@ -52,20 +52,20 @@ module('Integration | helpers | formatNames', function (hooks) {
   });
 
   test('name edge cases', async function (assert) {
-    await render(<template>
-      {{formatNames null fallback='Anonymous'}}
-    </template>);
+    await render(
+      <template>{{formatNames null fallback='Anonymous'}}</template>,
+    );
     assert.dom().hasText('Anonymous', 'uses fallback for null');
 
-    await render(<template>
-      {{formatNames undefined fallback='No name'}}
-    </template>);
+    await render(
+      <template>{{formatNames undefined fallback='No name'}}</template>,
+    );
     assert.dom().hasText('No name', 'uses fallback for undefined');
 
     const emptyName = {};
-    await render(<template>
-      {{formatNames emptyName fallback='Missing name'}}
-    </template>);
+    await render(
+      <template>{{formatNames emptyName fallback='Missing name'}}</template>,
+    );
     assert.dom().hasText('Missing name', 'uses fallback for empty object');
   });
 
@@ -96,18 +96,20 @@ module('Integration | helpers | formatNames', function (hooks) {
   test('cultural name formatting', async function (assert) {
     const hungarianName = { first: 'János', last: 'Nagy' };
 
-    await render(<template>
-      {{formatNames hungarianName format='last-first'}}
-    </template>);
+    await render(
+      <template>{{formatNames hungarianName format='last-first'}}</template>,
+    );
     assert
       .dom()
       .hasText('Nagy, János', 'Hungarian name formatting (last-first)');
 
     const easternName = { first: 'Yuki', last: 'Tanaka' };
 
-    await render(<template>
-      {{formatNames easternName format='last-first' separator=' '}}
-    </template>);
+    await render(
+      <template>
+        {{formatNames easternName format='last-first' separator=' '}}
+      </template>,
+    );
     assert
       .dom()
       .hasText('Tanaka Yuki', 'Eastern name formatting without comma');
@@ -119,9 +121,11 @@ module('Integration | helpers | formatNames', function (hooks) {
     await render(<template>{{formatNames name locale='fr-FR'}}</template>);
     assert.dom().hasText('Jean Dupont', 'French name formatting');
 
-    await render(<template>
-      {{formatNames name format='last-first' locale='fr-FR'}}
-    </template>);
+    await render(
+      <template>
+        {{formatNames name format='last-first' locale='fr-FR'}}
+      </template>,
+    );
     assert.dom().hasText('Dupont, Jean', 'French last-first formatting');
   });
 
@@ -143,9 +147,9 @@ module('Integration | helpers | formatNames', function (hooks) {
     await render(<template>{{formatNames name format='initials'}}</template>);
     assert.dom().hasText('J.M.D.', 'initials with periods');
 
-    await render(<template>
-      {{formatNames name format='initials' separator=''}}
-    </template>);
+    await render(
+      <template>{{formatNames name format='initials' separator=''}}</template>,
+    );
     assert.dom().hasText('JMD', 'initials without periods');
   });
 
@@ -164,9 +168,9 @@ module('Integration | helpers | formatNames', function (hooks) {
         'handles long names',
       );
 
-    await render(<template>
-      {{formatNames longName format='initials'}}
-    </template>);
+    await render(
+      <template>{{formatNames longName format='initials'}}</template>,
+    );
     assert
       .dom()
       .hasText('E.A.W.', 'initials for long names (first letter of each part)');
@@ -175,9 +179,11 @@ module('Integration | helpers | formatNames', function (hooks) {
   test('empty string handling', async function (assert) {
     const nameWithEmpty = { first: '', middle: 'Michael', last: 'Doe' };
 
-    await render(<template>
-      {{formatNames nameWithEmpty fallback='Incomplete name'}}
-    </template>);
+    await render(
+      <template>
+        {{formatNames nameWithEmpty fallback='Incomplete name'}}
+      </template>,
+    );
     assert.dom().hasText('Incomplete name', 'handles empty string parts');
   });
 

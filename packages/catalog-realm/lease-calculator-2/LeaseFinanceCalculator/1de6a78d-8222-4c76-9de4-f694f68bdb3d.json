@@ -71,9 +71,9 @@
       "financeKeepTermMonths": 60,
       "financeExpectedResaleValue": 20000,
       "memo": "Illustrative lease figures for a BMW X3. Based on common lease parameters, not exact market data.",
-      "title": "Sample Lease: BMW X3",
-      "description": "Comprehensive lease and finance calculation example for a BMW X3, including sample Rate Findr inputs.",
-      "thumbnailURL": null
+      "cardTitle": "Sample Lease: BMW X3",
+      "cardDescription": "Comprehensive lease and finance calculation example for a BMW X3, including sample Rate Findr inputs.",
+      "cardThumbnailURL": null
     },
     "meta": {
       "adoptsFrom": {

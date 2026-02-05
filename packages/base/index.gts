@@ -18,7 +18,7 @@ export class IndexCard extends CardDef {
       return this[realmInfo]?.name;
     },
   });
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: IndexCard) {
       return this.realmName;
     },
@@ -62,10 +62,10 @@ export class IndexCard extends CardDef {
           height: 100%;
           width: 100%;
         }
-        .home :deep(.field-component-card.isolated-format) {
+        .home > :deep(.field-component-card.isolated-format) {
           overflow: auto;
         }
-        .home :deep(.boxel-card-container) {
+        .home > :deep(.boxel-card-container) {
           border-radius: 0;
         }
       </style>

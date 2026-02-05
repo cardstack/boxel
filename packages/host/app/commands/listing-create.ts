@@ -6,8 +6,13 @@ import type {
   LooseSingleCardDocument,
   ResolvedCodeRef,
 } from '@cardstack/runtime-common';
-import { isCardInstance, SupportedMimeType } from '@cardstack/runtime-common';
-import { resolveAdoptedCodeRef } from '@cardstack/runtime-common/code-ref';
+import {
+  isCardInstance,
+  SupportedMimeType,
+  isFieldDef,
+  isResolvedCodeRef,
+} from '@cardstack/runtime-common';
+import { loadCardDef } from '@cardstack/runtime-common/code-ref';
 
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
@@ -19,6 +24,7 @@ import HostBaseCommand from '../lib/host-base-command';
 import CreateSpecCommand from './create-specs';
 import OneShotLlmRequestCommand from './one-shot-llm-request';
 import SearchAndChooseCommand from './search-and-choose';
+import { SearchCardsByTypeAndTitleCommand } from './search-cards';
 
 import type CardService from '../services/card-service';
 import type NetworkService from '../services/network';
@@ -27,12 +33,13 @@ import type RealmService from '../services/realm';
 import type RealmServerService from '../services/realm-server';
 import type StoreService from '../services/store';
 
-type ListingType = 'card' | 'app' | 'skill' | 'theme';
+type ListingType = 'card' | 'app' | 'skill' | 'theme' | 'field';
 const listingSubClass: Record<ListingType, string> = {
   card: 'CardListing',
   app: 'AppListing',
   skill: 'SkillListing',
   theme: 'ThemeListing',
+  field: 'FieldListing',
 };
 
 export default class ListingCreateCommand extends HostBaseCommand<
@@ -40,7 +47,7 @@ export default class ListingCreateCommand extends HostBaseCommand<
   typeof BaseCommandModule.ListingCreateResult
 > {
   @service declare private store: StoreService;
-  @service declare private cardService: CardService; // (kept for potential future use)
+  @service declare private cardService: CardService;
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private network: NetworkService;
   @service declare private realm: RealmService;
@@ -50,8 +57,6 @@ export default class ListingCreateCommand extends HostBaseCommand<
   description = 'Create a catalog listing for an example card';
 
   #cardAPI?: typeof CardAPI;
-  private serializedCardString?: string; // serialized JSON of example card
-  private adoptedCodeRef?: ResolvedCodeRef; // resolved adopted code ref for example card
 
   async loadCardAPI() {
     if (!this.#cardAPI) {
@@ -74,10 +79,11 @@ export default class ListingCreateCommand extends HostBaseCommand<
     return ListingCreateInput;
   }
 
-  requireInputFields = ['openCardId'];
+  requireInputFields = ['codeRef', 'targetRealm'];
 
-  private sanitizeDeps(deps: string[]) {
-    return deps.filter((dep) => {
+  private sanitizeModuleList(modulesToCreate: Iterable<string>) {
+    let uniqueModules = Array.from(new Set(modulesToCreate));
+    return uniqueModules.filter((dep) => {
       // Exclude scoped CSS requests
       if (isScopedCSSRequest(dep)) {
         return false;
@@ -93,7 +99,7 @@ export default class ListingCreateCommand extends HostBaseCommand<
         return false;
       }
 
-      // Only allow deps that belong to a realm we can read
+      // Only allow modulesToCreate that belong to a realm we can read
       const url = new URL(dep);
       const realmURL = this.realm.realmOfURL(url);
       if (!realmURL) {
@@ -107,44 +113,28 @@ export default class ListingCreateCommand extends HostBaseCommand<
     input: BaseCommandModule.ListingCreateInput,
   ): Promise<BaseCommandModule.ListingCreateResult> {
     const cardAPI = await this.loadCardAPI();
-    let { openCardId, targetRealm: targetRealmFromInput } = input;
-    if (!openCardId) {
-      throw new Error('openCardId is required');
+    let { openCardId, codeRef, targetRealm } = input;
+
+    if (!codeRef) {
+      throw new Error('codeRef is required');
     }
-    const instance = await this.store.get<CardAPI.CardDef>(openCardId);
-    if (!isCardInstance(instance)) {
-      throw new Error('Instance is not a card');
+    if (!isResolvedCodeRef(codeRef)) {
+      throw new Error('codeRef must be a ResolvedCodeRef with module and name');
     }
-    const exampleCard = instance as CardAPI.CardDef;
-    const targetRealm =
-      targetRealmFromInput ?? exampleCard[cardAPI.realmURL]?.href;
     if (!targetRealm) {
-      throw new Error('Realm not found');
+      throw new Error('Target Realm is required');
     }
 
-    // resolve adopted code ref once for downstream string patch prompts
-    try {
-      this.adoptedCodeRef = resolveAdoptedCodeRef(exampleCard);
-    } catch {
-      this.adoptedCodeRef = undefined;
-    }
-
-    // serialize once for guessListingType context
-    try {
-      const serialized = await this.cardService.serializeCard(exampleCard);
-      this.serializedCardString = JSON.stringify(serialized?.data, null, 2);
-    } catch {
-      this.serializedCardString = undefined;
-    }
-
-    const listingType = await this.guessListingType(exampleCard);
+    let listingType = await this.guessListingType(codeRef);
 
     const listingDoc: LooseSingleCardDocument = {
       data: {
         type: 'card',
-        relationships: {
-          'examples.0': { links: { self: openCardId } },
-        },
+        relationships: openCardId
+          ? {
+              'examples.0': { links: { self: openCardId } },
+            }
+          : {},
         meta: {
           adoptsFrom: {
             module: `${this.catalogRealm}catalog-app/listing/listing`,
@@ -163,47 +153,46 @@ export default class ListingCreateCommand extends HostBaseCommand<
 
     const commandModule = await this.loadCommandModule();
     const listingCard = listing as CardAPI.CardDef; // ensure correct type
-    const specsPromise = this.linkSpecs(listingCard, openCardId, targetRealm);
-    await Promise.all([
-      this.autoPatchName(listingCard),
-      this.autoPatchSummary(listingCard),
-      this.autoLinkExample(listingCard, exampleCard),
+    const specsPromise = this.linkSpecs(
+      listingCard,
+      targetRealm,
+      openCardId ?? codeRef?.module,
+    );
+
+    const promises = [
+      this.autoPatchName(listingCard, codeRef),
+      this.autoPatchSummary(listingCard, codeRef),
       this.autoLinkTag(listingCard),
       this.autoLinkCategory(listingCard),
       this.autoLinkLicense(listingCard),
+      this.autoLinkExample(listingCard, codeRef, openCardId),
       specsPromise,
-    ]);
-    //we don't need to call this save card
-    //interact stack item does auto-saving anyway
-    //await new SaveCardCommand(this.commandContext).execute({
-    //   card: listing as CardAPI.CardDef,
-    //   realm: targetRealm,
-    //});
+    ];
+
+    await Promise.all(promises);
     const { ListingCreateResult } = commandModule;
     return new ListingCreateResult({ listing });
   }
 
   private async guessListingType(
-    exampleCard: CardAPI.CardDef,
+    codeRef: ResolvedCodeRef,
   ): Promise<ListingType> {
-    if (this.isTheme()) {
+    if (this.isTheme(codeRef)) {
       return 'theme';
+    }
+    if (await this.isFieldCodeRef(codeRef)) {
+      return 'field';
     }
     try {
       const oneShot = new OneShotLlmRequestCommand(this.commandContext);
-      const name = (exampleCard as any).name || '';
-      const summary = (exampleCard as any).summary || '';
       const systemPrompt =
         'Respond ONLY with one token: card, app, skill, or theme. No JSON, no punctuation.';
-      const serializedSnippet = this.serializedCardString
-        ? this.serializedCardString.slice(0, 1500)
-        : '';
-      const userPrompt = `ID: ${exampleCard.id || 'unknown'}\nName: ${name}\nSummary: ${summary}\n${serializedSnippet ? `Card JSON (truncated):\n\n\`\`\`json\n${serializedSnippet}\n\`\`\`` : ''}`;
+      const userPrompt = 'What is the listingType?';
       const result = await oneShot.execute({
+        codeRef,
         systemPrompt,
         userPrompt,
         llmModel: 'openai/gpt-4.1-nano',
-        ...(this.adoptedCodeRef ? { codeRef: this.adoptedCodeRef } : {}),
       });
       const maybeType = parseResponseToSingleWord(result.output, true);
       if (
@@ -219,9 +208,9 @@ export default class ListingCreateCommand extends HostBaseCommand<
     }
   }
 
-  private isTheme(): boolean {
-    const codeRefModule = this.adoptedCodeRef?.module?.toLowerCase();
-    const codeRefName = this.adoptedCodeRef?.name?.toLowerCase();
+  private isTheme(codeRef: ResolvedCodeRef): boolean {
+    const codeRefModule = codeRef?.module?.toLowerCase();
+    const codeRefName = codeRef?.name?.toLowerCase();
     const knownBaseModules = [
       'https://cardstack.com/base/structured-theme',
       'https://cardstack.com/base/style-reference',
@@ -249,41 +238,80 @@ export default class ListingCreateCommand extends HostBaseCommand<
     return false;
   }
 
+  private async isFieldCodeRef(codeRef: ResolvedCodeRef): Promise<boolean> {
+    try {
+      const cardDef = await loadCardDef(codeRef, {
+        loader: this.loaderService.loader,
+      });
+      return isFieldDef(cardDef);
+    } catch {
+      return false;
+    }
+  }
+
   private async linkSpecs(
     listing: CardAPI.CardDef,
-    openCardId: string,
     targetRealm: string,
+    resourceUrl: string, // can be module or card instance id
   ): Promise<Spec[]> {
-    const response = await this.network.authedFetch(
-      `${targetRealm}_dependencies?url=${openCardId}`,
-      { headers: { Accept: SupportedMimeType.CardDependencies } },
-    );
+    const url = `${targetRealm}_dependencies?url=${encodeURIComponent(resourceUrl)}`;
+    const response = await this.network.authedFetch(url, {
+      headers: { Accept: SupportedMimeType.JSONAPI },
+    });
+
     if (!response.ok) {
       console.warn('Failed to fetch dependencies for specs');
       (listing as any).specs = [];
       return [];
     }
-    const deps = (await response.json()) as string[];
-    const sanitizedDeps = this.sanitizeDeps(deps ?? []);
-    if (!sanitizedDeps.length) {
-      (listing as any).specs = [];
-      return [];
+
+    const jsonApiResponse = (await response.json()) as {
+      data?: Array<{
+        type: string;
+        id: string;
+        attributes?: {
+          dependencies?: string[];
+        };
+      }>;
+    };
+
+    // Collect all modules (main + dependencies). Deduplication happens in sanitizeModuleList().
+    const modulesToCreate: string[] = [];
+
+    jsonApiResponse.data?.forEach((entry) => {
+      if (entry.attributes?.dependencies) {
+        modulesToCreate.push(...entry.attributes.dependencies);
+      }
+    });
+
+    const sanitizedModules = this.sanitizeModuleList(modulesToCreate);
+
+    // Create specs for all unique modules
+    const uniqueSpecsById = new Map<string, Spec>();
+
+    if (sanitizedModules.length > 0) {
+      const createSpecCommand = new CreateSpecCommand(this.commandContext);
+      const specResults = await Promise.all(
+        sanitizedModules.map((module) =>
+          createSpecCommand
+            .execute({ module, targetRealm, autoGenerateReadme: true })
+            .catch((e) => {
+              console.warn('Failed to create spec(s) for', module, e);
+              return undefined;
+            }),
+        ),
+      );
+
+      specResults.forEach((result) => {
+        result?.specs?.forEach((spec) => {
+          if (spec?.id) {
+            uniqueSpecsById.set(spec.id, spec);
+          }
+        });
+      });
     }
-    const createSpecCommand = new CreateSpecCommand(this.commandContext);
-    const specResults = await Promise.all(
-      sanitizedDeps.map((dep) =>
-        createSpecCommand
-          .execute({ module: dep, targetRealm, autoGenerateReadme: true })
-          .catch((e) => {
-            console.warn('Failed to create spec(s) for', dep, e);
-            return undefined;
-          }),
-      ),
-    );
-    const specs: Spec[] = [];
-    for (const res of specResults) {
-      if (res?.specs) specs.push(...res.specs);
-    }
+
+    const specs = Array.from(uniqueSpecsById.values());
     (listing as any).specs = specs;
     return specs;
   }
@@ -302,24 +330,43 @@ export default class ListingCreateCommand extends HostBaseCommand<
     return result.selectedCards ?? [];
   }
 
-  private async autoPatchName(listing: CardAPI.CardDef) {
+  private async autoPatchName(
+    listing: CardAPI.CardDef,
+    codeRef: ResolvedCodeRef,
+  ) {
     const name = await this.getStringPatch({
+      codeRef,
       systemPrompt:
-        'You are an expert catalog curator for tech products. Produce ONLY the concise human-friendly title (3 words max) for this listing. Output just the title text—no quotes, no JSON, no punctuation beyond normal word separators, and no extra commentary.',
-      userPrompt:
-        'Provide a short, clear, human-friendly title (3-8 words) for this listing. Avoid quotes, punctuation except hyphens/spaces, and version numbers.',
+        'You are an expert catalog curator. You read a Cardstack card/field definition source file and create a concise catalog listing title. Respond ONLY with the title text—no quotes, no JSON, no markdown, and no extra commentary.',
+      userPrompt: [
+        `Generate a catalog listing title for the definition referenced by:`,
+        `- module: ${codeRef.module}`,
+        `- exportName: ${codeRef.name}`,
+        `Use ONLY the attached module source shown below (the file content).`,
+        `Focus on the export named "${codeRef.name}" (ignore other exports).`,
+      ].join('\n'),
     });
     if (name) {
       (listing as any).name = name;
     }
   }
 
-  private async autoPatchSummary(listing: CardAPI.CardDef) {
+  private async autoPatchSummary(
+    listing: CardAPI.CardDef,
+    codeRef: ResolvedCodeRef,
+  ) {
     const summary = await this.getStringPatch({
+      codeRef,
       systemPrompt:
-        "You are an expert catalog curator for tech products. Produce ONLY a one or two sentence concise README-style summary describing the listing's value and primary purpose. Output just the summary text—no quotes, no JSON, no markdown, no extra commentary.",
-      userPrompt:
-        'Write a concise README-style summary. Focus on what this listing (software/card/app/skill) does and its primary purpose. Avoid implementation details and marketing fluff.',
+        'You are an expert catalog curator. You read a Cardstack card/field definition source file and write a concise spec-style summary. Output ONLY the summary text—no quotes, no JSON, no markdown, and no extra commentary.',
+      userPrompt: [
+        `Generate a README-style catalog listing summary for the definition referenced by:`,
+        `- module: ${codeRef.module}`,
+        `- exportName: ${codeRef.name}`,
+        `Use ONLY the attached module source shown below (the file content).`,
+        `Focus on the export named "${codeRef.name}" (ignore other exports).`,
+        `Focus on what this listing (app/card/field/skill/theme) does and its primary purpose. Avoid implementation details and marketing fluff.`,
+      ].join('\n'),
     });
     if (summary) {
       (listing as any).summary = summary;
@@ -328,7 +375,8 @@ export default class ListingCreateCommand extends HostBaseCommand<
 
   private async autoLinkExample(
     listing: CardAPI.CardDef,
-    exampleCard: CardAPI.CardDef,
+    codeRef: ResolvedCodeRef,
+    openCardId?: string,
   ) {
     const existingExamples = Array.isArray((listing as any).examples)
       ? ((listing as any).examples as CardAPI.CardDef[])
@@ -348,15 +396,56 @@ export default class ListingCreateCommand extends HostBaseCommand<
       addCard(existing);
     }
 
+    let exampleCard: CardAPI.CardDef | undefined;
+    if (openCardId) {
+      try {
+        const instance = await this.store.get<CardAPI.CardDef>(openCardId);
+        if (isCardInstance(instance)) {
+          exampleCard = instance as CardAPI.CardDef;
+        } else {
+          console.warn('autoLinkExample: openCardId is not a card instance', {
+            openCardId,
+          });
+        }
+      } catch (error) {
+        console.warn('autoLinkExample: failed to load openCardId', {
+          openCardId,
+          error,
+        });
+      }
+    } else {
+      // If no openCardId was provided, attempt to find any existing instance of this type.
+      try {
+        const search = new SearchCardsByTypeAndTitleCommand(
+          this.commandContext,
+        );
+        const result = await search.execute({ type: codeRef });
+        const instances = (result as any)?.instances as unknown;
+        if (Array.isArray(instances)) {
+          const first = instances.find(
+            (c: any) => c && typeof c.id === 'string' && isCardInstance(c),
+          );
+          if (first) {
+            exampleCard = first as CardAPI.CardDef;
+          }
+        }
+      } catch (error) {
+        console.warn(
+          'autoLinkExample: failed to search for an example instance',
+          { codeRef, error },
+        );
+      }
+    }
+
     addCard(exampleCard);
 
     const MAX_EXAMPLES = 4;
-    if (this.adoptedCodeRef && uniqueById.size < MAX_EXAMPLES) {
+    if (codeRef && exampleCard && uniqueById.size < MAX_EXAMPLES) {
       try {
         const searchAndChoose = new SearchAndChooseCommand(this.commandContext);
         const existingIds = Array.from(uniqueById.keys());
         const result = await searchAndChoose.execute({
-          codeRef: this.adoptedCodeRef,
+          codeRef,
           max: Math.max(1, MAX_EXAMPLES - existingIds.length),
           additionalSystemPrompt: [
             'Prefer examples that showcase common or high-impact use cases.',
@@ -378,7 +467,6 @@ export default class ListingCreateCommand extends HostBaseCommand<
         });
       }
     }
-
     (listing as any).examples = Array.from(uniqueById.values());
   }
 
@@ -424,14 +512,15 @@ export default class ListingCreateCommand extends HostBaseCommand<
   private async getStringPatch(opts: {
     systemPrompt: string;
     userPrompt: string;
+    codeRef?: ResolvedCodeRef;
   }): Promise<string | undefined> {
-    const { systemPrompt, userPrompt } = opts;
+    const { systemPrompt, userPrompt, codeRef } = opts;
     const oneShot = new OneShotLlmRequestCommand(this.commandContext);
     const result = await oneShot.execute({
+      ...(codeRef ? { codeRef } : {}),
       systemPrompt,
       userPrompt,
       llmModel: 'openai/gpt-4.1-nano',
-      ...(this.adoptedCodeRef ? { codeRef: this.adoptedCodeRef } : {}),
     });
     if (!result.output) return undefined;
     // We don't strictly need the key now; keep signature for compatibility.

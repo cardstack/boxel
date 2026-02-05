@@ -5,38 +5,49 @@ import { join, basename } from 'path';
 import type { Server } from 'http';
 import type { DirResult } from 'tmp';
 import { existsSync, readJSONSync, statSync } from 'fs-extra';
-import type { Realm } from '@cardstack/runtime-common';
+import type { Realm, Relationship } from '@cardstack/runtime-common';
 import {
+  baseRealm,
   isSingleCardDocument,
   type LooseSingleCardDocument,
   type SingleCardDocument,
 } from '@cardstack/runtime-common';
-import { stringify, parse } from 'qs';
+import { parse } from 'qs';
 import type { Query } from '@cardstack/runtime-common/query';
 import {
-  setupBaseRealmServer,
-  setupPermissionedRealm,
+  setupPermissionedRealmAtURL,
   setupPermissionedRealms,
   setupMatrixRoom,
-  matrixURL,
   closeServer,
   testRealmInfo,
   cleanWhiteSpace,
-  testRealmHref,
   createJWT,
   testRealmServerMatrixUserId,
   cardInfo,
+  type RealmRequest,
+  withRealmPath,
 } from './helpers';
 import { expectIncrementalIndexEvent } from './helpers/indexing';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import { resetCatalogRealms } from '../handlers/handle-fetch-catalog-realms';
 import type { PgAdapter } from '@cardstack/postgres';
 
+function parseSearchQuery(searchURL: URL) {
+  let queryParam = searchURL.searchParams.get('query');
+  if (queryParam != null) {
+    return parse(queryParam) as Record<string, any>;
+  }
+  return parse(searchURL.searchParams.toString()) as Record<string, any>;
+}
+
 module(basename(__filename), function () {
   module('Realm-specific Endpoints | card URLs', function (hooks) {
+    let realmURL = new URL('http://127.0.0.1:4444/test/');
+    let testRealmHref = realmURL.href;
     let testRealm: Realm;
     let testRealmHttpServer: Server;
-    let request: SuperTest<Test>;
+    let request: RealmRequest;
+    let serverRequest: SuperTest<Test>;
     let dir: DirResult;
     let dbAdapter: PgAdapter;
 
@@ -49,7 +60,8 @@ module(basename(__filename), function () {
     }) {
       testRealm = args.testRealm;
       testRealmHttpServer = args.testRealmHttpServer;
-      request = args.request;
+      serverRequest = args.request;
+      request = withRealmPath(args.request, realmURL);
       dir = args.dir;
       dbAdapter = args.dbAdapter;
     }
@@ -59,12 +71,11 @@ module(basename(__filename), function () {
         testRealm,
         testRealmHttpServer,
         request,
+        serverRequest,
         dir,
         dbAdapter,
       };
     }
-
-    setupBaseRealmServer(hooks, matrixURL);
 
     hooks.afterEach(async function () {
       await closeServer(testRealmHttpServer);
@@ -73,7 +84,7 @@ module(basename(__filename), function () {
 
     module('card GET request', function (_hooks) {
       module('public readable realm', function (hooks) {
-        setupPermissionedRealm(hooks, {
+        setupPermissionedRealmAtURL(hooks, realmURL, {
           permissions: {
             '*': ['read'],
           },
@@ -85,7 +96,11 @@ module(basename(__filename), function () {
             .get('/person-1')
             .set('Accept', 'application/vnd.card+json');
 
-          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          assert.strictEqual(
+            response.status,
+            200,
+            `HTTP 200 status: ${response.text}`,
+          );
           let json = response.body;
           assert.ok(json.data.meta.lastModified, 'lastModified exists');
           delete json.data.meta.lastModified;
@@ -105,11 +120,11 @@ module(basename(__filename), function () {
               id: `${testRealmHref}person-1`,
               type: 'card',
               attributes: {
-                title: 'Mango',
+                cardTitle: 'Mango',
                 cardInfo,
                 firstName: 'Mango',
-                description: null,
-                thumbnailURL: null,
+                cardDescription: null,
+                cardThumbnailURL: null,
               },
               relationships: {
                 'cardInfo.theme': {
@@ -174,6 +189,118 @@ module(basename(__filename), function () {
             },
           });
         });
+
+        test('includes FileDef resources for file links in included payload', async function (assert) {
+          let { testRealm: realm, request } = getRealmSetup();
+
+          let writes = new Map<string, string>([
+            [
+              'gallery.gts',
+              `
+                import { CardDef, field, linksTo, linksToMany } from "https://cardstack.com/base/card-api";
+                import { FileDef } from "https://cardstack.com/base/file-api";
+
+                export class Gallery extends CardDef {
+                  @field hero = linksTo(FileDef);
+                  @field attachments = linksToMany(FileDef);
+                }
+              `,
+            ],
+            [
+              'gallery.json',
+              JSON.stringify({
+                data: {
+                  attributes: {},
+                  relationships: {
+                    hero: {
+                      links: {
+                        self: './hero.png',
+                      },
+                    },
+                    'attachments.0': {
+                      links: {
+                        self: './first.png',
+                      },
+                    },
+                    'attachments.1': {
+                      links: {
+                        self: './second.png',
+                      },
+                    },
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: './gallery.gts',
+                      name: 'Gallery',
+                    },
+                  },
+                },
+              }),
+            ],
+            ['hero.png', 'mock hero image'],
+            ['first.png', 'mock first image'],
+            ['second.png', 'mock second image'],
+          ]);
+
+          await realm.writeMany(writes);
+
+          let response = await request
+            .get('/gallery')
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+
+          let doc = response.body as LooseSingleCardDocument;
+          assert.ok(Array.isArray(doc.included), 'included resources present');
+
+          let included = doc.included ?? [];
+          let hero = included.find(
+            (resource) => resource.id === `${testRealmHref}hero.png`,
+          );
+          let first = included.find(
+            (resource) => resource.id === `${testRealmHref}first.png`,
+          );
+          let second = included.find(
+            (resource) => resource.id === `${testRealmHref}second.png`,
+          );
+
+          assert.ok(hero, 'includes hero FileDef resource');
+          assert.ok(first, 'includes first attachment FileDef resource');
+          assert.ok(second, 'includes second attachment FileDef resource');
+          assert.strictEqual(
+            hero?.type,
+            'file-meta',
+            'FileDef uses file-meta type',
+          );
+          assert.strictEqual(hero?.attributes?.name, 'hero.png');
+          assert.strictEqual(hero?.attributes?.contentType, 'image/png');
+          assert.deepEqual(hero?.meta?.adoptsFrom, {
+            module: `${baseRealm.url}file-api`,
+            name: 'FileDef',
+          });
+
+          assert.deepEqual(
+            (doc.data.relationships?.hero as Relationship)?.data,
+            {
+              type: 'file-meta',
+              id: `${testRealmHref}hero.png`,
+            },
+          );
+          assert.deepEqual(
+            (doc.data.relationships?.['attachments.0'] as Relationship)?.data,
+            {
+              type: 'file-meta',
+              id: `${testRealmHref}first.png`,
+            },
+          );
+          assert.deepEqual(
+            (doc.data.relationships?.['attachments.1'] as Relationship)?.data,
+            {
+              type: 'file-meta',
+              id: `${testRealmHref}second.png`,
+            },
+          );
+        });
         test('card-level query-backed relationships resolve via search at read time', async function (assert) {
           let { testRealm: realm, request } = getRealmSetup();
 
@@ -186,18 +313,18 @@ module(basename(__filename), function () {
                 import { Person } from "./person";
 
                 export class QueryPersonFinder extends CardDef {
-                  @field title = contains(StringField);
+                  @field cardTitle = contains(StringField);
                   @field favorite = linksTo(Person, {
                     query: {
                       filter: {
-                        eq: { firstName: '$this.title' },
+                        eq: { firstName: '$this.cardTitle' },
                       },
                     },
                   });
                   @field matches = linksToMany(Person, {
                     query: {
                       filter: {
-                        eq: { firstName: '$this.title' },
+                        eq: { firstName: '$this.cardTitle' },
                       },
                     },
                   });
@@ -209,7 +336,7 @@ module(basename(__filename), function () {
               JSON.stringify({
                 data: {
                   attributes: {
-                    title: 'Mango',
+                    cardTitle: 'Mango',
                   },
                   meta: {
                     adoptsFrom: {
@@ -228,7 +355,11 @@ module(basename(__filename), function () {
             .get('/query-person-finder')
             .set('Accept', 'application/vnd.card+json');
 
-          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          assert.strictEqual(
+            response.status,
+            200,
+            `HTTP 200 status: ${response.text}`,
+          );
           let doc = response.body;
           let favorite = doc.data.relationships.favorite;
           assert.deepEqual(
@@ -274,18 +405,18 @@ module(basename(__filename), function () {
                 import { Person } from "./person";
 
                 export class QueryLinksField extends FieldDef {
-                  @field title = contains(StringField);
+                  @field cardTitle = contains(StringField);
                   @field favorite = linksTo(Person, {
                     query: {
                       filter: {
-                        eq: { firstName: '$this.title' },
+                        eq: { firstName: '$this.cardTitle' },
                       },
                     },
                   });
                   @field matches = linksToMany(Person, {
                     query: {
                       filter: {
-                        eq: { firstName: '$this.title' },
+                        eq: { firstName: '$this.cardTitle' },
                       },
                     },
                   });
@@ -315,7 +446,7 @@ module(basename(__filename), function () {
                   attributes: {
                     info: {
                       queries: {
-                        title: 'Mango',
+                        cardTitle: 'Mango',
                       },
                     },
                   },
@@ -336,7 +467,7 @@ module(basename(__filename), function () {
                     details: {
                       inner: {
                         queries: {
-                          title: 'Mango',
+                          cardTitle: 'Mango',
                         },
                       },
                     },
@@ -404,7 +535,7 @@ module(basename(__filename), function () {
       });
 
       module('published realm', function (hooks) {
-        setupPermissionedRealm(hooks, {
+        setupPermissionedRealmAtURL(hooks, realmURL, {
           permissions: {
             '*': ['read'],
           },
@@ -417,7 +548,11 @@ module(basename(__filename), function () {
             .get('/person-1')
             .set('Accept', 'application/vnd.card+json');
 
-          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          assert.strictEqual(
+            response.status,
+            200,
+            `HTTP 200 status: ${response.text}`,
+          );
 
           let json = response.body;
 
@@ -441,10 +576,10 @@ module(basename(__filename), function () {
               id: `${testRealmHref}person-1`,
               type: 'card',
               attributes: {
-                title: 'Mango',
+                cardTitle: 'Mango',
                 firstName: 'Mango',
-                description: null,
-                thumbnailURL: null,
+                cardDescription: null,
+                cardThumbnailURL: null,
                 cardInfo,
               },
               meta: {
@@ -475,7 +610,7 @@ module(basename(__filename), function () {
 
       // using public writable realm to make it easy for test setup for the error tests
       module('public writable realm', function (hooks) {
-        setupPermissionedRealm(hooks, {
+        setupPermissionedRealmAtURL(hooks, realmURL, {
           permissions: {
             '*': ['read', 'write'],
           },
@@ -549,7 +684,7 @@ module(basename(__filename), function () {
       });
 
       module('permissioned realm', function (hooks) {
-        setupPermissionedRealm(hooks, {
+        setupPermissionedRealmAtURL(hooks, realmURL, {
           permissions: {
             john: ['read'],
             '@node-test_realm:localhost': ['read'],
@@ -651,31 +786,11 @@ module(basename(__filename), function () {
           );
         });
       });
-
-      module('public readable realm with file', function (hooks) {
-        setupPermissionedRealm(hooks, {
-          permissions: {
-            '*': ['read'],
-          },
-          fileSystem: {
-            'greeting.txt': 'hello',
-          },
-          onRealmSetup,
-        });
-
-        test('does not return card JSON for file urls', async function (assert) {
-          let response = await request
-            .get('/greeting.txt')
-            .set('Accept', 'application/vnd.card+json');
-
-          assert.strictEqual(response.status, 404, 'HTTP 404 status');
-        });
-      });
     });
 
     module('card POST request', function (_hooks) {
       module('public writable realm', function (hooks) {
-        setupPermissionedRealm(hooks, {
+        setupPermissionedRealmAtURL(hooks, realmURL, {
           permissions: {
             '*': ['read', 'write'],
           },
@@ -1019,9 +1134,9 @@ module(basename(__filename), function () {
               type: 'card',
               attributes: {
                 firstName: 'Hassan',
-                title: 'Hassan',
-                description: null,
-                thumbnailURL: null,
+                cardTitle: 'Hassan',
+                cardDescription: null,
+                cardThumbnailURL: null,
                 cardInfo,
               },
               relationships: {
@@ -1071,9 +1186,9 @@ module(basename(__filename), function () {
                   type: 'card',
                   attributes: {
                     firstName: 'Jade',
-                    title: 'Jade',
-                    description: null,
-                    thumbnailURL: null,
+                    cardTitle: 'Jade',
+                    cardDescription: null,
+                    cardThumbnailURL: null,
                     cardInfo,
                   },
                   relationships: {
@@ -1118,9 +1233,9 @@ module(basename(__filename), function () {
                   type: 'card',
                   attributes: {
                     firstName: 'Germaine',
-                    title: 'Germaine',
-                    description: null,
-                    thumbnailURL: null,
+                    cardTitle: 'Germaine',
+                    cardDescription: null,
+                    cardThumbnailURL: null,
                     cardInfo,
                   },
                   relationships: {
@@ -1147,9 +1262,9 @@ module(basename(__filename), function () {
                   type: 'card',
                   attributes: {
                     firstName: 'Boris',
-                    title: 'Boris',
-                    description: null,
-                    thumbnailURL: null,
+                    cardTitle: 'Boris',
+                    cardDescription: null,
+                    cardThumbnailURL: null,
                     cardInfo,
                   },
                   relationships: {
@@ -1195,9 +1310,9 @@ module(basename(__filename), function () {
               type: 'card',
               attributes: {
                 firstName: 'Jade',
-                title: 'Jade',
-                description: null,
-                thumbnailURL: null,
+                cardTitle: 'Jade',
+                cardDescription: null,
+                cardThumbnailURL: null,
                 cardInfo,
               },
               relationships: {
@@ -1261,9 +1376,9 @@ module(basename(__filename), function () {
                   type: 'card',
                   attributes: {
                     firstName: 'Germaine',
-                    title: 'Germaine',
-                    description: null,
-                    thumbnailURL: null,
+                    cardTitle: 'Germaine',
+                    cardDescription: null,
+                    cardThumbnailURL: null,
                     cardInfo,
                   },
                   relationships: {
@@ -1290,9 +1405,9 @@ module(basename(__filename), function () {
                   type: 'card',
                   attributes: {
                     firstName: 'Boris',
-                    title: 'Boris',
-                    description: null,
-                    thumbnailURL: null,
+                    cardTitle: 'Boris',
+                    cardDescription: null,
+                    cardThumbnailURL: null,
                     cardInfo,
                   },
                   relationships: {
@@ -1339,9 +1454,9 @@ module(basename(__filename), function () {
                 type: 'card',
                 attributes: {
                   firstName: 'Germaine',
-                  title: 'Germaine',
-                  description: null,
-                  thumbnailURL: null,
+                  cardTitle: 'Germaine',
+                  cardDescription: null,
+                  cardThumbnailURL: null,
                   cardInfo,
                 },
                 relationships: {
@@ -1394,9 +1509,9 @@ module(basename(__filename), function () {
                 type: 'card',
                 attributes: {
                   firstName: 'Boris',
-                  title: 'Boris',
-                  description: null,
-                  thumbnailURL: null,
+                  cardTitle: 'Boris',
+                  cardDescription: null,
+                  cardThumbnailURL: null,
                   cardInfo,
                 },
                 relationships: {
@@ -1611,9 +1726,9 @@ module(basename(__filename), function () {
               type: 'card',
               attributes: {
                 firstName: 'Hassan',
-                title: 'Hassan',
-                description: null,
-                thumbnailURL: null,
+                cardTitle: 'Hassan',
+                cardDescription: null,
+                cardThumbnailURL: null,
                 cardInfo,
               },
               relationships: {
@@ -1648,7 +1763,7 @@ module(basename(__filename), function () {
       });
 
       module('permissioned realm', function (hooks) {
-        setupPermissionedRealm(hooks, {
+        setupPermissionedRealmAtURL(hooks, realmURL, {
           permissions: {
             john: ['read', 'write'],
             '@node-test_realm:localhost': ['read'],
@@ -1724,75 +1839,9 @@ module(basename(__filename), function () {
       });
     });
 
-    module('card POST request | file URL', function (_hooks) {
-      module('public writable realm with file', function (hooks) {
-        setupPermissionedRealm(hooks, {
-          permissions: {
-            '*': ['read', 'write'],
-          },
-          fileSystem: {
-            'greeting.txt': 'hello',
-          },
-          onRealmSetup,
-        });
-
-        test('rejects POST to a file URL', async function (assert) {
-          let response = await request
-            .post('/greeting.txt')
-            .send({
-              data: {
-                type: 'card',
-                attributes: {},
-                meta: {
-                  adoptsFrom: {
-                    module: 'https://cardstack.com/base/card-api',
-                    name: 'CardDef',
-                  },
-                },
-              },
-            })
-            .set('Accept', 'application/vnd.card+json');
-
-          assert.strictEqual(response.status, 405, 'HTTP 405 status');
-        });
-      });
-    });
-
     module('card PATCH request', function (_hooks) {
-      module('public writable realm with file', function (hooks) {
-        setupPermissionedRealm(hooks, {
-          permissions: {
-            '*': ['read', 'write'],
-          },
-          fileSystem: {
-            'greeting.txt': 'hello',
-          },
-          onRealmSetup,
-        });
-
-        test('rejects PATCH to a file URL', async function (assert) {
-          let response = await request
-            .patch('/greeting.txt')
-            .send({
-              data: {
-                type: 'card',
-                attributes: {},
-                meta: {
-                  adoptsFrom: {
-                    module: 'https://cardstack.com/base/card-api',
-                    name: 'CardDef',
-                  },
-                },
-              },
-            })
-            .set('Accept', 'application/vnd.card+json');
-
-          assert.strictEqual(response.status, 405, 'HTTP 405 status');
-        });
-      });
-
       module('public writable realm', function (hooks) {
-        setupPermissionedRealm(hooks, {
+        setupPermissionedRealmAtURL(hooks, realmURL, {
           permissions: {
             '*': ['read', 'write'],
           },
@@ -1897,8 +1946,10 @@ module(basename(__filename), function () {
           };
 
           response = await request
-            .get(`/_search?${stringify(query)}`)
-            .set('Accept', 'application/vnd.card+json');
+            .post('/_search')
+            .set('Accept', 'application/vnd.card+json')
+            .set('X-HTTP-Method-Override', 'QUERY')
+            .send({ ...query, realms: [testRealmHref] });
 
           assert.strictEqual(response.status, 200, 'HTTP 200 status');
           assert.strictEqual(response.body.data.length, 1, 'found one card');
@@ -1970,7 +2021,7 @@ module(basename(__filename), function () {
           for (let table of ['boxel_index', 'boxel_index_working']) {
             await dbAdapter.execute(
               `UPDATE ${table}
-               SET type = 'instance-error', error_doc = $1::jsonb
+               SET has_error = TRUE, error_doc = $1::jsonb
                WHERE url = $2`,
               {
                 bind: [JSON.stringify(errorDoc), cardURL],
@@ -2033,7 +2084,7 @@ module(basename(__filename), function () {
           for (let table of ['boxel_index', 'boxel_index_working']) {
             await dbAdapter.execute(
               `UPDATE ${table}
-               SET type = 'instance-error', error_doc = $1::jsonb, pristine_doc = NULL
+               SET has_error = TRUE, error_doc = $1::jsonb, pristine_doc = NULL
                WHERE url = $2`,
               {
                 bind: [JSON.stringify(errorDoc), cardURL],
@@ -2356,9 +2407,9 @@ module(basename(__filename), function () {
               attributes: {
                 firstName: 'Paper',
                 cardInfo,
-                title: 'Paper',
-                description: null,
-                thumbnailURL: null,
+                cardTitle: 'Paper',
+                cardDescription: null,
+                cardThumbnailURL: null,
               },
               relationships: {
                 friend: {
@@ -2407,10 +2458,10 @@ module(basename(__filename), function () {
                   type: 'card',
                   attributes: {
                     firstName: 'Jade',
-                    title: 'Jade',
+                    cardTitle: 'Jade',
                     cardInfo,
-                    description: null,
-                    thumbnailURL: null,
+                    cardDescription: null,
+                    cardThumbnailURL: null,
                   },
                   relationships: {
                     'friends.0': {
@@ -2455,9 +2506,9 @@ module(basename(__filename), function () {
                   attributes: {
                     cardInfo,
                     firstName: 'Germaine',
-                    title: 'Germaine',
-                    description: null,
-                    thumbnailURL: null,
+                    cardTitle: 'Germaine',
+                    cardDescription: null,
+                    cardThumbnailURL: null,
                   },
                   relationships: {
                     friend: {
@@ -2484,9 +2535,9 @@ module(basename(__filename), function () {
                   attributes: {
                     cardInfo,
                     firstName: 'Boris',
-                    title: 'Boris',
-                    description: null,
-                    thumbnailURL: null,
+                    cardTitle: 'Boris',
+                    cardDescription: null,
+                    cardThumbnailURL: null,
                   },
                   relationships: {
                     friend: {
@@ -2531,9 +2582,9 @@ module(basename(__filename), function () {
               type: 'card',
               attributes: {
                 firstName: 'Jade',
-                title: 'Jade',
-                description: null,
-                thumbnailURL: null,
+                cardTitle: 'Jade',
+                cardDescription: null,
+                cardThumbnailURL: null,
                 cardInfo,
               },
               relationships: {
@@ -2597,9 +2648,9 @@ module(basename(__filename), function () {
                   type: 'card',
                   attributes: {
                     firstName: 'Germaine',
-                    title: 'Germaine',
-                    description: null,
-                    thumbnailURL: null,
+                    cardTitle: 'Germaine',
+                    cardDescription: null,
+                    cardThumbnailURL: null,
                     cardInfo,
                   },
                   relationships: {
@@ -2626,9 +2677,9 @@ module(basename(__filename), function () {
                   type: 'card',
                   attributes: {
                     firstName: 'Boris',
-                    title: 'Boris',
-                    description: null,
-                    thumbnailURL: null,
+                    cardTitle: 'Boris',
+                    cardDescription: null,
+                    cardThumbnailURL: null,
                     cardInfo,
                   },
                   relationships: {
@@ -2675,9 +2726,9 @@ module(basename(__filename), function () {
                 type: 'card',
                 attributes: {
                   firstName: 'Germaine',
-                  title: 'Germaine',
-                  description: null,
-                  thumbnailURL: null,
+                  cardTitle: 'Germaine',
+                  cardDescription: null,
+                  cardThumbnailURL: null,
                   cardInfo,
                 },
                 relationships: {
@@ -2730,9 +2781,9 @@ module(basename(__filename), function () {
                 type: 'card',
                 attributes: {
                   firstName: 'Boris',
-                  title: 'Boris',
-                  description: null,
-                  thumbnailURL: null,
+                  cardTitle: 'Boris',
+                  cardDescription: null,
+                  cardThumbnailURL: null,
                   cardInfo,
                 },
                 relationships: {
@@ -2930,9 +2981,9 @@ module(basename(__filename), function () {
               type: 'card',
               attributes: {
                 firstName: 'Paper',
-                title: 'Paper',
-                description: null,
-                thumbnailURL: null,
+                cardTitle: 'Paper',
+                cardDescription: null,
+                cardThumbnailURL: null,
                 cardInfo,
               },
               relationships: {
@@ -2983,9 +3034,9 @@ module(basename(__filename), function () {
                   type: 'card',
                   attributes: {
                     firstName: 'Jade',
-                    title: 'Jade',
-                    description: null,
-                    thumbnailURL: null,
+                    cardTitle: 'Jade',
+                    cardDescription: null,
+                    cardThumbnailURL: null,
                     cardInfo,
                   },
                   relationships: {
@@ -3032,9 +3083,9 @@ module(basename(__filename), function () {
               type: 'card',
               attributes: {
                 firstName: 'Jade',
-                title: 'Jade',
-                description: null,
-                thumbnailURL: null,
+                cardTitle: 'Jade',
+                cardDescription: null,
+                cardThumbnailURL: null,
                 cardInfo,
               },
               relationships: {
@@ -3209,8 +3260,55 @@ module(basename(__filename), function () {
         });
       });
 
+      module('public writable realm with size limit', function (hooks) {
+        setupPermissionedRealmAtURL(hooks, realmURL, {
+          permissions: {
+            '*': ['read', 'write'],
+          },
+          cardSizeLimitBytes: 512,
+          onRealmSetup,
+        });
+
+        test('returns 413 when card payload exceeds size limit', async function (assert) {
+          let oversized = 'a'.repeat(2048);
+          let response = await request
+            .patch('/person-1')
+            .send({
+              data: {
+                type: 'card',
+                attributes: {
+                  firstName: oversized,
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: './person.gts',
+                    name: 'Person',
+                  },
+                },
+              },
+            })
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(response.status, 413, 'HTTP 413 status');
+          assert.strictEqual(
+            response.body.errors[0].title,
+            'Payload Too Large',
+            'error title is correct',
+          );
+          assert.strictEqual(
+            response.body.errors[0].status,
+            413,
+            'error status is correct',
+          );
+          assert.ok(
+            response.body.errors[0].message.includes('Card size'),
+            'error message mentions card size',
+          );
+        });
+      });
+
       module('permissioned realm', function (hooks) {
-        setupPermissionedRealm(hooks, {
+        setupPermissionedRealmAtURL(hooks, realmURL, {
           permissions: {
             john: ['read', 'write'],
             '@node-test_realm:localhost': ['read'],
@@ -3279,63 +3377,9 @@ module(basename(__filename), function () {
       });
     });
 
-    module('card PUT request | file URL', function (_hooks) {
-      module('public writable realm with file', function (hooks) {
-        setupPermissionedRealm(hooks, {
-          permissions: {
-            '*': ['read', 'write'],
-          },
-          fileSystem: {
-            'greeting.txt': 'hello',
-          },
-          onRealmSetup,
-        });
-
-        test('rejects PUT to a file URL', async function (assert) {
-          let response = await request
-            .put('/greeting.txt')
-            .send({
-              data: {
-                type: 'card',
-                attributes: {},
-                meta: {
-                  adoptsFrom: {
-                    module: 'https://cardstack.com/base/card-api',
-                    name: 'CardDef',
-                  },
-                },
-              },
-            })
-            .set('Accept', 'application/vnd.card+json');
-
-          assert.strictEqual(response.status, 405, 'HTTP 405 status');
-        });
-      });
-    });
-
     module('card DELETE request', function (_hooks) {
-      module('public writable realm with file', function (hooks) {
-        setupPermissionedRealm(hooks, {
-          permissions: {
-            '*': ['read', 'write'],
-          },
-          fileSystem: {
-            'greeting.txt': 'hello',
-          },
-          onRealmSetup,
-        });
-
-        test('rejects DELETE to a file URL', async function (assert) {
-          let response = await request
-            .delete('/greeting.txt')
-            .set('Accept', 'application/vnd.card+json');
-
-          assert.strictEqual(response.status, 405, 'HTTP 405 status');
-        });
-      });
-
       module('public writable realm', function (hooks) {
-        setupPermissionedRealm(hooks, {
+        setupPermissionedRealmAtURL(hooks, realmURL, {
           permissions: {
             '*': ['read', 'write'],
           },
@@ -3406,7 +3450,7 @@ module(basename(__filename), function () {
           assert.false(existsSync(cardFile), 'card json does not exist');
         });
 
-        test('removes file meta when card is deleted', async function (assert) {
+        test('removes card JSON file meta when card is deleted', async function (assert) {
           // confirm meta.resourceCreatedAt exists prior to deletion
           let initial = await request
             .get('/person-1')
@@ -3445,7 +3489,7 @@ module(basename(__filename), function () {
       });
 
       module('permissioned realm', function (hooks) {
-        setupPermissionedRealm(hooks, {
+        setupPermissionedRealmAtURL(hooks, realmURL, {
           permissions: {
             john: ['read', 'write'],
             '@node-test_realm:localhost': ['read'],
@@ -3485,15 +3529,70 @@ module(basename(__filename), function () {
         });
       });
     });
+
+    module('file URLs', function (hooks) {
+      setupPermissionedRealmAtURL(hooks, realmURL, {
+        permissions: {
+          '*': ['read', 'write'],
+        },
+        fileSystem: {
+          'greeting.txt': 'hello',
+        },
+        onRealmSetup,
+      });
+
+      test('rejects HTTP requests to file URLs', async function (assert) {
+        let response;
+        response = await request
+          .get('/greeting.txt')
+          .set('Accept', 'application/vnd.card+json');
+
+        assert.strictEqual(
+          response.status,
+          415,
+          'rejects GET for a file URL with 415 status',
+        );
+
+        response = await request
+          .patch('/greeting.txt')
+          .send({
+            data: {
+              type: 'card',
+              attributes: {},
+              meta: {
+                adoptsFrom: {
+                  module: 'https://cardstack.com/base/card-api',
+                  name: 'CardDef',
+                },
+              },
+            },
+          })
+          .set('Accept', 'application/vnd.card+json');
+
+        assert.strictEqual(
+          response.status,
+          415,
+          'rejects PATCH to a file URL with 415 status',
+        );
+
+        response = await request
+          .delete('/greeting.txt')
+          .set('Accept', 'application/vnd.card+json');
+
+        assert.strictEqual(
+          response.status,
+          415,
+          'rejects DELETE to a file URL with 415 status',
+        );
+      });
+    });
   });
 
   module('Query-backed relationships runtime resolver', function (hooks) {
-    const providerRealmURL = 'http://127.0.0.1:5521/';
-    const consumerRealmURL = 'http://127.0.0.1:5522/';
+    const providerRealmURL = 'http://127.0.0.1:5521/test/';
+    const consumerRealmURL = 'http://127.0.0.1:5522/test/';
     const UNREACHABLE_REALM_URL = 'https://example.invalid/offline/';
-    let consumerRequest: SuperTest<Test>;
-
-    setupBaseRealmServer(hooks, matrixURL);
+    let consumerRequest: RealmRequest;
 
     setupPermissionedRealms(hooks, {
       realms: [
@@ -3588,7 +3687,10 @@ module(basename(__filename), function () {
       ],
       onRealmSetup({ realms }) {
         let latestRealms = realms.slice(-2);
-        consumerRequest = supertest(latestRealms[1].realmHttpServer);
+        consumerRequest = withRealmPath(
+          supertest(latestRealms[1].realmHttpServer),
+          new URL(consumerRealmURL),
+        );
       },
     });
 
@@ -3622,9 +3724,7 @@ module(basename(__filename), function () {
         new URL('_search', consumerRealmURL).href,
         'favorite relationship search link targets consumer realm',
       );
-      let favoriteQueryParams = parse(
-        favoriteSearchURL.searchParams.toString(),
-      ) as Record<string, any>;
+      let favoriteQueryParams = parseSearchQuery(favoriteSearchURL);
       assert.deepEqual(
         favoriteQueryParams.page,
         { size: '1', number: '0' },
@@ -3697,14 +3797,16 @@ module(basename(__filename), function () {
         'linksToMany relationship exposes canonical search link',
       );
       let matchesSearchURL = new URL(matchesSearchLink);
+      assert.ok(
+        matchesSearchURL.searchParams.get('query'),
+        'matches search link uses query param',
+      );
       assert.strictEqual(
         matchesSearchURL.href.split('?')[0],
         new URL('_search', providerRealmURL).href,
         'matches relationship search link targets provider realm',
       );
-      let matchesQueryParams = parse(
-        matchesSearchURL.searchParams.toString(),
-      ) as Record<string, any>;
+      let matchesQueryParams = parseSearchQuery(matchesSearchURL);
       assert.deepEqual(
         matchesQueryParams.page,
         { size: '1', number: '0' },
@@ -3748,14 +3850,16 @@ module(basename(__filename), function () {
         'failingMatches relationship exposes canonical search link despite error',
       );
       let failingSearchURL = new URL(failingSearchLink);
+      assert.ok(
+        failingSearchURL.searchParams.get('query'),
+        'failingMatches search link uses query param',
+      );
       assert.strictEqual(
         failingSearchURL.href.split('?')[0],
         new URL('_search', UNREACHABLE_REALM_URL).href,
         'failingMatches search link targets unreachable realm',
       );
-      let failingQueryParams = parse(
-        failingSearchURL.searchParams.toString(),
-      ) as Record<string, any>;
+      let failingQueryParams = parseSearchQuery(failingSearchURL);
       assert.deepEqual(
         failingQueryParams.page,
         { size: '1', number: '0' },

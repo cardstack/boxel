@@ -13,6 +13,7 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import type { Loader } from '@cardstack/runtime-common';
+import { SupportedMimeType } from '@cardstack/runtime-common';
 import { testRealmURLToUsername } from '@cardstack/runtime-common/helpers/const';
 import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 
@@ -47,6 +48,7 @@ const QUERY_CARD_URL = `${testRealmURL}query-card`;
 const QUERY_CARD_2_URL = `${testRealmURL}query-card-2`;
 const QUERY_CARD_NESTED_URL = `${testRealmURL}query-card-nested`;
 const QUERY_CARD_MISSING_URL = `${testRealmURL}query-card-missing`;
+const TYPE_FILTER_CARD_URL = `${testRealmURL}type-filter-card`;
 
 module(
   'Acceptance | Query Fields | host respects server-populated results',
@@ -68,19 +70,22 @@ module(
         @field name = contains(StringField);
       }
       PersonClass = Person;
+      class Animal extends CardDef {
+        @field name = contains(StringField);
+      }
       class QueryLinksField extends FieldDef {
-        @field title = contains(StringField);
+        @field cardTitle = contains(StringField);
         @field favorite = linksTo(() => Person, {
           query: {
             filter: {
-              eq: { name: '$this.title' },
+              eq: { name: '$this.cardTitle' },
             },
           },
         });
         @field matches = linksToMany(() => Person, {
           query: {
             filter: {
-              eq: { name: '$this.title' },
+              eq: { name: '$this.cardTitle' },
             },
             page: {
               size: 10,
@@ -90,18 +95,18 @@ module(
         });
       }
       class QueryCard extends CardDef {
-        @field title = contains(StringField);
+        @field cardTitle = contains(StringField);
         @field favorite = linksTo(() => Person, {
           query: {
             filter: {
-              eq: { name: '$this.title' },
+              eq: { name: '$this.cardTitle' },
             },
           },
         });
         @field matches = linksToMany(() => Person, {
           query: {
             filter: {
-              eq: { name: '$this.title' },
+              eq: { name: '$this.cardTitle' },
             },
             page: {
               size: 10,
@@ -112,7 +117,7 @@ module(
         static isolated = class Isolated extends Component<typeof QueryCard> {
           <template>
             <div data-test-inline-title>
-              <@fields.title @format='edit' />
+              <@fields.cardTitle @format='edit' />
             </div>
             <div data-test-favorite>
               {{#if @model.favorite}}
@@ -134,7 +139,7 @@ module(
         > {
           <template>
             <div data-test-inline-title>
-              <@fields.queries.title @format='edit' />
+              <@fields.queries.cardTitle @format='edit' />
             </div>
             <div data-test-favorite>
               {{#if @model.queries.favorite}}
@@ -149,27 +154,51 @@ module(
           </template>
         };
       }
+      // A card whose query has no predicate filter, only a page size.
+      // normalizeQueryDefinition turns this into { type: targetRef } — an
+      // explicit CardTypeFilter — instead of injecting `on` into leaf predicates.
+      class TypeFilterCard extends CardDef {
+        @field matches = linksToMany(() => Person, {
+          query: {
+            page: { size: 10, number: 0 },
+          },
+        });
+        static isolated = class Isolated extends Component<
+          typeof TypeFilterCard
+        > {
+          <template>
+            <ul data-test-matches>
+              {{#each @model.matches as |match|}}
+                <li data-test-match>{{match.name}}</li>
+              {{/each}}
+            </ul>
+          </template>
+        };
+      }
       await setupAcceptanceTestRealm({
         mockMatrixUtils,
         contents: {
-          'query-card.gts': { Person, QueryCard },
+          'query-card.gts': { Person, QueryCard, Animal },
           'query-card-nested.gts': { Person, QueryCardNested, QueryLinksField },
+          'type-filter-card.gts': { TypeFilterCard, Person },
           'Person/target.json': new Person({ name: 'Target' }),
           'Person/not-target.json': new Person({ name: 'Not Target' }),
+          'Animal/target.json': new Animal({ name: 'Target' }),
           'query-card.json': new QueryCard({
-            title: 'Target',
+            cardTitle: 'Target',
           }),
           'query-card-2.json': new QueryCard({
-            title: 'Not Target',
+            cardTitle: 'Not Target',
           }),
           'query-card-nested.json': new QueryCardNested({
             queries: new QueryLinksField({
-              title: 'Target',
+              cardTitle: 'Target',
             }),
           }),
           'query-card-missing.json': new QueryCard({
-            title: 'Missing',
+            cardTitle: 'Missing',
           }),
+          'type-filter-card.json': new TypeFilterCard(),
         },
       });
       loader = getService('loader-service').loader;
@@ -533,7 +562,7 @@ module(
         });
         await waitFor('[data-test-edit-button]');
         await click('[data-test-edit-button]');
-        await fillIn('[data-test-field="title"] input', 'Not Target');
+        await fillIn('[data-test-field="cardTitle"] input', 'Not Target');
 
         await waitUntil(
           () => {
@@ -559,6 +588,325 @@ module(
         assert.notOk(
           'matches.0' in relationships,
           'linksToMany query field was omitted from PATCH body',
+        );
+      } finally {
+        network.virtualNetwork.unmount(handler);
+      }
+    });
+
+    test('client falls back to live search when server-side cross-realm query has errors', async function (assert) {
+      let network = getService('network') as NetworkService;
+      let interceptedSearchRequests: string[] = [];
+
+      // Pre-fetch the card JSON before mounting the handler so we can
+      // modify it without re-fetching from inside the handler (which
+      // can interfere with module loading through the virtual network).
+      let prefetchResponse = await network.virtualNetwork.fetch(
+        new Request(QUERY_CARD_URL, {
+          headers: { Accept: SupportedMimeType.CardJson },
+        }),
+      );
+      let cardJson = await prefetchResponse.json();
+
+      // Inject error metadata into the matches relationship,
+      // simulating a failed cross-realm query
+      let fakeRemoteRealm = 'https://unreachable-realm.example.com/';
+      let matchesRel = cardJson.data.relationships?.matches;
+      if (matchesRel) {
+        // Clear any results that were populated — simulating server couldn't get them
+        matchesRel.data = [];
+        matchesRel.meta = {
+          errors: [
+            {
+              realm: fakeRemoteRealm,
+              type: 'fetch-error',
+              message: 'Could not reach remote realm',
+              status: 502,
+            },
+          ],
+        };
+        // Remove indexed per-item relationships (matches.0, matches.1, ...)
+        for (let key of Object.keys(cardJson.data.relationships)) {
+          if (key.startsWith('matches.')) {
+            delete cardJson.data.relationships[key];
+          }
+        }
+      }
+
+      let modifiedBody = JSON.stringify(cardJson);
+
+      let handler = async (request: Request) => {
+        let url = new URL(request.url);
+
+        // Track client-side search requests
+        if (url.pathname.endsWith('/_search')) {
+          interceptedSearchRequests.push(request.url);
+        }
+
+        // Return the pre-modified card JSON for the card GET request.
+        if (
+          request.method === 'GET' &&
+          request.url === QUERY_CARD_URL &&
+          request.headers.get('Accept')?.includes('card+json')
+        ) {
+          return new Response(modifiedBody, {
+            status: 200,
+            headers: new Headers({
+              'content-type': SupportedMimeType.CardJson,
+            }),
+          });
+        }
+
+        return null;
+      };
+
+      network.virtualNetwork.mount(handler, { prepend: true });
+      try {
+        await visitOperatorMode({
+          stacks: [[{ id: QUERY_CARD_URL, format: 'isolated' }]],
+        });
+        await settled();
+
+        let cardSelector = `[data-test-stack-card="${QUERY_CARD_URL}"]`;
+        assert.dom(cardSelector).exists('query card is rendered');
+        await waitFor(`${cardSelector} [data-test-matches]`);
+
+        assert.ok(
+          interceptedSearchRequests.length > 0,
+          'client-side _search request was triggered as a fallback for the errored query field',
+        );
+
+        let matchElements = findAll(`${cardSelector} [data-test-match]`);
+        assert.deepEqual(
+          matchElements.map((el) => el.textContent?.trim()),
+          ['Target'],
+          'linksToMany query field was populated via client-side fallback search',
+        );
+      } finally {
+        network.virtualNetwork.unmount(handler);
+      }
+    });
+
+    test('fallback search preserves the type filter from the query definition', async function (assert) {
+      // This test verifies that when the client falls back to a live search
+      // due to server-side cross-realm query errors, the search correctly
+      // includes the type constraint. Both Person/target and Animal/target
+      // have name "Target", but the query field is typed as linksToMany(Person),
+      // so only Person cards should appear in the results.
+      let network = getService('network') as NetworkService;
+      let interceptedSearchRequests: string[] = [];
+
+      let prefetchResponse = await network.virtualNetwork.fetch(
+        new Request(QUERY_CARD_URL, {
+          headers: { Accept: SupportedMimeType.CardJson },
+        }),
+      );
+      let cardJson = await prefetchResponse.json();
+
+      let fakeRemoteRealm = 'https://unreachable-realm.example.com/';
+      let matchesRel = cardJson.data.relationships?.matches;
+      if (matchesRel) {
+        matchesRel.data = [];
+        matchesRel.meta = {
+          errors: [
+            {
+              realm: fakeRemoteRealm,
+              type: 'fetch-error',
+              message: 'Could not reach remote realm',
+              status: 502,
+            },
+          ],
+        };
+        for (let key of Object.keys(cardJson.data.relationships)) {
+          if (key.startsWith('matches.')) {
+            delete cardJson.data.relationships[key];
+          }
+        }
+      }
+
+      let modifiedBody = JSON.stringify(cardJson);
+
+      let handler = async (request: Request) => {
+        let url = new URL(request.url);
+
+        if (url.pathname.endsWith('/_search')) {
+          interceptedSearchRequests.push(request.url);
+        }
+
+        if (
+          request.method === 'GET' &&
+          request.url === QUERY_CARD_URL &&
+          request.headers.get('Accept')?.includes('card+json')
+        ) {
+          return new Response(modifiedBody, {
+            status: 200,
+            headers: new Headers({
+              'content-type': SupportedMimeType.CardJson,
+            }),
+          });
+        }
+
+        return null;
+      };
+
+      network.virtualNetwork.mount(handler, { prepend: true });
+      try {
+        await visitOperatorMode({
+          stacks: [[{ id: QUERY_CARD_URL, format: 'isolated' }]],
+        });
+        await settled();
+
+        let cardSelector = `[data-test-stack-card="${QUERY_CARD_URL}"]`;
+        assert.dom(cardSelector).exists('query card is rendered');
+        await waitFor(`${cardSelector} [data-test-matches]`);
+
+        assert.ok(
+          interceptedSearchRequests.length > 0,
+          'client-side _search request was triggered as a fallback',
+        );
+
+        let matchElements = findAll(`${cardSelector} [data-test-match]`);
+        assert.deepEqual(
+          matchElements.map((el) => el.textContent?.trim()),
+          ['Target'],
+          'only Person cards appear — Animal/target with same name is excluded by the type filter',
+        );
+      } finally {
+        network.virtualNetwork.unmount(handler);
+      }
+    });
+
+    test('explicit CardTypeFilter hydrates from server without re-fetch', async function (assert) {
+      // TypeFilterCard has a linksToMany query with no filter predicates,
+      // so normalizeQueryDefinition produces { type: targetRef } — a pure
+      // CardTypeFilter. This is the happy-path: server-populated results
+      // are used directly with no client-side search needed.
+      let network = getService('network') as NetworkService;
+      let interceptedSearchRequests: string[] = [];
+      let handler = async (request: Request) => {
+        let url = new URL(request.url);
+        if (url.pathname.endsWith('/_search')) {
+          interceptedSearchRequests.push(request.url);
+        }
+        return null;
+      };
+
+      network.virtualNetwork.mount(handler, { prepend: true });
+      try {
+        await visitOperatorMode({
+          stacks: [[{ id: TYPE_FILTER_CARD_URL, format: 'isolated' }]],
+        });
+        await settled();
+
+        let cardSelector = `[data-test-stack-card="${TYPE_FILTER_CARD_URL}"]`;
+        assert.dom(cardSelector).exists('type-filter card is rendered');
+        await waitFor(`${cardSelector} [data-test-matches]`);
+
+        assert.strictEqual(
+          interceptedSearchRequests.length,
+          0,
+          'no _search requests were triggered — server-populated results were used directly',
+        );
+
+        let matchElements = findAll(`${cardSelector} [data-test-match]`);
+        let matchNames = matchElements
+          .map((el) => el.textContent?.trim())
+          .sort();
+        assert.deepEqual(
+          matchNames,
+          ['Not Target', 'Target'],
+          'all Person cards are hydrated from server response — Animal/target is excluded by CardTypeFilter',
+        );
+      } finally {
+        network.virtualNetwork.unmount(handler);
+      }
+    });
+
+    test('fallback search works with an explicit CardTypeFilter (no predicate)', async function (assert) {
+      // TypeFilterCard has a linksToMany query with no filter predicates,
+      // so normalizeQueryDefinition produces { type: targetRef } — a pure
+      // CardTypeFilter. This test verifies the fallback search preserves
+      // that filter and returns only Person cards (not Animal cards).
+      let network = getService('network') as NetworkService;
+      let interceptedSearchRequests: string[] = [];
+
+      let prefetchResponse = await network.virtualNetwork.fetch(
+        new Request(TYPE_FILTER_CARD_URL, {
+          headers: { Accept: SupportedMimeType.CardJson },
+        }),
+      );
+      let cardJson = await prefetchResponse.json();
+
+      let fakeRemoteRealm = 'https://unreachable-realm.example.com/';
+      let matchesRel = cardJson.data.relationships?.matches;
+      if (matchesRel) {
+        matchesRel.data = [];
+        matchesRel.meta = {
+          errors: [
+            {
+              realm: fakeRemoteRealm,
+              type: 'fetch-error',
+              message: 'Could not reach remote realm',
+              status: 502,
+            },
+          ],
+        };
+        for (let key of Object.keys(cardJson.data.relationships)) {
+          if (key.startsWith('matches.')) {
+            delete cardJson.data.relationships[key];
+          }
+        }
+      }
+
+      let modifiedBody = JSON.stringify(cardJson);
+
+      let handler = async (request: Request) => {
+        let url = new URL(request.url);
+
+        if (url.pathname.endsWith('/_search')) {
+          interceptedSearchRequests.push(request.url);
+        }
+
+        if (
+          request.method === 'GET' &&
+          request.url === TYPE_FILTER_CARD_URL &&
+          request.headers.get('Accept')?.includes('card+json')
+        ) {
+          return new Response(modifiedBody, {
+            status: 200,
+            headers: new Headers({
+              'content-type': SupportedMimeType.CardJson,
+            }),
+          });
+        }
+
+        return null;
+      };
+
+      network.virtualNetwork.mount(handler, { prepend: true });
+      try {
+        await visitOperatorMode({
+          stacks: [[{ id: TYPE_FILTER_CARD_URL, format: 'isolated' }]],
+        });
+        await settled();
+
+        let cardSelector = `[data-test-stack-card="${TYPE_FILTER_CARD_URL}"]`;
+        assert.dom(cardSelector).exists('type-filter card is rendered');
+        await waitFor(`${cardSelector} [data-test-matches]`);
+
+        assert.ok(
+          interceptedSearchRequests.length > 0,
+          'client-side _search request was triggered as a fallback',
+        );
+
+        let matchElements = findAll(`${cardSelector} [data-test-match]`);
+        let matchNames = matchElements
+          .map((el) => el.textContent?.trim())
+          .sort();
+        assert.deepEqual(
+          matchNames,
+          ['Not Target', 'Target'],
+          'all Person cards are returned by the type filter — Animal/target is excluded',
         );
       } finally {
         network.virtualNetwork.unmount(handler);

@@ -1,8 +1,8 @@
 import { CardDef, field, contains, linksToMany, linksTo } from './card-api';
 import BooleanField from './boolean';
 import StringField from './string';
-import { getCardMenuItems } from '@cardstack/runtime-common';
-import { type GetCardMenuItemParams } from './card-menu-items';
+import { getMenuItems } from '@cardstack/runtime-common';
+import { type GetMenuItemParams } from './menu-items';
 import { type MenuItemOptions } from '@cardstack/boxel-ui/helpers';
 import SetUserSystemCardCommand from '@cardstack/boxel-host/commands/set-user-system-card';
 import AppsIcon from '@cardstack/boxel-icons/apps';
@@ -36,11 +36,11 @@ export class SystemCard extends CardDef {
     description: 'List of available model configurations for this system',
   });
 
-  [getCardMenuItems](params: GetCardMenuItemParams): MenuItemOptions[] {
-    let menuItems = super[getCardMenuItems](params);
+  [getMenuItems](params: GetMenuItemParams): MenuItemOptions[] {
+    let menuItems = super[getMenuItems](params);
     menuItems = [
       {
-        label: 'Set as my system card',
+        label: 'Set as My System Card',
         action: async () => {
           await new SetUserSystemCardCommand(params.commandContext).execute({
             cardId: this.id,

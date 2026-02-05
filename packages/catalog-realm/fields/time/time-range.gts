@@ -5,7 +5,7 @@ import {
   contains,
 } from 'https://cardstack.com/base/card-api';
 import ClockIcon from '@cardstack/boxel-icons/clock';
-import { TimeField } from '../time';
+import TimeField from '../time';
 
 class TimeRangeFieldEdit extends Component<typeof TimeRangeField> {
   get durationMinutes() {
@@ -98,7 +98,7 @@ class TimeRangeFieldEdit extends Component<typeof TimeRangeField> {
   </template>
 }
 
-export class TimeRangeField extends FieldDef {
+export default class TimeRangeField extends FieldDef {
   static displayName = 'Time Range';
   static icon = ClockIcon;
 
@@ -181,5 +181,3 @@ export class TimeRangeField extends FieldDef {
 
   static edit = TimeRangeFieldEdit;
 }
-
-export default TimeRangeField;

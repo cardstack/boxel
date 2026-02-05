@@ -176,6 +176,10 @@ export function getBoxComponent(
       userFormat && availableFormats.includes(userFormat)
         ? { fieldDef: userFormat, cardDef: userFormat }
         : defaultFormats;
+    if (field?.computeVia && result.fieldDef === 'edit') {
+      // Computed fields should never render in edit mode.
+      result = { ...result, fieldDef: 'embedded' };
+    }
     return result;
   }
 

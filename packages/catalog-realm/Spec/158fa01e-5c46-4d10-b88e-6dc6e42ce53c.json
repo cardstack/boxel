@@ -9,10 +9,10 @@
       },
       "specType": "card",
       "containedExamples": [],
-      "title": "Video Game",
-      "description": null,
+      "cardTitle": "Video Game",
+      "cardDescription": null,
       "cardInfo": {},
-      "thumbnailURL": null
+      "cardThumbnailURL": null
     },
     "relationships": {
       "linkedExamples": {

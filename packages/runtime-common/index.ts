@@ -1,14 +1,26 @@
-import type { CardResource, LooseCardResource, Meta } from './resource-types';
+import type {
+  CardResource,
+  FileMetaResource,
+  LinkableResource,
+  LooseLinkableResource,
+  Meta,
+} from './resource-types';
 import type { ResolvedCodeRef } from './code-ref';
 import type { RenderRouteOptions } from './render-route-options';
 import type { Definition } from './definitions';
 
 import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
+import type { FileDef } from 'https://cardstack.com/base/file-api';
 import type { ErrorEntry } from './index-writer';
 
+export interface LooseSingleResourceDocument<T extends LinkableResource> {
+  data: LooseLinkableResource<T>;
+  included?: LooseLinkableResource<LinkableResource>[];
+}
+
 export interface LooseSingleCardDocument {
-  data: LooseCardResource;
-  included?: CardResource[];
+  data: LooseLinkableResource<CardResource>;
+  included?: LinkableResource[];
 }
 
 export type PatchData = {
@@ -43,6 +55,36 @@ export interface RenderError extends ErrorEntry {
   evict?: boolean;
 }
 
+export interface FileExtractResponse {
+  id: string;
+  nonce: string;
+  status: 'ready' | 'error';
+  searchDoc: Record<string, any> | null;
+  resource?: FileMetaResource | null;
+  types?: string[] | null;
+  deps: string[];
+  error?: RenderError;
+  mismatch?: true;
+}
+
+export interface FileRenderResponse {
+  isolatedHTML: string | null;
+  headHTML: string | null;
+  atomHTML: string | null;
+  embeddedHTML: Record<string, string> | null;
+  fittedHTML: Record<string, string> | null;
+  iconHTML: string | null;
+  error?: RenderError;
+}
+
+export type FileRenderArgs = ModulePrerenderArgs & {
+  fileData: {
+    resource: FileMetaResource;
+    fileDefCodeRef: ResolvedCodeRef;
+  };
+  types: string[];
+};
+
 export interface ModuleDefinitionResult {
   type: 'definition';
   moduleURL: string; // node resolution w/o extension
@@ -76,6 +118,8 @@ export type PrerenderCardArgs = ModulePrerenderArgs;
 export interface Prerenderer {
   prerenderCard(args: PrerenderCardArgs): Promise<RenderResponse>;
   prerenderModule(args: ModulePrerenderArgs): Promise<ModuleRenderResponse>;
+  prerenderFileExtract(args: ModulePrerenderArgs): Promise<FileExtractResponse>;
+  prerenderFileRender(args: FileRenderArgs): Promise<FileRenderResponse>;
 }
 
 export type RealmAction = 'read' | 'write' | 'realm-owner' | 'assume-user';
@@ -93,6 +137,7 @@ export {
   type CardErrorsJSONAPI,
   isCardErrorJSONAPI,
 } from './error';
+export { validateWriteSize } from './write-size-validation';
 
 export interface ResourceObject {
   type: string;
@@ -152,6 +197,7 @@ export * from './matrix-constants';
 export * from './matrix-client';
 export * from './queue';
 export * from './expression';
+export * from './infer-content-type';
 export * from './index-query-engine';
 export * from './index-writer';
 export * from './definitions';
@@ -169,6 +215,8 @@ export * from './utils';
 export * from './authorization-middleware';
 export * from './resource-types';
 export * from './query';
+export * from './search-utils';
+export * from './prerendered-html-format';
 export * from './query-field-utils';
 export * from './relationship-utils';
 export * from './formats';
@@ -185,6 +233,7 @@ export * from './helpers/ensure-extension';
 export * from './url';
 export * from './render-route-options';
 export * from './publishability';
+export * from './pr-manifest';
 
 export const executableExtensions = ['.js', '.gjs', '.ts', '.gts'];
 export { createResponse } from './create-response';
@@ -222,9 +271,17 @@ export type { CodeRef };
 export * from './code-ref';
 export * from './serializers';
 
-export type { CardDocument, SingleCardDocument } from './document-types';
+export type {
+  CardDocument,
+  SingleCardDocument,
+  SingleFileMetaDocument,
+  CardCollectionDocument,
+  FileMetaCollectionDocument,
+  LinkableCollectionDocument,
+} from './document-types';
 export type {
   CardResource,
+  FileMetaResource,
   ModuleResource,
   CardResourceMeta,
   ResourceID,
@@ -232,11 +289,15 @@ export type {
   Saved,
   Relationship,
   CardFields,
+  LooseLinkableResource,
 } from './resource-types';
 export {
   isCardDocument,
   isCardCollectionDocument,
   isSingleCardDocument,
+  isSingleFileMetaDocument,
+  isFileMetaCollectionDocument,
+  isLinkableCollectionDocument,
   isCardDocumentString,
 } from './document-types';
 export {
@@ -406,6 +467,8 @@ export interface AddOptions extends CreateOptions {
   doNotWaitForPersist?: boolean;
 }
 
+export type StoreReadType = 'card' | 'file-meta';
+
 export interface Store {
   save(id: string): void;
   create(
@@ -424,23 +487,40 @@ export interface Store {
     instanceOrDoc: T | LooseSingleCardDocument,
     opts?: CreateOptions,
   ): Promise<T | CardErrorJSONAPI>;
-  peek<T extends CardDef>(id: string): T | CardErrorJSONAPI | undefined;
-  peekLive<T extends CardDef>(id: string): T | CardErrorJSONAPI | undefined;
-  peekError(id: string): CardErrorJSONAPI | undefined;
-  get<T extends CardDef>(id: string): Promise<T | CardErrorJSONAPI>;
+  peek<T extends CardDef>(
+    id: string,
+    opts?: { type?: 'card' },
+  ): T | CardErrorJSONAPI | undefined;
+  peek<T extends FileDef>(
+    id: string,
+    opts: { type: 'file-meta' },
+  ): T | CardErrorJSONAPI | undefined;
+  peekError(id: string, opts?: { type?: 'card' }): CardErrorJSONAPI | undefined;
+  peekError(
+    id: string,
+    opts: { type: 'file-meta' },
+  ): CardErrorJSONAPI | undefined;
+  get<T extends CardDef>(
+    id: string,
+    opts?: { type?: 'card' },
+  ): Promise<T | CardErrorJSONAPI>;
+  get<T extends FileDef>(
+    id: string,
+    opts: { type: 'file-meta' },
+  ): Promise<T | CardErrorJSONAPI>;
   delete(id: string): Promise<void>;
   patch<T extends CardDef>(
     id: string,
     patchData: PatchData,
     opts?: { doNotPersist?: boolean; clientRequestId?: string },
   ): Promise<T | CardErrorJSONAPI | undefined>;
-  search(query: Query, realmURL?: URL): Promise<CardDef[]>;
+  search(query: Query, realmURLs?: string[]): Promise<CardDef[]>;
   getSaveState(id: string): AutoSaveState | undefined;
 }
 
-export interface CardCatalogQuery extends Query {
+export type CardCatalogQuery = Query & {
   filter?: CardTypeFilter | EveryFilter;
-}
+};
 
 export interface CardCreator {
   create(

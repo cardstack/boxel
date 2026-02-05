@@ -28,6 +28,7 @@ import {
 import type { SerializedError } from './error';
 import type { DBAdapter } from './db';
 import type { RealmMetaTable } from './index-structure';
+import type { FileMetaResource } from './resource-types';
 import {
   coerceTypes,
   type BoxelIndexTable,
@@ -62,7 +63,7 @@ export class IndexWriter {
 export type IndexEntry = InstanceEntry | ModuleEntry | ErrorEntry | FileEntry;
 export type LastModifiedTimes = Map<
   string,
-  { type: string; lastModified: number | null }
+  { type: string; lastModified: number | null; hasError: boolean }
 >;
 
 export interface InstanceEntry {
@@ -107,8 +108,15 @@ export interface FileEntry {
   resourceCreatedAt: number;
   deps: Set<string>;
   searchData?: Record<string, any>;
+  resource?: FileMetaResource | null;
   types?: string[];
   displayNames?: string[];
+  isolatedHtml?: string;
+  headHtml?: string;
+  embeddedHtml?: Record<string, string>;
+  fittedHtml?: Record<string, string>;
+  atomHtml?: string;
+  iconHTML?: string;
 }
 
 export class Batch {
@@ -151,23 +159,52 @@ export class Batch {
 
   async getModifiedTimes(): Promise<LastModifiedTimes> {
     let results = (await this.#query([
-      `SELECT i.url, i.type, i.last_modified
+      `SELECT i.url, i.type, i.last_modified, i.has_error
        FROM boxel_index as i
           WHERE i.realm_url =`,
       param(this.realmURL.href),
     ] as Expression)) as Pick<
       BoxelIndexTable,
-      'url' | 'type' | 'last_modified'
+      'url' | 'type' | 'last_modified' | 'has_error'
     >[];
     let result: LastModifiedTimes = new Map();
-    for (let { url, type, last_modified: lastModified } of results) {
+    for (let { url, type, last_modified: lastModified, has_error } of results) {
       result.set(url, {
         type,
         // lastModified is unix time, so it should be safe to cast to number
         lastModified: lastModified == null ? null : parseInt(lastModified),
+        hasError: Boolean(has_error),
       });
     }
     return result;
+  }
+
+  async getModuleErrors(urls: string[]): Promise<SerializedError[]> {
+    let candidates = [...new Set(urls)].filter(
+      (url) => url && !url.endsWith('.json'),
+    );
+    if (candidates.length === 0) {
+      return [];
+    }
+    let params = candidates.map((url) => [param(url)]);
+    let rows = (await this.#query([
+      `SELECT i.error_doc`,
+      `FROM boxel_index_working as i`,
+      'WHERE',
+      ...every([
+        ['i.realm_url =', param(this.realmURL.href)],
+        ['i.type =', param('module')],
+        ['i.has_error = TRUE'],
+        any([
+          ['i.url IN', ...addExplicitParens(separatedByCommas(params))],
+          ['i.file_alias IN', ...addExplicitParens(separatedByCommas(params))],
+        ]),
+        any([['i.is_deleted = FALSE'], ['i.is_deleted IS NULL']]),
+      ]),
+    ] as Expression)) as Pick<BoxelIndexTable, 'error_doc'>[];
+    return rows
+      .map((row) => row.error_doc)
+      .filter((errorDoc): errorDoc is SerializedError => Boolean(errorDoc));
   }
 
   async copyFrom(sourceRealmURL: URL, destRealmInfo: RealmInfo): Promise<void> {
@@ -289,6 +326,7 @@ export class Batch {
           last_modified: entry.lastModified,
           resource_created_at: entry.resourceCreatedAt,
           error_doc: null,
+          has_error: false,
         };
         break;
       case 'module':
@@ -298,18 +336,27 @@ export class Batch {
           last_modified: entry.lastModified,
           resource_created_at: entry.resourceCreatedAt,
           error_doc: null,
+          has_error: false,
         };
         break;
       case 'file':
         entryPayload = {
           type: 'file',
           deps: [...entry.deps],
+          pristine_doc: entry.resource ?? null,
           search_doc: entry.searchData ?? null,
           types: entry.types ?? null,
           display_names: entry.displayNames ?? null,
+          isolated_html: entry.isolatedHtml ?? null,
+          head_html: entry.headHtml ?? null,
+          embedded_html: entry.embeddedHtml ?? null,
+          fitted_html: entry.fittedHtml ?? null,
+          atom_html: entry.atomHtml ?? null,
+          icon_html: entry.iconHTML ?? null,
           last_modified: entry.lastModified,
           resource_created_at: entry.resourceCreatedAt,
           error_doc: null,
+          has_error: false,
         };
         break;
       case 'instance-error':
@@ -323,8 +370,9 @@ export class Batch {
             url,
             baseTypeFromError(entry),
           )) ?? {}),
-          type: entry.type,
+          type: baseTypeFromError(entry),
           error_doc: errorEntry?.error ?? entry.error,
+          has_error: true,
         };
         break;
       default:
@@ -402,6 +450,7 @@ export class Batch {
           [`i.file_alias =`, param(url.href)],
         ]),
         ['i.type =', param(expectedType)],
+        any([['i.has_error = FALSE'], ['i.has_error IS NULL']]),
       ]),
     ] as Expression)) as unknown as BoxelIndexTable[];
     if (!entry) {
@@ -431,16 +480,7 @@ export class Batch {
           WHERE`,
       ...every([
         ['i.realm_url =', param(this.realmURL.href)],
-        [
-          'i.type NOT IN',
-          ...addExplicitParens(
-            separatedByCommas(
-              ['instance-error', 'module-error', 'file-error'].map((type) => [
-                param(type),
-              ]),
-            ),
-          ),
-        ],
+        any([['i.has_error = FALSE'], ['i.has_error IS NULL']]),
         ['i.is_deleted != true'],
       ]),
     ] as Expression)) as { total: string }[];
@@ -454,10 +494,7 @@ export class Batch {
           WHERE`,
       ...every([
         ['i.realm_url =', param(this.realmURL.href)],
-        any([
-          ['i.type = ', param('instance')],
-          ['i.type = ', param('instance-error')],
-        ]),
+        ['i.type = ', param('instance')],
         ['i.types IS NOT NULL'],
         [
           dbExpression({
@@ -764,7 +801,7 @@ export class Batch {
     let items = await this.itemsThatReference(resolvedPath);
     let invalidations = items.map(({ url }) => url);
     let aliases = items.map(({ alias: moduleAlias, type, url }) =>
-      type === 'instance' || type === 'instance-error'
+      type === 'instance'
         ? // for instances we expect that the deps for an entry always includes .json extension
           url
         : moduleAlias,
@@ -832,7 +869,7 @@ export class Batch {
       resolved.search = '';
       resolved.hash = '';
       resolved = depMapper ? depMapper(resolved) : resolved;
-      return resolved.href;
+      return trimExecutableExtension(resolved).href;
     } catch (_err) {
       return dep;
     }

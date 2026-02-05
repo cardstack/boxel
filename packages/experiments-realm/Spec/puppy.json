@@ -2,8 +2,8 @@
   "data": {
     "type": "card",
     "attributes": {
-      "title": "Puppy",
-      "description": "Spec for Puppy card",
+      "cardTitle": "Puppy",
+      "cardDescription": "Spec for Puppy card",
       "specType": "card",
       "ref": {
         "module": "../puppy-card",

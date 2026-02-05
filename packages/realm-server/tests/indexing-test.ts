@@ -1,6 +1,6 @@
 import { module, test } from 'qunit';
 import { dirSync } from 'tmp';
-import { SupportedMimeType } from '@cardstack/runtime-common';
+import { internalKeyFor, SupportedMimeType } from '@cardstack/runtime-common';
 import type {
   DBAdapter,
   LooseSingleCardDocument,
@@ -14,7 +14,6 @@ import type {
   QueueRunner,
 } from '@cardstack/runtime-common';
 import {
-  setupBaseRealmServer,
   setupDB,
   createVirtualNetwork,
   matrixURL,
@@ -397,7 +396,20 @@ function makeTestRealmFileSystem(): Record<
         },
       },
     },
+    'filedef-mismatch.gts': `
+      import {
+        FileDef as BaseFileDef,
+        FileContentMismatchError,
+      } from "https://cardstack.com/base/file-api";
+
+      export class FileDef extends BaseFileDef {
+        static async extractAttributes() {
+          throw new FileContentMismatchError('content mismatch');
+        }
+      }
+    `,
     'random-file.txt': 'hello',
+    'random-file.mismatch': 'mismatch content',
     'random-image.png': 'i am an image',
     '.DS_Store':
       'In  macOS, .DS_Store is a file that stores custom attributes of its containing folder',
@@ -454,8 +466,6 @@ module(basename(__filename), function () {
       }
       return maybeInstance as IndexedInstance | undefined;
     }
-
-    setupBaseRealmServer(hooks, matrixURL);
 
     setupDB(hooks, {
       before: async (dbAdapter, publisher, runner) => {
@@ -524,7 +534,7 @@ module(basename(__filename), function () {
         // TODO: restore in CS-9807
         // assert.ok(
         //   cleanedHead.includes('<title data-test-card-head-title>'),
-        //   `head html includes title: ${cleanedHead}`,
+        //   `head html includes cardTitle: ${cleanedHead}`,
         // );
 
         assert.strictEqual(
@@ -612,9 +622,11 @@ module(basename(__filename), function () {
           new URL(`${testRealm}boom2`),
         );
         if (entry?.type === 'error') {
-          assert.strictEqual(
-            entry.error.errorDetail.message,
-            'Attempted to resolve a modifier in a strict mode template, but it was not in scope: did-insert',
+          assert.ok(
+            /Attempted to resolve a modifier in a strict mode template, but that value was not in scope: did-insert/.test(
+              entry.error.errorDetail.message,
+            ),
+            'error text is about did-insert not being in scope',
           );
           assert.deepEqual(entry.error.errorDetail.deps, [`${testRealm}boom2`]);
         } else {
@@ -696,11 +708,11 @@ module(basename(__filename), function () {
         assert.deepEqual(
           hassan.doc.data.attributes,
           {
-            title: 'Untitled Card',
+            cardTitle: 'Untitled Card',
             nickName: "Ringo's buddy",
             firstName: 'Hassan',
-            description: null,
-            thumbnailURL: null,
+            cardDescription: null,
+            cardThumbnailURL: null,
             cardInfo,
           },
           'doc attributes are correct',
@@ -736,7 +748,7 @@ module(basename(__filename), function () {
             id: hassanId,
             pet: {
               id: `${testRealm}ringo`,
-              title: 'Untitled Card',
+              cardTitle: 'Untitled Card',
               firstName: 'Ringo',
               cardInfo: {
                 theme: null,
@@ -745,7 +757,7 @@ module(basename(__filename), function () {
             nickName: "Ringo's buddy",
             _cardType: 'PetPerson',
             firstName: 'Hassan',
-            title: 'Untitled Card',
+            cardTitle: 'Untitled Card',
             cardInfo: {
               theme: null,
             },
@@ -864,11 +876,122 @@ module(basename(__filename), function () {
       assert.ok(rows[0].last_modified, 'file entry has last_modified');
     });
 
+    test('indexes executable files as file entries too', async function (assert) {
+      let entry = await realm.realmIndexQueryEngine.file(
+        new URL(`${testRealm}person.gts`),
+      );
+      assert.ok(entry, 'file entry exists for executable file');
+      assert.strictEqual(
+        entry?.searchDoc?.name,
+        'person.gts',
+        'file entry includes name',
+      );
+      assert.strictEqual(
+        entry?.searchDoc?.contentType,
+        'text/typescript+glimmer',
+        'file entry includes contentType',
+      );
+    });
+
+    test('indexes card json resources as file entries too', async function (assert) {
+      let entry = await realm.realmIndexQueryEngine.file(
+        new URL(`${testRealm}mango.json`),
+      );
+      assert.ok(entry, 'file entry exists for card json resource');
+      assert.strictEqual(
+        entry?.searchDoc?.name,
+        'mango.json',
+        'file entry includes name',
+      );
+      assert.ok(
+        entry?.searchDoc?.contentHash,
+        'file entry includes contentHash',
+      );
+    });
+
+    test('keeps instance entries when indexing card json files as file entries', async function (assert) {
+      let instanceEntry = await getInstance(
+        realm,
+        new URL(`${testRealm}mango`),
+      );
+      let fileEntry = await realm.realmIndexQueryEngine.file(
+        new URL(`${testRealm}mango.json`),
+      );
+      assert.ok(instanceEntry, 'instance entry exists for card json resource');
+      assert.ok(fileEntry, 'file entry exists for card json resource');
+      assert.strictEqual(
+        instanceEntry?.canonicalURL,
+        fileEntry?.canonicalURL,
+        'instance and file entries can share the same url',
+      );
+      assert.strictEqual(
+        instanceEntry?.type,
+        'instance',
+        'instance entry keeps instance type',
+      );
+      assert.strictEqual(fileEntry?.type, 'file', 'file entry keeps file type');
+    });
+
+    test('file extractor populates search_doc', async function (assert) {
+      let rows = (await testDbAdapter.execute(
+        `SELECT search_doc FROM boxel_index WHERE url = '${testRealm}random-file.txt'`,
+      )) as { search_doc: Record<string, unknown> | string | null }[];
+      let raw = rows[0]?.search_doc;
+      let searchDoc = typeof raw === 'string' ? JSON.parse(raw) : (raw ?? {});
+      assert.strictEqual(
+        searchDoc.name,
+        'random-file.txt',
+        'search_doc includes name',
+      );
+      assert.strictEqual(
+        searchDoc.contentType,
+        'text/plain',
+        'search_doc includes contentType',
+      );
+      assert.ok(searchDoc.contentHash, 'search_doc includes contentHash');
+    });
+
+    test('file extractor mismatch falls back to base extractor', async function (assert) {
+      let rows = (await testDbAdapter.execute(
+        `SELECT search_doc, deps FROM boxel_index WHERE url = '${testRealm}random-file.mismatch'`,
+      )) as {
+        search_doc: Record<string, unknown> | string | null;
+        deps: string[] | string | null;
+      }[];
+      let rawDoc = rows[0]?.search_doc;
+      let searchDoc =
+        typeof rawDoc === 'string' ? JSON.parse(rawDoc) : (rawDoc ?? {});
+      assert.strictEqual(
+        searchDoc.name,
+        'random-file.mismatch',
+        'fallback search_doc includes name',
+      );
+      assert.ok(
+        searchDoc.contentHash,
+        'fallback search_doc includes contentHash',
+      );
+
+      let rawDeps = rows[0]?.deps ?? [];
+      let deps = Array.isArray(rawDeps)
+        ? rawDeps
+        : typeof rawDeps === 'string'
+          ? JSON.parse(rawDeps)
+          : [];
+      assert.ok(
+        deps.includes(`${testRealm}filedef-mismatch`),
+        'deps include mismatch extractor module',
+      );
+      assert.ok(
+        deps.includes('https://cardstack.com/base/file-api'),
+        'deps include base file-api for fallback',
+      );
+    });
+
     test('serves FileMeta from index entries', async function (assert) {
       // Mutate the index row so we can validate that the response must come from the index,
       // not from filesystem metadata.
       await testDbAdapter.execute(
-        `UPDATE boxel_index SET search_doc = '{"name":"from-index.txt","contentType":"application/x-index-test"}'::jsonb WHERE url = '${testRealm}random-file.txt'`,
+        `UPDATE boxel_index SET search_doc = '{"name":"from-index.txt","contentType":"application/x-index-test"}'::jsonb, pristine_doc = '{"id":"${testRealm}random-file.txt","type":"file-meta","attributes":{"name":"from-pristine.txt","contentType":"application/x-pristine","custom":"present"},"meta":{"adoptsFrom":{"module":"https://cardstack.com/base/file-api","name":"FileDef"}}}'::jsonb WHERE url = '${testRealm}random-file.txt'`,
       );
       let response = await fetch(`${testRealm}random-file.txt`, {
         headers: { Accept: SupportedMimeType.FileMeta },
@@ -876,19 +999,65 @@ module(basename(__filename), function () {
       assert.strictEqual(response.status, 200, 'file meta response is ok');
       let doc = (await response.json()) as LooseSingleCardDocument;
       assert.strictEqual(doc.data.id, `${testRealm}random-file.txt`);
+      assert.strictEqual(doc.data.type, 'file-meta');
       assert.strictEqual(
         doc.data.attributes?.name,
-        'from-index.txt',
-        'name sourced from index',
+        'from-pristine.txt',
+        'name sourced from pristine file resource',
       );
       assert.strictEqual(
         doc.data.attributes?.contentType,
-        'application/x-index-test',
-        'contentType sourced from index',
+        'application/x-pristine',
+        'contentType sourced from pristine file resource',
+      );
+      assert.strictEqual(
+        doc.data.attributes?.custom,
+        'present',
+        'custom attributes sourced from pristine file resource',
+      );
+      assert.deepEqual(
+        doc.data.meta?.adoptsFrom,
+        {
+          module: 'https://cardstack.com/base/file-api',
+          name: 'FileDef',
+        },
+        'adoptsFrom sourced from pristine file resource',
       );
       assert.ok(
-        response.headers.get('last-modified'),
-        'response includes last-modified',
+        doc.data.attributes?.lastModified,
+        'lastModified sourced from response attributes',
+      );
+    });
+
+    test('file meta adoptsFrom prefers index types', async function (assert) {
+      let fileDefModule = new URL('filedef-mismatch', testRealm).href;
+      let fileDefKey = internalKeyFor(
+        { module: fileDefModule, name: 'FileDef' },
+        undefined,
+      );
+      await testDbAdapter.execute(
+        `UPDATE boxel_index SET types = '${JSON.stringify([
+          fileDefKey,
+        ])}'::jsonb, pristine_doc = NULL WHERE url = '${testRealm}random-file.txt'`,
+      );
+
+      let response = await fetch(`${testRealm}random-file.txt`, {
+        headers: { Accept: SupportedMimeType.FileMeta },
+      });
+      assert.strictEqual(response.status, 200, 'file meta response is ok');
+      let doc = (await response.json()) as LooseSingleCardDocument;
+      let adoptsFrom = doc.data.meta?.adoptsFrom as
+        | { module?: string; name?: string }
+        | undefined;
+      assert.strictEqual(
+        adoptsFrom?.module,
+        fileDefModule,
+        'adoptsFrom module sourced from index types',
+      );
+      assert.strictEqual(
+        adoptsFrom?.name,
+        'FileDef',
+        'adoptsFrom name sourced from index types',
       );
     });
   });
@@ -897,8 +1066,6 @@ module(basename(__filename), function () {
     let realm: Realm;
     let adapter: RealmAdapter;
     let testRealmServer: TestRealmServerResult | undefined;
-
-    setupBaseRealmServer(hooks, matrixURL);
 
     setupDB(hooks, {
       beforeEach: async (dbAdapter, publisher, runner) => {
@@ -935,7 +1102,7 @@ module(basename(__filename), function () {
         } as LooseSingleCardDocument),
       );
 
-      let { data: result } = await realm.realmIndexQueryEngine.search({
+      let { data: result } = await realm.realmIndexQueryEngine.searchCards({
         filter: {
           on: { module: `${testRealm}person`, name: 'Person' },
           eq: { firstName: 'Mang-Mang' },
@@ -970,7 +1137,7 @@ module(basename(__filename), function () {
           export class Intentionally Thrown Error {}
         `,
       );
-      let { data: result } = await realm.realmIndexQueryEngine.search({
+      let { data: result } = await realm.realmIndexQueryEngine.searchCards({
         filter: {
           type: { module: `${testRealm}person`, name: 'Person' },
         },
@@ -992,7 +1159,7 @@ module(basename(__filename), function () {
         `,
       );
       result = (
-        await realm.realmIndexQueryEngine.search({
+        await realm.realmIndexQueryEngine.searchCards({
           filter: {
             type: { module: `${testRealm}person`, name: 'Person' },
           },
@@ -1018,6 +1185,21 @@ module(basename(__filename), function () {
           }
         `,
       );
+
+      let pet = await realm.realmIndexQueryEngine.module(
+        new URL(`${testRealm}pet`),
+      );
+      assert.strictEqual(pet?.type, 'module-error', 'Pet module is in error');
+      if (pet?.type === 'module-error') {
+        let errorDeps = new Set(pet.error.deps ?? []);
+        let hasNameDep =
+          errorDeps.has(`${testRealm}name`) ||
+          errorDeps.has(`${testRealm}name.gts`);
+        assert.ok(hasNameDep, 'error deps include missing Name module');
+      } else {
+        assert.ok(false, 'expected pet module error details');
+      }
+
       await realm.write(
         'name.gts',
         `
@@ -1031,7 +1213,7 @@ module(basename(__filename), function () {
         `,
       );
 
-      // Aspect module should be indexed
+      // Name module should be indexed
       let name = await realm.realmIndexQueryEngine.module(
         new URL(`${testRealm}name`),
       );
@@ -1042,8 +1224,7 @@ module(basename(__filename), function () {
       );
 
       // Since the name is ready, the pet should be indexed and not in an error state
-      // Fetch the pet module
-      let pet = await realm.realmIndexQueryEngine.module(
+      pet = await realm.realmIndexQueryEngine.module(
         new URL(`${testRealm}pet`),
       );
       assert.strictEqual(
@@ -1122,10 +1303,159 @@ module(basename(__filename), function () {
       );
     });
 
+    test('propagates module errors to dependent instances and recovers after missing modules are added', async function (assert) {
+      await realm.write(
+        'deep-card.json',
+        JSON.stringify({
+          data: {
+            attributes: {
+              middle: {
+                leaf: {
+                  value: 'Root',
+                },
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: './deep-card',
+                name: 'DeepCard',
+              },
+            },
+          },
+        } as LooseSingleCardDocument),
+      );
+
+      let brokenInstance = await realm.realmIndexQueryEngine.instance(
+        new URL(`${testRealm}deep-card`),
+      );
+      assert.strictEqual(
+        brokenInstance?.type,
+        'instance-error',
+        'instance is in an error state when DeepCard module is missing',
+      );
+      if (brokenInstance?.type === 'instance-error') {
+        assert.ok(
+          brokenInstance.error.deps?.includes(`${testRealm}deep-card`),
+          'error deps include missing DeepCard module',
+        );
+      } else {
+        assert.ok(false, 'expected instance error details');
+      }
+
+      await realm.write(
+        'deep-card.gts',
+        `
+          import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
+          import { MiddleField } from "./middle-field";
+
+          export class DeepCard extends CardDef {
+            @field middle = contains(MiddleField);
+          }
+        `,
+      );
+
+      brokenInstance = await realm.realmIndexQueryEngine.instance(
+        new URL(`${testRealm}deep-card`),
+      );
+      assert.strictEqual(
+        brokenInstance?.type,
+        'instance-error',
+        'instance is in an error state when MiddleField module is missing',
+      );
+      if (brokenInstance?.type === 'instance-error') {
+        let additionalErrors = Array.isArray(
+          brokenInstance.error.additionalErrors,
+        )
+          ? brokenInstance.error.additionalErrors
+          : [];
+        assert.ok(
+          additionalErrors.some((error) =>
+            String(error.message ?? '').includes('middle-field'),
+          ),
+          'missing MiddleField details are included in dependency errors',
+        );
+      } else {
+        assert.ok(false, 'expected instance error details');
+      }
+
+      await realm.write(
+        'middle-field.gts',
+        `
+          import { contains, field, FieldDef } from "https://cardstack.com/base/card-api";
+          import { LeafField } from "./leaf-field";
+
+          export class MiddleField extends FieldDef {
+            @field leaf = contains(LeafField);
+          }
+        `,
+      );
+
+      brokenInstance = await realm.realmIndexQueryEngine.instance(
+        new URL(`${testRealm}deep-card`),
+      );
+      assert.strictEqual(
+        brokenInstance?.type,
+        'instance-error',
+        'instance is in an error state when LeafField module is missing',
+      );
+      if (brokenInstance?.type === 'instance-error') {
+        let additionalErrors = Array.isArray(
+          brokenInstance.error.additionalErrors,
+        )
+          ? brokenInstance.error.additionalErrors
+          : [];
+        assert.ok(
+          additionalErrors.some((error) =>
+            String(error.message ?? '').includes('leaf-field'),
+          ),
+          'missing LeafField details are included in dependency errors',
+        );
+      } else {
+        assert.ok(false, 'expected instance error details');
+      }
+
+      await realm.write(
+        'leaf-field.gts',
+        `
+          import { contains, field, FieldDef } from "https://cardstack.com/base/card-api";
+          import StringField from "https://cardstack.com/base/string";
+
+          export class LeafField extends FieldDef {
+            @field value = contains(StringField);
+          }
+        `,
+      );
+
+      let healedInstance = await realm.realmIndexQueryEngine.instance(
+        new URL(`${testRealm}deep-card`),
+      );
+      assert.strictEqual(
+        healedInstance?.type,
+        'instance',
+        'instance is repaired when missing module is added',
+      );
+      let rows = (await testDbAdapter.execute(
+        `SELECT error_doc IS NULL AS is_sql_null
+         FROM boxel_index
+         WHERE realm_url = '${testRealm}'
+           AND (
+             url = '${testRealm}deep-card.json'
+             OR file_alias = '${testRealm}deep-card'
+           )
+           AND type = 'instance'`,
+      )) as { is_sql_null: boolean }[];
+      assert.strictEqual(
+        rows.length,
+        1,
+        'index row exists for deep-card instance',
+      );
+      assert.true(rows[0].is_sql_null, 'error_doc is SQL NULL after recovery');
+    });
+
     test('can incrementally index deleted instance', async function (assert) {
       await realm.delete('mango.json');
 
-      let { data: result } = await realm.realmIndexQueryEngine.search({
+      let { data: result } = await realm.realmIndexQueryEngine.searchCards({
         filter: {
           on: { module: `${testRealm}person`, name: 'Person' },
           eq: { firstName: 'Mango' },
@@ -1180,7 +1510,7 @@ module(basename(__filename), function () {
       `,
       );
 
-      let { data: result } = await realm.realmIndexQueryEngine.search({
+      let { data: result } = await realm.realmIndexQueryEngine.searchCards({
         filter: {
           on: { module: `${testRealm}post`, name: 'Post' },
           eq: { nickName: 'Van Gogh-poo' },
@@ -1213,7 +1543,7 @@ module(basename(__filename), function () {
         `,
       );
 
-      let { data: result } = await realm.realmIndexQueryEngine.search({
+      let { data: result } = await realm.realmIndexQueryEngine.searchCards({
         filter: {
           on: { module: `${testRealm}post`, name: 'Post' },
           eq: { 'author.nickName': 'Van Gogh-poo' },
@@ -1225,7 +1555,7 @@ module(basename(__filename), function () {
     test('can incrementally index instance that depends on deleted card source', async function (assert) {
       await realm.delete('post.gts');
       {
-        let { data: result } = await realm.realmIndexQueryEngine.search({
+        let { data: result } = await realm.realmIndexQueryEngine.searchCards({
           filter: {
             type: { module: `${testRealm}post`, name: 'Post' },
           },
@@ -1280,7 +1610,7 @@ module(basename(__filename), function () {
       `,
       );
       {
-        let { data: result } = await realm.realmIndexQueryEngine.search({
+        let { data: result } = await realm.realmIndexQueryEngine.searchCards({
           filter: {
             on: { module: `${testRealm}post`, name: 'Post' },
             eq: { nickName: 'Van Gogh-poo' },
@@ -1500,10 +1830,12 @@ module(basename(__filename), function () {
         }
       `,
       );
+      mapOfWrites.set('notes.txt', 'Hello from writeMany');
       let result = await realm.writeMany(mapOfWrites);
-      assert.strictEqual(result.length, 2, '2 files were written');
+      assert.strictEqual(result.length, 3, '3 files were written');
       assert.strictEqual(result[0].path, 'place.gts');
       assert.strictEqual(result[1].path, 'country.gts');
+      assert.strictEqual(result[2].path, 'notes.txt');
 
       let place = await realm.realmIndexQueryEngine.module(
         new URL(`${testRealm}place`),
@@ -1514,6 +1846,10 @@ module(basename(__filename), function () {
         new URL(`${testRealm}country`),
       );
       assert.ok(country, 'country module is in the index');
+      let fileEntry = await realm.realmIndexQueryEngine.file(
+        new URL(`${testRealm}notes.txt`),
+      );
+      assert.ok(fileEntry, 'file entry is in the index');
       assert.strictEqual(
         realm.realmIndexUpdater.stats.modulesIndexed,
         2,
@@ -1521,7 +1857,7 @@ module(basename(__filename), function () {
       );
     });
 
-    test('can write instances and modules at once', async function (assert) {
+    test('can write instances and modules and files at once', async function (assert) {
       let mapOfWrites = new Map();
       mapOfWrites.set(
         'city.gts',
@@ -1548,10 +1884,12 @@ module(basename(__filename), function () {
           },
         }),
       );
+      mapOfWrites.set('notes.txt', 'Hello from mixed writeMany');
       let result = await realm.writeMany(mapOfWrites);
-      assert.strictEqual(result.length, 2, '2 files were written');
+      assert.strictEqual(result.length, 3, '3 files were written');
       assert.strictEqual(result[0].path, 'city.gts');
       assert.strictEqual(result[1].path, 'city.json');
+      assert.strictEqual(result[2].path, 'notes.txt');
 
       let module = await realm.realmIndexQueryEngine.module(
         new URL(`${testRealm}city`),
@@ -1562,14 +1900,26 @@ module(basename(__filename), function () {
         new URL(`${testRealm}city`),
       );
       assert.ok(instance, 'city instance is in the index');
+      let fileEntry = await realm.realmIndexQueryEngine.file(
+        new URL(`${testRealm}notes.txt`),
+      );
+      assert.ok(fileEntry, 'file entry for notes.txt is in the index');
+      let instanceFileEntry = await realm.realmIndexQueryEngine.file(
+        new URL(`${testRealm}city.json`),
+      );
+      assert.ok(instanceFileEntry, 'file entry for city.json is in the index');
       assert.deepEqual(
         {
+          filesIndexed: realm.realmIndexUpdater.stats.filesIndexed,
+          fileErrors: realm.realmIndexUpdater.stats.fileErrors,
           instancesIndexed: realm.realmIndexUpdater.stats.instancesIndexed,
           instanceErrors: realm.realmIndexUpdater.stats.instanceErrors,
           moduleErrors: realm.realmIndexUpdater.stats.moduleErrors,
           modulesIndexed: realm.realmIndexUpdater.stats.modulesIndexed,
         },
         {
+          filesIndexed: 2,
+          fileErrors: 0,
           instancesIndexed: 1,
           instanceErrors: 0,
           moduleErrors: 0,
@@ -1635,11 +1985,9 @@ module(basename(__filename), function () {
     });
   });
 
-  module('permissioned realm', function (hooks) {
-    setupBaseRealmServer(hooks, matrixURL);
-
-    let testRealm1URL = 'http://127.0.0.1:4447/';
-    let testRealm2URL = 'http://127.0.0.1:4448/';
+  module('permissioned realm', function () {
+    let testRealm1URL = 'http://127.0.0.1:4447/test/';
+    let testRealm2URL = 'http://127.0.0.1:4448/test/';
     let testRealm2: Realm;
 
     function setupRealms(
@@ -1711,11 +2059,13 @@ module(basename(__filename), function () {
           // we splat because despite having the same shape, the constructors are different
           { ...testRealm2.realmIndexUpdater.stats },
           {
+            fileErrors: 0,
+            filesIndexed: 2,
             instancesIndexed: 1,
             instanceErrors: 0,
             moduleErrors: 0,
             modulesIndexed: 1,
-            totalIndexEntries: 2,
+            totalIndexEntries: 4,
           },
           'has no module errors',
         );
@@ -1739,11 +2089,13 @@ module(basename(__filename), function () {
           // we splat because despite having the same shape, the constructors are different
           { ...testRealm2.realmIndexUpdater.stats },
           {
+            fileErrors: 1,
+            filesIndexed: 1,
             instanceErrors: 1,
             instancesIndexed: 0,
             moduleErrors: 1,
             modulesIndexed: 0,
-            totalIndexEntries: 0,
+            totalIndexEntries: 1,
           },
           'has a module error',
         );

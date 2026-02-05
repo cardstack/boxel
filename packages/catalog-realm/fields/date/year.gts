@@ -8,6 +8,7 @@ import NumberField from 'https://cardstack.com/base/number';
 import { action } from '@ember/object';
 import CalendarEventIcon from '@cardstack/boxel-icons/calendar-event';
 import { BoxelSelect } from '@cardstack/boxel-ui/components';
+import { not } from '@cardstack/boxel-ui/helpers';
 
 class YearFieldEdit extends Component<typeof YearField> {
   get years() {
@@ -26,6 +27,7 @@ class YearFieldEdit extends Component<typeof YearField> {
       @onChange={{this.updateValue}}
       @placeholder='Select year'
       @dropdownClass='year-dropdown'
+      @disabled={{not @canEdit}}
       data-test-year-select
       as |year|
     >
@@ -34,7 +36,7 @@ class YearFieldEdit extends Component<typeof YearField> {
   </template>
 }
 
-export class YearField extends FieldDef {
+export default class YearField extends FieldDef {
   static displayName = 'Year';
   static icon = CalendarEventIcon;
 
@@ -106,4 +108,3 @@ export class YearField extends FieldDef {
   static edit = YearFieldEdit;
 }
 
-export default YearField;

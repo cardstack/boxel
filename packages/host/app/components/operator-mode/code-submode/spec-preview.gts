@@ -6,6 +6,9 @@ import { htmlSafe } from '@ember/template';
 import GlimmerComponent from '@glimmer/component';
 
 import { consume, provide } from 'ember-provide-consume-context';
+import { resource, use } from 'ember-resources';
+
+import { TrackedObject } from 'tracked-built-ins';
 
 import {
   BoxelButton,
@@ -27,6 +30,8 @@ import {
   localId,
   isLocalId,
   CardContextName,
+  isSpecCard,
+  loadCardDef,
 } from '@cardstack/runtime-common';
 
 import CardRenderer from '@cardstack/host/components/card-renderer';
@@ -34,6 +39,7 @@ import CardRenderer from '@cardstack/host/components/card-renderer';
 import { urlForRealmLookup } from '@cardstack/host/lib/utils';
 import type { ModuleDeclaration } from '@cardstack/host/resources/module-contents';
 
+import type LoaderService from '@cardstack/host/services/loader-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type { ModuleInspectorView } from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
@@ -70,6 +76,7 @@ interface Signature {
       WithBoundArgs<
         typeof SpecPreviewContent,
         | 'showCreateSpec'
+        | 'errorMessage'
         | 'canWrite'
         | 'onSelectSpec'
         | 'activeSpec'
@@ -85,6 +92,7 @@ interface ContentSignature {
   Element: HTMLDivElement;
   Args: {
     showCreateSpec: boolean;
+    errorMessage?: string;
     canWrite: boolean;
     onSelectSpec: (spec: Spec) => void;
     allSpecs: Spec[];
@@ -100,15 +108,15 @@ type SpecPreviewCardContext = Omit<
 >;
 
 class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
-  @consume(GetCardContextName) private declare getCard: getCard;
-  @consume(GetCardsContextName) private declare getCards: getCards;
+  @consume(GetCardContextName) declare private getCard: getCard;
+  @consume(GetCardsContextName) declare private getCards: getCards;
   @consume(GetCardCollectionContextName)
-  private declare getCardCollection: getCardCollection;
-  @consume(CardContextName) private declare cardContext: CardContext;
-  @service private declare realm: RealmService;
-  @service private declare operatorModeStateService: OperatorModeStateService;
-  @service private declare specPanelService: SpecPanelService;
-  @service private declare store: StoreService;
+  declare private getCardCollection: getCardCollection;
+  @consume(CardContextName) declare private cardContext: CardContext;
+  @service declare private realm: RealmService;
+  @service declare private operatorModeStateService: OperatorModeStateService;
+  @service declare private specPanelService: SpecPanelService;
+  @service declare private store: StoreService;
 
   private cardTracker = new ElementTracker();
 
@@ -179,6 +187,10 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
       {{#if @showCreateSpec}}
         <div data-test-create-spec-intent-message>
           Create a Boxel Specification to be able to create new instances
+        </div>
+      {{else if @errorMessage}}
+        <div data-test-spec-error-message>
+          {{@errorMessage}}
         </div>
       {{else if this.displayCannotWrite}}
         <div data-test-cannot-write-intent-message>
@@ -318,18 +330,57 @@ const SpecPreviewLoading: TemplateOnlyComponent<SpecPreviewLoadingSignature> =
   </template>;
 
 export default class SpecPreview extends GlimmerComponent<Signature> {
-  @service private declare operatorModeStateService: OperatorModeStateService;
-  @service private declare realm: RealmService;
-  @service private declare recentFilesService: RecentFilesService;
-  @service private declare specPanelService: SpecPanelService;
-  @service private declare store: StoreService;
+  @service declare private loaderService: LoaderService;
+  @service declare private operatorModeStateService: OperatorModeStateService;
+  @service declare private realm: RealmService;
+  @service declare private recentFilesService: RecentFilesService;
+  @service declare private specPanelService: SpecPanelService;
+  @service declare private store: StoreService;
+
+  @use private selectedDeclarationSpecState = resource(() => {
+    let state = new TrackedObject<{ value: boolean }>({ value: false });
+    let codeRef = this.args.selectedDeclarationAsCodeRef;
+    if (!codeRef.module || !codeRef.name) {
+      return state;
+    }
+    (async () => {
+      try {
+        let cardDef = await loadCardDef(codeRef, {
+          loader: this.loaderService.loader,
+          relativeTo: new URL(this.operatorModeStateService.realmURL),
+        });
+        state.value = isSpecCard(cardDef);
+      } catch {
+        state.value = false;
+      }
+    })();
+    return state;
+  });
 
   @action private onSelectSpec(spec: Spec): void {
     this.specPanelService.setSelection(spec.id);
   }
 
+  private get selectedDeclarationIsSpec() {
+    return this.selectedDeclarationSpecState?.value ?? false;
+  }
+
   private get canWrite() {
-    return this.realm.canWrite(this.operatorModeStateService.realmURL);
+    return (
+      this.realm.canWrite(this.operatorModeStateService.realmURL) &&
+      !this.selectedDeclarationIsSpec
+    );
+  }
+
+  private get displayCannotCreateSpecFromSpec() {
+    return this.selectedDeclarationIsSpec;
+  }
+
+  private get errorMessage() {
+    if (this.displayCannotCreateSpecFromSpec) {
+      return 'This is a card definition for a  Spec Card. Cannot create or display spec instances for this card type.';
+    }
+    return undefined;
   }
 
   get isLoading() {
@@ -352,6 +403,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
         (component
           SpecPreviewContent
           showCreateSpec=@showCreateSpec
+          errorMessage=this.errorMessage
           canWrite=this.canWrite
           onSelectSpec=this.onSelectSpec
           activeSpec=@activeSpec

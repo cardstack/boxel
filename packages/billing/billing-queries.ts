@@ -333,6 +333,27 @@ export async function sumUpCreditsLedger(
   return results[0].sum === null ? 0 : parseInt(results[0].sum as string);
 }
 
+export async function getLastDailyCreditGrantAt(
+  dbAdapter: DBAdapter,
+  userId: string,
+): Promise<number | null> {
+  let results = await query(dbAdapter, [
+    `SELECT MAX(created_at) AS last_grant_at FROM credits_ledger WHERE user_id = `,
+    param(userId),
+    ` AND credit_type = 'daily_credit'`,
+  ]);
+
+  let lastGrantAt = results[0]?.last_grant_at;
+  if (lastGrantAt == null) {
+    return null;
+  }
+  let parsed =
+    typeof lastGrantAt === 'number'
+      ? lastGrantAt
+      : parseInt(lastGrantAt as string);
+  return Number.isNaN(parsed) ? null : parsed;
+}
+
 export async function getCurrentActiveSubscription(
   dbAdapter: DBAdapter,
   userId: string,
@@ -541,14 +562,17 @@ export async function spendCredits(
   if (!subscriptionCycle) {
     throw new Error('subscription cycle not found');
   }
-  let availablePlanAllowanceCredits = await sumUpCreditsLedger(dbAdapter, {
-    creditType: [
-      'plan_allowance',
-      'plan_allowance_used',
-      'plan_allowance_expired',
-    ],
-    userId,
-  });
+  let availablePlanAllowanceCredits = Math.max(
+    0,
+    await sumUpCreditsLedger(dbAdapter, {
+      creditType: [
+        'plan_allowance',
+        'plan_allowance_used',
+        'plan_allowance_expired',
+      ],
+      subscriptionCycleId: subscriptionCycle.id,
+    }),
+  );
 
   if (availablePlanAllowanceCredits >= creditsToSpend) {
     await addToCreditsLedger(dbAdapter, {

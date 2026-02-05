@@ -10,9 +10,9 @@ module('Integration | helpers | formatDuration', function (hooks) {
     await render(<template>{{formatDuration 7380}}</template>); // 2 hours, 3 minutes
     assert.dom().hasText('2 hours', 'humanizes duration by default');
 
-    await render(<template>
-      {{formatDuration 7380 format='humanize'}}
-    </template>);
+    await render(
+      <template>{{formatDuration 7380 format='humanize'}}</template>,
+    );
     assert.dom().hasText('2 hours', 'explicit humanize format');
   });
 
@@ -45,9 +45,9 @@ module('Integration | helpers | formatDuration', function (hooks) {
   });
 
   test('different input units', async function (assert) {
-    await render(<template>
-      {{formatDuration 7380000 unit='milliseconds'}}
-    </template>);
+    await render(
+      <template>{{formatDuration 7380000 unit='milliseconds'}}</template>,
+    );
     assert.dom().hasText('2 hours', 'converts from milliseconds');
 
     await render(<template>{{formatDuration 123 unit='minutes'}}</template>);
@@ -64,31 +64,35 @@ module('Integration | helpers | formatDuration', function (hooks) {
     await render(<template>{{formatDuration 0}}</template>);
     assert.dom().hasText('0 seconds', 'handles zero duration');
 
-    await render(<template>
-      {{formatDuration null fallback='No duration'}}
-    </template>);
+    await render(
+      <template>{{formatDuration null fallback='No duration'}}</template>,
+    );
     assert.dom().hasText('No duration', 'uses fallback for null');
 
-    await render(<template>
-      {{formatDuration undefined fallback='Unknown duration'}}
-    </template>);
+    await render(
+      <template>
+        {{formatDuration undefined fallback='Unknown duration'}}
+      </template>,
+    );
     assert.dom().hasText('Unknown duration', 'uses fallback for undefined');
   });
 
   test('extreme durations', async function (assert) {
     const geologicalTime = 365 * 24 * 60 * 60 * 1000000; // 1 million years in seconds
 
-    await render(<template>
-      {{formatDuration geologicalTime format='humanize'}}
-    </template>);
+    await render(
+      <template>{{formatDuration geologicalTime format='humanize'}}</template>,
+    );
     assert.dom().hasText('1000000 years', 'handles geological time scales');
   });
 
   test('invalid duration handling', async function (assert) {
-    await render(<template>
-      {{! @glint-expect-error: invalid input type }}
-      {{formatDuration 'not-a-number' fallback='Invalid duration'}}
-    </template>);
+    await render(
+      <template>
+        {{! @glint-expect-error: invalid input type }}
+        {{formatDuration 'not-a-number' fallback='Invalid duration'}}
+      </template>,
+    );
     assert.dom().hasText('Invalid duration', 'handles non-numeric input');
 
     await render(<template>{{formatDuration 123.45 format='timer'}}</template>);
@@ -96,34 +100,40 @@ module('Integration | helpers | formatDuration', function (hooks) {
   });
 
   test('format options edge cases', async function (assert) {
-    await render(<template>
-      {{! @glint-expect-error: invalid format }}
-      {{formatDuration 3600 format='invalid' fallback='Invalid format'}}
-    </template>);
+    await render(
+      <template>
+        {{! @glint-expect-error: invalid format }}
+        {{formatDuration 3600 format='invalid' fallback='Invalid format'}}
+      </template>,
+    );
     assert.dom().hasText('Invalid format', 'handles invalid format option');
 
-    await render(<template>
-      {{! @glint-expect-error: invalid unit }}
-      {{formatDuration 3600 unit='invalid' fallback='Invalid unit'}}
-    </template>);
+    await render(
+      <template>
+        {{! @glint-expect-error: invalid unit }}
+        {{formatDuration 3600 unit='invalid' fallback='Invalid unit'}}
+      </template>,
+    );
     assert.dom().hasText('Invalid unit', 'handles invalid unit option');
 
-    await render(<template>
-      {{! @glint-expect-error: invalid format }}
-      {{formatDuration 3600 format=123 fallback='Numeric format'}}
-    </template>);
+    await render(
+      <template>
+        {{! @glint-expect-error: invalid format }}
+        {{formatDuration 3600 format=123 fallback='Numeric format'}}
+      </template>,
+    );
     assert.dom().hasText('Numeric format', 'handles numeric format option');
   });
 
   test('localization', async function (assert) {
-    await render(<template>
-      {{formatDuration 7380 format='long' locale='es-ES'}}
-    </template>);
+    await render(
+      <template>{{formatDuration 7380 format='long' locale='es-ES'}}</template>,
+    );
     assert.dom().hasText('2 horas, 3 minutos', 'Spanish duration formatting');
 
-    await render(<template>
-      {{formatDuration 7380 format='long' locale='fr-FR'}}
-    </template>);
+    await render(
+      <template>{{formatDuration 7380 format='long' locale='fr-FR'}}</template>,
+    );
     assert.dom().hasText('2 heures, 3 minutes', 'French duration formatting');
   });
 

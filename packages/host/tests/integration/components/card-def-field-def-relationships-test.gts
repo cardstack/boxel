@@ -301,7 +301,7 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
     class PersonField extends FieldDef {
       @field fullName = contains(StringField);
       @field guestCount = contains(NumberField);
-      @field title = contains(StringField, {
+      @field cardTitle = contains(StringField, {
         computeVia: function (this: PersonField) {
           return this.guestCount
             ? `${this.fullName} + ${this.guestCount}`
@@ -397,6 +397,25 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
     assert
       .dom('[data-test-contains-many="vip"] [data-test-remove="0"]')
       .exists('top level containsMany field item has remove button');
+  });
+
+  test('computed contains field renders embedded in edit format', async function (assert) {
+    class ContactCard extends CardDef {
+      @field name = contains(StringField, {
+        computeVia: () => 'Marcelius Wilde',
+      });
+    }
+
+    let card = new ContactCard();
+
+    await renderCard(loader, card, 'edit');
+
+    assert
+      .dom('[data-test-field="name"] input')
+      .doesNotExist('computed field does not render an edit input');
+    assert
+      .dom('[data-test-field="name"]')
+      .containsText('Marcelius Wilde', 'computed value is rendered');
   });
 
   test('render a CardDef field (singular) linked to from a FieldDef', async function (assert) {
@@ -521,7 +540,7 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
     class Country extends CardDef {
       static displayName = 'Country';
       @field name = contains(StringField);
-      @field title = contains(StringField, {
+      @field cardTitle = contains(StringField, {
         computeVia(this: Country) {
           return this.name;
         },

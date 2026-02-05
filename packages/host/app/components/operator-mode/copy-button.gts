@@ -116,9 +116,9 @@ export default class CopyButton extends Component<Signature> {
   </template>
 
   @consume(GetCardCollectionContextName)
-  private declare getCardCollection: getCardCollection;
-  @service private declare operatorModeStateService: OperatorModeStateService;
-  @service private declare realm: RealmService;
+  declare private getCardCollection: getCardCollection;
+  @service declare private operatorModeStateService: OperatorModeStateService;
+  @service declare private realm: RealmService;
   @tracked private topMostCardCollection:
     | ReturnType<getCardCollection>
     | undefined;

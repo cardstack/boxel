@@ -49,9 +49,7 @@ module('Integration | preview', function (hooks) {
     let card = new TestCard({ firstName: 'Mango ' });
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <CardRenderer @card={{card}} />
-        </template>
+        <template><CardRenderer @card={{card}} /></template>
       },
     );
     await waitFor('[data-test-firstName]'); // we need to wait for the card instance to load
@@ -63,16 +61,16 @@ module('Integration | preview', function (hooks) {
     let { default: StringField } = string;
 
     class HeadCard extends CardDef {
-      @field title = contains(StringField);
-      @field description = contains(StringField);
+      @field cardTitle = contains(StringField);
+      @field cardDescription = contains(StringField);
       @field image = contains(StringField);
       @field url = contains(StringField);
 
       static head = class Head extends Component<typeof this> {
         <template>
           {{! template-lint-disable no-forbidden-elements }}
-          <title>{{@model.title}}</title>
-          <meta name='description' content={{@model.description}} />
+          <title>{{@model.cardTitle}}</title>
+          <meta name='description' content={{@model.cardDescription}} />
           <meta property='og:url' content={{@model.url}} />
           <meta property='og:image' content={{@model.image}} />
           <meta name='twitter:card' content='summary' />
@@ -81,8 +79,8 @@ module('Integration | preview', function (hooks) {
     }
 
     let headCard = new HeadCard({
-      title: 'Preview Title',
-      description: 'Preview description',
+      cardTitle: 'Preview Title',
+      cardDescription: 'Preview description',
       image: 'https://example.com/cover.png',
       url: 'https://example.com/post',
     });
@@ -132,13 +130,13 @@ module('Integration | preview', function (hooks) {
     let { default: StringField } = string;
 
     class FallbackHeadCard extends CardDef {
-      @field title = contains(StringField);
+      @field cardTitle = contains(StringField);
       @field url = contains(StringField);
 
       static head = class Head extends Component<typeof this> {
         <template>
           {{! template-lint-disable no-forbidden-elements }}
-          <title>{{@model.title}}</title>
+          <title>{{@model.cardTitle}}</title>
           <meta property='og:type' content='article' />
           <meta property='og:url' content={{@model.url}} />
         </template>
@@ -146,7 +144,7 @@ module('Integration | preview', function (hooks) {
     }
 
     let fallbackCard = new FallbackHeadCard({
-      title: 'Fallback Title',
+      cardTitle: 'Fallback Title',
       url: 'https://example.com/no-image',
     });
 

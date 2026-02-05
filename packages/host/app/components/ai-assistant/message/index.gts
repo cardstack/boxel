@@ -185,9 +185,9 @@ function collectionResourceError(id: string | null | undefined) {
 }
 
 export default class AiAssistantMessage extends Component<Signature> {
-  @service private declare matrixService: MatrixService;
-  @service private declare operatorModeStateService: OperatorModeStateService;
-  @service private declare billingService: BillingService;
+  @service declare private matrixService: MatrixService;
+  @service declare private operatorModeStateService: OperatorModeStateService;
+  @service declare private billingService: BillingService;
 
   private get isReasoningExpandedByDefault() {
     let result =

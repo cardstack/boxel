@@ -6,7 +6,7 @@
       "canonicalSlug": "sao10k/l3.1-70b-hanami-x1",
       "name": "Sao10K: Llama 3.1 70B Hanami x1",
       "created": 1736302854,
-      "description": "This is [Sao10K](/sao10k)'s experiment over [Euryale v2.2](/sao10k/l3.1-euryale-70b).",
+      "cardDescription": "This is [Sao10K](/sao10k)'s experiment over [Euryale v2.2](/sao10k/l3.1-euryale-70b).",
       "pricing": {
         "prompt": "0.000003",
         "completion": "0.000003",
@@ -46,9 +46,9 @@
       ],
       "defaultParameters": {},
       "cardInfo": {
-        "title": null,
-        "description": null,
-        "thumbnailURL": null,
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
         "notes": null
       }
     },

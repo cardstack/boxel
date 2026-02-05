@@ -1,0 +1,47 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "ColorFieldSpec",
+        "module": "../color-field-spec"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "default",
+        "module": "../../fields/color"
+      },
+      "wheel": "#ddff00",
+      "readMe": null,
+      "advanced": "rgb(59, 130, 246)",
+      "cardInfo": {
+        "name": null,
+        "notes": null,
+        "summary": null,
+        "cardThumbnailURL": null
+      },
+      "specType": "field",
+      "standard": "#ba6d6d",
+      "cardTitle": "Color Field",
+      "sliderHsl": "hsl(79, 91%, 60%)",
+      "sliderRgb": "rgb(135, 88, 246)",
+      "swatchesPicker": "#FCF8A6",
+      "cardDescription": null,
+      "containedExamples": [],
+      "withContrastChecker": "#c86565"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "linkedExamples": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

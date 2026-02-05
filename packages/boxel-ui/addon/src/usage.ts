@@ -35,6 +35,7 @@ import MessageUsage from './components/message/usage.gts';
 import ModalUsage from './components/modal/usage.gts';
 import MultiSelectUsage from './components/multi-select/usage.gts';
 import PhoneInputUsage from './components/phone-input/usage.gts';
+import PickerUsage from './components/picker/usage.gts';
 import PillUsage from './components/pill/usage.gts';
 import ProgressBarUsage from './components/progress-bar/usage.gts';
 import ProgressRadialUsage from './components/progress-radial/usage.gts';
@@ -87,6 +88,7 @@ export const ALL_USAGE_COMPONENTS = [
   ['Modal', ModalUsage],
   ['MultiSelect', MultiSelectUsage],
   ['PhoneInput', PhoneInputUsage],
+  ['Picker', PickerUsage],
   ['Pill', PillUsage],
   ['ProgressBar', ProgressBarUsage],
   ['ProgressRadial', ProgressRadialUsage],

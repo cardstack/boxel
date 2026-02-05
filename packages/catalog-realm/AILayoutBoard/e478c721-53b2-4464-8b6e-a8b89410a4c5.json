@@ -49,7 +49,7 @@
       "timers": [
         {
           "targetDate": "2025-10-18T08:29:30.092Z",
-          "title": "New Timer",
+          "cardTitle": "New Timer",
           "position": {
             "x": 864.0380747614751,
             "y": -60.23225468188656,
@@ -63,9 +63,9 @@
       ],
       "cardInfo": {
         "notes": null,
-        "title": "Layout Board",
-        "description": null,
-        "thumbnailURL": null
+        "name": "Layout Board",
+        "summary": null,
+        "cardThumbnailURL": null
       },
       "gridSize": 20,
       "transformK": 1,

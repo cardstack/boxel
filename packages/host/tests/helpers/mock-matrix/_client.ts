@@ -152,13 +152,17 @@ export class MockClient implements ExtendedClient {
       permissions = ['read'];
     }
     let sessionRoom = `test-session-room-realm-${realmURL.href}-user-${this.loggedInAs}`;
+    let realmServerURL =
+      ensureTrailingSlash(realmURL.href) === baseRealm.url
+        ? new URL(ENV.resolvedBaseRealmURL).origin
+        : realmURL.origin;
     let payload = {
       iat: nowInSeconds,
       exp: expires,
       user: this.loggedInAs,
       realm: realmURL.href,
       sessionRoom,
-      realmServerURL: new URL(realmURL.origin).href,
+      realmServerURL: ensureTrailingSlash(realmServerURL),
       // adding a nonce to the test token so that we can tell the difference
       // between different tokens created in the same second
       nonce: nonce++,
@@ -341,11 +345,27 @@ export class MockClient implements ExtendedClient {
   }
 
   invite(
-    _roomId: string,
-    _userId: string,
+    roomId: string,
+    userId: string,
     _reason?: string | undefined,
   ): Promise<{}> {
-    throw new Error('Method not implemented.');
+    let sender =
+      this.loggedInAs ?? this.clientOpts.userId ?? '@test_user:localhost';
+    let timestamp = Date.now();
+    this.serverState.setRoomState(
+      sender,
+      roomId,
+      'm.room.member',
+      {
+        displayname: userId,
+        membership: 'invite',
+        membershipTs: timestamp,
+        membershipInitiator: sender,
+      },
+      userId,
+      timestamp,
+    );
+    return Promise.resolve({});
   }
 
   joinRoom(

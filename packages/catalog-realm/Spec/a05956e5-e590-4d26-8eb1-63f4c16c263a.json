@@ -9,9 +9,9 @@
       },
       "specType": "card",
       "containedExamples": [],
-      "title": "TennisCamp",
-      "description": null,
-      "thumbnailURL": null
+      "cardTitle": "TennisCamp",
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "relationships": {
       "linkedExamples": {

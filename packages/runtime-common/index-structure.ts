@@ -7,13 +7,8 @@ export interface BoxelIndexTable {
   file_alias: string;
   realm_version: number;
   realm_url: string;
-  type:
-    | 'instance'
-    | 'module'
-    | 'file'
-    | 'instance-error'
-    | 'module-error'
-    | 'file-error';
+  type: 'instance' | 'module' | 'file';
+  has_error: boolean | null;
   // TODO in followup PR update this to be a document not a resource
   pristine_doc: CardResource | null;
   error_doc: SerializedError | null;
@@ -66,6 +61,7 @@ export const coerceTypes = Object.freeze({
   fitted_html: 'JSON',
   display_names: 'JSON',
   is_deleted: 'BOOLEAN',
+  has_error: 'BOOLEAN',
   last_modified: 'VARCHAR',
   resource_created_at: 'VARCHAR',
   indexed_at: 'VARCHAR',

@@ -14,7 +14,10 @@ import Schema from '@cardstack/boxel-icons/schema';
 import { task } from 'ember-concurrency';
 import Modifier from 'ember-modifier';
 import { consume } from 'ember-provide-consume-context';
+import { resource, use } from 'ember-resources';
 import window from 'ember-window-mock';
+
+import { TrackedObject } from 'tracked-built-ins';
 
 import { eq } from '@cardstack/boxel-ui/helpers';
 
@@ -29,12 +32,15 @@ import {
   type Query,
   type CardResourceMeta,
   isFieldDef,
+  isSpecCard,
   internalKeyFor,
   GetCardsContextName,
   GetCardContextName,
+  loadCardDef,
   specRef,
   localId,
   meta,
+  hasExtension,
 } from '@cardstack/runtime-common';
 
 import CreateSpecCommand from '@cardstack/host/commands/create-specs';
@@ -116,24 +122,117 @@ interface ModuleInspectorSignature {
 }
 
 export default class ModuleInspector extends Component<ModuleInspectorSignature> {
-  @service private declare commandService: CommandService;
-  @service private declare loaderService: LoaderService;
-  @service private declare matrixService: MatrixService;
-  @service private declare operatorModeStateService: OperatorModeStateService;
-  @service private declare playgroundPanelService: PlaygroundPanelService;
-  @service private declare realm: RealmService;
-  @service private declare realmServer: RealmServerService;
-  @service private declare specPanelService: SpecPanelService;
-  @service private declare store: StoreService;
+  @service declare private commandService: CommandService;
+  @service declare private loaderService: LoaderService;
+  @service declare private matrixService: MatrixService;
+  @service declare private operatorModeStateService: OperatorModeStateService;
+  @service declare private playgroundPanelService: PlaygroundPanelService;
+  @service declare private realm: RealmService;
+  @service declare private realmServer: RealmServerService;
+  @service declare private specPanelService: SpecPanelService;
+  @service declare private store: StoreService;
 
-  @consume(GetCardsContextName) private declare getCards: getCards;
-  @consume(GetCardContextName) private declare getCard: getCard;
+  @consume(GetCardsContextName) declare private getCards: getCards;
+  @consume(GetCardContextName) declare private getCard: getCard;
 
   @tracked private specSearch: ReturnType<getCards<Spec>> | undefined;
   @tracked private cardResource: ReturnType<getCard> | undefined;
 
+  @use private isSpecResource = resource(() => {
+    let state = new TrackedObject<{ value: boolean }>({ value: false });
+    let codeRef = this.selectedDeclarationAsCodeRef;
+    if (!codeRef.module || !codeRef.name) {
+      return state;
+    }
+    (async () => {
+      try {
+        let cardDef = await loadCardDef(codeRef, {
+          loader: this.loaderService.loader,
+          relativeTo: new URL(this.operatorModeStateService.realmURL),
+        });
+        state.value = isSpecCard(cardDef);
+      } catch {
+        state.value = false;
+      }
+    })();
+    return state;
+  });
+
+  private get selectedDeclarationIsSpec() {
+    return this.isSpecResource?.value ?? false;
+  }
+
   private get isEmptyFile() {
     return this.args.readyFile?.content.match(/^\s*$/);
+  }
+
+  private get isGeneratingEmptyFileContent() {
+    if (!this.isEmptyFile) {
+      return false;
+    }
+
+    let roomId = this.matrixService.currentRoomId;
+    if (!roomId) {
+      return false;
+    }
+
+    let roomResource = this.matrixService.roomResources.get(roomId);
+    if (!roomResource) {
+      return false;
+    }
+
+    let lastMessageIndex = roomResource.indexOfLastNonDebugMessage;
+    if (lastMessageIndex < 0) {
+      return false;
+    }
+
+    let lastMessage = roomResource.messages[lastMessageIndex];
+    if (!lastMessage) {
+      return false;
+    }
+
+    let canceledActionMessageId =
+      this.matrixService.getLastCanceledActionEventId(roomId);
+    if (
+      lastMessage.isCanceled ||
+      canceledActionMessageId === lastMessage.eventId
+    ) {
+      return false;
+    }
+
+    if (lastMessage.author.userId !== this.matrixService.aiBotUserId) {
+      return false;
+    }
+
+    if (lastMessage.isStreamingFinished !== false) {
+      return lastMessage.htmlParts?.some((htmlPart) => {
+        let codeData = htmlPart.codeData;
+        if (!codeData) {
+          return false;
+        }
+
+        if (
+          codeData.fileUrl !== this.args.readyFile.url ||
+          !codeData.searchReplaceBlock
+        ) {
+          return false;
+        }
+
+        return this.commandService.getCodePatchStatus(codeData) === 'ready';
+      });
+    }
+
+    return lastMessage.htmlParts?.some((htmlPart) => {
+      let codeData = htmlPart.codeData;
+      if (!codeData) {
+        return false;
+      }
+
+      return (
+        codeData.fileUrl === this.args.readyFile.url &&
+        !codeData.searchReplaceBlock
+      );
+    });
   }
 
   private get sourceFileForCard(): FileDef | undefined {
@@ -180,7 +279,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
       return;
     }
 
-    const fileUrl = cardId.endsWith('.json') ? cardId : `${cardId}.json`;
+    const fileUrl = hasExtension(cardId) ? cardId : `${cardId}.json`;
     await this.operatorModeStateService.updateCodePath(new URL(fileUrl));
   };
 
@@ -378,6 +477,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
       !this.specSearch?.isLoading &&
       this.specsForSelectedDefinition.length === 0 &&
       !this.activeSpec &&
+      !this.selectedDeclarationIsSpec &&
       this.canWrite
     );
   }
@@ -388,7 +488,13 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
 
   <template>
     {{#if this.isEmptyFile}}
-      <SyntaxErrorDisplay @syntaxErrors='File is empty' />
+      <div class='empty-file-message' data-test-empty-file-message>
+        {{if
+          this.isGeneratingEmptyFileContent
+          'File is empty - its content is currently being generated by the AI Assistant.'
+          'File is empty - tools like schema inspector, and file preview, are unavailable.'
+        }}
+      </div>
     {{else if this.fileIncompatibilityMessage}}
       <div
         class='file-incompatible-message'
@@ -555,6 +661,19 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
 
       .file-incompatible-message > span {
         max-width: 400px;
+      }
+
+      .empty-file-message {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 100%;
+        background-color: var(--boxel-200);
+        font: var(--boxel-font-sm);
+        color: var(--boxel-450);
+        font-weight: 500;
+        text-align: center;
+        padding: var(--boxel-sp-xl);
       }
 
       .non-preview-panel-content {

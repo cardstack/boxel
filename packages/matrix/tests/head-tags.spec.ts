@@ -110,7 +110,7 @@ test.describe('Head tags', () => {
       import { CardCrudFunctionsContextName } from '@cardstack/runtime-common';
 
       export class DefaultHeadCard extends CardDef {
-        @field title = contains(StringField);
+        @field cardTitle = contains(StringField);
 
         static isolated = class Isolated extends Component<typeof this> {
           @consume(CardCrudFunctionsContextName) cardCrudFunctions: CardCrudFunctions | undefined;
@@ -136,7 +136,7 @@ test.describe('Head tags', () => {
 
           <template>
             <article data-test-default-head-card>
-              <h1>{{@model.title}}</h1>
+              <h1>{{@model.cardTitle}}</h1>
               <button type="button" data-test-head-nav="custom" {{on "click" this.viewCustom}}>
                 Go to custom head card
               </button>
@@ -155,7 +155,7 @@ test.describe('Head tags', () => {
       import { CardCrudFunctionsContextName } from '@cardstack/runtime-common';
 
       export class CustomHeadCard extends CardDef {
-        @field title = contains(StringField);
+        @field cardTitle = contains(StringField);
 
         static head = class Head extends Component<typeof this> {
           <template>
@@ -188,7 +188,7 @@ test.describe('Head tags', () => {
 
           <template>
             <article data-test-custom-head-card>
-              <h1>{{@model.title}}</h1>
+              <h1>{{@model.cardTitle}}</h1>
               <button type="button" data-test-head-nav="default" {{on "click" this.viewDefault}}>
                 Go to default head card
               </button>
@@ -221,7 +221,7 @@ test.describe('Head tags', () => {
             type: 'card',
             id: `${realmURL}default-head-card`,
             attributes: {
-              title: 'Default Head Card',
+              cardTitle: 'Default Head Card',
             },
             meta: {
               adoptsFrom: {
@@ -246,7 +246,7 @@ test.describe('Head tags', () => {
             type: 'card',
             id: `${realmURL}custom-head-card`,
             attributes: {
-              title: 'Custom Head Card',
+              cardTitle: 'Custom Head Card',
             },
             meta: {
               adoptsFrom: {
@@ -270,6 +270,10 @@ test.describe('Head tags', () => {
     let defaultCardURL = `${publishedRealmURL}default-head-card.json`;
 
     await page.goto(defaultCardURL);
+
+    // Wait for Ember to take over
+    await page.locator('[data-test-host-mode-content]').waitFor();
+
     await expect(
       page.locator('head meta[property="og:title"]'),
     ).toHaveAttribute('content', 'Default Head Card');

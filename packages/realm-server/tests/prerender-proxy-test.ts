@@ -33,7 +33,7 @@ module(basename(__filename), function () {
 
     function makePrerenderer() {
       let renderCalls: Array<{
-        kind: 'card' | 'module';
+        kind: 'card' | 'module' | 'file-extract' | 'file-render';
         args: {
           realm: string;
           url: string;
@@ -47,7 +47,7 @@ module(basename(__filename), function () {
           renderCalls.push({ kind: 'card', args });
           return {
             serialized: null,
-            searchDoc: { url: args.url, title: 'through proxy' },
+            searchDoc: { url: args.url, cardTitle: 'through proxy' },
             displayNames: ['Proxy Card'],
             deps: [],
             types: [],
@@ -70,6 +70,27 @@ module(basename(__filename), function () {
             createdAt: Date.now(),
             deps: [],
             definitions: {},
+          };
+        },
+        async prerenderFileExtract(args) {
+          renderCalls.push({ kind: 'file-extract', args });
+          return {
+            id: args.url,
+            nonce: 'nonce',
+            status: 'ready',
+            searchDoc: { url: args.url, title: 'through proxy' },
+            deps: [],
+          };
+        },
+        async prerenderFileRender(args) {
+          renderCalls.push({ kind: 'file-render', args });
+          return {
+            isolatedHTML: null,
+            headHTML: null,
+            atomHTML: null,
+            embeddedHTML: null,
+            fittedHTML: null,
+            iconHTML: null,
           };
         },
       };
@@ -127,7 +148,7 @@ module(basename(__filename), function () {
             id: cardURL,
             attributes: {
               serialized: null,
-              searchDoc: { url: cardURL, title: 'through proxy' },
+              searchDoc: { url: cardURL, cardTitle: 'through proxy' },
               displayNames: ['Proxy Card'],
               deps: [],
               types: [],

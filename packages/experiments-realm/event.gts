@@ -59,10 +59,10 @@ class Edit extends Component<typeof Event> {
           </BoxelSelect>
         </FieldContainer>
         <FieldContainer @label='Description' @tag='label' class='field'>
-          <@fields.description />
+          <@fields.cardDescription />
         </FieldContainer>
         <FieldContainer @label='Title' @tag='label' class='field'>
-          <@fields.title />
+          <@fields.cardTitle />
         </FieldContainer>
       </div>
       <div class='column'>
@@ -125,10 +125,10 @@ class Isolated extends Component<typeof Event> {
           <@fields.eventType />
         </FieldContainer>
         <FieldContainer @label='Description' @tag='label' class='field'>
-          <@fields.description />
+          <@fields.cardDescription />
         </FieldContainer>
         <FieldContainer @label='Title' @tag='label' class='field'>
-          <@fields.title />
+          <@fields.cardTitle />
         </FieldContainer>
       </div>
       <div class='column'>
@@ -169,8 +169,8 @@ export class Event extends CardDef {
   @field startDateTime = contains(DateTimeField);
   @field endDateTime = contains(DateTimeField);
   @field eventType = contains(StringField);
-  @field description = contains(TextAreaField);
-  @field title = contains(StringField, {
+  @field cardDescription = contains(TextAreaField);
+  @field cardTitle = contains(StringField, {
     computeVia(this: Event) {
       return this.subject;
     },

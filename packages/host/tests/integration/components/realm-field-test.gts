@@ -110,12 +110,12 @@ module('Integration | components | realm field', function (hooks) {
   test('renders writable realms and updates selection', async function (assert) {
     class RealmPickerCard extends CardDef {
       static displayName = 'Realm Picker';
-      @field title = contains(StringField);
+      @field cardTitle = contains(StringField);
       @field targetRealm = contains(RealmField);
     }
 
     let card = new RealmPickerCard({
-      title: 'Realm Picker Example',
+      cardTitle: 'Realm Picker Example',
       targetRealm: '',
     });
 

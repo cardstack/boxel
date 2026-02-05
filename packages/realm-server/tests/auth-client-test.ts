@@ -8,9 +8,10 @@ import {
 import { VirtualNetwork } from '@cardstack/runtime-common';
 import jwt from 'jsonwebtoken';
 import { basename } from 'path';
+import type ms from 'ms';
 
 function createJWT(
-  expiresIn: string | number,
+  expiresIn: ms.StringValue,
   payload: Record<string, unknown> = {},
 ) {
   return jwt.sign(payload, 'secret', { expiresIn });
@@ -118,7 +119,7 @@ module(basename(__filename), function () {
     });
 
     test('it refreshes the jwt if it expired in the client', async function (assert) {
-      let jwtFromClient = createJWT(-1); // Expired 1 second ago
+      let jwtFromClient = createJWT('-1s'); // Expired 1 second ago
       client['_jwt'] = jwtFromClient;
       assert.notEqual(
         jwtFromClient,

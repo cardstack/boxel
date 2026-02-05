@@ -10,9 +10,9 @@
     "attributes": {
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": null
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null
       },
       "testDate": "2025-01-07T17:31:00.000Z",
       "testDescription": "Comprehensive DateTime Helper Test"

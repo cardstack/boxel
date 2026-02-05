@@ -58,9 +58,9 @@ module('Integration | helpers | formatList', function (hooks) {
     await render(<template>{{formatList null fallback='No items'}}</template>);
     assert.dom().hasText('No items', 'uses fallback for null');
 
-    await render(<template>
-      {{formatList undefined fallback='No list'}}
-    </template>);
+    await render(
+      <template>{{formatList undefined fallback='No list'}}</template>,
+    );
     assert.dom().hasText('No list', 'uses fallback for undefined');
   });
 
@@ -70,9 +70,9 @@ module('Integration | helpers | formatList', function (hooks) {
     await render(<template>{{formatList twoItems}}</template>);
     assert.dom().hasText('Red and Blue', 'formats two items with "and"');
 
-    await render(<template>
-      {{formatList twoItems type='disjunction'}}
-    </template>);
+    await render(
+      <template>{{formatList twoItems type='disjunction'}}</template>,
+    );
     assert.dom().hasText('Red or Blue', 'formats two items with "or"');
   });
 
@@ -82,9 +82,11 @@ module('Integration | helpers | formatList', function (hooks) {
     await render(<template>{{formatList items locale='fr-FR'}}</template>);
     assert.dom().hasText('Rouge, Bleu et Vert', 'French conjunction');
 
-    await render(<template>
-      {{formatList items type='disjunction' locale='es-ES'}}
-    </template>);
+    await render(
+      <template>
+        {{formatList items type='disjunction' locale='es-ES'}}
+      </template>,
+    );
     assert.dom().hasText('Rouge, Bleu o Vert', 'Spanish disjunction');
 
     await render(<template>{{formatList items locale='zh-CN'}}</template>);
@@ -94,16 +96,20 @@ module('Integration | helpers | formatList', function (hooks) {
   test('invalid array handling', async function (assert) {
     const nestedArray = [['nested'], 'item'];
 
-    await render(<template>
-      {{! @glint-expect-error: invalid input type }}
-      {{formatList nestedArray fallback='Invalid list'}}
-    </template>);
+    await render(
+      <template>
+        {{! @glint-expect-error: invalid input type }}
+        {{formatList nestedArray fallback='Invalid list'}}
+      </template>,
+    );
     assert.dom().hasText('Invalid list', 'handles nested arrays');
 
-    await render(<template>
-      {{! @glint-expect-error: invalid input type }}
-      {{formatList 'not-an-array' fallback='Not an array'}}
-    </template>);
+    await render(
+      <template>
+        {{! @glint-expect-error: invalid input type }}
+        {{formatList 'not-an-array' fallback='Not an array'}}
+      </template>,
+    );
     assert.dom().hasText('Not an array', 'handles non-array input');
   });
 

@@ -1,4 +1,5 @@
 import GlimmerComponent from '@glimmer/component';
+import { hash } from '@ember/helper';
 import { on } from '@ember/modifier';
 import {
   restartableTask,
@@ -15,6 +16,7 @@ import {
   type Box,
   type Field,
   type CardContext,
+  type LinkableDefConstructor,
   CreateCardFn,
 } from './card-api';
 import {
@@ -31,13 +33,12 @@ import {
 import { Button, IconButton } from '@cardstack/boxel-ui/components';
 import { IconMinusCircle } from '@cardstack/boxel-ui/icons';
 import { consume } from 'ember-provide-consume-context';
-import { hash } from '@ember/helper';
 
 interface Signature {
   Element: HTMLElement;
   Args: {
     model: Box<CardDef | null>;
-    field: Field<typeof CardDef>;
+    field: Field<LinkableDefConstructor>;
     typeConstraint?: ResolvedCodeRef;
     createCard?: CreateCardFn;
   };

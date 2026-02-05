@@ -3,7 +3,7 @@
     "type": "card",
     "attributes": {
       "progressionName": "Andalusian Cadence (i-VII-VI-V)",
-      "description": "A haunting minor progression with Spanish and classical influences. The descending bass line creates a sense of melancholy and drama that's been used across many genres.",
+      "cardDescription": "A haunting minor progression with Spanish and classical influences. The descending bass line creates a sense of melancholy and drama that's been used across many genres.",
       "key": "A minor",
       "scale": "natural minor",
       "timeSignature": "4/4",
@@ -63,7 +63,7 @@
           }
         ]
       },
-      "title": "Andalusian Cadence (i-VII-VI-V)"
+      "cardTitle": "Andalusian Cadence (i-VII-VI-V)"
     },
     "relationships": {},
     "meta": {

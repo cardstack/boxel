@@ -6,7 +6,7 @@
       "canonicalSlug": "perplexity/sonar",
       "name": "Perplexity: Sonar",
       "created": 1738013808,
-      "description": "Sonar is lightweight, affordable, fast, and simple to use — now featuring citations and the ability to customize sources. It is designed for companies seeking to integrate lightweight question-and-answer features optimized for speed.",
+      "cardDescription": "Sonar is lightweight, affordable, fast, and simple to use \u2014 now featuring citations and the ability to customize sources. It is designed for companies seeking to integrate lightweight question-and-answer features optimized for speed.",
       "pricing": {
         "prompt": "0.000001",
         "completion": "0.000001",
@@ -43,9 +43,9 @@
       ],
       "defaultParameters": {},
       "cardInfo": {
-        "title": null,
-        "description": null,
-        "thumbnailURL": null,
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
         "notes": null
       }
     },

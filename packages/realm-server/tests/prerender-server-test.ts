@@ -3,13 +3,7 @@ import type { SuperTest, Test } from 'supertest';
 import supertest from 'supertest';
 import { basename } from 'path';
 
-import {
-  setupBaseRealmServer,
-  setupPermissionedRealm,
-  matrixURL,
-  testRealmHref,
-  testCreatePrerenderAuth,
-} from './helpers';
+import { setupPermissionedRealm, testCreatePrerenderAuth } from './helpers';
 import { buildPrerenderApp } from '../prerender/prerender-app';
 import type { Prerenderer } from '../prerender';
 import { baseCardRef } from '@cardstack/runtime-common';
@@ -26,12 +20,12 @@ module(basename(__filename), function () {
     let prerenderer: Prerenderer;
     const testUserId = '@jade:localhost';
     let draining = false;
-
-    setupBaseRealmServer(hooks, matrixURL);
+    let realmURL = new URL('http://127.0.0.1:4444/test/');
 
     setupPermissionedRealm(hooks, {
       mode: 'before',
       permissions: { [testUserId]: ['read', 'write', 'realm-owner'] },
+      realmURL,
       fileSystem: {
         'pet.gts': `
           import { CardDef, field, contains, StringField } from 'https://cardstack.com/base/card-api';
@@ -74,9 +68,9 @@ module(basename(__filename), function () {
     });
 
     test('it handles prerender request', async function (assert) {
-      let url = `${testRealmHref}1`;
+      let url = `${realmURL.href}1`;
       let permissions = {
-        [testRealmHref]: ['read', 'write', 'realm-owner'] as (
+        [realmURL.href]: ['read', 'write', 'realm-owner'] as (
           | 'read'
           | 'write'
           | 'realm-owner'
@@ -93,7 +87,7 @@ module(basename(__filename), function () {
             attributes: {
               url,
               auth,
-              realm: testRealmHref,
+              realm: realmURL.href,
             },
           },
         });
@@ -126,8 +120,8 @@ module(basename(__filename), function () {
         `${baseCardRef.module} is a dep`,
       );
       assert.ok(
-        res.body.data.attributes.deps?.includes(`${testRealmHref}pet`),
-        `${testRealmHref}pet is a dep`,
+        res.body.data.attributes.deps?.includes(`${realmURL.href}pet`),
+        `${realmURL.href}pet is a dep`,
       );
       assert.ok(
         (res.body.data.attributes.deps as string[]).find((d) =>
@@ -146,15 +140,15 @@ module(basename(__filename), function () {
       );
       assert.strictEqual(
         res.body.meta?.pool?.realm,
-        testRealmHref,
+        realmURL.href,
         'pool realm ok',
       );
     });
 
     test('it handles module prerender request', async function (assert) {
-      let url = `${testRealmHref}pet.gts`;
+      let url = `${realmURL.href}pet.gts`;
       let permissions = {
-        [testRealmHref]: ['read', 'write', 'realm-owner'] as (
+        [realmURL.href]: ['read', 'write', 'realm-owner'] as (
           | 'read'
           | 'write'
           | 'realm-owner'
@@ -171,7 +165,7 @@ module(basename(__filename), function () {
             attributes: {
               url,
               auth,
-              realm: testRealmHref,
+              realm: realmURL.href,
             },
           },
         });
@@ -203,7 +197,7 @@ module(basename(__filename), function () {
     test('reports draining status when shutting down', async function (assert) {
       draining = true;
       const permissions: Record<string, ('read' | 'write' | 'realm-owner')[]> =
-        { [testRealmHref]: ['read', 'write', 'realm-owner'] };
+        { [realmURL.href]: ['read', 'write', 'realm-owner'] };
       let auth = testCreatePrerenderAuth(testUserId, permissions);
       let res = await request
         .post('/prerender-card')
@@ -213,9 +207,9 @@ module(basename(__filename), function () {
           data: {
             type: 'prerender-request',
             attributes: {
-              url: `${testRealmHref}drain`,
+              url: `${realmURL.href}drain`,
               auth,
-              realm: testRealmHref,
+              realm: realmURL.href,
             },
           },
         });
@@ -251,9 +245,9 @@ module(basename(__filename), function () {
 
     test('tracks warmed realms for heartbeat', async function (assert) {
       let beforeWarm = prerenderer.getWarmRealms();
-      let url = `${testRealmHref}2`;
+      let url = `${realmURL.href}2`;
       const permissions: Record<string, ('read' | 'write' | 'realm-owner')[]> =
-        { [testRealmHref]: ['read', 'write', 'realm-owner'] };
+        { [realmURL.href]: ['read', 'write', 'realm-owner'] };
       let auth = testCreatePrerenderAuth(testUserId, permissions);
       await request
         .post('/prerender-card')
@@ -265,13 +259,13 @@ module(basename(__filename), function () {
             attributes: {
               url,
               auth,
-              realm: testRealmHref,
+              realm: realmURL.href,
             },
           },
         });
 
       assert.true(
-        prerenderer.getWarmRealms().includes(testRealmHref),
+        prerenderer.getWarmRealms().includes(realmURL.href),
         'warm realms include prerendered realm',
       );
       assert.true(
@@ -296,7 +290,7 @@ module(basename(__filename), function () {
         timings: { launchMs: 0, renderMs: 0 },
         pool: {
           pageId: 'p',
-          realm: testRealmHref,
+          realm: realmURL.href,
           reused: false,
           evicted: false,
           timedOut: false,
@@ -309,7 +303,7 @@ module(basename(__filename), function () {
       };
 
       let permissions: Record<string, ('read' | 'write' | 'realm-owner')[]> = {
-        [testRealmHref]: ['read', 'write', 'realm-owner'],
+        [realmURL.href]: ['read', 'write', 'realm-owner'],
       };
       let auth = testCreatePrerenderAuth(testUserId, permissions);
       let resPromise = localRequest
@@ -320,9 +314,9 @@ module(basename(__filename), function () {
           data: {
             type: 'prerender-request',
             attributes: {
-              url: `${testRealmHref}drain-midflight`,
+              url: `${realmURL.href}drain-midflight`,
               auth,
-              realm: testRealmHref,
+              realm: realmURL.href,
             },
           },
         });
@@ -368,7 +362,7 @@ module(basename(__filename), function () {
         };
 
         let permissions: Record<string, ('read' | 'write' | 'realm-owner')[]> =
-          { [testRealmHref]: ['read', 'write', 'realm-owner'] };
+          { [realmURL.href]: ['read', 'write', 'realm-owner'] };
         let auth = testCreatePrerenderAuth(testUserId, permissions);
         let res = await localRequest
           .post('/prerender-card')
@@ -378,9 +372,9 @@ module(basename(__filename), function () {
             data: {
               type: 'prerender-request',
               attributes: {
-                url: `${testRealmHref}drain-unhandled`,
+                url: `${realmURL.href}drain-unhandled`,
                 auth,
-                realm: testRealmHref,
+                realm: realmURL.href,
               },
             },
           });

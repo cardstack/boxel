@@ -3,7 +3,7 @@
     "type": "card",
     "attributes": {
       "kitName": "House Kit",
-      "description": "Punchy four-on-the-floor kicks with clean snares and smooth hi-hats",
+      "cardDescription": "Punchy four-on-the-floor kicks with clean snares and smooth hi-hats",
       "category": "House",
       "creator": "Beat Maker Studio",
       "kit": {
@@ -15,7 +15,7 @@
         "clapParams": "{\"type\": \"house\", \"frequency\": 1800, \"decay\": 0.15, \"amplitude\": 0.7, \"shape\": 2, \"resonance\": 3}",
         "crashParams": "{\"type\": \"house\", \"frequency\": 3500, \"decay\": 0.8, \"amplitude\": 0.4, \"shape\": 1, \"resonance\": 1}"
       },
-      "title": "House Kit"
+      "cardTitle": "House Kit"
     },
     "relationships": {},
     "meta": {

@@ -18,8 +18,8 @@
       },
       "name": "Schedule Website Planning Meeting",
       "details": "Initial consultation for website redesign project",
-      "description": null,
-      "thumbnailURL": null
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "relationships": {
       "crmApp": {

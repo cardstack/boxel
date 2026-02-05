@@ -10,7 +10,7 @@ export class User extends CardDef {
   static displayName = 'User';
   @field name = contains(StringField);
   @field email = contains(EmailField);
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: User) {
       return this.name;
     },

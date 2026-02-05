@@ -44,8 +44,8 @@ module(`Integration | realm querying`, function (hooks) {
       data: {
         type: 'card',
         attributes: {
-          title: 'Card 1',
-          description: 'Sample post',
+          cardTitle: 'Card 1',
+          cardDescription: 'Sample post',
           author: {
             firstName: 'Cardy',
             lastName: 'Stackington Jr. III',
@@ -80,8 +80,8 @@ module(`Integration | realm querying`, function (hooks) {
       data: {
         type: 'card',
         attributes: {
-          title: 'Card 1',
-          description: 'Sample post',
+          cardTitle: 'Card 1',
+          cardDescription: 'Sample post',
           author: {
             firstName: 'Carl',
             lastName: 'Stack',
@@ -102,8 +102,8 @@ module(`Integration | realm querying`, function (hooks) {
       data: {
         type: 'card',
         attributes: {
-          title: 'Card 2',
-          description: 'Sample post',
+          cardTitle: 'Card 2',
+          cardDescription: 'Sample post',
           author: {
             firstName: 'Carl',
             lastName: 'Deck',
@@ -181,8 +181,8 @@ module(`Integration | realm querying`, function (hooks) {
       data: {
         type: 'card',
         attributes: {
-          title: 'Post',
-          description: 'A card that represents a blog post',
+          cardTitle: 'Post',
+          cardDescription: 'A card that represents a blog post',
           specType: 'card',
           ref: {
             module: `${testModuleRealm}post`,
@@ -201,8 +201,8 @@ module(`Integration | realm querying`, function (hooks) {
       data: {
         type: 'card',
         attributes: {
-          title: 'Article',
-          description: 'A card that represents an online article ',
+          cardTitle: 'Article',
+          cardDescription: 'A card that represents an online article ',
           specType: 'card',
           ref: {
             module: `${testModuleRealm}article`,
@@ -221,7 +221,7 @@ module(`Integration | realm querying`, function (hooks) {
       data: {
         type: 'card',
         attributes: {
-          title: "Mango's Birthday",
+          cardTitle: "Mango's Birthday",
           venue: 'Dog Park',
           date: '2024-10-30',
         },
@@ -237,7 +237,7 @@ module(`Integration | realm querying`, function (hooks) {
       data: {
         type: 'card',
         attributes: {
-          title: "Van Gogh's Birthday",
+          cardTitle: "Van Gogh's Birthday",
           venue: 'Backyard',
           date: '2024-11-19',
         },
@@ -352,7 +352,7 @@ module(`Integration | realm querying`, function (hooks) {
           sponsors: ['Sony', 'Nintendo'],
           posts: [
             {
-              title: 'post 1',
+              cardTitle: 'post 1',
               author: {
                 firstName: 'A',
                 lastName: null,
@@ -384,7 +384,7 @@ module(`Integration | realm querying`, function (hooks) {
           sponsors: null,
           posts: [
             {
-              title: 'post 1',
+              cardTitle: 'post 1',
               author: {
                 firstName: 'A',
                 lastName: 'B',
@@ -393,7 +393,7 @@ module(`Integration | realm querying`, function (hooks) {
               views: 10,
             },
             {
-              title: 'post 2',
+              cardTitle: 'post 2',
               author: {
                 firstName: 'C',
                 lastName: 'D',
@@ -402,7 +402,7 @@ module(`Integration | realm querying`, function (hooks) {
               views: 13,
             },
             {
-              title: 'post 2',
+              cardTitle: 'post 2',
               author: {
                 firstName: 'C',
                 lastName: 'D',
@@ -577,16 +577,34 @@ module(`Integration | realm querying`, function (hooks) {
   hooks.beforeEach(async function () {
     let { realm } = await setupIntegrationTestRealm({
       mockMatrixUtils,
-      contents: sampleCards,
+      contents: {
+        ...sampleCards,
+        'files/sample.txt': 'Hello world',
+        'files/sample.md': 'Hello markdown',
+        'file-query-card-instance.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              nameFilter: '',
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testModuleRealm}file-query-card`,
+                name: 'FileQueryCard',
+              },
+            },
+          },
+        },
+      },
     });
     queryEngine = realm.realmIndexQueryEngine;
   });
 
   test(`can search for cards by using the 'eq' filter`, async function (assert) {
-    let { data: matching } = await queryEngine.search({
+    let { data: matching } = await queryEngine.searchCards({
       filter: {
         on: { module: `${testModuleRealm}post`, name: 'Post' },
-        eq: { title: 'Card 1', description: 'Sample post' },
+        eq: { cardTitle: 'Card 1', cardDescription: 'Sample post' },
       },
     });
     assert.deepEqual(
@@ -596,7 +614,7 @@ module(`Integration | realm querying`, function (hooks) {
   });
 
   test(`can use 'eq' to find empty values`, async function (assert) {
-    let { data: matching } = await queryEngine.search({
+    let { data: matching } = await queryEngine.searchCards({
       filter: {
         on: { module: `${testModuleRealm}booking`, name: 'Booking' },
         eq: { 'posts.author.lastName': null },
@@ -609,7 +627,7 @@ module(`Integration | realm querying`, function (hooks) {
   });
 
   test(`can use 'eq' to find missing values`, async function (assert) {
-    let { data: matching } = await queryEngine.search({
+    let { data: matching } = await queryEngine.searchCards({
       filter: {
         on: {
           module: `${testModuleRealm}type-examples`,
@@ -625,7 +643,7 @@ module(`Integration | realm querying`, function (hooks) {
   });
 
   test(`can use 'eq' to find empty containsMany field and missing containsMany field`, async function (assert) {
-    let { data: matching } = await queryEngine.search({
+    let { data: matching } = await queryEngine.searchCards({
       filter: {
         on: {
           module: `${testModuleRealm}type-examples`,
@@ -641,7 +659,7 @@ module(`Integration | realm querying`, function (hooks) {
   });
 
   test(`can use 'eq' to find empty linksToMany field and missing linksToMany field`, async function (assert) {
-    let { data: matching } = await queryEngine.search({
+    let { data: matching } = await queryEngine.searchCards({
       filter: {
         on: {
           module: `${testModuleRealm}friends`,
@@ -657,7 +675,7 @@ module(`Integration | realm querying`, function (hooks) {
   });
 
   test(`can use 'eq' to find empty linksTo field`, async function (assert) {
-    let { data: matching } = await queryEngine.search({
+    let { data: matching } = await queryEngine.searchCards({
       filter: {
         on: {
           module: `${testModuleRealm}friend`,
@@ -673,7 +691,7 @@ module(`Integration | realm querying`, function (hooks) {
   });
 
   test(`can search for cards by using a computed field`, async function (assert) {
-    let { data: matching } = await queryEngine.search({
+    let { data: matching } = await queryEngine.searchCards({
       filter: {
         on: { module: `${testModuleRealm}post`, name: 'Post' },
         eq: { 'author.fullName': 'Carl Stack' },
@@ -686,7 +704,7 @@ module(`Integration | realm querying`, function (hooks) {
   });
 
   test('can search for cards by using a linksTo field', async function (assert) {
-    let { data: matching } = await queryEngine.search({
+    let { data: matching } = await queryEngine.searchCards({
       filter: {
         on: { module: `${testModuleRealm}friend`, name: 'Friend' },
         eq: { 'friend.firstName': 'Mango' },
@@ -699,7 +717,7 @@ module(`Integration | realm querying`, function (hooks) {
   });
 
   test(`can search for cards that have code-ref queryableValue`, async function (assert) {
-    let { data: matching } = await queryEngine.search({
+    let { data: matching } = await queryEngine.searchCards({
       filter: {
         on: {
           module: `${baseRealm.url}spec`,
@@ -719,15 +737,78 @@ module(`Integration | realm querying`, function (hooks) {
     );
   });
 
+  test('can search for file-meta entries by FileDef type', async function (assert) {
+    let fileDefRef = { module: `${baseRealm.url}file-api`, name: 'FileDef' };
+    let result = (await queryEngine.searchCards({
+      filter: {
+        type: fileDefRef,
+      },
+    })) as unknown as {
+      data: { id?: string; type: string }[];
+    };
+    let fileEntry = result.data.find(
+      (entry) => entry.id === `${testRealmURL}files/sample.txt`,
+    );
+    assert.ok(fileEntry, 'file-meta entry is returned');
+    assert.strictEqual(
+      fileEntry?.type,
+      'file-meta',
+      'search results include file-meta resource',
+    );
+  });
+
+  test('can search for file-meta entries by url', async function (assert) {
+    let fileDefRef = { module: `${baseRealm.url}file-api`, name: 'FileDef' };
+    let targetUrl = `${testRealmURL}files/sample.txt`;
+    let result = (await queryEngine.searchCards({
+      filter: {
+        on: fileDefRef,
+        eq: { url: targetUrl },
+      },
+    })) as unknown as {
+      data: { id?: string; type: string }[];
+    };
+    assert.deepEqual(
+      result.data.map((entry) => entry.id),
+      [targetUrl],
+      'filters file-meta entries by url',
+    );
+    assert.strictEqual(
+      result.data[0]?.type,
+      'file-meta',
+      'url filter returns file-meta resource',
+    );
+  });
+
+  test('can search for file-meta entries by FileDef subclass type', async function (assert) {
+    let markdownRef = {
+      module: `${baseRealm.url}markdown-file-def`,
+      name: 'MarkdownDef',
+    };
+    let result = (await queryEngine.searchCards({
+      filter: {
+        type: markdownRef,
+      },
+    })) as unknown as {
+      data: { id?: string; type: string }[];
+    };
+    assert.ok(
+      result.data.some(
+        (entry) => entry.id === `${testRealmURL}files/sample.md`,
+      ),
+      'returns file-meta entries for subclass FileDef type',
+    );
+  });
+
   test('can combine multiple filters', async function (assert) {
-    let { data: matching } = await queryEngine.search({
+    let { data: matching } = await queryEngine.searchCards({
       filter: {
         on: {
           module: `${testModuleRealm}post`,
           name: 'Post',
         },
         every: [
-          { eq: { title: 'Card 1' } },
+          { eq: { cardTitle: 'Card 1' } },
           { not: { eq: { 'author.firstName': 'Cardy' } } },
         ],
       },
@@ -737,7 +818,7 @@ module(`Integration | realm querying`, function (hooks) {
   });
 
   test('can handle a filter with double negatives', async function (assert) {
-    let { data: matching } = await queryEngine.search({
+    let { data: matching } = await queryEngine.searchCards({
       filter: {
         on: { module: `${testModuleRealm}post`, name: 'Post' },
         not: { not: { not: { eq: { 'author.firstName': 'Carl' } } } },
@@ -750,7 +831,7 @@ module(`Integration | realm querying`, function (hooks) {
   });
 
   test('can filter by card type', async function (assert) {
-    let { data: matching } = await queryEngine.search({
+    let { data: matching } = await queryEngine.searchCards({
       filter: {
         type: { module: `${testModuleRealm}article`, name: 'Article' },
       },
@@ -762,7 +843,7 @@ module(`Integration | realm querying`, function (hooks) {
     );
 
     matching = (
-      await queryEngine.search({
+      await queryEngine.searchCards({
         filter: {
           type: { module: `${testModuleRealm}post`, name: 'Post' },
         },
@@ -776,7 +857,7 @@ module(`Integration | realm querying`, function (hooks) {
   });
 
   test(`can filter on a card's own fields using range`, async function (assert) {
-    let { data: matching } = await queryEngine.search({
+    let { data: matching } = await queryEngine.searchCards({
       filter: {
         on: { module: `${testModuleRealm}post`, name: 'Post' },
         range: {
@@ -793,7 +874,7 @@ module(`Integration | realm querying`, function (hooks) {
 
   test(`can filter on a nested field inside a containsMany using 'range'`, async function (assert) {
     {
-      let { data: matching } = await queryEngine.search({
+      let { data: matching } = await queryEngine.searchCards({
         filter: {
           on: { module: `${testModuleRealm}booking`, name: 'Booking' },
           range: {
@@ -808,7 +889,7 @@ module(`Integration | realm querying`, function (hooks) {
       );
     }
     {
-      let { data: matching } = await queryEngine.search({
+      let { data: matching } = await queryEngine.searchCards({
         filter: {
           on: { module: `${testModuleRealm}booking`, name: 'Booking' },
           range: {
@@ -824,7 +905,7 @@ module(`Integration | realm querying`, function (hooks) {
   });
 
   test('can use an eq filter with a date field', async function (assert) {
-    let { data: matching } = await queryEngine.search({
+    let { data: matching } = await queryEngine.searchCards({
       filter: {
         on: { module: `${testModuleRealm}event`, name: 'Event' },
         eq: {
@@ -839,7 +920,7 @@ module(`Integration | realm querying`, function (hooks) {
   });
 
   test(`can filter on a nested field using 'eq'`, async function (assert) {
-    let { data: matching } = await queryEngine.search({
+    let { data: matching } = await queryEngine.searchCards({
       filter: {
         on: { module: `${testModuleRealm}post`, name: 'Post' },
         eq: { 'author.firstName': 'Carl' },
@@ -853,7 +934,7 @@ module(`Integration | realm querying`, function (hooks) {
 
   test(`can filter on a nested field inside a containsMany using 'eq'`, async function (assert) {
     {
-      let { data: matching } = await queryEngine.search({
+      let { data: matching } = await queryEngine.searchCards({
         filter: {
           on: { module: `${testModuleRealm}booking`, name: 'Booking' },
           eq: { 'hosts.firstName': 'Arthur' },
@@ -866,7 +947,7 @@ module(`Integration | realm querying`, function (hooks) {
       );
     }
     {
-      let { data: matching } = await queryEngine.search({
+      let { data: matching } = await queryEngine.searchCards({
         filter: {
           on: { module: `${testModuleRealm}booking`, name: 'Booking' },
           eq: { 'hosts.firstName': null },
@@ -875,7 +956,7 @@ module(`Integration | realm querying`, function (hooks) {
       assert.strictEqual(matching.length, 0, 'eq on null hosts.firstName');
     }
     {
-      let { data: matching } = await queryEngine.search({
+      let { data: matching } = await queryEngine.searchCards({
         filter: {
           on: { module: `${testModuleRealm}booking`, name: 'Booking' },
           eq: {
@@ -891,7 +972,7 @@ module(`Integration | realm querying`, function (hooks) {
       );
     }
     {
-      let { data: matching } = await queryEngine.search({
+      let { data: matching } = await queryEngine.searchCards({
         filter: {
           on: { module: `${testModuleRealm}booking`, name: 'Booking' },
           eq: {
@@ -910,7 +991,7 @@ module(`Integration | realm querying`, function (hooks) {
 
   test(`can filter on an array of primitive fields inside a containsMany using 'eq'`, async function (assert) {
     {
-      let { data: matching } = await queryEngine.search({
+      let { data: matching } = await queryEngine.searchCards({
         filter: {
           on: {
             module: `${testModuleRealm}booking`,
@@ -926,7 +1007,7 @@ module(`Integration | realm querying`, function (hooks) {
       );
     }
     {
-      let { data: matching } = await queryEngine.search({
+      let { data: matching } = await queryEngine.searchCards({
         filter: {
           on: {
             module: `${testModuleRealm}booking`,
@@ -942,7 +1023,7 @@ module(`Integration | realm querying`, function (hooks) {
       );
     }
     {
-      let { data: matching } = await queryEngine.search({
+      let { data: matching } = await queryEngine.searchCards({
         filter: {
           on: {
             module: `${testModuleRealm}booking`,
@@ -963,7 +1044,7 @@ module(`Integration | realm querying`, function (hooks) {
   });
 
   test('can negate a filter', async function (assert) {
-    let { data: matching } = await queryEngine.search({
+    let { data: matching } = await queryEngine.searchCards({
       filter: {
         on: { module: `${testModuleRealm}article`, name: 'Article' },
         not: { eq: { 'author.firstName': 'Carl' } },
@@ -976,7 +1057,7 @@ module(`Integration | realm querying`, function (hooks) {
   });
 
   test('can combine multiple types', async function (assert) {
-    let { data: matching } = await queryEngine.search({
+    let { data: matching } = await queryEngine.searchCards({
       filter: {
         any: [
           {
@@ -1001,7 +1082,7 @@ module(`Integration | realm querying`, function (hooks) {
 
   // sorting
   test('can sort in alphabetical order', async function (assert) {
-    let { data: matching } = await queryEngine.search({
+    let { data: matching } = await queryEngine.searchCards({
       sort: [
         {
           by: 'author.lastName',
@@ -1019,7 +1100,7 @@ module(`Integration | realm querying`, function (hooks) {
   });
 
   test('can sort in reverse alphabetical order', async function (assert) {
-    let { data: matching } = await queryEngine.search({
+    let { data: matching } = await queryEngine.searchCards({
       sort: [
         {
           by: 'author.firstName',
@@ -1042,7 +1123,7 @@ module(`Integration | realm querying`, function (hooks) {
   });
 
   test('can sort by card display name (card type shown in the interface)', async function (assert) {
-    let { data: matching } = await queryEngine.search({
+    let { data: matching } = await queryEngine.searchCards({
       sort: [
         {
           on: baseCardRef,
@@ -1069,6 +1150,7 @@ module(`Integration | realm querying`, function (hooks) {
         `${paths.url}vangogh`, // dog
         `${paths.url}event-1`, // event
         `${paths.url}event-2`, // event
+        `${paths.url}file-query-card-instance`, // file query card
         `${paths.url}friend1`, // friend
         `${paths.url}friend2`, // friend
         `${paths.url}empty`, // friends
@@ -1088,7 +1170,7 @@ module(`Integration | realm querying`, function (hooks) {
   });
 
   test('can sort by multiple string field conditions in given directions', async function (assert) {
-    let { data: matching } = await queryEngine.search({
+    let { data: matching } = await queryEngine.searchCards({
       sort: [
         {
           by: 'author.lastName',
@@ -1117,7 +1199,7 @@ module(`Integration | realm querying`, function (hooks) {
   });
 
   test('can sort by number value', async function (assert) {
-    let { data: matching } = await queryEngine.search({
+    let { data: matching } = await queryEngine.searchCards({
       sort: [
         {
           by: 'editions',
@@ -1144,7 +1226,7 @@ module(`Integration | realm querying`, function (hooks) {
   });
 
   test('can sort by date', async function (assert) {
-    let { data: matching } = await queryEngine.search({
+    let { data: matching } = await queryEngine.searchCards({
       sort: [
         {
           by: 'pubDate',
@@ -1172,7 +1254,7 @@ module(`Integration | realm querying`, function (hooks) {
   });
 
   test('can sort by mixed field types', async function (assert) {
-    let { data: matching } = await queryEngine.search({
+    let { data: matching } = await queryEngine.searchCards({
       sort: [
         {
           by: 'editions',
@@ -1200,7 +1282,7 @@ module(`Integration | realm querying`, function (hooks) {
   });
 
   test(`can sort on multiple paths in combination with 'any' filter`, async function (assert) {
-    let { data: matching } = await queryEngine.search({
+    let { data: matching } = await queryEngine.searchCards({
       sort: [
         {
           by: 'author.lastName',
@@ -1243,7 +1325,7 @@ module(`Integration | realm querying`, function (hooks) {
   });
 
   test(`can sort on multiple paths in combination with 'every' filter`, async function (assert) {
-    let { data: matching } = await queryEngine.search({
+    let { data: matching } = await queryEngine.searchCards({
       sort: [
         {
           by: 'author.firstName',
@@ -1274,18 +1356,19 @@ module(`Integration | realm querying`, function (hooks) {
   });
 
   test(`can search for cards by using the 'contains' filter`, async function (assert) {
-    let { data: matching } = await queryEngine.search({
+    let { data: matching } = await queryEngine.searchCards({
       filter: {
-        contains: { title: 'ca' },
+        contains: { cardTitle: 'ca' },
       },
     });
-    assert.strictEqual(matching.length, 5);
+    assert.strictEqual(matching.length, 6);
     assert.deepEqual(
       matching.map((m) => m.id),
       [
         `${paths.url}card-1`,
         `${paths.url}cards/1`,
         `${paths.url}cards/2`,
+        `${paths.url}file-query-card-instance`,
         `${paths.url}person-card1`,
         `${paths.url}person-card2`,
       ],
@@ -1293,10 +1376,10 @@ module(`Integration | realm querying`, function (hooks) {
   });
 
   test(`can search on specific card by using 'contains' filter`, async function (assert) {
-    let { data: personMatchingByTitle } = await queryEngine.search({
+    let { data: personMatchingByTitle } = await queryEngine.searchCards({
       filter: {
         on: { module: `${testModuleRealm}person`, name: 'Person' },
-        contains: { title: 'ca' },
+        contains: { cardTitle: 'ca' },
       },
     });
     assert.strictEqual(personMatchingByTitle.length, 2);
@@ -1305,7 +1388,7 @@ module(`Integration | realm querying`, function (hooks) {
       [`${paths.url}person-card1`, `${paths.url}person-card2`],
     );
 
-    let { data: dogMatchingByFirstName } = await queryEngine.search({
+    let { data: dogMatchingByFirstName } = await queryEngine.searchCards({
       filter: {
         on: { module: `${testModuleRealm}dog`, name: 'Dog' },
         contains: { firstName: 'go' },
@@ -1319,12 +1402,66 @@ module(`Integration | realm querying`, function (hooks) {
   });
 
   test(`can use 'contains' filter to find 'null' values`, async function (assert) {
-    let { data: matching } = await queryEngine.search({
+    let { data: matching } = await queryEngine.searchCards({
       filter: {
         on: { module: `${testModuleRealm}dog`, name: 'Dog' },
-        contains: { title: null },
+        contains: { cardTitle: null },
       },
     });
     assert.strictEqual(matching.length, 3);
+  });
+
+  test('query field with linksToMany(FileDef) populates file-meta relationships', async function (assert) {
+    let result = await queryEngine.cardDocument(
+      new URL(`${testRealmURL}file-query-card-instance`),
+      { loadLinks: true },
+    );
+    assert.strictEqual(result?.type, 'doc', 'result is a doc');
+
+    let { data } = (result as { type: 'doc'; doc: { data: any } }).doc;
+    let relationships = data.relationships ?? {};
+
+    // The query field should have a top-level matchingFiles relationship with data array
+    let matchingFiles = relationships['matchingFiles'] as {
+      links?: Record<string, string | null>;
+      data?: { type: string; id: string }[];
+    };
+    assert.ok(matchingFiles, 'matchingFiles relationship exists');
+    assert.ok(
+      Array.isArray(matchingFiles?.data),
+      'matchingFiles has a data array',
+    );
+    assert.ok(
+      (matchingFiles?.data?.length ?? 0) >= 2,
+      'matchingFiles contains at least 2 file results',
+    );
+
+    // Each entry in the data array should have type 'file-meta'
+    for (let entry of matchingFiles?.data ?? []) {
+      assert.strictEqual(
+        entry.type,
+        'file-meta',
+        `relationship data entry ${entry.id} has type file-meta`,
+      );
+    }
+
+    // Individual indexed relationships should also have type 'file-meta'
+    let indexedKeys = Object.keys(relationships).filter((k) =>
+      k.startsWith('matchingFiles.'),
+    );
+    assert.ok(
+      indexedKeys.length >= 2,
+      'individual file relationships are present',
+    );
+    for (let key of indexedKeys) {
+      let rel = relationships[key] as {
+        data?: { type: string; id: string };
+      };
+      assert.strictEqual(
+        rel?.data?.type,
+        'file-meta',
+        `${key} relationship data has type file-meta`,
+      );
+    }
   });
 });

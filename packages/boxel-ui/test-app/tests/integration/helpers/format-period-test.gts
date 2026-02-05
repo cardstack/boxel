@@ -29,14 +29,14 @@ module('Integration | helpers | formatPeriod', function (hooks) {
   });
 
   test('period with range', async function (assert) {
-    await render(<template>
-      {{formatPeriod '2024-Q1' withRange=true}}
-    </template>);
+    await render(
+      <template>{{formatPeriod '2024-Q1' withRange=true}}</template>,
+    );
     assert.dom().hasText('Q1 2024 (Jan - Mar)', 'shows quarter range');
 
-    await render(<template>
-      {{formatPeriod '2024-06' withRange=true}}
-    </template>);
+    await render(
+      <template>{{formatPeriod '2024-06' withRange=true}}</template>,
+    );
     assert.dom().hasText('Jun 2024 (1-30)', 'shows monthly range');
 
     await render(<template>{{formatPeriod '2024' withRange=true}}</template>);
@@ -44,19 +44,19 @@ module('Integration | helpers | formatPeriod', function (hooks) {
   });
 
   test('period edge cases', async function (assert) {
-    await render(<template>
-      {{formatPeriod null fallback='No period'}}
-    </template>);
+    await render(
+      <template>{{formatPeriod null fallback='No period'}}</template>,
+    );
     assert.dom().hasText('No period', 'uses fallback for null');
 
-    await render(<template>
-      {{formatPeriod undefined fallback='Unknown period'}}
-    </template>);
+    await render(
+      <template>{{formatPeriod undefined fallback='Unknown period'}}</template>,
+    );
     assert.dom().hasText('Unknown period', 'uses fallback for undefined');
 
-    await render(<template>
-      {{formatPeriod '' fallback='Empty period'}}
-    </template>);
+    await render(
+      <template>{{formatPeriod '' fallback='Empty period'}}</template>,
+    );
     assert.dom().hasText('Empty period', 'uses fallback for empty string');
   });
 
@@ -75,36 +75,40 @@ module('Integration | helpers | formatPeriod', function (hooks) {
   });
 
   test('localization', async function (assert) {
-    await render(<template>
-      {{formatPeriod '2024-Q1' locale='es-ES'}}
-    </template>);
+    await render(
+      <template>{{formatPeriod '2024-Q1' locale='es-ES'}}</template>,
+    );
     assert.dom().hasText('T1 2024', 'Spanish quarter formatting');
 
-    await render(<template>
-      {{formatPeriod '2024-01' locale='fr-FR'}}
-    </template>);
+    await render(
+      <template>{{formatPeriod '2024-01' locale='fr-FR'}}</template>,
+    );
     assert.dom().hasText('jan. 2024', 'French month formatting');
 
-    await render(<template>
-      {{formatPeriod '2024-Q2' locale='de-DE'}}
-    </template>);
+    await render(
+      <template>{{formatPeriod '2024-Q2' locale='de-DE'}}</template>,
+    );
     assert.dom().hasText('Q2 2024', 'German quarter formatting');
   });
 
   test('invalid period handling', async function (assert) {
-    await render(<template>
-      {{formatPeriod 'invalid-period' fallback='Invalid format'}}
-    </template>);
+    await render(
+      <template>
+        {{formatPeriod 'invalid-period' fallback='Invalid format'}}
+      </template>,
+    );
     assert.dom().hasText('Invalid format', 'handles invalid period format');
 
-    await render(<template>
-      {{formatPeriod '2024-Q5' fallback='Invalid quarter'}}
-    </template>);
+    await render(
+      <template>
+        {{formatPeriod '2024-Q5' fallback='Invalid quarter'}}
+      </template>,
+    );
     assert.dom().hasText('Invalid quarter', 'handles invalid quarter');
 
-    await render(<template>
-      {{formatPeriod '2024-13' fallback='Invalid month'}}
-    </template>);
+    await render(
+      <template>{{formatPeriod '2024-13' fallback='Invalid month'}}</template>,
+    );
     assert.dom().hasText('Invalid month', 'handles invalid month');
   });
 
@@ -123,16 +127,18 @@ module('Integration | helpers | formatPeriod', function (hooks) {
     await render(<template>{{formatPeriod '2024-H2'}}</template>);
     assert.dom().hasText('H2 2024', 'formats second half');
 
-    await render(<template>
-      {{formatPeriod '2024-H1' withRange=true}}
-    </template>);
+    await render(
+      <template>{{formatPeriod '2024-H1' withRange=true}}</template>,
+    );
     assert.dom().hasText('H1 2024 (Jan - Jun)', 'shows half-year range');
   });
 
   test('period comparison formatting', async function (assert) {
-    await render(<template>
-      {{formatPeriod '2024-Q1' size='long' withRange=true}}
-    </template>);
+    await render(
+      <template>
+        {{formatPeriod '2024-Q1' size='long' withRange=true}}
+      </template>,
+    );
     assert
       .dom()
       .hasText(
@@ -140,9 +146,11 @@ module('Integration | helpers | formatPeriod', function (hooks) {
         'long format with full range',
       );
 
-    await render(<template>
-      {{formatPeriod '2024-01' size='long' withRange=true}}
-    </template>);
+    await render(
+      <template>
+        {{formatPeriod '2024-01' size='long' withRange=true}}
+      </template>,
+    );
     assert.dom().hasText('January 2024 (1-31)', 'long month with day range');
   });
 

@@ -3,7 +3,7 @@
     "type": "card",
     "attributes": {
       "kitName": "808 Analog",
-      "description": "Classic analog drum machine sounds with deep kicks and crisp hi-hats",
+      "cardDescription": "Classic analog drum machine sounds with deep kicks and crisp hi-hats",
       "category": "Analog",
       "creator": "Beat Maker Studio",
       "kit": {
@@ -15,7 +15,7 @@
         "clapParams": "{\"type\": \"808\", \"frequency\": 2000, \"decay\": 0.1, \"amplitude\": 0.6, \"shape\": 2, \"resonance\": 5}",
         "crashParams": "{\"type\": \"808\", \"frequency\": 3000, \"decay\": 1.0, \"amplitude\": 0.5, \"shape\": 0.5, \"resonance\": 1}"
       },
-      "title": "808 Analog"
+      "cardTitle": "808 Analog"
     },
     "relationships": {},
     "meta": {

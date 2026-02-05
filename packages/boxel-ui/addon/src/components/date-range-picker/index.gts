@@ -1,3 +1,5 @@
+import 'ember-power-calendar/styles';
+
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
@@ -19,6 +21,7 @@ import { setupDateLibrary } from './setup.gts';
 
 interface Signature {
   Args: {
+    disabled?: boolean;
     end?: Date | null;
     onSelect: TPowerCalendarRangeOnSelect;
     selected?: SelectedPowerCalendarRange;
@@ -104,7 +107,7 @@ export default class DateRangePicker extends Component<Signature> {
       ...attributes
       as |calendar|
     >
-      <div class='months-container'>
+      <div class='months-container {{if @disabled "disabled"}}'>
         <div class='month-calendar'>
           <calendar.Nav>
             <div class='nav-container'>
@@ -170,6 +173,10 @@ export default class DateRangePicker extends Component<Signature> {
         display: flex;
         flex-direction: row;
         gap: var(--boxel-sp-lg);
+      }
+      .months-container.disabled {
+        pointer-events: none;
+        opacity: 0.6;
       }
       .nav-container {
         display: flex;

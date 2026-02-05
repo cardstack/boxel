@@ -9,7 +9,7 @@ export class Game extends CardDef {
   static displayName = 'Game';
   static icon = GamepadIcon;
 
-  @field title = contains(StringField);
-  @field description = contains(MarkdownField);
+  @field cardTitle = contains(StringField);
+  @field cardDescription = contains(MarkdownField);
   @field genre = contains(StringField);
 }

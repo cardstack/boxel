@@ -1,3 +1,4 @@
+import { action } from '@ember/object';
 import Route from '@ember/routing/route';
 import type RouterService from '@ember/routing/router-service';
 import type Transition from '@ember/routing/transition';
@@ -43,18 +44,29 @@ export default class Card extends Route {
     clientSecret: { refreshModel: true },
   } as const;
 
-  @service private declare billingService: BillingService;
-  @service private declare cardService: CardService;
-  @service private declare hostModeService: HostModeService;
-  @service private declare hostModeStateService: HostModeStateService;
-  @service private declare matrixService: MatrixService;
-  @service private declare operatorModeStateService: OperatorModeStateService;
-  @service private declare router: RouterService;
-  @service private declare store: StoreService;
+  @service declare private billingService: BillingService;
+  @service declare private cardService: CardService;
+  @service declare private hostModeService: HostModeService;
+  @service declare private hostModeStateService: HostModeStateService;
+  @service declare private matrixService: MatrixService;
+  @service declare private operatorModeStateService: OperatorModeStateService;
+  @service declare private router: RouterService;
+  @service declare private store: StoreService;
   @service declare realm: RealmService;
   @service declare realmServer: RealmServerService;
 
   didMatrixServiceStart = false;
+  initialLoading = true;
+
+  @action
+  loading(transition: Transition) {
+    transition.finally(() => {
+      // The loading template will be shown only during the initial load of the app
+      this.initialLoading = false;
+    });
+
+    return this.initialLoading;
+  }
 
   // WARNING! Make sure we are _very_ careful with our async in this model. This
   // model hook is called _every_  time

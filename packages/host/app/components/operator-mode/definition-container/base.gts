@@ -101,7 +101,7 @@ interface BaseSignature {
 }
 
 class BaseDefinitionContainer extends Component<BaseSignature> {
-  @service private declare realm: RealmService;
+  @service declare private realm: RealmService;
 
   <template>
     <BaseContainer @isActive={{@isActive}} ...attributes as |BaseHeader|>
@@ -209,6 +209,7 @@ const Active: TemplateOnlyComponent<ActiveSignature> = <template>
       justify-content: flex-start;
       gap: var(--boxel-sp-xxxs);
       align-self: flex-start;
+      text-transform: capitalize;
     }
     .info-footer {
       color: var(--boxel-450);

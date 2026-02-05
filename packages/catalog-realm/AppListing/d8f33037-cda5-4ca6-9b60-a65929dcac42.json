@@ -17,9 +17,9 @@
       "summary": "Interactive music playlist selector based on your current mood",
       "cardInfo": {
         "notes": "Perfect for music apps, wellness platforms, or any application that wants to provide personalized music experiences",
-        "title": "Mood Selector Playlist",
-        "description": "An interactive card that helps users discover the perfect playlist based on their current mood. Features beautiful gradient mood cards with emojis and connects to curated playlists.",
-        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/mood-selector-playlist-listing/thumbnail.png"
+        "name": "Mood Selector Playlist",
+        "summary": "An interactive card that helps users discover the perfect playlist based on their current mood. Features beautiful gradient mood cards with emojis and connects to curated playlists.",
+        "cardThumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/mood-selector-playlist-listing/thumbnail.png"
       }
     },
     "relationships": {

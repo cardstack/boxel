@@ -22,6 +22,8 @@ jobs:
     outputs:
       boxel: ${{ steps.filter.outputs.boxel }}
       ai-bot: ${{ steps.filter.outputs.ai-bot }}
+      bot-runner: ${{ steps.filter.outputs.bot-runner }}
+      eslint-plugin-boxel: ${{ steps.filter.outputs.eslint-plugin-boxel }}
       postgres-migrations: ${{ steps.filter.outputs.postgres-migrations }}
       boxel-icons: ${{ steps.filter.outputs.boxel-icons }}
       boxel-motion: ${{ steps.filter.outputs.boxel-motion }}
@@ -49,6 +51,7 @@ jobs:
               - '.github/workflows/deploy-host.yml'
               - '.github/workflows/manual-deploy.yml'
               - 'packages/ai-bot/**'
+              - 'packages/bot-runner/**'
               - 'packages/base/**'
               - 'packages/boxel-icons/**'
               - 'packages/boxel-ui/**'
@@ -61,6 +64,13 @@ jobs:
               - 'packages/ai-bot/**'
               - 'packages/billing/**'
               - 'packages/postgres/**'
+            bot-runner:
+              - *shared
+              - 'packages/bot-runner/**'
+              - 'packages/postgres/**'
+            eslint-plugin-boxel:
+              - *shared
+              - 'packages/eslint-plugin-boxel/**'
             postgres-migrations:
               - 'packages/postgres/migrations/**'
             boxel-icons:
@@ -140,6 +150,36 @@ jobs:
       - name: AI Bot test suite
         run: pnpm test
         working-directory: packages/ai-bot
+
+  bot-runner-test:
+    name: Bot Runner Tests
+    needs: change-check
+    if: needs.change-check.outputs.bot-runner == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: bot-runner-test-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
+      - uses: ./.github/actions/init
+      - name: Bot Runner test suite
+        run: pnpm test
+        working-directory: packages/bot-runner
+
+  eslint-plugin-boxel-test:
+    name: ESLint Plugin Boxel Tests
+    needs: change-check
+    if: needs.change-check.outputs.eslint-plugin-boxel == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: eslint-plugin-boxel-test-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
+      - uses: ./.github/actions/init
+      - name: ESLint Plugin Boxel test suite
+        run: pnpm test
+        working-directory: packages/eslint-plugin-boxel
 
   postgres-migration-test:
     name: Postgres Migration Test
@@ -460,7 +500,19 @@ jobs:
             "realm-endpoints-test.ts",
             "search-prerendered-test.ts",
             "types-endpoint-test.ts",
-            "server-endpoints-test.ts",
+            "server-endpoints/authentication-test.ts",
+            "server-endpoints/bot-registration-test.ts",
+            "server-endpoints/download-realm-test.ts",
+            "server-endpoints/index-responses-test.ts",
+            "server-endpoints/maintenance-endpoints-test.ts",
+            "server-endpoints/queue-status-test.ts",
+            "server-endpoints/realm-lifecycle-test.ts",
+            "server-endpoints/search-test.ts",
+            "server-endpoints/info-test.ts",
+            "server-endpoints/search-prerendered-test.ts",
+            "server-endpoints/stripe-session-test.ts",
+            "server-endpoints/stripe-webhook-test.ts",
+            "server-endpoints/user-and-catalog-test.ts",
             "virtual-network-test.ts",
             "atomic-endpoints-test.ts",
             "request-forward-test.ts",
@@ -471,6 +523,7 @@ jobs:
             "get-boxel-claimed-domain-test.ts",
             "realm-auth-test.ts",
             "queries-test.ts",
+            "full-reindex-test.ts",
           ]
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
@@ -628,9 +681,14 @@ jobs:
     needs:
       - change-check
       - ai-bot-test
+      - bot-runner-test
       - boxel-ui-test
       - realm-server-test
     uses: ./.github/workflows/manual-deploy.yml
+    permissions:
+      contents: read
+      deployments: write
+      id-token: write
     secrets: inherit
     with:
       environment: "staging"

@@ -3,10 +3,10 @@
     "type": "card",
     "attributes": {
       "name": "Potion of Healing",
-      "description": "A character who drinks the magical red fluid in this vial regains 2d4 + 2 hit points. Drinking or administering a potion takes an action.",
+      "cardDescription": "A character who drinks the magical red fluid in this vial regains 2d4 + 2 hit points. Drinking or administering a potion takes an action.",
       "value": 50,
-      "title": "Potion of Healing",
-      "thumbnailURL": null
+      "cardTitle": "Potion of Healing",
+      "cardThumbnailURL": null
     },
     "meta": {
       "adoptsFrom": {

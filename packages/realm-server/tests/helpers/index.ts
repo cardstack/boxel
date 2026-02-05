@@ -7,7 +7,7 @@ import {
   copySync,
 } from 'fs-extra';
 import { NodeAdapter } from '../../node-realm';
-import { resolve, join } from 'path';
+import { join } from 'path';
 import type {
   LooseSingleCardDocument,
   RealmPermissions,
@@ -32,6 +32,7 @@ import {
   uuidv4,
   RealmPaths,
   PUBLISHED_DIRECTORY_NAME,
+  DEFAULT_CARD_SIZE_LIMIT_BYTES,
   clearSessionRooms,
   upsertSessionRoom,
   type MatrixConfig,
@@ -77,6 +78,42 @@ const testRealmHref = testRealmURL.href;
 export const testRealmServerMatrixUsername = 'node-test_realm-server';
 export const testRealmServerMatrixUserId = `@${testRealmServerMatrixUsername}:localhost`;
 
+export type RealmRequest = {
+  get(path: string): Test;
+  post(path: string): Test;
+  put(path: string): Test;
+  patch(path: string): Test;
+  delete(path: string): Test;
+  head(path: string): Test;
+};
+
+export function withRealmPath(
+  request: SuperTest<Test>,
+  realmURL: URL,
+): RealmRequest {
+  let realmPath = realmURL.pathname.replace(/\/?$/, '/');
+  let prefixPath = (path: string) => {
+    if (path.startsWith('http://') || path.startsWith('https://')) {
+      return path;
+    }
+    if (path.startsWith(realmPath)) {
+      return path;
+    }
+    if (path.startsWith('/')) {
+      return `${realmPath}${path.slice(1)}`;
+    }
+    return `${realmPath}${path}`;
+  };
+  return {
+    get: (path: string) => request.get(prefixPath(path)),
+    post: (path: string) => request.post(prefixPath(path)),
+    put: (path: string) => request.put(prefixPath(path)),
+    patch: (path: string) => request.patch(prefixPath(path)),
+    delete: (path: string) => request.delete(prefixPath(path)),
+    head: (path: string) => request.head(prefixPath(path)),
+  };
+}
+
 export { testRealmHref, testRealmURL };
 
 const REALM_EVENT_TS_SKEW_BUFFER_MS = 2000;
@@ -107,7 +144,7 @@ export async function waitUntil<T>(
 }
 
 export const testRealm = 'http://test-realm/';
-export const localBaseRealm = 'http://localhost:4441/';
+export const localBaseRealm = 'http://localhost:4201/base';
 export const matrixURL = new URL('http://localhost:8008');
 const testPrerenderHost = '127.0.0.1';
 const testPrerenderPort = 4460;
@@ -148,8 +185,6 @@ const trackedPrerenderers = new Set<TestPrerenderer>();
 const trackedDbAdapters = new Set<PgAdapter>();
 const trackedQueuePublishers = new Set<QueuePublisher>();
 const trackedQueueRunners = new Set<QueueRunner>();
-
-const basePath = resolve(join(__dirname, '..', '..', '..', 'base'));
 
 export function cleanWhiteSpace(text: string) {
   return text
@@ -285,10 +320,25 @@ async function startTestPrerenderServer(): Promise<string> {
 
 async function stopTestPrerenderServer() {
   if (prerenderServer && prerenderServer.listening) {
+    if (hasStopPrerenderer(prerenderServer)) {
+      await prerenderServer.__stopPrerenderer?.();
+    }
     await closeServer(prerenderServer);
   }
   prerenderServer = undefined;
   prerenderServerStart = undefined;
+}
+
+interface StoppablePrerenderServer extends Server {
+  __stopPrerenderer?: () => Promise<void>;
+}
+
+function hasStopPrerenderer(
+  server: Server,
+): server is StoppablePrerenderServer {
+  return (
+    typeof (server as StoppablePrerenderServer).__stopPrerenderer === 'function'
+  );
 }
 
 export async function getTestPrerenderer(): Promise<Prerenderer> {
@@ -402,6 +452,7 @@ export async function createRealm({
   matrixConfig = testMatrix,
   withWorker,
   enableFileWatcher = false,
+  cardSizeLimitBytes,
 }: {
   dir: string;
   definitionLookup: DefinitionLookup;
@@ -415,6 +466,7 @@ export async function createRealm({
   dbAdapter: PgAdapter;
   deferStartUp?: true;
   enableFileWatcher?: boolean;
+  cardSizeLimitBytes?: number;
   // if you are creating a realm  to test it directly without a server, you can
   // also specify `withWorker: true` to also include a worker with your realm
   withWorker?: true;
@@ -465,107 +517,17 @@ export async function createRealm({
     realmServerMatrixClient,
     realmServerURL: new URL(new URL(realmURL).origin).href,
     definitionLookup,
+    cardSizeLimitBytes:
+      cardSizeLimitBytes ??
+      Number(
+        process.env.CARD_SIZE_LIMIT_BYTES ?? DEFAULT_CARD_SIZE_LIMIT_BYTES,
+      ),
   });
   if (worker) {
     virtualNetwork.mount(realm.handle);
     await worker.run();
   }
   return { realm, adapter };
-}
-
-export function setupBaseRealmServer(hooks: NestedHooks, matrixURL: URL) {
-  let baseRealmServer: Server | undefined;
-  setupDB(hooks, {
-    before: async (dbAdapter, publisher, runner) => {
-      let dir = dirSync();
-      baseRealmServer = await runBaseRealmServer(
-        createVirtualNetwork(),
-        publisher,
-        runner,
-        dbAdapter,
-        matrixURL,
-        dir.name,
-        { '*': ['read'] },
-      );
-    },
-    after: async () => {
-      if (baseRealmServer) {
-        await closeServer(baseRealmServer);
-        baseRealmServer = undefined;
-      }
-    },
-  });
-}
-
-export async function runBaseRealmServer(
-  virtualNetwork: VirtualNetwork,
-  publisher: QueuePublisher,
-  runner: QueueRunner,
-  dbAdapter: PgAdapter,
-  matrixURL: URL,
-  realmsRootPath: string,
-  permissions: RealmPermissions = { '*': ['read'] },
-) {
-  let localBaseRealmURL = new URL(localBaseRealm);
-  virtualNetwork.addURLMapping(new URL(baseRealm.url), localBaseRealmURL);
-
-  let prerenderer = await getTestPrerenderer();
-  let definitionLookup = new CachingDefinitionLookup(
-    dbAdapter,
-    prerenderer,
-    virtualNetwork,
-    testCreatePrerenderAuth,
-  );
-  let worker = new Worker({
-    indexWriter: new IndexWriter(dbAdapter),
-    queue: runner,
-    dbAdapter,
-    queuePublisher: publisher,
-    virtualNetwork,
-    matrixURL,
-    secretSeed: realmSecretSeed,
-    realmServerMatrixUsername: testRealmServerMatrixUsername,
-    prerenderer,
-    createPrerenderAuth: testCreatePrerenderAuth,
-  });
-  let { realm: testBaseRealm } = await createRealm({
-    dir: basePath,
-    realmURL: baseRealm.url,
-    virtualNetwork,
-    publisher,
-    dbAdapter,
-    permissions,
-    definitionLookup,
-  });
-  // the base realm is public readable so it doesn't need a private network
-  virtualNetwork.mount(testBaseRealm.handle);
-  await worker.run();
-  await testBaseRealm.start();
-  let matrixClient = new MatrixClient({
-    matrixURL: realmServerTestMatrix.url,
-    username: realmServerTestMatrix.username,
-    seed: realmSecretSeed,
-  });
-  let realms = [testBaseRealm];
-  let testBaseRealmServer = new RealmServer({
-    realms,
-    virtualNetwork,
-    matrixClient,
-    realmServerSecretSeed,
-    realmSecretSeed,
-    matrixRegistrationSecret,
-    realmsRootPath,
-    dbAdapter,
-    queue: publisher,
-    getIndexHTML,
-    grafanaSecret,
-    serverURL: new URL(localBaseRealmURL.origin),
-    assetsURL: new URL(`http://example.com/notional-assets-host/`),
-    definitionLookup,
-    prerenderer,
-  });
-  let server = testBaseRealmServer.listen(parseInt(localBaseRealmURL.port));
-  return trackServer(server);
 }
 
 export async function runTestRealmServer({
@@ -581,6 +543,7 @@ export async function runTestRealmServer({
   matrixURL,
   permissions = { '*': ['read'] },
   enableFileWatcher = false,
+  cardSizeLimitBytes,
   domainsForPublishedRealms = {
     boxelSpace: 'localhost',
     boxelSite: 'localhost',
@@ -598,6 +561,7 @@ export async function runTestRealmServer({
   matrixURL: URL;
   matrixConfig?: MatrixConfig;
   enableFileWatcher?: boolean;
+  cardSizeLimitBytes?: number;
   domainsForPublishedRealms?: {
     boxelSpace?: string;
     boxelSite?: string;
@@ -634,6 +598,7 @@ export async function runTestRealmServer({
     dbAdapter,
     enableFileWatcher,
     definitionLookup,
+    cardSizeLimitBytes,
   });
 
   await testRealm.logInToMatrix();
@@ -675,6 +640,217 @@ export async function runTestRealmServer({
     testRealmAdapter,
     matrixClient,
   };
+}
+
+// Use when a single RealmServer instance must expose multiple realms
+// (e.g. server endpoints that federate across realms like /_search).
+export async function runTestRealmServerWithRealms({
+  realmsRootPath,
+  realms,
+  virtualNetwork,
+  publisher,
+  runner,
+  dbAdapter,
+  matrixURL,
+  enableFileWatcher = false,
+  domainsForPublishedRealms = {
+    boxelSpace: 'localhost',
+    boxelSite: 'localhost',
+  },
+}: {
+  realmsRootPath: string;
+  realms: {
+    realmURL: URL;
+    fileSystem?: Record<string, string | LooseSingleCardDocument>;
+    permissions?: RealmPermissions;
+    matrixConfig?: MatrixConfig;
+  }[];
+  virtualNetwork: VirtualNetwork;
+  publisher: QueuePublisher;
+  runner: QueueRunner;
+  dbAdapter: PgAdapter;
+  matrixURL: URL;
+  enableFileWatcher?: boolean;
+  domainsForPublishedRealms?: {
+    boxelSpace?: string;
+    boxelSite?: string;
+  };
+}) {
+  ensureDirSync(realmsRootPath);
+  let prerenderer = await getTestPrerenderer();
+  let definitionLookup = new CachingDefinitionLookup(
+    dbAdapter,
+    prerenderer,
+    virtualNetwork,
+    testCreatePrerenderAuth,
+  );
+  let worker = new Worker({
+    indexWriter: new IndexWriter(dbAdapter),
+    queue: runner,
+    dbAdapter,
+    queuePublisher: publisher,
+    virtualNetwork,
+    matrixURL,
+    secretSeed: realmSecretSeed,
+    realmServerMatrixUsername: testRealmServerMatrixUsername,
+    prerenderer,
+    createPrerenderAuth: testCreatePrerenderAuth,
+  });
+  await worker.run();
+
+  let createdRealms: Realm[] = [];
+  let realmAdapters: RealmAdapter[] = [];
+  let matrixUsers = ['test_realm', 'node-test_realm'];
+
+  for (let [index, realmConfig] of realms.entries()) {
+    let realmDir = join(realmsRootPath, `realm_${index}`);
+    ensureDirSync(realmDir);
+    let { realm, adapter } = await createRealm({
+      dir: realmDir,
+      fileSystem: realmConfig.fileSystem,
+      realmURL: realmConfig.realmURL.href,
+      permissions: realmConfig.permissions,
+      virtualNetwork,
+      matrixConfig: realmConfig.matrixConfig ?? {
+        url: matrixURL,
+        username: matrixUsers[index] ?? matrixUsers[0],
+      },
+      publisher,
+      dbAdapter,
+      enableFileWatcher,
+      definitionLookup,
+    });
+    await realm.logInToMatrix();
+    virtualNetwork.mount(realm.handle);
+    createdRealms.push(realm);
+    realmAdapters.push(adapter);
+  }
+
+  let matrixClient = new MatrixClient({
+    matrixURL: realmServerTestMatrix.url,
+    username: realmServerTestMatrix.username,
+    seed: realmSecretSeed,
+  });
+
+  let serverURL = new URL(realms[0].realmURL.origin);
+  let testRealmServer = new RealmServer({
+    realms: createdRealms,
+    virtualNetwork,
+    matrixClient,
+    realmServerSecretSeed,
+    realmSecretSeed,
+    matrixRegistrationSecret,
+    realmsRootPath,
+    dbAdapter,
+    queue: publisher,
+    getIndexHTML,
+    grafanaSecret,
+    serverURL,
+    assetsURL: new URL(`http://example.com/notional-assets-host/`),
+    domainsForPublishedRealms,
+    definitionLookup,
+    prerenderer,
+  });
+  let testRealmHttpServer = testRealmServer.listen(parseInt(serverURL.port));
+  trackServer(testRealmHttpServer);
+  await testRealmServer.start();
+
+  return {
+    realms: createdRealms,
+    realmAdapters,
+    testRealmServer,
+    testRealmHttpServer,
+    matrixClient,
+  };
+}
+
+// Spins up one RealmServer per realm. Use for cross-realm behavior that doesn't
+// require a shared server (authorization, permissions, etc.).
+export function setupPermissionedRealms(
+  hooks: NestedHooks,
+  {
+    mode = 'beforeEach',
+    realms: realmsArg,
+    onRealmSetup,
+  }: {
+    mode?: 'beforeEach' | 'before';
+    realms: {
+      realmURL: string;
+      permissions: RealmPermissions;
+      fileSystem?: Record<string, string | LooseSingleCardDocument>;
+    }[];
+    onRealmSetup?: (args: {
+      dbAdapter: PgAdapter;
+      realms: {
+        realm: Realm;
+        realmPath: string;
+        realmHttpServer: Server;
+        realmAdapter: RealmAdapter;
+      }[];
+    }) => void;
+  },
+) {
+  // We want 2 different realm users to test authorization between them - these
+  // names are selected because they are already available in the test
+  // environment (via register-realm-users.ts)
+  let matrixUsers = ['test_realm', 'node-test_realm'];
+  let realms: {
+    realm: Realm;
+    realmPath: string;
+    realmHttpServer: Server;
+    realmAdapter: RealmAdapter;
+  }[] = [];
+  let _dbAdapter: PgAdapter;
+  setupDB(hooks, {
+    [mode]: async (
+      dbAdapter: PgAdapter,
+      publisher: QueuePublisher,
+      runner: QueueRunner,
+    ) => {
+      _dbAdapter = dbAdapter;
+      for (let [i, realmArg] of realmsArg.entries()) {
+        let {
+          testRealmDir: realmPath,
+          testRealm: realm,
+          testRealmHttpServer: realmHttpServer,
+          testRealmAdapter: realmAdapter,
+        } = await runTestRealmServer({
+          virtualNetwork: await createVirtualNetwork(),
+          testRealmDir: dirSync().name,
+          realmsRootPath: dirSync().name,
+          realmURL: new URL(realmArg.realmURL),
+          fileSystem: realmArg.fileSystem,
+          permissions: realmArg.permissions,
+          matrixURL,
+          matrixConfig: {
+            url: matrixURL,
+            username: matrixUsers[i] ?? matrixUsers[0],
+          },
+          dbAdapter,
+          publisher,
+          runner,
+        });
+        realms.push({
+          realm,
+          realmPath,
+          realmHttpServer,
+          realmAdapter,
+        });
+      }
+      onRealmSetup?.({
+        dbAdapter: _dbAdapter!,
+        realms,
+      });
+    },
+  });
+
+  hooks[mode === 'beforeEach' ? 'afterEach' : 'after'](async function () {
+    for (let realm of realms) {
+      realm.realm.__testOnlyClearCaches();
+      await closeServer(realm.realmHttpServer);
+    }
+    realms = [];
+  });
 }
 
 export async function insertUser(
@@ -825,7 +1001,8 @@ export function setupMatrixRoom(
   getRealmSetup: () => {
     testRealm: Realm;
     testRealmHttpServer: Server;
-    request: SuperTest<Test>;
+    request: { post(path: string): Test };
+    serverRequest?: SuperTest<Test>;
     dir: DirResult;
     dbAdapter: PgAdapter;
   },
@@ -848,7 +1025,7 @@ export function setupMatrixRoom(
       throw new Error('matrixClient did not return an OpenID token');
     }
 
-    let response = await realmSetup.request
+    let response = await (realmSetup.serverRequest ?? realmSetup.request)
       .post('/_server-session')
       .send(JSON.stringify(openIdToken))
       .set('Accept', 'application/json')
@@ -964,13 +1141,16 @@ export function setupPermissionedRealm(
   hooks: NestedHooks,
   {
     permissions,
+    realmURL,
     fileSystem,
     onRealmSetup,
     subscribeToRealmEvents = false,
     mode = 'beforeEach',
     published = false,
+    cardSizeLimitBytes,
   }: {
     permissions: RealmPermissions;
+    realmURL?: URL;
     fileSystem?: Record<string, string | LooseSingleCardDocument>;
     onRealmSetup?: (args: {
       dbAdapter: PgAdapter;
@@ -984,6 +1164,7 @@ export function setupPermissionedRealm(
     subscribeToRealmEvents?: boolean;
     mode?: 'beforeEach' | 'before';
     published?: boolean;
+    cardSizeLimitBytes?: number;
   },
 ) {
   let testRealmServer: Awaited<ReturnType<typeof runTestRealmServer>>;
@@ -996,6 +1177,7 @@ export function setupPermissionedRealm(
       publisher: QueuePublisher,
       runner: QueueRunner,
     ) => {
+      let resolvedRealmURL = realmURL ?? testRealmURL;
       let dir = dirSync();
 
       let testRealmDir;
@@ -1010,7 +1192,7 @@ export function setupPermissionedRealm(
           publishedRealmId,
         );
 
-        dbAdapter.execute(
+        await dbAdapter.execute(
           `INSERT INTO
             published_realms
             (id, owner_username, source_realm_url, published_realm_url)
@@ -1019,7 +1201,7 @@ export function setupPermissionedRealm(
               '${publishedRealmId}',
               '@user:localhost',
               'http://example.localhost/source',
-              '${testRealmHref}'
+              '${resolvedRealmURL.href}'
             )`,
         );
       } else {
@@ -1039,7 +1221,7 @@ export function setupPermissionedRealm(
         virtualNetwork,
         testRealmDir,
         realmsRootPath: join(dir.name, 'realm_server_1'),
-        realmURL: testRealmURL,
+        realmURL: resolvedRealmURL,
         permissions,
         dbAdapter,
         runner,
@@ -1047,6 +1229,7 @@ export function setupPermissionedRealm(
         matrixURL,
         fileSystem,
         enableFileWatcher: subscribeToRealmEvents,
+        cardSizeLimitBytes,
       });
 
       let request = supertest(testRealmServer.testRealmHttpServer);
@@ -1073,92 +1256,19 @@ export function setupPermissionedRealm(
   });
 }
 
-export function setupPermissionedRealms(
+export function setupPermissionedRealmAtURL(
   hooks: NestedHooks,
-  {
-    mode = 'beforeEach',
-    realms: realmsArg,
-    onRealmSetup,
-  }: {
-    mode?: 'beforeEach' | 'before';
-    realms: {
-      realmURL: string;
-      permissions: RealmPermissions;
-      fileSystem?: Record<string, string | LooseSingleCardDocument>;
-    }[];
-    onRealmSetup?: (args: {
-      dbAdapter: PgAdapter;
-      realms: {
-        realm: Realm;
-        realmPath: string;
-        realmHttpServer: Server;
-        realmAdapter: RealmAdapter;
-      }[];
-    }) => void;
-  },
+  realmURL: URL,
+  options: Omit<Parameters<typeof setupPermissionedRealm>[1], 'realmURL'>,
 ) {
-  // We want 2 different realm users to test authorization between them - these
-  // names are selected because they are already available in the test
-  // environment (via register-realm-users.ts)
-  let matrixUsers = ['test_realm', 'node-test_realm'];
-  let realms: {
-    realm: Realm;
-    realmPath: string;
-    realmHttpServer: Server;
-    realmAdapter: RealmAdapter;
-  }[] = [];
-  let _dbAdapter: PgAdapter;
-  setupDB(hooks, {
-    [mode]: async (
-      dbAdapter: PgAdapter,
-      publisher: QueuePublisher,
-      runner: QueueRunner,
-    ) => {
-      _dbAdapter = dbAdapter;
-      for (let [i, realmArg] of realmsArg.entries()) {
-        let {
-          testRealmDir: realmPath,
-          testRealm: realm,
-          testRealmHttpServer: realmHttpServer,
-          testRealmAdapter: realmAdapter,
-        } = await runTestRealmServer({
-          virtualNetwork: await createVirtualNetwork(),
-          testRealmDir: dirSync().name,
-          realmsRootPath: dirSync().name,
-          realmURL: new URL(realmArg.realmURL),
-          fileSystem: realmArg.fileSystem,
-          permissions: realmArg.permissions,
-          matrixURL,
-          matrixConfig: {
-            url: matrixURL,
-            username: matrixUsers[i] ?? matrixUsers[0],
-          },
-          dbAdapter,
-          publisher,
-          runner,
-        });
-        realms.push({
-          realm,
-          realmPath,
-          realmHttpServer,
-          realmAdapter,
-        });
-      }
-      onRealmSetup?.({
-        dbAdapter: _dbAdapter!,
-        realms,
-      });
-    },
-  });
-
-  hooks[mode === 'beforeEach' ? 'afterEach' : 'after'](async function () {
-    for (let realm of realms) {
-      realm.realm.__testOnlyClearCaches();
-      await closeServer(realm.realmHttpServer);
-    }
-    realms = [];
+  return setupPermissionedRealm(hooks, {
+    ...options,
+    realmURL,
   });
 }
+
+// Spins up one RealmServer per realm. Use for cross-realm behavior that doesn't
+// require a shared server (authorization, permissions, etc.).
 
 export function createJWT(
   realm: Realm,
@@ -1179,9 +1289,9 @@ export function createJWT(
 
 export const cardInfo = {
   notes: null,
-  title: null,
-  description: null,
-  thumbnailURL: null,
+  name: null,
+  summary: null,
+  cardThumbnailURL: null,
 };
 
 export const cardDefinition: Definition['fields'] = {
@@ -1194,7 +1304,7 @@ export const cardDefinition: Definition['fields'] = {
     },
     isPrimitive: true,
   },
-  title: {
+  cardTitle: {
     type: 'contains',
     isComputed: true,
     fieldOrCard: {
@@ -1203,7 +1313,7 @@ export const cardDefinition: Definition['fields'] = {
     },
     isPrimitive: true,
   },
-  description: {
+  cardDescription: {
     type: 'contains',
     isComputed: true,
     fieldOrCard: {
@@ -1212,7 +1322,7 @@ export const cardDefinition: Definition['fields'] = {
     },
     isPrimitive: true,
   },
-  thumbnailURL: {
+  cardThumbnailURL: {
     type: 'contains',
     isComputed: true,
     fieldOrCard: {
@@ -1230,7 +1340,7 @@ export const cardDefinition: Definition['fields'] = {
     },
     isPrimitive: false,
   },
-  'cardInfo.title': {
+  'cardInfo.name': {
     type: 'contains',
     isComputed: false,
     fieldOrCard: {
@@ -1239,7 +1349,7 @@ export const cardDefinition: Definition['fields'] = {
     },
     isPrimitive: true,
   },
-  'cardInfo.description': {
+  'cardInfo.summary': {
     type: 'contains',
     isComputed: false,
     fieldOrCard: {
@@ -1248,7 +1358,7 @@ export const cardDefinition: Definition['fields'] = {
     },
     isPrimitive: true,
   },
-  'cardInfo.thumbnailURL': {
+  'cardInfo.cardThumbnailURL': {
     type: 'contains',
     isComputed: false,
     fieldOrCard: {
@@ -1284,7 +1394,7 @@ export const cardDefinition: Definition['fields'] = {
     },
     isPrimitive: true,
   },
-  'cardInfo.theme.title': {
+  'cardInfo.theme.cardTitle': {
     type: 'contains',
     isComputed: true,
     fieldOrCard: {
@@ -1293,7 +1403,7 @@ export const cardDefinition: Definition['fields'] = {
     },
     isPrimitive: true,
   },
-  'cardInfo.theme.description': {
+  'cardInfo.theme.cardDescription': {
     type: 'contains',
     isComputed: true,
     fieldOrCard: {
@@ -1302,7 +1412,7 @@ export const cardDefinition: Definition['fields'] = {
     },
     isPrimitive: true,
   },
-  'cardInfo.theme.thumbnailURL': {
+  'cardInfo.theme.cardThumbnailURL': {
     type: 'contains',
     isComputed: true,
     fieldOrCard: {
@@ -1320,7 +1430,7 @@ export const cardDefinition: Definition['fields'] = {
     },
     isPrimitive: false,
   },
-  'cardInfo.theme.cardInfo.title': {
+  'cardInfo.theme.cardInfo.name': {
     type: 'contains',
     isComputed: false,
     fieldOrCard: {
@@ -1329,7 +1439,7 @@ export const cardDefinition: Definition['fields'] = {
     },
     isPrimitive: true,
   },
-  'cardInfo.theme.cardInfo.description': {
+  'cardInfo.theme.cardInfo.summary': {
     type: 'contains',
     isComputed: false,
     fieldOrCard: {
@@ -1338,7 +1448,7 @@ export const cardDefinition: Definition['fields'] = {
     },
     isPrimitive: true,
   },
-  'cardInfo.theme.cardInfo.thumbnailURL': {
+  'cardInfo.theme.cardInfo.cardThumbnailURL': {
     type: 'contains',
     isComputed: false,
     fieldOrCard: {
@@ -1392,7 +1502,7 @@ export const cardDefinition: Definition['fields'] = {
     },
     isPrimitive: true,
   },
-  'cardInfo.theme.cardInfo.theme.title': {
+  'cardInfo.theme.cardInfo.theme.cardTitle': {
     type: 'contains',
     isComputed: true,
     fieldOrCard: {
@@ -1410,7 +1520,7 @@ export const cardDefinition: Definition['fields'] = {
     },
     isPrimitive: false,
   },
-  'cardInfo.theme.cardInfo.theme.cardInfo.title': {
+  'cardInfo.theme.cardInfo.theme.cardInfo.name': {
     type: 'contains',
     isComputed: false,
     fieldOrCard: {
@@ -1419,7 +1529,7 @@ export const cardDefinition: Definition['fields'] = {
     },
     isPrimitive: true,
   },
-  'cardInfo.theme.cardInfo.theme.cardInfo.description': {
+  'cardInfo.theme.cardInfo.theme.cardInfo.summary': {
     type: 'contains',
     isComputed: false,
     fieldOrCard: {
@@ -1428,7 +1538,7 @@ export const cardDefinition: Definition['fields'] = {
     },
     isPrimitive: true,
   },
-  'cardInfo.theme.cardInfo.theme.cardInfo.thumbnailURL': {
+  'cardInfo.theme.cardInfo.theme.cardInfo.cardThumbnailURL': {
     type: 'contains',
     isComputed: false,
     fieldOrCard: {
@@ -1446,7 +1556,7 @@ export const cardDefinition: Definition['fields'] = {
     },
     isPrimitive: true,
   },
-  'cardInfo.theme.cardInfo.theme.description': {
+  'cardInfo.theme.cardInfo.theme.cardDescription': {
     type: 'contains',
     isComputed: true,
     fieldOrCard: {
@@ -1473,7 +1583,7 @@ export const cardDefinition: Definition['fields'] = {
     },
     isPrimitive: true,
   },
-  'cardInfo.theme.cardInfo.theme.thumbnailURL': {
+  'cardInfo.theme.cardInfo.theme.cardThumbnailURL': {
     type: 'contains',
     isComputed: true,
     fieldOrCard: {
@@ -1500,7 +1610,7 @@ export const cardDefinition: Definition['fields'] = {
     },
     isPrimitive: true,
   },
-  'cardInfo.theme.cardInfo.theme.cardInfo.theme.title': {
+  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardTitle': {
     type: 'contains',
     isComputed: true,
     fieldOrCard: {
@@ -1518,7 +1628,7 @@ export const cardDefinition: Definition['fields'] = {
     },
     isPrimitive: false,
   },
-  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.title': {
+  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.name': {
     type: 'contains',
     isComputed: false,
     fieldOrCard: {
@@ -1527,7 +1637,7 @@ export const cardDefinition: Definition['fields'] = {
     },
     isPrimitive: true,
   },
-  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.description': {
+  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.summary': {
     type: 'contains',
     isComputed: false,
     fieldOrCard: {
@@ -1536,7 +1646,7 @@ export const cardDefinition: Definition['fields'] = {
     },
     isPrimitive: true,
   },
-  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.thumbnailURL': {
+  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.cardThumbnailURL': {
     type: 'contains',
     isComputed: false,
     fieldOrCard: {
@@ -1554,7 +1664,7 @@ export const cardDefinition: Definition['fields'] = {
     },
     isPrimitive: true,
   },
-  'cardInfo.theme.cardInfo.theme.cardInfo.theme.description': {
+  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardDescription': {
     type: 'contains',
     isComputed: true,
     fieldOrCard: {
@@ -1581,7 +1691,7 @@ export const cardDefinition: Definition['fields'] = {
     },
     isPrimitive: true,
   },
-  'cardInfo.theme.cardInfo.theme.cardInfo.theme.thumbnailURL': {
+  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardThumbnailURL': {
     type: 'contains',
     isComputed: true,
     fieldOrCard: {
@@ -1608,7 +1718,7 @@ export const cardDefinition: Definition['fields'] = {
     },
     isPrimitive: true,
   },
-  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.title': {
+  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardTitle': {
     type: 'contains',
     isComputed: true,
     fieldOrCard: {
@@ -1626,7 +1736,16 @@ export const cardDefinition: Definition['fields'] = {
     },
     isPrimitive: false,
   },
-  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.title':
+  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.name': {
+    type: 'contains',
+    isComputed: false,
+    fieldOrCard: {
+      name: 'StringField',
+      module: 'https://cardstack.com/base/card-api',
+    },
+    isPrimitive: true,
+  },
+  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.summary':
     {
       type: 'contains',
       isComputed: false,
@@ -1636,17 +1755,7 @@ export const cardDefinition: Definition['fields'] = {
       },
       isPrimitive: true,
     },
-  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.description':
-    {
-      type: 'contains',
-      isComputed: false,
-      fieldOrCard: {
-        name: 'StringField',
-        module: 'https://cardstack.com/base/card-api',
-      },
-      isPrimitive: true,
-    },
-  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.thumbnailURL':
+  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.cardThumbnailURL':
     {
       type: 'contains',
       isComputed: false,
@@ -1656,15 +1765,16 @@ export const cardDefinition: Definition['fields'] = {
       },
       isPrimitive: true,
     },
-  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.description': {
-    type: 'contains',
-    isComputed: true,
-    fieldOrCard: {
-      name: 'StringField',
-      module: 'https://cardstack.com/base/card-api',
+  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardDescription':
+    {
+      type: 'contains',
+      isComputed: true,
+      fieldOrCard: {
+        name: 'StringField',
+        module: 'https://cardstack.com/base/card-api',
+      },
+      isPrimitive: true,
     },
-    isPrimitive: true,
-  },
   'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.cssVariables': {
     type: 'contains',
     isComputed: false,
@@ -1683,15 +1793,16 @@ export const cardDefinition: Definition['fields'] = {
     },
     isPrimitive: true,
   },
-  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.thumbnailURL': {
-    type: 'contains',
-    isComputed: true,
-    fieldOrCard: {
-      name: 'MaybeBase64Field',
-      module: 'https://cardstack.com/base/card-api',
+  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardThumbnailURL':
+    {
+      type: 'contains',
+      isComputed: true,
+      fieldOrCard: {
+        name: 'MaybeBase64Field',
+        module: 'https://cardstack.com/base/card-api',
+      },
+      isPrimitive: true,
     },
-    isPrimitive: true,
-  },
   'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme':
     {
       type: 'linksTo',

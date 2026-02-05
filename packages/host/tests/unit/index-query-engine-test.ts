@@ -113,11 +113,11 @@ module('Unit | query', function (hooks) {
       @field name = contains(StringField);
     }
     class SimpleSpec extends CardDef {
-      @field title = contains(StringField);
+      @field cardTitle = contains(StringField);
       @field ref = contains(CodeRefField);
     }
     class Event extends CardDef {
-      @field title = contains(StringField);
+      @field cardTitle = contains(StringField);
       @field venue = contains(StringField);
       @field date = contains(DateField);
     }
@@ -129,14 +129,14 @@ module('Unit | query', function (hooks) {
     loader.shimModule(`${testRealmURL}event`, { Event });
 
     let stringFieldEntry = new SimpleSpec({
-      title: 'String Field',
+      cardTitle: 'String Field',
       ref: {
         module: `${baseRealm.url}string`,
         name: 'default',
       },
     });
     let numberFieldEntry = new SimpleSpec({
-      title: 'Number Field',
+      cardTitle: 'Number Field',
       ref: {
         module: `${baseRealm.url}number`,
         name: 'default',
@@ -171,12 +171,12 @@ module('Unit | query', function (hooks) {
     let paper = new Cat({ name: 'Paper' });
 
     let mangoBirthday = new Event({
-      title: "Mango's Birthday",
+      cardTitle: "Mango's Birthday",
       venue: 'Dog Park',
       date: p('2024-10-30'),
     });
     let vangoghBirthday = new Event({
-      title: "Van Gogh's Birthday",
+      cardTitle: "Van Gogh's Birthday",
       venue: 'Backyard',
       date: p('2024-11-19'),
     });
@@ -230,6 +230,9 @@ module('Unit | query', function (hooks) {
       async invalidate(_realmURL: string): Promise<void> {
         // no-op for tests
       },
+      async clearRealmCache(_realmURL: string): Promise<void> {
+        // no-op for tests
+      },
       registerRealm() {},
       forRealm() {
         return this;
@@ -242,7 +245,7 @@ module('Unit | query', function (hooks) {
     let { mango, vangogh, paper } = testCards;
     await setupIndex(dbAdapter, [mango, vangogh, paper]);
 
-    let { cards: results, meta } = await indexQueryEngine.search(
+    let { cards: results, meta } = await indexQueryEngine.searchCards(
       new URL(testRealmURL),
       {},
     );
@@ -266,7 +269,10 @@ module('Unit | query', function (hooks) {
       { card: paper, data: { is_deleted: true } },
     ]);
 
-    let { meta } = await indexQueryEngine.search(new URL(testRealmURL), {});
+    let { meta } = await indexQueryEngine.searchCards(
+      new URL(testRealmURL),
+      {},
+    );
     assert.strictEqual(meta.page.total, 2, 'the total results meta is correct');
   });
 
@@ -275,7 +281,8 @@ module('Unit | query', function (hooks) {
     await setupIndex(dbAdapter, [
       {
         url: `${testRealmURL}1.json`,
-        type: 'instance-error',
+        type: 'instance',
+        has_error: true,
         realm_version: 1,
         realm_url: testRealmURL,
         pristine_doc: undefined,
@@ -305,7 +312,7 @@ module('Unit | query', function (hooks) {
         error_doc: undefined,
       },
     ]);
-    let { cards: results, meta } = await indexQueryEngine.search(
+    let { cards: results, meta } = await indexQueryEngine.searchCards(
       new URL(testRealmURL),
       {},
     );
@@ -323,7 +330,7 @@ module('Unit | query', function (hooks) {
     await setupIndex(dbAdapter, [mango, vangogh, paper]);
 
     let type = await personCardType(testCards);
-    let { cards: results, meta } = await indexQueryEngine.search(
+    let { cards: results, meta } = await indexQueryEngine.searchCards(
       new URL(testRealmURL),
       { filter: { type } },
     );
@@ -347,7 +354,7 @@ module('Unit | query', function (hooks) {
     ]);
 
     let type = await personCardType(testCards);
-    let { cards: results, meta } = await indexQueryEngine.search(
+    let { cards: results, meta } = await indexQueryEngine.searchCards(
       new URL(testRealmURL),
       {
         filter: {
@@ -403,7 +410,7 @@ module('Unit | query', function (hooks) {
     ]);
 
     let type = await personCardType(testCards);
-    let { cards: results, meta } = await indexQueryEngine.search(
+    let { cards: results, meta } = await indexQueryEngine.searchCards(
       new URL(testRealmURL),
       {
         filter: {
@@ -445,7 +452,7 @@ module('Unit | query', function (hooks) {
     ]);
 
     let type = await personCardType(testCards);
-    let { cards: results, meta } = await indexQueryEngine.search(
+    let { cards: results, meta } = await indexQueryEngine.searchCards(
       new URL(testRealmURL),
       {
         filter: {
@@ -489,7 +496,7 @@ module('Unit | query', function (hooks) {
     ]);
 
     let type = await personCardType(testCards);
-    let { cards: results, meta } = await indexQueryEngine.search(
+    let { cards: results, meta } = await indexQueryEngine.searchCards(
       new URL(testRealmURL),
       {
         filter: {
@@ -527,7 +534,7 @@ module('Unit | query', function (hooks) {
     ]);
 
     let type = await personCardType(testCards);
-    let { cards: results, meta } = await indexQueryEngine.search(
+    let { cards: results, meta } = await indexQueryEngine.searchCards(
       new URL(testRealmURL),
       {
         filter: {
@@ -575,7 +582,7 @@ module('Unit | query', function (hooks) {
 
     let type = await personCardType(testCards);
     {
-      let { cards: results, meta } = await indexQueryEngine.search(
+      let { cards: results, meta } = await indexQueryEngine.searchCards(
         new URL(testRealmURL),
         {
           filter: {
@@ -593,7 +600,7 @@ module('Unit | query', function (hooks) {
       assert.deepEqual(getIds(results), [mango.id], 'results are correct');
     }
     {
-      let { cards: results, meta } = await indexQueryEngine.search(
+      let { cards: results, meta } = await indexQueryEngine.searchCards(
         new URL(testRealmURL),
         {
           filter: {
@@ -611,7 +618,7 @@ module('Unit | query', function (hooks) {
       assert.deepEqual(getIds(results), [vangogh.id], 'results are correct');
     }
     {
-      let { cards: results, meta } = await indexQueryEngine.search(
+      let { cards: results, meta } = await indexQueryEngine.searchCards(
         new URL(testRealmURL),
         {
           filter: {
@@ -637,7 +644,7 @@ module('Unit | query', function (hooks) {
         card: stringFieldEntry,
         data: {
           search_doc: {
-            title: stringFieldEntry.title,
+            cardTitle: stringFieldEntry.cardTitle,
             ref: internalKeyFor((stringFieldEntry as any).ref, undefined),
           },
         },
@@ -646,7 +653,7 @@ module('Unit | query', function (hooks) {
         card: numberFieldEntry,
         data: {
           search_doc: {
-            title: numberFieldEntry.title,
+            cardTitle: numberFieldEntry.cardTitle,
             ref: internalKeyFor((numberFieldEntry as any).ref, undefined),
           },
         },
@@ -654,7 +661,7 @@ module('Unit | query', function (hooks) {
     ]);
 
     let type = await SimpleSpecType(testCards);
-    let { cards: results, meta } = await indexQueryEngine.search(
+    let { cards: results, meta } = await indexQueryEngine.searchCards(
       new URL(testRealmURL),
       {
         filter: {
@@ -684,7 +691,7 @@ module('Unit | query', function (hooks) {
         card: mangoBirthday,
         data: {
           search_doc: {
-            title: mangoBirthday.title,
+            cardTitle: mangoBirthday.cardTitle,
             venue: (mangoBirthday as any).venue,
             date: format((mangoBirthday as any).date, 'yyyy-MM-dd'),
           },
@@ -694,7 +701,7 @@ module('Unit | query', function (hooks) {
         card: vangoghBirthday,
         data: {
           search_doc: {
-            title: vangoghBirthday.title,
+            cardTitle: vangoghBirthday.cardTitle,
             venue: (vangoghBirthday as any).venue,
             date: format((vangoghBirthday as any).date, 'yyyy-MM-dd'),
           },
@@ -703,7 +710,7 @@ module('Unit | query', function (hooks) {
     ]);
 
     let type = await eventType(testCards);
-    let { cards: results, meta } = await indexQueryEngine.search(
+    let { cards: results, meta } = await indexQueryEngine.searchCards(
       new URL(testRealmURL),
       {
         filter: {
@@ -753,7 +760,7 @@ module('Unit | query', function (hooks) {
     ]);
 
     let type = await personCardType(testCards);
-    let { cards: results, meta } = await indexQueryEngine.search(
+    let { cards: results, meta } = await indexQueryEngine.searchCards(
       new URL(testRealmURL),
       {
         filter: {
@@ -801,7 +808,7 @@ module('Unit | query', function (hooks) {
     ]);
 
     let type = await personCardType(testCards);
-    let { cards: results, meta } = await indexQueryEngine.search(
+    let { cards: results, meta } = await indexQueryEngine.searchCards(
       new URL(testRealmURL),
       {
         filter: {
@@ -849,7 +856,7 @@ module('Unit | query', function (hooks) {
     ]);
 
     let type = await personCardType(testCards);
-    let { cards: results, meta } = await indexQueryEngine.search(
+    let { cards: results, meta } = await indexQueryEngine.searchCards(
       new URL(testRealmURL),
       {
         filter: {
@@ -897,7 +904,7 @@ module('Unit | query', function (hooks) {
     ]);
 
     let type = await personCardType(testCards);
-    let { cards: results, meta } = await indexQueryEngine.search(
+    let { cards: results, meta } = await indexQueryEngine.searchCards(
       new URL(testRealmURL),
       {
         filter: {
@@ -935,7 +942,7 @@ module('Unit | query', function (hooks) {
     ]);
 
     let type = await personCardType(testCards);
-    let { cards: results, meta } = await indexQueryEngine.search(
+    let { cards: results, meta } = await indexQueryEngine.searchCards(
       new URL(testRealmURL),
       {
         filter: {
@@ -971,7 +978,7 @@ module('Unit | query', function (hooks) {
     ]);
 
     let type = await personCardType(testCards);
-    let { cards: results, meta } = await indexQueryEngine.search(
+    let { cards: results, meta } = await indexQueryEngine.searchCards(
       new URL(testRealmURL),
       {
         filter: {
@@ -1027,7 +1034,7 @@ module('Unit | query', function (hooks) {
     ]);
 
     let type = await personCardType(testCards);
-    let { cards: results, meta } = await indexQueryEngine.search(
+    let { cards: results, meta } = await indexQueryEngine.searchCards(
       new URL(testRealmURL),
       {
         filter: {
@@ -1078,7 +1085,7 @@ module('Unit | query', function (hooks) {
     ]);
 
     let type = await personCardType(testCards);
-    let { cards: results, meta } = await indexQueryEngine.search(
+    let { cards: results, meta } = await indexQueryEngine.searchCards(
       new URL(testRealmURL),
       {
         filter: {
@@ -1099,15 +1106,18 @@ module('Unit | query', function (hooks) {
   test(`returns empty results when query refers to missing card`, async function (assert) {
     await setupIndex(dbAdapter, []);
 
-    let { cards, meta } = await indexQueryEngine.search(new URL(testRealmURL), {
-      filter: {
-        on: {
-          module: `${testRealmURL}nonexistent`,
-          name: 'Nonexistent',
+    let { cards, meta } = await indexQueryEngine.searchCards(
+      new URL(testRealmURL),
+      {
+        filter: {
+          on: {
+            module: `${testRealmURL}nonexistent`,
+            name: 'Nonexistent',
+          },
+          eq: { nonExistentField: 'hello' },
         },
-        eq: { nonExistentField: 'hello' },
       },
-    });
+    );
 
     assert.strictEqual(cards.length, 0, 'no cards are returned');
     assert.strictEqual(meta.page.total, 0, 'total count is zero');
@@ -1118,7 +1128,7 @@ module('Unit | query', function (hooks) {
     let type = await personCardType(testCards);
 
     try {
-      await indexQueryEngine.search(new URL(testRealmURL), {
+      await indexQueryEngine.searchCards(new URL(testRealmURL), {
         filter: {
           on: type,
           eq: {
@@ -1162,7 +1172,7 @@ module('Unit | query', function (hooks) {
     ]);
 
     let type = await personCardType(testCards);
-    let { cards: results, meta } = await indexQueryEngine.search(
+    let { cards: results, meta } = await indexQueryEngine.searchCards(
       new URL(testRealmURL),
       {
         filter: {
@@ -1206,7 +1216,7 @@ module('Unit | query', function (hooks) {
 
     let type = await personCardType(testCards);
     {
-      let { cards: results, meta } = await indexQueryEngine.search(
+      let { cards: results, meta } = await indexQueryEngine.searchCards(
         new URL(testRealmURL),
         {
           filter: {
@@ -1224,7 +1234,7 @@ module('Unit | query', function (hooks) {
       assert.deepEqual(getIds(results), [mango.id], 'results are correct');
     }
     {
-      let { cards: results, meta } = await indexQueryEngine.search(
+      let { cards: results, meta } = await indexQueryEngine.searchCards(
         new URL(testRealmURL),
         {
           filter: {
@@ -1271,7 +1281,7 @@ module('Unit | query', function (hooks) {
     ]);
 
     let type = await personCardType(testCards);
-    let { cards: results, meta } = await indexQueryEngine.search(
+    let { cards: results, meta } = await indexQueryEngine.searchCards(
       new URL(testRealmURL),
       {
         filter: {
@@ -1315,7 +1325,7 @@ module('Unit | query', function (hooks) {
     ]);
 
     let type = await personCardType(testCards);
-    let { cards: results, meta } = await indexQueryEngine.search(
+    let { cards: results, meta } = await indexQueryEngine.searchCards(
       new URL(testRealmURL),
       {
         filter: {
@@ -1356,7 +1366,7 @@ module('Unit | query', function (hooks) {
     ]);
 
     let type = await personCardType(testCards);
-    let { cards: results, meta } = await indexQueryEngine.search(
+    let { cards: results, meta } = await indexQueryEngine.searchCards(
       new URL(testRealmURL),
       {
         filter: {
@@ -1388,7 +1398,7 @@ module('Unit | query', function (hooks) {
     ]);
 
     let type = await personCardType(testCards);
-    let { cards: results, meta } = await indexQueryEngine.search(
+    let { cards: results, meta } = await indexQueryEngine.searchCards(
       new URL(testRealmURL),
       {
         filter: {
@@ -1440,7 +1450,7 @@ module('Unit | query', function (hooks) {
     );
 
     let type = await personCardType(testCards);
-    let { cards: results, meta } = await indexQueryEngine.search(
+    let { cards: results, meta } = await indexQueryEngine.searchCards(
       new URL(testRealmURL),
       {
         filter: {
@@ -1497,7 +1507,7 @@ module('Unit | query', function (hooks) {
     );
 
     let type = await personCardType(testCards);
-    let { cards: results, meta } = await indexQueryEngine.search(
+    let { cards: results, meta } = await indexQueryEngine.searchCards(
       new URL(testRealmURL),
       {
         filter: {
@@ -1541,7 +1551,7 @@ module('Unit | query', function (hooks) {
     ]);
 
     let type = await personCardType(testCards);
-    let { cards: results, meta } = await indexQueryEngine.search(
+    let { cards: results, meta } = await indexQueryEngine.searchCards(
       new URL(testRealmURL),
       {
         sort: [
@@ -1591,7 +1601,7 @@ module('Unit | query', function (hooks) {
     ]);
 
     let type = await personCardType(testCards);
-    let { cards: results, meta } = await indexQueryEngine.search(
+    let { cards: results, meta } = await indexQueryEngine.searchCards(
       new URL(testRealmURL),
       {
         sort: [
@@ -1642,7 +1652,7 @@ module('Unit | query', function (hooks) {
     ]);
 
     let type = await personCardType(testCards);
-    let { cards: results } = await indexQueryEngine.search(
+    let { cards: results } = await indexQueryEngine.searchCards(
       new URL(testRealmURL),
       {
         sort: [
@@ -1706,12 +1716,15 @@ module('Unit | query', function (hooks) {
     ]);
 
     let type = await personCardType(testCards);
-    let { cards, meta } = await indexQueryEngine.search(new URL(testRealmURL), {
-      filter: {
-        on: type,
-        range: { age: { gt: 25 } },
+    let { cards, meta } = await indexQueryEngine.searchCards(
+      new URL(testRealmURL),
+      {
+        filter: {
+          on: type,
+          range: { age: { gt: 25 } },
+        },
       },
-    });
+    );
 
     assert.strictEqual(meta.page.total, 2, 'the total results meta is correct');
     assert.deepEqual(
@@ -1766,13 +1779,16 @@ module('Unit | query', function (hooks) {
     ]);
 
     let type = await personCardType(testCards);
-    let { cards, meta } = await indexQueryEngine.search(new URL(testRealmURL), {
-      filter: {
-        on: type,
-        type,
-        range: { age: { gt: 25 } },
+    let { cards, meta } = await indexQueryEngine.searchCards(
+      new URL(testRealmURL),
+      {
+        filter: {
+          on: type,
+          type,
+          range: { age: { gt: 25 } },
+        },
       },
-    });
+    );
 
     assert.strictEqual(meta.page.total, 2, 'the total results meta is correct');
     assert.deepEqual(
@@ -1812,13 +1828,16 @@ module('Unit | query', function (hooks) {
     ]);
 
     let type = await personCardType(testCards);
-    let { cards, meta } = await indexQueryEngine.search(new URL(testRealmURL), {
-      filter: {
-        on: type,
-        type,
-        eq: { name: 'Mango' },
+    let { cards, meta } = await indexQueryEngine.searchCards(
+      new URL(testRealmURL),
+      {
+        filter: {
+          on: type,
+          type,
+          eq: { name: 'Mango' },
+        },
       },
-    });
+    );
 
     assert.strictEqual(meta.page.total, 1, 'the total results meta is correct');
     assert.deepEqual(getIds(cards), [mango.id], 'results are correct');
@@ -1863,13 +1882,16 @@ module('Unit | query', function (hooks) {
     ]);
 
     let type = await personCardType(testCards);
-    let { cards, meta } = await indexQueryEngine.search(new URL(testRealmURL), {
-      filter: {
-        on: type,
-        type,
-        contains: { 'address.city': 'Barks' },
+    let { cards, meta } = await indexQueryEngine.searchCards(
+      new URL(testRealmURL),
+      {
+        filter: {
+          on: type,
+          type,
+          contains: { 'address.city': 'Barks' },
+        },
       },
-    });
+    );
 
     assert.strictEqual(meta.page.total, 2, 'the total results meta is correct');
     assert.deepEqual(
@@ -1909,22 +1931,25 @@ module('Unit | query', function (hooks) {
     ]);
 
     let type = await personCardType(testCards);
-    let { cards, meta } = await indexQueryEngine.search(new URL(testRealmURL), {
-      filter: {
-        on: type,
-        type,
-        not: {
-          eq: { name: 'Mango' },
-        },
-      },
-      sort: [
-        {
+    let { cards, meta } = await indexQueryEngine.searchCards(
+      new URL(testRealmURL),
+      {
+        filter: {
           on: type,
-          by: 'name',
-          direction: 'asc',
+          type,
+          not: {
+            eq: { name: 'Mango' },
+          },
         },
-      ],
-    });
+        sort: [
+          {
+            on: type,
+            by: 'name',
+            direction: 'asc',
+          },
+        ],
+      },
+    );
 
     assert.strictEqual(meta.page.total, 2, 'the total results meta is correct');
     assert.deepEqual(
@@ -1989,13 +2014,16 @@ module('Unit | query', function (hooks) {
 
     let personType = await personCardType(testCards);
     let catType = internalKeyToCodeRef([...(await getTypes(paper))].shift()!);
-    let { cards, meta } = await indexQueryEngine.search(new URL(testRealmURL), {
-      filter: {
-        on: personType,
-        type: catType,
-        range: { age: { gt: 25 } },
+    let { cards, meta } = await indexQueryEngine.searchCards(
+      new URL(testRealmURL),
+      {
+        filter: {
+          on: personType,
+          type: catType,
+          range: { age: { gt: 25 } },
+        },
       },
-    });
+    );
 
     assert.strictEqual(meta.page.total, 2, 'the total results meta is correct');
     assert.deepEqual(
@@ -2050,19 +2078,22 @@ module('Unit | query', function (hooks) {
     ]);
 
     let type = await personCardType(testCards);
-    let { cards, meta } = await indexQueryEngine.search(new URL(testRealmURL), {
-      filter: {
-        on: type,
-        range: { age: { gte: 25 } },
-      },
-      sort: [
-        {
+    let { cards, meta } = await indexQueryEngine.searchCards(
+      new URL(testRealmURL),
+      {
+        filter: {
           on: type,
-          by: 'age',
-          direction: 'desc',
+          range: { age: { gte: 25 } },
         },
-      ],
-    });
+        sort: [
+          {
+            on: type,
+            by: 'age',
+            direction: 'desc',
+          },
+        ],
+      },
+    );
 
     assert.strictEqual(meta.page.total, 3, 'the total results meta is correct');
     assert.deepEqual(
@@ -2117,16 +2148,19 @@ module('Unit | query', function (hooks) {
     ]);
 
     let type = await personCardType(testCards);
-    let { cards, meta } = await indexQueryEngine.search(new URL(testRealmURL), {
-      filter: {
-        on: type,
-        range: {
-          'address.number': {
-            gt: 100,
+    let { cards, meta } = await indexQueryEngine.searchCards(
+      new URL(testRealmURL),
+      {
+        filter: {
+          on: type,
+          range: {
+            'address.number': {
+              gt: 100,
+            },
           },
         },
       },
-    });
+    );
 
     assert.strictEqual(meta.page.total, 2, 'the total results meta is correct');
     assert.deepEqual(
@@ -2169,16 +2203,19 @@ module('Unit | query', function (hooks) {
     ]);
 
     let type = await personCardType(testCards);
-    let { cards, meta } = await indexQueryEngine.search(new URL(testRealmURL), {
-      filter: {
-        on: type,
-        range: {
-          lotteryNumbers: {
-            gt: 50,
+    let { cards, meta } = await indexQueryEngine.searchCards(
+      new URL(testRealmURL),
+      {
+        filter: {
+          on: type,
+          range: {
+            lotteryNumbers: {
+              gt: 50,
+            },
           },
         },
       },
-    });
+    );
 
     assert.strictEqual(meta.page.total, 2, 'the total results meta is correct');
     assert.deepEqual(
@@ -2233,16 +2270,19 @@ module('Unit | query', function (hooks) {
     ]);
 
     let type = await personCardType(testCards);
-    let { cards, meta } = await indexQueryEngine.search(new URL(testRealmURL), {
-      filter: {
-        on: type,
-        range: {
-          'friends.age': {
-            gt: 25,
+    let { cards, meta } = await indexQueryEngine.searchCards(
+      new URL(testRealmURL),
+      {
+        filter: {
+          on: type,
+          range: {
+            'friends.age': {
+              gt: 25,
+            },
           },
         },
       },
-    });
+    );
 
     assert.strictEqual(meta.page.total, 2, 'the total results meta is correct');
     assert.deepEqual(
@@ -2297,19 +2337,22 @@ module('Unit | query', function (hooks) {
     ]);
 
     let type = await personCardType(testCards);
-    let { cards, meta } = await indexQueryEngine.search(new URL(testRealmURL), {
-      filter: {
-        on: type,
-        range: { age: { lt: 35 } },
-      },
-      sort: [
-        {
+    let { cards, meta } = await indexQueryEngine.searchCards(
+      new URL(testRealmURL),
+      {
+        filter: {
           on: type,
-          by: 'age',
-          direction: 'desc',
+          range: { age: { lt: 35 } },
         },
-      ],
-    });
+        sort: [
+          {
+            on: type,
+            by: 'age',
+            direction: 'desc',
+          },
+        ],
+      },
+    );
 
     assert.strictEqual(meta.page.total, 2, 'the total results meta is correct');
     assert.deepEqual(
@@ -2364,19 +2407,22 @@ module('Unit | query', function (hooks) {
     ]);
 
     let type = await personCardType(testCards);
-    let { cards, meta } = await indexQueryEngine.search(new URL(testRealmURL), {
-      filter: {
-        on: type,
-        range: { age: { lte: 35 } },
-      },
-      sort: [
-        {
+    let { cards, meta } = await indexQueryEngine.searchCards(
+      new URL(testRealmURL),
+      {
+        filter: {
           on: type,
-          by: 'age',
-          direction: 'desc',
+          range: { age: { lte: 35 } },
         },
-      ],
-    });
+        sort: [
+          {
+            on: type,
+            by: 'age',
+            direction: 'desc',
+          },
+        ],
+      },
+    );
 
     assert.strictEqual(meta.page.total, 3, 'the total results meta is correct');
     assert.deepEqual(
@@ -2431,19 +2477,22 @@ module('Unit | query', function (hooks) {
     ]);
 
     let type = await personCardType(testCards);
-    let { cards, meta } = await indexQueryEngine.search(new URL(testRealmURL), {
-      filter: {
-        on: type,
-        range: { age: { gt: 25, lt: 35 } },
-      },
-      sort: [
-        {
+    let { cards, meta } = await indexQueryEngine.searchCards(
+      new URL(testRealmURL),
+      {
+        filter: {
           on: type,
-          by: 'age',
-          direction: 'desc',
+          range: { age: { gt: 25, lt: 35 } },
         },
-      ],
-    });
+        sort: [
+          {
+            on: type,
+            by: 'age',
+            direction: 'desc',
+          },
+        ],
+      },
+    );
 
     assert.strictEqual(meta.page.total, 1, 'the total results meta is correct');
     assert.deepEqual(getIds(cards), [vangogh.id], 'results are correct');
@@ -2495,7 +2544,7 @@ module('Unit | query', function (hooks) {
 
     let type = await personCardType(testCards);
     assert.rejects(
-      indexQueryEngine.search(new URL(testRealmURL), {
+      indexQueryEngine.searchCards(new URL(testRealmURL), {
         filter: {
           on: type,
           range: { age: { gt: null } },
@@ -2927,7 +2976,8 @@ module('Unit | query', function (hooks) {
       {
         url: `${testRealmURL}donald.json`,
         file_alias: `${testRealmURL}donald`,
-        type: 'instance-error',
+        type: 'instance',
+        has_error: true,
         realm_version: 1,
         realm_url: testRealmURL,
         deps: [],
@@ -2954,7 +3004,8 @@ module('Unit | query', function (hooks) {
       {
         url: `${testRealmURL}paper.json`,
         file_alias: `${testRealmURL}paper`,
-        type: 'instance-error',
+        type: 'instance',
+        has_error: true,
         realm_version: 1,
         realm_url: testRealmURL,
         deps: [],

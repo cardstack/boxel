@@ -16,9 +16,9 @@
       },
       "mapWidth": 600,
       "mapHeight": 400,
-      "description": null,
-      "thumbnailURL": null,
-      "title": "Golden Gate Bridge"
+      "cardDescription": null,
+      "cardThumbnailURL": null,
+      "cardTitle": "Golden Gate Bridge"
     },
     "meta": {
       "adoptsFrom": {

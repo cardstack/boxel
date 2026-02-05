@@ -6,7 +6,7 @@
       "canonicalSlug": "baidu/ernie-4.5-21b-a3b-thinking",
       "name": "Baidu: ERNIE 4.5 21B A3B Thinking",
       "created": 1760048887,
-      "description": "ERNIE-4.5-21B-A3B-Thinking is Baidu's upgraded lightweight MoE model, refined to boost reasoning depth and quality for top-tier performance in logical puzzles, math, science, coding, text generation, and expert-level academic benchmarks.",
+      "cardDescription": "ERNIE-4.5-21B-A3B-Thinking is Baidu's upgraded lightweight MoE model, refined to boost reasoning depth and quality for top-tier performance in logical puzzles, math, science, coding, text generation, and expert-level academic benchmarks.",
       "pricing": {
         "prompt": "0.000000056",
         "completion": "0.000000224",
@@ -50,9 +50,9 @@
         "frequency_penalty": null
       },
       "cardInfo": {
-        "title": null,
-        "description": null,
-        "thumbnailURL": null,
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
         "notes": null
       }
     },

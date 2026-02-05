@@ -14,6 +14,7 @@ import BooleanField from './boolean';
 import MarkdownField from './markdown';
 import NumberField from './number';
 import ResponseField from './response-field';
+import RealmField from './realm';
 import { Skill } from './skill';
 import { Spec } from './spec';
 import {
@@ -116,6 +117,11 @@ export class FileContents extends CardDef {
 export class SwitchSubmodeInput extends CardDef {
   @field submode = contains(StringField);
   @field codePath = contains(StringField);
+  @field createFile = contains(BooleanField);
+}
+
+export class SwitchSubmodeResult extends CardDef {
+  @field codePath = contains(StringField);
 }
 
 export class WriteTextFileInput extends CardDef {
@@ -123,6 +129,7 @@ export class WriteTextFileInput extends CardDef {
   @field realm = contains(StringField);
   @field path = contains(StringField);
   @field overwrite = contains(BooleanField);
+  @field useNonConflictingFilename = contains(BooleanField);
 }
 
 export class CreateInstanceInput extends CardDef {
@@ -197,6 +204,7 @@ export class LintAndFixInput extends CardDef {
 
 export class LintAndFixResult extends CardDef {
   @field output = contains(StringField);
+  @field lintIssues = containsMany(StringField);
 }
 
 export class PatchCodeResultField extends FieldDef {
@@ -207,6 +215,7 @@ export class PatchCodeResultField extends FieldDef {
 export class PatchCodeCommandResult extends CardDef {
   @field patchedContent = contains(StringField);
   @field finalFileUrl = contains(StringField);
+  @field lintIssues = containsMany(StringField);
   @field results = containsMany(PatchCodeResultField);
 }
 
@@ -220,6 +229,7 @@ export class CheckCorrectnessInput extends CardDef {
   @field targetType = contains(StringField);
   @field targetRef = contains(StringField);
   @field roomId = contains(StringField);
+  @field lintIssues = containsMany(StringField);
 }
 
 export class CorrectnessResultCard extends CardDef {
@@ -237,6 +247,23 @@ export class CreateAIAssistantRoomInput extends CardDef {
 
 export class CreateAIAssistantRoomResult extends CardDef {
   @field roomId = contains(StringField);
+}
+
+export class InviteUserToRoomInput extends CardDef {
+  @field roomId = contains(StringField);
+  @field userId = contains(StringField);
+}
+
+export class RegisterBotInput extends CardDef {
+  @field username = contains(StringField);
+}
+
+export class RegisterBotResult extends CardDef {
+  @field botRegistrationId = contains(StringField);
+}
+
+export class UnregisterBotInput extends CardDef {
+  @field botRegistrationId = contains(StringField);
 }
 
 export class SetActiveLLMInput extends CardDef {
@@ -338,9 +365,30 @@ export class ListingInstallResult extends CardDef {
   @field selectedCodeRef = contains(CodeRefField);
 }
 
+export class CreateListingPRInput extends CardDef {
+  @field roomId = contains(StringField);
+  @field realm = contains(RealmField);
+  @field listingId = contains(StringField);
+}
+
+export class CreateListingPRResult extends CardDef {
+  @field snapshotId = contains(StringField);
+  @field branch = contains(StringField);
+  @field fileCount = contains(NumberField);
+  @field prUrl = contains(StringField);
+  @field prNumber = contains(NumberField);
+}
+
+export class CreateListingPRRequestInput extends CardDef {
+  @field roomId = contains(StringField);
+  @field realm = contains(RealmField);
+  @field listingId = contains(StringField);
+}
+
 export class ListingCreateInput extends CardDef {
   @field openCardId = contains(StringField);
-  @field targetRealm = contains(StringField);
+  @field codeRef = contains(CodeRefField);
+  @field targetRealm = contains(RealmField);
 }
 
 export class ListingCreateResult extends CardDef {
@@ -380,6 +428,12 @@ export class GetEventsFromRoomInput extends CardDef {
 
 export class GetEventsFromRoomResult extends CardDef {
   @field matrixEvents = containsMany(JsonField);
+}
+
+export class SendBotTriggerEventInput extends CardDef {
+  @field roomId = contains(StringField);
+  @field type = contains(StringField);
+  @field input = contains(JsonField);
 }
 
 export class PreviewFormatInput extends CardDef {

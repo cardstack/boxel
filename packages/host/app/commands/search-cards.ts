@@ -1,10 +1,9 @@
 import { service } from '@ember/service';
 
-import flatMap from 'lodash/flatMap';
-
 import type { Filter } from '@cardstack/runtime-common';
 import { assertQuery } from '@cardstack/runtime-common';
 
+import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import HostBaseCommand from '../lib/host-base-command';
@@ -29,14 +28,14 @@ export class SearchCardsByTypeAndTitleCommand extends HostBaseCommand<
   protected async run(
     input: BaseCommandModule.SearchCardsByTypeAndTitleInput,
   ): Promise<BaseCommandModule.SearchCardsResult> {
-    if (!input.title && !input.cardType && !input.type) {
+    if (!input.cardTitle && !input.cardType && !input.type) {
       throw new Error(
-        'At least one of title, cardType, or type must be provided',
+        'At least one of cardTitle, cardType, or type must be provided',
       );
     }
     let filter = {} as any;
-    if (input.title) {
-      filter.contains = { title: input.title };
+    if (input.cardTitle) {
+      filter.contains = { cardTitle: input.cardTitle };
     }
     if (input.cardType) {
       filter.eq = { _cardType: input.cardType };
@@ -77,22 +76,12 @@ export class SearchCardsByQueryCommand extends HostBaseCommand<
   ): Promise<BaseCommandModule.SearchCardsResult> {
     assertQuery(input.query);
     let realmUrls = this.realmServer.availableRealmURLs;
-    let instances = flatMap(
-      await Promise.all(
-        realmUrls.map(async (realm) => {
-          try {
-            let realmInstances = await this.store.search(
-              input.query,
-              new URL(realm),
-            );
-            return realmInstances;
-          } catch (e) {
-            console.error(`Error searching in realm ${realm}:`, e, input.query);
-            return [];
-          }
-        }),
-      ),
-    );
+    let instances: CardDef[] = [];
+    try {
+      instances = await this.store.search(input.query, realmUrls);
+    } catch (e) {
+      console.error(`Error searching in realms:`, e, input.query);
+    }
 
     let commandModule = await this.loadCommandModule();
     const { SearchCardsResult, SearchCardSummaryField } = commandModule;
@@ -103,10 +92,10 @@ export class SearchCardsByQueryCommand extends HostBaseCommand<
         (c) =>
           new SearchCardSummaryField({
             id: c.id,
-            title: c.title,
+            cardTitle: c.cardTitle,
           }),
       ),
-      description: `Query: ${JSON.stringify(input.query.filter, null, 2)}`,
+      cardDescription: `Query: ${JSON.stringify(input.query.filter, null, 2)}`,
     });
     return resultCard;
   }

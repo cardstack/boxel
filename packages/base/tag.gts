@@ -20,8 +20,8 @@ class TagTemplate extends Component<typeof Tag> {
         @fontColor={{@model.fontColor}}
       />
       <div class='label'>{{@model.constructor.displayName}}</div>
-      <h3 class='title'><@fields.title /></h3>
-      <p class='description'><@fields.description /></p>
+      <h3 class='title'><@fields.cardTitle /></h3>
+      <p class='description'><@fields.cardDescription /></p>
     </BoxelContainer>
     <style scoped>
       .label {
@@ -48,7 +48,7 @@ export default class Tag extends CardDef {
   static icon = TagIcon;
   @field name = contains(StringField);
   @field ellipsize = contains(BooleanField);
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: Tag) {
       return this.name;
     },
@@ -83,9 +83,9 @@ export default class Tag extends CardDef {
         <FieldContainer
           @label='Description'
           @tag='label'
-          @icon={{getFieldIcon @model 'description'}}
+          @icon={{getFieldIcon @model 'cardDescription'}}
         >
-          <@fields.description />
+          <@fields.cardDescription />
         </FieldContainer>
         <FieldContainer
           @label='Pill Color'

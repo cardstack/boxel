@@ -1,4 +1,3 @@
- 
 // TIP: this file should be saved with "Save without formatting" in VSCode
 // to avoid messing with the whitespace in the compiled card source
 export const cardSrc = `
@@ -13,7 +12,7 @@ import StringField from 'https://cardstack.com/base/string';
 export class Person extends CardDef {
   static displayName = 'Person';
   @field firstName = contains(StringField);
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: Person) {
       return this.firstName;
     },
@@ -46,7 +45,7 @@ export class Person extends CardDef {
   }
   #firstName = (dt7948.i(this, "firstName"), void 0);
   static {
-    dt7948.g(this.prototype, "title", [field], function () {
+    dt7948.g(this.prototype, "cardTitle", [field], function () {
       return contains(StringField, {
         computeVia: function () {
           return this.firstName;
@@ -54,18 +53,16 @@ export class Person extends CardDef {
       });
     });
   }
-  #title = (dt7948.i(this, "title"), void 0);
+  #cardTitle = (dt7948.i(this, "cardTitle"), void 0);
   static isolated = class Isolated extends Component {
     static {
       setComponentTemplate(createTemplateFactory(
       /*
-        
-            <h1 data-test-card><@fields.firstName /></h1>
-          
+        <h1 data-test-card><@fields.firstName /></h1>
       */
       {
         "id": ${id},
-        "block": "[[[1,\\"\\\\n      \\"],[10,\\"h1\\"],[14,\\"data-test-card\\",\\"\\"],[12],[8,[30,1,[\\"firstName\\"]],null,null,null],[13],[1,\\"\\\\n    \\"]],[\\"@fields\\"],false,[]]",
+        "block": "[[[10,\\"h1\\"],[14,\\"data-test-card\\",\\"\\"],[12],[8,[30,1,[\\"firstName\\"]],null,null,null],[13]],[\\"@fields\\"],false,[]]",
         "moduleName": "${moduleName}",
         "isStrictMode": true
       }), this);

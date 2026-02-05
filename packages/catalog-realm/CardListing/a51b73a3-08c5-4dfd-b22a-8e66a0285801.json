@@ -12,12 +12,12 @@
       "images": [
         "https://boxel-images.boxel.ai/app-assets/catalog/chess-listing/screenshot_01.png"
       ],
-      "summary": "♟️ Players:\n\n- White pieces: Bottom (a1–h1, a2–h2)\n- Black pieces: Top (a7–h7, a8–h8)\n\n♟️Game State:\n\n- No moves have been made yet — it’s the very beginning of the game.\n\n♟️ Options:\n\nThe interface has buttons:\n- Prev Move / Next Move (for stepping through a game)\n- Back to Game Position\n- Reset",
+      "summary": "\u265f\ufe0f Players:\n\n- White pieces: Bottom (a1\u2013h1, a2\u2013h2)\n- Black pieces: Top (a7\u2013h7, a8\u2013h8)\n\n\u265f\ufe0fGame State:\n\n- No moves have been made yet \u2014 it\u2019s the very beginning of the game.\n\n\u265f\ufe0f Options:\n\nThe interface has buttons:\n- Prev Move / Next Move (for stepping through a game)\n- Back to Game Position\n- Reset",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/chess-listing/thumbnail.png"
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/chess-listing/thumbnail.png"
       }
     },
     "relationships": {

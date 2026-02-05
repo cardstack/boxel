@@ -3,7 +3,7 @@
     "type": "card",
     "attributes": {
       "kitName": "Jazz Kit",
-      "description": "Warm acoustic simulation with natural textures and gentle filtering",
+      "cardDescription": "Warm acoustic simulation with natural textures and gentle filtering",
       "category": "Jazz",
       "creator": "Beat Maker Studio",
       "kit": {
@@ -15,7 +15,7 @@
         "clapParams": "{\"type\": \"jazz\", \"frequency\": 1600, \"decay\": 0.18, \"amplitude\": 0.5, \"shape\": 1.8, \"resonance\": 2}",
         "crashParams": "{\"type\": \"jazz\", \"frequency\": 3200, \"decay\": 1.2, \"amplitude\": 0.3, \"shape\": 0.8, \"resonance\": 0.5}"
       },
-      "title": "Jazz Kit"
+      "cardTitle": "Jazz Kit"
     },
     "relationships": {},
     "meta": {

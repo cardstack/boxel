@@ -136,7 +136,7 @@ const countryCardSource = `
   export class Country extends CardDef {
     static displayName = 'Country';
     @field name = contains(StringField);
-    @field title = contains(StringField, {
+    @field cardTitle = contains(StringField, {
       computeVia(this: Country) {
         return this.name;
       },
@@ -187,7 +187,7 @@ const personCardSource = `
     static displayName = 'Person';
     @field firstName = contains(StringField);
     @field lastName = contains(StringField);
-    @field title = contains(StringField, {
+    @field cardTitle = contains(StringField, {
       computeVia: function (this: Person) {
         return [this.firstName, this.lastName].filter(Boolean).join(' ');
       },
@@ -202,7 +202,7 @@ const personCardSource = `
         <div data-test-person>
           <p>First name: <@fields.firstName /></p>
           <p>Last name: <@fields.lastName /></p>
-          <p>Title: <@fields.title /></p>
+          <p>Title: <@fields.cardTitle /></p>
           <p>Address List: <@fields.address /></p>
           <p>Friends: <@fields.friends /></p>
         </div>
@@ -224,7 +224,7 @@ const petCardSource = `
   export class Pet extends CardDef {
     static displayName = 'Pet';
     @field name = contains(StringField);
-    @field title = contains(StringField, {
+    @field cardTitle = contains(StringField, {
       computeVia: function (this: Pet) {
         return this.name;
       },
@@ -238,7 +238,7 @@ const petCardSource = `
     }
     static isolated = class Isolated extends Component<typeof this> {
       <template>
-        <h1>{{@model.title}}</h1>
+        <h1>{{@model.cardTitle}}</h1>
         <h2 data-test-pet={{@model.name}}>
           <@fields.name/>
         </h2>
@@ -350,7 +350,7 @@ const friendCardSource = `
     static displayName = 'Friend';
     @field name = contains(StringField);
     @field friend = linksTo(() => Friend);
-    @field title = contains(StringField, {
+    @field cardTitle = contains(StringField, {
       computeVia: function (this: Friend) {
         return this.name;
       },
@@ -612,8 +612,8 @@ module('Acceptance | code submode tests', function (_hooks) {
             data: {
               type: 'card',
               attributes: {
-                title: 'Person',
-                description: 'Spec',
+                cardTitle: 'Person',
+                cardDescription: 'Spec',
                 specType: 'card',
                 ref: {
                   module: `./person`,
@@ -800,8 +800,8 @@ module('Acceptance | code submode tests', function (_hooks) {
               type: 'card',
               attributes: {
                 name: 'United States',
-                description: null,
-                thumbnailURL: null,
+                cardDescription: null,
+                cardThumbnailURL: null,
               },
               meta: {
                 adoptsFrom: {
@@ -1965,6 +1965,40 @@ module('Acceptance | code submode tests', function (_hooks) {
       );
     });
 
+    test('code editor shows size limit error when json save exceeds limit', async function (assert) {
+      let environmentService = getService('environment-service') as any;
+      let originalMaxSize = environmentService.cardSizeLimitBytes;
+
+      try {
+        await visitOperatorMode({
+          submode: 'code',
+          codePath: `${testRealmURL}person-entry.json`,
+        });
+
+        await waitFor('[data-test-editor]');
+
+        let content = getMonacoContent();
+        let encoder = new TextEncoder();
+        let currentSize = encoder.encode(content).length;
+        environmentService.cardSizeLimitBytes = currentSize + 50;
+
+        let doc = JSON.parse(content);
+        doc.data.attributes = {
+          ...(doc.data.attributes ?? {}),
+          title: 'x'.repeat(currentSize + 200),
+        };
+        setMonacoContent(JSON.stringify(doc, null, 2));
+        await waitFor('[data-test-save-error]');
+        assert
+          .dom('[data-test-save-error]')
+          .includesText(
+            `exceeds maximum allowed size (${environmentService.cardSizeLimitBytes} bytes)`,
+          );
+      } finally {
+        environmentService.cardSizeLimitBytes = originalMaxSize;
+      }
+    });
+
     test('card preview live updates when index changes', async function (assert) {
       await visitOperatorMode({
         stacks: [
@@ -2021,7 +2055,7 @@ module('Acceptance | code submode tests', function (_hooks) {
           static displayName = 'Person';
           @field firstName = contains(StringField);
           @field lastName = contains(StringField);
-          @field title = contains(StringField, {
+          @field cardTitle = contains(StringField, {
             computeVia: function (this: Person) {
               return [this.firstName, this.lastName].filter(Boolean).join(' ');
             },

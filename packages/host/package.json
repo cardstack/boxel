@@ -88,6 +88,7 @@
     "@typescript-eslint/parser": "catalog:",
     "@universal-ember/test-support": "catalog:",
     "ajv": "catalog:",
+    "assert": "^2.1.0",
     "awesome-phonenumber": "catalog:",
     "babel-plugin-ember-template-compilation": "^2.3.0",
     "broccoli-funnel": "catalog:",

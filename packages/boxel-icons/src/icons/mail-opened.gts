@@ -16,9 +16,7 @@ const IconComponent: TemplateOnlyComponent<Signature> = <template>
     class='icon icon-tabler icons-tabler-outline icon-tabler-mail-opened'
     viewBox='0 0 24 24'
     ...attributes
-  ><path stroke='none' d='M0 0h24v24H0z' /><path
-      d='m3 9 9 6 9-6-9-6-9 6'
-    /><path
+  ><path stroke='none' d='M0 0h24v24H0z' /><path d='m3 9 9 6 9-6-9-6z' /><path
       d='M21 9v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9M3 19l6-6M15 13l6 6'
     /></svg>
 </template>;

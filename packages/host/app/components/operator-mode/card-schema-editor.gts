@@ -18,7 +18,7 @@ import { and, bool, gt } from '@cardstack/boxel-ui/helpers';
 
 import { ArrowTopLeft, IconLink, IconPlus } from '@cardstack/boxel-ui/icons';
 
-import { getPlural } from '@cardstack/runtime-common';
+import { getPlural, isOwnField } from '@cardstack/runtime-common';
 
 import type { CodeRef } from '@cardstack/runtime-common/code-ref';
 import type { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
@@ -39,10 +39,7 @@ import type LoaderService from '@cardstack/host/services/loader-service';
 
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
-import {
-  isOwnField,
-  calculateTotalOwnFields,
-} from '@cardstack/host/utils/schema-editor';
+import { calculateTotalOwnFields } from '@cardstack/host/utils/schema-editor';
 
 import type { BaseDef } from 'https://cardstack.com/base/card-api';
 
@@ -485,7 +482,7 @@ export default class CardSchemaEditor extends Component<Signature> {
   @service declare loaderService: LoaderService;
   @service declare cardService: CardService;
   @service declare operatorModeStateService: OperatorModeStateService;
-  @service private declare realm: RealmService;
+  @service declare private realm: RealmService;
 
   @tracked editFieldModalShown = false;
   @tracked removeFieldModalShown = false;

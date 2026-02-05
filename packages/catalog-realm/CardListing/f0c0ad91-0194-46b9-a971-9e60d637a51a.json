@@ -16,9 +16,9 @@
       "summary": "Create customizable avatar- avatars with various appearance options including hair styles, colors, facial features, and clothing.",
       "cardInfo": {
         "notes": "Includes AI-powered avatar- suggestion feature for creative inspiration.",
-        "title": "Avatar Creator",
-        "description": "An interactive tool for designing and customizing avatar- avatars. Choose from different hair styles, hair colors, facial expressions, skin tones, eyebrows, and clothing options to create unique avatars. Perfect for games, storytelling, or creative projects.",
-        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/avatar-creator-listing/thumbnail.png"
+        "name": "Avatar Creator",
+        "summary": "An interactive tool for designing and customizing avatar- avatars. Choose from different hair styles, hair colors, facial expressions, skin tones, eyebrows, and clothing options to create unique avatars. Perfect for games, storytelling, or creative projects.",
+        "cardThumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/avatar-creator-listing/thumbnail.png"
       }
     },
     "relationships": {

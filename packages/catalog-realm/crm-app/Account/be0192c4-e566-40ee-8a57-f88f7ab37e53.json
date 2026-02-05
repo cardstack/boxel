@@ -31,8 +31,8 @@
         "foregroundColor": "#1976D2",
         "backgroundColor": "#E3F2FD"
       },
-      "description": "Multi-location gym chain with comprehensive digital transformation needs",
-      "thumbnailURL": "https://picsum.photos/id/416/200/300"
+      "cardDescription": "Multi-location gym chain with comprehensive digital transformation needs",
+      "cardThumbnailURL": "https://picsum.photos/id/416/200/300"
     },
     "relationships": {
       "crmApp": {

@@ -3,20 +3,22 @@ import type { QueryResultsMeta, PrerenderedCard } from './index-query-engine';
 import type { CardTypeSummary } from './index-structure';
 import {
   type CardResource,
+  type FileMetaResource,
   type PrerenderedCardResource,
   type Saved,
   type Unsaved,
   isCardResource,
+  isFileMetaResource,
   isPrerenderedCardResource,
 } from './resource-types';
 
 export interface SingleCardDocument<Identity extends Unsaved = Saved> {
   data: CardResource<Identity>;
-  included?: CardResource<Saved>[];
+  included?: (FileMetaResource | CardResource<Saved>)[];
 }
 export interface CardCollectionDocument<Identity extends Unsaved = Saved> {
   data: CardResource<Identity>[];
-  included?: CardResource<Saved>[];
+  included?: (FileMetaResource | CardResource<Saved>)[];
   meta: QueryResultsMeta;
 }
 
@@ -28,7 +30,27 @@ export interface PrerenderedCardCollectionDocument {
   };
 }
 
+export interface SingleFileMetaDocument {
+  data: FileMetaResource;
+  included?: (FileMetaResource | CardResource<Saved>)[];
+}
+export interface FileMetaCollectionDocument {
+  data: FileMetaResource[];
+  included?: (FileMetaResource | CardResource<Saved>)[];
+  meta: QueryResultsMeta;
+}
+
+export interface LinkableCollectionDocument {
+  data: (CardResource<Saved> | FileMetaResource)[];
+  included?: (FileMetaResource | CardResource<Saved>)[];
+  meta: QueryResultsMeta;
+}
+
 export type CardDocument = SingleCardDocument | CardCollectionDocument;
+export type FileMetaDocument =
+  | SingleFileMetaDocument
+  | FileMetaCollectionDocument;
+export type LinkableDocument = CardDocument | FileMetaDocument;
 
 export function isCardDocument(doc: any): doc is CardDocument {
   return isSingleCardDocument(doc) || isCardCollectionDocument(doc);
@@ -83,6 +105,34 @@ export function isCardCollectionDocument(
     }
   }
   return data.every((resource) => isCardResource(resource));
+}
+
+export function isFileMetaCollectionDocument(
+  doc: any,
+): doc is FileMetaCollectionDocument {
+  if (typeof doc !== 'object' || doc == null) {
+    return false;
+  }
+  if (!('data' in doc)) {
+    return false;
+  }
+  let { data } = doc;
+  if (!Array.isArray(data)) {
+    return false;
+  }
+  if ('included' in doc) {
+    let { included } = doc;
+    if (!isIncluded(included)) {
+      return false;
+    }
+  }
+  return data.every((resource) => isFileMetaResource(resource));
+}
+
+export function isLinkableCollectionDocument(
+  doc: any,
+): doc is LinkableCollectionDocument {
+  return isCardCollectionDocument(doc) || isFileMetaCollectionDocument(doc);
 }
 
 export function isPrerenderedCardCollectionDocument(
@@ -151,7 +201,9 @@ export function makeCardTypeSummaryDoc(summaries: CardTypeSummary[]) {
   return { data };
 }
 
-function isIncluded(included: any): included is CardResource<Saved>[] {
+function isIncluded(
+  included: any,
+): included is (CardResource<Saved> | FileMetaResource)[] {
   if (!Array.isArray(included)) {
     return false;
   }
@@ -165,9 +217,31 @@ function isIncluded(included: any): included is CardResource<Saved>[] {
     ) {
       return false;
     }
-    if (!isCardResource(resource)) {
+    if (!isCardResource(resource) && !isFileMetaResource(resource)) {
       return false;
     }
   }
   return true;
+}
+
+export function isSingleFileMetaDocument(
+  doc: any,
+): doc is SingleFileMetaDocument {
+  if (typeof doc !== 'object' || doc == null) {
+    return false;
+  }
+  if (!('data' in doc)) {
+    return false;
+  }
+  let { data } = doc;
+  if (Array.isArray(data)) {
+    return false;
+  }
+  if ('included' in doc) {
+    let { included } = doc;
+    if (!isIncluded(included)) {
+      return false;
+    }
+  }
+  return isFileMetaResource(data);
 }

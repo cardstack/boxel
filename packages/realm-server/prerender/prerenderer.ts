@@ -2,7 +2,9 @@ import {
   type RenderRouteOptions,
   type RenderResponse,
   type ModuleRenderResponse,
-  Deferred,
+  type FileExtractResponse,
+  type FileRenderResponse,
+  type FileRenderArgs,
   logger,
 } from '@cardstack/runtime-common';
 import { BrowserManager } from './browser-manager';
@@ -42,7 +44,6 @@ class AsyncSemaphore {
 }
 
 export class Prerenderer {
-  #pendingByRealm = new Map<string, Promise<void>>();
   #stopped = false;
   #browserManager: BrowserManager;
   #pagePool: PagePool;
@@ -60,6 +61,7 @@ export class Prerenderer {
       serverURL: options.serverURL,
       browserManager: this.#browserManager,
       boxelHostURL,
+      renderSemaphore: this.#semaphore,
     });
     this.#renderRunner = new RenderRunner({
       pagePool: this.#pagePool,
@@ -117,37 +119,9 @@ export class Prerenderer {
     if (this.#stopped) {
       throw new Error('Prerenderer has been stopped and cannot be used');
     }
-    // chain requests for the same realm together so they happen in serial
-    let prev = this.#pendingByRealm.get(realm) ?? Promise.resolve();
-    let deferred = new Deferred<void>();
-    this.#pendingByRealm.set(
-      realm,
-      prev.then(() => deferred.promise),
-    );
-
-    let releaseGlobal: (() => void) | undefined;
-    try {
-      await prev.catch((e) => {
-        log.debug('Previous prerender in chain failed (continuing):', e);
-      }); // ensure chain continues even after errors
-      releaseGlobal = await this.#semaphore.acquire();
-
-      let attemptOptions = renderOptions;
-      let lastResult:
-        | {
-            response: RenderResponse;
-            timings: { launchMs: number; renderMs: number };
-            pool: {
-              pageId: string;
-              realm: string;
-              reused: boolean;
-              evicted: boolean;
-              timedOut: boolean;
-            };
-          }
-        | undefined;
-      for (let attempt = 0; attempt < 3; attempt++) {
-        let result: {
+    let attemptOptions = renderOptions;
+    let lastResult:
+      | {
           response: RenderResponse;
           timings: { launchMs: number; renderMs: number };
           pool: {
@@ -157,7 +131,34 @@ export class Prerenderer {
             evicted: boolean;
             timedOut: boolean;
           };
+        }
+      | undefined;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      let result: {
+        response: RenderResponse;
+        timings: { launchMs: number; renderMs: number };
+        pool: {
+          pageId: string;
+          realm: string;
+          reused: boolean;
+          evicted: boolean;
+          timedOut: boolean;
         };
+      };
+      try {
+        result = await this.#renderRunner.prerenderCardAttempt({
+          realm,
+          url,
+          auth,
+          opts,
+          renderOptions: attemptOptions,
+        });
+      } catch (e) {
+        log.error(
+          `prerender attempt for ${url} (realm ${realm}) failed with error, restarting browser`,
+          e,
+        );
+        await this.#restartBrowser();
         try {
           result = await this.#renderRunner.prerenderCardAttempt({
             realm,
@@ -166,75 +167,53 @@ export class Prerenderer {
             opts,
             renderOptions: attemptOptions,
           });
-        } catch (e) {
+        } catch (e2) {
           log.error(
-            `prerender attempt for ${url} (realm ${realm}) failed with error, restarting browser`,
-            e,
+            `prerender attempt for ${url} (realm ${realm}) failed again after browser restart`,
+            e2,
           );
-          await this.#restartBrowser();
-          try {
-            result = await this.#renderRunner.prerenderCardAttempt({
-              realm,
-              url,
-              auth,
-              opts,
-              renderOptions: attemptOptions,
-            });
-          } catch (e2) {
-            log.error(
-              `prerender attempt for ${url} (realm ${realm}) failed again after browser restart`,
-              e2,
-            );
-            throw e2;
-          }
+          throw e2;
         }
-        lastResult = result;
+      }
+      lastResult = result;
 
-        let retrySignature = this.#renderRunner.shouldRetryWithClearCache(
-          result.response,
+      let retrySignature = this.#renderRunner.shouldRetryWithClearCache(
+        result.response,
+      );
+      let isClearCacheAttempt = attemptOptions?.clearCache === true;
+
+      if (!isClearCacheAttempt && retrySignature) {
+        log.warn(
+          `retrying prerender for ${url} with clearCache due to error signature: ${retrySignature.join(
+            ' | ',
+          )}`,
         );
-        let isClearCacheAttempt = attemptOptions?.clearCache === true;
-
-        if (!isClearCacheAttempt && retrySignature) {
-          log.warn(
-            `retrying prerender for ${url} with clearCache due to error signature: ${retrySignature.join(
-              ' | ',
-            )}`,
-          );
-          attemptOptions = {
-            ...(attemptOptions ?? {}),
-            clearCache: true,
-          };
-          continue;
-        }
-
-        if (isClearCacheAttempt && retrySignature && result.response.error) {
-          log.warn(
-            `prerender retry with clearCache did not resolve error signature ${retrySignature.join(
-              ' | ',
-            )} for ${url}`,
-          );
-        }
-
-        return result;
+        attemptOptions = {
+          ...(attemptOptions ?? {}),
+          clearCache: true,
+        };
+        continue;
       }
-      if (lastResult) {
-        if (lastResult.response.error) {
-          log.error(
-            `prerender attempts exhausted for ${url} in realm ${realm}, returning last error response`,
-          );
-        }
-        return lastResult;
+
+      if (isClearCacheAttempt && retrySignature && result.response.error) {
+        log.warn(
+          `prerender retry with clearCache did not resolve error signature ${retrySignature.join(
+            ' | ',
+          )} for ${url}`,
+        );
       }
-      throw new Error(`prerender attempts exhausted for ${url}`);
-    } finally {
-      try {
-        releaseGlobal?.();
-      } catch (_e) {
-        // best-effort release; avoids blocking future renders
-      }
-      deferred.fulfill();
+
+      return result;
     }
+    if (lastResult) {
+      if (lastResult.response.error) {
+        log.error(
+          `prerender attempts exhausted for ${url} in realm ${realm}, returning last error response`,
+        );
+      }
+      return lastResult;
+    }
+    throw new Error(`prerender attempts exhausted for ${url}`);
   }
 
   async prerenderModule({
@@ -263,36 +242,9 @@ export class Prerenderer {
     if (this.#stopped) {
       throw new Error('Prerenderer has been stopped and cannot be used');
     }
-    let prev = this.#pendingByRealm.get(realm) ?? Promise.resolve();
-    let deferred = new Deferred<void>();
-    this.#pendingByRealm.set(
-      realm,
-      prev.then(() => deferred.promise),
-    );
-
-    let releaseGlobal: (() => void) | undefined;
-    try {
-      await prev.catch((e) => {
-        log.debug('Previous prerender in chain failed (continuing):', e);
-      });
-      releaseGlobal = await this.#semaphore.acquire();
-
-      let attemptOptions = renderOptions;
-      let lastResult:
-        | {
-            response: ModuleRenderResponse;
-            timings: { launchMs: number; renderMs: number };
-            pool: {
-              pageId: string;
-              realm: string;
-              reused: boolean;
-              evicted: boolean;
-              timedOut: boolean;
-            };
-          }
-        | undefined;
-      for (let attempt = 0; attempt < 3; attempt++) {
-        let result: {
+    let attemptOptions = renderOptions;
+    let lastResult:
+      | {
           response: ModuleRenderResponse;
           timings: { launchMs: number; renderMs: number };
           pool: {
@@ -302,7 +254,34 @@ export class Prerenderer {
             evicted: boolean;
             timedOut: boolean;
           };
+        }
+      | undefined;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      let result: {
+        response: ModuleRenderResponse;
+        timings: { launchMs: number; renderMs: number };
+        pool: {
+          pageId: string;
+          realm: string;
+          reused: boolean;
+          evicted: boolean;
+          timedOut: boolean;
         };
+      };
+      try {
+        result = await this.#renderRunner.prerenderModuleAttempt({
+          realm,
+          url,
+          auth,
+          opts,
+          renderOptions: attemptOptions,
+        });
+      } catch (e) {
+        log.error(
+          `module prerender attempt for ${url} (realm ${realm}) failed with error, restarting browser`,
+          e,
+        );
+        await this.#restartBrowser();
         try {
           result = await this.#renderRunner.prerenderModuleAttempt({
             realm,
@@ -311,75 +290,307 @@ export class Prerenderer {
             opts,
             renderOptions: attemptOptions,
           });
-        } catch (e) {
+        } catch (e2) {
           log.error(
-            `module prerender attempt for ${url} (realm ${realm}) failed with error, restarting browser`,
-            e,
+            `module prerender attempt for ${url} (realm ${realm}) failed again after browser restart`,
+            e2,
           );
-          await this.#restartBrowser();
-          try {
-            result = await this.#renderRunner.prerenderModuleAttempt({
-              realm,
-              url,
-              auth,
-              opts,
-              renderOptions: attemptOptions,
-            });
-          } catch (e2) {
-            log.error(
-              `module prerender attempt for ${url} (realm ${realm}) failed again after browser restart`,
-              e2,
-            );
-            throw e2;
-          }
+          throw e2;
         }
-        lastResult = result;
+      }
+      lastResult = result;
 
-        let retrySignature = this.#renderRunner.shouldRetryWithClearCache(
-          result.response,
+      let retrySignature = this.#renderRunner.shouldRetryWithClearCache(
+        result.response,
+      );
+      let isClearCacheAttempt = attemptOptions?.clearCache === true;
+
+      if (!isClearCacheAttempt && retrySignature) {
+        log.warn(
+          `retrying module prerender for ${url} with clearCache due to error signature: ${retrySignature.join(
+            ' | ',
+          )}`,
         );
-        let isClearCacheAttempt = attemptOptions?.clearCache === true;
-
-        if (!isClearCacheAttempt && retrySignature) {
-          log.warn(
-            `retrying module prerender for ${url} with clearCache due to error signature: ${retrySignature.join(
-              ' | ',
-            )}`,
-          );
-          attemptOptions = {
-            ...(attemptOptions ?? {}),
-            clearCache: true,
-          };
-          continue;
-        }
-
-        if (isClearCacheAttempt && retrySignature && result.response.error) {
-          log.warn(
-            `module prerender retry with clearCache did not resolve error signature ${retrySignature.join(
-              ' | ',
-            )} for ${url}`,
-          );
-        }
-
-        return result;
+        attemptOptions = {
+          ...(attemptOptions ?? {}),
+          clearCache: true,
+        };
+        continue;
       }
-      if (lastResult) {
-        if (lastResult.response.error) {
-          log.error(
-            `module prerender attempts exhausted for ${url} in realm ${realm}, returning last error response`,
-          );
-        }
-        return lastResult;
+
+      if (isClearCacheAttempt && retrySignature && result.response.error) {
+        log.warn(
+          `module prerender retry with clearCache did not resolve error signature ${retrySignature.join(
+            ' | ',
+          )} for ${url}`,
+        );
       }
-      throw new Error(`module prerender attempts exhausted for ${url}`);
-    } finally {
-      try {
-        releaseGlobal?.();
-      } catch (_e) {
-        // best-effort release; avoids blocking future renders
-      }
-      deferred.fulfill();
+
+      return result;
     }
+    if (lastResult) {
+      if (lastResult.response.error) {
+        log.error(
+          `module prerender attempts exhausted for ${url} in realm ${realm}, returning last error response`,
+        );
+      }
+      return lastResult;
+    }
+    throw new Error(`module prerender attempts exhausted for ${url}`);
+  }
+
+  async prerenderFileExtract({
+    realm,
+    url,
+    auth,
+    opts,
+    renderOptions,
+  }: {
+    realm: string;
+    url: string;
+    auth: string;
+    opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
+    renderOptions?: RenderRouteOptions;
+  }): Promise<{
+    response: FileExtractResponse;
+    timings: { launchMs: number; renderMs: number };
+    pool: {
+      pageId: string;
+      realm: string;
+      reused: boolean;
+      evicted: boolean;
+      timedOut: boolean;
+    };
+  }> {
+    if (this.#stopped) {
+      throw new Error('Prerenderer has been stopped and cannot be used');
+    }
+    let attemptOptions = renderOptions;
+    let lastResult:
+      | {
+          response: FileExtractResponse;
+          timings: { launchMs: number; renderMs: number };
+          pool: {
+            pageId: string;
+            realm: string;
+            reused: boolean;
+            evicted: boolean;
+            timedOut: boolean;
+          };
+        }
+      | undefined;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      let result: {
+        response: FileExtractResponse;
+        timings: { launchMs: number; renderMs: number };
+        pool: {
+          pageId: string;
+          realm: string;
+          reused: boolean;
+          evicted: boolean;
+          timedOut: boolean;
+        };
+      };
+      try {
+        result = await this.#renderRunner.prerenderFileExtractAttempt({
+          realm,
+          url,
+          auth,
+          opts,
+          renderOptions: attemptOptions,
+        });
+      } catch (e) {
+        log.error(
+          `file extract prerender attempt for ${url} (realm ${realm}) failed with error, restarting browser`,
+          e,
+        );
+        await this.#restartBrowser();
+        try {
+          result = await this.#renderRunner.prerenderFileExtractAttempt({
+            realm,
+            url,
+            auth,
+            opts,
+            renderOptions: attemptOptions,
+          });
+        } catch (e2) {
+          log.error(
+            `file extract prerender attempt for ${url} (realm ${realm}) failed again after browser restart`,
+            e2,
+          );
+          throw e2;
+        }
+      }
+      lastResult = result;
+
+      let retrySignature = this.#renderRunner.shouldRetryWithClearCache(
+        result.response,
+      );
+      let isClearCacheAttempt = attemptOptions?.clearCache === true;
+
+      if (!isClearCacheAttempt && retrySignature) {
+        log.warn(
+          `retrying file extract prerender for ${url} with clearCache due to error signature: ${retrySignature.join(
+            ' | ',
+          )}`,
+        );
+        attemptOptions = {
+          ...(attemptOptions ?? {}),
+          clearCache: true,
+        };
+        continue;
+      }
+
+      if (isClearCacheAttempt && retrySignature && result.response.error) {
+        log.warn(
+          `file extract prerender retry with clearCache did not resolve error signature ${retrySignature.join(
+            ' | ',
+          )} for ${url}`,
+        );
+      }
+
+      return result;
+    }
+    if (lastResult) {
+      if (lastResult.response.error) {
+        log.error(
+          `file extract prerender attempts exhausted for ${url} in realm ${realm}, returning last error response`,
+        );
+      }
+      return lastResult;
+    }
+    throw new Error(`file extract prerender attempts exhausted for ${url}`);
+  }
+
+  async prerenderFileRender({
+    realm,
+    url,
+    auth,
+    fileData,
+    types,
+    opts,
+    renderOptions,
+  }: {
+    realm: string;
+    url: string;
+    auth: string;
+    fileData: FileRenderArgs['fileData'];
+    types: string[];
+    opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
+    renderOptions?: RenderRouteOptions;
+  }): Promise<{
+    response: FileRenderResponse;
+    timings: { launchMs: number; renderMs: number };
+    pool: {
+      pageId: string;
+      realm: string;
+      reused: boolean;
+      evicted: boolean;
+      timedOut: boolean;
+    };
+  }> {
+    if (this.#stopped) {
+      throw new Error('Prerenderer has been stopped and cannot be used');
+    }
+    let attemptOptions = renderOptions;
+    let lastResult:
+      | {
+          response: FileRenderResponse;
+          timings: { launchMs: number; renderMs: number };
+          pool: {
+            pageId: string;
+            realm: string;
+            reused: boolean;
+            evicted: boolean;
+            timedOut: boolean;
+          };
+        }
+      | undefined;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      let result: {
+        response: FileRenderResponse;
+        timings: { launchMs: number; renderMs: number };
+        pool: {
+          pageId: string;
+          realm: string;
+          reused: boolean;
+          evicted: boolean;
+          timedOut: boolean;
+        };
+      };
+      try {
+        result = await this.#renderRunner.prerenderFileRenderAttempt({
+          realm,
+          url,
+          auth,
+          fileData,
+          types,
+          opts,
+          renderOptions: attemptOptions,
+        });
+      } catch (e) {
+        log.error(
+          `file render prerender attempt for ${url} (realm ${realm}) failed with error, restarting browser`,
+          e,
+        );
+        await this.#restartBrowser();
+        try {
+          result = await this.#renderRunner.prerenderFileRenderAttempt({
+            realm,
+            url,
+            auth,
+            fileData,
+            types,
+            opts,
+            renderOptions: attemptOptions,
+          });
+        } catch (e2) {
+          log.error(
+            `file render prerender attempt for ${url} (realm ${realm}) failed again after browser restart`,
+            e2,
+          );
+          throw e2;
+        }
+      }
+      lastResult = result;
+
+      let retrySignature = this.#renderRunner.shouldRetryWithClearCache(
+        result.response,
+      );
+      let isClearCacheAttempt = attemptOptions?.clearCache === true;
+
+      if (!isClearCacheAttempt && retrySignature) {
+        log.warn(
+          `retrying file render prerender for ${url} with clearCache due to error signature: ${retrySignature.join(
+            ' | ',
+          )}`,
+        );
+        attemptOptions = {
+          ...(attemptOptions ?? {}),
+          clearCache: true,
+        };
+        continue;
+      }
+
+      if (isClearCacheAttempt && retrySignature && result.response.error) {
+        log.warn(
+          `file render prerender retry with clearCache did not resolve error signature ${retrySignature.join(
+            ' | ',
+          )} for ${url}`,
+        );
+      }
+
+      return result;
+    }
+    if (lastResult) {
+      if (lastResult.response.error) {
+        log.error(
+          `file render prerender attempts exhausted for ${url} in realm ${realm}, returning last error response`,
+        );
+      }
+      return lastResult;
+    }
+    throw new Error(`file render prerender attempts exhausted for ${url}`);
   }
 
   async #restartBrowser(): Promise<void> {

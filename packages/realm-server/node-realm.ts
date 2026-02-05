@@ -179,7 +179,10 @@ export class NodeAdapter implements RealmAdapter {
     };
   }
 
-  async write(path: string, contents: string): Promise<AdapterWriteResult> {
+  async write(
+    path: string,
+    contents: string | Uint8Array,
+  ): Promise<AdapterWriteResult> {
     let absolutePath = join(this.realmDir, path);
     ensureFileSync(absolutePath);
     writeFileSync(absolutePath, contents);
@@ -212,7 +215,11 @@ export class NodeAdapter implements RealmAdapter {
     return { response, writable: s as unknown as WritableStream };
   }
 
-  createJWT(claims: TokenClaims, expiration: string, secret: string): string {
+  createJWT(
+    claims: TokenClaims,
+    expiration: Parameters<typeof createJWT>[1],
+    secret: string,
+  ): string {
     return createJWT(claims, expiration, secret);
   }
 
