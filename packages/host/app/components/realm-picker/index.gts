@@ -42,7 +42,6 @@ export default class RealmPicker extends Component<Signature> {
         type: 'option',
       });
     }
-    console.log(options);
     return options;
   }
 
@@ -69,23 +68,24 @@ export default class RealmPicker extends Component<Signature> {
           @onChange={{@onChange}}
           @placeholder={{@placeholder}}
           @maxSelectedDisplay={{3}}
+          @renderInPlace={{false}}
           data-test-realm-picker
         />
       </:default>
       <:loading>
         <div
-          class='realm-picker realm-picker--loading'
+          class='realm-picker loading'
           aria-label='Realm'
           data-test-realm-picker
           data-test-realm-picker-loading
         >
-          <span class='realm-picker__loading-label'>Realm</span>
-          <span class='realm-picker__loading-value'>Loading…</span>
+          <span class='loading-label'>Realm</span>
+          <span class='loading-value'>Loading…</span>
         </div>
       </:loading>
     </WithKnownRealmsLoaded>
     <style scoped>
-      .realm-picker--loading {
+      .loading {
         display: flex;
         align-items: center;
         gap: var(--boxel-sp-xs);
@@ -93,7 +93,7 @@ export default class RealmPicker extends Component<Signature> {
         color: var(--boxel-450);
         font-size: var(--boxel-font-size-sm);
       }
-      .realm-picker__loading-label {
+      .loading-label {
         font-weight: 500;
       }
     </style>
