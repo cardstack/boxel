@@ -35,12 +35,16 @@ export default class SendBotTriggerEventCommand extends HostBaseCommand<
         type: input.type,
         input: input.input,
       },
-    } as BotTriggerContent & { type: string; content: BotTriggerContent };
+    } as BotTriggerEvent;
 
     if (!isBotTriggerCommand(event)) {
       throw new Error(`Unsupported bot trigger event type: ${input.type}`);
     }
 
-    await this.matrixService.sendEvent(input.roomId, event.type, event.content);
+    await this.matrixService.sendEvent(
+      input.roomId,
+      event.type,
+      event.content,
+    );
   }
 }
