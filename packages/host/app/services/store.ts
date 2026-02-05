@@ -656,7 +656,7 @@ export default class StoreService extends Service implements StoreInterface {
           try {
             return await this._addResourceFromSearchData<T>(resource);
           } catch (error) {
-            logger.warn(
+            storeLogger.warn(
               `Failed to hydrate resource from search results (id: ${'id' in resource ? resource.id : 'unknown'})`,
               error,
             );
