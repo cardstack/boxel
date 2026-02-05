@@ -24,9 +24,7 @@ export function isBotTriggerEvent(value: unknown): value is BotTriggerEvent {
   return 'input' in content;
 }
 
-export function isBotTriggerCommand(
-  value: unknown,
-): value is BotTriggerEvent {
+export function isBotTriggerCommand(value: unknown): value is BotTriggerEvent {
   if (!isBotTriggerEvent(value)) {
     return false;
   }
