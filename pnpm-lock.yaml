@@ -66,9 +66,6 @@ catalogs:
     '@babel/traverse':
       specifier: 7.27.0
       version: 7.27.0
-    '@cardstack/requirejs-monaco-ember-polyfill':
-      specifier: ^0.0.1
-      version: 0.0.1
     '@cardstack/view-transitions':
       specifier: ^0.2.0
       version: 0.2.0
@@ -693,6 +690,9 @@ patchedDependencies:
   monaco-editor@0.52.2:
     hash: a09898c89392828a4df910a8b4b952fd774a69b779906e9fa5742cb9c05c2ecf
     path: patches/monaco-editor@0.52.2.patch
+  object-inspect:
+    hash: bd295adbd162403eccfdace2cf14691901d878d9d5d6e993bf76eedf238ac5de
+    path: patches/object-inspect.patch
   openai:
     hash: 6833f1bcf56cde16edb25881777c31d2745994c6ea992d1e2051d1248d213449
     path: patches/openai.patch
@@ -2157,9 +2157,6 @@ importers:
       '@cardstack/local-types':
         specifier: workspace:*
         version: link:../local-types
-      '@cardstack/requirejs-monaco-ember-polyfill':
-        specifier: 'catalog:'
-        version: 0.0.1
       '@cardstack/runtime-common':
         specifier: workspace:*
         version: link:../runtime-common
@@ -4005,9 +4002,6 @@ packages:
   '@babel/types@7.28.6':
     resolution: {integrity: sha512-0ZrskXVEHSWIqZM/sQZ4EV3jZJXRkio/WCxaqKZP1g//CEWEPSfeZFcms4XeKBCHU0ZKnIkdJeU/kF+eRp5lBg==}
     engines: {node: '>=6.9.0'}
-
-  '@cardstack/requirejs-monaco-ember-polyfill@0.0.1':
-    resolution: {integrity: sha512-B5bmLSLkweDtlzoDeem7IezF1zAHZDZU7vH5AQ3bklJjN/Vo80kLOyOomRcgAQfvyhbEN4663ZhUDk9PyAkgKA==}
 
   '@cardstack/view-transitions@0.2.0':
     resolution: {integrity: sha512-9JuWZy685yO12Pmh9ICLupyhGLgaVBjPK6Z2S07+Ebz9PSJCQunOMNMb6zfyVdq0vAhjfLGMNYOZOPWoYKQBNQ==}
@@ -15293,8 +15287,6 @@ snapshots:
       '@babel/helper-string-parser': 7.27.1
       '@babel/helper-validator-identifier': 7.28.5
 
-  '@cardstack/requirejs-monaco-ember-polyfill@0.0.1': {}
-
   '@cardstack/view-transitions@0.2.0(@babel/core@7.28.6)(ember-modifier@4.1.0(ember-source@5.12.0(patch_hash=2586bd032e74105d65b7953ccaae1cd1d1175047a58ba89ec0057f1f8b7b7fe1)(@glimmer/component@2.0.0)(@glint/template@1.3.0)(rsvp@4.8.5)))':
     dependencies:
       '@embroider/addon-shim': 1.10.2
@@ -22111,7 +22103,7 @@ snapshots:
       is-typed-array: 1.1.15
       is-weakref: 1.1.1
       math-intrinsics: 1.1.0
-      object-inspect: 1.13.4
+      object-inspect: 1.13.4(patch_hash=bd295adbd162403eccfdace2cf14691901d878d9d5d6e993bf76eedf238ac5de)
       object-keys: 1.1.1
       object.assign: 4.1.7
       own-keys: 1.0.1
@@ -25198,7 +25190,7 @@ snapshots:
 
   object-hash@1.3.1: {}
 
-  object-inspect@1.13.4: {}
+  object-inspect@1.13.4(patch_hash=bd295adbd162403eccfdace2cf14691901d878d9d5d6e993bf76eedf238ac5de): {}
 
   object-is@1.1.6:
     dependencies:
@@ -26634,27 +26626,27 @@ snapshots:
   side-channel-list@1.0.0:
     dependencies:
       es-errors: 1.3.0
-      object-inspect: 1.13.4
+      object-inspect: 1.13.4(patch_hash=bd295adbd162403eccfdace2cf14691901d878d9d5d6e993bf76eedf238ac5de)
 
   side-channel-map@1.0.1:
     dependencies:
       call-bound: 1.0.4
       es-errors: 1.3.0
       get-intrinsic: 1.3.0
-      object-inspect: 1.13.4
+      object-inspect: 1.13.4(patch_hash=bd295adbd162403eccfdace2cf14691901d878d9d5d6e993bf76eedf238ac5de)
 
   side-channel-weakmap@1.0.2:
     dependencies:
       call-bound: 1.0.4
       es-errors: 1.3.0
       get-intrinsic: 1.3.0
-      object-inspect: 1.13.4
+      object-inspect: 1.13.4(patch_hash=bd295adbd162403eccfdace2cf14691901d878d9d5d6e993bf76eedf238ac5de)
       side-channel-map: 1.0.1
 
   side-channel@1.1.0:
     dependencies:
       es-errors: 1.3.0
-      object-inspect: 1.13.4
+      object-inspect: 1.13.4(patch_hash=bd295adbd162403eccfdace2cf14691901d878d9d5d6e993bf76eedf238ac5de)
       side-channel-list: 1.0.0
       side-channel-map: 1.0.1
       side-channel-weakmap: 1.0.2
