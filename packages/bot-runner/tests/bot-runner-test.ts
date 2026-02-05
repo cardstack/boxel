@@ -8,10 +8,18 @@ import type { MatrixClient, MatrixEvent, Room, RoomMember } from 'matrix-js-sdk'
 import { onMembershipEvent } from '../lib/membership-handler';
 import { onTimelineEvent } from '../lib/timeline-handler';
 
-function makeEvent(sender: string | null | undefined, originServerTs: number) {
+function makeBotTriggerEvent(
+  sender: string | null | undefined,
+  originServerTs: number,
+) {
   return {
     event: {
       origin_server_ts: originServerTs,
+      type: 'app.boxel.bot-trigger',
+      content: {
+        type: 'create-listing-pr',
+        input: {},
+      },
     },
     getSender: () => sender,
   } as unknown as MatrixEvent;
@@ -103,7 +111,7 @@ module('timeline handler', () => {
     };
 
     await handleTimelineEvent(
-      makeEvent('@alice:localhost', 1000),
+      makeBotTriggerEvent('@alice:localhost', 1000),
       makeRoom('join'),
       false,
     );
@@ -131,7 +139,7 @@ module('timeline handler', () => {
     };
 
     await handleTimelineEvent(
-      makeEvent('@alice:localhost', 1000),
+      makeBotTriggerEvent('@alice:localhost', 1000),
       makeRoom('join'),
       false,
     );
@@ -148,7 +156,7 @@ module('timeline handler', () => {
     };
 
     await handleTimelineEvent(
-      makeEvent('@bot-runner:localhost', 2000),
+      makeBotTriggerEvent('@bot-runner:localhost', 2000),
       makeRoom('join'),
       false,
     );
