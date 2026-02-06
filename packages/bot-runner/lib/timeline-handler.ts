@@ -1,9 +1,4 @@
-import {
-  BOT_TRIGGER_EVENT_TYPE,
-  logger,
-  param,
-  query,
-} from '@cardstack/runtime-common';
+import { isBotTriggerEvent, logger, param, query } from '@cardstack/runtime-common';
 import * as Sentry from '@sentry/node';
 import type { DBAdapter, PgPrimitive } from '@cardstack/runtime-common';
 import type { MatrixEvent, Room } from 'matrix-js-sdk';
@@ -33,15 +28,11 @@ export function onTimelineEvent({
       if (!room || toStartOfTimeline) {
         return;
       }
-      let eventType = event.getType?.() ?? event.event?.type;
-      if (eventType !== BOT_TRIGGER_EVENT_TYPE) {
+      let rawEvent = event.event ?? event;
+      if (!isBotTriggerEvent(rawEvent)) {
         return;
       }
-
-      let eventContent = event.getContent?.() ?? event.event?.content;
-      if (eventContent == null) {
-        return;
-      }
+      let eventContent = rawEvent.content;
       log.debug('event content', eventContent);
       let senderUsername = getRoomCreator(room);
       if (!senderUsername) {
