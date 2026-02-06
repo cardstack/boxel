@@ -1087,450 +1087,149 @@ export class MusicHubCard extends CardDef {
   };
 
   static fitted = class Fitted extends Component<typeof this> {
+    get songCount() {
+      return this.args.model.featuredSongs?.length ?? 0;
+    }
+
+    get albumCount() {
+      return this.args.model.featuredAlbums?.length ?? 0;
+    }
+
+    get playlistCount() {
+      return this.args.model.featuredPlaylists?.length ?? 0;
+    }
+
+    get artistCount() {
+      return this.args.model.featuredMusicians?.length ?? 0;
+    }
+
+    get toolCount() {
+      let count = 0;
+      if (this.args.model.beatMaker) count++;
+      if (this.args.model.chordProgressionPlayer) count++;
+      if (this.args.model.creativeTool) count++;
+      if (this.args.model.recordingStudio) count++;
+      if (this.args.model.songBuilder) count++;
+      return count;
+    }
+
+    get title() {
+      return this.args.model.hubName ?? 'Music Hub';
+    }
+
+    get description() {
+      return this.args.model.cardDescription ?? 'Your creative music platform';
+    }
+
     <template>
-      <div class='fitted-container'>
-        <div class='badge-format'>
-          <div class='badge-content'>
-            <div class='badge-icon'>
-              <svg
-                viewBox='0 0 24 24'
-                fill='none'
-                stroke='currentColor'
-                stroke-width='2'
-              >
-                <circle cx='12' cy='12' r='10' />
-                <circle cx='12' cy='12' r='3' />
-              </svg>
-            </div>
-            <div class='badge-info'>
-              <div class='badge-title'>{{if
-                  @model.hubName
-                  @model.hubName
-                  'Music Hub'
-                }}</div>
-              <div class='badge-stats'>{{@model.featuredSongs.length}}
-                songs •
-                {{@model.featuredAlbums.length}}
-                albums</div>
-            </div>
+      <div class='fitted-music-hub'>
+        <div class='visual-section'>
+          <div class='waves'>
+            <div class='wave'></div>
+            <div class='wave'></div>
+            <div class='wave'></div>
+            <div class='wave'></div>
+            <div class='wave'></div>
+          </div>
+          <div class='live-badge'>
+            <span class='live-dot'></span>
+            LIVE
           </div>
         </div>
-
-        <div class='strip-format'>
-          <div class='strip-content'>
-            <div class='strip-visual'>
-              <div class='strip-waves'>
-                <div class='strip-wave'></div>
-                <div class='strip-wave'></div>
-                <div class='strip-wave'></div>
-              </div>
+        <div class='content-section'>
+          <h3 class='title'>{{this.title}}</h3>
+          <p class='description'>{{this.description}}</p>
+          <div class='stats'>
+            <div class='stat'>
+              <span class='stat-value'>{{this.songCount}}</span>
+              <span class='stat-label'>Songs</span>
             </div>
-            <div class='strip-info'>
-              <div class='strip-title'>{{if
-                  @model.hubName
-                  @model.hubName
-                  'Music Hub'
-                }}</div>
-              <div class='strip-description'>{{@model.featuredSongs.length}}
-                songs •
-                {{@model.featuredPlaylists.length}}
-                playlists •
-                {{@model.featuredMusicians.length}}
-                artists</div>
+            <div class='stat-divider'></div>
+            <div class='stat'>
+              <span class='stat-value'>{{this.albumCount}}</span>
+              <span class='stat-label'>Albums</span>
             </div>
-            <div class='strip-badge'>
-              <div class='live-indicator'></div>
-              LIVE
+            <div class='stat-divider'></div>
+            <div class='stat'>
+              <span class='stat-value'>{{this.playlistCount}}</span>
+              <span class='stat-label'>Playlists</span>
+            </div>
+            <div class='stat-divider'></div>
+            <div class='stat'>
+              <span class='stat-value'>{{this.artistCount}}</span>
+              <span class='stat-label'>Artists</span>
             </div>
           </div>
-        </div>
-
-        <div class='tile-format'>
-          <div class='tile-header'>
-            <div class='tile-visual'>
-              <div class='tile-waves'>
-                <div class='tile-wave'></div>
-                <div class='tile-wave'></div>
-                <div class='tile-wave'></div>
-                <div class='tile-wave'></div>
-              </div>
-            </div>
-            <div class='tile-badge'>
-              <div class='live-dot'></div>
-              LIVE
-            </div>
-          </div>
-          <div class='tile-content'>
-            <h3 class='tile-title'>{{if
-                @model.hubName
-                @model.hubName
-                'Music Hub'
-              }}</h3>
-            <div class='tile-stats'>
-              <div class='stat-row'>
-                <span class='stat-label'>Songs:</span>
-                <span class='stat-value'>{{@model.featuredSongs.length}}</span>
-              </div>
-              <div class='stat-row'>
-                <span class='stat-label'>Albums:</span>
-                <span class='stat-value'>{{@model.featuredAlbums.length}}</span>
-              </div>
-              <div class='stat-row'>
-                <span class='stat-label'>Artists:</span>
-                <span
-                  class='stat-value'
-                >{{@model.featuredMusicians.length}}</span>
-              </div>
-            </div>
-            <div class='tile-tools'>
-              {{#if @fields.beatMaker}}<div
-                  class='tool-indicator active'
-                >Beat</div>{{/if}}
-              {{#if @fields.chordProgressionPlayer}}<div
-                  class='tool-indicator active'
-                >Chord</div>{{/if}}
-              {{#if @fields.creativeTool}}<div
-                  class='tool-indicator active'
-                >Piano</div>{{/if}}
-            </div>
-          </div>
-        </div>
-
-        <div class='card-format'>
-          <div class='card-header'>
-            <div class='card-info'>
-              <h3 class='card-title'>{{if
-                  @model.hubName
-                  @model.hubName
-                  'Music Hub'
-                }}</h3>
-              <p class='card-description'>{{if
-                  @model.cardDescription
-                  @model.cardDescription
-                  'Your creative music platform'
-                }}</p>
-            </div>
-            <div class='card-visual'>
-              <div class='card-waves'>
-                <div class='card-wave'></div>
-                <div class='card-wave'></div>
-                <div class='card-wave'></div>
-                <div class='card-wave'></div>
-                <div class='card-wave'></div>
-              </div>
-            </div>
-          </div>
-          <div class='card-stats'>
-            <div class='stats-row'>
-              <div class='stat-group'>
-                <div class='stat-number'>{{@model.featuredSongs.length}}</div>
-                <div class='stat-label'>Songs</div>
-              </div>
-              <div class='stat-group'>
-                <div class='stat-number'>{{@model.featuredAlbums.length}}</div>
-                <div class='stat-label'>Albums</div>
-              </div>
-              <div class='stat-group'>
-                <div
-                  class='stat-number'
-                >{{@model.featuredPlaylists.length}}</div>
-                <div class='stat-label'>Playlists</div>
-              </div>
-              <div class='stat-group'>
-                <div
-                  class='stat-number'
-                >{{@model.featuredMusicians.length}}</div>
-                <div class='stat-label'>Artists</div>
-              </div>
-            </div>
-          </div>
-          <div class='card-tools'>
-            <div class='tools-label'>Active Creation Tools:</div>
-            <div class='tool-list'>
-              {{#if @fields.beatMaker}}<div class='tool-tag'>Beat Maker</div>{{/if}}
-              {{#if @fields.chordProgressionPlayer}}<div class='tool-tag'>Chord
-                  Explorer</div>{{/if}}
-              {{#if @fields.creativeTool}}<div class='tool-tag'>Piano Keys</div>{{/if}}
-              {{#if @fields.recordingStudio}}<div class='tool-tag'>Audio
-                  Recorder</div>{{/if}}
-            </div>
+          <div class='tools-row'>
+            {{#if this.toolCount}}
+              <span class='tools-badge'>{{this.toolCount}} tools</span>
+            {{/if}}
           </div>
         </div>
       </div>
 
       <style scoped>
-        .fitted-container {
-          container-type: size;
+        .fitted-music-hub {
           width: 100%;
           height: 100%;
-          font-family:
-            'Inter',
-            -apple-system,
-            sans-serif;
-        }
-
-        /* Hide all by default */
-        .badge-format,
-        .strip-format,
-        .tile-format,
-        .card-format {
-          display: none;
-          width: 100%;
-          height: 100%;
-          padding: clamp(0.1875rem, 2%, 0.625rem);
-          box-sizing: border-box;
+          display: flex;
+          gap: var(--boxel-sp-xs);
+          padding: var(--boxel-sp-sm);
           background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
-          border-radius: 12px;
-          overflow: hidden;
-        }
-
-        /* Badge Format (≤150px width, ≤169px height) */
-        @container (max-width: 150px) and (max-height: 169px) {
-          .badge-format {
-            display: flex;
-            align-items: center;
-          }
-        }
-
-        .badge-content {
-          display: flex;
-          align-items: center;
-          gap: 0.5rem;
-          width: 100%;
-        }
-
-        .badge-icon {
-          width: 24px;
-          height: 24px;
-          color: #22d3ee;
-          flex-shrink: 0;
-        }
-
-        .badge-icon svg {
-          width: 100%;
-          height: 100%;
-        }
-
-        .badge-info {
-          flex: 1;
-          min-width: 0;
-        }
-
-        .badge-title {
-          font-size: 0.75rem;
-          font-weight: 600;
           color: white;
-          line-height: 1.2;
-          margin-bottom: 0.125rem;
-          white-space: nowrap;
           overflow: hidden;
-          text-overflow: ellipsis;
+          font-family: 'Inter', -apple-system, sans-serif;
         }
 
-        .badge-stats {
-          font-size: 0.625rem;
-          color: rgba(255, 255, 255, 0.7);
-          font-family: 'JetBrains Mono', monospace;
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-        }
-
-        /* Strip Format (151px-399px width, ≤169px height) */
-        @container (min-width: 151px) and (max-height: 169px) {
-          .strip-format {
-            display: flex;
-            align-items: center;
-          }
-        }
-
-        .strip-content {
-          display: flex;
-          align-items: center;
-          gap: 1rem;
-          width: 100%;
-        }
-
-        .strip-visual {
+        .visual-section {
           flex-shrink: 0;
-        }
-
-        .strip-waves {
           display: flex;
-          align-items: flex-end;
-          gap: 2px;
-          height: 24px;
-          width: 32px;
-        }
-
-        .strip-wave {
-          width: 3px;
-          background: linear-gradient(135deg, #22d3ee 0%, #84cc16 100%);
-          border-radius: 1.5px;
-          animation: strip-wave-pulse 1.5s ease-in-out infinite;
-        }
-
-        .strip-wave:nth-child(1) {
-          height: 40%;
-          animation-delay: 0s;
-        }
-        .strip-wave:nth-child(2) {
-          height: 80%;
-          animation-delay: 0.2s;
-        }
-        .strip-wave:nth-child(3) {
-          height: 60%;
-          animation-delay: 0.4s;
-        }
-
-        @keyframes strip-wave-pulse {
-          0%,
-          100% {
-            transform: scaleY(1);
-            opacity: 0.7;
-          }
-          50% {
-            transform: scaleY(1.4);
-            opacity: 1;
-          }
-        }
-
-        .strip-info {
-          flex: 1;
-          min-width: 0;
-        }
-
-        .strip-title {
-          font-size: 0.875rem;
-          font-weight: 600;
-          color: white;
-          line-height: 1.2;
-          margin-bottom: 0.25rem;
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-        }
-
-        .strip-description {
-          font-size: 0.75rem;
-          color: rgba(255, 255, 255, 0.7);
-          font-family: 'JetBrains Mono', monospace;
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-        }
-
-        .strip-badge {
-          display: flex;
-          align-items: center;
-          gap: 0.25rem;
-          padding: 0.25rem 0.5rem;
-          background: rgba(16, 185, 129, 0.2);
-          border: 1px solid #10b981;
-          border-radius: 6px;
-          font-size: 0.625rem;
-          font-weight: 700;
-          color: #10b981;
-          font-family: 'JetBrains Mono', monospace;
-          flex-shrink: 0;
-        }
-
-        .live-indicator {
-          width: 6px;
-          height: 6px;
-          background: #10b981;
-          border-radius: 50%;
-          animation: live-pulse 2s ease-in-out infinite;
-        }
-
-        @keyframes live-pulse {
-          0%,
-          100% {
-            opacity: 1;
-            transform: scale(1);
-          }
-          50% {
-            opacity: 0.6;
-            transform: scale(1.2);
-          }
-        }
-
-        /* Tile Format (≤399px width, ≥170px height) */
-        @container (max-width: 399px) and (min-height: 170px) {
-          .tile-format {
-            display: flex;
-            flex-direction: column;
-          }
-        }
-
-        .tile-header {
-          position: relative;
-          height: 60px;
-          background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
-          display: flex;
+          flex-direction: column;
           align-items: center;
           justify-content: center;
-          margin-bottom: 1rem;
+          gap: var(--boxel-sp-xs);
+          background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+          border-radius: var(--boxel-border-radius);
+          padding: var(--boxel-sp-xs);
+          aspect-ratio: 0.85;
         }
 
-        .tile-waves {
+        .waves {
           display: flex;
           align-items: flex-end;
           gap: 3px;
           height: 32px;
         }
 
-        .tile-wave {
+        .wave {
           width: 4px;
-          background: rgba(255, 255, 255, 0.8);
+          background: linear-gradient(to top, rgba(255,255,255,0.6), white);
           border-radius: 2px;
-          animation: tile-wave-pulse 1.5s ease-in-out infinite;
+          animation: wave-pulse 1.5s ease-in-out infinite;
         }
 
-        .tile-wave:nth-child(1) {
-          height: 40%;
-          animation-delay: 0s;
-        }
-        .tile-wave:nth-child(2) {
-          height: 80%;
-          animation-delay: 0.2s;
-        }
-        .tile-wave:nth-child(3) {
-          height: 60%;
-          animation-delay: 0.4s;
-        }
-        .tile-wave:nth-child(4) {
-          height: 70%;
-          animation-delay: 0.6s;
+        .wave:nth-child(1) { height: 30%; animation-delay: 0s; }
+        .wave:nth-child(2) { height: 70%; animation-delay: 0.15s; }
+        .wave:nth-child(3) { height: 100%; animation-delay: 0.3s; }
+        .wave:nth-child(4) { height: 60%; animation-delay: 0.45s; }
+        .wave:nth-child(5) { height: 40%; animation-delay: 0.6s; }
+
+        @keyframes wave-pulse {
+          0%, 100% { transform: scaleY(1); opacity: 0.7; }
+          50% { transform: scaleY(1.3); opacity: 1; }
         }
 
-        @keyframes tile-wave-pulse {
-          0%,
-          100% {
-            transform: scaleY(1);
-            opacity: 0.7;
-          }
-          50% {
-            transform: scaleY(1.4);
-            opacity: 1;
-          }
-        }
-
-        .tile-badge {
-          position: absolute;
-          top: 0.5rem;
-          right: 0.5rem;
+        .live-badge {
           display: flex;
           align-items: center;
-          gap: 0.25rem;
-          padding: 0.25rem 0.5rem;
-          background: rgba(255, 255, 255, 0.2);
-          backdrop-filter: blur(8px);
-          border-radius: 6px;
-          font-size: 0.625rem;
+          gap: 4px;
+          padding: 2px 6px;
+          background: rgba(0, 0, 0, 0.3);
+          border-radius: var(--boxel-border-radius-sm);
+          font-size: 9px;
           font-weight: 700;
-          color: white;
           font-family: 'JetBrains Mono', monospace;
+          letter-spacing: 0.05em;
         }
 
         .live-dot {
@@ -1538,215 +1237,246 @@ export class MusicHubCard extends CardDef {
           height: 6px;
           background: #22d3ee;
           border-radius: 50%;
-          animation: live-pulse 2s ease-in-out infinite;
+          animation: pulse 2s ease-in-out infinite;
         }
 
-        .tile-content {
+        @keyframes pulse {
+          0%, 100% { opacity: 1; transform: scale(1); }
+          50% { opacity: 0.5; transform: scale(1.2); }
+        }
+
+        .content-section {
+          display: flex;
+          flex-direction: column;
+          gap: var(--boxel-sp-5xs);
+          overflow: hidden;
           flex: 1;
-          display: flex;
-          flex-direction: column;
-          gap: 1rem;
+          min-width: 0;
         }
 
-        .tile-title {
-          font-size: 1rem;
-          font-weight: 700;
-          color: white;
+        .title {
           margin: 0;
-          line-height: 1.2;
+          font: 600 var(--boxel-font-sm);
+          line-height: 1.25;
+          display: -webkit-box;
+          -webkit-box-orient: vertical;
+          -webkit-line-clamp: 2;
+          overflow: hidden;
         }
 
-        .tile-stats {
+        .description {
+          margin: 0;
+          font: 400 var(--boxel-font-xs);
+          color: rgba(255, 255, 255, 0.7);
+          display: -webkit-box;
+          -webkit-box-orient: vertical;
+          -webkit-line-clamp: 1;
+          overflow: hidden;
+        }
+
+        .stats {
+          display: flex;
+          align-items: center;
+          gap: var(--boxel-sp-xxs);
+          margin-top: auto;
+          background: rgba(255, 255, 255, 0.06);
+          border-radius: var(--boxel-border-radius-sm);
+          padding: var(--boxel-sp-5xs) var(--boxel-sp-xxs);
+        }
+
+        .stat {
           display: flex;
           flex-direction: column;
-          gap: 0.5rem;
-        }
-
-        .stat-row {
-          display: flex;
-          justify-content: space-between;
           align-items: center;
+          gap: 1px;
+          flex: 1;
         }
 
-        .stat-label {
-          font-size: 0.75rem;
-          color: rgba(255, 255, 255, 0.7);
-          font-weight: 500;
+        .stat-divider {
+          width: 1px;
+          height: 24px;
+          background: rgba(255, 255, 255, 0.15);
+          flex-shrink: 0;
         }
 
         .stat-value {
-          font-size: 0.875rem;
+          font: 700 var(--boxel-font-sm);
           color: #22d3ee;
-          font-weight: 600;
-          font-family: 'JetBrains Mono', monospace;
-        }
-
-        .tile-tools {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 0.375rem;
-          margin-top: auto;
-        }
-
-        .tool-indicator {
-          padding: 0.25rem 0.5rem;
-          background: rgba(16, 185, 129, 0.2);
-          border: 1px solid #10b981;
-          color: #10b981;
-          font-size: 0.625rem;
-          font-weight: 600;
-          border-radius: 4px;
-          font-family: 'JetBrains Mono', monospace;
-        }
-
-        /* Card Format (≥400px width, ≥170px height) */
-        @container (min-width: 400px) and (min-height: 170px) {
-          .card-format {
-            display: flex;
-            flex-direction: column;
-          }
-        }
-
-        .card-header {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
-          padding: 1rem;
-          border-radius: 8px;
-          margin-bottom: 1rem;
-        }
-
-        .card-info {
-          flex: 1;
-        }
-
-        .card-title {
-          font-size: 1.25rem;
-          font-weight: 700;
-          color: white;
-          margin: 0 0 0.5rem 0;
-          line-height: 1.2;
-        }
-
-        .card-description {
-          font-size: 0.875rem;
-          color: rgba(255, 255, 255, 0.9);
-          margin: 0;
-          line-height: 1.4;
-        }
-
-        .card-waves {
-          display: flex;
-          align-items: flex-end;
-          gap: 3px;
-          height: 40px;
-          padding: 0.5rem;
-          background: rgba(15, 23, 42, 0.7);
-          backdrop-filter: blur(8px);
-          border-radius: 8px;
-        }
-
-        .card-wave {
-          width: 4px;
-          background: linear-gradient(135deg, #22d3ee 0%, #84cc16 100%);
-          border-radius: 2px;
-          animation: card-wave-pulse 1.5s ease-in-out infinite;
-        }
-
-        .card-wave:nth-child(1) {
-          height: 30%;
-          animation-delay: 0s;
-        }
-        .card-wave:nth-child(2) {
-          height: 70%;
-          animation-delay: 0.2s;
-        }
-        .card-wave:nth-child(3) {
-          height: 100%;
-          animation-delay: 0.4s;
-        }
-        .card-wave:nth-child(4) {
-          height: 80%;
-          animation-delay: 0.6s;
-        }
-        .card-wave:nth-child(5) {
-          height: 50%;
-          animation-delay: 0.8s;
-        }
-
-        @keyframes card-wave-pulse {
-          0%,
-          100% {
-            transform: scaleY(1);
-            opacity: 0.7;
-          }
-          50% {
-            transform: scaleY(1.4);
-            opacity: 1;
-          }
-        }
-
-        .card-stats {
-          background: rgba(248, 250, 252, 0.1);
-          border-radius: 8px;
-          padding: 1rem;
-          margin-bottom: 1rem;
-        }
-
-        .stats-row {
-          display: grid;
-          grid-template-columns: repeat(4, 1fr);
-          gap: 1rem;
-        }
-
-        .stat-group {
-          text-align: center;
-        }
-
-        .stat-number {
-          font-size: 1.5rem;
-          font-weight: 700;
-          color: #22d3ee;
-          margin-bottom: 0.25rem;
           font-family: 'JetBrains Mono', monospace;
         }
 
         .stat-label {
-          font-size: 0.75rem;
-          color: rgba(255, 255, 255, 0.7);
-          font-weight: 500;
+          font: 500 9px sans-serif;
+          color: rgba(255, 255, 255, 0.6);
           text-transform: uppercase;
-          letter-spacing: 0.05em;
+          letter-spacing: 0.03em;
         }
 
-        .card-tools {
-          margin-top: auto;
-        }
-
-        .tools-label {
-          font-size: 0.75rem;
-          color: rgba(255, 255, 255, 0.7);
-          font-weight: 600;
-          margin-bottom: 0.5rem;
-          text-transform: uppercase;
-          letter-spacing: 0.05em;
-        }
-
-        .tool-list {
+        .tools-row {
           display: flex;
-          flex-wrap: wrap;
-          gap: 0.5rem;
+          gap: var(--boxel-sp-4xs);
         }
 
-        .tool-tag {
-          padding: 0.375rem 0.75rem;
+        .tools-badge {
+          font: 600 var(--boxel-font-xs);
+          padding: 2px 8px;
           background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-          color: white;
-          font-size: 0.75rem;
-          font-weight: 600;
-          border-radius: 6px;
-          border: 1px solid rgba(255, 255, 255, 0.1);
+          border-radius: var(--boxel-border-radius-sm);
+          white-space: nowrap;
+        }
+
+        /* Vertical layout */
+        @container fitted-card (aspect-ratio <= 1.0) {
+          .fitted-music-hub {
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+          }
+          .visual-section {
+            width: 60%;
+            max-width: 100px;
+            aspect-ratio: auto;
+            padding: var(--boxel-sp-sm);
+          }
+          .content-section {
+            align-items: center;
+          }
+          .stats {
+            justify-content: center;
+          }
+          .tools-row {
+            justify-content: center;
+          }
+        }
+
+        @container fitted-card (aspect-ratio <= 1.0) and (height <= 200px) {
+          .description {
+            display: none;
+          }
+        }
+
+        @container fitted-card (aspect-ratio <= 1.0) and (height <= 170px) {
+          .tools-row {
+            display: none;
+          }
+          .visual-section {
+            width: 50%;
+            max-width: 70px;
+          }
+        }
+
+        @container fitted-card (aspect-ratio <= 1.0) and (height <= 140px) {
+          .stats {
+            display: none;
+          }
+          .live-badge {
+            display: none;
+          }
+        }
+
+        @container fitted-card (aspect-ratio <= 1.0) and (height <= 100px) {
+          .visual-section {
+            display: none;
+          }
+          .title {
+            -webkit-line-clamp: 1;
+            font-size: var(--boxel-font-size-xs);
+          }
+        }
+
+        /* Horizontal layout */
+        @container fitted-card (1.0 < aspect-ratio) {
+          .visual-section {
+            height: 100%;
+            width: auto;
+          }
+          .stats {
+            margin-top: auto;
+          }
+        }
+
+        @container fitted-card (1.0 < aspect-ratio) and (height <= 80px) {
+          .description {
+            display: none;
+          }
+          .tools-row {
+            display: none;
+          }
+          .content-section {
+            justify-content: center;
+          }
+          .stats {
+            margin-top: 0;
+          }
+        }
+
+        @container fitted-card (1.0 < aspect-ratio) and (height <= 55px) {
+          .stats {
+            display: none;
+          }
+          .live-badge {
+            display: none;
+          }
+          .waves {
+            height: 20px;
+          }
+          .wave {
+            width: 3px;
+          }
+        }
+
+        /* Badges - small horizontal */
+        @container fitted-card (1.0 < aspect-ratio) and (width < 250px) {
+          .visual-section {
+            display: none;
+          }
+          .stats {
+            display: none;
+          }
+          .tools-row {
+            display: none;
+          }
+        }
+
+        @container fitted-card (1.0 < aspect-ratio) and (width < 250px) and (height < 65px) {
+          .title {
+            font-size: var(--boxel-font-size-xs);
+            -webkit-line-clamp: 1;
+          }
+          .description {
+            display: none;
+          }
+        }
+
+        /* Large cards */
+        @container fitted-card (400px <= width) and (275px <= height) {
+          .fitted-music-hub {
+            padding: var(--boxel-sp);
+            gap: var(--boxel-sp);
+          }
+          .visual-section {
+            width: 120px;
+            padding: var(--boxel-sp);
+          }
+          .waves {
+            height: 48px;
+          }
+          .wave {
+            width: 6px;
+          }
+          .title {
+            font-size: var(--boxel-font-size);
+          }
+          .description {
+            font-size: var(--boxel-font-size-sm);
+            -webkit-line-clamp: 2;
+          }
+          .stat-value {
+            font-size: var(--boxel-font-size);
+          }
+          .stat-label {
+            font-size: 10px;
+          }
         }
       </style>
     </template>
