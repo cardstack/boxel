@@ -1,0 +1,1 @@
+{"version":3,"file":"milestone.d.ts","sourceRoot":"","sources":["../../src/commands/milestone.ts"],"names":[],"mappings":"AAaA,wBAAsB,gBAAgB,CACpC,SAAS,EAAE,MAAM,EACjB,OAAO,EAAE;IACP,IAAI,CAAC,EAAE,OAAO,CAAC;IACf,MAAM,CAAC,EAAE,MAAM,GAAG,MAAM,CAAC;IACzB,IAAI,CAAC,EAAE,MAAM,CAAC;CACf,EACD,aAAa,CAAC,EAAE,MAAM,GACrB,OAAO,CAAC,IAAI,CAAC,CAkGf"}

@@ -1,0 +1,1 @@
+{"version":3,"file":"gather.d.ts","sourceRoot":"","sources":["../../src/commands/gather.ts"],"names":[],"mappings":"AAaA,UAAU,aAAa;IACrB,MAAM,EAAE,MAAM,CAAC;IACf,SAAS,CAAC,EAAE,MAAM,CAAC;IACnB,MAAM,CAAC,EAAE,MAAM,CAAC;IAChB,MAAM,CAAC,EAAE,OAAO,CAAC;IACjB,YAAY,CAAC,EAAE,OAAO,CAAC;CACxB;AAED,wBAAsB,aAAa,CACjC,SAAS,EAAE,MAAM,EACjB,OAAO,EAAE,aAAa,GACrB,OAAO,CAAC,IAAI,CAAC,CAmIf"}

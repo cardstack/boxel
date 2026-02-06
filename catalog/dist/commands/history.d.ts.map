@@ -1,0 +1,1 @@
+{"version":3,"file":"history.d.ts","sourceRoot":"","sources":["../../src/commands/history.ts"],"names":[],"mappings":"AAoDA,UAAU,cAAc;IACtB,OAAO,CAAC,EAAE,OAAO,GAAG,MAAM,CAAC;IAC3B,OAAO,CAAC,EAAE,MAAM,CAAC;CAClB;AAED,wBAAsB,cAAc,CAClC,YAAY,EAAE,MAAM,EACpB,OAAO,EAAE,cAAc,GACtB,OAAO,CAAC,IAAI,CAAC,CAyEf"}
