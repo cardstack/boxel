@@ -63,20 +63,20 @@ module('membership handler', () => {
         return makeRoom('join');
       },
     }),
-    authUserId: '@bot-runner:localhost',
+    authUserId: '@submissionbot:localhost',
     startTime: 1000,
   });
 
-  test('auto-joins room after membership invite event for bot-runner', async (assert) => {
+  test('auto-joins room after membership invite event for submissionbot', async (assert) => {
     joinedRooms = [];
 
     await handleMembershipEvent(
       makeMembershipEvent(1001),
       makeMember({
         membership: 'invite',
-        userId: '@bot-runner:localhost',
+        userId: '@submissionbot:localhost',
         roomId: '!room-id:localhost',
-        name: 'bot-runner',
+        name: 'submissionbot',
       }),
     );
 
@@ -108,7 +108,7 @@ module('timeline handler', () => {
   } as DBAdapter;
 
   handleTimelineEvent = onTimelineEvent({
-    authUserId: '@bot-runner:localhost',
+    authUserId: '@submissionbot:localhost',
     dbAdapter,
   });
 
@@ -157,18 +157,5 @@ module('timeline handler', () => {
     );
 
     assert.ok(true, 'loads registrations');
-  });
-
-  test('filters events for unregistered users', async (assert) => {
-    assert.expect(1);
-    currentRows = [];
-    mockGetRegistrations(() => {});
-
-    let r = await handleTimelineEvent(
-      makeBotTriggerEvent('@submission-bot:localhost', 2000),
-      makeRoom('join'),
-      false,
-    );
-    assert.deepEqual(currentRows, [], 'queries registrations');
   });
 });

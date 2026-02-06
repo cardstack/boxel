@@ -61,19 +61,19 @@ module('Integration | commands | invite-user-to-room', function (hooks) {
     let command = new InviteUserToRoomCommand(commandService.commandContext);
     await command.execute({
       roomId,
-      userId: 'bot-runner',
+      userId: 'submissionbot',
     });
 
-    let botRunnerUserId = matrixService.getFullUserId('bot-runner');
+    let submissionBotUserId = matrixService.getFullUserId('submissionbot');
     let membershipEvent = getRoomState(
       roomId,
       'm.room.member',
-      botRunnerUserId,
+      submissionBotUserId,
     );
     assert.strictEqual(
       membershipEvent.membership,
       'invite',
-      'bot-runner invited to room',
+      'submissionbot invited to room',
     );
   });
 
@@ -87,13 +87,13 @@ module('Integration | commands | invite-user-to-room', function (hooks) {
     let command = new InviteUserToRoomCommand(commandService.commandContext);
     await command.execute({
       roomId,
-      userId: 'bot-runner',
+      userId: 'submissionbot',
     });
 
     await assert.rejects(
       command.execute({
         roomId,
-        userId: 'bot-runner',
+        userId: 'submissionbot',
       }),
       /user already in room/,
       'rejects inviting a user that is already in the room',

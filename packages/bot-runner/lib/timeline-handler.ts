@@ -38,23 +38,23 @@ export function onTimelineEvent({
       if (!senderUsername) {
         return;
       }
-      let botRunnerUsername = authUserId;
+      let submissionBotUsername = authUserId;
 
       let registrations = await getRegistrationsForUser(
         dbAdapter,
         senderUsername,
       );
-      let botRunnerRegistrations = await getRegistrationsForUser(
+      let submissionBotRegistrations = await getRegistrationsForUser(
         dbAdapter,
-        botRunnerUsername,
+        submissionBotUsername,
       );
-      if (!registrations.length && !botRunnerRegistrations.length) {
+      if (!registrations.length && !submissionBotRegistrations.length) {
         return;
       }
       log.debug(
         `received event from ${senderUsername} in room ${room.roomId} with ${registrations.length} registrations`,
       );
-      for (let registration of botRunnerRegistrations) {
+      for (let registration of submissionBotRegistrations) {
         let createdAt = Date.parse(registration.created_at);
         if (Number.isNaN(createdAt)) {
           continue;
@@ -91,7 +91,7 @@ export function onTimelineEvent({
 }
 
 function getRoomCreator(room: Room | undefined): string | undefined {
-  return room?.getCreator?.();
+  return room?.getCreator?.() ?? undefined;
 }
 
 async function getRegistrationsForUser(

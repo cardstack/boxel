@@ -55,9 +55,9 @@ export default class CreateListingPRRequestCommand extends HostBaseCommand<
       roomId = createRoomResult.roomId;
     }
 
-    let botRunnerId = this.matrixService.botRunnerUserId;
-    if (!(await this.matrixService.isUserInRoom(roomId, botRunnerId))) {
-      await this.matrixService.inviteUserToRoom(roomId, botRunnerId);
+    let submissionBotId = this.matrixService.submissionBotUserId;
+    if (!(await this.matrixService.isUserInRoom(roomId, submissionBotId))) {
+      await this.matrixService.inviteUserToRoom(roomId, submissionBotId);
     }
 
     await new SendBotTriggerEventCommand(this.commandContext).execute({
