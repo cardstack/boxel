@@ -3,7 +3,10 @@ import { service } from '@ember/service';
 import { isBotTriggerCommand } from '@cardstack/runtime-common';
 
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
-import type { BotTriggerContent } from 'https://cardstack.com/base/matrix-event';
+import {
+  BOT_TRIGGER_EVENT_TYPE,
+  type BotTriggerContent,
+} from 'https://cardstack.com/base/matrix-event';
 
 import HostBaseCommand from '../lib/host-base-command';
 
@@ -30,7 +33,7 @@ export default class SendBotTriggerEventCommand extends HostBaseCommand<
     await this.matrixService.ready;
 
     let event = {
-      type: 'app.boxel.bot-trigger',
+      type: BOT_TRIGGER_EVENT_TYPE,
       content: {
         type: input.type,
         input: input.input,

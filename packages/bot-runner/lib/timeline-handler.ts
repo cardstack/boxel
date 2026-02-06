@@ -1,4 +1,9 @@
-import { logger, param, query } from '@cardstack/runtime-common';
+import {
+  BOT_TRIGGER_EVENT_TYPE,
+  logger,
+  param,
+  query,
+} from '@cardstack/runtime-common';
 import * as Sentry from '@sentry/node';
 import type { DBAdapter, PgPrimitive } from '@cardstack/runtime-common';
 import type { MatrixEvent, Room } from 'matrix-js-sdk';
@@ -29,7 +34,7 @@ export function onTimelineEvent({
         return;
       }
       let eventType = event.getType?.() ?? event.event?.type;
-      if (eventType !== 'app.boxel.bot-trigger') {
+      if (eventType !== BOT_TRIGGER_EVENT_TYPE) {
         return;
       }
 

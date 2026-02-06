@@ -37,6 +37,7 @@ import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type { SerializedFile } from 'https://cardstack.com/base/file-api';
 import type { FileDef } from 'https://cardstack.com/base/file-api';
 import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
+import { BOT_TRIGGER_EVENT_TYPE } from 'https://cardstack.com/base/matrix-event';
 import type { CommandField } from 'https://cardstack.com/base/skill';
 
 import type { MockSDK } from './_sdk';
@@ -622,6 +623,7 @@ export class MockClient implements ExtendedClient {
       case APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE:
       case APP_BOXEL_ACTIVE_LLM:
       case APP_BOXEL_REALM_EVENT_TYPE:
+      case BOT_TRIGGER_EVENT_TYPE:
       case 'm.room.create':
       case 'm.room.message':
       case 'm.room.name':

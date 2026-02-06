@@ -1,6 +1,8 @@
-import type { BotTriggerEvent } from 'https://cardstack.com/base/matrix-event';
-
-const RECOGNIZED_BOT_TRIGGER_TYPES = ['create-listing-pr'] as const;
+import {
+  BOT_TRIGGER_EVENT_TYPE,
+  BOT_TRIGGER_COMMAND_TYPES,
+  type BotTriggerEvent,
+} from 'https://cardstack.com/base/matrix-event';
 
 export function isBotTriggerEvent(value: unknown): value is BotTriggerEvent {
   if (!value || typeof value !== 'object') {
@@ -8,7 +10,7 @@ export function isBotTriggerEvent(value: unknown): value is BotTriggerEvent {
   }
 
   let event = value as { type?: unknown; content?: unknown };
-  if (event.type !== 'app.boxel.bot-trigger') {
+  if (event.type !== BOT_TRIGGER_EVENT_TYPE) {
     return false;
   }
 
@@ -28,7 +30,7 @@ export function isBotTriggerCommand(value: unknown): value is BotTriggerEvent {
   if (!isBotTriggerEvent(value)) {
     return false;
   }
-  return RECOGNIZED_BOT_TRIGGER_TYPES.includes(
-    value.content.type as (typeof RECOGNIZED_BOT_TRIGGER_TYPES)[number],
+  return BOT_TRIGGER_COMMAND_TYPES.includes(
+    value.content.type as (typeof BOT_TRIGGER_COMMAND_TYPES)[number],
   );
 }
