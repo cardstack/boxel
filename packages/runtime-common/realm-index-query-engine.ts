@@ -225,8 +225,7 @@ export class RealmIndexQueryEngine {
       return false;
     }
     try {
-      let definition =
-        await this.#definitionLookup.lookupDefinition(codeRef);
+      let definition = await this.#definitionLookup.lookupDefinition(codeRef);
       // Strip the linksToMany index suffix (e.g., "friends.0" -> "friends")
       let fieldName = fieldKey.includes('.')
         ? fieldKey.slice(0, fieldKey.indexOf('.'))

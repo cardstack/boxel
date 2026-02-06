@@ -5,7 +5,11 @@ import { join, basename } from 'path';
 import type { Server } from 'http';
 import type { DirResult } from 'tmp';
 import { existsSync, readJSONSync, statSync } from 'fs-extra';
-import type { Realm, Relationship } from '@cardstack/runtime-common';
+import type {
+  Realm,
+  Relationship,
+  ResourceID,
+} from '@cardstack/runtime-common';
 import {
   baseRealm,
   isSingleCardDocument,
@@ -437,7 +441,7 @@ module(basename(__filename), function () {
           let tagRelationship2 = doc2.data.relationships?.tag as Relationship;
           assert.ok(tagRelationship2, 'tag relationship still exists');
           assert.strictEqual(
-            tagRelationship2.data?.type,
+            (tagRelationship2.data as ResourceID)?.type,
             'card',
             'linksTo relationship for a CardDef should use type "card" even when data.type is missing from stale index and the linked instance is unavailable',
           );
