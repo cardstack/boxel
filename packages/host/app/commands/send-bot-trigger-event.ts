@@ -5,7 +5,7 @@ import { isBotTriggerCommand } from '@cardstack/runtime-common';
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 import {
   BOT_TRIGGER_EVENT_TYPE,
-  type BotTriggerContent,
+  type BotTriggerEvent,
 } from 'https://cardstack.com/base/matrix-event';
 
 import HostBaseCommand from '../lib/host-base-command';
