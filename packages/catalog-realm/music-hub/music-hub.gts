@@ -1349,6 +1349,46 @@ export class MusicHubCard extends CardDef {
           }
         }
 
+        /* Narrow vertical tiles: shrink stats, hide overflow items */
+        @container fitted-card (aspect-ratio <= 1.0) and (width <= 200px) {
+          .stat-value {
+            font-size: 11px;
+          }
+          .stat-label {
+            font-size: 7px;
+          }
+          .stat-divider {
+            height: 16px;
+          }
+          .stats {
+            gap: var(--boxel-sp-5xs);
+            padding: 2px var(--boxel-sp-5xs);
+          }
+          /* Hide last stat + divider at narrow widths */
+          .stat:nth-child(7),
+          .stat-divider:nth-child(6) {
+            display: none;
+          }
+          .title {
+            font-size: var(--boxel-font-size-xs);
+          }
+          .description {
+            font-size: 11px;
+          }
+          .tools-badge {
+            font-size: 10px;
+            padding: 1px 6px;
+          }
+        }
+
+        /* Very narrow vertical: show only 2 stats */
+        @container fitted-card (aspect-ratio <= 1.0) and (width <= 160px) {
+          .stat:nth-child(5),
+          .stat-divider:nth-child(4) {
+            display: none;
+          }
+        }
+
         @container fitted-card (aspect-ratio <= 1.0) and (height <= 200px) {
           .description {
             display: none;
@@ -1395,6 +1435,76 @@ export class MusicHubCard extends CardDef {
           }
         }
 
+        /* Narrow horizontal tiles: compact stats and text */
+        @container fitted-card (1.0 < aspect-ratio) and (width <= 300px) {
+          .visual-section {
+            aspect-ratio: 0.7;
+          }
+          .title {
+            font-size: var(--boxel-font-size-xs);
+          }
+          .description {
+            font-size: 11px;
+            -webkit-line-clamp: 1;
+          }
+          .stat-value {
+            font-size: 11px;
+          }
+          .stat-label {
+            font-size: 7px;
+          }
+          .stat-divider {
+            height: 16px;
+          }
+          .stats {
+            gap: var(--boxel-sp-5xs);
+            padding: 2px var(--boxel-sp-5xs);
+          }
+          /* Hide last 2 stats at narrow width */
+          .stat:nth-child(7),
+          .stat-divider:nth-child(6),
+          .stat:nth-child(5),
+          .stat-divider:nth-child(4) {
+            display: none;
+          }
+          .tools-badge {
+            font-size: 10px;
+            padding: 1px 6px;
+          }
+        }
+
+        /* Strip heights: compact everything */
+        @container fitted-card (1.0 < aspect-ratio) and (height <= 110px) {
+          .title {
+            font-size: var(--boxel-font-size-xs);
+            -webkit-line-clamp: 1;
+          }
+          .description {
+            font-size: 11px;
+            -webkit-line-clamp: 1;
+          }
+          .stat-value {
+            font-size: 12px;
+          }
+          .stat-label {
+            font-size: 8px;
+          }
+          .stat-divider {
+            height: 18px;
+          }
+          .stats {
+            padding: 2px var(--boxel-sp-5xs);
+            gap: var(--boxel-sp-5xs);
+          }
+          .tools-badge {
+            font-size: 10px;
+            padding: 1px 6px;
+          }
+          .content-section {
+            gap: 2px;
+          }
+        }
+
         @container fitted-card (1.0 < aspect-ratio) and (height <= 80px) {
           .description {
             display: none;
@@ -1404,6 +1514,12 @@ export class MusicHubCard extends CardDef {
           }
           .content-section {
             justify-content: center;
+            flex-direction: row;
+            align-items: center;
+            gap: var(--boxel-sp-xs);
+          }
+          .title {
+            white-space: nowrap;
           }
           .stats {
             margin-top: 0;
@@ -1422,6 +1538,14 @@ export class MusicHubCard extends CardDef {
           }
           .wave {
             width: 3px;
+          }
+        }
+
+        /* Narrow horizontal: hide last stat to prevent truncation */
+        @container fitted-card (1.0 < aspect-ratio) and (width < 350px) {
+          .stat:nth-child(7),
+          .stat-divider:nth-child(6) {
+            display: none;
           }
         }
 
