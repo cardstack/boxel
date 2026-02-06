@@ -37,7 +37,7 @@ import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type { SerializedFile } from 'https://cardstack.com/base/file-api';
 import type { FileDef } from 'https://cardstack.com/base/file-api';
 import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
-import { BOT_TRIGGER_EVENT_TYPE } from 'https://cardstack.com/base/matrix-event';
+import { BOT_TRIGGER_EVENT_TYPE } from '@cardstack/runtime-common';
 import type { CommandField } from 'https://cardstack.com/base/skill';
 
 import type { MockSDK } from './_sdk';
