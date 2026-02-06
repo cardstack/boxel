@@ -8,6 +8,7 @@ import { tracked } from '@glimmer/tracking';
 import { restartableTask, timeout } from 'ember-concurrency';
 import { TrackedSet } from 'tracked-built-ins';
 
+import { LoadingIndicator } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
 import { DropdownArrowDown } from '@cardstack/boxel-ui/icons';
 
@@ -45,7 +46,11 @@ export default class IndexedFileTree extends Component<Signature> {
         @relativePath=''
       />
       {{#if this.showMask}}
-        <div class='mask' data-test-file-tree-mask></div>
+        <div class='mask' data-test-file-tree-mask>
+          {{#if this.fileTree.isLoading}}
+            <LoadingIndicator />
+          {{/if}}
+        </div>
       {{/if}}
     </nav>
 
@@ -57,6 +62,9 @@ export default class IndexedFileTree extends Component<Signature> {
         background-color: white;
         height: 100%;
         width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
       }
       nav {
         position: relative;
@@ -67,17 +75,24 @@ export default class IndexedFileTree extends Component<Signature> {
   private fileTree = fileTreeFromIndex(this, () => this.args.realmURL);
   private localOpenDirs = new TrackedSet<string>();
   @tracked private selectedFile?: LocalPath;
-  @tracked private showMask = true;
+  @tracked private maskDismissed = false;
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
     this.hideMask.perform();
   }
 
+  private get showMask(): boolean {
+    if (this.fileTree.isLoading) {
+      return true;
+    }
+    return !this.maskDismissed;
+  }
+
   private hideMask = restartableTask(async () => {
     // fine tuned to coincide with debounce in RestoreScrollPosition modifier
     await timeout(300);
-    this.showMask = false;
+    this.maskDismissed = true;
   });
 
   private get effectiveOpenDirs(): Set<string> {
