@@ -1,0 +1,53 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Image Gallery Demo",
+      "description": "Showcasing ImageDef/PngDef with various images from the experiments realm"
+    },
+    "relationships": {
+      "featuredImage": {
+        "links": {
+          "self": "./mango.png"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "./mango.png"
+        }
+      },
+      "gallery.0": {
+        "links": {
+          "self": "./mango.png"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "./mango.png"
+        }
+      },
+      "gallery.1": {
+        "links": {
+          "self": "../logo.png"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../logo.png"
+        }
+      },
+      "gallery.2": {
+        "links": {
+          "self": "../FileLinksExample/mango.png"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../FileLinksExample/mango.png"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../png-def-playground",
+        "name": "PngDefPlayground"
+      }
+    }
+  }
+}

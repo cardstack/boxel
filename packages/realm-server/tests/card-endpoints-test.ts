@@ -40,6 +40,55 @@ function parseSearchQuery(searchURL: URL) {
   return parse(searchURL.searchParams.toString()) as Record<string, any>;
 }
 
+// Create minimal valid PNG bytes for testing
+function makeMinimalPng(): Uint8Array {
+  let signature = [137, 80, 78, 71, 13, 10, 26, 10];
+  let ihdrData = new Uint8Array(13);
+  let ihdrView = new DataView(ihdrData.buffer);
+  ihdrView.setUint32(0, 1); // width
+  ihdrView.setUint32(4, 1); // height
+  ihdrData[8] = 8; // bit depth
+  ihdrData[9] = 2; // color type (RGB)
+  let ihdrChunk = buildPngChunk('IHDR', ihdrData);
+  let idatData = new Uint8Array([
+    0x08, 0xd7, 0x01, 0x00, 0x00, 0xff, 0xff, 0x00, 0x01, 0x00, 0x01,
+  ]);
+  let idatChunk = buildPngChunk('IDAT', idatData);
+  let iendChunk = buildPngChunk('IEND', new Uint8Array(0));
+  let totalLength =
+    signature.length + ihdrChunk.length + idatChunk.length + iendChunk.length;
+  let png = new Uint8Array(totalLength);
+  let offset = 0;
+  png.set(signature, offset);
+  offset += signature.length;
+  png.set(ihdrChunk, offset);
+  offset += ihdrChunk.length;
+  png.set(idatChunk, offset);
+  offset += idatChunk.length;
+  png.set(iendChunk, offset);
+  return png;
+}
+
+function buildPngChunk(type: string, data: Uint8Array): Uint8Array {
+  let chunk = new Uint8Array(4 + 4 + data.length + 4);
+  let view = new DataView(chunk.buffer);
+  view.setUint32(0, data.length);
+  for (let i = 0; i < 4; i++) {
+    chunk[4 + i] = type.charCodeAt(i);
+  }
+  chunk.set(data, 8);
+  let crc = 0xffffffff;
+  let crcData = chunk.slice(4, 8 + data.length);
+  for (let i = 0; i < crcData.length; i++) {
+    crc ^= crcData[i]!;
+    for (let j = 0; j < 8; j++) {
+      crc = crc & 1 ? (crc >>> 1) ^ 0xedb88320 : crc >>> 1;
+    }
+  }
+  view.setUint32(8 + data.length, (crc ^ 0xffffffff) >>> 0);
+  return chunk;
+}
+
 module(basename(__filename), function () {
   module('Realm-specific Endpoints | card URLs', function (hooks) {
     let realmURL = new URL('http://127.0.0.1:4444/test/');
@@ -193,7 +242,7 @@ module(basename(__filename), function () {
         test('includes FileDef resources for file links in included payload', async function (assert) {
           let { testRealm: realm, request } = getRealmSetup();
 
-          let writes = new Map<string, string>([
+          let writes = new Map<string, string | Uint8Array>([
             [
               'gallery.gts',
               `
@@ -237,9 +286,9 @@ module(basename(__filename), function () {
                 },
               }),
             ],
-            ['hero.png', 'mock hero image'],
-            ['first.png', 'mock first image'],
-            ['second.png', 'mock second image'],
+            ['hero.png', makeMinimalPng()],
+            ['first.png', makeMinimalPng()],
+            ['second.png', makeMinimalPng()],
           ]);
 
           await realm.writeMany(writes);
@@ -275,8 +324,8 @@ module(basename(__filename), function () {
           assert.strictEqual(hero?.attributes?.name, 'hero.png');
           assert.strictEqual(hero?.attributes?.contentType, 'image/png');
           assert.deepEqual(hero?.meta?.adoptsFrom, {
-            module: `${baseRealm.url}file-api`,
-            name: 'FileDef',
+            module: `${baseRealm.url}png-image-def`,
+            name: 'PngDef',
           });
 
           assert.deepEqual(
