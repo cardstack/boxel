@@ -23,9 +23,11 @@ export function isBotTriggerEvent(value: unknown): value is BotTriggerEvent {
     return false;
   }
 
-  if (!BOT_TRIGGER_COMMAND_TYPES.includes(
-    content.type as (typeof BOT_TRIGGER_COMMAND_TYPES)[number],
-  )) {
+  if (
+    !BOT_TRIGGER_COMMAND_TYPES.includes(
+      content.type as (typeof BOT_TRIGGER_COMMAND_TYPES)[number],
+    )
+  ) {
     return false;
   }
 
