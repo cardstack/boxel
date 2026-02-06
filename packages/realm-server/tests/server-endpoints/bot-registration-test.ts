@@ -209,6 +209,19 @@ module(`server-endpoints/${basename(__filename)}`, function () {
             },
           });
         let botRegistrationId = registerResponse.body.data.id;
+        await query(context.dbAdapter, [
+          `INSERT INTO bot_commands (id, bot_id, command, filter, created_at) VALUES (`,
+          param(uuidv4()),
+          `,`,
+          param(botRegistrationId),
+          `,`,
+          param('app.boxel.search-google-images'),
+          `,`,
+          param(JSON.stringify({ type: 'app.boxel.search-google-images' })),
+          `,`,
+          `CURRENT_TIMESTAMP`,
+          `)`,
+        ]);
 
         let deleteResponse = await context.request2
           .delete('/_bot-registration')
@@ -234,6 +247,15 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           `SELECT id FROM bot_registrations`,
         );
         assert.strictEqual(rows.length, 0, 'bot registration removed');
+
+        let commandRows = await context.dbAdapter.execute(
+          `SELECT id FROM bot_commands`,
+        );
+        assert.strictEqual(
+          commandRows.length,
+          0,
+          'bot commands removed with registration',
+        );
       });
 
       test('unregistering a non-existent bot returns 204', async function (assert) {

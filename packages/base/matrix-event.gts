@@ -30,7 +30,7 @@ import {
 } from '@cardstack/runtime-common';
 import { type SerializedFile } from './file-api';
 
-interface BaseMatrixEvent {
+export interface BaseMatrixEvent {
   sender: string;
   origin_server_ts: number;
   event_id: string;
@@ -284,6 +284,14 @@ export interface CommandResultEvent extends BaseMatrixEvent {
   };
 }
 
+export interface CommandInputEvent extends BaseMatrixEvent {
+  content: {
+    // TODO: confirm whether this should be a serialized card type (e.g., SerializedFile)
+    // instead of generic JSON.
+    commandInput: Record<string, unknown>;
+  };
+}
+
 export interface CodePatchResultEvent extends BaseMatrixEvent {
   type: typeof APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE;
   content: CodePatchResultContent;
@@ -440,6 +448,7 @@ export type MatrixEvent =
   | ActiveLLMEvent
   | CardMessageEvent
   | CodePatchResultEvent
+  | CommandInputEvent
   | CommandResultEvent
   | DebugMessageEvent
   | InviteEvent
@@ -455,3 +464,5 @@ export type MatrixEvent =
   | RoomPowerLevels
   | RoomTopicEvent
   | SkillsConfigEvent;
+
+export type { MatrixEventFilter, CreateListingPREvent } from './bot-matrix-event';
