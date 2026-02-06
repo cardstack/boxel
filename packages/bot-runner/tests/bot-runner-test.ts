@@ -10,7 +10,6 @@ import type {
   Room,
   RoomMember,
 } from 'matrix-js-sdk';
-import { BOT_TRIGGER_EVENT_TYPE } from 'https://cardstack.com/base/matrix-event';
 import { onMembershipEvent } from '../lib/membership-handler';
 import { onTimelineEvent } from '../lib/timeline-handler';
 
@@ -18,6 +17,7 @@ function makeBotTriggerEvent(
   sender: string | null | undefined,
   originServerTs: number,
 ) {
+  const BOT_TRIGGER_EVENT_TYPE = 'app.boxel.bot-trigger';
   return {
     event: {
       origin_server_ts: originServerTs,
