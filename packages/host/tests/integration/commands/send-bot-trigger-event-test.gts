@@ -4,11 +4,11 @@ import type { RenderingTestContext } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
+import { isBotTriggerEvent } from '@cardstack/runtime-common';
+
 import SendBotTriggerEventCommand from '@cardstack/host/commands/send-bot-trigger-event';
 
 import RealmService from '@cardstack/host/services/realm';
-
-import { isBotTriggerEvent } from '@cardstack/runtime-common';
 
 import {
   setupIntegrationTestRealm,
