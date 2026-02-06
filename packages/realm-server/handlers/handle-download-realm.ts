@@ -11,6 +11,7 @@ import {
 } from '@cardstack/runtime-common';
 import { AuthenticationError } from '@cardstack/runtime-common/router';
 import { parseRealmsParam } from '@cardstack/runtime-common/search-utils';
+import { verifyURLSignature } from '@cardstack/runtime-common/url-signature';
 import archiver from 'archiver';
 import { existsSync, statSync } from 'fs-extra';
 import { join, resolve, sep } from 'path';
@@ -81,7 +82,29 @@ export default function handleDownloadRealm({
     }
 
     let publishedRealmURLs = await getPublishedRealmURLs(dbAdapter, [realmURL]);
-    let authorization = ctxt.req.headers['authorization'];
+    // Support token via query param for streaming downloads (browser navigates directly)
+    let tokenFromQuery = url.searchParams.get('token');
+    let authorization = ctxt.req.headers['authorization'] ?? tokenFromQuery;
+
+    // When token is provided via query param, require a signature to prevent token reuse
+    if (tokenFromQuery) {
+      let signature = url.searchParams.get('sig');
+      if (!signature) {
+        await sendResponseForBadRequest(
+          ctxt,
+          'Signature required when token is provided via query parameter',
+        );
+        return;
+      }
+      if (!verifyURLSignature(tokenFromQuery, url, signature)) {
+        await sendResponseForUnauthorizedRequest(
+          ctxt,
+          'Invalid signature for download URL',
+        );
+        return;
+      }
+    }
+
     let readableRealms: Set<string>;
     if (!authorization) {
       let publicPermissions = await fetchUserPermissions(dbAdapter, {

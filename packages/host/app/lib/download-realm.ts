@@ -1,17 +1,3 @@
-export function extractFilename(
-  contentDisposition: string | null,
-): string | null {
-  if (!contentDisposition) {
-    return null;
-  }
-  let utf8Match = contentDisposition.match(/filename\\*=UTF-8''([^;]+)/i);
-  if (utf8Match?.[1]) {
-    return decodeURIComponent(utf8Match[1]);
-  }
-  let match = contentDisposition.match(/filename="?([^";]+)"?/i);
-  return match?.[1] ?? null;
-}
-
 export function fallbackDownloadName(realmURL: URL) {
   let segments = realmURL.pathname.split('/').filter(Boolean);
   let base =
