@@ -1,12 +1,9 @@
 import { service } from '@ember/service';
 
-import { isBotTriggerCommand } from '@cardstack/runtime-common';
+import { isBotTriggerEvent } from '@cardstack/runtime-common';
 
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
-import {
-  BOT_TRIGGER_EVENT_TYPE,
-  type BotTriggerEvent,
-} from 'https://cardstack.com/base/matrix-event';
+import type { BotTriggerEvent } from 'https://cardstack.com/base/matrix-event';
 
 import HostBaseCommand from '../lib/host-base-command';
 
@@ -32,15 +29,16 @@ export default class SendBotTriggerEventCommand extends HostBaseCommand<
   ): Promise<undefined> {
     await this.matrixService.ready;
 
+    const botTriggerEventType = 'app.boxel.bot-trigger';
     let event = {
-      type: BOT_TRIGGER_EVENT_TYPE,
+      type: botTriggerEventType,
       content: {
         type: input.type,
         input: input.input,
       },
     } as BotTriggerEvent;
 
-    if (!isBotTriggerCommand(event)) {
+    if (!isBotTriggerEvent(event)) {
       throw new Error(`Unsupported bot trigger event type: ${input.type}`);
     }
 

@@ -23,14 +23,11 @@ export function isBotTriggerEvent(value: unknown): value is BotTriggerEvent {
     return false;
   }
 
-  return 'input' in content;
-}
-
-export function isBotTriggerCommand(value: unknown): value is BotTriggerEvent {
-  if (!isBotTriggerEvent(value)) {
+  if (!BOT_TRIGGER_COMMAND_TYPES.includes(
+    content.type as (typeof BOT_TRIGGER_COMMAND_TYPES)[number],
+  )) {
     return false;
   }
-  return BOT_TRIGGER_COMMAND_TYPES.includes(
-    value.content.type as (typeof BOT_TRIGGER_COMMAND_TYPES)[number],
-  );
+
+  return 'input' in content;
 }

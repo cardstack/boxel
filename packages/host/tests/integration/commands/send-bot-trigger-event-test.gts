@@ -5,8 +5,10 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import SendBotTriggerEventCommand from '@cardstack/host/commands/send-bot-trigger-event';
-import { BOT_TRIGGER_EVENT_TYPE } from 'https://cardstack.com/base/matrix-event';
+
 import RealmService from '@cardstack/host/services/realm';
+
+import { isBotTriggerEvent } from '@cardstack/runtime-common';
 
 import {
   setupIntegrationTestRealm,
@@ -63,7 +65,7 @@ module('Integration | commands | send-bot-trigger-event', function (hooks) {
     });
 
     let event = getRoomEvents(roomId).pop()!;
-    assert.strictEqual(event.type, BOT_TRIGGER_EVENT_TYPE);
+    assert.ok(isBotTriggerEvent(event));
     assert.strictEqual(event.content.type, 'create-listing-pr');
     assert.deepEqual(event.content.input, { listingId: 'catalog/listing-1' });
   });
