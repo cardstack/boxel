@@ -155,11 +155,12 @@ export default class ListingInstallCommand extends HostBaseCommand<
     if (!Array.isArray(atomicResults)) {
       let detail = (results as { errors?: Array<{ detail?: string }> })
         .errors?.[0]?.detail;
-      throw new Error(
-        detail
-          ? `Please make sure your listing has all required specs linked. ${detail}`
-          : 'Please make sure your listing has all required specs linked',
-      );
+      if (detail?.includes('filter refers to a nonexistent type')) {
+        throw new Error(
+          'Please click "Update Specs" on the listing and make sure all specs are linked.',
+        );
+      }
+      throw new Error(detail);
     }
     let writtenFiles = atomicResults.map((r) => r.data.id);
     log.debug('=== Final Results ===');
