@@ -2,7 +2,7 @@ import { registerRealmUser } from './register-realm-user-using-api';
 
 const realmServerURL = process.env.REALM_SERVER_URL || 'http://localhost:4201';
 
-async function registerBot(jwt: string, matrixUserId: string) {
+async function addBotRegistration(jwt: string, matrixUserId: string) {
   const response = await fetch(`${realmServerURL}/_bot-registration`, {
     method: 'POST',
     headers: {
@@ -27,9 +27,9 @@ async function registerBot(jwt: string, matrixUserId: string) {
 
 (async () => {
   const { jwt, userId } = await registerRealmUser();
-  await registerBot(jwt, userId);
-  console.log(`Registered realm bot ${userId}`);
+  await addBotRegistration(jwt, userId);
+  console.log(`Added bot registration for ${userId}`);
 })().catch((error) => {
-  console.error('register-realm-bot failed', error);
+  console.error('add-bot-registration failed', error);
   process.exit(1);
 });
