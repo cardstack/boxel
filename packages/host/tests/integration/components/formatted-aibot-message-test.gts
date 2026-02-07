@@ -7,7 +7,6 @@ import { waitUntil } from '@ember/test-helpers';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
-import percySnapshot from '@percy/ember';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
