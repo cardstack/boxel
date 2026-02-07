@@ -16,6 +16,9 @@ export interface BoxelIndexTable {
   // `deps` is a list of URLs that the card depends on, either card URL's or
   // module URL's
   deps: string[] | null;
+  // `last_known_good_deps` preserves deps from the most recent successful indexing
+  // and is not overwritten during error cycles
+  last_known_good_deps: string[] | null;
   // `types` is the adoption chain for card where each code ref is serialized
   // using `internalKeyFor()`
   types: string[] | null;
@@ -53,6 +56,7 @@ export interface RealmMetaTable {
 
 export const coerceTypes = Object.freeze({
   deps: 'JSON',
+  last_known_good_deps: 'JSON',
   types: 'JSON',
   pristine_doc: 'JSON',
   error_doc: 'JSON',
