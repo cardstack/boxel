@@ -9,6 +9,7 @@ import type { RealmServerTokenClaim } from 'utils/jwt';
 import { getUserByMatrixUserId } from '@cardstack/billing/billing-queries';
 import { createJWT } from '../jwt';
 import { sendResponseForError, setContextResponse } from '../middleware';
+import { createAuthCookie } from '../utils/auth-cookie';
 import * as Sentry from '@sentry/node';
 
 export default function handleRealmAuth({
@@ -74,6 +75,20 @@ export default function handleRealmAuth({
 
         continue;
       }
+    }
+
+    // Set auth cookies for each realm (for image loading via <img> tags)
+    let isSecure = serverURL.startsWith('https://');
+    let expiresInSeconds = 7 * 24 * 60 * 60; // 7 days (same as JWT)
+
+    for (let [realmUrl, jwt] of Object.entries(sessions)) {
+      let cookie = createAuthCookie({
+        realmURL: realmUrl,
+        token: jwt,
+        expiresInSeconds,
+        secure: isSecure,
+      });
+      ctxt.append('Set-Cookie', cookie);
     }
 
     await setContextResponse(

@@ -13,6 +13,7 @@ import {
   AuthenticationErrorMessages,
   SupportedMimeType,
 } from '@cardstack/runtime-common/router';
+import { INJECTED_AUTH_HEADER_STATE } from './cookie-auth';
 
 const REQUEST_BODY_STATE = 'requestBody';
 
@@ -112,8 +113,8 @@ export async function fetchRequestFromContext(
   ctxt: Koa.Context,
 ): Promise<Request> {
   let reqBody: string | Buffer | undefined;
+  let state = ctxt.state as Record<string, unknown>;
   if (['POST', 'PATCH', 'PUT', 'QUERY', 'DELETE'].includes(ctxt.method)) {
-    let state = ctxt.state as Record<string, unknown>;
     if (REQUEST_BODY_STATE in state) {
       reqBody = state[REQUEST_BODY_STATE] as string | Buffer;
     } else {
@@ -127,9 +128,18 @@ export async function fetchRequestFromContext(
   }
 
   let url = fullRequestURL(ctxt).href;
+
+  // Build headers, including any injected auth header from cookie auth middleware
+  // We copy the headers and add the injected auth header to ensure it persists
+  // even if mutating ctx.req.headers doesn't work reliably in all environments
+  let headers = { ...ctxt.req.headers } as { [name: string]: string };
+  if (INJECTED_AUTH_HEADER_STATE in state && !headers.authorization) {
+    headers.authorization = state[INJECTED_AUTH_HEADER_STATE] as string;
+  }
+
   return new Request(url, {
     method: ctxt.method,
-    headers: ctxt.req.headers as { [name: string]: string },
+    headers,
     ...(reqBody !== undefined ? { body: reqBody } : {}),
   });
 }
