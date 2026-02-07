@@ -1,3 +1,4 @@
+import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
 import type { ComponentLike } from '@glint/template';
@@ -15,6 +16,7 @@ export interface TriggerLabeledSignature {
   Args: {
     extra?: {
       label?: string;
+      maxSelectedDisplay?: number;
     };
     placeholder?: string;
     select: Select;
@@ -41,6 +43,36 @@ export default class PickerLabeledTrigger extends Component<TriggerLabeledSignat
     return this.args.extra?.label || '';
   }
 
+  get maxSelectedDisplay() {
+    return this.args.extra?.maxSelectedDisplay;
+  }
+
+  get displayedItems() {
+    const selected = this.args.select.selected;
+    if (
+      !this.maxSelectedDisplay ||
+      selected.length <= this.maxSelectedDisplay
+    ) {
+      return selected;
+    }
+    return selected.slice(0, this.maxSelectedDisplay);
+  }
+
+  get remainingCount() {
+    const selected = this.args.select.selected;
+    if (
+      !this.maxSelectedDisplay ||
+      selected.length <= this.maxSelectedDisplay
+    ) {
+      return 0;
+    }
+    return selected.length - this.maxSelectedDisplay;
+  }
+
+  get hasMoreItems() {
+    return this.remainingCount > 0;
+  }
+
   @action
   removeItem(item: any, event?: MouseEvent) {
     event?.stopPropagation();
@@ -49,6 +81,14 @@ export default class PickerLabeledTrigger extends Component<TriggerLabeledSignat
     );
     this.args.select.selected = [...newSelected];
     this.args.select.actions.select(newSelected);
+  }
+
+  @action
+  openDropdown(event: MouseEvent) {
+    event.stopPropagation();
+    if (!this.args.select.isOpen) {
+      this.args.select.actions.open(event);
+    }
   }
 
   get select(): ExtendedSelect {
@@ -86,7 +126,7 @@ export default class PickerLabeledTrigger extends Component<TriggerLabeledSignat
             )
             as |SelectedComponent|
           }}
-            {{#each @select.selected as |item|}}
+            {{#each this.displayedItems as |item|}}
               <SelectedComponent
                 @option={{item}}
                 @select={{this.select}}
@@ -95,6 +135,18 @@ export default class PickerLabeledTrigger extends Component<TriggerLabeledSignat
                 {{yield option select}}
               </SelectedComponent>
             {{/each}}
+            {{#if this.hasMoreItems}}
+              <div
+                class='picker-more-items'
+                role='button'
+                tabindex='0'
+                data-test-boxel-picker-more-items
+                {{on 'click' this.openDropdown}}
+              >
+                +{{this.remainingCount}}
+                more
+              </div>
+            {{/if}}
           {{/let}}
         {{/if}}
       </div>
@@ -147,6 +199,26 @@ export default class PickerLabeledTrigger extends Component<TriggerLabeledSignat
 
       .picker-trigger__caret.is-open {
         transform: rotate(180deg);
+      }
+
+      .picker-more-items {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-4xs);
+        padding: var(--boxel-sp-4xs);
+        border-radius: var(--boxel-border-radius-xs);
+        border: solid 1px var(--boxel-300);
+        background-color: var(--boxel-300);
+        min-height: 30px;
+        font: 500 var(--boxel-font-xs);
+        letter-spacing: var(--boxel-lsp-sm);
+        cursor: pointer;
+        user-select: none;
+      }
+
+      .picker-more-items:hover {
+        background-color: var(--boxel-400);
+        border-color: var(--boxel-400);
       }
 
       /*Ember power select has a right padding to the trigger element*/

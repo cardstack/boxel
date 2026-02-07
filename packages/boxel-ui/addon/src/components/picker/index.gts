@@ -25,6 +25,7 @@ export interface PickerSignature {
     // Display
     label: string;
     matchTriggerWidth?: boolean;
+    maxSelectedDisplay?: number;
 
     onChange: (selected: PickerOption[]) => void;
     // Data
@@ -44,6 +45,8 @@ export interface PickerSignature {
 
 export default class Picker extends Component<PickerSignature> {
   @tracked searchTerm = '';
+  @tracked private pinnedOption: PickerOption | null = null;
+  @tracked private pinnedToSection: 'selected' | 'unselected' | null = null;
 
   constructor(owner: Owner, args: PickerSignature['Args']) {
     super(owner, args);
@@ -107,22 +110,46 @@ export default class Picker extends Component<PickerSignature> {
 
   // Reorders the already-filtered options so that:
   // - "select-all" (search-all) options are always first
-  // - Selected regular options come next
-  // - Unselected regular options are listed last
+  // - Selected regular options come next (including pinned items that were in selected section)
+  // - Unselected regular options are listed last (including pinned items that were in unselected section)
   get sortedOptions(): PickerOption[] {
     const options = this.filteredOptions;
-    const selected = options.filter(
-      (o) => this.args.selected.includes(o) && o.type !== 'select-all',
-    );
-    const unselected = options.filter(
-      (o) => !this.args.selected.includes(o) && o.type !== 'select-all',
-    );
+    const { pinnedOption, pinnedToSection } = this;
+
+    const selected = options.filter((o) => {
+      if (o.type === 'select-all') return false;
+      // If this is the pinned option, check which section it should stay in
+      if (o === pinnedOption) {
+        return pinnedToSection === 'selected';
+      }
+      return this.args.selected.includes(o);
+    });
+
+    const unselected = options.filter((o) => {
+      if (o.type === 'select-all') return false;
+      // If this is the pinned option, check which section it should stay in
+      if (o === pinnedOption) {
+        return pinnedToSection === 'unselected';
+      }
+      return !this.args.selected.includes(o);
+    });
+
     const selectAll = options.filter((o) => o.type === 'select-all');
     return [...selectAll, ...selected, ...unselected];
   }
 
+  private isVisuallyInSelectedSection(option: PickerOption): boolean {
+    if (option.type === 'select-all') return false;
+    if (option === this.pinnedOption) {
+      return this.pinnedToSection === 'selected';
+    }
+    return this.args.selected.includes(option);
+  }
+
   get selectedInSortedOptions(): PickerOption[] {
-    return this.sortedOptions.filter((o) => this.args.selected.includes(o));
+    return this.sortedOptions.filter((o) =>
+      this.isVisuallyInSelectedSection(o),
+    );
   }
 
   get isSelected() {
@@ -137,7 +164,7 @@ export default class Picker extends Component<PickerSignature> {
 
   get hasUnselected() {
     const unselected = this.sortedOptions.filter(
-      (o) => !this.args.selected.includes(o),
+      (o) => o.type !== 'select-all' && !this.isVisuallyInSelectedSection(o),
     );
     return unselected.length > 0;
   }
@@ -150,12 +177,26 @@ export default class Picker extends Component<PickerSignature> {
     this.searchTerm = term;
   };
 
+  onOptionHover = (option: PickerOption | null) => {
+    if (option && option.type !== 'select-all') {
+      // Remember where the option was when hover started
+      this.pinnedOption = option;
+      this.pinnedToSection = this.args.selected.includes(option)
+        ? 'selected'
+        : 'unselected';
+    } else {
+      this.pinnedOption = null;
+      this.pinnedToSection = null;
+    }
+  };
+
   get extra() {
     return {
       label: this.args.label,
       searchTerm: this.searchTerm,
       searchPlaceholder: this.args.searchPlaceholder,
       onSearchTermChange: this.onSearchTermChange,
+      maxSelectedDisplay: this.args.maxSelectedDisplay,
     };
   }
 
@@ -219,7 +260,7 @@ export default class Picker extends Component<PickerSignature> {
       @placeholder={{@placeholder}}
       @disabled={{@disabled}}
       @renderInPlace={{this.renderInPlace}}
-      @matchTriggerWidth={{true}}
+      @matchTriggerWidth={{@matchTriggerWidth}}
       @searchEnabled={{false}}
       @closeOnSelect={{false}}
       @eventType='click'
@@ -235,6 +276,7 @@ export default class Picker extends Component<PickerSignature> {
         @option={{option}}
         @isSelected={{this.isSelected option}}
         @currentSelected={{@selected}}
+        @onHover={{this.onOptionHover}}
       />
       {{#if (this.displayDivider option)}}
         <div class='picker-divider' data-test-boxel-picker-divider></div>
