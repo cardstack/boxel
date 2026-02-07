@@ -4,9 +4,10 @@ import type { RenderingTestContext } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import InviteUserToRoomCommand from '@cardstack/host/commands/invite-user-to-room';
+import { isBotTriggerEvent } from '@cardstack/runtime-common';
 
-import type MatrixService from '@cardstack/host/services/matrix-service';
+import SendBotTriggerEventCommand from '@cardstack/host/commands/send-bot-trigger-event';
+
 import RealmService from '@cardstack/host/services/realm';
 
 import {
@@ -15,7 +16,6 @@ import {
   testRealmURL,
   testRealmInfo,
 } from '../../helpers';
-
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
@@ -28,7 +28,7 @@ class StubRealmService extends RealmService {
   }
 }
 
-module('Integration | commands | invite-user-to-room', function (hooks) {
+module('Integration | commands | send-bot-trigger-event', function (hooks) {
   setupRenderingTest(hooks);
   setupLocalIndexing(hooks);
 
@@ -37,7 +37,7 @@ module('Integration | commands | invite-user-to-room', function (hooks) {
     activeRealms: [testRealmURL],
   });
 
-  let { createAndJoinRoom, getRoomState } = mockMatrixUtils;
+  let { createAndJoinRoom, getRoomEvents } = mockMatrixUtils;
 
   hooks.beforeEach(function (this: RenderingTestContext) {
     getOwner(this)!.register('service:realm', StubRealmService);
@@ -50,53 +50,41 @@ module('Integration | commands | invite-user-to-room', function (hooks) {
     });
   });
 
-  test('invites a user to a room', async function (assert) {
+  test('sends a bot trigger event', async function (assert) {
     let roomId = createAndJoinRoom({
       sender: '@testuser:localhost',
       name: 'room-test',
     });
     let commandService = getService('command-service');
-    let matrixService = getService('matrix-service') as MatrixService;
 
-    let command = new InviteUserToRoomCommand(commandService.commandContext);
+    let command = new SendBotTriggerEventCommand(commandService.commandContext);
     await command.execute({
       roomId,
-      userId: 'submissionbot',
+      type: 'create-listing-pr',
+      input: { listingId: 'catalog/listing-1' },
     });
 
-    let submissionBotUserId = matrixService.getFullUserId('submissionbot');
-    let membershipEvent = getRoomState(
-      roomId,
-      'm.room.member',
-      submissionBotUserId,
-    );
-    assert.strictEqual(
-      membershipEvent.membership,
-      'invite',
-      'submissionbot invited to room',
-    );
+    let event = getRoomEvents(roomId).pop()!;
+    assert.ok(isBotTriggerEvent(event));
+    assert.strictEqual(event.content.type, 'create-listing-pr');
+    assert.deepEqual(event.content.input, { listingId: 'catalog/listing-1' });
   });
 
-  test('rejects inviting a user twice', async function (assert) {
+  test('rejects unknown trigger types', async function (assert) {
     let roomId = createAndJoinRoom({
       sender: '@testuser:localhost',
       name: 'room-test',
     });
     let commandService = getService('command-service');
 
-    let command = new InviteUserToRoomCommand(commandService.commandContext);
-    await command.execute({
-      roomId,
-      userId: 'submissionbot',
-    });
-
+    let command = new SendBotTriggerEventCommand(commandService.commandContext);
     await assert.rejects(
       command.execute({
         roomId,
-        userId: 'submissionbot',
+        type: 'not-a-real-command',
+        input: {},
       }),
-      /user already in room/,
-      'rejects inviting a user that is already in the room',
+      /Unsupported bot trigger event type/,
     );
   });
 });
