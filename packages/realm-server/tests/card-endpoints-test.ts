@@ -5,7 +5,11 @@ import { join, basename } from 'path';
 import type { Server } from 'http';
 import type { DirResult } from 'tmp';
 import { existsSync, readJSONSync, statSync } from 'fs-extra';
-import type { Realm, Relationship } from '@cardstack/runtime-common';
+import type {
+  Realm,
+  Relationship,
+  ResourceID,
+} from '@cardstack/runtime-common';
 import {
   baseRealm,
   isSingleCardDocument,
@@ -299,6 +303,147 @@ module(basename(__filename), function () {
               type: 'file-meta',
               id: `${testRealmHref}second.png`,
             },
+          );
+        });
+        test('linksTo relationship for CardDef uses card type not file-meta', async function (assert) {
+          let { testRealm: realm, request, dbAdapter } = getRealmSetup();
+
+          let writes = new Map<string, string>([
+            [
+              'tag.gts',
+              `
+                import { CardDef, field, contains } from "https://cardstack.com/base/card-api";
+                import StringField from "https://cardstack.com/base/string";
+
+                export class Tag extends CardDef {
+                  @field label = contains(StringField);
+                  @field cardTitle = contains(StringField, {
+                    computeVia: function (this: Tag) {
+                      return this.label;
+                    },
+                  });
+                }
+              `,
+            ],
+            [
+              'article.gts',
+              `
+                import { CardDef, field, contains, linksTo } from "https://cardstack.com/base/card-api";
+                import StringField from "https://cardstack.com/base/string";
+                import { Tag } from "./tag";
+
+                export class Article extends CardDef {
+                  @field title = contains(StringField);
+                  @field tag = linksTo(Tag);
+                  @field cardTitle = contains(StringField, {
+                    computeVia: function (this: Article) {
+                      return this.title;
+                    },
+                  });
+                }
+              `,
+            ],
+            [
+              'Tag/programming.json',
+              JSON.stringify({
+                data: {
+                  attributes: {
+                    label: 'Programming',
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: '../tag.gts',
+                      name: 'Tag',
+                    },
+                  },
+                },
+              }),
+            ],
+            [
+              'Article/hello-world.json',
+              JSON.stringify({
+                data: {
+                  attributes: {
+                    title: 'Hello World',
+                  },
+                  relationships: {
+                    tag: {
+                      links: {
+                        self: '../Tag/programming',
+                      },
+                    },
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: '../article.gts',
+                      name: 'Article',
+                    },
+                  },
+                },
+              }),
+            ],
+          ]);
+
+          await realm.writeMany(writes);
+
+          // Verify the relationship is correct with a fresh index
+          let response = await request
+            .get('/Article/hello-world')
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(
+            response.status,
+            200,
+            `HTTP 200 status: ${response.text}`,
+          );
+          let doc = response.body as LooseSingleCardDocument;
+          let tagRelationship = doc.data.relationships?.tag as Relationship;
+          assert.ok(tagRelationship, 'tag relationship exists');
+          assert.deepEqual(
+            tagRelationship.data,
+            {
+              type: 'card',
+              id: `${testRealmHref}Tag/programming`,
+            },
+            'linksTo relationship for a CardDef uses type "card" not "file-meta"',
+          );
+
+          // Now simulate a stale index where the pristine_doc relationship
+          // lacks data.type (as it would be before commit 480362eb12 which
+          // added data to NotLoadedValue serialization in LinksTo.serialize).
+          // Also remove the linked card's instance entry so getInstance
+          // returns nothing, forcing the getFile fallback path.
+          let articleAlias = `${testRealmHref}Article/hello-world`;
+          let tagAlias = `${testRealmHref}Tag/programming`;
+          await dbAdapter.execute(
+            `UPDATE boxel_index
+             SET pristine_doc = pristine_doc #- '{relationships,tag,data}'
+             WHERE file_alias = '${articleAlias}'
+             AND type = 'instance'`,
+          );
+          await dbAdapter.execute(
+            `UPDATE boxel_index
+             SET is_deleted = TRUE
+             WHERE file_alias = '${tagAlias}'
+             AND type = 'instance'`,
+          );
+
+          let response2 = await request
+            .get('/Article/hello-world')
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(
+            response2.status,
+            200,
+            `HTTP 200 status after index modification: ${response2.text}`,
+          );
+          let doc2 = response2.body as LooseSingleCardDocument;
+          let tagRelationship2 = doc2.data.relationships?.tag as Relationship;
+          assert.ok(tagRelationship2, 'tag relationship still exists');
+          assert.strictEqual(
+            (tagRelationship2.data as ResourceID)?.type,
+            'card',
+            'linksTo relationship for a CardDef should use type "card" even when data.type is missing from stale index and the linked instance is unavailable',
           );
         });
         test('card-level query-backed relationships resolve via search at read time', async function (assert) {

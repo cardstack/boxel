@@ -40,7 +40,7 @@ export async function createURLSignature(
 // Node.js implementation
 export function createURLSignatureSync(token: string, url: URL): string {
   // Dynamic import to avoid issues in browser
-  // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
   let crypto = require('crypto');
 
   let urlForSigning = new URL(url.href);
