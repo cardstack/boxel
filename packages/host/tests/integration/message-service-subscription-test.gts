@@ -107,6 +107,7 @@ module('Integration | message service subscription', function (hooks) {
         eventName: 'index',
         indexType: 'incremental-index-initiation',
         updatedFile: 'index.json',
+        realmURL: testRealmURL,
       },
     });
 

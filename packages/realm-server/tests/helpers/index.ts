@@ -501,7 +501,7 @@ export async function createRealm({
       createPrerenderAuth: testCreatePrerenderAuth,
     });
   }
-  let realmServerMatrixClient = new MatrixClient({
+  let matrixClient = new MatrixClient({
     matrixURL: realmServerTestMatrix.url,
     username: realmServerTestMatrix.username,
     seed: realmSecretSeed,
@@ -509,12 +509,11 @@ export async function createRealm({
   let realm = new Realm({
     url: realmURL,
     adapter,
-    matrix: matrixConfig,
     secretSeed: realmSecretSeed,
     virtualNetwork,
     dbAdapter,
     queue: publisher,
-    realmServerMatrixClient,
+    matrixClient,
     realmServerURL: new URL(new URL(realmURL).origin).href,
     definitionLookup,
     cardSizeLimitBytes:

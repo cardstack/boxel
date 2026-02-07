@@ -128,8 +128,13 @@ export class TestRealmAdapter implements RealmAdapter {
       rid.replace('test-session-room-realm-', '').startsWith(realmUrl),
     );
 
+    const eventWithRealmURL: RealmEventContent = {
+      ...event,
+      realmURL: realmUrl,
+    };
+
     for (let roomId of targetRoomIds) {
-      simulateRemoteMessage(roomId, realmMatrixUsername, event, {
+      simulateRemoteMessage(roomId, realmMatrixUsername, eventWithRealmURL, {
         type: APP_BOXEL_REALM_EVENT_TYPE,
       });
     }

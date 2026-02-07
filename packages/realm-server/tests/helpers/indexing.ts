@@ -88,12 +88,14 @@ export async function expectIncrementalIndexEvent(
     eventName: 'index',
     indexType: 'incremental-index-initiation',
     updatedFile: targetUrl,
+    realmURL: realm,
   });
 
   let expectedIncrementalContent: any = {
     eventName: 'index',
     indexType: 'incremental',
     invalidations: [invalidation],
+    realmURL: realm,
   };
 
   let actualContent = { ...incrementalEventContent };
