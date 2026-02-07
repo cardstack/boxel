@@ -4,6 +4,7 @@ module.exports = {
     'template-missing-invokable': require('./lib/rules/template-missing-invokable'),
     'missing-card-api-import': require('./lib/rules/missing-card-api-import'),
     'no-duplicate-imports': require('./lib/rules/no-duplicate-imports'),
+    'no-percy-direct-import': require('./lib/rules/no-percy-direct-import'),
     // Add other rules here
   },
 
