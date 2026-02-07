@@ -7,7 +7,6 @@ import { waitUntil } from '@ember/test-helpers';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
-import percySnapshot from '@percy/ember';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
@@ -220,8 +219,6 @@ ${REPLACE_MARKER}
     assert.dom('.cdr.line-delete').exists({ count: 2 });
     assert.dom('.cdr.line-insert').exists({ count: 1 });
     assert.dom('[data-test-apply-code-button]').exists();
-
-    await percySnapshot(assert);
   });
 
   test('it will render one diff editor and one standard code block if one search replace block is complete and another is not', async function (assert) {
@@ -318,8 +315,6 @@ let c = 3;
         lines?.innerText === '// existing code ... \nlet a = 1;\nlet c = 3;'
       );
     });
-
-    await percySnapshot(assert);
   });
 
   test('unincremental updates are handled gracefully', async function (assert) {
