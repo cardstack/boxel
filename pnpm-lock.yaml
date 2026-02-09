@@ -2187,9 +2187,6 @@ importers:
       '@glimmer/component':
         specifier: ^2.0.0
         version: 2.0.0
-      '@glimmer/node':
-        specifier: 0.92.4
-        version: 0.92.4
       '@glimmer/tracking':
         specifier: ^1.1.2
         version: 1.1.2
@@ -2726,9 +2723,6 @@ importers:
       '@cardstack/runtime-common':
         specifier: workspace:*
         version: link:../runtime-common
-      '@glimmer/node':
-        specifier: 0.92.4
-        version: 0.92.4
       '@koa/cors':
         specifier: 'catalog:'
         version: 4.0.0
