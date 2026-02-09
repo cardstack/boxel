@@ -274,6 +274,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
             .send({
               ...buildFileDefQuery(),
               fields: { 'file-meta': [] },
+              asData: true,
             });
 
           assert.strictEqual(response.status, 200, 'HTTP 200 status');
@@ -312,6 +313,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
             .send({
               ...buildFileDefQuery(),
               fields: { 'file-meta': ['name', 'url'] },
+              asData: true,
             });
 
           assert.strictEqual(response.status, 200, 'HTTP 200 status');
@@ -330,12 +332,14 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
               attrKeys.every((k) => ['name', 'url'].includes(k)),
               `attributes only contain requested fields, got: ${attrKeys.join(', ')}`,
             );
-            assert.ok(
-              entry.attributes?.name !== undefined,
+            assert.notStrictEqual(
+              entry.attributes?.name,
+              undefined,
               'name attribute is present',
             );
-            assert.ok(
-              entry.attributes?.url !== undefined,
+            assert.notStrictEqual(
+              entry.attributes?.url,
+              undefined,
               'url attribute is present',
             );
           }
@@ -349,12 +353,30 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
             .send({
               ...buildFileDefQuery(),
               fields: { 'file-meta': 'not-an-array' },
+              asData: true,
             });
 
           assert.strictEqual(
             response.status,
             400,
             'returns 400 for invalid fields value',
+          );
+        });
+
+        test('sparse fieldsets: fields without asData returns 400', async function (assert) {
+          let response = await request
+            .post(searchPath)
+            .set('Accept', 'application/vnd.card+json')
+            .set('X-HTTP-Method-Override', 'QUERY')
+            .send({
+              ...buildFileDefQuery(),
+              fields: { 'file-meta': ['name'] },
+            });
+
+          assert.strictEqual(
+            response.status,
+            400,
+            'returns 400 when fields is specified without asData: true',
           );
         });
 
@@ -375,20 +397,21 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
           };
 
           assert.ok(json.data.length > 0, 'results are returned');
-          let entry = json.data.find(
-            (e) => e.id === `${realmHref}dir/foo.txt`,
-          );
+          let entry = json.data.find((e) => e.id === `${realmHref}dir/foo.txt`);
           assert.ok(entry, 'expected entry is present');
+          assert.ok(entry!.attributes, 'attributes are present');
           assert.ok(
-            entry!.attributes && Object.keys(entry!.attributes).length > 0,
+            Object.keys(entry!.attributes!).length > 0,
             'attributes are populated when fields is not specified',
           );
-          assert.ok(
-            entry!.attributes?.name !== undefined,
+          assert.notStrictEqual(
+            entry!.attributes?.name,
+            undefined,
             'name attribute is present',
           );
-          assert.ok(
-            entry!.attributes?.url !== undefined,
+          assert.notStrictEqual(
+            entry!.attributes?.url,
+            undefined,
             'url attribute is present',
           );
         });
@@ -401,6 +424,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
             .send({
               ...buildPersonQuery('Mango'),
               fields: { card: [] },
+              asData: true,
             });
 
           assert.strictEqual(response.status, 200, 'HTTP 200 status');
@@ -434,6 +458,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
             .send({
               ...buildPersonQuery('Mango'),
               fields: { card: ['firstName'] },
+              asData: true,
             });
 
           assert.strictEqual(response.status, 200, 'HTTP 200 status');
@@ -478,8 +503,9 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
 
           assert.strictEqual(json.data.length, 1, 'one result is returned');
           let entry = json.data[0];
+          assert.ok(entry!.attributes, 'attributes are present');
           assert.ok(
-            entry.attributes && Object.keys(entry.attributes).length > 0,
+            Object.keys(entry!.attributes!).length > 0,
             'attributes are populated when fields is not specified',
           );
           assert.strictEqual(

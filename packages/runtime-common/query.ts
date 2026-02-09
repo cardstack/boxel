@@ -24,6 +24,7 @@ interface QueryBase {
   filter?: Filter;
   sort?: Sort;
   fields?: SparseFieldsets;
+  asData?: boolean;
   page?: {
     number?: number; // page.number is 0-based
     size: number;
@@ -34,6 +35,8 @@ interface QueryBase {
 export type Query =
   | (QueryBase & { realm?: string; realms?: never })
   | (QueryBase & { realms?: string[]; realm?: never });
+
+export type DataQuery = Query & { asData: true };
 
 interface QueryWithInterpolationsBase {
   filter?: Filter;
@@ -214,10 +217,23 @@ export function assertQuery(
       case 'fields':
         assertFields(value, pointer.concat('fields'));
         break;
+      case 'asData':
+        if (typeof value !== 'boolean') {
+          throw new InvalidQueryError(
+            `${pointer.concat('asData').join('/') || '/'}: asData must be a boolean`,
+          );
+        }
+        break;
 
       default:
         throw new InvalidQueryError(`unknown field in query: ${key}`);
     }
+  }
+
+  if ('fields' in query && query.asData !== true) {
+    throw new InvalidQueryError(
+      `${pointer.join('/') || '/'}: fields requires asData to be true`,
+    );
   }
 }
 
