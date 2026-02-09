@@ -1,100 +1,27 @@
-import ApplicationInstance from '@ember/application/instance';
-import type { BootOptions } from '@ember/engine/instance';
+import type Application from '@ember/application';
 
-import Ember from 'ember';
+// @ts-expect-error - glimmer internals not typed for direct import
+import { clientBuilder, rehydrationBuilder } from '@glimmer/runtime';
 
 declare const FastBoot: unknown;
 
-let hasPatchedBootSync = false;
-
-export function initialize(): void {
-  let log = (message: string) => console.log(`[rehydrate:init] ${message}`);
-
-  // let fastbootBodyStart = document?.getElementById('fastboot-body-start');
-
-  // if (fastbootBodyStart) {
-  //   log('Found body start, removing');
-  //   fastbootBodyStart.parentNode?.removeChild(fastbootBodyStart);
-  // }
-
-  // let fastbootBodyEnd = document?.getElementById('fastboot-body-end');
-
-  // if (fastbootBodyEnd) {
-  //   log('Found body end, removing');
-  //   fastbootBodyEnd.parentNode?.removeChild(fastbootBodyEnd);
-  // }
-
-  return;
-
-  log('start');
-
-  if (hasPatchedBootSync) {
-    log('already patched');
-    return;
-  }
-
+export function initialize(application: Application): void {
+  // Don't override in FastBoot (server-side) — let Ember's default serialize mode work
   if (typeof FastBoot !== 'undefined') {
-    log('FastBoot detected, skipping');
     return;
   }
 
-  if (typeof document === 'undefined') {
-    log('no document, skipping');
-    return;
-  }
-
-  let current = document.getElementById('fastboot-body-start');
-
-  if (!current) {
-    log('fastboot-body-start not found');
-    return;
-  }
-
-  let isSerializationFirstNode = Ember.ViewUtils?.isSerializationFirstNode;
-
-  if (typeof isSerializationFirstNode !== 'function') {
-    console.error(
-      "Experimental render mode rehydrate isn't working because it couldn't find Ember.ViewUtils.isSerializationFirstNode.",
-    );
-    log('isSerializationFirstNode missing');
-    return;
-  }
-
-  // debugger;
-
-  // let nextSibling = current.nextSibling;
-
-  // if (!nextSibling || !isSerializationFirstNode(nextSibling)) {
-  //   log('serialization marker not found');
-  //   return;
-  // }
-
-  log('patching ApplicationInstance._bootSync');
-  hasPatchedBootSync = true;
-  let originalBootSync = ApplicationInstance.prototype._bootSync;
-
-  ApplicationInstance.reopen({
-    _bootSync(this: ApplicationInstance, options?: BootOptions) {
-      console.log('bootSync', this, options);
-      if (options === undefined) {
-        options = {
-          _renderMode: 'rehydrate',
-        };
+  application.register('service:-dom-builder', {
+    create() {
+      if (
+        typeof document !== 'undefined' &&
+        document.getElementById('fastboot-body-start')
+      ) {
+        return rehydrationBuilder.bind(null);
       }
-
-      return originalBootSync.call(this, options);
+      return clientBuilder.bind(null);
     },
   });
-
-  log('removing fastboot markers');
-  current.parentNode?.removeChild(current);
-  let end = document.getElementById('fastboot-body-end');
-
-  if (end?.parentNode) {
-    end.parentNode.removeChild(end);
-  }
-
-  log('done');
 }
 
 export default {
