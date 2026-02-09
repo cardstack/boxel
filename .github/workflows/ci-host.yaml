@@ -87,7 +87,18 @@ jobs:
           sudo service upower restart
 
       - name: host test suite (shard ${{ matrix.shardIndex }})
-        run: dbus-run-session -- pnpm test-with-percy
+        run: |
+          set +e
+          dbus-run-session -- pnpm test-with-percy 2>&1 | tee /tmp/test-output.log
+          exit_code=${PIPESTATUS[0]}
+          if [ $exit_code -ne 0 ] && grep -q "ChunkLoadError" /tmp/test-output.log; then
+            echo ""
+            echo "::warning::ChunkLoadError detected — retrying shard ${{ matrix.shardIndex }}..."
+            echo ""
+            dbus-run-session -- pnpm test-with-percy
+            exit_code=$?
+          fi
+          exit $exit_code
         env:
           PERCY_GZIP: true
           PERCY_TOKEN: ${{ secrets.PERCY_TOKEN_HOST }}
