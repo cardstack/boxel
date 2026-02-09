@@ -366,20 +366,19 @@ export class PagePool {
       let pageId = uuidv4();
       this.#attachPageConsole(page, 'standby', pageId);
       log.debug(`Created standby page ${pageId}`);
-      log.debug('About to add script for new document');
-
-      // await page.evaluateOnNewDocument(
-      //   `globalThis.__boxelRenderMode = 'serialize';`,
-      // );
-      await page.evaluateOnNewDocument(`console.log('hello from whatever');`);
-      await page.evaluateOnNewDocument(`console.error('hey an error');`);
-      console.log('sending globalThis thing');
-      await page.evaluateOnNewDocument(`console.log(globalThis);`);
-      // FIXME can this be globalThis indeed?
       await page.evaluateOnNewDocument(
         'window.__boxelRenderMode = "serialize";',
       );
-      console.log('done');
+      await page.evaluateOnNewDocument(`
+        window.addEventListener('error', (e) => {
+          console.error('[prerender-error-capture]', e.message, e.filename + ':' + e.lineno + ':' + e.colno, e.error?.stack || '');
+        });
+        window.addEventListener('unhandledrejection', (e) => {
+          let reason = e.reason;
+          let msg = reason instanceof Error ? reason.stack || reason.message : String(reason);
+          console.error('[prerender-unhandled-rejection]', msg);
+        });
+      `);
 
       await this.#loadStandbyPage(page, pageId);
       let entry: StandbyEntry = {
@@ -742,6 +741,22 @@ export class PagePool {
             }
             if (typeof value === 'undefined') {
               return arg.toString();
+            }
+            // Error objects serialize to {} via JSON — extract message+stack instead
+            if (
+              typeof value === 'object' &&
+              value !== null &&
+              Object.keys(value).length === 0
+            ) {
+              let errorInfo = await arg.evaluate((obj: any) => {
+                if (obj instanceof Error) {
+                  return `${obj.name}: ${obj.message}\n${obj.stack ?? ''}`;
+                }
+                return undefined;
+              }).catch(() => undefined);
+              if (errorInfo) {
+                return errorInfo;
+              }
             }
             return JSON.stringify(value);
           } catch (_e) {
