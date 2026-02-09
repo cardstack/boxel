@@ -779,7 +779,10 @@ export async function captureResult(
             let nodes = Array.from(parent.childNodes);
             for (let node of nodes) {
               if (node === resolvedElement) {
-                pieces.push(resolvedElement.innerHTML);
+                // Use the same capture mode as the non-serialize path:
+                // innerHTML → firstChild.innerHTML (strips wrapper div)
+                // outerHTML → firstChild.outerHTML (keeps wrapper div)
+                pieces.push((firstChild as any)[capture]);
                 continue;
               }
               if (node.nodeType === 8) {
@@ -793,7 +796,9 @@ export async function captureResult(
           return {
             status: finalStatus,
             value:
-              pieces.length > 0 ? pieces.join('') : resolvedElement.innerHTML,
+              pieces.length > 0
+                ? pieces.join('')
+                : (firstChild as any)[capture],
             alive,
             id: resolvedElement.dataset.prerenderId ?? undefined,
             nonce: resolvedElement.dataset.prerenderNonce ?? undefined,
