@@ -1,4 +1,5 @@
 import type Koa from 'koa';
+import { validate as uuidValidate } from 'uuid';
 import {
   assertIsBotCommandFilter,
   dbExpression,
@@ -77,6 +78,10 @@ export function handleBotCommandsRequest({
     let botId = json.data.attributes.botId.trim();
     if (!botId) {
       await sendResponseForBadRequest(ctxt, 'botId is required');
+      return;
+    }
+    if (!uuidValidate(botId)) {
+      await sendResponseForBadRequest(ctxt, 'botId must be a UUID');
       return;
     }
 

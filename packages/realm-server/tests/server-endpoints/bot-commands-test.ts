@@ -207,6 +207,44 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       assert.strictEqual(response.status, 404, 'HTTP 404 status');
     });
 
+    test('rejects bot command with invalid botId', async function (assert) {
+      let matrixUserId = '@user:localhost';
+      await insertUser(
+        context.dbAdapter,
+        matrixUserId,
+        'cus_123',
+        'user@example.com',
+      );
+
+      let response = await context.request2
+        .post('/_bot-commands')
+        .set('Accept', 'application/vnd.api+json')
+        .set('Content-Type', 'application/vnd.api+json')
+        .set(
+          'Authorization',
+          `Bearer ${createRealmServerJWT(
+            { user: matrixUserId, sessionRoom: 'session-room-test' },
+            realmSecretSeed,
+          )}`,
+        )
+        .send({
+          data: {
+            type: 'bot-command',
+            attributes: {
+              botId: 'not-a-uuid',
+              command: 'https://example.com/bot/command/default',
+              filter: {
+                type: 'matrix-event',
+                event_type: 'app.boxel.bot-trigger',
+                content_type: 'create-listing-pr',
+              },
+            },
+          },
+        });
+
+      assert.strictEqual(response.status, 400, 'HTTP 400 status');
+    });
+
     test('rejects invalid command', async function (assert) {
       let matrixUserId = '@user:localhost';
       await insertUser(
