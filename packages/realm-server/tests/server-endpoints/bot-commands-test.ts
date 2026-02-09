@@ -521,5 +521,70 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         'bot commands are deleted with registration',
       );
     });
+
+    test('can delete bot command', async function (assert) {
+      let matrixUserId = '@user:localhost';
+      await insertUser(
+        context.dbAdapter,
+        matrixUserId,
+        'cus_123',
+        'user@example.com',
+      );
+
+      let botRegistrationId = uuidv4();
+      await query(context.dbAdapter, [
+        `INSERT INTO bot_registrations (id, username, created_at) VALUES (`,
+        param(botRegistrationId),
+        `,`,
+        param(matrixUserId),
+        `,`,
+        `CURRENT_TIMESTAMP`,
+        `)`,
+      ]);
+
+      let botCommandId = uuidv4();
+      await query(context.dbAdapter, [
+        `INSERT INTO bot_commands (id, bot_id, command, command_filter, created_at) VALUES (`,
+        param(botCommandId),
+        `,`,
+        param(botRegistrationId),
+        `,`,
+        param('https://example.com/bot/command/default'),
+        `,`,
+        param({
+          type: 'matrix-event',
+          event_type: 'app.boxel.bot-trigger',
+          content_type: 'create-listing-pr',
+        }),
+        `,`,
+        `CURRENT_TIMESTAMP`,
+        `)`,
+      ]);
+
+      let response = await context.request2
+        .delete('/_bot-commands')
+        .set('Accept', 'application/vnd.api+json')
+        .set('Content-Type', 'application/vnd.api+json')
+        .set(
+          'Authorization',
+          `Bearer ${createRealmServerJWT(
+            { user: matrixUserId, sessionRoom: 'session-room-test' },
+            realmSecretSeed,
+          )}`,
+        )
+        .send({
+          data: {
+            type: 'bot-command',
+            id: botCommandId,
+          },
+        });
+
+      assert.strictEqual(response.status, 204, 'HTTP 204 status');
+
+      let rows = await context.dbAdapter.execute(
+        `SELECT id FROM bot_commands WHERE id = '${botCommandId}'`,
+      );
+      assert.strictEqual(rows.length, 0, 'bot command is deleted');
+    });
   });
 });

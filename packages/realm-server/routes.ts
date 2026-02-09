@@ -48,7 +48,10 @@ import {
   handleBotRegistrationsRequest,
   handleBotUnregistrationRequest,
 } from './handlers/handle-bot-registration';
-import { handleBotCommandsRequest } from './handlers/handle-bot-commands';
+import {
+  handleBotCommandDeleteRequest,
+  handleBotCommandsRequest,
+} from './handlers/handle-bot-commands';
 import { buildCreatePrerenderAuth } from './prerender/auth';
 
 export type CreateRoutesArgs = {
@@ -263,6 +266,11 @@ export function createRoutes(args: CreateRoutesArgs) {
     '/_bot-commands',
     jwtMiddleware(args.realmSecretSeed),
     handleBotCommandsRequest(args),
+  );
+  router.delete(
+    '/_bot-commands',
+    jwtMiddleware(args.realmSecretSeed),
+    handleBotCommandDeleteRequest(args),
   );
 
   return router.routes();

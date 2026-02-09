@@ -196,6 +196,89 @@ export function handleBotCommandsRequest({
   };
 }
 
+export function handleBotCommandDeleteRequest({
+  dbAdapter,
+}: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
+  return async function (ctxt: Koa.Context, _next: Koa.Next) {
+    let token = ctxt.state.token as RealmServerTokenClaim;
+    if (!token) {
+      await sendResponseForSystemError(
+        ctxt,
+        'token is required to delete bot command',
+      );
+      return;
+    }
+
+    let { user: requestingUserId } = token;
+    if (!(await getUserByMatrixUserId(dbAdapter, requestingUserId))) {
+      await sendResponseForNotFound(ctxt, 'user is not found');
+      return;
+    }
+
+    let request = await fetchRequestFromContext(ctxt);
+    let rawBody = await request.text();
+    let json: Record<string, any>;
+    try {
+      json = JSON.parse(rawBody);
+    } catch (_error) {
+      await sendResponseForBadRequest(
+        ctxt,
+        'Request body is not valid JSON-API - invalid JSON',
+      );
+      return;
+    }
+
+    let botCommandId = json?.data?.id;
+    if (typeof botCommandId !== 'string' || !botCommandId.trim()) {
+      await sendResponseForBadRequest(ctxt, 'botCommandId is required');
+      return;
+    }
+    if (!uuidValidate(botCommandId)) {
+      await sendResponseForBadRequest(ctxt, 'botCommandId must be a UUID');
+      return;
+    }
+
+    let commandRows;
+    try {
+      commandRows = await query(dbAdapter, [
+        `SELECT br.username FROM bot_commands bc`,
+        `JOIN bot_registrations br ON br.id = bc.bot_id`,
+        `WHERE bc.id = `,
+        param(botCommandId),
+        ` LIMIT 1`,
+      ]);
+    } catch (_error) {
+      await sendResponseForSystemError(ctxt, 'failed to lookup bot command');
+      return;
+    }
+
+    let commandUsername = commandRows[0]?.username;
+    if (!commandUsername) {
+      await sendResponseForNotFound(ctxt, 'bot command is not found');
+      return;
+    }
+    if (commandUsername !== requestingUserId) {
+      await sendResponseForForbiddenRequest(
+        ctxt,
+        'bot command belongs to a different user',
+      );
+      return;
+    }
+
+    try {
+      await query(dbAdapter, [
+        `DELETE FROM bot_commands WHERE id = `,
+        param(botCommandId),
+      ]);
+    } catch (_error) {
+      await sendResponseForSystemError(ctxt, 'failed to delete bot command');
+      return;
+    }
+
+    await setContextResponse(ctxt, new Response(null, { status: 204 }));
+  };
+}
+
 function assertIsBotCommandJSON(json: any): asserts json is BotCommandJSON {
   if (typeof json !== 'object' || json === null) {
     throw new Error(`json must be an object`);
