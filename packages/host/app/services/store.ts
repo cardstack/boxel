@@ -56,6 +56,7 @@ import {
   type StoreReadType,
   type CardResource,
   type Saved,
+  type SparseFieldsets,
 } from '@cardstack/runtime-common';
 
 import type { CardDef, BaseDef } from 'https://cardstack.com/base/card-api';
@@ -654,7 +655,10 @@ export default class StoreService extends Service implements StoreInterface {
       await Promise.all(
         collectionDoc.data.map(async (resource) => {
           try {
-            return await this.addResourceFromSearchData<T>(resource);
+            return await this.addResourceFromSearchData<T>(
+              resource,
+              query.fields,
+            );
           } catch (error) {
             storeLogger.warn(
               `Failed to hydrate resource from search results (id: ${'id' in resource ? resource.id : 'unknown'})`,
@@ -1093,6 +1097,7 @@ export default class StoreService extends Service implements StoreInterface {
   // Not part of the public API since it's meant for internal search result processing.
   private async addResourceFromSearchData<T extends CardDef | FileDef>(
     resource: CardResource<Saved> | FileMetaResource,
+    fields?: SparseFieldsets,
   ): Promise<T | undefined> {
     if (!resource.id) {
       throw new Error('resource must have an id');
@@ -1100,6 +1105,16 @@ export default class StoreService extends Service implements StoreInterface {
 
     // Handle file-meta resources
     if (isFileMetaResource(resource)) {
+      if (fields?.['file-meta'] !== undefined) {
+        // Sparse fieldsets requested — server already filtered attributes.
+        // Skip cache to avoid polluting identity map with partial data.
+        let doc = { data: resource };
+        return this.createFileMetaFromSerialized(
+          resource,
+          doc,
+          new URL(resource.id),
+        ) as Promise<T>;
+      }
       let existingInstance = this.peek(resource.id, { type: 'file-meta' });
       if (existingInstance && isFileDefInstance(existingInstance)) {
         return existingInstance as T;
@@ -1113,6 +1128,14 @@ export default class StoreService extends Service implements StoreInterface {
     }
 
     // Handle card resources
+    if (fields?.['card'] !== undefined) {
+      // Sparse fieldsets requested — server already filtered attributes.
+      // Skip cache to avoid polluting identity map with partial data.
+      return this.add({ data: resource } as SingleCardDocument, {
+        doNotPersist: true,
+        relativeTo: new URL(resource.id),
+      }) as Promise<T>;
+    }
     let existingInstance = this.peek(resource.id);
     if (existingInstance && isCardInstance(existingInstance)) {
       return existingInstance as T;

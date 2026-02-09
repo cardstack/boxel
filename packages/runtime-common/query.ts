@@ -18,9 +18,12 @@ export class InvalidQueryError extends Error {
   }
 }
 
+export type SparseFieldsets = Record<string, string[]>;
+
 interface QueryBase {
   filter?: Filter;
   sort?: Sort;
+  fields?: SparseFieldsets;
   page?: {
     number?: number; // page.number is 0-based
     size: number;
@@ -35,6 +38,7 @@ export type Query =
 interface QueryWithInterpolationsBase {
   filter?: Filter;
   sort?: SortWithInterpolations;
+  fields?: SparseFieldsets;
   page?: {
     number?: number; // page.number is 0-based
     size: number | string;
@@ -207,6 +211,9 @@ export function assertQuery(
       case 'realms':
         assertRealms(value, pointer.concat('realms'));
         break;
+      case 'fields':
+        assertFields(value, pointer.concat('fields'));
+        break;
 
       default:
         throw new InvalidQueryError(`unknown field in query: ${key}`);
@@ -236,6 +243,31 @@ function assertRealms(
       throw new InvalidQueryError(
         `${pointer.join('/') || '/'}: realms must be an array of strings`,
       );
+    }
+  }
+}
+
+function assertFields(
+  fields: any,
+  pointer: string[],
+): asserts fields is SparseFieldsets {
+  if (typeof fields !== 'object' || fields == null || Array.isArray(fields)) {
+    throw new InvalidQueryError(
+      `${pointer.join('/') || '/'}: fields must be an object mapping type names to arrays of field names`,
+    );
+  }
+  for (let [typeName, fieldNames] of Object.entries(fields)) {
+    if (!Array.isArray(fieldNames)) {
+      throw new InvalidQueryError(
+        `${pointer.concat(typeName).join('/') || '/'}: fields value must be an array of field names`,
+      );
+    }
+    for (let fieldName of fieldNames) {
+      if (typeof fieldName !== 'string') {
+        throw new InvalidQueryError(
+          `${pointer.concat(typeName).join('/') || '/'}: each field name must be a string`,
+        );
+      }
     }
   }
 }
