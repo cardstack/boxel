@@ -703,5 +703,13 @@ export function isBrowserTestEnv() {
 }
 
 export * from './prerendered-card-search';
-export { isBotTriggerEvent } from './bot-trigger';
+export {
+  isBotTriggerEvent,
+} from './bot-trigger';
+export {
+  assertIsBotCommandFilter,
+  isBotCommandFilter,
+  type BotCommandFilter,
+  type BotCommandMatrixFilter,
+} from './bot-command';
 export { DEFAULT_LLM_ID_TO_NAME } from './matrix-constants';
