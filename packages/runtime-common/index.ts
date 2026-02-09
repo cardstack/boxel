@@ -703,9 +703,7 @@ export function isBrowserTestEnv() {
 }
 
 export * from './prerendered-card-search';
-export {
-  isBotTriggerEvent,
-} from './bot-trigger';
+export { isBotTriggerEvent } from './bot-trigger';
 export {
   assertIsBotCommandFilter,
   isBotCommandFilter,
