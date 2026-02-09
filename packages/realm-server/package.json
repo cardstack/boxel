@@ -12,7 +12,7 @@
     "@cardstack/local-types": "workspace:*",
     "@cardstack/postgres": "workspace:*",
     "@cardstack/runtime-common": "workspace:*",
-    "@glimmer/node": "^0.94.10",
+    "@glimmer/node": "0.92.4",
     "@koa/cors": "catalog:",
     "@koa/router": "catalog:",
     "@octokit/rest": "catalog:",
