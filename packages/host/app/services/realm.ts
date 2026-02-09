@@ -40,7 +40,6 @@ import type {
 } from 'https://cardstack.com/base/matrix-event';
 
 import {
-  registerAuthServiceWorker,
   syncTokenToServiceWorker,
   syncAllTokensToServiceWorker,
   clearServiceWorkerTokens,
@@ -660,7 +659,6 @@ export default class RealmService extends Service {
   constructor(owner: Owner) {
     super(owner);
     this.reset.register(this);
-    registerAuthServiceWorker();
   }
 
   get realms(): ReadonlyMap<string, RealmResource> {
