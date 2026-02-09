@@ -1,19 +1,24 @@
 import type { DBAdapter } from '@cardstack/runtime-common';
-import { query } from '@cardstack/runtime-common';
+import { expressionToSql, query } from '@cardstack/runtime-common';
 import { parseDeps } from '@cardstack/runtime-common/realm';
 import type { Expression } from '@cardstack/runtime-common/expression';
 import { decodeScopedCSSRequest, isScopedCSSRequest } from 'glimmer-scoped-css';
+import {
+  indexURLCandidates,
+  indexCandidateExpressions,
+} from './index-url-utils';
 
 export async function retrieveScopedCSS({
   cardURL,
   dbAdapter,
-  indexURLCandidates,
-  indexCandidateExpressions,
+  log,
 }: {
   cardURL: URL;
   dbAdapter: DBAdapter;
-  indexURLCandidates: (cardURL: URL) => string[];
-  indexCandidateExpressions: (candidates: string[]) => Expression;
+  log?: {
+    debug: (...args: unknown[]) => void;
+    trace: (...args: unknown[]) => void;
+  };
 }): Promise<string | null> {
   let candidates = indexURLCandidates(cardURL);
 
@@ -21,15 +26,35 @@ export async function retrieveScopedCSS({
     return null;
   }
 
-  let rows = await query(dbAdapter, [
-    `SELECT deps, realm_version FROM boxel_index_working WHERE deps IS NOT NULL AND`,
+  let scopedCSSQuery: Expression = [
+    `
+      SELECT deps, realm_version
+      FROM boxel_index
+      WHERE type = 'instance'
+        AND is_deleted IS NOT TRUE
+        AND deps IS NOT NULL
+        AND
+    `,
     ...indexCandidateExpressions(candidates),
-    `UNION ALL
-     SELECT deps, realm_version FROM boxel_index WHERE deps IS NOT NULL AND`,
-    ...indexCandidateExpressions(candidates),
-    `ORDER BY realm_version DESC
-     LIMIT 1`,
-  ]);
+    `
+      ORDER BY realm_version DESC
+      LIMIT 1
+    `,
+  ];
+
+  if (log) {
+    let sql = expressionToSql(dbAdapter.kind, scopedCSSQuery);
+    let compactSql = sql.text.replace(/\s+/g, ' ').trim();
+    let values = JSON.stringify(sql.values);
+    log.trace(
+      'Scoped CSS query for %s: %s; values=%s',
+      cardURL.href,
+      compactSql,
+      values,
+    );
+  }
+
+  let rows = await query(dbAdapter, scopedCSSQuery);
 
   let depsRow = rows[0] as
     | { deps?: string[] | string | null; realm_version?: string | number }

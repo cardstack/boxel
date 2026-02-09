@@ -28,6 +28,7 @@ import type {
 } from '@cardstack/runtime-common';
 import {
   aiBotUsername,
+  submissionBotUsername,
   logger,
   isCardInstance,
   Deferred,
@@ -89,6 +90,7 @@ import type * as FileAPI from 'https://cardstack.com/base/file-api';
 import type { FileDef } from 'https://cardstack.com/base/file-api';
 import type {
   BoxelContext,
+  BotTriggerContent,
   CardMessageContent,
   MatrixEvent as DiscreteMatrixEvent,
   CodePatchResultContent,
@@ -400,6 +402,32 @@ export default class MatrixService extends Service {
     return `@${aiBotUsername}:${server}`;
   }
 
+  get submissionBotUserId() {
+    let server = this.userId!.split(':')[1];
+    return `@${submissionBotUsername}:${server}`;
+  }
+
+  getFullUserId(username: string) {
+    if (username.includes(':')) {
+      return username;
+    }
+    let server = this.userId?.split(':')[1];
+    if (!server) {
+      throw new Error('Matrix server is unavailable for user id');
+    }
+    let localpart = username.startsWith('@') ? username.slice(1) : username;
+    return `@${localpart}:${server}`;
+  }
+
+  async isUserInRoom(roomId: string, userId: string) {
+    try {
+      let state = await this.getStateEvent(roomId, 'm.room.member', userId);
+      return state?.membership === 'invite' || state?.membership === 'join';
+    } catch (_error) {
+      return false;
+    }
+  }
+
   get userName() {
     return this.userId ? getMatrixUsername(this.userId) : null;
   }
@@ -594,6 +622,11 @@ export default class MatrixService extends Service {
       iconURL,
       backgroundURL,
     });
+
+    await this.appendRealmToAccountData(personalRealmURL.href);
+  }
+
+  public async appendRealmToAccountData(realmURLString: string) {
     let { realms = [] } =
       ((await this.client.getAccountDataFromServer(
         APP_BOXEL_REALMS_EVENT_TYPE,
@@ -602,7 +635,7 @@ export default class MatrixService extends Service {
     // Clone the account data instead of using it directly,
     // since mutating the original object would modify the Matrix client’s store
     // and prevent updates from being sent back to the server.
-    let newRealms = [...realms, personalRealmURL.href];
+    let newRealms = [...realms, realmURLString];
     await this.client.setAccountData(APP_BOXEL_REALMS_EVENT_TYPE, {
       realms: newRealms,
     });
@@ -805,6 +838,7 @@ export default class MatrixService extends Service {
     roomId: string,
     eventType: string,
     content:
+      | BotTriggerContent
       | CardMessageContent
       | CodePatchResultContent
       | CommandResultWithNoOutputContent
@@ -1011,6 +1045,7 @@ export default class MatrixService extends Service {
     attachedCards: CardDef[] = [],
     attachedFiles: FileDef[] = [],
     context: BoxelContext,
+    lintIssues?: string[],
     failureReason?: string | undefined,
   ) {
     let contentData = await this.withContextAndAttachments(
@@ -1018,6 +1053,13 @@ export default class MatrixService extends Service {
       attachedCards,
       attachedFiles,
     );
+    let normalizedLintIssues = lintIssues || [];
+    let data: CodePatchResultContent['data'] = {
+      ...contentData,
+      ...(normalizedLintIssues.length
+        ? { lintIssues: normalizedLintIssues }
+        : {}),
+    };
     let content: CodePatchResultContent = {
       msgtype: APP_BOXEL_CODE_PATCH_RESULT_MSGTYPE,
       codeBlockIndex,
@@ -1027,7 +1069,7 @@ export default class MatrixService extends Service {
         key: resultKey,
         rel_type: APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE,
       },
-      data: contentData,
+      data,
     };
     try {
       return await this.sendEvent(
@@ -1345,6 +1387,13 @@ export default class MatrixService extends Service {
     let roomData = this.ensureRoomData(roomId);
     await roomData.mutex.dispatch(async () => {
       return this.client.setPowerLevel(roomId, userId, powerLevel);
+    });
+  }
+
+  async inviteUserToRoom(roomId: string, userId: string) {
+    let roomData = this.ensureRoomData(roomId);
+    await roomData.mutex.dispatch(async () => {
+      return this.client.invite(roomId, userId);
     });
   }
 

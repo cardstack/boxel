@@ -32,6 +32,7 @@ import {
   uuidv4,
   RealmPaths,
   PUBLISHED_DIRECTORY_NAME,
+  DEFAULT_CARD_SIZE_LIMIT_BYTES,
   clearSessionRooms,
   upsertSessionRoom,
   type MatrixConfig,
@@ -451,6 +452,7 @@ export async function createRealm({
   matrixConfig = testMatrix,
   withWorker,
   enableFileWatcher = false,
+  cardSizeLimitBytes,
 }: {
   dir: string;
   definitionLookup: DefinitionLookup;
@@ -464,6 +466,7 @@ export async function createRealm({
   dbAdapter: PgAdapter;
   deferStartUp?: true;
   enableFileWatcher?: boolean;
+  cardSizeLimitBytes?: number;
   // if you are creating a realm  to test it directly without a server, you can
   // also specify `withWorker: true` to also include a worker with your realm
   withWorker?: true;
@@ -514,6 +517,11 @@ export async function createRealm({
     realmServerMatrixClient,
     realmServerURL: new URL(new URL(realmURL).origin).href,
     definitionLookup,
+    cardSizeLimitBytes:
+      cardSizeLimitBytes ??
+      Number(
+        process.env.CARD_SIZE_LIMIT_BYTES ?? DEFAULT_CARD_SIZE_LIMIT_BYTES,
+      ),
   });
   if (worker) {
     virtualNetwork.mount(realm.handle);
@@ -535,6 +543,7 @@ export async function runTestRealmServer({
   matrixURL,
   permissions = { '*': ['read'] },
   enableFileWatcher = false,
+  cardSizeLimitBytes,
   domainsForPublishedRealms = {
     boxelSpace: 'localhost',
     boxelSite: 'localhost',
@@ -552,6 +561,7 @@ export async function runTestRealmServer({
   matrixURL: URL;
   matrixConfig?: MatrixConfig;
   enableFileWatcher?: boolean;
+  cardSizeLimitBytes?: number;
   domainsForPublishedRealms?: {
     boxelSpace?: string;
     boxelSite?: string;
@@ -588,6 +598,7 @@ export async function runTestRealmServer({
     dbAdapter,
     enableFileWatcher,
     definitionLookup,
+    cardSizeLimitBytes,
   });
 
   await testRealm.logInToMatrix();
@@ -1136,6 +1147,7 @@ export function setupPermissionedRealm(
     subscribeToRealmEvents = false,
     mode = 'beforeEach',
     published = false,
+    cardSizeLimitBytes,
   }: {
     permissions: RealmPermissions;
     realmURL?: URL;
@@ -1152,6 +1164,7 @@ export function setupPermissionedRealm(
     subscribeToRealmEvents?: boolean;
     mode?: 'beforeEach' | 'before';
     published?: boolean;
+    cardSizeLimitBytes?: number;
   },
 ) {
   let testRealmServer: Awaited<ReturnType<typeof runTestRealmServer>>;
@@ -1179,7 +1192,7 @@ export function setupPermissionedRealm(
           publishedRealmId,
         );
 
-        dbAdapter.execute(
+        await dbAdapter.execute(
           `INSERT INTO
             published_realms
             (id, owner_username, source_realm_url, published_realm_url)
@@ -1216,6 +1229,7 @@ export function setupPermissionedRealm(
         matrixURL,
         fileSystem,
         enableFileWatcher: subscribeToRealmEvents,
+        cardSizeLimitBytes,
       });
 
       let request = supertest(testRealmServer.testRealmHttpServer);

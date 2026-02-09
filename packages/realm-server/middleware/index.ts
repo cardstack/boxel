@@ -6,7 +6,7 @@ import {
 } from '@cardstack/runtime-common';
 import type Koa from 'koa';
 import mime from 'mime-types';
-import { nodeStreamToText } from '../stream';
+import { nodeStreamToText, nodeStreamToBuffer } from '../stream';
 import { retrieveTokenClaim } from '../utils/jwt';
 import {
   AuthenticationError,
@@ -14,7 +14,7 @@ import {
   SupportedMimeType,
 } from '@cardstack/runtime-common/router';
 
-const REQUEST_BODY_STATE = 'requestBodyText';
+const REQUEST_BODY_STATE = 'requestBody';
 
 interface ProxyOptions {
   responseHeaders?: Record<string, string>;
@@ -111,13 +111,17 @@ export function fullRequestURL(ctxt: Koa.Context): URL {
 export async function fetchRequestFromContext(
   ctxt: Koa.Context,
 ): Promise<Request> {
-  let reqBody: string | undefined;
-  if (['POST', 'PATCH', 'PUT', 'QUERY'].includes(ctxt.method)) {
+  let reqBody: string | Buffer | undefined;
+  if (['POST', 'PATCH', 'PUT', 'QUERY', 'DELETE'].includes(ctxt.method)) {
     let state = ctxt.state as Record<string, unknown>;
     if (REQUEST_BODY_STATE in state) {
-      reqBody = state[REQUEST_BODY_STATE] as string;
+      reqBody = state[REQUEST_BODY_STATE] as string | Buffer;
     } else {
-      reqBody = await nodeStreamToText(ctxt.req);
+      let isBinary =
+        ctxt.req.headers['content-type'] === 'application/octet-stream';
+      reqBody = isBinary
+        ? await nodeStreamToBuffer(ctxt.req)
+        : await nodeStreamToText(ctxt.req);
       state[REQUEST_BODY_STATE] = reqBody;
     }
   }

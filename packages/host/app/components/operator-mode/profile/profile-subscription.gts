@@ -21,10 +21,10 @@ interface Signature {
 }
 
 export default class ProfileSubscription extends Component<Signature> {
-  @service private declare billingService: BillingService;
-  @service private declare matrixService: MatrixService;
-  @service private declare network: NetworkService;
-  @service private declare realmServer: RealmServerService;
+  @service declare private billingService: BillingService;
+  @service declare private matrixService: MatrixService;
+  @service declare private network: NetworkService;
+  @service declare private realmServer: RealmServerService;
 
   @action handleBuyMoreCredits(amount: number) {
     this.billingService.redirectToStripe({ aiCreditAmount: amount });

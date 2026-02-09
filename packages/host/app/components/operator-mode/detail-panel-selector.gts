@@ -66,9 +66,7 @@ class SelectorItemRenderer extends Component<{
   get asSelectorItem(): SelectorItem {
     return this.args.selectorItem as SelectorItem;
   }
-  <template>
-    {{yield this.asSelectorItem to='item'}}
-  </template>
+  <template>{{yield this.asSelectorItem to='item'}}</template>
 }
 
 interface Signature {

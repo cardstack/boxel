@@ -5,7 +5,11 @@ import { join, basename } from 'path';
 import type { Server } from 'http';
 import type { DirResult } from 'tmp';
 import { existsSync, readJSONSync, statSync } from 'fs-extra';
-import type { Realm, Relationship } from '@cardstack/runtime-common';
+import type {
+  Realm,
+  Relationship,
+  ResourceID,
+} from '@cardstack/runtime-common';
 import {
   baseRealm,
   isSingleCardDocument,
@@ -299,6 +303,147 @@ module(basename(__filename), function () {
               type: 'file-meta',
               id: `${testRealmHref}second.png`,
             },
+          );
+        });
+        test('linksTo relationship for CardDef uses card type not file-meta', async function (assert) {
+          let { testRealm: realm, request, dbAdapter } = getRealmSetup();
+
+          let writes = new Map<string, string>([
+            [
+              'tag.gts',
+              `
+                import { CardDef, field, contains } from "https://cardstack.com/base/card-api";
+                import StringField from "https://cardstack.com/base/string";
+
+                export class Tag extends CardDef {
+                  @field label = contains(StringField);
+                  @field cardTitle = contains(StringField, {
+                    computeVia: function (this: Tag) {
+                      return this.label;
+                    },
+                  });
+                }
+              `,
+            ],
+            [
+              'article.gts',
+              `
+                import { CardDef, field, contains, linksTo } from "https://cardstack.com/base/card-api";
+                import StringField from "https://cardstack.com/base/string";
+                import { Tag } from "./tag";
+
+                export class Article extends CardDef {
+                  @field title = contains(StringField);
+                  @field tag = linksTo(Tag);
+                  @field cardTitle = contains(StringField, {
+                    computeVia: function (this: Article) {
+                      return this.title;
+                    },
+                  });
+                }
+              `,
+            ],
+            [
+              'Tag/programming.json',
+              JSON.stringify({
+                data: {
+                  attributes: {
+                    label: 'Programming',
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: '../tag.gts',
+                      name: 'Tag',
+                    },
+                  },
+                },
+              }),
+            ],
+            [
+              'Article/hello-world.json',
+              JSON.stringify({
+                data: {
+                  attributes: {
+                    title: 'Hello World',
+                  },
+                  relationships: {
+                    tag: {
+                      links: {
+                        self: '../Tag/programming',
+                      },
+                    },
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: '../article.gts',
+                      name: 'Article',
+                    },
+                  },
+                },
+              }),
+            ],
+          ]);
+
+          await realm.writeMany(writes);
+
+          // Verify the relationship is correct with a fresh index
+          let response = await request
+            .get('/Article/hello-world')
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(
+            response.status,
+            200,
+            `HTTP 200 status: ${response.text}`,
+          );
+          let doc = response.body as LooseSingleCardDocument;
+          let tagRelationship = doc.data.relationships?.tag as Relationship;
+          assert.ok(tagRelationship, 'tag relationship exists');
+          assert.deepEqual(
+            tagRelationship.data,
+            {
+              type: 'card',
+              id: `${testRealmHref}Tag/programming`,
+            },
+            'linksTo relationship for a CardDef uses type "card" not "file-meta"',
+          );
+
+          // Now simulate a stale index where the pristine_doc relationship
+          // lacks data.type (as it would be before commit 480362eb12 which
+          // added data to NotLoadedValue serialization in LinksTo.serialize).
+          // Also remove the linked card's instance entry so getInstance
+          // returns nothing, forcing the getFile fallback path.
+          let articleAlias = `${testRealmHref}Article/hello-world`;
+          let tagAlias = `${testRealmHref}Tag/programming`;
+          await dbAdapter.execute(
+            `UPDATE boxel_index
+             SET pristine_doc = pristine_doc #- '{relationships,tag,data}'
+             WHERE file_alias = '${articleAlias}'
+             AND type = 'instance'`,
+          );
+          await dbAdapter.execute(
+            `UPDATE boxel_index
+             SET is_deleted = TRUE
+             WHERE file_alias = '${tagAlias}'
+             AND type = 'instance'`,
+          );
+
+          let response2 = await request
+            .get('/Article/hello-world')
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(
+            response2.status,
+            200,
+            `HTTP 200 status after index modification: ${response2.text}`,
+          );
+          let doc2 = response2.body as LooseSingleCardDocument;
+          let tagRelationship2 = doc2.data.relationships?.tag as Relationship;
+          assert.ok(tagRelationship2, 'tag relationship still exists');
+          assert.strictEqual(
+            (tagRelationship2.data as ResourceID)?.type,
+            'card',
+            'linksTo relationship for a CardDef should use type "card" even when data.type is missing from stale index and the linked instance is unavailable',
           );
         });
         test('card-level query-backed relationships resolve via search at read time', async function (assert) {
@@ -784,26 +929,6 @@ module(basename(__filename), function () {
             undefined,
             'realm is not public readable',
           );
-        });
-      });
-
-      module('public readable realm with file', function (hooks) {
-        setupPermissionedRealmAtURL(hooks, realmURL, {
-          permissions: {
-            '*': ['read'],
-          },
-          fileSystem: {
-            'greeting.txt': 'hello',
-          },
-          onRealmSetup,
-        });
-
-        test('does not return card JSON for file urls', async function (assert) {
-          let response = await request
-            .get('/greeting.txt')
-            .set('Accept', 'application/vnd.card+json');
-
-          assert.strictEqual(response.status, 404, 'HTTP 404 status');
         });
       });
     });
@@ -1859,73 +1984,7 @@ module(basename(__filename), function () {
       });
     });
 
-    module('card POST request | file URL', function (_hooks) {
-      module('public writable realm with file', function (hooks) {
-        setupPermissionedRealmAtURL(hooks, realmURL, {
-          permissions: {
-            '*': ['read', 'write'],
-          },
-          fileSystem: {
-            'greeting.txt': 'hello',
-          },
-          onRealmSetup,
-        });
-
-        test('rejects POST to a file URL', async function (assert) {
-          let response = await request
-            .post('/greeting.txt')
-            .send({
-              data: {
-                type: 'card',
-                attributes: {},
-                meta: {
-                  adoptsFrom: {
-                    module: 'https://cardstack.com/base/card-api',
-                    name: 'CardDef',
-                  },
-                },
-              },
-            })
-            .set('Accept', 'application/vnd.card+json');
-
-          assert.strictEqual(response.status, 405, 'HTTP 405 status');
-        });
-      });
-    });
-
     module('card PATCH request', function (_hooks) {
-      module('public writable realm with file', function (hooks) {
-        setupPermissionedRealmAtURL(hooks, realmURL, {
-          permissions: {
-            '*': ['read', 'write'],
-          },
-          fileSystem: {
-            'greeting.txt': 'hello',
-          },
-          onRealmSetup,
-        });
-
-        test('rejects PATCH to a file URL', async function (assert) {
-          let response = await request
-            .patch('/greeting.txt')
-            .send({
-              data: {
-                type: 'card',
-                attributes: {},
-                meta: {
-                  adoptsFrom: {
-                    module: 'https://cardstack.com/base/card-api',
-                    name: 'CardDef',
-                  },
-                },
-              },
-            })
-            .set('Accept', 'application/vnd.card+json');
-
-          assert.strictEqual(response.status, 405, 'HTTP 405 status');
-        });
-      });
-
       module('public writable realm', function (hooks) {
         setupPermissionedRealmAtURL(hooks, realmURL, {
           permissions: {
@@ -3346,6 +3405,53 @@ module(basename(__filename), function () {
         });
       });
 
+      module('public writable realm with size limit', function (hooks) {
+        setupPermissionedRealmAtURL(hooks, realmURL, {
+          permissions: {
+            '*': ['read', 'write'],
+          },
+          cardSizeLimitBytes: 512,
+          onRealmSetup,
+        });
+
+        test('returns 413 when card payload exceeds size limit', async function (assert) {
+          let oversized = 'a'.repeat(2048);
+          let response = await request
+            .patch('/person-1')
+            .send({
+              data: {
+                type: 'card',
+                attributes: {
+                  firstName: oversized,
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: './person.gts',
+                    name: 'Person',
+                  },
+                },
+              },
+            })
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(response.status, 413, 'HTTP 413 status');
+          assert.strictEqual(
+            response.body.errors[0].title,
+            'Payload Too Large',
+            'error title is correct',
+          );
+          assert.strictEqual(
+            response.body.errors[0].status,
+            413,
+            'error status is correct',
+          );
+          assert.ok(
+            response.body.errors[0].message.includes('Card size'),
+            'error message mentions card size',
+          );
+        });
+      });
+
       module('permissioned realm', function (hooks) {
         setupPermissionedRealmAtURL(hooks, realmURL, {
           permissions: {
@@ -3416,61 +3522,7 @@ module(basename(__filename), function () {
       });
     });
 
-    module('card PUT request | file URL', function (_hooks) {
-      module('public writable realm with file', function (hooks) {
-        setupPermissionedRealmAtURL(hooks, realmURL, {
-          permissions: {
-            '*': ['read', 'write'],
-          },
-          fileSystem: {
-            'greeting.txt': 'hello',
-          },
-          onRealmSetup,
-        });
-
-        test('rejects PUT to a file URL', async function (assert) {
-          let response = await request
-            .put('/greeting.txt')
-            .send({
-              data: {
-                type: 'card',
-                attributes: {},
-                meta: {
-                  adoptsFrom: {
-                    module: 'https://cardstack.com/base/card-api',
-                    name: 'CardDef',
-                  },
-                },
-              },
-            })
-            .set('Accept', 'application/vnd.card+json');
-
-          assert.strictEqual(response.status, 405, 'HTTP 405 status');
-        });
-      });
-    });
-
     module('card DELETE request', function (_hooks) {
-      module('public writable realm with file', function (hooks) {
-        setupPermissionedRealmAtURL(hooks, realmURL, {
-          permissions: {
-            '*': ['read', 'write'],
-          },
-          fileSystem: {
-            'greeting.txt': 'hello',
-          },
-          onRealmSetup,
-        });
-
-        test('rejects DELETE to a file URL', async function (assert) {
-          let response = await request
-            .delete('/greeting.txt')
-            .set('Accept', 'application/vnd.card+json');
-
-          assert.strictEqual(response.status, 405, 'HTTP 405 status');
-        });
-      });
-
       module('public writable realm', function (hooks) {
         setupPermissionedRealmAtURL(hooks, realmURL, {
           permissions: {
@@ -3543,7 +3595,7 @@ module(basename(__filename), function () {
           assert.false(existsSync(cardFile), 'card json does not exist');
         });
 
-        test('removes file meta when card is deleted', async function (assert) {
+        test('removes card JSON file meta when card is deleted', async function (assert) {
           // confirm meta.resourceCreatedAt exists prior to deletion
           let initial = await request
             .get('/person-1')
@@ -3620,6 +3672,63 @@ module(basename(__filename), function () {
 
           assert.strictEqual(response.status, 204, 'HTTP 204 status');
         });
+      });
+    });
+
+    module('file URLs', function (hooks) {
+      setupPermissionedRealmAtURL(hooks, realmURL, {
+        permissions: {
+          '*': ['read', 'write'],
+        },
+        fileSystem: {
+          'greeting.txt': 'hello',
+        },
+        onRealmSetup,
+      });
+
+      test('rejects HTTP requests to file URLs', async function (assert) {
+        let response;
+        response = await request
+          .get('/greeting.txt')
+          .set('Accept', 'application/vnd.card+json');
+
+        assert.strictEqual(
+          response.status,
+          415,
+          'rejects GET for a file URL with 415 status',
+        );
+
+        response = await request
+          .patch('/greeting.txt')
+          .send({
+            data: {
+              type: 'card',
+              attributes: {},
+              meta: {
+                adoptsFrom: {
+                  module: 'https://cardstack.com/base/card-api',
+                  name: 'CardDef',
+                },
+              },
+            },
+          })
+          .set('Accept', 'application/vnd.card+json');
+
+        assert.strictEqual(
+          response.status,
+          415,
+          'rejects PATCH to a file URL with 415 status',
+        );
+
+        response = await request
+          .delete('/greeting.txt')
+          .set('Accept', 'application/vnd.card+json');
+
+        assert.strictEqual(
+          response.status,
+          415,
+          'rejects DELETE to a file URL with 415 status',
+        );
       });
     });
   });

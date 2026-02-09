@@ -45,7 +45,7 @@ import { listingActions, isReady } from '../resources/listing-actions';
 import GetAllRealmMetasCommand from '@cardstack/boxel-host/commands/get-all-realm-metas';
 import ListingGenerateExampleCommand from '@cardstack/boxel-host/commands/listing-generate-example';
 import ListingUpdateSpecsCommand from '@cardstack/boxel-host/commands/listing-update-specs';
-import CreateListingPRCommand from '@cardstack/boxel-host/commands/create-listing-pr';
+import CreateListingPRRequestCommand from '@cardstack/boxel-host/commands/create-listing-pr-request';
 
 import { getMenuItems } from '@cardstack/runtime-common';
 
@@ -596,7 +596,7 @@ export class Listing extends CardDef {
       return undefined;
     }
     return {
-      label: 'Generate example with AI',
+      label: 'Generate Example with AI',
       action: async () => {
         const command = new ListingGenerateExampleCommand(
           params.commandContext,
@@ -676,8 +676,8 @@ export class Listing extends CardDef {
     return {
       label: 'Make a PR',
       action: async () => {
-        await new CreateListingPRCommand(commandContext).execute({
-          listing: this,
+        await new CreateListingPRRequestCommand(commandContext).execute({
+          listingId: this.id,
           realm: this[realmURL]!.href,
         });
       },

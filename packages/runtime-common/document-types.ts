@@ -40,6 +40,12 @@ export interface FileMetaCollectionDocument {
   meta: QueryResultsMeta;
 }
 
+export interface LinkableCollectionDocument {
+  data: (CardResource<Saved> | FileMetaResource)[];
+  included?: (FileMetaResource | CardResource<Saved>)[];
+  meta: QueryResultsMeta;
+}
+
 export type CardDocument = SingleCardDocument | CardCollectionDocument;
 export type FileMetaDocument =
   | SingleFileMetaDocument
@@ -99,6 +105,34 @@ export function isCardCollectionDocument(
     }
   }
   return data.every((resource) => isCardResource(resource));
+}
+
+export function isFileMetaCollectionDocument(
+  doc: any,
+): doc is FileMetaCollectionDocument {
+  if (typeof doc !== 'object' || doc == null) {
+    return false;
+  }
+  if (!('data' in doc)) {
+    return false;
+  }
+  let { data } = doc;
+  if (!Array.isArray(data)) {
+    return false;
+  }
+  if ('included' in doc) {
+    let { included } = doc;
+    if (!isIncluded(included)) {
+      return false;
+    }
+  }
+  return data.every((resource) => isFileMetaResource(resource));
+}
+
+export function isLinkableCollectionDocument(
+  doc: any,
+): doc is LinkableCollectionDocument {
+  return isCardCollectionDocument(doc) || isFileMetaCollectionDocument(doc);
 }
 
 export function isPrerenderedCardCollectionDocument(

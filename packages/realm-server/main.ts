@@ -6,6 +6,7 @@ import {
   logger,
   Deferred,
   CachingDefinitionLookup,
+  DEFAULT_CARD_SIZE_LIMIT_BYTES,
 } from '@cardstack/runtime-common';
 import { NodeAdapter } from './node-realm';
 import yargs from 'yargs';
@@ -279,6 +280,9 @@ const getIndexHTML = async () => {
         realmServerMatrixClient,
         realmServerURL: serverURL,
         definitionLookup,
+        cardSizeLimitBytes: Number(
+          process.env.CARD_SIZE_LIMIT_BYTES ?? DEFAULT_CARD_SIZE_LIMIT_BYTES,
+        ),
       },
       {
         fullIndexOnStartup: true,

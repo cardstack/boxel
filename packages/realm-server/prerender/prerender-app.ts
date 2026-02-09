@@ -10,6 +10,7 @@ import {
   type RenderResponse,
   type ModuleRenderResponse,
   type FileExtractResponse,
+  type FileRenderResponse,
 } from '@cardstack/runtime-common';
 import {
   ecsMetadata,
@@ -334,6 +335,175 @@ export function buildPrerenderApp(options: {
         );
       }
     },
+  });
+
+  // File render route needs additional attributes (fileData, types)
+  // beyond what registerPrerenderRoute handles, so we register it directly.
+  router.post('/prerender-file-render', async (ctxt: Koa.Context) => {
+    try {
+      let request = await fetchRequestFromContext(ctxt);
+      let raw = await request.text();
+      let body: any;
+      try {
+        body = raw ? JSON.parse(raw) : {};
+      } catch (e) {
+        ctxt.status = 400;
+        ctxt.body = {
+          errors: [{ status: 400, message: 'Invalid JSON body' }],
+        };
+        return;
+      }
+
+      let attrs = body?.data?.attributes ?? {};
+      let rawUrl = attrs.url;
+      let rawAuth = attrs.auth;
+      let rawRealm = attrs.realm;
+      let renderOptions: RenderRouteOptions =
+        attrs.renderOptions &&
+        typeof attrs.renderOptions === 'object' &&
+        !Array.isArray(attrs.renderOptions)
+          ? (attrs.renderOptions as RenderRouteOptions)
+          : {};
+      let fileData = attrs.fileData;
+      let types = attrs.types;
+
+      let isNonEmptyString = (value: unknown): value is string =>
+        typeof value === 'string' && value.trim().length > 0;
+
+      let missing = [
+        { value: rawUrl, name: 'url' },
+        { value: rawRealm, name: 'realm' },
+        { value: rawAuth, name: 'auth' },
+      ]
+        .filter(({ value }) => !isNonEmptyString(value))
+        .map(({ name }) => name);
+
+      if (!fileData) {
+        missing.push('fileData');
+      }
+      if (!Array.isArray(types)) {
+        missing.push('types');
+      }
+
+      log.debug(
+        `received file render prerender request ${rawUrl}: realm=${rawRealm}`,
+      );
+      if (missing.length > 0) {
+        ctxt.status = 400;
+        ctxt.body = {
+          errors: [
+            {
+              status: 400,
+              message: `Missing or invalid required attributes: ${missing.join(', ')}`,
+            },
+          ],
+        };
+        return;
+      }
+
+      let realm = rawRealm as string;
+      let url = rawUrl as string;
+      let auth = rawAuth as string;
+
+      let start = Date.now();
+      let execPromise = prerenderer
+        .prerenderFileRender({
+          realm,
+          url,
+          auth,
+          fileData,
+          types,
+          renderOptions,
+        })
+        .then((result) => ({ result }));
+      let drainPromise = options.drainingPromise
+        ? options.drainingPromise.then(() => ({ draining: true as const }))
+        : null;
+      let raceResult = drainPromise
+        ? await Promise.race([execPromise, drainPromise])
+        : await execPromise;
+      if ('draining' in raceResult) {
+        execPromise.catch((e) =>
+          log.debug(
+            'file render prerender execute settled after drain (ignored):',
+            e,
+          ),
+        );
+        ctxt.status = PRERENDER_SERVER_DRAINING_STATUS_CODE;
+        ctxt.set(
+          PRERENDER_SERVER_STATUS_HEADER,
+          PRERENDER_SERVER_STATUS_DRAINING,
+        );
+        ctxt.body = {
+          errors: [
+            {
+              status: PRERENDER_SERVER_DRAINING_STATUS_CODE,
+              message: 'Prerender server draining',
+            },
+          ],
+        };
+        return;
+      }
+      let { response, timings, pool } = raceResult.result;
+      let totalMs = Date.now() - start;
+      let poolFlags = Object.entries({
+        reused: pool.reused,
+        evicted: pool.evicted,
+        timedOut: pool.timedOut,
+      })
+        .filter(([, value]) => value === true)
+        .map(([key]) => key)
+        .join(', ');
+      let poolFlagSuffix = poolFlags.length > 0 ? ` flags=[${poolFlags}]` : '';
+      log.info(
+        'file render prerendered %s total=%dms launch=%dms render=%dms pageId=%s realm=%s%s',
+        url,
+        totalMs,
+        timings.launchMs,
+        timings.renderMs,
+        pool.pageId,
+        pool.realm,
+        poolFlagSuffix,
+      );
+      ctxt.status = 201;
+      ctxt.set('Content-Type', 'application/vnd.api+json');
+      ctxt.body = {
+        data: {
+          type: 'prerender-file-render-result',
+          id: url,
+          attributes: response,
+        },
+        meta: {
+          timing: {
+            launchMs: timings.launchMs,
+            renderMs: timings.renderMs,
+            totalMs,
+          },
+          pool,
+        },
+      };
+      if (pool.timedOut) {
+        log.warn(`file render of ${url} timed out`);
+      }
+      const fileResponse = response as FileRenderResponse;
+      if (fileResponse.error) {
+        log.debug(
+          `file render of ${url} resulted in error doc:\n${JSON.stringify(fileResponse.error, null, 2)}`,
+        );
+      }
+    } catch (err: any) {
+      Sentry.captureException(err);
+      log.error('Unhandled error in /prerender-file-render:', err);
+      ctxt.status = 500;
+      ctxt.body = {
+        errors: [
+          {
+            status: 500,
+            message: err?.message ?? 'Unknown error',
+          },
+        ],
+      };
+    }
   });
 
   app

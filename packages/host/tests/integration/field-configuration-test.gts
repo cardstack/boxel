@@ -16,6 +16,7 @@ import type {
   CardDef as CardDefType,
   StoreSearchResource,
 } from 'https://cardstack.com/base/card-api';
+import type { FileDef } from 'https://cardstack.com/base/file-api';
 
 import {
   testRealmURL,
@@ -42,7 +43,8 @@ import { setupRenderingTest } from '../helpers/setup';
 let loader: Loader;
 
 class DeferredLinkStore implements CardStore {
-  private instances = new Map<string, CardDefType>();
+  private cardInstances = new Map<string, CardDefType>();
+  private fileMetaInstances = new Map<string, FileDef>();
   private readyCardDocs = new Map<string, SingleCardDocument>();
   private pendingCardDocs = new Map<string, Deferred<SingleCardDocument>>();
   private readyFileMetaDocs = new Map<string, SingleFileMetaDocument>();
@@ -53,16 +55,27 @@ class DeferredLinkStore implements CardStore {
   private inFlightLoads = new Set<Promise<unknown>>();
   private loadGeneration = 0;
 
-  get(url: string) {
-    return this.instances.get(this.normalize(url));
+  getCard(url: string) {
+    return this.cardInstances.get(this.normalize(url));
   }
 
-  set(url: string, instance: CardDefType) {
-    this.instances.set(this.normalize(url), instance);
+  getFileMeta(url: string) {
+    return this.fileMetaInstances.get(this.normalize(url));
   }
 
-  setNonTracked(url: string, instance: CardDefType) {
-    this.instances.set(this.normalize(url), instance);
+  setCard(url: string, instance: CardDefType) {
+    this.cardInstances.set(this.normalize(url), instance);
+  }
+
+  setFileMeta(url: string, instance: FileDef) {
+    this.fileMetaInstances.set(this.normalize(url), instance);
+  }
+
+  setCardNonTracked(url: string, instance: CardDefType) {
+    this.cardInstances.set(this.normalize(url), instance);
+  }
+  setFileMetaNonTracked(url: string, instance: FileDef) {
+    this.fileMetaInstances.set(this.normalize(url), instance);
   }
 
   makeTracked(_id: string) {}
@@ -396,7 +409,7 @@ module('Integration | field configuration', function (hooks) {
     // Change the consumed field in the linked Theme card
     let mod = await loader.import(`${testRealmURL}reactive`);
     let ThemeCard = (mod as any).ThemeCard;
-    let loadedTheme = customStore.get(themeRef) as InstanceType<
+    let loadedTheme = customStore.getCard(themeRef) as InstanceType<
       typeof ThemeCard
     >;
     loadedTheme.palette = 'orange';

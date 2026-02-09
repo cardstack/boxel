@@ -19,8 +19,10 @@ import {
   hasExecutableExtension,
   isCardError,
   isCardInstance,
+  isFileDefInstance,
+  isFileMetaResource,
   isSingleCardDocument,
-  isCardCollectionDocument,
+  isLinkableCollectionDocument,
   Deferred,
   delay,
   mergeRelationships,
@@ -48,10 +50,17 @@ import {
   type CardErrorJSONAPI,
   type CardErrorsJSONAPI,
   type ErrorEntry,
+  type FileMetaResource,
+  type LooseLinkableResource,
+  type LooseSingleResourceDocument,
+  type StoreReadType,
+  type CardResource,
+  type Saved,
 } from '@cardstack/runtime-common';
 
 import type { CardDef, BaseDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
+import type { FileDef } from 'https://cardstack.com/base/file-api';
 
 import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
 
@@ -109,6 +118,10 @@ export default class StoreService extends Service implements StoreInterface {
   private ready: Promise<void>;
   private inflightGetCards: Map<string, Promise<CardDef | CardErrorJSONAPI>> =
     new Map();
+  private inflightGetFileMeta: Map<
+    string,
+    Promise<FileDef | CardErrorJSONAPI>
+  > = new Map();
   private inflightCardMutations: Map<string, Promise<void>> = new Map();
   private inflightCardLoads: Map<string, Deferred<void>> = new Map();
   private store: CardStore;
@@ -155,6 +168,7 @@ export default class StoreService extends Service implements StoreInterface {
     this.newReferencePromises = [];
     this.autoSaveStates = new TrackedMap();
     this.inflightGetCards = new Map();
+    this.inflightGetFileMeta = new Map();
     this.inflightCardMutations = new Map();
     this.inflightCardLoads = new Map();
     this.autoSaveQueues = new Map();
@@ -175,6 +189,7 @@ export default class StoreService extends Service implements StoreInterface {
     this.autoSaveStates = new TrackedMap();
     this.newReferencePromises = [];
     this.inflightGetCards = new Map();
+    this.inflightGetFileMeta = new Map();
     this.inflightCardMutations = new Map();
     this.inflightCardLoads = new Map();
     this.autoSaveQueues = new Map();
@@ -264,7 +279,7 @@ export default class StoreService extends Service implements StoreInterface {
       if (opts?.realm) {
         doc.data.meta = { ...(doc.data.meta ?? {}), realmURL: opts.realm };
       }
-      let cardOrError = await this.getInstance({
+      let cardOrError = await this.getCardInstance({
         idOrDoc: doc,
         relativeTo: opts?.relativeTo,
         realm: opts?.realm,
@@ -311,8 +326,16 @@ export default class StoreService extends Service implements StoreInterface {
       let api = await this.cardService.getAPI();
       let deps = getDeps(api, instance);
       for (let dep of deps) {
-        if (!this.store.get(dep[localIdSymbol])) {
-          this.store.set(dep.id ?? dep[localIdSymbol], dep);
+        if (isCardInstance(dep)) {
+          if (!this.store.getCard(dep[localIdSymbol])) {
+            this.store.setCard(dep.id ?? dep[localIdSymbol], dep);
+          }
+          continue;
+        }
+        if (isFileDefInstance(dep) && dep.id) {
+          if (!this.store.getFileMeta(dep.id)) {
+            this.store.setFileMeta(dep.id, dep);
+          }
         }
       }
     }
@@ -324,7 +347,7 @@ export default class StoreService extends Service implements StoreInterface {
     }
 
     let maybeOldInstance = instance.id
-      ? this.store.get(instance.id)
+      ? this.store.getCard(instance.id)
       : undefined;
     if (maybeOldInstance) {
       await this.stopAutoSaving(maybeOldInstance);
@@ -359,29 +382,87 @@ export default class StoreService extends Service implements StoreInterface {
 
   // peek will return a stale instance in the case the server has an error for
   // this id
-  peek<T extends CardDef>(id: string): T | CardErrorJSONAPI | undefined {
-    return this.store.getInstanceOrError(id) as T | undefined;
+  peek<T extends CardDef>(
+    id: string,
+    opts?: { type?: 'card' },
+  ): T | CardErrorJSONAPI | undefined;
+  peek<T extends FileDef>(
+    id: string,
+    opts: { type: 'file-meta' },
+  ): T | CardErrorJSONAPI | undefined;
+  peek<T extends CardDef | FileDef>(
+    id: string,
+    opts?: { type?: StoreReadType },
+  ): T | CardErrorJSONAPI | undefined {
+    let readType = opts?.type ?? 'card';
+    if (readType === 'file-meta') {
+      return this.store.getFileMetaInstanceOrError<T & FileDef>(id);
+    }
+    return this.store.getCardInstanceOrError<T & CardDef>(id);
   }
 
   // peekError will always return the current server state regarding errors for this id
-  peekError(id: string): CardErrorJSONAPI | undefined {
-    return this.store.getError(id);
+  peekError(id: string, opts?: { type?: 'card' }): CardErrorJSONAPI | undefined;
+  peekError(
+    id: string,
+    opts: { type: 'file-meta' },
+  ): CardErrorJSONAPI | undefined;
+  peekError(
+    id: string,
+    opts?: { type?: StoreReadType },
+  ): CardErrorJSONAPI | undefined {
+    let readType = opts?.type ?? 'card';
+    if (readType === 'file-meta') {
+      return this.store.getFileMetaError(id);
+    }
+    return this.store.getCardError(id);
   }
 
-  // peekLive will always return the current server state for both instances and errors
-  peekLive<T extends CardDef>(id: string): T | CardErrorJSONAPI | undefined {
-    return this.peekError(id) ?? this.peek(id);
-  }
-
-  async get<T extends CardDef>(id: string): Promise<T | CardErrorJSONAPI> {
-    return await this.getInstance<T>({ idOrDoc: id });
+  async get<T extends CardDef>(
+    id: string,
+    opts?: { type?: 'card' },
+  ): Promise<T | CardErrorJSONAPI>;
+  async get<T extends FileDef>(
+    id: string,
+    opts: { type: 'file-meta' },
+  ): Promise<T | CardErrorJSONAPI>;
+  async get<T extends CardDef | FileDef>(
+    id: string,
+    opts?: { type?: StoreReadType },
+  ): Promise<T | CardErrorJSONAPI> {
+    let readType = opts?.type ?? 'card';
+    if (readType === 'file-meta') {
+      return await this.getFileMetaInstance<T & FileDef>({
+        idOrDoc: id,
+      });
+    }
+    return await this.getCardInstance<T & CardDef>({ idOrDoc: id });
   }
 
   // Bypass cached state and fetch from source of truth
   async getWithoutCache<T extends CardDef>(
     id: string,
+    opts?: { type?: 'card' },
+  ): Promise<T | CardErrorJSONAPI>;
+  async getWithoutCache<T extends FileDef>(
+    id: string,
+    opts: { type: 'file-meta' },
+  ): Promise<T | CardErrorJSONAPI>;
+  async getWithoutCache<T extends CardDef | FileDef>(
+    id: string,
+    opts?: { type?: StoreReadType },
   ): Promise<T | CardErrorJSONAPI> {
-    return await this.getInstance<T>({ idOrDoc: id, opts: { noCache: true } });
+    let readType = opts?.type ?? 'card';
+    if (readType === 'file-meta') {
+      return await this.getFileMetaInstance<T & FileDef>({
+        idOrDoc: id,
+        opts: { noCache: true },
+      });
+    }
+    return await this.getCardInstance<T & CardDef>({
+      idOrDoc: id,
+      opts: { noCache: true },
+    });
   }
 
   async delete(id: string): Promise<void> {
@@ -497,7 +578,20 @@ export default class StoreService extends Service implements StoreInterface {
     return persistedResult as T | CardErrorJSONAPI;
   }
 
-  async search(query: Query, realms?: string[]): Promise<CardDef[]> {
+  async search<T extends CardDef | FileDef = CardDef>(
+    query: Query,
+    realms?: string[],
+  ): Promise<T[]>;
+  async search<T extends CardDef | FileDef = CardDef>(
+    query: Query,
+    realms: string[] | undefined,
+    opts: { includeMeta: true },
+  ): Promise<{ instances: T[]; meta: QueryResultsMeta }>;
+  async search<T extends CardDef | FileDef = CardDef>(
+    query: Query,
+    realms?: string[],
+    opts?: { includeMeta?: boolean },
+  ): Promise<T[] | { instances: T[]; meta: QueryResultsMeta }> {
     let normalizedRealms = (realms ?? [])
       .map((realm) => new RealmPaths(new URL(realm)).url)
       .filter(Boolean);
@@ -506,12 +600,23 @@ export default class StoreService extends Service implements StoreInterface {
         ? normalizedRealms
         : this.realmServer.availableRealmURLs;
     if (searchRealms.length === 0) {
-      return [];
+      return opts?.includeMeta
+        ? { instances: [], meta: { page: { total: 0 } } }
+        : [];
     }
-    return this._search(query, searchRealms);
+    let result = await this.fetchAndHydrateSearchResults<T>(
+      query,
+      searchRealms,
+    );
+    return opts?.includeMeta ? result : result.instances;
   }
 
-  private async _search(query: Query, realms: string[]): Promise<CardDef[]> {
+  private async fetchAndHydrateSearchResults<
+    T extends CardDef | FileDef = CardDef,
+  >(
+    query: Query,
+    realms: string[],
+  ): Promise<{ instances: T[]; meta: QueryResultsMeta }> {
     let realmServerURLs = this.realmServer.getRealmServersForRealms(realms);
     // TODO remove this assertion after multi-realm server/federated identity is supported
     this.realmServer.assertOwnRealmServer(realmServerURLs);
@@ -536,40 +641,35 @@ export default class StoreService extends Service implements StoreInterface {
       throw err;
     }
     let json = await response.json();
-    if (!isCardCollectionDocument(json)) {
+    if (!isLinkableCollectionDocument(json)) {
       throw new Error(
-        `The realm search response was not a card collection document:
+        `The realm search response was not a valid collection document:
         ${JSON.stringify(json, null, 2)}`,
       );
     }
     let collectionDoc = json;
-    return (
+
+    // Hydrate each result into the store
+    let instances = (
       await Promise.all(
-        collectionDoc.data.map(async (doc) => {
+        collectionDoc.data.map(async (resource) => {
           try {
-            return await this.getInstance({
-              idOrDoc: { data: doc },
-              relativeTo: new URL(doc.id!), // all results will have id's
-            });
-          } catch (e) {
-            console.warn(
-              `Skipping ${
-                doc.id
-              }. Encountered error deserializing from search result for query ${JSON.stringify(
-                query,
-                null,
-                2,
-              )} against realms ${realms.join()}`,
-              e,
+            return await this.addResourceFromSearchData<T>(resource);
+          } catch (error) {
+            storeLogger.warn(
+              `Failed to hydrate resource from search results (id: ${'id' in resource ? resource.id : 'unknown'})`,
+              error,
             );
             return undefined;
           }
         }),
       )
-    ).filter(Boolean) as CardDef[];
+    ).filter(Boolean) as T[];
+
+    return { instances, meta: collectionDoc.meta };
   }
 
-  getSearchResource<T extends CardDef = CardDef>(
+  getSearchResource<T extends CardDef | FileDef = CardDef>(
     parent: object,
     getQuery: () => Query | undefined,
     getRealms?: () => string[] | undefined,
@@ -581,6 +681,12 @@ export default class StoreService extends Service implements StoreInterface {
         searchURL?: string;
         meta?: QueryResultsMeta;
         errors?: ErrorEntry[];
+        queryErrors?: Array<{
+          realm: string;
+          type: string;
+          message: string;
+          status?: number;
+        }>;
       };
     },
   ): SearchResource<T> {
@@ -667,9 +773,19 @@ export default class StoreService extends Service implements StoreInterface {
       this.newReferencePromises.push(deferred.promise);
       try {
         await this.ready;
-        let instanceOrError = this.peekLive(url);
+        // Check file-meta map as well as card map — file-meta instances
+        // are loaded into their own map by store.get(id, { type: 'file-meta' })
+        let fileMetaInstance =
+          this.peekError(url, { type: 'file-meta' }) ??
+          this.peek(url, { type: 'file-meta' });
+        if (fileMetaInstance) {
+          // File-meta instances don't need auto-saving or card wiring
+          deferred.fulfill();
+          return;
+        }
+        let instanceOrError = this.peekError(url) ?? this.peek(url);
         if (!instanceOrError) {
-          instanceOrError = await this.getInstance({
+          instanceOrError = await this.getCardInstance({
             idOrDoc: url,
           });
           this.setIdentityContext(instanceOrError);
@@ -677,7 +793,7 @@ export default class StoreService extends Service implements StoreInterface {
         await this.startAutoSaving(instanceOrError);
         if (!instanceOrError.id) {
           // keep track of urls for cards that are missing
-          this.store.addInstanceOrError(url, instanceOrError);
+          this.store.addCardInstanceOrError(url, instanceOrError);
         }
         deferred.fulfill();
       } catch (e) {
@@ -717,7 +833,7 @@ export default class StoreService extends Service implements StoreInterface {
   }
 
   private unsubscribeFromInstance(id: string) {
-    let instance = this.store.get(id);
+    let instance = this.store.getCard(id);
     if (instance) {
       if (this.cardApiCache && instance) {
         this.cardApiCache?.unsubscribeFromChanges(
@@ -781,7 +897,7 @@ export default class StoreService extends Service implements StoreInterface {
       }
       let clientRequestId = event.clientRequestId ?? undefined;
 
-      let instance = this.peekLive(invalidation);
+      let instance = this.peekError(invalidation) ?? this.peek(invalidation);
       if (instance) {
         if (isCardInstance(instance)) {
           // Do not reload if the event is a result of an instance-editing request that we made. Otherwise we risk
@@ -842,8 +958,8 @@ export default class StoreService extends Service implements StoreInterface {
       let url = asURL(idOrDoc);
       let reloadTracker = this.startTrackingCardLoad(url);
       try {
-        let oldInstance = url ? this.store.get(url) : undefined;
-        let instanceOrError = await this.getInstance({
+        let oldInstance = url ? this.store.getCard(url) : undefined;
+        let instanceOrError = await this.getCardInstance({
           idOrDoc,
           opts: { noCache: true },
         });
@@ -867,7 +983,7 @@ export default class StoreService extends Service implements StoreInterface {
       if (isLocalId(id)) {
         let remoteIdsForLocal = this.store.getRemoteIds(id);
         if (remoteIdsForLocal.length === 0) {
-          let error = this.store.getError(id);
+          let error = this.store.getCardError(id);
           if (error?.meta?.remoteId) {
             remoteIdsForLocal = [error.meta.remoteId];
           }
@@ -880,7 +996,7 @@ export default class StoreService extends Service implements StoreInterface {
       }
     }
     await Promise.all(
-      [...remoteIds].map((id) => this.getInstance({ idOrDoc: id })),
+      [...remoteIds].map((id) => this.getCardInstance({ idOrDoc: id })),
     );
   });
 
@@ -931,17 +1047,80 @@ export default class StoreService extends Service implements StoreInterface {
     }
   };
 
-  private setIdentityContext(instanceOrError: CardDef | CardErrorJSONAPI) {
+  private setIdentityContext(
+    instanceOrError: CardDef | FileDef | CardErrorJSONAPI,
+    readType: StoreReadType = 'card',
+  ) {
+    if (readType === 'file-meta') {
+      let id = (instanceOrError as { id?: string }).id;
+      if (!id) {
+        return;
+      }
+      this.store.addFileMetaInstanceOrError(
+        id,
+        instanceOrError as FileDef | CardErrorJSONAPI,
+      );
+      return;
+    }
+
     let instance = isCardInstance(instanceOrError)
       ? instanceOrError
       : undefined;
     if (!instance && !instanceOrError.id) {
       return;
     }
-    this.store.addInstanceOrError(
+    this.store.addCardInstanceOrError(
       instance ? (instance.id ?? instance[localIdSymbol]) : instanceOrError.id!, // we checked above to make sure errors have id's
-      instanceOrError,
+      instanceOrError as CardDef | CardErrorJSONAPI,
     );
+  }
+
+  protected async createFileMetaFromSerialized(
+    resource: LooseLinkableResource<FileMetaResource>,
+    doc: LooseSingleResourceDocument<FileMetaResource>,
+    relativeTo: URL | undefined,
+  ): Promise<FileDef> {
+    let api = await this.cardService.getAPI();
+    let instance = (await api.createFromSerialized(resource, doc, relativeTo, {
+      store: this.store,
+    })) as unknown as FileDef;
+    this.setIdentityContext(instance, 'file-meta');
+    return instance;
+  }
+
+  // Internal method for hydrating a resource from search response data.
+  // This avoids N+1 queries when search results include card or file-meta resources.
+  // Not part of the public API since it's meant for internal search result processing.
+  private async addResourceFromSearchData<T extends CardDef | FileDef>(
+    resource: CardResource<Saved> | FileMetaResource,
+  ): Promise<T | undefined> {
+    if (!resource.id) {
+      throw new Error('resource must have an id');
+    }
+
+    // Handle file-meta resources
+    if (isFileMetaResource(resource)) {
+      let existingInstance = this.peek(resource.id, { type: 'file-meta' });
+      if (existingInstance && isFileDefInstance(existingInstance)) {
+        return existingInstance as T;
+      }
+      let doc = { data: resource };
+      return this.createFileMetaFromSerialized(
+        resource,
+        doc,
+        new URL(resource.id),
+      ) as Promise<T>;
+    }
+
+    // Handle card resources
+    let existingInstance = this.peek(resource.id);
+    if (existingInstance && isCardInstance(existingInstance)) {
+      return existingInstance as T;
+    }
+    return this.add({ data: resource } as SingleCardDocument, {
+      doNotPersist: true,
+      relativeTo: new URL(resource.id),
+    }) as Promise<T>;
   }
 
   private async startAutoSaving(instanceOrError: CardDef | CardErrorJSONAPI) {
@@ -969,7 +1148,7 @@ export default class StoreService extends Service implements StoreInterface {
     this.autoSaveStates.delete(instance[localIdSymbol]);
   }
 
-  private async getInstance<T extends CardDef>({
+  private async getCardInstance<T extends CardDef>({
     idOrDoc,
     relativeTo,
     realm,
@@ -980,8 +1159,6 @@ export default class StoreService extends Service implements StoreInterface {
     realm?: string; // used for new cards
     opts?: { noCache?: boolean; localDir?: string };
   }): Promise<T | CardErrorJSONAPI> {
-    // Note: the store can cache FileDef instances (via file-meta documents) for
-    // lookup/rendering, but autosave, dependency tracking, and GC are card-only.
     let deferred: Deferred<T | CardErrorJSONAPI> | undefined;
     let id = asURL(idOrDoc);
     if (id) {
@@ -1012,7 +1189,7 @@ export default class StoreService extends Service implements StoreInterface {
           if (!isCardInstance(maybeError)) {
             return maybeError;
           }
-          this.store.set(newInstance.id, newInstance);
+          this.store.setCard(newInstance.id, newInstance);
           deferred?.fulfill(newInstance as T);
           return newInstance as T;
         } else {
@@ -1039,22 +1216,6 @@ export default class StoreService extends Service implements StoreInterface {
       let doc = (typeof idOrDoc !== 'string' ? idOrDoc : undefined) as
         | SingleCardDocument
         | undefined;
-      if (!doc && looksLikeFileURL(url)) {
-        let fileMetaDoc = await this.store.loadFileMetaDocument(url);
-        if (isCardError(fileMetaDoc)) {
-          throw fileMetaDoc;
-        }
-        let api = await this.cardService.getAPI();
-        let fileInstance = await api.createFromSerialized(
-          fileMetaDoc.data,
-          fileMetaDoc,
-          fileMetaDoc.data.id ? new URL(fileMetaDoc.data.id) : new URL(url),
-          { store: this.store },
-        );
-        this.setIdentityContext(fileInstance as unknown as CardDef);
-        deferred?.fulfill(fileInstance as unknown as T);
-        return fileInstance as unknown as T;
-      }
       if (!doc) {
         let json: CardDocument | undefined;
         if (this.isRenderStore && (globalThis as any).__boxelRenderContext) {
@@ -1088,7 +1249,7 @@ export default class StoreService extends Service implements StoreInterface {
       );
       // in case the url is an alias for the id (like index card without the
       // "/index") we also add this
-      this.store.set(url, instance);
+      this.store.setCard(url, instance);
       deferred?.fulfill(instance as T);
       if (!existingInstance || !isCardInstance(existingInstance)) {
         this.setIdentityContext(instance);
@@ -1099,15 +1260,89 @@ export default class StoreService extends Service implements StoreInterface {
       let errorResponse = processCardError(id, error);
       let cardError = errorResponse.errors[0];
       deferred?.fulfill(cardError);
-      console.error(
-        `error getting instance ${JSON.stringify(idOrDoc, null, 2)}: ${JSON.stringify(error, null, 2)}`,
-        error,
+      this.setIdentityContext(cardError);
+      let status = cardError?.status ?? error?.status;
+      let isSystemCardDefault = isSystemCardDefaultId(
+        id,
+        idOrDoc,
+        cardError?.id,
       );
+      // suppress logging of 404s for system card defaults during tests
+      let shouldLogAsError = !(
+        isTesting() &&
+        status === 404 &&
+        isSystemCardDefault
+      );
+      let message = `error getting instance ${JSON.stringify(idOrDoc, null, 2)}: ${JSON.stringify(error, null, 2)}`;
+      if (shouldLogAsError) {
+        storeLogger.error(message, error);
+      } else {
+        storeLogger.debug(message, error);
+      }
       return cardError;
     } finally {
       if (id) {
         this.inflightGetCards.delete(id);
       }
+    }
+  }
+
+  private async getFileMetaInstance<T extends FileDef>({
+    idOrDoc,
+    opts,
+  }: {
+    idOrDoc: string | LooseSingleCardDocument;
+    opts?: { noCache?: boolean };
+  }): Promise<T | CardErrorJSONAPI> {
+    let deferred: Deferred<T | CardErrorJSONAPI> | undefined;
+    let id = asURL(idOrDoc);
+    if (!id) {
+      throw new Error('file-meta reads require a URL id');
+    }
+    let working = this.inflightGetFileMeta.get(id);
+    if (working) {
+      return working as Promise<T | CardErrorJSONAPI>;
+    }
+    deferred = new Deferred<T | CardErrorJSONAPI>();
+    this.inflightGetFileMeta.set(
+      id,
+      deferred.promise as Promise<FileDef | CardErrorJSONAPI>,
+    );
+    try {
+      let existingInstance = this.peek(id, { type: 'file-meta' });
+      if (!opts?.noCache && existingInstance) {
+        deferred.fulfill(existingInstance as T | CardErrorJSONAPI);
+        return existingInstance as T | CardErrorJSONAPI;
+      }
+      if (isLocalId(id)) {
+        throw new Error(`file-meta reads do not support local ids (${id})`);
+      }
+      let url = id;
+      let fileMetaDoc = await this.store.loadFileMetaDocument(url);
+      if (isCardError(fileMetaDoc)) {
+        throw fileMetaDoc;
+      }
+      let api = await this.cardService.getAPI();
+      let fileInstance = await api.createFromSerialized(
+        fileMetaDoc.data,
+        fileMetaDoc,
+        fileMetaDoc.data.id ? new URL(fileMetaDoc.data.id) : new URL(url),
+        { store: this.store },
+      );
+      this.setIdentityContext(fileInstance as unknown as FileDef, 'file-meta');
+      deferred.fulfill(fileInstance as T);
+      return fileInstance as T;
+    } catch (error: any) {
+      let errorResponse = processCardError(id, error);
+      let cardError = errorResponse.errors[0];
+      deferred.fulfill(cardError);
+      console.error(
+        `error getting file-meta instance ${JSON.stringify(idOrDoc, null, 2)}: ${JSON.stringify(error, null, 2)}`,
+        error,
+      );
+      return cardError;
+    } finally {
+      this.inflightGetFileMeta.delete(id);
     }
   }
 
@@ -1136,7 +1371,7 @@ export default class StoreService extends Service implements StoreInterface {
   ) {
     let instance: CardDef | undefined;
     if (typeof idOrInstance === 'string') {
-      instance = this.store.get(idOrInstance);
+      instance = this.store.getCard(idOrInstance);
       if (!instance) {
         return;
       }
@@ -1388,7 +1623,7 @@ export default class StoreService extends Service implements StoreInterface {
         this.setIdentityContext(cardError);
         let remoteId = cardError.meta?.remoteId;
         if (remoteId && (!cardError.id || isLocalId(cardError.id))) {
-          this.store.addInstanceOrError(remoteId, cardError);
+          this.store.addCardInstanceOrError(remoteId, cardError);
         }
         return cardError;
       } finally {
@@ -1509,7 +1744,7 @@ export default class StoreService extends Service implements StoreInterface {
       return;
     }
     let id = rel.links.self;
-    let instance = await this.getInstance({
+    let instance = await this.getCardInstance({
       idOrDoc: new URL(id, relativeTo).href,
     });
     return isCardInstance(instance) ? instance : undefined;
@@ -1569,24 +1804,19 @@ export function asURL(urlOrDoc: string | LooseSingleCardDocument) {
     : urlOrDoc.data.id;
 }
 
-function looksLikeFileURL(url: string): boolean {
-  try {
-    let pathname = new URL(url).pathname;
-    let name = pathname.split('/').pop() ?? '';
-    if (!name || !name.includes('.')) {
-      return false;
-    }
-    let lower = name.toLowerCase();
-    if (lower.endsWith('.json')) {
-      return false;
-    }
-    if (hasExecutableExtension(url)) {
-      return false;
-    }
-    return true;
-  } catch {
-    return false;
-  }
+function isSystemCardDefaultId(
+  id: string | undefined,
+  idOrDoc: string | LooseSingleCardDocument,
+  errorId: string | undefined,
+): boolean {
+  let candidates = [
+    id,
+    typeof idOrDoc === 'string' ? idOrDoc : idOrDoc?.data?.id,
+    errorId,
+  ].filter(Boolean) as string[];
+  return candidates.some((candidate) =>
+    candidate.includes('/SystemCard/default'),
+  );
 }
 
 async function withStubbedRenderTimers<T>(cb: () => Promise<T>): Promise<T> {

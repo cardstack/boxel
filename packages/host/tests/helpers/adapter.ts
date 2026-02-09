@@ -39,6 +39,7 @@ import { WebMessageStream, messageCloseHandler } from './stream';
 import { createJWT, testRealmURL } from '.';
 
 import type { MockUtils } from './mock-matrix/_utils';
+import type ms from 'ms';
 
 interface Dir {
   kind: 'directory';
@@ -47,7 +48,7 @@ interface Dir {
 
 interface File {
   kind: 'file';
-  content: string | object;
+  content: string | object | Uint8Array;
 }
 
 type CardAPI = typeof import('https://cardstack.com/base/card-api');
@@ -169,7 +170,7 @@ export class TestRealmAdapter implements RealmAdapter {
     this.prepareInstances();
   }
 
-  createJWT(claims: TokenClaims, expiration: string, secret: string) {
+  createJWT(claims: TokenClaims, expiration: ms.StringValue, secret: string) {
     return createJWT(claims, expiration, secret);
   }
 
@@ -220,30 +221,12 @@ export class TestRealmAdapter implements RealmAdapter {
   }
 
   async exists(path: LocalPath): Promise<boolean> {
-    let maybeFilename = path.split('/').pop()!;
     try {
-      // a quirk of our test file system's traverse is that it creates
-      // directories as it goes--so do our best to determine if we are checking for
-      // a file that exists (because of this behavior directories always exist)
-      await this.#traverse(
-        path.split('/'),
-        maybeFilename.includes('.') ? 'file' : 'directory',
-      );
+      this.#traverseExisting(path.split('/'));
       return true;
     } catch (err: any) {
-      if (err.name === 'NotFoundError') {
+      if (['NotFoundError', 'TypeMismatchError'].includes(err.name)) {
         return false;
-      }
-      if (err.name === 'TypeMismatchError') {
-        try {
-          await this.#traverse(path.split('/'), 'file');
-          return true;
-        } catch (err: any) {
-          if (err.name === 'NotFoundError') {
-            return false;
-          }
-          throw err;
-        }
       }
       throw err;
     }
@@ -253,7 +236,7 @@ export class TestRealmAdapter implements RealmAdapter {
     await this.#ready.promise;
     let content;
     try {
-      content = this.#traverse(path.split('/'), 'file');
+      content = this.#traverseExisting(path.split('/'));
     } catch (err: any) {
       if (['TypeMismatchError', 'NotFoundError'].includes(err.name)) {
         return undefined;
@@ -270,7 +253,7 @@ export class TestRealmAdapter implements RealmAdapter {
 
     let value = content.content;
 
-    let fileRefContent = '';
+    let fileRefContent: string | Uint8Array = '';
 
     if (path.endsWith('.json')) {
       let cardApi = await this.#loader.import<CardAPI>(
@@ -289,6 +272,8 @@ export class TestRealmAdapter implements RealmAdapter {
       } else {
         fileRefContent = shimmedModuleIndicator;
       }
+    } else if (value instanceof Uint8Array) {
+      fileRefContent = value;
     } else {
       fileRefContent = value as string;
     }
@@ -308,7 +293,7 @@ export class TestRealmAdapter implements RealmAdapter {
 
   async write(
     path: LocalPath,
-    contents: string | object,
+    contents: string | object | Uint8Array,
   ): Promise<AdapterWriteResult> {
     let segments = path.split('/');
     let name = segments.pop()!;
@@ -343,9 +328,11 @@ export class TestRealmAdapter implements RealmAdapter {
     dir.contents[name] = {
       kind: 'file',
       content:
-        typeof contents === 'string'
+        contents instanceof Uint8Array
           ? contents
-          : JSON.stringify(contents, null, 2),
+          : typeof contents === 'string'
+            ? contents
+            : JSON.stringify(contents, null, 2),
     };
 
     this.postUpdateEvent(updateEvent);
@@ -400,6 +387,31 @@ export class TestRealmAdapter implements RealmAdapter {
           err.name = 'NotFoundError'; // duck type to the same as what the FileSystem API looks like
           throw err;
         }
+      }
+      dir = dir.contents[name];
+    }
+    return dir;
+  }
+
+  #traverseExisting(
+    segments: string[],
+    originalPath = segments.join('/'),
+  ): File | Dir {
+    let dir: Dir | File = this.#files;
+    while (segments.length > 0) {
+      if (dir.kind === 'file') {
+        let err = new Error(`tried to use file as directory`);
+        err.name = 'TypeMismatchError';
+        throw err;
+      }
+      let name = segments.shift()!;
+      if (name === '') {
+        return dir;
+      }
+      if (dir.contents[name] === undefined) {
+        let err = new Error(`${originalPath} not found`);
+        err.name = 'NotFoundError';
+        throw err;
       }
       dir = dir.contents[name];
     }

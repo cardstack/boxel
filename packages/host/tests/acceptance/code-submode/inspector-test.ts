@@ -168,6 +168,8 @@ const employeeCardSource = `
   }
 `;
 
+const erroringModuleSource = `throw new Error('boom');`;
+
 const inThisFileSource = `
   import {
     contains,
@@ -468,6 +470,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
         're-export.gts': reExportSource,
         'local-inherit.gts': localInheritSource,
         'command-module.gts': commandModuleSource,
+        'erroring-module.gts': erroringModuleSource,
         'empty-file.gts': '',
         'person-entry.json': {
           data: {
@@ -2083,6 +2086,59 @@ export class ExportedCard extends ExportedCardParent {
       .doesNotExist('field defs do not display a create instance button');
   });
 
+  test('Create listing action is displayed for exported card definition', async function (assert) {
+    await visitOperatorMode({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}in-this-file.gts`,
+    });
+
+    await waitFor('[data-boxel-selector-item-text="ExportedCard"]');
+
+    await click('[data-boxel-selector-item-text="ExportedCard"]');
+    await waitFor('[data-test-card-module-definition]');
+
+    assert
+      .dom('[data-test-action-button="Create Listing"]')
+      .exists('exported card defs display a Create Listing button');
+  });
+
+  test('Create listing action is displayed for exported field definition', async function (assert) {
+    await visitOperatorMode({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}in-this-file.gts`,
+    });
+
+    await waitFor('[data-boxel-selector-item-text="ExportedField"]');
+
+    await click('[data-boxel-selector-item-text="ExportedField"]');
+    await waitFor('[data-test-card-module-definition]');
+
+    assert
+      .dom('[data-test-action-button="Create Listing"]')
+      .exists('exported field defs display a Create Listing button');
+  });
+
+  test('Create listing action is not displayed for non-exported Card definition', async function (assert) {
+    await visitOperatorMode({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}in-this-file.gts`,
+    });
+
+    await waitFor('[data-boxel-selector-item-text="LocalCard"]');
+
+    await click('[data-boxel-selector-item-text="LocalCard"]');
+    await waitFor('[data-test-card-module-definition]');
+
+    assert
+      .dom('[data-test-action-button="Create Listing"]')
+      .doesNotExist(
+        'non-exported card defs do not display a Create Listing button',
+      );
+  });
+
   test('can find instances of an exported card definition', async function (assert) {
     await visitOperatorMode({
       stacks: [[]],
@@ -2161,6 +2217,27 @@ export class ExportedCard extends ExportedCardParent {
     assert.dom('[data-test-delete-module-button]').exists();
   });
 
+  test('can delete an erroring module file', async function (assert) {
+    await visitOperatorMode({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}erroring-module.gts`,
+    });
+
+    await waitFor('[data-test-syntax-error]');
+    await waitFor('[data-test-action-button="Delete"]');
+
+    await click('[data-test-action-button="Delete"]');
+    await waitFor(
+      `[data-test-delete-modal="${testRealmURL}erroring-module.gts"]`,
+    );
+    await click('[data-test-confirm-delete-button]');
+    await waitFor('[data-test-empty-code-mode]');
+
+    let notFound = await adapter.openFile('erroring-module.gts');
+    assert.strictEqual(notFound, undefined, 'file ref does not exist');
+  });
+
   module('when the user lacks write permissions', function (hooks) {
     hooks.beforeEach(async function () {
       setRealmPermissions({ [testRealmURL]: ['read'] });
@@ -2200,6 +2277,25 @@ export class ExportedCard extends ExportedCardParent {
       });
       await waitFor('[data-test-current-module-name="empty-file.gts"]');
       assert.dom('[data-test-delete-module-button]').doesNotExist();
+    });
+
+    test('Create listing action is not displayed when user does not have permission to write to realm', async function (assert) {
+      await visitOperatorMode({
+        stacks: [[]],
+        submode: 'code',
+        codePath: `${testRealmURL}in-this-file.gts`,
+      });
+
+      await waitFor('[data-boxel-selector-item-text="ExportedCard"]');
+
+      await click('[data-boxel-selector-item-text="ExportedCard"]');
+      await waitFor('[data-test-card-module-definition]');
+
+      assert
+        .dom('[data-test-action-button="Create Listing"]')
+        .doesNotExist(
+          'Create Listing button is not displayed when user lacks write permissions',
+        );
     });
   });
 });

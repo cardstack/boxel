@@ -622,9 +622,11 @@ module(basename(__filename), function () {
           new URL(`${testRealm}boom2`),
         );
         if (entry?.type === 'error') {
-          assert.strictEqual(
-            entry.error.errorDetail.message,
-            'Attempted to resolve a modifier in a strict mode template, but it was not in scope: did-insert',
+          assert.ok(
+            /Attempted to resolve a modifier in a strict mode template, but that value was not in scope: did-insert/.test(
+              entry.error.errorDetail.message,
+            ),
+            'error text is about did-insert not being in scope',
           );
           assert.deepEqual(entry.error.errorDetail.deps, [`${testRealm}boom2`]);
         } else {
@@ -1100,7 +1102,7 @@ module(basename(__filename), function () {
         } as LooseSingleCardDocument),
       );
 
-      let { data: result } = await realm.realmIndexQueryEngine.search({
+      let { data: result } = await realm.realmIndexQueryEngine.searchCards({
         filter: {
           on: { module: `${testRealm}person`, name: 'Person' },
           eq: { firstName: 'Mang-Mang' },
@@ -1135,7 +1137,7 @@ module(basename(__filename), function () {
           export class Intentionally Thrown Error {}
         `,
       );
-      let { data: result } = await realm.realmIndexQueryEngine.search({
+      let { data: result } = await realm.realmIndexQueryEngine.searchCards({
         filter: {
           type: { module: `${testRealm}person`, name: 'Person' },
         },
@@ -1157,7 +1159,7 @@ module(basename(__filename), function () {
         `,
       );
       result = (
-        await realm.realmIndexQueryEngine.search({
+        await realm.realmIndexQueryEngine.searchCards({
           filter: {
             type: { module: `${testRealm}person`, name: 'Person' },
           },
@@ -1453,7 +1455,7 @@ module(basename(__filename), function () {
     test('can incrementally index deleted instance', async function (assert) {
       await realm.delete('mango.json');
 
-      let { data: result } = await realm.realmIndexQueryEngine.search({
+      let { data: result } = await realm.realmIndexQueryEngine.searchCards({
         filter: {
           on: { module: `${testRealm}person`, name: 'Person' },
           eq: { firstName: 'Mango' },
@@ -1508,7 +1510,7 @@ module(basename(__filename), function () {
       `,
       );
 
-      let { data: result } = await realm.realmIndexQueryEngine.search({
+      let { data: result } = await realm.realmIndexQueryEngine.searchCards({
         filter: {
           on: { module: `${testRealm}post`, name: 'Post' },
           eq: { nickName: 'Van Gogh-poo' },
@@ -1541,7 +1543,7 @@ module(basename(__filename), function () {
         `,
       );
 
-      let { data: result } = await realm.realmIndexQueryEngine.search({
+      let { data: result } = await realm.realmIndexQueryEngine.searchCards({
         filter: {
           on: { module: `${testRealm}post`, name: 'Post' },
           eq: { 'author.nickName': 'Van Gogh-poo' },
@@ -1553,7 +1555,7 @@ module(basename(__filename), function () {
     test('can incrementally index instance that depends on deleted card source', async function (assert) {
       await realm.delete('post.gts');
       {
-        let { data: result } = await realm.realmIndexQueryEngine.search({
+        let { data: result } = await realm.realmIndexQueryEngine.searchCards({
           filter: {
             type: { module: `${testRealm}post`, name: 'Post' },
           },
@@ -1608,7 +1610,7 @@ module(basename(__filename), function () {
       `,
       );
       {
-        let { data: result } = await realm.realmIndexQueryEngine.search({
+        let { data: result } = await realm.realmIndexQueryEngine.searchCards({
           filter: {
             on: { module: `${testRealm}post`, name: 'Post' },
             eq: { nickName: 'Van Gogh-poo' },

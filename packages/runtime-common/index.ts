@@ -10,6 +10,7 @@ import type { RenderRouteOptions } from './render-route-options';
 import type { Definition } from './definitions';
 
 import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
+import type { FileDef } from 'https://cardstack.com/base/file-api';
 import type { ErrorEntry } from './index-writer';
 
 export interface LooseSingleResourceDocument<T extends LinkableResource> {
@@ -66,6 +67,24 @@ export interface FileExtractResponse {
   mismatch?: true;
 }
 
+export interface FileRenderResponse {
+  isolatedHTML: string | null;
+  headHTML: string | null;
+  atomHTML: string | null;
+  embeddedHTML: Record<string, string> | null;
+  fittedHTML: Record<string, string> | null;
+  iconHTML: string | null;
+  error?: RenderError;
+}
+
+export type FileRenderArgs = ModulePrerenderArgs & {
+  fileData: {
+    resource: FileMetaResource;
+    fileDefCodeRef: ResolvedCodeRef;
+  };
+  types: string[];
+};
+
 export interface ModuleDefinitionResult {
   type: 'definition';
   moduleURL: string; // node resolution w/o extension
@@ -100,6 +119,7 @@ export interface Prerenderer {
   prerenderCard(args: PrerenderCardArgs): Promise<RenderResponse>;
   prerenderModule(args: ModulePrerenderArgs): Promise<ModuleRenderResponse>;
   prerenderFileExtract(args: ModulePrerenderArgs): Promise<FileExtractResponse>;
+  prerenderFileRender(args: FileRenderArgs): Promise<FileRenderResponse>;
 }
 
 export type RealmAction = 'read' | 'write' | 'realm-owner' | 'assume-user';
@@ -117,6 +137,7 @@ export {
   type CardErrorsJSONAPI,
   isCardErrorJSONAPI,
 } from './error';
+export { validateWriteSize } from './write-size-validation';
 
 export interface ResourceObject {
   type: string;
@@ -255,6 +276,8 @@ export type {
   SingleCardDocument,
   SingleFileMetaDocument,
   CardCollectionDocument,
+  FileMetaCollectionDocument,
+  LinkableCollectionDocument,
 } from './document-types';
 export type {
   CardResource,
@@ -273,6 +296,8 @@ export {
   isCardCollectionDocument,
   isSingleCardDocument,
   isSingleFileMetaDocument,
+  isFileMetaCollectionDocument,
+  isLinkableCollectionDocument,
   isCardDocumentString,
 } from './document-types';
 export {
@@ -442,6 +467,8 @@ export interface AddOptions extends CreateOptions {
   doNotWaitForPersist?: boolean;
 }
 
+export type StoreReadType = 'card' | 'file-meta';
+
 export interface Store {
   save(id: string): void;
   create(
@@ -460,10 +487,27 @@ export interface Store {
     instanceOrDoc: T | LooseSingleCardDocument,
     opts?: CreateOptions,
   ): Promise<T | CardErrorJSONAPI>;
-  peek<T extends CardDef>(id: string): T | CardErrorJSONAPI | undefined;
-  peekLive<T extends CardDef>(id: string): T | CardErrorJSONAPI | undefined;
-  peekError(id: string): CardErrorJSONAPI | undefined;
-  get<T extends CardDef>(id: string): Promise<T | CardErrorJSONAPI>;
+  peek<T extends CardDef>(
+    id: string,
+    opts?: { type?: 'card' },
+  ): T | CardErrorJSONAPI | undefined;
+  peek<T extends FileDef>(
+    id: string,
+    opts: { type: 'file-meta' },
+  ): T | CardErrorJSONAPI | undefined;
+  peekError(id: string, opts?: { type?: 'card' }): CardErrorJSONAPI | undefined;
+  peekError(
+    id: string,
+    opts: { type: 'file-meta' },
+  ): CardErrorJSONAPI | undefined;
+  get<T extends CardDef>(
+    id: string,
+    opts?: { type?: 'card' },
+  ): Promise<T | CardErrorJSONAPI>;
+  get<T extends FileDef>(
+    id: string,
+    opts: { type: 'file-meta' },
+  ): Promise<T | CardErrorJSONAPI>;
   delete(id: string): Promise<void>;
   patch<T extends CardDef>(
     id: string,
@@ -659,4 +703,5 @@ export function isBrowserTestEnv() {
 }
 
 export * from './prerendered-card-search';
+export { isBotTriggerEvent } from './bot-trigger';
 export { DEFAULT_LLM_ID_TO_NAME } from './matrix-constants';

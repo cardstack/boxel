@@ -47,6 +47,7 @@ import UpdateRoomSkillsCommand from '@cardstack/host/commands/update-room-skills
 import type { Message } from '@cardstack/host/lib/matrix-classes/message';
 import type { StackItem } from '@cardstack/host/lib/stack-item';
 import { getAutoAttachment } from '@cardstack/host/resources/auto-attached-card';
+import { isReady } from '@cardstack/host/resources/file';
 import type { RoomResource } from '@cardstack/host/resources/room';
 
 import type AiAssistantPanelService from '@cardstack/host/services/ai-assistant-panel-service';
@@ -194,7 +195,7 @@ export default class Room extends Component<Signature> {
             @removeCard={{this.removeCard}}
             @chooseFile={{this.chooseFile}}
             @removeFile={{this.removeFile}}
-            @autoAttachedFile={{this.autoAttachedFile}}
+            @autoAttachedFiles={{this.autoAttachedFiles}}
             @filesToAttach={{this.filesToAttach}}
             @autoAttachedCardTooltipMessage={{if
               (eq this.operatorModeStateService.state.submode Submodes.Code)
@@ -429,7 +430,7 @@ export default class Room extends Component<Signature> {
     </style>
   </template>
 
-  @consume(GetCardContextName) private declare getCard: getCard;
+  @consume(GetCardContextName) declare private getCard: getCard;
   @tracked private selectedBottomAction:
     | 'skill-menu'
     | 'llm-select'
@@ -437,20 +438,20 @@ export default class Room extends Component<Signature> {
   @tracked lastCanceledActionMessageId: string | undefined;
   @tracked acceptingAllLabel: string | undefined;
 
-  @service private declare store: StoreService;
-  @service private declare cardService: CardService;
-  @service private declare commandService: CommandService;
-  @service private declare matrixService: MatrixService;
-  @service private declare operatorModeStateService: OperatorModeStateService;
-  @service private declare playgroundPanelService: PlaygroundPanelService;
-  @service private declare specPanelService: SpecPanelService;
-  @service private declare aiAssistantPanelService: AiAssistantPanelService;
+  @service declare private store: StoreService;
+  @service declare private cardService: CardService;
+  @service declare private commandService: CommandService;
+  @service declare private matrixService: MatrixService;
+  @service declare private operatorModeStateService: OperatorModeStateService;
+  @service declare private playgroundPanelService: PlaygroundPanelService;
+  @service declare private specPanelService: SpecPanelService;
+  @service declare private aiAssistantPanelService: AiAssistantPanelService;
 
   private autoAttachmentResource = getAutoAttachment(this, {
     submode: () => this.operatorModeStateService.state.submode,
     moduleInspectorPanel: () =>
       this.operatorModeStateService.moduleInspectorPanel,
-    autoAttachedFileUrl: () => this.autoAttachedFileUrl,
+    autoAttachedFileUrls: () => this.autoAttachedFileUrls,
     playgroundPanelCardId: () => this.playgroundPanelCardId,
     activeSpecId: () => this.specPanelService.specSelection,
     topMostStackItems: () => this.topMostStackItems,
@@ -459,7 +460,7 @@ export default class Room extends Component<Signature> {
   });
   private removedAttachedCardIds = new TrackedArray<string>();
   private removedAttachedFileUrls: string[] = [];
-  private lastAutoAttachedFileUrl: string | undefined;
+  private lastAutoAttachedFileUrlsKey: string | undefined;
   private getConversationScrollability: (() => boolean) | undefined;
   private scrollConversationToBottom: (() => void) | undefined;
   private roomScrollState: WeakMap<
@@ -530,59 +531,98 @@ export default class Room extends Component<Signature> {
   // when the user opens a different file and then returns to this one.
   @use private autoAttachedFileResource = resource(() => {
     let state = new TrackedObject<{
-      value: FileDef | undefined;
-      remove: () => void;
+      value: FileDef[];
+      remove: (sourceUrl?: string) => void;
     }>({
-      value: undefined,
-      remove: () => {
-        state.value = undefined;
+      value: [],
+      remove: (sourceUrl?: string) => {
+        if (!sourceUrl) {
+          state.value = [];
+          return;
+        }
+        state.value = state.value.filter(
+          (file) => file.sourceUrl !== sourceUrl,
+        );
       },
     });
 
-    let autoAttachedFileUrl = this.autoAttachedFileUrl;
+    let autoAttachedFileUrls = this.autoAttachedFileUrls;
     let manuallyAttachedFiles = this.filesToAttach;
+    let autoAttachedFileUrlsKey = autoAttachedFileUrls.join('\n');
 
     let removedFileUrls: string[];
-    if (autoAttachedFileUrl !== this.lastAutoAttachedFileUrl) {
+    if (autoAttachedFileUrlsKey !== this.lastAutoAttachedFileUrlsKey) {
       this.removedAttachedFileUrls.splice(0);
       removedFileUrls = this.removedAttachedFileUrls;
-      this.lastAutoAttachedFileUrl = autoAttachedFileUrl;
+      this.lastAutoAttachedFileUrlsKey = autoAttachedFileUrlsKey;
     } else {
       removedFileUrls = this.removedAttachedFileUrls;
     }
 
-    let isManuallyAttached = manuallyAttachedFiles.some(
-      (file) => file.sourceUrl === autoAttachedFileUrl,
-    );
-    let isRemoved = autoAttachedFileUrl
-      ? removedFileUrls.includes(autoAttachedFileUrl)
-      : false;
+    let candidateUrls = autoAttachedFileUrls.filter((url) => {
+      if (!url) {
+        return false;
+      }
+      let isManuallyAttached = manuallyAttachedFiles.some(
+        (file) => file.sourceUrl === url,
+      );
+      let isRemoved = removedFileUrls.includes(url);
+      return !isManuallyAttached && !isRemoved;
+    });
 
-    if (!autoAttachedFileUrl || isManuallyAttached || isRemoved) {
-      state.value = undefined;
-    } else {
-      state.value = this.matrixService.fileAPI.createFileDef({
-        sourceUrl: autoAttachedFileUrl,
-        name: autoAttachedFileUrl.split('/').pop(),
-      });
-    }
+    state.value = candidateUrls.map((url) =>
+      this.matrixService.fileAPI.createFileDef({
+        sourceUrl: url,
+        name: url.split('/').pop(),
+      }),
+    );
 
     return state;
   });
 
-  private get autoAttachedFileUrl() {
-    return this.operatorModeStateService.state.codePath?.href;
+  private get autoAttachedFileUrls() {
+    let codePathUrl = this.operatorModeStateService.state.codePath?.href;
+    if (!codePathUrl) {
+      return [];
+    }
+
+    let urls = [codePathUrl];
+
+    if (codePathUrl.endsWith('.json')) {
+      let openFile = this.operatorModeStateService.openFile?.current;
+      if (openFile && isReady(openFile)) {
+        try {
+          let fileContent = JSON.parse(openFile.content);
+          let adoptsFrom = fileContent?.data?.meta?.adoptsFrom;
+          if (adoptsFrom?.module) {
+            let moduleURLWithExtension = new URL(
+              adoptsFrom.module.endsWith('.gts')
+                ? adoptsFrom.module
+                : `${adoptsFrom.module}.gts`,
+              openFile.url,
+            );
+            if (!urls.includes(moduleURLWithExtension.href)) {
+              urls.push(moduleURLWithExtension.href);
+            }
+          }
+        } catch (_error) {
+          // If JSON parse fails, fall back to just the current file URL.
+        }
+      }
+    }
+
+    return urls;
   }
 
-  private get autoAttachedFile() {
+  private get autoAttachedFiles() {
     return this.operatorModeStateService.state.submode === Submodes.Code
       ? this.autoAttachedFileResource.value
-      : undefined;
+      : [];
   }
 
   private get removeAutoAttachedFile() {
-    return () => {
-      this.autoAttachedFileResource.remove();
+    return (sourceUrl?: string) => {
+      this.autoAttachedFileResource.remove(sourceUrl);
     };
   }
 
@@ -939,8 +979,8 @@ export default class Room extends Component<Signature> {
     }
 
     let files = [];
-    if (this.autoAttachedFile) {
-      files.push(this.autoAttachedFile);
+    if (this.autoAttachedFiles.length > 0) {
+      files.push(...this.autoAttachedFiles);
     }
     files.push(...this.filesToAttach);
 
@@ -996,7 +1036,7 @@ export default class Room extends Component<Signature> {
   private chooseFile(file: FileDef) {
     // handle the case where auto-attached file pill is clicked
     if (this.isAutoAttachedFile(file)) {
-      this.removeAutoAttachedFile();
+      this.removeAutoAttachedFile(file.sourceUrl ?? undefined);
     }
 
     let files = this.filesToAttach;
@@ -1007,13 +1047,15 @@ export default class Room extends Component<Signature> {
 
   @action
   private isAutoAttachedFile(file: FileDef) {
-    return this.autoAttachedFile?.sourceUrl === file.sourceUrl;
+    return this.autoAttachedFiles.some(
+      (autoFile) => autoFile.sourceUrl === file.sourceUrl,
+    );
   }
 
   @action
   private removeFile(file: FileDef) {
     if (this.isAutoAttachedFile(file)) {
-      this.removeAutoAttachedFile();
+      this.removeAutoAttachedFile(file.sourceUrl ?? undefined);
       return;
     }
 
@@ -1166,8 +1208,8 @@ export default class Room extends Component<Signature> {
       !this.doSendMessage.isRunning &&
       Boolean(
         this.messageToSend?.trim() ||
-          this.cardIdsToAttach?.length ||
-          this.autoAttachedCardIds.size !== 0,
+        this.cardIdsToAttach?.length ||
+        this.autoAttachedCardIds.size !== 0,
       ) &&
       !!this.room &&
       !this.messages.some((m) => this.isPendingMessage(m)) &&
@@ -1228,7 +1270,7 @@ export default class Room extends Component<Signature> {
     return (
       this.filesToAttach?.length ||
       this.cardIdsToAttach?.length ||
-      this.autoAttachedFile ||
+      this.autoAttachedFiles.length > 0 ||
       this.autoAttachedCardIds?.size
     );
   }

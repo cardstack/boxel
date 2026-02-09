@@ -257,12 +257,13 @@ module('Acceptance | host mode tests', function (hooks) {
     let originalGet = store.get.bind(store);
     let gate = new Deferred<void>();
     let targetId = `${testHostModeRealmURL}Pet/non-existent.json`;
-    store.get = async (id: string, ...rest: unknown[]) => {
+    store.get = (async (...args: Parameters<StoreService['get']>) => {
+      let [id] = args;
       if (id === targetId) {
         await gate.promise;
       }
-      return originalGet(id, ...(rest as []));
-    };
+      return (originalGet as StoreService['get'])(...args);
+    }) as StoreService['get'];
 
     let visitPromise = visit('/test/Pet/non-existent.json');
     await waitFor('[data-test-host-loading]');
@@ -416,7 +417,7 @@ module('Acceptance | host mode tests', function (hooks) {
       .dom(`[data-test-host-mode-stack-item="${testHostModeRealmURL}index"]`)
       .exists();
     await click(
-      `[data-test-host-mode-stack-item="${testHostModeRealmURL}index"] .close-button`,
+      `[data-test-host-mode-stack-item="${testHostModeRealmURL}index"] [data-test-host-stack-item-close-button]`,
     );
 
     assert.strictEqual(currentURL(), '/test/Pet/mango.json');

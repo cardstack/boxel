@@ -1014,7 +1014,7 @@ module('Integration | realm', function (hooks) {
       'field value is correct',
     );
 
-    let { data: cards } = await queryEngine.search({
+    let { data: cards } = await queryEngine.searchCards({
       filter: {
         on: {
           module: `http://localhost:4202/test/person`,
@@ -1669,9 +1669,7 @@ module('Integration | realm', function (hooks) {
       @field message = contains(StringField);
       @field other = linksTo(Other);
       static embedded = class Embedded extends Component<typeof this> {
-        <template>
-          x: {{@model.other.name}}
-        </template>
+        <template>x: {{@model.other.name}}</template>
       };
     }
 
@@ -2745,7 +2743,7 @@ module('Integration | realm', function (hooks) {
 
     let queryEngine = realm.realmIndexQueryEngine;
 
-    let { data: cards } = await queryEngine.search({});
+    let { data: cards } = await queryEngine.searchCards({});
     assert.strictEqual(cards.length, 2, 'two cards found');
 
     let result = await queryEngine.cardDocument(
@@ -2796,7 +2794,7 @@ module('Integration | realm', function (hooks) {
       'card 1 is still there',
     );
 
-    cards = (await queryEngine.search({})).data;
+    cards = (await queryEngine.searchCards({})).data;
     assert.strictEqual(cards.length, 1, 'only one card remains');
   });
 

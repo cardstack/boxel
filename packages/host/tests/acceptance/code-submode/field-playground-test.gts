@@ -1036,7 +1036,7 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
 
     test('can request AI assistant to fill in sample data', async function (assert) {
       const prompt = `Fill in sample data for this example on the card's spec.`;
-      const menuItem = 'Fill in sample data with AI';
+      const menuItem = 'Fill in Sample Data with AI';
       const commandMessage = {
         from: 'testuser',
         message: prompt,
@@ -1188,7 +1188,7 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
 
     test('can autogenerate new Spec and field instance (no preexisting Spec)', async function (assert) {
       let queryEngine = realm.realmIndexQueryEngine;
-      let { data: matching } = await queryEngine.search({
+      let { data: matching } = await queryEngine.searchCards({
         filter: {
           on: specRef,
           eq: {
@@ -1210,7 +1210,7 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
       assertFieldExists(assert, 'edit');
       assert.dom('[data-test-field="quote"] input').hasNoValue();
 
-      ({ data: matching } = await queryEngine.search({
+      ({ data: matching } = await queryEngine.searchCards({
         filter: {
           on: specRef,
           eq: {

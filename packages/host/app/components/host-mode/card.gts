@@ -12,6 +12,7 @@ interface Signature {
   Args: {
     cardId: string | null;
     displayBoundaries?: boolean;
+    isPrimary?: boolean;
     openInteractSubmode?: () => void;
   };
 }
@@ -52,7 +53,7 @@ export default class HostModeCard extends Component<Signature> {
 
   <template>
     <CardContainer
-      class='host-mode-card'
+      class='host-mode-card {{if @isPrimary "is-primary"}}'
       displayBoundaries={{@displayBoundaries}}
       ...attributes
     >
@@ -93,6 +94,7 @@ export default class HostModeCard extends Component<Signature> {
         padding: var(--host-mode-card-padding);
         border-radius: var(--host-mode-card-border-radius, 20px);
         flex: 1;
+        z-index: 0;
         overflow: auto;
       }
 
@@ -117,6 +119,17 @@ export default class HostModeCard extends Component<Signature> {
         min-height: 16rem;
         text-align: center;
         gap: var(--boxel-sp);
+      }
+
+      @media print {
+        .host-mode-card.is-primary {
+          display: contents;
+        }
+
+        .host-mode-card.is-primary .card {
+          max-height: none;
+          overflow: visible;
+        }
       }
     </style>
   </template>

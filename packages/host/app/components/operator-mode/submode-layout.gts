@@ -107,15 +107,15 @@ export default class SubmodeLayout extends Component<Signature> {
     defaultWidth: 30,
     minWidth: 25,
   });
-  @service private declare operatorModeStateService: OperatorModeStateService;
-  @service private declare matrixService: MatrixService;
-  @service private declare store: StoreService;
-  @service private declare aiAssistantPanelService: AiAssistantPanelService;
-  @service private declare recentCardsService: RecentCardsService;
+  @service declare private operatorModeStateService: OperatorModeStateService;
+  @service declare private matrixService: MatrixService;
+  @service declare private store: StoreService;
+  @service declare private aiAssistantPanelService: AiAssistantPanelService;
+  @service declare private recentCardsService: RecentCardsService;
 
   private searchElement: HTMLElement | null = null;
   private suppressSearchClose = false;
-  private declare doSearch: (term: string) => void;
+  declare private doSearch: (term: string) => void;
 
   @action
   private onLayoutChange(layout: number[]) {
@@ -525,8 +525,10 @@ export default class SubmodeLayout extends Component<Signature> {
         --submode-bar-item-border-radius: var(--boxel-border-radius);
         --boxel-icon-button-width: var(--container-button-size);
         --boxel-icon-button-height: var(--container-button-size);
+        position: relative;
         display: flex;
         height: 100%;
+        z-index: 0;
       }
 
       .submode-layout > .boxel-panel-group {
@@ -651,6 +653,12 @@ export default class SubmodeLayout extends Component<Signature> {
       :deep(.open-search-field) {
         box-shadow: var(--submode-bar-item-box-shadow);
         outline: var(--submode-bar-item-outline);
+      }
+
+      @media print {
+        .submode-layout-top-bar {
+          display: none;
+        }
       }
     </style>
   </template>
