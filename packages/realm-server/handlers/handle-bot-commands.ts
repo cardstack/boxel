@@ -7,6 +7,7 @@ import {
   param,
   query,
   SupportedMimeType,
+  type PgPrimitive,
   type BotCommandFilter,
   uuidv4,
 } from '@cardstack/runtime-common';
@@ -37,11 +38,6 @@ export function handleBotCommandsRequest({
   dbAdapter,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
-    if (ctxt.method === 'GET') {
-      await handleBotCommandsListRequest({ dbAdapter })(ctxt, _next);
-      return;
-    }
-
     let token = ctxt.state.token as RealmServerTokenClaim;
     if (!token) {
       await sendResponseForSystemError(
@@ -154,7 +150,7 @@ export function handleBotCommandsRequest({
         `,`,
         param(command),
         `,`,
-        param(filter),
+        param(filter as unknown as PgPrimitive),
         `,`,
         dbExpression({ pg: 'NOW()', sqlite: 'CURRENT_TIMESTAMP' }),
         `) `,

@@ -50,6 +50,7 @@ import {
 } from './handlers/handle-bot-registration';
 import {
   handleBotCommandDeleteRequest,
+  handleBotCommandsListRequest,
   handleBotCommandsRequest,
 } from './handlers/handle-bot-commands';
 import { buildCreatePrerenderAuth } from './prerender/auth';
@@ -270,7 +271,7 @@ export function createRoutes(args: CreateRoutesArgs) {
   router.get(
     '/_bot-commands',
     jwtMiddleware(args.realmSecretSeed),
-    handleBotCommandsRequest(args),
+    handleBotCommandsListRequest(args),
   );
   router.delete(
     '/_bot-commands',
