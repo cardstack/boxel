@@ -8,8 +8,6 @@ import { isTesting } from '@embroider/macros';
 
 import window from 'ember-window-mock';
 
-let registrationPromise: Promise<ServiceWorkerRegistration> | undefined;
-
 function isServiceWorkerSupported(): boolean {
   return (
     !isTesting() &&
@@ -23,20 +21,28 @@ export async function registerAuthServiceWorker(): Promise<void> {
     return;
   }
 
-  try {
-    registrationPromise = navigator.serviceWorker.register(
-      '/auth-service-worker.js',
-      { scope: '/' },
-    );
-    await registrationPromise;
+  // Listen for controller changes BEFORE registration so we don't miss the
+  // event if the SW activates and calls clients.claim() quickly.
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    let tokens = readTokensFromStorage();
+    if (tokens) {
+      syncAllTokensToServiceWorker(tokens);
+    }
+  });
 
-    // When a new service worker takes over, re-sync all tokens
-    navigator.serviceWorker.addEventListener('controllerchange', () => {
+  try {
+    await navigator.serviceWorker.register('/auth-service-worker.js', {
+      scope: '/',
+    });
+
+    // If a controller already exists (SW was previously registered), sync
+    // tokens immediately since controllerchange won't fire.
+    if (navigator.serviceWorker.controller) {
       let tokens = readTokensFromStorage();
       if (tokens) {
         syncAllTokensToServiceWorker(tokens);
       }
-    });
+    }
   } catch (e) {
     console.warn('Failed to register auth service worker:', e);
   }
@@ -52,6 +58,8 @@ export function syncTokenToServiceWorker(
 
   let controller = navigator.serviceWorker.controller;
   if (!controller) {
+    // SW not yet active — tokens will be synced via controllerchange or
+    // the post-registration sync in registerAuthServiceWorker.
     return;
   }
 
