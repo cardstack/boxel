@@ -1,7 +1,11 @@
 import type Application from '@ember/application';
 
 // @ts-expect-error - glimmer internals not typed for direct import
-import { clientBuilder, rehydrationBuilder } from '@glimmer/runtime';
+import {
+  clientBuilder,
+  rehydrationBuilder,
+  serializeBuilder,
+} from '@glimmer/runtime';
 
 declare const FastBoot: unknown;
 
@@ -20,8 +24,16 @@ export function initialize(application: Application): void {
       ) {
         console.log('[ember-host] Boxel render mode override: rehydrate');
         return rehydrationBuilder.bind(null);
+      } else if (
+        typeof document !== 'undefined' &&
+        // @ts-expect-error what to do
+        globalThis.__boxelRenderMode === 'serialize'
+      ) {
+        console.log('[ember-host] Boxel render mode override: serialize');
+        return serializeBuilder.bind(null);
+      } else {
+        return clientBuilder.bind(null);
       }
-      return clientBuilder.bind(null);
     },
   });
 }
