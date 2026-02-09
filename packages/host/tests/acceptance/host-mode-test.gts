@@ -443,8 +443,8 @@ module('Acceptance | host mode tests', function (hooks) {
       .dom(`[data-test-host-mode-stack-item="${testHostModeRealmURL}index"]`)
       .exists();
 
-    // Click backdrop
-    await click('[data-test-host-mode-stack-backdrop]');
+    // Click outside the stack items (on the stack backdrop area)
+    await click('[data-test-host-mode-stack]');
 
     // Stack item should be removed
     await waitUntil(() => {
@@ -473,12 +473,12 @@ module('Acceptance | host mode tests', function (hooks) {
     assert.dom(stackSelector).exists();
   });
 
-  test('backdrop click with empty stack does nothing', async function (assert) {
+  test('stack does not exist when there are no stacked cards', async function (assert) {
     // Visit card with no stack
     await visit('/test/Pet/mango.json');
 
-    // Stack backdrop shouldn't exist when there's no stack
-    assert.dom('[data-test-host-mode-stack-backdrop]').doesNotExist();
+    // Stack shouldn't exist when there are no stacked cards
+    assert.dom('[data-test-host-mode-stack]').doesNotExist();
   });
 
   module('with a custom subdomain', function (hooks) {
