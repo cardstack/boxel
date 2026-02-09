@@ -210,7 +210,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         assert.strictEqual(response.status, 400, 'HTTP 400 status');
       });
 
-      test('rejects missing command', async function (assert) {
+      test('rejects missing command or filter', async function (assert) {
         let matrixUserId = '@user:localhost';
         await insertUser(
           context.dbAdapter,
@@ -230,7 +230,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           `)`,
         ]);
 
-        let response = await context.request2
+        let baseRequest = context.request2
           .post('/_bot-commands')
           .set('Accept', 'application/vnd.api+json')
           .set('Content-Type', 'application/vnd.api+json')
@@ -240,66 +240,41 @@ module(`server-endpoints/${basename(__filename)}`, function () {
               { user: matrixUserId, sessionRoom: 'session-room-test' },
               realmSecretSeed,
             )}`,
-          )
-          .send({
-            data: {
-              type: 'bot-command',
-              attributes: {
-                botId: botRegistrationId,
-                filter: {
-                  type: 'matrix-event',
-                  event_type: 'app.boxel.bot-trigger',
-                  content_type: 'create-listing-pr',
-                },
+          );
+
+        let missingCommandResponse = await baseRequest.send({
+          data: {
+            type: 'bot-command',
+            attributes: {
+              botId: botRegistrationId,
+              filter: {
+                type: 'matrix-event',
+                event_type: 'app.boxel.bot-trigger',
+                content_type: 'create-listing-pr',
               },
             },
-          });
-
-        assert.strictEqual(response.status, 400, 'HTTP 400 status');
-      });
-
-      test('rejects missing filter', async function (assert) {
-        let matrixUserId = '@user:localhost';
-        await insertUser(
-          context.dbAdapter,
-          matrixUserId,
-          'cus_123',
-          'user@example.com',
+          },
+        });
+        assert.strictEqual(
+          missingCommandResponse.status,
+          400,
+          'HTTP 400 status for missing command',
         );
 
-        let botRegistrationId = uuidv4();
-        await query(context.dbAdapter, [
-          `INSERT INTO bot_registrations (id, username, created_at) VALUES (`,
-          param(botRegistrationId),
-          `,`,
-          param(matrixUserId),
-          `,`,
-          `CURRENT_TIMESTAMP`,
-          `)`,
-        ]);
-
-        let response = await context.request2
-          .post('/_bot-commands')
-          .set('Accept', 'application/vnd.api+json')
-          .set('Content-Type', 'application/vnd.api+json')
-          .set(
-            'Authorization',
-            `Bearer ${createRealmServerJWT(
-              { user: matrixUserId, sessionRoom: 'session-room-test' },
-              realmSecretSeed,
-            )}`,
-          )
-          .send({
-            data: {
-              type: 'bot-command',
-              attributes: {
-                botId: botRegistrationId,
-                command: 'https://example.com/bot/command/default',
-              },
+        let missingFilterResponse = await baseRequest.send({
+          data: {
+            type: 'bot-command',
+            attributes: {
+              botId: botRegistrationId,
+              command: 'https://example.com/bot/command/default',
             },
-          });
-
-        assert.strictEqual(response.status, 400, 'HTTP 400 status');
+          },
+        });
+        assert.strictEqual(
+          missingFilterResponse.status,
+          400,
+          'HTTP 400 status for missing filter',
+        );
       });
 
       test('rejects unsupported filter', async function (assert) {
