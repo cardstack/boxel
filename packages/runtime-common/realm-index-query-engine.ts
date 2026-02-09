@@ -839,14 +839,16 @@ export class RealmIndexQueryEngine {
           // relationship.data has the correct type so stale
           // pristine_doc entries (missing data.type) for file
           // relationships are not misidentified as card links.
-          let fallbackRelationshipType: CardResourceType | FileMetaResourceType;
+          let fallbackRelationshipType:
+            | typeof CardResourceType
+            | typeof FileMetaResourceType;
           if (expectsFileMeta) {
             fallbackRelationshipType = FileMetaResourceType;
           } else {
             fallbackRelationshipType =
               (relationshipType as
-                | CardResourceType
-                | FileMetaResourceType
+                | typeof CardResourceType
+                | typeof FileMetaResourceType
                 | undefined) ?? CardResourceType;
           }
           relationship.data = {
