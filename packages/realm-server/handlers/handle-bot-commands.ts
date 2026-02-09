@@ -137,7 +137,7 @@ export function handleBotCommandsRequest({
     try {
       rows = await query(dbAdapter, [
         `INSERT INTO bot_commands`,
-        `(id, bot_id, command, filter, created_at) VALUES (`,
+        `(id, bot_id, command, command_filter, created_at) VALUES (`,
         param(uuidv4()),
         `,`,
         param(botId),
@@ -148,7 +148,7 @@ export function handleBotCommandsRequest({
         `,`,
         dbExpression({ pg: 'NOW()', sqlite: 'CURRENT_TIMESTAMP' }),
         `) `,
-        `RETURNING id, bot_id, command, filter, created_at`,
+        `RETURNING id, bot_id, command, command_filter, created_at`,
       ]);
     } catch (_error) {
       await sendResponseForSystemError(ctxt, 'failed to add bot command');
@@ -172,7 +172,7 @@ export function handleBotCommandsRequest({
               attributes: {
                 botId: row.bot_id,
                 command: row.command,
-                filter: row.filter,
+                filter: row.command_filter,
                 createdAt: row.created_at,
               },
             },

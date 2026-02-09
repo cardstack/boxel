@@ -13,12 +13,13 @@ exports.up = (pgm) => {
       type: 'uuid',
       notNull: true,
       references: 'bot_registrations(id)',
+      onDelete: 'CASCADE',
     },
     command: {
       type: 'text',
       notNull: true,
     },
-    filter: {
+    command_filter: {
       type: 'jsonb',
     },
     created_at: {
