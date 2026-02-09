@@ -208,7 +208,7 @@ module('Integration | card-catalog', function (hooks) {
       await waitFor(`[data-test-realm="${realmName}"]`);
       await waitFor('[data-test-realm="Base Workspace"]');
 
-      assert.dom('[data-test-realm]').exists({ count: 3 });
+      assert.dom('[data-test-realm]').exists({ count: 2 });
       assert
         .dom(`[data-test-realm="${realmName}"] [data-test-results-count]`)
         .hasText('6 results');
@@ -238,8 +238,8 @@ module('Integration | card-catalog', function (hooks) {
 
     test('can filter cards by selecting a realm', async function (assert) {
       await click('[data-test-realm-filter-button]');
-      assert.dom('[data-test-boxel-menu-item]').exists({ count: 4 });
-      assert.dom('[data-test-boxel-menu-item-selected]').exists({ count: 4 }); // All realms are selected by default
+      assert.dom('[data-test-boxel-menu-item]').exists({ count: 3 });
+      assert.dom('[data-test-boxel-menu-item-selected]').exists({ count: 3 }); // All realms are selected by default
       assert
         .dom('[data-test-realm-filter-button]')
         .includesText('Workspace: All');
@@ -247,7 +247,7 @@ module('Integration | card-catalog', function (hooks) {
       await click(`[data-test-boxel-menu-item-text="Local Workspace"]`); // Unselect Local Workspace
       assert
         .dom('[data-test-realm-filter-button]')
-        .hasText(`Workspace: Base Workspace, Cardstack Catalog, Boxel Skills`);
+        .hasText(`Workspace: Base Workspace, Boxel Skills`);
       assert
         .dom(`[data-test-realm="Base Workspace"] [data-test-card-catalog-item]`)
         .exists();
@@ -255,7 +255,7 @@ module('Integration | card-catalog', function (hooks) {
       assert.dom(`[data-test-realm="${realmName}"]`).doesNotExist();
 
       await click('[data-test-realm-filter-button]');
-      assert.dom('[data-test-boxel-menu-item-selected]').exists({ count: 3 });
+      assert.dom('[data-test-boxel-menu-item-selected]').exists({ count: 2 });
       assert
         .dom('[data-test-boxel-menu-item-selected]')
         .hasText('Base Workspace');

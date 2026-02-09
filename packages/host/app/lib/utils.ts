@@ -149,9 +149,9 @@ export function urlForRealmLookup(card: CardDef) {
 }
 
 // usage example for realm url: `catalogRealm.url`, `skillsRealm.url`
-export const catalogRealm = new RealmPaths(
-  new URL(ENV.resolvedCatalogRealmURL),
-);
+export const catalogRealm = ENV.resolvedCatalogRealmURL
+  ? new RealmPaths(new URL(ENV.resolvedCatalogRealmURL))
+  : null;
 export const skillsRealm = new RealmPaths(new URL(ENV.resolvedSkillsRealmURL));
 
 /**
