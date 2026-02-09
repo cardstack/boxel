@@ -241,7 +241,6 @@ const getIndexHTML = async () => {
     username: REALM_SERVER_MATRIX_USERNAME,
     seed: REALM_SECRET_SEED,
   });
-  await matrixClient.login();
   let prerenderer = createRemotePrerenderer(prerendererUrl);
   let createPrerenderAuth = buildCreatePrerenderAuth(
     REALM_SECRET_SEED,
