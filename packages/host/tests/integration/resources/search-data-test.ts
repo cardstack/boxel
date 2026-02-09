@@ -6,7 +6,10 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import type { DataQuery, Loader, Realm } from '@cardstack/runtime-common';
-import { baseRealm, type LooseSingleCardDocument } from '@cardstack/runtime-common';
+import {
+  baseRealm,
+  type LooseSingleCardDocument,
+} from '@cardstack/runtime-common';
 
 import type { SearchDataArgs } from '@cardstack/host/resources/search-data';
 import { SearchDataResource } from '@cardstack/host/resources/search-data';
@@ -47,6 +50,8 @@ module(`Integration | search data resource`, function (hooks) {
   let loader: Loader;
   let loaderService: LoaderService;
   let realm: Realm;
+  let cardApi: typeof import('https://cardstack.com/base/card-api');
+  let string: typeof import('https://cardstack.com/base/string');
 
   setupRenderingTest(hooks);
   hooks.beforeEach(function () {
@@ -64,8 +69,8 @@ module(`Integration | search data resource`, function (hooks) {
   });
   setupBaseRealm(hooks);
   hooks.beforeEach(async function (this: RenderingTestContext) {
-    let cardApi = await loader.import(`${baseRealm.url}card-api`);
-    let string = await loader.import(`${baseRealm.url}string`);
+    cardApi = await loader.import(`${baseRealm.url}card-api`);
+    string = await loader.import(`${baseRealm.url}string`);
 
     let { contains, field, CardDef, FieldDef } = cardApi;
     let { default: StringField } = string;

@@ -68,7 +68,10 @@ import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event'
 import CardStore, { getDeps, type ReferenceCount } from '../lib/gc-card-store';
 
 import { getSearch } from '../resources/search';
-import { getSearchData, type SearchDataResource } from '../resources/search-data';
+import {
+  getSearchData,
+  type SearchDataResource,
+} from '../resources/search-data';
 
 import {
   enableRenderTimerStub,

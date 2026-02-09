@@ -49,7 +49,9 @@ export class SearchDataResource extends Resource<SearchDataArgs> {
   // @ts-ignore we use this.loaded for test instrumentation.
   private loaded: Promise<void> | undefined;
   private subscriptions: { url: string; unsubscribe: () => void }[] = [];
-  private _resources = new TrackedArray<CardResource<Saved> | FileMetaResource>();
+  private _resources = new TrackedArray<
+    CardResource<Saved> | FileMetaResource
+  >();
   @tracked private _meta: QueryResultsMeta = { page: { total: 0 } };
   @tracked private _errors: ErrorEntry[] | undefined;
   #isLive = false;
