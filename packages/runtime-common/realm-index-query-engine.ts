@@ -844,8 +844,10 @@ export class RealmIndexQueryEngine {
             fallbackRelationshipType = FileMetaResourceType;
           } else {
             fallbackRelationshipType =
-              (relationshipType as CardResourceType | FileMetaResourceType | undefined) ??
-              CardResourceType;
+              (relationshipType as
+                | CardResourceType
+                | FileMetaResourceType
+                | undefined) ?? CardResourceType;
           }
           relationship.data = {
             type: fallbackRelationshipType,
