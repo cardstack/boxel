@@ -13,7 +13,6 @@ import {
 import { tracked } from '@glimmer/tracking';
 
 import Plane from '@cardstack/boxel-icons/plane';
-import percySnapshot from '@percy/ember';
 import { getService } from '@universal-ember/test-support';
 import format from 'date-fns/format';
 import parseISO from 'date-fns/parseISO';
@@ -47,6 +46,7 @@ import {
   testRealmURL,
   setupCardLogs,
   saveCard,
+  percySnapshot,
   provideConsumeContext,
   testModuleRealm,
   setupIntegrationTestRealm,

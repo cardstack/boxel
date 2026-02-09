@@ -11,8 +11,9 @@ const log = logger('bot-runner');
 const startTime = Date.now();
 
 const matrixUrl = process.env.MATRIX_URL || 'http://localhost:8008';
-const botUsername = process.env.BOT_RUNNER_USERNAME || 'bot-runner';
-const botPassword = process.env.BOT_RUNNER_PASSWORD || 'password';
+const submissionBotUsername =
+  process.env.SUBMISSION_BOT_USERNAME || 'submissionbot';
+const botPassword = process.env.SUBMISSION_BOT_PASSWORD || 'password';
 
 (async () => {
   let client = createClient({
@@ -21,7 +22,7 @@ const botPassword = process.env.BOT_RUNNER_PASSWORD || 'password';
 
   let auth;
   try {
-    auth = await client.loginWithPassword(botUsername, botPassword);
+    auth = await client.loginWithPassword(submissionBotUsername, botPassword);
   } catch (error) {
     throw new Error(
       `Bot runner could not login to Matrix at ${matrixUrl}. Check credentials and server availability.`,
