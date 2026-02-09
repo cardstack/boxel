@@ -20,17 +20,21 @@ export class InvalidQueryError extends Error {
 
 export type SparseFieldsets = Record<string, string[]>;
 
-interface QueryBase {
+interface QueryCommon {
   filter?: Filter;
   sort?: Sort;
-  fields?: SparseFieldsets;
-  asData?: boolean;
   page?: {
     number?: number; // page.number is 0-based
     size: number;
     realmVersion?: number;
   };
 }
+
+// fields is only valid when asData is true. This discriminated union
+// makes it a compile-time error to specify fields without asData.
+type QueryBase =
+  | (QueryCommon & { asData?: false; fields?: never })
+  | (QueryCommon & { asData: true; fields?: SparseFieldsets });
 
 export type Query =
   | (QueryBase & { realm?: string; realms?: never })
