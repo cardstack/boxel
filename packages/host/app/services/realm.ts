@@ -39,6 +39,12 @@ import type {
   RealmEventContent,
 } from 'https://cardstack.com/base/matrix-event';
 
+import {
+  registerAuthServiceWorker,
+  syncTokenToServiceWorker,
+  syncAllTokensToServiceWorker,
+  clearServiceWorkerTokens,
+} from '../utils/auth-service-worker-registration';
 import { SessionLocalStorageKey } from '../utils/local-storage-keys';
 
 import type MatrixService from './matrix-service';
@@ -654,6 +660,7 @@ export default class RealmService extends Service {
   constructor(owner: Owner) {
     super(owner);
     this.reset.register(this);
+    registerAuthServiceWorker();
   }
 
   get realms(): ReadonlyMap<string, RealmResource> {
@@ -949,6 +956,7 @@ export default class RealmService extends Service {
       realm.logout();
     }
     this.bulkInfoPromise = undefined;
+    clearServiceWorkerTokens();
   }
 
   async publish(realmURL: string, publishedRealmURLs: string[]) {
@@ -1090,6 +1098,7 @@ export default class RealmService extends Service {
     let sessions: Map<string, RealmResource> = new Map();
     let tokens = SessionStorage.getAll();
     if (tokens) {
+      syncAllTokensToServiceWorker(tokens);
       for (let [realmURL, token] of Object.entries(tokens)) {
         let resource = this.createRealmResource(realmURL, token);
         sessions.set(realmURL, resource);
@@ -1125,6 +1134,7 @@ let SessionStorage = {
         JSON.stringify(session),
       );
     }
+    syncTokenToServiceWorker(realmURL, token);
   },
 };
 
