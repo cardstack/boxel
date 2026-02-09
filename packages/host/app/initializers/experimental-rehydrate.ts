@@ -15,8 +15,10 @@ export function initialize(application: Application): void {
     create() {
       if (
         typeof document !== 'undefined' &&
-        document.getElementById('fastboot-body-start')
+        // @ts-expect-error hmm
+        globalThis.__boxelRenderMode === 'rehydrate'
       ) {
+        console.log('[ember-host] Boxel render mode override: rehydrate');
         return rehydrationBuilder.bind(null);
       }
       return clientBuilder.bind(null);
