@@ -119,14 +119,22 @@ export default class SearchBar extends Component<Signature> {
         border-color: var(--ring, var(--boxel-highlight));
       }
 
-      .search-sheet__search-bar:focus-within :deep(.boxel-input),
-      .search-sheet__search-bar:focus-within .search-sheet__search-bar-input {
-        outline: none;
+      .search-sheet__search-bar :deep(.boxel-input),
+      .search-sheet__search-bar .search-sheet__search-bar-input {
+        outline: none !important;
       }
 
-      .search-sheet__search-bar:focus-within :deep(.boxel-input:focus-visible) {
+      .search-sheet__search-bar :deep(.boxel-input:focus),
+      .search-sheet__search-bar :deep(.boxel-input:focus-visible) {
+        outline: none !important;
+        border-color: transparent !important;
+      }
+
+      .search-sheet__search-bar:focus-within
+        :deep(.ember-power-select-trigger:focus),
+      .search-sheet__search-bar:focus-within
+        :deep(.ember-power-select-trigger:focus-visible) {
         outline: none;
-        border-color: transparent;
       }
 
       .search-sheet__search-bar-icon {
