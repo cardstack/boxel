@@ -126,7 +126,7 @@ export function injectIsolatedHTML(
   isolatedHTML: string,
 ): string {
   return indexHTML.replace(
-    /(<script[^>]+id="boxel-isolated-start"[^>]*>\s*<\/script>)([\s\S]*?)(<script[^>]+id="boxel-isolated-end"[^>]*>\s*<\/script>)/,
+    /(<script[^>]+id="fastboot-body-start"[^>]*>\s*<\/script>)([\s\S]*?)(<script[^>]+id="fastboot-body-end"[^>]*>\s*<\/script>)/,
     (_match, start, _content, end) => `${start}\n${isolatedHTML}\n${end}`,
   );
 }
