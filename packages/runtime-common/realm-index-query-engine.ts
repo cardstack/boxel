@@ -831,16 +831,24 @@ export class RealmIndexQueryEngine {
           included.find((i) => i.id === relationshipId!.href)
         ) {
           relationship.data = {
-            type: linkResource?.type ?? 'card',
+            type: linkResource?.type ?? CardResourceType,
             id: relationshipId.href,
           };
         } else if (!linkResource) {
           // Even when the linked resource is unavailable, ensure
           // relationship.data has the correct type so stale
-          // pristine_doc entries (missing data.type) aren't
-          // misidentified as file-meta on subsequent loads.
+          // pristine_doc entries (missing data.type) for file
+          // relationships are not misidentified as card links.
+          let fallbackRelationshipType: CardResourceType | FileMetaResourceType;
+          if (expectsFileMeta) {
+            fallbackRelationshipType = FileMetaResourceType;
+          } else {
+            fallbackRelationshipType =
+              (relationshipType as CardResourceType | FileMetaResourceType | undefined) ??
+              CardResourceType;
+          }
           relationship.data = {
-            type: relationshipType ?? 'card',
+            type: fallbackRelationshipType,
             id: relationshipId.href,
           };
         }
