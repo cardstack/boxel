@@ -1,11 +1,8 @@
 import type Application from '@ember/application';
 
+import { serializeBuilder } from '@glimmer/node';
 // @ts-expect-error - glimmer internals not typed for direct import
-import {
-  clientBuilder,
-  rehydrationBuilder,
-  serializeBuilder,
-} from '@glimmer/runtime';
+import { clientBuilder, rehydrationBuilder } from '@glimmer/runtime';
 
 declare const FastBoot: unknown;
 
