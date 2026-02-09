@@ -1,15 +1,26 @@
 {
   "data": {
-    "type": "card",
-    "attributes": {
-      "title": "SW Auth Image Test",
-      "description": "Tests service worker auth injection for realm-hosted images",
-      "imageUrl": "../logo.png"
-    },
     "meta": {
       "adoptsFrom": {
-        "module": "../authenticated-image-tester",
-        "name": "default"
+        "name": "default",
+        "module": "../authenticated-image-tester"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "notes": null,
+        "summary": null,
+        "cardThumbnailURL": null
+      },
+      "imageUrl": "http://localhost:4201/experiments/logo.png"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
       }
     }
   }

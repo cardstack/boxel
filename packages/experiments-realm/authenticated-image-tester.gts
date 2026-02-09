@@ -46,7 +46,7 @@ class AuthenticatedImageTesterIsolated extends Component<
               <img
                 class='test-image'
                 src={{@model.imageUrl}}
-                alt='Test image loaded via img tag'
+                alt='Example loaded via img tag'
                 loading='lazy'
               />
             </div>
@@ -76,7 +76,8 @@ class AuthenticatedImageTesterIsolated extends Component<
             <li>Confirm <code>auth-service-worker.js</code> is active</li>
             <li>Open DevTools &rarr; Network tab</li>
             <li>Look for the image request to the realm URL</li>
-            <li>Check that the request has an <code>Authorization: Bearer ...</code>
+            <li>Check that the request has an
+              <code>Authorization: Bearer ...</code>
               header</li>
             <li>If both images above render correctly, the service worker is
               working</li>
@@ -85,7 +86,8 @@ class AuthenticatedImageTesterIsolated extends Component<
       {{else}}
         <div class='empty-state'>
           Enter a realm image URL above to test. Try a relative path like
-          <code>./logo.png</code> or an absolute realm URL.
+          <code>./logo.png</code>
+          or an absolute realm URL.
         </div>
       {{/if}}
     </div>

@@ -87,12 +87,22 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Create a new request with the Authorization header injected
+  // Create a new request with the Authorization header injected.
+  //
+  // Cross-origin <img> and CSS background-image requests arrive with
+  // mode: 'no-cors', which silently strips non-safelisted headers like
+  // Authorization. We must upgrade to mode: 'cors' so the header is
+  // actually sent. The realm server already supports CORS with
+  // Access-Control-Allow-Origin: * and Authorization in allowed headers.
   let headers = new Headers(request.headers);
   headers.set('Authorization', `Bearer ${matchedToken}`);
 
-  let authedRequest = new Request(request, {
+  let authedRequest = new Request(request.url, {
+    method: request.method,
     headers,
+    mode: 'cors',
+    credentials: 'same-origin',
+    redirect: 'follow',
   });
 
   event.respondWith(fetch(authedRequest));
