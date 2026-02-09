@@ -37,6 +37,11 @@ export function handleBotCommandsRequest({
   dbAdapter,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
+    if (ctxt.method === 'GET') {
+      await handleBotCommandsListRequest({ dbAdapter })(ctxt, _next);
+      return;
+    }
+
     let token = ctxt.state.token as RealmServerTokenClaim;
     if (!token) {
       await sendResponseForSystemError(
@@ -187,6 +192,81 @@ export function handleBotCommandsRequest({
         ),
         {
           status: 201,
+          headers: {
+            'content-type': SupportedMimeType.JSONAPI,
+          },
+        },
+      ),
+    );
+  };
+}
+
+export function handleBotCommandsListRequest({
+  dbAdapter,
+}: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
+  return async function (ctxt: Koa.Context, _next: Koa.Next) {
+    let token = ctxt.state.token as RealmServerTokenClaim;
+    if (!token) {
+      await sendResponseForSystemError(
+        ctxt,
+        'token is required to list bot commands',
+      );
+      return;
+    }
+
+    let { user: requestingUserId } = token;
+    if (!(await getUserByMatrixUserId(dbAdapter, requestingUserId))) {
+      await sendResponseForNotFound(ctxt, 'user is not found');
+      return;
+    }
+
+    let botIdParam = ctxt.request.query.botId;
+    let botId = typeof botIdParam === 'string' ? botIdParam.trim() : undefined;
+    if (botId) {
+      if (!uuidValidate(botId)) {
+        await sendResponseForBadRequest(ctxt, 'botId must be a UUID');
+        return;
+      }
+    }
+
+    let rows;
+    try {
+      rows = await query(dbAdapter, [
+        `SELECT bc.id, bc.bot_id, bc.command, bc.command_filter, bc.created_at`,
+        `FROM bot_commands bc`,
+        `JOIN bot_registrations br ON br.id = bc.bot_id`,
+        `WHERE br.username = `,
+        param(requestingUserId),
+        botId ? ` AND bc.bot_id = ` : ``,
+        botId ? param(botId) : ``,
+        ` ORDER BY bc.created_at ASC`,
+      ]);
+    } catch (_error) {
+      await sendResponseForSystemError(ctxt, 'failed to fetch bot commands');
+      return;
+    }
+
+    await setContextResponse(
+      ctxt,
+      new Response(
+        JSON.stringify(
+          {
+            data: rows.map((row: any) => ({
+              type: 'bot-command',
+              id: row.id,
+              attributes: {
+                botId: row.bot_id,
+                command: row.command,
+                filter: row.command_filter,
+                createdAt: row.created_at,
+              },
+            })),
+          },
+          null,
+          2,
+        ),
+        {
+          status: 200,
           headers: {
             'content-type': SupportedMimeType.JSONAPI,
           },

@@ -14,6 +14,11 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       assert.strictEqual(response.status, 401, 'HTTP 401 status');
     });
 
+    test('requires auth to list bot commands', async function (assert) {
+      let response = await context.request2.get('/_bot-commands');
+      assert.strictEqual(response.status, 401, 'HTTP 401 status');
+    });
+
     test('can add bot command for registered bot', async function (assert) {
       let matrixUserId = '@user:localhost';
       await insertUser(
@@ -111,6 +116,97 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         'filter is persisted',
       );
       assert.ok(rows[0].created_at, 'created_at is persisted');
+    });
+
+    test('lists bot commands for authenticated user', async function (assert) {
+      let matrixUserId = '@user:localhost';
+      let otherMatrixUserId = '@other-user:localhost';
+      await insertUser(
+        context.dbAdapter,
+        matrixUserId,
+        'cus_123',
+        'user@example.com',
+      );
+      await insertUser(
+        context.dbAdapter,
+        otherMatrixUserId,
+        'cus_124',
+        'other@example.com',
+      );
+
+      let botRegistrationId = uuidv4();
+      let otherBotRegistrationId = uuidv4();
+      await query(context.dbAdapter, [
+        `INSERT INTO bot_registrations (id, username, created_at) VALUES (`,
+        param(botRegistrationId),
+        `,`,
+        param(matrixUserId),
+        `,`,
+        `CURRENT_TIMESTAMP`,
+        `)`,
+      ]);
+      await query(context.dbAdapter, [
+        `INSERT INTO bot_registrations (id, username, created_at) VALUES (`,
+        param(otherBotRegistrationId),
+        `,`,
+        param(otherMatrixUserId),
+        `,`,
+        `CURRENT_TIMESTAMP`,
+        `)`,
+      ]);
+
+      await query(context.dbAdapter, [
+        `INSERT INTO bot_commands (id, bot_id, command, command_filter, created_at) VALUES (`,
+        param(uuidv4()),
+        `,`,
+        param(botRegistrationId),
+        `,`,
+        param('https://example.com/bot/command/default'),
+        `,`,
+        param({
+          type: 'matrix-event',
+          event_type: 'app.boxel.bot-trigger',
+          content_type: 'create-listing-pr',
+        }),
+        `,`,
+        `CURRENT_TIMESTAMP`,
+        `)`,
+      ]);
+      await query(context.dbAdapter, [
+        `INSERT INTO bot_commands (id, bot_id, command, command_filter, created_at) VALUES (`,
+        param(uuidv4()),
+        `,`,
+        param(otherBotRegistrationId),
+        `,`,
+        param('https://example.com/bot/command/default'),
+        `,`,
+        param({
+          type: 'matrix-event',
+          event_type: 'app.boxel.bot-trigger',
+          content_type: 'create-listing-pr',
+        }),
+        `,`,
+        `CURRENT_TIMESTAMP`,
+        `)`,
+      ]);
+
+      let response = await context.request2
+        .get('/_bot-commands')
+        .set(
+          'Authorization',
+          `Bearer ${createRealmServerJWT(
+            { user: matrixUserId, sessionRoom: 'session-room-test' },
+            realmSecretSeed,
+          )}`,
+        );
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      assert.strictEqual(response.body.data.length, 1, 'returns one row');
+      assert.strictEqual(
+        response.body.data[0].attributes.botId,
+        botRegistrationId,
+        'returns bot command for user registration',
+      );
     });
 
     test('rejects bot command for a different user', async function (assert) {

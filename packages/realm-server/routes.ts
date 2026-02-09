@@ -267,6 +267,11 @@ export function createRoutes(args: CreateRoutesArgs) {
     jwtMiddleware(args.realmSecretSeed),
     handleBotCommandsRequest(args),
   );
+  router.get(
+    '/_bot-commands',
+    jwtMiddleware(args.realmSecretSeed),
+    handleBotCommandsRequest(args),
+  );
   router.delete(
     '/_bot-commands',
     jwtMiddleware(args.realmSecretSeed),
