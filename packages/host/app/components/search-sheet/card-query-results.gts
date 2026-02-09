@@ -22,6 +22,7 @@ interface Signature {
     searchKey: string;
     isCompact: boolean;
     handleCardSelect: (cardId: string) => void;
+    realms?: string[];
   };
   Blocks: {};
 }
@@ -30,8 +31,14 @@ export default class CardQueryResults extends Component<Signature> {
   @service declare realmServer: RealmServerService;
 
   get realms() {
-    return this.realmServer.availableRealmURLs;
+    return this.args.realms ?? this.realmServer.availableRealmURLs;
   }
+
+  /** Serialized for data-test-search-realms (testing realm filter) */
+  get realmsForTest(): string {
+    return this.realms.join(',');
+  }
+
   get query() {
     let { searchKey } = this.args;
     let type = getCodeRefFromSearchKey(searchKey);
@@ -67,45 +74,47 @@ export default class CardQueryResults extends Component<Signature> {
   }
 
   <template>
-    <PrerenderedCardSearch
-      @query={{this.query}}
-      @format='fitted'
-      @realms={{this.realms}}
-    >
-      <:loading>
-        <ResultsSection
-          @label={{concat 'Searching for “' @searchKey '”'}}
-          @isCompact={{@isCompact}}
-        />
-      </:loading>
-      <:response as |cards|>
-        {{#if (or (gt cards.length 0) this.isSearchKeyNotEmpty)}}
+    <div data-test-search-realms={{this.realmsForTest}}>
+      <PrerenderedCardSearch
+        @query={{this.query}}
+        @format='fitted'
+        @realms={{this.realms}}
+      >
+        <:loading>
           <ResultsSection
-            @label={{concat
-              cards.length
-              ' Result'
-              (if (eq cards.length 1) '' 's')
-              ' for “'
-              @searchKey
-              '”'
-            }}
+            @label={{concat 'Searching for “' @searchKey '”'}}
             @isCompact={{@isCompact}}
-            as |SearchResult|
-          >
-            {{#each cards as |card i|}}
-              {{#unless card.isError}}
-                <SearchResult
-                  @component={{card.component}}
-                  @cardId={{card.url}}
-                  @isCompact={{@isCompact}}
-                  {{on 'click' (fn @handleCardSelect card.url)}}
-                  data-test-search-sheet-search-result={{i}}
-                />
-              {{/unless}}
-            {{/each}}
-          </ResultsSection>
-        {{/if}}
-      </:response>
-    </PrerenderedCardSearch>
+          />
+        </:loading>
+        <:response as |cards|>
+          {{#if (or (gt cards.length 0) this.isSearchKeyNotEmpty)}}
+            <ResultsSection
+              @label={{concat
+                cards.length
+                ' Result'
+                (if (eq cards.length 1) '' 's')
+                ' for “'
+                @searchKey
+                '”'
+              }}
+              @isCompact={{@isCompact}}
+              as |SearchResult|
+            >
+              {{#each cards as |card i|}}
+                {{#unless card.isError}}
+                  <SearchResult
+                    @component={{card.component}}
+                    @cardId={{card.url}}
+                    @isCompact={{@isCompact}}
+                    {{on 'click' (fn @handleCardSelect card.url)}}
+                    data-test-search-sheet-search-result={{i}}
+                  />
+                {{/unless}}
+              {{/each}}
+            </ResultsSection>
+          {{/if}}
+        </:response>
+      </PrerenderedCardSearch>
+    </div>
   </template>
 }

@@ -129,7 +129,7 @@ catalog:
   ember-modify-based-class-resource: ^1.1.0
   ember-qunit: ^8.0.1
   ember-resources: ^7.0.7
-  ember-source: ~5.4.1
+  ember-source: ~5.12.0
   ember-template-lint: ^7.8.1
   esbuild: ^0.24.0
   eslint: ^8.57.1

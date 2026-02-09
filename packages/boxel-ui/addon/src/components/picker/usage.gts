@@ -139,6 +139,19 @@ export default class PickerUsage extends Component {
               @placeholder='Select types'
             />
           </div>
+
+          <div class='picker-usage-example'>
+            <h3>Realm Picker (with max display limit of 2)</h3>
+            <Picker
+              @options={{this.realmOptions}}
+              @selected={{this.selectedRealms}}
+              @onChange={{this.onRealmChange}}
+              @label='Realm'
+              @placeholder='Select realms'
+              @searchPlaceholder='search for a realm'
+              @maxSelectedDisplay={{2}}
+            />
+          </div>
         </div>
       </:example>
     </FreestyleUsage>

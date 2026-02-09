@@ -1,8 +1,9 @@
 import { module, test } from 'qunit';
 import { join, basename } from 'path';
-import { systemInitiatedPriority } from '@cardstack/runtime-common';
+import type { Test, SuperTest } from 'supertest';
+import { systemInitiatedPriority, type Realm } from '@cardstack/runtime-common';
 import { setupServerEndpointsTest, testRealm2URL } from './helpers';
-import { waitUntil } from '../helpers';
+import { setupPermissionedRealmAtURL, waitUntil } from '../helpers';
 import { ensureDirSync, writeFileSync, writeJSONSync } from 'fs-extra';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
@@ -352,4 +353,64 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       });
     },
   );
+
+  module('Published realm index responses', function (hooks) {
+    // Use a URL with a path segment to avoid conflicts with server-level routes
+    // like /_info, /_search, etc. Without a path segment, requests to /_info
+    // would match the server's multi-realm info route instead of the realm's
+    // single-realm info handler.
+    let realmURL = new URL('http://127.0.0.1:4444/published/');
+    let request: SuperTest<Test>;
+    let testRealm: Realm;
+
+    function onRealmSetup(args: {
+      request: SuperTest<Test>;
+      testRealm: Realm;
+    }) {
+      request = args.request;
+      testRealm = args.testRealm;
+    }
+
+    setupPermissionedRealmAtURL(hooks, realmURL, {
+      permissions: {
+        '*': ['read'],
+      },
+      published: true,
+      onRealmSetup,
+    });
+
+    hooks.beforeEach(async function () {
+      // Wait for indexing to complete before running tests
+      // This ensures isolated_html is available in the database
+      await testRealm.indexing();
+    });
+
+    test('serves index HTML by default for published realm', async function (assert) {
+      let response = await request
+        .get('/published/')
+        .set('Accept', 'application/json');
+
+      assert.strictEqual(response.status, 200, 'serves HTML response');
+      assert.ok(
+        response.headers['content-type']?.includes('text/html'),
+        'content type is text/html',
+      );
+      assert.ok(
+        response.text.includes('data-test-home-card'),
+        'index HTML is served',
+      );
+    });
+
+    test('skips index HTML when vendor mime type is requested', async function (assert) {
+      let response = await request
+        .get('/published/person-1')
+        .set('Accept', 'application/vnd.card+json');
+
+      assert.strictEqual(response.status, 200, 'serves JSON response');
+      assert.ok(
+        response.headers['content-type']?.includes('application/vnd.card+json'),
+        'content type is vendor JSON',
+      );
+    });
+  });
 });
