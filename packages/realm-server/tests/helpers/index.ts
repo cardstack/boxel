@@ -1040,13 +1040,6 @@ export function setupMatrixRoom(
     }
 
     testAuthRoomId = payload.sessionRoom;
-
-    await upsertSessionRoom(
-      realmSetup.dbAdapter,
-      realmSetup.testRealm.url,
-      userId,
-      payload.sessionRoom,
-    );
   });
 
   return {
