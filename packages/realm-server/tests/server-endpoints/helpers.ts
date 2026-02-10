@@ -73,6 +73,7 @@ export function setupServerEndpointsTest(
   setupPermissionedRealm(hooks, {
     permissions: {
       '*': ['read', 'write'],
+      '@node-test_realm:localhost': ['read'],
     },
     onRealmSetup,
   });

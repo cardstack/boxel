@@ -978,6 +978,7 @@ module(basename(__filename), function () {
           realmURL,
           permissions: {
             john: ['read'],
+            '@node-test_realm:localhost': ['read'],
           },
           fileSystem: {
             'person.gts': `

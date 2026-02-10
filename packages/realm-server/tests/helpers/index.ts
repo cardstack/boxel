@@ -449,7 +449,6 @@ export async function createRealm({
   runner,
   publisher,
   dbAdapter,
-  matrixConfig = testMatrix,
   withWorker,
   enableFileWatcher = false,
   cardSizeLimitBytes,
@@ -494,7 +493,7 @@ export async function createRealm({
       dbAdapter,
       queuePublisher: publisher,
       virtualNetwork,
-      matrixURL: matrixConfig.url,
+      matrixURL: realmServerTestMatrix.url,
       secretSeed: realmSecretSeed,
       realmServerMatrixUsername: testRealmServerMatrixUsername,
       prerenderer,
@@ -792,7 +791,6 @@ export function setupPermissionedRealms(
   // We want 2 different realm users to test authorization between them - these
   // names are selected because they are already available in the test
   // environment (via register-realm-users.ts)
-  let matrixUsers = ['test_realm', 'node-test_realm'];
   let realms: {
     realm: Realm;
     realmPath: string;
@@ -807,7 +805,7 @@ export function setupPermissionedRealms(
       runner: QueueRunner,
     ) => {
       _dbAdapter = dbAdapter;
-      for (let [i, realmArg] of realmsArg.entries()) {
+      for (let realmArg of realmsArg.values()) {
         let {
           testRealmDir: realmPath,
           testRealm: realm,
@@ -821,10 +819,6 @@ export function setupPermissionedRealms(
           fileSystem: realmArg.fileSystem,
           permissions: realmArg.permissions,
           matrixURL,
-          matrixConfig: {
-            url: matrixURL,
-            username: matrixUsers[i] ?? matrixUsers[0],
-          },
           dbAdapter,
           publisher,
           runner,

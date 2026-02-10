@@ -93,6 +93,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
       setupPermissionedRealm(hooks, {
         permissions: {
           john: ['read', 'write'],
+          '@node-test_realm:localhost': ['read'],
         },
         realmURL,
         onRealmSetup,
@@ -166,6 +167,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
         setupPermissionedRealm(hooks, {
           permissions: {
             users: ['read'],
+            '@node-test_realm:localhost': ['read'],
           },
           realmURL,
           onRealmSetup,
@@ -209,6 +211,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
           bob: ['read'],
           jane: ['read'],
           john: ['read', 'write'],
+          '@node-test_realm:localhost': ['read'],
         },
         realmURL,
         onRealmSetup,
