@@ -1316,26 +1316,7 @@ export async function buildPromptForModel(
     }
   }
 
-  return messages.filter(hasMessageContent);
-}
-
-function hasMessageContent(message: OpenAIPromptMessage): boolean {
-  // Assistant messages with tool calls are valid even without text content
-  if (message.role === 'assistant' && message.tool_calls?.length) {
-    return true;
-  }
-  // Tool messages are required responses to tool calls
-  if (message.role === 'tool') {
-    return true;
-  }
-  let content = message.content;
-  if (typeof content === 'string') {
-    return content.length > 0;
-  }
-  if (Array.isArray(content)) {
-    return content.length > 0;
-  }
-  return false;
+  return messages;
 }
 
 function collectPendingCodePatchCorrectnessCheck(

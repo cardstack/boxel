@@ -5281,7 +5281,7 @@ new
           isStreamingFinished: true,
           [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
             {
-              toolCallId: 'call_1',
+              id: 'call_1',
               name: 'patchCardInstance',
               arguments: JSON.stringify({
                 card_id: 'http://localhost/card/1',
@@ -5342,6 +5342,18 @@ new
     assert.ok(
       assistantMessages[0].tool_calls?.length,
       'Assistant message should have tool calls',
+    );
+
+    const toolMessages = result.filter((message) => message.role === 'tool');
+    assert.equal(
+      toolMessages.length,
+      1,
+      'Tool result message should be present alongside the assistant tool call',
+    );
+    assert.equal(
+      toolMessages[0].tool_call_id,
+      'call_1',
+      'Tool result should reference the correct tool call id',
     );
   });
 
