@@ -97,9 +97,14 @@ self.addEventListener('fetch', (event) => {
   let headers = new Headers(request.headers);
   headers.set('Authorization', `Bearer ${matchedToken}`);
 
+  // credentials must be explicitly set to 'same-origin' because cross-origin
+  // <img> requests default to 'include', and credentials: 'include' with
+  // mode: 'cors' requires the server to send a specific origin in
+  // Access-Control-Allow-Origin (not '*'), which the realm server doesn't do.
   let authedRequest = new Request(request, {
     headers,
     mode: 'cors',
+    credentials: 'same-origin',
   });
 
   event.respondWith(fetch(authedRequest));
