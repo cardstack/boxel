@@ -34,9 +34,7 @@ function makeMinimalWebp(width: number, height: number): Uint8Array {
   // VP8 bitstream payload (10 bytes minimum)
   let vp8Payload = [
     // Frame tag (3 bytes): keyframe, version 0, show_frame=1
-    0x9d,
-    0x01,
-    0x2a,
+    0x9d, 0x01, 0x2a,
     // Note: first 3 bytes are actually part of the frame tag;
     // the start code 9D 01 2A comes next in the bitstream.
     // For a minimal VP8: bytes 0-2 are frame tag, bytes 3-5 are start code
@@ -51,9 +49,13 @@ function makeMinimalWebp(width: number, height: number): Uint8Array {
   //   We'll use: 0x00 0x00 0x00 → not quite right. Let me use a known working pattern.
   vp8Payload = [
     // Frame tag: keyframe=1, version=0, show=1, partition_size
-    0x30, 0x01, 0x00,
+    0x30,
+    0x01,
+    0x00,
     // Start code: 0x9D 0x01 0x2A
-    0x9d, 0x01, 0x2a,
+    0x9d,
+    0x01,
+    0x2a,
     // Width (LE uint16, lower 14 bits = width, upper 2 bits = horizontal scale)
     width & 0xff,
     (width >> 8) & 0x3f,
