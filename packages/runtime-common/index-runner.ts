@@ -82,6 +82,10 @@ const FILEDEF_CODE_REF_BY_EXTENSION: Record<string, ResolvedCodeRef> = {
     module: `${baseRealm.url}webp-image-def`,
     name: 'WebpDef',
   },
+  '.avif': {
+    module: `${baseRealm.url}avif-image-def`,
+    name: 'AvifDef',
+  },
   '.mismatch': { module: './filedef-mismatch', name: 'FileDef' },
 };
 const BASE_FILE_DEF_CODE_REF: ResolvedCodeRef = {
