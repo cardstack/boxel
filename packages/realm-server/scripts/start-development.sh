@@ -18,6 +18,7 @@ fi
 START_EXPERIMENTS=$(if [ -z "$SKIP_EXPERIMENTS" ]; then echo "true"; else echo ""; fi)
 START_CATALOG=$(if [ -z "$SKIP_CATALOG" ]; then echo "true"; else echo ""; fi)
 START_BOXEL_HOMEPAGE=$(if [ -z "$SKIP_BOXEL_HOMEPAGE" ]; then echo "true"; else echo ""; fi)
+START_SUBMISSION=$(if [ -z "$SKIP_SUBMISSION" ]; then echo "true"; else echo ""; fi)
 
 DEFAULT_CATALOG_REALM_URL='http://localhost:4201/catalog/'
 CATALOG_REALM_URL="${RESOLVED_CATALOG_REALM_URL:-$DEFAULT_CATALOG_REALM_URL}"
@@ -38,7 +39,9 @@ if [ -n "$USE_EXTERNAL_CATALOG" ]; then
   CATALOG_REALM_PATH='../catalog/contents'
 fi
 
-sh "$SCRIPTS_DIR/setup-submission-realm.sh" "$SUBMISSION_REALM_PATH"
+if [ -n "$START_SUBMISSION" ]; then
+  sh "$SCRIPTS_DIR/setup-submission-realm.sh" "$SUBMISSION_REALM_PATH"
+fi
 
 
 PRERENDER_URL="${PRERENDER_URL:-http://localhost:4221}"
@@ -74,10 +77,10 @@ LOW_CREDIT_THRESHOLD="${LOW_CREDIT_THRESHOLD:-2000}" \
   ${START_CATALOG:+--fromUrl="${CATALOG_REALM_URL}"} \
   ${START_CATALOG:+--toUrl="${CATALOG_REALM_URL}"} \
   \
-  --path="${SUBMISSION_REALM_PATH}" \
-  --username='submission_realm' \
-  --fromUrl="${SUBMISSION_REALM_URL}" \
-  --toUrl="${SUBMISSION_REALM_URL}" \
+  ${START_SUBMISSION:+--path="${SUBMISSION_REALM_PATH}"} \
+  ${START_SUBMISSION:+--username='submission_realm'} \
+  ${START_SUBMISSION:+--fromUrl="${SUBMISSION_REALM_URL}"} \
+  ${START_SUBMISSION:+--toUrl="${SUBMISSION_REALM_URL}"} \
   \
   --path='../skills-realm/contents' \
   --username='skills_realm' \
