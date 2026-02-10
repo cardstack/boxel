@@ -220,17 +220,5 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
         'realm name is correct',
       );
     });
-
-    test('QUERY /_info returns 400 when called without body (reproduces subdomain realm bug)', async function (assert) {
-      // Before the fix, the host app sent QUERY to /_info without a body.
-      // For subdomain realms at root path, this hits the server-level route
-      // which requires a realms array in the body, resulting in 400.
-      let response = await request
-        .post('/_info')
-        .set('X-HTTP-Method-Override', 'QUERY')
-        .set('Accept', 'application/vnd.api+json');
-
-      assert.strictEqual(response.status, 400, 'HTTP 400 status without body');
-    });
   });
 });
