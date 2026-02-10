@@ -550,7 +550,7 @@ jobs:
           wait-for: 3m
           wait-on: http-get://localhost:4200
       - name: Start realm servers
-        run: pnpm start:skip-experiments | tee -a /tmp/server.log &
+        run: pnpm start:skip-optional-realms | tee -a /tmp/server.log &
         working-directory: packages/realm-server
       - name: create realm users
         run: pnpm register-realm-users
