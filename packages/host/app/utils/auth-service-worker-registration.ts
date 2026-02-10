@@ -8,6 +8,8 @@ import { isTesting } from '@embroider/macros';
 
 import window from 'ember-window-mock';
 
+import { SessionLocalStorageKey } from './local-storage-keys';
+
 function isServiceWorkerSupported(): boolean {
   return (
     !isTesting() &&
@@ -108,11 +110,9 @@ export function clearServiceWorkerTokens(): void {
   controller.postMessage({ type: 'clear-tokens' });
 }
 
-const SESSION_LOCAL_STORAGE_KEY = 'boxel-session';
-
 function readTokensFromStorage(): Record<string, string> | undefined {
   try {
-    let sessionsString = window.localStorage.getItem(SESSION_LOCAL_STORAGE_KEY);
+    let sessionsString = window.localStorage.getItem(SessionLocalStorageKey);
     if (sessionsString) {
       return JSON.parse(sessionsString);
     }

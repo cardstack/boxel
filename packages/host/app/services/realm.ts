@@ -273,6 +273,7 @@ class RealmResource {
     this.fetchingInfo = undefined;
     this.fetchRealmPermissionsTask.cancelAll();
     window.localStorage.removeItem(SessionLocalStorageKey);
+    syncTokenToServiceWorker(this.realmURL, undefined);
   }
 
   private fetchingInfo: Promise<void> | undefined;

@@ -62,9 +62,12 @@ function createServiceWorkerEnv() {
       return null; // pass through
     }
 
+    // Mirror the actual SW: construct from original request, override headers
+    // and upgrade mode to 'cors' (cross-origin <img> arrives as 'no-cors'
+    // which would strip the Authorization header).
     let headers = new Headers(request.headers);
     headers.set('Authorization', `Bearer ${matchedToken}`);
-    return new Request(request, { headers });
+    return new Request(request, { headers, mode: 'cors' });
   };
 
   return { processMessage, processFetch, realmTokens };
@@ -282,6 +285,31 @@ module('Unit | auth-service-worker', function () {
       let result = sw.processFetch(request);
 
       assert.ok(result, 'HEAD request was intercepted');
+      assert.strictEqual(
+        result!.headers.get('Authorization'),
+        'Bearer my-jwt-token',
+      );
+    });
+
+    test('upgrades request mode to cors for intercepted requests', function (assert) {
+      let sw = createServiceWorkerEnv();
+
+      sw.processMessage({
+        type: 'set-realm-token',
+        realmURL: 'http://localhost:4201/user/realm/',
+        token: 'my-jwt-token',
+      });
+
+      // Cross-origin <img> elements arrive with mode: 'no-cors', which would
+      // silently strip the Authorization header. The SW must upgrade to 'cors'.
+      let request = new Request(
+        'http://localhost:4201/user/realm/images/photo.png',
+        { mode: 'no-cors' },
+      );
+      let result = sw.processFetch(request);
+
+      assert.ok(result, 'request was intercepted');
+      assert.strictEqual(result!.mode, 'cors', 'mode was upgraded to cors');
       assert.strictEqual(
         result!.headers.get('Authorization'),
         'Bearer my-jwt-token',

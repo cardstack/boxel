@@ -10,8 +10,29 @@ import { htmlSafe } from '@ember/template';
 class AuthenticatedImageTesterIsolated extends Component<
   typeof AuthenticatedImageTester
 > {
-  get backgroundStyle() {
+  get sanitizedImageUrl(): string | undefined {
     let url = this.args.model.imageUrl;
+    if (!url) {
+      return undefined;
+    }
+    // Only allow http(s) and relative URLs; reject anything that could
+    // break out of a CSS url("...") context (quotes, parens, semicolons).
+    if (/["'();]/.test(url)) {
+      return undefined;
+    }
+    if (
+      url.startsWith('http://') ||
+      url.startsWith('https://') ||
+      url.startsWith('./') ||
+      url.startsWith('/')
+    ) {
+      return url;
+    }
+    return undefined;
+  }
+
+  get backgroundStyle() {
+    let url = this.sanitizedImageUrl;
     if (!url) {
       return undefined;
     }
@@ -45,7 +66,7 @@ class AuthenticatedImageTesterIsolated extends Component<
             <div class='image-container'>
               <img
                 class='test-image'
-                src={{@model.imageUrl}}
+                src={{this.sanitizedImageUrl}}
                 alt='Example loaded via img tag'
                 loading='lazy'
               />

@@ -97,12 +97,9 @@ self.addEventListener('fetch', (event) => {
   let headers = new Headers(request.headers);
   headers.set('Authorization', `Bearer ${matchedToken}`);
 
-  let authedRequest = new Request(request.url, {
-    method: request.method,
+  let authedRequest = new Request(request, {
     headers,
     mode: 'cors',
-    credentials: 'same-origin',
-    redirect: 'follow',
   });
 
   event.respondWith(fetch(authedRequest));
