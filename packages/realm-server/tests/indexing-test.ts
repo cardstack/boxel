@@ -893,7 +893,10 @@ module(basename(__filename), function () {
         'text/plain',
         'search_doc includes contentType',
       );
-      assert.ok(entry?.searchDoc?.contentHash, 'search_doc includes contentHash');
+      assert.ok(
+        entry?.searchDoc?.contentHash,
+        'search_doc includes contentHash',
+      );
     });
 
     test('indexes executable files as file entries too', async function (assert) {
