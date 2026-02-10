@@ -33,11 +33,8 @@
     <meta data-boxel-head-end />
   </head>
   <body>
-    <script type="x/boundary" id="fastboot-body-start"></script>
-    <script type="x/boundary" id="fastboot-body-end"></script>
+    <div id="boxel-root"></div>
 
-    <!-- in case embercli's hooks insn't run,
-         we embed the following div manually -->
     <div id="ember-basic-dropdown-wormhole"></div>
     {{content-for "body"}}
 

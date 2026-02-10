@@ -126,13 +126,26 @@ export function injectIsolatedHTML(
   isolatedHTML: string,
 ): string {
   return indexHTML.replace(
-    /(<script[^>]+id="fastboot-body-start"[^>]*>\s*<\/script>)([\s\S]*?)(<script[^>]+id="fastboot-body-end"[^>]*>\s*<\/script>)/,
-    (_match, start, _content, end) => `${start}\n${isolatedHTML}\n${end}`,
+    /(<div[^>]+id="boxel-root"[^>]*>)([\s\S]*?)(<\/div>)/,
+    (_match, open, _content, close) => `${open}\n${isolatedHTML}\n${close}
+
+
+        <script>
+
+      if (window?.location?.search?.includes('debugger=true')) {
+        debugger;
+}
+    </script>
+
+    `,
   );
 }
 
 export function injectRenderModeScript(indexHTML: string): string {
-  let script = `<script>globalThis.__boxelRenderMode = 'rehydrate';</script>`;
+  let script = `
+    <script>
+      globalThis.__boxelRenderMode = 'rehydrate';
+    </script>`;
   let updated = indexHTML.replace(
     /(<meta[^>]+data-boxel-head-end[^>]*>)/,
     `$1\n${script}`,
