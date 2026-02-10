@@ -299,7 +299,11 @@ class RealmResource {
       try {
         response = await this.network.authedFetch(`${this.realmURL}_info`, {
           method: 'QUERY',
-          headers,
+          headers: {
+            ...headers,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ realms: [this.realmURL] }),
         });
       } catch (error) {
         if (isTesting()) {
@@ -328,12 +332,14 @@ class RealmResource {
         );
       }
       let json = await waitForPromise(response.json());
+      let realmData = Array.isArray(json.data) ? json.data[0] : json.data;
       let info: RealmInfo = {
-        url: json.data.id,
-        ...json.data.attributes,
+        url: realmData.id,
+        ...realmData.attributes,
       };
       let isPublic = Boolean(
-        response.headers.get('x-boxel-realm-public-readable'),
+        response.headers.get('x-boxel-realm-public-readable') ||
+        response.headers.get('x-boxel-realms-public-readable'),
       );
       this.info = new TrackedObject({ ...info, isIndexing: false, isPublic });
     } finally {

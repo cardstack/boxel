@@ -196,5 +196,41 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
         'response explains missing realms list',
       );
     });
+
+    test('QUERY /_info returns info for a public realm without auth when realms body is provided', async function (assert) {
+      // This tests the scenario where a subdomain-based realm at root path
+      // (e.g. http://hi.localhost:4201/) sends QUERY to /_info. The path /_info
+      // matches the server-level route (not the realm's own handler), so the
+      // request body with realms array is required.
+      let response = await request
+        .post('/_info')
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .set('Accept', 'application/vnd.api+json')
+        .send({ realms: [testRealm.url] });
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      let { data } = response.body as {
+        data: { id: string; type: string; attributes: { name: string } }[];
+      };
+      assert.strictEqual(data.length, 1, 'returns info for one realm');
+      assert.strictEqual(data[0].id, testRealm.url, 'realm id is correct');
+      assert.strictEqual(
+        data[0].attributes.name,
+        'Primary Realm',
+        'realm name is correct',
+      );
+    });
+
+    test('QUERY /_info returns 400 when called without body (reproduces subdomain realm bug)', async function (assert) {
+      // Before the fix, the host app sent QUERY to /_info without a body.
+      // For subdomain realms at root path, this hits the server-level route
+      // which requires a realms array in the body, resulting in 400.
+      let response = await request
+        .post('/_info')
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .set('Accept', 'application/vnd.api+json');
+
+      assert.strictEqual(response.status, 400, 'HTTP 400 status without body');
+    });
   });
 });
