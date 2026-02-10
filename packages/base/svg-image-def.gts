@@ -11,14 +11,8 @@ export class SvgDef extends ImageDef {
     getStream: () => Promise<ByteStream>,
     options: { contentHash?: string } = {},
   ): Promise<SerializedFile<{ width: number; height: number }>> {
-    let bytesPromise: Promise<Uint8Array> | undefined;
-    let memoizedStream = async () => {
-      bytesPromise ??= byteStreamToUint8Array(await getStream());
-      return bytesPromise;
-    };
-
-    let base = await super.extractAttributes(url, memoizedStream, options);
-    let bytes = await memoizedStream();
+    let base = await super.extractAttributes(url, getStream, options);
+    let bytes = await byteStreamToUint8Array(await getStream());
     let { width, height } = extractSvgDimensions(bytes);
 
     return {

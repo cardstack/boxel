@@ -1,4 +1,4 @@
-import { byteStreamToUint8Array } from '@cardstack/runtime-common';
+import { readFirstBytes } from '@cardstack/runtime-common';
 import { ImageDef } from './image-file-def';
 import { type ByteStream, type SerializedFile } from './file-api';
 import { extractGifDimensions } from './gif-meta-extractor';
@@ -11,14 +11,8 @@ export class GifDef extends ImageDef {
     getStream: () => Promise<ByteStream>,
     options: { contentHash?: string } = {},
   ): Promise<SerializedFile<{ width: number; height: number }>> {
-    let bytesPromise: Promise<Uint8Array> | undefined;
-    let memoizedStream = async () => {
-      bytesPromise ??= byteStreamToUint8Array(await getStream());
-      return bytesPromise;
-    };
-
-    let base = await super.extractAttributes(url, memoizedStream, options);
-    let bytes = await memoizedStream();
+    let base = await super.extractAttributes(url, getStream, options);
+    let bytes = await readFirstBytes(await getStream(), 10);
     let { width, height } = extractGifDimensions(bytes);
 
     return {
