@@ -1,0 +1,70 @@
+exports.up = (pgm) => {
+  switch (process.env.REALM_SENTRY_ENVIRONMENT) {
+    case 'staging':
+      pgm.sql(
+        `INSERT INTO realm_user_permissions (realm_url, username, read, write, realm_owner)
+         VALUES
+           ('https://realms-staging.stack.cards/submissions/', '@submission_realm:stack.cards', true, true, true),
+           ('https://realms-staging.stack.cards/submissions/', '@submissionbot:stack.cards', true, true, false),
+           ('https://realms-staging.stack.cards/submissions/', '*', true, false, false)
+         ON CONFLICT ON CONSTRAINT realm_user_permissions_pkey
+         DO UPDATE SET
+           realm_url   = EXCLUDED.realm_url,
+           username    = EXCLUDED.username,
+           read        = EXCLUDED.read,
+           write       = EXCLUDED.write,
+           realm_owner = EXCLUDED.realm_owner`,
+      );
+      break;
+    case 'production':
+      pgm.sql(
+        `INSERT INTO realm_user_permissions (realm_url, username, read, write, realm_owner)
+         VALUES
+           ('https://app.boxel.ai/submissions/', '@submission_realm:boxel.ai', true, true, true),
+           ('https://app.boxel.ai/submissions/', '@submissionbot:boxel.ai', true, true, false),
+           ('https://app.boxel.ai/submissions/', '*', true, false, false)
+         ON CONFLICT ON CONSTRAINT realm_user_permissions_pkey
+         DO UPDATE SET
+           realm_url   = EXCLUDED.realm_url,
+           username    = EXCLUDED.username,
+           read        = EXCLUDED.read,
+           write       = EXCLUDED.write,
+           realm_owner = EXCLUDED.realm_owner`,
+      );
+      break;
+    default:
+      pgm.sql(
+        `INSERT INTO realm_user_permissions (realm_url, username, read, write, realm_owner)
+         VALUES
+           ('http://localhost:4201/submissions/', '@submission_realm:localhost', true, true, true),
+           ('http://localhost:4201/submissions/', '@submissionbot:localhost', true, true, false),
+           ('http://localhost:4201/submissions/', '*', true, false, false)
+         ON CONFLICT ON CONSTRAINT realm_user_permissions_pkey
+         DO UPDATE SET
+           realm_url   = EXCLUDED.realm_url,
+           username    = EXCLUDED.username,
+           read        = EXCLUDED.read,
+           write       = EXCLUDED.write,
+           realm_owner = EXCLUDED.realm_owner`,
+      );
+  }
+};
+
+exports.down = (pgm) => {
+  switch (process.env.REALM_SENTRY_ENVIRONMENT) {
+    case 'staging':
+      pgm.sql(
+        "DELETE FROM realm_user_permissions WHERE realm_url = 'https://realms-staging.stack.cards/submissions/' AND username IN ('@submission_realm:stack.cards', '@submissionbot:stack.cards', '*')",
+      );
+      break;
+    case 'production':
+      pgm.sql(
+        "DELETE FROM realm_user_permissions WHERE realm_url = 'https://app.boxel.ai/submissions/' AND username IN ('@submission_realm:boxel.ai', '@submissionbot:boxel.ai', '*')",
+      );
+      break;
+    default:
+      pgm.sql(
+        "DELETE FROM realm_user_permissions WHERE realm_url = 'http://localhost:4201/submissions/' AND username IN ('@submission_realm:localhost', '@submissionbot:localhost', '*')",
+      );
+  }
+};

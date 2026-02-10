@@ -23,17 +23,23 @@ DEFAULT_CATALOG_REALM_URL='http://localhost:4201/catalog/'
 CATALOG_REALM_URL="${RESOLVED_CATALOG_REALM_URL:-$DEFAULT_CATALOG_REALM_URL}"
 DEFAULT_BOXEL_HOMEPAGE_REALM_URL='http://localhost:4201/boxel-homepage/'
 BOXEL_HOMEPAGE_REALM_URL="${RESOLVED_BOXEL_HOMEPAGE_REALM_URL:-$DEFAULT_BOXEL_HOMEPAGE_REALM_URL}"
+DEFAULT_SUBMISSION_REALM_URL='http://localhost:4201/submissions/'
+SUBMISSION_REALM_URL="${RESOLVED_SUBMISSION_REALM_URL:-$DEFAULT_SUBMISSION_REALM_URL}"
 
 # This can be overridden from the environment to point to a different catalog
 # and is used in start-services-for-host-tests.sh to point to a trimmed down
 # version of the catalog-realm for faster startup.
 CATALOG_REALM_PATH="${CATALOG_REALM_PATH:-../catalog-realm}"
+SUBMISSION_REALM_PATH="${SUBMISSION_REALM_PATH:-./realms/localhost_4201/submissions}"
 
 if [ -n "$USE_EXTERNAL_CATALOG" ]; then
   pnpm --dir=../catalog catalog:setup
   pnpm --dir=../catalog catalog:update
   CATALOG_REALM_PATH='../catalog/contents'
 fi
+
+sh "$SCRIPTS_DIR/setup-submission-realm.sh" "$SUBMISSION_REALM_PATH"
+
 
 PRERENDER_URL="${PRERENDER_URL:-http://localhost:4221}"
 
@@ -67,6 +73,11 @@ LOW_CREDIT_THRESHOLD="${LOW_CREDIT_THRESHOLD:-2000}" \
   ${START_CATALOG:+--username='catalog_realm'} \
   ${START_CATALOG:+--fromUrl="${CATALOG_REALM_URL}"} \
   ${START_CATALOG:+--toUrl="${CATALOG_REALM_URL}"} \
+  \
+  --path="${SUBMISSION_REALM_PATH}" \
+  --username='submission_realm' \
+  --fromUrl="${SUBMISSION_REALM_URL}" \
+  --toUrl="${SUBMISSION_REALM_URL}" \
   \
   --path='../skills-realm/contents' \
   --username='skills_realm' \
