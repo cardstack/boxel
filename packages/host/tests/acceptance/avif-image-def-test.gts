@@ -25,72 +25,84 @@ import {
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
+import { setupTestRealmServiceWorker } from '../helpers/test-realm-service-worker';
 
 // Build a minimal valid AVIF file (ISOBMFF) with the given dimensions.
 // Structure: ftyp box + meta box containing iprp > ipco > ispe (width/height).
+// This is sufficient for dimension extraction but not for browser rendering
+// (no AV1 pixel data).
 function makeMinimalAvif(width: number, height: number): Uint8Array {
   let buf = new ArrayBuffer(68);
   let view = new DataView(buf);
   let bytes = new Uint8Array(buf);
   let offset = 0;
 
+  function setChars(o: number, str: string) {
+    for (let i = 0; i < str.length; i++) bytes[o + i] = str.charCodeAt(i);
+  }
+
   // ftyp box (20 bytes)
   view.setUint32(offset, 20);
-  offset += 4; // size
-  setChars(bytes, offset, 'ftyp');
-  offset += 4; // type
-  setChars(bytes, offset, 'avif');
-  offset += 4; // major_brand
-  view.setUint32(offset, 0);
-  offset += 4; // minor_version
-  setChars(bytes, offset, 'avif');
-  offset += 4; // compatible_brand
+  setChars(offset + 4, 'ftyp');
+  setChars(offset + 8, 'avif');
+  view.setUint32(offset + 12, 0);
+  setChars(offset + 16, 'avif');
+  offset += 20;
 
   // meta box — fullbox (48 bytes)
   view.setUint32(offset, 48);
-  offset += 4; // size
-  setChars(bytes, offset, 'meta');
-  offset += 4; // type
-  view.setUint32(offset, 0);
-  offset += 4; // version + flags
+  setChars(offset + 4, 'meta');
+  view.setUint32(offset + 8, 0); // version + flags
+  offset += 12;
 
   // iprp box (36 bytes)
   view.setUint32(offset, 36);
-  offset += 4; // size
-  setChars(bytes, offset, 'iprp');
-  offset += 4; // type
+  setChars(offset + 4, 'iprp');
+  offset += 8;
 
   // ipco box (28 bytes)
   view.setUint32(offset, 28);
-  offset += 4; // size
-  setChars(bytes, offset, 'ipco');
-  offset += 4; // type
+  setChars(offset + 4, 'ipco');
+  offset += 8;
 
   // ispe box (20 bytes)
   view.setUint32(offset, 20);
-  offset += 4; // size
-  setChars(bytes, offset, 'ispe');
-  offset += 4; // type
-  view.setUint32(offset, 0);
-  offset += 4; // version + flags
-  view.setUint32(offset, width);
-  offset += 4; // width
-  view.setUint32(offset, height);
-  // height
+  setChars(offset + 4, 'ispe');
+  view.setUint32(offset + 8, 0); // version + flags
+  view.setUint32(offset + 12, width);
+  view.setUint32(offset + 16, height);
 
   return bytes;
 }
 
-function setChars(bytes: Uint8Array, offset: number, str: string): void {
-  for (let i = 0; i < str.length; i++) {
-    bytes[offset + i] = str.charCodeAt(i);
-  }
+// Generate a browser-renderable AVIF using the Canvas API.  Chrome's AVIF
+// encoder may use a different ISOBMFF layout than our extraction code expects,
+// so this is only used for the authenticated-display test (which needs a
+// decodable image) while extraction tests use makeMinimalAvif.
+async function makeRenderableAvif(
+  width: number,
+  height: number,
+): Promise<Uint8Array> {
+  let canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  let ctx = canvas.getContext('2d')!;
+  ctx.fillStyle = 'red';
+  ctx.fillRect(0, 0, width, height);
+  let blob: Blob = await new Promise((resolve, reject) => {
+    canvas.toBlob(
+      (b) => (b ? resolve(b) : reject(new Error('toBlob returned null'))),
+      'image/avif',
+    );
+  });
+  return new Uint8Array(await blob.arrayBuffer());
 }
 
 module('Acceptance | avif image def', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
   setupOnSave(hooks);
+  setupTestRealmServiceWorker(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
@@ -163,12 +175,13 @@ module('Acceptance | avif image def', function (hooks) {
   }
 
   hooks.beforeEach(async function () {
-    let avifBytes = makeMinimalAvif(2, 3);
+    let renderableAvif = await makeRenderableAvif(2, 3);
     ({ realm } = await setupAcceptanceTestRealm({
       mockMatrixUtils,
       contents: {
         ...SYSTEM_CARD_FIXTURE_CONTENTS,
-        'sample.avif': avifBytes,
+        'sample.avif': makeMinimalAvif(2, 3),
+        'renderable.avif': renderableAvif,
         'not-an-avif.avif': 'This is plain text, not an AVIF file.',
       },
     }));
@@ -313,7 +326,9 @@ module('Acceptance | avif image def', function (hooks) {
   });
 
   test('authenticated images display in browser', async function (assert) {
-    let url = makeFileURL('sample.avif');
+    // Use renderable.avif (canvas-generated, browser-decodable) rather than
+    // sample.avif (minimal ISOBMFF, not decodable).
+    let url = makeFileURL('renderable.avif');
 
     // First extract the file to get the resource
     await visit(
@@ -346,7 +361,7 @@ module('Acceptance | avif image def', function (hooks) {
     ) as HTMLImageElement | null;
     assert.ok(img, 'img element is rendered');
     assert.ok(
-      img?.getAttribute('src')?.includes('sample.avif'),
+      img?.getAttribute('src')?.includes('renderable.avif'),
       'img src references the AVIF file',
     );
 

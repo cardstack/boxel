@@ -25,14 +25,15 @@ import {
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
+import { setupTestRealmServiceWorker } from '../helpers/test-realm-service-worker';
 
-// Minimal valid PNG: 1x1 pixel, RGBA, with IHDR, IDAT, and IEND chunks.
-// Dimensions encoded in IHDR at bytes 16-19 (width=2) and 20-23 (height=3).
+// Minimal valid PNG with correct pixel data.
+// Dimensions encoded in IHDR at bytes 16-19 (width) and 20-23 (height).
 function makeMinimalPng(width: number, height: number): Uint8Array {
   // PNG signature (8 bytes)
   let signature = [137, 80, 78, 71, 13, 10, 26, 10];
 
-  // IHDR chunk: width, height, bit depth=8, color type=2 (RGB), compression=0, filter=0, interlace=0
+  // IHDR chunk: width, height, bit depth=8, color type=2 (RGB)
   let ihdrData = new Uint8Array(13);
   let ihdrView = new DataView(ihdrData.buffer);
   ihdrView.setUint32(0, width);
@@ -45,11 +46,32 @@ function makeMinimalPng(width: number, height: number): Uint8Array {
 
   let ihdrChunk = buildChunk('IHDR', ihdrData);
 
-  // Minimal IDAT chunk (empty compressed data — deflate stored block)
-  let idatData = new Uint8Array([
-    0x08, 0xd7, 0x01, 0x00, 0x00, 0xff, 0xff, 0x00, 0x01, 0x00, 0x01,
-  ]);
-  let idatChunk = buildChunk('IDAT', idatData);
+  // IDAT chunk: zlib-compressed scanlines (filter=None, all black pixels)
+  let scanlineBytes = 1 + width * 3; // filter byte + RGB per pixel
+  let rawSize = height * scanlineBytes;
+  let rawData = new Uint8Array(rawSize); // all zeros = filter None + black
+
+  // zlib wrapper: CMF + FLG + stored deflate block + Adler-32
+  let zlibSize = 2 + 5 + rawSize + 4;
+  let zlib = new Uint8Array(zlibSize);
+  let zi = 0;
+  zlib[zi++] = 0x08; // CMF: deflate, window 256
+  zlib[zi++] = 0x1d; // FLG: FCHECK so (CMF*256+FLG) % 31 == 0
+  zlib[zi++] = 0x01; // BFINAL=1, BTYPE=00 (stored)
+  zlib[zi++] = rawSize & 0xff;
+  zlib[zi++] = (rawSize >> 8) & 0xff;
+  zlib[zi++] = (~rawSize) & 0xff;
+  zlib[zi++] = (~rawSize >> 8) & 0xff;
+  zlib.set(rawData, zi);
+  zi += rawSize;
+  // Adler-32 of all-zero data: s1=1, s2=rawSize
+  let adler = ((rawSize & 0xffff) << 16) | 1;
+  zlib[zi++] = (adler >> 24) & 0xff;
+  zlib[zi++] = (adler >> 16) & 0xff;
+  zlib[zi++] = (adler >> 8) & 0xff;
+  zlib[zi++] = adler & 0xff;
+
+  let idatChunk = buildChunk('IDAT', zlib);
 
   // IEND chunk (empty)
   let iendChunk = buildChunk('IEND', new Uint8Array(0));
@@ -109,6 +131,7 @@ module('Acceptance | png image def', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
   setupOnSave(hooks);
+  setupTestRealmServiceWorker(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
