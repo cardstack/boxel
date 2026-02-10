@@ -14,6 +14,8 @@ export async function fetchSessionRoom(
   let rows = await query(dbAdapter, [
     'SELECT room_id FROM session_rooms WHERE realm_user_id =',
     param(realmUserId),
+    'AND realm_url = ',
+    param(REALM_SERVER_REALM),
     'AND matrix_user_id =',
     param(matrixUserId),
   ]);

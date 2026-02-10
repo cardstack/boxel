@@ -85,7 +85,6 @@ module(`server-endpoints/${basename(__filename)}`, function () {
               id: `${testRealm2URL}`,
               attributes: {
                 ...testRealmInfo,
-                realmUserId: '@node-test_realm:localhost',
               },
             },
           ],

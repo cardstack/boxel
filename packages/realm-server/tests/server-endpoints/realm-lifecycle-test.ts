@@ -17,6 +17,7 @@ import {
   createJWT,
   realmSecretSeed,
   testRealmInfo,
+  testRealmServerMatrixUserId,
 } from '../helpers';
 import { createJWT as createRealmServerJWT } from '../../utils/jwt';
 import { setupServerEndpointsTest, testRealm2URL } from './helpers';
@@ -121,7 +122,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
 
         let sessionRoom = await fetchSessionRoom(
           context.dbAdapter,
-          json.data.id,
+          testRealmServerMatrixUserId,
           ownerUserId,
         );
         assert.ok(

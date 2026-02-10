@@ -160,7 +160,7 @@ export const testRealmInfo = {
   interactHome: null,
   hostHome: null,
   visibility: 'public',
-  realmUserId: testMatrix.username,
+  realmUserId: testRealmServerMatrixUserId,
   publishable: null,
   lastPublishedAt: null,
 };

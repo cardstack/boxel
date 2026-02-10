@@ -80,7 +80,6 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
               type: 'realm-info',
               attributes: {
                 ...testRealmInfo,
-                realmUserId: '@node-test_realm:localhost',
               },
             },
           },
@@ -152,7 +151,6 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
               attributes: {
                 ...testRealmInfo,
                 visibility: 'private',
-                realmUserId: '@node-test_realm:localhost',
               },
             },
           },
@@ -195,7 +193,6 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
                 attributes: {
                   ...testRealmInfo,
                   visibility: 'shared',
-                  realmUserId: '@node-test_realm:localhost',
                 },
               },
             },
@@ -239,7 +236,6 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
               attributes: {
                 ...testRealmInfo,
                 visibility: 'shared',
-                realmUserId: '@node-test_realm:localhost',
               },
             },
           },

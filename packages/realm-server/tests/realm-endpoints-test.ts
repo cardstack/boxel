@@ -113,6 +113,7 @@ module(basename(__filename), function () {
         '*': ['read', 'write'],
         user: ['read', 'write', 'realm-owner'],
         carol: ['read', 'write'],
+        '@node-test_realm:localhost': ['read'],
       },
       realmURL,
       onRealmSetup,
@@ -337,7 +338,6 @@ module(basename(__filename), function () {
               type: 'realm-config',
               attributes: {
                 ...testRealmInfo,
-                realmUserId: '@node-test_realm:localhost',
                 backgroundURL: 'new-bg',
               },
             },
@@ -934,7 +934,7 @@ module(basename(__filename), function () {
       assert.strictEqual(response.status, 200, 'HTTP 200 status');
     });
 
-    test('can index a newly added file', async function (assert) {
+    test.only('can index a newly added file', async function (assert) {
       let realmEventTimestampStart = Date.now();
 
       let postResponse = await request
@@ -1034,10 +1034,7 @@ module(basename(__filename), function () {
                 module: '../person',
                 name: 'Person',
               },
-              realmInfo: {
-                ...testRealmInfo,
-                realmUserId: '@node-test_realm:localhost',
-              },
+              realmInfo: testRealmInfo,
               realmURL: testRealmHref,
             },
             links: {

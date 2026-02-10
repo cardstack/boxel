@@ -73,6 +73,7 @@ module(basename(__filename), function () {
         setupPermissionedRealmAtURL(hooks, realmURL, {
           permissions: {
             '*': ['read'],
+            '@node-test_realm:localhost': ['read'],
           },
           onRealmSetup,
         });
@@ -403,6 +404,7 @@ module(basename(__filename), function () {
         setupPermissionedRealmAtURL(hooks, realmURL, {
           permissions: {
             '*': ['read'],
+            '@node-test_realm:localhost': ['read'],
           },
           onRealmSetup,
         });
@@ -476,6 +478,7 @@ module(basename(__filename), function () {
         setupPermissionedRealmAtURL(hooks, realmURL, {
           permissions: {
             '*': ['read', 'write'],
+            '@node-test_realm:localhost': ['read'],
           },
           onRealmSetup,
         });
@@ -590,6 +593,7 @@ module(basename(__filename), function () {
         setupPermissionedRealmAtURL(hooks, realmURL, {
           permissions: {
             '*': ['read', 'write'],
+            '@node-test_realm:localhost': ['read'],
           },
           onRealmSetup,
         });
@@ -920,7 +924,7 @@ module(basename(__filename), function () {
                 eventName: 'index',
                 indexType: 'incremental-index-initiation',
                 updatedFile: `${testRealmURL}test-card.gts`,
-                realmURL: testRealmURL,
+                realmURL: testRealmURL.href,
               },
             },
             {
@@ -930,7 +934,7 @@ module(basename(__filename), function () {
                 indexType: 'incremental',
                 invalidations: [`${testRealmURL}test-card.gts`],
                 clientRequestId: null,
-                realmURL: testRealmURL,
+                realmURL: testRealmURL.href,
               },
             },
             {
@@ -939,7 +943,7 @@ module(basename(__filename), function () {
                 eventName: 'index',
                 indexType: 'incremental-index-initiation',
                 updatedFile: `${testRealmURL}test-card.gts`,
-                realmURL: testRealmURL,
+                realmURL: testRealmURL.href,
               },
             },
             {
@@ -949,7 +953,7 @@ module(basename(__filename), function () {
                 indexType: 'incremental',
                 invalidations: [`${testRealmURL}test-card.gts`, id],
                 clientRequestId: null,
-                realmURL: testRealmURL,
+                realmURL: testRealmURL.href,
               },
             },
             {
@@ -958,7 +962,7 @@ module(basename(__filename), function () {
                 eventName: 'index',
                 indexType: 'incremental-index-initiation',
                 updatedFile: `${id}.json`,
-                realmURL: testRealmURL,
+                realmURL: testRealmURL.href,
               },
             },
             {
@@ -968,7 +972,7 @@ module(basename(__filename), function () {
                 indexType: 'incremental',
                 invalidations: [id],
                 clientRequestId: null,
-                realmURL: testRealmURL,
+                realmURL: testRealmURL.href,
               },
             },
           ];
@@ -990,6 +994,7 @@ module(basename(__filename), function () {
         setupPermissionedRealmAtURL(hooks, realmURL, {
           permissions: {
             '*': ['read', 'write'],
+            '@node-test_realm:localhost': ['read'],
           },
           cardSizeLimitBytes: 512,
           onRealmSetup,
@@ -1192,6 +1197,7 @@ module(basename(__filename), function () {
           setupPermissionedRealmAtURL(hooks, realmURL, {
             permissions: {
               '*': ['read', 'write'],
+              '@node-test_realm:localhost': ['read'],
             },
             cardSizeLimitBytes: 512,
             onRealmSetup,
