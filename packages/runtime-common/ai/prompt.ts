@@ -1208,15 +1208,18 @@ export async function buildPromptForModel(
         event as CardMessageEvent,
         history,
       );
-      let historicalMessage: OpenAIPromptMessage = {
-        role: 'assistant',
-        content: elideCodeBlocks(body, codePatchResults),
-      };
+      let content = elideCodeBlocks(body, codePatchResults);
       let toolCalls = toToolCalls(event as CardMessageEvent);
-      if (toolCalls.length) {
-        historicalMessage.tool_calls = toolCalls;
+      if (content || toolCalls.length) {
+        let historicalMessage: OpenAIPromptMessage = {
+          role: 'assistant',
+          content,
+        };
+        if (toolCalls.length) {
+          historicalMessage.tool_calls = toolCalls;
+        }
+        historicalMessages.push(historicalMessage);
       }
-      historicalMessages.push(historicalMessage);
       let commandResults = getCommandResults(
         event as CardMessageEvent,
         history,
@@ -1313,7 +1316,26 @@ export async function buildPromptForModel(
     }
   }
 
-  return messages;
+  return messages.filter(hasMessageContent);
+}
+
+function hasMessageContent(message: OpenAIPromptMessage): boolean {
+  // Assistant messages with tool calls are valid even without text content
+  if (message.role === 'assistant' && message.tool_calls?.length) {
+    return true;
+  }
+  // Tool messages are required responses to tool calls
+  if (message.role === 'tool') {
+    return true;
+  }
+  let content = message.content;
+  if (typeof content === 'string') {
+    return content.length > 0;
+  }
+  if (Array.isArray(content)) {
+    return content.length > 0;
+  }
+  return false;
 }
 
 function collectPendingCodePatchCorrectnessCheck(
