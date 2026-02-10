@@ -6,8 +6,5 @@
     "skills:setup": "[ -d contents ] || (git clone git@github.com:cardstack/boxel-skills.git contents || git clone https://github.com/cardstack/boxel-skills.git contents)",
     "skills:update": "pnpm skills:setup && cd contents && git pull",
     "skills:reset": "rm -rf contents && pnpm skills:setup"
-  },
-  "volta": {
-    "extends": "../../package.json"
   }
 }

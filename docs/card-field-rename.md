@@ -77,7 +77,7 @@ pnpm install
 
 Notes:
 
-- This project uses Volta for Node + pnpm versions (see `package.json`).
+- This project uses mise for Node + pnpm versions (see `.mise.toml`).
 
 ## AI conversations
 
