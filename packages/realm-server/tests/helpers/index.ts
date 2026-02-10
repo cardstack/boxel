@@ -34,7 +34,6 @@ import {
   PUBLISHED_DIRECTORY_NAME,
   DEFAULT_CARD_SIZE_LIMIT_BYTES,
   clearSessionRooms,
-  upsertSessionRoom,
   type MatrixConfig,
   type QueuePublisher,
   type QueueRunner,

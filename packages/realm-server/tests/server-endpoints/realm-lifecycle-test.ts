@@ -116,11 +116,6 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           new URL(json.data.id),
         );
         assert.deepEqual(permissions, {
-          [`@realm/mango_${endpoint}:localhost`]: [
-            'read',
-            'write',
-            'realm-owner',
-          ],
           [ownerUserId]: ['read', 'write', 'realm-owner'],
         });
 
