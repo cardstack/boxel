@@ -68,6 +68,7 @@ export default class IndexedFileTree extends Component<Signature> {
       }
       nav {
         position: relative;
+        min-height: 100%;
       }
     </style>
   </template>
