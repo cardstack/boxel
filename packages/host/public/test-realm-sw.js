@@ -1,8 +1,6 @@
 // Service worker that relays requests to test-realm URLs back to the main
 // thread so the VirtualNetwork can serve them.  Only registered during tests.
 
-/* eslint-disable no-undef */
-
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', (event) => {
   event.waitUntil(self.clients.claim());
@@ -32,9 +30,8 @@ async function relayToClient(event) {
       let { status, headers, body } = msg.data;
       resolve(new Response(body, { status, headers }));
     };
-    client.postMessage(
-      { type: 'test-realm-fetch', url: event.request.url },
-      [channel.port2],
-    );
+    client.postMessage({ type: 'test-realm-fetch', url: event.request.url }, [
+      channel.port2,
+    ]);
   });
 }

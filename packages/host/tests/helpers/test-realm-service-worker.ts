@@ -1,5 +1,5 @@
-import type { NestedHooks } from 'qunit';
 import { getService } from '@universal-ember/test-support';
+
 import type NetworkService from '@cardstack/host/services/network';
 
 let swReady: Promise<void> | undefined;

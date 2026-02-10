@@ -60,7 +60,7 @@ function makeMinimalPng(width: number, height: number): Uint8Array {
   zlib[zi++] = 0x01; // BFINAL=1, BTYPE=00 (stored)
   zlib[zi++] = rawSize & 0xff;
   zlib[zi++] = (rawSize >> 8) & 0xff;
-  zlib[zi++] = (~rawSize) & 0xff;
+  zlib[zi++] = ~rawSize & 0xff;
   zlib[zi++] = (~rawSize >> 8) & 0xff;
   zlib.set(rawData, zi);
   zi += rawSize;
