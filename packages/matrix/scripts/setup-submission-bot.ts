@@ -118,11 +118,7 @@ async function fetchBotCommands(jwt: string, botId?: string) {
 
 async function ensureBotCommandId(jwt: string, botId: string) {
   const commands = await fetchBotCommands(jwt, botId);
-  const existing = commands.find(
-    (entry: any) =>
-      entry?.attributes?.command === commandURL &&
-      JSON.stringify(entry?.attributes?.filter) === JSON.stringify(commandFilter),
-  );
+  const existing = commands[0];
   if (existing?.id) {
     return existing.id as string;
   }
