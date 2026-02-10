@@ -5,7 +5,7 @@
    id NOT NULL,
    bot_id NOT NULL,
    command TEXT NOT NULL,
-   command_filter BLOB,
+   command_filter BLOB NOT NULL,
    created_at NOT NULL,
    PRIMARY KEY ( id ) 
 );

@@ -21,14 +21,17 @@ exports.up = (pgm) => {
     },
     command_filter: {
       type: 'jsonb',
+      notNull: true,
     },
     created_at: {
       type: 'timestamp',
       notNull: true,
     },
   });
+  pgm.createIndex('bot_commands', ['bot_id', 'created_at']);
 };
 
 exports.down = (pgm) => {
+  pgm.dropIndex('bot_commands', ['bot_id', 'created_at']);
   pgm.dropTable('bot_commands');
 };
