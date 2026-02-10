@@ -89,6 +89,8 @@ async function addBotCommand(jwt: string, botId: string) {
     const text = await response.text();
     throw new Error(`Failed to add bot command: ${response.status} ${text}`);
   }
+  const json = await response.json();
+  return json?.data?.id;
 }
 
 async function fetchBotCommands(jwt: string, botId?: string) {
@@ -124,8 +126,7 @@ async function ensureBotCommandId(jwt: string, botId: string) {
   if (existing?.id) {
     return existing.id as string;
   }
-  await addBotCommand(jwt, botId);
-  return undefined;
+  return addBotCommand(jwt, botId);
 }
 
 // registerRealmUser is idempotent: it logs in and ensures the realm user exists.
