@@ -17,7 +17,8 @@ class AuthenticatedImageTesterIsolated extends Component<
     }
     // Only allow http(s) and relative URLs; reject anything that could
     // break out of a CSS url("...") context (quotes, parens, semicolons).
-    if (/["'();]/.test(url)) {
+    let disallowed = new RegExp('["\u0027();]');
+    if (disallowed.test(url)) {
       return undefined;
     }
     if (
