@@ -3010,7 +3010,7 @@ export class Realm {
   public async search(query: Query): Promise<LinkableCollectionDocument> {
     assertQuery(query);
     return await this.#realmIndexQueryEngine.searchCards(query, {
-      loadLinks: true,
+      ...(query.asData ? {} : { loadLinks: true }),
     });
   }
 

@@ -242,6 +242,11 @@ export class Batch {
             (dep) => this.copiedRealmURL(sourceRealmURL, new URL(dep)).href,
           )
         : entry.deps;
+      entry.last_known_good_deps = entry.last_known_good_deps
+        ? entry.last_known_good_deps.map(
+            (dep) => this.copiedRealmURL(sourceRealmURL, new URL(dep)).href,
+          )
+        : entry.last_known_good_deps;
       entry.pristine_doc = entry.pristine_doc
         ? {
             ...entry.pristine_doc,
@@ -321,6 +326,7 @@ export class Batch {
           atom_html: entry.atomHtml,
           icon_html: entry.iconHTML,
           deps: [...entry.deps],
+          last_known_good_deps: [...entry.deps],
           types: entry.types,
           display_names: entry.displayNames,
           last_modified: entry.lastModified,
@@ -333,6 +339,7 @@ export class Batch {
         entryPayload = {
           type: 'module',
           deps: [...entry.deps],
+          last_known_good_deps: [...entry.deps],
           last_modified: entry.lastModified,
           resource_created_at: entry.resourceCreatedAt,
           error_doc: null,
@@ -343,6 +350,7 @@ export class Batch {
         entryPayload = {
           type: 'file',
           deps: [...entry.deps],
+          last_known_good_deps: [...entry.deps],
           pristine_doc: entry.resource ?? null,
           search_doc: entry.searchData ?? null,
           types: entry.types ?? null,
@@ -370,6 +378,12 @@ export class Batch {
             url,
             baseTypeFromError(entry),
           )) ?? {}),
+          // preserve last_known_good_deps through error cycles (may have been cleared
+          // by getProductionVersion if it returned undefined, so we explicitly preserve it)
+          last_known_good_deps: await this.getLastKnownGoodDeps(
+            url,
+            baseTypeFromError(entry),
+          ),
           type: baseTypeFromError(entry),
           error_doc: errorEntry?.error ?? entry.error,
           has_error: true,
@@ -471,6 +485,24 @@ export class Batch {
         ? parseInt(entry.resource_created_at)
         : null,
     };
+  }
+
+  private async getLastKnownGoodDeps(
+    url: URL,
+    expectedType: BoxelIndexTable['type'],
+  ): Promise<string[] | null> {
+    let [entry] = (await this.#query([
+      `SELECT i.last_known_good_deps FROM boxel_index as i WHERE`,
+      ...every([
+        any([
+          [`i.url =`, param(url.href)],
+          [`i.file_alias =`, param(url.href)],
+        ]),
+        ['i.type =', param(expectedType)],
+        ['i.last_known_good_deps IS NOT NULL'],
+      ]),
+    ] as Expression)) as Pick<BoxelIndexTable, 'last_known_good_deps'>[];
+    return entry?.last_known_good_deps ?? null;
   }
 
   private async numberOfIndexEntries() {
