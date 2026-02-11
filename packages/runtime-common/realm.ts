@@ -110,6 +110,7 @@ import {
   MatrixClient,
   ensureFullMatrixUserId,
   getMatrixUsername,
+  userIdFromUsername,
 } from './matrix-client';
 import { PACKAGES_FAKE_ORIGIN } from './package-shim-handler';
 
@@ -153,7 +154,6 @@ import {
   type PublishabilityWarningType,
   type ResourceIndexEntry,
 } from './publishability';
-import { userIdFromUsername } from 'matrix-client';
 
 export const REALM_ROOM_RETENTION_POLICY_MAX_LIFETIME = 60 * 60 * 1000;
 
