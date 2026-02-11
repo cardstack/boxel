@@ -39,6 +39,11 @@ import type {
   RealmEventContent,
 } from 'https://cardstack.com/base/matrix-event';
 
+import {
+  syncTokenToServiceWorker,
+  syncAllTokensToServiceWorker,
+  clearServiceWorkerTokens,
+} from '../utils/auth-service-worker-registration';
 import { SessionLocalStorageKey } from '../utils/local-storage-keys';
 
 import type MatrixService from './matrix-service';
@@ -268,6 +273,7 @@ class RealmResource {
     this.fetchingInfo = undefined;
     this.fetchRealmPermissionsTask.cancelAll();
     window.localStorage.removeItem(SessionLocalStorageKey);
+    syncTokenToServiceWorker(this.realmURL, undefined);
   }
 
   private fetchingInfo: Promise<void> | undefined;
@@ -299,7 +305,11 @@ class RealmResource {
       try {
         response = await this.network.authedFetch(`${this.realmURL}_info`, {
           method: 'QUERY',
-          headers,
+          headers: {
+            ...headers,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ realms: [this.realmURL] }),
         });
       } catch (error) {
         if (isTesting()) {
@@ -328,12 +338,14 @@ class RealmResource {
         );
       }
       let json = await waitForPromise(response.json());
+      let realmData = Array.isArray(json.data) ? json.data[0] : json.data;
       let info: RealmInfo = {
-        url: json.data.id,
-        ...json.data.attributes,
+        url: realmData.id,
+        ...realmData.attributes,
       };
       let isPublic = Boolean(
-        response.headers.get('x-boxel-realm-public-readable'),
+        response.headers.get('x-boxel-realm-public-readable') ||
+        response.headers.get('x-boxel-realms-public-readable'),
       );
       this.info = new TrackedObject({ ...info, isIndexing: false, isPublic });
     } finally {
@@ -949,6 +961,7 @@ export default class RealmService extends Service {
       realm.logout();
     }
     this.bulkInfoPromise = undefined;
+    clearServiceWorkerTokens();
   }
 
   async publish(realmURL: string, publishedRealmURLs: string[]) {
@@ -1090,6 +1103,7 @@ export default class RealmService extends Service {
     let sessions: Map<string, RealmResource> = new Map();
     let tokens = SessionStorage.getAll();
     if (tokens) {
+      syncAllTokensToServiceWorker(tokens);
       for (let [realmURL, token] of Object.entries(tokens)) {
         let resource = this.createRealmResource(realmURL, token);
         sessions.set(realmURL, resource);
@@ -1125,6 +1139,7 @@ let SessionStorage = {
         JSON.stringify(session),
       );
     }
+    syncTokenToServiceWorker(realmURL, token);
   },
 };
 

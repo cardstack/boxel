@@ -34,6 +34,7 @@ export enum SupportedMimeType {
   JSON = 'application/json',
   CardDependencies = 'application/json',
   CardTypeSummary = 'application/json',
+  OctetStream = 'application/octet-stream',
   All = '*/*',
 }
 /* eslint-enable @typescript-eslint/no-duplicate-enum-values */
@@ -73,15 +74,30 @@ export function lookupRouteTable<T>(
   let acceptMimeType = extractSupportedMimeType(
     request.headers.get('Accept') as unknown as null | string | [string],
   );
-  if (!acceptMimeType) {
-    return;
-  }
   if (!isHTTPMethod(request.method)) {
     return;
   }
-  let routes = routeTable.get(acceptMimeType)?.get(request.method);
+  let routes = acceptMimeType
+    ? routeTable.get(acceptMimeType)?.get(request.method)
+    : undefined;
+  // Fall back to Content-Type when Accept doesn't match a route. This
+  // supports POST/PATCH routes where the request body type (e.g.
+  // application/octet-stream) is the meaningful discriminator rather than the
+  // desired response type.
   if (!routes) {
-    return;
+    let contentType = extractSupportedMimeType(
+      request.headers.get('Content-Type') as unknown as
+        | null
+        | string
+        | [string],
+    );
+    if (!contentType) {
+      return;
+    }
+    routes = routeTable.get(contentType)?.get(request.method);
+    if (!routes) {
+      return;
+    }
   }
 
   // we construct a new URL within RealmPath.local() param that strips off the query string

@@ -1,8 +1,9 @@
 import { module, test } from 'qunit';
 import { join, basename } from 'path';
-import { systemInitiatedPriority } from '@cardstack/runtime-common';
+import type { Test, SuperTest } from 'supertest';
+import { systemInitiatedPriority, type Realm } from '@cardstack/runtime-common';
 import { setupServerEndpointsTest, testRealm2URL } from './helpers';
-import { waitUntil } from '../helpers';
+import { setupPermissionedRealmAtURL, waitUntil } from '../helpers';
 import { ensureDirSync, writeFileSync, writeJSONSync } from 'fs-extra';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
@@ -350,6 +351,170 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         let response = await context.request2.get('/%c0').set('Accept', '*/*');
         assert.strictEqual(response.status, 404, 'HTTP 404 status');
       });
+
+      test('preserves scoped CSS in HTML response after card enters error state', async function (assert) {
+        // First verify the card is indexed successfully and scoped CSS is served
+        let initialResponse = await context.request2
+          .get('/test/scoped-css-test')
+          .set('Accept', 'text/html');
+
+        assert.strictEqual(
+          initialResponse.status,
+          200,
+          'initial HTML response is successful',
+        );
+        assert.ok(
+          initialResponse.text.includes('--scoped-css-marker: 1'),
+          'scoped CSS is present in initial response',
+        );
+
+        // Break the instance by making it reference a non-existent module
+        // This is more reliable than breaking the module and waiting for propagation
+        let brokenInstanceJSON = JSON.stringify({
+          data: {
+            type: 'card',
+            attributes: {},
+            meta: {
+              adoptsFrom: {
+                module: './non-existent-module.gts',
+                name: 'NonExistentCard',
+              },
+            },
+          },
+        });
+
+        let writeResponse = await context.request2
+          .post('/test/scoped-css-test.json')
+          .set('Accept', 'application/vnd.card+source')
+          .send(brokenInstanceJSON);
+
+        assert.strictEqual(
+          writeResponse.status,
+          204,
+          'instance file write was accepted',
+        );
+
+        // Wait for the index to reflect the error state
+        await waitUntil(
+          async () => {
+            let rows = (await context.dbAdapter.execute(
+              `SELECT has_error FROM boxel_index
+               WHERE url = '${testRealm2URL.href}scoped-css-test.json'
+                 AND type = 'instance'`,
+            )) as { has_error: boolean }[];
+
+            return rows.length > 0 && rows[0].has_error === true;
+          },
+          {
+            timeout: 10000,
+            interval: 200,
+            timeoutMessage:
+              'Timed out waiting for instance to enter error state',
+          },
+        );
+
+        // Verify the database row has an error
+        let errorRows = (await context.dbAdapter.execute(
+          `SELECT has_error, last_known_good_deps FROM boxel_index
+           WHERE url = '${testRealm2URL.href}scoped-css-test.json'
+             AND type = 'instance'`,
+        )) as { has_error: boolean; last_known_good_deps: string[] | null }[];
+
+        assert.strictEqual(errorRows.length, 1, 'found the index entry');
+        assert.true(
+          errorRows[0].has_error,
+          'instance is in error state in the database',
+        );
+        assert.ok(
+          errorRows[0].last_known_good_deps,
+          'last_known_good_deps is preserved',
+        );
+        assert.ok(
+          errorRows[0].last_known_good_deps!.some((dep: string) =>
+            dep.includes('.glimmer-scoped.css'),
+          ),
+          'last_known_good_deps contains scoped CSS URL',
+        );
+
+        // Now request the HTML again - it should still include scoped CSS from last_known_good_deps
+        let errorStateResponse = await context.request2
+          .get('/test/scoped-css-test')
+          .set('Accept', 'text/html');
+
+        assert.strictEqual(
+          errorStateResponse.status,
+          200,
+          'HTML response is still successful even with errored card',
+        );
+        assert.ok(
+          errorStateResponse.text.includes('data-boxel-scoped-css'),
+          'scoped CSS style tag is still present after error (from last_known_good_deps)',
+        );
+        assert.ok(
+          errorStateResponse.text.includes('--scoped-css-marker: 1'),
+          'scoped CSS content is preserved from last_known_good_deps after card enters error state',
+        );
+      });
     },
   );
+
+  module('Published realm index responses', function (hooks) {
+    // Use a URL with a path segment to avoid conflicts with server-level routes
+    // like /_info, /_search, etc. Without a path segment, requests to /_info
+    // would match the server's multi-realm info route instead of the realm's
+    // single-realm info handler.
+    let realmURL = new URL('http://127.0.0.1:4444/published/');
+    let request: SuperTest<Test>;
+    let testRealm: Realm;
+
+    function onRealmSetup(args: {
+      request: SuperTest<Test>;
+      testRealm: Realm;
+    }) {
+      request = args.request;
+      testRealm = args.testRealm;
+    }
+
+    setupPermissionedRealmAtURL(hooks, realmURL, {
+      permissions: {
+        '*': ['read'],
+      },
+      published: true,
+      onRealmSetup,
+    });
+
+    hooks.beforeEach(async function () {
+      // Wait for indexing to complete before running tests
+      // This ensures isolated_html is available in the database
+      await testRealm.indexing();
+    });
+
+    test('serves index HTML by default for published realm', async function (assert) {
+      let response = await request
+        .get('/published/')
+        .set('Accept', 'application/json');
+
+      assert.strictEqual(response.status, 200, 'serves HTML response');
+      assert.ok(
+        response.headers['content-type']?.includes('text/html'),
+        'content type is text/html',
+      );
+      assert.ok(
+        response.text.includes('data-test-home-card'),
+        'index HTML is served',
+      );
+    });
+
+    test('skips index HTML when vendor mime type is requested', async function (assert) {
+      let response = await request
+        .get('/published/person-1')
+        .set('Accept', 'application/vnd.card+json');
+
+      assert.strictEqual(response.status, 200, 'serves JSON response');
+      assert.ok(
+        response.headers['content-type']?.includes('application/vnd.card+json'),
+        'content type is vendor JSON',
+      );
+    });
+  });
 });

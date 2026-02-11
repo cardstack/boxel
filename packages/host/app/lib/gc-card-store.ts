@@ -35,7 +35,7 @@ type InstanceGraph = Map<LocalId, Set<LocalId>>;
 type StoredInstance = CardDef | FileDef;
 
 type StoreHooks = {
-  getSearchResource<T extends CardDef = CardDef>(
+  getSearchResource<T extends CardDef | FileDef = CardDef>(
     parent: object,
     getQuery: () => Query | undefined,
     getRealms?: () => string[] | undefined,
@@ -780,7 +780,7 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     return dependencyGraph;
   }
 
-  getSearchResource<T extends CardDef = CardDef>(
+  getSearchResource<T extends CardDef | FileDef = CardDef>(
     parent: object,
     getQuery: () => Query | undefined,
     getRealms?: () => string[] | undefined,

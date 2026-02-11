@@ -1,7 +1,7 @@
 import { module, test } from 'qunit';
 import type { Test, SuperTest } from 'supertest';
 import { basename } from 'path';
-import type { Realm } from '@cardstack/runtime-common';
+import { baseRealm, type Realm } from '@cardstack/runtime-common';
 import type { Query } from '@cardstack/runtime-common/query';
 import { setupPermissionedRealm, createJWT } from '../helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
@@ -34,6 +34,17 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
           },
           eq: {
             firstName,
+          },
+        },
+      };
+    }
+
+    function buildFileDefQuery(): Query {
+      return {
+        filter: {
+          type: {
+            module: `${baseRealm.url}file-api`,
+            name: 'FileDef',
           },
         },
       };
@@ -176,6 +187,331 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
             json.data[0].id,
             json2.data[0].id,
             'different pages should return different results',
+          );
+        });
+
+        test('serves file-meta results when querying for FileDef', async function (assert) {
+          let response = await request
+            .post(searchPath)
+            .set('Accept', 'application/vnd.card+json')
+            .set('X-HTTP-Method-Override', 'QUERY')
+            .send(buildFileDefQuery());
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          let json = response.body as { data: { id?: string; type: string }[] };
+
+          assert.ok(json.data.length > 0, 'file-meta results are returned');
+          assert.ok(
+            json.data.every((entry) => entry.type === 'file-meta'),
+            'all results are file-meta resources',
+          );
+          assert.ok(
+            json.data.some((entry) => entry.id === `${realmHref}dir/foo.txt`),
+            'expected file-meta entry is present',
+          );
+        });
+
+        test('filters file-meta results by url', async function (assert) {
+          let response = await request
+            .post(searchPath)
+            .set('Accept', 'application/vnd.card+json')
+            .set('X-HTTP-Method-Override', 'QUERY')
+            .send({
+              filter: {
+                on: {
+                  module: `${baseRealm.url}file-api`,
+                  name: 'FileDef',
+                },
+                eq: {
+                  url: `${realmHref}dir/foo.txt`,
+                },
+              },
+            });
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          let json = response.body as { data: { id?: string; type: string }[] };
+
+          assert.deepEqual(
+            json.data.map((entry) => entry.id),
+            [`${realmHref}dir/foo.txt`],
+            'url filter returns matching file-meta entry',
+          );
+          assert.strictEqual(
+            json.data[0]?.type,
+            'file-meta',
+            'url filter returns file-meta resource',
+          );
+        });
+
+        test('filters file-meta results by FileDef subclass type', async function (assert) {
+          let response = await request
+            .post(searchPath)
+            .set('Accept', 'application/vnd.card+json')
+            .set('X-HTTP-Method-Override', 'QUERY')
+            .send({
+              filter: {
+                type: {
+                  module: `${baseRealm.url}markdown-file-def`,
+                  name: 'MarkdownDef',
+                },
+              },
+            });
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          let json = response.body as { data: { id?: string; type: string }[] };
+
+          assert.ok(
+            json.data.some((entry) => entry.id === `${realmHref}sample.md`),
+            'returns file-meta entries for subclass FileDef type',
+          );
+        });
+
+        test('sparse fieldsets: empty fields returns resources with no attributes', async function (assert) {
+          let response = await request
+            .post(searchPath)
+            .set('Accept', 'application/vnd.card+json')
+            .set('X-HTTP-Method-Override', 'QUERY')
+            .send({
+              ...buildFileDefQuery(),
+              fields: { 'file-meta': [] },
+              asData: true,
+            });
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          let json = response.body as {
+            data: {
+              id?: string;
+              type: string;
+              attributes?: Record<string, any>;
+              meta?: Record<string, any>;
+              links?: Record<string, any>;
+            }[];
+          };
+
+          assert.ok(json.data.length > 0, 'results are returned');
+          for (let entry of json.data) {
+            assert.strictEqual(
+              entry.type,
+              'file-meta',
+              'resource type is preserved',
+            );
+            assert.ok(entry.id, 'resource id is preserved');
+            assert.ok(entry.meta, 'resource meta is preserved');
+            assert.deepEqual(
+              entry.attributes,
+              {},
+              'attributes are empty when fields is empty array',
+            );
+          }
+        });
+
+        test('sparse fieldsets: specific fields returns only those attributes', async function (assert) {
+          let response = await request
+            .post(searchPath)
+            .set('Accept', 'application/vnd.card+json')
+            .set('X-HTTP-Method-Override', 'QUERY')
+            .send({
+              ...buildFileDefQuery(),
+              fields: { 'file-meta': ['name', 'url'] },
+              asData: true,
+            });
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          let json = response.body as {
+            data: {
+              id?: string;
+              type: string;
+              attributes?: Record<string, any>;
+            }[];
+          };
+
+          assert.ok(json.data.length > 0, 'results are returned');
+          for (let entry of json.data) {
+            let attrKeys = Object.keys(entry.attributes ?? {});
+            assert.ok(
+              attrKeys.every((k) => ['name', 'url'].includes(k)),
+              `attributes only contain requested fields, got: ${attrKeys.join(', ')}`,
+            );
+            assert.notStrictEqual(
+              entry.attributes?.name,
+              undefined,
+              'name attribute is present',
+            );
+            assert.notStrictEqual(
+              entry.attributes?.url,
+              undefined,
+              'url attribute is present',
+            );
+          }
+        });
+
+        test('sparse fieldsets: invalid fields value returns 400', async function (assert) {
+          let response = await request
+            .post(searchPath)
+            .set('Accept', 'application/vnd.card+json')
+            .set('X-HTTP-Method-Override', 'QUERY')
+            .send({
+              ...buildFileDefQuery(),
+              fields: { 'file-meta': 'not-an-array' },
+              asData: true,
+            });
+
+          assert.strictEqual(
+            response.status,
+            400,
+            'returns 400 for invalid fields value',
+          );
+        });
+
+        test('sparse fieldsets: fields without asData returns 400', async function (assert) {
+          let response = await request
+            .post(searchPath)
+            .set('Accept', 'application/vnd.card+json')
+            .set('X-HTTP-Method-Override', 'QUERY')
+            .send({
+              ...buildFileDefQuery(),
+              fields: { 'file-meta': ['name'] },
+            });
+
+          assert.strictEqual(
+            response.status,
+            400,
+            'returns 400 when fields is specified without asData: true',
+          );
+        });
+
+        test('query without fields returns all attributes (backward compat)', async function (assert) {
+          let response = await request
+            .post(searchPath)
+            .set('Accept', 'application/vnd.card+json')
+            .set('X-HTTP-Method-Override', 'QUERY')
+            .send(buildFileDefQuery());
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          let json = response.body as {
+            data: {
+              id?: string;
+              type: string;
+              attributes?: Record<string, any>;
+            }[];
+          };
+
+          assert.ok(json.data.length > 0, 'results are returned');
+          let entry = json.data.find((e) => e.id === `${realmHref}dir/foo.txt`);
+          assert.ok(entry, 'expected entry is present');
+          assert.ok(entry!.attributes, 'attributes are present');
+          assert.ok(
+            Object.keys(entry!.attributes!).length > 0,
+            'attributes are populated when fields is not specified',
+          );
+          assert.notStrictEqual(
+            entry!.attributes?.name,
+            undefined,
+            'name attribute is present',
+          );
+          assert.notStrictEqual(
+            entry!.attributes?.url,
+            undefined,
+            'url attribute is present',
+          );
+        });
+
+        test('sparse fieldsets for cards: empty fields returns card resources with no attributes', async function (assert) {
+          let response = await request
+            .post(searchPath)
+            .set('Accept', 'application/vnd.card+json')
+            .set('X-HTTP-Method-Override', 'QUERY')
+            .send({
+              ...buildPersonQuery('Mango'),
+              fields: { card: [] },
+              asData: true,
+            });
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          let json = response.body as {
+            data: {
+              id?: string;
+              type: string;
+              attributes?: Record<string, any>;
+              meta?: Record<string, any>;
+              links?: Record<string, any>;
+            }[];
+          };
+
+          assert.strictEqual(json.data.length, 1, 'one result is returned');
+          let entry = json.data[0];
+          assert.strictEqual(entry.type, 'card', 'resource type is preserved');
+          assert.ok(entry.id, 'resource id is preserved');
+          assert.ok(entry.meta, 'resource meta is preserved');
+          assert.deepEqual(
+            entry.attributes,
+            {},
+            'attributes are empty when fields is empty array',
+          );
+        });
+
+        test('sparse fieldsets for cards: specific fields returns only those attributes', async function (assert) {
+          let response = await request
+            .post(searchPath)
+            .set('Accept', 'application/vnd.card+json')
+            .set('X-HTTP-Method-Override', 'QUERY')
+            .send({
+              ...buildPersonQuery('Mango'),
+              fields: { card: ['firstName'] },
+              asData: true,
+            });
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          let json = response.body as {
+            data: {
+              id?: string;
+              type: string;
+              attributes?: Record<string, any>;
+            }[];
+          };
+
+          assert.strictEqual(json.data.length, 1, 'one result is returned');
+          let entry = json.data[0];
+          let attrKeys = Object.keys(entry.attributes ?? {});
+          assert.deepEqual(
+            attrKeys,
+            ['firstName'],
+            'only requested field is present',
+          );
+          assert.strictEqual(
+            entry.attributes?.firstName,
+            'Mango',
+            'firstName value is correct',
+          );
+        });
+
+        test('sparse fieldsets for cards: query without fields returns all attributes', async function (assert) {
+          let response = await request
+            .post(searchPath)
+            .set('Accept', 'application/vnd.card+json')
+            .set('X-HTTP-Method-Override', 'QUERY')
+            .send(buildPersonQuery('Mango'));
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          let json = response.body as {
+            data: {
+              id?: string;
+              type: string;
+              attributes?: Record<string, any>;
+            }[];
+          };
+
+          assert.strictEqual(json.data.length, 1, 'one result is returned');
+          let entry = json.data[0];
+          assert.ok(entry!.attributes, 'attributes are present');
+          assert.ok(
+            Object.keys(entry!.attributes!).length > 0,
+            'attributes are populated when fields is not specified',
+          );
+          assert.strictEqual(
+            entry.attributes?.firstName,
+            'Mango',
+            'firstName attribute is present',
           );
         });
       });

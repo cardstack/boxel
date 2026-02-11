@@ -3,18 +3,18 @@ import { expressionToSql, query } from '@cardstack/runtime-common';
 import { parseDeps } from '@cardstack/runtime-common/realm';
 import type { Expression } from '@cardstack/runtime-common/expression';
 import { decodeScopedCSSRequest, isScopedCSSRequest } from 'glimmer-scoped-css';
+import {
+  indexURLCandidates,
+  indexCandidateExpressions,
+} from './index-url-utils';
 
 export async function retrieveScopedCSS({
   cardURL,
   dbAdapter,
-  indexURLCandidates,
-  indexCandidateExpressions,
   log,
 }: {
   cardURL: URL;
   dbAdapter: DBAdapter;
-  indexURLCandidates: (cardURL: URL) => string[];
-  indexCandidateExpressions: (candidates: string[]) => Expression;
   log?: {
     debug: (...args: unknown[]) => void;
     trace: (...args: unknown[]) => void;
@@ -28,11 +28,11 @@ export async function retrieveScopedCSS({
 
   let scopedCSSQuery: Expression = [
     `
-      SELECT deps, realm_version
+      SELECT deps, last_known_good_deps, realm_version
       FROM boxel_index
       WHERE type = 'instance'
         AND is_deleted IS NOT TRUE
-        AND deps IS NOT NULL
+        AND (deps IS NOT NULL OR last_known_good_deps IS NOT NULL)
         AND
     `,
     ...indexCandidateExpressions(candidates),
@@ -57,15 +57,21 @@ export async function retrieveScopedCSS({
   let rows = await query(dbAdapter, scopedCSSQuery);
 
   let depsRow = rows[0] as
-    | { deps?: string[] | string | null; realm_version?: string | number }
+    | {
+        deps?: string[] | string | null;
+        last_known_good_deps?: string[] | string | null;
+        realm_version?: string | number;
+      }
     | undefined;
 
   let deps = parseDeps(depsRow?.deps);
-  if (deps.length === 0) {
-    return null;
-  }
-
   let scopedCSS = decodeScopedCSSFromDeps(deps);
+
+  // Fall back to last_known_good_deps if no CSS found in deps
+  if (!scopedCSS) {
+    let lastKnownGoodDeps = parseDeps(depsRow?.last_known_good_deps);
+    scopedCSS = decodeScopedCSSFromDeps(lastKnownGoodDeps);
+  }
 
   return scopedCSS;
 }

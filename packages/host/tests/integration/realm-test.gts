@@ -1014,7 +1014,7 @@ module('Integration | realm', function (hooks) {
       'field value is correct',
     );
 
-    let { data: cards } = await queryEngine.search({
+    let { data: cards } = await queryEngine.searchCards({
       filter: {
         on: {
           module: `http://localhost:4202/test/person`,
@@ -2743,7 +2743,7 @@ module('Integration | realm', function (hooks) {
 
     let queryEngine = realm.realmIndexQueryEngine;
 
-    let { data: cards } = await queryEngine.search({});
+    let { data: cards } = await queryEngine.searchCards({});
     assert.strictEqual(cards.length, 2, 'two cards found');
 
     let result = await queryEngine.cardDocument(
@@ -2794,7 +2794,7 @@ module('Integration | realm', function (hooks) {
       'card 1 is still there',
     );
 
-    cards = (await queryEngine.search({})).data;
+    cards = (await queryEngine.searchCards({})).data;
     assert.strictEqual(cards.length, 1, 'only one card remains');
   });
 
@@ -3312,7 +3312,7 @@ module('Integration | realm', function (hooks) {
   });
 
   test('included card uses correct module path when realm is mounted', async function (assert) {
-    let catalogRealmURL = 'http://localhost:4201/catalog/';
+    let mountedRealmURL = 'http://localhost:4201/mounted-test/';
     let spreadsheet1Id = 'spreadsheet-1';
     let spreadsheet2Id = 'spreadsheet-2';
 
@@ -3328,7 +3328,7 @@ module('Integration | realm', function (hooks) {
 
     let { realm } = await setupIntegrationTestRealm({
       mockMatrixUtils,
-      realmURL: catalogRealmURL,
+      realmURL: mountedRealmURL,
       contents: {
         'spreadsheet/spreadsheet.gts': {
           Spreadsheet,
@@ -3389,7 +3389,7 @@ module('Integration | realm', function (hooks) {
 
     let response = await handle(
       realm,
-      new Request(`${catalogRealmURL}index`, {
+      new Request(`${mountedRealmURL}index`, {
         headers: {
           Accept: 'application/vnd.card+json',
         },
@@ -3400,7 +3400,7 @@ module('Integration | realm', function (hooks) {
     let included = json.included?.find(
       (resource: any) =>
         resource.id ===
-        `${catalogRealmURL}spreadsheet/Spreadsheet/${spreadsheet1Id}`,
+        `${mountedRealmURL}spreadsheet/Spreadsheet/${spreadsheet1Id}`,
     );
     assert.ok(included, 'linked spreadsheet card is included');
     assert.strictEqual(

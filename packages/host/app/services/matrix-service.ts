@@ -28,7 +28,7 @@ import type {
 } from '@cardstack/runtime-common';
 import {
   aiBotUsername,
-  botRunnerUsername,
+  submissionBotUsername,
   logger,
   isCardInstance,
   Deferred,
@@ -90,6 +90,7 @@ import type * as FileAPI from 'https://cardstack.com/base/file-api';
 import type { FileDef } from 'https://cardstack.com/base/file-api';
 import type {
   BoxelContext,
+  BotTriggerContent,
   CardMessageContent,
   MatrixEvent as DiscreteMatrixEvent,
   CodePatchResultContent,
@@ -401,9 +402,30 @@ export default class MatrixService extends Service {
     return `@${aiBotUsername}:${server}`;
   }
 
-  get botRunnerUserId() {
+  get submissionBotUserId() {
     let server = this.userId!.split(':')[1];
-    return `@${botRunnerUsername}:${server}`;
+    return `@${submissionBotUsername}:${server}`;
+  }
+
+  getFullUserId(username: string) {
+    if (username.includes(':')) {
+      return username;
+    }
+    let server = this.userId?.split(':')[1];
+    if (!server) {
+      throw new Error('Matrix server is unavailable for user id');
+    }
+    let localpart = username.startsWith('@') ? username.slice(1) : username;
+    return `@${localpart}:${server}`;
+  }
+
+  async isUserInRoom(roomId: string, userId: string) {
+    try {
+      let state = await this.getStateEvent(roomId, 'm.room.member', userId);
+      return state?.membership === 'invite' || state?.membership === 'join';
+    } catch (_error) {
+      return false;
+    }
   }
 
   get userName() {
@@ -816,6 +838,7 @@ export default class MatrixService extends Service {
     roomId: string,
     eventType: string,
     content:
+      | BotTriggerContent
       | CardMessageContent
       | CodePatchResultContent
       | CommandResultWithNoOutputContent
@@ -1364,6 +1387,13 @@ export default class MatrixService extends Service {
     let roomData = this.ensureRoomData(roomId);
     await roomData.mutex.dispatch(async () => {
       return this.client.setPowerLevel(roomId, userId, powerLevel);
+    });
+  }
+
+  async inviteUserToRoom(roomId: string, userId: string) {
+    let roomData = this.ensureRoomData(roomId);
+    await roomData.mutex.dispatch(async () => {
+      return this.client.invite(roomId, userId);
     });
   }
 

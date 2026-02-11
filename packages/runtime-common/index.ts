@@ -4,6 +4,7 @@ import type {
   LinkableResource,
   LooseLinkableResource,
   Meta,
+  Saved,
 } from './resource-types';
 import type { ResolvedCodeRef } from './code-ref';
 import type { RenderRouteOptions } from './render-route-options';
@@ -67,6 +68,24 @@ export interface FileExtractResponse {
   mismatch?: true;
 }
 
+export interface FileRenderResponse {
+  isolatedHTML: string | null;
+  headHTML: string | null;
+  atomHTML: string | null;
+  embeddedHTML: Record<string, string> | null;
+  fittedHTML: Record<string, string> | null;
+  iconHTML: string | null;
+  error?: RenderError;
+}
+
+export type FileRenderArgs = ModulePrerenderArgs & {
+  fileData: {
+    resource: FileMetaResource;
+    fileDefCodeRef: ResolvedCodeRef;
+  };
+  types: string[];
+};
+
 export interface ModuleDefinitionResult {
   type: 'definition';
   moduleURL: string; // node resolution w/o extension
@@ -101,6 +120,7 @@ export interface Prerenderer {
   prerenderCard(args: PrerenderCardArgs): Promise<RenderResponse>;
   prerenderModule(args: ModulePrerenderArgs): Promise<ModuleRenderResponse>;
   prerenderFileExtract(args: ModulePrerenderArgs): Promise<FileExtractResponse>;
+  prerenderFileRender(args: FileRenderArgs): Promise<FileRenderResponse>;
 }
 
 export type RealmAction = 'read' | 'write' | 'realm-owner' | 'assume-user';
@@ -163,7 +183,7 @@ export interface RealmPrerenderedCards {
 // on the server? address in CS-8343
 export { v4 as uuidv4 } from '@lukeed/uuid'; // isomorphic UUID's using Math.random
 import type { LocalPath } from './paths';
-import type { CardTypeFilter, Query, EveryFilter } from './query';
+import type { CardTypeFilter, Query, DataQuery, EveryFilter } from './query';
 import { Loader } from './loader';
 export * from './paths';
 export * from './cached-fetch';
@@ -257,6 +277,8 @@ export type {
   SingleCardDocument,
   SingleFileMetaDocument,
   CardCollectionDocument,
+  FileMetaCollectionDocument,
+  LinkableCollectionDocument,
 } from './document-types';
 export type {
   CardResource,
@@ -275,6 +297,8 @@ export {
   isCardCollectionDocument,
   isSingleCardDocument,
   isSingleFileMetaDocument,
+  isFileMetaCollectionDocument,
+  isLinkableCollectionDocument,
   isCardDocumentString,
 } from './document-types';
 export {
@@ -429,6 +453,18 @@ export type getCards<T extends CardDef = CardDef> = (
 {
   instances: T[];
   instancesByRealm: { realm: string; cards: T[] }[];
+  isLoading: boolean;
+  meta: QueryResultsMeta;
+};
+
+// Duck type of the SearchDataResource
+export type getSearchData = (
+  parent: object,
+  getQuery: () => DataQuery | undefined,
+  getRealms?: () => string[] | undefined,
+  opts?: { isLive?: boolean },
+) => {
+  resources: (CardResource<Saved> | FileMetaResource)[];
   isLoading: boolean;
   meta: QueryResultsMeta;
 };
@@ -680,4 +716,11 @@ export function isBrowserTestEnv() {
 }
 
 export * from './prerendered-card-search';
+export { isBotTriggerEvent } from './bot-trigger';
+export {
+  assertIsBotCommandFilter,
+  isBotCommandFilter,
+  type BotCommandFilter,
+  type BotCommandMatrixFilter,
+} from './bot-command';
 export { DEFAULT_LLM_ID_TO_NAME } from './matrix-constants';

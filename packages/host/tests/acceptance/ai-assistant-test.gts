@@ -2011,7 +2011,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
           type: 'user-workspace',
           url: testRealmURL,
         },
-        {
+        catalogRealm && {
           name: 'Cardstack Catalog',
           type: 'catalog-workspace',
           url: catalogRealm.url,
@@ -2021,7 +2021,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
           type: 'catalog-workspace',
           url: skillsRealm.url,
         },
-      ],
+      ].filter(Boolean),
       'Context sent with message contains correct workspaces',
     );
   });

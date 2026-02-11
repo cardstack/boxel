@@ -501,7 +501,9 @@ jobs:
             "search-prerendered-test.ts",
             "types-endpoint-test.ts",
             "server-endpoints/authentication-test.ts",
+            "server-endpoints/bot-commands-test.ts",
             "server-endpoints/bot-registration-test.ts",
+            "server-endpoints/download-realm-test.ts",
             "server-endpoints/index-responses-test.ts",
             "server-endpoints/maintenance-endpoints-test.ts",
             "server-endpoints/queue-status-test.ts",
@@ -548,7 +550,7 @@ jobs:
           wait-for: 3m
           wait-on: http-get://localhost:4200
       - name: Start realm servers
-        run: pnpm start:skip-experiments | tee -a /tmp/server.log &
+        run: pnpm start:skip-optional-realms | tee -a /tmp/server.log &
         working-directory: packages/realm-server
       - name: create realm users
         run: pnpm register-realm-users

@@ -1,4 +1,4 @@
-import { logger, param, query } from '@cardstack/runtime-common';
+import { isBotTriggerEvent, logger, param, query } from '@cardstack/runtime-common';
 import * as Sentry from '@sentry/node';
 import type { DBAdapter, PgPrimitive } from '@cardstack/runtime-common';
 import type { MatrixEvent, Room } from 'matrix-js-sdk';
@@ -28,25 +28,46 @@ export function onTimelineEvent({
       if (!room || toStartOfTimeline) {
         return;
       }
-      if (room.getMyMembership() !== 'join') {
+      let rawEvent = event.event ?? event;
+      if (!isBotTriggerEvent(rawEvent)) {
         return;
       }
-
-      let senderUsername = event.getSender();
-      if (!senderUsername || senderUsername === authUserId) {
+      let eventContent = rawEvent.content;
+      log.debug('event content', eventContent);
+      let senderUsername = getRoomCreator(room);
+      if (!senderUsername) {
         return;
       }
+      let submissionBotUsername = authUserId;
 
       let registrations = await getRegistrationsForUser(
         dbAdapter,
         senderUsername,
       );
-      if (!registrations.length) {
+      let submissionBotRegistrations = await getRegistrationsForUser(
+        dbAdapter,
+        submissionBotUsername,
+      );
+      if (!registrations.length && !submissionBotRegistrations.length) {
         return;
       }
       log.debug(
         `received event from ${senderUsername} in room ${room.roomId} with ${registrations.length} registrations`,
       );
+      for (let registration of submissionBotRegistrations) {
+        let createdAt = Date.parse(registration.created_at);
+        if (Number.isNaN(createdAt)) {
+          continue;
+        }
+        let eventTimestamp = event.event.origin_server_ts;
+        if (eventTimestamp == null || eventTimestamp < createdAt) {
+          continue;
+        }
+        log.debug(
+          `handling event for bot runner registration ${registration.id} in room ${room.roomId}`,
+          eventContent,
+        );
+      }
       for (let registration of registrations) {
         let createdAt = Date.parse(registration.created_at);
         if (Number.isNaN(createdAt)) {
@@ -57,13 +78,20 @@ export function onTimelineEvent({
           continue;
         }
         // TODO: filter out events we want to handle based on the registration (e.g. command messages, system events)
-        // TODO: handle the event for this registration (e.g. enqueue a job).
+        log.debug(
+          `handling event for registration ${registration.id} in room ${room.roomId}`,
+          eventContent,
+        );
       }
     } catch (error) {
       log.error('error handling timeline event', error);
       Sentry.captureException(error);
     }
   };
+}
+
+function getRoomCreator(room: Room | undefined): string | undefined {
+  return room?.getCreator?.() ?? undefined;
 }
 
 async function getRegistrationsForUser(
