@@ -18,7 +18,7 @@ import {
 } from '@cardstack/runtime-common';
 import { getPublishedRealmDomainOverrides } from '@cardstack/runtime-common/constants';
 import { ensureDirSync, copySync, readJsonSync, writeJsonSync } from 'fs-extra';
-import { resolve, join } from 'path';
+import { join } from 'path';
 import {
   fetchRequestFromContext,
   sendResponseForBadRequest,
@@ -352,13 +352,13 @@ export default function handlePublishRealm({
         `created realm bot user '${userId}' for new realm ${publishedRealmURL}`,
       );
 
-      let pathNameParts = new URL(sourceRealmURL).pathname
-        .split('/')
-        .filter((p) => p);
-      if (pathNameParts.length < 1) {
-        throw new Error('Could not determine source realm folder');
+      let sourceRealm = realms.find((r) => r.url === sourceRealmURL);
+      if (!sourceRealm?.dir) {
+        throw new Error(
+          `Could not determine filesystem path for source realm ${sourceRealmURL}`,
+        );
       }
-      let sourceRealmPath = resolve(join(realmsRootPath, ...pathNameParts));
+      let sourceRealmPath = sourceRealm.dir;
       let publishedDir = join(realmsRootPath, PUBLISHED_DIRECTORY_NAME);
       let publishedRealmPath = join(publishedDir, publishedRealmData.id);
       copySync(sourceRealmPath, publishedRealmPath);
