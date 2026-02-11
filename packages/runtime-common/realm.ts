@@ -108,7 +108,7 @@ import { createResponse } from './create-response';
 import { mergeRelationships } from './merge-relationships';
 import { getCardDirectoryName } from './helpers/card-directory-name';
 import {
-  MatrixClient,
+  type MatrixClient,
   ensureFullMatrixUserId,
   getMatrixUsername,
 } from './matrix-client';
