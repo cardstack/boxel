@@ -153,6 +153,7 @@ import {
   type PublishabilityWarningType,
   type ResourceIndexEntry,
 } from './publishability';
+import { userIdFromUsername } from 'matrix-client';
 
 export const REALM_ROOM_RETENTION_POLICY_MAX_LIFETIME = 60 * 60 * 1000;
 
@@ -395,6 +396,7 @@ export type RequestContext = { realm: Realm; permissions: RealmPermissions };
 export class Realm {
   #startedUp = new Deferred<void>();
   #matrixClient: MatrixClient;
+  #matrixClientUserId: string;
   #realmServerURL: string;
   #realmIndexUpdater: RealmIndexUpdater;
   #realmIndexQueryEngine: RealmIndexQueryEngine;
@@ -487,6 +489,10 @@ export class Realm {
     this.#fromScratchIndexPriority =
       opts?.fromScratchIndexPriority ?? systemInitiatedPriority;
     this.#matrixClient = matrixClient;
+    this.#matrixClientUserId = userIdFromUsername(
+      this.#matrixClient.username,
+      this.#matrixClient.matrixURL.href,
+    );
     this.#realmServerURL = ensureTrailingSlash(realmServerURL);
     this.#cardSizeLimitBytes =
       cardSizeLimitBytes ?? DEFAULT_CARD_SIZE_LIMIT_BYTES;
@@ -673,18 +679,10 @@ export class Realm {
     await this.#matrixClient.login();
   }
 
-  async getMatrixUserId() {
-    if (!this.#matrixClient.getUserId()) {
-      await this.logInToMatrix();
-    }
-    return this.#matrixClient.getUserId()!;
-  }
-
   async ensureSessionRoom(matrixUserId: string): Promise<string> {
-    let realmServerMatrixUserId = await this.getMatrixUserId();
     let sessionRoom = await fetchSessionRoom(
       this.#dbAdapter,
-      realmServerMatrixUserId,
+      this.#matrixClientUserId,
       matrixUserId,
     );
 
@@ -693,7 +691,7 @@ export class Realm {
       sessionRoom = await this.#matrixClient.createDM(matrixUserId);
       await upsertSessionRoom(
         this.#dbAdapter,
-        realmServerMatrixUserId,
+        this.#matrixClientUserId,
         matrixUserId,
         sessionRoom,
       );
@@ -1402,7 +1400,6 @@ export class Realm {
     request: Request,
     requestContext: RequestContext,
   ) {
-    let realmServerMatrixUserId = await this.getMatrixUserId();
     let matrixBackendAuthentication = new MatrixBackendAuthentication(
       this.#matrixClient,
       {
@@ -1443,7 +1440,7 @@ export class Realm {
         setSessionRoom: (userId: string, roomId: string) =>
           upsertSessionRoom(
             this.#dbAdapter,
-            realmServerMatrixUserId,
+            this.#matrixClientUserId,
             userId,
             roomId,
           ),
@@ -1884,8 +1881,7 @@ export class Realm {
       }
 
       // if the client is the realm matrix user then we permit all actions
-      let realmServerMatrixUserId = await this.getMatrixUserId();
-      if (user === realmServerMatrixUserId) {
+      if (user === this.#matrixClientUserId) {
         return;
       }
 
@@ -4375,19 +4371,18 @@ export class Realm {
   private async createRequestContext(
     requiredPermission: RealmAction,
   ): Promise<RequestContext> {
-    let realmServerMatrixUserId = await this.getMatrixUserId();
     let permissions: RealmPermissions;
     let shouldUseWorldReadable =
       requiredPermission === 'read' && (await this.isWorldReadable());
 
     if (shouldUseWorldReadable) {
       permissions = {
-        [realmServerMatrixUserId]: ['assume-user'],
+        [this.#matrixClientUserId]: ['assume-user'],
         '*': ['read'],
       };
     } else {
       permissions = {
-        [realmServerMatrixUserId]: ['assume-user'],
+        [this.#matrixClientUserId]: ['assume-user'],
         ...(await fetchRealmPermissions(this.#dbAdapter, new URL(this.url))),
       };
     }
