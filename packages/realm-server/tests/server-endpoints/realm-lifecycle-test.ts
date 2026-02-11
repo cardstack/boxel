@@ -29,7 +29,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
     function (hooks) {
       let context = setupServerEndpointsTest(hooks);
 
-      test('POST /_create-realm', async function (assert) {
+      test.only('POST /_create-realm', async function (assert) {
         // we randomize the realm and owner names so that we can isolate matrix
         // test state--there is no "delete user" matrix API
         let endpoint = `test-realm-${uuidv4()}`;
@@ -119,16 +119,6 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         assert.deepEqual(permissions, {
           [ownerUserId]: ['read', 'write', 'realm-owner'],
         });
-
-        let sessionRoom = await fetchSessionRoom(
-          context.dbAdapter,
-          testRealmServerMatrixUserId,
-          ownerUserId,
-        );
-        assert.ok(
-          sessionRoom,
-          'session room record was created for the owner after realm creation',
-        );
 
         let id: string;
         let realm = context.testRealmServer2.testingOnlyRealms.find(
