@@ -20,7 +20,10 @@ export function initialize(appInstance: ApplicationInstance): void {
   }
 
   let store = appInstance.lookup('service:store') as any;
-  let shoeboxUrls = Object.keys(shoeboxData);
+  // Only preload card URLs — skip internal keys like __search:*
+  let shoeboxUrls = Object.keys(shoeboxData).filter(
+    (key) => !key.startsWith('__'),
+  );
 
   if (shoeboxUrls.length === 0) {
     return;
@@ -35,12 +38,6 @@ export function initialize(appInstance: ApplicationInstance): void {
   );
   let allUrls = [...new Set([...routeUrls, ...shoeboxUrls])];
 
-  console.log(
-    '[shoebox] Pre-loading',
-    allUrls.length,
-    'URL(s) into the store before routing',
-  );
-
   let preloadPromise = (async () => {
     await store.ensureSetupComplete();
     await Promise.all(
@@ -50,7 +47,6 @@ export function initialize(appInstance: ApplicationInstance): void {
         }),
       ),
     );
-    console.log('[shoebox] Pre-load complete');
   })();
 
   // Delay routing until the store is populated.  The router singleton is

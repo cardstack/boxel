@@ -21,11 +21,6 @@ class SerializeBuilder extends (NewElementBuilder as any) {
     if (tagName !== 'TITLE' && tagName !== 'SCRIPT' && tagName !== 'STYLE') {
       let depth = this.serializeBlockDepth++;
       this.__appendComment(`%+b:${depth}%`);
-      // Debug: log blocks at boxel-root level
-      if (this.element?.id === 'boxel-root') {
-        let stack = new Error().stack?.split('\n').slice(1, 6).join('\n');
-        console.log(`[serialize] __openBlock depth=${depth} at boxel-root\nstack:`, stack);
-      }
     }
     super.__openBlock();
   }
@@ -129,27 +124,6 @@ function fixedRehydrationBuilder(env: any, cursor: any) {
   let builder = rehydrationBuilder(env, cursor);
   let origAppendText = builder.__appendText.bind(builder);
   let origClearMismatch = builder.clearMismatch.bind(builder);
-  let origOpenBlock = builder.__openBlock.bind(builder);
-
-  // Log the initial cursor state
-  let cursorEl = builder.currentCursor?.element;
-  let firstChild = cursorEl?.firstChild;
-  console.log(
-    '[rehydration] Builder created. cursor element:',
-    cursorEl?.tagName,
-    cursorEl?.id,
-    'firstChild:',
-    firstChild?.nodeType,
-    firstChild?.nodeName,
-    firstChild?.nodeType === 8
-      ? firstChild.nodeValue
-      : firstChild?.nodeType === 3
-        ? JSON.stringify(firstChild.nodeValue?.slice(0, 50))
-        : firstChild?.outerHTML?.slice(0, 80),
-    'candidate:',
-    builder.currentCursor?.candidate?.nodeType,
-    builder.currentCursor?.candidate?.nodeName,
-  );
 
   builder.clearMismatch = function (candidate: any) {
     console.warn(
@@ -164,32 +138,7 @@ function fixedRehydrationBuilder(env: any, cursor: any) {
       candidate?.parentNode?.tagName,
       candidate?.parentNode?.id,
     );
-    console.trace('[rehydration] clearMismatch stack');
     return origClearMismatch(candidate);
-  };
-
-  let openBlockCount = 0;
-  builder.__openBlock = function () {
-    openBlockCount++;
-    let candidate = this.currentCursor?.candidate;
-    let isRootLevel =
-      candidate?.parentNode?.id === 'boxel-root' ||
-      this.currentCursor?.element?.id === 'boxel-root';
-    if (isRootLevel) {
-      let stack = new Error().stack?.split('\n').slice(1, 8).join('\n');
-      console.log(
-        `[rehydration] __openBlock #${openBlockCount} candidate:`,
-        candidate?.nodeType,
-        candidate?.nodeName,
-        candidate?.nodeType === 8
-          ? candidate.nodeValue
-          : candidate?.nodeType === 3
-            ? 'text:' + JSON.stringify(candidate.nodeValue?.slice(0, 50))
-            : candidate?.outerHTML?.slice(0, 80),
-        '\nstack:', stack,
-      );
-    }
-    return origOpenBlock();
   };
 
   builder.__appendText = function (string: string) {
@@ -223,15 +172,6 @@ function fixedRehydrationBuilder(env: any, cursor: any) {
       candidate.parentNode!.insertBefore(textNode, candidate);
       // Don't advance candidate — the element is still next
       return textNode;
-    }
-    // Debug: log any case where we're about to call origAppendText with an element candidate
-    if (candidate && candidate.nodeType === 1) {
-      console.warn(
-        '[rehydration] __appendText fallthrough to orig with element candidate!',
-        'string:', JSON.stringify(string),
-        'string.trim()===empty:', string.trim() === '',
-        'candidate:', candidate.nodeName, candidate.outerHTML?.slice(0, 120),
-      );
     }
     return origAppendText(string);
   };

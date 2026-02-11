@@ -37,6 +37,11 @@ export function htmlComponent(
   html: string,
   extraAttributes: Record<string, string> = {},
 ): HTMLComponent {
+  // Strip Glimmer serialization block markers (<!--%+b:N%-->, <!--%-b:N%-->,
+  // <!--% %-->) that the SerializeBuilder injects during prerendering.
+  // These comments are consumed by the RehydrateBuilder on the client but
+  // must not be present when parsing isolated card HTML for htmlComponent.
+  html = html.replace(/<!--%[^%]*%-->/g, '');
   let testContainer = document.createElement('div');
   testContainer.innerHTML = html;
   if (

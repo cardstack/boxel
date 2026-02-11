@@ -202,6 +202,57 @@ export default class PrerenderedCardSearch extends Component<PrerenderedCardComp
     normalizeRealms(this.args.realms),
   );
 
+  constructor(
+    owner: unknown,
+    args: PrerenderedCardComponentSignature['Args'],
+  ) {
+    super(owner, args);
+    this.initFromShoebox();
+  }
+
+  // During rehydration, pre-populate search results from shoebox data so the
+  // first render produces the response block (matching the prerendered DOM)
+  // instead of the loading block which would cause a rehydration mismatch.
+  private initFromShoebox() {
+    let shoeboxData = (globalThis as any).__boxelShoeboxData;
+    let renderMode = (globalThis as any).__boxelRenderMode;
+    if (
+      !shoeboxData ||
+      (renderMode !== 'rehydrate' && renderMode !== 'serialize')
+    ) {
+      return;
+    }
+
+    let realms = normalizeRealms(this.args.realms);
+
+    for (let key of Object.keys(shoeboxData)) {
+      if (!key.startsWith('__search:')) continue;
+      let json = shoeboxData[key];
+      if (!isPrerenderedCardCollectionDocument(json)) continue;
+
+      let instances = json.data.filter(Boolean).map((r: any) => {
+        let realmUrl = resolveCardRealmUrl(r.id, realms);
+        return new PrerenderedCard(
+          {
+            url: r.id,
+            realmUrl,
+            html: r.attributes?.html,
+            isError: !!r.attributes?.isError,
+          },
+          undefined, // no modifier during rehydration — DOM already correct
+        );
+      });
+
+      this._lastSearchResults = {
+        instances,
+        meta: json.meta ?? { page: { total: 0 } },
+      };
+      this._lastSearchQuery = this.args.query ?? null;
+      this._lastRealms = realms;
+      break;
+    }
+  }
+
   private get cardComponentModifier() {
     if (isDestroying(this) || isDestroyed(this)) {
       return undefined;
@@ -411,8 +462,9 @@ export default class PrerenderedCardSearch extends Component<PrerenderedCardComp
   });
 
   private get searchResults() {
-    if (this.runSearch.value) {
-      return this.runSearch.value;
+    let runSearchValue = this.runSearch.value;
+    if (runSearchValue) {
+      return runSearchValue;
     } else if (this._lastSearchResults) {
       return {
         instances: this._lastSearchResults.instances,
