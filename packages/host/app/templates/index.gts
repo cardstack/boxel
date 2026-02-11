@@ -1,4 +1,3 @@
-import Helper from '@ember/component/helper';
 import { action } from '@ember/object';
 import { getOwner } from '@ember/owner';
 import type RouterService from '@ember/routing/router-service';
@@ -230,8 +229,6 @@ export class IndexComponent extends Component<IndexComponentComponentSignature> 
           {{@model.id}}
         </div>
       {{else}}
-        {{bodyClass 'boxel-ready'}}
-
         <HostModeContent
           @primaryCardId={{this.hostModeStateService.primaryCard}}
           @stackItemCardIds={{this.hostModeStateService.stackItems}}
@@ -256,17 +253,4 @@ function eventHasValidOrigin(event: MessageEvent) {
   }
 
   return new URL(config.realmServerURL).href.startsWith(event.origin);
-}
-
-interface BodyClassSignature {
-  Args: {
-    Positional: [string];
-  };
-  Return: void;
-}
-
-class bodyClass extends Helper<BodyClassSignature> {
-  compute([className]: [string]) {
-    document.body.classList.add(className);
-  }
 }
