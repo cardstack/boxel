@@ -7,14 +7,13 @@ import {
   param,
   query,
   PUBLISHED_DIRECTORY_NAME,
-  RealmPaths,
 } from '@cardstack/runtime-common';
 import { AuthenticationError } from '@cardstack/runtime-common/router';
 import { parseRealmsParam } from '@cardstack/runtime-common/search-utils';
 import { verifyURLSignature } from '@cardstack/runtime-common/url-signature';
 import archiver from 'archiver';
 import { existsSync, statSync } from 'fs-extra';
-import { join, resolve, sep } from 'path';
+import { join } from 'path';
 import type { CreateRoutesArgs } from '../routes';
 import { retrieveTokenClaim } from '../utils/jwt';
 import {
@@ -41,7 +40,6 @@ export default function handleDownloadRealm({
   realmSecretSeed,
   realms,
   realmsRootPath,
-  serverURL,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
     let request = await fetchRequestFromContext(ctxt);
@@ -148,9 +146,9 @@ export default function handleDownloadRealm({
 
     let realmPath = await resolveRealmPath({
       dbAdapter,
+      realms,
       realmURL,
       realmsRootPath,
-      serverURL,
     });
     if (!realmPath) {
       await sendResponseForNotFound(
@@ -208,14 +206,14 @@ function hasRealm(realms: Realm[], realmURL: string): boolean {
 
 async function resolveRealmPath({
   dbAdapter,
+  realms,
   realmURL,
   realmsRootPath,
-  serverURL,
 }: {
   dbAdapter: DBAdapter;
+  realms: Realm[];
   realmURL: string;
   realmsRootPath: string;
-  serverURL: string;
 }): Promise<string | null> {
   let published = (await query(dbAdapter, [
     'SELECT id FROM published_realms WHERE published_realm_url =',
@@ -225,50 +223,10 @@ async function resolveRealmPath({
     return join(realmsRootPath, PUBLISHED_DIRECTORY_NAME, published[0].id);
   }
 
-  let realmPath = realmPathFromServerURL({
-    realmURL,
-    realmsRootPath,
-    serverURL,
-  });
-  if (!realmPath) {
-    return null;
-  }
-
-  let root = resolve(realmsRootPath);
-  let resolvedRealmPath = resolve(realmPath);
-  if (
-    resolvedRealmPath !== root &&
-    !resolvedRealmPath.startsWith(`${root}${sep}`)
-  ) {
-    return null;
-  }
-
-  return realmPath;
-}
-
-function realmPathFromServerURL({
-  realmURL,
-  realmsRootPath,
-  serverURL,
-}: {
-  realmURL: string;
-  realmsRootPath: string;
-  serverURL: string;
-}): string | null {
-  let serverRoot = new RealmPaths(new URL(ensureTrailingSlash(serverURL)));
-  let localPath: string;
-  try {
-    localPath = serverRoot.local(new URL(realmURL));
-  } catch {
-    return null;
-  }
-
-  let parts = localPath.split('/').filter(Boolean);
-  if (parts.length < 1) {
-    return null;
-  }
-
-  return resolve(join(realmsRootPath, ...parts));
+  let realm = realms.find(
+    (r) => ensureTrailingSlash(r.url) === realmURL,
+  );
+  return realm?.dir ?? null;
 }
 
 function buildArchiveName(realmURL: URL): string {
