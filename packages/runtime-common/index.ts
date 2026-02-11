@@ -4,6 +4,7 @@ import type {
   LinkableResource,
   LooseLinkableResource,
   Meta,
+  Saved,
 } from './resource-types';
 import type { ResolvedCodeRef } from './code-ref';
 import type { RenderRouteOptions } from './render-route-options';
@@ -182,7 +183,7 @@ export interface RealmPrerenderedCards {
 // on the server? address in CS-8343
 export { v4 as uuidv4 } from '@lukeed/uuid'; // isomorphic UUID's using Math.random
 import type { LocalPath } from './paths';
-import type { CardTypeFilter, Query, EveryFilter } from './query';
+import type { CardTypeFilter, Query, DataQuery, EveryFilter } from './query';
 import { Loader } from './loader';
 export * from './paths';
 export * from './cached-fetch';
@@ -456,6 +457,18 @@ export type getCards<T extends CardDef = CardDef> = (
   meta: QueryResultsMeta;
 };
 
+// Duck type of the SearchDataResource
+export type getSearchData = (
+  parent: object,
+  getQuery: () => DataQuery | undefined,
+  getRealms?: () => string[] | undefined,
+  opts?: { isLive?: boolean },
+) => {
+  resources: (CardResource<Saved> | FileMetaResource)[];
+  isLoading: boolean;
+  meta: QueryResultsMeta;
+};
+
 export interface CreateOptions {
   realm?: string;
   localDir?: LocalPath;
@@ -704,4 +717,10 @@ export function isBrowserTestEnv() {
 
 export * from './prerendered-card-search';
 export { isBotTriggerEvent } from './bot-trigger';
+export {
+  assertIsBotCommandFilter,
+  isBotCommandFilter,
+  type BotCommandFilter,
+  type BotCommandMatrixFilter,
+} from './bot-command';
 export { DEFAULT_LLM_ID_TO_NAME } from './matrix-constants';

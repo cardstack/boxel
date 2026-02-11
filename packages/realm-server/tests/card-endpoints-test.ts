@@ -5,7 +5,11 @@ import { join, basename } from 'path';
 import type { Server } from 'http';
 import type { DirResult } from 'tmp';
 import { existsSync, readJSONSync, statSync } from 'fs-extra';
-import type { Realm, Relationship } from '@cardstack/runtime-common';
+import type {
+  Realm,
+  Relationship,
+  ResourceID,
+} from '@cardstack/runtime-common';
 import {
   baseRealm,
   isSingleCardDocument,
@@ -38,6 +42,55 @@ function parseSearchQuery(searchURL: URL) {
     return parse(queryParam) as Record<string, any>;
   }
   return parse(searchURL.searchParams.toString()) as Record<string, any>;
+}
+
+// Create minimal valid PNG bytes for testing
+function makeMinimalPng(): Uint8Array {
+  let signature = [137, 80, 78, 71, 13, 10, 26, 10];
+  let ihdrData = new Uint8Array(13);
+  let ihdrView = new DataView(ihdrData.buffer);
+  ihdrView.setUint32(0, 1); // width
+  ihdrView.setUint32(4, 1); // height
+  ihdrData[8] = 8; // bit depth
+  ihdrData[9] = 2; // color type (RGB)
+  let ihdrChunk = buildPngChunk('IHDR', ihdrData);
+  let idatData = new Uint8Array([
+    0x08, 0xd7, 0x01, 0x00, 0x00, 0xff, 0xff, 0x00, 0x01, 0x00, 0x01,
+  ]);
+  let idatChunk = buildPngChunk('IDAT', idatData);
+  let iendChunk = buildPngChunk('IEND', new Uint8Array(0));
+  let totalLength =
+    signature.length + ihdrChunk.length + idatChunk.length + iendChunk.length;
+  let png = new Uint8Array(totalLength);
+  let offset = 0;
+  png.set(signature, offset);
+  offset += signature.length;
+  png.set(ihdrChunk, offset);
+  offset += ihdrChunk.length;
+  png.set(idatChunk, offset);
+  offset += idatChunk.length;
+  png.set(iendChunk, offset);
+  return png;
+}
+
+function buildPngChunk(type: string, data: Uint8Array): Uint8Array {
+  let chunk = new Uint8Array(4 + 4 + data.length + 4);
+  let view = new DataView(chunk.buffer);
+  view.setUint32(0, data.length);
+  for (let i = 0; i < 4; i++) {
+    chunk[4 + i] = type.charCodeAt(i);
+  }
+  chunk.set(data, 8);
+  let crc = 0xffffffff;
+  let crcData = chunk.slice(4, 8 + data.length);
+  for (let i = 0; i < crcData.length; i++) {
+    crc ^= crcData[i]!;
+    for (let j = 0; j < 8; j++) {
+      crc = crc & 1 ? (crc >>> 1) ^ 0xedb88320 : crc >>> 1;
+    }
+  }
+  view.setUint32(8 + data.length, (crc ^ 0xffffffff) >>> 0);
+  return chunk;
 }
 
 module(basename(__filename), function () {
@@ -193,7 +246,7 @@ module(basename(__filename), function () {
         test('includes FileDef resources for file links in included payload', async function (assert) {
           let { testRealm: realm, request } = getRealmSetup();
 
-          let writes = new Map<string, string>([
+          let writes = new Map<string, string | Uint8Array>([
             [
               'gallery.gts',
               `
@@ -237,9 +290,9 @@ module(basename(__filename), function () {
                 },
               }),
             ],
-            ['hero.png', 'mock hero image'],
-            ['first.png', 'mock first image'],
-            ['second.png', 'mock second image'],
+            ['hero.png', makeMinimalPng()],
+            ['first.png', makeMinimalPng()],
+            ['second.png', makeMinimalPng()],
           ]);
 
           await realm.writeMany(writes);
@@ -275,8 +328,8 @@ module(basename(__filename), function () {
           assert.strictEqual(hero?.attributes?.name, 'hero.png');
           assert.strictEqual(hero?.attributes?.contentType, 'image/png');
           assert.deepEqual(hero?.meta?.adoptsFrom, {
-            module: `${baseRealm.url}file-api`,
-            name: 'FileDef',
+            module: `${baseRealm.url}png-image-def`,
+            name: 'PngDef',
           });
 
           assert.deepEqual(
@@ -299,6 +352,147 @@ module(basename(__filename), function () {
               type: 'file-meta',
               id: `${testRealmHref}second.png`,
             },
+          );
+        });
+        test('linksTo relationship for CardDef uses card type not file-meta', async function (assert) {
+          let { testRealm: realm, request, dbAdapter } = getRealmSetup();
+
+          let writes = new Map<string, string>([
+            [
+              'tag.gts',
+              `
+                import { CardDef, field, contains } from "https://cardstack.com/base/card-api";
+                import StringField from "https://cardstack.com/base/string";
+
+                export class Tag extends CardDef {
+                  @field label = contains(StringField);
+                  @field cardTitle = contains(StringField, {
+                    computeVia: function (this: Tag) {
+                      return this.label;
+                    },
+                  });
+                }
+              `,
+            ],
+            [
+              'article.gts',
+              `
+                import { CardDef, field, contains, linksTo } from "https://cardstack.com/base/card-api";
+                import StringField from "https://cardstack.com/base/string";
+                import { Tag } from "./tag";
+
+                export class Article extends CardDef {
+                  @field title = contains(StringField);
+                  @field tag = linksTo(Tag);
+                  @field cardTitle = contains(StringField, {
+                    computeVia: function (this: Article) {
+                      return this.title;
+                    },
+                  });
+                }
+              `,
+            ],
+            [
+              'Tag/programming.json',
+              JSON.stringify({
+                data: {
+                  attributes: {
+                    label: 'Programming',
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: '../tag.gts',
+                      name: 'Tag',
+                    },
+                  },
+                },
+              }),
+            ],
+            [
+              'Article/hello-world.json',
+              JSON.stringify({
+                data: {
+                  attributes: {
+                    title: 'Hello World',
+                  },
+                  relationships: {
+                    tag: {
+                      links: {
+                        self: '../Tag/programming',
+                      },
+                    },
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: '../article.gts',
+                      name: 'Article',
+                    },
+                  },
+                },
+              }),
+            ],
+          ]);
+
+          await realm.writeMany(writes);
+
+          // Verify the relationship is correct with a fresh index
+          let response = await request
+            .get('/Article/hello-world')
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(
+            response.status,
+            200,
+            `HTTP 200 status: ${response.text}`,
+          );
+          let doc = response.body as LooseSingleCardDocument;
+          let tagRelationship = doc.data.relationships?.tag as Relationship;
+          assert.ok(tagRelationship, 'tag relationship exists');
+          assert.deepEqual(
+            tagRelationship.data,
+            {
+              type: 'card',
+              id: `${testRealmHref}Tag/programming`,
+            },
+            'linksTo relationship for a CardDef uses type "card" not "file-meta"',
+          );
+
+          // Now simulate a stale index where the pristine_doc relationship
+          // lacks data.type (as it would be before commit 480362eb12 which
+          // added data to NotLoadedValue serialization in LinksTo.serialize).
+          // Also remove the linked card's instance entry so getInstance
+          // returns nothing, forcing the getFile fallback path.
+          let articleAlias = `${testRealmHref}Article/hello-world`;
+          let tagAlias = `${testRealmHref}Tag/programming`;
+          await dbAdapter.execute(
+            `UPDATE boxel_index
+             SET pristine_doc = pristine_doc #- '{relationships,tag,data}'
+             WHERE file_alias = '${articleAlias}'
+             AND type = 'instance'`,
+          );
+          await dbAdapter.execute(
+            `UPDATE boxel_index
+             SET is_deleted = TRUE
+             WHERE file_alias = '${tagAlias}'
+             AND type = 'instance'`,
+          );
+
+          let response2 = await request
+            .get('/Article/hello-world')
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(
+            response2.status,
+            200,
+            `HTTP 200 status after index modification: ${response2.text}`,
+          );
+          let doc2 = response2.body as LooseSingleCardDocument;
+          let tagRelationship2 = doc2.data.relationships?.tag as Relationship;
+          assert.ok(tagRelationship2, 'tag relationship still exists');
+          assert.strictEqual(
+            (tagRelationship2.data as ResourceID)?.type,
+            'card',
+            'linksTo relationship for a CardDef should use type "card" even when data.type is missing from stale index and the linked instance is unavailable',
           );
         });
         test('card-level query-backed relationships resolve via search at read time', async function (assert) {

@@ -411,6 +411,7 @@ function makeTestRealmFileSystem(): Record<
     'random-file.txt': 'hello',
     'random-file.mismatch': 'mismatch content',
     'random-image.png': 'i am an image',
+    '🎉hello.txt': 'emoji filename content',
     '.DS_Store':
       'In  macOS, .DS_Store is a file that stores custom attributes of its containing folder',
   };
@@ -529,13 +530,12 @@ module(basename(__filename), function () {
           'pre-rendered embedded format html is correct',
         );
 
+        let cleanedHead = cleanWhiteSpace(entry.headHtml!);
         assert.ok(entry.headHtml, 'pre-rendered head format html is present');
-
-        // TODO: restore in CS-9807
-        // assert.ok(
-        //   cleanedHead.includes('<title data-test-card-head-title>'),
-        //   `head html includes cardTitle: ${cleanedHead}`,
-        // );
+        assert.ok(
+          cleanedHead.includes('<title data-test-card-head-title>'),
+          `head html includes cardTitle: ${cleanedHead}`,
+        );
 
         assert.strictEqual(
           trimCardContainer(
@@ -874,6 +874,28 @@ module(basename(__filename), function () {
       assert.strictEqual(rows.length, 1, 'file entry is in the index');
       assert.strictEqual(rows[0].type, 'file', 'file entry type is file');
       assert.ok(rows[0].last_modified, 'file entry has last_modified');
+    });
+
+    test('indexes files with emoji in filename', async function (assert) {
+      let entry = await realm.realmIndexQueryEngine.file(
+        new URL(`${testRealm}%F0%9F%8E%89hello.txt`),
+      );
+      assert.ok(entry, 'file entry exists for emoji filename');
+      assert.strictEqual(entry?.type, 'file', 'file entry type is file');
+      assert.strictEqual(
+        entry?.searchDoc?.name,
+        '🎉hello.txt',
+        'search_doc name contains decoded emoji filename',
+      );
+      assert.strictEqual(
+        entry?.searchDoc?.contentType,
+        'text/plain',
+        'search_doc includes contentType',
+      );
+      assert.ok(
+        entry?.searchDoc?.contentHash,
+        'search_doc includes contentHash',
+      );
     });
 
     test('indexes executable files as file entries too', async function (assert) {

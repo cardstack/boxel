@@ -138,10 +138,16 @@ export class RealmIndexQueryEngine {
         query,
         opts,
       );
+      let resources = files.map((fileEntry) =>
+        fileResourceFromIndex(new URL(fileEntry.canonicalURL), fileEntry),
+      );
+      if (query.fields?.['file-meta'] !== undefined) {
+        resources = resources.map((r) =>
+          applySparseFieldset(r, query.fields!['file-meta']),
+        );
+      }
       doc = {
-        data: files.map((fileEntry) =>
-          fileResourceFromIndex(new URL(fileEntry.canonicalURL), fileEntry),
-        ),
+        data: resources,
         meta,
       };
     } else {
@@ -150,11 +156,17 @@ export class RealmIndexQueryEngine {
         query,
         opts,
       );
+      let cardResources = cards.map((resource) => ({
+        ...resource,
+        ...{ links: { self: resource.id } },
+      }));
+      if (query.fields?.['card'] !== undefined) {
+        cardResources = cardResources.map((r) =>
+          applySparseFieldset(r, query.fields!['card']),
+        );
+      }
       doc = {
-        data: cards.map((resource) => ({
-          ...resource,
-          ...{ links: { self: resource.id } },
-        })),
+        data: cardResources,
         meta,
       };
     }
@@ -205,6 +217,50 @@ export class RealmIndexQueryEngine {
       }
     }
     return fileMatch && !instanceMatch;
+  }
+
+  // When a relationship in the pristine_doc is missing data.type (stale
+  // index data from before the fix that added data to NotLoadedValue
+  // serialization), we need to consult the field definition to determine
+  // whether the relationship targets a FileDef or a CardDef.
+  private async fieldExpectsFileMeta(
+    resource: LooseCardResource | FileMetaResource,
+    fieldKey: string,
+    opts?: Options,
+  ): Promise<boolean> {
+    if (!resource.meta?.adoptsFrom) {
+      return false;
+    }
+    let relativeTo = resource.id ? new URL(resource.id) : this.realmURL;
+    let codeRef = codeRefWithAbsoluteURL(resource.meta.adoptsFrom, relativeTo);
+    if (!isResolvedCodeRef(codeRef)) {
+      return false;
+    }
+    try {
+      let definition = await this.#definitionLookup.lookupDefinition(codeRef);
+      // Strip the linksToMany index suffix (e.g., "friends.0" -> "friends")
+      let fieldName = fieldKey.includes('.')
+        ? fieldKey.slice(0, fieldKey.indexOf('.'))
+        : fieldKey;
+      let fieldDefinition = definition.fields[fieldName];
+      if (!fieldDefinition) {
+        return false;
+      }
+      let fieldCardRef = fieldDefinition.fieldOrCard;
+      let isFileType = await this.#indexQueryEngine.hasFileType(
+        this.realmURL,
+        fieldCardRef,
+        opts,
+      );
+      let isInstanceType = await this.#indexQueryEngine.hasInstanceType(
+        this.realmURL,
+        fieldCardRef,
+        opts,
+      );
+      return isFileType && !isInstanceType;
+    } catch {
+      return false;
+    }
   }
 
   async fetchCardTypeSummary() {
@@ -687,16 +743,29 @@ export class RealmIndexQueryEngine {
               linkResource = maybeResult.instance;
             }
           }
-          if (!linkResource && (expectsFileMeta || !relationshipType)) {
-            let fileEntry = await this.#indexQueryEngine.getFile(linkURL, opts);
-            if (fileEntry) {
-              linkResource = fileResourceFromIndex(linkURL, fileEntry);
+          if (!linkResource) {
+            // Determine whether to try the file index:
+            // - If data.type explicitly says file-meta, try it
+            // - If data.type is missing (stale index data), consult the
+            //   field definition to avoid incorrectly degrading a CardDef
+            //   relationship to file-meta
+            let shouldTryFile = expectsFileMeta;
+            if (!shouldTryFile && !relationshipType) {
+              shouldTryFile = await this.fieldExpectsFileMeta(
+                resource,
+                key,
+                opts,
+              );
             }
-          }
-          if (!relationshipType && !linkResource) {
-            throw new Error(
-              `bug: relationship ${key} is missing a resource type when loading links`,
-            );
+            if (shouldTryFile) {
+              let fileEntry = await this.#indexQueryEngine.getFile(
+                linkURL,
+                opts,
+              );
+              if (fileEntry) {
+                linkResource = fileResourceFromIndex(linkURL, fileEntry);
+              }
+            }
           }
         } else {
           let response = await this.#fetch(linkURL, {
@@ -773,9 +842,29 @@ export class RealmIndexQueryEngine {
           omit.includes(relationshipId.href) ||
           included.find((i) => i.id === relationshipId!.href)
         ) {
-          let relationshipType = linkResource?.type ?? 'card';
           relationship.data = {
-            type: relationshipType,
+            type: linkResource?.type ?? CardResourceType,
+            id: relationshipId.href,
+          };
+        } else if (!linkResource) {
+          // Even when the linked resource is unavailable, ensure
+          // relationship.data has the correct type so stale
+          // pristine_doc entries (missing data.type) for file
+          // relationships are not misidentified as card links.
+          let fallbackRelationshipType:
+            | typeof CardResourceType
+            | typeof FileMetaResourceType;
+          if (expectsFileMeta) {
+            fallbackRelationshipType = FileMetaResourceType;
+          } else {
+            fallbackRelationshipType =
+              (relationshipType as
+                | typeof CardResourceType
+                | typeof FileMetaResourceType
+                | undefined) ?? CardResourceType;
+          }
+          relationship.data = {
+            type: fallbackRelationshipType,
             id: relationshipId.href,
           };
         }
@@ -843,6 +932,24 @@ function relativizeResource(
     let absoluteModuleURL = new URL(moduleURL, resource.id ?? primaryURL);
     setModuleURL(maybeRelativeURL(absoluteModuleURL, primaryURL, realmURL));
   });
+}
+
+function applySparseFieldset<T extends CardResource<Saved> | FileMetaResource>(
+  resource: T,
+  fields: string[],
+): T {
+  // Per JSON:API spec, id, type, links, meta are always preserved.
+  // Only filter attributes.
+  if (fields.length === 0) {
+    return { ...resource, attributes: {} };
+  }
+  let filtered: Record<string, any> = {};
+  for (let field of fields) {
+    if (resource.attributes?.[field] !== undefined) {
+      filtered[field] = resource.attributes[field];
+    }
+  }
+  return { ...resource, attributes: filtered };
 }
 
 function fileResourceFromIndex(
