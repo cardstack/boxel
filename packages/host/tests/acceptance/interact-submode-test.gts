@@ -600,8 +600,16 @@ module('Acceptance | interact submode tests', function (hooks) {
       );
 
       assert
-        .dom('[data-test-file-link-attachment]')
+        .dom(
+          '[data-test-links-to-editor="attachment"] [data-test-card="http://test-realm/test/README.txt"]',
+        )
         .exists('attachment field now shows the linked file');
+      await click(
+        `[data-test-operator-mode-stack="0"] [data-test-edit-button]`,
+      );
+      assert
+        .dom('[data-test-file-link-attachment]')
+        .exists('the linked file is rendered in the card');
     });
 
     test('can save mutated card without having opened in stack', async function (assert) {
