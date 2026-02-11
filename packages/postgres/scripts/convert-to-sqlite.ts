@@ -211,6 +211,11 @@ function makePrimaryKeyConstraint(
             }
             break;
           }
+          case 'constraint_foreign_key':
+            // Foreign key constraints are intentionally skipped for SQLite
+            // as they require additional configuration and are beyond the
+            // scope of this basic schema conversion
+            break;
           default:
             throw new Error(
               `Don't know how to serialize constraint ${item.constraint.type} for table '${tableName}'`,

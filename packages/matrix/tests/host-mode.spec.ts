@@ -13,6 +13,7 @@ test.describe('Host mode', () => {
   let publishedRealmURL: string;
   let publishedCardURL: string;
   let publishedWhitePaperCardURL: string;
+  let publishedMyCardURL: string;
   let connectRouteURL: string;
   let username: string;
   let password: string;
@@ -136,6 +137,51 @@ test.describe('Host mode', () => {
       }),
     );
 
+    await postCardSource(
+      page,
+      realmURL,
+      'card-with-head-title.gts',
+      `
+        import { CardDef, Component } from 'https://cardstack.com/base/card-api';
+
+        export class CardWithHeadTitle extends CardDef {
+          static displayName = 'Card With Head Title';
+
+          static head = class Head extends Component<typeof this> {
+            <template>
+              {{! template-lint-disable no-forbidden-elements }}
+              <title>My Custom Title From Head Template</title>
+              <meta name='description' content='A card with a custom title' />
+            </template>
+          };
+
+          static isolated = class Isolated extends Component<typeof this> {
+            <template>
+              <p data-test-card-with-head-title>Card content</p>
+            </template>
+          };
+        }
+      `,
+    );
+
+    await postCardSource(
+      page,
+      realmURL,
+      'my-card.json',
+      JSON.stringify({
+        data: {
+          type: 'card',
+          attributes: {},
+          meta: {
+            adoptsFrom: {
+              module: './card-with-head-title.gts',
+              name: 'CardWithHeadTitle',
+            },
+          },
+        },
+      }),
+    );
+
     await page.reload();
     await page.locator('[data-test-host-mode-isolated]').waitFor();
 
@@ -175,6 +221,7 @@ test.describe('Host mode', () => {
 
     publishedCardURL = `${publishedRealmURL}index.json`;
     publishedWhitePaperCardURL = `${publishedRealmURL}white-paper.json`;
+    publishedMyCardURL = `${publishedRealmURL}my-card.json`;
     connectRouteURL = `http://localhost:4205/connect/${encodeURIComponent(
       publishedRealmURL,
     )}`;
@@ -281,5 +328,19 @@ test.describe('Host mode', () => {
     expect(await page.textContent('body')).toContain(
       'No published realm found for origin http://example.com',
     );
+  });
+
+  test('page title comes from head format template', async ({ page }) => {
+    await page.goto(publishedMyCardURL);
+    await page.locator('[data-test-card-with-head-title]').waitFor();
+
+    // Wait for the head template to be injected
+    await waitUntil(async () => {
+      const title = await page.title();
+      return title === 'My Custom Title From Head Template';
+    });
+
+    const pageTitle = await page.title();
+    expect(pageTitle).toBe('My Custom Title From Head Template');
   });
 });

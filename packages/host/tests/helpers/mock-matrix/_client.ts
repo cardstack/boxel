@@ -60,9 +60,10 @@ type Plural<T> = {
 
 const publicRealmURLs = [
   baseRealm.url,
-  ensureTrailingSlash(ENV.resolvedCatalogRealmURL),
+  ENV.resolvedCatalogRealmURL &&
+    ensureTrailingSlash(ENV.resolvedCatalogRealmURL),
   ensureTrailingSlash(ENV.resolvedSkillsRealmURL),
-];
+].filter(Boolean) as string[];
 
 export class MockClient implements ExtendedClient {
   private listeners: Partial<Plural<MatrixSDK.ClientEventHandlerMap>> = {};

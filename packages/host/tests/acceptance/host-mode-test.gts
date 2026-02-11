@@ -427,6 +427,60 @@ module('Acceptance | host mode tests', function (hooks) {
     );
   });
 
+  test('clicking the stack backdrop closes the top card', async function (assert) {
+    let hostModeStackValue = encodeURIComponent(
+      JSON.stringify([`${testHostModeRealmURL}index`]),
+    );
+    await visit(`/test/Pet/mango.json?hostModeStack=${hostModeStackValue}`);
+
+    // Wait for stack item to appear
+    await waitFor(
+      `[data-test-host-mode-stack-item="${testHostModeRealmURL}index"]`,
+    );
+
+    // Verify stack item exists
+    assert
+      .dom(`[data-test-host-mode-stack-item="${testHostModeRealmURL}index"]`)
+      .exists();
+
+    // Click outside the stack items (on the stack backdrop area)
+    await click('[data-test-host-mode-stack]');
+
+    // Stack item should be removed
+    await waitUntil(() => {
+      return !document.querySelector(
+        `[data-test-host-mode-stack-item="${testHostModeRealmURL}index"]`,
+      );
+    });
+    assert
+      .dom(`[data-test-host-mode-stack-item="${testHostModeRealmURL}index"]`)
+      .doesNotExist();
+  });
+
+  test('clicking on a stack card does not close it', async function (assert) {
+    let hostModeStackValue = encodeURIComponent(
+      JSON.stringify([`${testHostModeRealmURL}index`]),
+    );
+    await visit(`/test/Pet/mango.json?hostModeStack=${hostModeStackValue}`);
+
+    let stackSelector = `[data-test-host-mode-stack-item="${testHostModeRealmURL}index"]`;
+    assert.dom(stackSelector).exists();
+
+    // Click on the card content itself
+    await click(stackSelector);
+
+    // Card should still exist
+    assert.dom(stackSelector).exists();
+  });
+
+  test('stack does not exist when there are no stacked cards', async function (assert) {
+    // Visit card with no stack
+    await visit('/test/Pet/mango.json');
+
+    // Stack shouldn't exist when there are no stacked cards
+    assert.dom('[data-test-host-mode-stack]').doesNotExist();
+  });
+
   module('with a custom subdomain', function (hooks) {
     hooks.beforeEach(function (this) {
       let owner = getOwner(this)!;

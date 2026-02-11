@@ -60,6 +60,7 @@ import {
   retrieveIsolatedHTML,
   injectHeadHTML,
   injectIsolatedHTML,
+  ensureSingleTitle,
 } from './lib/index-html-injection';
 
 export class RealmServer {
@@ -430,7 +431,7 @@ export class RealmServer {
     let headFragments: string[] = [];
 
     if (headHTML != null) {
-      headFragments.push(headHTML);
+      headFragments.push(ensureSingleTitle(headHTML));
     }
 
     if (scopedCSS != null) {
@@ -550,16 +551,19 @@ export class RealmServer {
   }
 
   private async retrieveIndexHTML(): Promise<string> {
-    if (this.promiseForIndexHTML) {
-      // This is optimized for production, in that we won't be changing index
-      // HTML after we start. However, in development this might be annoying
-      // because it means restarting the realm server to pick up ember-cli
-      // rebuilds in the case where you want to test with the the realm server
-      // specifically and not ember cli hosted app.
+    // Cache index.html in production only
+    let isDev = this.assetsURL.hostname === 'localhost';
+
+    if (!isDev && this.promiseForIndexHTML) {
       return this.promiseForIndexHTML;
     }
+
     let deferred = new Deferred<string>();
-    this.promiseForIndexHTML = deferred.promise;
+
+    if (!isDev) {
+      this.promiseForIndexHTML = deferred.promise;
+    }
+
     let indexHTML = (await this.getIndexHTML()).replace(
       /(<meta name="@cardstack\/host\/config\/environment" content=")([^"].*)(">)/,
       (_match, g1, g2, g3) => {
