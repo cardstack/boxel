@@ -36,6 +36,7 @@ import {
   setContextResponse,
   fetchRequestFromContext,
   methodOverrideSupport,
+  proxyAsset,
 } from './middleware';
 import { registerUser } from './synapse';
 import convertAcceptHeaderQueryParam from './middleware/convert-accept-header-qp';
@@ -233,6 +234,7 @@ export class RealmServer {
           prerenderer: this.prerenderer,
         }),
       )
+      .use(proxyAsset('/auth-service-worker.js', this.assetsURL))
       .use(this.serveIndex)
       .use(this.serveFromRealm);
 
