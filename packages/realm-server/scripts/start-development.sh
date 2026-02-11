@@ -18,22 +18,31 @@ fi
 START_EXPERIMENTS=$(if [ -z "$SKIP_EXPERIMENTS" ]; then echo "true"; else echo ""; fi)
 START_CATALOG=$(if [ -z "$SKIP_CATALOG" ]; then echo "true"; else echo ""; fi)
 START_BOXEL_HOMEPAGE=$(if [ -z "$SKIP_BOXEL_HOMEPAGE" ]; then echo "true"; else echo ""; fi)
+START_SUBMISSION=$(if [ -z "$SKIP_SUBMISSION" ]; then echo "true"; else echo ""; fi)
 
 DEFAULT_CATALOG_REALM_URL='http://localhost:4201/catalog/'
 CATALOG_REALM_URL="${RESOLVED_CATALOG_REALM_URL:-$DEFAULT_CATALOG_REALM_URL}"
 DEFAULT_BOXEL_HOMEPAGE_REALM_URL='http://localhost:4201/boxel-homepage/'
 BOXEL_HOMEPAGE_REALM_URL="${RESOLVED_BOXEL_HOMEPAGE_REALM_URL:-$DEFAULT_BOXEL_HOMEPAGE_REALM_URL}"
+DEFAULT_SUBMISSION_REALM_URL='http://localhost:4201/submissions/'
+SUBMISSION_REALM_URL="${RESOLVED_SUBMISSION_REALM_URL:-$DEFAULT_SUBMISSION_REALM_URL}"
 
 # This can be overridden from the environment to point to a different catalog
 # and is used in start-services-for-host-tests.sh to point to a trimmed down
 # version of the catalog-realm for faster startup.
 CATALOG_REALM_PATH="${CATALOG_REALM_PATH:-../catalog-realm}"
+SUBMISSION_REALM_PATH="${SUBMISSION_REALM_PATH:-./realms/localhost_4201/submissions}"
 
 if [ -n "$USE_EXTERNAL_CATALOG" ]; then
   pnpm --dir=../catalog catalog:setup
   pnpm --dir=../catalog catalog:update
   CATALOG_REALM_PATH='../catalog/contents'
 fi
+
+if [ -n "$START_SUBMISSION" ]; then
+  sh "$SCRIPTS_DIR/setup-submission-realm.sh" "$SUBMISSION_REALM_PATH"
+fi
+
 
 PRERENDER_URL="${PRERENDER_URL:-http://localhost:4221}"
 
@@ -67,6 +76,11 @@ LOW_CREDIT_THRESHOLD="${LOW_CREDIT_THRESHOLD:-2000}" \
   ${START_CATALOG:+--username='catalog_realm'} \
   ${START_CATALOG:+--fromUrl="${CATALOG_REALM_URL}"} \
   ${START_CATALOG:+--toUrl="${CATALOG_REALM_URL}"} \
+  \
+  ${START_SUBMISSION:+--path="${SUBMISSION_REALM_PATH}"} \
+  ${START_SUBMISSION:+--username='submission_realm'} \
+  ${START_SUBMISSION:+--fromUrl="${SUBMISSION_REALM_URL}"} \
+  ${START_SUBMISSION:+--toUrl="${SUBMISSION_REALM_URL}"} \
   \
   --path='../skills-realm/contents' \
   --username='skills_realm' \
