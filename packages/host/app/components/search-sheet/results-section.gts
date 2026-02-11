@@ -24,6 +24,7 @@ interface SearchResultSignature {
     card?: CardDef;
     cardId: string | undefined;
     isCompact: boolean;
+    displayRealmName?: boolean;
   };
 }
 
@@ -33,34 +34,39 @@ let resultsCardRef = {
   module: 'https://cardstack.com/base/card-api',
 };
 
-class SearchResult extends Component<SearchResultSignature> {
+export class SearchResult extends Component<SearchResultSignature> {
   @service declare realm: RealmService;
 
   private get urlForRealmLookup() {
+    if (!this.args.displayRealmName) {
+      return undefined;
+    }
     return this.args.card
       ? urlForRealmLookup(this.args.card)
       : this.args.cardId;
   }
 
   <template>
-    <div class={{cn 'container' is-compact=@isCompact}}>
-      {{#if @component}}
-        <@component
-          class='search-result'
-          data-test-search-result={{removeFileExtension @cardId}}
-          ...attributes
-        />
+    <div class='search-result-container'>
+      <div class={{cn 'card-container' is-compact=@isCompact}}>
+        {{#if @component}}
+          <@component
+            class='search-result'
+            data-test-search-result={{removeFileExtension @cardId}}
+            ...attributes
+          />
 
-      {{else if @card}}
-        <CardRenderer
-          @card={{@card}}
-          @format='fitted'
-          @codeRef={{resultsCardRef}}
-          data-test-search-result={{removeFileExtension @cardId}}
-          class='search-result'
-          ...attributes
-        />
-      {{/if}}
+        {{else if @card}}
+          <CardRenderer
+            @card={{@card}}
+            @format='fitted'
+            @codeRef={{resultsCardRef}}
+            data-test-search-result={{removeFileExtension @cardId}}
+            class='search-result'
+            ...attributes
+          />
+        {{/if}}
+      </div>
       {{#if this.urlForRealmLookup}}
         {{#let (this.realm.info this.urlForRealmLookup) as |realmInfo|}}
           <div class='realm-name' data-test-realm-name>{{realmInfo.name}}</div>
@@ -68,27 +74,30 @@ class SearchResult extends Component<SearchResultSignature> {
       {{/if}}
     </div>
     <style scoped>
-      .container {
+      .search-result-container {
         display: flex;
         flex-direction: column;
         align-items: self-end;
-        width: 311px;
-        height: 96px;
+      }
+      .card-container {
+        display: flex;
+        flex-direction: column;
+        align-items: self-end;
+        width: 100%;
       }
       .search-result,
       .search-result.field-component-card.fitted-format {
-        width: 311px;
-        height: 76px;
+        width: var(--item-width, 311px);
+        height: var(--item-height, 76px);
         overflow: hidden;
         cursor: pointer;
         container-name: fitted-card;
         container-type: size;
       }
-      .container.is-compact,
       .is-compact .search-result,
       .is-compact .search-result.field-component-card.fitted-format {
-        width: 199px;
-        height: 50px;
+        width: 250px;
+        height: 40px;
       }
       .realm-name {
         font: 400 var(--boxel-font);
