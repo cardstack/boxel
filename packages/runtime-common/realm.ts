@@ -70,7 +70,6 @@ import {
   codeRefWithAbsoluteURL,
   userInitiatedPriority,
   systemInitiatedPriority,
-  userIdFromUsername,
   isCardDocumentString,
   isBrowserTestEnv,
   type IndexedFile,
@@ -674,10 +673,18 @@ export class Realm {
     await this.#matrixClient.login();
   }
 
+  async getMatrixUserId() {
+    if (!this.#matrixClient.getUserId()) {
+      await this.logInToMatrix();
+    }
+    return this.#matrixClient.getUserId()!;
+  }
+
   async ensureSessionRoom(matrixUserId: string): Promise<string> {
+    let realmServerMatrixUserId = await this.getMatrixUserId();
     let sessionRoom = await fetchSessionRoom(
       this.#dbAdapter,
-      this.#matrixClient.getUserId(),
+      realmServerMatrixUserId,
       matrixUserId,
     );
 
@@ -686,7 +693,7 @@ export class Realm {
       sessionRoom = await this.#matrixClient.createDM(matrixUserId);
       await upsertSessionRoom(
         this.#dbAdapter,
-        this.#matrixClient.getUserId(),
+        realmServerMatrixUserId,
         matrixUserId,
         sessionRoom,
       );
@@ -1395,6 +1402,7 @@ export class Realm {
     request: Request,
     requestContext: RequestContext,
   ) {
+    let realmServerMatrixUserId = await this.getMatrixUserId();
     let matrixBackendAuthentication = new MatrixBackendAuthentication(
       this.#matrixClient,
       {
@@ -1435,7 +1443,7 @@ export class Realm {
         setSessionRoom: (userId: string, roomId: string) =>
           upsertSessionRoom(
             this.#dbAdapter,
-            this.#matrixClient.getUserId(),
+            realmServerMatrixUserId,
             userId,
             roomId,
           ),
@@ -1876,7 +1884,8 @@ export class Realm {
       }
 
       // if the client is the realm matrix user then we permit all actions
-      if (user === this.#matrixClient.getUserId()) {
+      let realmServerMatrixUserId = await this.getMatrixUserId();
+      if (user === realmServerMatrixUserId) {
         return;
       }
 
@@ -4366,7 +4375,7 @@ export class Realm {
   private async createRequestContext(
     requiredPermission: RealmAction,
   ): Promise<RequestContext> {
-    let realmServerMatrixUserId = this.#matrixClient.getUserId();
+    let realmServerMatrixUserId = await this.getMatrixUserId();
     let permissions: RealmPermissions;
     let shouldUseWorldReadable =
       requiredPermission === 'read' && (await this.isWorldReadable());

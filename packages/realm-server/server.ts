@@ -19,7 +19,6 @@ import {
   PUBLISHED_DIRECTORY_NAME,
   RealmPaths,
   fetchSessionRoom,
-  REALM_SERVER_REALM,
   userInitiatedPriority,
   hasExtension,
 } from '@cardstack/runtime-common';

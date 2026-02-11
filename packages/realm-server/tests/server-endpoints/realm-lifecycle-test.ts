@@ -11,13 +11,11 @@ import {
 import type { SingleCardDocument } from '@cardstack/runtime-common';
 import type { CardCollectionDocument } from '@cardstack/runtime-common/document-types';
 import { cardSrc } from '@cardstack/runtime-common/etc/test-fixtures';
-import { fetchSessionRoom } from '@cardstack/runtime-common/db-queries/session-room-queries';
 import {
   closeServer,
   createJWT,
   realmSecretSeed,
   testRealmInfo,
-  testRealmServerMatrixUserId,
 } from '../helpers';
 import { createJWT as createRealmServerJWT } from '../../utils/jwt';
 import { setupServerEndpointsTest, testRealm2URL } from './helpers';
@@ -29,7 +27,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
     function (hooks) {
       let context = setupServerEndpointsTest(hooks);
 
-      test.only('POST /_create-realm', async function (assert) {
+      test('POST /_create-realm', async function (assert) {
         // we randomize the realm and owner names so that we can isolate matrix
         // test state--there is no "delete user" matrix API
         let endpoint = `test-realm-${uuidv4()}`;

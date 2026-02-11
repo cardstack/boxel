@@ -148,10 +148,7 @@ export const matrixURL = new URL('http://localhost:8008');
 const testPrerenderHost = '127.0.0.1';
 const testPrerenderPort = 4460;
 const testPrerenderURL = `http://${testPrerenderHost}:${testPrerenderPort}`;
-const testMatrix: MatrixConfig = {
-  url: matrixURL,
-  username: 'node-test_realm',
-};
+
 export const testRealmInfo = {
   name: 'Test Realm',
   backgroundURL: null,
@@ -292,6 +289,7 @@ async function startTestPrerenderServer(): Promise<string> {
   }
   let server = createPrerenderHttpServer({
     silent: Boolean(process.env.SILENT_PRERENDERER),
+    maxPages: 1,
   });
   prerenderServer = server;
   trackServer(server);
@@ -1009,7 +1007,6 @@ export function setupMatrixRoom(
 
   hooks.beforeEach(async function () {
     await matrixClient.login();
-    let userId = matrixClient.getUserId()!;
 
     let realmSetup = getRealmSetup();
     let openIdToken = await matrixClient.getOpenIdToken();

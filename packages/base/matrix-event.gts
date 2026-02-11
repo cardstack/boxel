@@ -386,12 +386,9 @@ export interface RealmEvent extends BaseMatrixEvent {
   content: RealmEventContent;
 }
 
-export type RealmEventContent = (
+export type RealmEventContent =
   | IndexRealmEventContent
-  | UpdateRealmEventContent
-) & {
-  realmURL?: string;
-};
+  | UpdateRealmEventContent;
 
 export type IndexRealmEventContent =
   | IncrementalIndexEventContent
@@ -404,23 +401,27 @@ export interface IncrementalIndexEventContent {
   indexType: 'incremental';
   invalidations: string[];
   clientRequestId?: string | null;
+  realmURL?: string;
 }
 
 interface FullIndexEventContent {
   eventName: 'index';
   indexType: 'full';
+  realmURL?: string;
 }
 
 interface CopiedIndexEventContent {
   eventName: 'index';
   indexType: 'copy';
   sourceRealmURL: string;
+  realmURL?: string;
 }
 
 export interface IncrementalIndexInitiationContent {
   eventName: 'index';
   indexType: 'incremental-index-initiation';
   updatedFile: string;
+  realmURL?: string;
 }
 
 export type UpdateRealmEventContent =
@@ -431,16 +432,19 @@ export type UpdateRealmEventContent =
 export interface FileAddedEventContent {
   eventName: 'update';
   added: string;
+  realmURL?: string;
 }
 
 export interface FileUpdatedEventContent {
   eventName: 'update';
   updated: string;
+  realmURL?: string;
 }
 
 export interface FileRemovedEventContent {
   eventName: 'update';
   removed: string;
+  realmURL?: string;
 }
 
 export interface StopGeneratingEvent extends BaseMatrixEvent {
