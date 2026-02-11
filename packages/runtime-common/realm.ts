@@ -70,6 +70,7 @@ import {
   codeRefWithAbsoluteURL,
   userInitiatedPriority,
   systemInitiatedPriority,
+  userIdFromUsername,
   isCardDocumentString,
   isBrowserTestEnv,
   type IndexedFile,
@@ -110,7 +111,6 @@ import {
   MatrixClient,
   ensureFullMatrixUserId,
   getMatrixUsername,
-  userIdFromUsername,
 } from './matrix-client';
 import { PACKAGES_FAKE_ORIGIN } from './package-shim-handler';
 
