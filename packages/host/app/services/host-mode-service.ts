@@ -24,6 +24,9 @@ export default class HostModeService extends Service {
   private headUpdateRequestId = 0;
 
   get isActive() {
+    if ((globalThis as any).__boxelForceHostMode) {
+      return true;
+    }
     if (this.simulatingHostMode) {
       return true;
     }
@@ -59,6 +62,10 @@ export default class HostModeService extends Service {
   }
 
   get hostModeOrigin() {
+    let forced = (globalThis as any).__boxelForceHostMode;
+    if (forced?.origin) {
+      return forced.origin;
+    }
     if (this.simulatingHostMode) {
       return new URLSearchParams(window.location.search).get('hostModeOrigin');
     }

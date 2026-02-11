@@ -65,6 +65,8 @@ import {
   injectHeadHTML,
   injectIsolatedHTML,
   injectRenderModeScript,
+  extractShoeboxFromIsolatedHTML,
+  injectShoeboxScript,
 } from './lib/index-html-injection';
 
 export class RealmServer {
@@ -447,16 +449,28 @@ export class RealmServer {
 
     if (headFragments.length > 0) {
       responseHTML = injectHeadHTML(responseHTML, headFragments.join('\n'));
-      responseHTML = injectRenderModeScript(responseHTML);
     }
 
     if (isolatedHTML != null) {
+      // Inject rehydration mode script whenever there's prerendered content
+      responseHTML = injectRenderModeScript(responseHTML);
+      // Extract shoebox data (card JSON) if appended by the prerenderer
+      let { html: cleanIsolatedHTML, shoeboxJSON } =
+        extractShoeboxFromIsolatedHTML(isolatedHTML);
+
       this.isolatedLog.debug(
-        `Injecting isolated HTML for ${cardURL.href} (length ${isolatedHTML.length})\n${this.truncateLogLines(
-          isolatedHTML,
+        `Injecting isolated HTML for ${cardURL.href} (length ${cleanIsolatedHTML.length})\n${this.truncateLogLines(
+          cleanIsolatedHTML,
         )}`,
       );
-      responseHTML = injectIsolatedHTML(responseHTML, isolatedHTML);
+      responseHTML = injectIsolatedHTML(responseHTML, cleanIsolatedHTML);
+
+      if (shoeboxJSON) {
+        this.isolatedLog.debug(
+          `Injecting shoebox data for ${cardURL.href} (${shoeboxJSON.length} chars)`,
+        );
+        responseHTML = injectShoeboxScript(responseHTML, shoeboxJSON);
+      }
     }
 
     ctxt.body = responseHTML;
@@ -556,16 +570,14 @@ export class RealmServer {
   }
 
   private async retrieveIndexHTML(): Promise<string> {
-    if (this.promiseForIndexHTML) {
-      // This is optimized for production, in that we won't be changing index
-      // HTML after we start. However, in development this might be annoying
-      // because it means restarting the realm server to pick up ember-cli
-      // rebuilds in the case where you want to test with the the realm server
-      // specifically and not ember cli hosted app.
+    let isDev = this.assetsURL.hostname === 'localhost';
+    if (!isDev && this.promiseForIndexHTML) {
       return this.promiseForIndexHTML;
     }
     let deferred = new Deferred<string>();
-    this.promiseForIndexHTML = deferred.promise;
+    if (!isDev) {
+      this.promiseForIndexHTML = deferred.promise;
+    }
     let indexHTML = (await this.getIndexHTML()).replace(
       /(<meta name="@cardstack\/host\/config\/environment" content=")([^"].*)(">)/,
       (_match, g1, g2, g3) => {

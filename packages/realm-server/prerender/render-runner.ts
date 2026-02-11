@@ -365,6 +365,159 @@ export class RenderRunner {
         }
       }
 
+      // Host-mode capture: do a full page navigation to the card's URL so
+      // Ember boots fresh with the serialize builder.  This ensures the
+      // serialized block markers match the exact structure that the
+      // client-side rehydration builder expects (a route transition would
+      // produce stale block depths from the transition lifecycle).
+      const HOST_MODE_CAPTURE_TIMEOUT_MS = 10_000;
+      if (isolatedHTML && !shortCircuit) {
+        let forceHostModeScript: { identifier: string } | undefined;
+        try {
+          let cardUrl = url.replace(/\.json$/i, '');
+          let parsedUrl = new URL(cardUrl);
+          let origin = parsedUrl.origin;
+          let cardPath = parsedUrl.pathname.replace(/^\//, '');
+
+          // Register a script that sets __boxelForceHostMode before Ember
+          // boots on the next navigation.  This must be evaluateOnNewDocument
+          // (not page.evaluate) because page.goto clears the JS context.
+          forceHostModeScript = await page.evaluateOnNewDocument(
+            (config: { origin: string }) => {
+              (globalThis as any).__boxelForceHostMode = config;
+
+              // Intercept fetch to capture card JSON responses for the shoebox.
+              // This runs before any app code, so we wrap the native fetch.
+              let shoeboxData: Record<string, unknown> = {};
+              (globalThis as any).__boxelShoeboxData = shoeboxData;
+              let originalFetch = globalThis.fetch;
+              globalThis.fetch = async function (...args: Parameters<typeof fetch>) {
+                let firstArg = args[0] as any;
+                let reqUrl = typeof firstArg === 'string' ? firstArg : (firstArg?.url || '');
+                let reqMethod = firstArg instanceof Request ? firstArg.method : ((args[1] as any)?.method || 'GET');
+                console.log('[shoebox-intercept] fetch called:', reqMethod, reqUrl.slice(0, 120));
+                let response = await originalFetch.apply(globalThis, args);
+                try {
+                  let contentType = response.headers.get('content-type') || '';
+                  console.log('[shoebox-intercept] response:', response.status, contentType.slice(0, 60), reqUrl.slice(0, 80));
+                  if (
+                    contentType.includes('card+source') ||
+                    contentType.includes('card+json')
+                  ) {
+                    let clone = response.clone();
+                    let json = await clone.json();
+                    if (json?.data?.id) {
+                      // Single card document
+                      console.log('[shoebox-intercept] captured card:', json.data.id);
+                      shoeboxData[json.data.id] = json;
+                    } else if (Array.isArray(json?.data)) {
+                      // Collection document (e.g., _search-prerendered results)
+                      let requestUrl = typeof firstArg === 'string' ? firstArg : firstArg?.url || '';
+                      // Read method from Request object or init options
+                      let method = (firstArg instanceof Request ? firstArg.method : ((args[1] as any)?.method || 'GET')).toUpperCase();
+                      let body = typeof (args[1] as any)?.body === 'string' ? (args[1] as any).body : '';
+                      let key = '__search:' + method + ':' + requestUrl + ':' + body;
+                      console.log('[shoebox-intercept] captured collection:', key, 'items:', json.data.length);
+                      shoeboxData[key] = json;
+                    } else {
+                      console.log('[shoebox-intercept] card+json but no data.id and not array:', typeof json?.data, JSON.stringify(json?.data)?.slice(0, 100));
+                    }
+                  }
+                } catch (e: any) {
+                  console.error('[shoebox-intercept] error capturing:', e?.message || e);
+                }
+                return response;
+              };
+            },
+            { origin },
+          );
+
+          // Full page navigation — Ember boots fresh with the serialize
+          // builder, producing block markers that match a fresh render.
+          await page.goto(`${this.#boxelHostURL}/${cardPath}`, {
+            waitUntil: 'domcontentloaded',
+            timeout: HOST_MODE_CAPTURE_TIMEOUT_MS,
+          });
+
+          await page.waitForFunction(
+            () => {
+              return (
+                document.querySelector('[data-test-host-mode-card]') !== null
+              );
+            },
+            { timeout: HOST_MODE_CAPTURE_TIMEOUT_MS },
+          );
+
+          let hostModeHTML = await page.evaluate(() => {
+            let root = document.getElementById('boxel-root');
+            if (!root) return null;
+            return root.innerHTML;
+          });
+
+          if (hostModeHTML) {
+            log.info(
+              `Captured host-mode HTML for ${url} (${hostModeHTML.length} chars)`,
+            );
+
+            // Extract captured card JSON from the fetch interceptor
+            let shoeboxJSON: string | undefined;
+            try {
+              shoeboxJSON = await page.evaluate(() => {
+                let data = (globalThis as any).__boxelShoeboxData;
+                if (data && Object.keys(data).length > 0) {
+                  return JSON.stringify(data);
+                }
+                return undefined;
+              });
+            } catch {
+              // ignore shoebox extraction errors
+            }
+
+            if (shoeboxJSON) {
+              log.info(
+                `Captured shoebox data for ${url} (${shoeboxJSON.length} chars, ${Object.keys(JSON.parse(shoeboxJSON)).length} cards)`,
+              );
+              // Encode shoebox as base64 comment appended to isolatedHTML
+              // so it's stored alongside the HTML without DB schema changes.
+              let encoded = Buffer.from(shoeboxJSON).toString('base64');
+              hostModeHTML += `<!--boxel-shoebox:${encoded}-->`;
+            }
+
+            isolatedHTML = hostModeHTML;
+          }
+        } catch (e) {
+          log.warn(
+            'Host-mode capture failed, falling back to render route isolated HTML',
+            e,
+          );
+        } finally {
+          // Remove the temporary evaluateOnNewDocument script so it
+          // doesn't affect subsequent navigations on this page.
+          if (forceHostModeScript) {
+            await page
+              .removeScriptToEvaluateOnNewDocument(
+                forceHostModeScript.identifier,
+              )
+              .catch(() => {});
+          }
+          // Navigate back to standby so the page is reusable by the pool.
+          // Use a fresh page.goto (not a route transition) to fully reset
+          // the Ember app state and avoid stale component teardown errors.
+          try {
+            await page.goto(`${this.#boxelHostURL}/standby`, {
+              waitUntil: 'domcontentloaded',
+              timeout: HOST_MODE_CAPTURE_TIMEOUT_MS,
+            });
+            await page.waitForFunction(
+              () => document.querySelector('#standby-ready') !== null,
+              { timeout: HOST_MODE_CAPTURE_TIMEOUT_MS },
+            );
+          } catch {
+            // best-effort: page will be disposed on next use if unusable
+          }
+        }
+      }
+
       let response: RenderResponse = {
         ...(meta as PrerenderMeta),
         ...(error ? { error } : {}),

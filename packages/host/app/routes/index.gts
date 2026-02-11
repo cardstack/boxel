@@ -57,6 +57,7 @@ export default class Card extends Route {
 
   didMatrixServiceStart = false;
   initialLoading = true;
+  rehydrated = false;
 
   @action
   loading(transition: Transition) {
@@ -64,6 +65,19 @@ export default class Card extends Route {
       // The loading template will be shown only during the initial load of the app
       this.initialLoading = false;
     });
+
+    if (this.rehydrated) {
+      return false; // Don't show loading spinner over rehydrated content
+    }
+
+    // Don't show loading template during Puppeteer prerendering (serialize mode).
+    // The loading substate creates a different outlet block structure than a
+    // synchronous render, which causes rehydration mismatches because the
+    // serialized HTML has fewer block markers than the rehydration template expects.
+    // @ts-expect-error __boxelForceHostMode set by Puppeteer
+    if (globalThis.__boxelForceHostMode) {
+      return false;
+    }
 
     return this.initialLoading;
   }
@@ -79,6 +93,32 @@ export default class Card extends Route {
     path: string;
     operatorModeState: string;
   }) {
+    // @ts-expect-error render mode flag set by realm server
+    if (!this.rehydrated && globalThis.__boxelRenderMode === 'rehydrate') {
+      // Return synchronously so the index template is part of the initial
+      // render — this lets the rehydration builder adopt the prerendered DOM.
+      // Service initialization runs asynchronously after the first render.
+      // NOTE: Do NOT delete __boxelRenderMode here — the DOM builder service
+      // reads it lazily during the first render (after this hook returns).
+      this.rehydrated = true;
+      this.initialLoading = false;
+
+      // For host mode, set up state synchronously from route params
+      // so the template renders the correct card during rehydration.
+      if (this.hostModeService.isActive) {
+        let normalizedPath = params.path ?? '';
+        let cardUrl = `${this.hostModeService.hostModeOrigin}/${normalizedPath}`;
+        this.hostModeStateService.restore({
+          primaryCardId: cardUrl,
+          routePath: normalizedPath,
+          serializedStack: undefined,
+        });
+      }
+
+      this.deferredInit(params);
+      return;
+    }
+
     if (this.hostModeService.isActive) {
       let normalizedPath = params.path ?? '';
       let cardUrl = `${this.hostModeService.hostModeOrigin}/${normalizedPath}`;
@@ -172,11 +212,63 @@ export default class Card extends Route {
     }
   }
 
+  async deferredInit(params: {
+    operatorModeState: string;
+    cardPath?: string;
+    authRedirect?: string;
+    path: string;
+  }) {
+    try {
+      if (this.hostModeService.isActive) {
+        return;
+      }
+
+      if (!this.didMatrixServiceStart) {
+        await this.matrixService.ready;
+        await this.matrixService.start();
+        this.didMatrixServiceStart = true;
+      }
+
+      if (!this.matrixService.isLoggedIn) {
+        return;
+      }
+
+      if (params.authRedirect) {
+        window.location.href = params.authRedirect;
+        return;
+      }
+
+      if (!isTesting()) {
+        await this.billingService.initializeSubscriptionData();
+      }
+      this.matrixService.loginToRealms();
+
+      let { operatorModeState } = params;
+      let operatorModeStateObject = operatorModeState
+        ? JSON.parse(operatorModeState)
+        : undefined;
+      if (operatorModeStateObject) {
+        await this.operatorModeStateService.restore(
+          operatorModeStateObject || { stacks: [] },
+        );
+      }
+    } catch (e) {
+      console.error('[rehydration] Deferred init failed:', e);
+    }
+  }
+
   async afterModel(
     model: ReturnType<StoreService['get']>,
     transition: Transition,
   ) {
     await super.afterModel(model, transition);
+
+    if (this.rehydrated) {
+      // Host-mode state was set up synchronously in model().
+      // Skip async work so the route activates immediately and
+      // the rehydration builder can adopt the prerendered DOM.
+      return;
+    }
 
     if (!this.hostModeService.isActive) {
       return;

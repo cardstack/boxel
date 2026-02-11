@@ -58,9 +58,20 @@ export class CardResource extends Resource<Args> {
       return undefined;
     }
     let maybeCard = this.store.peek(this.#id) as unknown;
-    return isCardInstance(maybeCard) || isFileDefInstance(maybeCard)
+    let result = isCardInstance(maybeCard) || isFileDefInstance(maybeCard)
       ? (maybeCard as BaseDef)
       : undefined;
+    // @ts-expect-error debug logging for rehydration
+    if (globalThis.__boxelRenderMode === 'rehydrate' || globalThis.__boxelShoeboxData) {
+      console.log(
+        '[card-resource] card getter id:', this.#id,
+        'peek result:', maybeCard,
+        'isCardInstance:', isCardInstance(maybeCard),
+        'isFileDefInstance:', isFileDefInstance(maybeCard),
+        'returning:', result ? 'card' : 'undefined',
+      );
+    }
+    return result;
   }
 
   get cardError() {
