@@ -28,6 +28,7 @@ import {
 } from 'ember-concurrency';
 import {
   chooseCard,
+  chooseFile,
   baseCardRef,
   identifyCard,
   getPlural,
@@ -111,6 +112,17 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
   };
 
   private chooseCard = restartableTask(async () => {
+    if (isFileDef(this.args.field.card)) {
+      let file = await chooseFile();
+      if (file) {
+        let selectedCards = (this.args.model.value as any)[
+          this.args.field.name
+        ];
+        selectedCards = [...selectedCards, file];
+        (this.args.model.value as any)[this.args.field.name] = selectedCards;
+      }
+      return;
+    }
     let selectedCards = (this.args.model.value as any)[this.args.field.name];
     let selectedCardsQuery =
       selectedCards
@@ -482,9 +494,8 @@ function shouldRenderEditor(
   format: Format | undefined,
   defaultFormat: Format,
   isComputed: boolean,
-  isFileDef: boolean,
 ) {
-  return (format ?? defaultFormat) === 'edit' && !isComputed && !isFileDef;
+  return (format ?? defaultFormat) === 'edit' && !isComputed;
 }
 const componentCache = initSharedState(
   'linksToManyComponentCache',
@@ -521,7 +532,7 @@ export function getLinksToManyComponent({
       <DefaultFormatsConsumer as |defaultFormats|>
         {{#if
           (shouldRenderEditor
-            @format defaultFormats.cardDef isComputed isFileDefField
+            @format defaultFormats.cardDef isComputed
           )
         }}
           <LinksToManyEditor
