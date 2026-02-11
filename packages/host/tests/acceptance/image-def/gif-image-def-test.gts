@@ -22,10 +22,10 @@ import {
   setupAcceptanceTestRealm,
   SYSTEM_CARD_FIXTURE_CONTENTS,
   capturePrerenderResult,
-} from '../helpers';
-import { setupMockMatrix } from '../helpers/mock-matrix';
-import { setupApplicationTest } from '../helpers/setup';
-import { setupTestRealmServiceWorker } from '../helpers/test-realm-service-worker';
+} from '../../helpers';
+import { setupMockMatrix } from '../../helpers/mock-matrix';
+import { setupApplicationTest } from '../../helpers/setup';
+import { setupTestRealmServiceWorker } from '../../helpers/test-realm-service-worker';
 
 // Build a minimal valid GIF89a with specified dimensions.
 // GIF structure: signature (6) + logical screen descriptor (7) + trailer (1)
