@@ -1661,7 +1661,7 @@ module(basename(__filename), function () {
                     name: 'Friend',
                     module: 'http://localhost:4202/node-test/friend',
                   },
-                  realmInfo: testRealmInfo
+                  realmInfo: testRealmInfo,
                   realmURL: testRealmHref,
                 },
                 links: {
@@ -1713,7 +1713,7 @@ module(basename(__filename), function () {
                     name: 'Friend',
                     module: 'http://localhost:4202/node-test/friend',
                   },
-                  realmInfo: testRealmInfo
+                  realmInfo: testRealmInfo,
                   realmURL: testRealmHref,
                 },
                 links: {
@@ -2919,7 +2919,7 @@ module(basename(__filename), function () {
                     name: 'Friend',
                     module: '../friend',
                   },
-                  realmInfo: testRealmInfo
+                  realmInfo: testRealmInfo,
                   realmURL: testRealmHref,
                 },
                 links: {
@@ -2971,7 +2971,7 @@ module(basename(__filename), function () {
                     name: 'Friend',
                     module: '../friend',
                   },
-                  realmInfo: testRealmInfo
+                  realmInfo: testRealmInfo,
                   realmURL: testRealmHref,
                 },
                 links: {
