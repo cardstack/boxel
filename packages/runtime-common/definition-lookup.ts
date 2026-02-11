@@ -56,10 +56,10 @@ function normalizeExecutableURL(url: string): string {
   }
 }
 
-type CacheScope = 'public' | 'realm-auth';
+export type CacheScope = 'public' | 'realm-auth';
 type LocalRealm = Pick<Realm, 'url' | 'getRealmOwnerUserId' | 'visibility'>;
 
-interface ModuleCacheEntry {
+export interface ModuleCacheEntry {
   definitions: Record<string, ModuleDefinitionResult | ErrorEntry>;
   deps: string[];
   error?: ErrorEntry;
@@ -67,6 +67,15 @@ interface ModuleCacheEntry {
   authUserId?: string;
   resolvedRealmURL: string;
 }
+
+export interface ModuleCacheEntryQuery {
+  moduleUrls: string[];
+  cacheScope: CacheScope;
+  authUserId: string;
+  resolvedRealmURL: string;
+}
+
+export type ModuleCacheEntries = Record<string, ModuleCacheEntry>;
 
 interface WriteToDatabaseCacheParams {
   moduleUrl: string;
@@ -107,6 +116,9 @@ export interface DefinitionLookup {
   clearRealmCache(realmURL: string): Promise<void>;
   registerRealm(realm: LocalRealm): void;
   forRealm(realm: LocalRealm): DefinitionLookup;
+  getModuleCacheEntries(
+    query: ModuleCacheEntryQuery,
+  ): Promise<ModuleCacheEntries>;
 }
 
 interface LookupContext {
@@ -413,6 +425,57 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       authUserId: row.auth_user_id || undefined,
       resolvedRealmURL: row.resolved_realm_url || '',
     };
+  }
+
+  async getModuleCacheEntries(
+    query: ModuleCacheEntryQuery,
+  ): Promise<ModuleCacheEntries> {
+    if (query.moduleUrls.length === 0) {
+      return {};
+    }
+    let params = query.moduleUrls.map((moduleUrl) => [param(moduleUrl)]);
+    let moduleList = addExplicitParens(separatedByCommas(params)) as Expression;
+    let rows = (await this.query(
+      [
+        'SELECT url, definitions, deps, error_doc, cache_scope, auth_user_id, resolved_realm_url, file_alias',
+        'FROM',
+        MODULES_TABLE,
+        'WHERE',
+        ...(every([
+          ['resolved_realm_url =', param(query.resolvedRealmURL)],
+          ['cache_scope =', param(query.cacheScope)],
+          ['auth_user_id =', param(query.authUserId)],
+          any([
+            ['url IN', ...moduleList],
+            ['file_alias IN', ...moduleList],
+          ]) as Expression,
+        ]) as Expression),
+      ],
+      modulesTableCoerceTypes,
+    )) as {
+      url: string;
+      file_alias: string | null;
+      definitions: Record<string, ModuleDefinitionResult | ErrorEntry> | null;
+      deps: string[] | null;
+      error_doc: ErrorEntry | null;
+      cache_scope: CacheScope;
+      auth_user_id: string | null;
+      resolved_realm_url: string | null;
+    }[];
+
+    let entries: ModuleCacheEntries = {};
+    for (let row of rows) {
+      entries[row.url] = {
+        definitions: row.definitions ?? {},
+        deps: row.deps ?? [],
+        error: row.error_doc ?? undefined,
+        cacheScope: row.cache_scope,
+        authUserId: row.auth_user_id || undefined,
+        resolvedRealmURL: row.resolved_realm_url || '',
+      };
+    }
+
+    return entries;
   }
 
   private async writeToDatabaseCache({
@@ -860,5 +923,11 @@ class RealmScopedDefinitionLookup implements DefinitionLookup {
 
   forRealm(realm: LocalRealm): DefinitionLookup {
     return this.#inner.forRealm(realm);
+  }
+
+  async getModuleCacheEntries(
+    query: ModuleCacheEntryQuery,
+  ): Promise<ModuleCacheEntries> {
+    return await this.#inner.getModuleCacheEntries(query);
   }
 }

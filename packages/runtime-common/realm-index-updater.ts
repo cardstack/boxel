@@ -27,10 +27,8 @@ export class RealmIndexUpdater {
   #ignoreData: Record<string, string> = {};
   #stats: Stats = {
     instancesIndexed: 0,
-    modulesIndexed: 0,
     filesIndexed: 0,
     instanceErrors: 0,
-    moduleErrors: 0,
     fileErrors: 0,
     totalIndexEntries: 0,
   };

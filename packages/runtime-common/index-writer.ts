@@ -60,7 +60,7 @@ export class IndexWriter {
   }
 }
 
-export type IndexEntry = InstanceEntry | ModuleEntry | ErrorEntry | FileEntry;
+export type IndexEntry = InstanceEntry | ErrorEntry | FileEntry;
 export type LastModifiedTimes = Map<
   string,
   { type: string; lastModified: number | null; hasError: boolean }
@@ -93,13 +93,6 @@ export interface ErrorEntry {
 
 function isErrorEntry(entry: IndexEntry): entry is ErrorEntry {
   return entry.type.endsWith('-error');
-}
-
-interface ModuleEntry {
-  type: 'module';
-  lastModified: number;
-  resourceCreatedAt: number;
-  deps: Set<string>;
 }
 
 export interface FileEntry {
@@ -161,8 +154,12 @@ export class Batch {
     let results = (await this.#query([
       `SELECT i.url, i.type, i.last_modified, i.has_error
        FROM boxel_index as i
-          WHERE i.realm_url =`,
-      param(this.realmURL.href),
+          WHERE`,
+      ...every([
+        [`i.realm_url =`, param(this.realmURL.href)],
+        // TODO: Remove module rows from the index in a follow-up PR.
+        [`i.type !=`, param('module')],
+      ]),
     ] as Expression)) as Pick<
       BoxelIndexTable,
       'url' | 'type' | 'last_modified' | 'has_error'
@@ -179,34 +176,6 @@ export class Batch {
     return result;
   }
 
-  async getModuleErrors(urls: string[]): Promise<SerializedError[]> {
-    let candidates = [...new Set(urls)].filter(
-      (url) => url && !url.endsWith('.json'),
-    );
-    if (candidates.length === 0) {
-      return [];
-    }
-    let params = candidates.map((url) => [param(url)]);
-    let rows = (await this.#query([
-      `SELECT i.error_doc`,
-      `FROM boxel_index_working as i`,
-      'WHERE',
-      ...every([
-        ['i.realm_url =', param(this.realmURL.href)],
-        ['i.type =', param('module')],
-        ['i.has_error = TRUE'],
-        any([
-          ['i.url IN', ...addExplicitParens(separatedByCommas(params))],
-          ['i.file_alias IN', ...addExplicitParens(separatedByCommas(params))],
-        ]),
-        any([['i.is_deleted = FALSE'], ['i.is_deleted IS NULL']]),
-      ]),
-    ] as Expression)) as Pick<BoxelIndexTable, 'error_doc'>[];
-    return rows
-      .map((row) => row.error_doc)
-      .filter((errorDoc): errorDoc is SerializedError => Boolean(errorDoc));
-  }
-
   async copyFrom(sourceRealmURL: URL, destRealmInfo: RealmInfo): Promise<void> {
     let columns: string[][] | undefined;
     let sources = (await this.#query([
@@ -216,6 +185,8 @@ export class Batch {
       ...every([
         any([['is_deleted = false'], ['is_deleted IS NULL']]),
         [`realm_url =`, param(sourceRealmURL.href)],
+        // TODO: Remove module rows from the index in a follow-up PR.
+        [`type !=`, param('module')],
       ]),
     ] as Expression)) as unknown as BoxelIndexTable[];
     let now = String(Date.now());
@@ -335,17 +306,6 @@ export class Batch {
           has_error: false,
         };
         break;
-      case 'module':
-        entryPayload = {
-          type: 'module',
-          deps: [...entry.deps],
-          last_known_good_deps: [...entry.deps],
-          last_modified: entry.lastModified,
-          resource_created_at: entry.resourceCreatedAt,
-          error_doc: null,
-          has_error: false,
-        };
-        break;
       case 'file':
         entryPayload = {
           type: 'file',
@@ -368,7 +328,6 @@ export class Batch {
         };
         break;
       case 'instance-error':
-      case 'module-error':
       case 'file-error':
         entryPayload = {
           types: entry.types,
@@ -389,6 +348,11 @@ export class Batch {
           has_error: true,
         };
         break;
+      case 'module-error':
+        // TODO: Remove module rows from the index in a follow-up PR.
+        throw new Error(
+          'module index entries are no longer supported in the search index',
+        );
       default:
         throw new Error(`Unsupported index entry type`);
     }
@@ -514,6 +478,8 @@ export class Batch {
         ['i.realm_url =', param(this.realmURL.href)],
         any([['i.has_error = FALSE'], ['i.has_error IS NULL']]),
         ['i.is_deleted != true'],
+        // TODO: Remove module rows from the index in a follow-up PR.
+        ['i.type !=', param('module')],
       ]),
     ] as Expression)) as { total: string }[];
     return parseInt(total);
@@ -696,6 +662,8 @@ export class Batch {
       'SELECT DISTINCT url, type FROM boxel_index WHERE',
       ...every([
         ['realm_url =', param(this.realmURL.href)],
+        // TODO: Remove module rows from the index in a follow-up PR.
+        ['type !=', param('module')],
         [
           'url IN',
           ...addExplicitParens(
@@ -796,6 +764,8 @@ export class Batch {
           // css is a subset of modules, so there won't by any references that
           // are css entries that aren't already represented by a module entry
           [`i.type != 'css'`],
+          // TODO: Remove module rows from the index in a follow-up PR.
+          [`i.type != 'module'`],
           // probably need to reevaluate this condition when we get to cross
           // realm invalidation
           [`i.realm_url =`, param(this.realmURL.href)],
@@ -929,13 +899,16 @@ export class Batch {
 
 function baseTypeFromError(
   entry: ErrorEntry,
-): Extract<BoxelIndexTable['type'], 'instance' | 'module' | 'file'> {
+): Extract<BoxelIndexTable['type'], 'instance' | 'file'> {
   switch (entry.type) {
     case 'instance-error':
       return 'instance';
-    case 'module-error':
-      return 'module';
     case 'file-error':
       return 'file';
+    case 'module-error':
+      // TODO: Remove module rows from the index in a follow-up PR.
+      throw new Error(
+        'module index entries are no longer supported in the search index',
+      );
   }
 }

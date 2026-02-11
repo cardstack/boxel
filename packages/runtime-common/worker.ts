@@ -23,6 +23,7 @@ import {
   type QueuePublisher,
   type DBAdapter,
   type RealmPermissions,
+  CachingDefinitionLookup,
 } from '.';
 import { MatrixClient } from './matrix-client';
 import * as Tasks from './tasks';
@@ -30,10 +31,8 @@ import type { WorkerArgs, TaskArgs } from './tasks';
 
 export interface Stats extends JSONTypes.Object {
   instancesIndexed: number;
-  modulesIndexed: number;
   filesIndexed: number;
   instanceErrors: number;
-  moduleErrors: number;
   fileErrors: number;
   totalIndexEntries: number;
 }
@@ -126,6 +125,12 @@ export class Worker {
   }
 
   async run() {
+    let definitionLookup = new CachingDefinitionLookup(
+      this.#dbAdapter,
+      this.#prerenderer,
+      this.#virtualNetwork,
+      this.#createPrerenderAuth,
+    );
     let taskArgs: TaskArgs = {
       getReader,
       log: this.#log,
@@ -133,6 +138,7 @@ export class Worker {
       dbAdapter: this.#dbAdapter,
       indexWriter: this.#indexWriter,
       prerenderer: this.#prerenderer,
+      definitionLookup,
       queuePublisher: this.#queuePublisher,
       getAuthedFetch: this.makeAuthedFetch.bind(this),
       reportStatus: this.reportStatus.bind(this),

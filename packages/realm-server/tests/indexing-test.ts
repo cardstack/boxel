@@ -3,6 +3,7 @@ import { dirSync } from 'tmp';
 import { internalKeyFor, SupportedMimeType } from '@cardstack/runtime-common';
 import type {
   DBAdapter,
+  ErrorEntry,
   LooseSingleCardDocument,
   Realm,
   RealmPermissions,
@@ -769,24 +770,43 @@ module(basename(__filename), function () {
       }
     });
 
-    test('sets resource_created_at for modules and instances', async function (assert) {
-      let entry = (await realm.realmIndexQueryEngine.module(
+    test('sets resource_created_at for files and instances', async function (assert) {
+      let entry = await realm.realmIndexQueryEngine.file(
         new URL(`${testRealm}fancy-person.gts`),
-      )) as { resourceCreatedAt: number };
+      );
 
-      assert.ok(entry!.resourceCreatedAt, 'resourceCreatedAt is set');
+      assert.ok(entry?.resourceCreatedAt, 'resourceCreatedAt is set');
 
-      entry = (await realm.realmIndexQueryEngine.instance(
+      let instance = (await realm.realmIndexQueryEngine.instance(
         new URL(`${testRealm}mango`),
       )) as { resourceCreatedAt: number };
 
-      assert.ok(entry!.resourceCreatedAt, 'resourceCreatedAt is set');
+      assert.ok(instance!.resourceCreatedAt, 'resourceCreatedAt is set');
     });
 
-    test('sets urls containing encoded CSS for deps for a module', async function (assert) {
-      let entry = (await realm.realmIndexQueryEngine.module(
-        new URL(`${testRealm}fancy-person.gts`),
-      )) as { deps: string[] };
+    test('sets urls containing encoded CSS for deps for an instance', async function (assert) {
+      await realm.write(
+        'fancy.json',
+        JSON.stringify({
+          data: {
+            attributes: {
+              firstName: 'Fancy',
+            },
+            meta: {
+              adoptsFrom: {
+                module: './fancy-person',
+                name: 'FancyPerson',
+              },
+            },
+          },
+        }),
+      );
+
+      let entry = await realm.realmIndexQueryEngine.instance(
+        new URL(`${testRealm}fancy`),
+      );
+      assert.strictEqual(entry?.type, 'instance', 'fancy instance is indexed');
+      let deps = entry?.type === 'instance' ? (entry.deps ?? []) : [];
 
       let assertCssDependency = (
         deps: string[],
@@ -851,7 +871,7 @@ module(basename(__filename), function () {
       ];
 
       dependencies.forEach(({ pattern, fileName }) => {
-        assertCssDependency(entry.deps, pattern, fileName);
+        assertCssDependency(deps, pattern, fileName);
       });
     });
 
@@ -1194,138 +1214,9 @@ module(basename(__filename), function () {
       );
     });
 
-    test('can recover from a module sequence error', async function (assert) {
-      // introduce errors into 2 gts file with first module has dependency on second module
-      await realm.write(
-        'pet.gts',
-        `
-          import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
-          import StringField from "https://cardstack.com/base/string";
-          import { Name } from "./name"; // this is missing
-          export class Pet extends CardDef {
-            @field name = contains(Name);
-          }
-        `,
-      );
-
-      let pet = await realm.realmIndexQueryEngine.module(
-        new URL(`${testRealm}pet`),
-      );
-      assert.strictEqual(pet?.type, 'module-error', 'Pet module is in error');
-      if (pet?.type === 'module-error') {
-        let errorDeps = new Set(pet.error.deps ?? []);
-        let hasNameDep =
-          errorDeps.has(`${testRealm}name`) ||
-          errorDeps.has(`${testRealm}name.gts`);
-        assert.ok(hasNameDep, 'error deps include missing Name module');
-      } else {
-        assert.ok(false, 'expected pet module error details');
-      }
-
-      await realm.write(
-        'name.gts',
-        `
-          import { contains, field, FieldDef } from "https://cardstack.com/base/card-api";
-          import StringField from "https://cardstack.com/base/string";
-
-          export class Name extends FieldDef {
-            @field firstName = contains(StringField);
-            @field lastName = contains(StringField);
-          }
-        `,
-      );
-
-      // Name module should be indexed
-      let name = await realm.realmIndexQueryEngine.module(
-        new URL(`${testRealm}name`),
-      );
-      assert.strictEqual(
-        name?.type,
-        'module',
-        'Name module is successfully indexed',
-      );
-
-      // Since the name is ready, the pet should be indexed and not in an error state
-      pet = await realm.realmIndexQueryEngine.module(
-        new URL(`${testRealm}pet`),
-      );
-      assert.strictEqual(
-        pet?.type,
-        'module',
-        'Pet module is successfully indexed',
-      );
-    });
-
-    test('can successfully create instance after module sequence error is resolved', async function (assert) {
-      // First create pet.gts that depends on name.gts which doesn't exist yet
-      await realm.write(
-        'pet.gts',
-        `
-          import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
-          import StringField from "https://cardstack.com/base/string";
-          import { Name } from "./name";
-          export class Pet extends CardDef {
-            @field name = contains(Name);
-          }
-        `,
-      );
-
-      // Now create the missing name.gts module
-      await realm.write(
-        'name.gts',
-        `
-          import { contains, field, FieldDef } from "https://cardstack.com/base/card-api";
-          import StringField from "https://cardstack.com/base/string";
-
-          export class Name extends FieldDef {
-            @field firstName = contains(StringField);
-            @field lastName = contains(StringField);
-          }
-        `,
-      );
-
-      // Verify the Name module is properly indexed
-      let name = await realm.realmIndexQueryEngine.module(
-        new URL(`${testRealm}name`),
-      );
-      assert.strictEqual(
-        name?.type,
-        'module',
-        'Name module is successfully indexed',
-      );
-
-      // Create a pet instance
-      await realm.write(
-        'pet-apple.json',
-        JSON.stringify({
-          data: {
-            attributes: {
-              name: {
-                firstName: 'Apple',
-                lastName: 'Tangle',
-              },
-            },
-            meta: {
-              adoptsFrom: {
-                module: './pet',
-                name: 'Pet',
-              },
-            },
-          },
-        }),
-      );
-
-      let petApple = await realm.realmIndexQueryEngine.instance(
-        new URL(`${testRealm}pet-apple`),
-      );
-      assert.strictEqual(
-        petApple?.type,
-        'instance',
-        'pet-apple instance is created without error',
-      );
-    });
-
     test('propagates module errors to dependent instances and recovers after missing modules are added', async function (assert) {
+      await testDbAdapter.execute('DELETE FROM modules');
+
       await realm.write(
         'deep-card.json',
         JSON.stringify({
@@ -1391,13 +1282,55 @@ module(basename(__filename), function () {
           ? brokenInstance.error.additionalErrors
           : [];
         assert.ok(
-          additionalErrors.some((error) =>
+          additionalErrors.some((error: { message?: string }) =>
             String(error.message ?? '').includes('middle-field'),
           ),
           'missing MiddleField details are included in dependency errors',
         );
       } else {
         assert.ok(false, 'expected instance error details');
+      }
+
+      try {
+        await realm.realmIndexQueryEngine.searchCards({
+          filter: {
+            on: { module: `${testRealm}deep-card`, name: 'DeepCard' },
+            eq: { 'middle.leaf.value': 'Root' },
+          },
+        });
+      } catch (_error) {
+        // definition lookup errors are expected while dependencies are missing
+      }
+
+      let deepModuleRows = (await testDbAdapter.execute(
+        `SELECT error_doc FROM modules WHERE url IN ($1, $2) OR file_alias IN ($1, $2)`,
+        {
+          bind: [`${testRealm}deep-card`, `${testRealm}deep-card.gts`],
+          coerceTypes: { error_doc: 'JSON' },
+        },
+      )) as { error_doc: ErrorEntry | null }[];
+      let deepModuleError = deepModuleRows.find(
+        (row) => row.error_doc,
+      )?.error_doc;
+      assert.strictEqual(
+        deepModuleError?.type,
+        'module-error',
+        'deep-card module error is cached',
+      );
+      if (deepModuleError?.error) {
+        let additionalErrors = Array.isArray(
+          deepModuleError.error.additionalErrors,
+        )
+          ? deepModuleError.error.additionalErrors
+          : [];
+        assert.ok(
+          additionalErrors.some((error) =>
+            String(error.message ?? '').includes('middle-field'),
+          ),
+          'deep-card module error includes middle-field error details',
+        );
+      } else {
+        assert.ok(false, 'expected deep-card module error details');
       }
 
       await realm.write(
@@ -1427,13 +1360,48 @@ module(basename(__filename), function () {
           ? brokenInstance.error.additionalErrors
           : [];
         assert.ok(
-          additionalErrors.some((error) =>
+          additionalErrors.some((error: { message?: string }) =>
             String(error.message ?? '').includes('leaf-field'),
           ),
           'missing LeafField details are included in dependency errors',
         );
       } else {
         assert.ok(false, 'expected instance error details');
+      }
+
+      try {
+        await realm.realmIndexQueryEngine.searchCards({
+          filter: {
+            on: { module: `${testRealm}deep-card`, name: 'DeepCard' },
+            eq: { 'middle.leaf.value': 'Root' },
+          },
+        });
+      } catch (_error) {
+        // definition lookup errors are expected while dependencies are missing
+      }
+
+      deepModuleRows = (await testDbAdapter.execute(
+        `SELECT error_doc FROM modules WHERE url IN ($1, $2) OR file_alias IN ($1, $2)`,
+        {
+          bind: [`${testRealm}deep-card`, `${testRealm}deep-card.gts`],
+          coerceTypes: { error_doc: 'JSON' },
+        },
+      )) as { error_doc: ErrorEntry | null }[];
+      deepModuleError = deepModuleRows.find((row) => row.error_doc)?.error_doc;
+      if (deepModuleError?.error) {
+        let additionalErrors = Array.isArray(
+          deepModuleError.error.additionalErrors,
+        )
+          ? deepModuleError.error.additionalErrors
+          : [];
+        assert.ok(
+          additionalErrors.some((error) =>
+            String(error.message ?? '').includes('leaf-field'),
+          ),
+          'deep-card module error includes leaf-field error details',
+        );
+      } else {
+        assert.ok(false, 'expected deep-card module error details');
       }
 
       await realm.write(
@@ -1490,19 +1458,9 @@ module(basename(__filename), function () {
         'index did not touch any instance files',
       );
       assert.strictEqual(
-        realm.realmIndexUpdater.stats.modulesIndexed,
-        0,
-        'index did not touch any module files',
-      );
-      assert.strictEqual(
         realm.realmIndexUpdater.stats.instanceErrors,
         0,
         'no instance errors occurred',
-      );
-      assert.strictEqual(
-        realm.realmIndexUpdater.stats.moduleErrors,
-        0,
-        'no module errors occurred',
       );
     });
 
@@ -1539,6 +1497,176 @@ module(basename(__filename), function () {
         },
       });
       assert.strictEqual(result.length, 1, 'found updated document');
+    });
+
+    test('can recover from a module sequence error', async function (assert) {
+      await realm.write(
+        'pet.gts',
+        `
+          import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
+          import StringField from "https://cardstack.com/base/string";
+          import { Name } from "./name";
+
+          export class Pet extends CardDef {
+            @field name = contains(Name);
+          }
+        `,
+      );
+
+      await realm.write(
+        'pet-apple.json',
+        JSON.stringify({
+          data: {
+            attributes: {
+              name: {
+                firstName: 'Apple',
+                lastName: 'Tangle',
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: './pet',
+                name: 'Pet',
+              },
+            },
+          },
+        }),
+      );
+
+      let response = await fetch(`${testRealm}pet-apple`, {
+        headers: { Accept: SupportedMimeType.CardJson },
+      });
+      assert.strictEqual(
+        response.status,
+        500,
+        'card endpoint returns error before dependency exists',
+      );
+      let errorDoc = await response.json();
+      assert.strictEqual(
+        errorDoc.errors?.[0]?.id,
+        `${testRealm}pet-apple`,
+        'error response references the card url',
+      );
+
+      await realm.write(
+        'name.gts',
+        `
+          import { contains, field, FieldDef } from "https://cardstack.com/base/card-api";
+          import StringField from "https://cardstack.com/base/string";
+
+          export class Name extends FieldDef {
+            @field firstName = contains(StringField);
+            @field lastName = contains(StringField);
+          }
+        `,
+      );
+
+      response = await fetch(`${testRealm}pet-apple`, {
+        headers: { Accept: SupportedMimeType.CardJson },
+      });
+      assert.strictEqual(
+        response.status,
+        200,
+        'card endpoint succeeds after dependency exists',
+      );
+      let doc = await response.json();
+      assert.strictEqual(
+        doc.data?.attributes?.name?.firstName,
+        'Apple',
+        'card response includes the resolved data',
+      );
+    });
+
+    test('can successfully create instance after module sequence error is resolved', async function (assert) {
+      await realm.write(
+        'pet.gts',
+        `
+          import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
+          import { Name } from "./name";
+
+          export class Pet extends CardDef {
+            @field name = contains(Name);
+          }
+        `,
+      );
+
+      await realm.write(
+        'pet-ember.json',
+        JSON.stringify({
+          data: {
+            attributes: {
+              name: {
+                firstName: 'Ember',
+                lastName: 'Glow',
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: './pet',
+                name: 'Pet',
+              },
+            },
+          },
+        }),
+      );
+
+      let response = await fetch(`${testRealm}pet-ember`, {
+        headers: { Accept: SupportedMimeType.CardJson },
+      });
+      assert.strictEqual(
+        response.status,
+        500,
+        'card endpoint returns error before dependency exists',
+      );
+
+      await realm.write(
+        'name.gts',
+        `
+          import { contains, field, FieldDef } from "https://cardstack.com/base/card-api";
+          import StringField from "https://cardstack.com/base/string";
+
+          export class Name extends FieldDef {
+            @field firstName = contains(StringField);
+            @field lastName = contains(StringField);
+          }
+        `,
+      );
+
+      await realm.write(
+        'pet-puffin.json',
+        JSON.stringify({
+          data: {
+            attributes: {
+              name: {
+                firstName: 'Puffin',
+                lastName: 'Light',
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: './pet',
+                name: 'Pet',
+              },
+            },
+          },
+        }),
+      );
+
+      let createdResponse = await fetch(`${testRealm}pet-puffin`, {
+        headers: { Accept: SupportedMimeType.CardJson },
+      });
+      assert.strictEqual(
+        createdResponse.status,
+        200,
+        'created card can be fetched after dependency exists',
+      );
+      let fetchedDoc =
+        (await createdResponse.json()) as LooseSingleCardDocument;
+      assert.strictEqual(
+        fetchedDoc.data?.attributes?.name?.lastName,
+        'Light',
+        'fetched card includes the expected attributes',
+      );
     });
 
     test('can incrementally index instance that depends on updated card source consumed by other card sources', async function (assert) {
@@ -1642,195 +1770,7 @@ module(basename(__filename), function () {
       }
     });
 
-    test('should be able to handle dependencies between modules', async function (assert) {
-      let moduleWrites = new Map<string, string>();
-      moduleWrites.set(
-        'author.gts',
-        `
-            import { contains, field, CardDef, linksTo } from "https://cardstack.com/base/card-api";
-            import StringField from "https://cardstack.com/base/string";
-            import { BlogApp } from "./blog-app";
-
-            export class Author extends CardDef {
-              @field name = contains(StringField);
-              @field blog = linksTo(BlogApp);
-            }
-          `,
-      );
-      moduleWrites.set(
-        'blog-category.gts',
-        `
-        import { contains, field, CardDef, linksTo } from "https://cardstack.com/base/card-api";
-        import StringField from "https://cardstack.com/base/string";
-        import { BlogApp } from "./blog-app";
-
-        export class BlogCategory extends CardDef {
-          @field name = contains(StringField);
-          @field blog = linksTo(BlogApp);
-        }
-      `,
-      );
-      moduleWrites.set(
-        'blog-post.gts',
-        `
-        import { contains, field, CardDef, linksTo, linksToMany } from "https://cardstack.com/base/card-api";
-        import StringField from "https://cardstack.com/base/string";
-        import { Author } from "./author";
-        import { BlogApp } from "./blog-app";
-
-        export class BlogPost extends CardDef {
-          @field title = contains(StringField);
-          @field author = linksToMany(Author);
-          @field blog = linksTo(BlogApp);
-        }
-      `,
-      );
-      moduleWrites.set(
-        'blog-app.gts',
-        `
-        import { contains, field, CardDef, linksTo } from "https://cardstack.com/base/card-api";
-        import StringField from "https://cardstack.com/base/string";
-        import type { BlogPost } from "./blog-post";
-
-        export class BlogApp extends CardDef {
-          @field title = contains(StringField);
-        }
-      `,
-      );
-      await realm.writeMany(moduleWrites);
-
-      let blogPostModule = await realm.realmIndexQueryEngine.module(
-        new URL(`${testRealm}blog-post`),
-      );
-      assert.strictEqual(
-        blogPostModule?.type,
-        'module',
-        'BlogPost module is in resolved module successfully',
-      );
-
-      let blogCategoryModule = await realm.realmIndexQueryEngine.module(
-        new URL(`${testRealm}blog-category`),
-      );
-      assert.strictEqual(
-        blogCategoryModule?.type,
-        'module',
-        'BlogCategory module is in resolved module successfully',
-      );
-
-      let authorModule = await realm.realmIndexQueryEngine.module(
-        new URL(`${testRealm}author`),
-      );
-      assert.strictEqual(
-        authorModule?.type,
-        'module',
-        'Author module is in resolved module successfully',
-      );
-
-      let blogAppModule = await realm.realmIndexQueryEngine.module(
-        new URL(`${testRealm}blog-app`),
-      );
-      assert.strictEqual(
-        blogAppModule?.type,
-        'module',
-        'BlogApp module is in resolved module successfully',
-      );
-    });
-
-    test('should be able to handle dependencies between modules - with thunk', async function (assert) {
-      let moduleWrites = new Map<string, string>();
-      moduleWrites.set(
-        'author.gts',
-        `
-            import { contains, field, CardDef, linksTo } from "https://cardstack.com/base/card-api";
-            import StringField from "https://cardstack.com/base/string";
-            import { BlogApp } from "./blog-app";
-
-            export class Author extends CardDef {
-              @field name = contains(StringField);
-              @field blog = linksTo(() => BlogApp);
-            }
-          `,
-      );
-      moduleWrites.set(
-        'blog-category.gts',
-        `
-        import { contains, field, CardDef, linksTo } from "https://cardstack.com/base/card-api";
-        import StringField from "https://cardstack.com/base/string";
-        import { BlogApp } from "./blog-app";
-
-        export class BlogCategory extends CardDef {
-          @field name = contains(StringField);
-          @field blog = linksTo(() => BlogApp);
-        }
-      `,
-      );
-      moduleWrites.set(
-        'blog-post.gts',
-        `
-        import { contains, field, CardDef, linksTo, linksToMany } from "https://cardstack.com/base/card-api";
-        import StringField from "https://cardstack.com/base/string";
-        import { Author } from "./author";
-        import { BlogApp } from "./blog-app";
-
-        export class BlogPost extends CardDef {
-          @field title = contains(StringField);
-          @field author = linksToMany(() => Author);
-          @field blog = linksTo(() => BlogApp);
-        }
-      `,
-      );
-      moduleWrites.set(
-        'blog-app.gts',
-        `
-        import { contains, field, CardDef, linksTo } from "https://cardstack.com/base/card-api";
-        import StringField from "https://cardstack.com/base/string";
-        import type { BlogPost } from "./blog-post";
-
-        export class BlogApp extends CardDef {
-          @field title = contains(StringField);
-        }
-      `,
-      );
-      await realm.writeMany(moduleWrites);
-
-      let blogPostModule = await realm.realmIndexQueryEngine.module(
-        new URL(`${testRealm}blog-post`),
-      );
-      assert.strictEqual(
-        blogPostModule?.type,
-        'module',
-        'BlogPost module is in resolved module successfully',
-      );
-
-      let blogCategoryModule = await realm.realmIndexQueryEngine.module(
-        new URL(`${testRealm}blog-category`),
-      );
-      assert.strictEqual(
-        blogCategoryModule?.type,
-        'module',
-        'BlogCategory module is in resolved module successfully',
-      );
-
-      let authorModule = await realm.realmIndexQueryEngine.module(
-        new URL(`${testRealm}author`),
-      );
-      assert.strictEqual(
-        authorModule?.type,
-        'module',
-        'Author module is in resolved module successfully',
-      );
-
-      let blogAppModule = await realm.realmIndexQueryEngine.module(
-        new URL(`${testRealm}blog-app`),
-      );
-      assert.strictEqual(
-        blogAppModule?.type,
-        'module',
-        'BlogApp module is in resolved module successfully',
-      );
-    });
-
-    test('can write several modules at once', async function (assert) {
+    test('can write several module files at once', async function (assert) {
       let mapOfWrites = new Map();
       mapOfWrites.set(
         'place.gts',
@@ -1859,27 +1799,27 @@ module(basename(__filename), function () {
       assert.strictEqual(result[1].path, 'country.gts');
       assert.strictEqual(result[2].path, 'notes.txt');
 
-      let place = await realm.realmIndexQueryEngine.module(
-        new URL(`${testRealm}place`),
+      let place = await realm.realmIndexQueryEngine.file(
+        new URL(`${testRealm}place.gts`),
       );
-      assert.ok(place, 'place module is in the index');
+      assert.ok(place, 'place file is in the index');
 
-      let country = await realm.realmIndexQueryEngine.module(
-        new URL(`${testRealm}country`),
+      let country = await realm.realmIndexQueryEngine.file(
+        new URL(`${testRealm}country.gts`),
       );
-      assert.ok(country, 'country module is in the index');
+      assert.ok(country, 'country file is in the index');
       let fileEntry = await realm.realmIndexQueryEngine.file(
         new URL(`${testRealm}notes.txt`),
       );
       assert.ok(fileEntry, 'file entry is in the index');
       assert.strictEqual(
-        realm.realmIndexUpdater.stats.modulesIndexed,
-        2,
+        realm.realmIndexUpdater.stats.filesIndexed,
+        3,
         'indexed correct number of files',
       );
     });
 
-    test('can write instances and modules and files at once', async function (assert) {
+    test('can write instances and module files and files at once', async function (assert) {
       let mapOfWrites = new Map();
       mapOfWrites.set(
         'city.gts',
@@ -1913,10 +1853,10 @@ module(basename(__filename), function () {
       assert.strictEqual(result[1].path, 'city.json');
       assert.strictEqual(result[2].path, 'notes.txt');
 
-      let module = await realm.realmIndexQueryEngine.module(
-        new URL(`${testRealm}city`),
+      let moduleFile = await realm.realmIndexQueryEngine.file(
+        new URL(`${testRealm}city.gts`),
       );
-      assert.ok(module, 'city module is in the index');
+      assert.ok(moduleFile, 'city file is in the index');
 
       let instance = await realm.realmIndexQueryEngine.instance(
         new URL(`${testRealm}city`),
@@ -1936,16 +1876,12 @@ module(basename(__filename), function () {
           fileErrors: realm.realmIndexUpdater.stats.fileErrors,
           instancesIndexed: realm.realmIndexUpdater.stats.instancesIndexed,
           instanceErrors: realm.realmIndexUpdater.stats.instanceErrors,
-          moduleErrors: realm.realmIndexUpdater.stats.moduleErrors,
-          modulesIndexed: realm.realmIndexUpdater.stats.modulesIndexed,
         },
         {
           filesIndexed: 2,
           fileErrors: 0,
           instancesIndexed: 1,
           instanceErrors: 0,
-          moduleErrors: 0,
-          modulesIndexed: 0,
         },
         'indexed correct number of files',
       );
@@ -2076,20 +2012,16 @@ module(basename(__filename), function () {
         },
       });
 
-      test('has no module errors when trying to index a card from another realm when it has permission to read', async function (assert) {
-        assert.deepEqual(
-          // we splat because despite having the same shape, the constructors are different
-          { ...testRealm2.realmIndexUpdater.stats },
-          {
-            fileErrors: 0,
-            filesIndexed: 2,
-            instancesIndexed: 1,
-            instanceErrors: 0,
-            moduleErrors: 0,
-            modulesIndexed: 1,
-            totalIndexEntries: 4,
-          },
-          'has no module errors',
+      test('indexes a card from another realm when it has permission to read', async function (assert) {
+        let stats = { ...testRealm2.realmIndexUpdater.stats };
+        assert.strictEqual(stats.fileErrors, 0, 'no file errors');
+        assert.strictEqual(stats.instanceErrors, 0, 'no instance errors');
+        assert.strictEqual(stats.filesIndexed, 2, 'indexed all files');
+        assert.strictEqual(stats.instancesIndexed, 1, 'indexed instances');
+        assert.strictEqual(
+          stats.totalIndexEntries,
+          3,
+          'total entries are correct',
         );
       });
     });
@@ -2104,23 +2036,12 @@ module(basename(__filename), function () {
         },
       });
 
-      test('has a module error when trying to index a module from another realm when it has no permission to read', async function (assert) {
+      test('surfaces instance errors when lacking permission to read from another realm', async function (assert) {
         // Error during indexing will be: "Authorization error: Insufficient
         // permissions to perform this action"
-        assert.deepEqual(
-          // we splat because despite having the same shape, the constructors are different
-          { ...testRealm2.realmIndexUpdater.stats },
-          {
-            fileErrors: 1,
-            filesIndexed: 1,
-            instanceErrors: 1,
-            instancesIndexed: 0,
-            moduleErrors: 1,
-            modulesIndexed: 0,
-            totalIndexEntries: 1,
-          },
-          'has a module error',
-        );
+        let stats = { ...testRealm2.realmIndexUpdater.stats };
+        assert.strictEqual(stats.instanceErrors, 1, 'instance errors surfaced');
+        assert.strictEqual(stats.instancesIndexed, 0, 'no instances indexed');
       });
     });
   });

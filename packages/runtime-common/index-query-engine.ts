@@ -66,14 +66,6 @@ import {
 import { isScopedCSSRequest } from 'glimmer-scoped-css';
 import type { FileMetaResource } from './resource-types';
 
-interface IndexedModule {
-  type: 'module';
-  canonicalURL: string;
-  lastModified: number | null;
-  resourceCreatedAt: number;
-  deps: string[] | null;
-}
-
 export interface IndexedFile {
   type: 'file';
   canonicalURL: string;
@@ -107,10 +99,6 @@ export interface IndexedInstance {
   realmURL: string;
   indexedAt: number | null;
 }
-interface IndexedError {
-  type: 'module-error';
-  error: SerializedError;
-}
 
 interface InstanceError extends Partial<
   Omit<
@@ -133,7 +121,6 @@ interface InstanceError extends Partial<
 }
 
 export type InstanceOrError = IndexedInstance | InstanceError;
-export type IndexedModuleOrError = IndexedModule | IndexedError;
 
 type GetEntryOptions = WIPOptions;
 export type QueryOptions = WIPOptions & PrerenderedCardOptions;
@@ -188,49 +175,6 @@ export class IndexQueryEngine {
 
   async #queryCards(query: CardExpression) {
     return this.#query(await this.makeExpression(query));
-  }
-
-  async getModule(
-    url: URL,
-    opts?: GetEntryOptions,
-  ): Promise<IndexedModuleOrError | undefined> {
-    let rows = (await this.#query([
-      `SELECT i.*
-       FROM ${tableFromOpts(opts)} as i
-       WHERE`,
-      ...every([
-        any([
-          [`i.url =`, param(url.href)],
-          [`i.file_alias =`, param(url.href)],
-        ]),
-        ['i.type =', param('module')],
-        any([['i.is_deleted = FALSE'], ['i.is_deleted IS NULL']]),
-      ]),
-    ] as Expression)) as unknown as BoxelIndexTable[];
-    let maybeResult: BoxelIndexTable | undefined = rows[0];
-    if (!maybeResult) {
-      return undefined;
-    }
-    if (maybeResult.is_deleted) {
-      return undefined;
-    }
-    let result = maybeResult;
-    if (result.has_error) {
-      return { type: 'module-error', error: result.error_doc! };
-    }
-    let moduleEntry = assertIndexEntry(result);
-    let {
-      url: canonicalURL,
-      last_modified: lastModified,
-      resource_created_at: resourceCreatedAt,
-    } = moduleEntry;
-    return {
-      type: 'module',
-      canonicalURL,
-      lastModified: lastModified != null ? parseInt(lastModified) : null,
-      resourceCreatedAt: parseInt(resourceCreatedAt),
-      deps: moduleEntry.deps,
-    };
   }
 
   async getInstance(
