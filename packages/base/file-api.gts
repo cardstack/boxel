@@ -108,7 +108,9 @@ export class FileDef extends BaseDef {
     options: { contentHash?: string } = {},
   ): Promise<SerializedFile> {
     let parsed = new URL(url);
-    let name = parsed.pathname.split('/').pop() ?? parsed.pathname;
+    let name = decodeURIComponent(
+      parsed.pathname.split('/').pop() ?? parsed.pathname,
+    );
     let contentType = inferContentType(name);
     let contentHash: string | undefined = options.contentHash;
     if (!contentHash) {
