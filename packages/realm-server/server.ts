@@ -64,6 +64,7 @@ import {
   retrieveIsolatedHTML,
   injectHeadHTML,
   injectIsolatedHTML,
+  ensureSingleTitle,
 } from './lib/index-html-injection';
 
 export class RealmServer {
@@ -434,7 +435,7 @@ export class RealmServer {
     let headFragments: string[] = [];
 
     if (headHTML != null) {
-      headFragments.push(headHTML);
+      headFragments.push(ensureSingleTitle(headHTML));
     }
 
     if (scopedCSS != null) {
