@@ -1,0 +1,60 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "GeoSearchPointFieldSpec",
+        "module": "../geo-search-point-spec"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "default",
+        "module": "../../fields/geo-search-point"
+      },
+      "basic": {
+        "lat": 3.1336269,
+        "lon": 101.6299203,
+        "searchKey": "Glo damansara"
+      },
+      "readMe": null,
+      "cardInfo": {
+        "name": null,
+        "notes": null,
+        "summary": null,
+        "cardThumbnailURL": null
+      },
+      "combined": {
+        "lat": 3.1516964,
+        "lon": 101.6942371,
+        "searchKey": "Kuala Lumpur, 50100, Malaysia"
+      },
+      "specType": "field",
+      "cardTitle": "Geo Search Point Field",
+      "withTopResults": {
+        "lat": 3.1414907,
+        "lon": 101.7182597,
+        "searchKey": "Tun Razak Exchange (TRX), Pudu, Kuala Lumpur, 55188, Malaysia"
+      },
+      "cardDescription": "Spec card that renders GeoSearchPointField examples.",
+      "containedExamples": [],
+      "withoutRecentSearches": {
+        "lat": 48.8534951,
+        "lon": 2.3483915,
+        "searchKey": "Paris, Ile-de-France, Metropolitan France, France"
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "linkedExamples": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

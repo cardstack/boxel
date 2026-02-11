@@ -10,7 +10,7 @@ import {
 import { MapRender, type Coordinate } from '../components/map-render';
 import LeafletMapConfigField from '../fields/leaflet-map-config-field';
 import GeoSearchPointField, {
-  GeoSearchPointEditTemplate,
+  GeoSearchPointEdit,
 } from '../fields/geo-search-point';
 
 class AtomTemplate extends Component<typeof Route> {
@@ -403,7 +403,7 @@ export class CoordinateField extends GeoSearchPointField {
   static displayName = 'Coordinate';
 
   // resuse the edit template to prevent map embedding
-  static embedded = GeoSearchPointEditTemplate;
+  static embedded = GeoSearchPointEdit;
 }
 
 export class Route extends CardDef {
