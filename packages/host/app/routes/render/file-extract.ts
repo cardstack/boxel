@@ -241,7 +241,7 @@ class FileDefAttributesExtractor {
         );
       } catch (err) {
         console.warn(
-          `[file-extract] ${(klass as any).displayName ?? klass.name ?? 'unknown'}.extractAttributes failed for ${this.#fileURL}:`,
+          `[file-extract] ${(klass as any).displayName ?? (klass as any).name ?? 'unknown'}.extractAttributes failed for ${this.#fileURL}:`,
           err,
         );
         recordError(err);
