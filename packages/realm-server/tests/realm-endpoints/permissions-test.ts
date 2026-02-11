@@ -43,7 +43,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
         permissions: {
           mary: ['read', 'write', 'realm-owner'],
           bob: ['read', 'write'],
-          '@node-test_realm:localhost': ['read'],
+          '@node-test_realm:localhost': ['read', 'realm-owner'],
         },
         onRealmSetup,
       });
