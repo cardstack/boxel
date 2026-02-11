@@ -27,7 +27,6 @@ import {
   testHostModeRealmURL,
   testRealmInfo,
   testRealmURL,
-  testRealmURLToUsername,
   Worker,
   DEFAULT_CARD_SIZE_LIMIT_BYTES,
   type DefinitionLookup,
