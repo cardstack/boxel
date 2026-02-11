@@ -171,12 +171,8 @@ export default function handlePublishRealm({
       return;
     }
 
-    let sourceRealmURL: string = json.sourceRealmURL.endsWith('/')
-      ? json.sourceRealmURL
-      : `${json.sourceRealmURL}/`;
-    let publishedRealmURL = json.publishedRealmURL.endsWith('/')
-      ? json.publishedRealmURL
-      : `${json.publishedRealmURL}/`;
+    let sourceRealmURL = ensureTrailingSlash(json.sourceRealmURL);
+    let publishedRealmURL = ensureTrailingSlash(json.publishedRealmURL);
 
     let { user: ownerUserId, sessionRoom: tokenSessionRoom } = token;
 
