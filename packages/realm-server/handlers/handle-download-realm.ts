@@ -223,9 +223,7 @@ async function resolveRealmPath({
     return join(realmsRootPath, PUBLISHED_DIRECTORY_NAME, published[0].id);
   }
 
-  let realm = realms.find(
-    (r) => ensureTrailingSlash(r.url) === realmURL,
-  );
+  let realm = realms.find((r) => ensureTrailingSlash(r.url) === realmURL);
   return realm?.dir ?? null;
 }
 
