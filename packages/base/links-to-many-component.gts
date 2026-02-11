@@ -115,9 +115,8 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
     if (isFileDef(this.args.field.card)) {
       let file = await chooseFile();
       if (file) {
-        let selectedCards = (this.args.model.value as any)[
-          this.args.field.name
-        ];
+        let selectedCards =
+          (this.args.model.value as any)[this.args.field.name] ?? [];
         selectedCards = [...selectedCards, file];
         (this.args.model.value as any)[this.args.field.name] = selectedCards;
       }

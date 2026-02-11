@@ -11,7 +11,6 @@ import {
   getBoxComponent,
 } from './field-component';
 import {
-  type CardDef,
   type BaseDef,
   type Box,
   type Field,

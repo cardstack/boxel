@@ -26,9 +26,8 @@ import {
 import ModalContainer from '@cardstack/host/components/modal-container';
 
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-import type StoreService from '@cardstack/host/services/store';
-
 import type RealmService from '@cardstack/host/services/realm';
+import type StoreService from '@cardstack/host/services/store';
 
 import type { FileDef } from 'https://cardstack.com/base/file-api';
 
@@ -74,22 +73,27 @@ export default class ChooseFileModal extends Component<Signature> {
 
   @action
   private async pick(path: LocalPath | undefined) {
-    if (this.deferred && this.selectedRealm && path) {
-      let fileURL = new RealmPaths(this.selectedRealm.url).fileURL(path);
-      let file = await this.store.get<FileDef>(fileURL.href, {
-        type: 'file-meta',
-      });
-      if (isCardErrorJSONAPI(file)) {
-        throw new Error(
-          `choose-file-modal: failed to load file meta for ${fileURL.href}`,
-        );
+    try {
+      if (this.deferred && this.selectedRealm && path) {
+        let fileURL = new RealmPaths(this.selectedRealm.url).fileURL(path);
+        let file = await this.store.get<FileDef>(fileURL.href, {
+          type: 'file-meta',
+        });
+        if (isCardErrorJSONAPI(file)) {
+          this.deferred.reject(
+            new Error(
+              `choose-file-modal: failed to load file meta for ${fileURL.href}`,
+            ),
+          );
+          return;
+        }
+        this.deferred.fulfill(file);
       }
-      this.deferred.fulfill(file);
+    } finally {
+      this.selectedRealm = this.knownRealms[0];
+      this.selectedFile = undefined;
+      this.deferred = undefined;
     }
-
-    this.selectedRealm = this.knownRealms[0];
-    this.selectedFile = undefined;
-    this.deferred = undefined;
   }
 
   private get knownRealms() {
