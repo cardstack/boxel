@@ -934,7 +934,7 @@ module(basename(__filename), function () {
       assert.strictEqual(response.status, 200, 'HTTP 200 status');
     });
 
-    test.only('can index a newly added file', async function (assert) {
+    test('can index a newly added file', async function (assert) {
       let realmEventTimestampStart = Date.now();
 
       let postResponse = await request
