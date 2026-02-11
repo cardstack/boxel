@@ -192,6 +192,18 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         );
       });
 
+      test('HTML response does not include boxel-ready class on body', async function (assert) {
+        let response = await context.request2
+          .get('/test/isolated-test')
+          .set('Accept', 'text/html');
+
+        assert.strictEqual(response.status, 200, 'serves HTML response');
+        assert.notOk(
+          response.text.includes('boxel-ready'),
+          'boxel-ready class is not present in server-rendered HTML',
+        );
+      });
+
       test('serves isolated HTML for /subdirectory/index.json at /subdirectory/', async function (assert) {
         let response = await context.request2
           .get('/test/subdirectory/')
