@@ -2020,7 +2020,7 @@ module(basename(__filename), function () {
         setupPermissionedRealmAtURL(hooks, realmURL, {
           permissions: {
             '*': ['read', 'write'],
-            '@node-test_realm:localhost': ['read', 'realm-owner'] 'realm-owner'],
+            '@node-test_realm:localhost': ['read', 'realm-owner'],
           },
           onRealmSetup,
         });
@@ -3423,7 +3423,7 @@ module(basename(__filename), function () {
         setupPermissionedRealmAtURL(hooks, realmURL, {
           permissions: {
             '*': ['read', 'write'],
-            '@node-test_realm:localhost': ['read', 'realm-owner'] 'realm-owner'],
+            '@node-test_realm:localhost': ['read', 'realm-owner'],
           },
           cardSizeLimitBytes: 512,
           onRealmSetup,
