@@ -240,6 +240,10 @@ class FileDefAttributesExtractor {
           { contentHash: this.#contentHash },
         );
       } catch (err) {
+        console.warn(
+          `[file-extract] ${(klass as any).displayName ?? klass.name ?? 'unknown'}.extractAttributes failed for ${this.#fileURL}:`,
+          err,
+        );
         recordError(err);
         return undefined;
       }
