@@ -26,7 +26,7 @@ module(basename(__filename), function () {
       permissions: {
         '*': ['read'],
         [matrixUserId]: ['read', 'write'],
-        '@node-test_realm:localhost': ['read'],
+        '@node-test_realm:localhost': ['read', 'realm-owner'],
       },
       onRealmSetup: ({ dbAdapter: adapter, request: req }) => {
         dbAdapter = adapter;

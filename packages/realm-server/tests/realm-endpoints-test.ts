@@ -113,7 +113,7 @@ module(basename(__filename), function () {
         '*': ['read', 'write'],
         user: ['read', 'write', 'realm-owner'],
         carol: ['read', 'write'],
-        '@node-test_realm:localhost': ['read'],
+        '@node-test_realm:localhost': ['read', 'realm-owner'],
       },
       realmURL,
       onRealmSetup,

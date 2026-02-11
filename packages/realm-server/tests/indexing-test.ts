@@ -2073,7 +2073,7 @@ module(basename(__filename), function () {
         },
         consumer: {
           '*': ['read', 'write'],
-          '@node-test_realm:localhost': ['read'],
+          '@node-test_realm:localhost': ['read', 'realm-owner'],
         },
       });
 

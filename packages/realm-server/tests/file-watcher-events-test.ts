@@ -59,7 +59,7 @@ module(basename(__filename), function () {
     setupPermissionedRealmAtURL(hooks, realmURL, {
       permissions: {
         '*': ['read'],
-        '@node-test_realm:localhost': ['read'],
+        '@node-test_realm:localhost': ['read', 'realm-owner'],
       },
       subscribeToRealmEvents: true,
       onRealmSetup,
