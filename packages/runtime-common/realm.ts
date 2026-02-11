@@ -1677,7 +1677,11 @@ export class Realm {
     if (!hasExecutableExtension(fileRef.path)) {
       return {
         kind: 'non-module',
-        response: await this.serveLocalFile(request, fileRef, requestContext),
+        response: await this.serveLocalFile(request, fileRef, requestContext, {
+          defaultHeaders: {
+            'content-type': inferContentType(fileRef.path),
+          },
+        }),
       };
     }
 

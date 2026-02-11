@@ -58,6 +58,34 @@ const FILEDEF_CODE_REF_BY_EXTENSION: Record<string, ResolvedCodeRef> = {
     module: `${baseRealm.url}markdown-file-def`,
     name: 'MarkdownDef',
   },
+  '.png': {
+    module: `${baseRealm.url}png-image-def`,
+    name: 'PngDef',
+  },
+  '.jpg': {
+    module: `${baseRealm.url}jpg-image-def`,
+    name: 'JpgDef',
+  },
+  '.jpeg': {
+    module: `${baseRealm.url}jpg-image-def`,
+    name: 'JpgDef',
+  },
+  '.svg': {
+    module: `${baseRealm.url}svg-image-def`,
+    name: 'SvgDef',
+  },
+  '.gif': {
+    module: `${baseRealm.url}gif-image-def`,
+    name: 'GifDef',
+  },
+  '.webp': {
+    module: `${baseRealm.url}webp-image-def`,
+    name: 'WebpDef',
+  },
+  '.avif': {
+    module: `${baseRealm.url}avif-image-def`,
+    name: 'AvifDef',
+  },
   '.mismatch': { module: './filedef-mismatch', name: 'FileDef' },
 };
 const BASE_FILE_DEF_CODE_REF: ResolvedCodeRef = {
