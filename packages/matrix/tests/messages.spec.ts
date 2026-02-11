@@ -359,7 +359,7 @@ test.describe('Room messages', () => {
     await expect(
       page.locator(`[data-test-attached-card="${appURL}/hassan"]`),
     ).toHaveCount(1);
-    await expect(page.locator(`[data-test-attached-file]`)).toHaveCount(1);
+    await expect(page.locator(`[data-test-attached-file]`)).toHaveCount(2);
     await expect(
       page.locator(`[data-test-attached-file="${appURL}/person.gts"]`),
     ).toHaveCount(1);
