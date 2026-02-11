@@ -1,4 +1,5 @@
 import Route from '@ember/routing/route';
+import { schedule } from '@ember/runloop';
 import { service } from '@ember/service';
 
 import ENV from '@cardstack/host/config/environment';
@@ -7,6 +8,13 @@ import type MonacoService from '../services/monaco-service';
 
 export default class Application extends Route {
   @service declare monacoService: MonacoService;
+
+  activate(): void {
+    super.activate();
+    schedule('afterRender', () => {
+      document.body.classList.add('boxel-ready');
+    });
+  }
 
   async beforeModel(transition: any): Promise<void> {
     // Override the matrix URL for testing
