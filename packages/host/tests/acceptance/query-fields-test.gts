@@ -379,6 +379,7 @@ module(
             eventName: 'index',
             indexType: 'incremental',
             invalidations: [`${testRealmURL}Person/new-match`],
+            realmURL: testRealmURL,
           },
           { type: APP_BOXEL_REALM_EVENT_TYPE },
         );
@@ -494,6 +495,7 @@ module(
             eventName: 'index',
             indexType: 'incremental',
             invalidations: [`${testRealmURL}Person/new-match`],
+            realmURL: testRealmURL,
           },
           { type: APP_BOXEL_REALM_EVENT_TYPE },
         );
