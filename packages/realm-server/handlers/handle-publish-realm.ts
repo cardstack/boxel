@@ -287,53 +287,18 @@ export default function handlePublishRealm({
 
       let userId;
       let realmUsername;
-      let publishedRealmData: PublishedRealmTable | undefined;
+      let publishedRealmId: string;
+
       if (existingPublishedRealm) {
         let results = (await query(dbAdapter, [
-          `SELECT * FROM published_realms WHERE published_realm_url =`,
+          `SELECT id, owner_username FROM published_realms WHERE published_realm_url =`,
           param(publishedRealmURL),
-        ])) as Pick<
-          PublishedRealmTable,
-          | 'id'
-          | 'owner_username'
-          | 'source_realm_url'
-          | 'published_realm_url'
-          | 'last_published_at'
-        >[];
-        publishedRealmData = results[0];
-        realmUsername = `realm/${PUBLISHED_DIRECTORY_NAME}_${publishedRealmData.id}`;
-
-        let lastPublishedAt = Date.now().toString();
-        await query(dbAdapter, [
-          `UPDATE published_realms SET last_published_at =`,
-          param(lastPublishedAt),
-          `WHERE published_realm_url =`,
-          param(publishedRealmURL),
-        ]);
-        publishedRealmData.last_published_at = lastPublishedAt;
-      } else {
-        let publishedRealmId = uuidv4();
+        ])) as Pick<PublishedRealmTable, 'id' | 'owner_username'>[];
+        publishedRealmId = results[0].id;
         realmUsername = `realm/${PUBLISHED_DIRECTORY_NAME}_${publishedRealmId}`;
-        let { valueExpressions, nameExpressions } = asExpressions({
-          id: publishedRealmId,
-          owner_username: realmUsername,
-          source_realm_url: sourceRealmURL,
-          published_realm_url: publishedRealmURL,
-          last_published_at: Date.now().toString(),
-        });
-
-        let results = (await query(
-          dbAdapter,
-          insert('published_realms', nameExpressions, valueExpressions),
-        )) as Pick<
-          PublishedRealmTable,
-          | 'id'
-          | 'owner_username'
-          | 'source_realm_url'
-          | 'published_realm_url'
-          | 'last_published_at'
-        >[];
-        publishedRealmData = results[0];
+      } else {
+        publishedRealmId = uuidv4();
+        realmUsername = `realm/${PUBLISHED_DIRECTORY_NAME}_${publishedRealmId}`;
 
         let { userId: newUserId } = await registerUser({
           matrixURL: matrixClient.matrixURL,
@@ -350,9 +315,6 @@ export default function handlePublishRealm({
           '*': ['read'],
         });
       }
-      log.debug(
-        `created realm bot user '${userId}' for new realm ${publishedRealmURL}`,
-      );
 
       let pathNameParts = new URL(sourceRealmURL).pathname
         .split('/')
@@ -362,7 +324,7 @@ export default function handlePublishRealm({
       }
       let sourceRealmPath = resolve(join(realmsRootPath, ...pathNameParts));
       let publishedDir = join(realmsRootPath, PUBLISHED_DIRECTORY_NAME);
-      let publishedRealmPath = join(publishedDir, publishedRealmData.id);
+      let publishedRealmPath = join(publishedDir, publishedRealmId);
       copySync(sourceRealmPath, publishedRealmPath);
       ensureDirSync(publishedRealmPath);
 
@@ -402,16 +364,38 @@ export default function handlePublishRealm({
       // published realm URL (for example in the og:url meta tag).
       await realm.fullIndex();
 
+      let lastPublishedAt = Date.now().toString();
+      if (existingPublishedRealm) {
+        await query(dbAdapter, [
+          `UPDATE published_realms SET last_published_at =`,
+          param(lastPublishedAt),
+          `WHERE published_realm_url =`,
+          param(publishedRealmURL),
+        ]);
+      } else {
+        let { valueExpressions, nameExpressions } = asExpressions({
+          id: publishedRealmId,
+          owner_username: realmUsername,
+          source_realm_url: sourceRealmURL,
+          published_realm_url: publishedRealmURL,
+          last_published_at: lastPublishedAt,
+        });
+        await query(
+          dbAdapter,
+          insert('published_realms', nameExpressions, valueExpressions),
+        );
+      }
+
       let response = createResponse({
         body: JSON.stringify(
           {
             data: {
               type: 'published_realm',
-              id: publishedRealmData.id,
+              id: publishedRealmId,
               attributes: {
-                sourceRealmURL: publishedRealmData.source_realm_url,
-                publishedRealmURL: publishedRealmData.published_realm_url,
-                lastPublishedAt: publishedRealmData.last_published_at,
+                sourceRealmURL,
+                publishedRealmURL,
+                lastPublishedAt: lastPublishedAt,
               },
             },
           },
