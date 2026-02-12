@@ -201,9 +201,7 @@ module('Acceptance | file chooser tests', function (hooks) {
       ],
     });
 
-    await click(
-      `[data-test-operator-mode-stack="0"] [data-test-edit-button]`,
-    );
+    await click(`[data-test-operator-mode-stack="0"] [data-test-edit-button]`);
 
     assert
       .dom('[data-test-links-to-editor="attachment"] [data-test-add-new]')
@@ -263,9 +261,7 @@ module('Acceptance | file chooser tests', function (hooks) {
       ],
     });
 
-    await click(
-      `[data-test-operator-mode-stack="0"] [data-test-edit-button]`,
-    );
+    await click(`[data-test-operator-mode-stack="0"] [data-test-edit-button]`);
 
     assert
       .dom('[data-test-links-to-editor="attachment"] [data-test-add-new]')
