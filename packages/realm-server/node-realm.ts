@@ -49,6 +49,10 @@ export class NodeAdapter implements RealmAdapter {
     private enableFileWatcher?: boolean,
   ) {}
 
+  get dir(): string {
+    return this.realmDir;
+  }
+
   get fileWatcherEnabled(): boolean {
     return this.enableFileWatcher ?? false;
   }
