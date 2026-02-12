@@ -96,8 +96,6 @@ const BASE_FILE_DEF_CODE_REF: ResolvedCodeRef = {
   module: `${baseRealm.url}file-api`,
   name: 'FileDef',
 };
-const PREFERRED_EXECUTABLE_EXTENSIONS = ['.gts', '.ts', '.gjs', '.js'];
-
 function resolveFileDefCodeRef(fileURL: URL): ResolvedCodeRef {
   let name = fileURL.pathname.split('/').pop() ?? '';
   let dot = name.lastIndexOf('.');
@@ -148,7 +146,6 @@ export class IndexRunner {
     cacheScope: CacheScope;
     authUserId: string;
   };
-  #definitionLookupRealmRegistered = false;
   #realmOwnerUserId: string;
   #definitionLookup: DefinitionLookup;
   #jobInfo: JobInfo;
@@ -399,52 +396,6 @@ export class IndexRunner {
     return this.#moduleCacheContext;
   }
 
-  private async registerDefinitionLookupRealm(): Promise<void> {
-    if (this.#definitionLookupRealmRegistered) {
-      return;
-    }
-    let realmInfo = await this.ensureRealmInfo();
-    this.#definitionLookup.registerRealm({
-      url: this.realmURL.href,
-      getRealmOwnerUserId: async () => this.#realmOwnerUserId,
-      visibility: async () => realmInfo.visibility,
-    });
-    this.#definitionLookupRealmRegistered = true;
-  }
-
-  private async resolveExecutableModuleURL(
-    moduleURL: string,
-  ): Promise<string | undefined> {
-    if (!moduleURL.startsWith(this.realmURL.href)) {
-      return undefined;
-    }
-    let candidates = hasExecutableExtension(moduleURL)
-      ? [moduleURL]
-      : PREFERRED_EXECUTABLE_EXTENSIONS.map(
-          (extension) => `${moduleURL}${extension}`,
-        );
-    for (let candidate of candidates) {
-      let url = new URL(candidate);
-      try {
-        if (await this.#reader.readFile(url)) {
-          return url.href;
-        }
-      } catch (_err) {
-        continue;
-      }
-      let localPath: string;
-      try {
-        localPath = this.#realmPaths.local(url);
-      } catch (_err) {
-        continue;
-      }
-      if (await this.#reader.readFile(new URL(encodeURI(localPath), url))) {
-        return url.href;
-      }
-    }
-    return undefined;
-  }
-
   #scheduleClearCacheForNextRender() {
     this.#shouldClearCacheForNextRender = true;
   }
@@ -480,25 +431,6 @@ export class IndexRunner {
       authUserId,
       resolvedRealmURL,
     });
-    let missing = moduleIds.filter((moduleId) => !(moduleId in entries));
-    if (missing.length === 0) {
-      return entries;
-    }
-    await this.registerDefinitionLookupRealm();
-    for (let moduleId of missing) {
-      if (!moduleId.startsWith(this.realmURL.href)) {
-        continue;
-      }
-      let executableModuleURL = await this.resolveExecutableModuleURL(moduleId);
-      if (!executableModuleURL) {
-        continue;
-      }
-      let entry =
-        await this.#definitionLookup.getModuleCacheEntry(executableModuleURL);
-      if (entry) {
-        entries[moduleId] = entry;
-      }
-    }
     return entries;
   }
 
