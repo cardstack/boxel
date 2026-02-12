@@ -795,9 +795,7 @@ module(basename(__filename), function () {
           modulesBefore.length > 0,
           'modules table has entries for published realm before republish',
         );
-        let errorEntry = modulesBefore.find(
-          (m: any) => m.error_doc != null,
-        );
+        let errorEntry = modulesBefore.find((m: any) => m.error_doc != null);
         assert.ok(
           errorEntry,
           'modules table has an error_doc entry before republish',
