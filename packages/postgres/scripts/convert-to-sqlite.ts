@@ -21,6 +21,14 @@ const sqliteSchemaDir = resolve(
   join(__dirname, '..', '..', 'host', 'config', 'schema'),
 );
 const INDENT = '  ';
+const SQLITE_PK_COLUMN_MAPPING: Record<string, Record<string, string>> = {
+  modules: {
+    // Keep in sync with migration `1770889690032_index-row-size-max-error`,
+    // which defines `modules.url_hash` as a generated column derived from `url`.
+    // SQLite cannot include generated columns in PRIMARY KEY constraints.
+    url_hash: 'url',
+  },
+};
 
 let pgDumpFile = args[2];
 if (!pgDumpFile) {
@@ -258,11 +266,9 @@ function primaryKeyColumnForSQLite(
   tableName: string,
   columnName: string,
 ): string {
-  // SQLite cannot use generated columns in PRIMARY KEY constraints. Our
-  // converted schema maps `modules.url_hash` to a generated expression over
-  // `url`, so use `url` directly as the key column in SQLite.
-  if (tableName === 'modules' && columnName === 'url_hash') {
-    return 'url';
+  let tableMapping = SQLITE_PK_COLUMN_MAPPING[tableName];
+  if (tableMapping?.[columnName]) {
+    return tableMapping[columnName];
   }
   return columnName;
 }

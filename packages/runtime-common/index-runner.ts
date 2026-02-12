@@ -24,6 +24,8 @@ import {
   type Batch,
   type LooseCardResource,
   type InstanceEntry,
+  type InstanceErrorIndexEntry,
+  type FileErrorIndexEntry,
   type ErrorEntry,
   type RealmInfo,
   type FromScratchResult,
@@ -852,7 +854,7 @@ export class IndexRunner {
       }
 
       if (!renderResult || ('error' in renderResult && renderResult.error)) {
-        let renderError = renderResult?.error;
+        let renderError: InstanceErrorIndexEntry;
 
         /**
          * Normalize any combination of an optional ErrorEntry and thrown value
@@ -863,7 +865,7 @@ export class IndexRunner {
         let normalizeToErrorEntry = (
           entry: ErrorEntry | undefined,
           err: unknown,
-        ): ErrorEntry => {
+        ): InstanceErrorIndexEntry => {
           if (entry?.error) {
             let normalizedError = { ...entry.error };
             normalizedError.additionalErrors =
@@ -871,6 +873,9 @@ export class IndexRunner {
             normalizedError.status = normalizedError.status ?? 500;
             return {
               ...entry,
+              // TODO: Remove module rows from the index in a follow-up PR.
+              // Coerce any legacy error entry to instance-error for indexing.
+              type: 'instance-error',
               error: normalizedError,
             };
           }
@@ -890,7 +895,7 @@ export class IndexRunner {
           return { type: 'instance-error', error: serializableError(fallback) };
         };
 
-        renderError = normalizeToErrorEntry(renderError, uncaughtError);
+        renderError = normalizeToErrorEntry(renderResult?.error, uncaughtError);
 
         if (
           renderError.error.id &&
@@ -925,10 +930,17 @@ export class IndexRunner {
           };
         }
 
-        renderError = await this.appendDependencyErrors(
+        let errorWithDependencies = await this.appendDependencyErrors(
           renderError,
           instanceURL,
         );
+        if (errorWithDependencies.type !== 'instance-error') {
+          // TODO: Remove module rows from the index in a follow-up PR.
+          throw new Error(
+            'module index entries are no longer supported in the search index',
+          );
+        }
+        renderError = errorWithDependencies as InstanceErrorIndexEntry;
 
         this.#log.warn(
           `${jobIdentity(this.#jobInfo)} encountered error indexing card instance ${path}: ${renderError.error.message}`,
@@ -1023,7 +1035,7 @@ export class IndexRunner {
     let normalizeToErrorEntry = (
       entry: ErrorEntry | undefined,
       err: unknown,
-    ): ErrorEntry => {
+    ): FileErrorIndexEntry => {
       if (entry?.error) {
         let normalizedError = { ...entry.error };
         normalizedError.additionalErrors =
@@ -1031,6 +1043,9 @@ export class IndexRunner {
         normalizedError.status = normalizedError.status ?? 500;
         return {
           ...entry,
+          // TODO: Remove module rows from the index in a follow-up PR.
+          // Coerce any legacy error entry to file-error for indexing.
+          type: 'file-error',
           error: normalizedError,
         };
       }
@@ -1150,7 +1165,7 @@ export class IndexRunner {
 
   private async updateEntry(
     instanceURL: URL,
-    entry: InstanceEntry | ErrorEntry,
+    entry: InstanceEntry | InstanceErrorIndexEntry,
   ) {
     await this.batch.updateEntry(assertURLEndsWithJSON(instanceURL), entry);
     if (entry.type === 'instance') {

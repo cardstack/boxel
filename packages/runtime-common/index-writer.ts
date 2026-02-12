@@ -91,7 +91,16 @@ export interface ErrorEntry {
   cardType?: string;
 }
 
-function isErrorEntry(entry: IndexEntry): entry is ErrorEntry {
+export type InstanceErrorIndexEntry = ErrorEntry & { type: 'instance-error' };
+export type FileErrorIndexEntry = ErrorEntry & { type: 'file-error' };
+// TODO: Remove module rows from the index in a follow-up PR, then remove
+// `module-error` from `ErrorEntry` and collapse these narrowed entry types.
+export type SearchIndexErrorEntry =
+  | InstanceErrorIndexEntry
+  | FileErrorIndexEntry;
+export type SearchIndexEntry = InstanceEntry | SearchIndexErrorEntry | FileEntry;
+
+function isErrorEntry(entry: { type: string }): entry is ErrorEntry {
   return entry.type.endsWith('-error');
 }
 
@@ -270,7 +279,7 @@ export class Batch {
     ]);
   }
 
-  async updateEntry(url: URL, entry: IndexEntry): Promise<void> {
+  async updateEntry(url: URL, entry: SearchIndexEntry): Promise<void> {
     if (!new RealmPaths(this.realmURL).inRealm(url)) {
       // TODO this is a workaround for CS-6886. after we have solved that issue we can
       // drop this band-aid
@@ -348,13 +357,10 @@ export class Batch {
           has_error: true,
         };
         break;
-      case 'module-error':
-        // TODO: Remove module rows from the index in a follow-up PR.
-        throw new Error(
-          'module index entries are no longer supported in the search index',
-        );
       default:
-        throw new Error(`Unsupported index entry type`);
+        throw new Error(
+          `Unsupported index entry type: ${(entry as { type: string }).type}`,
+        );
     }
     let preparedEntry = {
       url: href,
@@ -898,17 +904,12 @@ export class Batch {
 }
 
 function baseTypeFromError(
-  entry: ErrorEntry,
+  entry: SearchIndexErrorEntry,
 ): Extract<BoxelIndexTable['type'], 'instance' | 'file'> {
   switch (entry.type) {
     case 'instance-error':
       return 'instance';
     case 'file-error':
       return 'file';
-    case 'module-error':
-      // TODO: Remove module rows from the index in a follow-up PR.
-      throw new Error(
-        'module index entries are no longer supported in the search index',
-      );
   }
 }

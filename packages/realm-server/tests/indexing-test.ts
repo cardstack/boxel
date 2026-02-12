@@ -1479,7 +1479,7 @@ module(basename(__filename), function () {
             ? deepModuleEntry.error.error.additionalErrors
             : [];
           assert.ok(
-            additionalErrors.some((error) =>
+            additionalErrors.some((error: { message?: string }) =>
               String(error.message ?? '').includes('middle-field'),
             ),
             'deep-card module error includes middle-field error details',
@@ -1554,7 +1554,7 @@ module(basename(__filename), function () {
             ? deepModuleEntry.error.error.additionalErrors
             : [];
           assert.ok(
-            additionalErrors.some((error) =>
+            additionalErrors.some((error: { message?: string }) =>
               String(error.message ?? '').includes('leaf-field'),
             ),
             'deep-card module error includes leaf-field error details',
@@ -1578,7 +1578,7 @@ module(basename(__filename), function () {
             ? middleModuleEntry.error.error.additionalErrors
             : [];
           assert.ok(
-            additionalErrors.some((error) =>
+            additionalErrors.some((error: { message?: string }) =>
               String(error.message ?? '').includes('leaf-field'),
             ),
             'middle-field module error includes leaf-field error details',
@@ -1707,7 +1707,7 @@ module(basename(__filename), function () {
             String(moduleAEntry.error.error.message ?? '').includes(
               'module-b exploded',
             ) ||
-            additionalErrors.some((error) =>
+            additionalErrors.some((error: { message?: string }) =>
               String(error.message ?? '').includes('module-b exploded'),
             );
           assert.ok(
