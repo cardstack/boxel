@@ -767,7 +767,6 @@ module('Integration | operator-mode | card catalog', function (hooks) {
     );
     await waitFor('[data-test-search-sheet-show-only]');
     await click('[data-test-search-sheet-show-only]');
-    await settled();
     const collapsedBlocks = document.querySelectorAll(
       '.search-result-block.collapsed',
     );
@@ -801,7 +800,6 @@ module('Integration | operator-mode | card catalog', function (hooks) {
       ) ?? document.querySelector('[data-test-search-sheet] .view-option');
     if (stripOption) {
       await click(stripOption as HTMLElement);
-      await settled();
       assert.dom('[data-test-search-sheet-search-result]').exists({ count: 6 });
     } else {
       assert.ok(true, 'view options not found; skip view toggle');

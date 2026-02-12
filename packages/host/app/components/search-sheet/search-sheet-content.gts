@@ -412,7 +412,7 @@ export default class SearchSheetContent extends Component<Signature> {
 
   @action
   isSectionCollapsed(sectionId: string): boolean {
-    return this.focusedSection && this.focusedSection !== sectionId;
+    return !!this.focusedSection && this.focusedSection !== sectionId;
   }
 
   <template>
