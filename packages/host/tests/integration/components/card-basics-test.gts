@@ -385,7 +385,7 @@ module('Integration | card-basics', function (hooks) {
       assert.true(instanceOf(new ExteriorField(), FieldDef));
     });
 
-    test('linksTo FileDef renders without editor controls in edit format', async function (assert) {
+    test('linksTo FileDef renders editor controls in edit format', async function (assert) {
       class ImageDef extends FileDef {
         static fitted = class Fitted extends Component<typeof this> {
           <template>
@@ -420,13 +420,13 @@ module('Integration | card-basics', function (hooks) {
 
       assert
         .dom('[data-test-links-to-editor="hero"]')
-        .doesNotExist('FileDef links should not show linksTo editor UI');
+        .exists('FileDef links should show linksTo editor UI');
       assert
         .dom('[data-test-image-def]')
         .hasText('hero.png', 'FileDef uses delegated fitted view');
     });
 
-    test('linksToMany FileDef renders without editor controls in edit format', async function (assert) {
+    test('linksToMany FileDef renders editor controls in edit format', async function (assert) {
       class ImageDef extends FileDef {
         static fitted = class Fitted extends Component<typeof this> {
           <template>
@@ -468,10 +468,7 @@ module('Integration | card-basics', function (hooks) {
 
       assert
         .dom('[data-test-links-to-many="attachments"]')
-        .doesNotExist('FileDef links should not show linksToMany editor UI');
-      assert
-        .dom('[data-test-plural-view-field="attachments"]')
-        .exists('FileDef links render via the plural view');
+        .exists('FileDef links should show linksToMany editor UI');
       assert
         .dom('[data-test-image-def]')
         .exists(
@@ -715,7 +712,7 @@ module('Integration | card-basics', function (hooks) {
           mockMatrixUtils,
           contents: {
             'test-cards.gts': { Gallery },
-            'hero.png': 'mock image bytes',
+            'hero.txt': 'some file content',
             'Gallery/hero.json': {
               data: {
                 type: 'card',
@@ -725,10 +722,10 @@ module('Integration | card-basics', function (hooks) {
                 relationships: {
                   hero: {
                     links: {
-                      self: `${testRealmURL}hero.png`,
+                      self: `${testRealmURL}hero.txt`,
                     },
                     data: {
-                      id: `${testRealmURL}hero.png`,
+                      id: `${testRealmURL}hero.txt`,
                       type: 'file-meta',
                     },
                   },
@@ -752,13 +749,13 @@ module('Integration | card-basics', function (hooks) {
         await waitUntil(() =>
           document
             .querySelector('[data-test-gallery-fitted]')
-            ?.textContent?.includes('hero.png'),
+            ?.textContent?.includes('hero.txt'),
         );
 
         assert
           .dom('[data-test-gallery-fitted]')
           .includesText(
-            'hero.png',
+            'hero.txt',
             'FileDef renders delegated view from file meta',
           );
       });
@@ -781,8 +778,8 @@ module('Integration | card-basics', function (hooks) {
           mockMatrixUtils,
           contents: {
             'test-cards.gts': { Gallery },
-            'first.png': 'first mock image',
-            'second.png': 'second mock image',
+            'first.txt': 'first file content',
+            'second.txt': 'second file content',
             'Gallery/attachments.json': {
               data: {
                 type: 'card',
@@ -792,19 +789,19 @@ module('Integration | card-basics', function (hooks) {
                 relationships: {
                   'attachments.0': {
                     links: {
-                      self: `${testRealmURL}first.png`,
+                      self: `${testRealmURL}first.txt`,
                     },
                     data: {
-                      id: `${testRealmURL}first.png`,
+                      id: `${testRealmURL}first.txt`,
                       type: 'file-meta',
                     },
                   },
                   'attachments.1': {
                     links: {
-                      self: `${testRealmURL}second.png`,
+                      self: `${testRealmURL}second.txt`,
                     },
                     data: {
-                      id: `${testRealmURL}second.png`,
+                      id: `${testRealmURL}second.txt`,
                       type: 'file-meta',
                     },
                   },
@@ -830,7 +827,7 @@ module('Integration | card-basics', function (hooks) {
             document.querySelector(
               '[data-test-plural-view-field="attachments"]',
             )?.textContent ?? '';
-          return text.includes('first.png') && text.includes('second.png');
+          return text.includes('first.txt') && text.includes('second.txt');
         });
 
         assert
@@ -839,13 +836,13 @@ module('Integration | card-basics', function (hooks) {
         assert
           .dom('[data-test-plural-view-field="attachments"]')
           .includesText(
-            'first.png',
+            'first.txt',
             'FileDef renders delegated view from file meta',
           );
         assert
           .dom('[data-test-plural-view-field="attachments"]')
           .includesText(
-            'second.png',
+            'second.txt',
             'FileDef renders delegated view from file meta',
           );
       });

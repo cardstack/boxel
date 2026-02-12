@@ -213,7 +213,7 @@ function registerCatalogRoutes() {
         ENV.resolvedSkillsRealmURL,
       ]
         .filter(Boolean)
-        .map((url) => ensureTrailingSlash(url));
+        .map((url) => ensureTrailingSlash(url as string));
       let data = catalogURLs.map((realmURL) => ({
         id: realmURL,
         type: 'catalog-realm',

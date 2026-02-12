@@ -238,3 +238,10 @@ export function injectShoeboxScript(
   }
   return updated;
 }
+
+export function ensureSingleTitle(headHTML: string): string {
+  if (/<title[\s>]/.test(headHTML)) {
+    return headHTML;
+  }
+  return `<title>Boxel</title>\n${headHTML}`;
+}

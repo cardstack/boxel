@@ -1677,7 +1677,11 @@ export class Realm {
     if (!hasExecutableExtension(fileRef.path)) {
       return {
         kind: 'non-module',
-        response: await this.serveLocalFile(request, fileRef, requestContext),
+        response: await this.serveLocalFile(request, fileRef, requestContext, {
+          defaultHeaders: {
+            'content-type': inferContentType(fileRef.path),
+          },
+        }),
       };
     }
 
@@ -3010,7 +3014,7 @@ export class Realm {
   public async search(query: Query): Promise<LinkableCollectionDocument> {
     assertQuery(query);
     return await this.#realmIndexQueryEngine.searchCards(query, {
-      loadLinks: true,
+      ...(query.asData ? {} : { loadLinks: true }),
     });
   }
 

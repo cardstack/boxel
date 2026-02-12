@@ -61,7 +61,7 @@ import {
 } from '../helpers/recent-files-cards';
 import { setupApplicationTest } from '../helpers/setup';
 
-const catalogRealmURL = ensureTrailingSlash(ENV.resolvedCatalogRealmURL);
+const skillsRealmURL = ensureTrailingSlash(ENV.resolvedSkillsRealmURL);
 
 let matrixRoomId: string;
 let realm2URL = 'http://test-realm/user/test2/';
@@ -809,10 +809,10 @@ module('Acceptance | operator mode tests', function (hooks) {
 
     await click('[data-test-workspace-chooser-toggle]');
 
-    await click('[data-test-workspace="Cardstack Catalog"]');
+    await click('[data-test-workspace="Boxel Skills"]');
     await click('[data-test-submode-switcher] button');
     await click('[data-test-boxel-menu-item-text="Code"]');
-    assert.dom(`[data-test-realm-name]`).includesText('In Cardstack Catalog');
+    assert.dom(`[data-test-realm-name]`).includesText('In Boxel Skills');
     assert.dom(`[data-test-file="index.json"]`).hasClass('selected');
     assert.dom('[data-test-recent-file]').exists({ count: 4 });
     assert
@@ -839,7 +839,7 @@ module('Acceptance | operator mode tests', function (hooks) {
       .dom(`[data-test-recent-file="${testRealmURL}Pet/vangogh.json"]`)
       .exists();
     assert
-      .dom(`[data-test-recent-file="${catalogRealmURL}index.json"]`)
+      .dom(`[data-test-recent-file="${skillsRealmURL}index.json"]`)
       .exists();
     assert
       .dom(`[data-test-recent-file="${testRealmURL}Pet/mango.json"]`)

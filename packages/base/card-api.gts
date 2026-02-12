@@ -1305,9 +1305,8 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
       format: Format | undefined,
       defaultFormat: Format,
       isComputed: boolean,
-      isFileDef: boolean,
     ) {
-      return (format ?? defaultFormat) === 'edit' && !isComputed && !isFileDef;
+      return (format ?? defaultFormat) === 'edit' && !isComputed;
     }
     function getChildFormat(
       format: Format | undefined,
@@ -1342,7 +1341,7 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
           <DefaultFormatsConsumer as |defaultFormats|>
             {{#if
               (shouldRenderEditor
-                @format defaultFormats.cardDef isComputed isFileDefField
+                @format defaultFormats.cardDef isComputed
               )
             }}
               <LinksToEditor

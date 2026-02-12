@@ -138,10 +138,16 @@ export class RealmIndexQueryEngine {
         query,
         opts,
       );
+      let resources = files.map((fileEntry) =>
+        fileResourceFromIndex(new URL(fileEntry.canonicalURL), fileEntry),
+      );
+      if (query.fields?.['file-meta'] !== undefined) {
+        resources = resources.map((r) =>
+          applySparseFieldset(r, query.fields!['file-meta']),
+        );
+      }
       doc = {
-        data: files.map((fileEntry) =>
-          fileResourceFromIndex(new URL(fileEntry.canonicalURL), fileEntry),
-        ),
+        data: resources,
         meta,
       };
     } else {
@@ -150,11 +156,17 @@ export class RealmIndexQueryEngine {
         query,
         opts,
       );
+      let cardResources = cards.map((resource) => ({
+        ...resource,
+        ...{ links: { self: resource.id } },
+      }));
+      if (query.fields?.['card'] !== undefined) {
+        cardResources = cardResources.map((r) =>
+          applySparseFieldset(r, query.fields!['card']),
+        );
+      }
       doc = {
-        data: cards.map((resource) => ({
-          ...resource,
-          ...{ links: { self: resource.id } },
-        })),
+        data: cardResources,
         meta,
       };
     }
@@ -920,6 +932,24 @@ function relativizeResource(
     let absoluteModuleURL = new URL(moduleURL, resource.id ?? primaryURL);
     setModuleURL(maybeRelativeURL(absoluteModuleURL, primaryURL, realmURL));
   });
+}
+
+function applySparseFieldset<T extends CardResource<Saved> | FileMetaResource>(
+  resource: T,
+  fields: string[],
+): T {
+  // Per JSON:API spec, id, type, links, meta are always preserved.
+  // Only filter attributes.
+  if (fields.length === 0) {
+    return { ...resource, attributes: {} };
+  }
+  let filtered: Record<string, any> = {};
+  for (let field of fields) {
+    if (resource.attributes?.[field] !== undefined) {
+      filtered[field] = resource.attributes[field];
+    }
+  }
+  return { ...resource, attributes: filtered };
 }
 
 function fileResourceFromIndex(

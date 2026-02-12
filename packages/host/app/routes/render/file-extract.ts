@@ -110,13 +110,12 @@ export default class RenderFileExtractRoute extends Route<Model> {
     }
 
     let fileDefCodeRef = parsedOptions.fileDefCodeRef ?? BASE_FILE_DEF_CODE_REF;
-    let fileURL = this.#decodeURL(id);
     let contentHash: string | undefined = parsedOptions.fileContentHash;
     let extractor = new FileDefAttributesExtractor({
       loaderService: this.loaderService,
       network: this.network,
       authGuard: this.#authGuard,
-      fileURL,
+      fileURL: id,
       fileDefCodeRef,
       baseFileDefCodeRef: BASE_FILE_DEF_CODE_REF,
       contentHash,
@@ -124,18 +123,10 @@ export default class RenderFileExtractRoute extends Route<Model> {
     });
     let result = await extractor.extract();
     return {
-      id: fileURL,
+      id,
       nonce,
       ...result,
     };
-  }
-
-  #decodeURL(id: string): string {
-    try {
-      return decodeURIComponent(id);
-    } catch {
-      return id;
-    }
   }
 
   #buildError(url: string, error: any): RenderError {
@@ -249,6 +240,10 @@ class FileDefAttributesExtractor {
           { contentHash: this.#contentHash },
         );
       } catch (err) {
+        console.warn(
+          `[file-extract] ${(klass as any).displayName ?? (klass as any).name ?? 'unknown'}.extractAttributes failed for ${this.#fileURL}:`,
+          err,
+        );
         recordError(err);
         return undefined;
       }

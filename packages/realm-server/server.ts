@@ -36,6 +36,7 @@ import {
   setContextResponse,
   fetchRequestFromContext,
   methodOverrideSupport,
+  proxyAsset,
 } from './middleware';
 import { registerUser } from './synapse';
 import convertAcceptHeaderQueryParam from './middleware/convert-accept-header-qp';
@@ -67,6 +68,7 @@ import {
   injectRenderModeScript,
   extractShoeboxFromIsolatedHTML,
   injectShoeboxScript,
+  ensureSingleTitle,
 } from './lib/index-html-injection';
 
 export class RealmServer {
@@ -235,6 +237,7 @@ export class RealmServer {
           prerenderer: this.prerenderer,
         }),
       )
+      .use(proxyAsset('/auth-service-worker.js', this.assetsURL))
       .use(this.serveIndex)
       .use(this.serveFromRealm);
 
@@ -437,7 +440,7 @@ export class RealmServer {
     let headFragments: string[] = [];
 
     if (headHTML != null) {
-      headFragments.push(headHTML);
+      headFragments.push(ensureSingleTitle(headHTML));
     }
 
     if (scopedCSS != null) {
@@ -572,14 +575,19 @@ export class RealmServer {
   }
 
   private async retrieveIndexHTML(): Promise<string> {
+    // Cache index.html in production only
     let isDev = this.assetsURL.hostname === 'localhost';
+
     if (!isDev && this.promiseForIndexHTML) {
       return this.promiseForIndexHTML;
     }
+
     let deferred = new Deferred<string>();
+
     if (!isDev) {
       this.promiseForIndexHTML = deferred.promise;
     }
+
     let indexHTML = (await this.getIndexHTML()).replace(
       /(<meta name="@cardstack\/host\/config\/environment" content=")([^"].*)(">)/,
       (_match, g1, g2, g3) => {
