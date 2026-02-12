@@ -470,7 +470,7 @@ export default class SearchSheetContent extends Component<Signature> {
       {{/if}}
 
       {{! Render all sections }}
-      {{#each this.sections as |section|}}
+      {{#each this.sections as |section i|}}
         <SearchResultSection
           @section={{section}}
           @viewOption={{this.activeViewId}}
@@ -481,6 +481,7 @@ export default class SearchSheetContent extends Component<Signature> {
           @onFocusSection={{this.onFocusSection}}
           @getDisplayedCount={{this.getDisplayedCount}}
           @onShowMore={{this.onShowMore}}
+          data-test-search-result-section={{i}}
         />
       {{/each}}
     </div>

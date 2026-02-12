@@ -743,18 +743,22 @@ module('Integration | operator-mode | card catalog', function (hooks) {
     await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
     await click(`[data-test-open-search-field]`);
     await fillIn(`[data-test-search-field]`, 'ma');
+    await waitFor('[data-test-search-result-section]');
 
     assert.dom('[data-test-search-result-header]').exists();
-    const stripOption =
-      document.querySelector(
-        '[data-test-search-sheet] .view-option:last-of-type',
-      ) ?? document.querySelector('[data-test-search-sheet] .view-option');
-    if (stripOption) {
-      await click(stripOption as HTMLElement);
-      assert.dom('[data-test-search-sheet-search-result]').exists({ count: 6 });
-    } else {
-      assert.ok(true, 'view options not found; skip view toggle');
-    }
+    assert
+      .dom(
+        '[data-test-search-result-section="0"] [data-test-search-cards-result]',
+      )
+      .hasClass('grid-view');
+    await click(
+      '[data-test-search-result-header] [data-test-boxel-radio-option-id="strip"]',
+    );
+    assert
+      .dom(
+        '[data-test-search-result-section="0"] [data-test-search-cards-result]',
+      )
+      .hasClass('strip-view');
   });
 
   test(`can select one or more cards on cards-grid and unselect`, async function (assert) {

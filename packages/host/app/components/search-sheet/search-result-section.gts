@@ -128,7 +128,10 @@ export default class SearchResultSection extends Component<Signature> {
   }
 
   <template>
-    <div class='search-result-block {{if @isCollapsed "collapsed"}}'>
+    <div
+      class='search-result-block {{if @isCollapsed "collapsed"}}'
+      ...attributes
+    >
       {{#if this.realmSection}}
         {{#unless @isCompact}}
           <SearchSheetSectionHeader
@@ -140,7 +143,7 @@ export default class SearchResultSection extends Component<Signature> {
             @onShowOnlyChange={{this.handleShowOnlyChange}}
           />
         {{/unless}}
-        <div class='cards {{this.viewClass}}'>
+        <div class='cards {{this.viewClass}}' data-test-search-cards-result>
           {{#each this.displayedRealmCards as |card i|}}
             {{#unless card.isError}}
               <div class='search-sheet-result__card-item'>
