@@ -1590,6 +1590,10 @@ module(basename(__filename), function () {
           cleanedHead.includes('name="twitter:card" content="summary"'),
           `failed to find twitter:card in head html:${cleanedHead}`,
         );
+        assert.notOk(
+          cleanedHead.includes('boxel-card-container'),
+          `headHTML should not contain card container wrapper:${cleanedHead}`,
+        );
       });
 
       test('serialized', function (assert) {

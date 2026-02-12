@@ -42,11 +42,29 @@ test.describe('Host mode', () => {
       'host-mode-isolated-card.gts',
       `
         import { CardDef, Component } from 'https://cardstack.com/base/card-api';
+        import { on } from '@ember/modifier';
+        import { tracked } from '@glimmer/tracking';
 
         export class HostModeIsolatedCard extends CardDef {
           static isolated = class Isolated extends Component<typeof this> {
+            @tracked showExtra = false;
+
+            addExtra = () => {
+              this.showExtra = true;
+            };
+
             <template>
               <p data-test-host-mode-isolated>Host mode isolated</p>
+              <button
+                type="button"
+                data-test-host-mode-button
+                {{on 'click' this.addExtra}}
+              >
+                Add extra
+              </button>
+              {{#if this.showExtra}}
+                <div data-test-host-mode-extra>Extra content</div>
+              {{/if}}
             </template>
           };
         }
@@ -229,7 +247,7 @@ test.describe('Host mode', () => {
     await logout(page);
   });
 
-  test('published card response includes isolated template markup', async ({
+  test('published card response includes isolated template markup that’s rehydrated when Ember takes over', async ({
     page,
   }) => {
     let html = await waitUntil(async () => {
@@ -249,6 +267,16 @@ test.describe('Host mode', () => {
 
     await page.goto(publishedCardURL);
     await expect(page.locator('[data-test-host-mode-isolated]')).toBeVisible();
+
+    let button = page.locator('[data-test-host-mode-button]');
+    await expect(button).toBeVisible();
+
+    // Click the button in the template until the Ember event handler responds and shows the extra element
+    await waitUntil(async () => {
+      await button.click();
+      return await page.locator('[data-test-host-mode-extra]').isVisible();
+    });
+    await expect(page.locator('[data-test-host-mode-extra]')).toBeVisible();
   });
 
   test('printed isolated card produces a stable page count', async ({

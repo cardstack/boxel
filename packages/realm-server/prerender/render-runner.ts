@@ -365,6 +365,282 @@ export class RenderRunner {
         }
       }
 
+      // Host-mode capture: do a full page navigation to the card's URL so
+      // Ember boots fresh with the serialize builder.  This ensures the
+      // serialized block markers match the exact structure that the
+      // client-side rehydration builder expects (a route transition would
+      // produce stale block depths from the transition lifecycle).
+      const HOST_MODE_CAPTURE_TIMEOUT_MS = 10_000;
+      if (isolatedHTML && !shortCircuit) {
+        let forceHostModeScript: { identifier: string } | undefined;
+        let requestHandler: ((req: import('puppeteer').HTTPRequest) => void) | undefined;
+        try {
+          let cardUrl = url.replace(/\.json$/i, '');
+          let parsedUrl = new URL(cardUrl);
+          let origin = parsedUrl.origin;
+          let cardPath = parsedUrl.pathname.replace(/^\//, '');
+
+          // Register a script that sets __boxelForceHostMode before Ember
+          // boots on the next navigation.  This must be evaluateOnNewDocument
+          // (not page.evaluate) because page.goto clears the JS context.
+          forceHostModeScript = await page.evaluateOnNewDocument(
+            (config: { origin: string }) => {
+              (globalThis as any).__boxelForceHostMode = config;
+
+              // Intercept fetch to capture card JSON responses for the shoebox.
+              // This runs before any app code, so we wrap the native fetch.
+              let shoeboxData: Record<string, unknown> = {};
+              (globalThis as any).__boxelShoeboxData = shoeboxData;
+              (globalThis as any).__boxelPendingFetches = 0;
+              let originalFetch = globalThis.fetch;
+              globalThis.fetch = async function (...args: Parameters<typeof fetch>) {
+                (globalThis as any).__boxelPendingFetches++;
+                let firstArg = args[0] as any;
+                try {
+                let response = await originalFetch.apply(globalThis, args);
+                try {
+                  let contentType = response.headers.get('content-type') || '';
+                  if (
+                    contentType.includes('card+source') ||
+                    contentType.includes('card+json')
+                  ) {
+                    let clone = response.clone();
+                    let json = await clone.json();
+                    if (json?.data?.id) {
+                      shoeboxData[json.data.id] = json;
+                    } else if (Array.isArray(json?.data)) {
+                      let requestUrl = typeof firstArg === 'string' ? firstArg : firstArg?.url || '';
+                      let method = (firstArg instanceof Request ? firstArg.method : ((args[1] as any)?.method || 'GET')).toUpperCase();
+                      let body = typeof (args[1] as any)?.body === 'string' ? (args[1] as any).body : '';
+                      let key = '__search:' + method + ':' + requestUrl + ':' + body;
+                      shoeboxData[key] = json;
+                    }
+                  }
+                } catch (e: any) {
+                  console.error('[shoebox-intercept] error capturing:', e?.message || e);
+                }
+                return response;
+                } finally {
+                  (globalThis as any).__boxelPendingFetches--;
+                }
+              };
+            },
+            { origin },
+          );
+
+          // Intercept network requests to add auth headers for realm
+          // module imports.  During a fresh page.goto the Ember loader
+          // hasn't established realm sessions yet, so ES module imports
+          // would fail with 401.  We parse the JWTs from boxel-session
+          // and inject them as Authorization headers.
+          let authMap: Record<string, string> = {};
+          try {
+            authMap = JSON.parse(auth) as Record<string, string>;
+          } catch {
+            // auth might not be JSON; ignore
+          }
+          // Build a map from origin to JWT token for request interception
+          let originTokenMap = new Map<string, string>();
+          for (let [realmUrl, token] of Object.entries(authMap)) {
+            if (token) {
+              try {
+                originTokenMap.set(new URL(realmUrl).origin, token);
+              } catch {
+                // ignore invalid URLs
+              }
+            }
+          }
+
+          await page.setRequestInterception(true);
+          requestHandler = (
+            interceptedRequest: import('puppeteer').HTTPRequest,
+          ) => {
+            let reqUrl = interceptedRequest.url();
+            let matchedToken: string | undefined;
+            try {
+              matchedToken = originTokenMap.get(new URL(reqUrl).origin);
+            } catch {
+              // ignore invalid URLs
+            }
+            if (matchedToken) {
+              interceptedRequest.continue({
+                headers: {
+                  ...interceptedRequest.headers(),
+                  Authorization: matchedToken,
+                },
+              });
+            } else {
+              interceptedRequest.continue();
+            }
+          };
+          page.on('request', requestHandler);
+
+          // Full page navigation — Ember boots fresh with the serialize
+          // builder, producing block markers that match a fresh render.
+          await page.goto(`${this.#boxelHostURL}/${cardPath}`, {
+            waitUntil: 'domcontentloaded',
+            timeout: HOST_MODE_CAPTURE_TIMEOUT_MS,
+          });
+
+          await page.waitForFunction(
+            () => {
+              return (
+                document.querySelector('[data-test-host-mode-card]') !== null
+              );
+            },
+            { timeout: HOST_MODE_CAPTURE_TIMEOUT_MS },
+          );
+
+          // Wait for all in-flight fetches to complete (e.g., search results
+          // from PrerenderedCardSearch) so the captured HTML is fully rendered.
+          await page.waitForFunction(
+            () => (globalThis as any).__boxelPendingFetches === 0,
+            { timeout: HOST_MODE_CAPTURE_TIMEOUT_MS },
+          );
+
+          // After fetches complete, give Ember time to process responses
+          // and re-render (trackedFunction updates → Glimmer re-render).
+          await page.evaluate(
+            () => new Promise((resolve) => setTimeout(resolve, 500)),
+          );
+
+          let hostModeHTML = await page.evaluate(() => {
+            let root = document.getElementById('boxel-root');
+            if (!root) return null;
+            return root.innerHTML;
+          });
+
+          if (hostModeHTML) {
+            log.info(
+              `Captured host-mode HTML for ${url} (${hostModeHTML.length} chars)`,
+            );
+
+            // Extract captured card JSON from the fetch interceptor
+            let shoeboxJSON: string | undefined;
+            try {
+              shoeboxJSON = await page.evaluate(() => {
+                let data = (globalThis as any).__boxelShoeboxData;
+                if (data && Object.keys(data).length > 0) {
+                  return JSON.stringify(data);
+                }
+                return undefined;
+              });
+            } catch {
+              // ignore shoebox extraction errors
+            }
+
+            if (shoeboxJSON) {
+              log.info(
+                `Captured shoebox data for ${url} (${shoeboxJSON.length} chars, ${Object.keys(JSON.parse(shoeboxJSON)).length} cards)`,
+              );
+
+              // --- Second pass ---
+              // The first render's {{#each}} iterations were produced by a
+              // Glimmer UPDATE (loading→response transition), so they lack
+              // per-iteration block markers.  Re-navigate with shoebox data
+              // pre-injected so `initFromShoebox` populates search results
+              // synchronously during the INITIAL render, causing the
+              // SerializeBuilder to emit correct per-iteration markers.
+              let shoeboxScript: { identifier: string } | undefined;
+              try {
+                let parsedShoebox = JSON.parse(shoeboxJSON);
+                shoeboxScript = await page.evaluateOnNewDocument(
+                  (sbData: Record<string, unknown>) => {
+                    (globalThis as any).__boxelShoeboxData = sbData;
+                  },
+                  parsedShoebox,
+                );
+
+                await page.goto(`${this.#boxelHostURL}/${cardPath}`, {
+                  waitUntil: 'domcontentloaded',
+                  timeout: HOST_MODE_CAPTURE_TIMEOUT_MS,
+                });
+
+                await page.waitForFunction(
+                  () =>
+                    document.querySelector('[data-test-host-mode-card]') !==
+                    null,
+                  { timeout: HOST_MODE_CAPTURE_TIMEOUT_MS },
+                );
+
+                // Brief wait for Ember to finish rendering
+                await page.evaluate(
+                  () => new Promise((resolve) => setTimeout(resolve, 500)),
+                );
+
+                let pass2HTML = await page.evaluate(() => {
+                  let root = document.getElementById('boxel-root');
+                  if (!root) return null;
+                  return root.innerHTML;
+                });
+
+                if (pass2HTML) {
+                  log.info(
+                    `Second-pass host-mode HTML for ${url} (${pass2HTML.length} chars)`,
+                  );
+                  hostModeHTML = pass2HTML;
+                }
+              } catch (e) {
+                log.warn(
+                  'Second-pass prerender failed, using first-pass HTML',
+                  e,
+                );
+              } finally {
+                if (shoeboxScript) {
+                  await page
+                    .removeScriptToEvaluateOnNewDocument(
+                      shoeboxScript.identifier,
+                    )
+                    .catch(() => {});
+                }
+              }
+
+              // Encode shoebox as base64 comment appended to isolatedHTML
+              // so it's stored alongside the HTML without DB schema changes.
+              let encoded = Buffer.from(shoeboxJSON).toString('base64');
+              hostModeHTML += `<!--boxel-shoebox:${encoded}-->`;
+            }
+
+            isolatedHTML = hostModeHTML;
+          }
+        } catch (e) {
+          log.warn(
+            'Host-mode capture failed, falling back to render route isolated HTML',
+            e,
+          );
+        } finally {
+          // Clean up request interception
+          if (requestHandler) {
+            page.off('request', requestHandler);
+            await page.setRequestInterception(false).catch(() => {});
+          }
+          // Remove the temporary evaluateOnNewDocument script so it
+          // doesn't affect subsequent navigations on this page.
+          if (forceHostModeScript) {
+            await page
+              .removeScriptToEvaluateOnNewDocument(
+                forceHostModeScript.identifier,
+              )
+              .catch(() => {});
+          }
+          // Navigate back to standby so the page is reusable by the pool.
+          // Use a fresh page.goto (not a route transition) to fully reset
+          // the Ember app state and avoid stale component teardown errors.
+          try {
+            await page.goto(`${this.#boxelHostURL}/standby`, {
+              waitUntil: 'domcontentloaded',
+              timeout: HOST_MODE_CAPTURE_TIMEOUT_MS,
+            });
+            await page.waitForFunction(
+              () => document.querySelector('#standby-ready') !== null,
+              { timeout: HOST_MODE_CAPTURE_TIMEOUT_MS },
+            );
+          } catch {
+            // best-effort: page will be disposed on next use if unusable
+          }
+        }
+      }
+
       let response: RenderResponse = {
         ...(meta as PrerenderMeta),
         ...(error ? { error } : {}),

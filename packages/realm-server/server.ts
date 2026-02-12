@@ -65,6 +65,9 @@ import {
   retrieveIsolatedHTML,
   injectHeadHTML,
   injectIsolatedHTML,
+  injectRenderModeScript,
+  extractShoeboxFromIsolatedHTML,
+  injectShoeboxScript,
   ensureSingleTitle,
 } from './lib/index-html-injection';
 
@@ -452,12 +455,27 @@ export class RealmServer {
     }
 
     if (isolatedHTML != null) {
+      // Extract shoebox data (card JSON) if appended by the prerenderer
+      let { html: cleanIsolatedHTML, shoeboxJSON } =
+        extractShoeboxFromIsolatedHTML(isolatedHTML);
+
+      if (shoeboxJSON) {
+        // Shoebox data means the HTML was captured via host-mode (full Ember
+        // app) so its block markers match the client-side template structure.
+        // Enable rehydration so the client adopts the prerendered DOM.
+        responseHTML = injectRenderModeScript(responseHTML);
+        this.isolatedLog.debug(
+          `Injecting shoebox data for ${cardURL.href} (${shoeboxJSON.length} chars)`,
+        );
+        responseHTML = injectShoeboxScript(responseHTML, shoeboxJSON);
+      }
+
       this.isolatedLog.debug(
-        `Injecting isolated HTML for ${cardURL.href} (length ${isolatedHTML.length})\n${this.truncateLogLines(
-          isolatedHTML,
+        `Injecting isolated HTML for ${cardURL.href} (length ${cleanIsolatedHTML.length})\n${this.truncateLogLines(
+          cleanIsolatedHTML,
         )}`,
       );
-      responseHTML = injectIsolatedHTML(responseHTML, isolatedHTML);
+      responseHTML = injectIsolatedHTML(responseHTML, cleanIsolatedHTML);
     }
 
     ctxt.body = responseHTML;

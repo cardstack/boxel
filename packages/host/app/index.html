@@ -23,15 +23,11 @@
   <meta data-boxel-head-start />
   <title>Boxel</title>
   <meta data-boxel-head-end />
-
 </head>
 
 <body>
-  <script type="x/boundary" id="boxel-isolated-start"></script>
-  <script type="x/boundary" id="boxel-isolated-end"></script>
+  <div id="boxel-root"></div>
 
-  <!-- in case embercli's hooks insn't run,
-         we embed the following div manually -->
   <div id="ember-basic-dropdown-wormhole"></div>
   {{content-for "body"}}
 

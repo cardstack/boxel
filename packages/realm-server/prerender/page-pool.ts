@@ -349,8 +349,37 @@ export class PagePool {
       let browser = await this.#browserManager.getBrowser();
       context = await browser.createBrowserContext();
       let page = await context.newPage();
+
+      page.on('pageerror', (err) => log.error(`pageerror ${pageId}:`, err));
+      page.on('error', (err) => log.error(`error ${pageId}:`, err));
+      page.on('requestfailed', (req) =>
+        log.warn(
+          `requestfailed ${pageId}: ${req.url()} ${req.failure()?.errorText}`,
+        ),
+      );
+      page.on('response', (res) => {
+        if (res.status() >= 400) {
+          log.warn(`response ${pageId}: ${res.status()} ${res.url()}`);
+        }
+      });
+
       let pageId = uuidv4();
       this.#attachPageConsole(page, 'standby', pageId);
+      log.debug(`Created standby page ${pageId}`);
+      await page.evaluateOnNewDocument(
+        'window.__boxelRenderMode = "serialize";',
+      );
+      await page.evaluateOnNewDocument(`
+        window.addEventListener('error', (e) => {
+          console.error('[prerender-error-capture]', e.message, e.filename + ':' + e.lineno + ':' + e.colno, e.error?.stack || '');
+        });
+        window.addEventListener('unhandledrejection', (e) => {
+          let reason = e.reason;
+          let msg = reason instanceof Error ? reason.stack || reason.message : String(reason);
+          console.error('[prerender-unhandled-rejection]', msg);
+        });
+      `);
+
       await this.#loadStandbyPage(page, pageId);
       let entry: StandbyEntry = {
         type: 'standby',
@@ -712,6 +741,24 @@ export class PagePool {
             }
             if (typeof value === 'undefined') {
               return arg.toString();
+            }
+            // Error objects serialize to {} via JSON — extract message+stack instead
+            if (
+              typeof value === 'object' &&
+              value !== null &&
+              Object.keys(value).length === 0
+            ) {
+              let errorInfo = await arg
+                .evaluate((obj: any) => {
+                  if (obj instanceof Error) {
+                    return `${obj.name}: ${obj.message}\n${obj.stack ?? ''}`;
+                  }
+                  return undefined;
+                })
+                .catch(() => undefined);
+              if (errorInfo) {
+                return errorInfo;
+              }
             }
             return JSON.stringify(value);
           } catch (_e) {
