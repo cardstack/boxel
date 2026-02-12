@@ -5,6 +5,7 @@ import { extractSvgDimensions } from './svg-meta-extractor';
 
 export class SvgDef extends ImageDef {
   static displayName = 'SVG Image';
+  static acceptTypes = '.svg,image/svg+xml';
 
   static async extractAttributes(
     url: string,
