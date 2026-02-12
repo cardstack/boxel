@@ -199,7 +199,7 @@ export class IndexComponent extends Component<IndexComponentComponentSignature> 
     };
   });
 
-<template>
+  <template>
     {{#if this.hostModeService.isActive}}
       {{#unless this.hostModeService.headTemplateContainsTitle}}
         {{pageTitle this.title}}

@@ -12,10 +12,7 @@ import type ApplicationInstance from '@ember/application/instance';
 
 export function initialize(appInstance: ApplicationInstance): void {
   let shoeboxData = (globalThis as any).__boxelShoeboxData;
-  if (
-    !shoeboxData ||
-    (globalThis as any).__boxelRenderMode !== 'rehydrate'
-  ) {
+  if (!shoeboxData || (globalThis as any).__boxelRenderMode !== 'rehydrate') {
     return;
   }
 
