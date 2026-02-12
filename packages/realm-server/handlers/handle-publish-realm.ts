@@ -18,7 +18,13 @@ import {
   userInitiatedPriority,
 } from '@cardstack/runtime-common';
 import { getPublishedRealmDomainOverrides } from '@cardstack/runtime-common/constants';
-import { ensureDirSync, copySync, readJsonSync, writeJsonSync, removeSync } from 'fs-extra';
+import {
+  ensureDirSync,
+  copySync,
+  readJsonSync,
+  writeJsonSync,
+  removeSync,
+} from 'fs-extra';
 import { resolve, join } from 'path';
 import {
   fetchRequestFromContext,
