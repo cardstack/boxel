@@ -56,7 +56,9 @@ class StubCustomSubdomainHostModeService extends StubHostModeService {
 module('Acceptance | host mode tests', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
-  setupOnSave(hooks);
+    setupOnSave(hooks);
+  
+
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
