@@ -245,17 +245,19 @@ module(basename(__filename), function () {
         let instanceWithHead = indexResults.find(
           (r) => r.type === 'instance' && r.head_html,
         );
-        if (instanceWithHead) {
-          let headHtml = instanceWithHead.head_html as string;
-          assert.ok(
-            headHtml.includes(publishedRealmURL),
-            `head_html should reference published realm URL, got: ${headHtml}`,
-          );
-          assert.notOk(
-            headHtml.includes(sourceRealmUrlString),
-            `head_html should not reference source realm URL, got: ${headHtml}`,
-          );
-        }
+        assert.ok(
+          instanceWithHead,
+          'boxel_index should contain an instance row with head_html for the published realm',
+        );
+        let headHtml = (instanceWithHead as any).head_html as string;
+        assert.ok(
+          headHtml.includes(publishedRealmURL),
+          `head_html should reference published realm URL, got: ${headHtml}`,
+        );
+        assert.notOk(
+          headHtml.includes(sourceRealmUrlString),
+          `head_html should not reference source realm URL, got: ${headHtml}`,
+        );
 
         let catalogResponse = await request
           .get('/_catalog-realms')
