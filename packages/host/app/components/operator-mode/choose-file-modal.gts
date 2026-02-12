@@ -65,9 +65,10 @@ export default class ChooseFileModal extends Component<Signature> {
   }
 
   // public API
-  async chooseFile<T extends FileDef>(
-    opts?: { fileType?: CodeRef; fileTypeName?: string },
-  ): Promise<undefined | T> {
+  async chooseFile<T extends FileDef>(opts?: {
+    fileType?: CodeRef;
+    fileTypeName?: string;
+  }): Promise<undefined | T> {
     this.deferred = new Deferred();
     this.fileTypeFilter = opts?.fileType;
     this.fileTypeName = opts?.fileTypeName;

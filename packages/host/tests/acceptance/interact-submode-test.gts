@@ -648,9 +648,7 @@ module('Acceptance | interact submode tests', function (hooks) {
         .dom('[data-test-choose-file-modal]')
         .exists('file chooser modal is open');
       assert
-        .dom(
-          '[data-test-choose-file-modal] [data-test-boxel-header-title]',
-        )
+        .dom('[data-test-choose-file-modal] [data-test-boxel-header-title]')
         .hasText('Choose Image', 'modal title reflects the file type');
 
       await waitUntil(
@@ -716,9 +714,7 @@ module('Acceptance | interact submode tests', function (hooks) {
       );
 
       assert
-        .dom(
-          '[data-test-choose-file-modal] [data-test-boxel-header-title]',
-        )
+        .dom('[data-test-choose-file-modal] [data-test-boxel-header-title]')
         .hasText('Choose File', 'modal title shows generic file type');
 
       await waitUntil(

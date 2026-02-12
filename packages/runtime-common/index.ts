@@ -400,9 +400,10 @@ export async function chooseCard(
   return await chooser.chooseCard(query, opts);
 }
 
-export async function chooseFile<T extends FieldDef>(
-  opts?: { fileType?: CodeRef; fileTypeName?: string },
-): Promise<undefined | any> {
+export async function chooseFile<T extends FieldDef>(opts?: {
+  fileType?: CodeRef;
+  fileTypeName?: string;
+}): Promise<undefined | any> {
   let here = globalThis as any;
   if (!here._CARDSTACK_FILE_CHOOSER) {
     throw new Error(
