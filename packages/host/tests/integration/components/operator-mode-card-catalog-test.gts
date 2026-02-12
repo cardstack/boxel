@@ -743,7 +743,7 @@ module('Integration | operator-mode | card catalog', function (hooks) {
     await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
     await click(`[data-test-open-search-field]`);
     await fillIn(`[data-test-search-field]`, 'ma');
-    await settled();
+
     assert.dom('[data-test-search-result-header]').exists();
     const stripOption =
       document.querySelector(

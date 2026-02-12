@@ -10,6 +10,8 @@ import { tracked } from '@glimmer/tracking';
 import onClickOutside from 'ember-click-outside/modifiers/on-click-outside';
 import { consume } from 'ember-provide-consume-context';
 
+import { trackedFunction } from 'reactiveweb/function';
+
 import {
   Button,
   IconButton,
@@ -62,7 +64,6 @@ export default class SearchSheet extends Component<Signature> {
 
   @tracked private searchKey = '';
   @tracked selectedRealms: PickerOption[] = [];
-  @tracked fetchCardByUrlError: Error | undefined = undefined;
 
   @service declare private realmServer: RealmServerService;
   @service declare private realm: RealmService;
@@ -174,12 +175,50 @@ export default class SearchSheet extends Component<Signature> {
     return this.sheetSize === 'prompt';
   }
 
-  @action private onFetchCardByUrlError(error: Error) {
-    this.fetchCardByUrlError = error;
+  private get searchKeyAsURL() {
+    if (!this.searchKeyIsURL) {
+      return undefined;
+    }
+    let cardURL = this.searchKey;
+
+    let maybeIndexCardURL = this.realmServer.availableRealmURLs.find(
+      (u) => u === cardURL + '/',
+    );
+    return maybeIndexCardURL ?? cardURL;
+  }
+
+  // note that this is a card that is eligible for garbage collection
+  // and is meant for immediate consumption. it's not safe to pass this
+  // as state for another component.
+  private fetchCardByUrl = trackedFunction(this, async () => {
+    if (!this.searchKeyAsURL) {
+      return;
+    }
+    let card = await this.store.get(this.searchKeyAsURL);
+    return {
+      card,
+    };
+  });
+
+  private get fetchCardByUrlResult() {
+    let value = this.fetchCardByUrl.value;
+    if (value) {
+      if (value.card) {
+        return { card: value.card };
+      } else {
+        return { card: null };
+      }
+    }
+
+    return undefined;
   }
 
   private get inputValidationState() {
-    if (this.searchKeyIsURL && this.fetchCardByUrlError) {
+    if (
+      this.searchKeyIsURL &&
+      this.fetchCardByUrlResult &&
+      !this.fetchCardByUrlResult.card
+    ) {
       return 'invalid';
     } else {
       return 'none';
@@ -232,7 +271,6 @@ export default class SearchSheet extends Component<Signature> {
           @selectedRealmURLs={{this.selectedRealmURLs}}
           @isCompact={{this.isCompact}}
           @handleCardSelect={{this.handleCardSelect}}
-          @onFetchCardByUrlError={{this.onFetchCardByUrlError}}
         />
         <div class='footer'>
           <div class='buttons'>

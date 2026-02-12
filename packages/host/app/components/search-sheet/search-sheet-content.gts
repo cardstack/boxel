@@ -1,26 +1,32 @@
+import { isDestroyed, isDestroying } from '@ember/destroyable';
 import { action } from '@ember/object';
+import { getOwner } from '@ember/owner';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
-import { debounce } from 'lodash';
-import { trackedFunction } from 'reactiveweb/function';
+import { consume } from 'ember-provide-consume-context';
 
 import { eq } from '@cardstack/boxel-ui/helpers';
 
-import { isCardInstance, specRef } from '@cardstack/runtime-common';
+import {
+  type getCard,
+  type getCardCollection,
+  GetCardCollectionContextName,
+  GetCardContextName,
+  specRef,
+} from '@cardstack/runtime-common';
 
+import consumeContext from '@cardstack/host/helpers/consume-context';
 import { urlForRealmLookup } from '@cardstack/host/lib/utils';
-import { getCardCollection } from '@cardstack/host/resources/card-collection';
+import { getPrerenderedSearch } from '@cardstack/host/resources/prerendered-search';
+import type LoaderService from '@cardstack/host/services/loader-service';
 import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 import type RecentCards from '@cardstack/host/services/recent-cards-service';
-
 import type StoreService from '@cardstack/host/services/store';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
-
-import PrerenderedCardSearch from '../prerendered-card-search';
 
 import {
   SECTION_DISPLAY_LIMIT_FOCUSED,
@@ -31,11 +37,12 @@ import {
   type SortOption,
 } from './constants';
 import SearchResultHeader from './search-result-header';
-
 import SearchResultSection from './search-result-section';
 import { getCodeRefFromSearchKey } from './utils';
 
 import type { PrerenderedCard } from '../prerendered-card-search';
+
+const OWNER_DESTROYED_ERROR = 'OWNER_DESTROYED_ERROR';
 
 export interface RealmSection {
   sid: string;
@@ -69,12 +76,12 @@ interface Signature {
     selectedRealmURLs: string[];
     isCompact: boolean;
     handleCardSelect: (cardId: string) => void;
-    onFetchCardByUrlError?: (error: Error) => void;
   };
   Blocks: {};
 }
 
 export default class SearchSheetContent extends Component<Signature> {
+  @service declare loaderService: LoaderService;
   @service declare realm: RealmService;
   @service declare realmServer: RealmServerService;
   @service declare recentCardsService: RecentCards;
@@ -82,16 +89,39 @@ export default class SearchSheetContent extends Component<Signature> {
 
   @tracked activeViewId = 'grid';
   @tracked activeSort: SortOption = SORT_OPTIONS[0];
-  @tracked isFetchingQuery = false;
-  @tracked totalQueryResults: number = 0;
   /** Section id when focused: 'realm:<url>' or 'recents'. Null = no focus */
   @tracked focusedSection: string | null = null;
   @tracked displayedCountBySection: Record<string, number> = {};
-  @tracked resultCountByRealm: Record<string, number> = {};
 
-  recentCardCollection = getCardCollection(
+  @consume(GetCardCollectionContextName)
+  declare private getCardCollection: getCardCollection;
+  @tracked private recentCardCollection:
+    | ReturnType<getCardCollection>
+    | undefined;
+  private getRecentCardCollection = () => {
+    this.recentCardCollection = this.getCardCollection(
+      this,
+      () => this.recentCardsService.recentCardIds,
+    );
+  };
+
+  @consume(GetCardContextName) declare private getCard: getCard;
+  @tracked private cardResource: ReturnType<getCard> | undefined;
+  private makeCardResource = () => {
+    this.cardResource = this.getCard(this, () => this.searchKeyAsURL);
+  };
+
+  private searchPrerenderedCards = getPrerenderedSearch(
     this,
-    () => this.recentCardsService.recentCardIds,
+    getOwner(this)!,
+    () => ({
+      query:
+        this.isSearchKeyEmpty || this.searchKeyIsURL ? undefined : this.query,
+      format: 'fitted',
+      realms: this.realms,
+      isLive: true,
+      cardComponentModifier: this.cardComponentModifier,
+    }),
   );
 
   private get isSearchKeyEmpty() {
@@ -123,41 +153,8 @@ export default class SearchSheetContent extends Component<Signature> {
     return maybeIndexCardURL ?? cardURL;
   }
 
-  // note that this is a card that is eligible for garbage collection
-  // and is meant for immediate consumption. it's not safe to pass this
-  // as state for another component.
-  private fetchCardByUrl = trackedFunction(this, async () => {
-    if (!this.searchKeyAsURL) {
-      return;
-    }
-    let card = await this.store.get(this.searchKeyAsURL);
-    if (!card) {
-      this.args.onFetchCardByUrlError?.(
-        new Error(`Card not found at ${this.searchKeyAsURL}`),
-      );
-    }
-    return {
-      card,
-    };
-  });
-
-  private get fetchCardByUrlResult() {
-    let value = this.fetchCardByUrl.value;
-    if (value) {
-      if (value.card) {
-        return { card: value.card };
-      } else {
-        return { card: null };
-      }
-    }
-
-    return undefined;
-  }
-
   private get resolvedCard() {
-    const result = this.fetchCardByUrlResult;
-    const card = result?.card;
-    return card && isCardInstance(card) ? card : null;
+    return this.cardResource?.card;
   }
 
   private get realms() {
@@ -200,50 +197,52 @@ export default class SearchSheetContent extends Component<Signature> {
   }
 
   private get summaryText(): string {
-    if (this.isFetchingQuery || this.fetchCardByUrl.isPending) {
-      return 'Searching…';
-    }
-
-    let total = this.totalQueryResults;
-    let realms = this.realms;
     if (this.args.isCompact) {
       return '';
     }
-    if (this.searchKeyIsURL) {
-      if (this.resolvedCard) {
-        return '1 result from 1 realm';
-      }
-      return '0 results';
+
+    if (this.searchPrerenderedCards.isLoading) {
+      return 'Searching…';
     }
+
+    // URL search result
+    if (this.searchKeyIsURL) {
+      return this.resolvedCard ? '1 result from 1 realm' : '0 results';
+    }
+
+    // Recents view (empty search or focused on recents)
     if (this.focusedSection === 'recents' || this.isSearchKeyEmpty) {
       const count = this.recentCardsService.recentCardIds.length;
       return count === 1 ? '1 in Recent' : `${count} in Recents`;
     }
 
-    if (this.focusedSection != null) {
-      if (this.focusedSection.startsWith('realm:')) {
-        const realmUrl = this.focusedSection.slice('realm:'.length);
-        const realmInfo = this.realm.info(realmUrl);
-        const realmName =
-          realmInfo?.name ?? this.realmNameFromUrl(realmUrl) ?? realmUrl;
-        const realmTotal = this.resultCountByRealm[realmUrl];
+    // Query search results
+    const total = this.searchPrerenderedCards.meta.page?.total ?? 0;
+    const realms = this.realms;
 
-        if (typeof realmTotal === 'number') {
-          return `${total} result${total === 1 ? '' : 's'} across ${realms.length} realm${realms.length === 1 ? '' : 's'}, ${realmTotal} result${realmTotal === 1 ? '' : 's'} in ${realmName}`;
-        }
+    // Focused on a specific realm section
+    if (this.focusedSection?.startsWith('realm:')) {
+      const realmUrl = this.focusedSection.slice('realm:'.length);
+      const realmInfo = this.realm.info(realmUrl);
+      const realmName = realmInfo?.name ?? this.realmNameFromUrl(realmUrl);
+      const realmTotal = this.resultCountByRealm[realmUrl];
 
-        // Fallback if we don't yet have per-realm counts
-        return `${total} result${total === 1 ? '' : 's'} in ${realmName}`;
+      if (typeof realmTotal === 'number') {
+        return `${total} result${total === 1 ? '' : 's'} across ${realms.length} realm${realms.length === 1 ? '' : 's'}, ${realmTotal} result${realmTotal === 1 ? '' : 's'} in ${realmName}`;
       }
 
-      return `${total} result${total === 1 ? '' : 's'} in ${this.focusedSection}`;
+      return `${total} result${total === 1 ? '' : 's'} in ${realmName}`;
     }
 
+    // Default: all results across all realms
     return `${total} result${total === 1 ? '' : 's'} across ${realms.length} realm${realms.length === 1 ? '' : 's'}`;
   }
 
   private get sortedRecentCards(): CardDef[] {
-    const cards = this.recentCardCollection.cards.filter(Boolean) as CardDef[];
+    const cards = this.recentCardCollection?.cards.filter(Boolean) as CardDef[];
+    if (!cards) {
+      return [];
+    }
     const sortOption = this.activeSort;
     const displayName = sortOption.displayName;
     return [...cards].sort((a, b) => {
@@ -272,20 +271,6 @@ export default class SearchSheetContent extends Component<Signature> {
       totalCount: this.sortedRecentCards.length,
     } as RecentsSection;
   }
-
-  debounceSetQueryResultsMeta = debounce(
-    (meta: { page?: { total?: number } }) => {
-      // use debounce to prevent excessive re-renders
-      this.totalQueryResults = meta.page?.total ?? 0;
-      this.isFetchingQuery = false;
-    },
-    100,
-  );
-
-  debounceSetIsFetchingQuery = debounce((isFetching: boolean) => {
-    // use debounce to prevent excessive re-renders
-    this.isFetchingQuery = isFetching;
-  }, 100);
 
   @action
   onChangeView(id: string) {
@@ -360,15 +345,20 @@ export default class SearchSheetContent extends Component<Signature> {
     } as UrlSection;
   }
 
-  buildCardByQuerySections = (
-    cards: { realmUrl: string; url: string }[],
-  ): SearchSheetSection[] => {
-    const byRealm = new Map<string, typeof cards>();
+  private get cardsByQuerySection(): SearchSheetSection[] | null {
+    if (this.isSearchKeyEmpty || this.searchKeyIsURL) {
+      return null;
+    }
+
+    const cards = this.searchPrerenderedCards.instances;
+    const byRealm = new Map<string, PrerenderedCard[]>();
+
     for (const card of cards) {
-      const list = byRealm.get(card.realmUrl) ?? [];
+      const list: PrerenderedCard[] = byRealm.get(card.realmUrl) ?? [];
       list.push(card);
       byRealm.set(card.realmUrl, list);
     }
+
     const sections: RealmSection[] = [];
     for (const [realmUrl, realmCards] of byRealm) {
       const realmInfo = this.realm.info(realmUrl);
@@ -380,21 +370,45 @@ export default class SearchSheetContent extends Component<Signature> {
           name: realmInfo?.name ?? this.realmNameFromUrl(realmUrl),
           iconURL: realmInfo?.iconURL ?? undefined,
         },
-        cards: realmCards as any,
+        cards: realmCards,
         totalCount: realmCards.length,
       });
     }
 
-    // Store section for usage in summary text
-    const resultCountByRealm: Record<string, number> = {};
+    return sections;
+  }
+
+  private get resultCountByRealm(): Record<string, number> {
+    const sections = this.cardsByQuerySection ?? [];
+    const counts: Record<string, number> = {};
     for (const section of sections) {
       if (section.type === 'realm') {
-        resultCountByRealm[section.realmUrl] = section.totalCount;
+        counts[section.realmUrl] = section.totalCount;
       }
     }
-    this.resultCountByRealm = resultCountByRealm;
+    return counts;
+  }
+
+  private get sections(): SearchSheetSection[] {
+    const sections: SearchSheetSection[] = [];
+
+    // Add URL section if present
+    if (this.cardByUrlSection) {
+      sections.push(this.cardByUrlSection);
+    }
+
+    // Add query sections if present
+    if (this.cardsByQuerySection) {
+      sections.push(...this.cardsByQuerySection);
+    }
+
+    // Add recents section if present
+    if (this.recentCardsSection) {
+      sections.push(this.recentCardsSection);
+    }
+
     return sections;
-  };
+  }
 
   private realmUrlForCard(cardIdOrUrl: string): string {
     for (const realm of this.realms) {
@@ -410,12 +424,28 @@ export default class SearchSheetContent extends Component<Signature> {
     }
   }
 
+  private get cardComponentModifier() {
+    if (isDestroying(this) || isDestroyed(this)) {
+      return undefined;
+    }
+    try {
+      return (this as any).args.context?.cardComponentModifier;
+    } catch (e: any) {
+      if (e.message && e.message.includes(OWNER_DESTROYED_ERROR)) {
+        return undefined;
+      }
+      throw e;
+    }
+  }
+
   @action
   isSectionCollapsed(sectionId: string): boolean {
     return !!this.focusedSection && this.focusedSection !== sectionId;
   }
 
   <template>
+    {{consumeContext this.getRecentCardCollection}}
+    {{consumeContext this.makeCardResource}}
     <div class='search-sheet-content {{if @isCompact "compact"}}'>
       {{#unless @isCompact}}
         <SearchResultHeader
@@ -428,73 +458,31 @@ export default class SearchSheetContent extends Component<Signature> {
           @onChangeSort={{this.onChangeSort}}
         />
       {{/unless}}
+
+      {{! Handle empty URL search state }}
       {{#if this.searchKeyIsURL}}
-        {{! URL path: single card or empty }}
-        {{#if this.cardByUrlSection}}
-          <SearchResultSection
-            @section={{this.cardByUrlSection}}
-            @viewOption={{this.activeViewId}}
-            @isCompact={{@isCompact}}
-            @handleCardSelect={{@handleCardSelect}}
-            @isFocused={{eq this.focusedSection this.cardByUrlSection.sid}}
-            @isCollapsed={{this.isSectionCollapsed this.cardByUrlSection.sid}}
-            @onFocusSection={{this.onFocusSection}}
-            @getDisplayedCount={{this.getDisplayedCount}}
-            @onShowMore={{this.onShowMore}}
-          />
-        {{else if this.searchKeyAsURL}}
+        {{#unless this.resolvedCard}}
           <div class='empty-state' data-test-search-sheet-empty>
             No card found at
             {{@searchKey}}
           </div>
-        {{/if}}
-      {{else if this.isSearchKeyEmpty}}
-        {{! empty content }}
-      {{else}}
-        {{! Query path: PrerenderedCardSearch }}
-        <PrerenderedCardSearch
-          @query={{this.query}}
-          @format='fitted'
-          @realms={{this.realms}}
-        >
-          <:loading>
-            {{this.debounceSetIsFetchingQuery true}}
-          </:loading>
-          <:response as |cards|>
-            {{#let (this.buildCardByQuerySections cards) as |sections|}}
-              {{#each sections as |section|}}
-                <SearchResultSection
-                  @section={{section}}
-                  @viewOption={{this.activeViewId}}
-                  @isCompact={{@isCompact}}
-                  @handleCardSelect={{@handleCardSelect}}
-                  @isFocused={{eq this.focusedSection section.sid}}
-                  @isCollapsed={{this.isSectionCollapsed section.sid}}
-                  @onFocusSection={{this.onFocusSection}}
-                  @getDisplayedCount={{this.getDisplayedCount}}
-                  @onShowMore={{this.onShowMore}}
-                />
-              {{/each}}
-            {{/let}}
-          </:response>
-          <:meta as |meta|>
-            {{this.debounceSetQueryResultsMeta meta}}
-          </:meta>
-        </PrerenderedCardSearch>
+        {{/unless}}
       {{/if}}
-      {{#if this.recentCardsSection}}
+
+      {{! Render all sections }}
+      {{#each this.sections as |section|}}
         <SearchResultSection
-          @section={{this.recentCardsSection}}
+          @section={{section}}
           @viewOption={{this.activeViewId}}
           @isCompact={{@isCompact}}
           @handleCardSelect={{@handleCardSelect}}
-          @isFocused={{eq this.focusedSection this.recentCardsSection.sid}}
-          @isCollapsed={{this.isSectionCollapsed this.recentCardsSection.sid}}
+          @isFocused={{eq this.focusedSection section.sid}}
+          @isCollapsed={{this.isSectionCollapsed section.sid}}
           @onFocusSection={{this.onFocusSection}}
           @getDisplayedCount={{this.getDisplayedCount}}
           @onShowMore={{this.onShowMore}}
         />
-      {{/if}}
+      {{/each}}
     </div>
     <style scoped>
       .search-sheet-content {
