@@ -9,6 +9,7 @@ const JPEG_MAX_HEADER_BYTES = 65_536;
 
 export class JpgDef extends ImageDef {
   static displayName = 'JPEG Image';
+  static acceptTypes = '.jpg,.jpeg,image/jpeg';
 
   static async extractAttributes(
     url: string,
