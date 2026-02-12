@@ -63,6 +63,8 @@ import type { NormalizePhoneFormatResult } from './helpers/validate-phone-format
 
 export * from './helpers/color-tools.ts';
 
+export * from './utils/fitted-formats.ts';
+
 export {
   add,
   addClassToSVG,
