@@ -3,8 +3,8 @@ import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
-import { Label } from '@cardstack/boxel-ui/components';
-import { cn } from '@cardstack/boxel-ui/helpers';
+import { Label, FittedCardContainer } from '@cardstack/boxel-ui/components';
+import { cn, type FittedFormatId } from '@cardstack/boxel-ui/helpers';
 
 import { urlForRealmLookup } from '@cardstack/host/lib/utils';
 import type RealmService from '@cardstack/host/services/realm';
@@ -44,26 +44,31 @@ class SearchResult extends Component<SearchResultSignature> {
 
   <template>
     <div class={{cn 'container' is-compact=@isCompact}}>
-      {{#if @component}}
-        <@component
-          class='search-result'
-          data-test-search-result={{removeFileExtension @cardId}}
-          ...attributes
-        />
+      <FittedCardContainer
+        @size={{if @isCompact 'single-strip' 'cardsgrid-tile'}}
+      >
+        {{#if @component}}
+          <@component
+            class='search-result'
+            data-test-search-result={{removeFileExtension @cardId}}
+            ...attributes
+          />
 
-      {{else if @card}}
-        <CardRenderer
-          @card={{@card}}
-          @format='fitted'
-          @codeRef={{resultsCardRef}}
-          data-test-search-result={{removeFileExtension @cardId}}
-          class='search-result'
-          ...attributes
-        />
-      {{/if}}
+        {{else if @card}}
+          <CardRenderer
+            @card={{@card}}
+            @format='fitted'
+            @codeRef={{resultsCardRef}}
+            data-test-search-result={{removeFileExtension @cardId}}
+            class='search-result'
+            ...attributes
+          />
+        {{/if}}
+      </FittedCardContainer>
       {{#if this.urlForRealmLookup}}
         {{#let (this.realm.info this.urlForRealmLookup) as |realmInfo|}}
-          <div class='realm-name' data-test-realm-name>{{realmInfo.name}}</div>
+          <div class='realm-name' data-test-realm-name>in
+            {{realmInfo.name}}</div>
         {{/let}}
       {{/if}}
     </div>
@@ -72,23 +77,6 @@ class SearchResult extends Component<SearchResultSignature> {
         display: flex;
         flex-direction: column;
         align-items: self-end;
-        width: 311px;
-        height: 96px;
-      }
-      .search-result,
-      .search-result.field-component-card.fitted-format {
-        width: 311px;
-        height: 76px;
-        overflow: hidden;
-        cursor: pointer;
-        container-name: fitted-card;
-        container-type: size;
-      }
-      .container.is-compact,
-      .is-compact .search-result,
-      .is-compact .search-result.field-component-card.fitted-format {
-        width: 199px;
-        height: 50px;
       }
       .realm-name {
         font: 400 var(--boxel-font);
@@ -98,9 +86,6 @@ class SearchResult extends Component<SearchResultSignature> {
         height: 20px;
         font-size: var(--boxel-font-size-xs);
       }
-      .is-compact .realm-name {
-        display: none;
-      }
     </style>
   </template>
 }
@@ -108,8 +93,8 @@ class SearchResult extends Component<SearchResultSignature> {
 interface Signature {
   Element: HTMLElement;
   Args: {
-    label: string;
-    isCompact: boolean;
+    label?: string;
+    isCompact?: boolean;
   };
   Blocks: {
     default: [SearchResultComponent: typeof SearchResult];
@@ -118,7 +103,9 @@ interface Signature {
 
 let ResultsSection: TemplateOnlyComponent<Signature> = <template>
   <div class={{cn 'section' is-compact=@isCompact}}>
-    <Label data-test-search-label>{{@label}}</Label>
+    {{#if @label}}
+      <Label class='section__label' data-test-search-label>{{@label}}</Label>
+    {{/if}}
     <div class='section__body'>
       <div class='section__cards'>
         {{yield SearchResult}}
@@ -128,32 +115,30 @@ let ResultsSection: TemplateOnlyComponent<Signature> = <template>
   <style scoped>
     .section {
       display: flex;
-      flex-direction: column;
       width: 100%;
     }
-    .section .boxel-label {
-      font: 600 var(--boxel-font);
-      padding-right: var(--boxel-sp);
+    .section:not(.is-compact) {
+      flex-direction: column;
+      padding-top: var(--boxel-sp);
     }
-    .section__body {
-      overflow: auto;
+    .section.is-compact {
+      flex-direction: row;
+      height: 100%;
+    }
+    .section__label {
+      font: 700 var(--boxel-font);
+      padding-inline: var(--boxel-sp);
     }
     .section__cards {
       display: flex;
       flex-direction: row;
       flex-wrap: wrap;
-      padding: var(--boxel-sp) var(--boxel-sp-xxxs);
+      padding: var(--boxel-sp);
       gap: var(--boxel-sp);
     }
-    .section.is-compact {
-      flex-direction: row;
-      align-items: center;
-      height: 100%;
-    }
     .is-compact .section__cards {
-      display: flex;
       flex-wrap: nowrap;
-      padding: var(--boxel-sp-xxs);
+      padding: var(--boxel-sp-xs);
       gap: var(--boxel-sp-xs);
     }
   </style>

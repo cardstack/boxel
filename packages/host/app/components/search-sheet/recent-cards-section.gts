@@ -33,7 +33,7 @@ export default class RecentCardsSection extends Component<Signature> {
   <template>
     {{#if this.hasRecentCards}}
       <ResultsSection
-        @label='Recent'
+        @label={{@label}}
         @isCompact={{@isCompact}}
         as |SearchResult|
       >

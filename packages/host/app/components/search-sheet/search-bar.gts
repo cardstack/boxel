@@ -47,7 +47,11 @@ export default class SearchBar extends Component<Signature> {
   }
 
   <template>
-    <div class='search-sheet__search-bar' data-test-search-sheet-search-bar>
+    <div
+      class='search-sheet__search-bar'
+      data-test-search-sheet-search-bar
+      ...attributes
+    >
       <div class='search-sheet__search-bar-icon' aria-hidden='true'>
         <IconSearch
           class='search-sheet__search-bar-search-icon'
