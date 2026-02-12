@@ -214,7 +214,9 @@ function makePrimaryKeyConstraint(
                     column.type === 'index_specification' &&
                     column.expr.type === 'identifier'
                   ) {
-                    columns.push(column.expr.name);
+                    columns.push(
+                      primaryKeyColumnForSQLite(tableName, column.expr.name),
+                    );
                   }
                 }
               } else {
@@ -250,6 +252,19 @@ function makePrimaryKeyConstraint(
     return undefined;
   }
   return pkConstraint.join(' ');
+}
+
+function primaryKeyColumnForSQLite(
+  tableName: string,
+  columnName: string,
+): string {
+  // SQLite cannot use generated columns in PRIMARY KEY constraints. Our
+  // converted schema maps `modules.url_hash` to a generated expression over
+  // `url`, so use `url` directly as the key column in SQLite.
+  if (tableName === 'modules' && columnName === 'url_hash') {
+    return 'url';
+  }
+  return columnName;
 }
 
 // This strips out all the things that our SQL AST chokes on (it's still in an

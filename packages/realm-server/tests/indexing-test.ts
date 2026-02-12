@@ -4,7 +4,6 @@ import { internalKeyFor, SupportedMimeType } from '@cardstack/runtime-common';
 import type {
   DBAdapter,
   DefinitionLookup,
-  ErrorEntry,
   LooseSingleCardDocument,
   Realm,
   RealmPermissions,
@@ -1292,8 +1291,8 @@ module(basename(__filename), function () {
       );
       assert.strictEqual(
         moduleRows[0]?.url,
-        fileDefAlias,
-        'module cache entry URL matches file def alias',
+        `${fileDefAlias}.gts`,
+        'module cache entry URL matches file def module URL',
       );
       assert.strictEqual(
         moduleRows[0]?.file_alias,
@@ -1460,40 +1459,38 @@ module(basename(__filename), function () {
         // definition lookup errors are expected while dependencies are missing
       }
 
-      let deepModuleRows = (await testDbAdapter.execute(
-        `SELECT error_doc FROM modules WHERE url IN ($1, $2) OR file_alias IN ($1, $2)`,
-        {
-          bind: [`${testRealm}deep-card`, `${testRealm}deep-card.gts`],
-          coerceTypes: { error_doc: 'JSON' },
-        },
-      )) as { error_doc: ErrorEntry | null }[];
-      let deepModuleError = deepModuleRows.find(
-        (row) => row.error_doc,
-      )?.error_doc;
-      assert.strictEqual(
-        deepModuleError?.type,
-        'module-error',
-        'deep-card module error is cached',
-      );
-      if (deepModuleError?.error) {
-        let additionalErrors = Array.isArray(
-          deepModuleError.error.additionalErrors,
-        )
-          ? deepModuleError.error.additionalErrors
-          : [];
-        assert.ok(
-          additionalErrors.some((error) =>
-            String(error.message ?? '').includes('middle-field'),
-          ),
-          'deep-card module error includes middle-field error details',
-        );
+      let definitionLookup = (testRealmServer?.testRealmServer as any)
+        ?.definitionLookup as DefinitionLookup | undefined;
+      if (!definitionLookup) {
+        assert.ok(false, 'definition lookup is available');
       } else {
-        assert.ok(false, 'expected deep-card module error details');
-      }
+        let deepModuleEntry = await definitionLookup.getModuleCacheEntry(
+          `${testRealm}deep-card`,
+        );
+        assert.strictEqual(
+          deepModuleEntry?.error?.type,
+          'module-error',
+          'deep-card module error is cached',
+        );
+        if (deepModuleEntry?.error?.error) {
+          let additionalErrors = Array.isArray(
+            deepModuleEntry.error.error.additionalErrors,
+          )
+            ? deepModuleEntry.error.error.additionalErrors
+            : [];
+          assert.ok(
+            additionalErrors.some((error) =>
+              String(error.message ?? '').includes('middle-field'),
+            ),
+            'deep-card module error includes middle-field error details',
+          );
+        } else {
+          assert.ok(false, 'expected deep-card module error details');
+        }
 
-      await realm.write(
-        'middle-field.gts',
-        `
+        await realm.write(
+          'middle-field.gts',
+          `
           import { contains, field, FieldDef } from "https://cardstack.com/base/card-api";
           import { LeafField } from "./leaf-field";
 
@@ -1501,11 +1498,8 @@ module(basename(__filename), function () {
             @field leaf = contains(LeafField);
           }
         `,
-      );
+        );
 
-      let definitionLookup = (testRealmServer?.testRealmServer as any)
-        ?.definitionLookup as DefinitionLookup | undefined;
-      if (definitionLookup) {
         try {
           await definitionLookup.lookupDefinition({
             module: `${testRealm}middle-field`,
@@ -1514,98 +1508,84 @@ module(basename(__filename), function () {
         } catch (_error) {
           // expected while dependencies are missing
         }
-      } else {
-        assert.ok(false, 'definition lookup is available');
-      }
 
-      brokenInstance = await realm.realmIndexQueryEngine.instance(
-        new URL(`${testRealm}deep-card`),
-      );
-      assert.strictEqual(
-        brokenInstance?.type,
-        'instance-error',
-        'instance is in an error state when LeafField module is missing',
-      );
-      if (brokenInstance?.type === 'instance-error') {
-        let additionalErrors = Array.isArray(
-          brokenInstance.error.additionalErrors,
-        )
-          ? brokenInstance.error.additionalErrors
-          : [];
-        assert.ok(
-          additionalErrors.some((error: { message?: string }) =>
-            String(error.message ?? '').includes('leaf-field'),
-          ),
-          'missing LeafField details are included in dependency errors',
+        brokenInstance = await realm.realmIndexQueryEngine.instance(
+          new URL(`${testRealm}deep-card`),
         );
-      } else {
-        assert.ok(false, 'expected instance error details');
-      }
-
-      try {
-        await realm.realmIndexQueryEngine.searchCards({
-          filter: {
-            on: { module: `${testRealm}deep-card`, name: 'DeepCard' },
-            eq: { 'middle.leaf.value': 'Root' },
-          },
-        });
-      } catch (_error) {
-        // definition lookup errors are expected while dependencies are missing
-      }
-
-      deepModuleRows = (await testDbAdapter.execute(
-        `SELECT error_doc FROM modules WHERE url IN ($1, $2) OR file_alias IN ($1, $2)`,
-        {
-          bind: [`${testRealm}deep-card`, `${testRealm}deep-card.gts`],
-          coerceTypes: { error_doc: 'JSON' },
-        },
-      )) as { error_doc: ErrorEntry | null }[];
-      deepModuleError = deepModuleRows.find((row) => row.error_doc)?.error_doc;
-      if (deepModuleError?.error) {
-        let additionalErrors = Array.isArray(
-          deepModuleError.error.additionalErrors,
-        )
-          ? deepModuleError.error.additionalErrors
-          : [];
-        assert.ok(
-          additionalErrors.some((error) =>
-            String(error.message ?? '').includes('leaf-field'),
-          ),
-          'deep-card module error includes leaf-field error details',
+        assert.strictEqual(
+          brokenInstance?.type,
+          'instance-error',
+          'instance is in an error state when LeafField module is missing',
         );
-      } else {
-        assert.ok(false, 'expected deep-card module error details');
-      }
+        if (brokenInstance?.type === 'instance-error') {
+          let additionalErrors = Array.isArray(
+            brokenInstance.error.additionalErrors,
+          )
+            ? brokenInstance.error.additionalErrors
+            : [];
+          assert.ok(
+            additionalErrors.some((error: { message?: string }) =>
+              String(error.message ?? '').includes('leaf-field'),
+            ),
+            'missing LeafField details are included in dependency errors',
+          );
+        } else {
+          assert.ok(false, 'expected instance error details');
+        }
 
-      let middleModuleRows = (await testDbAdapter.execute(
-        `SELECT error_doc FROM modules WHERE url IN ($1, $2) OR file_alias IN ($1, $2)`,
-        {
-          bind: [`${testRealm}middle-field`, `${testRealm}middle-field.gts`],
-          coerceTypes: { error_doc: 'JSON' },
-        },
-      )) as { error_doc: ErrorEntry | null }[];
-      let middleModuleError = middleModuleRows.find(
-        (row) => row.error_doc,
-      )?.error_doc;
-      assert.strictEqual(
-        middleModuleError?.type,
-        'module-error',
-        'middle-field module error is cached',
-      );
-      if (middleModuleError?.error) {
-        let additionalErrors = Array.isArray(
-          middleModuleError.error.additionalErrors,
-        )
-          ? middleModuleError.error.additionalErrors
-          : [];
-        assert.ok(
-          additionalErrors.some((error) =>
-            String(error.message ?? '').includes('leaf-field'),
-          ),
-          'middle-field module error includes leaf-field error details',
+        try {
+          await realm.realmIndexQueryEngine.searchCards({
+            filter: {
+              on: { module: `${testRealm}deep-card`, name: 'DeepCard' },
+              eq: { 'middle.leaf.value': 'Root' },
+            },
+          });
+        } catch (_error) {
+          // definition lookup errors are expected while dependencies are missing
+        }
+
+        deepModuleEntry = await definitionLookup.getModuleCacheEntry(
+          `${testRealm}deep-card`,
         );
-      } else {
-        assert.ok(false, 'expected middle-field module error details');
+        if (deepModuleEntry?.error?.error) {
+          let additionalErrors = Array.isArray(
+            deepModuleEntry.error.error.additionalErrors,
+          )
+            ? deepModuleEntry.error.error.additionalErrors
+            : [];
+          assert.ok(
+            additionalErrors.some((error) =>
+              String(error.message ?? '').includes('leaf-field'),
+            ),
+            'deep-card module error includes leaf-field error details',
+          );
+        } else {
+          assert.ok(false, 'expected deep-card module error details');
+        }
+
+        let middleModuleEntry = await definitionLookup.getModuleCacheEntry(
+          `${testRealm}middle-field`,
+        );
+        assert.strictEqual(
+          middleModuleEntry?.error?.type,
+          'module-error',
+          'middle-field module error is cached',
+        );
+        if (middleModuleEntry?.error?.error) {
+          let additionalErrors = Array.isArray(
+            middleModuleEntry.error.error.additionalErrors,
+          )
+            ? middleModuleEntry.error.error.additionalErrors
+            : [];
+          assert.ok(
+            additionalErrors.some((error) =>
+              String(error.message ?? '').includes('leaf-field'),
+            ),
+            'middle-field module error includes leaf-field error details',
+          );
+        } else {
+          assert.ok(false, 'expected middle-field module error details');
+        }
       }
 
       await realm.write(

@@ -242,7 +242,10 @@ export class CachingDefinitionLookup implements DefinitionLookup {
         realmURL,
         prerenderUserId,
       );
-      if (response.status === 'error' && this.isMissingModuleError(response)) {
+      if (
+        response.status === 'error' &&
+        this.isMissingModuleError(response, candidateURL)
+      ) {
         continue;
       }
       return await this.persistModuleCacheEntry(
@@ -268,11 +271,31 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     ];
   }
 
-  private isMissingModuleError(response: ModuleRenderResponse): boolean {
-    return (
-      response.error?.type === 'module-error' &&
-      response.error.error.status === 404
-    );
+  private isMissingModuleError(
+    response: ModuleRenderResponse,
+    moduleURL: string,
+  ): boolean {
+    if (
+      response.error?.type !== 'module-error' ||
+      response.error.error.status !== 404
+    ) {
+      return false;
+    }
+    let deps = response.error.error.deps ?? [];
+    if (deps.length === 0) {
+      return true;
+    }
+    let moduleVariants = new Set(this.moduleURLVariants(moduleURL));
+    let moduleBaseURL: URL;
+    try {
+      moduleBaseURL = new URL(moduleURL);
+    } catch (_err) {
+      return false;
+    }
+    return deps.every((dep) => {
+      let normalizedDep = this.normalizeDependencyForLookup(dep, moduleBaseURL);
+      return moduleVariants.has(normalizedDep);
+    });
   }
 
   private async lookupDefinitionWithContext(

@@ -1,7 +1,3 @@
-/* eslint-disable camelcase */
-
-exports.shorthands = undefined;
-
 exports.up = (pgm) => {
   pgm.dropConstraint('modules', 'modules_pkey', {
     ifExists: true,
@@ -37,22 +33,9 @@ exports.down = (pgm) => {
   pgm.sql('DROP INDEX IF EXISTS modules_resolved_realm_url_file_alias_index');
   pgm.sql(`
     CREATE INDEX modules_resolved_realm_url_file_alias_index
-    ON modules (resolved_realm_url, file_alias)
+    ON modules (resolved_realm_url, md5(file_alias))
   `);
-
-  pgm.dropConstraint('modules', 'modules_pkey', {
-    ifExists: true,
-  });
-
-  pgm.dropColumn('modules', 'url_without_css', {
-    ifExists: true,
-  });
-
-  pgm.dropColumn('modules', 'url_hash', {
-    ifExists: true,
-  });
-
-  pgm.addConstraint('modules', 'modules_pkey', {
-    primaryKey: ['url', 'cache_scope', 'auth_user_id'],
-  });
+  // Reverting to a PRIMARY KEY that includes raw `url` can exceed Postgres'
+  // btree tuple-size limit for long URLs. We keep the hashed primary key and
+  // generated columns in place so `migrate redo` remains usable.
 };

@@ -83,7 +83,7 @@
    file_alias TEXT,
    url_hash TEXT GENERATED ALWAYS AS (url) STORED NOT NULL,
    url_without_css TEXT GENERATED ALWAYS AS (url) STORED,
-   PRIMARY KEY ( url_hash, cache_scope, auth_user_id ) 
+   PRIMARY KEY ( url, cache_scope, auth_user_id ) 
 );
 
  CREATE TABLE IF NOT EXISTS published_realms (
