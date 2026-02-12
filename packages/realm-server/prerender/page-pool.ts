@@ -748,12 +748,14 @@ export class PagePool {
               value !== null &&
               Object.keys(value).length === 0
             ) {
-              let errorInfo = await arg.evaluate((obj: any) => {
-                if (obj instanceof Error) {
-                  return `${obj.name}: ${obj.message}\n${obj.stack ?? ''}`;
-                }
-                return undefined;
-              }).catch(() => undefined);
+              let errorInfo = await arg
+                .evaluate((obj: any) => {
+                  if (obj instanceof Error) {
+                    return `${obj.name}: ${obj.message}\n${obj.stack ?? ''}`;
+                  }
+                  return undefined;
+                })
+                .catch(() => undefined);
               if (errorInfo) {
                 return errorInfo;
               }
