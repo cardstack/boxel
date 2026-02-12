@@ -30,12 +30,29 @@ exports.up = (pgm) => {
 };
 
 exports.down = (pgm) => {
-  pgm.sql('DROP INDEX IF EXISTS modules_resolved_realm_url_file_alias_index');
+  // Try to fully restore pre-migration schema. If Postgres rejects the wide
+  // primary key/index (54000), keep hash-based schema so redo stays usable.
   pgm.sql(`
-    CREATE INDEX modules_resolved_realm_url_file_alias_index
-    ON modules (resolved_realm_url, md5(file_alias))
+    DO $$
+    BEGIN
+      LOCK TABLE modules IN ACCESS EXCLUSIVE MODE;
+      DELETE FROM modules;
+      DROP INDEX IF EXISTS modules_resolved_realm_url_file_alias_index;
+      ALTER TABLE modules DROP CONSTRAINT IF EXISTS modules_pkey;
+      ALTER TABLE modules DROP COLUMN IF EXISTS url_without_css;
+      ALTER TABLE modules DROP COLUMN IF EXISTS url_hash;
+      ALTER TABLE modules
+        ADD CONSTRAINT modules_pkey PRIMARY KEY (url, cache_scope, auth_user_id);
+      CREATE INDEX modules_resolved_realm_url_file_alias_index
+        ON modules (resolved_realm_url, file_alias);
+    EXCEPTION
+      WHEN SQLSTATE '54000' THEN
+        RAISE NOTICE
+          'Skipping full rollback of 1770889690032: index tuple too large. Keeping hash-based modules key/index.';
+        DROP INDEX IF EXISTS modules_resolved_realm_url_file_alias_index;
+        CREATE INDEX modules_resolved_realm_url_file_alias_index
+          ON modules (resolved_realm_url, md5(file_alias));
+    END
+    $$;
   `);
-  // Reverting to a PRIMARY KEY that includes raw `url` can exceed Postgres'
-  // btree tuple-size limit for long URLs. We keep the hashed primary key and
-  // generated columns in place so `migrate redo` remains usable.
 };
