@@ -186,11 +186,16 @@ export default class SearchSheet extends Component<Signature> {
     }
   }
 
+  private get joinSelectedRealmURLs() {
+    return this.selectedRealmURLs?.join(',');
+  }
+
   <template>
     <div
       id='search-sheet'
       class='search-sheet {{this.sheetSize}}'
       data-test-search-sheet={{@mode}}
+      data-test-search-realms={{this.joinSelectedRealmURLs}}
       {{onClickOutside
         @onBlur
         exceptSelector='.add-card-to-neighbor-stack,.boxel-picker__dropdown,.picker-before-options-with-search,.picker-option-row,.search-sheet-header,.search-sheet-section-header,.variant-default'

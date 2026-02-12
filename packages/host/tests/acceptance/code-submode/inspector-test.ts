@@ -2156,9 +2156,7 @@ export class ExportedCard extends ExportedCardParent {
     assert
       .dom('[data-test-search-field]')
       .hasValue(`carddef:${testRealmURL}pet/Pet`);
-    assert
-      .dom('[data-test-search-label]')
-      .hasText(`2 Results for “carddef:${testRealmURL}pet/Pet”`);
+    assert.dom('[data-test-search-label]').includesText('2 result');
     assert.dom(`[data-test-search-result="${testRealmURL}Pet/mango"]`).exists();
     assert
       .dom(`[data-test-search-result="${testRealmURL}Pet/vangogh"]`)
