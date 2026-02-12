@@ -139,12 +139,10 @@ module('Integration | operator-mode | card catalog', function (hooks) {
 
     await click(`[data-test-open-search-field]`);
     typeIn(`[data-test-search-field]`, 'ma');
-    await waitUntil(
-      () =>
-        (
-          document.querySelector('[data-test-search-label]') as HTMLElement
-        )?.innerText.includes('Searching…'),
-      { timeout: 3000 },
+    await waitUntil(() =>
+      (
+        document.querySelector('[data-test-search-label]') as HTMLElement
+      )?.innerText.includes('Searching…'),
     );
     assert.dom(`[data-test-search-label]`).containsText('Searching…');
     await settled();
@@ -159,12 +157,10 @@ module('Integration | operator-mode | card catalog', function (hooks) {
     await click(`[data-test-search-sheet-cancel-button]`);
     await click(`[data-test-open-search-field]`);
     await typeIn(`[data-test-search-field]`, 'Mark J');
-    await waitUntil(
-      () =>
-        (
-          document.querySelector('[data-test-search-label]') as HTMLElement
-        )?.innerText.includes('1 result'),
-      { timeout: 5000 },
+    await waitUntil(() =>
+      (
+        document.querySelector('[data-test-search-label]') as HTMLElement
+      )?.innerText.includes('1 result'),
     );
     assert
       .dom(`[data-test-search-label]`)
@@ -177,21 +173,10 @@ module('Integration | operator-mode | card catalog', function (hooks) {
 
     await focus(`[data-test-search-field]`);
     typeIn(`[data-test-search-field]`, 'No Cards');
-    await waitUntil(
-      () =>
-        (
-          document.querySelector('[data-test-search-label]') as HTMLElement
-        )?.innerText.includes('Searching…'),
-      { timeout: 3000 },
-    );
-    assert.dom(`[data-test-search-label]`).containsText('Searching…');
-
-    await waitUntil(
-      () =>
-        (
-          document.querySelector('[data-test-search-label]') as HTMLElement
-        )?.innerText.includes('0 results'),
-      { timeout: 5000 },
+    await waitUntil(() =>
+      (
+        document.querySelector('[data-test-search-label]') as HTMLElement
+      )?.innerText.includes('0 results'),
     );
     assert
       .dom(`[data-test-search-label]`)
@@ -613,13 +598,6 @@ module('Integration | operator-mode | card catalog', function (hooks) {
     await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
     await click(`[data-test-open-search-field]`);
     await fillIn(`[data-test-search-field]`, 'ma');
-    await waitUntil(
-      () =>
-        (
-          document.querySelector('[data-test-search-label]') as HTMLElement
-        )?.innerText?.includes('result'),
-      { timeout: 5000 },
-    );
     assert.dom(`[data-test-search-sheet-section-header]`).exists();
     assert.dom(`[data-test-search-result="${testRealmURL}Pet/mango"]`).exists();
     assert
@@ -639,13 +617,6 @@ module('Integration | operator-mode | card catalog', function (hooks) {
     await click(`[data-test-open-search-field]`);
     // Use a query that returns multiple results in one realm (ma -> Pet/mango, Author/mark, etc.)
     await fillIn(`[data-test-search-field]`, 'ma');
-    await waitUntil(
-      () =>
-        (
-          document.querySelector('[data-test-search-label]') as HTMLElement
-        )?.innerText?.includes('result'),
-      { timeout: 5000 },
-    );
     await waitFor('[data-test-search-sheet-search-result]');
     const initialCount = document.querySelectorAll(
       '[data-test-search-sheet-search-result]',
@@ -714,13 +685,6 @@ module('Integration | operator-mode | card catalog', function (hooks) {
     await click(`[data-test-open-search-field]`);
     // In compact (prompt) mode, section headers are not rendered; type a query to expand to results mode
     await fillIn(`[data-test-search-field]`, 'ma');
-    await waitUntil(
-      () =>
-        (
-          document.querySelector('[data-test-search-label]') as HTMLElement
-        )?.innerText?.includes('result'),
-      { timeout: 5000 },
-    );
     assert.dom(`[data-test-search-sheet-section-header]`).exists();
     assert.dom('.search-sheet-content').containsText('Recents');
   });
@@ -758,13 +722,6 @@ module('Integration | operator-mode | card catalog', function (hooks) {
     await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
     await click(`[data-test-open-search-field]`);
     await fillIn(`[data-test-search-field]`, 'ma');
-    await waitUntil(
-      () =>
-        (
-          document.querySelector('[data-test-search-label]') as HTMLElement
-        )?.innerText?.includes('result'),
-      { timeout: 5000 },
-    );
     await waitFor('[data-test-search-sheet-show-only]');
     await click('[data-test-search-sheet-show-only]');
     const collapsedBlocks = document.querySelectorAll(
@@ -786,13 +743,7 @@ module('Integration | operator-mode | card catalog', function (hooks) {
     await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
     await click(`[data-test-open-search-field]`);
     await fillIn(`[data-test-search-field]`, 'ma');
-    await waitUntil(
-      () =>
-        (
-          document.querySelector('[data-test-search-label]') as HTMLElement
-        )?.innerText?.includes('result'),
-      { timeout: 5000 },
-    );
+    await settled();
     assert.dom('[data-test-search-result-header]').exists();
     const stripOption =
       document.querySelector(

@@ -2156,7 +2156,12 @@ export class ExportedCard extends ExportedCardParent {
     assert
       .dom('[data-test-search-field]')
       .hasValue(`carddef:${testRealmURL}pet/Pet`);
-    assert.dom('[data-test-search-label]').includesText('2 result');
+    await waitUntil(() =>
+      (
+        document.querySelector('[data-test-search-label]') as HTMLElement
+      )?.innerText.includes('2 results'),
+    );
+    assert.dom('[data-test-search-label]').includesText('2 results');
     assert.dom(`[data-test-search-result="${testRealmURL}Pet/mango"]`).exists();
     assert
       .dom(`[data-test-search-result="${testRealmURL}Pet/vangogh"]`)
