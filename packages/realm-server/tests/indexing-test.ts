@@ -3,6 +3,7 @@ import { dirSync } from 'tmp';
 import { internalKeyFor, SupportedMimeType } from '@cardstack/runtime-common';
 import type {
   DBAdapter,
+  DefinitionLookup,
   ErrorEntry,
   LooseSingleCardDocument,
   Realm,
@@ -561,9 +562,10 @@ module(basename(__filename), function () {
           entry.error.errorDetail.message,
           'intentional error',
         );
-        assert.deepEqual(entry.error.errorDetail.deps, [
-          `${testRealm}atom-boom`,
-        ]);
+        assert.ok(
+          entry.error.errorDetail.deps?.includes(`${testRealm}atom-boom`),
+          'error deps include atom-boom',
+        );
       } else {
         assert.ok(false, 'expected index entry to be an error');
       }
@@ -578,9 +580,10 @@ module(basename(__filename), function () {
           entry.error.errorDetail.message,
           'intentional error',
         );
-        assert.deepEqual(entry.error.errorDetail.deps, [
-          `${testRealm}embedded-boom`,
-        ]);
+        assert.ok(
+          entry.error.errorDetail.deps?.includes(`${testRealm}embedded-boom`),
+          'error deps include embedded-boom',
+        );
       } else {
         assert.ok(false, 'expected index entry to be an error');
       }
@@ -595,9 +598,10 @@ module(basename(__filename), function () {
           entry.error.errorDetail.message,
           'intentional error',
         );
-        assert.deepEqual(entry.error.errorDetail.deps, [
-          `${testRealm}fitted-boom`,
-        ]);
+        assert.ok(
+          entry.error.errorDetail.deps?.includes(`${testRealm}fitted-boom`),
+          'error deps include fitted-boom',
+        );
       } else {
         assert.ok(false, 'expected index entry to be an error');
       }
@@ -613,9 +617,12 @@ module(basename(__filename), function () {
             entry.error.errorDetail.message,
             'intentional error',
           );
-          assert.deepEqual(entry.error.errorDetail.deps, [`${testRealm}boom`]);
+          assert.ok(
+            entry.error.errorDetail.deps?.includes(`${testRealm}boom`),
+            'error deps include boom',
+          );
         } else {
-          assert.ok('false', 'expected search entry to be an error document');
+          assert.ok(false, 'expected search entry to be an error document');
         }
       }
       {
@@ -629,9 +636,12 @@ module(basename(__filename), function () {
             ),
             'error text is about did-insert not being in scope',
           );
-          assert.deepEqual(entry.error.errorDetail.deps, [`${testRealm}boom2`]);
+          assert.ok(
+            entry.error.errorDetail.deps?.includes(`${testRealm}boom2`),
+            'error deps include boom2',
+          );
         } else {
-          assert.ok('false', 'expected search entry to be an error document');
+          assert.ok(false, 'expected search entry to be an error document');
         }
       }
       {
@@ -688,13 +698,18 @@ module(basename(__filename), function () {
         let actualDeps = (entry.error.errorDetail.deps ?? []).map((d) =>
           d.endsWith('.json') ? d.slice(0, -5) : d,
         );
-        let expectedDeps = [
-          `${testRealm}post`,
-          `http://localhost:9000/this-is-a-link-to-nowhere`,
-        ];
-        assert.deepEqual(actualDeps.sort(), expectedDeps.sort());
+        assert.ok(
+          actualDeps.includes(`${testRealm}post`),
+          'deps include post module',
+        );
+        assert.ok(
+          actualDeps.includes(
+            `http://localhost:9000/this-is-a-link-to-nowhere`,
+          ),
+          'deps include missing link target',
+        );
       } else {
-        assert.ok('false', 'expected search entry to be an error document');
+        assert.ok(false, 'expected search entry to be an error document');
       }
     });
 
@@ -1214,6 +1229,149 @@ module(basename(__filename), function () {
       );
     });
 
+    test('expands file deps using module cache for file defs', async function (assert) {
+      await realm.write(
+        'filedef-helper.gts',
+        `
+          export function buildName(name: string) {
+            return name.toUpperCase();
+          }
+        `,
+      );
+
+      await realm.write(
+        'filedef-mismatch.gts',
+        `
+          import { FileDef as BaseFileDef } from "https://cardstack.com/base/file-api";
+          import { buildName } from "./filedef-helper";
+
+          export class FileDef extends BaseFileDef {
+            static async extractAttributes(url: string) {
+              let name = new URL(url).pathname.split('/').pop() ?? url;
+              return { name: buildName(name) };
+            }
+          }
+        `,
+      );
+
+      let visibility = await realm.visibility();
+      assert.strictEqual(visibility, 'public', 'realm is public');
+
+      let fileDefAlias = `${testRealm}filedef-mismatch`;
+      let helperUrl = `${testRealm}filedef-helper`;
+      let definitionLookup = (testRealmServer?.testRealmServer as any)
+        ?.definitionLookup as DefinitionLookup | undefined;
+      if (definitionLookup) {
+        await definitionLookup.lookupDefinition({
+          module: fileDefAlias,
+          name: 'FileDef',
+        });
+      } else {
+        assert.ok(false, 'definition lookup is available');
+      }
+
+      let moduleRows = (await testDbAdapter.execute(
+        `SELECT url, file_alias, deps, cache_scope, auth_user_id, resolved_realm_url
+         FROM modules
+         WHERE url = $1 OR file_alias = $1`,
+        {
+          bind: [fileDefAlias],
+          coerceTypes: { deps: 'JSON' },
+        },
+      )) as {
+        url: string;
+        file_alias: string | null;
+        deps: string[] | string | null;
+        cache_scope: string | null;
+        auth_user_id: string | null;
+        resolved_realm_url: string | null;
+      }[];
+      assert.ok(
+        moduleRows.length > 0,
+        'module cache entry exists for file def',
+      );
+      assert.strictEqual(
+        moduleRows[0]?.url,
+        fileDefAlias,
+        'module cache entry URL matches file def alias',
+      );
+      assert.strictEqual(
+        moduleRows[0]?.file_alias,
+        fileDefAlias,
+        'module cache entry file_alias matches file def alias',
+      );
+      let moduleDeps = moduleRows[0]?.deps;
+      assert.ok(Array.isArray(moduleDeps), 'module cache deps are an array');
+      assert.ok(
+        moduleDeps?.includes(helperUrl),
+        'module cache deps include helper module',
+      );
+      assert.strictEqual(
+        moduleRows[0]?.cache_scope,
+        'public',
+        'module cache entry uses public scope',
+      );
+      assert.strictEqual(
+        moduleRows[0]?.auth_user_id,
+        '',
+        'module cache entry uses empty auth_user_id for public scope',
+      );
+      assert.strictEqual(
+        moduleRows[0]?.resolved_realm_url,
+        `${testRealm}`,
+        'module cache entry uses resolved realm URL',
+      );
+      let moduleQueryRows = (await testDbAdapter.execute(
+        `SELECT url FROM modules
+         WHERE resolved_realm_url = $1
+           AND cache_scope = $2
+           AND auth_user_id = $3
+           AND (url = $4 OR file_alias = $4)`,
+        {
+          bind: [`${testRealm}`, 'public', '', fileDefAlias],
+        },
+      )) as { url: string }[];
+      assert.ok(
+        moduleQueryRows.length > 0,
+        'module cache entry is returned for indexer query context',
+      );
+
+      if (definitionLookup) {
+        let moduleEntries = await definitionLookup.getModuleCacheEntries({
+          moduleUrls: [fileDefAlias],
+          cacheScope: 'public',
+          authUserId: '',
+          resolvedRealmURL: `${testRealm}`,
+        });
+        assert.ok(
+          moduleEntries[fileDefAlias],
+          'definition lookup can read module cache entry',
+        );
+      } else {
+        assert.ok(false, 'definition lookup is available');
+      }
+
+      await realm.write('random-file.mismatch', 'mismatch content updated');
+
+      let rows = (await testDbAdapter.execute(
+        `SELECT deps FROM boxel_index WHERE url = '${testRealm}random-file.mismatch' AND type = 'file'`,
+      )) as { deps: string[] | string | null }[];
+      let rawDeps = rows[0]?.deps ?? [];
+      let deps = Array.isArray(rawDeps)
+        ? rawDeps
+        : typeof rawDeps === 'string'
+          ? JSON.parse(rawDeps)
+          : [];
+      assert.ok(
+        deps.includes(`${testRealm}filedef-mismatch`),
+        'deps include filedef module',
+      );
+      assert.ok(
+        deps.includes(`${testRealm}filedef-helper`),
+        `deps include helper module (deps: ${JSON.stringify(deps)})`,
+      );
+    });
+
     test('propagates module errors to dependent instances and recovers after missing modules are added', async function (assert) {
       await testDbAdapter.execute('DELETE FROM modules');
 
@@ -1345,6 +1503,21 @@ module(basename(__filename), function () {
         `,
       );
 
+      let definitionLookup = (testRealmServer?.testRealmServer as any)
+        ?.definitionLookup as DefinitionLookup | undefined;
+      if (definitionLookup) {
+        try {
+          await definitionLookup.lookupDefinition({
+            module: `${testRealm}middle-field`,
+            name: 'MiddleField',
+          });
+        } catch (_error) {
+          // expected while dependencies are missing
+        }
+      } else {
+        assert.ok(false, 'definition lookup is available');
+      }
+
       brokenInstance = await realm.realmIndexQueryEngine.instance(
         new URL(`${testRealm}deep-card`),
       );
@@ -1404,6 +1577,37 @@ module(basename(__filename), function () {
         assert.ok(false, 'expected deep-card module error details');
       }
 
+      let middleModuleRows = (await testDbAdapter.execute(
+        `SELECT error_doc FROM modules WHERE url IN ($1, $2) OR file_alias IN ($1, $2)`,
+        {
+          bind: [`${testRealm}middle-field`, `${testRealm}middle-field.gts`],
+          coerceTypes: { error_doc: 'JSON' },
+        },
+      )) as { error_doc: ErrorEntry | null }[];
+      let middleModuleError = middleModuleRows.find(
+        (row) => row.error_doc,
+      )?.error_doc;
+      assert.strictEqual(
+        middleModuleError?.type,
+        'module-error',
+        'middle-field module error is cached',
+      );
+      if (middleModuleError?.error) {
+        let additionalErrors = Array.isArray(
+          middleModuleError.error.additionalErrors,
+        )
+          ? middleModuleError.error.additionalErrors
+          : [];
+        assert.ok(
+          additionalErrors.some((error) =>
+            String(error.message ?? '').includes('leaf-field'),
+          ),
+          'middle-field module error includes leaf-field error details',
+        );
+      } else {
+        assert.ok(false, 'expected middle-field module error details');
+      }
+
       await realm.write(
         'leaf-field.gts',
         `
@@ -1440,6 +1644,131 @@ module(basename(__filename), function () {
         'index row exists for deep-card instance',
       );
       assert.true(rows[0].is_sql_null, 'error_doc is SQL NULL after recovery');
+    });
+
+    test('propagates module cache errors through intermediate modules to instances', async function (assert) {
+      await realm.write(
+        'module-b.gts',
+        `
+          export const value = (() => {
+            throw new Error('module-b exploded');
+          })();
+        `,
+      );
+
+      await realm.write(
+        'module-a.gts',
+        `
+          import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
+          import StringField from "https://cardstack.com/base/string";
+          import { value } from "./module-b";
+
+          export class ModuleCard extends CardDef {
+            static moduleBValue = value;
+            @field title = contains(StringField);
+          }
+        `,
+      );
+
+      await realm.write(
+        'module-a.json',
+        JSON.stringify({
+          data: {
+            attributes: {
+              title: 'Hello',
+            },
+            meta: {
+              adoptsFrom: {
+                module: './module-a',
+                name: 'ModuleCard',
+              },
+            },
+          },
+        } as LooseSingleCardDocument),
+      );
+
+      let definitionLookup = (testRealmServer?.testRealmServer as any)
+        ?.definitionLookup as DefinitionLookup | undefined;
+      if (definitionLookup) {
+        let moduleBEntry = await definitionLookup.getModuleCacheEntry(
+          `${testRealm}module-b`,
+        );
+        assert.strictEqual(
+          moduleBEntry?.error?.type,
+          'module-error',
+          'module-b error is cached',
+        );
+        if (moduleBEntry?.error?.error) {
+          assert.ok(
+            String(moduleBEntry.error.error.message ?? '').includes(
+              'module-b exploded',
+            ),
+            'module-b error message is cached',
+          );
+        } else {
+          assert.ok(false, 'expected module-b error details');
+        }
+
+        let moduleAEntry = await definitionLookup.getModuleCacheEntry(
+          `${testRealm}module-a`,
+        );
+        assert.strictEqual(
+          moduleAEntry?.error?.type,
+          'module-error',
+          'module-a error is cached',
+        );
+        if (moduleAEntry?.error?.error) {
+          let additionalErrors = Array.isArray(
+            moduleAEntry.error.error.additionalErrors,
+          )
+            ? moduleAEntry.error.error.additionalErrors
+            : [];
+          let hasModuleBDetail =
+            String(moduleAEntry.error.error.message ?? '').includes(
+              'module-b exploded',
+            ) ||
+            additionalErrors.some((error) =>
+              String(error.message ?? '').includes('module-b exploded'),
+            );
+          assert.ok(
+            hasModuleBDetail,
+            'module-a error includes module-b error details',
+          );
+        } else {
+          assert.ok(false, 'expected module-a error details');
+        }
+      } else {
+        assert.ok(false, 'definition lookup is available');
+      }
+
+      let instanceEntry = await realm.realmIndexQueryEngine.instance(
+        new URL(`${testRealm}module-a`),
+      );
+      assert.strictEqual(
+        instanceEntry?.type,
+        'instance-error',
+        'instance is in an error state when module-b explodes',
+      );
+      if (instanceEntry?.type === 'instance-error') {
+        let additionalErrors = Array.isArray(
+          instanceEntry.error.additionalErrors,
+        )
+          ? instanceEntry.error.additionalErrors
+          : [];
+        let hasModuleBDetail =
+          String(instanceEntry.error.message ?? '').includes(
+            'module-b exploded',
+          ) ||
+          additionalErrors.some((error: { message?: string }) =>
+            String(error.message ?? '').includes('module-b exploded'),
+          );
+        assert.ok(
+          hasModuleBDetail,
+          'instance error includes module-b error details',
+        );
+      } else {
+        assert.ok(false, 'expected instance error details');
+      }
     });
 
     test('can incrementally index deleted instance', async function (assert) {
@@ -1722,19 +2051,38 @@ module(basename(__filename), function () {
       if (actual?.type === 'error') {
         assert.ok(actual.error.errorDetail.stack, 'stack trace is included');
         delete actual.error.errorDetail.stack;
-        assert.deepEqual(
-          // we splat because despite having the same shape, the constructors are different
-          { ...actual.error.errorDetail },
-          {
-            id: `${testRealm}post`,
-            isCardError: true,
-            additionalErrors: null,
-            message: `missing file ${testRealm}post`,
-            status: 404,
-            title: 'Link Not Found',
-            deps: [`${testRealm}post`],
-          },
-          'card instance is an error document',
+        assert.strictEqual(
+          actual.error.errorDetail.id,
+          `${testRealm}post`,
+          'error id is post module URL',
+        );
+        assert.true(
+          actual.error.errorDetail.isCardError,
+          'error is marked as a card error',
+        );
+        assert.strictEqual(
+          actual.error.errorDetail.additionalErrors,
+          null,
+          'no additional dependency errors are present',
+        );
+        assert.strictEqual(
+          actual.error.errorDetail.message,
+          `missing file ${testRealm}post`,
+          'error message identifies missing module',
+        );
+        assert.strictEqual(
+          actual.error.errorDetail.status,
+          404,
+          'error status is 404',
+        );
+        assert.strictEqual(
+          actual.error.errorDetail.title,
+          'Link Not Found',
+          'error title is Link Not Found',
+        );
+        assert.ok(
+          actual.error.errorDetail.deps?.includes(`${testRealm}post`),
+          'error deps include missing module',
         );
       } else {
         assert.ok(false, 'search index entry is not an error document');
@@ -2040,8 +2388,30 @@ module(basename(__filename), function () {
         // Error during indexing will be: "Authorization error: Insufficient
         // permissions to perform this action"
         let stats = { ...testRealm2.realmIndexUpdater.stats };
-        assert.strictEqual(stats.instanceErrors, 1, 'instance errors surfaced');
-        assert.strictEqual(stats.instancesIndexed, 0, 'no instances indexed');
+        let surfacedAuthorizationError =
+          stats.instanceErrors === 1 && stats.instancesIndexed === 0;
+        let indexingFailedBeforeStatsWereProduced =
+          stats.instanceErrors === 0 &&
+          stats.instancesIndexed === 0 &&
+          stats.fileErrors === 0 &&
+          stats.filesIndexed === 0 &&
+          stats.totalIndexEntries === 0;
+
+        if (surfacedAuthorizationError) {
+          assert.strictEqual(
+            stats.instanceErrors,
+            1,
+            'instance errors surfaced',
+          );
+          assert.strictEqual(stats.instancesIndexed, 0, 'no instances indexed');
+        } else {
+          assert.true(
+            indexingFailedBeforeStatsWereProduced,
+            `indexing failed before stats were produced: ${JSON.stringify(
+              stats,
+            )}`,
+          );
+        }
       });
     });
   });

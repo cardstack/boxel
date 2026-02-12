@@ -145,6 +145,7 @@ export class IndexRunner {
     cacheScope: CacheScope;
     authUserId: string;
   };
+  #definitionLookupRealmRegistered = false;
   #realmOwnerUserId: string;
   #definitionLookup: DefinitionLookup;
   #jobInfo: JobInfo;
@@ -369,6 +370,19 @@ export class IndexRunner {
     return this.#moduleCacheContext;
   }
 
+  private async registerDefinitionLookupRealm(): Promise<void> {
+    if (this.#definitionLookupRealmRegistered) {
+      return;
+    }
+    let realmInfo = await this.ensureRealmInfo();
+    this.#definitionLookup.registerRealm({
+      url: this.realmURL.href,
+      getRealmOwnerUserId: async () => this.#realmOwnerUserId,
+      visibility: async () => realmInfo.visibility,
+    });
+    this.#definitionLookupRealmRegistered = true;
+  }
+
   #scheduleClearCacheForNextRender() {
     this.#shouldClearCacheForNextRender = true;
   }
@@ -398,12 +412,23 @@ export class IndexRunner {
     }
     let { resolvedRealmURL, cacheScope, authUserId } =
       await this.getModuleCacheContext();
-    return await this.#definitionLookup.getModuleCacheEntries({
+    let entries = await this.#definitionLookup.getModuleCacheEntries({
       moduleUrls: moduleIds,
       cacheScope,
       authUserId,
       resolvedRealmURL,
     });
+    let missing = moduleIds.filter((moduleId) => !(moduleId in entries));
+    if (missing.length > 0) {
+      await this.registerDefinitionLookupRealm();
+      for (let moduleId of missing) {
+        let entry = await this.#definitionLookup.getModuleCacheEntry(moduleId);
+        if (entry) {
+          entries[moduleId] = entry;
+        }
+      }
+    }
+    return entries;
   }
 
   private async collectTransitiveModuleDeps(
@@ -1052,6 +1077,13 @@ export class IndexRunner {
       internalKeyFor(ref, undefined),
     );
     let fileTypes = extractResult.types ?? fallbackTypes;
+    let directDeps = extractResult.deps ?? [];
+    let moduleDeps = directDeps.filter((dep) => dep !== fileURL);
+    let expandedDeps = await this.collectTransitiveModuleDeps(
+      moduleDeps,
+      entryURL,
+    );
+    let deps = new Set([...expandedDeps, fileURL]);
 
     // Phase 2: Render HTML for file entry (non-fatal).
     // Skip for files that already have their own prerender (modules) since
@@ -1092,7 +1124,7 @@ export class IndexRunner {
       type: 'file',
       lastModified,
       resourceCreatedAt,
-      deps: new Set([...(extractResult.deps ?? []), fileURL]),
+      deps,
       resource: extractResult.resource ?? null,
       searchData: {
         url: fileURL,

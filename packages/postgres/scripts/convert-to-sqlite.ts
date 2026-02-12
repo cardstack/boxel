@@ -3,6 +3,7 @@ import { readFileSync, readdirSync, writeFileSync } from 'fs-extra';
 import { resolve, join } from 'path';
 import {
   parse,
+  show,
   type CreateTableStmt,
   type AlterTableStmt,
   type Program,
@@ -147,6 +148,27 @@ function createColumns(
             `Don't know how to serialize default value constraint for expression type '${constraint.expr.type}'`,
           );
         }
+        case 'constraint_generated': {
+          // SQLite supports generated columns, but not Postgres-specific
+          // functions like md5() and regexp_replace(). Fall back to a stable
+          // expression so schema conversion succeeds.
+          if ('sequenceOptions' in constraint && constraint.sequenceOptions) {
+            break;
+          }
+
+          let generatedExpr = show(constraint.expr);
+          generatedExpr = toSQLiteGeneratedExpression(
+            generatedExpr,
+            item.name.name,
+          );
+          column.push('GENERATED ALWAYS AS', generatedExpr);
+          column.push(
+            constraint.storageKw?.name?.toUpperCase() === 'VIRTUAL'
+              ? 'VIRTUAL'
+              : 'STORED',
+          );
+          break;
+        }
         default: {
           throw new Error(
             `Don't know how to serialize constraint ${constraint.type} for column '${item.name.name}'`,
@@ -246,4 +268,26 @@ function getSchemaFilename(): string {
     .sort()
     .pop()!;
   return `${lastFile.replace(/_.*/, '')}_schema.sql`;
+}
+
+function toSQLiteGeneratedExpression(expr: string, columnName: string): string {
+  let normalizedExpr = expr.toLowerCase();
+
+  if (
+    columnName === 'url_hash' &&
+    normalizedExpr.includes('md5(') &&
+    normalizedExpr.includes('url')
+  ) {
+    return '(url)';
+  }
+
+  if (
+    columnName === 'url_without_css' &&
+    normalizedExpr.includes('regexp_replace(') &&
+    normalizedExpr.includes('url')
+  ) {
+    return '(url)';
+  }
+
+  return expr;
 }

@@ -56,6 +56,20 @@ function normalizeExecutableURL(url: string): string {
   }
 }
 
+function parseJsonValue<T>(value: T | string | null): T | null {
+  if (value == null) {
+    return null;
+  }
+  if (typeof value === 'string') {
+    try {
+      return JSON.parse(value) as T;
+    } catch (_err) {
+      return null;
+    }
+  }
+  return value as T;
+}
+
 export type CacheScope = 'public' | 'realm-auth';
 type LocalRealm = Pick<Realm, 'url' | 'getRealmOwnerUserId' | 'visibility'>;
 
@@ -116,6 +130,7 @@ export interface DefinitionLookup {
   clearRealmCache(realmURL: string): Promise<void>;
   registerRealm(realm: LocalRealm): void;
   forRealm(realm: LocalRealm): DefinitionLookup;
+  getModuleCacheEntry(moduleUrl: string): Promise<ModuleCacheEntry | undefined>;
   getModuleCacheEntries(
     query: ModuleCacheEntryQuery,
   ): Promise<ModuleCacheEntries>;
@@ -152,6 +167,38 @@ export class CachingDefinitionLookup implements DefinitionLookup {
 
   async lookupDefinition(codeRef: ResolvedCodeRef): Promise<Definition> {
     return await this.lookupDefinitionWithContext(codeRef);
+  }
+
+  async getModuleCacheEntry(
+    moduleUrl: string,
+  ): Promise<ModuleCacheEntry | undefined> {
+    let canonicalModuleURL = canonicalURL(moduleUrl);
+    let context = await this.buildLookupContext(canonicalModuleURL);
+    if (!context) {
+      return undefined;
+    }
+    let {
+      realmURL,
+      cacheUserId,
+      prerenderUserId,
+      cacheScope,
+      resolvedRealmURL,
+    } = context;
+    return (
+      (await this.readFromDatabaseCache(
+        canonicalModuleURL,
+        cacheScope,
+        cacheUserId,
+        resolvedRealmURL,
+      )) ??
+      (await this.populateCache(
+        canonicalModuleURL,
+        realmURL,
+        resolvedRealmURL,
+        prerenderUserId,
+        cacheScope,
+      ))
+    );
   }
 
   private async query(expression: Expression, coerceTypes?: TypeCoercion) {
@@ -417,10 +464,19 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     }
 
     let row = rows[0];
+    let definitions =
+      parseJsonValue<Record<string, ModuleDefinitionResult | ErrorEntry>>(
+        row.definitions,
+      ) ?? {};
+    let deps = parseJsonValue<string[]>(row.deps) ?? [];
+    if (!Array.isArray(deps)) {
+      deps = [];
+    }
+    let error = parseJsonValue<ErrorEntry>(row.error_doc) ?? undefined;
     return {
-      definitions: row.definitions ?? {},
-      deps: row.deps ?? [],
-      error: row.error_doc ?? undefined,
+      definitions,
+      deps,
+      error,
       cacheScope: row.cache_scope,
       authUserId: row.auth_user_id || undefined,
       resolvedRealmURL: row.resolved_realm_url || '',
@@ -433,7 +489,13 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     if (query.moduleUrls.length === 0) {
       return {};
     }
-    let params = query.moduleUrls.map((moduleUrl) => [param(moduleUrl)]);
+    let candidateUrls = new Set<string>();
+    for (let moduleUrl of query.moduleUrls) {
+      let canonicalModuleUrl = canonicalURL(moduleUrl);
+      candidateUrls.add(canonicalModuleUrl);
+      candidateUrls.add(normalizeExecutableURL(canonicalModuleUrl));
+    }
+    let params = [...candidateUrls].map((moduleUrl) => [param(moduleUrl)]);
     let moduleList = addExplicitParens(separatedByCommas(params)) as Expression;
     let rows = (await this.query(
       [
@@ -451,8 +513,8 @@ export class CachingDefinitionLookup implements DefinitionLookup {
           ]) as Expression,
         ]) as Expression),
       ],
-      modulesTableCoerceTypes,
-    )) as {
+        modulesTableCoerceTypes,
+      )) as {
       url: string;
       file_alias: string | null;
       definitions: Record<string, ModuleDefinitionResult | ErrorEntry> | null;
@@ -464,15 +526,34 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     }[];
 
     let entries: ModuleCacheEntries = {};
-    for (let row of rows) {
-      entries[row.url] = {
-        definitions: row.definitions ?? {},
-        deps: row.deps ?? [],
-        error: row.error_doc ?? undefined,
+    let assignEntry = (key: string, row: (typeof rows)[number]) => {
+      let definitions =
+        parseJsonValue<Record<string, ModuleDefinitionResult | ErrorEntry>>(
+          row.definitions,
+        ) ?? {};
+      let deps = parseJsonValue<string[]>(row.deps) ?? [];
+      if (!Array.isArray(deps)) {
+        deps = [];
+      }
+      let error = parseJsonValue<ErrorEntry>(row.error_doc) ?? undefined;
+      let existing = entries[key];
+      if (existing && row.cache_scope !== 'realm-auth') {
+        return;
+      }
+      entries[key] = {
+        definitions,
+        deps,
+        error,
         cacheScope: row.cache_scope,
         authUserId: row.auth_user_id || undefined,
         resolvedRealmURL: row.resolved_realm_url || '',
       };
+    };
+    for (let row of rows) {
+      assignEntry(row.url, row);
+      if (row.file_alias) {
+        assignEntry(row.file_alias, row);
+      }
     }
 
     return entries;
@@ -518,7 +599,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
           [param(authUserId)],
         ]),
       ) as Expression),
-      'ON CONFLICT (url, cache_scope, auth_user_id) DO UPDATE SET',
+      'ON CONFLICT ON CONSTRAINT modules_pkey DO UPDATE SET',
       ...(separatedByCommas([
         ['file_alias = excluded.file_alias'],
         ['definitions = excluded.definitions'],
@@ -923,6 +1004,12 @@ class RealmScopedDefinitionLookup implements DefinitionLookup {
 
   forRealm(realm: LocalRealm): DefinitionLookup {
     return this.#inner.forRealm(realm);
+  }
+
+  async getModuleCacheEntry(
+    moduleUrl: string,
+  ): Promise<ModuleCacheEntry | undefined> {
+    return await this.#inner.getModuleCacheEntry(moduleUrl);
   }
 
   async getModuleCacheEntries(

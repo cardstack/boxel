@@ -233,6 +233,9 @@ module('Unit | query', function (hooks) {
       async clearRealmCache(_realmURL: string): Promise<void> {
         // no-op for tests
       },
+      async getModuleCacheEntry(): Promise<undefined> {
+        return undefined;
+      },
       async getModuleCacheEntries(): Promise<Record<string, never>> {
         return {};
       },
