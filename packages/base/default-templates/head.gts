@@ -27,7 +27,7 @@ export default class DefaultHeadTemplate extends GlimmerComponent<{
 
     <meta property='og:title' content={{this.title}} />
     <meta name='twitter:title' content={{this.title}} />
-    <meta property='og:url' content={{this.args.model.id}} />
+    <meta property='og:url' content={{@model.id}} />
 
     {{#if this.description}}
       <meta name='description' content={{this.description}} />
