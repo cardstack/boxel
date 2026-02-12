@@ -98,7 +98,10 @@ export type FileErrorIndexEntry = ErrorEntry & { type: 'file-error' };
 export type SearchIndexErrorEntry =
   | InstanceErrorIndexEntry
   | FileErrorIndexEntry;
-export type SearchIndexEntry = InstanceEntry | SearchIndexErrorEntry | FileEntry;
+export type SearchIndexEntry =
+  | InstanceEntry
+  | SearchIndexErrorEntry
+  | FileEntry;
 
 function isErrorEntry(entry: { type: string }): entry is ErrorEntry {
   return entry.type.endsWith('-error');
