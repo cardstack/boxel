@@ -86,18 +86,14 @@ export class CardContextConsumer extends Component<CardContextConsumerSignature>
     };
   }
 
-  <template>
-    {{yield this.context}}
-  </template>
+  <template>{{yield this.context}}</template>
 }
 
 export class CardCrudFunctionsConsumer extends Component<CardCrudFunctionsConsumerSignature> {
   @consume(CardCrudFunctionsContextName)
   declare cardCrudFunctions: CardCrudFunctions;
 
-  <template>
-    {{yield this.cardCrudFunctions}}
-  </template>
+  <template>{{yield this.cardCrudFunctions}}</template>
 }
 
 interface DefaultFormatConsumerSignature {
@@ -113,9 +109,7 @@ export class DefaultFormatsConsumer extends Component<DefaultFormatConsumerSigna
     return this.defaultFormats ?? { cardDef: 'isolated', fieldDef: 'embedded' };
   }
 
-  <template>
-    {{yield this.effectiveDefaultFormats}}
-  </template>
+  <template>{{yield this.effectiveDefaultFormats}}</template>
 }
 
 interface DefaultFormatsProviderSignature {
@@ -137,9 +131,7 @@ interface PermissionsConsumerSignature {
 export class PermissionsConsumer extends Component<PermissionsConsumerSignature> {
   @consume(PermissionsContextName) declare permissions: Permissions | undefined;
 
-  <template>
-    {{yield this.permissions}}
-  </template>
+  <template>{{yield this.permissions}}</template>
 }
 
 const componentCache = initSharedState(
@@ -527,7 +519,11 @@ function getFields(card: typeof CardDef): {
       }
       return [[maybeFieldName, maybeField]];
     });
-    fields = { ...fields, ...Object.fromEntries(currentFields) };
+    fields = Object.assign(
+      Object.create(null),
+      fields,
+      Object.fromEntries(currentFields),
+    );
     obj = Reflect.getPrototypeOf(obj);
   }
   return fields;

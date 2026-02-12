@@ -14,7 +14,9 @@ import { generateScopedCSSPlugin } from 'glimmer-scoped-css/ast-transform';
 
 //@ts-ignore no upstream types
 import decoratorTransforms from 'decorator-transforms';
-import { compiler } from './etc';
+
+//@ts-ignore no upstream types
+import * as compiler from 'ember-source/ember-template-compiler/index.js';
 
 const scopedCSSTransform = generateScopedCSSPlugin({
   noGlobal: true,
