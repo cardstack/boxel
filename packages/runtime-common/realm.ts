@@ -1,5 +1,10 @@
 import { Deferred } from './deferred';
 import {
+  collectDependentModuleCacheInvalidations,
+  extractModuleDependencyKeys,
+  moduleDependencyKey,
+} from './cache/module-cache-invalidation';
+import {
   makeCardTypeSummaryDoc,
   transformResultsToPrerenderedCardsDoc,
   type SingleCardDocument,
@@ -226,6 +231,7 @@ type ModuleCacheEntry = {
   canonicalPath: LocalPath;
   body: string;
   headers: Record<string, string>;
+  dependencyKeys: Set<string>;
 };
 
 type ModuleLoadResult =
@@ -1612,6 +1618,12 @@ export class Realm {
               canonicalPath: result.canonicalPath,
               body: result.body,
               headers: result.headers,
+              dependencyKeys: extractModuleDependencyKeys(
+                result.body,
+                result.canonicalPath,
+                this.url,
+                this.paths,
+              ),
             });
           }
           response = createResponse({
@@ -2193,17 +2205,46 @@ export class Realm {
   private async handleExecutableInvalidations(
     invalidatedURLs: URL[],
   ): Promise<void> {
-    let definitionInvalidations: Promise<void>[] = [];
+    let definitionInvalidations: Promise<string[]>[] = [];
+    let changedDependencyKeys = new Set<string>();
     for (const invalidatedURL of invalidatedURLs) {
       if (hasExecutableExtension(invalidatedURL.href)) {
-        this.#moduleCache.invalidate(this.paths.local(invalidatedURL));
+        let invalidatedPath = this.paths.local(invalidatedURL);
+        this.#moduleCache.invalidate(invalidatedPath);
+        changedDependencyKeys.add(moduleDependencyKey(invalidatedPath));
         definitionInvalidations.push(
           this.#definitionLookup.invalidate(invalidatedURL.href),
         );
       }
     }
-    if (definitionInvalidations.length > 0) {
-      await Promise.all(definitionInvalidations);
+    for (let invalidatedModuleURLs of await Promise.all(
+      definitionInvalidations,
+    )) {
+      for (let invalidatedModuleURL of invalidatedModuleURLs) {
+        try {
+          let invalidatedPath = this.paths.local(new URL(invalidatedModuleURL));
+          this.#moduleCache.invalidate(invalidatedPath);
+          changedDependencyKeys.add(moduleDependencyKey(invalidatedPath));
+        } catch (_err) {
+          // ignore invalidations outside this realm
+        }
+      }
+    }
+    let dependentInvalidations = collectDependentModuleCacheInvalidations(
+      changedDependencyKeys,
+      this.moduleCacheDependencyEntries(),
+    );
+    for (let invalidatedPath of dependentInvalidations) {
+      this.#moduleCache.invalidate(invalidatedPath);
+    }
+  }
+
+  private *moduleCacheDependencyEntries() {
+    for (let [, cachedEntry] of this.#moduleCache.entries()) {
+      yield {
+        canonicalPath: cachedEntry.canonicalPath,
+        dependencyKeys: cachedEntry.dependencyKeys,
+      };
     }
   }
 

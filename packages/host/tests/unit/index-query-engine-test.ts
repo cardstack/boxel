@@ -227,8 +227,9 @@ module('Unit | query', function (hooks) {
             });
         }
       },
-      async invalidate(_realmURL: string): Promise<void> {
+      async invalidate(_realmURL: string): Promise<string[]> {
         // no-op for tests
+        return [];
       },
       async clearRealmCache(_realmURL: string): Promise<void> {
         // no-op for tests

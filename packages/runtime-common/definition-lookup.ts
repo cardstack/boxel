@@ -21,6 +21,7 @@ import {
   type Realm,
   type RealmPermissions,
   type ResolvedCodeRef,
+  executableExtensions,
   hasExecutableExtension,
   trimExecutableExtension,
 } from './index';
@@ -126,7 +127,7 @@ export function isFilterRefersToNonexistentTypeError(
 
 export interface DefinitionLookup {
   lookupDefinition(codeRef: ResolvedCodeRef): Promise<Definition>;
-  invalidate(moduleURL: string): Promise<void>;
+  invalidate(moduleURL: string): Promise<string[]>;
   clearRealmCache(realmURL: string): Promise<void>;
   registerRealm(realm: LocalRealm): void;
   forRealm(realm: LocalRealm): DefinitionLookup;
@@ -275,27 +276,27 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     });
   }
 
-  async invalidate(moduleURL: string): Promise<void> {
+  async invalidate(moduleURL: string): Promise<string[]> {
     let canonicalModuleURL = canonicalURL(moduleURL);
     let resolvedRealmURL = this.resolveLocalRealmURL(canonicalModuleURL);
     if (!resolvedRealmURL) {
-      return;
-    }
-    let moduleAlias = normalizeExecutableURL(canonicalModuleURL);
-    if (!moduleAlias) {
-      return;
+      return [];
     }
     let visited = new Set<string>();
-    let invalidations = [
-      moduleAlias,
-      ...(await this.calculateInvalidations(
-        moduleAlias,
-        resolvedRealmURL,
-        visited,
-      )),
-    ];
+    let moduleVariants = this.moduleURLVariants(canonicalModuleURL);
+    let invalidations = [...moduleVariants];
+    for (let moduleVariant of moduleVariants) {
+      invalidations.push(
+        ...(await this.calculateInvalidations(
+          moduleVariant,
+          resolvedRealmURL,
+          visited,
+        )),
+      );
+    }
     let uniqueInvalidations = [...new Set(invalidations)];
     await this.deleteModuleAliases(resolvedRealmURL, uniqueInvalidations);
+    return uniqueInvalidations;
   }
 
   async clearRealmCache(realmURL: string): Promise<void> {
@@ -513,8 +514,8 @@ export class CachingDefinitionLookup implements DefinitionLookup {
           ]) as Expression,
         ]) as Expression),
       ],
-        modulesTableCoerceTypes,
-      )) as {
+      modulesTableCoerceTypes,
+    )) as {
       url: string;
       file_alias: string | null;
       definitions: Record<string, ModuleDefinitionResult | ErrorEntry> | null;
@@ -885,12 +886,17 @@ export class CachingDefinitionLookup implements DefinitionLookup {
   }
 
   private async itemsThatReference(
-    moduleAlias: string,
+    moduleAliases: string[],
     resolvedRealmURL: string,
   ): Promise<{ url: string; alias: string }[]> {
-    if (!moduleAlias) {
+    if (moduleAliases.length === 0) {
       return [];
     }
+    let moduleAliasList = addExplicitParens(
+      separatedByCommas(
+        moduleAliases.map((moduleAlias) => [param(moduleAlias)]),
+      ),
+    ) as Expression;
     let rows = (await this.query([
       'SELECT DISTINCT url, file_alias',
       'FROM',
@@ -904,7 +910,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       'WHERE',
       ...(every([
         ['resolved_realm_url =', param(resolvedRealmURL)],
-        ['dep.value =', param(moduleAlias)],
+        ['dep.value IN', ...moduleAliasList],
       ]) as Expression),
     ])) as { url: string; file_alias: string | null }[];
 
@@ -919,12 +925,13 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     resolvedRealmURL: string,
     visited: Set<string>,
   ): Promise<string[]> {
-    if (visited.has(moduleAlias)) {
+    let moduleKey = this.moduleKey(moduleAlias);
+    if (!moduleKey || visited.has(moduleKey)) {
       return [];
     }
-    visited.add(moduleAlias);
+    visited.add(moduleKey);
     let consumers = await this.itemsThatReference(
-      moduleAlias,
+      this.moduleURLVariants(moduleAlias),
       resolvedRealmURL,
     );
     let invalidations: string[] = [];
@@ -944,6 +951,35 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       }
     }
     return invalidations;
+  }
+
+  private moduleKey(moduleURL: string): string | undefined {
+    let canonical = canonicalURL(moduleURL);
+    if (!canonical) {
+      return undefined;
+    }
+    return normalizeExecutableURL(canonical);
+  }
+
+  private moduleURLVariants(moduleURL: string): string[] {
+    let canonical = canonicalURL(moduleURL);
+    if (!canonical) {
+      return [];
+    }
+    let variants = new Set<string>();
+    variants.add(canonical);
+    let alias = normalizeExecutableURL(canonical);
+    if (alias) {
+      variants.add(alias);
+      // Also consider extension-based variants so callers can invalidate
+      // module cache rows regardless of whether they have a file extension.
+      if (!canonical.endsWith('/')) {
+        for (let extension of executableExtensions) {
+          variants.add(`${alias}${extension}`);
+        }
+      }
+    }
+    return [...variants];
   }
 
   private async deleteModuleAliases(
@@ -990,8 +1026,8 @@ class RealmScopedDefinitionLookup implements DefinitionLookup {
     return await this.#inner.lookupDefinitionForRealm(codeRef, this.#realm);
   }
 
-  async invalidate(moduleURL: string): Promise<void> {
-    await this.#inner.invalidate(moduleURL);
+  async invalidate(moduleURL: string): Promise<string[]> {
+    return await this.#inner.invalidate(moduleURL);
   }
 
   async clearRealmCache(realmURL: string): Promise<void> {

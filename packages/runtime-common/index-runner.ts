@@ -39,7 +39,11 @@ import {
   baseRealm,
   internalKeyFor,
 } from './index';
-import type { DefinitionLookup, ModuleCacheEntries } from './definition-lookup';
+import type {
+  CacheScope,
+  DefinitionLookup,
+  ModuleCacheEntries,
+} from './definition-lookup';
 import { inferContentType } from './infer-content-type';
 import {
   CardError,
@@ -92,8 +96,6 @@ const BASE_FILE_DEF_CODE_REF: ResolvedCodeRef = {
   module: `${baseRealm.url}file-api`,
   name: 'FileDef',
 };
-
-type CacheScope = 'public' | 'realm-auth';
 
 function resolveFileDefCodeRef(fileURL: URL): ResolvedCodeRef {
   let name = fileURL.pathname.split('/').pop() ?? '';
@@ -344,11 +346,37 @@ export class IndexRunner {
 
   private async ensureRealmInfo(): Promise<RealmInfo> {
     if (!this.#realmInfo) {
-      let realmInfoResponse = await this.#fetch(`${this.realmURL}_info`, {
+      let realmInfoURL = `${this.realmURL}_info`;
+      let realmInfoResponse = await this.#fetch(realmInfoURL, {
         method: 'QUERY',
         headers: { Accept: SupportedMimeType.RealmInfo },
       });
-      this.#realmInfo = (await realmInfoResponse.json())?.data?.attributes;
+      if (!realmInfoResponse.ok) {
+        let body = '<unable to read response body>';
+        try {
+          body = await realmInfoResponse.text();
+        } catch (_err) {
+          // fall back to placeholder body text
+        }
+        throw new Error(
+          `Failed to load realm info for indexing from ${realmInfoURL}: ` +
+            `${realmInfoResponse.status} ${realmInfoResponse.statusText}. ` +
+            `Response body: ${body}`,
+        );
+      }
+      let payload: unknown;
+      try {
+        payload = await realmInfoResponse.json();
+      } catch (err: unknown) {
+        throw new Error(
+          `Failed to parse realm info response from ${realmInfoURL} as JSON: ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+        );
+      }
+      this.#realmInfo = (
+        payload as { data?: { attributes?: RealmInfo } }
+      )?.data?.attributes;
     }
     if (!this.#realmInfo) {
       throw new Error('Unable to load realm info for indexing');
