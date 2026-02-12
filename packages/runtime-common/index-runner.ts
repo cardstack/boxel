@@ -96,6 +96,7 @@ const BASE_FILE_DEF_CODE_REF: ResolvedCodeRef = {
   module: `${baseRealm.url}file-api`,
   name: 'FileDef',
 };
+const PREFERRED_EXECUTABLE_EXTENSIONS = ['.gts', '.ts', '.gjs', '.js'];
 
 function resolveFileDefCodeRef(fileURL: URL): ResolvedCodeRef {
   let name = fileURL.pathname.split('/').pop() ?? '';
@@ -411,6 +412,39 @@ export class IndexRunner {
     this.#definitionLookupRealmRegistered = true;
   }
 
+  private async resolveExecutableModuleURL(
+    moduleURL: string,
+  ): Promise<string | undefined> {
+    if (!moduleURL.startsWith(this.realmURL.href)) {
+      return undefined;
+    }
+    let candidates = hasExecutableExtension(moduleURL)
+      ? [moduleURL]
+      : PREFERRED_EXECUTABLE_EXTENSIONS.map(
+          (extension) => `${moduleURL}${extension}`,
+        );
+    for (let candidate of candidates) {
+      let url = new URL(candidate);
+      try {
+        if (await this.#reader.readFile(url)) {
+          return url.href;
+        }
+      } catch (_err) {
+        continue;
+      }
+      let localPath: string;
+      try {
+        localPath = this.#realmPaths.local(url);
+      } catch (_err) {
+        continue;
+      }
+      if (await this.#reader.readFile(new URL(encodeURI(localPath), url))) {
+        return url.href;
+      }
+    }
+    return undefined;
+  }
+
   #scheduleClearCacheForNextRender() {
     this.#shouldClearCacheForNextRender = true;
   }
@@ -447,13 +481,22 @@ export class IndexRunner {
       resolvedRealmURL,
     });
     let missing = moduleIds.filter((moduleId) => !(moduleId in entries));
-    if (missing.length > 0) {
-      await this.registerDefinitionLookupRealm();
-      for (let moduleId of missing) {
-        let entry = await this.#definitionLookup.getModuleCacheEntry(moduleId);
-        if (entry) {
-          entries[moduleId] = entry;
-        }
+    if (missing.length === 0) {
+      return entries;
+    }
+    await this.registerDefinitionLookupRealm();
+    for (let moduleId of missing) {
+      if (!moduleId.startsWith(this.realmURL.href)) {
+        continue;
+      }
+      let executableModuleURL = await this.resolveExecutableModuleURL(moduleId);
+      if (!executableModuleURL) {
+        continue;
+      }
+      let entry =
+        await this.#definitionLookup.getModuleCacheEntry(executableModuleURL);
+      if (entry) {
+        entries[moduleId] = entry;
       }
     }
     return entries;

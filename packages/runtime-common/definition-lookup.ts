@@ -28,6 +28,7 @@ import {
 import type { VirtualNetwork } from './virtual-network';
 
 const MODULES_TABLE = 'modules';
+const PREFERRED_EXECUTABLE_EXTENSIONS = ['.gts', '.ts', '.gjs', '.js'];
 const modulesTableCoerceTypes: TypeCoercion = Object.freeze({
   definitions: 'JSON',
   deps: 'JSON',
@@ -185,25 +186,93 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       cacheScope,
       resolvedRealmURL,
     } = context;
-    return (
-      (await this.readFromDatabaseCache(
-        canonicalModuleURL,
-        cacheScope,
-        cacheUserId,
-        resolvedRealmURL,
-      )) ??
-      (await this.populateCache(
-        canonicalModuleURL,
-        realmURL,
-        resolvedRealmURL,
-        prerenderUserId,
-        cacheScope,
-      ))
-    );
+    return await this.loadModuleCacheEntry({
+      moduleURL: canonicalModuleURL,
+      realmURL,
+      resolvedRealmURL,
+      cacheScope,
+      cacheUserId,
+      prerenderUserId,
+    });
   }
 
   private async query(expression: Expression, coerceTypes?: TypeCoercion) {
     return await query(this.#dbAdapter, expression, coerceTypes);
+  }
+
+  private async loadModuleCacheEntry({
+    moduleURL,
+    realmURL,
+    resolvedRealmURL,
+    cacheScope,
+    cacheUserId,
+    prerenderUserId,
+  }: {
+    moduleURL: string;
+    realmURL: string;
+    resolvedRealmURL: string;
+    cacheScope: CacheScope;
+    cacheUserId: string;
+    prerenderUserId: string;
+  }): Promise<ModuleCacheEntry | undefined> {
+    let cached = await this.readFromDatabaseCache(
+      moduleURL,
+      cacheScope,
+      cacheUserId,
+      resolvedRealmURL,
+    );
+    if (cached) {
+      return cached;
+    }
+
+    for (let candidateURL of this.populationCandidates(moduleURL)) {
+      if (candidateURL !== moduleURL) {
+        let candidateCached = await this.readFromDatabaseCache(
+          candidateURL,
+          cacheScope,
+          cacheUserId,
+          resolvedRealmURL,
+        );
+        if (candidateCached) {
+          return candidateCached;
+        }
+      }
+      let response = await this.getModuleDefinitionsViaPrerenderer(
+        candidateURL,
+        realmURL,
+        prerenderUserId,
+      );
+      if (response.status === 'error' && this.isMissingModuleError(response)) {
+        continue;
+      }
+      return await this.persistModuleCacheEntry(
+        candidateURL,
+        response,
+        resolvedRealmURL,
+        cacheScope,
+        prerenderUserId,
+      );
+    }
+    return undefined;
+  }
+
+  private populationCandidates(moduleURL: string): string[] {
+    if (hasExecutableExtension(moduleURL)) {
+      return [moduleURL];
+    }
+    return [
+      ...PREFERRED_EXECUTABLE_EXTENSIONS.map(
+        (extension) => `${moduleURL}${extension}`,
+      ),
+      moduleURL,
+    ];
+  }
+
+  private isMissingModuleError(response: ModuleRenderResponse): boolean {
+    return (
+      response.error?.type === 'module-error' &&
+      response.error.error.status === 404
+    );
   }
 
   private async lookupDefinitionWithContext(
@@ -232,20 +301,14 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       resolvedRealmURL,
     } = context;
 
-    let moduleEntry =
-      (await this.readFromDatabaseCache(
-        canonicalModuleURL,
-        cacheScope,
-        cacheUserId,
-        resolvedRealmURL,
-      )) ??
-      (await this.populateCache(
-        canonicalModuleURL,
-        realmURL,
-        resolvedRealmURL,
-        prerenderUserId,
-        cacheScope,
-      ));
+    let moduleEntry = await this.loadModuleCacheEntry({
+      moduleURL: canonicalModuleURL,
+      realmURL,
+      resolvedRealmURL,
+      cacheScope,
+      cacheUserId,
+      prerenderUserId,
+    });
 
     if (!moduleEntry) {
       throw new FilterRefersToNonexistentTypeError(codeRef, {
@@ -612,18 +675,13 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     ]);
   }
 
-  private async populateCache(
+  private async persistModuleCacheEntry(
     moduleUrl: string,
-    realmURL: string,
+    response: ModuleRenderResponse,
     resolvedRealmURL: string,
-    userId: string,
     cacheScope: CacheScope,
-  ): Promise<ModuleCacheEntry | undefined> {
-    let response = await this.getModuleDefinitionsViaPrerenderer(
-      moduleUrl,
-      realmURL,
-      userId,
-    );
+    userId: string,
+  ): Promise<ModuleCacheEntry> {
     let entryURL = new URL(moduleUrl);
     let normalizedDeps = this.normalizeDependencies(
       response.deps ?? [],
