@@ -15,6 +15,7 @@ import {
   type PublishedRealmTable,
   fetchRealmPermissions,
   uuidv4,
+  userInitiatedPriority,
 } from '@cardstack/runtime-common';
 import { getPublishedRealmDomainOverrides } from '@cardstack/runtime-common/constants';
 import { ensureDirSync, copySync, readJsonSync, writeJsonSync, removeSync } from 'fs-extra';
@@ -367,7 +368,7 @@ export default function handlePublishRealm({
       // to the published realm get regenerated - we want this so that the
       // places in the templates that refer to model.id are updated to the new
       // published realm URL (for example in the og:url meta tag).
-      await realm.fullIndex();
+      await realm.fullIndex(userInitiatedPriority);
 
       let lastPublishedAt = Date.now().toString();
       try {
