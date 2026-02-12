@@ -194,6 +194,18 @@ export async function fetchUserPermissions(
   );
 }
 
+export function ensureRealmOwnerPermissions(
+  permissions: RealmPermissions,
+  realmURL: string,
+): RealmPermissions {
+  let next: RealmPermissions = { ...permissions };
+  let existing = new Set(next[realmURL] ?? []);
+  existing.add('read');
+  existing.add('realm-owner');
+  next[realmURL] = [...existing];
+  return next;
+}
+
 export async function fetchCatalogRealms(dbAdapter: DBAdapter) {
   let results = (await query(dbAdapter, [
     `SELECT rup.realm_url

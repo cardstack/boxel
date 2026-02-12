@@ -1,10 +1,10 @@
 import type * as JSONTypes from 'json-typescript';
 import type { Task, WorkerArgs } from './index';
 import {
+  ensureRealmOwnerPermissions,
   jobIdentity,
   userIdFromUsername,
   fetchUserPermissions,
-  type RealmPermissions,
 } from '../index';
 import { IndexRunner } from '../index-runner';
 import type { Stats } from '../worker';
@@ -156,14 +156,4 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
     };
   };
 
-function ensureRealmOwnerPermissions(
-  permissions: RealmPermissions,
-  realmURL: string,
-): RealmPermissions {
-  let next: RealmPermissions = { ...permissions };
-  let existing = new Set(next[realmURL] ?? []);
-  existing.add('read');
-  existing.add('realm-owner');
-  next[realmURL] = [...existing];
-  return next;
-}
+

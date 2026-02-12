@@ -11,6 +11,7 @@ import {
 } from './expression';
 import type { SerializedError } from './error';
 import {
+  ensureRealmOwnerPermissions,
   fetchUserPermissions,
   internalKeyFor,
   type Definition,
@@ -359,7 +360,11 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     userId: string,
   ): Promise<ModuleRenderResponse> {
     let permissions = await fetchUserPermissions(this.#dbAdapter, { userId });
-    let auth = this.#createPrerenderAuth(userId, permissions);
+    let prerenderPermissions = ensureRealmOwnerPermissions(
+      permissions,
+      realmURL,
+    );
+    let auth = this.#createPrerenderAuth(userId, prerenderPermissions);
     return await this.#prerenderer.prerenderModule({
       realm: realmURL,
       url: moduleUrl,
