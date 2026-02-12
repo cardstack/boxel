@@ -10,9 +10,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
     let context = setupServerEndpointsTest(hooks);
 
     test('requires auth to add webhook command', async function (assert) {
-      let response = await context.request2
-        .post('/_webhook-commands')
-        .send({});
+      let response = await context.request2.post('/_webhook-commands').send({});
       assert.strictEqual(response.status, 401, 'HTTP 401 status');
     });
 
@@ -22,14 +20,12 @@ module(`server-endpoints/${basename(__filename)}`, function () {
     });
 
     test('requires auth to delete webhook command', async function (assert) {
-      let response = await context.request2
-        .delete('/_webhook-commands')
-        .send({
-          data: {
-            type: 'webhook-command',
-            id: uuidv4(),
-          },
-        });
+      let response = await context.request2.delete('/_webhook-commands').send({
+        data: {
+          type: 'webhook-command',
+          id: uuidv4(),
+        },
+      });
       assert.strictEqual(response.status, 401, 'HTTP 401 status');
     });
 

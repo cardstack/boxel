@@ -52,10 +52,7 @@ export default function handleWebhookReceiverRequest({
         ctxt.req.headers,
       );
     } catch (_error) {
-      await sendResponseForSystemError(
-        ctxt,
-        'signature verification failed',
-      );
+      await sendResponseForSystemError(ctxt, 'signature verification failed');
       return;
     }
 

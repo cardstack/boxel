@@ -1,7 +1,3 @@
-/* eslint-disable camelcase */
-
-exports.shorthands = undefined;
-
 exports.up = (pgm) => {
   pgm.createTable('incoming_webhooks', {
     id: {
@@ -41,7 +37,6 @@ exports.up = (pgm) => {
   });
 
   pgm.createIndex('incoming_webhooks', 'username');
-  pgm.createIndex('incoming_webhooks', 'webhook_path', { unique: true });
 
   pgm.createTable('webhook_commands', {
     id: {
@@ -78,7 +73,6 @@ exports.up = (pgm) => {
 exports.down = (pgm) => {
   pgm.dropIndex('webhook_commands', ['incoming_webhook_id', 'created_at']);
   pgm.dropTable('webhook_commands');
-  pgm.dropIndex('incoming_webhooks', 'webhook_path');
   pgm.dropIndex('incoming_webhooks', 'username');
   pgm.dropTable('incoming_webhooks');
 };

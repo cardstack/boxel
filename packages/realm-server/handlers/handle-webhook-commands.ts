@@ -80,10 +80,7 @@ export function handleCreateWebhookCommandRequest({
       return;
     }
     if (!uuidValidate(incomingWebhookId)) {
-      await sendResponseForBadRequest(
-        ctxt,
-        'incomingWebhookId must be a UUID',
-      );
+      await sendResponseForBadRequest(ctxt, 'incomingWebhookId must be a UUID');
       return;
     }
 
@@ -138,9 +135,7 @@ export function handleCreateWebhookCommandRequest({
         `,`,
         param(command),
         `,`,
-        filter !== null
-          ? param(filter as unknown as PgPrimitive)
-          : `NULL`,
+        filter !== null ? param(filter as unknown as PgPrimitive) : `NULL`,
         `,`,
         dbExpression({ pg: 'NOW()', sqlite: 'CURRENT_TIMESTAMP' }),
         `,`,
@@ -149,19 +144,13 @@ export function handleCreateWebhookCommandRequest({
         `RETURNING id, incoming_webhook_id, command, command_filter, created_at, updated_at`,
       ]);
     } catch (_error) {
-      await sendResponseForSystemError(
-        ctxt,
-        'failed to add webhook command',
-      );
+      await sendResponseForSystemError(ctxt, 'failed to add webhook command');
       return;
     }
 
     let row = rows[0];
     if (!row) {
-      await sendResponseForSystemError(
-        ctxt,
-        'failed to add webhook command',
-      );
+      await sendResponseForSystemError(ctxt, 'failed to add webhook command');
       return;
     }
 
@@ -317,10 +306,7 @@ export function handleDeleteWebhookCommandRequest({
       return;
     }
     if (!uuidValidate(webhookCommandId)) {
-      await sendResponseForBadRequest(
-        ctxt,
-        'webhookCommandId must be a UUID',
-      );
+      await sendResponseForBadRequest(ctxt, 'webhookCommandId must be a UUID');
       return;
     }
 
