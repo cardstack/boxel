@@ -17,7 +17,7 @@ import {
   uuidv4,
 } from '@cardstack/runtime-common';
 import { getPublishedRealmDomainOverrides } from '@cardstack/runtime-common/constants';
-import { ensureDirSync, copySync, readJsonSync, writeJsonSync } from 'fs-extra';
+import { ensureDirSync, copySync, readJsonSync, writeJsonSync, removeSync } from 'fs-extra';
 import { resolve, join } from 'path';
 import {
   fetchRequestFromContext,
@@ -294,6 +294,11 @@ export default function handlePublishRealm({
           `SELECT id, owner_username FROM published_realms WHERE published_realm_url =`,
           param(publishedRealmURL),
         ])) as Pick<PublishedRealmTable, 'id' | 'owner_username'>[];
+        if (!results.length) {
+          throw new Error(
+            `Published realm record not found for ${publishedRealmURL}`,
+          );
+        }
         publishedRealmId = results[0].id;
         realmUsername = `realm/${PUBLISHED_DIRECTORY_NAME}_${publishedRealmId}`;
       } else {
@@ -365,25 +370,34 @@ export default function handlePublishRealm({
       await realm.fullIndex();
 
       let lastPublishedAt = Date.now().toString();
-      if (existingPublishedRealm) {
-        await query(dbAdapter, [
-          `UPDATE published_realms SET last_published_at =`,
-          param(lastPublishedAt),
-          `WHERE published_realm_url =`,
-          param(publishedRealmURL),
-        ]);
-      } else {
-        let { valueExpressions, nameExpressions } = asExpressions({
-          id: publishedRealmId,
-          owner_username: realmUsername,
-          source_realm_url: sourceRealmURL,
-          published_realm_url: publishedRealmURL,
-          last_published_at: lastPublishedAt,
-        });
-        await query(
-          dbAdapter,
-          insert('published_realms', nameExpressions, valueExpressions),
-        );
+      try {
+        if (existingPublishedRealm) {
+          await query(dbAdapter, [
+            `UPDATE published_realms SET last_published_at =`,
+            param(lastPublishedAt),
+            `WHERE published_realm_url =`,
+            param(publishedRealmURL),
+          ]);
+        } else {
+          let { valueExpressions, nameExpressions } = asExpressions({
+            id: publishedRealmId,
+            owner_username: realmUsername,
+            source_realm_url: sourceRealmURL,
+            published_realm_url: publishedRealmURL,
+            last_published_at: lastPublishedAt,
+          });
+          await query(
+            dbAdapter,
+            insert('published_realms', nameExpressions, valueExpressions),
+          );
+        }
+      } catch (dbError: any) {
+        // Clean up the mounted realm so we don't leave an orphan
+        // without a corresponding published_realms DB record
+        realms.splice(realms.indexOf(realm), 1);
+        virtualNetwork.unmount(realm.handle);
+        removeSync(publishedRealmPath);
+        throw dbError;
       }
 
       let response = createResponse({
