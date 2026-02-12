@@ -130,3 +130,10 @@ export function injectIsolatedHTML(
     (_match, start, _content, end) => `${start}\n${isolatedHTML}\n${end}`,
   );
 }
+
+export function ensureSingleTitle(headHTML: string): string {
+  if (/<title[\s>]/.test(headHTML)) {
+    return headHTML;
+  }
+  return `<title>Boxel</title>\n${headHTML}`;
+}

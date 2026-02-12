@@ -136,17 +136,25 @@ export function createRemotePrerenderer(
             `Prerender request to ${endpoint.href} aborted after ${requestTimeoutMs}ms`,
           );
         }
+        // Node.js fetch() wraps network errors in TypeError with the
+        // underlying error (ECONNREFUSED, ECONNRESET, etc.) in e.cause.
+        // Check both e.code and e.cause.code to catch these.
+        let code = e?.code ?? e?.cause?.code;
         let retryable =
           e instanceof RetryablePrerenderError ||
-          e?.code === 'ECONNREFUSED' ||
-          e?.code === 'ETIMEDOUT' ||
-          e?.name === 'AbortError';
+          code === 'ECONNREFUSED' ||
+          code === 'ETIMEDOUT' ||
+          code === 'ECONNRESET' ||
+          (e instanceof TypeError && e.message === 'fetch failed');
         if (!retryable || attempts >= maxAttempts) {
           throw e;
         }
         let delayMs = Math.min(
           baseDelayMs * Math.pow(2, attempts - 1),
           maxDelayMs,
+        );
+        log.warn(
+          `Prerender request to ${endpoint.href} failed (attempt ${attempts}/${maxAttempts}), retrying in ${delayMs}ms: ${e.message}`,
         );
         await delay(delayMs);
       }

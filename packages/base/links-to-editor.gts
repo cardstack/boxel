@@ -11,16 +11,17 @@ import {
   getBoxComponent,
 } from './field-component';
 import {
-  type CardDef,
   type BaseDef,
   type Box,
   type Field,
   type CardContext,
   type LinkableDefConstructor,
   CreateCardFn,
+  isFileDef,
 } from './card-api';
 import {
   chooseCard,
+  chooseFile,
   baseCardRef,
   identifyCard,
   CardContextName,
@@ -37,7 +38,7 @@ import { consume } from 'ember-provide-consume-context';
 interface Signature {
   Element: HTMLElement;
   Args: {
-    model: Box<CardDef | null>;
+    model: Box<BaseDef | null>;
     field: Field<LinkableDefConstructor>;
     typeConstraint?: ResolvedCodeRef;
     createCard?: CreateCardFn;
@@ -166,6 +167,13 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
   }
 
   private chooseCard = restartableTask(async () => {
+    if (isFileDef(this.args.field.card)) {
+      let file = await chooseFile();
+      if (file) {
+        this.args.model.value = file;
+      }
+      return;
+    }
     let type = identifyCard(this.args.field.card) ?? baseCardRef;
     if (this.args.typeConstraint) {
       type = await getNarrowestType(this.args.typeConstraint, type, myLoader());

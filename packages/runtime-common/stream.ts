@@ -59,6 +59,41 @@ export async function byteStreamToUint8Array(
   return await webStreamToBytes(stream);
 }
 
+export async function readFirstBytes(
+  stream: ByteStream,
+  n: number,
+): Promise<Uint8Array> {
+  if (stream instanceof Uint8Array) {
+    return stream.slice(0, n);
+  }
+  let reader = stream.getReader();
+  let chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    while (total < n) {
+      let { done, value } = await reader.read();
+      if (done || !value) {
+        break;
+      }
+      chunks.push(value);
+      total += value.length;
+    }
+  } finally {
+    reader.releaseLock();
+    stream.cancel().catch(() => {});
+  }
+  if (chunks.length === 1) {
+    return chunks[0]!.slice(0, n);
+  }
+  let merged = new Uint8Array(total);
+  let offset = 0;
+  for (let chunk of chunks) {
+    merged.set(chunk, offset);
+    offset += chunk.length;
+  }
+  return merged.slice(0, n);
+}
+
 export async function fileContentToText({
   content,
 }: Pick<FileRef, 'content'>): Promise<string> {

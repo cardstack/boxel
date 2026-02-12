@@ -36,6 +36,7 @@ import {
   setContextResponse,
   fetchRequestFromContext,
   methodOverrideSupport,
+  proxyAsset,
 } from './middleware';
 import { registerUser } from './synapse';
 import convertAcceptHeaderQueryParam from './middleware/convert-accept-header-qp';
@@ -64,6 +65,7 @@ import {
   retrieveIsolatedHTML,
   injectHeadHTML,
   injectIsolatedHTML,
+  ensureSingleTitle,
 } from './lib/index-html-injection';
 
 export class RealmServer {
@@ -232,6 +234,7 @@ export class RealmServer {
           prerenderer: this.prerenderer,
         }),
       )
+      .use(proxyAsset('/auth-service-worker.js', this.assetsURL))
       .use(this.serveIndex)
       .use(this.serveFromRealm);
 
@@ -434,7 +437,7 @@ export class RealmServer {
     let headFragments: string[] = [];
 
     if (headHTML != null) {
-      headFragments.push(headHTML);
+      headFragments.push(ensureSingleTitle(headHTML));
     }
 
     if (scopedCSS != null) {
