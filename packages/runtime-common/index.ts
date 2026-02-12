@@ -369,7 +369,10 @@ export interface CardChooser {
 }
 
 export interface FileChooser {
-  chooseFile<T>(defaultRealmURL?: URL): Promise<undefined | T>;
+  chooseFile<T>(opts?: {
+    fileType?: CodeRef;
+    fileTypeName?: string;
+  }): Promise<undefined | T>;
 }
 
 export async function chooseCard(
@@ -397,9 +400,9 @@ export async function chooseCard(
   return await chooser.chooseCard(query, opts);
 }
 
-export async function chooseFile<T extends FieldDef>(): Promise<
-  undefined | any
-> {
+export async function chooseFile<T extends FieldDef>(
+  opts?: { fileType?: CodeRef; fileTypeName?: string },
+): Promise<undefined | any> {
   let here = globalThis as any;
   if (!here._CARDSTACK_FILE_CHOOSER) {
     throw new Error(
@@ -408,7 +411,7 @@ export async function chooseFile<T extends FieldDef>(): Promise<
   }
   let chooser: FileChooser = here._CARDSTACK_FILE_CHOOSER;
 
-  return await chooser.chooseFile<T>();
+  return await chooser.chooseFile<T>(opts);
 }
 
 import type { CardErrorJSONAPI } from './error';

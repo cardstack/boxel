@@ -168,7 +168,11 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
 
   private chooseCard = restartableTask(async () => {
     if (isFileDef(this.args.field.card)) {
-      let file = await chooseFile();
+      let fileType = identifyCard(this.args.field.card);
+      let fileTypeName = this.args.field.card.displayName;
+      let file = await chooseFile(
+        fileType ? { fileType, fileTypeName } : undefined,
+      );
       if (file) {
         this.args.model.value = file;
       }

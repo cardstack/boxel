@@ -612,6 +612,133 @@ module('Acceptance | interact submode tests', function (hooks) {
         .exists('the linked file is rendered in the card');
     });
 
+    test('file chooser filters by type when field is ImageDef', async function (assert) {
+      await visitOperatorMode({
+        stacks: [
+          [
+            {
+              id: `${testRealmURL}ImageLinkCard/empty`,
+              format: 'edit',
+            },
+          ],
+        ],
+      });
+
+      await waitUntil(
+        () =>
+          document.querySelector(
+            '[data-test-links-to-editor="photo"] [data-test-add-new]',
+          ),
+        {
+          timeout: 5000,
+          timeoutMessage: 'add button did not render for ImageDef field',
+        },
+      );
+
+      await click(
+        '[data-test-links-to-editor="photo"] [data-test-add-new="photo"]',
+      );
+
+      await waitUntil(
+        () => document.querySelector('[data-test-choose-file-modal]'),
+        { timeout: 5000, timeoutMessage: 'file chooser modal did not open' },
+      );
+
+      assert
+        .dom('[data-test-choose-file-modal]')
+        .exists('file chooser modal is open');
+      assert
+        .dom(
+          '[data-test-choose-file-modal] [data-test-boxel-header-title]',
+        )
+        .hasText('Choose Image', 'modal title reflects the file type');
+
+      await waitUntil(
+        () => document.querySelector('[data-test-file="test-image.png"]'),
+        {
+          timeout: 5000,
+          timeoutMessage: 'file tree did not load test-image.png',
+        },
+      );
+
+      assert
+        .dom('[data-test-file="test-image.png"]')
+        .exists('image file is shown in the file chooser');
+      assert
+        .dom('[data-test-file="README.txt"]')
+        .doesNotExist('non-image file is not shown in the file chooser');
+
+      await click('[data-test-file="test-image.png"]');
+      await click('[data-test-choose-file-modal-add-button]');
+
+      await waitUntil(
+        () => !document.querySelector('[data-test-choose-file-modal]'),
+        { timeout: 5000, timeoutMessage: 'file chooser modal did not close' },
+      );
+
+      assert
+        .dom(
+          '[data-test-links-to-editor="photo"] [data-test-card="http://test-realm/test/test-image.png"]',
+        )
+        .exists('photo field now shows the linked image');
+    });
+
+    test('file chooser shows all files when field is FileDef', async function (assert) {
+      await visitOperatorMode({
+        stacks: [
+          [
+            {
+              id: `${testRealmURL}FileLinkCard/empty`,
+              format: 'edit',
+            },
+          ],
+        ],
+      });
+
+      await waitUntil(
+        () =>
+          document.querySelector(
+            '[data-test-links-to-editor="attachment"] [data-test-add-new]',
+          ),
+        {
+          timeout: 5000,
+          timeoutMessage: 'add button did not render for FileDef field',
+        },
+      );
+
+      await click(
+        '[data-test-links-to-editor="attachment"] [data-test-add-new="attachment"]',
+      );
+
+      await waitUntil(
+        () => document.querySelector('[data-test-choose-file-modal]'),
+        { timeout: 5000, timeoutMessage: 'file chooser modal did not open' },
+      );
+
+      assert
+        .dom(
+          '[data-test-choose-file-modal] [data-test-boxel-header-title]',
+        )
+        .hasText('Choose File', 'modal title shows generic file type');
+
+      await waitUntil(
+        () => document.querySelector('[data-test-file="README.txt"]'),
+        {
+          timeout: 5000,
+          timeoutMessage: 'file tree did not load README.txt',
+        },
+      );
+
+      assert
+        .dom('[data-test-file="README.txt"]')
+        .exists('text file is shown in the file chooser');
+      assert
+        .dom('[data-test-file="test-image.png"]')
+        .exists('image file is also shown in the file chooser');
+
+      await click('[data-test-choose-file-modal-cancel-button]');
+    });
+
     test('can save mutated card without having opened in stack', async function (assert) {
       await visitOperatorMode({
         stacks: [

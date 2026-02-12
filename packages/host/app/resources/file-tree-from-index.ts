@@ -6,7 +6,9 @@ import { Resource } from 'ember-modify-based-class-resource';
 
 import {
   ensureTrailingSlash,
+  baseFileRef,
   type CardResource,
+  type CodeRef,
   type FileMetaResource,
   type Saved,
 } from '@cardstack/runtime-common';
@@ -17,6 +19,7 @@ import { getSearchData, type SearchDataResource } from './search-data';
 interface Args {
   named: {
     realmURL: string;
+    fileTypeFilter?: CodeRef;
   };
 }
 
@@ -31,11 +34,13 @@ export class FileTreeFromIndexResource extends Resource<Args> {
   // Use private field to avoid Glimmer autotracking - this prevents the error:
   // "You attempted to update `realmURL` but it had already been used previously in the same computation"
   #realmURL: string | undefined;
+  #fileTypeFilter: CodeRef | undefined;
   private search: SearchDataResource | undefined;
 
   modify(_positional: never[], named: Args['named']) {
-    let { realmURL } = named;
+    let { realmURL, fileTypeFilter } = named;
     let normalizedURL = ensureTrailingSlash(realmURL);
+    this.#fileTypeFilter = fileTypeFilter;
 
     // Always update - the search resource handles deduplication internally
     this.#realmURL = normalizedURL;
@@ -57,10 +62,7 @@ export class FileTreeFromIndexResource extends Resource<Args> {
     }
     return {
       filter: {
-        type: {
-          module: 'https://cardstack.com/base/file-api',
-          name: 'FileDef',
-        },
+        type: this.#fileTypeFilter ?? baseFileRef,
       },
       asData: true,
       fields: { 'file-meta': [] },
@@ -159,8 +161,13 @@ export class FileTreeFromIndexResource extends Resource<Args> {
   }
 }
 
-export function fileTreeFromIndex(parent: object, realmURL: () => string) {
+export function fileTreeFromIndex(
+  parent: object,
+  realmURL: () => string,
+  fileTypeFilter?: () => CodeRef | undefined,
+) {
   return FileTreeFromIndexResource.from(parent, () => ({
     realmURL: realmURL(),
+    fileTypeFilter: fileTypeFilter?.(),
   })) as FileTreeFromIndexResource;
 }
