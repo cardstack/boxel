@@ -202,10 +202,7 @@ export default class PrerenderedCardSearch extends Component<PrerenderedCardComp
     normalizeRealms(this.args.realms),
   );
 
-  constructor(
-    owner: unknown,
-    args: PrerenderedCardComponentSignature['Args'],
-  ) {
+  constructor(owner: unknown, args: PrerenderedCardComponentSignature['Args']) {
     super(owner, args);
     this.initFromShoebox();
   }
