@@ -499,7 +499,28 @@ export default class RenderRoute extends Route<Model> {
     if (!modelState || modelState.isReady) {
       return;
     }
-    await this.#authGuard.race(() => this.store.loaded());
+    // Handle multi-level linked card loading cascades. Each store.loaded()
+    // waits for in-flight linked card loads, but when those loads resolve and
+    // Ember re-renders, newly-accessed linked fields (deeper in the component
+    // tree) may trigger additional loads (e.g., HomeLayout → sections[].content
+    // → HeroSection → backgroundGrid). We loop, yielding to Ember's render
+    // queue between iterations, until no new loads appear after a render pass.
+    const MAX_SETTLE_ROUNDS = 10;
+    for (let round = 0; round < MAX_SETTLE_ROUNDS; round++) {
+      await this.#authGuard.race(() => this.store.loaded());
+      // Yield to Ember's render queue so templates update with newly-loaded
+      // data and any deeper linked card loads can start
+      await new Promise<void>((resolve) =>
+        scheduleOnce('afterRender', null, resolve),
+      );
+      // If no new document loads appeared after the render pass, we're stable
+      if (
+        this.store.cardDocsInFlight.length === 0 &&
+        this.store.fileMetaDocsInFlight.length === 0
+      ) {
+        break;
+      }
+    }
     modelState.state.set('status', 'ready');
     modelState.isReady = true;
     modelState.readyDeferred.fulfill();
