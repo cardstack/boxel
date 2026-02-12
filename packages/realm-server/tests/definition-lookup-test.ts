@@ -813,7 +813,9 @@ module(basename(__filename), function () {
                   args.url,
                   'DeepCard',
                   ['./middle-field.gts'],
-                  buildModuleError(args.url, 'missing middle-field'),
+                  buildModuleError(args.url, 'missing middle-field', [
+                    './middle-field.gts',
+                  ]),
                 );
               }
               return buildModuleResponse(args.url, 'DeepCard', [
@@ -826,7 +828,9 @@ module(basename(__filename), function () {
                   args.url,
                   'MiddleField',
                   [],
-                  buildModuleError(args.url, 'missing middle-field'),
+                  buildModuleError(args.url, 'missing middle-field', [
+                    './leaf-field.gts',
+                  ]),
                 );
               }
               if (!state.leaf) {
@@ -834,7 +838,9 @@ module(basename(__filename), function () {
                   args.url,
                   'MiddleField',
                   ['./leaf-field.gts'],
-                  buildModuleError(args.url, 'missing leaf-field'),
+                  buildModuleError(args.url, 'missing leaf-field', [
+                    './leaf-field.gts',
+                  ]),
                 );
               }
               return buildModuleResponse(args.url, 'MiddleField', [
