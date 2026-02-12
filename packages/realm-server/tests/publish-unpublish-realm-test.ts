@@ -239,6 +239,24 @@ module(basename(__filename), function () {
           'index entries should reference the published realm URL',
         );
 
+        // Verify that head_html in the published realm references the
+        // published URL, not the source realm URL (the fullIndex after
+        // publish re-renders templates so og:url uses the correct URL)
+        let instanceWithHead = indexResults.find(
+          (r: { type: string; head_html: string | null }) =>
+            r.type === 'instance' && r.head_html,
+        );
+        if (instanceWithHead) {
+          assert.ok(
+            instanceWithHead.head_html.includes(publishedRealmURL),
+            `head_html should reference published realm URL, got: ${instanceWithHead.head_html}`,
+          );
+          assert.notOk(
+            instanceWithHead.head_html.includes(sourceRealmUrlString),
+            `head_html should not reference source realm URL, got: ${instanceWithHead.head_html}`,
+          );
+        }
+
         let catalogResponse = await request
           .get('/_catalog-realms')
           .set('Accept', 'application/vnd.api+json');

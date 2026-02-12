@@ -394,6 +394,12 @@ export default function handlePublishRealm({
       );
       await realm.start();
 
+      // reindexing is to ensure that prerendered templates that get copied over
+      // to the published realm get regenerated - we want this so that the
+      // places in the templates that refer to model.id are updated to the new
+      // published realm URL (for example in the og:url meta tag).
+      await realm.fullIndex();
+
       let response = createResponse({
         body: JSON.stringify(
           {
