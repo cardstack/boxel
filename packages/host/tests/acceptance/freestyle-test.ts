@@ -3,9 +3,14 @@ import { visit } from '@ember/test-helpers';
 import { module, test } from 'qunit';
 
 import { setupApplicationTest } from '../helpers/setup';
+import { setupAuthEndpoints } from '../helpers';
 
 module('Acceptance | Freestyle', function (hooks) {
   setupApplicationTest(hooks);
+
+  hooks.beforeEach(function () {
+    setupAuthEndpoints();
+  });
 
   test('smoke check', async function (assert) {
     await visit('/_freestyle');
