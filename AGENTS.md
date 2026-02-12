@@ -93,6 +93,7 @@
   Add `.only` to module/test declaration (`test.only('returns a 201 response', ...)`)
   Then run `pnpm test`
   Make sure not to commit `.only` to source control
+- make sure to kill previously running realm-server tests if they are still running before starting a new test run.
 - run `pnpm lint` directly in this directory to lint changes made to this package
 
 ### packages/postgres
