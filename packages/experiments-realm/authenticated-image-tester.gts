@@ -108,7 +108,7 @@ class AuthenticatedImageTesterIsolated extends Component<
       {{else}}
         <div class='empty-state'>
           Enter a realm image URL above to test. Try a relative path like
-          <code>./logo.png</code>
+          <code>./green-mango.png</code>
           or an absolute realm URL.
         </div>
       {{/if}}
