@@ -92,6 +92,7 @@ function extractExcerpt(markdown: string): string {
 
 export class MarkdownDef extends FileDef {
   static displayName = 'Markdown';
+  static acceptTypes = '.md,.markdown';
 
   @field title = contains(StringField);
   @field excerpt = contains(StringField);

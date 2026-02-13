@@ -1,6 +1,9 @@
-import { currentURL, click } from '@ember/test-helpers';
+import { currentURL, click, settled, waitUntil } from '@ember/test-helpers';
 
+import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
+
+import type FileUploadService from '@cardstack/host/services/file-upload';
 
 import { testRealmURL, visitOperatorMode } from '../helpers';
 
@@ -182,6 +185,118 @@ module('Acceptance | file chooser tests', function (hooks) {
     assert
       .dom('[data-test-file="test-image.png"]')
       .exists('image file is also shown in the file chooser');
+
+    await click('[data-test-choose-file-modal-cancel-button]');
+  });
+
+  test('can upload a file via the file chooser', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}FileLinkCard/empty`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    await click(`[data-test-operator-mode-stack="0"] [data-test-edit-button]`);
+
+    assert
+      .dom('[data-test-links-to-editor="attachment"] [data-test-add-new]')
+      .exists('add button rendered for FileDef field');
+
+    await click(
+      '[data-test-links-to-editor="attachment"] [data-test-add-new="attachment"]',
+    );
+
+    assert
+      .dom('[data-test-choose-file-modal]')
+      .exists('file chooser modal is open');
+
+    assert
+      .dom('[data-test-choose-file-modal-upload-button]')
+      .exists('upload button is shown in the file chooser');
+
+    await click('[data-test-choose-file-modal-upload-button]');
+
+    let fileUpload = getService('file-upload') as FileUploadService;
+    await waitUntil(() => fileUpload.activeUploads.length > 0, {
+      timeout: 2000,
+      timeoutMessage: 'upload task was not created',
+    });
+
+    let task = fileUpload.activeUploads[0];
+    assert.strictEqual(
+      task.state,
+      'picking',
+      'task is in picking state waiting for file',
+    );
+
+    task.__provideFileForTesting(
+      new File(['hello upload'], 'uploaded.txt', { type: 'text/plain' }),
+    );
+
+    await waitUntil(
+      () => !document.querySelector('[data-test-choose-file-modal]'),
+      {
+        timeout: 10000,
+        timeoutMessage: 'file chooser modal did not close after upload',
+      },
+    );
+
+    assert
+      .dom(
+        '[data-test-links-to-editor="attachment"] [data-test-card="http://test-realm/test/uploaded.txt"]',
+      )
+      .exists('attachment field now shows the uploaded file');
+  });
+
+  test('cancelling file upload does not close the modal', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}FileLinkCard/empty`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    await click(`[data-test-operator-mode-stack="0"] [data-test-edit-button]`);
+
+    assert
+      .dom('[data-test-links-to-editor="attachment"] [data-test-add-new]')
+      .exists('add button rendered for FileDef field');
+
+    await click(
+      '[data-test-links-to-editor="attachment"] [data-test-add-new="attachment"]',
+    );
+
+    assert
+      .dom('[data-test-choose-file-modal]')
+      .exists('file chooser modal is open');
+
+    await click('[data-test-choose-file-modal-upload-button]');
+
+    let fileUpload = getService('file-upload') as FileUploadService;
+    await waitUntil(() => fileUpload.activeUploads.length > 0, {
+      timeout: 2000,
+      timeoutMessage: 'upload task was not created',
+    });
+
+    let task = fileUpload.activeUploads[0];
+
+    // Simulate cancelling the native file picker
+    task.__provideFileForTesting(null);
+
+    await settled();
+
+    assert
+      .dom('[data-test-choose-file-modal]')
+      .exists('modal remains open after cancelling file pick');
 
     await click('[data-test-choose-file-modal-cancel-button]');
   });

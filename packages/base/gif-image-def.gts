@@ -5,6 +5,7 @@ import { extractGifDimensions } from './gif-meta-extractor';
 
 export class GifDef extends ImageDef {
   static displayName = 'GIF Image';
+  static acceptTypes = '.gif,image/gif';
 
   static async extractAttributes(
     url: string,
