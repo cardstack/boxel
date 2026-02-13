@@ -349,12 +349,39 @@ jobs:
       - name: Print realm server logs
         if: always()
         run: cat /tmp/server.log
+      - name: Extract worker and prerender logs
+        if: always()
+        run: |
+          grep -E '^\[start:worker-base|^\[start:worker-development|^\[start:worker-test' /tmp/server.log > /tmp/worker-manager.log || true
+          grep -E '^\[start:prerender-dev' /tmp/server.log > /tmp/prerender-server.log || true
+          grep -E '^\[start:prerender-manager-dev' /tmp/server.log > /tmp/prerender-manager.log || true
       - name: Upload realm server log
         uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
         if: always()
         with:
           name: matrix-test-realm-server-log-${{ matrix.shardIndex }}
           path: /tmp/server.log
+          retention-days: 30
+      - name: Upload worker manager log
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
+        if: always()
+        with:
+          name: matrix-test-worker-manager-log-${{ matrix.shardIndex }}
+          path: /tmp/worker-manager.log
+          retention-days: 30
+      - name: Upload prerender server log
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
+        if: always()
+        with:
+          name: matrix-test-prerender-server-log-${{ matrix.shardIndex }}
+          path: /tmp/prerender-server.log
+          retention-days: 30
+      - name: Upload prerender manager log
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
+        if: always()
+        with:
+          name: matrix-test-prerender-manager-log-${{ matrix.shardIndex }}
+          path: /tmp/prerender-manager.log
           retention-days: 30
 
       - name: Upload blob report to GitHub Actions Artifacts
@@ -569,12 +596,39 @@ jobs:
         run: |
           export SAFE_ARTIFACT_NAME=$(echo ${{ matrix.testModule }} |  sed 's/[/]/_/g')
           echo "artifact_name=$SAFE_ARTIFACT_NAME" >> "$GITHUB_OUTPUT"
+      - name: Extract worker and prerender logs
+        if: always()
+        run: |
+          grep -E '^\[start:worker-development|^\[start:worker-test' /tmp/server.log > /tmp/worker-manager.log || true
+          grep -E '^\[start:prerender-dev' /tmp/server.log > /tmp/prerender-server.log || true
+          grep -E '^\[start:prerender-manager-dev' /tmp/server.log > /tmp/prerender-manager.log || true
       - name: Upload realm server log
         uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
         if: always()
         with:
           name: realm-server-test-realm-server-log-${{steps.artifact_name.outputs.artifact_name}}
           path: /tmp/server.log
+          retention-days: 30
+      - name: Upload worker manager log
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
+        if: always()
+        with:
+          name: realm-server-test-worker-manager-log-${{steps.artifact_name.outputs.artifact_name}}
+          path: /tmp/worker-manager.log
+          retention-days: 30
+      - name: Upload prerender server log
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
+        if: always()
+        with:
+          name: realm-server-test-prerender-server-log-${{steps.artifact_name.outputs.artifact_name}}
+          path: /tmp/prerender-server.log
+          retention-days: 30
+      - name: Upload prerender manager log
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
+        if: always()
+        with:
+          name: realm-server-test-prerender-manager-log-${{steps.artifact_name.outputs.artifact_name}}
+          path: /tmp/prerender-manager.log
           retention-days: 30
 
   vscode-boxel-tools-package:
