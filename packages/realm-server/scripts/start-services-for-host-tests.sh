@@ -46,11 +46,15 @@ done
 
 export CATALOG_REALM_PATH="$CATALOG_TEMP_PATH"
 
+# Make host-test startup logs focus on indexing progress rather than per-request noise.
+HOST_TEST_LOG_LEVELS="${HOST_TEST_LOG_LEVELS:-*=info,realm:requests=warn,realm-index-updater=debug,index-runner=debug,index-perf=debug,index-writer=debug,worker=debug,worker-manager=debug}"
+
 WAIT_ON_TIMEOUT=900000 \
   SKIP_EXPERIMENTS=true \
   SKIP_CATALOG=true \
   SKIP_BOXEL_HOMEPAGE=true \
   CATALOG_REALM_PATH="$CATALOG_TEMP_PATH" \
+  LOG_LEVELS="$HOST_TEST_LOG_LEVELS" \
   NODE_NO_WARNINGS=1 \
   start-server-and-test \
     'run-p start:pg start:prerender-dev start:prerender-manager-dev start:matrix start:smtp start:worker-development start:development' \
