@@ -5,7 +5,7 @@ import { service } from '@ember/service';
 
 import { isEqual } from 'lodash';
 
-import type { CodeRef } from '@cardstack/runtime-common';
+import type { CodeRef, LooseCardResource } from '@cardstack/runtime-common';
 import {
   baseRef,
   identifyCard,
@@ -72,7 +72,17 @@ export default class RenderMetaRoute extends Route<Model> {
 
     let instanceURL = new URL(instance.id);
     let moduleDeps = directModuleDeps(serialized.data, instanceURL);
-    // TODO eventually we need to include instance deps in here
+
+    // Include module deps from linked card instances (included resources)
+    if (serialized.included) {
+      for (let resource of serialized.included) {
+        if (resource.meta?.adoptsFrom) {
+          moduleDeps.push(
+            ...directModuleDeps(resource as LooseCardResource, instanceURL),
+          );
+        }
+      }
+    }
 
     let deps = [
       ...(await recursiveModuleDeps(moduleDeps, this.loaderService.loader)),
