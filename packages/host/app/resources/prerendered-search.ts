@@ -317,6 +317,15 @@ export class PrerenderedSearchResource extends Resource<Args> {
 
         // Clear refresh flags
         this.realmsNeedingRefresh.clear();
+      } catch (e) {
+        console.error(
+          `Failed to search prerendered for realms ${Array.from(
+            this.realmsNeedingRefresh.values(),
+          ).join(', ')}:`,
+          e,
+        );
+        this._instances.splice(0, this._instances.length);
+        this._meta = { page: { total: 0 } };
       } finally {
         waiter.endAsync(token);
       }
