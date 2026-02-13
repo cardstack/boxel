@@ -73,7 +73,7 @@ For further assistance, check the [extension repository](https://github.com/card
 
 ## Development
 
-This project uses Volta for toolchain management and pnpm for package management.
+This project uses mise for toolchain management and pnpm for package management.
 
 Install dependencies with pnpm:
 

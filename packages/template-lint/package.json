@@ -12,8 +12,5 @@
     "ember-template-recast": "^6.1.5"
   },
   "author": "",
-  "license": "MIT",
-  "volta": {
-    "extends": "../../package.json"
-  }
+  "license": "MIT"
 }

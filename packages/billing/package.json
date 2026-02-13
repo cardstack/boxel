@@ -18,8 +18,5 @@
     "lint:js": "eslint . --report-unused-disable-directives --cache",
     "lint:js:fix": "eslint . --report-unused-disable-directives --fix",
     "lint:glint": "glint"
-  },
-  "volta": {
-    "extends": "../../package.json"
   }
 }

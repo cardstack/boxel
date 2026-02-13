@@ -132,9 +132,6 @@
     "sync-stripe-products": "NODE_NO_WARNINGS=1 PGDATABASE=boxel PGPORT=5435 ts-node --transpileOnly scripts/sync-stripe-products.ts",
     "stripe": "docker run --rm --add-host=host.docker.internal:host-gateway -it stripe/stripe-cli:latest"
   },
-  "volta": {
-    "extends": "../../package.json"
-  },
   "dependencies": {
     "puppeteer": "^24.8.2"
   }

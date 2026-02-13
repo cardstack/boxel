@@ -4,11 +4,9 @@ description: Setup common dependencies
 runs:
   using: composite
   steps:
-    - uses: actions/setup-node@cdca7365b2dadb8aad0a33bc7601856ffabcc48e # 4.3.0
+    - uses: jdx/mise-action@v2
       with:
-        node-version-file: "package.json"
-
-    - uses: cardstack/gh-actions/setup-pnpm-volta@main
+        install: true
 
     - name: Get pnpm store directory
       id: pnpm-cache
