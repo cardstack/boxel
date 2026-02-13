@@ -19,15 +19,15 @@ import {
 import {
   Deferred,
   RealmPaths,
+  isCardErrorJSONAPI,
   type LocalPath,
 } from '@cardstack/runtime-common';
 
 import ModalContainer from '@cardstack/host/components/modal-container';
 
-import type MatrixService from '@cardstack/host/services/matrix-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-
 import type RealmService from '@cardstack/host/services/realm';
+import type StoreService from '@cardstack/host/services/store';
 
 import type { FileDef } from 'https://cardstack.com/base/file-api';
 
@@ -44,7 +44,7 @@ export default class ChooseFileModal extends Component<Signature> {
 
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private realm: RealmService;
-  @service declare private matrixService: MatrixService;
+  @service declare private store: StoreService;
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
@@ -72,19 +72,28 @@ export default class ChooseFileModal extends Component<Signature> {
   }
 
   @action
-  private pick(path: LocalPath | undefined) {
-    if (this.deferred && this.selectedRealm && path) {
-      let fileURL = new RealmPaths(this.selectedRealm.url).fileURL(path);
-      let file = this.matrixService.fileAPI.createFileDef({
-        sourceUrl: fileURL.toString(),
-        name: fileURL.toString().split('/').pop()!,
-      });
-      this.deferred.fulfill(file);
+  private async pick(path: LocalPath | undefined) {
+    try {
+      if (this.deferred && this.selectedRealm && path) {
+        let fileURL = new RealmPaths(this.selectedRealm.url).fileURL(path);
+        let file = await this.store.get<FileDef>(fileURL.href, {
+          type: 'file-meta',
+        });
+        if (isCardErrorJSONAPI(file)) {
+          this.deferred.reject(
+            new Error(
+              `choose-file-modal: failed to load file meta for ${fileURL.href}`,
+            ),
+          );
+          return;
+        }
+        this.deferred.fulfill(file);
+      }
+    } finally {
+      this.selectedRealm = this.knownRealms[0];
+      this.selectedFile = undefined;
+      this.deferred = undefined;
     }
-
-    this.selectedRealm = this.knownRealms[0];
-    this.selectedFile = undefined;
-    this.deferred = undefined;
   }
 
   private get knownRealms() {

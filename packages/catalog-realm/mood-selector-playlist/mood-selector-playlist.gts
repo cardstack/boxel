@@ -411,6 +411,294 @@ class MoodSelectorPlaylistEmbedded extends Component<
   </template>
 }
 
+class MoodSelectorPlaylistFitted extends Component<
+  typeof MoodSelectorPlaylistCard
+> {
+  get moodCount() {
+    return this.args.model.moods?.length ?? 0;
+  }
+
+  get previewEmojis() {
+    const moods = this.args.model.moods ?? [];
+    return moods.slice(0, 6).map((m) => m.emoji);
+  }
+
+  get firstMoodGradient() {
+    const moods = this.args.model.moods ?? [];
+    return moods[0]?.gradient ?? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
+  }
+
+  get title() {
+    return this.args.model.selectorTitle ?? 'Mood Selector';
+  }
+
+  get subtitle() {
+    return this.args.model.cardDescription ?? 'Find your perfect playlist';
+  }
+
+  <template>
+    <div class='fitted-mood-selector'>
+      <div
+        class='visual-header'
+        style={{htmlSafe (concat 'background: ' this.firstMoodGradient)}}
+      >
+        <div class='emoji-grid'>
+          {{#each this.previewEmojis as |emoji|}}
+            <span class='emoji'>{{emoji}}</span>
+          {{/each}}
+        </div>
+        <span class='mood-badge'>{{this.moodCount}} moods</span>
+      </div>
+      <div class='content-section'>
+        <h3 class='title'>{{this.title}}</h3>
+        <p class='subtitle'>{{this.subtitle}}</p>
+        <div class='footer'>
+          <MusicIcon class='footer-icon' />
+          <span class='footer-text'>Curated playlists</span>
+        </div>
+      </div>
+    </div>
+
+    <style scoped>
+      .fitted-mood-selector {
+        width: 100%;
+        height: 100%;
+        display: flex;
+        overflow: hidden;
+        font-family: 'Inter', -apple-system, sans-serif;
+        background: #f8fafc;
+      }
+      .visual-header {
+        flex-shrink: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: var(--boxel-sp-xs);
+        padding: var(--boxel-sp-sm);
+        color: white;
+        overflow: hidden;
+        height: 100%;
+        min-width: 80px;
+        aspect-ratio: 0.85;
+      }
+      .emoji-grid {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+        justify-content: center;
+        align-items: center;
+      }
+      .emoji {
+        font-size: 20px;
+        filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
+      }
+      .mood-badge {
+        font: 600 var(--boxel-font-xs);
+        background: rgba(255, 255, 255, 0.25);
+        backdrop-filter: blur(5px);
+        padding: 2px 10px;
+        border-radius: 20px;
+        white-space: nowrap;
+        color: white;
+        letter-spacing: 0.02em;
+      }
+      .content-section {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-5xs);
+        overflow: hidden;
+        min-width: 0;
+        flex: 1;
+        padding: var(--boxel-sp-xs);
+      }
+      .title {
+        margin: 0;
+        font: 700 var(--boxel-font-sm);
+        color: #1e293b;
+        line-height: 1.25;
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
+        overflow: hidden;
+      }
+      .subtitle {
+        margin: 0;
+        font: 400 var(--boxel-font-xs);
+        color: #64748b;
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
+        overflow: hidden;
+        line-height: 1.4;
+      }
+      .footer {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-5xs);
+        margin-top: auto;
+        color: #94a3b8;
+      }
+      .footer-icon {
+        width: 14px;
+        height: 14px;
+        flex-shrink: 0;
+      }
+      .footer-text {
+        font: 500 var(--boxel-font-xs);
+        white-space: nowrap;
+      }
+
+      /* Vertical layout */
+      @container fitted-card (aspect-ratio <= 1.0) {
+        .fitted-mood-selector {
+          flex-direction: column;
+        }
+        .visual-header {
+          width: 100%;
+          height: auto;
+          min-height: 40%;
+          min-width: unset;
+          aspect-ratio: auto;
+          flex-direction: row;
+          flex-wrap: wrap;
+          padding: var(--boxel-sp-xs);
+        }
+        .content-section {
+          padding: var(--boxel-sp-xs);
+        }
+      }
+
+      @container fitted-card (aspect-ratio <= 1.0) and (height <= 200px) {
+        .subtitle {
+          -webkit-line-clamp: 1;
+        }
+        .visual-header {
+          min-height: 35%;
+        }
+      }
+
+      @container fitted-card (aspect-ratio <= 1.0) and (height <= 150px) {
+        .footer {
+          display: none;
+        }
+        .mood-badge {
+          display: none;
+        }
+        .visual-header {
+          min-height: 30%;
+          padding: var(--boxel-sp-5xs);
+        }
+        .emoji {
+          font-size: 16px;
+        }
+      }
+
+      @container fitted-card (aspect-ratio <= 1.0) and (height <= 120px) {
+        .subtitle {
+          display: none;
+        }
+        .emoji-grid {
+          display: none;
+        }
+        .visual-header {
+          min-height: auto;
+          padding: var(--boxel-sp-5xs) var(--boxel-sp-xs);
+        }
+      }
+
+      @container fitted-card (aspect-ratio <= 1.0) and (height <= 100px) {
+        .visual-header {
+          display: none;
+        }
+        .content-section {
+          justify-content: center;
+        }
+        .title {
+          -webkit-line-clamp: 1;
+          font-size: var(--boxel-font-size-xs);
+        }
+      }
+
+      /* Horizontal layout adjustments */
+      @container fitted-card (1.0 < aspect-ratio) and (height <= 80px) {
+        .subtitle {
+          -webkit-line-clamp: 1;
+        }
+        .footer {
+          display: none;
+        }
+        .content-section {
+          justify-content: center;
+        }
+      }
+
+      @container fitted-card (1.0 < aspect-ratio) and (height <= 55px) {
+        .mood-badge {
+          display: none;
+        }
+        .subtitle {
+          display: none;
+        }
+        .emoji {
+          font-size: 14px;
+        }
+        .visual-header {
+          min-width: 50px;
+          padding: var(--boxel-sp-5xs);
+        }
+      }
+
+      /* Small horizontal badges */
+      @container fitted-card (1.0 < aspect-ratio) and (width < 250px) {
+        .visual-header {
+          display: none;
+        }
+        .content-section {
+          justify-content: center;
+        }
+      }
+
+      @container fitted-card (1.0 < aspect-ratio) and (width < 250px) and (height < 65px) {
+        .title {
+          font-size: var(--boxel-font-size-xs);
+          -webkit-line-clamp: 1;
+        }
+        .subtitle {
+          display: none;
+        }
+      }
+
+      /* Large cards */
+      @container fitted-card (400px <= width) and (275px <= height) {
+        .visual-header {
+          min-width: 140px;
+          padding: var(--boxel-sp);
+        }
+        .content-section {
+          padding: var(--boxel-sp);
+        }
+        .emoji {
+          font-size: 28px;
+        }
+        .emoji-grid {
+          gap: 6px;
+        }
+        .title {
+          font-size: var(--boxel-font-size);
+        }
+        .subtitle {
+          font-size: var(--boxel-font-size-sm);
+        }
+        .mood-badge {
+          font-size: var(--boxel-font-size-sm);
+          padding: 4px 14px;
+        }
+      }
+    </style>
+  </template>
+}
+
 class MoodSelectorPlaylistIsolated extends Component<
   typeof MoodSelectorPlaylistCard
 > {
@@ -901,4 +1189,5 @@ export class MoodSelectorPlaylistCard extends CardDef {
 
   static embedded = MoodSelectorPlaylistEmbedded;
   static isolated = MoodSelectorPlaylistIsolated;
+  static fitted = MoodSelectorPlaylistFitted;
 }

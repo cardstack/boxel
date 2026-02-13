@@ -360,6 +360,8 @@ export interface RealmAdapter {
     writable: WritableStream;
   };
 
+  dir?: string;
+
   fileWatcherEnabled: boolean;
 
   subscribe(cb: (message: UpdateRealmEventContent) => void): Promise<void>;
@@ -455,6 +457,10 @@ export class Realm {
 
   get url(): string {
     return this.paths.url;
+  }
+
+  get dir(): string | undefined {
+    return this.#adapter.dir;
   }
 
   get realmServerURL(): string {

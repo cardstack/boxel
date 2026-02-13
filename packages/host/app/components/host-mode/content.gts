@@ -1,3 +1,4 @@
+import Helper from '@ember/component/helper';
 import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 
@@ -90,6 +91,8 @@ export default class HostModeContent extends Component<Signature> {
   }
 
   <template>
+    {{bodyClass 'boxel-ready'}}
+
     <div
       class='host-mode-content {{if this.isWideCard "is-wide"}}'
       data-test-host-mode-content
@@ -176,4 +179,17 @@ export default class HostModeContent extends Component<Signature> {
       }
     </style>
   </template>
+}
+
+interface BodyClassSignature {
+  Args: {
+    Positional: [string];
+  };
+  Return: void;
+}
+
+class bodyClass extends Helper<BodyClassSignature> {
+  compute([className]: [string]) {
+    document.body.classList.add(className);
+  }
 }

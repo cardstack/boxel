@@ -3,7 +3,7 @@
     "type": "card",
     "attributes": {
       "firstName": "Mango",
-      "cardThumbnailURL": "../logo.png"
+      "cardThumbnailURL": "../green-mango.png"
     },
     "relationships": {
       "friend": {
