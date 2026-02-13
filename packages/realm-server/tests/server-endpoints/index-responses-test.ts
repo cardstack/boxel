@@ -192,21 +192,18 @@ module(`server-endpoints/${basename(__filename)}`, function () {
             `,
           );
 
-          writeJSONSync(
-            join(context.testRealmDir, 'linked-css-child-1.json'),
-            {
-              data: {
-                type: 'card',
-                attributes: {},
-                meta: {
-                  adoptsFrom: {
-                    module: './linked-css-child.gts',
-                    name: 'LinkedCssChild',
-                  },
+          writeJSONSync(join(context.testRealmDir, 'linked-css-child-1.json'), {
+            data: {
+              type: 'card',
+              attributes: {},
+              meta: {
+                adoptsFrom: {
+                  module: './linked-css-child.gts',
+                  name: 'LinkedCssChild',
                 },
               },
             },
-          );
+          });
 
           writeJSONSync(
             join(context.testRealmDir, 'linked-css-parent-1.json'),
