@@ -1208,15 +1208,18 @@ export async function buildPromptForModel(
         event as CardMessageEvent,
         history,
       );
-      let historicalMessage: OpenAIPromptMessage = {
-        role: 'assistant',
-        content: elideCodeBlocks(body, codePatchResults),
-      };
+      let content = elideCodeBlocks(body, codePatchResults);
       let toolCalls = toToolCalls(event as CardMessageEvent);
-      if (toolCalls.length) {
-        historicalMessage.tool_calls = toolCalls;
+      if (content || toolCalls.length) {
+        let historicalMessage: OpenAIPromptMessage = {
+          role: 'assistant',
+          content,
+        };
+        if (toolCalls.length) {
+          historicalMessage.tool_calls = toolCalls;
+        }
+        historicalMessages.push(historicalMessage);
       }
-      historicalMessages.push(historicalMessage);
       let commandResults = getCommandResults(
         event as CardMessageEvent,
         history,
