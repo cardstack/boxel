@@ -383,6 +383,26 @@ export function setupInteractSubmodeTests(
           pet: mangoPet,
           friends: [mangoPet],
         }),
+        'FileLinkCard/empty.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              title: 'Empty linked file',
+            },
+            relationships: {
+              attachment: {
+                links: { self: null },
+                data: null,
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: '../file-link-card',
+                name: 'FileLinkCard',
+              },
+            },
+          },
+        },
         'FileLinkCard/with-file.json': {
           data: {
             type: 'card',
