@@ -42,7 +42,11 @@ export default class SearchSheetSectionHeader extends Component<Signature> {
         {{/if}}
       </div>
       <div class='title'>{{@title}}</div>
-      <div class='count' data-test-search-sheet-section-count>
+      <div
+        class='count'
+        data-test-search-sheet-section-count
+        data-test-results-count
+      >
         {{@totalCount}}
         {{if (eq @totalCount 1) 'result' 'results'}}
       </div>

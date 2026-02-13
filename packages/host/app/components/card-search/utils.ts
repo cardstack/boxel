@@ -1,4 +1,10 @@
-import type { ResolvedCodeRef } from '@cardstack/runtime-common';
+import type { CodeRef, ResolvedCodeRef } from '@cardstack/runtime-common';
+
+export interface NewCardArgs {
+  ref: CodeRef;
+  relativeTo: string | undefined;
+  realmURL: string;
+}
 
 export function getCodeRefFromSearchKey(
   searchKey: string,
