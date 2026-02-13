@@ -501,6 +501,13 @@ export class RealmServer {
       return false;
     }
 
+    // During publish/copy index races, module rows can lag behind source files.
+    // If an extensionless module source file exists on disk, always treat it as
+    // a module URL to avoid incorrectly serving host-mode HTML.
+    if (this.hasExtensionlessSourceModule(cardURL)) {
+      return false;
+    }
+
     // First check if there's a module at this URL - modules take precedence
     // over instance aliases. This handles the case where:
     // - Module: /foo/bar.gts (file_alias: /foo/bar)
@@ -556,6 +563,36 @@ export class RealmServer {
     ]);
 
     return rows.length > 0;
+  }
+
+  private hasExtensionlessSourceModule(cardURL: URL): boolean {
+    let realm = this.findRealmForRequestURL(cardURL);
+    if (!realm?.dir) {
+      return false;
+    }
+
+    let localPath: string;
+    try {
+      localPath = realm.paths.local(cardURL);
+    } catch {
+      return false;
+    }
+
+    if (!localPath || hasExtension(localPath)) {
+      return false;
+    }
+
+    let moduleExtensions = ['.gts', '.ts', '.js'];
+    for (let extension of moduleExtensions) {
+      if (existsSync(join(realm.dir, `${localPath}${extension}`))) {
+        return true;
+      }
+      if (existsSync(join(realm.dir, localPath, `index${extension}`))) {
+        return true;
+      }
+    }
+
+    return false;
   }
 
   private async hasPublicPermissions(cardURL: URL): Promise<boolean> {

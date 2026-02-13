@@ -309,13 +309,5 @@ function toSQLiteGeneratedExpression(expr: string, columnName: string): string {
     return '(url)';
   }
 
-  if (
-    columnName === 'url_without_css' &&
-    normalizedExpr.includes('regexp_replace(') &&
-    normalizedExpr.includes('url')
-  ) {
-    return '(url)';
-  }
-
   return expr;
 }

@@ -10,17 +10,6 @@ exports.up = (pgm) => {
     primaryKey: ['url_hash', 'cache_scope', 'auth_user_id'],
   });
 
-  pgm.sql(`
-    ALTER TABLE modules
-    ADD COLUMN IF NOT EXISTS url_without_css text GENERATED ALWAYS AS (
-      regexp_replace(
-        url,
-        '\\.(gts|gjs)\\.[A-Za-z0-9_-]+={0,2}\\.glimmer-scoped\\.css$',
-        '.\\1'
-      )
-    ) STORED
-  `);
-
   pgm.sql('DROP INDEX IF EXISTS modules_resolved_realm_url_file_alias_index');
   pgm.sql(`
     CREATE INDEX modules_resolved_realm_url_file_alias_index
