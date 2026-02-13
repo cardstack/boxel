@@ -77,15 +77,15 @@ LOW_CREDIT_THRESHOLD="${LOW_CREDIT_THRESHOLD:-2000}" \
   ${START_CATALOG:+--fromUrl="${CATALOG_REALM_URL}"} \
   ${START_CATALOG:+--toUrl="${CATALOG_REALM_URL}"} \
   \
-  ${START_SUBMISSION:+--path="${SUBMISSION_REALM_PATH}"} \
-  ${START_SUBMISSION:+--username='submission_realm'} \
-  ${START_SUBMISSION:+--fromUrl="${SUBMISSION_REALM_URL}"} \
-  ${START_SUBMISSION:+--toUrl="${SUBMISSION_REALM_URL}"} \
-  \
   --path='../skills-realm/contents' \
   --username='skills_realm' \
   --fromUrl='http://localhost:4201/skills/' \
   --toUrl='http://localhost:4201/skills/' \
+  \
+  ${START_SUBMISSION:+--path="${SUBMISSION_REALM_PATH}"} \
+  ${START_SUBMISSION:+--username='submission_realm'} \
+  ${START_SUBMISSION:+--fromUrl="${SUBMISSION_REALM_URL}"} \
+  ${START_SUBMISSION:+--toUrl="${SUBMISSION_REALM_URL}"} \
   \
   ${START_BOXEL_HOMEPAGE:+--path='../boxel-homepage-realm/contents'} \
   ${START_BOXEL_HOMEPAGE:+--username='boxel_homepage_realm'} \
