@@ -1,30 +1,10 @@
 {
   "data": {
+    "type": "card",
     "meta": {
       "adoptsFrom": {
-        "name": "IndexCard",
-        "module": "./index"
-      }
-    },
-    "type": "card",
-    "attributes": {
-      "cardInfo": {
-        "notes": null,
-        "name": null,
-        "summary": null,
-        "cardThumbnailURL": null
-      }
-    },
-    "relationships": {
-      "cardsGrid": {
-        "links": {
-          "self": "./cards-grid"
-        }
-      },
-      "cardInfo.theme": {
-        "links": {
-          "self": null
-        }
+        "module": "./cards-grid",
+        "name": "CardsGrid"
       }
     }
   }
