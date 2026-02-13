@@ -12,6 +12,7 @@ import { LoadingIndicator } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
 import { DropdownArrowDown } from '@cardstack/boxel-ui/icons';
 
+import type { CodeRef } from '@cardstack/runtime-common';
 import type { LocalPath } from '@cardstack/runtime-common/paths';
 
 import scrollIntoViewModifier from '@cardstack/host/modifiers/scroll-into-view';
@@ -24,6 +25,7 @@ import { normalizeDirPath } from '@cardstack/host/utils/normalized-dir-path';
 interface Signature {
   Args: {
     realmURL: string;
+    fileTypeFilter?: CodeRef;
     selectedFile?: LocalPath;
     openDirs?: LocalPath[];
     onFileSelected?: (entryPath: LocalPath) => void;
@@ -73,7 +75,11 @@ export default class IndexedFileTree extends Component<Signature> {
     </style>
   </template>
 
-  private fileTree = fileTreeFromIndex(this, () => this.args.realmURL);
+  private fileTree = fileTreeFromIndex(
+    this,
+    () => this.args.realmURL,
+    () => this.args.fileTypeFilter,
+  );
   private localOpenDirs = new TrackedSet<string>();
   @tracked private selectedFile?: LocalPath;
   @tracked private maskDismissed = false;

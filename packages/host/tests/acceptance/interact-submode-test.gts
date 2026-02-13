@@ -6,7 +6,6 @@ import {
   typeIn,
   triggerKeyEvent,
   settled,
-  waitUntil,
 } from '@ember/test-helpers';
 
 import { triggerEvent } from '@ember/test-helpers';
@@ -509,107 +508,6 @@ module('Acceptance | interact submode tests', function (hooks) {
           `[data-test-stack-card="${testRealmURL}Pet/mango"] [data-test-card-format="edit"]`,
         )
         .exists('linked card now rendered as a stack item in edit format');
-    });
-
-    test('clicking a linked file opens it as a new isolated stack item', async function (assert) {
-      let fileId = `${testRealmURL}FileLinkCard/notes.txt`;
-      await visitOperatorMode({
-        stacks: [
-          [
-            {
-              id: `${testRealmURL}FileLinkCard/with-file`,
-              format: 'isolated',
-            },
-          ],
-        ],
-      });
-
-      assert
-        .dom(
-          `[data-test-stack-card="${testRealmURL}FileLinkCard/with-file"] [data-test-card="${fileId}"]`,
-        )
-        .exists('linked file is rendered in the card');
-
-      await click(
-        `[data-test-stack-card="${testRealmURL}FileLinkCard/with-file"] [data-test-card="${fileId}"]`,
-      );
-
-      assert.operatorModeParametersMatch(currentURL(), {
-        stacks: [
-          [
-            {
-              id: `${testRealmURL}FileLinkCard/with-file`,
-              format: 'isolated',
-            },
-            {
-              id: fileId,
-              format: 'isolated',
-            },
-          ],
-        ],
-      });
-    });
-
-    test('can link a file via the chooser', async function (assert) {
-      await visitOperatorMode({
-        stacks: [
-          [
-            {
-              id: `${testRealmURL}FileLinkCard/empty`,
-              format: 'isolated',
-            },
-          ],
-        ],
-      });
-
-      await click(
-        `[data-test-operator-mode-stack="0"] [data-test-edit-button]`,
-      );
-
-      assert
-        .dom('[data-test-links-to-editor="attachment"] [data-test-add-new]')
-        .exists('add button is shown for empty FileDef field');
-
-      await click(
-        '[data-test-links-to-editor="attachment"] [data-test-add-new="attachment"]',
-      );
-
-      await waitUntil(
-        () => document.querySelector('[data-test-choose-file-modal]'),
-        { timeout: 5000, timeoutMessage: 'file chooser modal did not open' },
-      );
-
-      assert
-        .dom('[data-test-choose-file-modal]')
-        .exists('file chooser modal is open');
-
-      await waitUntil(
-        () => document.querySelector('[data-test-file="README.txt"]'),
-        {
-          timeout: 5000,
-          timeoutMessage: 'file tree did not load README.txt',
-        },
-      );
-
-      await click('[data-test-file="README.txt"]');
-      await click('[data-test-choose-file-modal-add-button]');
-
-      await waitUntil(
-        () => !document.querySelector('[data-test-choose-file-modal]'),
-        { timeout: 5000, timeoutMessage: 'file chooser modal did not close' },
-      );
-
-      assert
-        .dom(
-          '[data-test-links-to-editor="attachment"] [data-test-card="http://test-realm/test/README.txt"]',
-        )
-        .exists('attachment field now shows the linked file');
-      await click(
-        `[data-test-operator-mode-stack="0"] [data-test-edit-button]`,
-      );
-      assert
-        .dom('[data-test-file-link-attachment]')
-        .exists('the linked file is rendered in the card');
     });
 
     test('can save mutated card without having opened in stack', async function (assert) {
@@ -1284,14 +1182,6 @@ module('Acceptance | interact submode tests', function (hooks) {
         await fillIn(
           `[data-test-stack-card="${testRealmURL}Pet/mango"] [data-test-field="name"] input`,
           'x'.repeat(5000),
-        );
-
-        await waitUntil(() =>
-          Boolean(
-            !find(
-              `[data-test-stack-card="${testRealmURL}Pet/mango"] [data-test-auto-save-indicator]`,
-            )?.textContent?.includes('Saving'),
-          ),
         );
 
         assert

@@ -196,6 +196,7 @@ class Fitted extends Component<typeof ImageDef> {
 
 export class ImageDef extends FileDef {
   static displayName = 'Image';
+  static acceptTypes = 'image/*';
 
   @field width = contains(NumberField);
   @field height = contains(NumberField);

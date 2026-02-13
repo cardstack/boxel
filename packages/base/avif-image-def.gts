@@ -9,6 +9,7 @@ const AVIF_MAX_HEADER_BYTES = 65_536;
 
 export class AvifDef extends ImageDef {
   static displayName = 'AVIF Image';
+  static acceptTypes = '.avif,image/avif';
 
   static async extractAttributes(
     url: string,
