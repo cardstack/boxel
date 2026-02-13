@@ -152,6 +152,84 @@ module(`server-endpoints/${basename(__filename)}`, function () {
               },
             },
           });
+
+          // Cards for testing scoped CSS from linked card instances
+          writeFileSync(
+            join(context.testRealmDir, 'linked-css-child.gts'),
+            `
+            import { Component, CardDef } from 'https://cardstack.com/base/card-api';
+
+            export class LinkedCssChild extends CardDef {
+              static embedded = class Embedded extends Component<typeof this> {
+                <template>
+                  <div class="linked-child-marker" data-test-linked-child>Linked Child</div>
+                  <style scoped>
+                    .linked-child-marker {
+                      --linked-child-css: 1;
+                    }
+                  </style>
+                </template>
+              };
+            }
+            `,
+          );
+
+          writeFileSync(
+            join(context.testRealmDir, 'linked-css-parent.gts'),
+            `
+            import { Component, CardDef, field, linksTo } from 'https://cardstack.com/base/card-api';
+            import { LinkedCssChild } from './linked-css-child.gts';
+
+            export class LinkedCssParent extends CardDef {
+              @field child = linksTo(() => LinkedCssChild);
+              static isolated = class Isolated extends Component<typeof this> {
+                <template>
+                  <div data-test-linked-parent>Parent</div>
+                  <@fields.child />
+                </template>
+              };
+            }
+            `,
+          );
+
+          writeJSONSync(
+            join(context.testRealmDir, 'linked-css-child-1.json'),
+            {
+              data: {
+                type: 'card',
+                attributes: {},
+                meta: {
+                  adoptsFrom: {
+                    module: './linked-css-child.gts',
+                    name: 'LinkedCssChild',
+                  },
+                },
+              },
+            },
+          );
+
+          writeJSONSync(
+            join(context.testRealmDir, 'linked-css-parent-1.json'),
+            {
+              data: {
+                type: 'card',
+                attributes: {},
+                relationships: {
+                  child: {
+                    links: {
+                      self: './linked-css-child-1',
+                    },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: './linked-css-parent.gts',
+                    name: 'LinkedCssParent',
+                  },
+                },
+              },
+            },
+          );
         },
       });
 
@@ -250,6 +328,22 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         assert.ok(
           response.text.includes('--scoped-css-marker: 1'),
           'scoped CSS is included in the HTML response',
+        );
+      });
+
+      test('serves scoped CSS from linked cards in index responses', async function (assert) {
+        let response = await context.request2
+          .get('/test/linked-css-parent-1')
+          .set('Accept', 'text/html');
+
+        assert.strictEqual(response.status, 200, 'serves HTML response');
+        assert.ok(
+          response.text.includes('data-test-linked-parent'),
+          'parent isolated HTML is in the response',
+        );
+        assert.ok(
+          response.text.includes('--linked-child-css: 1'),
+          'scoped CSS from linked card is included in the HTML response',
         );
       });
 
