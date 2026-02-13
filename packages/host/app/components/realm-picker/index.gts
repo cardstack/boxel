@@ -69,6 +69,7 @@ export default class RealmPicker extends Component<Signature> {
           @placeholder={{@placeholder}}
           @maxSelectedDisplay={{3}}
           @renderInPlace={{false}}
+          @matchTriggerWidth={{false}}
           data-test-realm-picker
         />
       </:default>

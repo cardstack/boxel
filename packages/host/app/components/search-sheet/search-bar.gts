@@ -21,6 +21,10 @@ let elementCallback = modifier(
   },
 );
 
+const autoFocus = modifier((element: HTMLElement) => {
+  element.focus();
+});
+
 interface Signature {
   Element: HTMLElement;
   Args: {
@@ -80,6 +84,7 @@ export default class SearchBar extends Component<Signature> {
           @onBlur={{@onBlur}}
           id={{@id}}
           {{elementCallback @onInputInsertion}}
+          {{autoFocus}}
           data-test-search-field
         />
       </div>
