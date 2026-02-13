@@ -53,6 +53,10 @@ WAIT_ON_TIMEOUT=900000 \
   SKIP_EXPERIMENTS=true \
   SKIP_CATALOG=true \
   SKIP_BOXEL_HOMEPAGE=true \
+  # There is a race condition starting up the servers that setting up the
+  # submission realm triggers which triggers the start-development.sh script to
+  # SIGTERM. currently we don't need the submission realm for host tests to
+  # skipping that. but this issue needs to be fixed.
   SKIP_SUBMISSION=true \
   CATALOG_REALM_PATH="$CATALOG_TEMP_PATH" \
   LOG_LEVELS="$HOST_TEST_LOG_LEVELS" \
