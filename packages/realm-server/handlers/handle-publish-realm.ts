@@ -383,6 +383,14 @@ export default function handlePublishRealm({
         realms.splice(realms.indexOf(existingPublishedRealm), 1);
         virtualNetwork.unmount(existingPublishedRealm.handle);
       }
+
+      // Clear stale modules cache for the published realm so that
+      // error entries from a previous publish don't persist
+      await query(dbAdapter, [
+        `DELETE FROM modules WHERE resolved_realm_url =`,
+        param(publishedRealmURL),
+      ]);
+
       let realm = createAndMountRealm(
         publishedRealmPath,
         publishedRealmURL,
