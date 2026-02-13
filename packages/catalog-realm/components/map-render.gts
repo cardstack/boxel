@@ -88,7 +88,7 @@ export class MapRender extends GlimmerComponent<MapRenderSignature> {
         margin: 0;
         width: 100%;
         height: 100%;
-        min-height: 300px;
+        aspect-ratio: 16/9;
         position: relative;
         display: flex;
         align-items: center;
@@ -198,7 +198,9 @@ class LeafletLayerState implements LeafletLayerStateInterface {
       const color =
         i === 0 ? '#22c55e' : i === coords.length - 1 ? '#ef4444' : '#3b82f6';
       const marker = createMarker(c, color);
-      if (c.address) marker.bindPopup(c.address);
+      const popupContent =
+        c.address?.trim() || `${c.lat.toFixed(6)}, ${c.lng.toFixed(6)}`;
+      marker.bindPopup(popupContent);
       return marker;
     });
   }
