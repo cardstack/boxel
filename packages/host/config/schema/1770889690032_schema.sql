@@ -71,6 +71,18 @@
    PRIMARY KEY ( url, realm_url, type ) 
 );
 
+ CREATE TABLE IF NOT EXISTS incoming_webhooks (
+   id NOT NULL,
+   username TEXT NOT NULL,
+   webhook_path TEXT NOT NULL,
+   verification_type TEXT NOT NULL,
+   verification_config BLOB NOT NULL,
+   signing_secret TEXT NOT NULL,
+   created_at NOT NULL,
+   updated_at NOT NULL,
+   PRIMARY KEY ( id ) 
+);
+
  CREATE TABLE IF NOT EXISTS modules (
    url TEXT NOT NULL,
    cache_scope TEXT NOT NULL,
@@ -124,4 +136,14 @@
    realm_url TEXT NOT NULL,
    current_version INTEGER NOT NULL,
    PRIMARY KEY ( realm_url ) 
+);
+
+ CREATE TABLE IF NOT EXISTS webhook_commands (
+   id NOT NULL,
+   incoming_webhook_id NOT NULL,
+   command TEXT NOT NULL,
+   command_filter BLOB,
+   created_at NOT NULL,
+   updated_at NOT NULL,
+   PRIMARY KEY ( id ) 
 );

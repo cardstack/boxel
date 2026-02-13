@@ -177,6 +177,9 @@ function createColumns(
           );
           break;
         }
+        case 'constraint_unique':
+          column.push('UNIQUE');
+          break;
         default: {
           throw new Error(
             `Don't know how to serialize constraint ${constraint.type} for column '${item.name.name}'`,
@@ -247,6 +250,10 @@ function makePrimaryKeyConstraint(
             // Foreign key constraints are intentionally skipped for SQLite
             // as they require additional configuration and are beyond the
             // scope of this basic schema conversion
+            break;
+          case 'constraint_unique':
+            // Unique constraints added via ALTER TABLE are skipped here
+            // because they are already handled inline on the column definition
             break;
           default:
             throw new Error(
