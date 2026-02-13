@@ -231,6 +231,11 @@ export {
   getFieldIcon,
 } from './helpers/card-type-display-name';
 export * from './helpers/ensure-extension';
+export {
+  sanitizeHeadHTML,
+  sanitizeHeadHTMLToString,
+  findDisallowedHeadTags,
+} from './helpers/sanitize-head-html';
 export * from './url';
 export * from './render-route-options';
 export * from './publishability';

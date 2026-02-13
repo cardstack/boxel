@@ -67,6 +67,8 @@ import {
   injectIsolatedHTML,
   ensureSingleTitle,
 } from './lib/index-html-injection';
+import { sanitizeHeadHTMLToString } from '@cardstack/runtime-common';
+import { JSDOM } from 'jsdom';
 
 export class RealmServer {
   private log = logger('realm-server');
@@ -410,6 +412,16 @@ export class RealmServer {
         log: this.scopedCSSLog,
       }),
     ]);
+
+    if (headHTML != null) {
+      let doc = new JSDOM().window.document;
+      let sanitized = sanitizeHeadHTMLToString(headHTML, doc);
+      if (sanitized !== null) {
+        headHTML = sanitized;
+      } else {
+        headHTML = null;
+      }
+    }
 
     if (headHTML != null) {
       this.headLog.debug(

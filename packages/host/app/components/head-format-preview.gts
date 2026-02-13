@@ -4,6 +4,8 @@ import { cached, tracked } from '@glimmer/tracking';
 
 import { modifier } from 'ember-modifier';
 
+import { findDisallowedHeadTags } from '@cardstack/runtime-common';
+
 import type { ComponentLike } from '@glint/template';
 
 type HeadPreviewData = {
@@ -248,6 +250,19 @@ export default class HeadFormatPreview extends Component<Signature> {
   }
 
   @cached
+  private get disallowedTags(): string[] {
+    if (!this.headMarkup || typeof DOMParser === 'undefined') {
+      return [];
+    }
+    let doc = new DOMParser().parseFromString('', 'text/html');
+    return findDisallowedHeadTags(this.headMarkup, doc);
+  }
+
+  private get disallowedTagList(): string {
+    return this.disallowedTags.join('>, <');
+  }
+
+  @cached
   private get previewUrlParts() {
     let raw = this.headPreviewData.url ?? this.urlBase;
     if (!raw) {
@@ -341,6 +356,17 @@ export default class HeadFormatPreview extends Component<Signature> {
     </div>
 
     <div class='social-preview-container'>
+      {{#if this.disallowedTags.length}}
+        <div class='head-warning' data-test-head-warning>
+          <span class='head-warning-icon'>&#x26A0;</span>
+          <div>
+            <strong>Disallowed tags detected:</strong>
+            &lt;{{this.disallowedTagList}}&gt; tags are not permitted in the
+            head template. Only &lt;title&gt;, &lt;meta&gt;, and &lt;link&gt;
+            are allowed. Disallowed tags will be stripped when rendering.
+          </div>
+        </div>
+      {{/if}}
       <header class='preview-header'>
         <h1 class='preview-title'>Social Media Preview</h1>
         <p class='preview-subtitle'>
@@ -475,6 +501,23 @@ export default class HeadFormatPreview extends Component<Signature> {
         font: 400 var(--boxel-font-sm);
         color: var(--boxel-500);
         margin: 0;
+      }
+
+      .head-warning {
+        display: flex;
+        gap: var(--boxel-sp-sm);
+        padding: var(--boxel-sp-sm) var(--boxel-sp-lg);
+        background: #fff3cd;
+        border: 1px solid #ffc107;
+        border-radius: var(--boxel-border-radius);
+        color: #664d03;
+        font: 400 var(--boxel-font-sm);
+        line-height: 1.5;
+      }
+
+      .head-warning-icon {
+        flex-shrink: 0;
+        font-size: 1.2em;
       }
 
       .platform-section,
