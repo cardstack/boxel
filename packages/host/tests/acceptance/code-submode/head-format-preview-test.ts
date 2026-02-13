@@ -97,6 +97,7 @@ module('Acceptance | code submode | head format preview', function (hooks) {
       contents: {
         ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'head-preview.gts': headPreviewCardSource,
+        'head-preview-unsafe.gts': headPreviewWithDisallowedTagsSource,
         'HeadPreview/example.json': {
           data: {
             type: 'card',
@@ -108,6 +109,20 @@ module('Acceptance | code submode | head format preview', function (hooks) {
               adoptsFrom: {
                 module: `${testRealmURL}head-preview`,
                 name: 'HeadPreview',
+              },
+            },
+          },
+        },
+        'HeadPreviewUnsafe/example.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              title: 'Unsafe Card',
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}head-preview-unsafe`,
+                name: 'HeadPreviewUnsafe',
               },
             },
           },
@@ -163,28 +178,6 @@ module('Acceptance | code submode | head format preview', function (hooks) {
       RecentFiles,
       JSON.stringify([[testRealmURL, 'HeadPreviewUnsafe/example.json']]),
     );
-
-    await setupAcceptanceTestRealm({
-      mockMatrixUtils,
-      contents: {
-        ...SYSTEM_CARD_FIXTURE_CONTENTS,
-        'head-preview-unsafe.gts': headPreviewWithDisallowedTagsSource,
-        'HeadPreviewUnsafe/example.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              title: 'Unsafe Card',
-            },
-            meta: {
-              adoptsFrom: {
-                module: `${testRealmURL}head-preview-unsafe`,
-                name: 'HeadPreviewUnsafe',
-              },
-            },
-          },
-        },
-      },
-    });
 
     await visitOperatorMode({
       stacks: [

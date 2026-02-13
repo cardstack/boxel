@@ -145,21 +145,18 @@ module(`server-endpoints/${basename(__filename)}`, function () {
             `,
           );
 
-          writeJSONSync(
-            join(context.testRealmDir, 'unsafe-head-test.json'),
-            {
-              data: {
-                type: 'card',
-                attributes: {},
-                meta: {
-                  adoptsFrom: {
-                    module: './unsafe-head-card.gts',
-                    name: 'UnsafeHeadCard',
-                  },
+          writeJSONSync(join(context.testRealmDir, 'unsafe-head-test.json'), {
+            data: {
+              type: 'card',
+              attributes: {},
+              meta: {
+                adoptsFrom: {
+                  module: './unsafe-head-card.gts',
+                  name: 'UnsafeHeadCard',
                 },
               },
             },
-          );
+          });
 
           writeFileSync(
             join(context.testRealmDir, 'scoped-css-card.gts'),

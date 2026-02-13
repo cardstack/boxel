@@ -21,10 +21,7 @@ module(basename(__filename), function () {
       assert.ok(fragment, 'returns a fragment');
       let container = doc.createElement('div');
       container.appendChild(fragment!);
-      assert.ok(
-        container.querySelector('title'),
-        'title tag is preserved',
-      );
+      assert.ok(container.querySelector('title'), 'title tag is preserved');
       assert.ok(
         container.querySelector('meta[name="description"]'),
         'meta tag is preserved',
@@ -44,35 +41,24 @@ module(basename(__filename), function () {
       let container = doc.createElement('div');
       container.appendChild(fragment!);
       assert.ok(container.querySelector('title'), 'title is preserved');
-      assert.ok(
-        container.querySelector('meta'),
-        'meta is preserved',
-      );
-      assert.notOk(
-        container.querySelector('script'),
-        'script tag is stripped',
-      );
+      assert.ok(container.querySelector('meta'), 'meta is preserved');
+      assert.notOk(container.querySelector('script'), 'script tag is stripped');
     });
 
     test('strips style tags', function (assert) {
       let doc = makeDoc();
-      let html =
-        '<title>Test</title><style>body { display: none }</style>';
+      let html = '<title>Test</title><style>body { display: none }</style>';
       let fragment = sanitizeHeadHTML(html, doc);
       assert.ok(fragment, 'returns a fragment');
       let container = doc.createElement('div');
       container.appendChild(fragment!);
       assert.ok(container.querySelector('title'), 'title is preserved');
-      assert.notOk(
-        container.querySelector('style'),
-        'style tag is stripped',
-      );
+      assert.notOk(container.querySelector('style'), 'style tag is stripped');
     });
 
     test('strips noscript tags', function (assert) {
       let doc = makeDoc();
-      let html =
-        '<title>Test</title><noscript><p>No JS</p></noscript>';
+      let html = '<title>Test</title><noscript><p>No JS</p></noscript>';
       let fragment = sanitizeHeadHTML(html, doc);
       assert.ok(fragment, 'returns a fragment');
       let container = doc.createElement('div');
@@ -86,17 +72,13 @@ module(basename(__filename), function () {
 
     test('strips base tags', function (assert) {
       let doc = makeDoc();
-      let html =
-        '<title>Test</title><base href="https://evil.com">';
+      let html = '<title>Test</title><base href="https://evil.com">';
       let fragment = sanitizeHeadHTML(html, doc);
       assert.ok(fragment, 'returns a fragment');
       let container = doc.createElement('div');
       container.appendChild(fragment!);
       assert.ok(container.querySelector('title'), 'title is preserved');
-      assert.notOk(
-        container.querySelector('base'),
-        'base tag is stripped',
-      );
+      assert.notOk(container.querySelector('base'), 'base tag is stripped');
     });
 
     test('strips arbitrary HTML tags like div, h1, p', function (assert) {
@@ -146,10 +128,7 @@ module(basename(__filename), function () {
         'test',
         'allowed attr preserved',
       );
-      assert.notOk(
-        meta!.hasAttribute('onclick'),
-        'onclick is stripped',
-      );
+      assert.notOk(meta!.hasAttribute('onclick'), 'onclick is stripped');
       assert.notOk(
         meta!.hasAttribute('data-custom'),
         'data-custom is stripped',
@@ -193,14 +172,8 @@ module(basename(__filename), function () {
       let result = sanitizeHeadHTMLToString(html, doc);
       assert.ok(result, 'returns a string');
       assert.ok(result!.includes('<title>'), 'title is in output');
-      assert.ok(
-        result!.includes('<meta'),
-        'meta is in output',
-      );
-      assert.notOk(
-        result!.includes('<script'),
-        'script is not in output',
-      );
+      assert.ok(result!.includes('<meta'), 'meta is in output');
+      assert.notOk(result!.includes('<script'), 'script is not in output');
       assert.notOk(
         result!.includes('alert'),
         'script content is not in output',
@@ -209,10 +182,7 @@ module(basename(__filename), function () {
 
     test('returns null when all content is disallowed', function (assert) {
       let doc = makeDoc();
-      let result = sanitizeHeadHTMLToString(
-        '<script>alert(1)</script>',
-        doc,
-      );
+      let result = sanitizeHeadHTMLToString('<script>alert(1)</script>', doc);
       assert.strictEqual(result, null, 'returns null');
     });
 
@@ -234,8 +204,7 @@ module(basename(__filename), function () {
 
     test('detects script tags', function (assert) {
       let doc = makeDoc();
-      let html =
-        '<title>Test</title><script>alert(1)</script>';
+      let html = '<title>Test</title><script>alert(1)</script>';
       let result = findDisallowedHeadTags(html, doc);
       assert.deepEqual(result, ['script'], 'detects script');
     });
@@ -249,16 +218,14 @@ module(basename(__filename), function () {
 
     test('detects noscript tags', function (assert) {
       let doc = makeDoc();
-      let html =
-        '<title>Test</title><noscript>fallback</noscript>';
+      let html = '<title>Test</title><noscript>fallback</noscript>';
       let result = findDisallowedHeadTags(html, doc);
       assert.deepEqual(result, ['noscript'], 'detects noscript');
     });
 
     test('detects base tags', function (assert) {
       let doc = makeDoc();
-      let html =
-        '<title>Test</title><base href="https://evil.com">';
+      let html = '<title>Test</title><base href="https://evil.com">';
       let result = findDisallowedHeadTags(html, doc);
       assert.deepEqual(result, ['base'], 'detects base');
     });
@@ -276,14 +243,9 @@ module(basename(__filename), function () {
 
     test('deduplicates repeated disallowed tags', function (assert) {
       let doc = makeDoc();
-      let html =
-        '<script>a</script><script>b</script><script>c</script>';
+      let html = '<script>a</script><script>b</script><script>c</script>';
       let result = findDisallowedHeadTags(html, doc);
-      assert.deepEqual(
-        result,
-        ['script'],
-        'script appears only once',
-      );
+      assert.deepEqual(result, ['script'], 'script appears only once');
     });
 
     test('returns empty array for empty string', function (assert) {
