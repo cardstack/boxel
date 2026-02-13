@@ -602,6 +602,8 @@ jobs:
           grep -E '^\[start:worker-development|^\[start:worker-test' /tmp/server.log > /tmp/worker-manager.log || true
           grep -E '^\[start:prerender-dev' /tmp/server.log > /tmp/prerender-server.log || true
           grep -E '^\[start:prerender-manager-dev' /tmp/server.log > /tmp/prerender-manager.log || true
+          grep -E '^\[start:development' /tmp/server.log > /tmp/start-development.log || true
+          grep -E '^\[start:test-realms|^\[start:worker-test' /tmp/server.log > /tmp/test-realms.log || true
       - name: Upload realm server log
         uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
         if: always()
@@ -629,6 +631,20 @@ jobs:
         with:
           name: realm-server-test-prerender-manager-log-${{steps.artifact_name.outputs.artifact_name}}
           path: /tmp/prerender-manager.log
+          retention-days: 30
+      - name: Upload start:development log
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
+        if: always()
+        with:
+          name: realm-server-test-start-development-log-${{steps.artifact_name.outputs.artifact_name}}
+          path: /tmp/start-development.log
+          retention-days: 30
+      - name: Upload test-realms log
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
+        if: always()
+        with:
+          name: realm-server-test-test-realms-log-${{steps.artifact_name.outputs.artifact_name}}
+          path: /tmp/test-realms.log
           retention-days: 30
 
   vscode-boxel-tools-package:
