@@ -152,6 +152,101 @@ module(`server-endpoints/${basename(__filename)}`, function () {
               },
             },
           });
+
+          // Cards for testing scoped CSS from linked card instances.
+          // The parent declares linksTo with a base type, but the actual linked
+          // instance is a subclass with its own scoped CSS. This means the child's
+          // CSS is NOT reachable through the parent's static module imports — it
+          // can only be found by iterating over serialized.included resources.
+          writeFileSync(
+            join(context.testRealmDir, 'linked-css-base.gts'),
+            `
+            import { Component, CardDef } from 'https://cardstack.com/base/card-api';
+
+            export class LinkedCssBase extends CardDef {
+              static embedded = class Embedded extends Component<typeof this> {
+                <template>
+                  <div data-test-linked-base>Base</div>
+                </template>
+              };
+            }
+            `,
+          );
+
+          writeFileSync(
+            join(context.testRealmDir, 'linked-css-child.gts'),
+            `
+            import { Component } from 'https://cardstack.com/base/card-api';
+            import { LinkedCssBase } from './linked-css-base.gts';
+
+            export class LinkedCssChild extends LinkedCssBase {
+              static embedded = class Embedded extends Component<typeof this> {
+                <template>
+                  <div class="linked-child-marker" data-test-linked-child>Linked Child</div>
+                  <style scoped>
+                    .linked-child-marker {
+                      --linked-child-css: 1;
+                    }
+                  </style>
+                </template>
+              };
+            }
+            `,
+          );
+
+          writeFileSync(
+            join(context.testRealmDir, 'linked-css-parent.gts'),
+            `
+            import { Component, CardDef, field, linksTo } from 'https://cardstack.com/base/card-api';
+            import { LinkedCssBase } from './linked-css-base.gts';
+
+            export class LinkedCssParent extends CardDef {
+              @field child = linksTo(() => LinkedCssBase);
+              static isolated = class Isolated extends Component<typeof this> {
+                <template>
+                  <div data-test-linked-parent>Parent</div>
+                  <@fields.child />
+                </template>
+              };
+            }
+            `,
+          );
+
+          writeJSONSync(join(context.testRealmDir, 'linked-css-child-1.json'), {
+            data: {
+              type: 'card',
+              attributes: {},
+              meta: {
+                adoptsFrom: {
+                  module: './linked-css-child.gts',
+                  name: 'LinkedCssChild',
+                },
+              },
+            },
+          });
+
+          writeJSONSync(
+            join(context.testRealmDir, 'linked-css-parent-1.json'),
+            {
+              data: {
+                type: 'card',
+                attributes: {},
+                relationships: {
+                  child: {
+                    links: {
+                      self: './linked-css-child-1',
+                    },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: './linked-css-parent.gts',
+                    name: 'LinkedCssParent',
+                  },
+                },
+              },
+            },
+          );
         },
       });
 
@@ -250,6 +345,22 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         assert.ok(
           response.text.includes('--scoped-css-marker: 1'),
           'scoped CSS is included in the HTML response',
+        );
+      });
+
+      test('serves scoped CSS from linked cards in index responses', async function (assert) {
+        let response = await context.request2
+          .get('/test/linked-css-parent-1')
+          .set('Accept', 'text/html');
+
+        assert.strictEqual(response.status, 200, 'serves HTML response');
+        assert.ok(
+          response.text.includes('data-test-linked-parent'),
+          'parent isolated HTML is in the response',
+        );
+        assert.ok(
+          response.text.includes('--linked-child-css: 1'),
+          'scoped CSS from linked card is included in the HTML response',
         );
       });
 
