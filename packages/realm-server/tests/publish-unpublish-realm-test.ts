@@ -113,7 +113,7 @@ module(basename(__filename), function () {
         .send(
           JSON.stringify({
             sourceRealmURL: testRealm.url,
-            publishedRealmURL: 'http://testuser.localhost/test-realm/',
+            publishedRealmURL: 'http://testuser.localhost:4445/test-realm/',
           }),
         );
 
@@ -180,7 +180,7 @@ module(basename(__filename), function () {
           .send(
             JSON.stringify({
               sourceRealmURL: sourceRealmUrlString,
-              publishedRealmURL: 'http://testuser.localhost/test-realm/',
+              publishedRealmURL: 'http://testuser.localhost:4445/test-realm/',
             }),
           );
 
@@ -237,6 +237,26 @@ module(basename(__filename), function () {
           indexResults[0].realm_url,
           publishedRealmURL,
           'index entries should reference the published realm URL',
+        );
+
+        // Verify that head_html in the published realm references the
+        // published URL, not the source realm URL (the fullIndex after
+        // publish re-renders templates so og:url uses the correct URL)
+        let instanceWithHead = indexResults.find(
+          (r) => r.type === 'instance' && r.head_html,
+        );
+        assert.ok(
+          instanceWithHead,
+          'boxel_index should contain an instance row with head_html for the published realm',
+        );
+        let headHtml = (instanceWithHead as any).head_html as string;
+        assert.ok(
+          headHtml.includes(publishedRealmURL),
+          `head_html should reference published realm URL, got: ${headHtml}`,
+        );
+        assert.notOk(
+          headHtml.includes(sourceRealmUrlString),
+          `head_html should not reference source realm URL, got: ${headHtml}`,
         );
 
         let catalogResponse = await request
@@ -364,7 +384,7 @@ module(basename(__filename), function () {
           .send(
             JSON.stringify({
               sourceRealmURL: sourceRealmUrlString,
-              publishedRealmURL: 'http://testuser.localhost/test-realm/',
+              publishedRealmURL: 'http://testuser.localhost:4445/test-realm/',
             }),
           );
 
@@ -408,7 +428,7 @@ module(basename(__filename), function () {
           .send(
             JSON.stringify({
               sourceRealmURL: sourceRealmUrlString,
-              publishedRealmURL: 'http://testuser.localhost/test-realm/',
+              publishedRealmURL: 'http://testuser.localhost:4445/test-realm/',
             }),
           );
 
@@ -433,7 +453,7 @@ module(basename(__filename), function () {
           .send(
             JSON.stringify({
               sourceRealmURL: sourceRealmUrlString,
-              publishedRealmURL: 'http://testuser.localhost/test-realm/',
+              publishedRealmURL: 'http://testuser.localhost:4445/test-realm/',
             }),
           );
 
@@ -484,7 +504,7 @@ module(basename(__filename), function () {
           .send(
             JSON.stringify({
               sourceRealmURL: sourceRealmUrlString,
-              publishedRealmURL: 'http://testuser.localhost/test-realm/',
+              publishedRealmURL: 'http://testuser.localhost:4445/test-realm/',
             }),
           );
 
@@ -568,7 +588,7 @@ module(basename(__filename), function () {
         )[0];
         assert.strictEqual(
           realmVersion.current_version,
-          2,
+          3,
           'realm version of published realm is increased',
         );
 
@@ -685,7 +705,7 @@ module(basename(__filename), function () {
           .send(
             JSON.stringify({
               sourceRealmURL: sourceRealmUrlString,
-              publishedRealmURL: 'http://testuser.localhost/test-realm/',
+              publishedRealmURL: 'http://testuser.localhost:4445/test-realm/',
             }),
           );
 
@@ -757,7 +777,7 @@ module(basename(__filename), function () {
       });
 
       test('POST /_publish-realm does not create duplicate realm instances on republish', async function (assert) {
-        let publishedRealmURL = 'http://testuser.localhost/test-realm/';
+        let publishedRealmURL = 'http://testuser.localhost:4445/test-realm/';
 
         // First publish
         let firstResponse = await request

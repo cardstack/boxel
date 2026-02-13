@@ -200,8 +200,10 @@ export default function handlePublishRealm({
           validPublishedRealmDomains &&
           validPublishedRealmDomains.length > 0
         ) {
-          let isValidDomain = validPublishedRealmDomains.some((domain) =>
-            publishedURL.host.endsWith(domain),
+          let isValidDomain = validPublishedRealmDomains.some(
+            (domain) =>
+              publishedURL.host.endsWith(domain) ||
+              publishedURL.hostname.endsWith(domain),
           );
           if (!isValidDomain) {
             await sendResponseForBadRequest(
@@ -389,6 +391,12 @@ export default function handlePublishRealm({
         false,
       );
       await realm.start();
+
+      // reindexing is to ensure that prerendered templates that get copied over
+      // to the published realm get regenerated - we want this so that the
+      // places in the templates that refer to model.id are updated to the new
+      // published realm URL (for example in the og:url meta tag).
+      await realm.fullIndex();
 
       let response = createResponse({
         body: JSON.stringify(

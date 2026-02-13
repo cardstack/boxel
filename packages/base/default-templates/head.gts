@@ -24,8 +24,10 @@ export default class DefaultHeadTemplate extends GlimmerComponent<{
   <template>
     {{! template-lint-disable no-forbidden-elements }}
     <title data-test-card-head-title>{{this.title}}</title>
+
     <meta property='og:title' content={{this.title}} />
     <meta name='twitter:title' content={{this.title}} />
+    <meta property='og:url' content={{@model.id}} />
 
     {{#if this.description}}
       <meta name='description' content={{this.description}} />
