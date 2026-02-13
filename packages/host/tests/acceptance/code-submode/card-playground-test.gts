@@ -644,7 +644,13 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         .exists();
 
       await click('[data-test-open-search-field]');
-      await click('[data-test-search-result-index="5"]');
+      await waitFor(
+        `[data-test-search-result="${testRealmURL}Category/landscaping"]`,
+        { timeout: 8000 },
+      );
+      await click(
+        `[data-test-search-result="${testRealmURL}Category/landscaping"]`,
+      );
       assert
         .dom(`[data-test-stack-card="${testRealmURL}Category/landscaping"]`)
         .exists();

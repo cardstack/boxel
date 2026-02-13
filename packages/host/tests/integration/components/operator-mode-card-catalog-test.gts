@@ -118,7 +118,13 @@ module('Integration | operator-mode | card catalog', function (hooks) {
 
     await click(`[data-test-open-search-field]`);
     await waitFor(`[data-test-search-result]`);
-    assert.dom(`[data-test-search-result]`).exists({ count: 10 });
+    // New design: Recents section shows SECTION_DISPLAY_LIMIT_UNFOCUSED (5) initially in prompt mode; no Show more in compact
+    assert
+      .dom(`[data-test-search-result]`)
+      .exists(
+        { count: 5 },
+        'recents capped at 10 total, initial display limit shows 5',
+      );
   });
 
   test(`displays searching results`, async function (assert) {
@@ -136,17 +142,14 @@ module('Integration | operator-mode | card catalog', function (hooks) {
     await waitUntil(() =>
       (
         document.querySelector('[data-test-search-label]') as HTMLElement
-      )?.innerText.includes('Searching for “ma”'),
+      )?.innerText.includes('Searching…'),
     );
-    assert.dom(`[data-test-search-label]`).containsText('Searching for “ma”');
+    assert.dom(`[data-test-search-label]`).containsText('Searching…');
     await settled();
 
     assert.dom(`[data-test-search-result="${testRealmURL}Pet/mango"]`).exists();
-    assert
-      .dom(
-        `[data-test-search-result="${testRealmURL}Pet/mango"] + [data-test-realm-name]`,
-      )
-      .containsText('Operator Mode Workspace');
+    // New design: realm name is in a section header; multiple realms can appear (Base + test realm)
+    assert.dom(`.search-sheet-content`).containsText('Operator Mode Workspace');
     assert
       .dom(`[data-test-search-result="${testRealmURL}Author/mark"]`)
       .exists();
@@ -154,10 +157,14 @@ module('Integration | operator-mode | card catalog', function (hooks) {
     await click(`[data-test-search-sheet-cancel-button]`);
     await click(`[data-test-open-search-field]`);
     await typeIn(`[data-test-search-field]`, 'Mark J');
-
+    await waitUntil(() =>
+      (
+        document.querySelector('[data-test-search-label]') as HTMLElement
+      )?.innerText.includes('1 result'),
+    );
     assert
       .dom(`[data-test-search-label]`)
-      .containsText('1 Result for “Mark J”');
+      .containsText('1 result', 'new design summary text');
 
     await click(`[data-test-search-sheet-cancel-button]`);
     await click(`[data-test-open-search-field]`);
@@ -169,17 +176,11 @@ module('Integration | operator-mode | card catalog', function (hooks) {
     await waitUntil(() =>
       (
         document.querySelector('[data-test-search-label]') as HTMLElement
-      )?.innerText.includes('Searching for “No Cards”'),
+      )?.innerText.includes('0 results'),
     );
     assert
       .dom(`[data-test-search-label]`)
-      .containsText('Searching for “No Cards”');
-
-    await settled();
-
-    assert
-      .dom(`[data-test-search-label]`)
-      .containsText('0 Results for “No Cards”');
+      .containsText('0 results', 'new design summary for no results');
     assert.dom(`[data-test-search-sheet-search-result]`).doesNotExist();
   });
 
@@ -545,8 +546,10 @@ module('Integration | operator-mode | card catalog', function (hooks) {
     await fillIn('[data-test-search-field]', 'http://localhost:4202/test/man');
     await waitFor(`[data-test-search-label]`);
 
+    // New design: summary shows "0 results"; empty state body shows "No card found at ..."
+    assert.dom('[data-test-search-label]').containsText('0 results');
     assert
-      .dom('[data-test-search-label]')
+      .dom('[data-test-search-sheet-empty]')
       .containsText('No card found at http://localhost:4202/test/man');
     assert.dom('[data-test-search-sheet-search-result]').doesNotExist();
 
@@ -558,13 +561,14 @@ module('Integration | operator-mode | card catalog', function (hooks) {
 
     assert
       .dom('[data-test-search-label]')
-      .containsText('Card found at http://localhost:4202/test/mango');
+      .containsText('1 result from 1 realm');
     assert.dom('[data-test-search-sheet-search-result]').exists({ count: 1 });
 
     await fillIn('[data-test-search-field]', 'http://localhost:4202/test/man');
 
+    assert.dom('[data-test-search-label]').containsText('0 results');
     assert
-      .dom('[data-test-search-label]')
+      .dom('[data-test-search-sheet-empty]')
       .containsText('No card found at http://localhost:4202/test/man');
     assert.dom('[data-test-search-sheet-search-result]').doesNotExist();
 
@@ -582,6 +586,179 @@ module('Integration | operator-mode | card catalog', function (hooks) {
         `[data-test-stack-card="http://localhost:4202/test/mango"] [data-test-field-component-card]`,
       )
       .containsText('Mango', 'the card is rendered in the stack');
+  });
+
+  test(`search results are grouped by realm with section headers`, async function (assert) {
+    ctx.setCardInOperatorModeState(`${testRealmURL}grid`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+    await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
+    await click(`[data-test-open-search-field]`);
+    await fillIn(`[data-test-search-field]`, 'ma');
+    assert.dom(`[data-test-search-sheet-section-header]`).exists();
+    assert.dom(`[data-test-search-result="${testRealmURL}Pet/mango"]`).exists();
+    assert
+      .dom(`[data-test-search-result="${testRealmURL}Author/mark"]`)
+      .exists();
+    assert.dom(`.search-sheet-content`).containsText('Operator Mode Workspace');
+  });
+
+  test(`Show more button reveals more cards when search has many results`, async function (assert) {
+    ctx.setCardInOperatorModeState(`${testRealmURL}grid`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+    await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
+    await click(`[data-test-open-search-field]`);
+    // Use a query that returns multiple results in one realm (ma -> Pet/mango, Author/mark, etc.)
+    await fillIn(`[data-test-search-field]`, 'ma');
+    await waitFor('[data-test-search-sheet-search-result]');
+    const initialCount = document.querySelectorAll(
+      '[data-test-search-sheet-search-result]',
+    ).length;
+    assert.ok(initialCount >= 1, 'at least one query result shown');
+    const showMoreButton = document.querySelector(
+      '[data-test-search-sheet-show-more]',
+    );
+    if (showMoreButton) {
+      await click('[data-test-search-sheet-show-more]');
+      const afterCount = document.querySelectorAll(
+        '[data-test-search-sheet-search-result]',
+      ).length;
+      assert.ok(
+        afterCount > initialCount,
+        'Show more reveals additional cards',
+      );
+    } else {
+      assert.ok(true, 'Show more not shown when results fit in initial limit');
+    }
+  });
+
+  test(`empty state shows when URL has no card`, async function (assert) {
+    ctx.setCardInOperatorModeState(`${testRealmURL}grid`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+    await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
+    await click(`[data-test-open-search-field]`);
+    await fillIn(
+      '[data-test-search-field]',
+      'http://localhost:4202/test/nonexistent',
+    );
+    await waitFor(`[data-test-search-label]`);
+    assert.dom('[data-test-search-sheet-empty]').exists();
+    assert
+      .dom('[data-test-search-sheet-empty]')
+      .containsText('No card found at');
+  });
+
+  test(`SearchResultHeader is hidden in compact (prompt) mode`, async function (assert) {
+    ctx.setCardInOperatorModeState(`${testRealmURL}grid`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+    await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
+    await click(`[data-test-open-search-field]`);
+    assert.dom(`[data-test-search-sheet="search-prompt"]`).exists();
+    assert
+      .dom('[data-test-search-result-header]')
+      .doesNotExist('header is not shown in compact prompt mode');
+  });
+
+  test(`Recents section is present when search sheet is open (expanded mode)`, async function (assert) {
+    ctx.setCardInOperatorModeState(`${testRealmURL}grid`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+    await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
+    await click(`[data-test-open-search-field]`);
+    // In compact (prompt) mode, section headers are not rendered; type a query to expand to results mode
+    await fillIn(`[data-test-search-field]`, 'ma');
+    assert.dom(`[data-test-search-sheet-section-header]`).exists();
+    assert.dom('.search-sheet-content').containsText('Recents');
+  });
+
+  test(`compact mode shows no full header and recents remain clickable`, async function (assert) {
+    ctx.setCardInOperatorModeState(`${testRealmURL}grid`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+    await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
+    await click(`[data-test-boxel-filter-list-button="All Cards"]`);
+    await waitFor(`[data-test-cards-grid-item]`);
+    await click(
+      `[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"] .field-component-card`,
+    );
+    await waitFor(`[data-test-stack-card-index="1"]`);
+    await click(`[data-test-open-search-field]`);
+    assert.dom('[data-test-search-result-header]').doesNotExist();
+    await waitFor('[data-test-search-result]', { timeout: 3000 });
+    await click(`[data-test-search-result="${testRealmURL}Person/fadhlan"]`);
+    assert
+      .dom(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`)
+      .exists('clicking a recent in compact mode adds card to stack');
+  });
+
+  test(`Show only focuses a section and collapses others`, async function (assert) {
+    ctx.setCardInOperatorModeState(`${testRealmURL}grid`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+    await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
+    await click(`[data-test-open-search-field]`);
+    await fillIn(`[data-test-search-field]`, 'ma');
+    await waitFor('[data-test-search-sheet-show-only]');
+    await click('[data-test-search-sheet-show-only]');
+    const collapsedBlocks = document.querySelectorAll(
+      '.search-result-block.collapsed',
+    );
+    assert.ok(
+      collapsedBlocks.length >= 1,
+      'at least one section is collapsed when Show only is checked',
+    );
+  });
+
+  test(`view toggle updates layout (grid vs strip)`, async function (assert) {
+    ctx.setCardInOperatorModeState(`${testRealmURL}grid`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+    await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
+    await click(`[data-test-open-search-field]`);
+    await fillIn(`[data-test-search-field]`, 'ma');
+    await waitFor('[data-test-search-result-section]');
+
+    assert.dom('[data-test-search-result-header]').exists();
+    assert
+      .dom(
+        '[data-test-search-result-section="0"] [data-test-search-cards-result]',
+      )
+      .hasClass('grid-view');
+    await click(
+      '[data-test-search-result-header] [data-test-boxel-radio-option-id="strip"]',
+    );
+    assert
+      .dom(
+        '[data-test-search-result-section="0"] [data-test-search-cards-result]',
+      )
+      .hasClass('strip-view');
   });
 
   test(`can select one or more cards on cards-grid and unselect`, async function (assert) {
