@@ -443,7 +443,9 @@ module(basename(__filename), function () {
             return response.status === 200 ? response : undefined;
           },
           {
-            timeout: 10_000,
+            // This can be slow in CI because the first published lookup may
+            // need to prerender and populate module cache rows.
+            timeout: 30_000,
             interval: 200,
             timeoutMessage:
               'published linked-card card did not become readable',
@@ -471,7 +473,7 @@ module(basename(__filename), function () {
             return rows[0];
           },
           {
-            timeout: 10_000,
+            timeout: 30_000,
             interval: 200,
             timeoutMessage:
               'module cache entry for published linked-card was not created',
