@@ -20,6 +20,7 @@ import {
   Deferred,
   RealmPaths,
   isCardErrorJSONAPI,
+  type CodeRef,
   type LocalPath,
 } from '@cardstack/runtime-common';
 
@@ -41,6 +42,8 @@ export default class ChooseFileModal extends Component<Signature> {
   @tracked deferred?: Deferred<FileDef>;
   @tracked selectedRealm = this.knownRealms[0];
   @tracked selectedFile?: LocalPath;
+  @tracked fileTypeFilter?: CodeRef;
+  @tracked fileTypeName?: string;
 
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private realm: RealmService;
@@ -54,9 +57,21 @@ export default class ChooseFileModal extends Component<Signature> {
     });
   }
 
+  private get modalTitle(): string {
+    if (this.fileTypeName) {
+      return `Choose ${this.fileTypeName}`;
+    }
+    return 'Choose a File';
+  }
+
   // public API
-  async chooseFile<T extends FileDef>(): Promise<undefined | T> {
+  async chooseFile<T extends FileDef>(opts?: {
+    fileType?: CodeRef;
+    fileTypeName?: string;
+  }): Promise<undefined | T> {
     this.deferred = new Deferred();
+    this.fileTypeFilter = opts?.fileType;
+    this.fileTypeName = opts?.fileTypeName;
     let defaultRealm = this.knownRealms.find(
       (r) =>
         r.url.toString() === this.operatorModeStateService.realmURL?.toString(),
@@ -92,6 +107,8 @@ export default class ChooseFileModal extends Component<Signature> {
     } finally {
       this.selectedRealm = this.knownRealms[0];
       this.selectedFile = undefined;
+      this.fileTypeFilter = undefined;
+      this.fileTypeName = undefined;
       this.deferred = undefined;
     }
   }
@@ -194,7 +211,7 @@ export default class ChooseFileModal extends Component<Signature> {
     </style>
     {{#if this.deferred}}
       <ModalContainer
-        @title='Choose a File'
+        @title={{this.modalTitle}}
         @onClose={{fn this.pick undefined}}
         @size='medium'
         @centered={{true}}
@@ -231,6 +248,7 @@ export default class ChooseFileModal extends Component<Signature> {
             {{#each (array this.selectedRealm.url.href) as |realmURL|}}
               <IndexedFileTree
                 @realmURL={{realmURL}}
+                @fileTypeFilter={{this.fileTypeFilter}}
                 @onFileSelected={{this.selectFile}}
               />
             {{/each}}
