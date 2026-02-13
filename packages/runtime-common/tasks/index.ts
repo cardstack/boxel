@@ -6,6 +6,7 @@ import type {
   Prerenderer,
   Reader,
   RealmPermissions,
+  DefinitionLookup,
 } from '../index';
 import type { JobInfo } from '../worker';
 export * from './lint';
@@ -21,6 +22,7 @@ export interface TaskArgs {
   queuePublisher: QueuePublisher;
   indexWriter: IndexWriter;
   prerenderer: Prerenderer;
+  definitionLookup: DefinitionLookup;
   log: LoggerInstance;
   matrixURL: string;
   getReader(fetch: typeof global.fetch, realmURL: string): Reader;

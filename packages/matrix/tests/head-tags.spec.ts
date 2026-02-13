@@ -11,6 +11,10 @@ import {
 } from '../helpers';
 
 test.describe('Head tags', () => {
+  // These tests mutate shared published-realm/head-tag state in the same
+  // browser session; parallel execution can cause cross-test interference.
+  test.describe.configure({ mode: 'serial' });
+
   let user: { username: string; password: string; credentials: any };
 
   async function createUserAndRealm(

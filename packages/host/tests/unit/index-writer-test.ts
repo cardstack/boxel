@@ -242,7 +242,7 @@ module('Unit | index-writer', function (hooks) {
     );
   });
 
-  test('can perform invalidations for a module entry', async function (assert) {
+  test('can perform invalidations for a module change via instance deps', async function (assert) {
     await setupIndex(
       adapter,
       [
@@ -251,28 +251,12 @@ module('Unit | index-writer', function (hooks) {
       ],
       [
         {
-          url: `${testRealmURL}person.gts`,
-          file_alias: `${testRealmURL}person`,
-          type: 'module',
-          realm_version: 1,
-          realm_url: testRealmURL,
-          deps: [],
-        },
-        {
-          url: `${testRealmURL}employee.gts`,
-          file_alias: `${testRealmURL}employee`,
-          type: 'module',
-          realm_version: 1,
-          realm_url: testRealmURL,
-          deps: [`${testRealmURL}person`],
-        },
-        {
           url: `${testRealmURL}1.json`,
           file_alias: `${testRealmURL}1.json`,
           type: 'instance',
           realm_version: 1,
           realm_url: testRealmURL,
-          deps: [`${testRealmURL}employee`],
+          deps: [`${testRealmURL}employee`, `${testRealmURL}person`],
         },
         {
           url: `${testRealmURL}2.json`,
@@ -300,7 +284,6 @@ module('Unit | index-writer', function (hooks) {
     assert.deepEqual(invalidations.sort(), [
       `${testRealmURL}1.json`,
       `${testRealmURL}2.json`,
-      `${testRealmURL}employee.gts`,
       `${testRealmURL}person.gts`,
     ]);
   });
@@ -313,14 +296,6 @@ module('Unit | index-writer', function (hooks) {
         { realm_url: testRealmURL2, current_version: 5 },
       ],
       [
-        {
-          url: `${testRealmURL}person.gts`,
-          file_alias: `${testRealmURL}person`,
-          type: 'module',
-          realm_version: 1,
-          realm_url: testRealmURL,
-          deps: [],
-        },
         {
           url: `${testRealmURL2}luke.json`,
           file_alias: `${testRealmURL2}luke.json`,
@@ -592,26 +567,6 @@ module('Unit | index-writer', function (hooks) {
           head_html: `<span class="head">Head HTML</span>`,
           icon_html: '<svg>test icon</svg>',
         },
-        {
-          url: `${testRealmURL}person.gts`,
-          realm_version: 1,
-          realm_url: testRealmURL,
-          type: 'module',
-          pristine_doc: null,
-          search_doc: null,
-          display_names: null,
-          deps: [`https://cardstack.com/base/card-api.gts`],
-          last_known_good_deps: [`https://cardstack.com/base/card-api.gts`],
-          types: null,
-          last_modified: String(modified),
-          resource_created_at: String(modified),
-          head_html: null,
-          embedded_html: null,
-          fitted_html: null,
-          isolated_html: null,
-          atom_html: null,
-          icon_html: null,
-        },
       ],
     );
     let batch = await indexWriter.createBatch(new URL(testRealmURL2));
@@ -624,16 +579,14 @@ module('Unit | index-writer', function (hooks) {
     )) as unknown as BoxelIndexTable[];
     assert.strictEqual(
       results.length,
-      2,
+      1,
       'correct number of items were copied',
     );
 
-    let [copiedInstance, copiedModule] = results;
+    let [copiedInstance] = results;
     assert.ok(copiedInstance.indexed_at, 'indexed_at was set');
-    assert.ok(copiedModule.indexed_at, 'indexed_at was set');
 
     delete (copiedInstance as Partial<BoxelIndexTable>).indexed_at;
-    delete (copiedModule as Partial<BoxelIndexTable>).indexed_at;
 
     assert.deepEqual(
       copiedInstance as Omit<BoxelIndexTable, 'indexed_at'>,
@@ -691,34 +644,6 @@ module('Unit | index-writer', function (hooks) {
         is_deleted: null,
       },
       'the copied instance is correct',
-    );
-    assert.deepEqual(
-      copiedModule as Omit<BoxelIndexTable, 'indexed_at'>,
-      {
-        url: `${testRealmURL2}person.gts`,
-        file_alias: `${testRealmURL2}person`,
-        realm_version: 2,
-        realm_url: testRealmURL2,
-        type: 'module',
-        has_error: false,
-        error_doc: null,
-        pristine_doc: null,
-        search_doc: null,
-        display_names: null,
-        deps: [`https://cardstack.com/base/card-api.gts`],
-        last_known_good_deps: [`https://cardstack.com/base/card-api.gts`],
-        types: null,
-        last_modified: String(modified),
-        resource_created_at: String(modified),
-        embedded_html: null,
-        fitted_html: null,
-        isolated_html: null,
-        atom_html: null,
-        head_html: null,
-        icon_html: null,
-        is_deleted: null,
-      },
-      'the copied module is correct',
     );
   });
 
@@ -1003,6 +928,53 @@ module('Unit | index-writer', function (hooks) {
     }
   });
 
+  test('allows multiple index entries for the same url with different types', async function (assert) {
+    let timestamp = Date.now();
+    let resource: LooseCardResource = {
+      id: `${testRealmURL}1`,
+      type: 'card',
+      attributes: {
+        name: 'Mango',
+      },
+      meta: {
+        adoptsFrom: {
+          module: `./person`,
+          name: 'Person',
+        },
+      },
+    };
+    await setupIndex(adapter, [
+      {
+        url: `${testRealmURL}1.json`,
+        type: 'instance',
+        pristine_doc: resource,
+        last_modified: String(timestamp),
+        resource_created_at: String(timestamp),
+      },
+      {
+        url: `${testRealmURL}1.json`,
+        type: 'file',
+        search_doc: { name: '1.json' },
+      },
+    ]);
+
+    let rows = await adapter.execute(
+      'SELECT url, type FROM boxel_index WHERE url = $1 ORDER BY type COLLATE "POSIX"',
+      { bind: [`${testRealmURL}1.json`] },
+    );
+    assert.deepEqual(
+      rows,
+      [
+        { url: `${testRealmURL}1.json`, type: 'file' },
+        { url: `${testRealmURL}1.json`, type: 'instance' },
+      ],
+      'index rows include file and instance entries',
+    );
+
+    let entry = await indexQueryEngine.getInstance(new URL(`${testRealmURL}1`));
+    assert.strictEqual(entry?.type, 'instance', 'instance entry is accessible');
+  });
+
   test('can get "production" index entry', async function (assert) {
     let originalModified = Date.now();
     let originalResource: LooseCardResource = {
@@ -1262,175 +1234,6 @@ module('Unit | index-writer', function (hooks) {
       ],
       'the "production" realm versions are correct',
     );
-  });
-
-  test('can get compiled module and source when requested with file extension', async function (assert) {
-    await setupIndex(adapter);
-    let batch = await indexWriter.createBatch(new URL(testRealmURL));
-    let now = Date.now();
-    await batch.updateEntry(new URL(`${testRealmURL}person.gts`), {
-      type: 'module',
-      lastModified: now,
-      resourceCreatedAt: now,
-      deps: new Set(),
-    });
-    await batch.done();
-
-    let result = await indexQueryEngine.getModule(
-      new URL(`${testRealmURL}person.gts`),
-    );
-    if (result?.type === 'module') {
-      let { lastModified } = result;
-      assert.strictEqual(lastModified, now, 'lastModified is correct');
-    } else {
-      assert.ok(false, `expected module not to be an error document`);
-    }
-  });
-
-  test('allows multiple index entries for the same url with different types', async function (assert) {
-    await setupIndex(adapter);
-    let batch = await indexWriter.createBatch(new URL(testRealmURL));
-    let now = Date.now();
-
-    await batch.updateEntry(new URL(`${testRealmURL}person.gts`), {
-      type: 'file',
-      lastModified: now,
-      resourceCreatedAt: now,
-      deps: new Set(),
-      searchData: {
-        name: 'person.gts',
-        contentType: 'text/plain',
-      },
-    });
-    await batch.updateEntry(new URL(`${testRealmURL}person.gts`), {
-      type: 'module',
-      lastModified: now,
-      resourceCreatedAt: now,
-      deps: new Set(),
-    });
-    await batch.done();
-
-    let rows = await adapter.execute(
-      'SELECT url, type FROM boxel_index WHERE url = $1 ORDER BY type COLLATE "POSIX"',
-      { bind: [`${testRealmURL}person.gts`] },
-    );
-
-    assert.deepEqual(
-      rows,
-      [
-        { url: `${testRealmURL}person.gts`, type: 'file' },
-        { url: `${testRealmURL}person.gts`, type: 'module' },
-      ],
-      'file and module entries share the same url',
-    );
-  });
-
-  test('can get compiled module and source when requested without file extension', async function (assert) {
-    await setupIndex(adapter);
-    let batch = await indexWriter.createBatch(new URL(testRealmURL));
-    let now = Date.now();
-    await batch.updateEntry(new URL(`${testRealmURL}person.gts`), {
-      type: 'module',
-      lastModified: now,
-      resourceCreatedAt: now,
-      deps: new Set(),
-    });
-    await batch.done();
-
-    let result = await indexQueryEngine.getModule(
-      new URL(`${testRealmURL}person`),
-    );
-    if (result?.type === 'module') {
-      let { lastModified } = result;
-      assert.strictEqual(lastModified, now, 'lastModified is correct');
-    } else {
-      assert.ok(false, `expected module not to be an error document`);
-    }
-  });
-
-  test('can get compiled module and source from WIP index', async function (assert) {
-    await setupIndex(adapter);
-    let batch = await indexWriter.createBatch(new URL(testRealmURL));
-    let now = Date.now();
-    await batch.updateEntry(new URL(`${testRealmURL}person.gts`), {
-      type: 'module',
-      lastModified: now,
-      resourceCreatedAt: now,
-      deps: new Set(),
-    });
-
-    let result = await indexQueryEngine.getModule(
-      new URL(`${testRealmURL}person.gts`),
-      {
-        useWorkInProgressIndex: true,
-      },
-    );
-    if (result?.type === 'module') {
-      let { lastModified } = result;
-      assert.strictEqual(lastModified, now, 'lastModified is correct');
-    } else {
-      assert.ok(false, `expected module not to be an error document`);
-    }
-
-    let noResult = await indexQueryEngine.getModule(
-      new URL(`${testRealmURL}person.gts`),
-    );
-    assert.strictEqual(
-      noResult,
-      undefined,
-      'module does not exist in production index',
-    );
-  });
-
-  test('can get error doc for module', async function (assert) {
-    await setupIndex(adapter, [
-      {
-        url: `${testRealmURL}person.gts`,
-        realm_version: 1,
-        realm_url: testRealmURL,
-        type: 'module',
-        has_error: true,
-        error_doc: {
-          message: 'test error',
-          status: 500,
-          id: `${testRealmURL}person.gts`,
-          additionalErrors: [],
-        },
-      },
-    ]);
-    let result = await indexQueryEngine.getModule(
-      new URL(`${testRealmURL}person.gts`),
-    );
-    if (result?.type === 'module-error') {
-      assert.deepEqual(result, {
-        type: 'module-error',
-        error: {
-          message: 'test error',
-          status: 500,
-          id: `${testRealmURL}person.gts`,
-          additionalErrors: [],
-        },
-      });
-    } else {
-      assert.ok(false, `expected an error document`);
-    }
-  });
-
-  test('returns undefined when getting a deleted module', async function (assert) {
-    await setupIndex(adapter, [
-      {
-        url: `${testRealmURL}person.gts`,
-        type: 'module',
-        realm_version: 1,
-        realm_url: testRealmURL,
-        is_deleted: true,
-      },
-    ]);
-
-    let entry = await indexQueryEngine.getModule(
-      new URL(`${testRealmURL}person.gts`),
-    );
-    assert.strictEqual(entry, undefined, 'deleted modules return undefined');
   });
 
   test('update realm meta when indexing is done', async function (assert) {

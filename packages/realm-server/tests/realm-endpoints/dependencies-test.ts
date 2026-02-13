@@ -35,7 +35,7 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
     onRealmSetup,
   });
 
-  test('returns resource index entries for an existing module', async function (assert) {
+  test('returns resource index entries for an existing file', async function (assert) {
     await testRealm.write(
       'dependencies-card.gts',
       `
@@ -50,26 +50,22 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
 
     let targetUrl = `${testRealm.url}dependencies-card.gts`;
     let response = await request
-      .get(`/_dependencies?url=${encodeURIComponent(targetUrl)}&type=module`)
+      .get(`/_dependencies?url=${encodeURIComponent(targetUrl)}&type=file`)
       .set('Accept', SupportedMimeType.JSONAPI);
 
     assert.strictEqual(response.status, 200, 'HTTP 200 status');
     assert.true(response.body.data.length > 0, 'returns at least one entry');
 
     let entry = response.body.data.find(
-      (candidate: any) => candidate.attributes?.entryType === 'module',
+      (candidate: any) => candidate.attributes?.entryType === 'file',
     );
-    assert.ok(entry, 'returns module entry');
+    assert.ok(entry, 'returns file entry');
     assert.strictEqual(entry.id, targetUrl);
     assert.strictEqual(entry.attributes.canonicalUrl, targetUrl);
     assert.strictEqual(entry.attributes.realmUrl, testRealm.url);
-    assert.strictEqual(entry.attributes.entryType, 'module');
+    assert.strictEqual(entry.attributes.entryType, 'file');
     assert.false(entry.attributes.hasError);
-    assert.true(
-      entry.attributes.dependencies.includes(
-        'https://cardstack.com/base/string',
-      ),
-    );
+    assert.true(entry.attributes.dependencies.includes(targetUrl));
   });
 
   test('returns empty array for unknown resources', async function (assert) {

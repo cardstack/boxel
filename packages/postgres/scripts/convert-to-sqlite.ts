@@ -3,6 +3,7 @@ import { readFileSync, readdirSync, writeFileSync } from 'fs-extra';
 import { resolve, join } from 'path';
 import {
   parse,
+  show,
   type CreateTableStmt,
   type AlterTableStmt,
   type Program,
@@ -20,6 +21,14 @@ const sqliteSchemaDir = resolve(
   join(__dirname, '..', '..', 'host', 'config', 'schema'),
 );
 const INDENT = '  ';
+const SQLITE_PK_COLUMN_MAPPING: Record<string, Record<string, string>> = {
+  modules: {
+    // Keep in sync with migration `1770889690032_index-row-size-max-error`,
+    // which defines `modules.url_hash` as a generated column derived from `url`.
+    // SQLite cannot include generated columns in PRIMARY KEY constraints.
+    url_hash: 'url',
+  },
+};
 
 let pgDumpFile = args[2];
 if (!pgDumpFile) {
@@ -147,6 +156,27 @@ function createColumns(
             `Don't know how to serialize default value constraint for expression type '${constraint.expr.type}'`,
           );
         }
+        case 'constraint_generated': {
+          // SQLite supports generated columns, but not Postgres-specific
+          // functions like md5() and regexp_replace(). Fall back to a stable
+          // expression so schema conversion succeeds.
+          if ('sequenceOptions' in constraint && constraint.sequenceOptions) {
+            break;
+          }
+
+          let generatedExpr = show(constraint.expr);
+          generatedExpr = toSQLiteGeneratedExpression(
+            generatedExpr,
+            item.name.name,
+          );
+          column.push('GENERATED ALWAYS AS', generatedExpr);
+          column.push(
+            constraint.storageKw?.name?.toUpperCase() === 'VIRTUAL'
+              ? 'VIRTUAL'
+              : 'STORED',
+          );
+          break;
+        }
         case 'constraint_unique':
           column.push('UNIQUE');
           break;
@@ -195,7 +225,9 @@ function makePrimaryKeyConstraint(
                     column.type === 'index_specification' &&
                     column.expr.type === 'identifier'
                   ) {
-                    columns.push(column.expr.name);
+                    columns.push(
+                      primaryKeyColumnForSQLite(tableName, column.expr.name),
+                    );
                   }
                 }
               } else {
@@ -237,6 +269,17 @@ function makePrimaryKeyConstraint(
   return pkConstraint.join(' ');
 }
 
+function primaryKeyColumnForSQLite(
+  tableName: string,
+  columnName: string,
+): string {
+  let tableMapping = SQLITE_PK_COLUMN_MAPPING[tableName];
+  if (tableMapping?.[columnName]) {
+    return tableMapping[columnName];
+  }
+  return columnName;
+}
+
 // This strips out all the things that our SQL AST chokes on (it's still in an
 // experimental phase for postgresql)
 function prepareDump(sql: string): string {
@@ -253,4 +296,18 @@ function getSchemaFilename(): string {
     .sort()
     .pop()!;
   return `${lastFile.replace(/_.*/, '')}_schema.sql`;
+}
+
+function toSQLiteGeneratedExpression(expr: string, columnName: string): string {
+  let normalizedExpr = expr.toLowerCase();
+
+  if (
+    columnName === 'url_hash' &&
+    normalizedExpr.includes('md5(') &&
+    normalizedExpr.includes('url')
+  ) {
+    return '(url)';
+  }
+
+  return expr;
 }

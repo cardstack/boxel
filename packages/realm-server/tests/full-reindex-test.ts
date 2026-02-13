@@ -3,6 +3,7 @@ import { basename } from 'path';
 import type { PgAdapter } from '@cardstack/postgres';
 import type {
   IndexWriter,
+  DefinitionLookup,
   Prerenderer,
   QueuePublisher,
 } from '@cardstack/runtime-common';
@@ -40,6 +41,7 @@ module(basename(__filename), function (hooks) {
       queuePublisher,
       indexWriter: null as unknown as IndexWriter,
       prerenderer: null as unknown as Prerenderer,
+      definitionLookup: null as unknown as DefinitionLookup,
       matrixURL: 'http://localhost:8008',
       getReader: () => {
         throw new Error('getReader is not used by full-reindex');

@@ -356,6 +356,10 @@ export default function handlePublishRealm({
           `Could not determine filesystem path for source realm ${sourceRealmURL}`,
         );
       }
+      // Publishing copies index state from the source realm, so we need to
+      // wait for any in-flight indexing/update propagation to settle first.
+      await sourceRealm.indexing();
+      await sourceRealm.flushUpdateEvents();
       let sourceRealmPath = sourceRealm.dir;
       let publishedDir = join(realmsRootPath, PUBLISHED_DIRECTORY_NAME);
       let publishedRealmPath = join(publishedDir, publishedRealmData.id);

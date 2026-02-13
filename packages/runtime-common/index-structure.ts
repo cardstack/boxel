@@ -7,7 +7,7 @@ export interface BoxelIndexTable {
   file_alias: string;
   realm_version: number;
   realm_url: string;
-  type: 'instance' | 'module' | 'file';
+  type: 'instance' | 'file';
   has_error: boolean | null;
   // TODO in followup PR update this to be a document not a resource
   pristine_doc: CardResource | null;
