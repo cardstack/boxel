@@ -153,13 +153,33 @@ module(`server-endpoints/${basename(__filename)}`, function () {
             },
           });
 
-          // Cards for testing scoped CSS from linked card instances
+          // Cards for testing scoped CSS from linked card instances.
+          // The parent declares linksTo with a base type, but the actual linked
+          // instance is a subclass with its own scoped CSS. This means the child's
+          // CSS is NOT reachable through the parent's static module imports — it
+          // can only be found by iterating over serialized.included resources.
           writeFileSync(
-            join(context.testRealmDir, 'linked-css-child.gts'),
+            join(context.testRealmDir, 'linked-css-base.gts'),
             `
             import { Component, CardDef } from 'https://cardstack.com/base/card-api';
 
-            export class LinkedCssChild extends CardDef {
+            export class LinkedCssBase extends CardDef {
+              static embedded = class Embedded extends Component<typeof this> {
+                <template>
+                  <div data-test-linked-base>Base</div>
+                </template>
+              };
+            }
+            `,
+          );
+
+          writeFileSync(
+            join(context.testRealmDir, 'linked-css-child.gts'),
+            `
+            import { Component } from 'https://cardstack.com/base/card-api';
+            import { LinkedCssBase } from './linked-css-base.gts';
+
+            export class LinkedCssChild extends LinkedCssBase {
               static embedded = class Embedded extends Component<typeof this> {
                 <template>
                   <div class="linked-child-marker" data-test-linked-child>Linked Child</div>
@@ -178,10 +198,10 @@ module(`server-endpoints/${basename(__filename)}`, function () {
             join(context.testRealmDir, 'linked-css-parent.gts'),
             `
             import { Component, CardDef, field, linksTo } from 'https://cardstack.com/base/card-api';
-            import { LinkedCssChild } from './linked-css-child.gts';
+            import { LinkedCssBase } from './linked-css-base.gts';
 
             export class LinkedCssParent extends CardDef {
-              @field child = linksTo(() => LinkedCssChild);
+              @field child = linksTo(() => LinkedCssBase);
               static isolated = class Isolated extends Component<typeof this> {
                 <template>
                   <div data-test-linked-parent>Parent</div>
