@@ -238,9 +238,13 @@ module('Acceptance | file chooser tests', function (hooks) {
       new File(['hello upload'], 'uploaded.txt', { type: 'text/plain' }),
     );
 
-    assert
-      .dom('[data-test-choose-file-modal]')
-      .doesNotExist('file chooser modal closed after upload');
+    await waitUntil(
+      () => !document.querySelector('[data-test-choose-file-modal]'),
+      {
+        timeout: 10000,
+        timeoutMessage: 'file chooser modal did not close after upload',
+      },
+    );
 
     assert
       .dom(
