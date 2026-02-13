@@ -187,6 +187,10 @@ export default class SearchContent extends Component<Signature> {
     return this.cardResource?.card;
   }
 
+  private get isCardResourceLoaded() {
+    return this.cardResource?.isLoaded ?? false;
+  }
+
   private get realms() {
     const urls =
       this.args.selectedRealmURLs.length > 0
@@ -261,6 +265,9 @@ export default class SearchContent extends Component<Signature> {
 
     // URL search result
     if (this.searchKeyIsURL) {
+      if (!this.isCardResourceLoaded) {
+        return 'Searching…';
+      }
       return this.resolvedCard ? '1 result from 1 realm' : '0 results';
     }
 
@@ -531,14 +538,16 @@ export default class SearchContent extends Component<Signature> {
         {{/unless}}
       {{/if}}
 
-      {{! Handle empty URL search state }}
+      {{! Handle empty URL search state — only after loading completes }}
       {{#if this.searchKeyIsURL}}
-        {{#unless this.resolvedCard}}
-          <div class='empty-state' data-test-search-sheet-empty>
-            No card found at
-            {{@searchKey}}
-          </div>
-        {{/unless}}
+        {{#if this.isCardResourceLoaded}}
+          {{#unless this.resolvedCard}}
+            <div class='empty-state' data-test-search-sheet-empty>
+              No card found at
+              {{@searchKey}}
+            </div>
+          {{/unless}}
+        {{/if}}
       {{/if}}
 
       {{! Render all sections }}

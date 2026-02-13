@@ -86,6 +86,20 @@ export class PrerenderedSearchResource extends Resource<Args> {
     setOwner(this, owner);
 
     if (query === undefined || format === undefined) {
+      // Clear stale state so live subscriptions don't re-fire the old query
+      this.#previousQuery = undefined;
+      this.#previousQueryString = undefined;
+      this.#previousFormat = undefined;
+      this.#previousCardUrls = undefined;
+      this.#previousRealms = undefined;
+      this.realmsNeedingRefresh.clear();
+      this.search.cancelAll();
+      for (let subscription of this.subscriptions) {
+        subscription.unsubscribe();
+      }
+      this.subscriptions = [];
+      this._instances = new TrackedArray();
+      this._meta = { page: { total: 0 } };
       return;
     }
 
