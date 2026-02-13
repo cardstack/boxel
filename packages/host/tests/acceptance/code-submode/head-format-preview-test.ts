@@ -22,6 +22,27 @@ import {
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupApplicationTest } from '../../helpers/setup';
 
+const headPreviewWithDisallowedTagsSource = `
+  import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
+  import StringField from "https://cardstack.com/base/string";
+
+  export class HeadPreviewUnsafe extends CardDef {
+    static displayName = 'Head Preview Unsafe';
+
+    @field title = contains(StringField);
+
+    static head = class Head extends Component<typeof this> {
+      <template>
+        {{! template-lint-disable no-forbidden-elements }}
+        <title>{{@model.title}}</title>
+        <meta name='description' content='test' />
+        <script>void 0</script>
+        <style>.injected { color: red }</style>
+      </template>
+    };
+  }
+`;
+
 const headPreviewCardSource = `
   import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
   import StringField from "https://cardstack.com/base/string";
@@ -135,5 +156,80 @@ module('Acceptance | code submode | head format preview', function (hooks) {
 
     assert.dom('.google-title').hasText('Updated Title');
     assert.dom('.google-description').hasText('Updated description');
+  });
+
+  test('shows warning when head template contains disallowed tags', async function (assert) {
+    window.localStorage.setItem(
+      RecentFiles,
+      JSON.stringify([[testRealmURL, 'HeadPreviewUnsafe/example.json']]),
+    );
+
+    await setupAcceptanceTestRealm({
+      mockMatrixUtils,
+      contents: {
+        ...SYSTEM_CARD_FIXTURE_CONTENTS,
+        'head-preview-unsafe.gts': headPreviewWithDisallowedTagsSource,
+        'HeadPreviewUnsafe/example.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              title: 'Unsafe Card',
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}head-preview-unsafe`,
+                name: 'HeadPreviewUnsafe',
+              },
+            },
+          },
+        },
+      },
+    });
+
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}HeadPreviewUnsafe/example`,
+            format: 'head',
+          },
+        ],
+      ],
+      submode: 'code',
+      codePath: `${testRealmURL}HeadPreviewUnsafe/example.json`,
+      cardPreviewFormat: 'head',
+    });
+
+    await waitFor('[data-test-head-warning]');
+    assert
+      .dom('[data-test-head-warning]')
+      .exists('warning is shown for disallowed tags');
+    assert
+      .dom('[data-test-head-warning]')
+      .includesText(
+        'Disallowed tags detected',
+        'warning message is displayed',
+      );
+  });
+
+  test('does not show warning when head template only has allowed tags', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}HeadPreview/example`,
+            format: 'head',
+          },
+        ],
+      ],
+      submode: 'code',
+      codePath: `${testRealmURL}HeadPreview/example.json`,
+      cardPreviewFormat: 'head',
+    });
+
+    await waitFor('.google-title');
+    assert
+      .dom('[data-test-head-warning]')
+      .doesNotExist('no warning for valid head content');
   });
 });

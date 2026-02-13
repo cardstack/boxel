@@ -3,6 +3,8 @@ import { tracked } from '@glimmer/tracking';
 
 import window from 'ember-window-mock';
 
+import { sanitizeHeadHTML } from '@cardstack/runtime-common';
+
 import config from '@cardstack/host/config/environment';
 
 const DEFAULT_HEAD_HTML = '<title>Boxel</title>';
@@ -293,12 +295,23 @@ export default class HostModeService extends Service {
       node = next;
     }
 
-    let contentToInsert =
-      !headHTML || headHTML.trim().length === 0 ? DEFAULT_HEAD_HTML : headHTML;
-    let fragment = document
-      .createRange()
-      .createContextualFragment(contentToInsert);
-    parent.insertBefore(fragment, end);
+    if (!headHTML || headHTML.trim().length === 0) {
+      let fallback = document
+        .createRange()
+        .createContextualFragment(DEFAULT_HEAD_HTML);
+      parent.insertBefore(fallback, end);
+      return;
+    }
+
+    let sanitized = sanitizeHeadHTML(headHTML, document);
+    if (sanitized) {
+      parent.insertBefore(sanitized, end);
+    } else {
+      let fallback = document
+        .createRange()
+        .createContextualFragment(DEFAULT_HEAD_HTML);
+      parent.insertBefore(fallback, end);
+    }
   }
 
   private findHeadMarkers(): [Element, Element] | null {

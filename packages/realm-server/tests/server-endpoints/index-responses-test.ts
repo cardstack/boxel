@@ -121,6 +121,47 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           });
 
           writeFileSync(
+            join(context.testRealmDir, 'unsafe-head-card.gts'),
+            `
+            import { Component, CardDef } from 'https://cardstack.com/base/card-api';
+
+            export class UnsafeHeadCard extends CardDef {
+              static isolated = class Isolated extends Component<typeof this> {
+                <template>
+                  <div data-test-isolated-html>Unsafe head card</div>
+                </template>
+              };
+
+              static head = class Head extends Component<typeof this> {
+                <template>
+                  {{! template-lint-disable no-forbidden-elements }}
+                  <title>Safe Title</title>
+                  <meta name="description" content="safe description" />
+                  <script>void 0</script>
+                  <style>.injected-style { color: red }</style>
+                </template>
+              };
+            }
+            `,
+          );
+
+          writeJSONSync(
+            join(context.testRealmDir, 'unsafe-head-test.json'),
+            {
+              data: {
+                type: 'card',
+                attributes: {},
+                meta: {
+                  adoptsFrom: {
+                    module: './unsafe-head-card.gts',
+                    name: 'UnsafeHeadCard',
+                  },
+                },
+              },
+            },
+          );
+
+          writeFileSync(
             join(context.testRealmDir, 'scoped-css-card.gts'),
             `
             import { Component, CardDef } from 'https://cardstack.com/base/card-api';
@@ -250,6 +291,41 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         assert.ok(
           response.text.includes('--scoped-css-marker: 1'),
           'scoped CSS is included in the HTML response',
+        );
+      });
+
+      test('sanitizes disallowed tags from head HTML in index responses', async function (assert) {
+        let response = await context.request2
+          .get('/test/unsafe-head-test')
+          .set('Accept', 'text/html');
+
+        assert.strictEqual(response.status, 200, 'serves HTML response');
+
+        // Extract content between head markers
+        let headMatch = response.text.match(
+          /data-boxel-head-start[^>]*>([\s\S]*?)data-boxel-head-end/,
+        );
+        let headContent = headMatch?.[1] ?? '';
+
+        assert.ok(
+          headContent.includes('<title>'),
+          'title tag is preserved in head HTML',
+        );
+        assert.ok(
+          headContent.includes('<meta'),
+          'meta tag is preserved in head HTML',
+        );
+        assert.notOk(
+          headContent.includes('<script'),
+          'script tag is stripped from head HTML',
+        );
+        assert.notOk(
+          headContent.includes('void 0'),
+          'script content is stripped from head HTML',
+        );
+        assert.notOk(
+          headContent.includes('.injected-style'),
+          'user-injected style content is stripped from head HTML',
         );
       });
 
