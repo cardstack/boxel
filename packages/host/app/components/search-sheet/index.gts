@@ -27,9 +27,9 @@ import { type getCard, GetCardContextName } from '@cardstack/runtime-common';
 import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 
-import SearchBar from './search-bar';
-import SearchSheetContent from './search-sheet-content';
-import { getCodeRefFromSearchKey } from './utils';
+import SearchBar from '../card-search/search-bar';
+import SearchContent from '../card-search/search-content';
+import { getCodeRefFromSearchKey } from '../card-search/utils';
 
 import type StoreService from '../../services/store';
 
@@ -266,7 +266,7 @@ export default class SearchSheet extends Component<Signature> {
           class='search-sheet__search-input-group'
           autocomplete='off'
         />
-        <SearchSheetContent
+        <SearchContent
           @searchKey={{this.searchKey}}
           @selectedRealmURLs={{this.selectedRealmURLs}}
           @isCompact={{this.isCompact}}

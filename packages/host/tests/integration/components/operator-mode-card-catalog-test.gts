@@ -329,7 +329,9 @@ module('Integration | operator-mode | card catalog', function (hooks) {
 
     await fillIn(`[data-test-search-field]`, `friend`);
     await waitFor('[data-test-card-catalog-item]', { count: 0 });
-    assert.dom(`[data-test-card-catalog]`).hasText('No cards available');
+    assert
+      .dom(`[data-test-search-content-empty]`)
+      .hasText('No cards available');
   });
 
   test(`can filter by realm after searching in card catalog`, async function (assert) {
@@ -394,26 +396,21 @@ module('Integration | operator-mode | card catalog', function (hooks) {
       )
       .exists();
 
-    await click('[data-test-realm-filter-button]');
-    await click('[data-test-boxel-menu-item-text="Base Workspace"]');
+    // Open realm picker and select only Operator Mode Workspace
+    await click('[data-test-realm-picker] [data-test-boxel-picker-trigger]');
+    await click(`[data-test-boxel-picker-option-row="${testRealmURL}"]`);
 
     assert.dom(`[data-test-realm]`).exists({ count: 1 });
     assert.dom('[data-test-realm="Operator Mode Workspace"]').exists();
     assert.dom('[data-test-realm="Base Workspace"]').doesNotExist();
     assert.dom(`[data-test-select="${testRealmURL}Spec/pet-room"]`).exists();
 
-    await click('[data-test-realm-filter-button]');
-    await click('[data-test-boxel-menu-item-text="Operator Mode Workspace"]');
-    assert.dom('[data-test-realm="Operator Mode Workspace"]').doesNotExist();
-    assert.dom('[data-test-realm="Base Workspace"]').doesNotExist();
-    assert.dom(`[data-test-card-catalog-item]`).doesNotExist();
-    assert.dom('[data-test-card-catalog]').hasText('No cards available');
+    // Switch to All Realms by clicking All Realms option
+    await click('[data-test-realm-picker] [data-test-boxel-picker-trigger]');
+    await click('[data-test-boxel-picker-option-row="select-all"]');
 
-    await click('[data-test-realm-filter-button]');
-    await click('[data-test-boxel-menu-item-text="Operator Mode Workspace"]');
-    assert.dom(`[data-test-realm]`).exists({ count: 1 });
     assert.dom('[data-test-realm="Operator Mode Workspace"]').exists();
-    assert.dom('[data-test-realm="Base Workspace"]').doesNotExist();
+    assert.dom('[data-test-realm="Base Workspace"]').exists();
     assert.dom(`[data-test-select="${testRealmURL}Spec/pet-room"]`).exists();
   });
 
@@ -476,7 +473,7 @@ module('Integration | operator-mode | card catalog', function (hooks) {
       .exists({ count: 1 });
 
     await click('[data-test-card-catalog-cancel-button]');
-    await waitFor('[data-test-card-catalog]', { count: 0 });
+    await waitFor('[data-test-card-catalog-modal]', { count: 0 });
 
     assert.dom('[data-test-operator-mode-stack="0"]').exists();
     assert
@@ -518,7 +515,7 @@ module('Integration | operator-mode | card catalog', function (hooks) {
       .exists({ count: 1 });
 
     await click('[data-test-card-catalog-cancel-button]');
-    await waitFor('[data-test-card-catalog]', { count: 0 });
+    await waitFor('[data-test-card-catalog-modal]', { count: 0 });
 
     assert
       .dom(`[data-test-field="authorBio"] [data-test-add-new]`)

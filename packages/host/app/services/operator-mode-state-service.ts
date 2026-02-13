@@ -49,7 +49,7 @@ import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
 
 import type { BoxelContext } from 'https://cardstack.com/base/matrix-event';
 
-import { removeFileExtension } from '../components/search-sheet/utils';
+import { removeFileExtension } from '../components/card-search/utils';
 
 import { ModuleInspectorSelections } from '../utils/local-storage-keys';
 
