@@ -498,6 +498,7 @@ jobs:
             "realm-endpoints/search-test.ts",
             "realm-endpoints/user-test.ts",
             "realm-endpoints-test.ts",
+            "sanitize-head-html-test.ts",
             "search-prerendered-test.ts",
             "types-endpoint-test.ts",
             "server-endpoints/authentication-test.ts",
