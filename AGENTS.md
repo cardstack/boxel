@@ -79,6 +79,7 @@
   - Run tests:
     `pnpm test`
 - Focusing on single test or module:
+- make sure to kill previously running matrix tests if they are still running before starting a new test run.
   Add `--grep` flag to command (`--grep 'it can register a user with a registration token'`)
 
 ### packages/realm-server

@@ -506,19 +506,36 @@ export class RealmServer {
     // - Module: /foo/bar.gts (file_alias: /foo/bar)
     // - Instance: /foo/bar.json (file_alias: /foo/bar)
     // A request for /foo/bar should serve the module, not HTML for the instance.
+    // Prefer the modules table here because copied/published realms do not
+    // carry module rows in boxel_index.
     let moduleRows = await query(this.dbAdapter, [
       `
         SELECT 1
-        FROM boxel_index
-        WHERE type = 'module'
-          AND is_deleted IS NOT TRUE
-          AND
-        `,
+        FROM modules
+        WHERE
+      `,
       ...indexCandidateExpressions(candidates),
       `
         LIMIT 1
       `,
     ]);
+
+    // Fallback for legacy/indexed module rows in boxel_index.
+    if (moduleRows.length === 0) {
+      moduleRows = await query(this.dbAdapter, [
+        `
+          SELECT 1
+          FROM boxel_index
+          WHERE type = 'module'
+            AND is_deleted IS NOT TRUE
+            AND
+          `,
+        ...indexCandidateExpressions(candidates),
+        `
+          LIMIT 1
+        `,
+      ]);
+    }
 
     if (moduleRows.length > 0) {
       return false;
