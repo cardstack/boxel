@@ -70,13 +70,81 @@ export default function handleWebhookReceiverRequest({
       return;
     }
 
-    // Signature verified. Command execution will be added in a future ticket.
+    let webhookId = webhook.id as string;
+    let commandRows;
+    try {
+      commandRows = await query(dbAdapter, [
+        `SELECT id, incoming_webhook_id, command, command_filter`,
+        `FROM webhook_commands WHERE incoming_webhook_id = `,
+        param(webhookId),
+      ]);
+    } catch (_error) {
+      await sendResponseForSystemError(
+        ctxt,
+        'failed to lookup webhook commands',
+      );
+      return;
+    }
+
+    // Parse the webhook payload to extract event information for filtering
+    let payload: Record<string, any> = {};
+    try {
+      payload = JSON.parse(rawBody);
+    } catch (_error) {
+      console.warn('Failed to parse webhook payload for filtering');
+    }
+
+    let eventType = ctxt.req.headers['x-github-event'] as string | undefined;
+
+    let executedCommands = 0;
+    for (let commandRow of commandRows) {
+      let commandFilter = commandRow.command_filter as Record<
+        string,
+        any
+      > | null;
+
+      // Apply filter if specified
+      if (commandFilter) {
+        // Check if event type matches filter
+        if (commandFilter.eventType && commandFilter.eventType !== eventType) {
+          continue;
+        }
+
+        // Check if PR number matches filter (for pull_request events)
+        if (
+          commandFilter.prNumber &&
+          payload.pull_request?.number !== commandFilter.prNumber
+        ) {
+          continue;
+        }
+
+        // Additional filter checks can be added here as needed
+      }
+
+      // TODO: Load and execute the command GTS module
+      // Command is a URL pointing to a GTS module (e.g., http://realm/commands/process-webhook)
+      // Future implementation will:
+      // 1. Load the GTS module from the command URL
+      // 2. Execute the exported command function with the webhook context
+      // 3. Track successful executions in executedCommands
+      let commandURL = commandRow.command as string;
+      console.log(
+        `Webhook command registered but not yet executed: ${commandURL}`,
+      );
+    }
+
     await setContextResponse(
       ctxt,
-      new Response(JSON.stringify({ status: 'received' }), {
-        status: 200,
-        headers: { 'content-type': 'application/json' },
-      }),
+      new Response(
+        JSON.stringify({
+          status: 'received',
+          commandsExecuted: executedCommands,
+        }),
+        {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        },
+      ),
     );
   };
 }

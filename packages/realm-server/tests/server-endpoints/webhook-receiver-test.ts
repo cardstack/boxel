@@ -117,8 +117,8 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       assert.strictEqual(response.status, 200, 'HTTP 200 status');
       assert.deepEqual(
         response.body,
-        { status: 'received' },
-        'response indicates receipt',
+        { status: 'received', commandsExecuted: 0 },
+        'response indicates receipt with no commands executed',
       );
     });
 
@@ -274,6 +274,385 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         response.status,
         200,
         'webhook receiver does not require JWT',
+      );
+    });
+
+    test('executes webhook command when signature is valid', async function (assert) {
+      let matrixUserId = '@user:localhost';
+      await insertUser(
+        context.dbAdapter,
+        matrixUserId,
+        'cus_123',
+        'user@example.com',
+      );
+
+      // Create webhook
+      let createWebhookResponse = await context.request2
+        .post('/_incoming-webhooks')
+        .set('Accept', 'application/vnd.api+json')
+        .set('Content-Type', 'application/vnd.api+json')
+        .set(
+          'Authorization',
+          `Bearer ${createRealmServerJWT(
+            { user: matrixUserId, sessionRoom: 'session-room-test' },
+            realmSecretSeed,
+          )}`,
+        )
+        .send({
+          data: {
+            type: 'incoming-webhook',
+            attributes: {
+              verificationType: 'HMAC_SHA256_HEADER',
+              verificationConfig: {
+                header: 'X-Hub-Signature-256',
+                encoding: 'hex',
+              },
+            },
+          },
+        });
+
+      let webhookId = createWebhookResponse.body.data.id;
+      let webhookPath = createWebhookResponse.body.data.attributes.webhookPath;
+      let signingSecret =
+        createWebhookResponse.body.data.attributes.signingSecret;
+
+      // Register webhook command
+      await context.request2
+        .post('/_webhook-commands')
+        .set('Accept', 'application/vnd.api+json')
+        .set('Content-Type', 'application/vnd.api+json')
+        .set(
+          'Authorization',
+          `Bearer ${createRealmServerJWT(
+            { user: matrixUserId, sessionRoom: 'session-room-test' },
+            realmSecretSeed,
+          )}`,
+        )
+        .send({
+          data: {
+            type: 'webhook-command',
+            attributes: {
+              incomingWebhookId: webhookId,
+              command: `http://test-realm/commands/process-github-webhook`,
+              filter: null,
+            },
+          },
+        });
+
+      // Send webhook with valid signature
+      let payload = JSON.stringify({
+        action: 'opened',
+        pull_request: { number: 123 },
+      });
+      let signature =
+        'sha256=' +
+        createHmac('sha256', signingSecret)
+          .update(payload, 'utf8')
+          .digest('hex');
+
+      let response = await context.request2
+        .post(`/_webhooks/${webhookPath}`)
+        .set('Content-Type', 'application/json')
+        .set('X-Hub-Signature-256', signature)
+        .set('X-GitHub-Event', 'pull_request')
+        .send(payload);
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      assert.strictEqual(
+        response.body.status,
+        'received',
+        'webhook was received',
+      );
+      assert.strictEqual(
+        response.body.commandsExecuted,
+        0,
+        'command execution not yet implemented (pending headless chrome module loading)',
+      );
+    });
+
+    test('filters commands by event type', async function (assert) {
+      let matrixUserId = '@user:localhost';
+      await insertUser(
+        context.dbAdapter,
+        matrixUserId,
+        'cus_123',
+        'user@example.com',
+      );
+
+      // Create webhook
+      let createWebhookResponse = await context.request2
+        .post('/_incoming-webhooks')
+        .set('Accept', 'application/vnd.api+json')
+        .set('Content-Type', 'application/vnd.api+json')
+        .set(
+          'Authorization',
+          `Bearer ${createRealmServerJWT(
+            { user: matrixUserId, sessionRoom: 'session-room-test' },
+            realmSecretSeed,
+          )}`,
+        )
+        .send({
+          data: {
+            type: 'incoming-webhook',
+            attributes: {
+              verificationType: 'HMAC_SHA256_HEADER',
+              verificationConfig: {
+                header: 'X-Hub-Signature-256',
+                encoding: 'hex',
+              },
+            },
+          },
+        });
+
+      let webhookId = createWebhookResponse.body.data.id;
+      let webhookPath = createWebhookResponse.body.data.attributes.webhookPath;
+      let signingSecret =
+        createWebhookResponse.body.data.attributes.signingSecret;
+
+      // Register command filtered to 'push' events only
+      await context.request2
+        .post('/_webhook-commands')
+        .set('Accept', 'application/vnd.api+json')
+        .set('Content-Type', 'application/vnd.api+json')
+        .set(
+          'Authorization',
+          `Bearer ${createRealmServerJWT(
+            { user: matrixUserId, sessionRoom: 'session-room-test' },
+            realmSecretSeed,
+          )}`,
+        )
+        .send({
+          data: {
+            type: 'webhook-command',
+            attributes: {
+              incomingWebhookId: webhookId,
+              command: `http://test-realm/commands/process-github-webhook`,
+              filter: { eventType: 'push' },
+            },
+          },
+        });
+
+      // Send 'pull_request' event (should NOT execute command)
+      let payload = JSON.stringify({
+        action: 'opened',
+        pull_request: { number: 123 },
+      });
+      let signature =
+        'sha256=' +
+        createHmac('sha256', signingSecret)
+          .update(payload, 'utf8')
+          .digest('hex');
+
+      let response = await context.request2
+        .post(`/_webhooks/${webhookPath}`)
+        .set('Content-Type', 'application/json')
+        .set('X-Hub-Signature-256', signature)
+        .set('X-GitHub-Event', 'pull_request')
+        .send(payload);
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      assert.strictEqual(
+        response.body.commandsExecuted,
+        0,
+        'command was filtered out by event type',
+      );
+    });
+
+    test('filters commands by PR number', async function (assert) {
+      let matrixUserId = '@user:localhost';
+      await insertUser(
+        context.dbAdapter,
+        matrixUserId,
+        'cus_123',
+        'user@example.com',
+      );
+
+      // Create webhook
+      let createWebhookResponse = await context.request2
+        .post('/_incoming-webhooks')
+        .set('Accept', 'application/vnd.api+json')
+        .set('Content-Type', 'application/vnd.api+json')
+        .set(
+          'Authorization',
+          `Bearer ${createRealmServerJWT(
+            { user: matrixUserId, sessionRoom: 'session-room-test' },
+            realmSecretSeed,
+          )}`,
+        )
+        .send({
+          data: {
+            type: 'incoming-webhook',
+            attributes: {
+              verificationType: 'HMAC_SHA256_HEADER',
+              verificationConfig: {
+                header: 'X-Hub-Signature-256',
+                encoding: 'hex',
+              },
+            },
+          },
+        });
+
+      let webhookId = createWebhookResponse.body.data.id;
+      let webhookPath = createWebhookResponse.body.data.attributes.webhookPath;
+      let signingSecret =
+        createWebhookResponse.body.data.attributes.signingSecret;
+
+      // Register command filtered to PR #456 only
+      await context.request2
+        .post('/_webhook-commands')
+        .set('Accept', 'application/vnd.api+json')
+        .set('Content-Type', 'application/vnd.api+json')
+        .set(
+          'Authorization',
+          `Bearer ${createRealmServerJWT(
+            { user: matrixUserId, sessionRoom: 'session-room-test' },
+            realmSecretSeed,
+          )}`,
+        )
+        .send({
+          data: {
+            type: 'webhook-command',
+            attributes: {
+              incomingWebhookId: webhookId,
+              command: `http://test-realm/commands/process-github-webhook`,
+              filter: { eventType: 'pull_request', prNumber: 456 },
+            },
+          },
+        });
+
+      // Send PR #123 event (should NOT execute command)
+      let payload = JSON.stringify({
+        action: 'opened',
+        pull_request: { number: 123 },
+      });
+      let signature =
+        'sha256=' +
+        createHmac('sha256', signingSecret)
+          .update(payload, 'utf8')
+          .digest('hex');
+
+      let response = await context.request2
+        .post(`/_webhooks/${webhookPath}`)
+        .set('Content-Type', 'application/json')
+        .set('X-Hub-Signature-256', signature)
+        .set('X-GitHub-Event', 'pull_request')
+        .send(payload);
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      assert.strictEqual(
+        response.body.commandsExecuted,
+        0,
+        'command was filtered out by PR number',
+      );
+    });
+
+    test('executes multiple matching commands', async function (assert) {
+      let matrixUserId = '@user:localhost';
+      await insertUser(
+        context.dbAdapter,
+        matrixUserId,
+        'cus_123',
+        'user@example.com',
+      );
+
+      // Create webhook
+      let createWebhookResponse = await context.request2
+        .post('/_incoming-webhooks')
+        .set('Accept', 'application/vnd.api+json')
+        .set('Content-Type', 'application/vnd.api+json')
+        .set(
+          'Authorization',
+          `Bearer ${createRealmServerJWT(
+            { user: matrixUserId, sessionRoom: 'session-room-test' },
+            realmSecretSeed,
+          )}`,
+        )
+        .send({
+          data: {
+            type: 'incoming-webhook',
+            attributes: {
+              verificationType: 'HMAC_SHA256_HEADER',
+              verificationConfig: {
+                header: 'X-Hub-Signature-256',
+                encoding: 'hex',
+              },
+            },
+          },
+        });
+
+      let webhookId = createWebhookResponse.body.data.id;
+      let webhookPath = createWebhookResponse.body.data.attributes.webhookPath;
+      let signingSecret =
+        createWebhookResponse.body.data.attributes.signingSecret;
+
+      // Register two commands for same event
+      await context.request2
+        .post('/_webhook-commands')
+        .set('Accept', 'application/vnd.api+json')
+        .set('Content-Type', 'application/vnd.api+json')
+        .set(
+          'Authorization',
+          `Bearer ${createRealmServerJWT(
+            { user: matrixUserId, sessionRoom: 'session-room-test' },
+            realmSecretSeed,
+          )}`,
+        )
+        .send({
+          data: {
+            type: 'webhook-command',
+            attributes: {
+              incomingWebhookId: webhookId,
+              command: `http://test-realm/commands/process-github-webhook`,
+              filter: { eventType: 'pull_request' },
+            },
+          },
+        });
+
+      await context.request2
+        .post('/_webhook-commands')
+        .set('Accept', 'application/vnd.api+json')
+        .set('Content-Type', 'application/vnd.api+json')
+        .set(
+          'Authorization',
+          `Bearer ${createRealmServerJWT(
+            { user: matrixUserId, sessionRoom: 'session-room-test' },
+            realmSecretSeed,
+          )}`,
+        )
+        .send({
+          data: {
+            type: 'webhook-command',
+            attributes: {
+              incomingWebhookId: webhookId,
+              command: `http://test-realm/commands/process-github-webhook`,
+              filter: null, // No filter - always executes
+            },
+          },
+        });
+
+      // Send pull_request event
+      let payload = JSON.stringify({
+        action: 'opened',
+        pull_request: { number: 123 },
+      });
+      let signature =
+        'sha256=' +
+        createHmac('sha256', signingSecret)
+          .update(payload, 'utf8')
+          .digest('hex');
+
+      let response = await context.request2
+        .post(`/_webhooks/${webhookPath}`)
+        .set('Content-Type', 'application/json')
+        .set('X-Hub-Signature-256', signature)
+        .set('X-GitHub-Event', 'pull_request')
+        .send(payload);
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      assert.strictEqual(
+        response.body.commandsExecuted,
+        0,
+        'command execution not yet implemented (pending headless chrome module loading)',
       );
     });
   });

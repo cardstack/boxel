@@ -1022,6 +1022,130 @@ export default class RealmServerService extends Service {
     return data.attributes;
   }
 
+  async createIncomingWebhook(params: {
+    verificationType: 'HMAC_SHA256_HEADER';
+    verificationConfig: {
+      header: string;
+      encoding: 'hex' | 'base64';
+    };
+  }): Promise<{
+    id: string;
+    webhookPath: string;
+    signingSecret: string;
+    username: string;
+    createdAt: string;
+  }> {
+    await this.login();
+
+    const response = await this.authedFetch(
+      `${this.url.href}_incoming-webhooks`,
+      {
+        method: 'POST',
+        headers: {
+          Accept: SupportedMimeType.JSONAPI,
+          'Content-Type': 'application/vnd.api+json',
+        },
+        body: JSON.stringify({
+          data: {
+            type: 'incoming-webhook',
+            attributes: params,
+          },
+        }),
+      },
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(
+        `Failed to create incoming webhook: ${response.status} - ${errorText}`,
+      );
+    }
+
+    const { data } = (await response.json()) as {
+      data: {
+        type: string;
+        id: string;
+        attributes: {
+          username: string;
+          webhookPath: string;
+          verificationType: string;
+          verificationConfig: Record<string, unknown>;
+          signingSecret: string;
+          createdAt: string;
+          updatedAt: string;
+        };
+      };
+    };
+
+    return {
+      id: data.id,
+      webhookPath: data.attributes.webhookPath,
+      signingSecret: data.attributes.signingSecret,
+      username: data.attributes.username,
+      createdAt: data.attributes.createdAt,
+    };
+  }
+
+  async createWebhookCommand(params: {
+    incomingWebhookId: string;
+    command: string;
+    filter?: Record<string, unknown> | null;
+  }): Promise<{
+    id: string;
+    incomingWebhookId: string;
+    command: string;
+    filter: Record<string, unknown> | null;
+    createdAt: string;
+  }> {
+    await this.login();
+
+    const response = await this.authedFetch(
+      `${this.url.href}_webhook-commands`,
+      {
+        method: 'POST',
+        headers: {
+          Accept: SupportedMimeType.JSONAPI,
+          'Content-Type': 'application/vnd.api+json',
+        },
+        body: JSON.stringify({
+          data: {
+            type: 'webhook-command',
+            attributes: params,
+          },
+        }),
+      },
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(
+        `Failed to create webhook command: ${response.status} - ${errorText}`,
+      );
+    }
+
+    const { data } = (await response.json()) as {
+      data: {
+        type: string;
+        id: string;
+        attributes: {
+          incomingWebhookId: string;
+          command: string;
+          filter: Record<string, unknown> | null;
+          createdAt: string;
+          updatedAt: string;
+        };
+      };
+    };
+
+    return {
+      id: data.id,
+      incomingWebhookId: data.attributes.incomingWebhookId,
+      command: data.attributes.command,
+      filter: data.attributes.filter,
+      createdAt: data.attributes.createdAt,
+    };
+  }
+
   private async getToken() {
     if (!this.token) {
       await this.login();

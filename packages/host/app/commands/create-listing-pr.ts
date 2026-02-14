@@ -187,7 +187,24 @@ export default class CreateListingPRCommand extends HostBaseCommand<
 
     log.debug('PR created successfully:', prResult);
 
-    // Open room and send PR status message with full details
+    // Register webhook for PR status updates
+    const webhookData = await this.registerPRWebhook(prResult.prNumber);
+
+    if (webhookData) {
+      manifest.webhook = {
+        id: webhookData.id,
+        path: webhookData.path,
+        signingSecret: webhookData.signingSecret,
+      };
+
+      log.debug('Webhook registered for PR:', {
+        webhookUrl: `${this.realmServer.url.href}_webhooks/${webhookData.path}`,
+        signingSecret: webhookData.signingSecret,
+        prNumber: prResult.prNumber,
+      });
+    }
+
+    // Open room and send PR status message
     await new UseAiAssistantCommand(this.commandContext).execute({
       roomId,
       prompt: `I just submitted a PR for my listing "${listing.name ?? listing.id}".
@@ -206,6 +223,47 @@ PR Details:
     });
 
     return await this.makeResult(manifest);
+  }
+
+  private async registerPRWebhook(
+    prNumber: number,
+  ): Promise<{ id: string; path: string; signingSecret: string } | null> {
+    try {
+      const webhook = await this.realmServer.createIncomingWebhook({
+        verificationType: 'HMAC_SHA256_HEADER',
+        verificationConfig: {
+          header: 'x-hub-signature-256',
+          encoding: 'hex',
+        },
+      });
+
+      log.debug('Created incoming webhook:', {
+        id: webhook.id,
+        path: webhook.webhookPath,
+      });
+
+      await this.realmServer.createWebhookCommand({
+        incomingWebhookId: webhook.id,
+        command: `${this.realmServer.url.href}catalog-realm/commands/process-github-webhook`,
+        filter: {
+          eventType: 'pull_request',
+          prNumber: prNumber,
+        },
+      });
+
+      log.debug('Registered webhook command for PR', { prNumber });
+
+      return {
+        id: webhook.id,
+        path: webhook.webhookPath,
+        signingSecret: webhook.signingSecret,
+      };
+    } catch (error: any) {
+      log.error('Failed to register PR webhook:', error);
+      // Don't fail the entire PR creation if webhook registration fails
+      // Just log and continue
+      return null;
+    }
   }
 
   private async collectAndFetchFiles(
