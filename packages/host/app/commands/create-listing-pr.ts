@@ -187,7 +187,7 @@ export default class CreateListingPRCommand extends HostBaseCommand<
 
     log.debug('PR created successfully:', prResult);
 
-    // Open room and send PR status message with full details
+    // Open room and send PR status message
     await new UseAiAssistantCommand(this.commandContext).execute({
       roomId,
       prompt: `I just submitted a PR for my listing "${listing.name ?? listing.id}".

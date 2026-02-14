@@ -25,4 +25,9 @@ export interface PrManifest {
     lastCheckedAt?: string;
     error?: string;
   };
+  webhook?: {
+    id: string;              // UUID from incoming_webhooks table
+    path: string;            // webhook_path (e.g., "whk_abc123...")
+    signingSecret: string;   // For GitHub webhook configuration
+  };
 }
