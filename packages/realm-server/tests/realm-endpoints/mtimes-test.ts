@@ -30,6 +30,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
     setupPermissionedRealm(hooks, {
       permissions: {
         mary: ['read'],
+        '@node-test_realm:localhost': ['read', 'realm-owner'],
       },
       onRealmSetup,
     });

@@ -11,7 +11,6 @@ import {
 import type { SingleCardDocument } from '@cardstack/runtime-common';
 import type { CardCollectionDocument } from '@cardstack/runtime-common/document-types';
 import { cardSrc } from '@cardstack/runtime-common/etc/test-fixtures';
-import { fetchSessionRoom } from '@cardstack/runtime-common/db-queries/session-room-queries';
 import {
   closeServer,
   createJWT,
@@ -116,23 +115,8 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           new URL(json.data.id),
         );
         assert.deepEqual(permissions, {
-          [`@realm/mango_${endpoint}:localhost`]: [
-            'read',
-            'write',
-            'realm-owner',
-          ],
           [ownerUserId]: ['read', 'write', 'realm-owner'],
         });
-
-        let sessionRoom = await fetchSessionRoom(
-          context.dbAdapter,
-          json.data.id,
-          ownerUserId,
-        );
-        assert.ok(
-          sessionRoom,
-          'session room record was created for the owner after realm creation',
-        );
 
         let id: string;
         let realm = context.testRealmServer2.testingOnlyRealms.find(

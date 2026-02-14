@@ -34,7 +34,6 @@ import {
   PUBLISHED_DIRECTORY_NAME,
   DEFAULT_CARD_SIZE_LIMIT_BYTES,
   clearSessionRooms,
-  upsertSessionRoom,
   type MatrixConfig,
   type QueuePublisher,
   type QueueRunner,
@@ -149,10 +148,7 @@ export const matrixURL = new URL('http://localhost:8008');
 const testPrerenderHost = '127.0.0.1';
 const testPrerenderPort = 4460;
 const testPrerenderURL = `http://${testPrerenderHost}:${testPrerenderPort}`;
-const testMatrix: MatrixConfig = {
-  url: matrixURL,
-  username: 'node-test_realm',
-};
+
 export const testRealmInfo = {
   name: 'Test Realm',
   backgroundURL: null,
@@ -161,7 +157,7 @@ export const testRealmInfo = {
   interactHome: null,
   hostHome: null,
   visibility: 'public',
-  realmUserId: testMatrix.username,
+  realmUserId: testRealmServerMatrixUserId,
   publishable: null,
   lastPublishedAt: null,
 };
@@ -293,6 +289,7 @@ async function startTestPrerenderServer(): Promise<string> {
   }
   let server = createPrerenderHttpServer({
     silent: Boolean(process.env.SILENT_PRERENDERER),
+    maxPages: 1,
   });
   prerenderServer = server;
   trackServer(server);
@@ -449,7 +446,6 @@ export async function createRealm({
   runner,
   publisher,
   dbAdapter,
-  matrixConfig = testMatrix,
   withWorker,
   enableFileWatcher = false,
   cardSizeLimitBytes,
@@ -494,14 +490,14 @@ export async function createRealm({
       dbAdapter,
       queuePublisher: publisher,
       virtualNetwork,
-      matrixURL: matrixConfig.url,
+      matrixURL: realmServerTestMatrix.url,
       secretSeed: realmSecretSeed,
       realmServerMatrixUsername: testRealmServerMatrixUsername,
       prerenderer,
       createPrerenderAuth: testCreatePrerenderAuth,
     });
   }
-  let realmServerMatrixClient = new MatrixClient({
+  let matrixClient = new MatrixClient({
     matrixURL: realmServerTestMatrix.url,
     username: realmServerTestMatrix.username,
     seed: realmSecretSeed,
@@ -509,12 +505,11 @@ export async function createRealm({
   let realm = new Realm({
     url: realmURL,
     adapter,
-    matrix: matrixConfig,
     secretSeed: realmSecretSeed,
     virtualNetwork,
     dbAdapter,
     queue: publisher,
-    realmServerMatrixClient,
+    matrixClient,
     realmServerURL: new URL(new URL(realmURL).origin).href,
     definitionLookup,
     cardSizeLimitBytes:
@@ -793,7 +788,6 @@ export function setupPermissionedRealms(
   // We want 2 different realm users to test authorization between them - these
   // names are selected because they are already available in the test
   // environment (via register-realm-users.ts)
-  let matrixUsers = ['test_realm', 'node-test_realm'];
   let realms: {
     realm: Realm;
     realmPath: string;
@@ -808,7 +802,7 @@ export function setupPermissionedRealms(
       runner: QueueRunner,
     ) => {
       _dbAdapter = dbAdapter;
-      for (let [i, realmArg] of realmsArg.entries()) {
+      for (let realmArg of realmsArg.values()) {
         let {
           testRealmDir: realmPath,
           testRealm: realm,
@@ -822,10 +816,6 @@ export function setupPermissionedRealms(
           fileSystem: realmArg.fileSystem,
           permissions: realmArg.permissions,
           matrixURL,
-          matrixConfig: {
-            url: matrixURL,
-            username: matrixUsers[i] ?? matrixUsers[0],
-          },
           dbAdapter,
           publisher,
           runner,
@@ -1017,7 +1007,6 @@ export function setupMatrixRoom(
 
   hooks.beforeEach(async function () {
     await matrixClient.login();
-    let userId = matrixClient.getUserId()!;
 
     let realmSetup = getRealmSetup();
     let openIdToken = await matrixClient.getOpenIdToken();
@@ -1047,13 +1036,6 @@ export function setupMatrixRoom(
     }
 
     testAuthRoomId = payload.sessionRoom;
-
-    await upsertSessionRoom(
-      realmSetup.dbAdapter,
-      realmSetup.testRealm.url,
-      userId,
-      payload.sessionRoom,
-    );
   });
 
   return {

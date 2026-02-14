@@ -40,6 +40,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
 
     module('permissions requests', function (hooks) {
       setupPermissionedRealm(hooks, {
+        fileSystem: {},
         permissions: {
           mary: ['read', 'write', 'realm-owner'],
           bob: ['read', 'write'],

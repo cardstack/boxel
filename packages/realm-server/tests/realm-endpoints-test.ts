@@ -113,6 +113,7 @@ module(basename(__filename), function () {
         '*': ['read', 'write'],
         user: ['read', 'write', 'realm-owner'],
         carol: ['read', 'write'],
+        '@node-test_realm:localhost': ['read', 'realm-owner'],
       },
       realmURL,
       onRealmSetup,
@@ -337,7 +338,6 @@ module(basename(__filename), function () {
               type: 'realm-config',
               attributes: {
                 ...testRealmInfo,
-                realmUserId: '@node-test_realm:localhost',
                 backgroundURL: 'new-bg',
               },
             },
@@ -988,6 +988,7 @@ module(basename(__filename), function () {
         eventName: 'index',
         indexType: 'incremental-index-initiation',
         updatedFile: `${newCardId}.json`,
+        realmURL: testRealmHref,
       });
 
       assert.deepEqual(incrementalEvent?.content, {
@@ -995,6 +996,7 @@ module(basename(__filename), function () {
         indexType: 'incremental',
         invalidations: [newCardId],
         clientRequestId: null,
+        realmURL: testRealmHref,
       });
 
       {
@@ -1032,10 +1034,7 @@ module(basename(__filename), function () {
                 module: '../person',
                 name: 'Person',
               },
-              realmInfo: {
-                ...testRealmInfo,
-                realmUserId: '@node-test_realm:localhost',
-              },
+              realmInfo: testRealmInfo,
               realmURL: testRealmHref,
             },
             links: {
@@ -1152,12 +1151,14 @@ module(basename(__filename), function () {
         eventName: 'index',
         indexType: 'incremental-index-initiation',
         updatedFile: `${testRealmHref}person-1.json`,
+        realmURL: testRealmHref,
       });
 
       assert.deepEqual(incrementalEvent?.content, {
         eventName: 'index',
         indexType: 'incremental',
         invalidations: [`${testRealmHref}person-1`],
+        realmURL: testRealmHref,
       });
 
       {

@@ -14,7 +14,7 @@ import { module, test } from 'qunit';
 
 import type { Loader } from '@cardstack/runtime-common';
 import { SupportedMimeType } from '@cardstack/runtime-common';
-import { testRealmURLToUsername } from '@cardstack/runtime-common/helpers/const';
+import { testRealmInfo } from '@cardstack/runtime-common/helpers/const';
 import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 
 import type NetworkService from '@cardstack/host/services/network';
@@ -361,7 +361,7 @@ module(
           'no query runs while hydrating server-provided results',
         );
 
-        let realmMatrixUsername = testRealmURLToUsername(testRealmURL);
+        let realmMatrixUsername = testRealmInfo.realmUserId;
         let realmRoomId = mockMatrixUtils.getRoomIdForRealmAndUser(
           testRealmURL,
           '@testuser:localhost',
@@ -379,6 +379,7 @@ module(
             eventName: 'index',
             indexType: 'incremental',
             invalidations: [`${testRealmURL}Person/new-match`],
+            realmURL: testRealmURL,
           },
           { type: APP_BOXEL_REALM_EVENT_TYPE },
         );
@@ -476,7 +477,7 @@ module(
         (store as any).store.sweep(cardAPI);
         await settled();
 
-        let realmMatrixUsername = testRealmURLToUsername(testRealmURL);
+        let realmMatrixUsername = testRealmInfo.realmUserId;
         let realmRoomId = mockMatrixUtils.getRoomIdForRealmAndUser(
           testRealmURL,
           '@testuser:localhost',
@@ -494,6 +495,7 @@ module(
             eventName: 'index',
             indexType: 'incremental',
             invalidations: [`${testRealmURL}Person/new-match`],
+            realmURL: testRealmURL,
           },
           { type: APP_BOXEL_REALM_EVENT_TYPE },
         );

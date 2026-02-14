@@ -122,31 +122,6 @@ export async function setRealmRedirects(page: Page) {
 export async function registerRealmUsers(synapse: SynapseInstance) {
   await registerUser(
     synapse,
-    'base_realm',
-    await realmPassword('base_realm', realmSecretSeed),
-  );
-  await registerUser(
-    synapse,
-    'experiments_realm',
-    await realmPassword('experiments_realm', realmSecretSeed),
-  );
-  await registerUser(
-    synapse,
-    'catalog_realm',
-    await realmPassword('catalog_realm', realmSecretSeed),
-  );
-  await registerUser(
-    synapse,
-    'skills_realm',
-    await realmPassword('skills_realm', realmSecretSeed),
-  );
-  await registerUser(
-    synapse,
-    'test_realm',
-    await realmPassword('test_realm', realmSecretSeed),
-  );
-  await registerUser(
-    synapse,
     'node-test_realm',
     await realmPassword('node-test_realm', realmSecretSeed),
   );

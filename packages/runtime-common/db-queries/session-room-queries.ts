@@ -8,12 +8,14 @@ export const REALM_SERVER_REALM = '__realm-server__';
  */
 export async function fetchSessionRoom(
   dbAdapter: DBAdapter,
-  realmURL: string,
+  realmUserId: string,
   matrixUserId: string,
 ) {
   let rows = await query(dbAdapter, [
-    'SELECT room_id FROM session_rooms WHERE realm_url =',
-    param(realmURL),
+    'SELECT room_id FROM session_rooms WHERE realm_user_id =',
+    param(realmUserId),
+    'AND realm_url = ',
+    param(REALM_SERVER_REALM),
     'AND matrix_user_id =',
     param(matrixUserId),
   ]);
@@ -31,14 +33,16 @@ export async function fetchSessionRoom(
  */
 export async function upsertSessionRoom(
   dbAdapter: DBAdapter,
-  realmURL: string,
+  realmUserId: string,
   matrixUserId: string,
   roomId: string,
 ) {
   await query(dbAdapter, [
-    'INSERT INTO session_rooms (realm_url, matrix_user_id, room_id, created_at, updated_at)',
+    'INSERT INTO session_rooms (realm_url, realm_user_id, matrix_user_id, room_id, created_at, updated_at)',
     'VALUES (',
-    param(realmURL),
+    param(REALM_SERVER_REALM),
+    ',',
+    param(realmUserId),
     ',',
     param(matrixUserId),
     ',',
@@ -52,6 +56,9 @@ export async function upsertSessionRoom(
     'room_id =',
     param(roomId),
     ',',
+    'realm_user_id =',
+    param(realmUserId),
+    ',',
     'updated_at =',
     dbExpression({ pg: 'NOW()', sqlite: 'CURRENT_TIMESTAMP' }),
   ]);
@@ -63,10 +70,20 @@ export async function upsertSessionRoom(
 export async function fetchAllSessionRooms(
   dbAdapter: DBAdapter,
   realmURL: string,
+  realmUserId: string,
 ) {
   let rows = await query(dbAdapter, [
-    'SELECT matrix_user_id, room_id FROM session_rooms WHERE realm_url =',
+    'SELECT sr.matrix_user_id, sr.room_id',
+    'FROM session_rooms sr',
+    'JOIN realm_user_permissions rup',
+    'ON rup.username = sr.matrix_user_id',
+    'WHERE rup.realm_url =',
     param(realmURL),
+    'AND (rup.read = true OR rup.write = true)',
+    'AND sr.realm_user_id =',
+    param(realmUserId),
+    'AND sr.realm_url =',
+    param(REALM_SERVER_REALM),
   ]);
 
   let result: Record<string, string> = {};

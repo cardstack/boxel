@@ -10,7 +10,7 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
-import { testRealmURLToUsername } from '@cardstack/runtime-common/helpers/const';
+import { testRealmInfo } from '@cardstack/runtime-common/helpers/const';
 import type { Loader } from '@cardstack/runtime-common/loader';
 import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 
@@ -45,7 +45,7 @@ module('Integration | message service subscription', function (hooks) {
     autostart: true,
   });
 
-  let realmMatrixUsername = testRealmURLToUsername(testRealmURL);
+  let realmMatrixUsername = testRealmInfo.realmUserId;
 
   let realmRoomId = mockMatrixUtils.getRoomIdForRealmAndUser(
     testRealmURL,
@@ -107,6 +107,7 @@ module('Integration | message service subscription', function (hooks) {
         eventName: 'index',
         indexType: 'incremental-index-initiation',
         updatedFile: 'index.json',
+        realmURL: testRealmURL,
       },
     });
 

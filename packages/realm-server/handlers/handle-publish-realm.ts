@@ -30,8 +30,6 @@ import {
 import { createJWT } from '../jwt';
 import type { CreateRoutesArgs } from '../routes';
 import type { RealmServerTokenClaim } from '../utils/jwt';
-import { registerUser } from '../synapse';
-import { passwordFromSeed } from '@cardstack/runtime-common/matrix-client';
 
 const log = logger('handle-publish');
 
@@ -128,13 +126,11 @@ function rewriteHostHomeForPublishedRealm(
 
 export default function handlePublishRealm({
   dbAdapter,
-  matrixClient,
   realmSecretSeed,
   serverURL,
   virtualNetwork,
   realms,
   realmsRootPath,
-  getMatrixRegistrationSecret,
   createAndMountRealm,
   domainsForPublishedRealms,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
@@ -282,7 +278,6 @@ export default function handlePublishRealm({
       );
 
       let userId;
-      let realmUsername;
       let publishedRealmData: PublishedRealmTable | undefined;
       if (existingPublishedRealm) {
         let results = (await query(dbAdapter, [
@@ -297,7 +292,6 @@ export default function handlePublishRealm({
           | 'last_published_at'
         >[];
         publishedRealmData = results[0];
-        realmUsername = `realm/${PUBLISHED_DIRECTORY_NAME}_${publishedRealmData.id}`;
 
         let lastPublishedAt = Date.now().toString();
         await query(dbAdapter, [
@@ -309,10 +303,9 @@ export default function handlePublishRealm({
         publishedRealmData.last_published_at = lastPublishedAt;
       } else {
         let publishedRealmId = uuidv4();
-        realmUsername = `realm/${PUBLISHED_DIRECTORY_NAME}_${publishedRealmId}`;
         let { valueExpressions, nameExpressions } = asExpressions({
           id: publishedRealmId,
-          owner_username: realmUsername,
+          owner_username: 'NONE',
           source_realm_url: sourceRealmURL,
           published_realm_url: publishedRealmURL,
           last_published_at: Date.now().toString(),
@@ -330,18 +323,7 @@ export default function handlePublishRealm({
           | 'last_published_at'
         >[];
         publishedRealmData = results[0];
-
-        let { userId: newUserId } = await registerUser({
-          matrixURL: matrixClient.matrixURL,
-          displayname: realmUsername,
-          username: realmUsername,
-          password: await passwordFromSeed(realmUsername, realmSecretSeed),
-          registrationSecret: await getMatrixRegistrationSecret(),
-        });
-        userId = newUserId;
-
         await insertPermissions(dbAdapter, new URL(publishedRealmURL), {
-          [userId]: ['read', 'realm-owner'],
           [ownerUserId]: ['read', 'realm-owner'],
           '*': ['read'],
         });
@@ -394,7 +376,6 @@ export default function handlePublishRealm({
       let realm = createAndMountRealm(
         publishedRealmPath,
         publishedRealmURL,
-        realmUsername,
         new URL(sourceRealmURL),
         false,
       );

@@ -59,6 +59,7 @@ module(basename(__filename), function () {
     setupPermissionedRealmAtURL(hooks, realmURL, {
       permissions: {
         '*': ['read'],
+        '@node-test_realm:localhost': ['read', 'realm-owner'],
       },
       subscribeToRealmEvents: true,
       onRealmSetup,
@@ -186,6 +187,7 @@ module(basename(__filename), function () {
       assert.deepEqual(updateEvent.content, {
         eventName: 'update',
         added: basename(newFilePath),
+        realmURL: realmURL.href,
       });
     });
 
@@ -221,6 +223,7 @@ module(basename(__filename), function () {
       assert.deepEqual(updateEvent.content, {
         eventName: 'update',
         updated: basename(updatedFilePath),
+        realmURL: realmURL.href,
       });
     });
 
@@ -244,6 +247,7 @@ module(basename(__filename), function () {
       assert.deepEqual(updateEvent.content, {
         eventName: 'update',
         removed: basename(deletedFilePath),
+        realmURL: realmURL.href,
       });
     });
 

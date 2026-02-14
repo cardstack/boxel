@@ -245,7 +245,11 @@ export class NodeAdapter implements RealmAdapter {
     dbAdapter: DBAdapter,
   ): Promise<void> {
     realmEventsLog.debug('Broadcasting realm event', event);
-
+    const eventWithRealmURL: RealmEventContent = {
+      ...event,
+      realmURL: realmUrl,
+    };
+    let realmUserId;
     if (dbAdapter.isClosed) {
       realmEventsLog.warn(
         `Database adapter is closed, skipping sending realm event`,
@@ -254,19 +258,35 @@ export class NodeAdapter implements RealmAdapter {
     }
     try {
       await matrixClient.login();
+      realmUserId = matrixClient.getUserId();
+      if (!realmUserId) {
+        realmEventsLog.error(
+          'Matrix client has no user ID after login, unable to broadcast realm event',
+          event,
+        );
+        return;
+      }
     } catch (e) {
       realmEventsLog.error('Error logging into matrix. Skipping broadcast', e);
       return;
     }
 
-    let dmRooms = await this.waitForSessionRooms(dbAdapter, realmUrl);
+    let dmRooms = await this.waitForSessionRooms(
+      dbAdapter,
+      realmUrl,
+      realmUserId,
+    );
 
     realmEventsLog.debug('Sending to dm rooms', Object.values(dmRooms));
 
     for (let userId of Object.keys(dmRooms)) {
       let roomId = dmRooms[userId];
       try {
-        await matrixClient.sendEvent(roomId, APP_BOXEL_REALM_EVENT_TYPE, event);
+        await matrixClient.sendEvent(
+          roomId,
+          APP_BOXEL_REALM_EVENT_TYPE,
+          eventWithRealmURL,
+        );
       } catch (e) {
         realmEventsLog.error(
           `Unable to send event in room ${roomId} for user ${userId}`,
@@ -280,6 +300,7 @@ export class NodeAdapter implements RealmAdapter {
   private async waitForSessionRooms(
     dbAdapter: DBAdapter,
     realmUrl: string,
+    realmUserId: string,
     attempts = 3,
     delayMs = 50,
   ): Promise<Record<string, string>> {
@@ -289,7 +310,7 @@ export class NodeAdapter implements RealmAdapter {
 
     let dmRooms: Record<string, string> = {};
     try {
-      dmRooms = await fetchAllSessionRooms(dbAdapter, realmUrl);
+      dmRooms = await fetchAllSessionRooms(dbAdapter, realmUrl, realmUserId);
     } catch (e) {
       realmEventsLog.error('Error getting account data', e);
       return {}; // bail immediately on errors instead of retrying
@@ -307,6 +328,7 @@ export class NodeAdapter implements RealmAdapter {
     return await this.waitForSessionRooms(
       dbAdapter,
       realmUrl,
+      realmUserId,
       attempts - 1,
       delayMs,
     );

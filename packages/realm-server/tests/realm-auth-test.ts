@@ -12,6 +12,7 @@ import {
   insertUser,
   realmSecretSeed,
   testRealmHref,
+  testRealmServerMatrixUserId,
 } from './helpers';
 import { createJWT as createRealmServerJWT } from '../utils/jwt';
 
@@ -25,6 +26,7 @@ module(basename(__filename), function () {
       permissions: {
         '*': ['read'],
         [matrixUserId]: ['read', 'write'],
+        '@node-test_realm:localhost': ['read', 'realm-owner'],
       },
       onRealmSetup: ({ dbAdapter: adapter, request: req }) => {
         dbAdapter = adapter;
@@ -53,7 +55,7 @@ module(basename(__filename), function () {
 
       let existingRoom = await fetchSessionRoom(
         dbAdapter,
-        testRealmHref,
+        testRealmServerMatrixUserId,
         matrixUserId,
       );
       assert.strictEqual(
@@ -88,7 +90,7 @@ module(basename(__filename), function () {
 
       let sessionRoom = await fetchSessionRoom(
         dbAdapter,
-        testRealmHref,
+        testRealmServerMatrixUserId,
         matrixUserId,
       );
       assert.strictEqual(

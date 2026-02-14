@@ -81,7 +81,6 @@ export type CreateRoutesArgs = {
   createAndMountRealm: (
     path: string,
     url: string,
-    username: string,
     copiedFromRealm?: URL,
     enableFileWatcher?: boolean,
     fromScratchIndexPriority?: number,
