@@ -385,6 +385,20 @@ const reExportSource = `
   export { default as Date } from 'https://cardstack.com/base/date';
 `;
 
+const fileDefSource = `
+  import { FileDef } from 'https://cardstack.com/base/file-api';
+  import {
+    contains,
+    field,
+  } from 'https://cardstack.com/base/card-api';
+  import StringField from 'https://cardstack.com/base/string';
+
+  export class CustomFileDef extends FileDef {
+    static displayName = 'custom file';
+    @field customTag = contains(StringField);
+  }
+`;
+
 const localInheritSource = `
   import {
     contains,
@@ -469,6 +483,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
         'imports.gts': importsSource,
         're-export.gts': reExportSource,
         'local-inherit.gts': localInheritSource,
+        'file-def.gts': fileDefSource,
         'command-module.gts': commandModuleSource,
         'erroring-module.gts': erroringModuleSource,
         'empty-file.gts': '',
@@ -1511,6 +1526,55 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     assert.dom('[data-test-card-module-definition]').includesText('Card');
     assert.true(monacoService.getLineCursorOn()?.includes('Human'));
     assert.dom('[data-test-file-incompatibility-message]').doesNotExist();
+  });
+
+  test('Schema/Playground/Spec panes render for a focused FileDef declaration', async function (assert) {
+    await visitOperatorMode({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}file-def.gts`,
+    });
+
+    await waitFor('[data-test-card-inspector-panel]');
+    await waitFor('[data-test-current-module-name]');
+    await waitFor('[data-test-in-this-file-selector]');
+
+    // Select the FileDef declaration
+    let elementName = 'CustomFileDef';
+    await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
+
+    // Schema pane should render with the adoption chain
+    await waitFor('[data-test-card-schema="custom file"]');
+    assert.dom('[data-test-card-schema="custom file"]').exists({ count: 1 });
+    assert
+      .dom(
+        `[data-test-card-schema="custom file"] [data-test-field-name="customTag"] [data-test-card-display-name="String"]`,
+      )
+      .exists('customTag field is shown in schema');
+
+    // The 3-pane tab header should be visible
+    assert
+      .dom('[data-test-module-inspector="card-or-field"]')
+      .exists('module inspector 3-pane view renders for FileDef');
+
+    // Switch to Playground pane - should not crash
+    await click('[data-test-module-inspector-view="preview"]');
+    assert
+      .dom('[data-test-active-module-inspector-view="preview"]')
+      .exists('playground pane renders for FileDef');
+
+    // Switch to Spec pane - should not crash
+    await click('[data-test-module-inspector-view="spec"]');
+    assert
+      .dom('[data-test-active-module-inspector-view="spec"]')
+      .exists('spec pane renders for FileDef');
+
+    // Switch back to schema to verify it still works
+    await click('[data-test-module-inspector-view="schema"]');
+    assert
+      .dom('[data-test-active-module-inspector-view="schema"]')
+      .exists('schema pane renders for FileDef');
+    assert.dom('[data-test-card-schema="custom file"]').exists();
   });
 
   test('"in-this-file" panel displays local grandfather card. selection will move cursor and display card or field schema', async function (assert) {
