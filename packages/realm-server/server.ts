@@ -502,20 +502,13 @@ export class RealmServer {
       return false;
     }
 
-    // During publish/copy races, module metadata can lag behind source files.
-    // If an extensionless module source file exists on disk, always treat it as
-    // a module URL to avoid incorrectly serving host-mode HTML.
-    if (this.hasExtensionlessSourceModule(cardURL)) {
-      return false;
-    }
-
     // First check if there's a module at this URL - modules take precedence
     // over instance aliases. This handles the case where:
     // - Module: /foo/bar.gts (file_alias: /foo/bar)
     // - Instance: /foo/bar.json (file_alias: /foo/bar)
     // A request for /foo/bar should serve the module, not HTML for the instance.
-    // We rely on the modules table because boxel_index only contains instance
-    // and file rows.
+    // Prefer the modules table here because copied/published realms do not
+    // carry module rows in boxel_index.
     let moduleRows = await query(this.dbAdapter, [
       `
         SELECT 1
@@ -546,7 +539,18 @@ export class RealmServer {
       `,
     ]);
 
-    return rows.length > 0;
+    if (rows.length === 0) {
+      return false;
+    }
+
+    // During publish/copy index races, module rows can lag behind source files.
+    // Only do filesystem probing after we've identified an instance candidate
+    // to avoid extra IO on the hot request path.
+    if (this.hasExtensionlessSourceModule(cardURL)) {
+      return false;
+    }
+
+    return true;
   }
 
   private hasExtensionlessSourceModule(cardURL: URL): boolean {
