@@ -816,7 +816,11 @@ export class Realm {
     let urls: URL[] = [];
     // Collect write results for all files we wrote
     let results: { path: LocalPath; lastModified: number }[] = [];
-    let fileMetaRows: { path: LocalPath; contentHash?: string; contentSize?: number }[] = [];
+    let fileMetaRows: {
+      path: LocalPath;
+      contentHash?: string;
+      contentSize?: number;
+    }[] = [];
     let lastWriteType: 'module' | 'instance' | undefined;
     let invalidations: Set<string> = new Set();
     let clientRequestId: string | null = options?.clientRequestId ?? null;
@@ -926,12 +930,21 @@ export class Realm {
   // persist created_at into realm_file_meta table using db adapter
   private async persistFileMeta(
     rows: { path: LocalPath; contentHash?: string; contentSize?: number }[],
-  ): Promise<Map<LocalPath, { createdAt: number; contentHash?: string; contentSize?: number }>> {
+  ): Promise<
+    Map<
+      LocalPath,
+      { createdAt: number; contentHash?: string; contentSize?: number }
+    >
+  > {
     if (!this.#dbAdapter || rows.length === 0) return new Map();
     const createdMap = await persistFileMeta(
       this.#dbAdapter,
       this.url,
-      rows.map((r) => ({ path: r.path, contentHash: r.contentHash, contentSize: r.contentSize })),
+      rows.map((r) => ({
+        path: r.path,
+        contentHash: r.contentHash,
+        contentSize: r.contentSize,
+      })),
     );
     // maintain LocalPath typing on keys
     return new Map(
