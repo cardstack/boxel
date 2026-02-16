@@ -29,6 +29,7 @@ import {
   isCardDocumentString,
   isCardDef,
   isFieldDef,
+  isFileDef,
   isBaseDef,
   internalKeyFor,
   type ResolvedCodeRef,
@@ -209,9 +210,11 @@ export default class DetailPanel extends Component<Signature> {
             },
           ]
         : []),
-      // the inherit feature performs in the inheritance in a new module,
+      // the inherit feature performs the inheritance in a new module,
       // this means that the Card/Field that we are inheriting must be exported
-      ...(this.args.selectedDeclaration?.exportName
+      // FileDefs are excluded since they don't support the inherit workflow
+      ...(this.args.selectedDeclaration?.exportName &&
+      !isFileDef(this.args.selectedDeclaration?.cardOrField)
         ? [
             {
               label: 'Inherit',
@@ -403,6 +406,19 @@ export default class DetailPanel extends Component<Signature> {
     return hasExecutableExtension(this.args.readyFile.url);
   }
 
+  private get inheritancePanelHeader() {
+    if (
+      this.args.selectedDeclaration &&
+      (isCardOrFieldDeclaration(this.args.selectedDeclaration) ||
+        isReexportCardOrField(this.args.selectedDeclaration))
+    ) {
+      if (isFileDef(this.args.selectedDeclaration.cardOrField)) {
+        return 'File Def Inheritance';
+      }
+    }
+    return 'Card Inheritance';
+  }
+
   private get fileExtension() {
     if (!this.args.cardInstance) {
       return '.' + this.args.readyFile.url.split('.').pop() || '';
@@ -512,7 +528,7 @@ export default class DetailPanel extends Component<Signature> {
             aria-label='Inheritance Panel Header'
             data-test-inheritance-panel-header
           >
-            Card Inheritance
+            {{this.inheritancePanelHeader}}
           </PanelHeader>
           {{#if this.isCardInstance}}
             {{! JSON case when visting, eg Author/1.json }}
@@ -659,6 +675,8 @@ function getDefinitionTitle(declaration: ModuleDeclaration) {
       return 'Card Definition';
     } else if (isFieldDef(declaration.cardOrField)) {
       return 'Field Definition';
+    } else if (isFileDef(declaration.cardOrField)) {
+      return 'File Definition';
     } else if (isBaseDef(declaration.cardOrField)) {
       return 'Base Definition';
     }
@@ -668,6 +686,8 @@ function getDefinitionTitle(declaration: ModuleDeclaration) {
       return 'Re-exported Card Definition';
     } else if (isFieldDef(declaration.cardOrField)) {
       return 'Re-exported Field Definition';
+    } else if (isFileDef(declaration.cardOrField)) {
+      return 'Re-exported File Definition';
     } else if (isBaseDef(declaration.cardOrField)) {
       return 'Re-exported Base Definition';
     }
