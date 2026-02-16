@@ -527,10 +527,7 @@ module('Acceptance | host submode', function (hooks) {
         trail: [`${testRealmURL}nonexistent.json`],
       });
 
-      // Wait for loading to complete and error to show
-      await new Promise((resolve) => setTimeout(resolve, 100));
-
-      assert.dom('[data-test-host-mode-error]').exists();
+      await waitFor('[data-test-card-error]');
       assert.dom('[data-test-card-error]').exists();
     });
 

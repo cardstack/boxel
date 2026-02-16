@@ -271,7 +271,7 @@ module('Acceptance | host mode tests', function (hooks) {
     gate.fulfill();
 
     await visitPromise;
-    assert.dom('[data-test-host-mode-error]').exists();
+    await waitFor('[data-test-card-error]');
     assert.dom('[data-test-card-error]').exists();
     assert.strictEqual(
       getPageTitle(),

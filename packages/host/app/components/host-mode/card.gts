@@ -32,20 +32,18 @@ export default class HostModeCard extends Component<Signature> {
     return this.cardResource?.card;
   }
 
-  get isError() {
-    return this.cardResource?.cardError;
-  }
-
-  get isLoading() {
-    return Boolean(this.args.cardId) && !this.card && !this.isError;
-  }
-
   get cardError() {
     return this.cardResource?.cardError;
   }
 
+  get isLoading() {
+    return Boolean(this.args.cardId) && !this.card && !this.cardError;
+  }
+
   get shouldShowEmptyMessage() {
-    return !this.args.cardId && !this.card && !this.isError && !this.isLoading;
+    return (
+      !this.args.cardId && !this.card && !this.cardError && !this.isLoading
+    );
   }
 
   <template>
@@ -54,12 +52,8 @@ export default class HostModeCard extends Component<Signature> {
       displayBoundaries={{@displayBoundaries}}
       ...attributes
     >
-      {{#if this.isError}}
-        <CardError
-          @error={{this.cardError}}
-          @hideHeader={{true}}
-          data-test-host-mode-error
-        />
+      {{#if this.cardError}}
+        <CardError @error={{this.cardError}} @hideHeader={{true}} />
       {{else if this.card}}
         <CardRenderer
           class='card'
