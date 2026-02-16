@@ -94,7 +94,6 @@
    created_at,
    file_alias TEXT,
    url_hash TEXT GENERATED ALWAYS AS (url) STORED NOT NULL,
-   url_without_css TEXT GENERATED ALWAYS AS (regexp_replace((url)::text,'\.(gts|gjs)\.[A-Za-z0-9_-]+={0,2}\.glimmer-scoped\.css$'::text,'.\1'::text)) STORED,
    PRIMARY KEY ( url, cache_scope, auth_user_id ) 
 );
 
