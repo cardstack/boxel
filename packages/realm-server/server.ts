@@ -22,6 +22,7 @@ import {
   REALM_SERVER_REALM,
   userInitiatedPriority,
   hasExtension,
+  executableExtensions,
 } from '@cardstack/runtime-common';
 import {
   ensureDirSync,
@@ -565,8 +566,7 @@ export class RealmServer {
       return false;
     }
 
-    let moduleExtensions = ['.gts', '.ts', '.js'];
-    for (let extension of moduleExtensions) {
+    for (let extension of executableExtensions) {
       if (existsSync(join(realm.dir, `${localPath}${extension}`))) {
         return true;
       }
