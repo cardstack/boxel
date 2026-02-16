@@ -14,7 +14,7 @@ import {
   BoxelButton,
   FieldContainer,
   BoxelSelect,
-  ProgressBar,
+  LoadingIndicator,
 } from '@cardstack/boxel-ui/components';
 
 import { eq } from '@cardstack/boxel-ui/helpers';
@@ -75,8 +75,9 @@ export default class ChooseFileModal extends Component<Signature> {
     return 'Choose a File';
   }
 
-  private get isUploading(): boolean {
-    return this.currentUpload?.state === 'uploading';
+  private get isUploadBusy(): boolean {
+    let state = this.currentUpload?.state;
+    return state === 'picking' || state === 'uploading';
   }
 
   // public API
@@ -272,9 +273,8 @@ export default class ChooseFileModal extends Component<Signature> {
         gap: var(--boxel-sp-xs);
         flex: 1;
       }
-      .upload-progress-bar {
-        flex: 1;
-        min-width: 80px;
+      .upload-spinner {
+        --boxel-loading-indicator-size: 1.25em;
       }
       .upload-file-name {
         font: var(--boxel-font-xs);
@@ -283,6 +283,12 @@ export default class ChooseFileModal extends Component<Signature> {
         overflow: hidden;
         text-overflow: ellipsis;
         max-width: 120px;
+      }
+      .upload-error-row {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-xs);
+        flex: 1;
       }
       .upload-error {
         color: var(--boxel-error-200);
@@ -336,32 +342,41 @@ export default class ChooseFileModal extends Component<Signature> {
           <FieldContainer class='field buttons' @label='' @tag='div'>
             <div class='footer'>
               <div class='footer-left'>
-                {{#if this.currentUpload}}
-                  {{#if (eq this.currentUpload.state 'uploading')}}
-                    <div
-                      class='upload-progress'
-                      data-test-choose-file-modal-upload-progress
-                    >
-                      <span
-                        class='upload-file-name'
-                      >{{this.currentUpload.fileName}}</span>
-                      <ProgressBar
-                        class='upload-progress-bar'
-                        @value={{this.currentUpload.progress}}
-                        @max={{100}}
-                      />
-                    </div>
-                  {{/if}}
-                  {{#if (eq this.currentUpload.state 'error')}}
+                {{#if (eq this.currentUpload.state 'picking')}}
+                  <BoxelButton
+                    @size='tall'
+                    @disabled={{true}}
+                    data-test-choose-file-modal-upload-button
+                  >
+                    Choose a file&hellip;
+                  </BoxelButton>
+                {{else if (eq this.currentUpload.state 'uploading')}}
+                  <div
+                    class='upload-progress'
+                    data-test-choose-file-modal-upload-progress
+                  >
+                    <span
+                      class='upload-file-name'
+                    >{{this.currentUpload.fileName}}</span>
+                    <LoadingIndicator class='upload-spinner' />
+                  </div>
+                {{else if (eq this.currentUpload.state 'error')}}
+                  <div class='upload-error-row'>
                     <div
                       class='upload-error'
                       data-test-choose-file-modal-upload-error
                     >{{this.currentUpload.error}}</div>
-                  {{/if}}
+                    <BoxelButton
+                      @size='tall'
+                      {{on 'click' this.triggerUpload}}
+                      data-test-choose-file-modal-upload-button
+                    >
+                      Retry&hellip;
+                    </BoxelButton>
+                  </div>
                 {{else}}
                   <BoxelButton
                     @size='tall'
-                    @disabled={{this.isUploading}}
                     {{on 'click' this.triggerUpload}}
                     data-test-choose-file-modal-upload-button
                   >
@@ -381,7 +396,7 @@ export default class ChooseFileModal extends Component<Signature> {
                 <BoxelButton
                   @kind='primary'
                   @size='tall'
-                  @disabled={{this.isUploading}}
+                  @disabled={{this.isUploadBusy}}
                   {{on 'click' (fn this.pick this.selectedFile)}}
                   {{onKeyMod 'Enter'}}
                   data-test-choose-file-modal-add-button

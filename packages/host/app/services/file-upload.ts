@@ -16,7 +16,6 @@ import type NetworkService from './network';
 import type StoreService from './store';
 
 export class FileUploadTask {
-  @tracked progress = 0;
   @tracked state: 'picking' | 'uploading' | 'complete' | 'error' = 'picking';
   @tracked error?: string;
   @tracked fileName?: string;
@@ -109,21 +108,29 @@ export default class FileUploadService extends Service {
       task.state = 'uploading';
 
       let targetUrl = new RealmPaths(realmURL).fileURL(file.name as LocalPath);
-      let data = await file.arrayBuffer();
 
       let response = await this.network.authedFetch(targetUrl, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/octet-stream',
+          'Content-Type': file.type || 'application/octet-stream',
         },
-        body: data,
+        body: file,
       });
 
       if (!response.ok) {
-        throw new Error(`Upload failed: ${response.status}`);
+        let detail = response.statusText || '';
+        try {
+          let body = await response.json();
+          if (body?.errors?.[0]?.detail) {
+            detail = body.errors[0].detail;
+          }
+        } catch {
+          // response may not be JSON
+        }
+        throw new Error(
+          `Upload of ${file.name} to ${realmURL.href} failed: ${response.status}${detail ? ` ${detail}` : ''}`,
+        );
       }
-
-      task.progress = 100;
 
       let fileDef = await this.store.getWithoutCache<FileDef>(targetUrl.href, {
         type: 'file-meta',
