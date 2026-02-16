@@ -13,14 +13,21 @@ import {
   Tooltip,
 } from '@cardstack/boxel-ui/components';
 
-import { cn, or, toMenuItems } from '@cardstack/boxel-ui/helpers';
+import {
+  cn,
+  copyCardURLToClipboard,
+  or,
+  toMenuItems,
+} from '@cardstack/boxel-ui/helpers';
 import type { MenuItemOptions } from '@cardstack/boxel-ui/helpers';
 
 import {
   Eye,
   IconCircle,
   IconCircleSelected,
+  IconLink,
   IconPencil,
+  IconTrash,
   ThreeDotsHorizontal,
 } from '@cardstack/boxel-ui/icons';
 
@@ -408,6 +415,26 @@ export default class OperatorModeOverlays extends Overlays {
       action: () => this.openOrSelectCard(cardDefOrId),
       icon: Eye,
     };
+
+    // When cardDefOrId is a string (e.g., prerendered cards in the grid),
+    // we can't call [getMenuItems] on it, so construct default menu items
+    if (typeof cardDefOrId === 'string') {
+      const menuItems: MenuItemOptions[] = [viewCardItem];
+      menuItems.push({
+        label: 'Copy Card URL',
+        action: () => copyCardURLToClipboard(cardId),
+        icon: IconLink,
+      });
+      if (!isField && this.realm.canWrite(cardId)) {
+        menuItems.push({
+          label: 'Delete',
+          action: () => this.cardCrudFunctions.deleteCard?.(cardDefOrId),
+          icon: IconTrash,
+          dangerous: true,
+        });
+      }
+      return toMenuItems(menuItems);
+    }
 
     const cardMenuItems =
       (cardDefOrId as CardDef)[getMenuItems]?.({

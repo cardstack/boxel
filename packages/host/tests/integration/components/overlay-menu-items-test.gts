@@ -181,9 +181,7 @@ module('Integration | overlay-menu-items', function (hooks) {
         <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
-    await waitFor(
-      `[data-test-card="${testRealmURL}CardWithCustomMenu/1"]`,
-    );
+    await waitFor(`[data-test-card="${testRealmURL}CardWithCustomMenu/1"]`);
     await triggerEvent(
       `[data-test-card="${testRealmURL}CardWithCustomMenu/1"]`,
       'mouseenter',
@@ -206,9 +204,7 @@ module('Integration | overlay-menu-items', function (hooks) {
         <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
-    await waitFor(
-      `[data-test-card="${testRealmURL}CardWithCustomMenu/1"]`,
-    );
+    await waitFor(`[data-test-card="${testRealmURL}CardWithCustomMenu/1"]`);
     await triggerEvent(
       `[data-test-card="${testRealmURL}CardWithCustomMenu/1"]`,
       'mouseenter',
