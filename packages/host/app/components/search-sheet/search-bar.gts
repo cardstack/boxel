@@ -10,6 +10,7 @@ import {
 } from '@cardstack/boxel-ui/components';
 import type { PickerOption } from '@cardstack/boxel-ui/components';
 import { IconSearch } from '@cardstack/boxel-ui/icons';
+import { autoFocus } from '@cardstack/boxel-ui/modifiers';
 
 import RealmPicker from '@cardstack/host/components/realm-picker';
 
@@ -20,10 +21,6 @@ let elementCallback = modifier(
     }
   },
 );
-
-const autoFocus = modifier((element: HTMLElement) => {
-  element.focus();
-});
 
 interface Signature {
   Element: HTMLElement;

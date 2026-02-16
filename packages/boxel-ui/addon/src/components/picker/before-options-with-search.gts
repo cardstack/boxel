@@ -1,14 +1,10 @@
+import { autoFocus } from '@cardstack/boxel-ui/modifiers';
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
-import { modifier } from 'ember-modifier';
 import type { Select } from 'ember-power-select/components/power-select';
 
 import BoxelInput from '../input/index.gts';
 import type { PickerOption } from './index.gts';
-
-const autoFocus = modifier((element: HTMLElement) => {
-  element.focus();
-});
 
 export interface BeforeOptionsWithSearchSignature {
   Args: {
