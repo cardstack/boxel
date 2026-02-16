@@ -30,8 +30,8 @@ import type {
 import type {
   FileAddedEventContent,
   FileUpdatedEventContent,
+  FileWatcherEventContent,
   RealmEventContent,
-  UpdateRealmEventContent,
 } from 'https://cardstack.com/base/matrix-event';
 
 import { WebMessageStream, messageCloseHandler } from './stream';
@@ -66,7 +66,9 @@ export class TestRealmAdapter implements RealmAdapter {
   #files: Dir = { kind: 'directory', contents: {} };
   #lastModified: Map<string, number> = new Map();
   #paths: RealmPaths;
-  #subscriber: ((message: UpdateRealmEventContent) => void) | undefined;
+  #subscriber:
+    | ((message: FileWatcherEventContent) => void)
+    | undefined;
   #loader: Loader | undefined; // Will be set in the realm's constructor - needed for openFile for shimming purposes
   #ready = new Deferred<void>();
   #potentialModulesAndInstances: { content: any; url: URL }[] = [];
@@ -348,7 +350,7 @@ export class TestRealmAdapter implements RealmAdapter {
     };
   }
 
-  postUpdateEvent(data: UpdateRealmEventContent) {
+  postUpdateEvent(data: FileWatcherEventContent) {
     this.#subscriber?.(data);
   }
 
@@ -444,7 +446,7 @@ export class TestRealmAdapter implements RealmAdapter {
   }
 
   async subscribe(
-    cb: (message: UpdateRealmEventContent) => void,
+    cb: (message: FileWatcherEventContent) => void,
   ): Promise<void> {
     this.#subscriber = cb;
   }
