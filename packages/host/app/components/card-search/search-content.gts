@@ -12,6 +12,8 @@ import pluralize from 'pluralize';
 import { eq } from '@cardstack/boxel-ui/helpers';
 
 import {
+  type CodeRef,
+  type Filter,
   CardContextName,
   type getCard,
   type getCardCollection,
@@ -44,6 +46,8 @@ import SearchResultSection from './search-result-section';
 import { getCodeRefFromSearchKey } from './utils';
 
 import type { PrerenderedCard } from '../prerendered-card-search';
+
+import type { NewCardArgs } from './utils';
 
 const OWNER_DESTROYED_ERROR = 'OWNER_DESTROYED_ERROR';
 
@@ -85,11 +89,21 @@ interface Signature {
     selectedRealmURLs: string[];
     isCompact: boolean;
     handleCardSelect: (cardId: string) => void;
+    // New args for card-catalog modal integration:
+    selectedCardId?: string;
+    baseFilter?: Filter;
+    offerToCreate?: {
+      ref: CodeRef;
+      relativeTo: URL | undefined;
+    };
+    onCreateCard?: (args: NewCardArgs) => void;
+    showRecents?: boolean;
+    showHeader?: boolean;
   };
   Blocks: {};
 }
 
-export default class SearchSheetContent extends Component<Signature> {
+export default class SearchContent extends Component<Signature> {
   @service declare loaderService: LoaderService;
   @service declare realm: RealmService;
   @service declare realmServer: RealmServerService;
@@ -127,14 +141,30 @@ export default class SearchSheetContent extends Component<Signature> {
     this,
     getOwner(this)!,
     () => ({
-      query:
-        this.isSearchKeyEmpty || this.searchKeyIsURL ? undefined : this.query,
+      query: this.shouldSkipQuery ? undefined : this.query,
       format: 'fitted',
       realms: this.realms,
       isLive: true,
       cardComponentModifier: this.cardComponentModifier,
     }),
   );
+
+  private get shouldSkipQuery() {
+    // In baseFilter mode (modal), only skip when search key is a URL
+    if (this.args.baseFilter) {
+      return this.searchKeyIsURL;
+    }
+    // In search-sheet mode, skip when empty or URL
+    return this.isSearchKeyEmpty || this.searchKeyIsURL;
+  }
+
+  private get showRecents() {
+    return this.args.showRecents !== false;
+  }
+
+  private get showHeader() {
+    return this.args.showHeader !== false;
+  }
 
   private get isSearchKeyEmpty() {
     return (this.args.searchKey?.trim() ?? '') === '';
@@ -191,6 +221,30 @@ export default class SearchSheetContent extends Component<Signature> {
 
   private get query() {
     const { searchKey } = this.args;
+
+    // Modal mode: use the externally-provided base filter
+    if (this.args.baseFilter) {
+      const searchTerm = searchKey?.trim() || undefined;
+      return {
+        filter: {
+          every: [
+            this.args.baseFilter,
+            ...(searchTerm
+              ? [
+                  {
+                    contains: {
+                      cardTitle: searchTerm,
+                    },
+                  },
+                ]
+              : []),
+          ],
+        },
+        sort: this.activeSort.sort,
+      };
+    }
+
+    // Search-sheet mode: existing logic (type detection, specRef exclusion)
     const type = getCodeRefFromSearchKey(searchKey);
     const searchTerm = !type ? searchKey : undefined;
     return {
@@ -398,7 +452,12 @@ export default class SearchSheetContent extends Component<Signature> {
   }
 
   private get cardsByQuerySection(): SearchSheetSection[] | null {
-    if (this.isSearchKeyEmpty || this.searchKeyIsURL) {
+    if (this.searchKeyIsURL) {
+      return null;
+    }
+
+    // In search-sheet mode (no baseFilter), skip when search key is empty
+    if (!this.args.baseFilter && this.isSearchKeyEmpty) {
       return null;
     }
 
@@ -455,8 +514,8 @@ export default class SearchSheetContent extends Component<Signature> {
       sections.push(...this.cardsByQuerySection);
     }
 
-    // Add recents section if present
-    if (this.recentCardsSection) {
+    // Add recents section if enabled
+    if (this.showRecents && this.recentCardsSection) {
       sections.push(this.recentCardsSection);
     }
 
@@ -499,21 +558,31 @@ export default class SearchSheetContent extends Component<Signature> {
     return !!this.focusedSection && this.focusedSection !== sectionId;
   }
 
+  private get hasNoResults(): boolean {
+    return (
+      this.sections.length === 0 &&
+      !this.searchPrerenderedCards.isLoading &&
+      !this.shouldSkipQuery
+    );
+  }
+
   <template>
     {{consumeContext this.getRecentCardCollection}}
     {{consumeContext this.makeCardResource}}
     <div class='search-sheet-content {{if @isCompact "compact"}}'>
-      {{#unless @isCompact}}
-        <SearchResultHeader
-          @summaryText={{this.summaryText}}
-          @viewOptions={{VIEW_OPTIONS}}
-          @activeViewId={{this.activeViewId}}
-          @activeSort={{this.activeSort}}
-          @sortOptions={{SORT_OPTIONS}}
-          @onChangeView={{this.onChangeView}}
-          @onChangeSort={{this.onChangeSort}}
-        />
-      {{/unless}}
+      {{#if this.showHeader}}
+        {{#unless @isCompact}}
+          <SearchResultHeader
+            @summaryText={{this.summaryText}}
+            @viewOptions={{VIEW_OPTIONS}}
+            @activeViewId={{this.activeViewId}}
+            @activeSort={{this.activeSort}}
+            @sortOptions={{SORT_OPTIONS}}
+            @onChangeView={{this.onChangeView}}
+            @onChangeSort={{this.onChangeSort}}
+          />
+        {{/unless}}
+      {{/if}}
 
       {{! Handle empty URL search state — only after loading completes }}
       {{#if this.searchKeyIsURL}}
@@ -539,9 +608,18 @@ export default class SearchSheetContent extends Component<Signature> {
           @onFocusSection={{this.onFocusSection}}
           @getDisplayedCount={{this.getDisplayedCount}}
           @onShowMore={{this.onShowMore}}
+          @selectedCardId={{@selectedCardId}}
+          @offerToCreate={{@offerToCreate}}
+          @onCreateCard={{@onCreateCard}}
           data-test-search-result-section={{i}}
         />
       {{/each}}
+
+      {{#if this.hasNoResults}}
+        <div class='empty-state' data-test-search-content-empty>
+          No cards available
+        </div>
+      {{/if}}
     </div>
     <style scoped>
       .search-sheet-content {

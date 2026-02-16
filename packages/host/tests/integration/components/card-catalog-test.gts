@@ -218,7 +218,9 @@ module('Integration | card-catalog', function (hooks) {
       assert
         .dom('[data-test-realm="Base Workspace"] [data-test-card-catalog-item]')
         .exists();
-      assert.dom('[data-test-realm-filter-button]').hasText('Workspace: All');
+      assert
+        .dom('[data-test-realm-picker]')
+        .exists('realm picker is displayed');
 
       let localResults = [
         ...document.querySelectorAll(
@@ -237,28 +239,15 @@ module('Integration | card-catalog', function (hooks) {
     });
 
     test('can filter cards by selecting a realm', async function (assert) {
-      await click('[data-test-realm-filter-button]');
-      assert.dom('[data-test-boxel-menu-item]').exists({ count: 3 });
-      assert.dom('[data-test-boxel-menu-item-selected]').exists({ count: 3 }); // All realms are selected by default
-      assert
-        .dom('[data-test-realm-filter-button]')
-        .includesText('Workspace: All');
+      // Open the realm picker and select only Base Workspace
+      await click('[data-test-realm-picker] [data-test-boxel-picker-trigger]');
+      await click(`[data-test-boxel-picker-option-row="${baseRealm.url}"]`);
 
-      await click(`[data-test-boxel-menu-item-text="Local Workspace"]`); // Unselect Local Workspace
-      assert
-        .dom('[data-test-realm-filter-button]')
-        .hasText(`Workspace: Base Workspace, Boxel Skills`);
+      // Only Base Workspace results should be shown
       assert
         .dom(`[data-test-realm="Base Workspace"] [data-test-card-catalog-item]`)
         .exists();
-
       assert.dom(`[data-test-realm="${realmName}"]`).doesNotExist();
-
-      await click('[data-test-realm-filter-button]');
-      assert.dom('[data-test-boxel-menu-item-selected]').exists({ count: 2 });
-      assert
-        .dom('[data-test-boxel-menu-item-selected]')
-        .hasText('Base Workspace');
     });
 
     test('can paginate results from a realm', async function (assert) {
@@ -312,7 +301,7 @@ module('Integration | card-catalog', function (hooks) {
       assert.dom(`[data-test-card-catalog-item-selected]`).doesNotExist();
 
       await triggerKeyEvent(`[data-test-select="${card}"]`, 'keydown', 'Enter');
-      await waitFor('[data-test-card-catalog]', { count: 0 });
+      await waitFor('[data-test-card-catalog-modal]', { count: 0 });
       await waitFor(`[data-test-stack-card-index="1"]`);
       assert
         .dom(
@@ -340,7 +329,7 @@ module('Integration | card-catalog', function (hooks) {
         .hasAttribute('data-test-card-catalog-item-selected');
 
       await triggerKeyEvent(`[data-test-select="${card}"]`, 'keydown', 'Enter');
-      await waitFor('[data-test-card-catalog]', { count: 0 });
+      await waitFor('[data-test-card-catalog-modal]', { count: 0 });
       await waitFor(`[data-test-stack-card-index="1"]`);
       assert
         .dom(
@@ -375,7 +364,7 @@ module('Integration | card-catalog', function (hooks) {
         'keydown',
         'Enter',
       );
-      await waitFor('[data-test-card-catalog]', { count: 0 });
+      await waitFor('[data-test-card-catalog-modal]', { count: 0 });
       await waitFor(`[data-test-stack-card-index="1"]`);
       assert
         .dom(
@@ -398,7 +387,7 @@ module('Integration | card-catalog', function (hooks) {
       assert.dom(`[data-test-card-catalog-item-selected]`).doesNotExist();
 
       await doubleClick(`[data-test-select="${card}"`);
-      await waitFor('[data-test-card-catalog]', { count: 0 });
+      await waitFor('[data-test-card-catalog-modal]', { count: 0 });
       await waitFor(`[data-test-stack-card-index="1"]`);
       assert
         .dom(
@@ -423,7 +412,7 @@ module('Integration | card-catalog', function (hooks) {
         'keydown',
         'Escape',
       );
-      await waitFor('[data-test-card-catalog]', { count: 0 });
+      await waitFor('[data-test-card-catalog-modal]', { count: 0 });
       assert.dom(`[data-test-stack-card-index="0"]`).exists();
       assert.dom('[data-test-stack-card-index="1"]').doesNotExist();
     });

@@ -594,7 +594,7 @@ module(
         await click('[data-test-stack-card-index="0"] [data-test-edit-button]');
         await click('[data-test-add-new="friends"]');
 
-        await waitFor('[data-test-card-catalog]');
+        await waitFor('[data-test-card-catalog-modal]');
         await waitFor('[data-test-realm="Test Workspace A"]');
         await waitFor('[data-test-realm="Test Workspace B"]');
 
@@ -611,7 +611,7 @@ module(
           'keydown',
           'Escape',
         );
-        await waitFor('[data-test-card-catalog]', { count: 0 });
+        await waitFor('[data-test-card-catalog-modal]', { count: 0 });
       });
 
       test('the delete item is not present in "..." menu of stack item', async function (assert) {
