@@ -9,7 +9,6 @@ import { fetchSessionRoom } from '@cardstack/runtime-common/db-queries/session-r
 
 import {
   setupPermissionedRealm,
-  insertUser,
   realmSecretSeed,
   testRealmHref,
 } from './helpers';
@@ -31,10 +30,6 @@ module(basename(__filename), function () {
         dbAdapter = adapter;
         request = req;
       },
-    });
-
-    hooks.beforeEach(async function () {
-      await insertUser(dbAdapter, matrixUserId, 'cus_test', null);
     });
 
     hooks.afterEach(function () {

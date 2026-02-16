@@ -73,6 +73,7 @@ module(basename(__filename), function () {
     setupPermissionedRealm(hooks, {
       permissions: {
         '*': ['read', 'write'],
+        '@node-test_realm:localhost': ['read', 'write', 'realm-owner'],
       },
       realmURL,
       onRealmSetup,

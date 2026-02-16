@@ -27,7 +27,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       });
 
       test('can create a user', async function (assert) {
-        let ownerUserId = '@mango:localhost';
+        let ownerUserId = '@mango-new:localhost';
         let response = await context.request2
           .post('/_user')
           .set('Accept', 'application/json')

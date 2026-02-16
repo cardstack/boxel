@@ -42,6 +42,9 @@ module(`server-endpoints/${basename(__filename)}`, function () {
             testRealmDir,
             realmsRootPath: join(dir.name, 'realm_server_5'),
             realmURL: testRealmURL,
+            permissions: {
+              test_realm: ['read', 'realm-owner'],
+            },
             dbAdapter,
             publisher,
             runner,

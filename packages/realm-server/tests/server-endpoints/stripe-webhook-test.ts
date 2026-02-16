@@ -1,7 +1,7 @@
 import { module, test } from 'qunit';
 import { basename } from 'path';
 import type { Test, SuperTest } from 'supertest';
-import type { Realm } from '@cardstack/runtime-common';
+import type { Realm, User } from '@cardstack/runtime-common';
 import { Deferred } from '@cardstack/runtime-common';
 import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import Stripe from 'stripe';
@@ -36,6 +36,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       let matrixClient: MatrixClient;
       let roomId: string;
       let userId = '@test_realm:localhost';
+      let user: User;
       let originalLowCreditThreshold: string | undefined;
       let waitForBillingNotification = async function (
         assert: Assert,
@@ -78,6 +79,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         let stripe = getStripe();
         createSubscriptionStub = sinon.stub(stripe.subscriptions, 'create');
         fetchPriceListStub = sinon.stub(stripe.prices, 'list');
+        user = await insertUser(dbAdapter, userId!, 'cus_123', 'user@test.com');
 
         matrixClient = new MatrixClient({
           matrixURL: realmServerTestMatrix.url,
@@ -111,12 +113,6 @@ module(`server-endpoints/${basename(__filename)}`, function () {
 
       test('subscribes user back to free plan when the current subscription is expired', async function (assert) {
         const secret = process.env.STRIPE_WEBHOOK_SECRET;
-        let user = await insertUser(
-          dbAdapter,
-          userId,
-          'cus_123',
-          'user@test.com',
-        );
         let freePlan = await insertPlan(
           dbAdapter,
           'Free plan',
@@ -347,12 +343,6 @@ module(`server-endpoints/${basename(__filename)}`, function () {
 
       test('ensures the current subscription expires when free plan subscription fails', async function (assert) {
         const secret = process.env.STRIPE_WEBHOOK_SECRET;
-        let user = await insertUser(
-          dbAdapter,
-          userId,
-          'cus_123',
-          'user@test.com',
-        );
         await insertPlan(dbAdapter, 'Free plan', 0, 100, 'prod_free');
         let creatorPlan = await insertPlan(
           dbAdapter,
@@ -547,7 +537,6 @@ module(`server-endpoints/${basename(__filename)}`, function () {
 
       test('sends billing notification on invoice payment succeeded event', async function (assert) {
         const secret = process.env.STRIPE_WEBHOOK_SECRET;
-        await insertUser(dbAdapter, userId!, 'cus_123', 'user@test.com');
         await insertPlan(dbAdapter, 'Free plan', 0, 100, 'prod_free');
         if (!secret) {
           throw new Error('STRIPE_WEBHOOK_SECRET is not set');
@@ -600,12 +589,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
 
       test('sends billing notification on checkout session completed event', async function (assert) {
         const secret = process.env.STRIPE_WEBHOOK_SECRET;
-        let user = await insertUser(
-          dbAdapter,
-          userId!,
-          'cus_123',
-          'user@test.com',
-        );
+
         await insertPlan(dbAdapter, 'Free plan', 0, 100, 'prod_free');
         if (!secret) {
           throw new Error('STRIPE_WEBHOOK_SECRET is not set');
