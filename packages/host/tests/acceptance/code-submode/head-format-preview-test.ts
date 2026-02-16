@@ -199,10 +199,7 @@ module('Acceptance | code submode | head format preview', function (hooks) {
       .exists('warning is shown for disallowed tags');
     assert
       .dom('[data-test-head-warning]')
-      .includesText(
-        'Disallowed tags detected',
-        'warning message is displayed',
-      );
+      .includesText('Disallowed tags detected', 'warning message is displayed');
   });
 
   test('does not show warning when head template only has allowed tags', async function (assert) {
