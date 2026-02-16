@@ -1,8 +1,6 @@
 exports.up = (pgm) => {
   pgm.sql(`DELETE FROM boxel_index WHERE type = 'module'`);
   pgm.sql(`DELETE FROM boxel_index_working WHERE type = 'module'`);
-  // this column should never have existed. it was a leftover artifact in my dev env
-  pgm.sql(`ALTER TABLE modules DROP COLUMN IF EXISTS url_without_css`);
 
   pgm.dropConstraint('boxel_index', 'boxel_index_type_check');
   pgm.dropConstraint('boxel_index_working', 'boxel_index_working_type_check');
