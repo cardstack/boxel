@@ -1556,9 +1556,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       .dom('[data-test-inheritance-panel-header]')
       .hasText('File Def Inheritance');
     assert.dom('[data-test-card-module-definition]').exists();
-    assert
-      .dom('[data-test-definition-header]')
-      .includesText('File Definition');
+    assert.dom('[data-test-definition-header]').includesText('File Definition');
     assert
       .dom('[data-test-card-module-definition]')
       .includesText('custom file');
