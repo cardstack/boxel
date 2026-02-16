@@ -91,9 +91,11 @@ module('Acceptance | interact submode tests', function (hooks) {
 
       assert
         .dom('[data-test-search-label]')
-        .includesText('Card found at http://test-realm/test/');
+        .includesText('1 result from 1 realm');
       assert
-        .dom('[data-test-card="http://test-realm/test/index"]')
+        .dom(
+          '[data-test-search-result="http://test-realm/test/index"], [data-test-card="http://test-realm/test/index"]',
+        )
         .exists({ count: 1 });
     });
 

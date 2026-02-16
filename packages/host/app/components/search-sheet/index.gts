@@ -24,12 +24,11 @@ import { IconSearch } from '@cardstack/boxel-ui/icons';
 
 import { type getCard, GetCardContextName } from '@cardstack/runtime-common';
 
+import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 
-import CardQueryResults from './card-query-results';
-import CardURLResults from './card-url-results';
-import RecentCardsSection from './recent-cards-section';
 import SearchBar from './search-bar';
+import SearchSheetContent from './search-sheet-content';
 import { getCodeRefFromSearchKey } from './utils';
 
 import type StoreService from '../../services/store';
@@ -67,6 +66,7 @@ export default class SearchSheet extends Component<Signature> {
   @tracked selectedRealms: PickerOption[] = [];
 
   @service declare private realmServer: RealmServerService;
+  @service declare private realm: RealmService;
   @service declare private store: StoreService;
 
   constructor(owner: Owner, args: any) {
@@ -175,10 +175,6 @@ export default class SearchSheet extends Component<Signature> {
     return this.sheetSize === 'prompt';
   }
 
-  private get isSearchKeyEmpty() {
-    return (this.searchKey?.trim() || '') === '';
-  }
-
   private get searchKeyAsURL() {
     if (!this.searchKeyIsURL) {
       return undefined;
@@ -229,14 +225,19 @@ export default class SearchSheet extends Component<Signature> {
     }
   }
 
+  private get joinSelectedRealmURLs() {
+    return this.selectedRealmURLs?.join(',');
+  }
+
   <template>
     <div
       id='search-sheet'
       class='search-sheet {{this.sheetSize}}'
       data-test-search-sheet={{@mode}}
+      data-test-search-realms={{this.joinSelectedRealmURLs}}
       {{onClickOutside
         @onBlur
-        exceptSelector='.add-card-to-neighbor-stack,.boxel-picker__dropdown,.picker-before-options-with-search,.picker-option-row'
+        exceptSelector='.add-card-to-neighbor-stack,.boxel-picker__dropdown,.picker-before-options-with-search,.picker-option-row,.search-sheet-header,.search-sheet-section-header,.variant-default'
       }}
     >
       {{#if (eq @mode 'closed')}}
@@ -265,29 +266,12 @@ export default class SearchSheet extends Component<Signature> {
           class='search-sheet__search-input-group'
           autocomplete='off'
         />
-        <div class='search-sheet-content'>
-          {{#if this.searchKeyIsURL}}
-            <CardURLResults
-              @url={{this.searchKey}}
-              @handleCardSelect={{this.handleCardSelect}}
-              @isCompact={{this.isCompact}}
-              @searchKeyAsURL={{this.searchKeyAsURL}}
-            />
-          {{else if this.isSearchKeyEmpty}}
-            {{! nothing }}
-          {{else}}
-            <CardQueryResults
-              @searchKey={{this.searchKey}}
-              @realms={{this.selectedRealmURLs}}
-              @handleCardSelect={{this.handleCardSelect}}
-              @isCompact={{this.isCompact}}
-            />
-          {{/if}}
-          <RecentCardsSection
-            @handleCardSelect={{this.handleCardSelect}}
-            @isCompact={{this.isCompact}}
-          />
-        </div>
+        <SearchSheetContent
+          @searchKey={{this.searchKey}}
+          @selectedRealmURLs={{this.selectedRealmURLs}}
+          @isCompact={{this.isCompact}}
+          @handleCardSelect={{this.handleCardSelect}}
+        />
         <div class='footer'>
           <div class='buttons'>
             <Button
@@ -354,10 +338,6 @@ export default class SearchSheet extends Component<Signature> {
         width: var(--search-sheet-closed-width);
       }
 
-      .search-sheet.closed .search-sheet-content {
-        display: none;
-      }
-
       .prompt {
         height: var(--search-sheet-prompt-height);
         box-shadow: var(--boxel-deep-box-shadow);
@@ -389,7 +369,6 @@ export default class SearchSheet extends Component<Signature> {
         padding: 0;
       }
 
-      .closed .search-sheet-content,
       .closed .footer,
       .prompt .footer {
         height: 0;
@@ -401,24 +380,6 @@ export default class SearchSheet extends Component<Signature> {
       }
       .buttons > * + * {
         margin-left: var(--boxel-sp-xs);
-      }
-
-      .search-sheet-content {
-        height: 100%;
-        background-color: var(--boxel-light);
-        border-bottom: 1px solid var(--boxel-200);
-        padding: 0 var(--boxel-sp-lg);
-        transition: opacity calc(var(--boxel-transition) / 4);
-      }
-      .results .search-sheet-content {
-        padding-top: var(--boxel-sp);
-        display: flex;
-        flex-direction: column;
-        flex: 1;
-        overflow-y: auto;
-      }
-      .prompt .search-sheet-content {
-        overflow-x: auto;
       }
 
       .open-search-field:focus:focus-visible {

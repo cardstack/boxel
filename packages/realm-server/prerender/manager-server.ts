@@ -25,7 +25,7 @@ let { port, exitOnSignal, forceExitTimeoutMs } = yargs(process.argv.slice(2))
     forceExitTimeoutMs: {
       description:
         'When exitOnSignal is true, force the process to exit after this timeout (ms)',
-      default: 1000,
+      default: 150000,
       type: 'number',
     },
   })
