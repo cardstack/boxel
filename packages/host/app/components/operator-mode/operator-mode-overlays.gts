@@ -2,6 +2,7 @@ import { array, fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 
+import { consume } from 'ember-provide-consume-context';
 import { velcro } from 'ember-velcro';
 
 import type { BoxelDropdownAPI } from '@cardstack/boxel-ui/components';
@@ -12,21 +13,30 @@ import {
   Tooltip,
 } from '@cardstack/boxel-ui/components';
 
-import { compact, cn, menuItem, or } from '@cardstack/boxel-ui/helpers';
+import { cn, or, toMenuItems } from '@cardstack/boxel-ui/helpers';
+import type { MenuItemOptions } from '@cardstack/boxel-ui/helpers';
 
 import {
   Eye,
   IconCircle,
   IconCircleSelected,
-  IconLink,
   IconPencil,
-  IconTrash,
   ThreeDotsHorizontal,
 } from '@cardstack/boxel-ui/icons';
 
-import { copyCardURLToClipboard } from '@cardstack/host/utils/clipboard';
+import type { CommandContext } from '@cardstack/runtime-common';
+import {
+  CardCrudFunctionsContextName,
+  CommandContextName,
+  getMenuItems,
+} from '@cardstack/runtime-common';
 
-import type { Format } from 'https://cardstack.com/base/card-api';
+
+import type {
+  CardCrudFunctions,
+  CardDef,
+  Format,
+} from 'https://cardstack.com/base/card-api';
 
 import { removeFileExtension } from '../search-sheet/utils';
 
@@ -38,6 +48,12 @@ import type { CardDefOrId } from './stack-item';
 
 export default class OperatorModeOverlays extends Overlays {
   overlayClassName = 'actions-overlay';
+
+  @consume(CardCrudFunctionsContextName)
+  declare private cardCrudFunctions: CardCrudFunctions;
+
+  @consume(CommandContextName)
+  declare private commandContext: CommandContext;
 
   get renderedCardsForOverlayActionsWithEvents() {
     return super
@@ -136,36 +152,9 @@ export default class OperatorModeOverlays extends Overlays {
                         <:content as |dd|>
                           <Menu
                             @closeMenu={{dd.close}}
-                            @items={{compact
-                              (array
-                                (if
-                                  (this.isMenuDisplayed 'view' renderedCard)
-                                  (menuItem
-                                    'View card'
-                                    (fn this.openOrSelectCard cardDefOrId)
-                                    icon=Eye
-                                  )
-                                )
-                                (if
-                                  (this.isMenuDisplayed
-                                    'copy-card-url' renderedCard
-                                  )
-                                  (menuItem
-                                    'Copy Card URL'
-                                    (fn this.copyCardUrl cardDefOrId)
-                                    icon=IconLink
-                                  )
-                                )
-                                (if
-                                  (this.isMenuDisplayed 'delete' renderedCard)
-                                  (menuItem
-                                    'Delete'
-                                    (fn this.deleteCard cardDefOrId)
-                                    icon=IconTrash
-                                    dangerous=true
-                                  )
-                                )
-                              )
+                            @items={{this.getMenuItemsForCard
+                              cardDefOrId
+                              renderedCard
                             }}
                           />
                         </:content>
@@ -352,30 +341,7 @@ export default class OperatorModeOverlays extends Overlays {
       case 'edit':
         return this.realm.canWrite(this.getCardId(renderedCard.cardDefOrId));
       case 'more-options':
-        return (
-          this.isMenuDisplayed('view', renderedCard) ||
-          this.isMenuDisplayed('copy-card-url', renderedCard) ||
-          this.isMenuDisplayed('delete', renderedCard)
-        );
-      default:
-        return false;
-    }
-  }
-
-  @action
-  private isMenuDisplayed(
-    type: string,
-    renderedCard: StackItemRenderedCardForOverlayActions,
-  ) {
-    switch (type) {
-      case 'view':
-      case 'copy-card-url':
         return true;
-      case 'delete':
-        return (
-          !this.isField(renderedCard) &&
-          this.realm.canWrite(this.getCardId(renderedCard.cardDefOrId))
-        );
       default:
         return false;
     }
@@ -430,12 +396,27 @@ export default class OperatorModeOverlays extends Overlays {
   }
 
   @action
-  private copyCardUrl(cardDefOrId: CardDefOrId) {
-    return copyCardURLToClipboard(cardDefOrId);
-  }
+  private getMenuItemsForCard(
+    cardDefOrId: CardDefOrId,
+    renderedCard: StackItemRenderedCardForOverlayActions,
+  ) {
+    const isField = this.isField(renderedCard);
+    const cardId = this.getCardId(cardDefOrId);
 
-  @action
-  private deleteCard(cardDefOrId: CardDefOrId) {
-    return this.args.requestDeleteCard?.(cardDefOrId);
+    const viewCardItem: MenuItemOptions = {
+      label: 'View card',
+      action: () => this.openOrSelectCard(cardDefOrId),
+      icon: Eye,
+    };
+
+    const cardMenuItems =
+      (cardDefOrId as CardDef)[getMenuItems]?.({
+        canEdit: isField ? false : this.realm.canWrite(cardId);,
+        cardCrudFunctions: this.cardCrudFunctions,
+        menuContext: 'interact',
+        commandContext: this.commandContext,
+      }) ?? [];
+
+    return toMenuItems([viewCardItem, ...cardMenuItems]);
   }
 }
