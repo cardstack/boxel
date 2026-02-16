@@ -27,6 +27,10 @@ export const skillCardRef: ResolvedCodeRef = {
   module: `${baseRealm.url}skill`,
   name: 'Skill',
 };
+export const baseFileRef: ResolvedCodeRef = {
+  module: `${baseRealm.url}file-api`,
+  name: 'FileDef',
+};
 
 export const isField = Symbol('cardstack-field');
 export const isSpec = Symbol('is-spec');
