@@ -54,18 +54,18 @@ export default class HostModeCard extends Component<Signature> {
       displayBoundaries={{@displayBoundaries}}
       ...attributes
     >
-      {{#if this.card}}
+      {{#if this.isError}}
+        <CardError
+          @error={{this.cardError}}
+          @hideHeader={{true}}
+          data-test-host-mode-error
+        />
+      {{else if this.card}}
         <CardRenderer
           class='card'
           @card={{this.card}}
           @format='isolated'
           data-test-host-mode-card={{@cardId}}
-        />
-      {{else if this.isError}}
-        <CardError
-          @error={{this.cardError}}
-          @hideHeader={{true}}
-          data-test-host-mode-error
         />
       {{else if this.isLoading}}
         <div class='message'>

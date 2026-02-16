@@ -275,7 +275,7 @@ module('Acceptance | host mode tests', function (hooks) {
     assert.dom('[data-test-card-error]').exists();
     assert.strictEqual(
       getPageTitle(),
-      `Card not found: ${testHostModeRealmURL}Pet/non-existent`,
+      `Error rendering ${testHostModeRealmURL}Pet/non-existent`,
     );
     assert.dom('[data-test-host-loading]').doesNotExist();
 
