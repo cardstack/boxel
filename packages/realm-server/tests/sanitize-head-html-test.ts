@@ -32,68 +32,28 @@ module(basename(__filename), function () {
       );
     });
 
-    test('strips script tags', function (assert) {
-      let doc = makeDoc();
-      let html =
-        '<title>Test</title><script>alert("xss")</script><meta name="description" content="desc">';
-      let fragment = sanitizeHeadHTML(html, doc);
-      assert.ok(fragment, 'returns a fragment');
-      let container = doc.createElement('div');
-      container.appendChild(fragment!);
-      assert.ok(container.querySelector('title'), 'title is preserved');
-      assert.ok(container.querySelector('meta'), 'meta is preserved');
-      assert.notOk(container.querySelector('script'), 'script tag is stripped');
-    });
+    const strippedTags: { tag: string; html: string }[] = [
+      { tag: 'script', html: '<script>alert("xss")</script>' },
+      { tag: 'style', html: '<style>body { display: none }</style>' },
+      { tag: 'noscript', html: '<noscript><p>No JS</p></noscript>' },
+      { tag: 'base', html: '<base href="https://evil.com">' },
+      { tag: 'div', html: '<div>bad</div>' },
+      { tag: 'h1', html: '<h1>heading</h1>' },
+      { tag: 'p', html: '<p>paragraph</p>' },
+    ];
 
-    test('strips style tags', function (assert) {
-      let doc = makeDoc();
-      let html = '<title>Test</title><style>body { display: none }</style>';
-      let fragment = sanitizeHeadHTML(html, doc);
-      assert.ok(fragment, 'returns a fragment');
-      let container = doc.createElement('div');
-      container.appendChild(fragment!);
-      assert.ok(container.querySelector('title'), 'title is preserved');
-      assert.notOk(container.querySelector('style'), 'style tag is stripped');
-    });
-
-    test('strips noscript tags', function (assert) {
-      let doc = makeDoc();
-      let html = '<title>Test</title><noscript><p>No JS</p></noscript>';
-      let fragment = sanitizeHeadHTML(html, doc);
-      assert.ok(fragment, 'returns a fragment');
-      let container = doc.createElement('div');
-      container.appendChild(fragment!);
-      assert.ok(container.querySelector('title'), 'title is preserved');
-      assert.notOk(
-        container.querySelector('noscript'),
-        'noscript tag is stripped',
-      );
-    });
-
-    test('strips base tags', function (assert) {
-      let doc = makeDoc();
-      let html = '<title>Test</title><base href="https://evil.com">';
-      let fragment = sanitizeHeadHTML(html, doc);
-      assert.ok(fragment, 'returns a fragment');
-      let container = doc.createElement('div');
-      container.appendChild(fragment!);
-      assert.ok(container.querySelector('title'), 'title is preserved');
-      assert.notOk(container.querySelector('base'), 'base tag is stripped');
-    });
-
-    test('strips arbitrary HTML tags like div, h1, p', function (assert) {
-      let doc = makeDoc();
-      let html =
-        '<title>Test</title><div>bad</div><h1>heading</h1><p>paragraph</p>';
-      let fragment = sanitizeHeadHTML(html, doc);
-      assert.ok(fragment, 'returns a fragment');
-      let container = doc.createElement('div');
-      container.appendChild(fragment!);
-      assert.ok(container.querySelector('title'), 'title is preserved');
-      assert.notOk(container.querySelector('div'), 'div is stripped');
-      assert.notOk(container.querySelector('h1'), 'h1 is stripped');
-      assert.notOk(container.querySelector('p'), 'p is stripped');
-    });
+    for (let { tag, html: disallowedHtml } of strippedTags) {
+      test(`strips ${tag} tags`, function (assert) {
+        let doc = makeDoc();
+        let html = `<title>Test</title>${disallowedHtml}`;
+        let fragment = sanitizeHeadHTML(html, doc);
+        assert.ok(fragment, 'returns a fragment');
+        let container = doc.createElement('div');
+        container.appendChild(fragment!);
+        assert.ok(container.querySelector('title'), 'title is preserved');
+        assert.notOk(container.querySelector(tag), `${tag} tag is stripped`);
+      });
+    }
 
     test('returns null when all content is disallowed', function (assert) {
       let doc = makeDoc();
@@ -202,33 +162,21 @@ module(basename(__filename), function () {
       assert.deepEqual(result, [], 'no disallowed tags');
     });
 
-    test('detects script tags', function (assert) {
-      let doc = makeDoc();
-      let html = '<title>Test</title><script>alert(1)</script>';
-      let result = findDisallowedHeadTags(html, doc);
-      assert.deepEqual(result, ['script'], 'detects script');
-    });
+    const detectedTags: { tag: string; html: string }[] = [
+      { tag: 'script', html: '<script>alert(1)</script>' },
+      { tag: 'style', html: '<style>body{}</style>' },
+      { tag: 'noscript', html: '<noscript>fallback</noscript>' },
+      { tag: 'base', html: '<base href="https://evil.com">' },
+    ];
 
-    test('detects style tags', function (assert) {
-      let doc = makeDoc();
-      let html = '<title>Test</title><style>body{}</style>';
-      let result = findDisallowedHeadTags(html, doc);
-      assert.deepEqual(result, ['style'], 'detects style');
-    });
-
-    test('detects noscript tags', function (assert) {
-      let doc = makeDoc();
-      let html = '<title>Test</title><noscript>fallback</noscript>';
-      let result = findDisallowedHeadTags(html, doc);
-      assert.deepEqual(result, ['noscript'], 'detects noscript');
-    });
-
-    test('detects base tags', function (assert) {
-      let doc = makeDoc();
-      let html = '<title>Test</title><base href="https://evil.com">';
-      let result = findDisallowedHeadTags(html, doc);
-      assert.deepEqual(result, ['base'], 'detects base');
-    });
+    for (let { tag, html: disallowedHtml } of detectedTags) {
+      test(`detects ${tag} tags`, function (assert) {
+        let doc = makeDoc();
+        let html = `<title>Test</title>${disallowedHtml}`;
+        let result = findDisallowedHeadTags(html, doc);
+        assert.deepEqual(result, [tag], `detects ${tag}`);
+      });
+    }
 
     test('detects multiple disallowed tag types', function (assert) {
       let doc = makeDoc();
