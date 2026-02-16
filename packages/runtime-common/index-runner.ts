@@ -929,7 +929,10 @@ export class IndexRunner {
           };
         }
 
-        renderError = await this.appendDependencyErrors(renderError, instanceURL);
+        renderError = await this.appendDependencyErrors(
+          renderError,
+          instanceURL,
+        );
 
         this.#log.warn(
           `${jobIdentity(this.#jobInfo)} encountered error indexing card instance ${path}: ${renderError.error.message}`,
