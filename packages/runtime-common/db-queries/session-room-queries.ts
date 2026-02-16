@@ -1,22 +1,15 @@
 import type { DBAdapter } from '../db';
-import { query, param, dbExpression } from '../expression';
-
-export const REALM_SERVER_REALM = '__realm-server__';
+import { query, param } from '../expression';
 
 /**
  * Returns the stored session room id for the given matrix user or null when none exists.
  */
 export async function fetchSessionRoom(
   dbAdapter: DBAdapter,
-  realmUserId: string,
   matrixUserId: string,
 ) {
   let rows = await query(dbAdapter, [
-    'SELECT room_id FROM session_rooms WHERE realm_user_id =',
-    param(realmUserId),
-    'AND realm_url = ',
-    param(REALM_SERVER_REALM),
-    'AND matrix_user_id =',
+    'SELECT session_room_id FROM users WHERE matrix_user_id =',
     param(matrixUserId),
   ]);
 
@@ -25,76 +18,48 @@ export async function fetchSessionRoom(
   }
 
   let [row] = rows;
-  return (row.room_id as string) ?? null;
+  return (row.session_room_id as string) ?? null;
 }
 
 /**
- * Upserts the session room id for the given matrix user and updates the timestamp.
+ * Updates the session room id for the given matrix user.
  */
 export async function upsertSessionRoom(
   dbAdapter: DBAdapter,
-  realmUserId: string,
   matrixUserId: string,
   roomId: string,
 ) {
   await query(dbAdapter, [
-    'INSERT INTO session_rooms (realm_url, realm_user_id, matrix_user_id, room_id, created_at, updated_at)',
-    'VALUES (',
-    param(REALM_SERVER_REALM),
-    ',',
-    param(realmUserId),
-    ',',
+    'UPDATE users SET session_room_id =',
+    param(roomId),
+    'WHERE matrix_user_id =',
     param(matrixUserId),
-    ',',
-    param(roomId),
-    ',',
-    dbExpression({ pg: 'NOW()', sqlite: 'CURRENT_TIMESTAMP' }),
-    ',',
-    dbExpression({ pg: 'NOW()', sqlite: 'CURRENT_TIMESTAMP' }),
-    ')',
-    'ON CONFLICT (realm_url, matrix_user_id) DO UPDATE SET',
-    'room_id =',
-    param(roomId),
-    ',',
-    'realm_user_id =',
-    param(realmUserId),
-    ',',
-    'updated_at =',
-    dbExpression({ pg: 'NOW()', sqlite: 'CURRENT_TIMESTAMP' }),
   ]);
 }
 
 /**
  * Returns a mapping of matrix user id to session room id for all known sessions.
  */
-export async function fetchAllSessionRooms(
+export async function fetchRealmSessionRooms(
   dbAdapter: DBAdapter,
   realmURL: string,
-  realmUserId: string,
 ) {
   let rows = await query(dbAdapter, [
-    'SELECT sr.matrix_user_id, sr.room_id',
-    'FROM session_rooms sr',
+    'SELECT u.matrix_user_id, u.session_room_id',
+    'FROM users u',
     'JOIN realm_user_permissions rup',
-    'ON rup.username = sr.matrix_user_id',
+    'ON rup.username = u.matrix_user_id',
     'WHERE rup.realm_url =',
     param(realmURL),
     'AND (rup.read = true OR rup.write = true)',
-    'AND sr.realm_user_id =',
-    param(realmUserId),
-    'AND sr.realm_url =',
-    param(REALM_SERVER_REALM),
+    'AND u.session_room_id IS NOT NULL',
   ]);
 
   let result: Record<string, string> = {};
   for (let row of rows) {
-    if (row.matrix_user_id && row.room_id) {
-      result[row.matrix_user_id as string] = row.room_id as string;
+    if (row.matrix_user_id && row.session_room_id) {
+      result[row.matrix_user_id as string] = row.session_room_id as string;
     }
   }
   return result;
-}
-
-export async function clearSessionRooms(dbAdapter: DBAdapter) {
-  await query(dbAdapter, ['DELETE FROM session_rooms']);
 }

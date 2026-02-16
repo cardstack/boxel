@@ -41,26 +41,11 @@ export default function handleCreateSessionRequest({
       createJWT: async (user: string, sessionRoom: string) =>
         createJWT({ user, sessionRoom }, realmSecretSeed),
       ensureSessionRoom: async (userId: string) => {
-        const realmServerUserId = matrixClient.getUserId();
-        if (!realmServerUserId) {
-          throw new Error(
-            'Realm server Matrix user ID is not available, unable to create session room',
-          );
-        }
-        let sessionRoom = await fetchSessionRoom(
-          dbAdapter,
-          realmServerUserId,
-          userId,
-        );
+        let sessionRoom = await fetchSessionRoom(dbAdapter, userId);
 
         if (!sessionRoom) {
           sessionRoom = await matrixClient.createDM(userId);
-          await upsertSessionRoom(
-            dbAdapter,
-            realmServerUserId,
-            userId,
-            sessionRoom,
-          );
+          await upsertSessionRoom(dbAdapter, userId, sessionRoom);
         }
         return sessionRoom;
       },

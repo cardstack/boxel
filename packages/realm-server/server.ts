@@ -1012,8 +1012,7 @@ export class RealmServer {
     if (!this.matrixClient.isLoggedIn()) {
       await this.matrixClient.login();
     }
-    let realmUserId = this.matrixClient.getUserId()!;
-    let roomId = await fetchSessionRoom(this.dbAdapter, realmUserId, user);
+    let roomId = await fetchSessionRoom(this.dbAdapter, user);
     if (!roomId) {
       console.error(
         `Failed to send event: ${eventType}, cannot find session room for user: ${user}`,

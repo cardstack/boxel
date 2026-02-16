@@ -680,21 +680,12 @@ export class Realm {
   }
 
   async ensureSessionRoom(matrixUserId: string): Promise<string> {
-    let sessionRoom = await fetchSessionRoom(
-      this.#dbAdapter,
-      this.#matrixClientUserId,
-      matrixUserId,
-    );
+    let sessionRoom = await fetchSessionRoom(this.#dbAdapter, matrixUserId);
 
     if (!sessionRoom) {
       await this.#matrixClient.login();
       sessionRoom = await this.#matrixClient.createDM(matrixUserId);
-      await upsertSessionRoom(
-        this.#dbAdapter,
-        this.#matrixClientUserId,
-        matrixUserId,
-        sessionRoom,
-      );
+      await upsertSessionRoom(this.#dbAdapter, matrixUserId, sessionRoom);
     }
 
     return sessionRoom;
