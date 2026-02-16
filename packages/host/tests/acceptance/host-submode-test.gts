@@ -531,9 +531,7 @@ module('Acceptance | host submode', function (hooks) {
       await new Promise((resolve) => setTimeout(resolve, 100));
 
       assert.dom('[data-test-host-mode-error]').exists();
-      assert
-        .dom('[data-test-host-mode-error]')
-        .hasText(`Could not find ${testRealmURL}nonexistent`);
+      assert.dom('[data-test-card-error]').exists();
     });
 
     test('ai assistant is not displayed in host submode', async function (assert) {

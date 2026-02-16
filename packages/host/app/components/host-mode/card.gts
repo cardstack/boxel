@@ -5,6 +5,7 @@ import { cached } from '@glimmer/tracking';
 import { BoxelButton, CardContainer } from '@cardstack/boxel-ui/components';
 
 import CardRenderer from '@cardstack/host/components/card-renderer';
+import CardError from '@cardstack/host/components/operator-mode/card-error';
 import { getCard } from '@cardstack/host/resources/card-resource';
 
 interface Signature {
@@ -43,10 +44,6 @@ export default class HostModeCard extends Component<Signature> {
     return this.cardResource?.cardError;
   }
 
-  get errorMessage() {
-    return this.cardError?.message;
-  }
-
   get shouldShowEmptyMessage() {
     return !this.args.cardId && !this.card && !this.isError && !this.isLoading;
   }
@@ -65,9 +62,11 @@ export default class HostModeCard extends Component<Signature> {
           data-test-host-mode-card={{@cardId}}
         />
       {{else if this.isError}}
-        <div class='message message--error' data-test-host-mode-error>
-          <p>{{this.errorMessage}}</p>
-        </div>
+        <CardError
+          @error={{this.cardError}}
+          @hideHeader={{true}}
+          data-test-host-mode-error
+        />
       {{else if this.isLoading}}
         <div class='message'>
           <p>Loading card…</p>
@@ -96,6 +95,7 @@ export default class HostModeCard extends Component<Signature> {
         flex: 1;
         z-index: 0;
         overflow: auto;
+        position: relative;
       }
 
       .message {
@@ -105,10 +105,6 @@ export default class HostModeCard extends Component<Signature> {
         min-height: 16rem;
         text-align: center;
         gap: var(--boxel-sp);
-      }
-
-      .message--error {
-        color: var(--boxel-error-100);
       }
 
       .non-publishable-message {

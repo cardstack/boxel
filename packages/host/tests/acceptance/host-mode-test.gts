@@ -271,9 +271,8 @@ module('Acceptance | host mode tests', function (hooks) {
     gate.fulfill();
 
     await visitPromise;
-    assert
-      .dom('[data-test-error="not-found"]')
-      .hasText(`Card not found: ${testHostModeRealmURL}Pet/non-existent`);
+    assert.dom('[data-test-host-mode-error]').exists();
+    assert.dom('[data-test-card-error]').exists();
     assert.strictEqual(
       getPageTitle(),
       `Card not found: ${testHostModeRealmURL}Pet/non-existent`,

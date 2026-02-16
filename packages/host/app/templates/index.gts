@@ -223,20 +223,13 @@ export class IndexComponent extends Component<IndexComponentComponentSignature> 
         {{pageTitle this.title}}
       {{/unless}}
 
-      {{#if this.isError}}
-        <div data-test-error='not-found'>
-          Card not found:
-          {{@model.id}}
-        </div>
-      {{else}}
-        <HostModeContent
-          @primaryCardId={{this.hostModeStateService.primaryCard}}
-          @stackItemCardIds={{this.hostModeStateService.stackItems}}
-          @removeCardFromStack={{this.removeCardFromStack}}
-          @viewCard={{this.viewCard}}
-          {{this.removeIsolatedMarkup}}
-        />
-      {{/if}}
+      <HostModeContent
+        @primaryCardId={{this.hostModeStateService.primaryCard}}
+        @stackItemCardIds={{this.hostModeStateService.stackItems}}
+        @removeCardFromStack={{this.removeCardFromStack}}
+        @viewCard={{this.viewCard}}
+        {{this.removeIsolatedMarkup}}
+      />
     {{else}}
       {{pageTitle this.operatorModeStateService.title}}
       <OperatorModeContainer @onClose={{this.closeOperatorMode}} />
