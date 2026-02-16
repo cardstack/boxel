@@ -2,15 +2,17 @@ import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
 
+import { RealmIcon } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
 
+import type { RealmSectionInfo } from './search-sheet-content';
 import type { ComponentLike } from '@glint/template';
 
 interface Signature {
   Element: HTMLElement;
   Args: {
     icon?: ComponentLike<{ Element: Element }>;
-    iconURL?: string;
+    realmInfo?: RealmSectionInfo;
     title: string;
     totalCount: number;
     showOnlyLabel?: string;
@@ -33,8 +35,8 @@ export default class SearchSheetSectionHeader extends Component<Signature> {
       data-test-search-sheet-section-header
     >
       <div class='icon'>
-        {{#if @iconURL}}
-          <img src={{@iconURL}} alt='' class='realm-image' />
+        {{#if @realmInfo}}
+          <RealmIcon @realmInfo={{@realmInfo}} />
         {{else if @icon}}
           {{#let @icon as |IconComponent|}}
             <IconComponent class='icon-svg' />
@@ -69,18 +71,13 @@ export default class SearchSheetSectionHeader extends Component<Signature> {
         margin-bottom: var(--boxel-sp-lg);
       }
       .icon {
+        --boxel-realm-icon-size: 1.5rem;
         display: flex;
         align-items: center;
         justify-content: center;
         width: 1.5rem;
         height: 1.5rem;
         flex-shrink: 0;
-      }
-      .realm-image {
-        width: 100%;
-        height: 100%;
-        object-fit: contain;
-        border-radius: var(--boxel-border-radius-sm);
       }
       .icon-svg {
         width: 1.5rem;

@@ -7,9 +7,12 @@ import { tracked } from '@glimmer/tracking';
 
 import { consume } from 'ember-provide-consume-context';
 
+import pluralize from 'pluralize';
+
 import { eq } from '@cardstack/boxel-ui/helpers';
 
 import {
+  CardContextName,
   type getCard,
   type getCardCollection,
   GetCardCollectionContextName,
@@ -26,7 +29,7 @@ import type RealmServerService from '@cardstack/host/services/realm-server';
 import type RecentCards from '@cardstack/host/services/recent-cards-service';
 import type StoreService from '@cardstack/host/services/store';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
+import type { CardContext, CardDef } from 'https://cardstack.com/base/card-api';
 
 import {
   SECTION_DISPLAY_LIMIT_FOCUSED,
@@ -44,11 +47,17 @@ import type { PrerenderedCard } from '../prerendered-card-search';
 
 const OWNER_DESTROYED_ERROR = 'OWNER_DESTROYED_ERROR';
 
+export interface RealmSectionInfo {
+  name: string;
+  iconURL: string | null;
+  publishable: boolean | null;
+}
+
 export interface RealmSection {
   sid: string;
   type: 'realm';
   realmUrl: string;
-  realmInfo: { name: string; iconURL?: string };
+  realmInfo: RealmSectionInfo;
   cards: PrerenderedCard[];
   totalCount: number;
 }
@@ -64,7 +73,7 @@ export interface UrlSection {
   sid: string;
   type: 'url';
   card: CardDef;
-  realmInfo: { name: string; iconURL?: string };
+  realmInfo: RealmSectionInfo;
 }
 
 export type SearchSheetSection = RealmSection | RecentsSection | UrlSection;
@@ -105,6 +114,9 @@ export default class SearchSheetContent extends Component<Signature> {
     );
   };
 
+  @consume(CardContextName) declare private cardContext:
+    | CardContext
+    | undefined;
   @consume(GetCardContextName) declare private getCard: getCard;
   @tracked private cardResource: ReturnType<getCard> | undefined;
   private makeCardResource = () => {
@@ -139,6 +151,14 @@ export default class SearchSheetContent extends Component<Signature> {
     } catch (_e) {
       return false;
     }
+  }
+
+  private get searchTerm(): string | undefined {
+    if (this.isSearchKeyEmpty || this.searchKeyIsURL) {
+      return undefined;
+    }
+    const type = getCodeRefFromSearchKey(this.args.searchKey);
+    return type ? undefined : this.args.searchKey;
   }
 
   private get searchKeyAsURL() {
@@ -219,8 +239,8 @@ export default class SearchSheetContent extends Component<Signature> {
 
     // Recents view (empty search or focused on recents)
     if (this.focusedSection === 'recents' || this.isSearchKeyEmpty) {
-      const count = this.recentCardsService.recentCardIds.length;
-      return count === 1 ? '1 in Recent' : `${count} in Recents`;
+      const count = this.recentCardsSection?.totalCount ?? 0;
+      return `${count} in ${pluralize('Recent', count)}`;
     }
 
     // Query search results
@@ -235,14 +255,14 @@ export default class SearchSheetContent extends Component<Signature> {
       const realmTotal = this.resultCountByRealm[realmUrl];
 
       if (typeof realmTotal === 'number') {
-        return `${total} result${total === 1 ? '' : 's'} across ${realms.length} realm${realms.length === 1 ? '' : 's'}, ${realmTotal} result${realmTotal === 1 ? '' : 's'} in ${realmName}`;
+        return `${pluralize('result', total, true)} across ${pluralize('realm', realms.length, true)}, ${pluralize('result', realmTotal, true)} in ${realmName}`;
       }
 
-      return `${total} result${total === 1 ? '' : 's'} in ${realmName}`;
+      return `${pluralize('result', total, true)} in ${realmName}`;
     }
 
     // Default: all results across all realms
-    return `${total} result${total === 1 ? '' : 's'} across ${realms.length} realm${realms.length === 1 ? '' : 's'}`;
+    return `${pluralize('result', total, true)} across ${pluralize('realm', realms.length, true)}`;
   }
 
   private get sortedRecentCards(): CardDef[] {
@@ -250,33 +270,57 @@ export default class SearchSheetContent extends Component<Signature> {
     if (!cards) {
       return [];
     }
+    let filtered = cards;
+    const term = this.searchTerm;
+    if (term) {
+      const lowerTerm = term.toLowerCase();
+      filtered = cards.filter((c) =>
+        (c.cardTitle ?? '').toLowerCase().includes(lowerTerm),
+      );
+    }
     const sortOption = this.activeSort;
     const displayName = sortOption.displayName;
-    return [...cards].sort((a, b) => {
+    return [...filtered].sort((a, b) => {
       if (displayName === 'A-Z') {
         return (a.cardTitle ?? '').localeCompare(b.cardTitle ?? '');
       }
       if (displayName === 'Last Updated') {
-        const aVal = (a as any).lastModified ?? 0;
-        const bVal = (b as any).lastModified ?? 0;
+        const aVal =
+          'lastModified' in a
+            ? ((a as Record<string, unknown>).lastModified as number)
+            : 0;
+        const bVal =
+          'lastModified' in b
+            ? ((b as Record<string, unknown>).lastModified as number)
+            : 0;
         return bVal - aVal;
       }
       if (displayName === 'Date Created') {
-        const aVal = (a as any).createdAt ?? 0;
-        const bVal = (b as any).createdAt ?? 0;
+        const aVal =
+          'createdAt' in a
+            ? ((a as Record<string, unknown>).createdAt as number)
+            : 0;
+        const bVal =
+          'createdAt' in b
+            ? ((b as Record<string, unknown>).createdAt as number)
+            : 0;
         return bVal - aVal;
       }
       return 0;
     });
   }
 
-  private get recentCardsSection(): SearchSheetSection {
+  private get recentCardsSection(): RecentsSection | undefined {
+    const cards = this.sortedRecentCards;
+    if (cards.length === 0) {
+      return undefined;
+    }
     return {
       sid: 'recents',
       type: 'recents',
-      cards: this.sortedRecentCards,
-      totalCount: this.sortedRecentCards.length,
-    } as RecentsSection;
+      cards,
+      totalCount: cards.length,
+    };
   }
 
   @action
@@ -347,7 +391,8 @@ export default class SearchSheetContent extends Component<Signature> {
       card,
       realmInfo: {
         name: realmInfo?.name ?? this.realmNameFromUrl(realmUrl),
-        iconURL: realmInfo?.iconURL ?? undefined,
+        iconURL: realmInfo?.iconURL ?? null,
+        publishable: realmInfo?.publishable ?? null,
       },
     } as UrlSection;
   }
@@ -375,7 +420,8 @@ export default class SearchSheetContent extends Component<Signature> {
         realmUrl,
         realmInfo: {
           name: realmInfo?.name ?? this.realmNameFromUrl(realmUrl),
-          iconURL: realmInfo?.iconURL ?? undefined,
+          iconURL: realmInfo?.iconURL ?? null,
+          publishable: realmInfo?.publishable ?? null,
         },
         cards: realmCards,
         totalCount: realmCards.length,
@@ -436,12 +482,15 @@ export default class SearchSheetContent extends Component<Signature> {
       return undefined;
     }
     try {
-      return (this as any).args.context?.cardComponentModifier;
-    } catch (e: any) {
-      if (e.message && e.message.includes(OWNER_DESTROYED_ERROR)) {
+      return this.cardContext?.cardComponentModifier;
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        error.message.includes(OWNER_DESTROYED_ERROR)
+      ) {
         return undefined;
       }
-      throw e;
+      throw error;
     }
   }
 

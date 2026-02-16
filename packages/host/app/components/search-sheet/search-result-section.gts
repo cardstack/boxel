@@ -4,6 +4,7 @@ import { action } from '@ember/object';
 import Component from '@glimmer/component';
 
 import HistoryIcon from '@cardstack/boxel-icons/history';
+import pluralize from 'pluralize';
 
 import { Button } from '@cardstack/boxel-ui/components';
 
@@ -47,6 +48,11 @@ export default class SearchResultSection extends Component<Signature> {
 
   get recentsSection(): RecentsSection | null {
     return this.args.section.type === 'recents' ? this.args.section : null;
+  }
+
+  get recentsTitle(): string {
+    const count = this.recentsSection?.totalCount ?? 0;
+    return pluralize('Recent', count);
   }
 
   @action
@@ -135,7 +141,7 @@ export default class SearchResultSection extends Component<Signature> {
       {{#if this.realmSection}}
         {{#unless @isCompact}}
           <SearchSheetSectionHeader
-            @iconURL={{this.realmSection.realmInfo.iconURL}}
+            @realmInfo={{this.realmSection.realmInfo}}
             @title={{this.realmSection.realmInfo.name}}
             @totalCount={{this.realmSection.totalCount}}
             @showOnlyLabel={{this.realmSection.realmInfo.name}}
@@ -176,7 +182,7 @@ export default class SearchResultSection extends Component<Signature> {
       {{else if this.urlSection}}
         {{#unless @isCompact}}
           <SearchSheetSectionHeader
-            @iconURL={{this.urlSection.realmInfo.iconURL}}
+            @realmInfo={{this.urlSection.realmInfo}}
             @title={{this.urlSection.realmInfo.name}}
             @totalCount={{1}}
           />
@@ -197,9 +203,9 @@ export default class SearchResultSection extends Component<Signature> {
         {{#unless @isCompact}}
           <SearchSheetSectionHeader
             @icon={{this.recentsIcon}}
-            @title='Recents'
+            @title={{this.recentsTitle}}
             @totalCount={{this.recentsSection.totalCount}}
-            @showOnlyLabel='Recents'
+            @showOnlyLabel={{this.recentsTitle}}
             @showOnlyChecked={{@isFocused}}
             @onShowOnlyChange={{this.handleShowOnlyChange}}
           />

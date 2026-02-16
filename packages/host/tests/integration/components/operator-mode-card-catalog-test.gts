@@ -10,6 +10,7 @@ import {
 } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
+import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import {
@@ -543,20 +544,17 @@ module('Integration | operator-mode | card catalog', function (hooks) {
     await waitFor(`[data-test-cards-grid-item]`);
 
     await click('[data-test-open-search-field]');
-    await fillIn('[data-test-search-field]', 'http://localhost:4202/test/man');
+    await fillIn('[data-test-search-field]', `${testRealmURL}Pet/man`);
     await waitFor(`[data-test-search-label]`);
 
     // New design: summary shows "0 results"; empty state body shows "No card found at ..."
     assert.dom('[data-test-search-label]').containsText('0 results');
     assert
       .dom('[data-test-search-sheet-empty]')
-      .containsText('No card found at http://localhost:4202/test/man');
+      .containsText(`No card found at ${testRealmURL}Pet/man`);
     assert.dom('[data-test-search-sheet-search-result]').doesNotExist();
 
-    await fillIn(
-      '[data-test-search-field]',
-      'http://localhost:4202/test/mango',
-    );
+    await fillIn('[data-test-search-field]', `${testRealmURL}Pet/mango`);
     await waitFor('[data-test-search-sheet-search-result]');
 
     assert
@@ -564,26 +562,23 @@ module('Integration | operator-mode | card catalog', function (hooks) {
       .containsText('1 result from 1 realm');
     assert.dom('[data-test-search-sheet-search-result]').exists({ count: 1 });
 
-    await fillIn('[data-test-search-field]', 'http://localhost:4202/test/man');
+    await fillIn('[data-test-search-field]', `${testRealmURL}Pet/man`);
 
     assert.dom('[data-test-search-label]').containsText('0 results');
     assert
       .dom('[data-test-search-sheet-empty]')
-      .containsText('No card found at http://localhost:4202/test/man');
+      .containsText(`No card found at ${testRealmURL}Pet/man`);
     assert.dom('[data-test-search-sheet-search-result]').doesNotExist();
 
-    await fillIn(
-      '[data-test-search-field]',
-      'http://localhost:4202/test/mango',
-    );
+    await fillIn('[data-test-search-field]', `${testRealmURL}Pet/mango`);
     await waitFor('[data-test-search-sheet-search-result]');
 
     await click('[data-test-search-sheet-search-result]');
 
-    await waitFor(`[data-test-stack-card="http://localhost:4202/test/mango"]`);
+    await waitFor(`[data-test-stack-card="${testRealmURL}Pet/mango"]`);
     assert
       .dom(
-        `[data-test-stack-card="http://localhost:4202/test/mango"] [data-test-field-component-card]`,
+        `[data-test-stack-card="${testRealmURL}Pet/mango"] [data-test-field-component-card]`,
       )
       .containsText('Mango', 'the card is rendered in the stack');
   });
@@ -675,6 +670,12 @@ module('Integration | operator-mode | card catalog', function (hooks) {
   });
 
   test(`Recents section is present when search sheet is open (expanded mode)`, async function (assert) {
+    // creates a recent item
+    let recentCardsService = getService('recent-cards-service');
+    [`${testRealmURL}Pet/mango`, `${testRealmURL}Pet/jackie`].map((url) =>
+      recentCardsService.add(url),
+    );
+
     ctx.setCardInOperatorModeState(`${testRealmURL}grid`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -686,7 +687,50 @@ module('Integration | operator-mode | card catalog', function (hooks) {
     // In compact (prompt) mode, section headers are not rendered; type a query to expand to results mode
     await fillIn(`[data-test-search-field]`, 'ma');
     assert.dom(`[data-test-search-sheet-section-header]`).exists();
-    assert.dom('.search-sheet-content').containsText('Recents');
+    assert.dom('.search-sheet-content').containsText('Recent');
+  });
+
+  test(`Recents section filters cards by search key`, async function (assert) {
+    let recentCardsService = getService('recent-cards-service');
+    [`${testRealmURL}Pet/mango`, `${testRealmURL}Person/fadhlan`].map((url) =>
+      recentCardsService.add(url),
+    );
+
+    ctx.setCardInOperatorModeState(`${testRealmURL}grid`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+    await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
+    await click(`[data-test-open-search-field]`);
+
+    // Search for "man" — only Mango should appear in recents
+    await fillIn(`[data-test-search-field]`, 'man');
+    await waitFor(`[data-test-search-result="${testRealmURL}Pet/mango"]`);
+    assert
+      .dom(`[data-test-search-result-index]`)
+      .exists({ count: 1 }, 'only 1 recent card matches "man"');
+    assert
+      .dom(`[data-test-search-result="${testRealmURL}Pet/mango"]`)
+      .exists('Mango appears in filtered recents');
+
+    // Search for "fadh" — only Fadhlan should appear in recents
+    await fillIn(`[data-test-search-field]`, 'fadh');
+    await waitFor(`[data-test-search-result="${testRealmURL}Person/fadhlan"]`);
+    assert
+      .dom(`[data-test-search-result-index]`)
+      .exists({ count: 1 }, 'only 1 recent card matches "fadh"');
+    assert
+      .dom(`[data-test-search-result="${testRealmURL}Person/fadhlan"]`)
+      .exists('Fadhlan appears in filtered recents');
+
+    // Search for something that matches no recents
+    await fillIn(`[data-test-search-field]`, 'zzzzz');
+
+    assert
+      .dom(`[data-test-search-result-index]`)
+      .doesNotExist('no recent cards match "zzzzz"');
   });
 
   test(`compact mode shows no full header and recents remain clickable`, async function (assert) {
