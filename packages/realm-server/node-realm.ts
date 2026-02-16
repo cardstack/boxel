@@ -35,8 +35,8 @@ import type {
   AdapterWriteResult,
 } from '@cardstack/runtime-common/realm';
 import type {
+  FileWatcherEventContent,
   RealmEventContent,
-  UpdateRealmEventContent,
 } from 'https://cardstack.com/base/matrix-event';
 import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 import { createJWT, verifyJWT } from './jwt';
@@ -80,7 +80,7 @@ export class NodeAdapter implements RealmAdapter {
   private watcher: Watcher | undefined = undefined;
 
   async subscribe(
-    cb: (message: UpdateRealmEventContent) => void,
+    cb: (message: FileWatcherEventContent) => void,
   ): Promise<void> {
     if (this.watcher) {
       throw new Error(`tried to subscribe to watcher twice`);

@@ -131,6 +131,7 @@ import type { Utils } from './matrix-backend-authentication';
 import { MatrixBackendAuthentication } from './matrix-backend-authentication';
 
 import type {
+  FileWatcherEventContent,
   RealmEventContent,
   UpdateRealmEventContent,
 } from 'https://cardstack.com/base/matrix-event';
@@ -356,7 +357,7 @@ export interface RealmAdapter {
 
   fileWatcherEnabled: boolean;
 
-  subscribe(cb: (message: UpdateRealmEventContent) => void): Promise<void>;
+  subscribe(cb: (message: FileWatcherEventContent) => void): Promise<void>;
 
   unsubscribe(): void;
 
@@ -860,6 +861,7 @@ export class Realm {
       indexType: 'incremental',
       invalidations: [...invalidations],
       clientRequestId,
+      realmURL: this.url,
     });
     return results.map(({ path, lastModified }) => ({
       path,
@@ -1181,7 +1183,7 @@ export class Realm {
   }
 
   private getTrackedWrite(
-    data: UpdateRealmEventContent,
+    data: FileWatcherEventContent,
   ): { isTracked: boolean; url: URL } | undefined {
     let file: string;
     let type: string | undefined;
@@ -1229,6 +1231,7 @@ export class Realm {
           eventName: 'index',
           indexType: 'incremental',
           invalidations: invalidatedURLs.map((u) => u.href),
+          realmURL: this.url,
         });
       },
     });
@@ -1263,6 +1266,7 @@ export class Realm {
           eventName: 'index',
           indexType: 'incremental',
           invalidations: invalidatedURLs.map((u) => u.href),
+          realmURL: this.url,
         });
       },
     });
@@ -1283,6 +1287,7 @@ export class Realm {
     this.broadcastRealmEvent({
       eventName: 'index',
       indexType: 'full',
+      realmURL: this.url,
     });
   }
 
@@ -1295,6 +1300,7 @@ export class Realm {
         eventName: 'index',
         indexType: 'copy',
         sourceRealmURL: this.#copiedFromRealm.href,
+        realmURL: this.url,
       });
     } else {
       let isNewIndex = await this.#realmIndexUpdater.isNewIndex();
@@ -1311,6 +1317,7 @@ export class Realm {
         this.broadcastRealmEvent({
           eventName: 'index',
           indexType: 'full',
+          realmURL: this.url,
         });
       }
     }
@@ -1359,6 +1366,8 @@ export class Realm {
       return userId;
     }
     // hard coded test URLs
+
+    // TODO::`( this should be removed.
     if ((globalThis as any).__environment === 'test') {
       let url = new URL(this.url);
       if (url.hostname === '127.0.0.1') {
@@ -1428,13 +1437,6 @@ export class Realm {
         },
         ensureSessionRoom: async (userId: string) =>
           this.ensureSessionRoom(userId),
-        setSessionRoom: (userId: string, roomId: string) =>
-          upsertSessionRoom(
-            this.#dbAdapter,
-            this.#matrixClientUserId,
-            userId,
-            roomId,
-          ),
       } as Utils,
     );
 
@@ -4281,7 +4283,10 @@ export class Realm {
         await this.#definitionLookup.invalidate(tracked.url.href);
       }
 
-      this.broadcastRealmEvent(data);
+      this.broadcastRealmEvent({
+        ...data,
+        realmURL: this.url,
+      } as UpdateRealmEventContent);
       this.#updateItems.push({
         operation: ('added' in data
           ? 'add'
@@ -4313,6 +4318,7 @@ export class Realm {
             eventName: 'index',
             indexType: 'incremental',
             invalidations: invalidatedURLs.map((u) => u.href),
+            realmURL: this.url,
           });
         },
         ...(operation === 'removed' ? { delete: true } : {}),
@@ -4326,6 +4332,7 @@ export class Realm {
       eventName: 'index',
       indexType: 'incremental-index-initiation',
       updatedFile,
+      realmURL: this.url,
     });
   }
 

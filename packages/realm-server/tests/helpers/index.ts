@@ -33,7 +33,6 @@ import {
   RealmPaths,
   PUBLISHED_DIRECTORY_NAME,
   DEFAULT_CARD_SIZE_LIMIT_BYTES,
-  clearSessionRooms,
   type MatrixConfig,
   type QueuePublisher,
   type QueueRunner,
@@ -380,9 +379,6 @@ export function setupDB(
     await runner?.destroy();
     if (runner) {
       trackedQueueRunners.delete(runner);
-    }
-    if (dbAdapter) {
-      await clearSessionRooms(dbAdapter);
     }
     await dbAdapter?.close();
     if (dbAdapter) {
@@ -864,6 +860,7 @@ export async function insertUser(
     matrixUserId: result[0].matrix_user_id,
     stripeCustomerId: result[0].stripe_customer_id,
     stripeCustomerEmail: result[0].stripe_customer_email,
+    sessionRoomId: result[0].session_room_id ?? null,
   } as User;
 }
 
