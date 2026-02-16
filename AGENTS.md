@@ -79,6 +79,7 @@
   - Run tests:
     `pnpm test`
 - Focusing on single test or module:
+- make sure to kill previously running matrix tests if they are still running before starting a new test run.
   Add `--grep` flag to command (`--grep 'it can register a user with a registration token'`)
 
 ### packages/realm-server
@@ -93,6 +94,7 @@
   Add `.only` to module/test declaration (`test.only('returns a 201 response', ...)`)
   Then run `pnpm test`
   Make sure not to commit `.only` to source control
+- make sure to kill previously running realm-server tests if they are still running before starting a new test run.
 - run `pnpm lint` directly in this directory to lint changes made to this package
 
 ### packages/postgres

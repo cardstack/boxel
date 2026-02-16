@@ -22,6 +22,7 @@ import {
   REALM_SERVER_REALM,
   userInitiatedPriority,
   hasExtension,
+  executableExtensions,
 } from '@cardstack/runtime-common';
 import {
   ensureDirSync,
@@ -506,19 +507,36 @@ export class RealmServer {
     // - Module: /foo/bar.gts (file_alias: /foo/bar)
     // - Instance: /foo/bar.json (file_alias: /foo/bar)
     // A request for /foo/bar should serve the module, not HTML for the instance.
+    // Prefer the modules table here because copied/published realms do not
+    // carry module rows in boxel_index.
     let moduleRows = await query(this.dbAdapter, [
       `
         SELECT 1
-        FROM boxel_index
-        WHERE type = 'module'
-          AND is_deleted IS NOT TRUE
-          AND
-        `,
+        FROM modules
+        WHERE
+      `,
       ...indexCandidateExpressions(candidates),
       `
         LIMIT 1
       `,
     ]);
+
+    // Fallback for legacy/indexed module rows in boxel_index.
+    if (moduleRows.length === 0) {
+      moduleRows = await query(this.dbAdapter, [
+        `
+          SELECT 1
+          FROM boxel_index
+          WHERE type = 'module'
+            AND is_deleted IS NOT TRUE
+            AND
+          `,
+        ...indexCandidateExpressions(candidates),
+        `
+          LIMIT 1
+        `,
+      ]);
+    }
 
     if (moduleRows.length > 0) {
       return false;
@@ -538,7 +556,47 @@ export class RealmServer {
       `,
     ]);
 
-    return rows.length > 0;
+    if (rows.length === 0) {
+      return false;
+    }
+
+    // During publish/copy index races, module rows can lag behind source files.
+    // Only do filesystem probing after we've identified an instance candidate
+    // to avoid extra IO on the hot request path.
+    if (this.hasExtensionlessSourceModule(cardURL)) {
+      return false;
+    }
+
+    return true;
+  }
+
+  private hasExtensionlessSourceModule(cardURL: URL): boolean {
+    let realm = this.findRealmForRequestURL(cardURL);
+    if (!realm?.dir) {
+      return false;
+    }
+
+    let localPath: string;
+    try {
+      localPath = realm.paths.local(cardURL);
+    } catch {
+      return false;
+    }
+
+    if (!localPath || hasExtension(localPath)) {
+      return false;
+    }
+
+    for (let extension of executableExtensions) {
+      if (existsSync(join(realm.dir, `${localPath}${extension}`))) {
+        return true;
+      }
+      if (existsSync(join(realm.dir, localPath, `index${extension}`))) {
+        return true;
+      }
+    }
+
+    return false;
   }
 
   private async hasPublicPermissions(cardURL: URL): Promise<boolean> {

@@ -93,6 +93,7 @@
    error_doc BLOB,
    created_at,
    file_alias TEXT,
+   url_hash TEXT GENERATED ALWAYS AS (url) STORED NOT NULL,
    PRIMARY KEY ( url, cache_scope, auth_user_id ) 
 );
 
