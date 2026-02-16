@@ -23,18 +23,26 @@ export async function fetchSessionRoom(
 
 /**
  * Updates the session room id for the given matrix user.
+ * Throws if the user does not exist in the users table.
  */
 export async function upsertSessionRoom(
   dbAdapter: DBAdapter,
   matrixUserId: string,
   roomId: string,
 ) {
-  await query(dbAdapter, [
+  let rows = await query(dbAdapter, [
     'UPDATE users SET session_room_id =',
     param(roomId),
     'WHERE matrix_user_id =',
     param(matrixUserId),
+    'RETURNING id',
   ]);
+
+  if (rows.length === 0) {
+    throw new Error(
+      `Cannot set session room for user ${matrixUserId}: user does not exist in the users table`,
+    );
+  }
 }
 
 /**

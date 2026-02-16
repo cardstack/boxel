@@ -465,6 +465,12 @@ export async function createRealm({
 }): Promise<{ realm: Realm; adapter: RealmAdapter }> {
   await insertPermissions(dbAdapter, new URL(realmURL), permissions);
 
+  for (let username of Object.keys(permissions)) {
+    if (username !== '*') {
+      await ensureTestUser(dbAdapter, username);
+    }
+  }
+
   for (let [filename, contents] of Object.entries(fileSystem)) {
     if (typeof contents === 'string') {
       writeFileSync(join(dir, filename), contents);
@@ -668,6 +674,7 @@ export async function runTestRealmServerWithRealms({
   };
 }) {
   ensureDirSync(realmsRootPath);
+
   let prerenderer = await getTestPrerenderer();
   let definitionLookup = new CachingDefinitionLookup(
     dbAdapter,
@@ -864,6 +871,16 @@ export async function insertUser(
   } as User;
 }
 
+export async function ensureTestUser(
+  dbAdapter: PgAdapter,
+  matrixUserId: string,
+) {
+  await dbAdapter.execute(
+    `INSERT INTO users (matrix_user_id) VALUES ($1) ON CONFLICT (matrix_user_id) DO NOTHING`,
+    { bind: [matrixUserId] },
+  );
+}
+
 export async function insertPlan(
   dbAdapter: PgAdapter,
   name: string,
@@ -1025,6 +1042,7 @@ export function setupMatrixRoom(
     let payload = JSON.parse(
       Buffer.from(jwt.split('.')[1], 'base64').toString('utf8'),
     ) as { sessionRoom: string };
+    console.log('Session room', payload.sessionRoom);
 
     let { joined_rooms: rooms } = await matrixClient.getJoinedRooms();
 
