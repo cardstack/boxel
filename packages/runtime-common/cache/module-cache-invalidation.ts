@@ -1,8 +1,7 @@
 import type { LocalPath, RealmPaths } from '../paths';
 import { executableExtensions } from '../index';
-
-const importSpecifierExpression =
-  /(?:import|export)\s+(?:[^'"`]*?\sfrom\s+)?['"]([^'"]+)['"]|import\(\s*['"]([^'"]+)['"]\s*\)/g;
+import { parse as babelParse } from '@babel/parser';
+import { getBabelOptions } from '../babel-options';
 
 export interface CachedModuleDependencyEntry {
   canonicalPath: LocalPath;
@@ -66,12 +65,7 @@ export function extractModuleDependencyKeys(
 ): Set<string> {
   let dependencies = new Set<string>();
   let moduleURL = paths.fileURL(canonicalPath).href;
-  let match: RegExpExecArray | null;
-  while ((match = importSpecifierExpression.exec(source))) {
-    let specifier = match[1] ?? match[2];
-    if (!specifier) {
-      continue;
-    }
+  for (let specifier of extractImportSpecifiers(source, moduleURL)) {
     try {
       let resolvedURL = new URL(specifier, moduleURL);
       if (!resolvedURL.href.startsWith(realmURL)) {
@@ -83,4 +77,95 @@ export function extractModuleDependencyKeys(
     }
   }
   return dependencies;
+}
+
+function extractImportSpecifiers(
+  source: string,
+  sourceFilename: string,
+): Set<string> {
+  let specifiers = new Set<string>();
+  let ast;
+  try {
+    ast = babelParse(source, getBabelOptions({ sourceFilename }));
+  } catch (_err) {
+    return specifiers;
+  }
+
+  visitNode(ast, (node) => {
+    switch (node.type) {
+      case 'ImportDeclaration':
+      case 'ExportAllDeclaration':
+      case 'ExportNamedDeclaration':
+        addStringLiteral(node.source, specifiers);
+        break;
+      case 'ImportExpression':
+        addStringLiteral(node.source, specifiers);
+        break;
+      case 'CallExpression': {
+        // Babel may represent dynamic import as CallExpression + Import callee.
+        let callee = asNode(node.callee);
+        if (callee?.type === 'Import') {
+          let args = Array.isArray(node.arguments) ? node.arguments : [];
+          addStringLiteral(args[0], specifiers);
+        }
+        break;
+      }
+    }
+  });
+
+  return specifiers;
+}
+
+function addStringLiteral(value: unknown, specifiers: Set<string>) {
+  let node = asNode(value);
+  if (node?.type === 'StringLiteral' && typeof node.value === 'string') {
+    specifiers.add(node.value);
+  }
+}
+
+function visitNode(
+  value: unknown,
+  visitor: (
+    node: { type: string; [key: string]: unknown } & Record<string, unknown>,
+  ) => void,
+) {
+  if (value == null) {
+    return;
+  }
+  if (Array.isArray(value)) {
+    for (let item of value) {
+      visitNode(item, visitor);
+    }
+    return;
+  }
+
+  if (!isRecord(value)) {
+    return;
+  }
+
+  let node = asNode(value);
+  if (!node) {
+    for (let nested of Object.values(value)) {
+      visitNode(nested, visitor);
+    }
+    return;
+  }
+
+  visitor(node);
+  for (let nested of Object.values(value)) {
+    visitNode(nested, visitor);
+  }
+}
+
+function asNode(
+  value: unknown,
+): ({ type: string } & Record<string, unknown>) | undefined {
+  if (!isRecord(value) || typeof value.type !== 'string') {
+    return undefined;
+  }
+  return value as { type: string } & Record<string, unknown>;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
 }

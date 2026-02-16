@@ -22,6 +22,7 @@ import {
   REALM_SERVER_REALM,
   userInitiatedPriority,
   hasExtension,
+  executableExtensions,
 } from '@cardstack/runtime-common';
 import {
   ensureDirSync,
@@ -501,13 +502,6 @@ export class RealmServer {
       return false;
     }
 
-    // During publish/copy index races, module rows can lag behind source files.
-    // If an extensionless module source file exists on disk, always treat it as
-    // a module URL to avoid incorrectly serving host-mode HTML.
-    if (this.hasExtensionlessSourceModule(cardURL)) {
-      return false;
-    }
-
     // First check if there's a module at this URL - modules take precedence
     // over instance aliases. This handles the case where:
     // - Module: /foo/bar.gts (file_alias: /foo/bar)
@@ -562,7 +556,18 @@ export class RealmServer {
       `,
     ]);
 
-    return rows.length > 0;
+    if (rows.length === 0) {
+      return false;
+    }
+
+    // During publish/copy index races, module rows can lag behind source files.
+    // Only do filesystem probing after we've identified an instance candidate
+    // to avoid extra IO on the hot request path.
+    if (this.hasExtensionlessSourceModule(cardURL)) {
+      return false;
+    }
+
+    return true;
   }
 
   private hasExtensionlessSourceModule(cardURL: URL): boolean {
@@ -582,8 +587,7 @@ export class RealmServer {
       return false;
     }
 
-    let moduleExtensions = ['.gts', '.ts', '.js'];
-    for (let extension of moduleExtensions) {
+    for (let extension of executableExtensions) {
       if (existsSync(join(realm.dir, `${localPath}${extension}`))) {
         return true;
       }

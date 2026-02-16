@@ -2368,30 +2368,8 @@ module(basename(__filename), function () {
         // Error during indexing will be: "Authorization error: Insufficient
         // permissions to perform this action"
         let stats = { ...testRealm2.realmIndexUpdater.stats };
-        let surfacedAuthorizationError =
-          stats.instanceErrors === 1 && stats.instancesIndexed === 0;
-        let indexingFailedBeforeStatsWereProduced =
-          stats.instanceErrors === 0 &&
-          stats.instancesIndexed === 0 &&
-          stats.fileErrors === 0 &&
-          stats.filesIndexed === 0 &&
-          stats.totalIndexEntries === 0;
-
-        if (surfacedAuthorizationError) {
-          assert.strictEqual(
-            stats.instanceErrors,
-            1,
-            'instance errors surfaced',
-          );
-          assert.strictEqual(stats.instancesIndexed, 0, 'no instances indexed');
-        } else {
-          assert.true(
-            indexingFailedBeforeStatsWereProduced,
-            `indexing failed before stats were produced: ${JSON.stringify(
-              stats,
-            )}`,
-          );
-        }
+        assert.strictEqual(stats.instanceErrors, 1, 'instance errors surfaced');
+        assert.strictEqual(stats.instancesIndexed, 0, 'no instances indexed');
       });
     });
   });
