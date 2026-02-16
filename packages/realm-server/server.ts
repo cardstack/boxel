@@ -501,7 +501,7 @@ export class RealmServer {
       return false;
     }
 
-    // During publish/copy index races, module rows can lag behind source files.
+    // During publish/copy races, module metadata can lag behind source files.
     // If an extensionless module source file exists on disk, always treat it as
     // a module URL to avoid incorrectly serving host-mode HTML.
     if (this.hasExtensionlessSourceModule(cardURL)) {
@@ -513,8 +513,8 @@ export class RealmServer {
     // - Module: /foo/bar.gts (file_alias: /foo/bar)
     // - Instance: /foo/bar.json (file_alias: /foo/bar)
     // A request for /foo/bar should serve the module, not HTML for the instance.
-    // Prefer the modules table here because copied/published realms do not
-    // carry module rows in boxel_index.
+    // We rely on the modules table because boxel_index only contains instance
+    // and file rows.
     let moduleRows = await query(this.dbAdapter, [
       `
         SELECT 1
@@ -526,23 +526,6 @@ export class RealmServer {
         LIMIT 1
       `,
     ]);
-
-    // Fallback for legacy/indexed module rows in boxel_index.
-    if (moduleRows.length === 0) {
-      moduleRows = await query(this.dbAdapter, [
-        `
-          SELECT 1
-          FROM boxel_index
-          WHERE type = 'module'
-            AND is_deleted IS NOT TRUE
-            AND
-          `,
-        ...indexCandidateExpressions(candidates),
-        `
-          LIMIT 1
-        `,
-      ]);
-    }
 
     if (moduleRows.length > 0) {
       return false;

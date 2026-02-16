@@ -9,10 +9,10 @@ import type {
 import type { ResolvedCodeRef } from './code-ref';
 import type { RenderRouteOptions } from './render-route-options';
 import type { Definition } from './definitions';
+import type { SerializedError } from './error';
 
 import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
 import type { FileDef } from 'https://cardstack.com/base/file-api';
-import type { ErrorEntry } from './index-writer';
 
 export interface LooseSingleResourceDocument<T extends LinkableResource> {
   data: LooseLinkableResource<T>;
@@ -50,6 +50,14 @@ export interface RenderResponse extends PrerenderMeta {
   fittedHTML: Record<string, string> | null;
   iconHTML: string | null;
   error?: RenderError;
+}
+
+export interface ErrorEntry {
+  type: 'instance-error' | 'module-error' | 'file-error';
+  error: SerializedError;
+  types?: string[];
+  searchData?: Record<string, any>;
+  cardType?: string;
 }
 
 export interface RenderError extends ErrorEntry {

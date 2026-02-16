@@ -3429,7 +3429,7 @@ export class Realm {
       : requestedType;
     let acceptedTypes = normalizedType
       ? [normalizedType]
-      : ['instance', 'module', 'file'];
+      : ['instance', 'file'];
 
     let rows = (await query(this.#dbAdapter, [
       `SELECT url, realm_url, deps, type, has_error FROM boxel_index WHERE (url =`,
@@ -3669,11 +3669,7 @@ export class Realm {
             : [];
 
           let entryType = resource.attributes?.entryType;
-          if (
-            entryType !== 'instance' &&
-            entryType !== 'module' &&
-            entryType !== 'file'
-          ) {
+          if (entryType !== 'instance' && entryType !== 'file') {
             return undefined;
           }
 
