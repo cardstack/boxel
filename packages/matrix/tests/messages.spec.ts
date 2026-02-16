@@ -197,7 +197,7 @@ test.describe('Room messages', () => {
     await page.locator('[data-test-attach-button]').click();
     await page.locator('[data-test-attach-card-btn]').click();
     await page.locator(`[data-test-search-field]`).fill(testCard);
-    await page.locator(`[data-test-select="${testCard}"]`).click();
+    await page.locator(`[data-test-card-catalog-item="${testCard}"]`).click();
     await page.locator('[data-test-card-catalog-go-button]').click();
     await expect(
       page.locator(`[data-test-attached-card="${testCard}"]`),
@@ -235,7 +235,7 @@ test.describe('Room messages', () => {
     await page.locator('[data-test-attach-card-btn]').click();
 
     await page.locator(`[data-test-search-field]`).fill('Mango the Puppy');
-    await page.locator(`[data-test-select="${testCard}"]`).click();
+    await page.locator(`[data-test-card-catalog-item="${testCard}"]`).click();
     await page.locator('[data-test-card-catalog-go-button]').click();
     await expect(
       page.locator(`[data-test-attached-card="${testCard}"]`),

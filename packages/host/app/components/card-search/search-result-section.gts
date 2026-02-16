@@ -234,8 +234,7 @@ export default class SearchResultSection extends Component<Signature> {
                   @displayRealmName={{@isCompact}}
                   {{on 'click' (fn @handleCardSelect card.url)}}
                   data-test-search-sheet-search-result={{i}}
-                  data-test-select={{removeFileExtension card.url}}
-                  data-test-card-catalog-item={{card.url}}
+                  data-test-card-catalog-item={{removeFileExtension card.url}}
                   data-test-card-catalog-item-selected={{if
                     (eq @selectedCardId card.url)
                     'true'
