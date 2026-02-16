@@ -12,7 +12,6 @@ import {
   insertUser,
   realmSecretSeed,
   testRealmHref,
-  testRealmServerMatrixUserId,
 } from './helpers';
 import { createJWT as createRealmServerJWT } from '../utils/jwt';
 
@@ -53,11 +52,7 @@ module(basename(__filename), function () {
       });
       sinon.stub(MatrixClient.prototype, 'joinRoom').resolves();
 
-      let existingRoom = await fetchSessionRoom(
-        dbAdapter,
-        testRealmServerMatrixUserId,
-        matrixUserId,
-      );
+      let existingRoom = await fetchSessionRoom(dbAdapter, matrixUserId);
       assert.strictEqual(
         existingRoom,
         null,
@@ -88,11 +83,7 @@ module(basename(__filename), function () {
         'realm created the DM room for the requesting user',
       );
 
-      let sessionRoom = await fetchSessionRoom(
-        dbAdapter,
-        testRealmServerMatrixUserId,
-        matrixUserId,
-      );
+      let sessionRoom = await fetchSessionRoom(dbAdapter, matrixUserId);
       assert.strictEqual(
         sessionRoom,
         expectedRoomId,
