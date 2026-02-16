@@ -97,6 +97,7 @@ interface Signature {
       relativeTo: URL | undefined;
     };
     onCreateCard?: (args: NewCardArgs) => void;
+    onCardSubmit?: (cardId: string) => void;
     showRecents?: boolean;
     showHeader?: boolean;
   };
@@ -292,7 +293,10 @@ export default class SearchContent extends Component<Signature> {
     }
 
     // Recents view (empty search or focused on recents)
-    if (this.focusedSection === 'recents' || this.isSearchKeyEmpty) {
+    if (
+      (this.focusedSection === 'recents' || this.isSearchKeyEmpty) &&
+      this.showRecents
+    ) {
       const count = this.recentCardsSection?.totalCount ?? 0;
       return `${count} in ${pluralize('Recent', count)}`;
     }
@@ -487,6 +491,29 @@ export default class SearchContent extends Component<Signature> {
       });
     }
 
+    // When offerToCreate is provided, include empty sections for all
+    // available/selected realms that have no results, so users can
+    // create new cards in those realms.
+    if (this.args.offerToCreate) {
+      for (const realmUrl of this.realms) {
+        if (!byRealm.has(realmUrl)) {
+          const realmInfo = this.realm.info(realmUrl);
+          sections.push({
+            sid: `realm:${realmUrl}`,
+            type: 'realm',
+            realmUrl,
+            realmInfo: {
+              name: realmInfo?.name ?? this.realmNameFromUrl(realmUrl),
+              iconURL: realmInfo?.iconURL ?? null,
+              publishable: realmInfo?.publishable ?? null,
+            },
+            cards: [],
+            totalCount: 0,
+          });
+        }
+      }
+    }
+
     return sections;
   }
 
@@ -611,6 +638,7 @@ export default class SearchContent extends Component<Signature> {
           @selectedCardId={{@selectedCardId}}
           @offerToCreate={{@offerToCreate}}
           @onCreateCard={{@onCreateCard}}
+          @onCardSubmit={{@onCardSubmit}}
           data-test-search-result-section={{i}}
         />
       {{/each}}

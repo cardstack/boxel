@@ -46,6 +46,7 @@ interface Signature {
       relativeTo: URL | undefined;
     };
     onCreateCard?: (args: NewCardArgs) => void;
+    onCardSubmit?: (cardId: string) => void;
   };
   Blocks: {};
 }
@@ -65,6 +66,16 @@ export default class SearchResultSection extends Component<Signature> {
 
   get recentsSection(): RecentsSection | null {
     return this.args.section.type === 'recents' ? this.args.section : null;
+  }
+
+  get sectionRealmName(): string | undefined {
+    if (this.realmSection) {
+      return this.realmSection.realmInfo.name;
+    }
+    if (this.urlSection) {
+      return this.urlSection.realmInfo.name;
+    }
+    return undefined;
   }
 
   get recentsTitle(): string {
@@ -169,6 +180,20 @@ export default class SearchResultSection extends Component<Signature> {
   };
 
   @action
+  handleCardKeydown(cardId: string, event: KeyboardEvent) {
+    if (event.key === 'Enter') {
+      this.args.handleCardSelect(cardId);
+      this.args.onCardSubmit?.(cardId);
+    }
+  }
+
+  @action
+  handleCardDblClick(cardId: string) {
+    this.args.handleCardSelect(cardId);
+    this.args.onCardSubmit?.(cardId);
+  }
+
+  @action
   handleCreateCard(realmUrl: string) {
     if (!this.args.offerToCreate || !this.args.onCreateCard) {
       return;
@@ -184,7 +209,7 @@ export default class SearchResultSection extends Component<Signature> {
   <template>
     <div
       class='search-result-block {{if @isCollapsed "collapsed"}}'
-      data-test-realm={{this.realmSection.realmInfo.name}}
+      data-test-realm={{this.sectionRealmName}}
       ...attributes
     >
       {{#if this.realmSection}}
@@ -198,29 +223,32 @@ export default class SearchResultSection extends Component<Signature> {
             @onShowOnlyChange={{this.handleShowOnlyChange}}
           />
         {{/unless}}
+        {{#if (this.showCreateForRealm this.realmSection.realmUrl)}}
+          <Button
+            class='create-new-card'
+            type='button'
+            {{on 'click' (fn this.handleCreateCard this.realmSection.realmUrl)}}
+            {{on
+              'keydown'
+              (fn this.handleCreateCard this.realmSection.realmUrl)
+            }}
+            {{on
+              'dblclick'
+              (fn this.handleCreateCard this.realmSection.realmUrl)
+            }}
+            data-test-card-catalog-create-new-button={{this.realmSection.realmUrl}}
+          >
+            <IconPlus
+              class='plus-icon'
+              width='16'
+              height='16'
+              role='presentation'
+            />
+            Create New
+            {{this.cardRefName}}
+          </Button>
+        {{/if}}
         <div class='cards {{this.viewClass}}' data-test-search-cards-result>
-          {{#if (this.showCreateForRealm this.realmSection.realmUrl)}}
-            <div class='search-sheet-result__card-item'>
-              <button
-                class='create-new-card'
-                type='button'
-                {{on
-                  'click'
-                  (fn this.handleCreateCard this.realmSection.realmUrl)
-                }}
-                data-test-card-catalog-create-new-button={{this.realmSection.realmUrl}}
-              >
-                <IconPlus
-                  class='plus-icon'
-                  width='16'
-                  height='16'
-                  role='presentation'
-                />
-                Create New
-                {{this.cardRefName}}
-              </button>
-            </div>
-          {{/if}}
           {{#each this.displayedRealmCards as |card i|}}
             {{#unless card.isError}}
               <div
@@ -232,7 +260,10 @@ export default class SearchResultSection extends Component<Signature> {
                   @cardId={{card.url}}
                   @isCompact={{@isCompact}}
                   @displayRealmName={{@isCompact}}
+                  tabindex='0'
                   {{on 'click' (fn @handleCardSelect card.url)}}
+                  {{on 'keydown' (fn this.handleCardKeydown card.url)}}
+                  {{on 'dblclick' (fn this.handleCardDblClick card.url)}}
                   data-test-search-sheet-search-result={{i}}
                   data-test-card-catalog-item={{removeFileExtension card.url}}
                   data-test-card-catalog-item-selected={{if
@@ -255,7 +286,9 @@ export default class SearchResultSection extends Component<Signature> {
           >
             Show
             {{this.nextShowMoreCount}}
-            more cards ({{this.remainingCount}}
+            more
+            {{pluralize 'card' this.nextShowMoreCount}}
+            ({{this.remainingCount}}
             not shown)
           </Button>
         {{/if}}
@@ -277,7 +310,16 @@ export default class SearchResultSection extends Component<Signature> {
               @cardId={{this.urlSection.card.id}}
               @isCompact={{@isCompact}}
               @displayRealmName={{@isCompact}}
+              tabindex='0'
               {{on 'click' (fn @handleCardSelect this.urlSection.card.id)}}
+              {{on
+                'keydown'
+                (fn this.handleCardKeydown this.urlSection.card.id)
+              }}
+              {{on
+                'dblclick'
+                (fn this.handleCardDblClick this.urlSection.card.id)
+              }}
               data-test-search-sheet-search-result='0'
               data-test-card-catalog-item={{this.urlSection.card.id}}
               data-test-card-catalog-item-selected={{if
@@ -309,7 +351,10 @@ export default class SearchResultSection extends Component<Signature> {
                   @card={{card}}
                   @cardId={{card.id}}
                   @isCompact={{@isCompact}}
+                  tabindex='0'
                   {{on 'click' (fn @handleCardSelect card.id)}}
+                  {{on 'keydown' (fn this.handleCardKeydown card.id)}}
+                  {{on 'dblclick' (fn this.handleCardDblClick card.id)}}
                   @displayRealmName={{true}}
                   data-test-search-result-index={{i}}
                   data-test-card-catalog-item={{card.id}}
@@ -399,20 +444,18 @@ export default class SearchResultSection extends Component<Signature> {
         width: fit-content;
       }
       .create-new-card {
-        display: flex;
-        align-items: center;
         gap: var(--boxel-sp-xs);
-        padding: var(--boxel-sp-xs) var(--boxel-sp);
         border: 1px solid var(--boxel-200);
         border-radius: var(--boxel-border-radius-xl);
-        background: transparent;
-        cursor: pointer;
-        font: var(--boxel-font);
-        letter-spacing: var(--boxel-lsp-xs);
         height: 67px;
         width: 100%;
         max-width: 100%;
         text-align: left;
+        --boxel-button-padding: var(--boxel-sp-xs) var(--boxel-sp);
+        --boxel-button-letter-spacing: var(--boxel-lsp-xs);
+        flex-wrap: nowrap;
+        justify-content: flex-start;
+        margin-bottom: var(--boxel-sp);
       }
       .create-new-card:hover {
         border-color: var(--boxel-darker-hover);

@@ -413,7 +413,6 @@ module('Integration | operator-mode | card catalog', function (hooks) {
       .exists();
 
     // Switch to All Realms by clicking All Realms option
-    await click('[data-test-realm-picker] [data-test-boxel-picker-trigger]');
     await click('[data-test-boxel-picker-option-row="select-all"]');
 
     assert.dom('[data-test-realm="Operator Mode Workspace"]').exists();

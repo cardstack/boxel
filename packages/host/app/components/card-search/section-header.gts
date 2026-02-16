@@ -5,7 +5,7 @@ import Component from '@glimmer/component';
 import { RealmIcon } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
 
-import type { RealmSectionInfo } from './search-sheet-content';
+import type { RealmSectionInfo } from './search-content';
 import type { ComponentLike } from '@glint/template';
 
 interface Signature {
@@ -30,7 +30,7 @@ export default class SearchSheetSectionHeader extends Component<Signature> {
   }
 
   <template>
-    <div
+    <header
       class='search-sheet-section-header'
       data-test-search-sheet-section-header
     >
@@ -49,8 +49,12 @@ export default class SearchSheetSectionHeader extends Component<Signature> {
         data-test-search-sheet-section-count
         data-test-results-count
       >
-        {{@totalCount}}
-        {{if (eq @totalCount 1) 'result' 'results'}}
+        {{#if (eq @totalCount 0)}}
+          No results
+        {{else}}
+          {{@totalCount}}
+          {{if (eq @totalCount 1) 'result' 'results'}}
+        {{/if}}
       </div>
       {{#if @showOnlyLabel}}
         <label class='show-only'>
@@ -64,7 +68,7 @@ export default class SearchSheetSectionHeader extends Component<Signature> {
             <strong>{{@showOnlyLabel}}</strong></span>
         </label>
       {{/if}}
-    </div>
+    </header>
     <style scoped>
       .search-sheet-section-header {
         display: flex;

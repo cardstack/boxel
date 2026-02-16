@@ -93,11 +93,20 @@ export class SearchResult extends Component<SearchResultSignature> {
         cursor: pointer;
         container-name: fitted-card;
         container-type: size;
+        border: 1px solid var(--boxel-200);
+        border-radius: var(--boxel-border-radius-xl);
       }
       .is-compact .search-result,
       .is-compact .search-result.field-component-card.fitted-format {
         width: 250px;
         height: 40px;
+      }
+      .search-result:hover,
+      .search-result.field-component-card.fitted-format:hover {
+        border-color: var(--boxel-darker-hover);
+      }
+      .search-result:focus {
+        outline: 2px solid var(--boxel-highlight);
       }
       .realm-name {
         font: 400 var(--boxel-font);
