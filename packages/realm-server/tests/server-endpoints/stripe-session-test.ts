@@ -1,7 +1,6 @@
 import { module, test } from 'qunit';
 import { basename } from 'path';
 import type { Test, SuperTest } from 'supertest';
-import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import sinon from 'sinon';
 import { getStripe } from '@cardstack/billing/stripe-webhook-handlers/stripe';
 import type { PgAdapter } from '@cardstack/postgres';
