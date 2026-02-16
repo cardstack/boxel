@@ -411,7 +411,7 @@ export default class OperatorModeOverlays extends Overlays {
 
     const cardMenuItems =
       (cardDefOrId as CardDef)[getMenuItems]?.({
-        canEdit: isField ? false : this.realm.canWrite(cardId);,
+        canEdit: isField ? false : this.realm.canWrite(cardId),
         cardCrudFunctions: this.cardCrudFunctions,
         menuContext: 'interact',
         commandContext: this.commandContext,
