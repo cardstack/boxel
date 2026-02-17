@@ -1,3 +1,9 @@
+---
+name: review-branch
+description: Reviews a git branch and provides a detailed analysis of the changes, including risks, performance issues, style concerns, and testing gaps.
+allowed-tools: Read, Grep, Bash(git fetch origin, git checkout *, git diff *, git log *), Bash(cd)
+---
+
 # Code Review Guide
 
 Check out the branch `$ARGUMENTS` and give me a thorough guided tour of the changes.
