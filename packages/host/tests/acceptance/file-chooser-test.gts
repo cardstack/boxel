@@ -301,3 +301,82 @@ module('Acceptance | file chooser tests', function (hooks) {
     await click('[data-test-choose-file-modal-cancel-button]');
   });
 });
+
+module('Acceptance | file chooser tests | upload size limit', function (hooks) {
+  let FILE_SIZE_LIMIT = 512;
+
+  setupInteractSubmodeTests(hooks, {
+    setRealm() {},
+    fileSizeLimitBytes: FILE_SIZE_LIMIT,
+  });
+
+  test('shows error when uploaded file exceeds size limit', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}FileLinkCard/empty`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    await click(`[data-test-operator-mode-stack="0"] [data-test-edit-button]`);
+
+    await click(
+      '[data-test-links-to-editor="attachment"] [data-test-add-new="attachment"]',
+    );
+
+    assert
+      .dom('[data-test-choose-file-modal]')
+      .exists('file chooser modal is open');
+
+    await click('[data-test-choose-file-modal-upload-button]');
+
+    let fileUpload = getService('file-upload') as FileUploadService;
+    await waitUntil(() => fileUpload.activeUploads.length > 0, {
+      timeout: 2000,
+      timeoutMessage: 'upload task was not created',
+    });
+
+    let task = fileUpload.activeUploads[0];
+    let oversizedContent = new Uint8Array(FILE_SIZE_LIMIT + 100).fill(0xff);
+    task.__provideFileForTesting(
+      new File([oversizedContent], 'too-big.bin', {
+        type: 'application/octet-stream',
+      }),
+    );
+
+    await waitUntil(
+      () =>
+        document.querySelector('[data-test-choose-file-modal-upload-error]') !==
+        null,
+      {
+        timeout: 10000,
+        timeoutMessage: 'upload error was not displayed',
+      },
+    );
+
+    assert
+      .dom('[data-test-choose-file-modal-upload-error]')
+      .exists('error message is displayed');
+
+    assert
+      .dom('[data-test-choose-file-modal-upload-error]')
+      .includesText(
+        'exceeds maximum allowed size',
+        'error message mentions the size limit',
+      );
+
+    assert
+      .dom('[data-test-choose-file-modal]')
+      .exists('modal remains open after upload error');
+
+    assert
+      .dom('[data-test-choose-file-modal-upload-button]')
+      .hasText('Retry\u2026', 'retry button is shown');
+
+    await click('[data-test-choose-file-modal-cancel-button]');
+  });
+});

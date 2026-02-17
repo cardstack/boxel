@@ -121,8 +121,9 @@ export default class FileUploadService extends Service {
         let detail = response.statusText || '';
         try {
           let body = await response.json();
-          if (body?.errors?.[0]?.detail) {
-            detail = body.errors[0].detail;
+          let errorEntry = body?.errors?.[0];
+          if (errorEntry?.detail || errorEntry?.message) {
+            detail = errorEntry.detail ?? errorEntry.message;
           }
         } catch {
           // response may not be JSON

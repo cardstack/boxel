@@ -149,8 +149,9 @@ export default class ChooseFileModal extends Component<Signature> {
       if (fileDef && this.deferred) {
         this.deferred.fulfill(fileDef);
         this.resetState();
+      } else if (task.state !== 'error') {
+        this.currentUpload = undefined;
       }
-      this.currentUpload = undefined;
     });
   }
 
