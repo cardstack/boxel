@@ -1734,7 +1734,7 @@ module('Acceptance | code submode tests', function (_hooks) {
       );
       assert
         .dom('[data-test-boxel-selector-item-selected]')
-        .hasText(`${elementName} field`);
+        .hasText(`${elementName} field def`);
 
       elementName = 'LocalField';
       position = new MonacoSDK.Position(38, 0);
@@ -1744,7 +1744,7 @@ module('Acceptance | code submode tests', function (_hooks) {
       );
       assert
         .dom('[data-test-boxel-selector-item-selected]')
-        .hasText(`${elementName} field`);
+        .hasText(`${elementName} field def`);
 
       elementName = 'ExportedCard';
       position = new MonacoSDK.Position(31, 0);
@@ -1754,7 +1754,7 @@ module('Acceptance | code submode tests', function (_hooks) {
       );
       assert
         .dom('[data-test-boxel-selector-item-selected]')
-        .hasText(`${elementName} card`);
+        .hasText(`${elementName} card def`);
     });
 
     test('the monaco cursor position is maintained during an auto-save', async function (assert) {
