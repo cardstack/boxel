@@ -45,7 +45,7 @@ module('Integration | message service subscription', function (hooks) {
     autostart: true,
   });
 
-  let realmMatrixUsername = testRealmInfo.realmUserId;
+  let realmMatrixUsername = testRealmInfo.realmUserId!;
 
   let realmRoomId = mockMatrixUtils.getRoomIdForRealmAndUser(
     testRealmURL,

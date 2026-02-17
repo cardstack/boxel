@@ -361,7 +361,7 @@ module(
           'no query runs while hydrating server-provided results',
         );
 
-        let realmMatrixUsername = testRealmInfo.realmUserId;
+        let realmMatrixUsername = testRealmInfo.realmUserId!;
         let realmRoomId = mockMatrixUtils.getRoomIdForRealmAndUser(
           testRealmURL,
           '@testuser:localhost',
@@ -477,7 +477,7 @@ module(
         (store as any).store.sweep(cardAPI);
         await settled();
 
-        let realmMatrixUsername = testRealmInfo.realmUserId;
+        let realmMatrixUsername = testRealmInfo.realmUserId!;
         let realmRoomId = mockMatrixUtils.getRoomIdForRealmAndUser(
           testRealmURL,
           '@testuser:localhost',

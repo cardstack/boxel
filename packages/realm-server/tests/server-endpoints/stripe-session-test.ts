@@ -12,7 +12,7 @@ import {
   setupPermissionedRealm,
 } from '../helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
-import { Realm } from '@cardstack/runtime-common';
+import type { Realm } from '@cardstack/runtime-common';
 
 module(`server-endpoints/${basename(__filename)}`, function () {
   module('Realm Server Endpoints (not specific to one realm)', function () {

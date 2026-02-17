@@ -28,8 +28,6 @@ import type {
 } from '@cardstack/runtime-common/realm';
 
 import type {
-  FileAddedEventContent,
-  FileUpdatedEventContent,
   FileWatcherEventContent,
   RealmEventContent,
 } from 'https://cardstack.com/base/matrix-event';
@@ -66,9 +64,7 @@ export class TestRealmAdapter implements RealmAdapter {
   #files: Dir = { kind: 'directory', contents: {} };
   #lastModified: Map<string, number> = new Map();
   #paths: RealmPaths;
-  #subscriber:
-    | ((message: FileWatcherEventContent) => void)
-    | undefined;
+  #subscriber: ((message: FileWatcherEventContent) => void) | undefined;
   #loader: Loader | undefined; // Will be set in the realm's constructor - needed for openFile for shimming purposes
   #ready = new Deferred<void>();
   #potentialModulesAndInstances: { content: any; url: URL }[] = [];
@@ -315,7 +311,7 @@ export class TestRealmAdapter implements RealmAdapter {
       );
     }
 
-    let updateEvent: FileAddedEventContent | FileUpdatedEventContent;
+    let updateEvent: FileWatcherEventContent;
 
     let lastModified = unixTime(Date.now());
     this.#lastModified.set(this.#paths.fileURL(path).href, lastModified);
