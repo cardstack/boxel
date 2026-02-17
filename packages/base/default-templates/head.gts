@@ -50,6 +50,16 @@ export default class DefaultHeadTemplate extends GlimmerComponent<{
     {{#if this.themeIcon}}
       <link rel='icon' href={{this.themeIcon}} />
       <link rel='apple-touch-icon' href={{this.themeIcon}} />
+    {{else}}
+      {{! FIXME these are hardcoded to staging }}
+      <link
+        rel='icon'
+        href='https://boxel-host-staging.stack.cards/boxel-webclip.png'
+      />
+      <link
+        rel='apple-touch-icon'
+        href='https://boxel-host-staging.stack.cards/boxel-webclip.png'
+      />
     {{/if}}
 
     <meta property='og:type' content='website' />
