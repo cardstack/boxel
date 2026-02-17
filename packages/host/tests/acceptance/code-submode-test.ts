@@ -1967,7 +1967,7 @@ module('Acceptance | code submode tests', function (_hooks) {
 
     test('code editor shows size limit error when json save exceeds limit', async function (assert) {
       let environmentService = getService('environment-service') as any;
-      let originalMaxSize = environmentService.fileSizeLimitBytes;
+      let originalMaxSize = environmentService.cardSizeLimitBytes;
 
       try {
         await visitOperatorMode({
@@ -1980,7 +1980,7 @@ module('Acceptance | code submode tests', function (_hooks) {
         let content = getMonacoContent();
         let encoder = new TextEncoder();
         let currentSize = encoder.encode(content).length;
-        environmentService.fileSizeLimitBytes = currentSize + 50;
+        environmentService.cardSizeLimitBytes = currentSize + 50;
 
         let doc = JSON.parse(content);
         doc.data.attributes = {
@@ -1992,10 +1992,10 @@ module('Acceptance | code submode tests', function (_hooks) {
         assert
           .dom('[data-test-save-error]')
           .includesText(
-            `exceeds maximum allowed size (${environmentService.fileSizeLimitBytes} bytes)`,
+            `exceeds maximum allowed size (${environmentService.cardSizeLimitBytes} bytes)`,
           );
       } finally {
-        environmentService.fileSizeLimitBytes = originalMaxSize;
+        environmentService.cardSizeLimitBytes = originalMaxSize;
       }
     });
 

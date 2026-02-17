@@ -213,7 +213,10 @@ export default class CardService extends Service {
     options?: SaveSourceOptions,
   ) {
     try {
-      this.validateSizeLimit(url.href, content, 'file');
+      let sizeType: 'card' | 'file' = url.href.endsWith('.json')
+        ? 'card'
+        : 'file';
+      this.validateSizeLimit(url.href, content, sizeType);
       let clientRequestId = options?.clientRequestId ?? `${type}:${uuidv4()}`;
       this.clientRequestIds.add(clientRequestId);
 
