@@ -223,8 +223,12 @@ export default class ChooseFileModal extends Component<Signature> {
         justify-content: space-between;
         max-width: 100%;
         min-width: 13rem;
+        align-items: flex-start;
+        gap: var(--boxel-sp-xs);
       }
       .footer-left {
+        min-width: 0;
+        flex: 1;
       }
       .footer-buttons {
         display: flex;
@@ -290,10 +294,12 @@ export default class ChooseFileModal extends Component<Signature> {
         align-items: center;
         gap: var(--boxel-sp-xs);
         flex: 1;
+        min-width: 0;
       }
       .upload-error {
         color: var(--boxel-error-200);
         font: var(--boxel-font-xs);
+        overflow-wrap: anywhere;
       }
     </style>
     {{#if this.deferred}}
