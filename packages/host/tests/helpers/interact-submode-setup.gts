@@ -9,6 +9,7 @@ import type { Realm } from '@cardstack/runtime-common/realm';
 
 import {
   SYSTEM_CARD_FIXTURE_CONTENTS,
+  makeMinimalPng,
   setupAcceptanceTestRealm,
   setupAuthEndpoints,
   setupLocalIndexing,
@@ -57,11 +58,13 @@ export function setupInteractSubmodeTests(
     let spec: typeof import('https://cardstack.com/base/spec');
     let cardsGrid: typeof import('https://cardstack.com/base/cards-grid');
     let fileApi: typeof import('https://cardstack.com/base/file-api');
+    let imageFileApi: typeof import('https://cardstack.com/base/image-file-def');
     cardApi = await loader.import(`${baseRealm.url}card-api`);
     string = await loader.import(`${baseRealm.url}string`);
     spec = await loader.import(`${baseRealm.url}spec`);
     cardsGrid = await loader.import(`${baseRealm.url}cards-grid`);
     fileApi = await loader.import(`${baseRealm.url}file-api`);
+    imageFileApi = await loader.import(`${baseRealm.url}image-file-def`);
 
     let {
       field,
@@ -77,6 +80,7 @@ export function setupInteractSubmodeTests(
     let { Spec } = spec;
     let { CardsGrid } = cardsGrid;
     let { FileDef } = fileApi;
+    let { ImageDef } = imageFileApi;
 
     class Pet extends CardDef {
       static displayName = 'Pet';
@@ -257,6 +261,21 @@ export function setupInteractSubmodeTests(
       };
     }
 
+    class ImageLinkCard extends CardDef {
+      static displayName = 'Image Link Card';
+      @field title = contains(StringField);
+      @field photo = linksTo(ImageDef);
+
+      static isolated = class Isolated extends Component<typeof this> {
+        <template>
+          <h2 data-test-image-link-card-title><@fields.title /></h2>
+          <div data-test-image-link-photo>
+            <@fields.photo />
+          </div>
+        </template>
+      };
+    }
+
     class Personnel extends Person {
       static displayName = 'Personnel';
     }
@@ -309,11 +328,13 @@ export function setupInteractSubmodeTests(
         'focus-test.gts': { FocusTest },
         'focus-nested.gts': { FocusNested, FocusNestedItem },
         'file-link-card.gts': { FileLinkCard },
+        'image-link-card.gts': { ImageLinkCard },
         'person.gts': { Person },
         'personnel.gts': { Personnel },
         'pet.gts': { Pet, Puppy },
         'shipping-info.gts': { ShippingInfo },
         'README.txt': `Hello World`,
+        'test-image.png': makeMinimalPng(),
         'FileLinkCard/notes.txt': 'Hello from a file link',
         'person-entry.json': new Spec({
           cardTitle: 'Person Card',
@@ -424,6 +445,26 @@ export function setupInteractSubmodeTests(
               adoptsFrom: {
                 module: '../file-link-card',
                 name: 'FileLinkCard',
+              },
+            },
+          },
+        },
+        'ImageLinkCard/empty.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              title: 'Empty image link',
+            },
+            relationships: {
+              photo: {
+                links: { self: null },
+                data: null,
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: '../image-link-card',
+                name: 'ImageLinkCard',
               },
             },
           },

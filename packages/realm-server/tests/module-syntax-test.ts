@@ -4,8 +4,16 @@ import {
   gjsToPlaceholderJS,
   placeholderJSToGJS,
 } from '@cardstack/runtime-common/module-syntax';
+import {
+  extractModuleDependencyKeys,
+  moduleDependencyKey,
+} from '@cardstack/runtime-common/cache/module-cache-invalidation';
 
-import { baseCardRef, baseFieldRef } from '@cardstack/runtime-common';
+import {
+  baseCardRef,
+  baseFieldRef,
+  RealmPaths,
+} from '@cardstack/runtime-common';
 import { testRealm } from './helpers';
 import { basename } from 'path';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
@@ -1350,6 +1358,36 @@ module(basename(__filename), function () {
           'expected error was thrown',
         );
       }
+    });
+  });
+  module('module-cache-invalidation', function () {
+    test('extracts dependency keys from import and export specifiers via AST parsing', function (assert) {
+      let source = `
+        import alpha from './alpha';
+        export { beta } from './beta.js';
+        export * from './gamma.gjs';
+        const ignored = "import './not-real'";
+        const ignoredTemplate = \`export * from "./also-not-real"\`;
+        await import('./delta.ts');
+        await import(dynamicPath);
+        import "https://example.com/not-in-realm";
+      `;
+      let paths = new RealmPaths(new URL(testRealm));
+      let deps = extractModuleDependencyKeys(
+        source,
+        'dir/main.gts',
+        testRealm,
+        paths,
+      );
+      assert.deepEqual(
+        [...deps].sort(),
+        [
+          moduleDependencyKey('dir/alpha'),
+          moduleDependencyKey('dir/beta.js'),
+          moduleDependencyKey('dir/delta.ts'),
+          moduleDependencyKey('dir/gamma.gjs'),
+        ].sort(),
+      );
     });
   });
   module('gjs-to-placeholder', function () {

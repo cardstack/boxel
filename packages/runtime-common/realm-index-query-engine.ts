@@ -16,7 +16,6 @@ import {
   type LooseCardResource,
   type DBAdapter,
   type QueryOptions,
-  type IndexedModuleOrError,
   type InstanceOrError,
   type IndexedFile,
   type DefinitionLookup,
@@ -336,13 +335,6 @@ export class RealmIndexQueryEngine {
     }
     relativizeDocument(doc, this.realmURL);
     return { type: 'doc', doc };
-  }
-
-  async module(
-    url: URL,
-    opts?: Options,
-  ): Promise<IndexedModuleOrError | undefined> {
-    return await this.#indexQueryEngine.getModule(url, opts);
   }
 
   async instance(

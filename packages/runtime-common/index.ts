@@ -231,6 +231,11 @@ export {
   getFieldIcon,
 } from './helpers/card-type-display-name';
 export * from './helpers/ensure-extension';
+export {
+  sanitizeHeadHTML,
+  sanitizeHeadHTMLToString,
+  findDisallowedHeadTags,
+} from './helpers/sanitize-head-html';
 export * from './url';
 export * from './render-route-options';
 export * from './publishability';
@@ -369,7 +374,10 @@ export interface CardChooser {
 }
 
 export interface FileChooser {
-  chooseFile<T>(defaultRealmURL?: URL): Promise<undefined | T>;
+  chooseFile<T>(opts?: {
+    fileType?: CodeRef;
+    fileTypeName?: string;
+  }): Promise<undefined | T>;
 }
 
 export async function chooseCard(
@@ -397,9 +405,10 @@ export async function chooseCard(
   return await chooser.chooseCard(query, opts);
 }
 
-export async function chooseFile<T extends FieldDef>(): Promise<
-  undefined | any
-> {
+export async function chooseFile<T extends FileDef>(opts?: {
+  fileType?: CodeRef;
+  fileTypeName?: string;
+}): Promise<undefined | T> {
   let here = globalThis as any;
   if (!here._CARDSTACK_FILE_CHOOSER) {
     throw new Error(
@@ -408,7 +417,7 @@ export async function chooseFile<T extends FieldDef>(): Promise<
   }
   let chooser: FileChooser = here._CARDSTACK_FILE_CHOOSER;
 
-  return await chooser.chooseFile<T>();
+  return await chooser.chooseFile<T>(opts);
 }
 
 import type { CardErrorJSONAPI } from './error';
