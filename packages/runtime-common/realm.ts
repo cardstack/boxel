@@ -149,6 +149,7 @@ import {
   fetchSessionRoom,
   upsertSessionRoom,
 } from './db-queries/session-room-queries';
+import { userExists } from './db-queries/user-queries';
 import {
   analyzeRealmPublishability,
   type PublishabilityViolation,
@@ -289,7 +290,7 @@ async function computeContentHashFromRef(
 export interface TokenClaims {
   user: string;
   realm: string;
-  sessionRoom: string;
+  sessionRoom: string | undefined; // TODO: remove when we create users on demand in ensureSessionRoom
   permissions: RealmPermissions['user'];
   realmServerURL: string;
 }
@@ -680,11 +681,16 @@ export class Realm {
     await this.#matrixClient.login();
   }
 
-  async ensureSessionRoom(matrixUserId: string): Promise<string> {
+  async ensureSessionRoom(matrixUserId: string): Promise<string | undefined> {
     let sessionRoom = await fetchSessionRoom(this.#dbAdapter, matrixUserId);
 
     if (!sessionRoom) {
       await this.#matrixClient.login();
+      let userExistsInDB = await userExists(this.#dbAdapter, matrixUserId);
+      if (!userExistsInDB) {
+        // TODO: should we create it if it doesn't exist?
+        return undefined;
+      }
       sessionRoom = await this.#matrixClient.createDM(matrixUserId);
       await upsertSessionRoom(this.#dbAdapter, matrixUserId, sessionRoom);
     }
