@@ -287,51 +287,44 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           );
 
           // Cards for testing default head template with cardInfo.theme
-          writeJSONSync(
-            join(context.testRealmDir, 'test-brand-guide.json'),
-            {
-              data: {
-                type: 'card',
-                attributes: {
-                  markUsage: {
-                    socialMediaProfileIcon:
-                      'https://example.com/brand-icon.png',
-                  },
+          writeJSONSync(join(context.testRealmDir, 'test-brand-guide.json'), {
+            data: {
+              type: 'card',
+              attributes: {
+                markUsage: {
+                  socialMediaProfileIcon: 'https://example.com/brand-icon.png',
                 },
-                meta: {
-                  adoptsFrom: {
-                    module: 'https://cardstack.com/base/brand-guide',
-                    name: 'BrandGuide',
-                  },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: 'https://cardstack.com/base/brand-guide',
+                  name: 'BrandGuide',
                 },
               },
             },
-          );
+          });
 
-          writeJSONSync(
-            join(context.testRealmDir, 'card-with-theme.json'),
-            {
-              data: {
-                type: 'card',
-                attributes: {
-                  firstName: 'Themed Card',
-                },
-                relationships: {
-                  'cardInfo.theme': {
-                    links: {
-                      self: './test-brand-guide',
-                    },
-                  },
-                },
-                meta: {
-                  adoptsFrom: {
-                    module: './person.gts',
-                    name: 'Person',
+          writeJSONSync(join(context.testRealmDir, 'card-with-theme.json'), {
+            data: {
+              type: 'card',
+              attributes: {
+                firstName: 'Themed Card',
+              },
+              relationships: {
+                'cardInfo.theme': {
+                  links: {
+                    self: './test-brand-guide',
                   },
                 },
               },
+              meta: {
+                adoptsFrom: {
+                  module: './person.gts',
+                  name: 'Person',
+                },
+              },
             },
-          );
+          });
         },
       });
 
