@@ -3,6 +3,7 @@ import {
   logger,
   SupportedMimeType,
   upsertSessionRoom,
+  userExists,
 } from '@cardstack/runtime-common';
 import type { Utils } from '@cardstack/runtime-common/matrix-backend-authentication';
 import { MatrixBackendAuthentication } from '@cardstack/runtime-common/matrix-backend-authentication';
@@ -44,6 +45,11 @@ export default function handleCreateSessionRequest({
         let sessionRoom = await fetchSessionRoom(dbAdapter, userId);
 
         if (!sessionRoom) {
+          let userExistsInDB = await userExists(dbAdapter, userId);
+          if (!userExistsInDB) {
+            // TODO: should we create it if it doesn't exist?
+            return undefined;
+          }
           sessionRoom = await matrixClient.createDM(userId);
           await upsertSessionRoom(dbAdapter, userId, sessionRoom);
         }
