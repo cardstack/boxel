@@ -650,9 +650,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
           );
           assert.ok(json.included, 'included array is present');
           assert.ok(json.included.length > 0, 'included has resources');
-          let includedIds = json.included.map(
-            (r: { id: string }) => r.id,
-          );
+          let includedIds = json.included.map((r: { id: string }) => r.id);
           assert.ok(
             includedIds.some((id: string) => id.includes('friend-2')),
             'linked friend resource is in included',
@@ -704,9 +702,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
           let json = response.body;
           assert.strictEqual(json.data.length, 1, 'one result is returned');
           assert.ok(json.included, 'included array is present');
-          let includedIds = json.included.map(
-            (r: { id: string }) => r.id,
-          );
+          let includedIds = json.included.map((r: { id: string }) => r.id);
           assert.ok(
             includedIds.some((id: string) => id.includes('friend-2')),
             'directly linked friend (Bob) is in included',
@@ -732,9 +728,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
           let json = response.body;
           assert.strictEqual(json.data.length, 1, 'one result is returned');
           assert.ok(json.included, 'included array is present');
-          let includedIds = json.included.map(
-            (r: { id: string }) => r.id,
-          );
+          let includedIds = json.included.map((r: { id: string }) => r.id);
           assert.ok(
             includedIds.some((id: string) => id.includes('friend-2')),
             'first linked friend is in included',
