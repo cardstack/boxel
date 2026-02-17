@@ -285,6 +285,53 @@ module(`server-endpoints/${basename(__filename)}`, function () {
               },
             },
           );
+
+          // Cards for testing default head template with cardInfo.theme
+          writeJSONSync(
+            join(context.testRealmDir, 'test-brand-guide.json'),
+            {
+              data: {
+                type: 'card',
+                attributes: {
+                  markUsage: {
+                    socialMediaProfileIcon:
+                      'https://example.com/brand-icon.png',
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: 'https://cardstack.com/base/brand-guide',
+                    name: 'BrandGuide',
+                  },
+                },
+              },
+            },
+          );
+
+          writeJSONSync(
+            join(context.testRealmDir, 'card-with-theme.json'),
+            {
+              data: {
+                type: 'card',
+                attributes: {
+                  firstName: 'Themed Card',
+                },
+                relationships: {
+                  'cardInfo.theme': {
+                    links: {
+                      self: './test-brand-guide',
+                    },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: './person.gts',
+                    name: 'Person',
+                  },
+                },
+              },
+            },
+          );
         },
       });
 
@@ -540,6 +587,32 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         assert.notOk(
           scopedCSSResponse.text.includes('data-test-scoped-css'),
           'deleted isolated HTML is not injected for scoped CSS card',
+        );
+      });
+
+      test('default head template includes favicon and apple-touch-icon from cardInfo.theme', async function (assert) {
+        let response = await context.request2
+          .get('/test/card-with-theme')
+          .set('Accept', 'text/html');
+
+        assert.strictEqual(response.status, 200, 'serves HTML response');
+
+        let headMatch = response.text.match(
+          /data-boxel-head-start[^>]*>([\s\S]*?)data-boxel-head-end/,
+        );
+        let headContent = headMatch?.[1] ?? '';
+
+        assert.ok(
+          headContent.includes(
+            '<link rel="icon" href="https://example.com/brand-icon.png"',
+          ),
+          'head HTML includes favicon link from theme',
+        );
+        assert.ok(
+          headContent.includes(
+            '<link rel="apple-touch-icon" href="https://example.com/brand-icon.png"',
+          ),
+          'head HTML includes apple-touch-icon link from theme',
         );
       });
 
