@@ -93,6 +93,20 @@ module('Acceptance | host mode tests', function (hooks) {
     let { field, contains, CardDef, Component } = cardApi;
     let { default: StringField } = string;
 
+    class BrokenCard extends CardDef {
+      static displayName = 'BrokenCard';
+      @field name = contains(StringField);
+      static isolated = class Isolated extends Component<typeof this> {
+        <template>
+          {{(this.throwError)}}
+        </template>
+
+        get throwError() {
+          throw new Error('Intentional rendering error');
+        }
+      };
+    }
+
     class Pet extends CardDef {
       static displayName = 'Pet';
       static headerColor = '#355e3b';
@@ -210,6 +224,20 @@ module('Acceptance | host mode tests', function (hooks) {
             },
           },
         },
+        'broken-card.gts': { BrokenCard },
+        'BrokenCard/broken.json': {
+          data: {
+            attributes: {
+              name: 'Broken',
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testHostModeRealmURL}broken-card`,
+                name: 'BrokenCard',
+              },
+            },
+          },
+        },
         '.realm.json': {
           name: 'Test Workspace B',
           backgroundURL:
@@ -273,13 +301,28 @@ module('Acceptance | host mode tests', function (hooks) {
     await visitPromise;
     await waitFor('[data-test-card-error]');
     assert.dom('[data-test-card-error]').exists();
+    assert.dom('[data-test-card-error]').containsText('Card not found');
     assert.strictEqual(
       getPageTitle(),
-      `Error rendering ${testHostModeRealmURL}Pet/non-existent`,
+      `Card not found: ${testHostModeRealmURL}Pet/non-existent`,
     );
     assert.dom('[data-test-host-loading]').doesNotExist();
 
     store.get = originalGet;
+  });
+
+  test('visiting a card with a rendering error shows an error', async function (assert) {
+    await visit('/test/BrokenCard/broken.json');
+
+    await waitFor('[data-test-card-error]');
+    assert.dom('[data-test-card-error]').exists();
+    assert
+      .dom('[data-test-card-error]')
+      .containsText('This card contains an error');
+    assert.strictEqual(
+      getPageTitle(),
+      `Error rendering ${testHostModeRealmURL}BrokenCard/broken`,
+    );
   });
 
   test('invoking viewCard from a card stacks the linked card', async function (assert) {

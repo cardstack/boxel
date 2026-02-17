@@ -110,7 +110,11 @@ export class IndexComponent extends Component<IndexComponentComponentSignature> 
 
   get title() {
     if (this.isError) {
-      return `Error rendering ${this.args.model?.id}`;
+      let error = this.args.model as CardErrorJSONAPI;
+      if (error.status === 404) {
+        return `Card not found: ${error.id}`;
+      }
+      return `Error rendering ${error.id}`;
     }
 
     return this.card?.cardTitle ?? '';

@@ -36,6 +36,13 @@ export default class HostModeCard extends Component<Signature> {
     return this.cardResource?.cardError;
   }
 
+  get cardErrorMessage() {
+    if (this.cardError?.status === 404) {
+      return 'Card not found.';
+    }
+    return undefined;
+  }
+
   get isLoading() {
     return Boolean(this.args.cardId) && !this.card && !this.cardError;
   }
@@ -53,7 +60,11 @@ export default class HostModeCard extends Component<Signature> {
       ...attributes
     >
       {{#if this.cardError}}
-        <CardError @error={{this.cardError}} @hideHeader={{true}} />
+        <CardError
+          @error={{this.cardError}}
+          @hideHeader={{true}}
+          @message={{this.cardErrorMessage}}
+        />
       {{else if this.card}}
         <CardRenderer
           class='card'
