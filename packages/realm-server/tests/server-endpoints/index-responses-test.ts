@@ -287,18 +287,18 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           );
 
           // Cards for testing default head template with cardInfo.theme
-          writeJSONSync(join(context.testRealmDir, 'test-brand-guide.json'), {
+          writeJSONSync(join(context.testRealmDir, 'test-theme.json'), {
             data: {
               type: 'card',
               attributes: {
-                markUsage: {
-                  socialMediaProfileIcon: 'https://example.com/brand-icon.png',
+                cardInfo: {
+                  cardThumbnailURL: 'https://example.com/brand-icon.png',
                 },
               },
               meta: {
                 adoptsFrom: {
-                  module: 'https://cardstack.com/base/brand-guide',
-                  name: 'BrandGuide',
+                  module: 'https://cardstack.com/base/card-api',
+                  name: 'Theme',
                 },
               },
             },
@@ -313,7 +313,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
               relationships: {
                 'cardInfo.theme': {
                   links: {
-                    self: './test-brand-guide',
+                    self: './test-theme',
                   },
                 },
               },
