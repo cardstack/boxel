@@ -930,6 +930,11 @@ module(basename(__filename), function () {
         entry?.searchDoc?.contentHash,
         'search_doc includes contentHash',
       );
+      assert.strictEqual(
+        typeof entry?.searchDoc?.contentSize,
+        'number',
+        'search_doc includes contentSize',
+      );
     });
 
     test('indexes executable files as file entries too', async function (assert) {
@@ -962,6 +967,11 @@ module(basename(__filename), function () {
       assert.ok(
         entry?.searchDoc?.contentHash,
         'file entry includes contentHash',
+      );
+      assert.strictEqual(
+        typeof entry?.searchDoc?.contentSize,
+        'number',
+        'file entry includes contentSize',
       );
     });
 
@@ -1005,6 +1015,11 @@ module(basename(__filename), function () {
         'search_doc includes contentType',
       );
       assert.ok(searchDoc.contentHash, 'search_doc includes contentHash');
+      assert.strictEqual(
+        typeof searchDoc.contentSize,
+        'number',
+        'search_doc includes contentSize',
+      );
     });
 
     test('file extractor mismatch falls back to base extractor', async function (assert) {
@@ -1025,6 +1040,11 @@ module(basename(__filename), function () {
       assert.ok(
         searchDoc.contentHash,
         'fallback search_doc includes contentHash',
+      );
+      assert.strictEqual(
+        typeof searchDoc.contentSize,
+        'number',
+        'fallback search_doc includes contentSize',
       );
 
       let rawDeps = rows[0]?.deps ?? [];

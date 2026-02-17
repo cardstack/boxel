@@ -111,6 +111,7 @@
    file_path TEXT NOT NULL,
    created_at INTEGER NOT NULL,
    content_hash TEXT,
+   content_size INTEGER,
    PRIMARY KEY ( realm_url, file_path ) 
 );
 

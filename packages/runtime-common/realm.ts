@@ -23,6 +23,7 @@ import {
   removeFileMeta,
   getCreatedTime,
   getContentHash,
+  getContentSize,
 } from './file-meta';
 import {
   systemError,
@@ -207,6 +208,7 @@ export const FILE_META_RESERVED_KEYS = new Set([
   'sourceUrl',
   'contentType',
   'contentHash',
+  'contentSize',
   'lastModified',
   'createdAt',
 ]);
@@ -273,6 +275,28 @@ function computeContentHash(content: string | Uint8Array): string {
     } catch {
       throw new Error('Failed to compute content hash');
     }
+  }
+}
+
+function computeContentSize(content: string | Uint8Array): number {
+  if (content instanceof Uint8Array) {
+    return content.byteLength;
+  }
+  return new TextEncoder().encode(content).byteLength;
+}
+
+async function computeContentSizeFromRef(
+  ref: FileRef,
+): Promise<number | undefined> {
+  try {
+    let content = ref.content;
+    if (typeof content === 'string' || content instanceof Uint8Array) {
+      return computeContentSize(content);
+    }
+    let bytes = await fileContentToBytes({ content });
+    return computeContentSize(bytes);
+  } catch {
+    return undefined;
   }
 }
 
@@ -792,7 +816,11 @@ export class Realm {
     let urls: URL[] = [];
     // Collect write results for all files we wrote
     let results: { path: LocalPath; lastModified: number }[] = [];
-    let fileMetaRows: { path: LocalPath; contentHash?: string }[] = [];
+    let fileMetaRows: {
+      path: LocalPath;
+      contentHash?: string;
+      contentSize?: number;
+    }[] = [];
     let lastWriteType: 'module' | 'instance' | undefined;
     let invalidations: Set<string> = new Set();
     let clientRequestId: string | null = options?.clientRequestId ?? null;
@@ -856,6 +884,7 @@ export class Realm {
         }
       }
       let contentHash = computeContentHash(content);
+      let contentSize = computeContentSize(content);
       if (lastWriteType === 'module' && currentWriteType === 'instance') {
         // we need to generate/update possible definition in order for
         // instance file serialization that may depend on the included module to
@@ -875,7 +904,7 @@ export class Realm {
         this.#moduleCache.invalidate(path);
       }
       results.push({ path, lastModified });
-      fileMetaRows.push({ path, contentHash });
+      fileMetaRows.push({ path, contentHash, contentSize });
       urls.push(url);
       lastWriteType = currentWriteType ?? lastWriteType;
     }
@@ -900,13 +929,22 @@ export class Realm {
 
   // persist created_at into realm_file_meta table using db adapter
   private async persistFileMeta(
-    rows: { path: LocalPath; contentHash?: string }[],
-  ): Promise<Map<LocalPath, { createdAt: number; contentHash?: string }>> {
+    rows: { path: LocalPath; contentHash?: string; contentSize?: number }[],
+  ): Promise<
+    Map<
+      LocalPath,
+      { createdAt: number; contentHash?: string; contentSize?: number }
+    >
+  > {
     if (!this.#dbAdapter || rows.length === 0) return new Map();
     const createdMap = await persistFileMeta(
       this.#dbAdapter,
       this.url,
-      rows.map((r) => ({ path: r.path, contentHash: r.contentHash })),
+      rows.map((r) => ({
+        path: r.path,
+        contentHash: r.contentHash,
+        contentSize: r.contentSize,
+      })),
     );
     // maintain LocalPath typing on keys
     return new Map(
@@ -2295,6 +2333,10 @@ export class Realm {
       (this.#dbAdapter
         ? await getContentHash(this.#dbAdapter, this.url, localPath)
         : undefined) ?? (await computeContentHashFromRef(fileRef));
+    let contentSize =
+      (this.#dbAdapter
+        ? await getContentSize(this.#dbAdapter, this.url, localPath)
+        : undefined) ?? (await computeContentSizeFromRef(fileRef));
     let doc: SingleFileMetaDocument = {
       data: {
         type: 'file-meta',
@@ -2305,6 +2347,7 @@ export class Realm {
           sourceUrl: fileURL,
           contentType: inferredContentType,
           contentHash,
+          contentSize,
           lastModified: fileRef.lastModified,
           createdAt: createdAt ?? fileRef.lastModified,
         },
@@ -2344,6 +2387,12 @@ export class Realm {
         : this.#dbAdapter
           ? await getContentHash(this.#dbAdapter, this.url, localPath)
           : undefined;
+    let contentSize =
+      typeof searchDoc.contentSize === 'number'
+        ? searchDoc.contentSize
+        : this.#dbAdapter
+          ? await getContentSize(this.#dbAdapter, this.url, localPath)
+          : undefined;
     let adoptsFrom =
       codeRefFromInternalKey(fileEntry.types?.[0]) ??
       (isCodeRef(fileEntry.resource?.meta?.adoptsFrom)
@@ -2360,6 +2409,7 @@ export class Realm {
         searchDoc.contentType ??
         inferredContentType,
       contentHash: resourceAttributes.contentHash ?? contentHash,
+      contentSize: resourceAttributes.contentSize ?? contentSize,
       lastModified: fileEntry.lastModified ?? unixTime(Date.now()),
       createdAt: createdAt ?? unixTime(Date.now()),
     };

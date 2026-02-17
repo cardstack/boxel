@@ -8,6 +8,7 @@ export interface RenderRouteOptions {
   fileRender?: true;
   fileDefCodeRef?: ResolvedCodeRef;
   fileContentHash?: string;
+  fileContentSize?: number;
 }
 
 export function parseRenderRouteOptions(
@@ -29,6 +30,9 @@ export function parseRenderRouteOptions(
       }
       if (typeof parsed.fileContentHash === 'string') {
         options.fileContentHash = parsed.fileContentHash;
+      }
+      if (typeof parsed.fileContentSize === 'number') {
+        options.fileContentSize = parsed.fileContentSize;
       }
     }
     if (parsed.fileRender) {
@@ -57,6 +61,9 @@ export function serializeRenderRouteOptions(
     }
     if (options.fileContentHash) {
       serialized.fileContentHash = options.fileContentHash;
+    }
+    if (options.fileContentSize !== undefined) {
+      serialized.fileContentSize = options.fileContentSize;
     }
   }
   if (options.fileRender) {
