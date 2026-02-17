@@ -93,20 +93,6 @@ module('Acceptance | host mode tests', function (hooks) {
     let { field, contains, CardDef, Component } = cardApi;
     let { default: StringField } = string;
 
-    class BrokenCard extends CardDef {
-      static displayName = 'BrokenCard';
-      @field name = contains(StringField);
-      static isolated = class Isolated extends Component<typeof this> {
-        <template>
-          {{(this.throwError)}}
-        </template>
-
-        get throwError() {
-          throw new Error('Intentional rendering error');
-        }
-      };
-    }
-
     class Pet extends CardDef {
       static displayName = 'Pet';
       static headerColor = '#355e3b';
@@ -224,7 +210,20 @@ module('Acceptance | host mode tests', function (hooks) {
             },
           },
         },
-        'broken-card.gts': { BrokenCard },
+        'broken-card.gts': `
+          import { contains, field, Component, CardDef } from 'https://cardstack.com/base/card-api';
+          import StringField from 'https://cardstack.com/base/string';
+          export class BrokenCard extends CardDef {
+            static displayName = 'BrokenCard';
+            @field name = contains(StringField);
+            static isolated = class Isolated extends Component<typeof this> {
+              <template><div>{{this.triggerError}}</div></template>
+              get triggerError() {
+                throw new Error('Intentional rendering error');
+              }
+            };
+          }
+        `,
         'BrokenCard/broken.json': {
           data: {
             attributes: {
