@@ -17,7 +17,10 @@ import { normalizeRelationships } from './relationship-utils';
 import type { LocalPath } from './paths';
 import { RealmPaths, ensureTrailingSlash, join } from './paths';
 import type ms from 'ms';
-import { DEFAULT_CARD_SIZE_LIMIT_BYTES } from './constants';
+import {
+  DEFAULT_CARD_SIZE_LIMIT_BYTES,
+  DEFAULT_FILE_SIZE_LIMIT_BYTES,
+} from './constants';
 import {
   persistFileMeta,
   removeFileMeta,
@@ -449,6 +452,7 @@ export class Realm {
   #sourceCache = new AliasCache<SourceCacheEntry>();
   #moduleCache = new AliasCache<ModuleCacheEntry>();
   #cardSizeLimitBytes: number;
+  #fileSizeLimitBytes: number;
 
   #publicEndpoints: RouteTable<true> = new Map([
     [
@@ -504,6 +508,7 @@ export class Realm {
       realmServerURL,
       definitionLookup,
       cardSizeLimitBytes,
+      fileSizeLimitBytes,
     }: {
       url: string;
       adapter: RealmAdapter;
@@ -516,6 +521,7 @@ export class Realm {
       realmServerURL: string;
       definitionLookup: DefinitionLookup;
       cardSizeLimitBytes?: number;
+      fileSizeLimitBytes?: number;
     },
     opts?: Options,
   ) {
@@ -532,6 +538,8 @@ export class Realm {
     this.#realmServerURL = ensureTrailingSlash(realmServerURL);
     this.#cardSizeLimitBytes =
       cardSizeLimitBytes ?? DEFAULT_CARD_SIZE_LIMIT_BYTES;
+    this.#fileSizeLimitBytes =
+      fileSizeLimitBytes ?? DEFAULT_FILE_SIZE_LIMIT_BYTES;
     this.#realmServerMatrixUserId = userIdFromUsername(
       realmServerMatrixClient.username,
       realmServerMatrixClient.matrixURL.href,
@@ -2036,8 +2044,10 @@ export class Realm {
   }
 
   private assertWriteSize(content: string | Uint8Array, type: 'card' | 'file') {
+    let limit =
+      type === 'card' ? this.#cardSizeLimitBytes : this.#fileSizeLimitBytes;
     try {
-      validateWriteSize(content, this.#cardSizeLimitBytes, type);
+      validateWriteSize(content, limit, type);
     } catch (error: any) {
       throw new CardError(error?.message ?? 'Payload too large', {
         status: 413,

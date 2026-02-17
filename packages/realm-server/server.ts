@@ -16,6 +16,7 @@ import {
   type QueuePublisher,
   DEFAULT_PERMISSIONS,
   DEFAULT_CARD_SIZE_LIMIT_BYTES,
+  DEFAULT_FILE_SIZE_LIMIT_BYTES,
   PUBLISHED_DIRECTORY_NAME,
   RealmPaths,
   fetchSessionRoom,
@@ -97,6 +98,7 @@ export class RealmServer {
     | undefined;
   private enableFileWatcher: boolean;
   private cardSizeLimitBytes: number;
+  private fileSizeLimitBytes: number;
   private domainsForPublishedRealms:
     | {
         boxelSpace?: string;
@@ -158,6 +160,9 @@ export class RealmServer {
     this.serverURL = serverURL;
     this.cardSizeLimitBytes = Number(
       process.env.CARD_SIZE_LIMIT_BYTES ?? DEFAULT_CARD_SIZE_LIMIT_BYTES,
+    );
+    this.fileSizeLimitBytes = Number(
+      process.env.FILE_SIZE_LIMIT_BYTES ?? DEFAULT_FILE_SIZE_LIMIT_BYTES,
     );
     this.virtualNetwork = virtualNetwork;
     this.matrixClient = matrixClient;
@@ -664,6 +669,7 @@ export class RealmServer {
           assetsURL: this.assetsURL.href,
           realmServerURL: this.serverURL.href,
           cardSizeLimitBytes: this.cardSizeLimitBytes,
+          fileSizeLimitBytes: this.fileSizeLimitBytes,
           publishedRealmDomainOverrides:
             process.env.PUBLISHED_REALM_DOMAIN_OVERRIDES ??
             config.publishedRealmDomainOverrides,
@@ -872,6 +878,7 @@ export class RealmServer {
         realmServerURL: this.serverURL.href,
         definitionLookup: this.definitionLookup,
         cardSizeLimitBytes: this.cardSizeLimitBytes,
+        fileSizeLimitBytes: this.fileSizeLimitBytes,
       },
       Object.keys(realmOptions).length ? realmOptions : undefined,
     );
@@ -942,6 +949,7 @@ export class RealmServer {
             realmServerURL: this.serverURL.href,
             definitionLookup: this.definitionLookup,
             cardSizeLimitBytes: this.cardSizeLimitBytes,
+            fileSizeLimitBytes: this.fileSizeLimitBytes,
           });
           this.virtualNetwork.mount(realm.handle);
           realms.push(realm);
@@ -1073,6 +1081,7 @@ export class RealmServer {
             realmServerURL: this.serverURL.href,
             definitionLookup: this.definitionLookup,
             cardSizeLimitBytes: this.cardSizeLimitBytes,
+            fileSizeLimitBytes: this.fileSizeLimitBytes,
           });
 
           this.virtualNetwork.mount(realm.handle);
