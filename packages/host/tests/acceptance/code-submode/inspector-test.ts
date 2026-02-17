@@ -487,6 +487,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
         'command-module.gts': commandModuleSource,
         'erroring-module.gts': erroringModuleSource,
         'empty-file.gts': '',
+        'sample-styles.css': 'body { color: red; }',
         'person-entry.json': {
           data: {
             type: 'card',
@@ -2400,6 +2401,42 @@ export class ExportedCard extends ExportedCardParent {
         .doesNotExist(
           'Create Listing button is not displayed when user lacks write permissions',
         );
+    });
+
+    test('inspector shows file inheritance panel for non-module files', async function (assert) {
+      await visitOperatorMode({
+        stacks: [[]],
+        submode: 'code',
+        codePath: `${testRealmURL}sample-styles.css`,
+      });
+
+      await waitFor('[data-test-card-inspector-panel]');
+      await waitFor('[data-test-inheritance-panel-header]');
+
+      assert
+        .dom('[data-test-inheritance-panel-header]')
+        .hasText('File Inheritance');
+
+      assert
+        .dom('[data-test-card-instance-definition]')
+        .exists('file instance definition is shown');
+      assert
+        .dom(
+          '[data-test-card-instance-definition] [data-test-definition-header]',
+        )
+        .includesText('File Instance');
+      assert
+        .dom(
+          '[data-test-card-instance-definition] [data-test-definition-file-extension]',
+        )
+        .includesText('.css');
+
+      assert
+        .dom('[data-test-card-module-definition]')
+        .exists('file definition (adopts from) is shown');
+      assert
+        .dom('[data-test-card-module-definition]')
+        .includesText('File Definition');
     });
   });
 });
