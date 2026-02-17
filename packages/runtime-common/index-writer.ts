@@ -60,7 +60,7 @@ export class IndexWriter {
   }
 }
 
-export type IndexEntry = InstanceEntry | ErrorEntry | FileEntry;
+export type IndexEntry = InstanceEntry | IndexErrorEntry | FileEntry;
 export type LastModifiedTimes = Map<
   string,
   { type: string; lastModified: number | null; hasError: boolean }
@@ -83,18 +83,18 @@ export interface InstanceEntry {
   deps: Set<string>;
 }
 
-export interface ErrorEntry {
-  type: 'instance-error' | 'module-error' | 'file-error';
+export interface IndexErrorEntry {
+  type: 'instance-error' | 'file-error';
   error: SerializedError;
   types?: string[];
   searchData?: Record<string, any>;
   cardType?: string;
 }
 
-export type InstanceErrorIndexEntry = ErrorEntry & { type: 'instance-error' };
-export type FileErrorIndexEntry = ErrorEntry & { type: 'file-error' };
-// TODO: Remove module rows from the index in a follow-up PR, then remove
-// `module-error` from `ErrorEntry` and collapse these narrowed entry types.
+export type InstanceErrorIndexEntry = IndexErrorEntry & {
+  type: 'instance-error';
+};
+export type FileErrorIndexEntry = IndexErrorEntry & { type: 'file-error' };
 export type SearchIndexErrorEntry =
   | InstanceErrorIndexEntry
   | FileErrorIndexEntry;
@@ -103,8 +103,8 @@ export type SearchIndexEntry =
   | SearchIndexErrorEntry
   | FileEntry;
 
-function isErrorEntry(entry: { type: string }): entry is ErrorEntry {
-  return entry.type.endsWith('-error');
+function isErrorEntry(entry: { type: string }): entry is IndexErrorEntry {
+  return entry.type === 'instance-error' || entry.type === 'file-error';
 }
 
 export interface FileEntry {
@@ -167,11 +167,7 @@ export class Batch {
       `SELECT i.url, i.type, i.last_modified, i.has_error
        FROM boxel_index as i
           WHERE`,
-      ...every([
-        [`i.realm_url =`, param(this.realmURL.href)],
-        // TODO: Remove module rows from the index in a follow-up PR.
-        [`i.type !=`, param('module')],
-      ]),
+      ...every([[`i.realm_url =`, param(this.realmURL.href)]]),
     ] as Expression)) as Pick<
       BoxelIndexTable,
       'url' | 'type' | 'last_modified' | 'has_error'
@@ -197,8 +193,6 @@ export class Batch {
       ...every([
         any([['is_deleted = false'], ['is_deleted IS NULL']]),
         [`realm_url =`, param(sourceRealmURL.href)],
-        // TODO: Remove module rows from the index in a follow-up PR.
-        [`type !=`, param('module')],
       ]),
     ] as Expression)) as unknown as BoxelIndexTable[];
     let now = String(Date.now());
@@ -487,8 +481,6 @@ export class Batch {
         ['i.realm_url =', param(this.realmURL.href)],
         any([['i.has_error = FALSE'], ['i.has_error IS NULL']]),
         ['i.is_deleted != true'],
-        // TODO: Remove module rows from the index in a follow-up PR.
-        ['i.type !=', param('module')],
       ]),
     ] as Expression)) as { total: string }[];
     return parseInt(total);
@@ -671,8 +663,6 @@ export class Batch {
       'SELECT DISTINCT url, type FROM boxel_index WHERE',
       ...every([
         ['realm_url =', param(this.realmURL.href)],
-        // TODO: Remove module rows from the index in a follow-up PR.
-        ['type !=', param('module')],
         [
           'url IN',
           ...addExplicitParens(
@@ -770,11 +760,6 @@ export class Batch {
             }),
             param({ sqlite: resolvedPath, pg: `["${resolvedPath}"]` }),
           ],
-          // css is a subset of modules, so there won't by any references that
-          // are css entries that aren't already represented by a module entry
-          [`i.type != 'css'`],
-          // TODO: Remove module rows from the index in a follow-up PR.
-          [`i.type != 'module'`],
           // probably need to reevaluate this condition when we get to cross
           // realm invalidation
           [`i.realm_url =`, param(this.realmURL.href)],
