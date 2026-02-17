@@ -533,23 +533,6 @@ export class RealmServer {
       `,
     ]);
 
-    // Fallback for legacy/indexed module rows in boxel_index.
-    if (moduleRows.length === 0) {
-      moduleRows = await query(this.dbAdapter, [
-        `
-          SELECT 1
-          FROM boxel_index
-          WHERE type = 'module'
-            AND is_deleted IS NOT TRUE
-            AND
-          `,
-        ...indexCandidateExpressions(candidates),
-        `
-          LIMIT 1
-        `,
-      ]);
-    }
-
     if (moduleRows.length > 0) {
       return false;
     }

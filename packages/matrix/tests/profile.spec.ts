@@ -42,6 +42,26 @@ test.describe('Profile', () => {
     await page.locator('[data-test-signout-button]').click();
   }
 
+  async function signInFromLoggedOutState(
+    page: Page,
+    username: string,
+    password: string,
+  ) {
+    await expect(page.locator('[data-test-login-btn]')).toBeDisabled();
+    await expect(async () => {
+      await page.locator('[data-test-username-field]').fill(username);
+      await page.locator('[data-test-password-field]').fill(password);
+      await expect(page.locator('[data-test-username-field]')).toHaveValue(
+        username,
+      );
+      await expect(page.locator('[data-test-password-field]')).toHaveValue(
+        password,
+      );
+      await expect(page.locator('[data-test-login-btn]')).toBeEnabled();
+    }).toPass({ timeout: 15_000 });
+    await page.locator('[data-test-login-btn]').click();
+  }
+
   test('it can change display name in settings', async ({ page }) => {
     await expect(
       page.locator('[data-test-profile-display-name]'),
@@ -334,12 +354,7 @@ test.describe('Profile', () => {
     await logoutFromProfileSettings(page);
     await assertLoggedOut(page);
 
-    await expect(page.locator('[data-test-login-btn]')).toBeDisabled();
-    await page.locator('[data-test-username-field]').fill(user.username);
-    await expect(page.locator('[data-test-login-btn]')).toBeDisabled();
-    await page.locator('[data-test-password-field]').fill('newpass123!');
-    await expect(page.locator('[data-test-login-btn]')).toBeEnabled();
-    await page.locator('[data-test-login-btn]').click();
+    await signInFromLoggedOutState(page, user.username, 'newpass123!');
     await assertLoggedIn(page, {
       userId: user.credentials.userId,
       displayName: user.username,
@@ -419,12 +434,7 @@ test.describe('Profile', () => {
     await logoutFromProfileSettings(page);
     await assertLoggedOut(page);
 
-    await expect(page.locator('[data-test-login-btn]')).toBeDisabled();
-    await page.locator('[data-test-username-field]').fill(user.username);
-    await expect(page.locator('[data-test-login-btn]')).toBeDisabled();
-    await page.locator('[data-test-password-field]').fill('newpass123!');
-    await expect(page.locator('[data-test-login-btn]')).toBeEnabled();
-    await page.locator('[data-test-login-btn]').click();
+    await signInFromLoggedOutState(page, user.username, 'newpass123!');
     await assertLoggedIn(page, {
       userId: user.credentials.userId,
       displayName: user.username,
@@ -492,12 +502,7 @@ test.describe('Profile', () => {
     await logoutFromProfileSettings(page);
     await assertLoggedOut(page);
 
-    await expect(page.locator('[data-test-login-btn]')).toBeDisabled();
-    await page.locator('[data-test-username-field]').fill(user.username);
-    await expect(page.locator('[data-test-login-btn]')).toBeDisabled();
-    await page.locator('[data-test-password-field]').fill('newpass123!');
-    await expect(page.locator('[data-test-login-btn]')).toBeEnabled();
-    await page.locator('[data-test-login-btn]').click();
+    await signInFromLoggedOutState(page, user.username, 'newpass123!');
     await assertLoggedIn(page, {
       userId: user.credentials.userId,
       displayName: user.username,

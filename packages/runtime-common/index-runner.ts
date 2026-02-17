@@ -27,6 +27,7 @@ import {
   type InstanceErrorIndexEntry,
   type FileErrorIndexEntry,
   type ErrorEntry,
+  type SearchIndexErrorEntry,
   type RealmInfo,
   type FromScratchResult,
   type IncrementalResult,
@@ -574,10 +575,10 @@ export class IndexRunner {
     return collected;
   }
 
-  private async appendDependencyErrors(
-    entry: ErrorEntry,
+  private async appendDependencyErrors<T extends SearchIndexErrorEntry>(
+    entry: T,
     entryURL: URL,
-  ): Promise<ErrorEntry> {
+  ): Promise<T> {
     let deps = entry.error.deps ?? [];
     if (deps.length === 0) {
       return entry;
@@ -610,7 +611,7 @@ export class IndexRunner {
         ...entry.error,
         additionalErrors: existing,
       },
-    };
+    } as T;
   }
 
   @Memoize()
@@ -873,8 +874,6 @@ export class IndexRunner {
             normalizedError.status = normalizedError.status ?? 500;
             return {
               ...entry,
-              // TODO: Remove module rows from the index in a follow-up PR.
-              // Coerce any legacy error entry to instance-error for indexing.
               type: 'instance-error',
               error: normalizedError,
             };
@@ -930,17 +929,10 @@ export class IndexRunner {
           };
         }
 
-        let errorWithDependencies = await this.appendDependencyErrors(
+        renderError = await this.appendDependencyErrors(
           renderError,
           instanceURL,
         );
-        if (errorWithDependencies.type !== 'instance-error') {
-          // TODO: Remove module rows from the index in a follow-up PR.
-          throw new Error(
-            'module index entries are no longer supported in the search index',
-          );
-        }
-        renderError = errorWithDependencies as InstanceErrorIndexEntry;
 
         this.#log.warn(
           `${jobIdentity(this.#jobInfo)} encountered error indexing card instance ${path}: ${renderError.error.message}`,
@@ -1043,8 +1035,6 @@ export class IndexRunner {
         normalizedError.status = normalizedError.status ?? 500;
         return {
           ...entry,
-          // TODO: Remove module rows from the index in a follow-up PR.
-          // Coerce any legacy error entry to file-error for indexing.
           type: 'file-error',
           error: normalizedError,
         };
