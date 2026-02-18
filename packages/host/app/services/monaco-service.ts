@@ -9,6 +9,14 @@ import { task } from 'ember-concurrency';
 
 import merge from 'lodash/merge';
 
+// The worker suffix here is a vite feature that builds them into standalone
+// worker scripts, which will be outside the main bundle in prod.
+import EditorWorker from 'monaco-editor/esm/vs/editor/editor.worker.js?worker';
+import CSSWorker from 'monaco-editor/esm/vs/language/css/css.worker.js?worker';
+import HTMLWorker from 'monaco-editor/esm/vs/language/html/html.worker.js?worker';
+import JSONWorker from 'monaco-editor/esm/vs/language/json/json.worker.js?worker';
+import TSWorker from 'monaco-editor/esm/vs/language/typescript/ts.worker.js?worker';
+
 import type { SingleCardDocument } from '@cardstack/runtime-common';
 
 import config from '@cardstack/host/config/environment';
@@ -27,6 +35,28 @@ export type MonacoSDK = typeof _MonacoSDK;
 export type IStandaloneCodeEditor = _MonacoSDK.editor.IStandaloneCodeEditor;
 
 const { serverEchoDebounceMs } = config;
+(
+  globalThis as unknown as { MonacoEnvironment: _MonacoSDK.Environment }
+).MonacoEnvironment = {
+  getWorker: function (_workerId, label) {
+    switch (label) {
+      case 'json':
+        return new JSONWorker();
+      case 'css':
+      case 'scss':
+      case 'less':
+        return new CSSWorker();
+      case 'typescript':
+      case 'javascript':
+        return new TSWorker();
+      case 'html':
+      case 'handlebars':
+        return new HTMLWorker();
+      default:
+        return new EditorWorker();
+    }
+  },
+};
 
 export default class MonacoService extends Service {
   #ready: Promise<MonacoSDK>;
