@@ -48,6 +48,22 @@ import {
   handleBotRegistrationsRequest,
   handleBotUnregistrationRequest,
 } from './handlers/handle-bot-registration';
+import {
+  handleBotCommandDeleteRequest,
+  handleBotCommandsListRequest,
+  handleBotCommandsRequest,
+} from './handlers/handle-bot-commands';
+import {
+  handleCreateIncomingWebhookRequest,
+  handleListIncomingWebhooksRequest,
+  handleDeleteIncomingWebhookRequest,
+} from './handlers/handle-incoming-webhook';
+import {
+  handleCreateWebhookCommandRequest,
+  handleListWebhookCommandsRequest,
+  handleDeleteWebhookCommandRequest,
+} from './handlers/handle-webhook-commands';
+import handleWebhookReceiverRequest from './handlers/handle-webhook-receiver';
 import { buildCreatePrerenderAuth } from './prerender/auth';
 
 export type CreateRoutesArgs = {
@@ -258,6 +274,52 @@ export function createRoutes(args: CreateRoutesArgs) {
     jwtMiddleware(args.realmSecretSeed),
     handleBotUnregistrationRequest(args),
   );
+  router.post(
+    '/_bot-commands',
+    jwtMiddleware(args.realmSecretSeed),
+    handleBotCommandsRequest(args),
+  );
+  router.get(
+    '/_bot-commands',
+    jwtMiddleware(args.realmSecretSeed),
+    handleBotCommandsListRequest(args),
+  );
+  router.delete(
+    '/_bot-commands',
+    jwtMiddleware(args.realmSecretSeed),
+    handleBotCommandDeleteRequest(args),
+  );
+  router.post(
+    '/_incoming-webhooks',
+    jwtMiddleware(args.realmSecretSeed),
+    handleCreateIncomingWebhookRequest(args),
+  );
+  router.get(
+    '/_incoming-webhooks',
+    jwtMiddleware(args.realmSecretSeed),
+    handleListIncomingWebhooksRequest(args),
+  );
+  router.delete(
+    '/_incoming-webhooks',
+    jwtMiddleware(args.realmSecretSeed),
+    handleDeleteIncomingWebhookRequest(args),
+  );
+  router.post(
+    '/_webhook-commands',
+    jwtMiddleware(args.realmSecretSeed),
+    handleCreateWebhookCommandRequest(args),
+  );
+  router.get(
+    '/_webhook-commands',
+    jwtMiddleware(args.realmSecretSeed),
+    handleListWebhookCommandsRequest(args),
+  );
+  router.delete(
+    '/_webhook-commands',
+    jwtMiddleware(args.realmSecretSeed),
+    handleDeleteWebhookCommandRequest(args),
+  );
+  router.post('/_webhooks/:webhookPath', handleWebhookReceiverRequest(args));
 
   return router.routes();
 }

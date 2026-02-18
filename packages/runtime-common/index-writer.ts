@@ -60,7 +60,7 @@ export class IndexWriter {
   }
 }
 
-export type IndexEntry = InstanceEntry | ModuleEntry | ErrorEntry | FileEntry;
+export type IndexEntry = InstanceEntry | IndexErrorEntry | FileEntry;
 export type LastModifiedTimes = Map<
   string,
   { type: string; lastModified: number | null; hasError: boolean }
@@ -83,23 +83,28 @@ export interface InstanceEntry {
   deps: Set<string>;
 }
 
-export interface ErrorEntry {
-  type: 'instance-error' | 'module-error' | 'file-error';
+export interface IndexErrorEntry {
+  type: 'instance-error' | 'file-error';
   error: SerializedError;
   types?: string[];
   searchData?: Record<string, any>;
   cardType?: string;
 }
 
-function isErrorEntry(entry: IndexEntry): entry is ErrorEntry {
-  return entry.type.endsWith('-error');
-}
+export type InstanceErrorIndexEntry = IndexErrorEntry & {
+  type: 'instance-error';
+};
+export type FileErrorIndexEntry = IndexErrorEntry & { type: 'file-error' };
+export type SearchIndexErrorEntry =
+  | InstanceErrorIndexEntry
+  | FileErrorIndexEntry;
+export type SearchIndexEntry =
+  | InstanceEntry
+  | SearchIndexErrorEntry
+  | FileEntry;
 
-interface ModuleEntry {
-  type: 'module';
-  lastModified: number;
-  resourceCreatedAt: number;
-  deps: Set<string>;
+function isErrorEntry(entry: { type: string }): entry is IndexErrorEntry {
+  return entry.type === 'instance-error' || entry.type === 'file-error';
 }
 
 export interface FileEntry {
@@ -161,8 +166,8 @@ export class Batch {
     let results = (await this.#query([
       `SELECT i.url, i.type, i.last_modified, i.has_error
        FROM boxel_index as i
-          WHERE i.realm_url =`,
-      param(this.realmURL.href),
+          WHERE`,
+      ...every([[`i.realm_url =`, param(this.realmURL.href)]]),
     ] as Expression)) as Pick<
       BoxelIndexTable,
       'url' | 'type' | 'last_modified' | 'has_error'
@@ -177,34 +182,6 @@ export class Batch {
       });
     }
     return result;
-  }
-
-  async getModuleErrors(urls: string[]): Promise<SerializedError[]> {
-    let candidates = [...new Set(urls)].filter(
-      (url) => url && !url.endsWith('.json'),
-    );
-    if (candidates.length === 0) {
-      return [];
-    }
-    let params = candidates.map((url) => [param(url)]);
-    let rows = (await this.#query([
-      `SELECT i.error_doc`,
-      `FROM boxel_index_working as i`,
-      'WHERE',
-      ...every([
-        ['i.realm_url =', param(this.realmURL.href)],
-        ['i.type =', param('module')],
-        ['i.has_error = TRUE'],
-        any([
-          ['i.url IN', ...addExplicitParens(separatedByCommas(params))],
-          ['i.file_alias IN', ...addExplicitParens(separatedByCommas(params))],
-        ]),
-        any([['i.is_deleted = FALSE'], ['i.is_deleted IS NULL']]),
-      ]),
-    ] as Expression)) as Pick<BoxelIndexTable, 'error_doc'>[];
-    return rows
-      .map((row) => row.error_doc)
-      .filter((errorDoc): errorDoc is SerializedError => Boolean(errorDoc));
   }
 
   async copyFrom(sourceRealmURL: URL, destRealmInfo: RealmInfo): Promise<void> {
@@ -242,6 +219,11 @@ export class Batch {
             (dep) => this.copiedRealmURL(sourceRealmURL, new URL(dep)).href,
           )
         : entry.deps;
+      entry.last_known_good_deps = entry.last_known_good_deps
+        ? entry.last_known_good_deps.map(
+            (dep) => this.copiedRealmURL(sourceRealmURL, new URL(dep)).href,
+          )
+        : entry.last_known_good_deps;
       entry.pristine_doc = entry.pristine_doc
         ? {
             ...entry.pristine_doc,
@@ -294,7 +276,7 @@ export class Batch {
     ]);
   }
 
-  async updateEntry(url: URL, entry: IndexEntry): Promise<void> {
+  async updateEntry(url: URL, entry: SearchIndexEntry): Promise<void> {
     if (!new RealmPaths(this.realmURL).inRealm(url)) {
       // TODO this is a workaround for CS-6886. after we have solved that issue we can
       // drop this band-aid
@@ -321,18 +303,9 @@ export class Batch {
           atom_html: entry.atomHtml,
           icon_html: entry.iconHTML,
           deps: [...entry.deps],
+          last_known_good_deps: [...entry.deps],
           types: entry.types,
           display_names: entry.displayNames,
-          last_modified: entry.lastModified,
-          resource_created_at: entry.resourceCreatedAt,
-          error_doc: null,
-          has_error: false,
-        };
-        break;
-      case 'module':
-        entryPayload = {
-          type: 'module',
-          deps: [...entry.deps],
           last_modified: entry.lastModified,
           resource_created_at: entry.resourceCreatedAt,
           error_doc: null,
@@ -343,6 +316,7 @@ export class Batch {
         entryPayload = {
           type: 'file',
           deps: [...entry.deps],
+          last_known_good_deps: [...entry.deps],
           pristine_doc: entry.resource ?? null,
           search_doc: entry.searchData ?? null,
           types: entry.types ?? null,
@@ -360,7 +334,6 @@ export class Batch {
         };
         break;
       case 'instance-error':
-      case 'module-error':
       case 'file-error':
         entryPayload = {
           types: entry.types,
@@ -370,13 +343,21 @@ export class Batch {
             url,
             baseTypeFromError(entry),
           )) ?? {}),
+          // preserve last_known_good_deps through error cycles (may have been cleared
+          // by getProductionVersion if it returned undefined, so we explicitly preserve it)
+          last_known_good_deps: await this.getLastKnownGoodDeps(
+            url,
+            baseTypeFromError(entry),
+          ),
           type: baseTypeFromError(entry),
           error_doc: errorEntry?.error ?? entry.error,
           has_error: true,
         };
         break;
       default:
-        throw new Error(`Unsupported index entry type`);
+        throw new Error(
+          `Unsupported index entry type: ${(entry as { type: string }).type}`,
+        );
     }
     let preparedEntry = {
       url: href,
@@ -471,6 +452,24 @@ export class Batch {
         ? parseInt(entry.resource_created_at)
         : null,
     };
+  }
+
+  private async getLastKnownGoodDeps(
+    url: URL,
+    expectedType: BoxelIndexTable['type'],
+  ): Promise<string[] | null> {
+    let [entry] = (await this.#query([
+      `SELECT i.last_known_good_deps FROM boxel_index as i WHERE`,
+      ...every([
+        any([
+          [`i.url =`, param(url.href)],
+          [`i.file_alias =`, param(url.href)],
+        ]),
+        ['i.type =', param(expectedType)],
+        ['i.last_known_good_deps IS NOT NULL'],
+      ]),
+    ] as Expression)) as Pick<BoxelIndexTable, 'last_known_good_deps'>[];
+    return entry?.last_known_good_deps ?? null;
   }
 
   private async numberOfIndexEntries() {
@@ -761,9 +760,6 @@ export class Batch {
             }),
             param({ sqlite: resolvedPath, pg: `["${resolvedPath}"]` }),
           ],
-          // css is a subset of modules, so there won't by any references that
-          // are css entries that aren't already represented by a module entry
-          [`i.type != 'css'`],
           // probably need to reevaluate this condition when we get to cross
           // realm invalidation
           [`i.realm_url =`, param(this.realmURL.href)],
@@ -896,13 +892,11 @@ export class Batch {
 }
 
 function baseTypeFromError(
-  entry: ErrorEntry,
-): Extract<BoxelIndexTable['type'], 'instance' | 'module' | 'file'> {
+  entry: SearchIndexErrorEntry,
+): Extract<BoxelIndexTable['type'], 'instance' | 'file'> {
   switch (entry.type) {
     case 'instance-error':
       return 'instance';
-    case 'module-error':
-      return 'module';
     case 'file-error':
       return 'file';
   }

@@ -30,6 +30,7 @@ import {
   testRealmURLToUsername,
   Worker,
   DEFAULT_CARD_SIZE_LIMIT_BYTES,
+  DEFAULT_FILE_SIZE_LIMIT_BYTES,
   type DefinitionLookup,
   type LooseSingleCardDocument,
   type Prerenderer,
@@ -500,7 +501,8 @@ interface RealmContents {
     | LooseSingleCardDocument
     | RealmInfo
     | Record<string, unknown>
-    | string;
+    | string
+    | Uint8Array;
 }
 
 export const SYSTEM_CARD_FIXTURE_CONTENTS: RealmContents = {
@@ -633,12 +635,14 @@ export async function setupAcceptanceTestRealm({
   permissions,
   mockMatrixUtils,
   startMatrix = true,
+  fileSizeLimitBytes,
 }: {
   contents: RealmContents;
   realmURL?: string;
   permissions?: RealmPermissions;
   mockMatrixUtils: MockUtils;
   startMatrix?: boolean;
+  fileSizeLimitBytes?: number;
 }) {
   let resolvedRealmURL = ensureTrailingSlash(realmURL ?? testRealmURL);
   setupAuthEndpoints({
@@ -651,6 +655,7 @@ export async function setupAcceptanceTestRealm({
     permissions,
     mockMatrixUtils,
     startMatrix,
+    fileSizeLimitBytes,
   });
   getTestRealmRegistry().set(result.realm.url, {
     realm: result.realm,
@@ -714,6 +719,7 @@ async function setupTestRealm({
   permissions = { '*': ['read', 'write'] },
   mockMatrixUtils,
   startMatrix = true,
+  fileSizeLimitBytes,
 }: {
   contents: RealmContents;
   realmURL?: string;
@@ -721,6 +727,7 @@ async function setupTestRealm({
   permissions?: RealmPermissions;
   mockMatrixUtils: MockUtils;
   startMatrix?: boolean;
+  fileSizeLimitBytes?: number;
 }) {
   let owner = (getContext() as TestContext).owner;
   let { virtualNetwork } = getService('network');
@@ -805,6 +812,11 @@ async function setupTestRealm({
     cardSizeLimitBytes: Number(
       process.env.CARD_SIZE_LIMIT_BYTES ?? DEFAULT_CARD_SIZE_LIMIT_BYTES,
     ),
+    fileSizeLimitBytes:
+      fileSizeLimitBytes ??
+      Number(
+        process.env.FILE_SIZE_LIMIT_BYTES ?? DEFAULT_FILE_SIZE_LIMIT_BYTES,
+      ),
   });
 
   // Register the realm early so realm-server mock _info lookups can resolve
@@ -995,6 +1007,62 @@ export function delay(delayAmountMs: number): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(resolve, delayAmountMs);
   });
+}
+
+// Create minimal valid PNG bytes for testing (1x1 pixel by default)
+export function makeMinimalPng(width = 1, height = 1): Uint8Array {
+  let signature = [137, 80, 78, 71, 13, 10, 26, 10];
+  let ihdrData = new Uint8Array(13);
+  let ihdrView = new DataView(ihdrData.buffer);
+  ihdrView.setUint32(0, width);
+  ihdrView.setUint32(4, height);
+  ihdrData[8] = 8; // bit depth
+  ihdrData[9] = 2; // color type (RGB)
+  ihdrData[10] = 0; // compression
+  ihdrData[11] = 0; // filter
+  ihdrData[12] = 0; // interlace
+  let ihdrChunk = buildPngChunk('IHDR', ihdrData);
+  let idatData = new Uint8Array([
+    0x08, 0xd7, 0x01, 0x00, 0x00, 0xff, 0xff, 0x00, 0x01, 0x00, 0x01,
+  ]);
+  let idatChunk = buildPngChunk('IDAT', idatData);
+  let iendChunk = buildPngChunk('IEND', new Uint8Array(0));
+  let totalLength =
+    signature.length + ihdrChunk.length + idatChunk.length + iendChunk.length;
+  let png = new Uint8Array(totalLength);
+  let offset = 0;
+  png.set(signature, offset);
+  offset += signature.length;
+  png.set(ihdrChunk, offset);
+  offset += ihdrChunk.length;
+  png.set(idatChunk, offset);
+  offset += idatChunk.length;
+  png.set(iendChunk, offset);
+  return png;
+}
+
+function buildPngChunk(type: string, data: Uint8Array): Uint8Array {
+  let chunk = new Uint8Array(4 + 4 + data.length + 4);
+  let view = new DataView(chunk.buffer);
+  view.setUint32(0, data.length);
+  for (let i = 0; i < 4; i++) {
+    chunk[4 + i] = type.charCodeAt(i);
+  }
+  chunk.set(data, 8);
+  let crc = crc32Png(chunk.slice(4, 8 + data.length));
+  view.setUint32(8 + data.length, crc);
+  return chunk;
+}
+
+function crc32Png(data: Uint8Array): number {
+  let crc = 0xffffffff;
+  for (let i = 0; i < data.length; i++) {
+    crc ^= data[i]!;
+    for (let j = 0; j < 8; j++) {
+      crc = crc & 1 ? (crc >>> 1) ^ 0xedb88320 : crc >>> 1;
+    }
+  }
+  return (crc ^ 0xffffffff) >>> 0;
 }
 
 // --- Created-at test utilities ---

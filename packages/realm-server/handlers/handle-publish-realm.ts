@@ -15,10 +15,19 @@ import {
   type PublishedRealmTable,
   fetchRealmPermissions,
   uuidv4,
+  userInitiatedPriority,
 } from '@cardstack/runtime-common';
 import { getPublishedRealmDomainOverrides } from '@cardstack/runtime-common/constants';
-import { ensureDirSync, copySync, readJsonSync, writeJsonSync } from 'fs-extra';
-import { resolve, join } from 'path';
+
+import { join } from 'path';
+import {
+  ensureDirSync,
+  copySync,
+  readJsonSync,
+  writeJsonSync,
+  removeSync,
+} from 'fs-extra';
+
 import {
   fetchRequestFromContext,
   sendResponseForBadRequest,
@@ -171,12 +180,8 @@ export default function handlePublishRealm({
       return;
     }
 
-    let sourceRealmURL: string = json.sourceRealmURL.endsWith('/')
-      ? json.sourceRealmURL
-      : `${json.sourceRealmURL}/`;
-    let publishedRealmURL = json.publishedRealmURL.endsWith('/')
-      ? json.publishedRealmURL
-      : `${json.publishedRealmURL}/`;
+    let sourceRealmURL = ensureTrailingSlash(json.sourceRealmURL);
+    let publishedRealmURL = ensureTrailingSlash(json.publishedRealmURL);
 
     let { user: ownerUserId, sessionRoom: tokenSessionRoom } = token;
 
@@ -204,8 +209,10 @@ export default function handlePublishRealm({
           validPublishedRealmDomains &&
           validPublishedRealmDomains.length > 0
         ) {
-          let isValidDomain = validPublishedRealmDomains.some((domain) =>
-            publishedURL.host.endsWith(domain),
+          let isValidDomain = validPublishedRealmDomains.some(
+            (domain) =>
+              publishedURL.host.endsWith(domain) ||
+              publishedURL.hostname.endsWith(domain),
           );
           if (!isValidDomain) {
             await sendResponseForBadRequest(
@@ -285,53 +292,23 @@ export default function handlePublishRealm({
 
       let userId;
       let realmUsername;
-      let publishedRealmData: PublishedRealmTable | undefined;
+      let publishedRealmId: string;
+
       if (existingPublishedRealm) {
         let results = (await query(dbAdapter, [
-          `SELECT * FROM published_realms WHERE published_realm_url =`,
+          `SELECT id, owner_username FROM published_realms WHERE published_realm_url =`,
           param(publishedRealmURL),
-        ])) as Pick<
-          PublishedRealmTable,
-          | 'id'
-          | 'owner_username'
-          | 'source_realm_url'
-          | 'published_realm_url'
-          | 'last_published_at'
-        >[];
-        publishedRealmData = results[0];
-        realmUsername = `realm/${PUBLISHED_DIRECTORY_NAME}_${publishedRealmData.id}`;
-
-        let lastPublishedAt = Date.now().toString();
-        await query(dbAdapter, [
-          `UPDATE published_realms SET last_published_at =`,
-          param(lastPublishedAt),
-          `WHERE published_realm_url =`,
-          param(publishedRealmURL),
-        ]);
-        publishedRealmData.last_published_at = lastPublishedAt;
-      } else {
-        let publishedRealmId = uuidv4();
+        ])) as Pick<PublishedRealmTable, 'id' | 'owner_username'>[];
+        if (!results.length) {
+          throw new Error(
+            `Published realm record not found for ${publishedRealmURL}`,
+          );
+        }
+        publishedRealmId = results[0].id;
         realmUsername = `realm/${PUBLISHED_DIRECTORY_NAME}_${publishedRealmId}`;
-        let { valueExpressions, nameExpressions } = asExpressions({
-          id: publishedRealmId,
-          owner_username: realmUsername,
-          source_realm_url: sourceRealmURL,
-          published_realm_url: publishedRealmURL,
-          last_published_at: Date.now().toString(),
-        });
-
-        let results = (await query(
-          dbAdapter,
-          insert('published_realms', nameExpressions, valueExpressions),
-        )) as Pick<
-          PublishedRealmTable,
-          | 'id'
-          | 'owner_username'
-          | 'source_realm_url'
-          | 'published_realm_url'
-          | 'last_published_at'
-        >[];
-        publishedRealmData = results[0];
+      } else {
+        publishedRealmId = uuidv4();
+        realmUsername = `realm/${PUBLISHED_DIRECTORY_NAME}_${publishedRealmId}`;
 
         let { userId: newUserId } = await registerUser({
           matrixURL: matrixClient.matrixURL,
@@ -348,19 +325,20 @@ export default function handlePublishRealm({
           '*': ['read'],
         });
       }
-      log.debug(
-        `created realm bot user '${userId}' for new realm ${publishedRealmURL}`,
-      );
 
-      let pathNameParts = new URL(sourceRealmURL).pathname
-        .split('/')
-        .filter((p) => p);
-      if (pathNameParts.length < 1) {
-        throw new Error('Could not determine source realm folder');
+      let sourceRealm = realms.find((r) => r.url === sourceRealmURL);
+      if (!sourceRealm?.dir) {
+        throw new Error(
+          `Could not determine filesystem path for source realm ${sourceRealmURL}`,
+        );
       }
-      let sourceRealmPath = resolve(join(realmsRootPath, ...pathNameParts));
+      // Publishing copies index state from the source realm, so we need to
+      // wait for any in-flight indexing/update propagation to settle first.
+      await sourceRealm.indexing();
+      await sourceRealm.flushUpdateEvents();
+      let sourceRealmPath = sourceRealm.dir;
       let publishedDir = join(realmsRootPath, PUBLISHED_DIRECTORY_NAME);
-      let publishedRealmPath = join(publishedDir, publishedRealmData.id);
+      let publishedRealmPath = join(publishedDir, publishedRealmId);
       copySync(sourceRealmPath, publishedRealmPath);
       ensureDirSync(publishedRealmPath);
 
@@ -385,6 +363,14 @@ export default function handlePublishRealm({
         realms.splice(realms.indexOf(existingPublishedRealm), 1);
         virtualNetwork.unmount(existingPublishedRealm.handle);
       }
+
+      // Clear stale modules cache for the published realm so that
+      // error entries from a previous publish don't persist
+      await query(dbAdapter, [
+        `DELETE FROM modules WHERE resolved_realm_url =`,
+        param(publishedRealmURL),
+      ]);
+
       let realm = createAndMountRealm(
         publishedRealmPath,
         publishedRealmURL,
@@ -394,16 +380,53 @@ export default function handlePublishRealm({
       );
       await realm.start();
 
+      // reindexing is to ensure that prerendered templates that get copied over
+      // to the published realm get regenerated - we want this so that the
+      // places in the templates that refer to model.id are updated to the new
+      // published realm URL (for example in the og:url meta tag).
+      await realm.fullIndex(userInitiatedPriority);
+
+      let lastPublishedAt = Date.now().toString();
+      try {
+        if (existingPublishedRealm) {
+          await query(dbAdapter, [
+            `UPDATE published_realms SET last_published_at =`,
+            param(lastPublishedAt),
+            `WHERE published_realm_url =`,
+            param(publishedRealmURL),
+          ]);
+        } else {
+          let { valueExpressions, nameExpressions } = asExpressions({
+            id: publishedRealmId,
+            owner_username: realmUsername,
+            source_realm_url: sourceRealmURL,
+            published_realm_url: publishedRealmURL,
+            last_published_at: lastPublishedAt,
+          });
+          await query(
+            dbAdapter,
+            insert('published_realms', nameExpressions, valueExpressions),
+          );
+        }
+      } catch (dbError: any) {
+        // Clean up the mounted realm so we don't leave an orphan
+        // without a corresponding published_realms DB record
+        realms.splice(realms.indexOf(realm), 1);
+        virtualNetwork.unmount(realm.handle);
+        removeSync(publishedRealmPath);
+        throw dbError;
+      }
+
       let response = createResponse({
         body: JSON.stringify(
           {
             data: {
               type: 'published_realm',
-              id: publishedRealmData.id,
+              id: publishedRealmId,
               attributes: {
-                sourceRealmURL: publishedRealmData.source_realm_url,
-                publishedRealmURL: publishedRealmData.published_realm_url,
-                lastPublishedAt: publishedRealmData.last_published_at,
+                sourceRealmURL,
+                publishedRealmURL,
+                lastPublishedAt: lastPublishedAt,
               },
             },
           },

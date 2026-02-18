@@ -10,6 +10,7 @@ import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
 import { baseRealm, unixTime } from '@cardstack/runtime-common';
 
 import { ensureTrailingSlash } from '@cardstack/runtime-common';
+import { BOT_TRIGGER_EVENT_TYPE } from '@cardstack/runtime-common';
 import {
   APP_BOXEL_ACTIVE_LLM,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
@@ -59,9 +60,10 @@ type Plural<T> = {
 
 const publicRealmURLs = [
   baseRealm.url,
-  ensureTrailingSlash(ENV.resolvedCatalogRealmURL),
+  ENV.resolvedCatalogRealmURL &&
+    ensureTrailingSlash(ENV.resolvedCatalogRealmURL),
   ensureTrailingSlash(ENV.resolvedSkillsRealmURL),
-];
+].filter(Boolean) as string[];
 
 export class MockClient implements ExtendedClient {
   private listeners: Partial<Plural<MatrixSDK.ClientEventHandlerMap>> = {};
@@ -622,6 +624,7 @@ export class MockClient implements ExtendedClient {
       case APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE:
       case APP_BOXEL_ACTIVE_LLM:
       case APP_BOXEL_REALM_EVENT_TYPE:
+      case BOT_TRIGGER_EVENT_TYPE:
       case 'm.room.create':
       case 'm.room.message':
       case 'm.room.name':

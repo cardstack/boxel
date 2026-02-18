@@ -1,9 +1,14 @@
 #! /bin/sh
+SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
 pnpm setup:base-in-deployment
 pnpm setup:experiments-in-deployment
 pnpm setup:catalog-in-deployment
 pnpm setup:skills-in-deployment
 pnpm setup:boxel-homepage-in-deployment
+
+SUBMISSION_REALM_PATH='/persistent/submissions'
+SUBMISSION_REALM_URL="${RESOLVED_SUBMISSION_REALM_URL:-https://realms-staging.stack.cards/submissions/}"
+sh "$SCRIPTS_DIR/setup-submission-realm.sh" "$SUBMISSION_REALM_PATH"
 
 DEFAULT_CATALOG_REALM_URL='https://realms-staging.stack.cards/catalog/'
 CATALOG_REALM_URL="${RESOLVED_CATALOG_REALM_URL:-$DEFAULT_CATALOG_REALM_URL}"
@@ -35,6 +40,11 @@ NODE_NO_WARNINGS=1 \
   --username='catalog_realm' \
   --fromUrl="${CATALOG_REALM_URL}" \
   --toUrl="${CATALOG_REALM_URL}" \
+  \
+  --path="${SUBMISSION_REALM_PATH}" \
+  --username='submission_realm' \
+  --fromUrl="${SUBMISSION_REALM_URL}" \
+  --toUrl="${SUBMISSION_REALM_URL}" \
   \
   --path='/persistent/skills' \
   --username='skills_realm' \

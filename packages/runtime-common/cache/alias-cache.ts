@@ -37,6 +37,10 @@ export class AliasCache<T extends CanonicalCacheEntry> {
     this.#aliasesByCanonical.clear();
   }
 
+  entries(): IterableIterator<[LocalPath, T]> {
+    return this.#entries.entries();
+  }
+
   #register(canonicalPath: LocalPath, alias: LocalPath): void {
     let aliases = this.#aliasesByCanonical.get(canonicalPath);
     if (!aliases) {

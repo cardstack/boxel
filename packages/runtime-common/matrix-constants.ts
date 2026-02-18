@@ -25,6 +25,8 @@ export const APP_BOXEL_REALMS_EVENT_TYPE = 'app.boxel.realms';
 export const APP_BOXEL_SYSTEM_CARD_EVENT_TYPE = 'app.boxel.system-card';
 export const APP_BOXEL_REALM_EVENT_TYPE = 'app.boxel.realm-event';
 export const APP_BOXEL_ACTIVE_LLM = 'app.boxel.active-llm';
+export const BOT_TRIGGER_EVENT_TYPE = 'app.boxel.bot-trigger';
+export const BOT_TRIGGER_COMMAND_TYPES = ['create-listing-pr'] as const;
 export const APP_BOXEL_REASONING_CONTENT_KEY = 'app.boxel.reasoning';
 export const APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY =
   'app.boxel.has-continuation';

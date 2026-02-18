@@ -18,7 +18,9 @@ export class InvalidQueryError extends Error {
   }
 }
 
-interface QueryBase {
+export type SparseFieldsets = Record<string, string[]>;
+
+interface QueryCommon {
   filter?: Filter;
   sort?: Sort;
   page?: {
@@ -28,13 +30,22 @@ interface QueryBase {
   };
 }
 
+// fields is only valid when asData is true. This discriminated union
+// makes it a compile-time error to specify fields without asData.
+type QueryBase =
+  | (QueryCommon & { asData?: false; fields?: never })
+  | (QueryCommon & { asData: true; fields?: SparseFieldsets });
+
 export type Query =
   | (QueryBase & { realm?: string; realms?: never })
   | (QueryBase & { realms?: string[]; realm?: never });
 
+export type DataQuery = Query & { asData: true };
+
 interface QueryWithInterpolationsBase {
   filter?: Filter;
   sort?: SortWithInterpolations;
+  fields?: SparseFieldsets;
   page?: {
     number?: number; // page.number is 0-based
     size: number | string;
@@ -207,10 +218,26 @@ export function assertQuery(
       case 'realms':
         assertRealms(value, pointer.concat('realms'));
         break;
+      case 'fields':
+        assertFields(value, pointer.concat('fields'));
+        break;
+      case 'asData':
+        if (typeof value !== 'boolean') {
+          throw new InvalidQueryError(
+            `${pointer.concat('asData').join('/') || '/'}: asData must be a boolean`,
+          );
+        }
+        break;
 
       default:
         throw new InvalidQueryError(`unknown field in query: ${key}`);
     }
+  }
+
+  if ('fields' in query && query.asData !== true) {
+    throw new InvalidQueryError(
+      `${pointer.join('/') || '/'}: fields requires asData to be true`,
+    );
   }
 }
 
@@ -236,6 +263,31 @@ function assertRealms(
       throw new InvalidQueryError(
         `${pointer.join('/') || '/'}: realms must be an array of strings`,
       );
+    }
+  }
+}
+
+function assertFields(
+  fields: any,
+  pointer: string[],
+): asserts fields is SparseFieldsets {
+  if (typeof fields !== 'object' || fields == null || Array.isArray(fields)) {
+    throw new InvalidQueryError(
+      `${pointer.join('/') || '/'}: fields must be an object mapping type names to arrays of field names`,
+    );
+  }
+  for (let [typeName, fieldNames] of Object.entries(fields)) {
+    if (!Array.isArray(fieldNames)) {
+      throw new InvalidQueryError(
+        `${pointer.concat(typeName).join('/') || '/'}: fields value must be an array of field names`,
+      );
+    }
+    for (let fieldName of fieldNames) {
+      if (typeof fieldName !== 'string') {
+        throw new InvalidQueryError(
+          `${pointer.concat(typeName).join('/') || '/'}: each field name must be a string`,
+        );
+      }
     }
   }
 }

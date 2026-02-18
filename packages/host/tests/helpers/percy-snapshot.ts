@@ -1,5 +1,6 @@
 import { pauseTest, settled } from '@ember/test-helpers';
 
+// eslint-disable-next-line @cardstack/boxel/no-percy-direct-import
 import originalPercySnapshot from '@percy/ember';
 
 import QUnit from 'qunit';

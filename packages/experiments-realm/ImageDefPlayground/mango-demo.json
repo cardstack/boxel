@@ -1,0 +1,68 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "ImageDefPlayground",
+        "module": "../image-def-playground"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "title": "Image Playground",
+      "cardInfo": {
+        "name": null,
+        "notes": null,
+        "summary": null,
+        "cardThumbnailURL": null
+      },
+      "description": "Demonstrating ImageDef capabilities including automatic dimension extraction and various display formats"
+    },
+    "relationships": {
+      "gallery.0": {
+        "links": {
+          "self": "../test-images/green-mango.png"
+        }
+      },
+      "gallery.1": {
+        "links": {
+          "self": "./mango.png"
+        }
+      },
+      "gallery.2": {
+        "links": {
+          "self": "../test-images/rainbow-mango.avif"
+        }
+      },
+      "gallery.3": {
+        "links": {
+          "self": "../test-images/red-mango.jpg"
+        }
+      },
+      "gallery.4": {
+        "links": {
+          "self": "../test-images/traced-mango.svg"
+        }
+      },
+      "gallery.5": {
+        "links": {
+          "self": "../test-images/rainbow-mango.gif"
+        }
+      },
+      "gallery.6": {
+        "links": {
+          "self": "../test-images/yellow-mango.webp"
+        }
+      },
+      "featuredImage": {
+        "links": {
+          "self": "./mango.png"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

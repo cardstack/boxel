@@ -19,6 +19,7 @@ import {
   field,
   getDataBucket,
 } from './card-api';
+import NumberField from './number';
 import LinkIcon from '@cardstack/boxel-icons/link';
 import OpenInInteractModeCommand from '@cardstack/boxel-host/commands/open-in-interact-mode';
 import Eye from '@cardstack/boxel-icons/eye';
@@ -58,6 +59,7 @@ export type SerializedFile<Extra extends object = {}> = {
   name: string;
   contentType: string;
   contentHash?: string;
+  contentSize?: number;
 } & Extra;
 
 export type ByteStream = ReadableStream<Uint8Array> | Uint8Array;
@@ -95,6 +97,7 @@ export class FileDef extends BaseDef {
   @field name = contains(StringField);
   @field contentType = contains(StringField);
   @field contentHash = contains(StringField);
+  @field contentSize = contains(NumberField);
 
   static embedded: BaseDefComponent = View;
   static fitted: BaseDefComponent = View;
@@ -105,18 +108,26 @@ export class FileDef extends BaseDef {
   static async extractAttributes(
     url: string,
     getStream: () => Promise<ByteStream>,
-    options: { contentHash?: string } = {},
+    options: { contentHash?: string; contentSize?: number } = {},
   ): Promise<SerializedFile> {
     let parsed = new URL(url);
-    let name = parsed.pathname.split('/').pop() ?? parsed.pathname;
+    let name = decodeURIComponent(
+      parsed.pathname.split('/').pop() ?? parsed.pathname,
+    );
     let contentType = inferContentType(name);
     let contentHash: string | undefined = options.contentHash;
-    if (!contentHash) {
+    let contentSize: number | undefined = options.contentSize;
+    if (!contentHash || contentSize === undefined) {
       let bytes = await byteStreamToUint8Array(await getStream());
-      try {
-        contentHash = md5(bytes);
-      } catch {
-        contentHash = md5(new TextDecoder().decode(bytes));
+      if (!contentHash) {
+        try {
+          contentHash = md5(bytes);
+        } catch {
+          contentHash = md5(new TextDecoder().decode(bytes));
+        }
+      }
+      if (contentSize === undefined) {
+        contentSize = bytes.byteLength;
       }
     }
 
@@ -126,6 +137,7 @@ export class FileDef extends BaseDef {
       name,
       contentType,
       contentHash,
+      contentSize,
     };
   }
 
@@ -136,6 +148,7 @@ export class FileDef extends BaseDef {
       name: this.name,
       contentType: this.contentType,
       contentHash: this.contentHash,
+      contentSize: this.contentSize,
     };
   }
 
@@ -149,6 +162,7 @@ export interface SerializedFileDef {
   sourceUrl: string;
   name?: string;
   contentHash?: string;
+  contentSize?: number;
   contentType?: string;
   content?: string;
   error?: string;
@@ -160,8 +174,9 @@ export function createFileDef({
   name,
   contentType,
   contentHash,
+  contentSize,
 }: SerializedFileDef) {
-  return new FileDef({ url, sourceUrl, name, contentType, contentHash });
+  return new FileDef({ url, sourceUrl, name, contentType, contentHash, contentSize });
 }
 
 export function getDefaultFileMenuItems(

@@ -3312,7 +3312,7 @@ module('Integration | realm', function (hooks) {
   });
 
   test('included card uses correct module path when realm is mounted', async function (assert) {
-    let catalogRealmURL = 'http://localhost:4201/catalog/';
+    let mountedRealmURL = 'http://localhost:4201/mounted-test/';
     let spreadsheet1Id = 'spreadsheet-1';
     let spreadsheet2Id = 'spreadsheet-2';
 
@@ -3328,7 +3328,7 @@ module('Integration | realm', function (hooks) {
 
     let { realm } = await setupIntegrationTestRealm({
       mockMatrixUtils,
-      realmURL: catalogRealmURL,
+      realmURL: mountedRealmURL,
       contents: {
         'spreadsheet/spreadsheet.gts': {
           Spreadsheet,
@@ -3389,7 +3389,7 @@ module('Integration | realm', function (hooks) {
 
     let response = await handle(
       realm,
-      new Request(`${catalogRealmURL}index`, {
+      new Request(`${mountedRealmURL}index`, {
         headers: {
           Accept: 'application/vnd.card+json',
         },
@@ -3400,7 +3400,7 @@ module('Integration | realm', function (hooks) {
     let included = json.included?.find(
       (resource: any) =>
         resource.id ===
-        `${catalogRealmURL}spreadsheet/Spreadsheet/${spreadsheet1Id}`,
+        `${mountedRealmURL}spreadsheet/Spreadsheet/${spreadsheet1Id}`,
     );
     assert.ok(included, 'linked spreadsheet card is included');
     assert.strictEqual(

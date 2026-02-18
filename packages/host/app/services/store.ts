@@ -20,8 +20,9 @@ import {
   isCardError,
   isCardInstance,
   isFileDefInstance,
+  isFileMetaResource,
   isSingleCardDocument,
-  isCardCollectionDocument,
+  isLinkableCollectionDocument,
   Deferred,
   delay,
   mergeRelationships,
@@ -37,6 +38,7 @@ import {
   type AddOptions,
   type CreateOptions,
   type Query,
+  type DataQuery,
   type QueryResultsMeta,
   type PatchData,
   type Relationship,
@@ -53,6 +55,8 @@ import {
   type LooseLinkableResource,
   type LooseSingleResourceDocument,
   type StoreReadType,
+  type CardResource,
+  type Saved,
 } from '@cardstack/runtime-common';
 
 import type { CardDef, BaseDef } from 'https://cardstack.com/base/card-api';
@@ -64,6 +68,10 @@ import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event'
 import CardStore, { getDeps, type ReferenceCount } from '../lib/gc-card-store';
 
 import { getSearch } from '../resources/search';
+import {
+  getSearchData,
+  type SearchDataResource,
+} from '../resources/search-data';
 
 import {
   enableRenderTimerStub,
@@ -575,7 +583,40 @@ export default class StoreService extends Service implements StoreInterface {
     return persistedResult as T | CardErrorJSONAPI;
   }
 
-  async search(query: Query, realms?: string[]): Promise<CardDef[]> {
+  async search(
+    query: DataQuery,
+    realms?: string[],
+  ): Promise<(CardResource<Saved> | FileMetaResource)[]>;
+  async search(
+    query: DataQuery,
+    realms: string[] | undefined,
+    opts: { includeMeta: true },
+  ): Promise<{
+    resources: (CardResource<Saved> | FileMetaResource)[];
+    meta: QueryResultsMeta;
+  }>;
+  async search<T extends CardDef | FileDef = CardDef>(
+    query: Query,
+    realms?: string[],
+  ): Promise<T[]>;
+  async search<T extends CardDef | FileDef = CardDef>(
+    query: Query,
+    realms: string[] | undefined,
+    opts: { includeMeta: true },
+  ): Promise<{ instances: T[]; meta: QueryResultsMeta }>;
+  async search<T extends CardDef | FileDef = CardDef>(
+    query: Query,
+    realms?: string[],
+    opts?: { includeMeta?: boolean },
+  ): Promise<
+    | T[]
+    | (CardResource<Saved> | FileMetaResource)[]
+    | { instances: T[]; meta: QueryResultsMeta }
+    | {
+        resources: (CardResource<Saved> | FileMetaResource)[];
+        meta: QueryResultsMeta;
+      }
+  > {
     let normalizedRealms = (realms ?? [])
       .map((realm) => new RealmPaths(new URL(realm)).url)
       .filter(Boolean);
@@ -584,12 +625,32 @@ export default class StoreService extends Service implements StoreInterface {
         ? normalizedRealms
         : this.realmServer.availableRealmURLs;
     if (searchRealms.length === 0) {
-      return [];
+      if (query.asData) {
+        return opts?.includeMeta
+          ? { resources: [], meta: { page: { total: 0 } } }
+          : [];
+      }
+      return opts?.includeMeta
+        ? { instances: [], meta: { page: { total: 0 } } }
+        : [];
     }
-    return this._search(query, searchRealms);
+    if (query.asData) {
+      let result = await this.fetchSearchData(query, searchRealms);
+      return opts?.includeMeta ? result : result.resources;
+    }
+    let result = await this.fetchAndHydrateSearchResults<T>(
+      query,
+      searchRealms,
+    );
+    return opts?.includeMeta ? result : result.instances;
   }
 
-  private async _search(query: Query, realms: string[]): Promise<CardDef[]> {
+  private async fetchAndHydrateSearchResults<
+    T extends CardDef | FileDef = CardDef,
+  >(
+    query: Query,
+    realms: string[],
+  ): Promise<{ instances: T[]; meta: QueryResultsMeta }> {
     let realmServerURLs = this.realmServer.getRealmServersForRealms(realms);
     // TODO remove this assertion after multi-realm server/federated identity is supported
     this.realmServer.assertOwnRealmServer(realmServerURLs);
@@ -614,37 +675,72 @@ export default class StoreService extends Service implements StoreInterface {
       throw err;
     }
     let json = await response.json();
-    if (!isCardCollectionDocument(json)) {
+    if (!isLinkableCollectionDocument(json)) {
       throw new Error(
-        `The realm search response was not a card collection document:
+        `The realm search response was not a valid collection document:
         ${JSON.stringify(json, null, 2)}`,
       );
     }
     let collectionDoc = json;
-    return (
+
+    // Hydrate each result into the store
+    let instances = (
       await Promise.all(
-        collectionDoc.data.map(async (doc) => {
+        collectionDoc.data.map(async (resource) => {
           try {
-            return await this.getCardInstance({
-              idOrDoc: { data: doc },
-              relativeTo: new URL(doc.id!), // all results will have id's
-            });
-          } catch (e) {
-            console.warn(
-              `Skipping ${
-                doc.id
-              }. Encountered error deserializing from search result for query ${JSON.stringify(
-                query,
-                null,
-                2,
-              )} against realms ${realms.join()}`,
-              e,
+            return await this.addResourceFromSearchData<T>(resource);
+          } catch (error) {
+            storeLogger.warn(
+              `Failed to hydrate resource from search results (id: ${'id' in resource ? resource.id : 'unknown'})`,
+              error,
             );
             return undefined;
           }
         }),
       )
-    ).filter(Boolean) as CardDef[];
+    ).filter(Boolean) as T[];
+
+    return { instances, meta: collectionDoc.meta };
+  }
+
+  private async fetchSearchData(
+    query: Query,
+    realms: string[],
+  ): Promise<{
+    resources: (CardResource<Saved> | FileMetaResource)[];
+    meta: QueryResultsMeta;
+  }> {
+    let realmServerURLs = this.realmServer.getRealmServersForRealms(realms);
+    // TODO remove this assertion after multi-realm server/federated identity is supported
+    this.realmServer.assertOwnRealmServer(realmServerURLs);
+    let [realmServerURL] = realmServerURLs;
+    let searchURL = new URL('_search', realmServerURL);
+    let response = await this.realmServer.maybeAuthedFetch(searchURL.href, {
+      method: 'QUERY',
+      headers: {
+        Accept: SupportedMimeType.CardJson,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ ...query, realms }),
+    });
+    if (!response.ok) {
+      let responseText = await response.text();
+      let err = new Error(
+        `status: ${response.status} - ${response.statusText}. ${responseText}`,
+      ) as any;
+      err.status = response.status;
+      err.responseText = responseText;
+      err.responseHeaders = response.headers;
+      throw err;
+    }
+    let json = await response.json();
+    if (!isLinkableCollectionDocument(json)) {
+      throw new Error(
+        `The realm search response was not a valid collection document:
+        ${JSON.stringify(json, null, 2)}`,
+      );
+    }
+    return { resources: json.data, meta: json.meta };
   }
 
   getSearchResource<T extends CardDef | FileDef = CardDef>(
@@ -678,6 +774,24 @@ export default class StoreService extends Service implements StoreInterface {
       getRealms,
       opts,
     ) as unknown as SearchResource<T>;
+  }
+
+  getSearchDataResource(
+    parent: object,
+    getQuery: () => DataQuery | undefined,
+    getRealms?: () => string[] | undefined,
+    opts?: { isLive?: boolean },
+  ): SearchDataResource {
+    if (this.isRenderStore && opts) {
+      opts.isLive = false;
+    }
+    return getSearchData(
+      parent,
+      getOwner(this)!,
+      getQuery,
+      getRealms,
+      opts,
+    ) as unknown as SearchDataResource;
   }
 
   getSaveState(id: string): AutoSaveState | undefined {
@@ -1064,6 +1178,41 @@ export default class StoreService extends Service implements StoreInterface {
     })) as unknown as FileDef;
     this.setIdentityContext(instance, 'file-meta');
     return instance;
+  }
+
+  // Internal method for hydrating a resource from search response data.
+  // This avoids N+1 queries when search results include card or file-meta resources.
+  // Not part of the public API since it's meant for internal search result processing.
+  private async addResourceFromSearchData<T extends CardDef | FileDef>(
+    resource: CardResource<Saved> | FileMetaResource,
+  ): Promise<T | undefined> {
+    if (!resource.id) {
+      throw new Error('resource must have an id');
+    }
+
+    // Handle file-meta resources
+    if (isFileMetaResource(resource)) {
+      let existingInstance = this.peek(resource.id, { type: 'file-meta' });
+      if (existingInstance && isFileDefInstance(existingInstance)) {
+        return existingInstance as T;
+      }
+      let doc = { data: resource };
+      return this.createFileMetaFromSerialized(
+        resource,
+        doc,
+        new URL(resource.id),
+      ) as Promise<T>;
+    }
+
+    // Handle card resources
+    let existingInstance = this.peek(resource.id);
+    if (existingInstance && isCardInstance(existingInstance)) {
+      return existingInstance as T;
+    }
+    return this.add({ data: resource } as SingleCardDocument, {
+      doNotPersist: true,
+      relativeTo: new URL(resource.id),
+    }) as Promise<T>;
   }
 
   private async startAutoSaving(instanceOrError: CardDef | CardErrorJSONAPI) {

@@ -11,15 +11,13 @@ import TextAreaField from 'https://cardstack.com/base/text-area';
 import { Person } from './person';
 import FileTextIcon from '@cardstack/boxel-icons/file-text';
 
-let imageURL = new URL('./logo.png', import.meta.url).href;
+let imageURL = new URL('./green-mango.png', import.meta.url).href;
 
 class BasicField extends FieldDef {
   static displayName = 'Basic Field';
   @field cardTitle = contains(StringField);
   static embedded = class Embedded extends Component<typeof this> {
-    <template>
-      Title: <@fields.cardTitle />
-    </template>
+    <template>Title: <@fields.cardTitle /></template>
   };
 }
 
@@ -46,7 +44,10 @@ export class Post extends CardDef {
   static isolated = class Isolated extends Component<typeof this> {
     <template>
       <div class='container'>
-        <h1><@fields.cardTitle /><img src='{{imageURL}}' aria-hidden='true' /></h1>
+        <h1><@fields.cardTitle /><img
+            src='{{imageURL}}'
+            aria-hidden='true'
+          /></h1>
         <h3>by <@fields.author.firstName /> <@fields.author.lastName /></h3>
         <p><@fields.body /></p>
       </div>

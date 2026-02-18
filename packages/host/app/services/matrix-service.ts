@@ -28,7 +28,7 @@ import type {
 } from '@cardstack/runtime-common';
 import {
   aiBotUsername,
-  botRunnerUsername,
+  submissionBotUsername,
   logger,
   isCardInstance,
   Deferred,
@@ -90,6 +90,7 @@ import type * as FileAPI from 'https://cardstack.com/base/file-api';
 import type { FileDef } from 'https://cardstack.com/base/file-api';
 import type {
   BoxelContext,
+  BotTriggerContent,
   CardMessageContent,
   MatrixEvent as DiscreteMatrixEvent,
   CodePatchResultContent,
@@ -401,9 +402,9 @@ export default class MatrixService extends Service {
     return `@${aiBotUsername}:${server}`;
   }
 
-  get botRunnerUserId() {
+  get submissionBotUserId() {
     let server = this.userId!.split(':')[1];
-    return `@${botRunnerUsername}:${server}`;
+    return `@${submissionBotUsername}:${server}`;
   }
 
   getFullUserId(username: string) {
@@ -837,6 +838,7 @@ export default class MatrixService extends Service {
     roomId: string,
     eventType: string,
     content:
+      | BotTriggerContent
       | CardMessageContent
       | CodePatchResultContent
       | CommandResultWithNoOutputContent

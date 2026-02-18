@@ -1,7 +1,7 @@
 #! /bin/sh
 
 COUNT=0
-MAX_ATTEMPTS=10
+MAX_ATTEMPTS=24
 
 until $(curl --output /dev/null --silent --head --fail http://localhost:8008); do
   printf '.'
@@ -23,6 +23,7 @@ ts-node --transpileOnly ./scripts/register-realm-user.ts base_realm
 ts-node --transpileOnly ./scripts/register-realm-user.ts experiments_realm
 ts-node --transpileOnly ./scripts/register-realm-user.ts catalog_realm
 ts-node --transpileOnly ./scripts/register-realm-user.ts boxel_homepage_realm
+ts-node --transpileOnly ./scripts/register-realm-user.ts submission_realm
 ts-node --transpileOnly ./scripts/register-realm-user.ts node-test_realm
 ts-node --transpileOnly ./scripts/register-realm-user.ts skills_realm
 ts-node --transpileOnly ./scripts/register-realm-user.ts test_realm

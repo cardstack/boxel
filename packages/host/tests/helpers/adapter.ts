@@ -57,7 +57,7 @@ class TokenExpiredError extends Error {}
 class JsonWebTokenError extends Error {}
 
 interface TestAdapterContents {
-  [path: string]: string | object;
+  [path: string]: string | object | Uint8Array;
 }
 
 let shimmedModuleIndicator = '// this file is shimmed';
@@ -255,7 +255,9 @@ export class TestRealmAdapter implements RealmAdapter {
 
     let fileRefContent: string | Uint8Array = '';
 
-    if (path.endsWith('.json')) {
+    if (value instanceof Uint8Array) {
+      fileRefContent = value;
+    } else if (path.endsWith('.json')) {
       let cardApi = await this.#loader.import<CardAPI>(
         `${baseRealm.url}card-api`,
       );
@@ -272,8 +274,6 @@ export class TestRealmAdapter implements RealmAdapter {
       } else {
         fileRefContent = shimmedModuleIndicator;
       }
-    } else if (value instanceof Uint8Array) {
-      fileRefContent = value;
     } else {
       fileRefContent = value as string;
     }

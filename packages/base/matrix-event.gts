@@ -284,6 +284,19 @@ export interface CommandResultEvent extends BaseMatrixEvent {
   };
 }
 
+export const BOT_TRIGGER_EVENT_TYPE = 'app.boxel.bot-trigger';
+export const BOT_TRIGGER_COMMAND_TYPES = ['create-listing-pr'] as const;
+
+export interface BotTriggerContent {
+  type: (typeof BOT_TRIGGER_COMMAND_TYPES)[number];
+  input: unknown;
+}
+
+export interface BotTriggerEvent extends BaseMatrixEvent {
+  type: typeof BOT_TRIGGER_EVENT_TYPE;
+  content: BotTriggerContent;
+}
+
 export interface CodePatchResultEvent extends BaseMatrixEvent {
   type: typeof APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE;
   content: CodePatchResultContent;
@@ -438,6 +451,7 @@ export type MatrixEventWithBoxelContext =
 
 export type MatrixEvent =
   | ActiveLLMEvent
+  | BotTriggerEvent
   | CardMessageEvent
   | CodePatchResultEvent
   | CommandResultEvent

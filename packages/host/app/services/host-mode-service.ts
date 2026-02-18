@@ -1,8 +1,23 @@
 import Service, { service } from '@ember/service';
+import { tracked } from '@glimmer/tracking';
 
 import window from 'ember-window-mock';
 
+import { sanitizeHeadHTML } from '@cardstack/runtime-common';
+
 import config from '@cardstack/host/config/environment';
+
+const DEFAULT_HEAD_HTML = '<title>Boxel</title>';
+
+function headContainsTitle(html: string): boolean {
+  return /<title[\s>]/.test(html);
+}
+
+function ensureSingleTitle(headHTML: string): string {
+  return headContainsTitle(headHTML)
+    ? headHTML
+    : `${DEFAULT_HEAD_HTML}\n${headHTML}`;
+}
 import type HostModeStateService from '@cardstack/host/services/host-mode-state-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
@@ -22,6 +37,9 @@ export default class HostModeService extends Service {
 
   // increasing token to ignore stale async head fetches
   private headUpdateRequestId = 0;
+
+  // tracks whether the current head template contains a title tag
+  @tracked headTemplateContainsTitle = false;
 
   get isActive() {
     if (this.simulatingHostMode) {
@@ -167,6 +185,7 @@ export default class HostModeService extends Service {
 
     if (normalizedCardURL === null) {
       // If there is no card, clear the head content
+      this.headTemplateContainsTitle = false;
       this.replaceHeadTemplate(null);
       return;
     }
@@ -192,7 +211,13 @@ export default class HostModeService extends Service {
       return;
     }
 
-    this.replaceHeadTemplate(headHTML);
+    // Track whether the fetched head HTML contains a title
+    this.headTemplateContainsTitle =
+      headHTML !== null && headContainsTitle(headHTML);
+
+    this.replaceHeadTemplate(
+      headHTML !== null ? ensureSingleTitle(headHTML) : null,
+    );
   }
 
   private async fetchPrerenderedHead(
@@ -271,11 +296,22 @@ export default class HostModeService extends Service {
     }
 
     if (!headHTML || headHTML.trim().length === 0) {
+      let fallback = document
+        .createRange()
+        .createContextualFragment(DEFAULT_HEAD_HTML);
+      parent.insertBefore(fallback, end);
       return;
     }
 
-    let fragment = document.createRange().createContextualFragment(headHTML);
-    parent.insertBefore(fragment, end);
+    let sanitized = sanitizeHeadHTML(headHTML, document);
+    if (sanitized) {
+      parent.insertBefore(sanitized, end);
+    } else {
+      let fallback = document
+        .createRange()
+        .createContextualFragment(DEFAULT_HEAD_HTML);
+      parent.insertBefore(fallback, end);
+    }
   }
 
   private findHeadMarkers(): [Element, Element] | null {
