@@ -28,6 +28,9 @@ import { copyCardURLToClipboard } from '@cardstack/host/utils/clipboard';
 
 import type { Format } from 'https://cardstack.com/base/card-api';
 
+import { isFileDefInstance } from '@cardstack/runtime-common';
+import { hasExtension } from '@cardstack/runtime-common/url';
+
 import { removeFileExtension } from '../search-sheet/utils';
 
 import Overlays from './overlays';
@@ -350,6 +353,9 @@ export default class OperatorModeOverlays extends Overlays {
       case 'select':
         return !this.isField(renderedCard) && !!this.args.toggleSelect;
       case 'edit':
+        if (this.isFileMetaTarget(renderedCard)) {
+          return false;
+        }
         return this.realm.canWrite(this.getCardId(renderedCard.cardDefOrId));
       case 'more-options':
         return (
@@ -379,6 +385,16 @@ export default class OperatorModeOverlays extends Overlays {
       default:
         return false;
     }
+  }
+
+  private isFileMetaTarget(
+    renderedCard: StackItemRenderedCardForOverlayActions,
+  ): boolean {
+    let cardDefOrId = renderedCard.cardDefOrId;
+    if (typeof cardDefOrId === 'string') {
+      return hasExtension(cardDefOrId) && !cardDefOrId.endsWith('.json');
+    }
+    return isFileDefInstance(cardDefOrId);
   }
 
   @action
@@ -426,6 +442,9 @@ export default class OperatorModeOverlays extends Overlays {
   protected override getFormatForCard(
     renderedCard: StackItemRenderedCardForOverlayActions,
   ): Format {
+    if (this.isFileMetaTarget(renderedCard)) {
+      return 'isolated';
+    }
     return renderedCard.stackItem.format as Format;
   }
 

@@ -36,6 +36,7 @@ import {
   codeRefWithAbsoluteURL,
   identifyCard,
   isCardInstance,
+  isFileDefInstance,
   isResolvedCodeRef,
   CardError,
   loadCardDef,
@@ -50,6 +51,7 @@ import {
   type ResolvedCodeRef,
   type Filter,
 } from '@cardstack/runtime-common';
+import { hasExtension } from '@cardstack/runtime-common/url';
 
 import CopyCardToStackCommand from '@cardstack/host/commands/copy-card-to-stack';
 
@@ -212,6 +214,9 @@ export default class InteractSubmode extends Component {
         : cardOrURL instanceof URL
           ? cardOrURL.href
           : cardOrURL.id;
+    if (!cardId) {
+      return;
+    }
     if (opts?.openCardInRightMostStack) {
       stackIndex = this.stacks.length;
     } else if (typeof opts?.stackIndex === 'number') {
@@ -229,10 +234,18 @@ export default class InteractSubmode extends Component {
       }
       stackIndex = opts.stackIndex;
     }
+    let isFileMeta =
+      (typeof cardOrURL === 'string' || cardOrURL instanceof URL) &&
+      hasExtension(cardId) &&
+      !cardId.endsWith('.json');
+    if (cardOrURL && typeof cardOrURL === 'object' && !isFileMeta) {
+      isFileMeta = isFileDefInstance(cardOrURL as CardDef);
+    }
     let newItem = new StackItem({
       id: cardId,
       format,
       stackIndex,
+      type: isFileMeta ? 'file-meta' : 'card',
       relationshipContext: opts?.fieldName
         ? {
             fieldName: opts.fieldName,

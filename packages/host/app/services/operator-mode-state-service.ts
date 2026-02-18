@@ -27,7 +27,7 @@ import {
 
 import type { Submode } from '@cardstack/host/components/submode-switcher';
 import { Submodes } from '@cardstack/host/components/submode-switcher';
-import { StackItem } from '@cardstack/host/lib/stack-item';
+import { StackItem, type StackItemType } from '@cardstack/host/lib/stack-item';
 
 import {
   file,
@@ -92,6 +92,7 @@ export interface OperatorModeState {
 interface CardItem {
   id: string;
   format: 'isolated' | 'edit' | 'head';
+  type?: StackItemType;
 }
 
 export type FileView = 'inspector' | 'browser';
@@ -413,6 +414,9 @@ export default class OperatorModeStateService extends Service {
 
   editCardOnStack(stackIndex: number, card: CardDef): void {
     let item = this.findCardInStack(card, stackIndex);
+    if (item.type === 'file-meta') {
+      return;
+    }
     this.replaceItemInStack(
       item,
       item.clone({
@@ -875,11 +879,14 @@ export default class OperatorModeStateService extends Service {
           throw new Error(`Unknown format for card on stack ${item.format}`);
         }
         if (item.id) {
-          let instance = this.store.peek(item.id);
+          let instance =
+            this.store.peek(item.id) ??
+            this.store.peek(item.id, { type: 'file-meta' });
           if (!isLocalId(item.id) || instance?.id) {
             serializedStack.push({
               id: instance?.id ?? item.id,
               format: item.format,
+              type: item.type === 'card' ? undefined : item.type,
             });
           }
         }
@@ -903,12 +910,14 @@ export default class OperatorModeStateService extends Service {
       fieldName?: string;
       fieldType?: 'linksTo' | 'linksToMany';
     },
+    type?: StackItemType,
   ) {
     let stackItem = new StackItem({
       id,
       stackIndex,
       format,
       relationshipContext,
+      type,
     });
     return stackItem;
   }
@@ -961,6 +970,7 @@ export default class OperatorModeStateService extends Service {
             id: item.id,
             format,
             stackIndex,
+            type: item.type,
           }),
         );
       }

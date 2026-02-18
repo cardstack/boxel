@@ -440,6 +440,7 @@ export type AutoSaveState = {
 export type getCard<T extends CardDef = CardDef> = (
   parent: object,
   id: () => string | undefined,
+  opts?: { type?: StoreReadType },
 ) => // This is a duck type of the CardResource
 {
   id: string | undefined;

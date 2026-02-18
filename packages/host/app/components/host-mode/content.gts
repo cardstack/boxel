@@ -11,6 +11,8 @@ import {
   isCardInstance,
 } from '@cardstack/runtime-common';
 import { meta } from '@cardstack/runtime-common/constants';
+import type { StoreReadType } from '@cardstack/runtime-common';
+import { hasExtension } from '@cardstack/runtime-common/url';
 
 import { getCard } from '@cardstack/host/resources/card-resource';
 
@@ -45,7 +47,14 @@ export default class HostModeContent extends Component<Signature> {
       return undefined;
     }
 
-    return getCard(this, () => this.args.primaryCardId!);
+    return getCard(this, () => this.args.primaryCardId!, {
+      type: this.primaryReadType,
+    });
+  }
+
+  private get primaryReadType(): StoreReadType {
+    let id = this.args.primaryCardId ?? '';
+    return hasExtension(id) && !id.endsWith('.json') ? 'file-meta' : 'card';
   }
 
   get cardIds() {

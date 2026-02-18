@@ -7,6 +7,7 @@ interface Args {
   request?: Deferred<string>;
   stackIndex: number;
   id: string;
+  type?: StackItemType;
   closeAfterSaving?: boolean;
   relationshipContext?: {
     fieldName?: string;
@@ -14,11 +15,28 @@ interface Args {
   };
 }
 
+export type StackItemType = 'card' | 'file-meta';
+
+function inferStackItemType(id: string, type?: StackItemType): StackItemType {
+  if (type) {
+    return type;
+  }
+  let withoutJson = id.replace(/\.json$/, '');
+  let path = withoutJson.split(/[?#]/)[0];
+  let lastSegment = path.split('/').pop() ?? '';
+  let lastDotIndex = lastSegment.lastIndexOf('.');
+  if (lastDotIndex > 0 && lastDotIndex < lastSegment.length - 1) {
+    return 'file-meta';
+  }
+  return 'card';
+}
+
 export class StackItem {
   format: Format;
   request?: Deferred<string>;
   stackIndex: number;
   closeAfterSaving?: boolean;
+  type: StackItemType;
   #id: string;
   relationshipContext?:
     | {
@@ -33,6 +51,7 @@ export class StackItem {
       request,
       stackIndex,
       id,
+      type,
       closeAfterSaving,
       relationshipContext,
     } = args;
@@ -41,6 +60,7 @@ export class StackItem {
     this.format = format;
     this.request = request;
     this.stackIndex = stackIndex;
+    this.type = inferStackItemType(this.#id, type);
     this.closeAfterSaving = closeAfterSaving;
     this.relationshipContext = relationshipContext;
   }
@@ -57,12 +77,14 @@ export class StackItem {
       closeAfterSaving,
       stackIndex,
       relationshipContext,
+      type,
     } = this;
     return new StackItem({
       format,
       request,
       closeAfterSaving,
       id,
+      type,
       stackIndex,
       relationshipContext,
       ...args,

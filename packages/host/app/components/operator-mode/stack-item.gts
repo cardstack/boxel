@@ -43,6 +43,7 @@ import {
   type getCard,
   type getCards,
   type getCardCollection,
+  isFileDefInstance,
   cardTypeDisplayName,
   PermissionsContextName,
   RealmURLContextName,
@@ -178,7 +179,9 @@ export default class OperatorModeStackItem extends Component<Signature> {
   }
 
   private makeCardResource = () => {
-    this.cardResource = this.getCard(this, () => this.args.item.id);
+    this.cardResource = this.getCard(this, () => this.args.item.id, {
+      type: this.args.item.type,
+    });
   };
 
   private get url() {
@@ -654,12 +657,24 @@ export default class OperatorModeStackItem extends Component<Signature> {
       this.card[realmURL] &&
       !this.isBuried &&
       !this.isEditing &&
+      !this.isFileCard &&
       this.realm.canWrite(this.card[realmURL].href)
     );
   }
 
   private get isEditing() {
-    return !this.isBuried && this.args.item.format === 'edit';
+    return !this.isBuried && !this.isFileCard && this.args.item.format === 'edit';
+  }
+
+  private get isFileCard() {
+    return (
+      this.args.item.type === 'file-meta' ||
+      (this.card ? isFileDefInstance(this.card) : false)
+    );
+  }
+
+  private get cardFormat() {
+    return this.isFileCard ? 'isolated' : this.args.item.format;
   }
 
   private get showError() {
@@ -831,7 +846,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
             <CardRenderer
               class='stack-item-preview'
               @card={{this.card}}
-              @format={{@item.format}}
+              @format={{this.cardFormat}}
             />
             <OperatorModeOverlays
               @renderedCardsForOverlayActions={{this.renderedCardsForOverlayActions}}

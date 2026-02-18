@@ -87,7 +87,10 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
             />
           {{/if}}
           <DefaultFormatsProvider
-            @value={{hash cardDef='fitted' fieldDef='embedded'}}
+            @value={{hash
+              cardDef=(if this.isFileDefField 'embedded' 'fitted')
+              fieldDef='embedded'
+            }}
           >
             <this.linkedCard />
           </DefaultFormatsProvider>
@@ -149,6 +152,10 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
 
   get isEmpty() {
     return this.args.model.value == null;
+  }
+
+  get isFileDefField() {
+    return isFileDef(this.args.field.card);
   }
 
   get linkedCard() {

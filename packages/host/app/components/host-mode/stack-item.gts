@@ -12,6 +12,8 @@ import { ContextButton } from '@cardstack/boxel-ui/components';
 import { and, bool } from '@cardstack/boxel-ui/helpers';
 
 import { getCard } from '@cardstack/host/resources/card-resource';
+import type { StoreReadType } from '@cardstack/runtime-common';
+import { hasExtension } from '@cardstack/runtime-common/url';
 
 import HostModeCard from './card';
 
@@ -37,7 +39,14 @@ export default class HostModeStackItem extends Component<Signature> {
     if (!this.args.cardId) {
       return undefined;
     }
-    return getCard(this, () => this.args.cardId);
+    return getCard(this, () => this.args.cardId, {
+      type: this.readType,
+    });
+  }
+
+  private get readType(): StoreReadType {
+    let id = this.args.cardId;
+    return hasExtension(id) && !id.endsWith('.json') ? 'file-meta' : 'card';
   }
 
   @cached

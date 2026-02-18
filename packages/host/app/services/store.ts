@@ -18,6 +18,7 @@ import { TrackedObject, TrackedMap } from 'tracked-built-ins';
 import {
   hasExecutableExtension,
   isCardError,
+  isCardErrorJSONAPI,
   isCardInstance,
   isFileDefInstance,
   isFileMetaResource,
@@ -58,6 +59,7 @@ import {
   type CardResource,
   type Saved,
 } from '@cardstack/runtime-common';
+import { hasExtension } from '@cardstack/runtime-common/url';
 
 import type { CardDef, BaseDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
@@ -232,10 +234,13 @@ export default class StoreService extends Service implements StoreInterface {
     }
   }
 
-  addReference(id: string | undefined) {
+  addReference(id: string | undefined, opts?: { type?: StoreReadType }) {
     if (!id) {
       return;
     }
+    let readType: StoreReadType =
+      opts?.type ??
+      (hasExtension(id) && !id.endsWith('.json') ? 'file-meta' : 'card');
     // synchronously update the reference count so we don't run into race
     // conditions requiring a mutex
     let currentReferenceCount = this.referenceCount.get(id) ?? 0;
@@ -259,7 +264,7 @@ export default class StoreService extends Service implements StoreInterface {
       this.subscribeToRealm(new URL(id));
       // intentionally not awaiting this. we keep track of the promise in
       // this.newReferencePromises
-      this.wireUpNewReference(id);
+      this.wireUpNewReference(id, readType);
     }
   }
 
@@ -859,12 +864,26 @@ export default class StoreService extends Service implements StoreInterface {
     deferred.fulfill();
   }
 
-  private async wireUpNewReference(url: string) {
+  private async wireUpNewReference(
+    url: string,
+    readType: StoreReadType = 'card',
+  ) {
     let deferred = new Deferred<void>();
     await this.withTestWaiters(async () => {
       this.newReferencePromises.push(deferred.promise);
       try {
         await this.ready;
+        if (readType === 'file-meta') {
+          let instanceOrError = await this.getFileMetaInstance<FileDef>({
+            idOrDoc: url,
+          });
+          this.setIdentityContext(
+            instanceOrError as FileDef | CardErrorJSONAPI,
+            'file-meta',
+          );
+          deferred.fulfill();
+          return;
+        }
         // Check file-meta map as well as card map — file-meta instances
         // are loaded into their own map by store.get(id, { type: 'file-meta' })
         let fileMetaInstance =
@@ -876,10 +895,38 @@ export default class StoreService extends Service implements StoreInterface {
           return;
         }
         let instanceOrError = this.peekError(url) ?? this.peek(url);
+        if (
+          isCardErrorJSONAPI(instanceOrError) &&
+          instanceOrError.status === 415
+        ) {
+          let fileInstanceOrError = await this.getFileMetaInstance<FileDef>({
+            idOrDoc: url,
+          });
+          this.setIdentityContext(
+            fileInstanceOrError as FileDef | CardErrorJSONAPI,
+            'file-meta',
+          );
+          deferred.fulfill();
+          return;
+        }
         if (!instanceOrError) {
           instanceOrError = await this.getCardInstance({
             idOrDoc: url,
           });
+          if (
+            isCardErrorJSONAPI(instanceOrError) &&
+            instanceOrError.status === 415
+          ) {
+            let fileInstanceOrError = await this.getFileMetaInstance<FileDef>({
+              idOrDoc: url,
+            });
+            this.setIdentityContext(
+              fileInstanceOrError as FileDef | CardErrorJSONAPI,
+              'file-meta',
+            );
+            deferred.fulfill();
+            return;
+          }
           this.setIdentityContext(instanceOrError);
         }
         await this.startAutoSaving(instanceOrError);

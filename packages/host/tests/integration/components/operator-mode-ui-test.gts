@@ -86,6 +86,28 @@ module('Integration | operator-mode | ui', function (hooks) {
       .includesText('Author');
   });
 
+  test(`click on "links to" the embedded file will open it on the stack`, async function (assert) {
+    ctx.setCardInOperatorModeState(`${testRealmURL}FileLinkCard/with-file`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+
+    await waitFor('[data-test-file-link-attachment] [data-test-card]');
+    await click('[data-test-file-link-attachment] [data-test-card]');
+    await waitFor('[data-test-stack-card-index="1"]');
+    assert.dom('[data-test-stack-card-index]').exists({ count: 2 });
+    assert
+      .dom('[data-test-stack-card-index="1"]')
+      .includesText('notes.txt');
+    assert
+      .dom(
+        '[data-test-stack-card-index="1"] [data-test-filedef-edit-unavailable]',
+      )
+      .doesNotExist();
+  });
+
   test(`toggles mode switcher`, async function (assert) {
     ctx.setCardInOperatorModeState(`${testRealmURL}BlogPost/1`);
     await renderComponent(
