@@ -4,9 +4,8 @@ To build the entire repository and run the application, follow these steps:
 
 1. The 2 main system dependencies to install are:
 
-   - [volta](https://docs.volta.sh/guide/getting-started)
+   - [mise](https://mise.jdx.dev/getting-started.html) — manages Node.js and pnpm versions automatically from `.mise.toml`
    - [docker](https://docs.docker.com/get-docker/)
-   - [pnpm](https://docs.volta.sh/advanced/pnpm) Note: If you don't have pnpm already on your system, **DON'T** install pnpm manually (volta will install it for you when you call `pnpm install`).
 
 2. Clone the repo:
 
@@ -17,7 +16,7 @@ To build the entire repository and run the application, follow these steps:
 3. Install the package dependencies:
 
    ```zsh
-   echo 'export VOLTA_FEATURE_PNPM=1' >> ~/.profile && source ~/.profile
+   mise install
    pnpm install
    ```
 

@@ -101,9 +101,6 @@
   "engines": {
     "node": ">= 20"
   },
-  "volta": {
-    "extends": "../../../package.json"
-  },
   "ember": {
     "edition": "octane"
   },
