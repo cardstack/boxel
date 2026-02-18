@@ -115,12 +115,11 @@ export default class CardCatalogModal extends Component<Signature> {
               @searchKey={{this.state.searchKey}}
               @selectedRealmURLs={{this.selectedRealmURLs}}
               @isCompact={{false}}
-              @handleCardSelect={{this.selectCardFromSearch}}
-              @onCardSubmit={{this.submitCardFromSearch}}
-              @selectedCardId={{this.selectedCardIdString}}
+              @handleSelect={{this.selectFromSearch}}
+              @onSubmit={{this.submitFromSearch}}
+              @selectedCard={{this.state.selectedCard}}
               @baseFilter={{this.state.baseFilter}}
               @offerToCreate={{this.offerToCreateArg}}
-              @onCreateCard={{this.handleCreateCard}}
               @showRecents={{false}}
             />
           </:content>
@@ -213,15 +212,6 @@ export default class CardCatalogModal extends Component<Signature> {
       return this.state.availableRealmUrls;
     }
     return selected.map((opt) => opt.id).filter(Boolean);
-  }
-
-  private get selectedCardIdString(): string | undefined {
-    if (!this.state) {
-      return undefined;
-    }
-    return typeof this.state.selectedCard === 'string'
-      ? this.state.selectedCard
-      : undefined;
   }
 
   private get offerToCreateArg() {
@@ -363,28 +353,20 @@ export default class CardCatalogModal extends Component<Signature> {
     }
   }
 
-  @action private selectCardFromSearch(cardId: string): void {
-    if (!this.state || !cardId) {
+  @action private selectFromSearch(selection: string | NewCardArgs): void {
+    if (!this.state || !selection) {
       return;
     }
-    this.state.selectedCard = cardId;
+    this.state.selectedCard = selection;
     this.state.hasPreselectedCard = false;
   }
 
-  @action private submitCardFromSearch(cardId: string): void {
+  @action private submitFromSearch(selection: string | NewCardArgs): void {
     if (!this.state) {
       return;
     }
-    this.state.selectedCard = cardId;
-    this.pickCard.perform(cardId);
-  }
-
-  @action private handleCreateCard(newCardArgs: NewCardArgs): void {
-    if (!this.state) {
-      return;
-    }
-    this.state.selectedCard = newCardArgs;
-    this.state.hasPreselectedCard = false;
+    this.state.selectedCard = selection;
+    this.pickCard.perform(selection);
   }
 
   pickCard = restartableTask(

@@ -327,7 +327,7 @@ module('Integration | card-catalog', function (hooks) {
       await waitFor(`[data-test-card-catalog-item="${card}"]`);
       assert.dom(`[data-test-card-catalog-item-selected]`).doesNotExist();
 
-      await click(`[data-test-card-catalog-item="${card}"`);
+      await click(`[data-test-card-catalog-item="${card}"]`);
       assert
         .dom(`[data-test-card-catalog-item="${card}"]`)
         .hasAttribute('data-test-card-catalog-item-selected');
@@ -361,7 +361,7 @@ module('Integration | card-catalog', function (hooks) {
       await waitFor(`[data-test-card-catalog-item="${card2}"]`);
       assert.dom(`[data-test-card-catalog-item-selected]`).doesNotExist();
 
-      await click(`[data-test-card-catalog-item="${card1}"`);
+      await click(`[data-test-card-catalog-item="${card1}"]`);
       assert
         .dom(`[data-test-card-catalog-item="${card1}"]`)
         .hasAttribute('data-test-card-catalog-item-selected');
@@ -394,7 +394,7 @@ module('Integration | card-catalog', function (hooks) {
       await waitFor(`[data-test-card-catalog-item="${card}"]`);
       assert.dom(`[data-test-card-catalog-item-selected]`).doesNotExist();
 
-      await doubleClick(`[data-test-card-catalog-item="${card}"`);
+      await doubleClick(`[data-test-card-catalog-item="${card}"]`);
       await waitFor('[data-test-card-catalog-modal]', { count: 0 });
       await waitFor(`[data-test-stack-card-index="1"]`);
       assert

@@ -88,16 +88,14 @@ interface Signature {
     searchKey: string;
     selectedRealmURLs: string[];
     isCompact: boolean;
-    handleCardSelect: (cardId: string) => void;
-    // New args for card-catalog modal integration:
-    selectedCardId?: string;
+    handleSelect: (selection: string | NewCardArgs) => void;
+    selectedCard?: string | NewCardArgs;
     baseFilter?: Filter;
     offerToCreate?: {
       ref: CodeRef;
       relativeTo: URL | undefined;
     };
-    onCreateCard?: (args: NewCardArgs) => void;
-    onCardSubmit?: (cardId: string) => void;
+    onSubmit?: (selection: string | NewCardArgs) => void;
     showRecents?: boolean;
     showHeader?: boolean;
   };
@@ -629,16 +627,15 @@ export default class SearchContent extends Component<Signature> {
           @section={{section}}
           @viewOption={{this.activeViewId}}
           @isCompact={{@isCompact}}
-          @handleCardSelect={{@handleCardSelect}}
+          @handleSelect={{@handleSelect}}
           @isFocused={{eq this.focusedSection section.sid}}
           @isCollapsed={{this.isSectionCollapsed section.sid}}
           @onFocusSection={{this.onFocusSection}}
           @getDisplayedCount={{this.getDisplayedCount}}
           @onShowMore={{this.onShowMore}}
-          @selectedCardId={{@selectedCardId}}
+          @selectedCard={{@selectedCard}}
           @offerToCreate={{@offerToCreate}}
-          @onCreateCard={{@onCreateCard}}
-          @onCardSubmit={{@onCardSubmit}}
+          @onSubmit={{@onSubmit}}
           data-test-search-result-section={{i}}
         />
       {{/each}}
@@ -658,7 +655,6 @@ export default class SearchContent extends Component<Signature> {
 
         height: 100%;
         background-color: var(--boxel-light);
-        border-bottom: 1px solid var(--boxel-200);
         padding: 0 var(--boxel-sp-lg);
         transition: opacity calc(var(--boxel-transition) / 4);
       }

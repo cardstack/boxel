@@ -9,16 +9,14 @@ import pluralize from 'pluralize';
 
 import { Button } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
-import { IconPlus } from '@cardstack/boxel-ui/icons';
 
 import type { CodeRef } from '@cardstack/runtime-common';
 
 import type RealmService from '@cardstack/host/services/realm';
 
 import { SECTION_SHOW_MORE_INCREMENT } from './constants';
-import { SearchResult } from './results-section';
+import ItemButton from './item-button';
 import SearchSheetSectionHeader from './section-header';
-import { removeFileExtension } from './utils';
 
 import type {
   RealmSection,
@@ -34,19 +32,18 @@ interface Signature {
     section: SearchSheetSection;
     viewOption: string;
     isCompact: boolean;
-    handleCardSelect: (cardId: string) => void;
+    handleSelect: (selection: string | NewCardArgs) => void;
     isFocused: boolean;
     isCollapsed: boolean;
     onFocusSection: (sectionId: string | null) => void;
     getDisplayedCount?: (sectionId: string, totalCount: number) => number;
     onShowMore?: (sectionId: string, totalCount: number) => void;
-    selectedCardId?: string;
+    selectedCard?: string | NewCardArgs;
     offerToCreate?: {
       ref: CodeRef;
       relativeTo: URL | undefined;
     };
-    onCreateCard?: (args: NewCardArgs) => void;
-    onCardSubmit?: (cardId: string) => void;
+    onSubmit?: (selection: string | NewCardArgs) => void;
   };
   Blocks: {};
 }
@@ -149,7 +146,12 @@ export default class SearchResultSection extends Component<Signature> {
   get viewClass() {
     if (this.args.isCompact) {
       return 'compact-view';
-    } else if (this.args.viewOption === 'grid') {
+    } else if (
+      this.args.viewOption === 'grid' &&
+      (this.displayedRealmCards.length > 0 ||
+        this.displayedRecentsCards.length > 0 ||
+        this.urlSection)
+    ) {
       return 'grid-view';
     } else if (this.args.viewOption === 'strip') {
       return 'strip-view';
@@ -161,50 +163,36 @@ export default class SearchResultSection extends Component<Signature> {
     return this.hasMoreCards && !this.args.isCompact;
   }
 
-  private get cardRefName(): string | undefined {
-    if (!this.args.offerToCreate) {
-      return undefined;
-    }
-    return (
-      (
-        this.args.offerToCreate.ref as {
-          module: string;
-          name: string;
-        }
-      ).name ?? 'Card'
-    );
-  }
-
   showCreateForRealm = (realmUrl: string): boolean => {
     return !!this.args.offerToCreate && this.realm.canWrite(realmUrl);
   };
 
-  @action
-  handleCardKeydown(cardId: string, event: KeyboardEvent) {
-    if (event.key === 'Enter') {
-      this.args.handleCardSelect(cardId);
-      this.args.onCardSubmit?.(cardId);
+  get selectedCardId(): string | undefined {
+    const selected = this.args.selectedCard;
+    return typeof selected === 'string' ? selected : undefined;
+  }
+
+  get isCreateNewSelected(): boolean {
+    const selected = this.args.selectedCard;
+    if (!this.realmSection || !selected || typeof selected === 'string') {
+      return false;
     }
+    return selected.realmURL === this.realmSection.realmUrl;
   }
 
-  @action
-  handleCardDblClick(cardId: string) {
-    this.args.handleCardSelect(cardId);
-    this.args.onCardSubmit?.(cardId);
-  }
-
-  @action
-  handleCreateCard(realmUrl: string) {
-    if (!this.args.offerToCreate || !this.args.onCreateCard) {
-      return;
+  newCardArgs = (realmUrl: string): NewCardArgs => {
+    if (!this.args.offerToCreate) {
+      throw new Error(
+        'cannot create newCardArgs without offerToCreate argument',
+      );
     }
     const { ref, relativeTo } = this.args.offerToCreate;
-    this.args.onCreateCard({
+    return {
       ref,
       relativeTo: relativeTo ? relativeTo.href : undefined,
       realmURL: realmUrl,
-    });
-  }
+    };
+  };
 
   <template>
     <div
@@ -223,55 +211,28 @@ export default class SearchResultSection extends Component<Signature> {
             @onShowOnlyChange={{this.handleShowOnlyChange}}
           />
         {{/unless}}
-        {{#if (this.showCreateForRealm this.realmSection.realmUrl)}}
-          <Button
-            class='create-new-card'
-            type='button'
-            {{on 'click' (fn this.handleCreateCard this.realmSection.realmUrl)}}
-            {{on
-              'keydown'
-              (fn this.handleCreateCard this.realmSection.realmUrl)
-            }}
-            {{on
-              'dblclick'
-              (fn this.handleCreateCard this.realmSection.realmUrl)
-            }}
-            data-test-card-catalog-create-new-button={{this.realmSection.realmUrl}}
-          >
-            <IconPlus
-              class='plus-icon'
-              width='16'
-              height='16'
-              role='presentation'
-            />
-            Create New
-            {{this.cardRefName}}
-          </Button>
-        {{/if}}
         <div class='cards {{this.viewClass}}' data-test-search-cards-result>
+          {{#if (this.showCreateForRealm this.realmSection.realmUrl)}}
+            <ItemButton
+              @item={{this.newCardArgs this.realmSection.realmUrl}}
+              @isSelected={{this.isCreateNewSelected}}
+              @isCompact={{@isCompact}}
+              @onSelect={{@handleSelect}}
+              @onSubmit={{@onSubmit}}
+            />
+          {{/if}}
           {{#each this.displayedRealmCards as |card i|}}
             {{#unless card.isError}}
-              <div
-                class='search-sheet-result__card-item
-                  {{if (eq @selectedCardId card.url) "selected"}}'
-              >
-                <SearchResult
-                  @component={{card.component}}
-                  @cardId={{card.url}}
-                  @isCompact={{@isCompact}}
-                  @displayRealmName={{@isCompact}}
-                  tabindex='0'
-                  {{on 'click' (fn @handleCardSelect card.url)}}
-                  {{on 'keydown' (fn this.handleCardKeydown card.url)}}
-                  {{on 'dblclick' (fn this.handleCardDblClick card.url)}}
-                  data-test-search-sheet-search-result={{i}}
-                  data-test-card-catalog-item={{removeFileExtension card.url}}
-                  data-test-card-catalog-item-selected={{if
-                    (eq @selectedCardId card.url)
-                    'true'
-                  }}
-                />
-              </div>
+              <ItemButton
+                @item={{card.component}}
+                @itemId={{card.url}}
+                @isSelected={{eq this.selectedCardId card.url}}
+                @isCompact={{@isCompact}}
+                @displayRealmName={{@isCompact}}
+                @onSelect={{@handleSelect}}
+                @onSubmit={{@onSubmit}}
+                data-test-search-sheet-search-result={{i}}
+              />
             {{/unless}}
           {{/each}}
         </div>
@@ -301,33 +262,16 @@ export default class SearchResultSection extends Component<Signature> {
           />
         {{/unless}}
         <div class='cards {{this.viewClass}}'>
-          <div
-            class='search-sheet-result__card-item
-              {{if (eq @selectedCardId this.urlSection.card.id) "selected"}}'
-          >
-            <SearchResult
-              @card={{this.urlSection.card}}
-              @cardId={{this.urlSection.card.id}}
-              @isCompact={{@isCompact}}
-              @displayRealmName={{@isCompact}}
-              tabindex='0'
-              {{on 'click' (fn @handleCardSelect this.urlSection.card.id)}}
-              {{on
-                'keydown'
-                (fn this.handleCardKeydown this.urlSection.card.id)
-              }}
-              {{on
-                'dblclick'
-                (fn this.handleCardDblClick this.urlSection.card.id)
-              }}
-              data-test-search-sheet-search-result='0'
-              data-test-card-catalog-item={{this.urlSection.card.id}}
-              data-test-card-catalog-item-selected={{if
-                (eq @selectedCardId this.urlSection.card.id)
-                'true'
-              }}
-            />
-          </div>
+          <ItemButton
+            @item={{this.urlSection.card}}
+            @itemId={{this.urlSection.card.id}}
+            @isSelected={{eq this.selectedCardId this.urlSection.card.id}}
+            @isCompact={{@isCompact}}
+            @displayRealmName={{@isCompact}}
+            @onSelect={{@handleSelect}}
+            @onSubmit={{@onSubmit}}
+            data-test-search-sheet-search-result='0'
+          />
         </div>
       {{else if this.recentsSection}}
         {{#unless @isCompact}}
@@ -343,27 +287,16 @@ export default class SearchResultSection extends Component<Signature> {
         <div class='cards {{this.viewClass}}'>
           {{#each this.displayedRecentsCards as |card i|}}
             {{#if card}}
-              <div
-                class='search-sheet-result__card-item
-                  {{if (eq @selectedCardId card.id) "selected"}}'
-              >
-                <SearchResult
-                  @card={{card}}
-                  @cardId={{card.id}}
-                  @isCompact={{@isCompact}}
-                  tabindex='0'
-                  {{on 'click' (fn @handleCardSelect card.id)}}
-                  {{on 'keydown' (fn this.handleCardKeydown card.id)}}
-                  {{on 'dblclick' (fn this.handleCardDblClick card.id)}}
-                  @displayRealmName={{true}}
-                  data-test-search-result-index={{i}}
-                  data-test-card-catalog-item={{card.id}}
-                  data-test-card-catalog-item-selected={{if
-                    (eq @selectedCardId card.id)
-                    'true'
-                  }}
-                />
-              </div>
+              <ItemButton
+                @item={{card}}
+                @itemId={{card.id}}
+                @isSelected={{eq this.selectedCardId card.id}}
+                @isCompact={{@isCompact}}
+                @displayRealmName={{true}}
+                @onSelect={{@handleSelect}}
+                @onSubmit={{@onSubmit}}
+                data-test-search-result-index={{i}}
+              />
             {{/if}}
           {{/each}}
         </div>
@@ -431,37 +364,16 @@ export default class SearchResultSection extends Component<Signature> {
         grid-template-columns: 1fr;
         align-content: start;
       }
-      .cards.grid-view .search-sheet-result__card-item,
-      .cards.strip-view .search-sheet-result__card-item {
-        width: 100%;
-      }
-      .search-sheet-result__card-item.selected {
-        border: 2px solid var(--boxel-highlight);
-        border-radius: var(--boxel-border-radius-xl);
+      .cards.grid-view :deep(.create-card) {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        height: 100%;
       }
       .show-more {
         margin-top: var(--boxel-sp);
         width: fit-content;
-      }
-      .create-new-card {
-        gap: var(--boxel-sp-xs);
-        border: 1px solid var(--boxel-200);
-        border-radius: var(--boxel-border-radius-xl);
-        height: 67px;
-        width: 100%;
-        max-width: 100%;
-        text-align: left;
-        --boxel-button-padding: var(--boxel-sp-xs) var(--boxel-sp);
-        --boxel-button-letter-spacing: var(--boxel-lsp-xs);
-        flex-wrap: nowrap;
-        justify-content: flex-start;
-        margin-bottom: var(--boxel-sp);
-      }
-      .create-new-card:hover {
-        border-color: var(--boxel-darker-hover);
-      }
-      .plus-icon > :deep(path) {
-        stroke: none;
       }
     </style>
   </template>

@@ -124,9 +124,12 @@ export default class SearchSheet extends Component<Signature> {
     this.args.onCancel();
   }
 
-  @action private handleCardSelect(cardId: string) {
+  @action private handleCardSelect(selection: string | { realmURL: string }) {
+    if (typeof selection !== 'string') {
+      return;
+    }
     this.resetState();
-    this.args.onCardSelect(cardId);
+    this.args.onCardSelect(selection);
   }
 
   @action
@@ -270,7 +273,7 @@ export default class SearchSheet extends Component<Signature> {
           @searchKey={{this.searchKey}}
           @selectedRealmURLs={{this.selectedRealmURLs}}
           @isCompact={{this.isCompact}}
-          @handleCardSelect={{this.handleCardSelect}}
+          @handleSelect={{this.handleCardSelect}}
         />
         <div class='footer'>
           <div class='buttons'>
@@ -356,6 +359,7 @@ export default class SearchSheet extends Component<Signature> {
         height: var(--stack-card-footer-height);
         padding: var(--boxel-sp);
         background-color: var(--boxel-light);
+        border-top: 1px solid var(--boxel-200);
         overflow: hidden;
 
         transition:
