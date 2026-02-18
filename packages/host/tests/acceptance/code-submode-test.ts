@@ -940,9 +940,7 @@ module('Acceptance | code submode tests', function (_hooks) {
         )
         .doesNotExist();
 
-      assert
-        .dom('[data-test-definition-header]')
-        .includesText('File Instance');
+      assert.dom('[data-test-definition-header]').includesText('File Instance');
 
       assert
         .dom('[data-test-inheritance-panel-header]')
