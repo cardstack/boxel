@@ -7,6 +7,7 @@ import {
   type JobInfo,
   jobIdentity,
   trimExecutableExtension,
+  hasExecutableExtension,
   RealmPaths,
   unixTime,
   logger,
@@ -102,6 +103,15 @@ export type SearchIndexEntry =
   | InstanceEntry
   | SearchIndexErrorEntry
   | FileEntry;
+
+export interface DependencyIndexRow {
+  url: string;
+  type: BoxelIndexTable['type'];
+  deps: string[] | null;
+  hasError: boolean;
+  isDeleted: boolean;
+  errorDoc: SerializedError | null;
+}
 
 function isErrorEntry(entry: { type: string }): entry is IndexErrorEntry {
   return entry.type === 'instance-error' || entry.type === 'file-error';
@@ -724,10 +734,104 @@ export class Batch {
     this.#invalidations = new Set([...this.#invalidations, ...invalidations]);
   }
 
+  async getDependencyRows(urls: string[]): Promise<DependencyIndexRow[]> {
+    await this.ready;
+    if (urls.length === 0) {
+      return [];
+    }
+
+    let uniqueUrls = [...new Set(urls)];
+    let [workingRows, productionRows] = await Promise.all([
+      this.queryDependencyRows('boxel_index_working', uniqueUrls),
+      this.queryDependencyRows('boxel_index', uniqueUrls),
+    ]);
+
+    let rowsByKey = new Map<
+      string,
+      {
+        working?: DependencyIndexRow;
+        production?: DependencyIndexRow;
+      }
+    >();
+
+    for (let row of workingRows) {
+      let key = `${row.url}|${row.type}`;
+      let existing = rowsByKey.get(key) ?? {};
+      existing.working = row;
+      rowsByKey.set(key, existing);
+    }
+
+    for (let row of productionRows) {
+      let key = `${row.url}|${row.type}`;
+      let existing = rowsByKey.get(key) ?? {};
+      existing.production = row;
+      rowsByKey.set(key, existing);
+    }
+
+    let selectedRows: DependencyIndexRow[] = [];
+    for (let { working, production } of rowsByKey.values()) {
+      if (working && !working.isDeleted) {
+        selectedRows.push(working);
+        continue;
+      }
+      if (working?.isDeleted && production) {
+        selectedRows.push(production);
+        continue;
+      }
+      if (working) {
+        selectedRows.push(working);
+        continue;
+      }
+      if (production) {
+        selectedRows.push(production);
+      }
+    }
+
+    return selectedRows;
+  }
+
+  private async queryDependencyRows(
+    tableName: 'boxel_index' | 'boxel_index_working',
+    urls: string[],
+  ): Promise<DependencyIndexRow[]> {
+    if (urls.length === 0) {
+      return [];
+    }
+
+    let rows = (await this.#query([
+      `SELECT url, type, deps, has_error, is_deleted, error_doc FROM ${tableName} WHERE`,
+      ...every([
+        ['realm_url =', param(this.realmURL.href)],
+        [
+          'url IN',
+          ...addExplicitParens(
+            separatedByCommas(urls.map((url) => [param(url)])),
+          ),
+        ],
+        any([
+          ['type =', param('instance')],
+          ['type =', param('file')],
+        ]),
+      ]),
+    ] as Expression)) as Pick<
+      BoxelIndexTable,
+      'url' | 'type' | 'deps' | 'has_error' | 'is_deleted' | 'error_doc'
+    >[];
+
+    return rows.map((row) => ({
+      url: row.url,
+      type: row.type,
+      deps: row.deps ?? null,
+      hasError: Boolean(row.has_error),
+      isDeleted: Boolean(row.is_deleted),
+      errorDoc: row.error_doc ?? null,
+    }));
+  }
+
   private async itemsThatReference(resolvedPath: string): Promise<
     {
       url: string;
-      alias: string;
+      alias: string | null;
       type: BoxelIndexTable['type'];
     }[]
   > {
@@ -796,21 +900,41 @@ export class Batch {
     visited.add(resolvedPath);
     let items = await this.itemsThatReference(resolvedPath);
     let invalidations = items.map(({ url }) => url);
-    let aliases = items.map(({ alias: moduleAlias, type, url }) =>
-      type === 'instance'
-        ? // for instances we expect that the deps for an entry always includes .json extension
-          url
-        : moduleAlias,
+    let aliases = items.map(({ alias, type, url }) =>
+      this.invalidationTraversalAlias({ alias, type, url }),
     );
     let results = [
       ...invalidations,
       ...flatten(
         await Promise.all(
-          aliases.map((a) => this.calculateInvalidations(a, visited)),
+          aliases
+            .filter((a): a is string => Boolean(a))
+            .map((a) => this.calculateInvalidations(a, visited)),
         ),
       ),
     ];
     return [...new Set(results)];
+  }
+
+  private invalidationTraversalAlias({
+    alias,
+    type,
+    url,
+  }: {
+    alias: string | null;
+    type: BoxelIndexTable['type'];
+    url: string;
+  }): string {
+    if (type === 'instance') {
+      // for instances we expect that deps include concrete .json URLs
+      return url;
+    }
+    if (hasExecutableExtension(url) && alias) {
+      // executable file invalidation needs node-style alias traversal
+      return alias;
+    }
+    // non-executable files should recurse by concrete URL
+    return url;
   }
 
   private copiedRealmURL(fromRealm: URL, file: URL): URL {

@@ -1,134 +1,37 @@
 import ignore, { type Ignore } from 'ignore';
 
-import merge from 'lodash/merge';
-
 import { Memoize } from 'typescript-memoize';
 
 import {
   logger,
-  isCardResource,
   hasExecutableExtension,
   SupportedMimeType,
-  unixTime,
   jobIdentity,
-  modulesConsumedInMeta,
-  trimExecutableExtension,
   Deferred,
   RealmPaths,
-  isIgnored,
   type IndexWriter,
-  type RenderResponse,
-  type FileExtractResponse,
-  type FileRenderResponse,
   type ResolvedCodeRef,
   type Batch,
   type LooseCardResource,
   type InstanceEntry,
   type InstanceErrorIndexEntry,
-  type FileErrorIndexEntry,
-  type ErrorEntry,
-  type SearchIndexErrorEntry,
   type RealmInfo,
   type FromScratchResult,
   type IncrementalResult,
-  type CardResource,
   type LastModifiedTimes,
   type JobInfo,
   type Prerenderer,
-  type RenderRouteOptions,
   type LocalPath,
   type Reader,
   type Stats,
-  baseRealm,
-  internalKeyFor,
 } from './index';
-import type {
-  CacheScope,
-  DefinitionLookup,
-  ModuleCacheEntries,
-} from './definition-lookup';
-import { inferContentType } from './infer-content-type';
-import {
-  CardError,
-  isCardError,
-  serializableError,
-  type SerializedError,
-} from './error';
-
-const FILEDEF_CODE_REF_BY_EXTENSION: Record<string, ResolvedCodeRef> = {
-  // TODO: Replace with realm metadata configuration.
-  '.markdown': {
-    module: `${baseRealm.url}markdown-file-def`,
-    name: 'MarkdownDef',
-  },
-  '.md': {
-    module: `${baseRealm.url}markdown-file-def`,
-    name: 'MarkdownDef',
-  },
-  '.png': {
-    module: `${baseRealm.url}png-image-def`,
-    name: 'PngDef',
-  },
-  '.jpg': {
-    module: `${baseRealm.url}jpg-image-def`,
-    name: 'JpgDef',
-  },
-  '.jpeg': {
-    module: `${baseRealm.url}jpg-image-def`,
-    name: 'JpgDef',
-  },
-  '.svg': {
-    module: `${baseRealm.url}svg-image-def`,
-    name: 'SvgDef',
-  },
-  '.gif': {
-    module: `${baseRealm.url}gif-image-def`,
-    name: 'GifDef',
-  },
-  '.webp': {
-    module: `${baseRealm.url}webp-image-def`,
-    name: 'WebpDef',
-  },
-  '.avif': {
-    module: `${baseRealm.url}avif-image-def`,
-    name: 'AvifDef',
-  },
-  '.mismatch': { module: './filedef-mismatch', name: 'FileDef' },
-};
-const BASE_FILE_DEF_CODE_REF: ResolvedCodeRef = {
-  module: `${baseRealm.url}file-api`,
-  name: 'FileDef',
-};
-function resolveFileDefCodeRef(fileURL: URL): ResolvedCodeRef {
-  let name = fileURL.pathname.split('/').pop() ?? '';
-  let dot = name.lastIndexOf('.');
-  let extension = dot === -1 ? '' : name.slice(dot).toLowerCase();
-  let mapping = extension
-    ? FILEDEF_CODE_REF_BY_EXTENSION[extension]
-    : undefined;
-  if (!mapping) {
-    return BASE_FILE_DEF_CODE_REF;
-  }
-  if (mapping.module.includes('://')) {
-    return mapping;
-  }
-  return {
-    ...mapping,
-    module: new URL(mapping.module, fileURL).href,
-  };
-}
-
-function canonicalURL(url: string, relativeTo?: string): string {
-  try {
-    let parsed = new URL(url, relativeTo);
-    parsed.search = '';
-    parsed.hash = '';
-    return parsed.href;
-  } catch (_e) {
-    let stripped = url.split('#')[0] ?? url;
-    return stripped.split('?')[0] ?? stripped;
-  }
-}
+import type { CacheScope, DefinitionLookup } from './definition-lookup';
+import { isCardError } from './error';
+import { IndexRunnerDependencyResolver } from './index-runner/dependency-resolver';
+import { discoverInvalidations } from './index-runner/discover-invalidations';
+import { visitFileForIndexing } from './index-runner/visit-file';
+import { performCardIndexing } from './index-runner/card-indexer';
+import { performFileIndexing } from './index-runner/file-indexer';
 
 export class IndexRunner {
   #indexingInstances = new Map<string, Promise<void>>();
@@ -152,6 +55,7 @@ export class IndexRunner {
   #realmOwnerUserId: string;
   #definitionLookup: DefinitionLookup;
   #jobInfo: JobInfo;
+  #dependencyResolver: IndexRunnerDependencyResolver;
   #reportStatus?: (
     jobInfo: JobInfo | undefined,
     status: 'start' | 'finish',
@@ -205,9 +109,29 @@ export class IndexRunner {
     this.#fetch = fetch;
     this.#realmOwnerUserId = realmOwnerUserId;
     this.#definitionLookup = definitionLookup;
+    this.#dependencyResolver = new IndexRunnerDependencyResolver({
+      realmURL: this.#realmURL,
+      readModuleCacheEntries: async (moduleIds) => {
+        if (moduleIds.length === 0) {
+          return {};
+        }
+        let { resolvedRealmURL, cacheScope, authUserId } =
+          await this.getModuleCacheContext();
+        return await this.#definitionLookup.getModuleCacheEntries({
+          moduleUrls: moduleIds,
+          cacheScope,
+          authUserId,
+          resolvedRealmURL,
+        });
+      },
+      getDependencyRows: async (urls) =>
+        await this.batch.getDependencyRows(urls),
+      getInvalidations: () => this.#batch?.invalidations ?? [],
+    });
   }
 
   static async fromScratch(current: IndexRunner): Promise<FromScratchResult> {
+    current.#dependencyResolver.reset();
     let start = Date.now();
     current.#log.debug(
       `${jobIdentity(current.#jobInfo)} starting from scratch indexing`,
@@ -271,6 +195,7 @@ export class IndexRunner {
       operation: 'update' | 'delete';
     },
   ): Promise<IncrementalResult> {
+    current.#dependencyResolver.reset();
     let start = Date.now();
     current.#log.debug(
       `${jobIdentity(current.#jobInfo)} starting from incremental indexing for ${urls.map((u) => u.href).join()}`,
@@ -280,10 +205,17 @@ export class IndexRunner {
       current.realmURL,
       current.#jobInfo,
     );
+    urls.forEach((url) =>
+      current.#dependencyResolver.invalidateRelationshipDependencyRowCache(url),
+    );
     await current.batch.invalidate(urls);
     let invalidations = sortInvalidations(
       current.batch.invalidations.map((href) => new URL(href)),
     );
+    invalidations =
+      await current.#dependencyResolver.orderInvalidationsByDependencies(
+        invalidations,
+      );
     let hasExecutableInvalidation = invalidations.some((url) =>
       hasExecutableExtension(url.href),
     );
@@ -411,209 +343,6 @@ export class IndexRunner {
     return true;
   }
 
-  private normalizeDependencyForLookup(dep: string, relativeTo: URL): string {
-    let canonical = canonicalURL(dep, relativeTo.href);
-    try {
-      return trimExecutableExtension(new URL(canonical)).href;
-    } catch (_err) {
-      return canonical;
-    }
-  }
-
-  private async readModuleCacheEntries(
-    moduleIds: string[],
-  ): Promise<ModuleCacheEntries> {
-    if (moduleIds.length === 0) {
-      return {};
-    }
-    let { resolvedRealmURL, cacheScope, authUserId } =
-      await this.getModuleCacheContext();
-    let entries = await this.#definitionLookup.getModuleCacheEntries({
-      moduleUrls: moduleIds,
-      cacheScope,
-      authUserId,
-      resolvedRealmURL,
-    });
-    return entries;
-  }
-
-  private async collectTransitiveModuleDeps(
-    deps: string[],
-    relativeTo: URL,
-  ): Promise<Set<string>> {
-    let collected = new Set<string>();
-    let pending = new Set<string>();
-    let visited = new Set<string>();
-
-    for (let dep of deps) {
-      let normalized = this.normalizeDependencyForLookup(dep, relativeTo);
-      if (!normalized) {
-        continue;
-      }
-      collected.add(normalized);
-      if (
-        !normalized.endsWith('.json') &&
-        normalized.startsWith(this.realmURL.href)
-      ) {
-        pending.add(normalized);
-        visited.add(normalized);
-      }
-    }
-
-    while (pending.size > 0) {
-      let batch = [...pending];
-      pending.clear();
-      let entries = await this.readModuleCacheEntries(batch);
-      for (let [moduleUrl, entry] of Object.entries(entries)) {
-        let base: URL;
-        try {
-          base = new URL(moduleUrl);
-        } catch (_err) {
-          base = relativeTo;
-        }
-        for (let dep of entry.deps ?? []) {
-          let normalized = this.normalizeDependencyForLookup(dep, base);
-          if (!normalized) {
-            continue;
-          }
-          if (!collected.has(normalized)) {
-            collected.add(normalized);
-          }
-          if (
-            !normalized.endsWith('.json') &&
-            normalized.startsWith(this.realmURL.href) &&
-            !visited.has(normalized)
-          ) {
-            visited.add(normalized);
-            pending.add(normalized);
-          }
-        }
-      }
-    }
-
-    return collected;
-  }
-
-  private errorKey(error: SerializedError): string {
-    return JSON.stringify({
-      id: error.id ?? null,
-      message: error.message ?? null,
-      status: error.status ?? null,
-    });
-  }
-
-  private async getModuleErrorsFromCache(
-    deps: string[],
-  ): Promise<SerializedError[]> {
-    if (deps.length === 0) {
-      return [];
-    }
-    let entries = await this.readModuleCacheEntries(deps);
-    let errors: SerializedError[] = [];
-    for (let entry of Object.values(entries)) {
-      if (!entry.error?.error) {
-        continue;
-      }
-      let normalized = {
-        ...entry.error.error,
-        additionalErrors: entry.error.error.additionalErrors ?? null,
-      };
-      errors.push(normalized);
-    }
-    return errors;
-  }
-
-  private async collectModuleErrors(
-    deps: string[],
-    relativeTo: URL,
-  ): Promise<SerializedError[]> {
-    let pending = new Set<string>();
-    let visited = new Set<string>();
-    let enqueue = (dep: string, base: URL) => {
-      let normalized = this.normalizeDependencyForLookup(dep, base);
-      if (!normalized || normalized.endsWith('.json')) {
-        return;
-      }
-      if (visited.has(normalized)) {
-        return;
-      }
-      visited.add(normalized);
-      pending.add(normalized);
-    };
-
-    for (let dep of deps) {
-      enqueue(dep, relativeTo);
-    }
-
-    let collected: SerializedError[] = [];
-    let seenErrors = new Set<string>();
-
-    while (pending.size > 0) {
-      let batchDeps = [...pending];
-      pending.clear();
-      let errors = await this.getModuleErrorsFromCache(batchDeps);
-      for (let error of errors) {
-        let key = this.errorKey(error);
-        if (!seenErrors.has(key)) {
-          collected.push(error);
-          seenErrors.add(key);
-        }
-        let base = relativeTo;
-        if (error.id) {
-          try {
-            base = new URL(error.id);
-          } catch (_err) {
-            base = relativeTo;
-          }
-        }
-        for (let dep of error.deps ?? []) {
-          enqueue(dep, base);
-        }
-      }
-    }
-
-    return collected;
-  }
-
-  private async appendDependencyErrors<T extends SearchIndexErrorEntry>(
-    entry: T,
-    entryURL: URL,
-  ): Promise<T> {
-    let deps = entry.error.deps ?? [];
-    if (deps.length === 0) {
-      return entry;
-    }
-    let dependencyErrors = await this.collectModuleErrors(deps, entryURL);
-    if (dependencyErrors.length === 0) {
-      return entry;
-    }
-
-    let existing = Array.isArray(entry.error.additionalErrors)
-      ? [...entry.error.additionalErrors]
-      : [];
-    let seen = new Set(existing.map((error) => this.errorKey(error)));
-    seen.add(this.errorKey(entry.error));
-    let added = false;
-    for (let error of dependencyErrors) {
-      let key = this.errorKey(error);
-      if (!seen.has(key)) {
-        existing.push(error);
-        seen.add(key);
-        added = true;
-      }
-    }
-    if (!added) {
-      return entry;
-    }
-    return {
-      ...entry,
-      error: {
-        ...entry.error,
-        additionalErrors: existing,
-      },
-    } as T;
-  }
-
   @Memoize()
   private get ignoreMap() {
     let ignoreMap = new Map<string, Ignore>();
@@ -627,155 +356,33 @@ export class IndexRunner {
     url: URL,
     indexMtimes: LastModifiedTimes,
   ): Promise<string[]> {
-    this.#log.debug(
-      `${jobIdentity(this.#jobInfo)} discovering invalidations in dir ${url.href}`,
-    );
-    this.#perfLog.debug(
-      `${jobIdentity(this.#jobInfo)} discovering invalidations in dir ${url.href}`,
-    );
-    let mtimesStart = Date.now();
-    let filesystemMtimes = await this.#reader.mtimes();
-    this.#perfLog.debug(
-      `${jobIdentity(this.#jobInfo)} time to get file system mtimes ${Date.now() - mtimesStart} ms`,
-    );
-
-    let ignoreFile = new URL('.gitignore', url).href;
-    // it costs about 10 sec to try to get the ignore file when it doesn't
-    // exist, so don't get it if it's not there.
-    if (filesystemMtimes[ignoreFile]) {
-      let ignoreStart = Date.now();
-      let ignorePatterns = await this.#reader.readFile(new URL(ignoreFile));
-      this.#perfLog.debug(
-        `time to get ignore rules ${Date.now() - ignoreStart} ms`,
-      );
-      if (ignorePatterns && ignorePatterns.content) {
-        this.ignoreMap.set(url.href, ignore().add(ignorePatterns.content));
-        this.#ignoreData[url.href] = ignorePatterns.content;
-      }
-    } else {
-      this.#perfLog.debug(
-        `${jobIdentity(this.#jobInfo)} skip getting the ignore file--there is nothing to ignore`,
-      );
-    }
-
-    let invalidationList: string[] = [];
-    let skipList: string[] = [];
-    for (let [url, lastModified] of Object.entries(filesystemMtimes)) {
-      let indexEntry = indexMtimes.get(url);
-
-      if (
-        !indexEntry ||
-        indexEntry.hasError ||
-        indexEntry.lastModified == null ||
-        lastModified !== indexEntry.lastModified
-      ) {
-        invalidationList.push(url);
-      } else {
-        skipList.push(url);
-      }
-    }
-    if (skipList.length === 0) {
-      // the whole realm needs to be visited, no need to calculate
-      // invalidations--it's everything
-      return invalidationList;
-    }
-
-    // Check for deleted files - files that exist in index but not on filesystem
-    let indexedUrls = [...indexMtimes.keys()];
-    let deletedUrls = indexedUrls.filter((url) => !filesystemMtimes[url]);
-    if (deletedUrls.length > 0) {
-      this.#perfLog.debug(
-        `${jobIdentity(this.#jobInfo)} found ${deletedUrls.length} deleted files to add to invalidations: ${deletedUrls.join(', ')}`,
-      );
-      invalidationList.push(...deletedUrls);
-    }
-
-    let invalidationStart = Date.now();
-    await this.batch.invalidate(invalidationList.map((u) => new URL(u)));
-    this.#perfLog.debug(
-      `${jobIdentity(this.#jobInfo)} time to invalidate ${url} ${Date.now() - invalidationStart} ms`,
-    );
-    return this.batch.invalidations;
+    return await discoverInvalidations({
+      url,
+      indexMtimes,
+      reader: this.#reader,
+      batch: this.batch,
+      ignoreMap: this.ignoreMap,
+      ignoreData: this.#ignoreData,
+      jobInfo: this.#jobInfo,
+      logDebug: (message) => this.#log.debug(message),
+      perfDebug: (message) => this.#perfLog.debug(message),
+    });
   }
 
   private async visitFile(url: URL): Promise<void> {
-    if (isIgnored(this.#realmURL, this.ignoreMap, url)) {
-      return;
-    }
-    let start = Date.now();
-    this.#log.debug(
-      `${jobIdentity(this.#jobInfo)} begin visiting file ${url.href}`,
-    );
-    let localPath: string;
-    try {
-      localPath = this.#realmPaths.local(url);
-    } catch (e) {
-      // until we have cross realm invalidation, if our invalidation
-      // graph cross a realm just skip over the file. it will be out
-      // of date, but such is life...
-      this.#log.debug(
-        `${jobIdentity(this.#jobInfo)} Visit of ${url.href} cannot be performed as it is in a different realm than the realm whose contents are being invalidated (${this.realmURL.href})`,
-      );
-      return;
-    }
-
-    let fileRef = await this.#reader.readFile(url);
-    if (!fileRef) {
-      fileRef = await this.#reader.readFile(new URL(encodeURI(localPath), url));
-    }
-    if (!fileRef) {
-      let error = new CardError(`missing file ${url.href}`, { status: 404 });
-      error.deps = [url.href];
-      throw error;
-    }
-    let { content, lastModified } = fileRef;
-    // ensure created_at exists for this file and use it for resourceCreatedAt
-    let resourceCreatedAt = await this.batch.ensureFileCreatedAt(localPath);
-    let isModule = hasExecutableExtension(url.href);
-    if (url.href.endsWith('.json')) {
-      let resource;
-
-      try {
-        let { data } = JSON.parse(content);
-        resource = data;
-      } catch (e) {
-        this.#log.warn(
-          `${jobIdentity(this.#jobInfo)} unable to parse ${url.href} as card JSON`,
-        );
-      }
-
-      if (resource && isCardResource(resource)) {
-        if (lastModified == null) {
-          this.#log.warn(
-            `${jobIdentity(this.#jobInfo)} No lastModified date available for ${url.href}, using current time`,
-          );
-          lastModified = unixTime(Date.now());
-        }
-        await this.indexCard({
-          path: localPath,
-          lastModified,
-          resourceCreatedAt,
-          resource,
-        });
-        // Intentionally fall through so card JSON files also get a file entry.
-      }
-    }
-
-    if (lastModified == null) {
-      this.#log.warn(
-        `${jobIdentity(this.#jobInfo)} No lastModified date available for ${url.href}, using current time`,
-      );
-      lastModified = unixTime(Date.now());
-    }
-    await this.indexFile({
-      path: localPath,
-      lastModified,
-      resourceCreatedAt,
-      hasModulePrerender: isModule,
+    await visitFileForIndexing({
+      url,
+      realmURL: this.#realmURL,
+      ignoreMap: this.ignoreMap,
+      realmPaths: this.#realmPaths,
+      reader: this.#reader,
+      batch: this.batch,
+      jobInfo: this.#jobInfo,
+      logDebug: (message) => this.#log.debug(message),
+      logWarn: (message) => this.#log.warn(message),
+      indexCard: async (args) => await this.indexCard(args),
+      indexFile: async (args) => await this.indexFile(args),
     });
-    this.#log.debug(
-      `${jobIdentity(this.#jobInfo)} completed visiting file ${url.href} in ${Date.now() - start}ms`,
-    );
   }
 
   private reportStatus(
@@ -821,160 +428,24 @@ export class IndexRunner {
       }
       deferred = new Deferred<void>();
       this.#indexingInstances.set(fileURL, deferred.promise);
-      let uncaughtError: Error | undefined;
-      let renderResult: RenderResponse | undefined;
-      try {
-        let clearCache = this.#consumeClearCacheForRender();
-        let prerenderOptions: RenderRouteOptions | undefined = clearCache
-          ? { clearCache }
-          : undefined;
-        renderResult = await this.#prerenderer.prerenderCard({
-          url: fileURL,
-          realm: this.#realmURL.href,
-          auth: this.#auth,
-          renderOptions: prerenderOptions,
-        });
-
-        // we tack on data that can only be determined via access to underlying filesystem/DB
-        let realmInfo = await this.ensureRealmInfo();
-        let serialized = renderResult?.serialized;
-        if (serialized) {
-          merge(serialized, {
-            data: {
-              meta: {
-                lastModified,
-                resourceCreatedAt,
-                realmInfo: { ...realmInfo },
-                realmURL: this.realmURL.href,
-              },
-            },
-          });
-        }
-      } catch (err: any) {
-        uncaughtError = err;
-      }
-
-      if (!renderResult || ('error' in renderResult && renderResult.error)) {
-        let renderError: InstanceErrorIndexEntry;
-
-        /**
-         * Normalize any combination of an optional ErrorEntry and thrown value
-         * into a well-formed ErrorEntry. Handles the common case of a provided
-         * entry with an error, rejects malformed entries missing error payloads,
-         * and synthesizes an ErrorEntry from either a CardError or generic Error.
-         */
-        let normalizeToErrorEntry = (
-          entry: ErrorEntry | undefined,
-          err: unknown,
-        ): InstanceErrorIndexEntry => {
-          if (entry?.error) {
-            let normalizedError = { ...entry.error };
-            normalizedError.additionalErrors =
-              normalizedError.additionalErrors ?? null;
-            normalizedError.status = normalizedError.status ?? 500;
-            return {
-              ...entry,
-              type: 'instance-error',
-              error: normalizedError,
-            };
-          }
-          if (entry && !entry.error) {
-            throw new CardError('ErrorEntry missing error payload', {
-              status: 500,
-            });
-          }
-          if (isCardError(err)) {
-            return { type: 'instance-error', error: serializableError(err) };
-          }
-          let fallback = new CardError(
-            (err as Error)?.message ?? 'unknown render error',
-            { status: 500 },
-          );
-          fallback.stack = (err as Error)?.stack;
-          return { type: 'instance-error', error: serializableError(fallback) };
-        };
-
-        renderError = normalizeToErrorEntry(renderResult?.error, uncaughtError);
-
-        if (
-          renderError.error.id &&
-          renderError.error.id.replace(/\.json$/, '') !== instanceURL.href
-        ) {
-          renderError.error.deps = renderError.error.deps ?? [];
-          renderError.error.deps.push(
-            canonicalURL(renderError.error.id, instanceURL.href),
-          );
-        }
-
-        // always include the modules that we see in serialized as deps
-        renderError.error.deps = renderError.error.deps ?? [];
-        renderError.error.deps.push(
-          ...modulesConsumedInMeta(resource.meta).map((m) =>
-            canonicalURL(m, instanceURL.href),
-          ),
-        );
-        renderError.error.deps = [...new Set(renderError.error.deps)];
-        renderError.error.deps = [
-          ...(await this.collectTransitiveModuleDeps(
-            renderError.error.deps,
-            instanceURL,
-          )),
-        ];
-
-        if (renderError.cardType) {
-          renderError.searchData = {
-            ...(renderError.searchData ?? {}),
-            _cardType:
-              renderError.searchData?._cardType ?? renderError.cardType,
-          };
-        }
-
-        renderError = await this.appendDependencyErrors(
-          renderError,
-          instanceURL,
-        );
-
-        this.#log.warn(
-          `${jobIdentity(this.#jobInfo)} encountered error indexing card instance ${path}: ${renderError.error.message}`,
-        );
-        await this.updateEntry(instanceURL, renderError);
-        return;
-      } else {
-        let {
-          serialized,
-          searchDoc,
-          displayNames,
-          deps,
-          types,
-          isolatedHTML,
-          headHTML,
-          atomHTML,
-          embeddedHTML,
-          fittedHTML,
-          iconHTML,
-        } = renderResult;
-        let expandedDeps = await this.collectTransitiveModuleDeps(
-          deps ?? [],
-          instanceURL,
-        );
-        await this.updateEntry(instanceURL, {
-          type: 'instance',
-          resource: serialized!.data as CardResource,
-          searchData: searchDoc!,
-          isolatedHtml: isolatedHTML ?? undefined,
-          headHtml: headHTML ?? undefined,
-          atomHtml: atomHTML ?? undefined,
-          embeddedHtml: embeddedHTML ?? undefined,
-          fittedHtml: fittedHTML ?? undefined,
-          iconHTML: iconHTML ?? undefined,
-          lastModified,
-          resourceCreatedAt,
-          types: types!,
-          displayNames: displayNames ?? [],
-          deps: expandedDeps,
-        });
-        return;
-      }
+      await performCardIndexing({
+        path,
+        lastModified,
+        resourceCreatedAt,
+        resource,
+        fileURL,
+        instanceURL,
+        realmURL: this.#realmURL,
+        auth: this.#auth,
+        jobInfo: this.#jobInfo,
+        prerenderer: this.#prerenderer,
+        consumeClearCacheForRender: () => this.#consumeClearCacheForRender(),
+        ensureRealmInfo: () => this.ensureRealmInfo(),
+        dependencyResolver: this.#dependencyResolver,
+        updateEntry: async (entryURL, entry) =>
+          await this.updateEntry(entryURL, entry),
+        logWarn: (message) => this.#log.warn(message),
+      });
     } finally {
       deferred?.fulfill();
       this.reportStatus('finish', fileURL, resource);
@@ -993,171 +464,43 @@ export class IndexRunner {
     hasModulePrerender?: boolean;
   }): Promise<void> {
     let fileURL = this.#realmPaths.fileURL(path).href;
-    let entryURL = new URL(fileURL);
-    let name = path.split('/').pop() ?? path;
-    let contentType = inferContentType(name);
-    let fileDefCodeRef = resolveFileDefCodeRef(new URL(fileURL));
-    let fileTypeRefs = [fileDefCodeRef];
-    if (
-      fileDefCodeRef.module !== BASE_FILE_DEF_CODE_REF.module ||
-      fileDefCodeRef.name !== BASE_FILE_DEF_CODE_REF.name
-    ) {
-      fileTypeRefs.push(BASE_FILE_DEF_CODE_REF);
-    }
-    let clearCache = this.#consumeClearCacheForRender();
-    let renderOptions: RenderRouteOptions = {
-      fileExtract: true,
-      fileDefCodeRef,
-      ...(clearCache ? { clearCache } : {}),
-    };
-
-    let extractResult: FileExtractResponse | undefined;
-    let uncaughtError: Error | undefined;
-    try {
-      extractResult = await this.#prerenderer.prerenderFileExtract({
-        url: fileURL,
-        realm: this.#realmURL.href,
-        auth: this.#auth,
-        renderOptions,
-      });
-    } catch (err: any) {
-      uncaughtError = err;
-    }
-
-    let normalizeToErrorEntry = (
-      entry: ErrorEntry | undefined,
-      err: unknown,
-    ): FileErrorIndexEntry => {
-      if (entry?.error) {
-        let normalizedError = { ...entry.error };
-        normalizedError.additionalErrors =
-          normalizedError.additionalErrors ?? null;
-        normalizedError.status = normalizedError.status ?? 500;
-        return {
-          ...entry,
-          type: 'file-error',
-          error: normalizedError,
-        };
-      }
-      if (entry && !entry.error) {
-        throw new CardError('ErrorEntry missing error payload', {
-          status: 500,
-        });
-      }
-      if (isCardError(err)) {
-        return { type: 'file-error', error: serializableError(err) };
-      }
-      let fallback = new CardError(
-        (err as Error)?.message ?? 'unknown file extract error',
-        { status: 500 },
-      );
-      fallback.stack = (err as Error)?.stack;
-      return { type: 'file-error', error: serializableError(fallback) };
-    };
-
-    if (!extractResult || extractResult.status === 'error') {
-      let renderError = normalizeToErrorEntry(
-        extractResult?.error,
-        uncaughtError,
-      );
-      renderError.error.deps = renderError.error.deps ?? [];
-      renderError.error.deps.push(fileURL, fileDefCodeRef.module);
-      if (extractResult?.deps) {
-        renderError.error.deps.push(...extractResult.deps);
-      }
-      renderError.error.deps = [...new Set(renderError.error.deps)];
-
-      this.#log.warn(
-        `${jobIdentity(this.#jobInfo)} encountered error indexing file ${path}: ${renderError.error.message}`,
-      );
-      await this.batch.updateEntry(entryURL, renderError);
-      this.stats.fileErrors++;
-      return;
-    }
-
-    if (extractResult.error) {
-      this.#log.warn(
-        `${jobIdentity(this.#jobInfo)} extractor fallback while indexing file ${path}: ${extractResult.error.error.message}`,
-      );
-    }
-
-    let fallbackTypes = fileTypeRefs.map((ref) =>
-      internalKeyFor(ref, undefined),
-    );
-    let fileTypes = extractResult.types ?? fallbackTypes;
-    let directDeps = extractResult.deps ?? [];
-    let moduleDeps = directDeps.filter((dep) => dep !== fileURL);
-    let expandedDeps = await this.collectTransitiveModuleDeps(
-      moduleDeps,
-      entryURL,
-    );
-    let deps = new Set([...expandedDeps, fileURL]);
-
-    // Phase 2: Render HTML for file entry (non-fatal).
-    // Skip for files that already have their own prerender (modules) since
-    // they add significant per-file Puppeteer overhead and already produce HTML
-    // through their module prerender path.
-    let renderResult: FileRenderResponse | undefined;
-    if (extractResult.resource && !hasModulePrerender) {
-      try {
-        let fileRenderOptions: RenderRouteOptions = {
-          fileRender: true,
-          fileDefCodeRef,
-        };
-        renderResult = await this.#prerenderer.prerenderFileRender({
-          url: fileURL,
-          realm: this.#realmURL.href,
-          auth: this.#auth,
-          fileData: {
-            resource: extractResult.resource,
-            fileDefCodeRef,
-          },
-          types: fileTypes,
-          renderOptions: fileRenderOptions,
-        });
-        if (renderResult?.error) {
-          this.#log.warn(
-            `${jobIdentity(this.#jobInfo)} file render produced error for ${path}, continuing without HTML: ${renderResult.error.error?.message}`,
-          );
-          renderResult = undefined;
-        }
-      } catch (err: any) {
-        this.#log.warn(
-          `${jobIdentity(this.#jobInfo)} file render failed for ${path}, continuing without HTML: ${err.message}`,
-        );
-      }
-    }
-
-    await this.batch.updateEntry(entryURL, {
-      type: 'file',
+    let result = await performFileIndexing({
+      path,
+      fileURL,
       lastModified,
       resourceCreatedAt,
-      deps,
-      resource: extractResult.resource ?? null,
-      searchData: {
-        url: fileURL,
-        sourceUrl: fileURL,
-        name,
-        contentType,
-        ...(extractResult.searchDoc ?? {}),
+      hasModulePrerender,
+      realmURL: this.#realmURL,
+      auth: this.#auth,
+      jobInfo: this.#jobInfo,
+      prerenderer: this.#prerenderer,
+      consumeClearCacheForRender: () => this.#consumeClearCacheForRender(),
+      dependencyResolver: this.#dependencyResolver,
+      updateEntry: async (entryURL, entry) => {
+        await this.batch.updateEntry(entryURL, entry);
+        this.#dependencyResolver.invalidateRelationshipDependencyRowCache(
+          entryURL,
+        );
       },
-      types: fileTypes,
-      displayNames: [],
-      isolatedHtml: renderResult?.isolatedHTML ?? undefined,
-      headHtml: renderResult?.headHTML ?? undefined,
-      atomHtml: renderResult?.atomHTML ?? undefined,
-      embeddedHtml: renderResult?.embeddedHTML ?? undefined,
-      fittedHtml: renderResult?.fittedHTML ?? undefined,
-      iconHTML: renderResult?.iconHTML ?? undefined,
+      logWarn: (message) => this.#log.warn(message),
     });
-    this.stats.filesIndexed++;
+
+    if (result === 'indexed') {
+      this.stats.filesIndexed++;
+    } else {
+      this.stats.fileErrors++;
+    }
   }
 
   private async updateEntry(
     instanceURL: URL,
     entry: InstanceEntry | InstanceErrorIndexEntry,
   ) {
-    await this.batch.updateEntry(assertURLEndsWithJSON(instanceURL), entry);
+    let normalizedURL = assertURLEndsWithJSON(instanceURL);
+    await this.batch.updateEntry(normalizedURL, entry);
+    this.#dependencyResolver.invalidateRelationshipDependencyRowCache(
+      normalizedURL,
+    );
     if (entry.type === 'instance') {
       this.stats.instancesIndexed++;
     } else {
