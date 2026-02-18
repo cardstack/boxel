@@ -1868,7 +1868,7 @@ export class Realm {
       typeof ref.content === 'string'
     ) {
       return createResponse({
-        body: ref.content,
+        body: ref.content as BodyInit,
         init: { headers },
         requestContext,
       });
