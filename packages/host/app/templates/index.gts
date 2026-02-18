@@ -110,7 +110,11 @@ export class IndexComponent extends Component<IndexComponentComponentSignature> 
 
   get title() {
     if (this.isError) {
-      return `Card not found: ${this.args.model?.id}`;
+      let error = this.args.model as CardErrorJSONAPI;
+      if (error.status === 404) {
+        return `Card not found: ${error.id}`;
+      }
+      return `Error rendering ${error.id}`;
     }
 
     return this.card?.cardTitle ?? '';
@@ -223,20 +227,13 @@ export class IndexComponent extends Component<IndexComponentComponentSignature> 
         {{pageTitle this.title}}
       {{/unless}}
 
-      {{#if this.isError}}
-        <div data-test-error='not-found'>
-          Card not found:
-          {{@model.id}}
-        </div>
-      {{else}}
-        <HostModeContent
-          @primaryCardId={{this.hostModeStateService.primaryCard}}
-          @stackItemCardIds={{this.hostModeStateService.stackItems}}
-          @removeCardFromStack={{this.removeCardFromStack}}
-          @viewCard={{this.viewCard}}
-          {{this.removeIsolatedMarkup}}
-        />
-      {{/if}}
+      <HostModeContent
+        @primaryCardId={{this.hostModeStateService.primaryCard}}
+        @stackItemCardIds={{this.hostModeStateService.stackItems}}
+        @removeCardFromStack={{this.removeCardFromStack}}
+        @viewCard={{this.viewCard}}
+        {{this.removeIsolatedMarkup}}
+      />
     {{else}}
       {{pageTitle this.operatorModeStateService.title}}
       <OperatorModeContainer @onClose={{this.closeOperatorMode}} />
