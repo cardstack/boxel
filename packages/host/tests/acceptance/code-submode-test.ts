@@ -899,7 +899,7 @@ module('Acceptance | code submode tests', function (_hooks) {
       assert.dom('[data-test-file]').exists();
     });
 
-    test('non-card JSON is shown as just a file with empty schema editor', async function (assert) {
+    test('non-card JSON is shown as a file instance with file inheritance', async function (assert) {
       await visitOperatorMode({
         stacks: [
           [
@@ -913,7 +913,7 @@ module('Acceptance | code submode tests', function (_hooks) {
         codePath: `${testRealmURL}z01.json`,
       });
 
-      await waitFor('[data-test-file-definition]');
+      await waitFor('[data-test-card-instance-definition]');
 
       assert.dom('[data-test-definition-file-extension]').hasText('.json');
       await waitFor('[data-test-definition-realm-name]');
@@ -940,7 +940,13 @@ module('Acceptance | code submode tests', function (_hooks) {
         )
         .doesNotExist();
 
-      assert.dom('[data-test-definition-header]').includesText('File');
+      assert
+        .dom('[data-test-definition-header]')
+        .includesText('File Instance');
+
+      assert
+        .dom('[data-test-inheritance-panel-header]')
+        .includesText('File Inheritance');
 
       assert
         .dom('[data-test-definition-realm-name]')
@@ -948,7 +954,7 @@ module('Acceptance | code submode tests', function (_hooks) {
       assert.dom('[data-test-action-button="Delete"]').exists();
     });
 
-    test('invalid JSON is shown as just a file with empty schema editor', async function (assert) {
+    test('invalid JSON is shown as a file instance with file inheritance', async function (assert) {
       await visitOperatorMode({
         stacks: [
           [
@@ -962,7 +968,7 @@ module('Acceptance | code submode tests', function (_hooks) {
         codePath: `${testRealmURL}not-json.json`,
       });
 
-      await waitFor('[data-test-file-definition]');
+      await waitFor('[data-test-card-instance-definition]');
 
       assert.dom('[data-test-definition-file-extension]').hasText('.json');
       await waitFor('[data-test-definition-realm-name]');

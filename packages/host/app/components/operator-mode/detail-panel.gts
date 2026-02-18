@@ -595,32 +595,7 @@ export default class DetailPanel extends Component<Signature> {
           >
             {{this.inheritancePanelHeader}}
           </PanelHeader>
-          {{#if this.isFileDefInstance}}
-            <InstanceDefinitionContainer
-              @title='File Instance'
-              @fileURL={{@readyFile.url}}
-              @name={{@readyFile.name}}
-              @fileExtension={{this.fileExtension}}
-              @infoText={{this.lastModified.value}}
-              @actions={{this.miscFileActions}}
-            />
-            <Divider @label='Adopts From' />
-            {{#if this.fileDefInstanceType.type}}
-              {{#let
-                (getResolvedCodeRefFromType this.fileDefInstanceType.type)
-                as |codeRef|
-              }}
-                <ClickableModuleDefinitionContainer
-                  @title='File Definition'
-                  @fileURL={{this.fileDefInstanceType.type.module}}
-                  @name={{this.fileDefInstanceType.type.displayName}}
-                  @fileExtension={{this.fileDefInstanceType.type.moduleInfo.extension}}
-                  @goToDefinition={{@goToDefinition}}
-                  @codeRef={{codeRef}}
-                />
-              {{/let}}
-            {{/if}}
-          {{else if this.isCardInstance}}
+          {{#if this.isCardInstance}}
             {{! JSON case when visting, eg Author/1.json }}
             <InstanceDefinitionContainer
               @fileURL={{@readyFile.url}}
@@ -640,6 +615,31 @@ export default class DetailPanel extends Component<Signature> {
                   @fileURL={{this.cardInstanceType.type.module}}
                   @name={{this.cardInstanceType.type.displayName}}
                   @fileExtension={{this.cardInstanceType.type.moduleInfo.extension}}
+                  @goToDefinition={{@goToDefinition}}
+                  @codeRef={{codeRef}}
+                />
+              {{/let}}
+            {{/if}}
+          {{else if this.isFileDefInstance}}
+            <InstanceDefinitionContainer
+              @title='File Instance'
+              @fileURL={{@readyFile.url}}
+              @name={{@readyFile.name}}
+              @fileExtension={{this.fileExtension}}
+              @infoText={{this.lastModified.value}}
+              @actions={{this.miscFileActions}}
+            />
+            <Divider @label='Adopts From' />
+            {{#if this.fileDefInstanceType.type}}
+              {{#let
+                (getResolvedCodeRefFromType this.fileDefInstanceType.type)
+                as |codeRef|
+              }}
+                <ClickableModuleDefinitionContainer
+                  @title='File Definition'
+                  @fileURL={{this.fileDefInstanceType.type.module}}
+                  @name={{this.fileDefInstanceType.type.displayName}}
+                  @fileExtension={{this.fileDefInstanceType.type.moduleInfo.extension}}
                   @goToDefinition={{@goToDefinition}}
                   @codeRef={{codeRef}}
                 />
