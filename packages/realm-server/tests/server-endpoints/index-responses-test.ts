@@ -1,8 +1,9 @@
 import { module, test } from 'qunit';
 import { join, basename } from 'path';
-import { systemInitiatedPriority } from '@cardstack/runtime-common';
+import type { Test, SuperTest } from 'supertest';
+import { systemInitiatedPriority, type Realm } from '@cardstack/runtime-common';
 import { setupServerEndpointsTest, testRealm2URL } from './helpers';
-import { waitUntil } from '../helpers';
+import { setupPermissionedRealmAtURL, waitUntil } from '../helpers';
 import { ensureDirSync, writeFileSync, writeJSONSync } from 'fs-extra';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
@@ -120,6 +121,44 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           });
 
           writeFileSync(
+            join(context.testRealmDir, 'unsafe-head-card.gts'),
+            `
+            import { Component, CardDef } from 'https://cardstack.com/base/card-api';
+
+            export class UnsafeHeadCard extends CardDef {
+              static isolated = class Isolated extends Component<typeof this> {
+                <template>
+                  <div data-test-isolated-html>Unsafe head card</div>
+                </template>
+              };
+
+              static head = class Head extends Component<typeof this> {
+                <template>
+                  {{! template-lint-disable no-forbidden-elements }}
+                  <title>Safe Title</title>
+                  <meta name="description" content="safe description" />
+                  <script>void 0</script>
+                  <style>.injected-style { color: red }</style>
+                </template>
+              };
+            }
+            `,
+          );
+
+          writeJSONSync(join(context.testRealmDir, 'unsafe-head-test.json'), {
+            data: {
+              type: 'card',
+              attributes: {},
+              meta: {
+                adoptsFrom: {
+                  module: './unsafe-head-card.gts',
+                  name: 'UnsafeHeadCard',
+                },
+              },
+            },
+          });
+
+          writeFileSync(
             join(context.testRealmDir, 'scoped-css-card.gts'),
             `
             import { Component, CardDef } from 'https://cardstack.com/base/card-api';
@@ -151,6 +190,101 @@ module(`server-endpoints/${basename(__filename)}`, function () {
               },
             },
           });
+
+          // Cards for testing scoped CSS from linked card instances.
+          // The parent declares linksTo with a base type, but the actual linked
+          // instance is a subclass with its own scoped CSS. This means the child's
+          // CSS is NOT reachable through the parent's static module imports — it
+          // can only be found by iterating over serialized.included resources.
+          writeFileSync(
+            join(context.testRealmDir, 'linked-css-base.gts'),
+            `
+            import { Component, CardDef } from 'https://cardstack.com/base/card-api';
+
+            export class LinkedCssBase extends CardDef {
+              static embedded = class Embedded extends Component<typeof this> {
+                <template>
+                  <div data-test-linked-base>Base</div>
+                </template>
+              };
+            }
+            `,
+          );
+
+          writeFileSync(
+            join(context.testRealmDir, 'linked-css-child.gts'),
+            `
+            import { Component } from 'https://cardstack.com/base/card-api';
+            import { LinkedCssBase } from './linked-css-base.gts';
+
+            export class LinkedCssChild extends LinkedCssBase {
+              static embedded = class Embedded extends Component<typeof this> {
+                <template>
+                  <div class="linked-child-marker" data-test-linked-child>Linked Child</div>
+                  <style scoped>
+                    .linked-child-marker {
+                      --linked-child-css: 1;
+                    }
+                  </style>
+                </template>
+              };
+            }
+            `,
+          );
+
+          writeFileSync(
+            join(context.testRealmDir, 'linked-css-parent.gts'),
+            `
+            import { Component, CardDef, field, linksTo } from 'https://cardstack.com/base/card-api';
+            import { LinkedCssBase } from './linked-css-base.gts';
+
+            export class LinkedCssParent extends CardDef {
+              @field child = linksTo(() => LinkedCssBase);
+              static isolated = class Isolated extends Component<typeof this> {
+                <template>
+                  <div data-test-linked-parent>Parent</div>
+                  <@fields.child />
+                </template>
+              };
+            }
+            `,
+          );
+
+          writeJSONSync(join(context.testRealmDir, 'linked-css-child-1.json'), {
+            data: {
+              type: 'card',
+              attributes: {},
+              meta: {
+                adoptsFrom: {
+                  module: './linked-css-child.gts',
+                  name: 'LinkedCssChild',
+                },
+              },
+            },
+          });
+
+          writeJSONSync(
+            join(context.testRealmDir, 'linked-css-parent-1.json'),
+            {
+              data: {
+                type: 'card',
+                attributes: {},
+                relationships: {
+                  child: {
+                    links: {
+                      self: './linked-css-child-1',
+                    },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: './linked-css-parent.gts',
+                    name: 'LinkedCssParent',
+                  },
+                },
+              },
+            },
+          );
         },
       });
 
@@ -188,6 +322,18 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         assert.ok(
           response.text.includes('data-test-isolated-html'),
           'isolated HTML is injected into the HTML response',
+        );
+      });
+
+      test('HTML response does not include boxel-ready class on body', async function (assert) {
+        let response = await context.request2
+          .get('/test/isolated-test')
+          .set('Accept', 'text/html');
+
+        assert.strictEqual(response.status, 200, 'serves HTML response');
+        assert.notOk(
+          response.text.includes('boxel-ready'),
+          'boxel-ready class is not present in server-rendered HTML',
         );
       });
 
@@ -237,6 +383,57 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         assert.ok(
           response.text.includes('--scoped-css-marker: 1'),
           'scoped CSS is included in the HTML response',
+        );
+      });
+
+      test('serves scoped CSS from linked cards in index responses', async function (assert) {
+        let response = await context.request2
+          .get('/test/linked-css-parent-1')
+          .set('Accept', 'text/html');
+
+        assert.strictEqual(response.status, 200, 'serves HTML response');
+        assert.ok(
+          response.text.includes('data-test-linked-parent'),
+          'parent isolated HTML is in the response',
+        );
+        assert.ok(
+          response.text.includes('--linked-child-css: 1'),
+          'scoped CSS from linked card is included in the HTML response',
+        );
+      });
+
+      test('sanitizes disallowed tags from head HTML in index responses', async function (assert) {
+        let response = await context.request2
+          .get('/test/unsafe-head-test')
+          .set('Accept', 'text/html');
+
+        assert.strictEqual(response.status, 200, 'serves HTML response');
+
+        // Extract content between head markers
+        let headMatch = response.text.match(
+          /data-boxel-head-start[^>]*>([\s\S]*?)data-boxel-head-end/,
+        );
+        let headContent = headMatch?.[1] ?? '';
+
+        assert.ok(
+          headContent.includes('<title>'),
+          'title tag is preserved in head HTML',
+        );
+        assert.ok(
+          headContent.includes('<meta'),
+          'meta tag is preserved in head HTML',
+        );
+        assert.notOk(
+          headContent.includes('<script'),
+          'script tag is stripped from head HTML',
+        );
+        assert.notOk(
+          headContent.includes('void 0'),
+          'script content is stripped from head HTML',
+        );
+        assert.notOk(
+          headContent.includes('.injected-style'),
+          'user-injected style content is stripped from head HTML',
         );
       });
 
@@ -350,6 +547,170 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         let response = await context.request2.get('/%c0').set('Accept', '*/*');
         assert.strictEqual(response.status, 404, 'HTTP 404 status');
       });
+
+      test('preserves scoped CSS in HTML response after card enters error state', async function (assert) {
+        // First verify the card is indexed successfully and scoped CSS is served
+        let initialResponse = await context.request2
+          .get('/test/scoped-css-test')
+          .set('Accept', 'text/html');
+
+        assert.strictEqual(
+          initialResponse.status,
+          200,
+          'initial HTML response is successful',
+        );
+        assert.ok(
+          initialResponse.text.includes('--scoped-css-marker: 1'),
+          'scoped CSS is present in initial response',
+        );
+
+        // Break the instance by making it reference a non-existent module
+        // This is more reliable than breaking the module and waiting for propagation
+        let brokenInstanceJSON = JSON.stringify({
+          data: {
+            type: 'card',
+            attributes: {},
+            meta: {
+              adoptsFrom: {
+                module: './non-existent-module.gts',
+                name: 'NonExistentCard',
+              },
+            },
+          },
+        });
+
+        let writeResponse = await context.request2
+          .post('/test/scoped-css-test.json')
+          .set('Accept', 'application/vnd.card+source')
+          .send(brokenInstanceJSON);
+
+        assert.strictEqual(
+          writeResponse.status,
+          204,
+          'instance file write was accepted',
+        );
+
+        // Wait for the index to reflect the error state
+        await waitUntil(
+          async () => {
+            let rows = (await context.dbAdapter.execute(
+              `SELECT has_error FROM boxel_index
+               WHERE url = '${testRealm2URL.href}scoped-css-test.json'
+                 AND type = 'instance'`,
+            )) as { has_error: boolean }[];
+
+            return rows.length > 0 && rows[0].has_error === true;
+          },
+          {
+            timeout: 10000,
+            interval: 200,
+            timeoutMessage:
+              'Timed out waiting for instance to enter error state',
+          },
+        );
+
+        // Verify the database row has an error
+        let errorRows = (await context.dbAdapter.execute(
+          `SELECT has_error, last_known_good_deps FROM boxel_index
+           WHERE url = '${testRealm2URL.href}scoped-css-test.json'
+             AND type = 'instance'`,
+        )) as { has_error: boolean; last_known_good_deps: string[] | null }[];
+
+        assert.strictEqual(errorRows.length, 1, 'found the index entry');
+        assert.true(
+          errorRows[0].has_error,
+          'instance is in error state in the database',
+        );
+        assert.ok(
+          errorRows[0].last_known_good_deps,
+          'last_known_good_deps is preserved',
+        );
+        assert.ok(
+          errorRows[0].last_known_good_deps!.some((dep: string) =>
+            dep.includes('.glimmer-scoped.css'),
+          ),
+          'last_known_good_deps contains scoped CSS URL',
+        );
+
+        // Now request the HTML again - it should still include scoped CSS from last_known_good_deps
+        let errorStateResponse = await context.request2
+          .get('/test/scoped-css-test')
+          .set('Accept', 'text/html');
+
+        assert.strictEqual(
+          errorStateResponse.status,
+          200,
+          'HTML response is still successful even with errored card',
+        );
+        assert.ok(
+          errorStateResponse.text.includes('data-boxel-scoped-css'),
+          'scoped CSS style tag is still present after error (from last_known_good_deps)',
+        );
+        assert.ok(
+          errorStateResponse.text.includes('--scoped-css-marker: 1'),
+          'scoped CSS content is preserved from last_known_good_deps after card enters error state',
+        );
+      });
     },
   );
+
+  module('Published realm index responses', function (hooks) {
+    // Use a URL with a path segment to avoid conflicts with server-level routes
+    // like /_info, /_search, etc. Without a path segment, requests to /_info
+    // would match the server's multi-realm info route instead of the realm's
+    // single-realm info handler.
+    let realmURL = new URL('http://127.0.0.1:4444/published/');
+    let request: SuperTest<Test>;
+    let testRealm: Realm;
+
+    function onRealmSetup(args: {
+      request: SuperTest<Test>;
+      testRealm: Realm;
+    }) {
+      request = args.request;
+      testRealm = args.testRealm;
+    }
+
+    setupPermissionedRealmAtURL(hooks, realmURL, {
+      permissions: {
+        '*': ['read'],
+      },
+      published: true,
+      onRealmSetup,
+    });
+
+    hooks.beforeEach(async function () {
+      // Wait for indexing to complete before running tests
+      // This ensures isolated_html is available in the database
+      await testRealm.indexing();
+    });
+
+    test('serves index HTML by default for published realm', async function (assert) {
+      let response = await request
+        .get('/published/')
+        .set('Accept', 'application/json');
+
+      assert.strictEqual(response.status, 200, 'serves HTML response');
+      assert.ok(
+        response.headers['content-type']?.includes('text/html'),
+        'content type is text/html',
+      );
+      assert.ok(
+        response.text.includes('data-test-home-card'),
+        'index HTML is served',
+      );
+    });
+
+    test('skips index HTML when vendor mime type is requested', async function (assert) {
+      let response = await request
+        .get('/published/person-1')
+        .set('Accept', 'application/vnd.card+json');
+
+      assert.strictEqual(response.status, 200, 'serves JSON response');
+      assert.ok(
+        response.headers['content-type']?.includes('application/vnd.card+json'),
+        'content type is vendor JSON',
+      );
+    });
+  });
 });

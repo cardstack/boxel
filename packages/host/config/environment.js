@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const DEFAULT_CARD_RENDER_TIMEOUT_MS = 30_000;
 const DEFAULT_CARD_SIZE_LIMIT_BYTES = 512 * 1024; // 512KB
+const DEFAULT_FILE_SIZE_LIMIT_BYTES = 5 * 1024 * 1024; // 5MB
 
 let sqlSchema = fs.readFileSync(getLatestSchemaFile(), 'utf8');
 
@@ -44,6 +45,9 @@ module.exports = function (environment) {
     cardSizeLimitBytes: Number(
       process.env.CARD_SIZE_LIMIT_BYTES ?? DEFAULT_CARD_SIZE_LIMIT_BYTES,
     ),
+    fileSizeLimitBytes: Number(
+      process.env.FILE_SIZE_LIMIT_BYTES ?? DEFAULT_FILE_SIZE_LIMIT_BYTES,
+    ),
     iconsURL: process.env.ICONS_URL || 'https://boxel-icons.boxel.ai',
     publishedRealmBoxelSpaceDomain:
       process.env.PUBLISHED_REALM_BOXEL_SPACE_DOMAIN || 'localhost:4201',
@@ -55,9 +59,10 @@ module.exports = function (environment) {
     realmServerURL: process.env.REALM_SERVER_DOMAIN || 'http://localhost:4201/',
     resolvedBaseRealmURL:
       process.env.RESOLVED_BASE_REALM_URL || 'http://localhost:4201/base/',
-    resolvedCatalogRealmURL:
-      process.env.RESOLVED_CATALOG_REALM_URL ||
-      'http://localhost:4201/catalog/',
+    resolvedCatalogRealmURL: process.env.SKIP_CATALOG
+      ? undefined
+      : process.env.RESOLVED_CATALOG_REALM_URL ||
+        'http://localhost:4201/catalog/',
     resolvedSkillsRealmURL:
       process.env.RESOLVED_SKILLS_REALM_URL || 'http://localhost:4201/skills/',
     featureFlags: {
@@ -71,9 +76,11 @@ module.exports = function (environment) {
     // ENV.APP.LOG_TRANSITIONS = true;
     // ENV.APP.LOG_TRANSITIONS_INTERNAL = true;
     // ENV.APP.LOG_VIEW_LOOKUPS = true;
-    ENV.defaultSystemCardId =
-      process.env.DEFAULT_SYSTEM_CARD_ID ??
-      'http://localhost:4201/catalog/SystemCard/default';
+    ENV.defaultSystemCardId = process.env.DEFAULT_SYSTEM_CARD_ID;
+    if (!ENV.defaultSystemCardId && !process.env.SKIP_CATALOG) {
+      ENV.defaultSystemCardId =
+        'http://localhost:4201/catalog/SystemCard/default';
+    }
   }
 
   if (environment === 'test') {
@@ -97,6 +104,9 @@ module.exports = function (environment) {
     ENV.featureFlags = {
       SHOW_ASK_AI: true,
     };
+
+    // Catalog realm is not available in test environment
+    ENV.resolvedCatalogRealmURL = undefined;
 
     ENV.defaultSystemCardId =
       process.env.DEFAULT_SYSTEM_CARD_ID ??

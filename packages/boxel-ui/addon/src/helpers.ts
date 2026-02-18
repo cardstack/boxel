@@ -1,3 +1,4 @@
+import { addClassToSVG } from './helpers/add-class-to-svg.ts';
 import { copyCardURLToClipboard } from './helpers/clipboard.ts';
 import cn from './helpers/cn.ts';
 import compact from './helpers/compact.ts';
@@ -64,6 +65,7 @@ export * from './helpers/color-tools.ts';
 
 export {
   add,
+  addClassToSVG,
   and,
   bool,
   buildCssGroups,

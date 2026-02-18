@@ -63,6 +63,7 @@ import Lock from './icons/lock.gts';
 import Profile from './icons/profile.gts';
 import PublishSiteIcon from './icons/publish-site-icon.gts';
 import Rows4 from './icons/rows-4.gts';
+import SelectAll from './icons/select-all.gts';
 import Send from './icons/send.gts';
 import Sparkle from './icons/sparkle.gts';
 import Star from './icons/star.gts';
@@ -136,6 +137,7 @@ export const ALL_ICON_COMPONENTS = [
   Profile,
   PublishSiteIcon,
   Rows4,
+  SelectAll,
   Send,
   Sparkle,
   Star,
@@ -210,6 +212,7 @@ export {
   Profile,
   PublishSiteIcon,
   Rows4,
+  SelectAll,
   Send,
   Sparkle,
   Star,

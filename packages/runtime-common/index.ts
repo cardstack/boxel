@@ -4,14 +4,15 @@ import type {
   LinkableResource,
   LooseLinkableResource,
   Meta,
+  Saved,
 } from './resource-types';
 import type { ResolvedCodeRef } from './code-ref';
 import type { RenderRouteOptions } from './render-route-options';
 import type { Definition } from './definitions';
+import type { SerializedError } from './error';
 
 import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
 import type { FileDef } from 'https://cardstack.com/base/file-api';
-import type { ErrorEntry } from './index-writer';
 
 export interface LooseSingleResourceDocument<T extends LinkableResource> {
   data: LooseLinkableResource<T>;
@@ -49,6 +50,14 @@ export interface RenderResponse extends PrerenderMeta {
   fittedHTML: Record<string, string> | null;
   iconHTML: string | null;
   error?: RenderError;
+}
+
+export interface ErrorEntry {
+  type: 'instance-error' | 'module-error' | 'file-error';
+  error: SerializedError;
+  types?: string[];
+  searchData?: Record<string, any>;
+  cardType?: string;
 }
 
 export interface RenderError extends ErrorEntry {
@@ -182,7 +191,7 @@ export interface RealmPrerenderedCards {
 // on the server? address in CS-8343
 export { v4 as uuidv4 } from '@lukeed/uuid'; // isomorphic UUID's using Math.random
 import type { LocalPath } from './paths';
-import type { CardTypeFilter, Query, EveryFilter } from './query';
+import type { CardTypeFilter, Query, DataQuery, EveryFilter } from './query';
 import { Loader } from './loader';
 export * from './paths';
 export * from './cached-fetch';
@@ -230,6 +239,11 @@ export {
   getFieldIcon,
 } from './helpers/card-type-display-name';
 export * from './helpers/ensure-extension';
+export {
+  sanitizeHeadHTML,
+  sanitizeHeadHTMLToString,
+  findDisallowedHeadTags,
+} from './helpers/sanitize-head-html';
 export * from './url';
 export * from './render-route-options';
 export * from './publishability';
@@ -276,6 +290,8 @@ export type {
   SingleCardDocument,
   SingleFileMetaDocument,
   CardCollectionDocument,
+  FileMetaCollectionDocument,
+  LinkableCollectionDocument,
 } from './document-types';
 export type {
   CardResource,
@@ -294,6 +310,8 @@ export {
   isCardCollectionDocument,
   isSingleCardDocument,
   isSingleFileMetaDocument,
+  isFileMetaCollectionDocument,
+  isLinkableCollectionDocument,
   isCardDocumentString,
 } from './document-types';
 export {
@@ -364,7 +382,10 @@ export interface CardChooser {
 }
 
 export interface FileChooser {
-  chooseFile<T>(defaultRealmURL?: URL): Promise<undefined | T>;
+  chooseFile<T>(opts?: {
+    fileType?: CodeRef;
+    fileTypeName?: string;
+  }): Promise<undefined | T>;
 }
 
 export async function chooseCard(
@@ -392,9 +413,10 @@ export async function chooseCard(
   return await chooser.chooseCard(query, opts);
 }
 
-export async function chooseFile<T extends FieldDef>(): Promise<
-  undefined | any
-> {
+export async function chooseFile<T extends FileDef>(opts?: {
+  fileType?: CodeRef;
+  fileTypeName?: string;
+}): Promise<undefined | T> {
   let here = globalThis as any;
   if (!here._CARDSTACK_FILE_CHOOSER) {
     throw new Error(
@@ -403,7 +425,7 @@ export async function chooseFile<T extends FieldDef>(): Promise<
   }
   let chooser: FileChooser = here._CARDSTACK_FILE_CHOOSER;
 
-  return await chooser.chooseFile<T>();
+  return await chooser.chooseFile<T>(opts);
 }
 
 import type { CardErrorJSONAPI } from './error';
@@ -448,6 +470,18 @@ export type getCards<T extends CardDef = CardDef> = (
 {
   instances: T[];
   instancesByRealm: { realm: string; cards: T[] }[];
+  isLoading: boolean;
+  meta: QueryResultsMeta;
+};
+
+// Duck type of the SearchDataResource
+export type getSearchData = (
+  parent: object,
+  getQuery: () => DataQuery | undefined,
+  getRealms?: () => string[] | undefined,
+  opts?: { isLive?: boolean },
+) => {
+  resources: (CardResource<Saved> | FileMetaResource)[];
   isLoading: boolean;
   meta: QueryResultsMeta;
 };
@@ -699,4 +733,11 @@ export function isBrowserTestEnv() {
 }
 
 export * from './prerendered-card-search';
+export { isBotTriggerEvent } from './bot-trigger';
+export {
+  assertIsBotCommandFilter,
+  isBotCommandFilter,
+  type BotCommandFilter,
+  type BotCommandMatrixFilter,
+} from './bot-command';
 export { DEFAULT_LLM_ID_TO_NAME } from './matrix-constants';

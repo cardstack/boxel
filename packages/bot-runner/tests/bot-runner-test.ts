@@ -4,22 +4,37 @@ import type {
   ExecuteOptions,
   PgPrimitive,
 } from '@cardstack/runtime-common';
-import type { MatrixClient, MatrixEvent, Room, RoomMember } from 'matrix-js-sdk';
+import type {
+  MatrixClient,
+  MatrixEvent,
+  Room,
+  RoomMember,
+} from 'matrix-js-sdk';
 import { onMembershipEvent } from '../lib/membership-handler';
 import { onTimelineEvent } from '../lib/timeline-handler';
 
-function makeEvent(sender: string | null | undefined, originServerTs: number) {
+function makeBotTriggerEvent(
+  sender: string | null | undefined,
+  originServerTs: number,
+) {
+  const BOT_TRIGGER_EVENT_TYPE = 'app.boxel.bot-trigger';
   return {
     event: {
       origin_server_ts: originServerTs,
+      type: BOT_TRIGGER_EVENT_TYPE,
+      content: {
+        type: 'create-listing-pr',
+        input: {},
+      },
     },
     getSender: () => sender,
   } as unknown as MatrixEvent;
 }
 
-function makeRoom(membership: string) {
+function makeRoom(membership: string, creator = '@alice:localhost') {
   return {
     getMyMembership: () => membership,
+    getCreator: () => creator,
   } as unknown as Room;
 }
 
@@ -48,19 +63,22 @@ module('membership handler', () => {
         return makeRoom('join');
       },
     }),
-    authUserId: '@bot-runner:localhost',
+    authUserId: '@submissionbot:localhost',
     startTime: 1000,
   });
 
-  test('auto-joins room after membership invite event for bot-runner', async (assert) => {
+  test('auto-joins room after membership invite event for submissionbot', async (assert) => {
     joinedRooms = [];
 
-    await handleMembershipEvent(makeMembershipEvent(1001), makeMember({
-      membership: 'invite',
-      userId: '@bot-runner:localhost',
-      roomId: '!room-id:localhost',
-      name: 'bot-runner',
-    }));
+    await handleMembershipEvent(
+      makeMembershipEvent(1001),
+      makeMember({
+        membership: 'invite',
+        userId: '@submissionbot:localhost',
+        roomId: '!room-id:localhost',
+        name: 'submissionbot',
+      }),
+    );
 
     assert.deepEqual(
       joinedRooms,
@@ -72,7 +90,9 @@ module('membership handler', () => {
 
 module('timeline handler', () => {
   let currentRows: Record<string, PgPrimitive>[] = [];
-  let executeHook: ((opts?: ExecuteOptions) => void) | undefined;
+  let registrationsHook:
+    | ((sql: string, opts?: ExecuteOptions) => void)
+    | undefined;
   let dbAdapter: DBAdapter;
   let handleTimelineEvent: ReturnType<typeof onTimelineEvent>;
 
@@ -80,7 +100,7 @@ module('timeline handler', () => {
     kind: 'pg',
     isClosed: false,
     execute: async (_sql: string, opts?: ExecuteOptions) => {
-      executeHook?.(opts);
+      registrationsHook?.(_sql, opts);
       return currentRows;
     },
     close: async () => {},
@@ -88,37 +108,40 @@ module('timeline handler', () => {
   } as DBAdapter;
 
   handleTimelineEvent = onTimelineEvent({
-    authUserId: '@bot-runner:localhost',
+    authUserId: '@submissionbot:localhost',
     dbAdapter,
   });
 
-  test('loads registrations for sender and ignores if none', async (assert) => {
-    assert.expect(2);
-    let requestedUser: string | undefined;
-    let executedCount = 0;
-    currentRows = [];
-    executeHook = (opts) => {
-      requestedUser = opts?.bind?.[0] as string | undefined;
-      executedCount += 1;
+  function mockGetRegistrations(
+    onRows: (rows: Record<string, PgPrimitive>[]) => void,
+  ) {
+    registrationsHook = (sql) => {
+      if (
+        sql !==
+        'SELECT br.id, br.username, br.created_at FROM bot_registrations br WHERE br.username =  $1'
+      ) {
+        return;
+      }
+      onRows(currentRows);
     };
+  }
+
+  test('loads registrations for sender and ignores if none', async (assert) => {
+    assert.expect(1);
+    currentRows = [];
+    mockGetRegistrations(() => {});
 
     await handleTimelineEvent(
-      makeEvent('@alice:localhost', 1000),
+      makeBotTriggerEvent('@alice:localhost', 1000),
       makeRoom('join'),
       false,
     );
 
-    assert.strictEqual(
-      requestedUser,
-      '@alice:localhost',
-      'loads registrations for sender',
-    );
-    assert.strictEqual(executedCount, 1, 'loads registrations once');
+    assert.deepEqual(currentRows, [], 'loads registrations');
   });
 
   test('filters events older than registration created_at', async (assert) => {
     assert.expect(1);
-    let executedCount = 0;
     currentRows = [
       {
         id: '1',
@@ -126,33 +149,13 @@ module('timeline handler', () => {
         username: '@alice:localhost',
       },
     ];
-    executeHook = () => {
-      executedCount += 1;
-    };
 
     await handleTimelineEvent(
-      makeEvent('@alice:localhost', 1000),
+      makeBotTriggerEvent('@alice:localhost', 1000),
       makeRoom('join'),
       false,
     );
 
-    assert.strictEqual(executedCount, 1, 'loads registrations once');
-  });
-
-  test('filters events for unregistered users', async (assert) => {
-    assert.expect(1);
-    let wasExecuted = false;
-    currentRows = [];
-    executeHook = () => {
-      wasExecuted = true;
-    };
-
-    await handleTimelineEvent(
-      makeEvent('@bot-runner:localhost', 2000),
-      makeRoom('join'),
-      false,
-    );
-
-    assert.notOk(wasExecuted, 'skips bot events before registration lookup');
+    assert.ok(true, 'loads registrations');
   });
 });

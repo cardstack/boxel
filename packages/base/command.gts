@@ -249,6 +249,11 @@ export class CreateAIAssistantRoomResult extends CardDef {
   @field roomId = contains(StringField);
 }
 
+export class InviteUserToRoomInput extends CardDef {
+  @field roomId = contains(StringField);
+  @field userId = contains(StringField);
+}
+
 export class RegisterBotInput extends CardDef {
   @field username = contains(StringField);
 }
@@ -363,7 +368,7 @@ export class ListingInstallResult extends CardDef {
 export class CreateListingPRInput extends CardDef {
   @field roomId = contains(StringField);
   @field realm = contains(RealmField);
-  @field listing = linksTo(CardDef);
+  @field listingId = contains(StringField);
 }
 
 export class CreateListingPRResult extends CardDef {
@@ -372,6 +377,12 @@ export class CreateListingPRResult extends CardDef {
   @field fileCount = contains(NumberField);
   @field prUrl = contains(StringField);
   @field prNumber = contains(NumberField);
+}
+
+export class CreateListingPRRequestInput extends CardDef {
+  @field roomId = contains(StringField);
+  @field realm = contains(RealmField);
+  @field listingId = contains(StringField);
 }
 
 export class ListingCreateInput extends CardDef {
@@ -417,6 +428,12 @@ export class GetEventsFromRoomInput extends CardDef {
 
 export class GetEventsFromRoomResult extends CardDef {
   @field matrixEvents = containsMany(JsonField);
+}
+
+export class SendBotTriggerEventInput extends CardDef {
+  @field roomId = contains(StringField);
+  @field type = contains(StringField);
+  @field input = contains(JsonField);
 }
 
 export class PreviewFormatInput extends CardDef {

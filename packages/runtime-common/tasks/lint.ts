@@ -79,6 +79,7 @@ async function lintFix({
     ],
     '@cardstack/boxel/no-duplicate-imports': 'error',
     '@cardstack/boxel/no-css-position-fixed': 'warn',
+    '@cardstack/boxel/no-forbidden-head-tags': 'warn',
   };
 
   const eslintJsModule = await import(/* webpackIgnore: true */ '@eslint/js');

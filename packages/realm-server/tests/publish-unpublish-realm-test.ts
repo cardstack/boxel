@@ -28,6 +28,7 @@ import {
   createVirtualNetwork,
   realmSecretSeed,
   matrixURL,
+  waitUntil,
 } from './helpers';
 import { createJWT as createRealmServerJWT } from '../utils/jwt';
 
@@ -79,6 +80,10 @@ module(basename(__filename), function () {
             '*': ['read', 'write'],
             [ownerUserId]: DEFAULT_PERMISSIONS,
           },
+          domainsForPublishedRealms: {
+            boxelSpace: 'localhost',
+            boxelSite: 'localhost:4445',
+          },
         }));
       request = supertest(testRealmHttpServer);
     }
@@ -113,7 +118,7 @@ module(basename(__filename), function () {
         .send(
           JSON.stringify({
             sourceRealmURL: testRealm.url,
-            publishedRealmURL: 'http://testuser.localhost/test-realm/',
+            publishedRealmURL: 'http://testuser.localhost:4445/test-realm/',
           }),
         );
 
@@ -180,7 +185,7 @@ module(basename(__filename), function () {
           .send(
             JSON.stringify({
               sourceRealmURL: sourceRealmUrlString,
-              publishedRealmURL: 'http://testuser.localhost/test-realm/',
+              publishedRealmURL: 'http://testuser.localhost:4445/test-realm/',
             }),
           );
 
@@ -237,6 +242,26 @@ module(basename(__filename), function () {
           indexResults[0].realm_url,
           publishedRealmURL,
           'index entries should reference the published realm URL',
+        );
+
+        // Verify that head_html in the published realm references the
+        // published URL, not the source realm URL (the fullIndex after
+        // publish re-renders templates so og:url uses the correct URL)
+        let instanceWithHead = indexResults.find(
+          (r) => r.type === 'instance' && r.head_html,
+        );
+        assert.ok(
+          instanceWithHead,
+          'boxel_index should contain an instance row with head_html for the published realm',
+        );
+        let headHtml = (instanceWithHead as any).head_html as string;
+        assert.ok(
+          headHtml.includes(publishedRealmURL),
+          `head_html should reference published realm URL, got: ${headHtml}`,
+        );
+        assert.notOk(
+          headHtml.includes(sourceRealmUrlString),
+          `head_html should not reference source realm URL, got: ${headHtml}`,
         );
 
         let catalogResponse = await request
@@ -330,6 +355,155 @@ module(basename(__filename), function () {
         );
       });
 
+      test('POST /_publish-realm serves cached module entries for published realm URLs', async function (assert) {
+        let requestedPublishedRealmURL = 'http://localhost:4445/test-realm/';
+        let sourceRealmPath = new URL(sourceRealmUrlString).pathname;
+
+        let linkedCardModuleResponse = await request
+          .post(`${sourceRealmPath}linked-card.gts`)
+          .set('Accept', 'application/vnd.card+source').send(`
+            import { CardDef } from "https://cardstack.com/base/card-api";
+            import { linkedCardTitle } from "./linked-card-title";
+
+            export const _linkedCardTitle = linkedCardTitle;
+
+            export class LinkedCard extends CardDef {}
+          `);
+        assert.strictEqual(
+          linkedCardModuleResponse.status,
+          204,
+          'source linked-card module can be written',
+        );
+
+        let linkedCardDepResponse = await request
+          .post(`${sourceRealmPath}linked-card-title.ts`)
+          .set('Accept', 'application/vnd.card+source')
+          .send(`export const linkedCardTitle = "linked-card-title";`);
+        assert.strictEqual(
+          linkedCardDepResponse.status,
+          204,
+          'source linked-card dependency module can be written',
+        );
+
+        let linkedCardInstanceResponse = await request
+          .post(`${sourceRealmPath}linked-card.json`)
+          .set('Accept', 'application/vnd.card+source')
+          .send(
+            JSON.stringify({
+              data: {
+                type: 'card',
+                id: `${sourceRealmUrlString}linked-card`,
+                attributes: {},
+                meta: {
+                  adoptsFrom: {
+                    module: './linked-card',
+                    name: 'LinkedCard',
+                  },
+                },
+              },
+            }),
+          );
+        assert.strictEqual(
+          linkedCardInstanceResponse.status,
+          204,
+          'source linked-card instance can be written',
+        );
+
+        let publishResponse = await request
+          .post('/_publish-realm')
+          .set('Accept', 'application/vnd.api+json')
+          .set('Content-Type', 'application/json')
+          .set(
+            'Authorization',
+            `Bearer ${createRealmServerJWT(
+              { user: ownerUserId, sessionRoom: 'session-room-test' },
+              realmSecretSeed,
+            )}`,
+          )
+          .send(
+            JSON.stringify({
+              sourceRealmURL: sourceRealmUrlString,
+              publishedRealmURL: requestedPublishedRealmURL,
+            }),
+          );
+
+        assert.strictEqual(publishResponse.status, 201, 'HTTP 201 status');
+        let publishedRealmURL =
+          publishResponse.body.data.attributes.publishedRealmURL;
+        let publishedRealmPath = new URL(publishedRealmURL).pathname;
+        let publishedRealmHost = new URL(publishedRealmURL).host;
+        let publishedModuleAlias = `${publishedRealmURL}linked-card`;
+
+        let publishedCardResponse = await waitUntil(
+          async () => {
+            let response = await request
+              .get(`${publishedRealmPath}linked-card`)
+              .set('Accept', 'application/vnd.card+json')
+              .set('Host', publishedRealmHost);
+            return response.status === 200 ? response : undefined;
+          },
+          {
+            // This can be slow in CI because the first published lookup may
+            // need to prerender and populate module cache rows.
+            timeout: 30_000,
+            interval: 200,
+            timeoutMessage:
+              'published linked-card card did not become readable',
+          },
+        );
+        assert.strictEqual(publishedCardResponse?.status, 200);
+
+        let cachedModuleEntry = await waitUntil(
+          async () => {
+            let rows = (await dbAdapter.execute(
+              `SELECT url, file_alias, deps, resolved_realm_url
+               FROM modules
+               WHERE file_alias = $1
+                 AND resolved_realm_url = $2`,
+              {
+                bind: [publishedModuleAlias, publishedRealmURL],
+                coerceTypes: { deps: 'JSON' },
+              },
+            )) as {
+              url: string;
+              file_alias: string | null;
+              deps: string[] | string | null;
+              resolved_realm_url: string | null;
+            }[];
+            return rows[0];
+          },
+          {
+            timeout: 30_000,
+            interval: 200,
+            timeoutMessage:
+              'module cache entry for published linked-card was not created',
+          },
+        );
+
+        assert.ok(cachedModuleEntry, 'published module cache entry is created');
+        assert.strictEqual(
+          cachedModuleEntry.url,
+          `${publishedModuleAlias}.gts`,
+          'cached module URL uses published realm URL',
+        );
+        assert.strictEqual(
+          cachedModuleEntry.file_alias,
+          publishedModuleAlias,
+          'cached module file_alias uses published realm URL',
+        );
+        assert.strictEqual(
+          cachedModuleEntry.resolved_realm_url,
+          publishedRealmURL,
+          'cached module resolved realm URL is the published realm',
+        );
+        let moduleDeps = cachedModuleEntry.deps;
+        assert.ok(Array.isArray(moduleDeps), 'cached module deps are an array');
+        assert.ok(
+          moduleDeps?.includes(`${publishedRealmURL}linked-card-title`),
+          'cached module deps include published local dependency',
+        );
+      });
+
       test('publishing rewrites hostHome URLs that point to the source realm', async function (assert) {
         let sourceRealmURL = new URL(sourceRealmUrlString);
         let sourceRealmPath = join(
@@ -364,7 +538,7 @@ module(basename(__filename), function () {
           .send(
             JSON.stringify({
               sourceRealmURL: sourceRealmUrlString,
-              publishedRealmURL: 'http://testuser.localhost/test-realm/',
+              publishedRealmURL: 'http://testuser.localhost:4445/test-realm/',
             }),
           );
 
@@ -408,7 +582,7 @@ module(basename(__filename), function () {
           .send(
             JSON.stringify({
               sourceRealmURL: sourceRealmUrlString,
-              publishedRealmURL: 'http://testuser.localhost/test-realm/',
+              publishedRealmURL: 'http://testuser.localhost:4445/test-realm/',
             }),
           );
 
@@ -433,7 +607,7 @@ module(basename(__filename), function () {
           .send(
             JSON.stringify({
               sourceRealmURL: sourceRealmUrlString,
-              publishedRealmURL: 'http://testuser.localhost/test-realm/',
+              publishedRealmURL: 'http://testuser.localhost:4445/test-realm/',
             }),
           );
 
@@ -484,7 +658,7 @@ module(basename(__filename), function () {
           .send(
             JSON.stringify({
               sourceRealmURL: sourceRealmUrlString,
-              publishedRealmURL: 'http://testuser.localhost/test-realm/',
+              publishedRealmURL: 'http://testuser.localhost:4445/test-realm/',
             }),
           );
 
@@ -568,7 +742,7 @@ module(basename(__filename), function () {
         )[0];
         assert.strictEqual(
           realmVersion.current_version,
-          2,
+          3,
           'realm version of published realm is increased',
         );
 
@@ -685,7 +859,7 @@ module(basename(__filename), function () {
           .send(
             JSON.stringify({
               sourceRealmURL: sourceRealmUrlString,
-              publishedRealmURL: 'http://testuser.localhost/test-realm/',
+              publishedRealmURL: 'http://testuser.localhost:4445/test-realm/',
             }),
           );
 
@@ -756,8 +930,87 @@ module(basename(__filename), function () {
         );
       });
 
-      test('POST /_publish-realm does not create duplicate realm instances on republish', async function (assert) {
+      test('republishing clears stale modules cache entries for the published realm', async function (assert) {
         let publishedRealmURL = 'http://testuser.localhost/test-realm/';
+
+        // First publish
+        let firstResponse = await request
+          .post('/_publish-realm')
+          .set('Accept', 'application/vnd.api+json')
+          .set('Content-Type', 'application/json')
+          .set(
+            'Authorization',
+            `Bearer ${createRealmServerJWT(
+              { user: ownerUserId, sessionRoom: 'session-room-test' },
+              realmSecretSeed,
+            )}`,
+          )
+          .send(
+            JSON.stringify({
+              sourceRealmURL: sourceRealmUrlString,
+              publishedRealmURL,
+            }),
+          );
+
+        assert.strictEqual(firstResponse.status, 201, 'First publish succeeds');
+
+        // Simulate a stale modules cache entry with an error for the published realm
+        let moduleUrl = `${publishedRealmURL}my-module`;
+        await dbAdapter.execute(
+          `INSERT INTO modules (url, file_alias, definitions, deps, error_doc, created_at, resolved_realm_url, cache_scope, auth_user_id)
+           VALUES ('${moduleUrl}', '${moduleUrl}', '{}', '[]', '${JSON.stringify({ error: { message: 'simulated prerender failure' } })}', ${Date.now()}, '${publishedRealmURL}', 'public', '')`,
+        );
+
+        // Verify the error entry exists
+        let modulesBefore = await dbAdapter.execute(
+          `SELECT * FROM modules WHERE resolved_realm_url = '${publishedRealmURL}'`,
+        );
+        assert.ok(
+          modulesBefore.length > 0,
+          'modules table has entries for published realm before republish',
+        );
+        let errorEntry = modulesBefore.find((m: any) => m.error_doc != null);
+        assert.ok(
+          errorEntry,
+          'modules table has an error_doc entry before republish',
+        );
+
+        // Republish the realm
+        let secondResponse = await request
+          .post('/_publish-realm')
+          .set('Accept', 'application/vnd.api+json')
+          .set('Content-Type', 'application/json')
+          .set(
+            'Authorization',
+            `Bearer ${createRealmServerJWT(
+              { user: ownerUserId, sessionRoom: 'session-room-test' },
+              realmSecretSeed,
+            )}`,
+          )
+          .send(
+            JSON.stringify({
+              sourceRealmURL: sourceRealmUrlString,
+              publishedRealmURL,
+            }),
+          );
+
+        assert.strictEqual(secondResponse.status, 201, 'Republish succeeds');
+
+        // Verify the stale modules cache entries were cleared
+        let modulesAfter = await dbAdapter.execute(
+          `SELECT * FROM modules WHERE resolved_realm_url = '${publishedRealmURL}'`,
+        );
+        let errorEntryAfter = modulesAfter.find(
+          (m: any) => m.error_doc != null,
+        );
+        assert.notOk(
+          errorEntryAfter,
+          'modules table should not have error_doc entries after republish',
+        );
+      });
+
+      test('POST /_publish-realm does not create duplicate realm instances on republish', async function (assert) {
+        let publishedRealmURL = 'http://testuser.localhost:4445/test-realm/';
 
         // First publish
         let firstResponse = await request

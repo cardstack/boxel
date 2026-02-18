@@ -50,7 +50,7 @@ module('Integration | commands | set-user-system-card', function (hooks) {
     let commandService = getService('command-service');
     let command = new SetUserSystemCardCommand(commandService.commandContext);
 
-    let systemCardId = 'http://localhost:4201/catalog/SystemCard/default';
+    let systemCardId = `${testRealmURL}SystemCard/default`;
 
     await command.execute({
       cardId: systemCardId,

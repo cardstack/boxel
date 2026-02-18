@@ -32,7 +32,7 @@ export async function waitForIncrementalIndexEvent(
 }
 
 export async function expectIncrementalIndexEvent(
-  url: string, // <>.gts OR <>.json OR <>/
+  url: string, // <>.gts OR <>.json OR <>.* OR <>/
   since: number,
   opts: IncrementalIndexEventTestContext,
 ) {
@@ -41,8 +41,9 @@ export async function expectIncrementalIndexEvent(
   type = type ?? 'CardDef';
 
   let endsWithSlash = url.endsWith('/'); // new card def is being created
+  let hasExtension = /\.[^/]+$/.test(url);
 
-  if (!url.endsWith('.json') && !url.endsWith('.gts') && !endsWithSlash) {
+  if (!hasExtension && !endsWithSlash) {
     throw new Error('Invalid file path');
   }
   await waitForIncrementalIndexEvent(getMessagesSince, since);

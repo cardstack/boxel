@@ -8,29 +8,27 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
 import onClickOutside from 'ember-click-outside/modifiers/on-click-outside';
-import { modifier } from 'ember-modifier';
 import { consume } from 'ember-provide-consume-context';
 
 import { trackedFunction } from 'reactiveweb/function';
 
 import {
   Button,
-  BoxelInput,
   IconButton,
   BoxelInputBottomTreatments,
 } from '@cardstack/boxel-ui/components';
+import type { PickerOption } from '@cardstack/boxel-ui/components';
 
 import { eq } from '@cardstack/boxel-ui/helpers';
 import { IconSearch } from '@cardstack/boxel-ui/icons';
 
 import { type getCard, GetCardContextName } from '@cardstack/runtime-common';
 
+import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 
-import CardQueryResults from './card-query-results';
-import CardURLResults from './card-url-results';
-
-import RecentCardsSection from './recent-cards-section';
+import SearchBar from './search-bar';
+import SearchSheetContent from './search-sheet-content';
 import { getCodeRefFromSearchKey } from './utils';
 
 import type StoreService from '../../services/store';
@@ -61,20 +59,14 @@ interface Signature {
   Blocks: {};
 }
 
-let elementCallback = modifier(
-  (element, [callback]: [((element: HTMLElement) => void) | undefined]) => {
-    if (callback) {
-      callback(element as HTMLElement);
-    }
-  },
-);
-
 export default class SearchSheet extends Component<Signature> {
   @consume(GetCardContextName) declare private getCard: getCard;
 
   @tracked private searchKey = '';
+  @tracked selectedRealms: PickerOption[] = [];
 
   @service declare private realmServer: RealmServerService;
+  @service declare private realm: RealmService;
   @service declare private store: StoreService;
 
   constructor(owner: Owner, args: any) {
@@ -144,6 +136,22 @@ export default class SearchSheet extends Component<Signature> {
 
   private resetState() {
     this.searchKey = '';
+    this.selectedRealms = [];
+  }
+
+  private get selectedRealmURLs(): string[] {
+    const hasSelectAll = this.selectedRealms.some(
+      (opt) => opt.type === 'select-all',
+    );
+    if (hasSelectAll || this.selectedRealms.length === 0) {
+      return this.realmServer.availableRealmURLs;
+    }
+    return this.selectedRealms.map((opt) => opt.id).filter(Boolean);
+  }
+
+  @action
+  private onRealmChange(selected: PickerOption[]) {
+    this.selectedRealms = selected;
   }
 
   @action private debouncedSetSearchKey(searchKey: string) {
@@ -165,10 +173,6 @@ export default class SearchSheet extends Component<Signature> {
 
   private get isCompact() {
     return this.sheetSize === 'prompt';
-  }
-
-  private get isSearchKeyEmpty() {
-    return (this.searchKey?.trim() || '') === '';
   }
 
   private get searchKeyAsURL() {
@@ -221,12 +225,20 @@ export default class SearchSheet extends Component<Signature> {
     }
   }
 
+  private get joinSelectedRealmURLs() {
+    return this.selectedRealmURLs?.join(',');
+  }
+
   <template>
     <div
       id='search-sheet'
       class='search-sheet {{this.sheetSize}}'
       data-test-search-sheet={{@mode}}
-      {{onClickOutside @onBlur exceptSelector='.add-card-to-neighbor-stack'}}
+      data-test-search-realms={{this.joinSelectedRealmURLs}}
+      {{onClickOutside
+        @onBlur
+        exceptSelector='.add-card-to-neighbor-stack,.boxel-picker__dropdown,.picker-before-options-with-search,.picker-option-row,.search-sheet-header,.search-sheet-section-header,.variant-default'
+      }}
     >
       {{#if (eq @mode 'closed')}}
         <IconButton
@@ -240,43 +252,26 @@ export default class SearchSheet extends Component<Signature> {
           data-test-open-search-field
         />
       {{else}}
-        <BoxelInput
-          @type='search'
-          @size='large'
-          @bottomTreatment={{this.inputBottomTreatment}}
+        <SearchBar
           @value={{this.searchKey}}
-          @state={{this.inputValidationState}}
           @placeholder={{this.placeholderText}}
+          @state={{this.inputValidationState}}
+          @bottomTreatment={{this.inputBottomTreatment}}
           @onFocus={{@onFocus}}
           @onInput={{this.debouncedSetSearchKey}}
-          {{elementCallback @onInputInsertion}}
-          {{on 'keydown' this.onSearchInputKeyDown}}
+          @onKeyDown={{this.onSearchInputKeyDown}}
+          @onInputInsertion={{@onInputInsertion}}
+          @selectedRealms={{this.selectedRealms}}
+          @onRealmChange={{this.onRealmChange}}
           class='search-sheet__search-input-group'
           autocomplete='off'
-          data-test-search-field
         />
-        <div class='search-sheet-content'>
-          {{#if this.searchKeyIsURL}}
-            <CardURLResults
-              @url={{this.searchKey}}
-              @handleCardSelect={{this.handleCardSelect}}
-              @isCompact={{this.isCompact}}
-              @searchKeyAsURL={{this.searchKeyAsURL}}
-            />
-          {{else if this.isSearchKeyEmpty}}
-            {{! nothing }}
-          {{else}}
-            <CardQueryResults
-              @searchKey={{this.searchKey}}
-              @handleCardSelect={{this.handleCardSelect}}
-              @isCompact={{this.isCompact}}
-            />
-          {{/if}}
-          <RecentCardsSection
-            @handleCardSelect={{this.handleCardSelect}}
-            @isCompact={{this.isCompact}}
-          />
-        </div>
+        <SearchSheetContent
+          @searchKey={{this.searchKey}}
+          @selectedRealmURLs={{this.selectedRealmURLs}}
+          @isCompact={{this.isCompact}}
+          @handleCardSelect={{this.handleCardSelect}}
+        />
         <div class='footer'>
           <div class='buttons'>
             <Button
@@ -326,11 +321,13 @@ export default class SearchSheet extends Component<Signature> {
         overflow: hidden;
       }
       .search-sheet:not(.closed):deep(.input-container),
-      .search-sheet:not(.closed):deep(.search-sheet__search-input-group) {
+      .search-sheet:not(.closed):deep(.search-sheet__search-input-group),
+      .search-sheet:not(.closed):deep(.search-sheet__search-bar) {
         border-radius: inherit;
       }
 
-      .search-sheet__search-input-group {
+      .search-sheet__search-input-group,
+      .search-sheet__search-bar {
         transition:
           height var(--boxel-transition),
           width var(--boxel-transition);
@@ -339,10 +336,6 @@ export default class SearchSheet extends Component<Signature> {
       .closed {
         height: var(--search-sheet-closed-height);
         width: var(--search-sheet-closed-width);
-      }
-
-      .search-sheet.closed .search-sheet-content {
-        display: none;
       }
 
       .prompt {
@@ -376,7 +369,6 @@ export default class SearchSheet extends Component<Signature> {
         padding: 0;
       }
 
-      .closed .search-sheet-content,
       .closed .footer,
       .prompt .footer {
         height: 0;
@@ -388,24 +380,6 @@ export default class SearchSheet extends Component<Signature> {
       }
       .buttons > * + * {
         margin-left: var(--boxel-sp-xs);
-      }
-
-      .search-sheet-content {
-        height: 100%;
-        background-color: var(--boxel-light);
-        border-bottom: 1px solid var(--boxel-200);
-        padding: 0 var(--boxel-sp-lg);
-        transition: opacity calc(var(--boxel-transition) / 4);
-      }
-      .results .search-sheet-content {
-        padding-top: var(--boxel-sp);
-        display: flex;
-        flex-direction: column;
-        flex: 1;
-        overflow-y: auto;
-      }
-      .prompt .search-sheet-content {
-        overflow-x: auto;
       }
 
       .open-search-field:focus:focus-visible {

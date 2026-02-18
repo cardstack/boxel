@@ -17,8 +17,8 @@ In order to use it, a user must
 
 Environment variables:
 - `MATRIX_URL` (default: `http://localhost:8008`)
-- `BOT_RUNNER_USERNAME` (default: `bot-runner`)
-- `BOT_RUNNER_PASSWORD` (default: `password`)
+- `SUBMISSION_BOT_USERNAME` (default: `submissionbot`)
+- `SUBMISSION_BOT_PASSWORD` (default: `password`)
 - `LOG_LEVELS` (default: `*=info`)
 - `SENTRY_DSN` (optional)
 - `SENTRY_ENVIRONMENT` (optional, default: `development`)
@@ -41,7 +41,7 @@ Register (JSON:API):
     "data": {
       "type": "bot-registration",
       "attributes": {
-        "username": "@bot-runner:localhost"
+        "username": "@submissionbot:localhost"
       }
     }
   }
@@ -60,7 +60,7 @@ Register via script
 ```sh
 REALM_SERVER_URL="http://localhost:4201" \
 REALM_SERVER_JWT="..." \
-USERNAME="@bot-runner:localhost" \
+USERNAME="@submissionbot:localhost" \
 ./packages/realm-server/scripts/register-bot.sh
 ```
 

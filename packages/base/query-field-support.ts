@@ -31,6 +31,12 @@ interface QueryFieldState {
   seedSearchURL?: string | null;
   seedRecords?: CardDef[];
   seedRealms?: string[];
+  seedErrors?: Array<{
+    realm: string;
+    type: string;
+    message: string;
+    status?: number;
+  }>;
   searchResource?: StoreSearchResource;
 }
 
@@ -59,7 +65,7 @@ export function ensureQueryFieldSearchResource(
   let fieldState = queryFieldState?.get(field.name);
   let searchResource = fieldState?.searchResource;
   if (searchResource) {
-    log.info(
+    log.debug(
       `ensureQueryFieldSearchResource: reusing existing resource from fieldState for field=${field.name}`,
     );
     return searchResource;
@@ -87,6 +93,7 @@ export function ensureQueryFieldSearchResource(
             cards: seedRecords,
             searchURL: seedSearchURL ?? undefined,
             realms: fieldState?.seedRealms,
+            queryErrors: fieldState?.seedErrors,
           }
         : undefined,
     },
@@ -261,6 +268,8 @@ export function captureQueryFieldSeedData(
   fieldState.seedRealms = fieldState.seedSearchURL
     ? [parseSearchURL(new URL(fieldState.seedSearchURL)).realm.href]
     : [];
+  fieldState.seedErrors =
+    (relationship?.meta as any)?.errors ?? undefined;
 }
 
 function resolveQueryAndRealm(

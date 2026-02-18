@@ -1,54 +1,48 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <title>Boxel</title>
-    <meta name="description" content="" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    {{content-for "head"}}
+<head>
+  <meta charset="utf-8" />
+  <meta name="description" content="" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <link integrity="" rel="stylesheet" href="{{rootURL}}assets/vendor.css" />
-    <link
-      integrity=""
-      rel="stylesheet"
-      href="{{rootURL}}assets/@cardstack/host.css"
-    />
-    <link
-      href="{{rootURL}}boxel-favicon.png"
-      rel="shortcut icon"
-      type="image/x-icon"
-    />
-    <link href="{{rootURL}}boxel-webclip.png" rel="apple-touch-icon" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600;1,700&family=IBM+Plex+Sans:ital,wght@0,100..700;1,100..700&family=IBM+Plex+Serif:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600;1,700&display=swap"
-      rel="stylesheet"
-    />
+  {{content-for "head"}}
 
-    {{content-for "head-footer"}}
+  <link integrity="" rel="stylesheet" href="{{rootURL}}assets/vendor.css" />
+  <link integrity="" rel="stylesheet" href="{{rootURL}}assets/@cardstack/host.css" />
+  <link href="{{rootURL}}boxel-favicon.png" rel="shortcut icon" type="image/x-icon" />
+  <link href="{{rootURL}}boxel-webclip.png" rel="apple-touch-icon" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600;1,700&family=IBM+Plex+Sans:ital,wght@0,100..700;1,100..700&family=IBM+Plex+Serif:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600;1,700&display=swap"
+    rel="stylesheet" />
 
-    <meta data-boxel-head-start />
-    <meta data-boxel-head-end />
+  {{content-for "head-footer"}}
 
-  </head>
-  <body>
-    <script type="x/boundary" id="boxel-isolated-start"></script>
-    <script type="x/boundary" id="boxel-isolated-end"></script>
+  <meta data-boxel-head-start />
+  <title>Boxel</title>
+  <meta data-boxel-head-end />
 
-    <!-- in case embercli's hooks insn't run,
+</head>
+
+<body>
+  <script type="x/boundary" id="boxel-isolated-start"></script>
+  <script type="x/boundary" id="boxel-isolated-end"></script>
+
+  <!-- in case embercli's hooks insn't run,
          we embed the following div manually -->
-    <div id="ember-basic-dropdown-wormhole"></div>
-    {{content-for "body"}}
+  <div id="ember-basic-dropdown-wormhole"></div>
+  {{content-for "body"}}
 
-    <script type="module">
-      import * as ContentTag from '{{rootURL}}assets/content-tag/standalone.js';
-      globalThis.ContentTagGlobal = ContentTag;
-    </script>
-    <script src="{{rootURL}}assets/vendor.js"></script>
-    <script src="{{rootURL}}assets/@cardstack/host.js"></script>
+  <script type="module">
+    import * as ContentTag from '{{rootURL}}assets/content-tag/standalone.js';
+    globalThis.ContentTagGlobal = ContentTag;
+  </script>
+  <script src="{{rootURL}}assets/vendor.js"></script>
+  <script src="{{rootURL}}assets/@cardstack/host.js"></script>
 
-    {{content-for "body-footer"}}
-  </body>
+  {{content-for "body-footer"}}
+</body>
+
 </html>

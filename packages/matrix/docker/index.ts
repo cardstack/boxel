@@ -2,13 +2,52 @@ import * as os from 'os';
 import * as childProcess from 'child_process';
 import * as fse from 'fs-extra';
 
-export function dockerRun(args: {
+function dockerPull(
+  image: string,
+  retries = 3,
+  delayMs = 5000,
+): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    let attempt = 0;
+    function tryPull() {
+      attempt++;
+      childProcess.execFile(
+        'docker',
+        ['pull', image],
+        { encoding: 'utf8' },
+        (err, _stdout, stderr) => {
+          if (!err) {
+            resolve();
+            return;
+          }
+          if (attempt < retries) {
+            console.log(
+              `docker pull ${image} failed (attempt ${attempt}/${retries}): ${stderr.trim()}. Retrying in ${delayMs / 1000}s...`,
+            );
+            setTimeout(tryPull, delayMs);
+          } else {
+            reject(
+              new Error(
+                `docker pull ${image} failed after ${retries} attempts: ${err.message}`,
+              ),
+            );
+          }
+        },
+      );
+    }
+    tryPull();
+  });
+}
+
+export async function dockerRun(args: {
   image: string;
   containerName: string;
   dockerParams?: string[];
   applicationParams?: string[];
   runAsUser?: true;
 }): Promise<string> {
+  await dockerPull(args.image);
+
   const userInfo = os.userInfo();
   const params = args.dockerParams ?? [];
   const appParams = args.applicationParams ?? [];

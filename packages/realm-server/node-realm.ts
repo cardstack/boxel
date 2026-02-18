@@ -49,6 +49,10 @@ export class NodeAdapter implements RealmAdapter {
     private enableFileWatcher?: boolean,
   ) {}
 
+  get dir(): string {
+    return this.realmDir;
+  }
+
   get fileWatcherEnabled(): boolean {
     return this.enableFileWatcher ?? false;
   }
@@ -179,7 +183,10 @@ export class NodeAdapter implements RealmAdapter {
     };
   }
 
-  async write(path: string, contents: string): Promise<AdapterWriteResult> {
+  async write(
+    path: string,
+    contents: string | Uint8Array,
+  ): Promise<AdapterWriteResult> {
     let absolutePath = join(this.realmDir, path);
     ensureFileSync(absolutePath);
     writeFileSync(absolutePath, contents);

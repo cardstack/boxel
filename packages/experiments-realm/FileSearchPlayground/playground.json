@@ -1,0 +1,29 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "FileSearchPlayground",
+        "module": "../file-search-playground"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": "File Search Playground",
+        "notes": null,
+        "summary": "Interactively search files in the realm using query-backed linksToMany(FileDef).",
+        "cardThumbnailURL": null
+      },
+      "pageSize": 4,
+      "nameFilter": "rate",
+      "sortDirection": "asc"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

@@ -1,7 +1,7 @@
 FROM node:24.13.1-slim
 ARG CI=1
 RUN apt-get update && apt-get install -y python3 build-essential
-RUN npm install -g pnpm@10.17.0
+RUN npm install -g pnpm@10.30.0
 WORKDIR /boxel
 COPY . .
 RUN pnpm install --frozen-lockfile

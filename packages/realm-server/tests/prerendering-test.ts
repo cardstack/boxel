@@ -1576,16 +1576,19 @@ module(basename(__filename), function () {
         assert.ok(result.headHTML, 'headHTML should be present');
         let cleanedHead = cleanWhiteSpace(result.headHTML!);
 
-        // TODO: restore in CS-9807
-        // assert.ok(
-        //   cleanedHead.includes(
-        //     '<title data-test-card-head-title>Untitled Cat</title>',
-        //   ),
-        //   `failed to find title in head html:${cleanedHead}`,
-        // );
+        assert.ok(
+          cleanedHead.includes(
+            '<title data-test-card-head-title>Untitled Cat</title>',
+          ),
+          `failed to find title in head html:${cleanedHead}`,
+        );
         assert.ok(
           cleanedHead.includes('property="og:title" content="Untitled Cat"'),
           `failed to find og:title in head html:${cleanedHead}`,
+        );
+        assert.ok(
+          cleanedHead.includes(`property="og:url" content="${realmURL2}1"`),
+          `failed to find og:url in head html:${cleanedHead}`,
         );
         assert.ok(
           cleanedHead.includes('name="twitter:card" content="summary"'),

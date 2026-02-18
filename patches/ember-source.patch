@@ -1,0 +1,15 @@
+diff --git a/dist/ember-template-compiler.js b/dist/ember-template-compiler.js
+index 01999af0c4c125af3c713318db7eb85fa492f72d..becb917a5b5fd7fd4883001210776ea34439c474 100644
+--- a/dist/ember-template-compiler.js
++++ b/dist/ember-template-compiler.js
+@@ -8288,9 +8288,7 @@ var define, require;
+             */
+             toSlice(expected) {
+               const chars = this.data.asString();
+-              return void 0 !== expected && chars !== expected &&
+-              // eslint-disable-next-line no-console
+-              console.warn(`unexpectedly found ${JSON.stringify(chars)} when slicing source, but expected ${JSON.stringify(expected)}`), new SourceSlice({
++              return new SourceSlice({
+                 loc: this,
+                 chars: expected || chars
+               });

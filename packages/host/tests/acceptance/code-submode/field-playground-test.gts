@@ -1188,7 +1188,7 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
 
     test('can autogenerate new Spec and field instance (no preexisting Spec)', async function (assert) {
       let queryEngine = realm.realmIndexQueryEngine;
-      let { data: matching } = await queryEngine.search({
+      let { data: matching } = await queryEngine.searchCards({
         filter: {
           on: specRef,
           eq: {
@@ -1210,7 +1210,7 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
       assertFieldExists(assert, 'edit');
       assert.dom('[data-test-field="quote"] input').hasNoValue();
 
-      ({ data: matching } = await queryEngine.search({
+      ({ data: matching } = await queryEngine.searchCards({
         filter: {
           on: specRef,
           eq: {

@@ -367,7 +367,7 @@ export async function flushLogs() {
   await logger.flush();
 }
 
-export interface StoreSearchResource<T extends CardDef = CardDef> {
+export interface StoreSearchResource<T extends CardDef | FileDef = CardDef> {
   readonly instances: T[];
   readonly instancesByRealm: { realm: string; cards: T[] }[];
   readonly isLoading: boolean;
@@ -382,9 +382,15 @@ export type GetSearchResourceFuncOpts = {
     cards: CardDef[];
     searchURL?: string;
     realms?: string[];
+    queryErrors?: Array<{
+      realm: string;
+      type: string;
+      message: string;
+      status?: number;
+    }>;
   };
 };
-export type GetSearchResourceFunc<T extends CardDef = CardDef> = (
+export type GetSearchResourceFunc<T extends CardDef | FileDef = CardDef> = (
   parent: object,
   getQuery: () => Query | undefined,
   getRealms?: () => string[] | undefined,
@@ -1299,9 +1305,8 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
       format: Format | undefined,
       defaultFormat: Format,
       isComputed: boolean,
-      isFileDef: boolean,
     ) {
-      return (format ?? defaultFormat) === 'edit' && !isComputed && !isFileDef;
+      return (format ?? defaultFormat) === 'edit' && !isComputed;
     }
     function getChildFormat(
       format: Format | undefined,
@@ -1336,7 +1341,7 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
           <DefaultFormatsConsumer as |defaultFormats|>
             {{#if
               (shouldRenderEditor
-                @format defaultFormats.cardDef isComputed isFileDefField
+                @format defaultFormats.cardDef isComputed
               )
             }}
               <LinksToEditor
