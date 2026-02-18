@@ -22,7 +22,10 @@ module.exports = {
           'ember-cli-htmlbars-inline-precompile',
           'htmlbars-inline-precompile',
         ],
-        transforms: [...templateCompatSupport()],
+        transforms: [
+          ...templateCompatSupport(),
+          'glimmer-scoped-css/ast-transform',
+        ],
       },
     ],
     [
