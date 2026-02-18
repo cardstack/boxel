@@ -244,6 +244,12 @@ type ModuleLoadResult =
       headers: Record<string, string>;
     };
 
+// If we change anything in the transpilation toolchain in an incompatible way,
+// we need to bump this number. Otherwise browsers will keep caching files that
+// were transpiled the old way, so long as the source files have constant
+// last-modified time.
+const transpilerToolchainVersion = 'v2';
+
 function buildEtag(
   lastModified: number | undefined,
   variant?: string,
@@ -251,7 +257,7 @@ function buildEtag(
   if (lastModified == null) {
     return undefined;
   }
-  let base = String(lastModified);
+  let base = transpilerToolchainVersion + ':' + String(lastModified);
   return variant ? `${base}:${variant}` : base;
 }
 
