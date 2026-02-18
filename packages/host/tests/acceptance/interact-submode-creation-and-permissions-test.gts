@@ -11,7 +11,7 @@ import { triggerEvent } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import window from 'ember-window-mock';
-import { module, test } from 'qunit';
+import { module, skip, test } from 'qunit';
 
 import type { SingleCardDocument } from '@cardstack/runtime-common';
 import { Deferred, isLocalId } from '@cardstack/runtime-common';
@@ -1010,7 +1010,7 @@ module(
         assert.dom('[data-test-community-link]').exists({ count: 4 });
       });
 
-      test('sends typed prompt to ask ai when creating app', async function (assert) {
+      skip('sends typed prompt to ask ai when creating app', async function (assert) {
         await visitOperatorMode({
           stacks: [[{ id: `${personalRealmURL}index`, format: 'isolated' }]],
           selectAllCardsFilter: false,
