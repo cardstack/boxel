@@ -79,12 +79,12 @@ module('Integration | operator-mode | card catalog', function (hooks) {
     assert.dom(`[data-test-search-result]`).exists({ count: 2 });
     assert
       .dom(
-        `[data-test-search-result-index="0"][data-test-search-result="${testRealmURL}Person/burcu"]`,
+        `[data-test-search-result-index="0"] [data-test-search-result="${testRealmURL}Person/burcu"]`,
       )
       .exists();
     assert
       .dom(
-        `[data-test-search-result-index="1"][data-test-search-result="${testRealmURL}Person/fadhlan"]`,
+        `[data-test-search-result-index="1"] [data-test-search-result="${testRealmURL}Person/fadhlan"]`,
       )
       .exists();
   });
