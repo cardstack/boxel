@@ -266,9 +266,7 @@ export default class DetailPanel extends Component<Signature> {
         : []),
       // the inherit feature performs the inheritance in a new module,
       // this means that the Card/Field that we are inheriting must be exported
-      // FileDefs are excluded since they don't support the inherit workflow
-      ...(this.args.selectedDeclaration?.exportName &&
-      !isFileDef(this.args.selectedDeclaration?.cardOrField)
+      ...(this.args.selectedDeclaration?.exportName
         ? [
             {
               label: 'Inherit',
@@ -379,9 +377,13 @@ export default class DetailPanel extends Component<Signature> {
       ? 'card-definition'
       : isFieldDef(this.args.selectedDeclaration.cardOrField)
         ? 'field-definition'
-        : undefined;
+        : isFileDef(this.args.selectedDeclaration.cardOrField)
+          ? 'file-definition'
+          : undefined;
     if (!id) {
-      throw new Error(`Can only call inherit() on card def or field def`);
+      throw new Error(
+        `Can only call inherit() on card def, field def, or file def`,
+      );
     }
     let ref = this.selectedDeclarationAsCodeRef;
     let displayName = this.args.selectedDeclaration.cardOrField.displayName;
