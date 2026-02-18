@@ -11,7 +11,7 @@ import {
 } from '@cardstack/runtime-common';
 
 import CardRenderer from '@cardstack/host/components/card-renderer';
-import FittedFormatGallery from '@cardstack/host/components/operator-mode/card-renderer-panel/fitted-format-gallery';
+import FittedFormatGallery from '@cardstack/host/components/operator-mode/preview-panel/fitted-format-gallery';
 import type { EnhancedRealmInfo } from '@cardstack/host/services/realm';
 
 import type {

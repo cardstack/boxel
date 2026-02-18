@@ -921,11 +921,24 @@ module('Acceptance | code submode tests', function (_hooks) {
         .dom('[data-test-definition-realm-name]')
         .hasText('in Test Workspace B');
 
+      assert.dom('[data-test-code-mode-card-renderer-body]').exists();
+
+      // File preview header shows "File" type
       assert
-        .dom('[data-test-file-incompatibility-message]')
-        .hasText(
-          'No tools are available to be used with this file type. Choose a file representing a card instance or module.',
-        );
+        .dom(
+          '[data-test-code-mode-card-renderer-header] [data-test-boxel-card-header-title]',
+        )
+        .includesText('File');
+
+      // No edit format option for file previews
+      assert.dom('[data-test-format-chooser="edit"]').doesNotExist();
+
+      // No edit button in header for files
+      assert
+        .dom(
+          '[data-test-code-mode-card-renderer-header] [data-test-edit-button]',
+        )
+        .doesNotExist();
 
       assert.dom('[data-test-definition-header]').includesText('File');
 
@@ -956,11 +969,7 @@ module('Acceptance | code submode tests', function (_hooks) {
       assert
         .dom('[data-test-definition-realm-name]')
         .hasText('in Test Workspace B');
-      assert
-        .dom('[data-test-file-incompatibility-message]')
-        .hasText(
-          'No tools are available to be used with this file type. Choose a file representing a card instance or module.',
-        );
+      assert.dom('[data-test-code-mode-card-renderer-body]').exists();
     });
 
     test('showing module with a syntax error will display the error', async function (assert) {
@@ -1240,11 +1249,7 @@ module('Acceptance | code submode tests', function (_hooks) {
         assert
           .dom('[data-test-binary-info] [data-test-last-modified]')
           .containsText('Last modified');
-        assert
-          .dom('[data-test-file-incompatibility-message]')
-          .hasText(
-            'No tools are available to be used with this file type. Choose a file representing a card instance or module.',
-          );
+        assert.dom('[data-test-code-mode-card-renderer-body]').exists();
         await percySnapshot(assert);
       });
     });
@@ -1302,6 +1307,16 @@ module('Acceptance | code submode tests', function (_hooks) {
       assert
         .dom('[data-test-code-mode-card-renderer-body]')
         .includesText('Fadhlan');
+
+      // Cards HAVE the edit format option (contrast with files)
+      assert.dom('[data-test-format-chooser="edit"]').exists();
+
+      // Cards HAVE the edit button in header
+      assert
+        .dom(
+          '[data-test-code-mode-card-renderer-header] [data-test-edit-button]',
+        )
+        .exists();
 
       assert.dom('[data-test-format-chooser="isolated"]').hasClass('active');
 
@@ -1396,12 +1411,29 @@ module('Acceptance | code submode tests', function (_hooks) {
         codePath: `${testRealmURL}hello.txt`,
       });
 
-      await waitFor('[data-test-file-incompatibility-message]');
+      assert.dom('[data-test-code-mode-card-renderer-body]').exists();
+
+      // File preview header shows "File" type and file name
       assert
-        .dom('[data-test-file-incompatibility-message]')
-        .hasText(
-          'No tools are available to be used with this file type. Choose a file representing a card instance or module.',
-        );
+        .dom(
+          '[data-test-code-mode-card-renderer-header] [data-test-boxel-card-header-title]',
+        )
+        .includesText('File');
+      assert
+        .dom(
+          '[data-test-code-mode-card-renderer-header] [data-test-boxel-card-header-title]',
+        )
+        .includesText('hello.txt');
+
+      // No edit format for file previews
+      assert.dom('[data-test-format-chooser="edit"]').doesNotExist();
+
+      // No edit button for files
+      assert
+        .dom(
+          '[data-test-code-mode-card-renderer-header] [data-test-edit-button]',
+        )
+        .doesNotExist();
 
       await waitFor('[data-test-definition-file-extension]');
       assert.dom('[data-test-definition-file-extension]').hasText('.txt');

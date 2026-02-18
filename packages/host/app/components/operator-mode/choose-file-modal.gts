@@ -14,18 +14,25 @@ import {
   BoxelButton,
   FieldContainer,
   BoxelSelect,
+  LoadingIndicator,
 } from '@cardstack/boxel-ui/components';
+
+import { eq } from '@cardstack/boxel-ui/helpers';
 
 import {
   Deferred,
   RealmPaths,
   isCardErrorJSONAPI,
+  loadCardDef,
   type CodeRef,
   type LocalPath,
 } from '@cardstack/runtime-common';
 
 import ModalContainer from '@cardstack/host/components/modal-container';
 
+import type FileUploadService from '@cardstack/host/services/file-upload';
+import type { FileUploadTask } from '@cardstack/host/services/file-upload';
+import type LoaderService from '@cardstack/host/services/loader-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
 import type StoreService from '@cardstack/host/services/store';
@@ -44,10 +51,14 @@ export default class ChooseFileModal extends Component<Signature> {
   @tracked selectedFile?: LocalPath;
   @tracked fileTypeFilter?: CodeRef;
   @tracked fileTypeName?: string;
+  @tracked acceptTypes?: string;
+  @tracked currentUpload?: FileUploadTask;
 
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private realm: RealmService;
   @service declare private store: StoreService;
+  @service('file-upload') declare private fileUpload: FileUploadService;
+  @service('loader-service') declare private loaderService: LoaderService;
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
@@ -64,6 +75,11 @@ export default class ChooseFileModal extends Component<Signature> {
     return 'Choose a File';
   }
 
+  private get isUploadBusy(): boolean {
+    let state = this.currentUpload?.state;
+    return state === 'picking' || state === 'uploading';
+  }
+
   // public API
   async chooseFile<T extends FileDef>(opts?: {
     fileType?: CodeRef;
@@ -72,11 +88,24 @@ export default class ChooseFileModal extends Component<Signature> {
     this.deferred = new Deferred();
     this.fileTypeFilter = opts?.fileType;
     this.fileTypeName = opts?.fileTypeName;
+    this.acceptTypes = undefined;
+    this.currentUpload = undefined;
     let defaultRealm = this.knownRealms.find(
       (r) =>
         r.url.toString() === this.operatorModeStateService.realmURL?.toString(),
     );
     this.selectedRealm = defaultRealm ?? this.selectedRealm;
+
+    if (opts?.fileType) {
+      try {
+        let cardDef = await loadCardDef(opts.fileType, {
+          loader: this.loaderService.loader,
+        });
+        this.acceptTypes = (cardDef as any).acceptTypes;
+      } catch {
+        // If we can't load the def, acceptTypes stays undefined (allow all)
+      }
+    }
 
     let file = await this.deferred.promise;
     if (file) {
@@ -105,12 +134,35 @@ export default class ChooseFileModal extends Component<Signature> {
         this.deferred.fulfill(file);
       }
     } finally {
-      this.selectedRealm = this.knownRealms[0];
-      this.selectedFile = undefined;
-      this.fileTypeFilter = undefined;
-      this.fileTypeName = undefined;
-      this.deferred = undefined;
+      this.resetState();
     }
+  }
+
+  @action
+  private triggerUpload() {
+    let task = this.fileUpload.uploadFile({
+      realmURL: this.selectedRealm.url,
+      acceptTypes: this.acceptTypes,
+    });
+    this.currentUpload = task;
+    task.result.then((fileDef) => {
+      if (fileDef && this.deferred) {
+        this.deferred.fulfill(fileDef);
+        this.resetState();
+      } else if (task.state !== 'error') {
+        this.currentUpload = undefined;
+      }
+    });
+  }
+
+  private resetState() {
+    this.selectedRealm = this.knownRealms[0];
+    this.selectedFile = undefined;
+    this.fileTypeFilter = undefined;
+    this.fileTypeName = undefined;
+    this.acceptTypes = undefined;
+    this.currentUpload = undefined;
+    this.deferred = undefined;
   }
 
   private get knownRealms() {
@@ -166,11 +218,23 @@ export default class ChooseFileModal extends Component<Signature> {
         max-width: 100%;
         min-width: 13rem;
       }
+      .footer {
+        display: flex;
+        justify-content: space-between;
+        max-width: 100%;
+        min-width: 13rem;
+        align-items: flex-start;
+        gap: var(--boxel-sp-xs);
+      }
+      .footer-left {
+        min-width: 0;
+        flex: 1;
+      }
       .footer-buttons {
         display: flex;
-        margin-left: auto;
         gap: var(--horizontal-gap);
-        align-self: center;
+        align-items: center;
+        margin-left: auto;
       }
       fieldset.field {
         border: none;
@@ -207,6 +271,35 @@ export default class ChooseFileModal extends Component<Signature> {
         height: auto;
         border: none;
         padding: 0 var(--boxel-sp) 40px var(--boxel-sp);
+      }
+      .upload-progress {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-xs);
+        flex: 1;
+      }
+      .upload-spinner {
+        --boxel-loading-indicator-size: 1.25em;
+      }
+      .upload-file-name {
+        font: var(--boxel-font-xs);
+        color: var(--boxel-600);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 120px;
+      }
+      .upload-error-row {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-xs);
+        flex: 1;
+        min-width: 0;
+      }
+      .upload-error {
+        color: var(--boxel-error-200);
+        font: var(--boxel-font-xs);
+        overflow-wrap: anywhere;
       }
     </style>
     {{#if this.deferred}}
@@ -253,28 +346,74 @@ export default class ChooseFileModal extends Component<Signature> {
               />
             {{/each}}
           </FieldContainer>
+          <FieldContainer class='field buttons' @label='' @tag='div'>
+            <div class='footer'>
+              <div class='footer-left'>
+                {{#if (eq this.currentUpload.state 'picking')}}
+                  <BoxelButton
+                    @size='tall'
+                    @disabled={{true}}
+                    data-test-choose-file-modal-upload-button
+                  >
+                    Choose a file&hellip;
+                  </BoxelButton>
+                {{else if (eq this.currentUpload.state 'uploading')}}
+                  <div
+                    class='upload-progress'
+                    data-test-choose-file-modal-upload-progress
+                  >
+                    <span
+                      class='upload-file-name'
+                    >{{this.currentUpload.fileName}}</span>
+                    <LoadingIndicator class='upload-spinner' />
+                  </div>
+                {{else if (eq this.currentUpload.state 'error')}}
+                  <div class='upload-error-row'>
+                    <div
+                      class='upload-error'
+                      data-test-choose-file-modal-upload-error
+                    >{{this.currentUpload.error}}</div>
+                    <BoxelButton
+                      @size='tall'
+                      {{on 'click' this.triggerUpload}}
+                      data-test-choose-file-modal-upload-button
+                    >
+                      Retry&hellip;
+                    </BoxelButton>
+                  </div>
+                {{else}}
+                  <BoxelButton
+                    @size='tall'
+                    {{on 'click' this.triggerUpload}}
+                    data-test-choose-file-modal-upload-button
+                  >
+                    Upload&hellip;
+                  </BoxelButton>
+                {{/if}}
+              </div>
+              <div class='footer-buttons'>
+                <BoxelButton
+                  @size='tall'
+                  {{on 'click' (fn this.pick undefined)}}
+                  {{onKeyMod 'Escape'}}
+                  data-test-choose-file-modal-cancel-button
+                >
+                  Cancel
+                </BoxelButton>
+                <BoxelButton
+                  @kind='primary'
+                  @size='tall'
+                  @disabled={{this.isUploadBusy}}
+                  {{on 'click' (fn this.pick this.selectedFile)}}
+                  {{onKeyMod 'Enter'}}
+                  data-test-choose-file-modal-add-button
+                >
+                  Add
+                </BoxelButton>
+              </div>
+            </div>
+          </FieldContainer>
         </:content>
-        <:footer>
-          <div class='footer-buttons'>
-            <BoxelButton
-              @size='tall'
-              {{on 'click' (fn this.pick undefined)}}
-              {{onKeyMod 'Escape'}}
-              data-test-choose-file-modal-cancel-button
-            >
-              Cancel
-            </BoxelButton>
-            <BoxelButton
-              @kind='primary'
-              @size='tall'
-              {{on 'click' (fn this.pick this.selectedFile)}}
-              {{onKeyMod 'Enter'}}
-              data-test-choose-file-modal-add-button
-            >
-              Add
-            </BoxelButton>
-          </div>
-        </:footer>
       </ModalContainer>
     {{/if}}
   </template>
