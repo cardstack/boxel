@@ -7,7 +7,7 @@ ENV prerender_manager_script=$prerender_manager_script
 WORKDIR /realm-server
 
 RUN apt-get update && apt-get install -y ca-certificates curl unzip jq
-RUN npm install -g pnpm@10.17.0
+RUN npm install -g pnpm@10.30.0
 
 COPY pnpm-lock.yaml ./
 
