@@ -2,6 +2,7 @@ import { defineConfig } from 'vite';
 import { extensions, classicEmberSupport, ember } from '@embroider/vite';
 import { babel } from '@rollup/plugin-babel';
 import { createRequire } from 'node:module';
+import { scopedCSS } from 'glimmer-scoped-css/rollup';
 
 const require = createRequire(import.meta.url);
 
@@ -14,6 +15,7 @@ export default defineConfig({
     },
   },
   plugins: [
+    scopedCSS(),
     classicEmberSupport(),
     ember(),
     // extra plugins here
