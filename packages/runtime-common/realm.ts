@@ -288,15 +288,12 @@ type ModuleLoadResult =
       headers: Record<string, string>;
     };
 
-// ETag base prefers a content fingerprint (md5 of the file body) over
-// `lastModified` because the unix-second timestamp collides for two
-// writes that land in the same second — and `cachedFetch` (loader →
-// cached-fetch) will then serve a stale 304-cached body. We compute the
-// content hash on the cache-miss path of the source endpoint, where the
-// content is already being materialized into memory, and stash it on the
-// cache entry so subsequent serves reuse it. Adapters that don't yet
-// surface a content fingerprint fall back to `lastModified` and keep the
-// pre-existing behavior.
+// If we change anything in the transpilation toolchain in an incompatible way,
+// we need to bump this number. Otherwise browsers will keep caching files that
+// were transpiled the old way, so long as the source files have constant
+// last-modified time.
+const transpilerToolchainVersion = 'v2';
+
 function buildEtag(
   base: string | number | undefined,
   variant?: string,
@@ -304,8 +301,8 @@ function buildEtag(
   if (base == null) {
     return undefined;
   }
-  let baseStr = String(base);
-  return variant ? `${baseStr}:${variant}` : baseStr;
+  let base = transpilerToolchainVersion + ':' + String(lastModified);
+  return variant ? `${base}:${variant}` : base;
 }
 
 function computeContentHash(content: string | Uint8Array): string {
