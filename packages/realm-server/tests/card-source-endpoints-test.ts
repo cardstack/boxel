@@ -983,7 +983,7 @@ module(basename(__filename), function () {
           permissions: {
             '*': ['read', 'write'],
           },
-          cardSizeLimitBytes: 512,
+          fileSizeLimitBytes: 512,
           onRealmSetup,
         });
 
@@ -1183,7 +1183,7 @@ module(basename(__filename), function () {
             permissions: {
               '*': ['read', 'write'],
             },
-            cardSizeLimitBytes: 512,
+            fileSizeLimitBytes: 512,
             onRealmSetup,
           });
 

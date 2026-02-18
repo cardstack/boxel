@@ -7,6 +7,7 @@ import {
   Deferred,
   CachingDefinitionLookup,
   DEFAULT_CARD_SIZE_LIMIT_BYTES,
+  DEFAULT_FILE_SIZE_LIMIT_BYTES,
 } from '@cardstack/runtime-common';
 import { NodeAdapter } from './node-realm';
 import yargs from 'yargs';
@@ -282,6 +283,9 @@ const getIndexHTML = async () => {
         definitionLookup,
         cardSizeLimitBytes: Number(
           process.env.CARD_SIZE_LIMIT_BYTES ?? DEFAULT_CARD_SIZE_LIMIT_BYTES,
+        ),
+        fileSizeLimitBytes: Number(
+          process.env.FILE_SIZE_LIMIT_BYTES ?? DEFAULT_FILE_SIZE_LIMIT_BYTES,
         ),
       },
       {
