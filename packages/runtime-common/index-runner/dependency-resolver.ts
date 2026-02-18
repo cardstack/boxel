@@ -105,6 +105,21 @@ export class IndexRunnerDependencyResolver {
       .filter((href) => (indegree.get(href) ?? 0) === 0)
       .sort((a, b) => (order.get(a) ?? 0) - (order.get(b) ?? 0));
     let ordered: string[] = [];
+    let insertByOrder = (href: string) => {
+      let priority = order.get(href) ?? Number.MAX_SAFE_INTEGER;
+      let low = 0;
+      let high = queue.length;
+      while (low < high) {
+        let mid = Math.floor((low + high) / 2);
+        let midPriority = order.get(queue[mid]!) ?? Number.MAX_SAFE_INTEGER;
+        if (midPriority <= priority) {
+          low = mid + 1;
+        } else {
+          high = mid;
+        }
+      }
+      queue.splice(low, 0, href);
+    };
 
     while (queue.length > 0) {
       let href = queue.shift()!;
@@ -113,10 +128,9 @@ export class IndexRunnerDependencyResolver {
         let next = (indegree.get(dependent) ?? 0) - 1;
         indegree.set(dependent, next);
         if (next === 0) {
-          queue.push(dependent);
+          insertByOrder(dependent);
         }
       }
-      queue.sort((a, b) => (order.get(a) ?? 0) - (order.get(b) ?? 0));
     }
 
     if (ordered.length !== hrefs.length) {

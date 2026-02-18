@@ -741,10 +741,20 @@ export class Batch {
     }
 
     let uniqueUrls = [...new Set(urls)];
-    let [workingRows, productionRows] = await Promise.all([
-      this.queryDependencyRows('boxel_index_working', uniqueUrls),
-      this.queryDependencyRows('boxel_index', uniqueUrls),
-    ]);
+    // SQLite has a lower parameter limit than Postgres. Chunk URL lookups to
+    // keep IN-clause parameter counts within safe bounds for both adapters.
+    let urlBatchSize = this.#dbAdapter.kind === 'sqlite' ? 900 : 5000;
+    let workingRows: DependencyIndexRow[] = [];
+    let productionRows: DependencyIndexRow[] = [];
+    for (let i = 0; i < uniqueUrls.length; i += urlBatchSize) {
+      let urlBatch = uniqueUrls.slice(i, i + urlBatchSize);
+      let [workingBatchRows, productionBatchRows] = await Promise.all([
+        this.queryDependencyRows('boxel_index_working', urlBatch),
+        this.queryDependencyRows('boxel_index', urlBatch),
+      ]);
+      workingRows.push(...workingBatchRows);
+      productionRows.push(...productionBatchRows);
+    }
 
     let rowsByKey = new Map<
       string,

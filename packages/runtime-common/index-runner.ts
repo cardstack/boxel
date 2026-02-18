@@ -159,6 +159,10 @@ export class IndexRunner {
 
     let visitStart = Date.now();
     invalidations = sortInvalidations(invalidations);
+    invalidations =
+      await current.#dependencyResolver.orderInvalidationsByDependencies(
+        invalidations,
+      );
     for (let invalidation of invalidations) {
       await current.tryToVisit(invalidation);
     }
