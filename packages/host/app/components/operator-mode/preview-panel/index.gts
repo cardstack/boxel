@@ -20,8 +20,10 @@ import { Eye, IconCode } from '@cardstack/boxel-ui/icons';
 import {
   cardTypeDisplayName,
   cardTypeIcon,
+  formats as allFormats,
   getMenuItems,
   identifyCard,
+  isCardInstance,
   isResolvedCodeRef,
 } from '@cardstack/runtime-common';
 
@@ -29,8 +31,6 @@ import { CardContextName } from '@cardstack/runtime-common';
 
 import CardRenderer from '@cardstack/host/components/card-renderer';
 import Overlays from '@cardstack/host/components/operator-mode/overlays';
-
-import { urlForRealmLookup } from '@cardstack/host/lib/utils';
 
 import ElementTracker, {
   type RenderedCardForOverlayActions,
@@ -41,6 +41,7 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 import type RealmService from '@cardstack/host/services/realm';
 
 import type {
+  BaseDef,
   CardContext,
   CardDef,
   Format,
@@ -54,14 +55,14 @@ import FittedFormatGallery from './fitted-format-gallery';
 interface Signature {
   Element: HTMLElement;
   Args: {
-    card: CardDef;
+    card: BaseDef;
     format?: Format; // defaults to 'isolated'
     setFormat: (format: Format) => void;
     viewCard?: ViewCardFn;
   };
 }
 
-export default class CardRendererPanel extends Component<Signature> {
+export default class PreviewPanel extends Component<Signature> {
   @consume(CardContextName) declare private cardContext: CardContext;
   @service declare private commandService: CommandService;
   @service declare private operatorModeStateService: OperatorModeStateService;
@@ -83,15 +84,23 @@ export default class CardRendererPanel extends Component<Signature> {
     return this.args.format ?? 'isolated';
   }
 
+  private get cardId(): string | undefined {
+    return (this.args.card as CardDef).id;
+  }
+
+  private get isCard(): boolean {
+    return isCardInstance(this.args.card);
+  }
+
   private openInInteractMode = () => {
-    this.operatorModeStateService.openCardInInteractMode(this.args.card.id);
+    if (this.cardId) {
+      this.operatorModeStateService.openCardInInteractMode(this.cardId);
+    }
   };
 
   private editTemplate = () => {
-    // Get the card definition using identifyCard
     const type = identifyCard(this.args.card.constructor as any);
     if (type && isResolvedCodeRef(type)) {
-      // Construct the GTS file URL
       const gtsFileUrl = type.module.endsWith('.gts')
         ? type.module
         : `${type.module}.gts`;
@@ -100,20 +109,19 @@ export default class CardRendererPanel extends Component<Signature> {
   };
 
   private get realmInfo() {
-    let url = this.args.card ? urlForRealmLookup(this.args.card) : undefined;
-    if (!url) {
+    if (!this.cardId) {
       return undefined;
     }
-    return this.realm.info(url);
+    return this.realm.info(this.cardId);
   }
 
   private get contextMenuItems() {
-    if (!this.args.card) {
+    if (!this.args.card || !(getMenuItems in this.args.card)) {
       return [];
     }
     return toMenuItems(
-      this.args.card[getMenuItems]({
-        canEdit: this.realm.canWrite(this.args.card.id),
+      (this.args.card as CardDef)[getMenuItems]({
+        canEdit: this.cardId ? this.realm.canWrite(this.cardId) : false,
         cardCrudFunctions: {},
         menuContext: 'code-mode-preview',
         commandContext: this.commandService.commandContext,
@@ -123,8 +131,25 @@ export default class CardRendererPanel extends Component<Signature> {
 
   private get canEditCard() {
     return Boolean(
-      this.format !== 'edit' && this.realm.canWrite(this.args.card.id),
+      this.isCard &&
+      this.format !== 'edit' &&
+      this.cardId &&
+      this.realm.canWrite(this.cardId),
     );
+  }
+
+  private get cardTitle(): string | undefined {
+    if (this.isCard) {
+      return (this.args.card as CardDef).cardTitle;
+    }
+    return (this.args.card as any).name;
+  }
+
+  private get availableFormats() {
+    if (this.isCard) {
+      return allFormats;
+    }
+    return allFormats.filter((f) => f !== 'edit');
   }
 
   @provide(CardContextName)
@@ -191,7 +216,7 @@ export default class CardRendererPanel extends Component<Signature> {
             class='card-renderer-header'
             @cardTypeDisplayName={{cardTypeDisplayName @card}}
             @cardTypeIcon={{cardTypeIcon @card}}
-            @cardTitle={{@card.cardTitle}}
+            @cardTitle={{this.cardTitle}}
             @realmInfo={{this.realmInfo}}
             @onEdit={{if this.canEditCard (fn @setFormat 'edit')}}
             @onFinishEditing={{if
@@ -200,7 +225,7 @@ export default class CardRendererPanel extends Component<Signature> {
             }}
             @isTopCard={{true}}
             @moreOptionsMenuItems={{this.contextMenuItems}}
-            data-test-code-mode-card-renderer-header={{@card.id}}
+            data-test-code-mode-card-renderer-header={{this.cardId}}
             ...attributes
           />
           {{#if (eq this.format 'fitted')}}
@@ -223,7 +248,11 @@ export default class CardRendererPanel extends Component<Signature> {
     </div>
 
     <div class='card-renderer-format-chooser'>
-      <FormatChooser @format={{this.format}} @setFormat={{@setFormat}} />
+      <FormatChooser
+        @format={{this.format}}
+        @setFormat={{@setFormat}}
+        @formats={{this.availableFormats}}
+      />
     </div>
 
     <style scoped>
