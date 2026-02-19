@@ -287,7 +287,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           );
 
           // Cards for testing default head template with cardInfo.theme
-          writeJSONSync(join(context.testRealmDir, 'test-theme.json'), {
+          writeJSONSync(join(context.testRealmDir, 'a-test-theme.json'), {
             data: {
               type: 'card',
               attributes: {
@@ -313,7 +313,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
               relationships: {
                 'cardInfo.theme': {
                   links: {
-                    self: './test-theme',
+                    self: './a-test-theme',
                   },
                 },
               },
