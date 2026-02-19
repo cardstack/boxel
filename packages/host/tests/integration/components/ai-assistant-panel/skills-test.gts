@@ -331,7 +331,9 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
     await click('[data-test-skill-menu][data-test-pill-menu-button]');
     assert.dom('[data-test-skill-menu]').containsText('Skills: 1 of 1 active');
     await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
-    await click('[data-test-select="http://test-realm/test/Skill/example"]');
+    await click(
+      '[data-test-card-catalog-item="http://test-realm/test/Skill/example"]',
+    );
     await click('[data-test-card-catalog-go-button]');
     await waitUntil(() =>
       document
@@ -348,7 +350,9 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
     // Attach the skill card without changing it
     await click('[data-test-attach-button]');
     await click('[data-test-attach-card-btn]');
-    await click('[data-test-select="http://test-realm/test/Skill/example"]');
+    await click(
+      '[data-test-card-catalog-item="http://test-realm/test/Skill/example"]',
+    );
     await click('[data-test-card-catalog-go-button]');
     await click(
       '[data-test-attached-card="http://test-realm/test/Person/fadhlan"] [data-test-remove-card-btn]',
@@ -374,7 +378,7 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
 
     await click('[data-test-skill-menu][data-test-pill-menu-button]');
     await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
-    await click(`[data-test-select="${skillId}"]`);
+    await click(`[data-test-card-catalog-item="${skillId}"]`);
     await click('[data-test-card-catalog-go-button]');
     await waitUntil(() =>
       Boolean(
@@ -406,7 +410,7 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
     await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
 
     let skillId = `${testRealmURL}Skill/example`;
-    await click(`[data-test-select="${skillId}"]`);
+    await click(`[data-test-card-catalog-item="${skillId}"]`);
     await click('[data-test-card-catalog-go-button]');
 
     await click('[data-test-submode-switcher] button');
@@ -449,7 +453,9 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
     await click('[data-test-skill-menu][data-test-pill-menu-button]');
     assert.dom('[data-test-skill-menu]').containsText('Skills: 1 of 1 active');
     await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
-    await click('[data-test-select="http://test-realm/test/Skill/example"]');
+    await click(
+      '[data-test-card-catalog-item="http://test-realm/test/Skill/example"]',
+    );
     await click('[data-test-card-catalog-go-button]');
     await fillIn(
       '[data-test-boxel-input-id="ai-chat-input"]',
@@ -475,7 +481,9 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
     // Add the same skill card without changes
     await click('[data-test-skill-menu][data-test-pill-menu-button]');
     await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
-    await click('[data-test-select="http://test-realm/test/Skill/example"]');
+    await click(
+      '[data-test-card-catalog-item="http://test-realm/test/Skill/example"]',
+    );
     await click('[data-test-card-catalog-go-button]');
     await fillIn(
       '[data-test-boxel-input-id="ai-chat-input"]',
@@ -535,7 +543,9 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
     // Add the skill card with modified command
     await click('[data-test-skill-menu][data-test-pill-menu-button]');
     await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
-    await click('[data-test-select="http://test-realm/test/Skill/example"]');
+    await click(
+      '[data-test-card-catalog-item="http://test-realm/test/Skill/example"]',
+    );
     await click('[data-test-card-catalog-go-button]');
     await fillIn(
       '[data-test-boxel-input-id="ai-chat-input"]',
@@ -603,7 +613,9 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
     await click('[data-test-skill-menu][data-test-pill-menu-button]');
     assert.dom('[data-test-skill-menu]').containsText('Skills: 1 of 1 active');
     await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
-    await click('[data-test-select="http://test-realm/test/Skill/example"]');
+    await click(
+      '[data-test-card-catalog-item="http://test-realm/test/Skill/example"]',
+    );
     await click('[data-test-card-catalog-go-button]');
     await fillIn(
       '[data-test-boxel-input-id="ai-chat-input"]',
@@ -697,7 +709,9 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
 
     await click('[data-test-skill-menu][data-test-pill-menu-button]');
     await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
-    await click('[data-test-select="http://test-realm/test/Skill/example"]');
+    await click(
+      '[data-test-card-catalog-item="http://test-realm/test/Skill/example"]',
+    );
     await click('[data-test-card-catalog-go-button]');
 
     const initialRoomStateSkillsJson = getRoomState(
@@ -791,7 +805,9 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
 
     await click('[data-test-skill-menu][data-test-pill-menu-button]');
     await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
-    await click('[data-test-select="http://test-realm/test/Skill/example"]');
+    await click(
+      '[data-test-card-catalog-item="http://test-realm/test/Skill/example"]',
+    );
     await click('[data-test-card-catalog-go-button]');
 
     const initialRoomStateSkillsJson = getRoomState(
@@ -903,7 +919,9 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
 
     await click('[data-test-skill-menu][data-test-pill-menu-button]');
     await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
-    await click('[data-test-select="http://test-realm/test/Skill/example"]');
+    await click(
+      '[data-test-card-catalog-item="http://test-realm/test/Skill/example"]',
+    );
     await click('[data-test-card-catalog-go-button]');
 
     const initialRoomStateSkillsJson = getRoomState(
@@ -1008,7 +1026,9 @@ ${REPLACE_MARKER}
 
     await click('[data-test-skill-menu][data-test-pill-menu-button]');
     await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
-    await click('[data-test-select="http://test-realm/test/Skill/example"]');
+    await click(
+      '[data-test-card-catalog-item="http://test-realm/test/Skill/example"]',
+    );
     await click('[data-test-card-catalog-go-button]');
 
     const initialRoomStateSkillsJson = getRoomState(
@@ -1146,7 +1166,9 @@ ${REPLACE_MARKER}
 
     await click('[data-test-skill-menu][data-test-pill-menu-button]');
     await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
-    await click('[data-test-select="http://test-realm/test/Skill/example"]');
+    await click(
+      '[data-test-card-catalog-item="http://test-realm/test/Skill/example"]',
+    );
     await click('[data-test-card-catalog-go-button]');
     await click('[data-test-send-message-btn]');
     await click('[data-test-pill-menu-button]');
@@ -1173,7 +1195,9 @@ ${REPLACE_MARKER}
     // Attach the second skill card
     await click('[data-test-skill-menu][data-test-pill-menu-button]');
     await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
-    await click('[data-test-select="http://test-realm/test/Skill/example2"]');
+    await click(
+      '[data-test-card-catalog-item="http://test-realm/test/Skill/example2"]',
+    );
     await click('[data-test-card-catalog-go-button]');
     await click('[data-test-send-message-btn]');
     const finalRoomStateSkillsJson = getRoomState(

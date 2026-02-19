@@ -48,9 +48,7 @@ import {
 import CreateSpecCommand from '@cardstack/host/commands/create-specs';
 import CardError from '@cardstack/host/components/operator-mode/card-error';
 import Playground from '@cardstack/host/components/operator-mode/code-submode/playground/playground';
-
 import SchemaEditor from '@cardstack/host/components/operator-mode/code-submode/schema-editor';
-
 import SpecPreview from '@cardstack/host/components/operator-mode/code-submode/spec-preview';
 import SpecPreviewBadge from '@cardstack/host/components/operator-mode/code-submode/spec-preview-badge';
 

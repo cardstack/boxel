@@ -43,7 +43,7 @@ module('Integration | operator-mode | links', function (hooks) {
     await click('[data-test-add-new="authorBio"]');
     await waitFor(`[data-test-card-catalog-modal]`);
     await waitFor(`[data-test-card-catalog-item="${testRealmURL}Author/2"]`);
-    await click(`[data-test-select="${testRealmURL}Author/2"]`);
+    await click(`[data-test-card-catalog-item="${testRealmURL}Author/2"]`);
     assert
       .dom(
         `[data-test-card-catalog-item="${testRealmURL}Author/2"][data-test-card-catalog-item-selected]`,
@@ -78,7 +78,7 @@ module('Integration | operator-mode | links', function (hooks) {
 
     await click('[data-test-add-new="authorBio"]');
     await waitFor(`[data-test-card-catalog-item="${testRealmURL}Author/2"]`);
-    await click(`[data-test-select="${testRealmURL}Author/2"]`);
+    await click(`[data-test-card-catalog-item="${testRealmURL}Author/2"]`);
     await click('[data-test-card-catalog-go-button]');
 
     await waitUntil(() => !document.querySelector('[card-catalog-modal]'));
@@ -155,7 +155,7 @@ module('Integration | operator-mode | links', function (hooks) {
       `[data-test-card-catalog-item="https://cardstack.com/base/fields/biginteger-field"]`,
     );
     await click(
-      `[data-test-select="https://cardstack.com/base/fields/biginteger-field"]`,
+      `[data-test-card-catalog-item="https://cardstack.com/base/fields/biginteger-field"]`,
     );
     await click('[data-test-card-catalog-go-button]');
 
@@ -206,7 +206,7 @@ module('Integration | operator-mode | links', function (hooks) {
 
     await click('[data-test-links-to-many="friends"] [data-test-add-new]');
     await waitFor(`[data-test-card-catalog-item="${testRealmURL}Pet/mango"]`);
-    await click(`[data-test-select="${testRealmURL}Pet/mango"]`);
+    await click(`[data-test-card-catalog-item="${testRealmURL}Pet/mango"]`);
     await click('[data-test-card-catalog-go-button]');
 
     await waitUntil(() => !document.querySelector('[card-catalog-modal]'));
@@ -237,7 +237,9 @@ module('Integration | operator-mode | links', function (hooks) {
     await waitFor(
       `[data-test-card-catalog-item="${testRealmURL}Friend/friend-a"]`,
     );
-    await click(`[data-test-select="${testRealmURL}Friend/friend-a"]`);
+    await click(
+      `[data-test-card-catalog-item="${testRealmURL}Friend/friend-a"]`,
+    );
     await click('[data-test-card-catalog-go-button]');
 
     await waitUntil(() => !document.querySelector('[card-catalog-modal]'));
@@ -273,7 +275,7 @@ module('Integration | operator-mode | links', function (hooks) {
     assert.dom('[data-test-add-new="friends"]').hasText('Add Pets');
     await click('[data-test-add-new="friends"]');
     await waitFor(`[data-test-card-catalog-item="${testRealmURL}Pet/mango"]`);
-    await click(`[data-test-select="${testRealmURL}Pet/jackie"]`);
+    await click(`[data-test-card-catalog-item="${testRealmURL}Pet/jackie"]`);
     await click('[data-test-card-catalog-go-button]');
 
     await waitUntil(() => !document.querySelector('[card-catalog-modal]'));
@@ -297,7 +299,7 @@ module('Integration | operator-mode | links', function (hooks) {
       .hasText('Add Pets');
     await click('[data-test-field="friends"] [data-test-add-new]');
     await waitFor(`[data-test-card-catalog-item="${testRealmURL}Pet/mango"]`);
-    await click(`[data-test-select="${testRealmURL}Pet/jackie"]`);
+    await click(`[data-test-card-catalog-item="${testRealmURL}Pet/jackie"]`);
     await click('[data-test-card-catalog-go-button]');
 
     await waitUntil(() => !document.querySelector('[card-catalog-modal]'));
@@ -323,7 +325,7 @@ module('Integration | operator-mode | links', function (hooks) {
 
     await click('[data-test-links-to-many="friends"] [data-test-add-new]');
     await waitFor(`[data-test-card-catalog-item="${testRealmURL}Pet/mango"]`);
-    await click(`[data-test-select="${testRealmURL}Pet/mango"]`);
+    await click(`[data-test-card-catalog-item="${testRealmURL}Pet/mango"]`);
     await click('[data-test-card-catalog-go-button]');
 
     await waitUntil(() => !document.querySelector('[card-catalog-modal]'));
