@@ -583,7 +583,82 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         );
       });
 
+      test('HTML response always includes default static favicon and apple-touch-icon', async function (assert) {
+        // Even a card with no theme should get the static icons from index.html
+        // (which live outside the head injection markers)
+        let response = await context.request2
+          .get('/test/isolated-test')
+          .set('Accept', 'text/html');
+
+        assert.strictEqual(response.status, 200, 'serves HTML response');
+        assert.ok(
+          response.text.includes('rel="icon"'),
+          'static favicon link is present in the HTML response',
+        );
+        assert.ok(
+          response.text.includes('rel="apple-touch-icon"'),
+          'static apple-touch-icon link is present in the HTML response',
+        );
+      });
+
+      test('head HTML does not include icon links when card has no theme', async function (assert) {
+        let response = await context.request2
+          .get('/test/isolated-test')
+          .set('Accept', 'text/html');
+
+        assert.strictEqual(response.status, 200, 'serves HTML response');
+
+        let headMatch = response.text.match(
+          /data-boxel-head-start[^>]*>([\s\S]*?)data-boxel-head-end/,
+        );
+        let headContent = headMatch?.[1] ?? '';
+
+        // The default head template should NOT emit icon links when there's no theme
+        // (the static icons from index.html serve as defaults)
+        assert.notOk(
+          headContent.includes('rel="icon"'),
+          'injected head HTML does not contain favicon link (static ones from index.html are the default)',
+        );
+        assert.notOk(
+          headContent.includes('rel="apple-touch-icon"'),
+          'injected head HTML does not contain apple-touch-icon link',
+        );
+      });
+
+      test('non-public realm preserves static favicon and apple-touch-icon', async function (assert) {
+        await context.dbAdapter.execute(
+          `DELETE FROM realm_user_permissions WHERE realm_url = '${testRealm2URL.href}' AND username = '*'`,
+        );
+
+        let response = await context.request2
+          .get('/test/private-index-test')
+          .set('Accept', 'text/html');
+
+        assert.strictEqual(response.status, 200, 'serves HTML response');
+        // Even without head injection, static icons from index.html remain
+        assert.ok(
+          response.text.includes('rel="icon"'),
+          'static favicon link is present even without head injection',
+        );
+        assert.ok(
+          response.text.includes('rel="apple-touch-icon"'),
+          'static apple-touch-icon link is present even without head injection',
+        );
+      });
+
       test('default head template includes favicon and apple-touch-icon from cardInfo.theme', async function (assert) {
+        // First, check what the indexer stored as head_html
+        let rows = (await context.dbAdapter.execute(
+          `SELECT head_html FROM boxel_index
+           WHERE url LIKE '%card-with-theme%'
+             AND type = 'instance'
+             AND is_deleted IS NOT TRUE
+             AND head_html IS NOT NULL
+           LIMIT 1`,
+        )) as { head_html: string }[];
+
+        let storedHeadHtml = rows[0]?.head_html ?? '(no head_html in DB)';
+
         let response = await context.request2
           .get('/test/card-with-theme')
           .set('Accept', 'text/html');
@@ -599,13 +674,13 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           headContent.includes(
             '<link rel="icon" href="https://example.com/brand-icon.png"',
           ),
-          `head HTML includes favicon link from theme. headContent=${headContent.substring(0, 500)}`,
+          `head HTML includes favicon link from theme. storedHeadHtml=${storedHeadHtml}`,
         );
         assert.ok(
           headContent.includes(
             '<link rel="apple-touch-icon" href="https://example.com/brand-icon.png"',
           ),
-          `head HTML includes apple-touch-icon link from theme. headContent=${headContent.substring(0, 500)}`,
+          `head HTML includes apple-touch-icon link from theme. storedHeadHtml=${storedHeadHtml}`,
         );
       });
 

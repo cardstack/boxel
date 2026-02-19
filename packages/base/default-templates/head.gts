@@ -25,16 +25,6 @@ export default class DefaultHeadTemplate extends GlimmerComponent<{
     return this.args.model?.cardInfo?.theme?.cardThumbnailURL;
   }
 
-  get debugCardInfo(): string {
-    let cardInfo = this.args.model?.cardInfo;
-    if (!cardInfo) return 'no-cardInfo';
-    let theme = cardInfo.theme;
-    if (theme === undefined) return 'theme-undefined';
-    if (theme === null) return 'theme-null';
-    let url = theme.cardThumbnailURL;
-    return `theme-url=${url ?? 'no-url'}`;
-  }
-
   <template>
     {{! template-lint-disable no-forbidden-elements }}
     <title data-test-card-head-title>{{this.title}}</title>
@@ -60,19 +50,8 @@ export default class DefaultHeadTemplate extends GlimmerComponent<{
     {{#if this.themeIcon}}
       <link rel='icon' href={{this.themeIcon}} />
       <link rel='apple-touch-icon' href={{this.themeIcon}} />
-    {{else}}
-      {{! FIXME these are hardcoded to staging }}
-      <link
-        rel='icon'
-        href='https://boxel-host-staging.stack.cards/boxel-webclip.png'
-      />
-      <link
-        rel='apple-touch-icon'
-        href='https://boxel-host-staging.stack.cards/boxel-webclip.png'
-      />
     {{/if}}
 
     <meta property='og:type' content='website' />
-    <meta name='debug-card-info' content={{this.debugCardInfo}} />
   </template>
 }
