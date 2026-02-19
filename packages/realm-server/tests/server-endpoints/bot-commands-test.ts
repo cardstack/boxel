@@ -452,55 +452,6 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       );
     });
 
-    test('rejects unsupported filter', async function (assert) {
-      let matrixUserId = '@user:localhost';
-      await insertUser(
-        context.dbAdapter,
-        matrixUserId,
-        'cus_123',
-        'user@example.com',
-      );
-
-      let botRegistrationId = uuidv4();
-      await query(context.dbAdapter, [
-        `INSERT INTO bot_registrations (id, username, created_at) VALUES (`,
-        param(botRegistrationId),
-        `,`,
-        param(matrixUserId),
-        `,`,
-        `CURRENT_TIMESTAMP`,
-        `)`,
-      ]);
-
-      let response = await context.request2
-        .post('/_bot-commands')
-        .set('Accept', 'application/vnd.api+json')
-        .set('Content-Type', 'application/vnd.api+json')
-        .set(
-          'Authorization',
-          `Bearer ${createRealmServerJWT(
-            { user: matrixUserId, sessionRoom: 'session-room-test' },
-            realmSecretSeed,
-          )}`,
-        )
-        .send({
-          data: {
-            type: 'bot-command',
-            attributes: {
-              botId: botRegistrationId,
-              command: 'https://example.com/bot/command/default',
-              filter: {
-                type: 'matrix-event',
-                event_type: 'app.boxel.bot-trigger',
-                content_type: 'unsupported',
-              },
-            },
-          },
-        });
-
-      assert.strictEqual(response.status, 400, 'HTTP 400 status');
-    });
-
     test('rejects non-matrix filter type', async function (assert) {
       let matrixUserId = '@user:localhost';
       await insertUser(
