@@ -283,6 +283,46 @@ module(basename(__filename), function () {
       );
     });
 
+    test('proxies run-command requests', async function (assert) {
+      let { app } = buildPrerenderManagerApp();
+      let request: SuperTest<Test> = supertest(app.callback());
+
+      // Register a single server
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: { capacity: 2, url: serverUrlA },
+        },
+      });
+
+      let realm = 'https://realm.example/CMD';
+      let command = {
+        module: `${realm}/commands/say-hello`,
+        name: 'SayHelloCommand',
+      };
+
+      let proxyResponse = await request
+        .post('/run-command')
+        .send(makeCommandBody(realm, command));
+
+      assert.strictEqual(proxyResponse.status, 201, 'proxy request successful');
+      assert.strictEqual(
+        proxyResponse.headers['x-boxel-prerender-target'],
+        serverUrlA,
+        'command request routed to registered prerender server',
+      );
+      assert.strictEqual(
+        proxyResponse.body?.data?.type,
+        'command-result',
+        'command result type returned',
+      );
+      assert.strictEqual(
+        proxyResponse.body?.data?.id,
+        command.module,
+        'command result id echoed',
+      );
+    });
+
     test('heartbeat: url required; heartbeat updates warmed realms and status', async function (assert) {
       let { app } = buildPrerenderManagerApp();
       let request: SuperTest<Test> = supertest(app.callback());
@@ -1337,7 +1377,7 @@ function makeMockPrerender(): {
     responder: (
       ctxt: Koa.Context,
       body: any,
-      type: 'card' | 'module',
+      type: 'card' | 'module' | 'command',
     ) => Promise<void> | void,
   ) => void;
 } {
@@ -1350,7 +1390,7 @@ function makeMockPrerender(): {
   let responder: (
     ctxt: Koa.Context,
     body: any,
-    type: 'card' | 'module',
+    type: 'card' | 'module' | 'command',
   ) => Promise<void> | void = defaultResponder;
   async function readBody(ctxt: Koa.Context) {
     return await new Promise<string>((resolve) => {
@@ -1362,7 +1402,7 @@ function makeMockPrerender(): {
   function defaultResponder(
     ctxt: Koa.Context,
     body: any,
-    type: 'card' | 'module',
+    type: 'card' | 'module' | 'command',
   ) {
     ctxt.status = 201;
     ctxt.set('Content-Type', 'application/vnd.api+json');
@@ -1383,7 +1423,7 @@ function makeMockPrerender(): {
           },
         },
       });
-    } else {
+    } else if (type === 'module') {
       ctxt.body = JSON.stringify({
         data: {
           type: 'prerender-module-result',
@@ -1409,6 +1449,26 @@ function makeMockPrerender(): {
           },
         },
       });
+    } else {
+      ctxt.body = JSON.stringify({
+        data: {
+          type: 'command-result',
+          id: body?.data?.attributes?.command?.module || 'command',
+          attributes: {
+            status: 'ready',
+            result: null,
+          },
+        },
+        meta: {
+          timing: { launchMs: 0, renderMs: 0, totalMs: 0 },
+          pool: {
+            pageId: 'p',
+            realm: body?.data?.attributes?.realm,
+            reused: false,
+            evicted: false,
+          },
+        },
+      });
     }
   }
   router.post('/prerender-card', async (ctxt) => {
@@ -1420,6 +1480,11 @@ function makeMockPrerender(): {
     let raw = await readBody(ctxt);
     let body = raw ? JSON.parse(raw) : {};
     await responder(ctxt, body, 'module');
+  });
+  router.post('/run-command', async (ctxt) => {
+    let raw = await readBody(ctxt);
+    let body = raw ? JSON.parse(raw) : {};
+    await responder(ctxt, body, 'command');
   });
   app.use(router.routes());
   let server = createServer(app.callback()).listen(0);
@@ -1463,6 +1528,23 @@ function makeModuleBody(realm: string, url: string) {
         url,
         auth,
         realm,
+      },
+    },
+  };
+}
+
+function makeCommandBody(
+  realm: string,
+  command: { module: string; name?: string },
+) {
+  let auth = makeAuth(realm);
+  return {
+    data: {
+      type: 'command-request',
+      attributes: {
+        realm,
+        auth,
+        command,
       },
     },
   };

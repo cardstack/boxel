@@ -13,7 +13,8 @@ import type PlaygroundPanelService from '../services/playground-panel-service';
 import type StoreService from '../services/store';
 
 export default class ShowCardCommand extends HostBaseCommand<
-  typeof BaseCommandModule.ShowCardInput
+  typeof BaseCommandModule.ShowCardInput,
+  typeof CardDef
 > {
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private playgroundPanelService: PlaygroundPanelService;
@@ -34,7 +35,7 @@ export default class ShowCardCommand extends HostBaseCommand<
 
   protected async run(
     input: BaseCommandModule.ShowCardInput,
-  ): Promise<undefined> {
+  ): Promise<CardDef> {
     let { operatorModeStateService, store } = this;
     if (operatorModeStateService.workspaceChooserOpened) {
       operatorModeStateService.closeWorkspaceChooser();
@@ -50,6 +51,7 @@ export default class ShowCardCommand extends HostBaseCommand<
         (input.format as 'isolated' | 'edit') || 'isolated',
       );
       operatorModeStateService.addItemToStack(newStackItem);
+      return await store.get<CardDef>(input.cardId);
     } else if (operatorModeStateService.state?.submode === 'code') {
       let cardInstance = await store.get<CardDef>(input.cardId);
       let cardDefRef = identifyCard(
@@ -75,11 +77,13 @@ export default class ShowCardCommand extends HostBaseCommand<
         (input.format as Format) || 'isolated',
         undefined,
       );
+      return cardInstance;
     } else {
       console.error(
         'Unknown submode:',
         this.operatorModeStateService.state?.submode,
       );
+      return await store.get<CardDef>(input.cardId);
     }
   }
 }

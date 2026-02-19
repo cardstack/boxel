@@ -33,10 +33,10 @@ module(basename(__filename), function () {
 
     function makePrerenderer() {
       let renderCalls: Array<{
-        kind: 'card' | 'module' | 'file-extract' | 'file-render';
+        kind: 'card' | 'module' | 'file-extract' | 'file-render' | 'command';
         args: {
           realm: string;
-          url: string;
+          url?: string;
           auth: string;
           renderOptions?: RenderRouteOptions;
         };
@@ -91,6 +91,13 @@ module(basename(__filename), function () {
             embeddedHTML: null,
             fittedHTML: null,
             iconHTML: null,
+          };
+        },
+        async runCommand(args) {
+          renderCalls.push({ kind: 'command', args });
+          return {
+            status: 'ready',
+            result: null,
           };
         },
       };
