@@ -137,7 +137,7 @@ export class RenderRunner {
         localStorage.setItem('boxel-session', sessionAuth);
       }, auth);
       log.info(
-        'command-runner session set: %s',
+        'prerender session set: %s',
         await page.evaluate(() => localStorage.getItem('boxel-session')),
       );
 
