@@ -1,7 +1,7 @@
 import { getOwner, setOwner } from '@ember/owner';
 import Route from '@ember/routing/route';
 import type RouterService from '@ember/routing/router-service';
-import type { PublicTransition } from '@ember/routing/transition';
+import type Transition from '@ember/routing/transition';
 import { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 
@@ -76,10 +76,7 @@ export default class CommandRunnerRoute extends Route<CommandRunnerModel> {
     (globalThis as any).__boxelRenderContext = undefined;
   }
 
-  model(
-    params: { nonce: string },
-    transition: PublicTransition,
-  ): CommandRunnerModel {
+  model(params: { nonce: string }, transition: Transition): CommandRunnerModel {
     let model = new CommandRunState(params.nonce);
     let queryParams = transition?.to?.queryParams ?? {};
     let command = parseResolvedCodeRef(getQueryParam(queryParams, 'command'));

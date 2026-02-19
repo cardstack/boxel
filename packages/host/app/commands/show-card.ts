@@ -1,7 +1,11 @@
 import { service } from '@ember/service';
 
 import type { ResolvedCodeRef } from '@cardstack/runtime-common';
-import { identifyCard, internalKeyFor } from '@cardstack/runtime-common';
+import {
+  identifyCard,
+  internalKeyFor,
+  isCardErrorJSONAPI,
+} from '@cardstack/runtime-common';
 
 import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
@@ -36,7 +40,7 @@ export default class ShowCardCommand extends HostBaseCommand<
   protected async run(
     input: BaseCommandModule.ShowCardInput,
   ): Promise<CardDef> {
-    let { operatorModeStateService, store } = this;
+    let { operatorModeStateService } = this;
     if (operatorModeStateService.workspaceChooserOpened) {
       operatorModeStateService.closeWorkspaceChooser();
     }
@@ -51,9 +55,9 @@ export default class ShowCardCommand extends HostBaseCommand<
         (input.format as 'isolated' | 'edit') || 'isolated',
       );
       operatorModeStateService.addItemToStack(newStackItem);
-      return await store.get<CardDef>(input.cardId);
+      return await this.loadCard(input.cardId);
     } else if (operatorModeStateService.state?.submode === 'code') {
-      let cardInstance = await store.get<CardDef>(input.cardId);
+      let cardInstance = await this.loadCard(input.cardId);
       let cardDefRef = identifyCard(
         cardInstance.constructor as typeof CardDef,
       ) as ResolvedCodeRef;
@@ -83,7 +87,15 @@ export default class ShowCardCommand extends HostBaseCommand<
         'Unknown submode:',
         this.operatorModeStateService.state?.submode,
       );
-      return await store.get<CardDef>(input.cardId);
+      return await this.loadCard(input.cardId);
     }
+  }
+
+  private async loadCard(cardId: string): Promise<CardDef> {
+    let maybeCard = await this.store.get<CardDef>(cardId);
+    if (isCardErrorJSONAPI(maybeCard)) {
+      throw new Error(maybeCard.message);
+    }
+    return maybeCard;
   }
 }

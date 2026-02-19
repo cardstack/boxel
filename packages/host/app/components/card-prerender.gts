@@ -25,6 +25,8 @@ import {
   type FileRenderResponse,
   type FileRenderArgs,
   type Prerenderer,
+  type RunCommandArgs,
+  type RunCommandResponse,
   type Format,
   type PrerenderMeta,
   type RenderRouteOptions,
@@ -96,6 +98,7 @@ export default class CardPrerender extends Component {
       prerenderModule: this.prerenderModule.bind(this),
       prerenderFileExtract: this.prerenderFileExtract.bind(this),
       prerenderFileRender: this.prerenderFileRenderPublic.bind(this),
+      runCommand: this.runCommand.bind(this),
     };
     this.localIndexer.setup(this.#prerendererDelegate);
     window.addEventListener('boxel-render-error', this.#handleRenderErrorEvent);
@@ -222,6 +225,13 @@ export default class CardPrerender extends Component {
         `card-prerender component is missing or being destroyed before file render prerender of url ${args.url} was completed`,
       );
     });
+  }
+
+  private async runCommand(_args: RunCommandArgs): Promise<RunCommandResponse> {
+    return {
+      status: 'error',
+      error: 'runCommand is not supported by the card-prerender delegate',
+    };
   }
 
   // This emulates the job of the Prerenderer that runs in the server
