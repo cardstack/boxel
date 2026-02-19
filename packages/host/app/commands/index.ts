@@ -6,7 +6,6 @@ import * as ApplyMarkdownEditCommandModule from './apply-markdown-edit';
 import * as ApplySearchReplaceBlockCommandModule from './apply-search-replace-block';
 import * as AskAiCommandModule from './ask-ai';
 import * as CreateListingPRRequestCommandModule from './bot-requests/create-listing-pr-request';
-import * as CreateShowCardRequestCommandModule from './bot-requests/create-show-card-request';
 import * as SendBotTriggerEventCommandModule from './bot-requests/send-bot-trigger-event';
 import * as CheckCorrectnessCommandModule from './check-correctness';
 import * as CopyAndEditCommandModule from './copy-and-edit';
@@ -108,10 +107,6 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/create-specs',
     CreateSpecCommandModule,
-  );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/create-show-card-request',
-    CreateShowCardRequestCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/check-correctness',
@@ -362,7 +357,6 @@ export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
   ListingRemixCommandModule.default,
   CreateListingPRCommandModule.default,
   CreateListingPRRequestCommandModule.default,
-  CreateShowCardRequestCommandModule.default,
   ListingUpdateSpecsCommandModule.default,
   ListingUseCommandModule.default,
   OneShotLlmRequestCommandModule.default,
