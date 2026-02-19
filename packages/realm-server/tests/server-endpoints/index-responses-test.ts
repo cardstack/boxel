@@ -285,6 +285,90 @@ module(`server-endpoints/${basename(__filename)}`, function () {
               },
             },
           );
+
+          // Cards for testing that linksToMany query field search results
+          // are present in prerendered isolated HTML (i.e. store.loaded()
+          // waits for SearchResource tasks to settle).
+          writeFileSync(
+            join(context.testRealmDir, 'sample-item.gts'),
+            `
+            import { contains, field, Component, CardDef } from 'https://cardstack.com/base/card-api';
+            import StringField from 'https://cardstack.com/base/string';
+
+            export class SampleItem extends CardDef {
+              @field itemTitle = contains(StringField);
+              static embedded = class Embedded extends Component<typeof this> {
+                <template>
+                  <span data-test-sample-item>{{@model.itemTitle}}</span>
+                </template>
+              };
+            }
+            `,
+          );
+
+          writeFileSync(
+            join(context.testRealmDir, 'query-grid.gts'),
+            `
+            import { field, linksToMany, Component, CardDef } from 'https://cardstack.com/base/card-api';
+            import { SampleItem } from './sample-item.gts';
+
+            export class QueryGrid extends CardDef {
+              @field samples = linksToMany(() => SampleItem, {
+                query: {
+                  page: { size: 10, number: 0 },
+                },
+              });
+              static isolated = class Isolated extends Component<typeof this> {
+                <template>
+                  <div data-test-query-grid>
+                    {{#each @model.samples as |sample|}}
+                      <div data-test-grid-item>{{sample.itemTitle}}</div>
+                    {{/each}}
+                  </div>
+                </template>
+              };
+            }
+            `,
+          );
+
+          writeJSONSync(join(context.testRealmDir, 'sample-item-1.json'), {
+            data: {
+              type: 'card',
+              attributes: { itemTitle: 'Alpha Item' },
+              meta: {
+                adoptsFrom: {
+                  module: './sample-item.gts',
+                  name: 'SampleItem',
+                },
+              },
+            },
+          });
+
+          writeJSONSync(join(context.testRealmDir, 'sample-item-2.json'), {
+            data: {
+              type: 'card',
+              attributes: { itemTitle: 'Beta Item' },
+              meta: {
+                adoptsFrom: {
+                  module: './sample-item.gts',
+                  name: 'SampleItem',
+                },
+              },
+            },
+          });
+
+          writeJSONSync(join(context.testRealmDir, 'query-grid-1.json'), {
+            data: {
+              type: 'card',
+              attributes: {},
+              meta: {
+                adoptsFrom: {
+                  module: './query-grid.gts',
+                  name: 'QueryGrid',
+                },
+              },
+            },
+          });
         },
       });
 
@@ -322,6 +406,26 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         assert.ok(
           response.text.includes('data-test-isolated-html'),
           'isolated HTML is injected into the HTML response',
+        );
+      });
+
+      test('serves isolated HTML with linksToMany query field search results', async function (assert) {
+        let response = await context.request2
+          .get('/test/query-grid-1')
+          .set('Accept', 'text/html');
+
+        assert.strictEqual(response.status, 200, 'serves HTML response');
+        assert.ok(
+          response.text.includes('data-test-query-grid'),
+          'query grid isolated HTML is present in the response',
+        );
+        assert.ok(
+          response.text.includes('Alpha Item'),
+          'first search result from linksToMany query is present in the isolated HTML',
+        );
+        assert.ok(
+          response.text.includes('Beta Item'),
+          'second search result from linksToMany query is present in the isolated HTML',
         );
       });
 
