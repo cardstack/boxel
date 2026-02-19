@@ -463,20 +463,65 @@ export class RenderRunner {
         ),
       );
 
-      await withTimeout(
+      let waitResult = await withTimeout(
         page,
         async () => {
-          return await captureResult(page, 'textContent', {
-            simulateTimeoutMs: opts?.simulateTimeoutMs,
-          });
+          await page.waitForFunction(
+            (expectedNonce: string) => {
+              let containers = Array.from(
+                document.querySelectorAll(
+                  '[data-prerender][data-prerender-id="command-runner"]',
+                ),
+              ) as HTMLElement[];
+              let container =
+                containers.find(
+                  (candidate) =>
+                    candidate.dataset.prerenderNonce === expectedNonce,
+                ) ?? null;
+              if (!container) {
+                return false;
+              }
+              let status = container.dataset.prerenderStatus ?? '';
+              return ['ready', 'error', 'unusable'].includes(status);
+            },
+            {},
+            String(this.#nonce),
+          );
+
+          if (opts?.simulateTimeoutMs) {
+            await new Promise((resolve) =>
+              setTimeout(resolve, opts.simulateTimeoutMs),
+            );
+          }
+
+          return true;
         },
         opts?.timeoutMs,
       );
 
-      let payload = await page.evaluate(() => {
-        let container = document.querySelector(
-          '[data-prerender]',
-        ) as HTMLElement | null;
+      if (isRenderError(waitResult)) {
+        let response: RunCommandResponse = {
+          status: 'unusable',
+          error: waitResult.error.message,
+        };
+        markTimeout(response.status);
+        return {
+          response,
+          timings: { launchMs, renderMs: Date.now() - renderStart },
+          pool: poolInfo,
+        };
+      }
+
+      let payload = await page.evaluate((expectedNonce: string) => {
+        let containers = Array.from(
+          document.querySelectorAll(
+            '[data-prerender][data-prerender-id="command-runner"]',
+          ),
+        ) as HTMLElement[];
+        let container =
+          containers.find(
+            (candidate) => candidate.dataset.prerenderNonce === expectedNonce,
+          ) ?? null;
         let status =
           (container?.dataset.prerenderStatus as
             | 'ready'
@@ -496,7 +541,7 @@ export class RenderRunner {
           error: error.length > 0 ? error : null,
           result: result.length > 0 ? result : null,
         };
-      });
+      }, String(this.#nonce));
 
       let response: RunCommandResponse = {
         status: payload.status,
