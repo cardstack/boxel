@@ -16,7 +16,7 @@ export interface RunCommandArgs extends JSONTypes.Object {
   realmUsername: string;
   runAs: string;
   command: ResolvedCodeRef;
-  commandInput?: Record<string, any> | null;
+  commandInput: JSONTypes.Object | null;
 }
 
 export { runCommand };
