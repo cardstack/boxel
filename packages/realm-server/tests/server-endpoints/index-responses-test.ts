@@ -668,30 +668,45 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           'card-with-theme file write was accepted',
         );
 
-        // Wait for the card to be indexed with head_html containing theme icon
+        // Wait for the card to appear in the index (head_html may or may not have the theme)
         await waitUntil(
           async () => {
             let rows = (await context.dbAdapter.execute(
-              `SELECT head_html FROM boxel_index
+              `SELECT url, head_html FROM boxel_index
                WHERE url LIKE '%card-with-theme%'
                  AND type = 'instance'
                  AND is_deleted IS NOT TRUE
                LIMIT 1`,
-            )) as { head_html: string | null }[];
+            )) as { url: string; head_html: string | null }[];
 
-            return (
-              rows.length > 0 &&
-              rows[0].head_html != null &&
-              rows[0].head_html.includes('brand-icon.png')
-            );
+            return rows.length > 0 && rows[0].head_html != null;
           },
           {
             timeout: 30000,
             interval: 500,
             timeoutMessage:
-              'Timed out waiting for card-with-theme to be indexed with theme icon in head_html',
+              'Timed out waiting for card-with-theme to be indexed',
           },
         );
+
+        // Diagnostic: check what the indexer stored
+        let diagRows = (await context.dbAdapter.execute(
+          `SELECT head_html, deps FROM boxel_index
+           WHERE url LIKE '%card-with-theme%'
+             AND type = 'instance'
+             AND is_deleted IS NOT TRUE
+           LIMIT 1`,
+        )) as { head_html: string | null; deps: string[] | null }[];
+        let storedHeadHtml = diagRows[0]?.head_html ?? '(null)';
+        let storedDeps = JSON.stringify(diagRows[0]?.deps?.filter((d: string) => d.includes('theme')) ?? []);
+
+        // Also check if the theme card exists in the index
+        let themeRows = (await context.dbAdapter.execute(
+          `SELECT url, type FROM boxel_index
+           WHERE url LIKE '%test-theme%' OR url LIKE '%a-test-theme%'
+           LIMIT 5`,
+        )) as { url: string; type: string }[];
+        let themeInfo = JSON.stringify(themeRows);
 
         let response = await context.request2
           .get('/test/card-with-theme')
@@ -708,7 +723,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           headContent.includes(
             '<link rel="icon" href="https://example.com/brand-icon.png"',
           ),
-          `head HTML includes favicon link from theme`,
+          `head HTML includes favicon link from theme. storedHeadHtml=${storedHeadHtml.substring(0, 500)} | themeDeps=${storedDeps} | themeInIndex=${themeInfo}`,
         );
         assert.ok(
           headContent.includes(
