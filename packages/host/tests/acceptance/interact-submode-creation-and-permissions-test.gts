@@ -75,7 +75,9 @@ module(
         assert
           .dom('[data-test-show-more-cards]')
           .containsText('not shown', 'Entries are paginated');
-        await click(`[data-test-select="${testRealmURL}person-entry"]`);
+        await click(
+          `[data-test-card-catalog-item="${testRealmURL}person-entry"]`,
+        );
         await click('[data-test-card-catalog-go-button]');
 
         await fillIn(`[data-test-field="firstName"] input`, 'Hassan');
@@ -122,7 +124,9 @@ module(
         assert
           .dom('[data-test-show-more-cards]')
           .containsText('not shown', 'Entries are paginated');
-        await click(`[data-test-select="${testRealmURL}person-entry"]`);
+        await click(
+          `[data-test-card-catalog-item="${testRealmURL}person-entry"]`,
+        );
         await click('[data-test-card-catalog-go-button]');
 
         await fillIn(`[data-test-field="firstName"] input`, 'Hassan');
@@ -187,7 +191,7 @@ module(
         await fillIn('[data-test-search-field]', 'Skill');
         // Select a card from catalog entries
         await click(
-          `[data-test-select="https://cardstack.com/base/cards/skill"]`,
+          `[data-test-card-catalog-item="https://cardstack.com/base/cards/skill"]`,
         );
 
         await click(`[data-test-card-catalog-go-button]`);
@@ -212,7 +216,7 @@ module(
         await click('[data-test-create-new-card-button]');
         await fillIn('[data-test-search-field]', 'Skill');
         await click(
-          `[data-test-select="https://cardstack.com/base/cards/skill"]`,
+          `[data-test-card-catalog-item="https://cardstack.com/base/cards/skill"]`,
         );
 
         let id: string | undefined;
@@ -299,7 +303,7 @@ module(
         await click('[data-test-create-new-card-button]');
         await fillIn('[data-test-search-field]', 'Skill');
         await click(
-          `[data-test-select="https://cardstack.com/base/cards/skill"]`,
+          `[data-test-card-catalog-item="https://cardstack.com/base/cards/skill"]`,
         );
 
         let id: string | undefined;
@@ -594,7 +598,7 @@ module(
         await click('[data-test-stack-card-index="0"] [data-test-edit-button]');
         await click('[data-test-add-new="friends"]');
 
-        await waitFor('[data-test-card-catalog]');
+        await waitFor('[data-test-card-catalog-modal]');
         await waitFor('[data-test-realm="Test Workspace A"]');
         await waitFor('[data-test-realm="Test Workspace B"]');
 
@@ -611,7 +615,7 @@ module(
           'keydown',
           'Escape',
         );
-        await waitFor('[data-test-card-catalog]', { count: 0 });
+        await waitFor('[data-test-card-catalog-modal]', { count: 0 });
       });
 
       test('the delete item is not present in "..." menu of stack item', async function (assert) {

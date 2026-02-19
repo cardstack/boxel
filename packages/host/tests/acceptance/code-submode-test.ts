@@ -1933,9 +1933,11 @@ module('Acceptance | code submode tests', function (_hooks) {
         '[data-test-links-to-many="countriesVisited"] [data-test-add-new]',
       );
       await waitFor(
-        `[data-test-select="${testRealmURL}Country/united-states"]`,
+        `[data-test-card-catalog-item="${testRealmURL}Country/united-states"]`,
       );
-      await click(`[data-test-select="${testRealmURL}Country/united-states"]`);
+      await click(
+        `[data-test-card-catalog-item="${testRealmURL}Country/united-states"]`,
+      );
       await click(`[data-test-card-catalog-go-button]`);
 
       await waitFor('[data-test-saved]');

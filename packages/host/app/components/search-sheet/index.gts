@@ -27,9 +27,9 @@ import { type getCard, GetCardContextName } from '@cardstack/runtime-common';
 import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 
-import SearchBar from './search-bar';
-import SearchSheetContent from './search-sheet-content';
-import { getCodeRefFromSearchKey } from './utils';
+import SearchBar from '../card-search/search-bar';
+import SearchContent from '../card-search/search-content';
+import { getCodeRefFromSearchKey } from '../card-search/utils';
 
 import type StoreService from '../../services/store';
 
@@ -124,9 +124,12 @@ export default class SearchSheet extends Component<Signature> {
     this.args.onCancel();
   }
 
-  @action private handleCardSelect(cardId: string) {
+  @action private handleCardSelect(selection: string | { realmURL: string }) {
+    if (typeof selection !== 'string') {
+      return;
+    }
     this.resetState();
-    this.args.onCardSelect(cardId);
+    this.args.onCardSelect(selection);
   }
 
   @action
@@ -266,11 +269,11 @@ export default class SearchSheet extends Component<Signature> {
           class='search-sheet__search-input-group'
           autocomplete='off'
         />
-        <SearchSheetContent
+        <SearchContent
           @searchKey={{this.searchKey}}
           @selectedRealmURLs={{this.selectedRealmURLs}}
           @isCompact={{this.isCompact}}
-          @handleCardSelect={{this.handleCardSelect}}
+          @handleSelect={{this.handleCardSelect}}
         />
         <div class='footer'>
           <div class='buttons'>
@@ -356,6 +359,7 @@ export default class SearchSheet extends Component<Signature> {
         height: var(--stack-card-footer-height);
         padding: var(--boxel-sp);
         background-color: var(--boxel-light);
+        border-top: 1px solid var(--boxel-200);
         overflow: hidden;
 
         transition:
