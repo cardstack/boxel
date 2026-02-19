@@ -767,16 +767,10 @@ export default class StoreService extends Service implements StoreInterface {
     if (this.isRenderStore && opts) {
       opts.isLive = false;
     }
-    return getSearch<T>(
-      parent,
-      getOwner(this)!,
-      getQuery,
-      getRealms,
-      {
-        ...opts,
-        onLoad: (load: Promise<unknown>) => this.store.trackLoad(load),
-      },
-    ) as unknown as SearchResource<T>;
+    return getSearch<T>(parent, getOwner(this)!, getQuery, getRealms, {
+      ...opts,
+      onLoad: (load: Promise<unknown>) => this.store.trackLoad(load),
+    }) as unknown as SearchResource<T>;
   }
 
   getSearchDataResource(
