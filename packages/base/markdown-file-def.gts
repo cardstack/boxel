@@ -1,6 +1,13 @@
 import { byteStreamToUint8Array } from '@cardstack/runtime-common';
-import { StringField, contains, field } from './card-api';
-import MarkdownFilePreview from './markdown-file-preview';
+import MarkdownIcon from '@cardstack/boxel-icons/align-box-left-middle';
+import {
+  BaseDefComponent,
+  Component,
+  StringField,
+  contains,
+  field,
+} from './card-api';
+import MarkdownTemplate from './default-templates/markdown';
 import {
   FileContentMismatchError,
   FileDef,
@@ -90,6 +97,244 @@ function extractExcerpt(markdown: string): string {
   return '';
 }
 
+class Isolated extends Component<typeof MarkdownDef> {
+  get title() {
+    return this.args.model?.title ?? this.args.model?.name ?? 'Untitled markdown';
+  }
+
+  get hasContent() {
+    return Boolean(this.args.model?.content?.trim());
+  }
+
+  <template>
+    <article class='markdown-isolated' data-test-markdown-isolated>
+      {{#if this.hasContent}}
+        <MarkdownTemplate @content={{@model.content}} />
+      {{else}}
+        <header class='markdown-isolated__title'>{{this.title}}</header>
+      {{/if}}
+    </article>
+    <style scoped>
+      .markdown-isolated {
+        padding: var(--boxel-sp-lg);
+        max-width: 100%;
+      }
+
+      .markdown-isolated__title {
+        color: var(--boxel-900);
+        font-weight: 600;
+        font-size: var(--boxel-font-size-lg);
+      }
+    </style>
+  </template>
+}
+
+class Embedded extends Component<typeof MarkdownDef> {
+  get title() {
+    return this.args.model?.title ?? this.args.model?.name ?? 'Untitled markdown';
+  }
+
+  <template>
+    <article class='markdown-embedded' data-test-markdown-embedded>
+      <header class='markdown-embedded__title'>{{this.title}}</header>
+      <div class='markdown-embedded__content'>
+        <MarkdownTemplate @content={{@model.content}} />
+      </div>
+    </article>
+    <style scoped>
+      .markdown-embedded {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-xs);
+      }
+
+      .markdown-embedded__title {
+        color: var(--boxel-900);
+        font-weight: 600;
+      }
+
+      .markdown-embedded__content {
+        max-height: 200px;
+        overflow: hidden;
+        mask-image: linear-gradient(to bottom, black 60%, transparent 100%);
+        -webkit-mask-image: linear-gradient(to bottom, black 60%, transparent 100%);
+      }
+    </style>
+  </template>
+}
+
+class Fitted extends Component<typeof MarkdownDef> {
+  get title() {
+    return this.args.model?.title ?? this.args.model?.name ?? 'Untitled markdown';
+  }
+
+  get excerpt() {
+    return this.args.model?.excerpt ?? '';
+  }
+
+  get hasExcerpt() {
+    return Boolean(this.excerpt);
+  }
+
+  <template>
+    <article class='markdown-fitted' data-test-markdown-fitted>
+      <div class='markdown-fitted__icon'>
+        <MarkdownIcon width='100%' height='100%' />
+      </div>
+      <div class='markdown-fitted__text'>
+        <header class='markdown-fitted__title'>{{this.title}}</header>
+        {{#if this.hasExcerpt}}
+          <p class='markdown-fitted__excerpt'>{{this.excerpt}}</p>
+        {{/if}}
+      </div>
+    </article>
+    <style scoped>
+      .markdown-fitted {
+        container-name: fitted-card;
+        container-type: size;
+        width: 100%;
+        height: 100%;
+        display: flex;
+        align-items: flex-start;
+        gap: var(--boxel-sp-xs);
+        padding: var(--boxel-sp-xs);
+        overflow: hidden;
+      }
+
+      .markdown-fitted__icon {
+        flex-shrink: 0;
+        width: 20px;
+        height: 20px;
+        color: var(--boxel-600);
+      }
+
+      .markdown-fitted__text {
+        min-width: 0;
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-4xs);
+      }
+
+      .markdown-fitted__title {
+        color: var(--boxel-900);
+        font-weight: 600;
+        font-size: var(--boxel-font-sm);
+        overflow: hidden;
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
+      }
+
+      .markdown-fitted__excerpt {
+        color: var(--boxel-600);
+        font-size: var(--boxel-font-xs);
+        margin: 0;
+        overflow: hidden;
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 3;
+      }
+
+      /* Portrait tall: icon above text */
+      @container fitted-card (aspect-ratio <= 1.0) and (height >= 120px) {
+        .markdown-fitted {
+          flex-direction: column;
+          align-items: center;
+          text-align: center;
+        }
+
+        .markdown-fitted__icon {
+          width: 28px;
+          height: 28px;
+        }
+
+        .markdown-fitted__title {
+          -webkit-line-clamp: 3;
+        }
+      }
+
+      /* Portrait short: hide excerpt */
+      @container fitted-card (aspect-ratio <= 1.0) and (height < 120px) {
+        .markdown-fitted__excerpt {
+          display: none;
+        }
+      }
+
+      /* Portrait very short: hide icon too */
+      @container fitted-card (aspect-ratio <= 1.0) and (height < 80px) {
+        .markdown-fitted__icon {
+          display: none;
+        }
+      }
+
+      /* Landscape: icon left of text */
+      @container fitted-card (1.0 < aspect-ratio) {
+        .markdown-fitted {
+          align-items: flex-start;
+        }
+      }
+
+      /* Landscape short: hide excerpt */
+      @container fitted-card (1.0 < aspect-ratio) and (height < 80px) {
+        .markdown-fitted__excerpt {
+          display: none;
+        }
+      }
+
+      /* Very small: title only, smaller font */
+      @container fitted-card (height <= 57px) {
+        .markdown-fitted__icon {
+          display: none;
+        }
+
+        .markdown-fitted__excerpt {
+          display: none;
+        }
+
+        .markdown-fitted__title {
+          font-size: var(--boxel-font-xs);
+          -webkit-line-clamp: 1;
+        }
+      }
+    </style>
+  </template>
+}
+
+class Atom extends Component<typeof MarkdownDef> {
+  get title() {
+    return this.args.model?.title ?? this.args.model?.name ?? 'Untitled markdown';
+  }
+
+  <template>
+    <span class='markdown-atom' data-test-markdown-atom>
+      <MarkdownIcon class='markdown-atom__icon' width='16' height='16' />
+      <span class='markdown-atom__title'>{{this.title}}</span>
+    </span>
+    <style scoped>
+      .markdown-atom {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--boxel-sp-4xs);
+        min-width: 0;
+      }
+
+      .markdown-atom__icon {
+        flex-shrink: 0;
+        color: var(--boxel-600);
+      }
+
+      .markdown-atom__title {
+        color: var(--boxel-900);
+        font-size: var(--boxel-font-sm);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+    </style>
+  </template>
+}
+
 export class MarkdownDef extends FileDef {
   static displayName = 'Markdown';
   static acceptTypes = '.md,.markdown';
@@ -98,9 +343,10 @@ export class MarkdownDef extends FileDef {
   @field excerpt = contains(StringField);
   @field content = contains(StringField);
 
-  static embedded = MarkdownFilePreview;
-  static fitted = MarkdownFilePreview;
-  static isolated = MarkdownFilePreview;
+  static isolated: BaseDefComponent = Isolated;
+  static embedded: BaseDefComponent = Embedded;
+  static fitted: BaseDefComponent = Fitted;
+  static atom: BaseDefComponent = Atom;
 
   static async extractAttributes(
     url: string,
