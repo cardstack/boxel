@@ -17,7 +17,7 @@ SMTP_4_DEV_URL="http://localhost:5001"
 ICONS_URL="http://localhost:4206"
 
 WAIT_ON_TIMEOUT=900000 SKIP_BOXEL_HOMEPAGE=true NODE_NO_WARNINGS=1 start-server-and-test \
-  'run-p start:pg start:icons start:prerender-dev start:prerender-manager-dev start:worker-development start:development' \
+  'run-p start:pg start:prerender-dev start:prerender-manager-dev start:worker-development start:development' \
   "$BASE_REALM_READY|$EXPERIMENTS_REALM_READY|$SYNAPSE_URL|$SMTP_4_DEV_URL|$ICONS_URL" \
   'run-p start:worker-test start:test-realms' \
   "$NODE_TEST_REALM_READY" \

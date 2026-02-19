@@ -62,7 +62,7 @@ WAIT_ON_TIMEOUT=900000 \
   LOG_LEVELS="$HOST_TEST_LOG_LEVELS" \
   NODE_NO_WARNINGS=1 \
   start-server-and-test \
-    'run-p -ln start:pg start:icons start:prerender-dev start:prerender-manager-dev start:matrix start:smtp start:worker-development start:development' \
+    'run-p -ln start:pg start:prerender-dev start:prerender-manager-dev start:matrix start:smtp start:worker-development start:development' \
     'http-get://localhost:4201/base/_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson|http://localhost:8008|http://localhost:5001|http://localhost:4206' \
     'run-p -ln start:worker-test start:test-realms' \
     'http-get://localhost:4202/node-test/_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson' \
