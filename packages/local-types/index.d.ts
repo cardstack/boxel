@@ -30,15 +30,15 @@ import type {
 import { Invoke, InvokeDirect } from '@glint/template/-private/integration';
 import './eslint-js';
 
-// Augment Glint's HTML element attributes with missing properties
-declare global {
-  // glimmer-scoped-css uses <style scoped> which isn't in Glint v2's type defs
-  interface HTMLStyleElementAttributes {
-    ['scoped']: string | boolean | null | undefined;
-  }
-  // Open Graph meta tags use <meta property="og:...">
-  interface HTMLMetaElementAttributes {
-    ['property']: string | null | undefined;
+import type EmberAnimatedRegistry from 'ember-animated/template-registry';
+import type EmberContextTemplateRegistry from 'ember-provide-consume-context/template-registry';
+
+declare module '@glint/environment-ember-loose/registry' {
+  export default interface Registry
+    extends
+      EmberContextTemplateRegistry,
+      EmberAnimatedRegistry /* other addon registries */ {
+    // local entries
   }
 }
 
