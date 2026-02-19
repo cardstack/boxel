@@ -772,7 +772,10 @@ export default class StoreService extends Service implements StoreInterface {
       getOwner(this)!,
       getQuery,
       getRealms,
-      opts,
+      {
+        ...opts,
+        onLoad: (load: Promise<unknown>) => this.store.trackLoad(load),
+      },
     ) as unknown as SearchResource<T>;
   }
 
