@@ -134,9 +134,11 @@ export class IndexRunnerDependencyResolver {
     }
 
     if (ordered.length !== hrefs.length) {
+      let orderedSet = new Set(ordered);
       for (let href of hrefs) {
-        if (!ordered.includes(href)) {
+        if (!orderedSet.has(href)) {
           ordered.push(href);
+          orderedSet.add(href);
         }
       }
     }
