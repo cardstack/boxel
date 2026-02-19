@@ -40,7 +40,6 @@ export interface Args<T extends CardDef | FileDef = CardDef> {
     isAutoSaved?: boolean;
     storeService?: StoreService;
     doWhileRefreshing?: (() => void) | undefined;
-    onLoad?: (load: Promise<unknown>) => void;
     seed?:
       | {
           cards: T[];
@@ -95,8 +94,7 @@ export class SearchResource<
   }
 
   modify(_positional: never[], named: Args<T>['named']) {
-    let { query, realms, isLive, doWhileRefreshing, onLoad, seed, owner } =
-      named;
+    let { query, realms, isLive, doWhileRefreshing, seed, owner } = named;
 
     setOwner(this, owner); // works around problem where lifetime parent is used as owner when they should be allowed to differ
 
@@ -118,7 +116,6 @@ export class SearchResource<
     );
     if (seed && !this.#seedApplied) {
       this.loaded = this.applySeed.perform(seed);
-      onLoad?.(this.loaded);
       this.#seedApplied = true;
       let hasQueryErrors = seed.queryErrors && seed.queryErrors.length > 0;
       if (seed.searchURL && !hasQueryErrors) {
@@ -191,7 +188,6 @@ export class SearchResource<
     this.#previousQuery = query;
     this.#previousQueryString = queryString;
     this.loaded = this.search.perform(query);
-    onLoad?.(this.loaded);
   }
   get isLoading() {
     return this.search.isRunning;
@@ -324,7 +320,6 @@ export function getSearch<T extends CardDef | FileDef = CardDef>(
   opts?: {
     isLive?: boolean;
     doWhileRefreshing?: (() => void) | undefined;
-    onLoad?: (load: Promise<unknown>) => void;
     seed?:
       | {
           cards: T[];
@@ -348,7 +343,6 @@ export function getSearch<T extends CardDef | FileDef = CardDef>(
       isLive: opts?.isLive != null ? opts.isLive : false,
       // TODO refactor this out
       doWhileRefreshing: opts?.doWhileRefreshing,
-      onLoad: opts?.onLoad,
       seed: opts?.seed,
       owner,
     },
