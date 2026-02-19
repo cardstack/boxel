@@ -73,14 +73,12 @@ export function setupOperatorModeTests(
     let textArea: typeof import('https://cardstack.com/base/text-area');
     let cardsGrid: typeof import('https://cardstack.com/base/cards-grid');
     let spec: typeof import('https://cardstack.com/base/spec');
-    let fileApi: typeof import('https://cardstack.com/base/file-api');
 
     cardApi = await loader.import(`${baseRealm.url}card-api`);
     string = await loader.import(`${baseRealm.url}string`);
     textArea = await loader.import(`${baseRealm.url}text-area`);
     cardsGrid = await loader.import(`${baseRealm.url}cards-grid`);
     spec = await loader.import(`${baseRealm.url}spec`);
-    fileApi = await loader.import(`${baseRealm.url}file-api`);
 
     let {
       field,
@@ -97,7 +95,6 @@ export function setupOperatorModeTests(
     let { default: TextAreaField } = textArea;
     let { CardsGrid } = cardsGrid;
     let { Spec } = spec;
-    let { FileDef } = fileApi;
 
     // use string source so we can get the transpiled scoped CSS
     let friendWithCSSSource = `
@@ -373,21 +370,6 @@ export function setupOperatorModeTests(
       };
     }
 
-    class FileLinkCard extends CardDef {
-      static displayName = 'File Link Card';
-      @field title = contains(StringField);
-      @field attachment = linksTo(FileDef as unknown as typeof CardDef);
-
-      static isolated = class Isolated extends Component<typeof this> {
-        <template>
-          <h2 data-test-file-link-card-title><@fields.title /></h2>
-          <div data-test-file-link-attachment>
-            <@fields.attachment />
-          </div>
-        </template>
-      };
-    }
-
     class ExplodingCard extends CardDef {
       static displayName = 'Exploding Card';
       @field name = contains(StringField);
@@ -467,7 +449,6 @@ export function setupOperatorModeTests(
           'boom-field.gts': { BoomField },
           'boom-pet.gts': { BoomPet },
           'blog-post.gts': { BlogPost },
-          'file-link-card.gts': { FileLinkCard },
           'exploding-card.gts': { ExplodingCard },
           'car.gts': { Car },
           'author.gts': { Author },
@@ -628,32 +609,6 @@ export function setupOperatorModeTests(
             firstName: 'Mark',
             lastName: 'Jackson',
           }),
-          'FileLinkCard/notes.txt': 'Hello from a file link',
-          'FileLinkCard/with-file.json': {
-            data: {
-              type: 'card',
-              attributes: {
-                title: 'Linked file example',
-              },
-              relationships: {
-                attachment: {
-                  links: {
-                    self: './notes.txt',
-                  },
-                  data: {
-                    type: 'file-meta',
-                    id: './notes.txt',
-                  },
-                },
-              },
-              meta: {
-                adoptsFrom: {
-                  module: '../file-link-card',
-                  name: 'FileLinkCard',
-                },
-              },
-            },
-          },
           'BlogPost/1.json': blogPost,
           'BlogPost/2.json': new BlogPost({ cardTitle: 'Beginnings' }),
           'ExplodingCard/1.json': explodingCard,
