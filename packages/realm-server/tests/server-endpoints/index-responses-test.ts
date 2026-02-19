@@ -599,13 +599,13 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           headContent.includes(
             '<link rel="icon" href="https://example.com/brand-icon.png"',
           ),
-          'head HTML includes favicon link from theme',
+          `head HTML includes favicon link from theme. headContent=${headContent.substring(0, 500)}`,
         );
         assert.ok(
           headContent.includes(
             '<link rel="apple-touch-icon" href="https://example.com/brand-icon.png"',
           ),
-          'head HTML includes apple-touch-icon link from theme',
+          `head HTML includes apple-touch-icon link from theme. headContent=${headContent.substring(0, 500)}`,
         );
       });
 

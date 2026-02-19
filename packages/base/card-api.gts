@@ -530,6 +530,16 @@ class ContainsMany<FieldT extends FieldDefConstructor> implements Field<
     }
     let results = getter(instance, this);
     propagateRealmContext(results, instance);
+    // Propagate the store from the parent instance to child FieldDef values
+    // so that nested linksTo fields can properly track their loads
+    let parentStore = stores.get(instance);
+    if (parentStore && Array.isArray(results)) {
+      for (let item of results) {
+        if (isCardOrField(item) && !stores.has(item)) {
+          stores.set(item, parentStore);
+        }
+      }
+    }
     return results;
   }
 
@@ -836,6 +846,14 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
     }
     let value = getter(instance, this);
     propagateRealmContext(value, instance);
+    // Propagate the store from the parent instance to child FieldDef values
+    // so that nested linksTo fields can properly track their loads
+    if (isCardOrField(value)) {
+      let parentStore = stores.get(instance);
+      if (parentStore && !stores.has(value)) {
+        stores.set(value, parentStore);
+      }
+    }
     return value;
   }
 
