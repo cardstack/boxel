@@ -441,10 +441,7 @@ export default class RenderRoute extends Route<Model> {
     this.#touchNestedLinksToFields(cardApi, instance);
   }
 
-  #touchNestedLinksToFields(
-    cardApi: typeof CardAPI,
-    instance: CardDef,
-  ): void {
+  #touchNestedLinksToFields(cardApi: typeof CardAPI, instance: CardDef): void {
     let fields = cardApi.getFields(instance, { includeComputeds: true });
     for (let [fieldName, field] of Object.entries(fields)) {
       if (field?.fieldType === 'contains') {
