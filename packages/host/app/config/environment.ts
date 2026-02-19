@@ -25,9 +25,41 @@ assert(
 );
 
 export default config as {
+  environment: string;
   modulePrefix: string;
-  podModulePrefix?: string;
-  locationType: string;
+  podModulePrefix: string;
+  locationType: 'history' | 'hash' | 'none' | 'auto';
   rootURL: string;
   APP: Record<string, unknown>;
+  matrixURL: string;
+  matrixServerName: string;
+
+  realmServerURL: string;
+  resolvedBaseRealmURL: string;
+  resolvedCatalogRealmURL: string;
+  resolvedSkillsRealmURL: string;
+  hostsOwnAssets: boolean;
+  realmsServed?: string[];
+  logLevels: string;
+  iconsURL: string;
+  autoSaveDelayMs: number;
+  monacoDebounceMs: number;
+  monacoCursorDebounceMs: number;
+  serverEchoDebounceMs: number;
+  loginMessageTimeoutMs: number;
+  minSaveTaskDurationMs: number;
+  cardRenderTimeout: number;
+  sqlSchema: string;
+  assetsURL: string;
+  stripePaymentLink: string;
+  featureFlags?: {
+    SHOW_ASK_AI?: boolean;
+    AI_PATCHING_CORRECTNESS_CHECKS?: boolean;
+  };
+  publishedRealmDomainOverrides: string;
+  publishedRealmBoxelSpaceDomain: string;
+  publishedRealmBoxelSiteDomain: string;
+  cardSizeLimitBytes: number;
+  fileSizeLimitBytes: number;
+  defaultSystemCardId: string;
 } & Record<string, unknown>;

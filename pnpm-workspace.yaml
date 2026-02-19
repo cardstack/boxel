@@ -103,7 +103,6 @@ catalog:
   babel-plugin-dynamic-import-node: ^2.3.3
   babel-plugin-ember-template-compilation: ^2.4.1
   broccoli-asset-rev: ^3.0.0
-  broccoli-funnel: ^3.0.8
   broccoli-merge-trees: ^4.2.0
   broccoli-plugin: ^4.0.7
   broccoli-source: ^3.0.1
@@ -182,9 +181,7 @@ catalog:
   matrix-js-sdk: ^38.3.0
   mime-types: ^2.1.35
   moment: ^2.29.4
-  moment-locales-webpack-plugin: ^1.2.0
   monaco-editor: ^0.52.2
-  monaco-editor-webpack-plugin: ^7.1.1
   ms: ^2.1.3
   node-pg-migrate: ^6.2.2
   normalize.css: 8.0.1

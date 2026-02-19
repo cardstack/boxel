@@ -279,9 +279,6 @@ catalogs:
     broccoli-asset-rev:
       specifier: ^3.0.0
       version: 3.0.0
-    broccoli-funnel:
-      specifier: ^3.0.8
-      version: 3.0.8
     broccoli-merge-trees:
       specifier: ^4.2.0
       version: 4.2.0
@@ -501,15 +498,9 @@ catalogs:
     moment:
       specifier: ^2.29.4
       version: 2.30.1
-    moment-locales-webpack-plugin:
-      specifier: ^1.2.0
-      version: 1.2.0
     monaco-editor:
       specifier: ^0.52.2
       version: 0.52.2
-    monaco-editor-webpack-plugin:
-      specifier: ^7.1.1
-      version: 7.1.1
     ms:
       specifier: ^2.1.3
       version: 2.1.3
@@ -2292,9 +2283,6 @@ importers:
       babel-plugin-ember-template-compilation:
         specifier: ^2.3.0
         version: 2.4.1
-      broccoli-funnel:
-        specifier: 'catalog:'
-        version: 3.0.8
       broccoli-merge-trees:
         specifier: 'catalog:'
         version: 4.2.0
@@ -2499,15 +2487,9 @@ importers:
       moment:
         specifier: 'catalog:'
         version: 2.30.1
-      moment-locales-webpack-plugin:
-        specifier: 'catalog:'
-        version: 1.2.0(moment@2.30.1)(webpack@5.104.1)
       monaco-editor:
         specifier: 'catalog:'
         version: 0.52.2(patch_hash=a09898c89392828a4df910a8b4b952fd774a69b779906e9fa5742cb9c05c2ecf)
-      monaco-editor-webpack-plugin:
-        specifier: 'catalog:'
-        version: 7.1.1(monaco-editor@0.52.2(patch_hash=a09898c89392828a4df910a8b4b952fd774a69b779906e9fa5742cb9c05c2ecf))(webpack@5.104.1)
       ms:
         specifier: 'catalog:'
         version: 2.1.3
@@ -11304,9 +11286,6 @@ packages:
   lodash.defaultsdeep@4.6.1:
     resolution: {integrity: sha512-3j8wdDzYuWO3lM3Reg03MuQR957t287Rpcxp1njpEa8oDrikb+FwGdW3n+FELh/A6qib6yPit0j/pv9G/yeAqA==}
 
-  lodash.difference@4.5.0:
-    resolution: {integrity: sha512-dS2j+W26TQ7taQBGN8Lbbq04ssV3emRw4NY58WErlTO29pIqS0HmoT5aJ9+TUQ1N3G+JOZSji4eugsWwGp9yPA==}
-
   lodash.flatten@3.0.2:
     resolution: {integrity: sha512-jCXLoNcqQRbnT/KWZq2fIREHWeczrzpTR0vsycm96l/pu5hGeAntVBG0t7GuM/2wFqmnZs3d1eGptnAH2E8+xQ==}
 
@@ -11743,20 +11722,8 @@ packages:
   module-details-from-path@1.0.4:
     resolution: {integrity: sha512-EGWKgxALGMgzvxYF1UyGTy0HXX/2vHLkw6+NvDKW2jypWbHpjQuj4UMcqQWXHERJhVGKikolT06G3bcKe4fi7w==}
 
-  moment-locales-webpack-plugin@1.2.0:
-    resolution: {integrity: sha512-QAi5v0OlPUP7GXviKMtxnpBAo8WmTHrUNN7iciAhNOEAd9evCOvuN0g1N7ThIg3q11GLCkjY1zQ2saRcf/43nQ==}
-    peerDependencies:
-      moment: ^2.8.0
-      webpack: ^1 || ^2 || ^3 || ^4 || ^5
-
   moment@2.30.1:
     resolution: {integrity: sha512-uEmtNhbDOrWPFS+hdjFCBfy9f2YoyzRpwcl+DqpC6taX21FzsTLQVbMV/W7PzNSX6x/bhC1zA3c2UQ5NzH6how==}
-
-  monaco-editor-webpack-plugin@7.1.1:
-    resolution: {integrity: sha512-WxdbFHS3Wtz4V9hzhe/Xog5hQRSMxmDLkEEYZwqMDHgJlkZo00HVFZR0j5d0nKypjTUkkygH3dDSXERLG4757A==}
-    peerDependencies:
-      monaco-editor: '>= 0.31.0'
-      webpack: ^4.5.0 || 5.x
 
   monaco-editor@0.52.2:
     resolution: {integrity: sha512-GEQWEZmfkOGLdd3XK8ryrfWz3AIP8YymVXiPHEdewrUq7mh0qrKrfHLNCXcbB6sTnMLnOZ3ztSiKcciFUkIJwQ==}
@@ -25452,8 +25419,6 @@ snapshots:
 
   lodash.defaultsdeep@4.6.1: {}
 
-  lodash.difference@4.5.0: {}
-
   lodash.flatten@3.0.2:
     dependencies:
       lodash._baseflatten: 3.1.4
@@ -25874,19 +25839,7 @@ snapshots:
 
   module-details-from-path@1.0.4: {}
 
-  moment-locales-webpack-plugin@1.2.0(moment@2.30.1)(webpack@5.104.1):
-    dependencies:
-      lodash.difference: 4.5.0
-      moment: 2.30.1
-      webpack: 5.104.1
-
   moment@2.30.1: {}
-
-  monaco-editor-webpack-plugin@7.1.1(monaco-editor@0.52.2(patch_hash=a09898c89392828a4df910a8b4b952fd774a69b779906e9fa5742cb9c05c2ecf))(webpack@5.104.1):
-    dependencies:
-      loader-utils: 2.0.4
-      monaco-editor: 0.52.2(patch_hash=a09898c89392828a4df910a8b4b952fd774a69b779906e9fa5742cb9c05c2ecf)
-      webpack: 5.104.1
 
   monaco-editor@0.52.2(patch_hash=a09898c89392828a4df910a8b4b952fd774a69b779906e9fa5742cb9c05c2ecf): {}
 
