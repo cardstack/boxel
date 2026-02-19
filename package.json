@@ -91,7 +91,7 @@
     "pnpm": "^10"
   },
   "volta": {
-    "node": "22.20.0",
+    "node": "24.13.1",
     "pnpm": "10.30.0"
   },
   "dependencies": {
