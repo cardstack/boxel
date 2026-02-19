@@ -14,6 +14,7 @@ import {
   SYSTEM_CARD_FIXTURE_CONTENTS,
   getMonacoContent,
   visitOperatorMode as _visitOperatorMode,
+  withCachedRealmSetup,
   type TestContextWithSave,
   setupAuthEndpoints,
   setupUserSubscription,
@@ -195,6 +196,21 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
     });
   }
 
+  async function timeStep<T>(
+    label: string,
+    step: () => Promise<T>,
+  ): Promise<T> {
+    let start = performance.now();
+    try {
+      return await step();
+    } finally {
+      let durationMs = performance.now() - start;
+      console.info(
+        `[create-file-test] ${label} took ${durationMs.toFixed(1)}ms`,
+      );
+    }
+  }
+
   let adapter: TestRealmAdapter;
 
   setupApplicationTest(hooks);
@@ -209,15 +225,21 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
   let { setRealmPermissions, createAndJoinRoom } = mockMatrixUtils;
 
   hooks.beforeEach(async function () {
-    await setupAcceptanceTestRealm({
-      contents: { ...SYSTEM_CARD_FIXTURE_CONTENTS, ...filesB },
-      realmURL: testRealmURL2,
-      mockMatrixUtils,
-    });
-    ({ adapter } = await setupAcceptanceTestRealm({
-      contents: { ...SYSTEM_CARD_FIXTURE_CONTENTS, ...files },
-      mockMatrixUtils,
-    }));
+    let setupStart = performance.now();
+
+    ({ adapter } = await timeStep('withCachedRealmSetup', () =>
+      withCachedRealmSetup('create-file-test-realms', async () => {
+        await setupAcceptanceTestRealm({
+          contents: { ...SYSTEM_CARD_FIXTURE_CONTENTS, ...filesB },
+          realmURL: testRealmURL2,
+          mockMatrixUtils,
+        });
+        return setupAcceptanceTestRealm({
+          contents: { ...SYSTEM_CARD_FIXTURE_CONTENTS, ...files },
+          mockMatrixUtils,
+        });
+      }),
+    ));
 
     createAndJoinRoom({
       sender: '@testuser:localhost',

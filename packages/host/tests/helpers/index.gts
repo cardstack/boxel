@@ -58,6 +58,7 @@ import type {
 } from 'https://cardstack.com/base/card-api';
 
 import { TestRealmAdapter } from './adapter';
+import { getCachedSnapshot, setCachedSnapshot } from './db-snapshot-cache';
 import { testRealmServerMatrixUsername } from './mock-matrix';
 import percySnapshot from './percy-snapshot';
 import { setupAuthEndpoints } from './realm-server-mock';
@@ -155,6 +156,22 @@ export async function getDbAdapter() {
     (globalThis as any).__sqliteAdapter = dbAdapter;
   }
   return dbAdapter;
+}
+
+export async function withCachedRealmSetup<T>(
+  cacheKey: string,
+  setup: () => Promise<T>,
+): Promise<T> {
+  let dbAdapter = await getDbAdapter();
+  let cached = getCachedSnapshot(cacheKey);
+  if (cached) {
+    await dbAdapter.importSnapshot(cached);
+    return await setup();
+  }
+  let result = await setup();
+  let exported = await dbAdapter.exportSnapshot();
+  setCachedSnapshot(cacheKey, exported);
+  return result;
 }
 
 export async function withSlowSave(
@@ -770,7 +787,6 @@ async function setupTestRealm({
       'definition-lookup:main',
     ) as DefinitionLookup;
   }
-
   await insertPermissions(dbAdapter, new URL(realmURL), permissions);
   let worker = new Worker({
     indexWriter: new IndexWriter(dbAdapter),
