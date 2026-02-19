@@ -521,12 +521,15 @@ function assertURLEndsWithJSON(url: URL): URL {
 }
 
 function sortInvalidations(urls: URL[]): URL[] {
+  // sort invalidations so that .json files are visited after their non-.json counterparts,
+  // which allows us to have the file entry in place before we visit the card JSON and need to render it.
+  // among URLs that both do or both don't end with .json, sort lexically by href for consistency.
   return urls.sort((a, b) => {
-    let aExec = hasExecutableExtension(a.href);
-    let bExec = hasExecutableExtension(b.href);
-    if (aExec === bExec) {
+    let aJson = a.href.endsWith('.json');
+    let bJson = b.href.endsWith('.json');
+    if (aJson === bJson) {
       return a.href.localeCompare(b.href);
     }
-    return aExec ? -1 : 1;
+    return aJson ? 1 : -1;
   });
 }
