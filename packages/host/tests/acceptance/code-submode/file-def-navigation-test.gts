@@ -128,4 +128,19 @@ Some markdown content.`,
 
     assert.dom('[data-test-card-url-bar-input]').hasValue(expectedMarkdownUrl);
   });
+
+  test('file def instance is read-only in code mode', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}FileLinkCard/notes.md`,
+    });
+
+    await waitFor('[data-test-editor]');
+    assert
+      .dom('[data-test-format-chooser="edit"]')
+      .doesNotExist('edit format option is not shown for file def instance');
+    assert
+      .dom('[data-test-realm-indicator-not-writable]')
+      .exists('read-only indicator is shown for file def instance');
+  });
 });
