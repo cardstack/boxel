@@ -357,18 +357,6 @@ module(`server-endpoints/${basename(__filename)}`, function () {
             },
           });
 
-          writeJSONSync(join(context.testRealmDir, 'query-grid-1.json'), {
-            data: {
-              type: 'card',
-              attributes: {},
-              meta: {
-                adoptsFrom: {
-                  module: './query-grid.gts',
-                  name: 'QueryGrid',
-                },
-              },
-            },
-          });
         },
       });
 
@@ -410,6 +398,58 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       });
 
       test('serves isolated HTML with linksToMany query field search results', async function (assert) {
+        // Write query-grid-1 via the realm API AFTER the server starts.
+        // During from-scratch indexing, boxel_index (main table) is empty,
+        // so search returns no results for query-backed fields. By writing
+        // the card instance after initial indexing completes, the incremental
+        // re-index can find the sample items in boxel_index.
+        let writeResponse = await context.request2
+          .post('/test/query-grid-1.json')
+          .set('Accept', 'application/vnd.card+source')
+          .send(
+            JSON.stringify({
+              data: {
+                type: 'card',
+                attributes: {},
+                meta: {
+                  adoptsFrom: {
+                    module: './query-grid.gts',
+                    name: 'QueryGrid',
+                  },
+                },
+              },
+            }),
+          );
+
+        assert.strictEqual(
+          writeResponse.status,
+          204,
+          'query-grid-1 file write was accepted',
+        );
+
+        // Wait for the incremental re-index to produce isolated_html
+        await waitUntil(
+          async () => {
+            let rows = (await context.dbAdapter.execute(
+              `SELECT isolated_html FROM boxel_index
+               WHERE url = '${testRealm2URL.href}query-grid-1.json'
+                 AND type = 'instance'`,
+            )) as { isolated_html: string | null }[];
+
+            return (
+              rows.length > 0 &&
+              rows[0].isolated_html != null &&
+              rows[0].isolated_html.includes('data-test-query-grid')
+            );
+          },
+          {
+            timeout: 30000,
+            interval: 500,
+            timeoutMessage:
+              'Timed out waiting for query-grid-1 isolated HTML to be indexed',
+          },
+        );
+
         let response = await context.request2
           .get('/test/query-grid-1')
           .set('Accept', 'text/html');
