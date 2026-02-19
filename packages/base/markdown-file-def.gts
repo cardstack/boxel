@@ -16,7 +16,7 @@ import {
 } from './file-api';
 
 const MARKDOWN_EXTENSIONS = new Set(['.md', '.markdown']);
-const EXCERPT_MAX_LENGTH = 240;
+const EXCERPT_MAX_LENGTH = 500;
 
 function getExtension(url: string): string {
   try {
@@ -99,7 +99,9 @@ function extractExcerpt(markdown: string): string {
 
 class Isolated extends Component<typeof MarkdownDef> {
   get title() {
-    return this.args.model?.title ?? this.args.model?.name ?? 'Untitled markdown';
+    return (
+      this.args.model?.title ?? this.args.model?.name ?? 'Untitled markdown'
+    );
   }
 
   get hasContent() {
@@ -125,18 +127,45 @@ class Isolated extends Component<typeof MarkdownDef> {
         font-weight: 600;
         font-size: var(--boxel-font-size-lg);
       }
+
+      .markdown-isolated :deep(h1:first-child),
+      .markdown-isolated :deep(h2:first-child),
+      .markdown-isolated :deep(h3:first-child),
+      .markdown-isolated :deep(h4:first-child),
+      .markdown-isolated :deep(h5:first-child),
+      .markdown-isolated :deep(h6:first-child) {
+        margin-top: 0;
+      }
     </style>
   </template>
 }
 
 class Embedded extends Component<typeof MarkdownDef> {
   get title() {
-    return this.args.model?.title ?? this.args.model?.name ?? 'Untitled markdown';
+    return (
+      this.args.model?.title ?? this.args.model?.name ?? 'Untitled markdown'
+    );
+  }
+
+  get contentStartsWithTitle() {
+    let content = this.args.model?.content?.trim();
+    if (!content) {
+      return false;
+    }
+    let firstLine = content.split('\n')[0].trim();
+    let match = firstLine.match(/^\s*#{1,6}\s+(.+?)\s*#*\s*$/);
+    if (!match?.[1]) {
+      return false;
+    }
+    let headingText = stripMarkdown(match[1]);
+    return headingText === this.title;
   }
 
   <template>
     <article class='markdown-embedded' data-test-markdown-embedded>
-      <header class='markdown-embedded__title'>{{this.title}}</header>
+      {{#unless this.contentStartsWithTitle}}
+        <header class='markdown-embedded__title'>{{this.title}}</header>
+      {{/unless}}
       <div class='markdown-embedded__content'>
         <MarkdownTemplate @content={{@model.content}} />
       </div>
@@ -146,6 +175,7 @@ class Embedded extends Component<typeof MarkdownDef> {
         display: flex;
         flex-direction: column;
         gap: var(--boxel-sp-xs);
+        padding: var(--boxel-sp);
       }
 
       .markdown-embedded__title {
@@ -157,7 +187,20 @@ class Embedded extends Component<typeof MarkdownDef> {
         max-height: 200px;
         overflow: hidden;
         mask-image: linear-gradient(to bottom, black 60%, transparent 100%);
-        -webkit-mask-image: linear-gradient(to bottom, black 60%, transparent 100%);
+        -webkit-mask-image: linear-gradient(
+          to bottom,
+          black 60%,
+          transparent 100%
+        );
+      }
+
+      .markdown-embedded__content :deep(h1:first-child),
+      .markdown-embedded__content :deep(h2:first-child),
+      .markdown-embedded__content :deep(h3:first-child),
+      .markdown-embedded__content :deep(h4:first-child),
+      .markdown-embedded__content :deep(h5:first-child),
+      .markdown-embedded__content :deep(h6:first-child) {
+        margin-top: 0;
       }
     </style>
   </template>
@@ -165,7 +208,9 @@ class Embedded extends Component<typeof MarkdownDef> {
 
 class Fitted extends Component<typeof MarkdownDef> {
   get title() {
-    return this.args.model?.title ?? this.args.model?.name ?? 'Untitled markdown';
+    return (
+      this.args.model?.title ?? this.args.model?.name ?? 'Untitled markdown'
+    );
   }
 
   get excerpt() {
@@ -303,7 +348,9 @@ class Fitted extends Component<typeof MarkdownDef> {
 
 class Atom extends Component<typeof MarkdownDef> {
   get title() {
-    return this.args.model?.title ?? this.args.model?.name ?? 'Untitled markdown';
+    return (
+      this.args.model?.title ?? this.args.model?.name ?? 'Untitled markdown'
+    );
   }
 
   <template>
@@ -335,6 +382,34 @@ class Atom extends Component<typeof MarkdownDef> {
   </template>
 }
 
+class Head extends Component<typeof MarkdownDef> {
+  get title() {
+    return this.args.model?.title ?? this.args.model?.name ?? 'Untitled markdown';
+  }
+
+  get description() {
+    return this.args.model?.excerpt;
+  }
+
+  <template>
+    {{! template-lint-disable no-forbidden-elements }}
+    <title data-test-card-head-title>{{this.title}}</title>
+
+    <meta property='og:title' content={{this.title}} />
+    <meta name='twitter:title' content={{this.title}} />
+    <meta property='og:url' content={{@model.id}} />
+
+    {{#if this.description}}
+      <meta name='description' content={{this.description}} />
+      <meta property='og:description' content={{this.description}} />
+      <meta name='twitter:description' content={{this.description}} />
+    {{/if}}
+
+    <meta name='twitter:card' content='summary' />
+    <meta property='og:type' content='article' />
+  </template>
+}
+
 export class MarkdownDef extends FileDef {
   static displayName = 'Markdown';
   static acceptTypes = '.md,.markdown';
@@ -347,6 +422,7 @@ export class MarkdownDef extends FileDef {
   static embedded: BaseDefComponent = Embedded;
   static fitted: BaseDefComponent = Fitted;
   static atom: BaseDefComponent = Atom;
+  static head: BaseDefComponent = Head;
 
   static async extractAttributes(
     url: string,
