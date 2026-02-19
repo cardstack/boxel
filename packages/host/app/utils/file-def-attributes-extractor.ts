@@ -1,3 +1,5 @@
+import { isEqual } from 'lodash';
+
 import {
   baseRef,
   CardError,
@@ -10,8 +12,6 @@ import {
   type RenderError,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
-
-import { isEqual } from 'lodash';
 
 import type { BaseDef } from 'https://cardstack.com/base/card-api';
 

@@ -72,6 +72,7 @@ import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event'
 
 import CardStore, { getDeps, type ReferenceCount } from '../lib/gc-card-store';
 
+import { errorJsonApiToErrorEntry } from '../lib/window-error-handler';
 import { getSearch } from '../resources/search';
 import {
   getSearchData,
@@ -83,8 +84,6 @@ import {
   enableRenderTimerStub,
   withTimersBlocked,
 } from '../utils/render-timer-stub';
-
-import { errorJsonApiToErrorEntry } from '../lib/window-error-handler';
 
 import type { CardSaveSubscriber } from './card-service';
 import type CardService from './card-service';
