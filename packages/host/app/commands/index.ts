@@ -5,6 +5,9 @@ import * as UseAiAssistantCommandModule from './ai-assistant';
 import * as ApplyMarkdownEditCommandModule from './apply-markdown-edit';
 import * as ApplySearchReplaceBlockCommandModule from './apply-search-replace-block';
 import * as AskAiCommandModule from './ask-ai';
+import * as CreateListingPRRequestCommandModule from './bot-requests/create-listing-pr-request';
+import * as CreateShowCardRequestCommandModule from './bot-requests/create-show-card-request';
+import * as SendBotTriggerEventCommandModule from './bot-requests/send-bot-trigger-event';
 import * as CheckCorrectnessCommandModule from './check-correctness';
 import * as CopyAndEditCommandModule from './copy-and-edit';
 import * as CopyCardToRealmModule from './copy-card';
@@ -12,7 +15,6 @@ import * as CopyCardToStackCommandModule from './copy-card-to-stack';
 import * as CopySourceCommandModule from './copy-source';
 import * as CreateAIAssistantRoomCommandModule from './create-ai-assistant-room';
 import * as CreateListingPRCommandModule from './create-listing-pr';
-import * as CreateListingPRRequestCommandModule from './create-listing-pr-request';
 import * as CreateSpecCommandModule from './create-specs';
 import * as GenerateExampleCardsCommandModule from './generate-example-cards';
 import * as GenerateReadmeSpecCommandModule from './generate-readme-spec';
@@ -50,7 +52,6 @@ import * as SearchAndChooseCommandModule from './search-and-choose';
 import * as SearchCardsCommandModule from './search-cards';
 import * as SearchGoogleImagesCommandModule from './search-google-images';
 import * as SendAiAssistantMessageModule from './send-ai-assistant-message';
-import * as SendBotTriggerEventCommandModule from './send-bot-trigger-event';
 import * as SendRequestViaProxyCommandModule from './send-request-via-proxy';
 import * as SetActiveLlmModule from './set-active-llm';
 import * as SetUserSystemCardCommandModule from './set-user-system-card';
@@ -107,6 +108,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/create-specs',
     CreateSpecCommandModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/create-show-card-request',
+    CreateShowCardRequestCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/check-correctness',
@@ -357,6 +362,7 @@ export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
   ListingRemixCommandModule.default,
   CreateListingPRCommandModule.default,
   CreateListingPRRequestCommandModule.default,
+  CreateShowCardRequestCommandModule.default,
   ListingUpdateSpecsCommandModule.default,
   ListingUseCommandModule.default,
   OneShotLlmRequestCommandModule.default,
