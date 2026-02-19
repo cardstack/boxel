@@ -1,5 +1,4 @@
 import 'ember-source/types';
-import 'ember-source/types/preview';
 import * as ContentTag from 'content-tag';
 
 declare global {
@@ -28,7 +27,8 @@ import type EmberContextTemplateRegistry from 'ember-provide-consume-context/tem
 
 declare module '@glint/environment-ember-loose/registry' {
   export default interface Registry
-    extends EmberContextTemplateRegistry,
+    extends
+      EmberContextTemplateRegistry,
       EmberAnimatedRegistry /* other addon registries */ {
     // local entries
   }
