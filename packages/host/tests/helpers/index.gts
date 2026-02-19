@@ -211,13 +211,15 @@ export async function waitForSyntaxHighlighting(
   );
 }
 export async function showSearchResult(realmName: string, id: string) {
-  await waitFor(`[data-test-realm="${realmName}"] [data-test-select]`);
+  await waitFor(
+    `[data-test-realm="${realmName}"] [data-test-card-catalog-item]`,
+  );
   while (
     document.querySelector(
       `[data-test-realm="${realmName}"] [data-test-show-more-cards]`,
     ) &&
     !document.querySelector(
-      `[data-test-realm="${realmName}"] [data-test-select="${id}"]`,
+      `[data-test-realm="${realmName}"] [data-test-card-catalog-item="${id}"]`,
     )
   ) {
     await click(`[data-test-realm="${realmName}"] [data-test-show-more-cards]`);
