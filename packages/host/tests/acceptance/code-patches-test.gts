@@ -1686,7 +1686,7 @@ ${REPLACE_MARKER}
 
     // Assert that the spinner disappears after automatic execution completes
     assert
-      .dom('[data-test-loading-indicator]')
+      .dom('[data-test-ai-assistant-action-bar] [data-test-loading-indicator]')
       .doesNotExist(
         'Loading indicator disappears after automatic execution completes',
       );
