@@ -771,7 +771,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
     await click('[data-test-toggle-thumbnail-editor]');
     await click('[data-test-add-new="theme"]');
 
-    assert.dom('[data-test-card-catalog]').exists();
+    assert.dom('[data-test-card-catalog-modal]').exists();
     await click(`[data-test-card-catalog-item="${themeId}"]`);
     await click('[data-test-card-catalog-go-button]');
 
@@ -789,7 +789,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
 
     await click(`[data-test-field="cardInfo-theme"] [data-test-remove-card]`);
 
-    assert.dom('[data-test-card-catalog]').doesNotExist();
+    assert.dom('[data-test-card-catalog-modal]').doesNotExist();
     assert
       .dom(`[data-test-field="cardInfo-theme"] [data-test-card="${themeId}"]`)
       .doesNotExist();
