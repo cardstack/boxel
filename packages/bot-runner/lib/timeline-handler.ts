@@ -1,6 +1,21 @@
-import { isBotTriggerEvent, logger, param, query } from '@cardstack/runtime-common';
+import {
+  isBotTriggerEvent,
+  isBotCommandFilter,
+  assertIsResolvedCodeRef,
+  logger,
+  param,
+  query,
+  userInitiatedPriority,
+  ensureTrailingSlash,
+} from '@cardstack/runtime-common';
+import { enqueueRunCommandJob } from '@cardstack/runtime-common/jobs/run-command';
 import * as Sentry from '@sentry/node';
-import type { DBAdapter, PgPrimitive } from '@cardstack/runtime-common';
+import type {
+  DBAdapter,
+  PgPrimitive,
+  QueuePublisher,
+} from '@cardstack/runtime-common';
+import type { ResolvedCodeRef } from '@cardstack/runtime-common';
 import type { MatrixEvent, Room } from 'matrix-js-sdk';
 
 const log = logger('bot-runner');
@@ -13,11 +28,13 @@ export interface BotRegistration {
 export interface TimelineHandlerOptions {
   authUserId: string;
   dbAdapter: DBAdapter;
+  queuePublisher: QueuePublisher;
 }
 
 export function onTimelineEvent({
   authUserId,
   dbAdapter,
+  queuePublisher,
 }: TimelineHandlerOptions) {
   return async function handleTimelineEvent(
     event: MatrixEvent,
@@ -34,11 +51,14 @@ export function onTimelineEvent({
       }
       let eventContent = rawEvent.content;
       log.debug('event content', eventContent);
-      let senderUsername = getRoomCreator(room);
+      let senderUsername =
+        event.getSender?.() ??
+        (typeof rawEvent.sender === 'string' ? rawEvent.sender : undefined) ??
+        getRoomCreator(room);
       if (!senderUsername) {
         return;
       }
-      let submissionBotUsername = authUserId;
+      let submissionBotUserId = authUserId;
 
       let registrations = await getRegistrationsForUser(
         dbAdapter,
@@ -46,7 +66,7 @@ export function onTimelineEvent({
       );
       let submissionBotRegistrations = await getRegistrationsForUser(
         dbAdapter,
-        submissionBotUsername,
+        submissionBotUserId,
       );
       if (!registrations.length && !submissionBotRegistrations.length) {
         return;
@@ -67,6 +87,17 @@ export function onTimelineEvent({
           `handling event for bot runner registration ${registration.id} in room ${room.roomId}`,
           eventContent,
         );
+        let allowedCommands = await getCommandsForRegistration(
+          dbAdapter,
+          registration.id,
+        );
+        await maybeEnqueueCommand({
+          dbAdapter,
+          queuePublisher,
+          runAs: senderUsername,
+          eventContent,
+          allowedCommands,
+        });
       }
       for (let registration of registrations) {
         let createdAt = Date.parse(registration.created_at);
@@ -82,6 +113,17 @@ export function onTimelineEvent({
           `handling event for registration ${registration.id} in room ${room.roomId}`,
           eventContent,
         );
+        let allowedCommands = await getCommandsForRegistration(
+          dbAdapter,
+          registration.id,
+        );
+        await maybeEnqueueCommand({
+          dbAdapter,
+          queuePublisher,
+          runAs: senderUsername,
+          eventContent,
+          allowedCommands,
+        });
       }
     } catch (error) {
       log.error('error handling timeline event', error);
@@ -90,8 +132,141 @@ export function onTimelineEvent({
   };
 }
 
+async function maybeEnqueueCommand({
+  dbAdapter,
+  queuePublisher,
+  runAs,
+  eventContent,
+  allowedCommands,
+}: {
+  dbAdapter: DBAdapter;
+  queuePublisher: QueuePublisher;
+  runAs: string;
+  eventContent: { type?: unknown; input?: unknown; realm?: unknown };
+  allowedCommands: { type: string; command: string }[];
+}) {
+  if (
+    !allowedCommands.length ||
+    typeof eventContent.type !== 'string' ||
+    !allowedCommands.some((entry) => entry.type === eventContent.type)
+  ) {
+    return;
+  }
+
+  if (!eventContent?.input || typeof eventContent.input !== 'object') {
+    return;
+  }
+
+  let input = eventContent.input as Record<string, unknown>;
+  let realmURL =
+    typeof eventContent.realm === 'string' ? eventContent.realm : undefined;
+  let commandRegistration = allowedCommands.find(
+    (entry) => entry.type === eventContent.type,
+  );
+  let commandURL = commandRegistration?.command;
+  let command = commandURL
+    ? commandUrlToCodeRef(commandURL, realmURL)
+    : undefined;
+  let commandInput: Record<string, any> | null = input;
+
+  if (!realmURL || !commandURL || !command) {
+    log.warn(
+      'bot trigger missing required input for command (need realmURL and command)',
+      { realmURL, commandURL, command },
+    );
+    return;
+  }
+
+  assertIsResolvedCodeRef(command);
+
+  await enqueueRunCommandJob(
+    {
+      realmURL,
+      realmUsername: runAs,
+      runAs,
+      command,
+      commandInput,
+    },
+    queuePublisher,
+    dbAdapter,
+    userInitiatedPriority,
+  );
+}
+
 function getRoomCreator(room: Room | undefined): string | undefined {
   return room?.getCreator?.() ?? undefined;
+}
+
+async function getCommandsForRegistration(
+  dbAdapter: DBAdapter,
+  registrationId: string,
+): Promise<{ type: string; command: string }[]> {
+  let rows = await query(dbAdapter, [
+    `SELECT command_filter, command FROM bot_commands WHERE bot_id = `,
+    param(registrationId),
+  ]);
+
+  let commands: { type: string; command: string }[] = [];
+  for (let row of rows) {
+    let filter = row.command_filter;
+    if (!isBotCommandFilter(filter)) {
+      continue;
+    }
+    if (typeof row.command !== 'string' || !row.command.trim()) {
+      continue;
+    }
+    commands.push({ type: filter.content_type, command: row.command });
+  }
+  return commands;
+}
+
+function commandUrlToCodeRef(
+  commandUrl: string,
+  realmURL: string | undefined,
+): ResolvedCodeRef | undefined {
+  if (!commandUrl) {
+    return undefined;
+  }
+
+  try {
+    let url = new URL(commandUrl);
+    let path = url.pathname;
+
+    // TODO: boxel-host commands are not exposed internally as HTTP URLs; they
+    // are only available via module specifiers, so we map those URLs to code refs.
+    let boxelHostPrefix = '/boxel-host/commands/';
+    if (path.includes(boxelHostPrefix)) {
+      let rest = path.split(boxelHostPrefix)[1] ?? '';
+      let [commandName, exportName = 'default'] = rest.split('/');
+      if (!commandName) {
+        return undefined;
+      }
+      return {
+        module: `@cardstack/boxel-host/commands/${commandName}`,
+        name: exportName || 'default',
+      };
+    }
+
+    let commandsPrefix = '/commands/';
+    if (path.includes(commandsPrefix)) {
+      if (!realmURL) {
+        return undefined;
+      }
+      let rest = path.split(commandsPrefix)[1] ?? '';
+      let [commandName, exportName = 'default'] = rest.split('/');
+      if (!commandName) {
+        return undefined;
+      }
+      return {
+        module: `${ensureTrailingSlash(realmURL)}commands/${commandName}`,
+        name: exportName || 'default',
+      };
+    }
+  } catch {
+    // ignore invalid URLs
+  }
+
+  return undefined;
 }
 
 async function getRegistrationsForUser(
@@ -121,13 +296,13 @@ function toBotRegistration(
   if (
     typeof row.id !== 'string' ||
     typeof row.username !== 'string' ||
-    typeof row.created_at !== 'string'
+    typeof row.created_at !== 'object'
   ) {
     return null;
   }
   return {
     id: row.id,
     username: row.username,
-    created_at: row.created_at,
+    created_at: String(row.created_at),
   };
 }

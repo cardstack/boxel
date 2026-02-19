@@ -62,6 +62,7 @@ const botPassword = process.env.SUBMISSION_BOT_PASSWORD || 'password';
   let handleTimelineEvent = onTimelineEvent({
     authUserId: auth.user_id,
     dbAdapter,
+    queuePublisher,
   });
   client.on(RoomEvent.Timeline, async (event, room, toStartOfTimeline) => {
     await handleTimelineEvent(event, room, toStartOfTimeline);
