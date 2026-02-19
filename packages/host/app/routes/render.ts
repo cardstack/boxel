@@ -432,6 +432,48 @@ export default class RenderRoute extends Route<Model> {
         }
       }
     }
+    // Touch linksTo/linksToMany fields nested within contains FieldDefs so
+    // their async loads are tracked by store.loaded() before the model is
+    // marked as "ready". Without this, the head format template (which
+    // accesses e.g. cardInfo.theme.cardThumbnailURL) would trigger the load
+    // AFTER the model is already "ready", and captureResult would capture
+    // the HTML before the linked card resolves.
+    this.#touchNestedLinksToFields(cardApi, instance);
+  }
+
+  #touchNestedLinksToFields(
+    cardApi: typeof CardAPI,
+    instance: CardDef,
+  ): void {
+    let fields = cardApi.getFields(instance, { includeComputeds: true });
+    for (let [fieldName, field] of Object.entries(fields)) {
+      if (field?.fieldType === 'contains') {
+        try {
+          let value = (instance as any)[fieldName];
+          if (value != null && typeof value === 'object') {
+            let nestedFields = cardApi.getFields(value, {
+              includeComputeds: true,
+            });
+            for (let [nestedName, nestedField] of Object.entries(
+              nestedFields,
+            )) {
+              if (
+                nestedField?.fieldType === 'linksTo' ||
+                nestedField?.fieldType === 'linksToMany'
+              ) {
+                try {
+                  value[nestedName];
+                } catch {
+                  // ignore errors from touching nested linksTo fields
+                }
+              }
+            }
+          }
+        } catch {
+          // ignore errors from accessing contains fields
+        }
+      }
+    }
   }
 
   setupController(controller: Controller, model: Model) {
