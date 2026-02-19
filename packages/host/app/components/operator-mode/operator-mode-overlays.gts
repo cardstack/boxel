@@ -24,12 +24,14 @@ import {
   ThreeDotsHorizontal,
 } from '@cardstack/boxel-ui/icons';
 
+import { isFileDefInstance } from '@cardstack/runtime-common';
+
+import { hasExtension } from '@cardstack/runtime-common/url';
+
 import { copyCardURLToClipboard } from '@cardstack/host/utils/clipboard';
 
 import type { Format } from 'https://cardstack.com/base/card-api';
 
-import { isFileDefInstance } from '@cardstack/runtime-common';
-import { hasExtension } from '@cardstack/runtime-common/url';
 import { removeFileExtension } from '../card-search/utils';
 
 import Overlays from './overlays';

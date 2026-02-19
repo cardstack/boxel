@@ -663,7 +663,9 @@ export default class OperatorModeStackItem extends Component<Signature> {
   }
 
   private get isEditing() {
-    return !this.isBuried && !this.isFileCard && this.args.item.format === 'edit';
+    return (
+      !this.isBuried && !this.isFileCard && this.args.item.format === 'edit'
+    );
   }
 
   private get isFileCard() {

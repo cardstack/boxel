@@ -116,31 +116,34 @@ module('Integration | operator-mode | ui', function (hooks) {
       'FileLinkCard/notes.txt',
       'Hello from a file link',
     );
-    await ctx.testRealm.write('FileLinkCard/with-file.json', {
-      data: {
-        type: 'card',
-        attributes: {
-          title: 'Linked file example',
-        },
-        relationships: {
-          attachment: {
-            links: {
-              self: './notes.txt',
+    await ctx.testRealm.write(
+      'FileLinkCard/with-file.json',
+      JSON.stringify({
+        data: {
+          type: 'card',
+          attributes: {
+            title: 'Linked file example',
+          },
+          relationships: {
+            attachment: {
+              links: {
+                self: './notes.txt',
+              },
+              data: {
+                type: 'file-meta',
+                id: './notes.txt',
+              },
             },
-            data: {
-              type: 'file-meta',
-              id: './notes.txt',
+          },
+          meta: {
+            adoptsFrom: {
+              module: '../file-link-card',
+              name: 'FileLinkCard',
             },
           },
         },
-        meta: {
-          adoptsFrom: {
-            module: '../file-link-card',
-            name: 'FileLinkCard',
-          },
-        },
-      },
-    });
+      }),
+    );
 
     ctx.setCardInOperatorModeState(`${testRealmURL}FileLinkCard/with-file`);
     await renderComponent(

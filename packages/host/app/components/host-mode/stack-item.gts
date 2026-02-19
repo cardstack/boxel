@@ -11,9 +11,10 @@ import { cached, tracked } from '@glimmer/tracking';
 import { ContextButton } from '@cardstack/boxel-ui/components';
 import { and, bool } from '@cardstack/boxel-ui/helpers';
 
-import { getCard } from '@cardstack/host/resources/card-resource';
 import type { StoreReadType } from '@cardstack/runtime-common';
 import { hasExtension } from '@cardstack/runtime-common/url';
+
+import { getCard } from '@cardstack/host/resources/card-resource';
 
 import HostModeCard from './card';
 

@@ -10,8 +10,8 @@ import {
   CardCrudFunctionsContextName,
   isCardInstance,
 } from '@cardstack/runtime-common';
-import { meta } from '@cardstack/runtime-common/constants';
 import type { StoreReadType } from '@cardstack/runtime-common';
+import { meta } from '@cardstack/runtime-common/constants';
 import { hasExtension } from '@cardstack/runtime-common/url';
 
 import { getCard } from '@cardstack/host/resources/card-resource';

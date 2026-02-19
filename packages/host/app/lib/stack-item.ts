@@ -17,7 +17,7 @@ interface Args {
 
 export type StackItemType = 'card' | 'file-meta';
 
-function inferStackItemType(id: string, type?: StackItemType): StackItemType {
+function inferStackItemType(type?: StackItemType): StackItemType {
   if (type) {
     return type;
   }
@@ -53,7 +53,7 @@ export class StackItem {
     this.format = format;
     this.request = request;
     this.stackIndex = stackIndex;
-    this.type = inferStackItemType(this.#id, type);
+    this.type = inferStackItemType(type);
     this.closeAfterSaving = closeAfterSaving;
     this.relationshipContext = relationshipContext;
   }

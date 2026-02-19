@@ -9,10 +9,11 @@ import { Resource } from 'ember-modify-based-class-resource';
 
 import { isCardInstance, isFileDefInstance } from '@cardstack/runtime-common';
 
+import type { StoreReadType } from '@cardstack/runtime-common';
+
 import type { BaseDef } from 'https://cardstack.com/base/card-api';
 
 import type StoreService from '../services/store';
-import type { StoreReadType } from '@cardstack/runtime-common';
 
 interface Args {
   named: {
@@ -88,10 +89,10 @@ export class CardResource extends Resource<Args> {
     }
     let maybeError =
       this.readType === 'file-meta'
-        ? this.store.peekError(this.#id, { type: 'file-meta' }) ??
-          this.store.peekError(this.#id)
-        : this.store.peekError(this.#id) ??
-          this.store.peekError(this.#id, { type: 'file-meta' });
+        ? (this.store.peekError(this.#id, { type: 'file-meta' }) ??
+          this.store.peekError(this.#id))
+        : (this.store.peekError(this.#id) ??
+          this.store.peekError(this.#id, { type: 'file-meta' }));
     return maybeError && !isCardInstance(maybeError) ? maybeError : undefined;
   }
 
