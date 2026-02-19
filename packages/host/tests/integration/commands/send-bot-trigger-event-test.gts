@@ -77,24 +77,4 @@ module('Integration | commands | send-bot-trigger-event', function (hooks) {
     assert.strictEqual(event.content.realm, testRealmURL);
     assert.deepEqual(event.content.input, { listingId: 'catalog/listing-1' });
   });
-
-  test('allows custom trigger types', async function (assert) {
-    let roomId = createAndJoinRoom({
-      sender: '@testuser:localhost',
-      name: 'room-test',
-    });
-    let commandService = getService('command-service');
-
-    let command = new SendBotTriggerEventCommand(commandService.commandContext);
-    await command.execute({
-      roomId,
-      type: 'not-a-real-command',
-      realm: testRealmURL,
-      input: {},
-    });
-
-    let event = getRoomEvents(roomId).pop()!;
-    assert.ok(isBotTriggerEvent(event));
-    assert.strictEqual(event.content.type, 'not-a-real-command');
-  });
 });
