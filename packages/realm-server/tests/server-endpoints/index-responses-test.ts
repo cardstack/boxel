@@ -668,7 +668,11 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           'card-with-theme file write was accepted',
         );
 
-        // Wait for the card to appear in the index (head_html may or may not have the theme)
+        // Wait for the card to be indexed with head_html containing the theme icon.
+        // The card-api fix ensures nested relationships (like cardInfo.theme) are
+        // deserialized even when the parent contains field has no attributes, and
+        // #touchNestedLinksToFields ensures the linked theme is loaded before the
+        // head template renders during prerender.
         await waitUntil(
           async () => {
             let rows = (await context.dbAdapter.execute(
@@ -689,25 +693,6 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           },
         );
 
-        // Diagnostic: check what the indexer stored
-        let diagRows = (await context.dbAdapter.execute(
-          `SELECT head_html, deps FROM boxel_index
-           WHERE url LIKE '%card-with-theme%'
-             AND type = 'instance'
-             AND is_deleted IS NOT TRUE
-           LIMIT 1`,
-        )) as { head_html: string | null; deps: string[] | null }[];
-        let storedHeadHtml = diagRows[0]?.head_html ?? '(null)';
-        let storedDeps = JSON.stringify(diagRows[0]?.deps?.filter((d: string) => d.includes('theme')) ?? []);
-
-        // Also check if the theme card exists in the index
-        let themeRows = (await context.dbAdapter.execute(
-          `SELECT url, type FROM boxel_index
-           WHERE url LIKE '%test-theme%' OR url LIKE '%a-test-theme%'
-           LIMIT 5`,
-        )) as { url: string; type: string }[];
-        let themeInfo = JSON.stringify(themeRows);
-
         let response = await context.request2
           .get('/test/card-with-theme')
           .set('Accept', 'text/html');
@@ -723,7 +708,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           headContent.includes(
             '<link rel="icon" href="https://example.com/brand-icon.png"',
           ),
-          `head HTML includes favicon link from theme. storedHeadHtml=${storedHeadHtml.substring(0, 500)} | themeDeps=${storedDeps} | themeInIndex=${themeInfo}`,
+          `head HTML includes favicon link from theme`,
         );
         assert.ok(
           headContent.includes(

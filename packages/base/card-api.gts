@@ -3255,11 +3255,43 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
     return field;
   }
 
+  // Ensure contains fields with nested relationships are deserialized even
+  // when no attribute value is present. Without this, a relationship like
+  // "cardInfo.theme" is silently lost when "cardInfo" has no entry in
+  // resource.attributes (e.g. card-source format), because
+  // Contains.deserialize is never called and the nested linksTo reference
+  // is never set up as a NotLoadedValue.
+  let nestedRelFieldStubs: Record<string, undefined> = {};
+  if (resource.relationships) {
+    let attributeKeys = new Set(Object.keys(resource.attributes ?? {}));
+    for (let relName of Object.keys(resource.relationships)) {
+      let dotIdx = relName.indexOf('.');
+      if (dotIdx === -1) {
+        continue;
+      }
+      let prefix = relName.substring(0, dotIdx);
+      let suffix = relName.substring(dotIdx + 1);
+      // Skip linksToMany numeric indices (e.g. "friends.0") since they
+      // are already handled via linksToManyRelationships
+      if (suffix.match(/^\d+$/)) {
+        continue;
+      }
+      if (
+        !attributeKeys.has(prefix) &&
+        !(prefix in nonNestedRelationships) &&
+        !(prefix in linksToManyRelationships)
+      ) {
+        nestedRelFieldStubs[prefix] = undefined;
+      }
+    }
+  }
+
   let values = (await Promise.all(
     Object.entries({
       ...resource.attributes,
       ...nonNestedRelationships,
       ...linksToManyRelationships,
+      ...nestedRelFieldStubs,
       ...(resource.id !== undefined ? { id: resource.id } : {}),
     }).map(async ([fieldName, value]) => {
       let field = getField(instance, fieldName);
