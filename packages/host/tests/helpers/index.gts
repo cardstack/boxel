@@ -12,6 +12,7 @@ import { tracked } from '@glimmer/tracking';
 
 import { getService } from '@universal-ember/test-support';
 
+import QUnit from 'qunit';
 import { validate as uuidValidate } from 'uuid';
 
 import {
@@ -159,19 +160,44 @@ export async function getDbAdapter() {
 }
 
 export async function withCachedRealmSetup<T>(
-  cacheKey: string,
-  setup: () => Promise<T>,
+  cacheKeyOrSetup: string | (() => Promise<T>),
+  maybeSetup?: () => Promise<T>,
 ): Promise<T> {
+  let resolvedCacheKey: string;
+  let resolvedSetup: () => Promise<T>;
+  if (typeof cacheKeyOrSetup === 'string') {
+    if (!maybeSetup) {
+      throw new Error(
+        'withCachedRealmSetup(cacheKey, setup) requires a setup callback',
+      );
+    }
+    resolvedCacheKey = cacheKeyOrSetup;
+    resolvedSetup = maybeSetup;
+  } else {
+    resolvedCacheKey = getCurrentModuleCacheKey();
+    resolvedSetup = cacheKeyOrSetup;
+  }
+
   let dbAdapter = await getDbAdapter();
-  let cached = getCachedSnapshot(cacheKey);
+  let cached = getCachedSnapshot(resolvedCacheKey);
   if (cached) {
     await dbAdapter.importSnapshot(cached);
-    return await setup();
+    return await resolvedSetup();
   }
-  let result = await setup();
+  let result = await resolvedSetup();
   let exported = await dbAdapter.exportSnapshot();
-  setCachedSnapshot(cacheKey, exported);
+  setCachedSnapshot(resolvedCacheKey, exported);
   return result;
+}
+
+function getCurrentModuleCacheKey(): string {
+  let moduleName = QUnit.config.current?.module?.name;
+  if (moduleName?.trim()) {
+    return moduleName;
+  }
+  throw new Error(
+    'withCachedRealmSetup() was called without an explicit cacheKey, but no active QUnit module name was available',
+  );
 }
 
 export async function withSlowSave(
