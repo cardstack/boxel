@@ -65,6 +65,8 @@ jobs:
         if: steps.restore.outputs.cache-hit != 'true'
         run: NODE_OPTIONS="--max_old_space_size=4096" pnpm build
         working-directory: packages/host
+        env:
+          ICONS_URL: http://localhost:4206
 
       - name: Write assets manifest
         shell: bash
