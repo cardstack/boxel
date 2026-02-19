@@ -2,12 +2,35 @@ import { registerRealmUser } from './register-realm-user-using-api';
 
 const realmServerURL = process.env.REALM_SERVER_URL || 'http://localhost:4201';
 
-const commandURL = 'https://example.com/bot/command/default';
-const commandFilter = {
-  type: 'matrix-event',
-  event_type: 'app.boxel.bot-trigger',
-  content_type: 'create-listing-pr',
-};
+const botCommands = [
+  {
+    name: 'create-listing-pr',
+    commandURL: `${realmServerURL}/commands/create-listing-pr/default`,
+    filter: {
+      type: 'matrix-event',
+      event_type: 'app.boxel.bot-trigger',
+      content_type: 'create-listing-pr',
+    },
+  },
+  {
+    name: 'show-card',
+    commandURL: `${realmServerURL}/boxel-host/commands/show-card/default`,
+    filter: {
+      type: 'matrix-event',
+      event_type: 'app.boxel.bot-trigger',
+      content_type: 'show-card',
+    },
+  },
+  {
+    name: 'patch-card-instance',
+    commandURL: `${realmServerURL}/boxel-host/commands/patch-card-instance/default`,
+    filter: {
+      type: 'matrix-event',
+      event_type: 'app.boxel.bot-trigger',
+      content_type: 'patch-card-instance',
+    },
+  },
+];
 
 async function fetchBotRegistrations(jwt: string) {
   const response = await fetch(`${realmServerURL}/_bot-registrations`, {
@@ -66,7 +89,11 @@ async function ensureBotRegistration(jwt: string, matrixUserId: string) {
   return createBotRegistration(jwt, matrixUserId);
 }
 
-async function addBotCommand(jwt: string, botId: string) {
+async function addBotCommand(
+  jwt: string,
+  botId: string,
+  command: (typeof botCommands)[number],
+) {
   const response = await fetch(`${realmServerURL}/_bot-commands`, {
     method: 'POST',
     headers: {
@@ -78,8 +105,8 @@ async function addBotCommand(jwt: string, botId: string) {
         type: 'bot-command',
         attributes: {
           botId,
-          command: commandURL,
-          filter: commandFilter,
+          command: command.commandURL,
+          filter: command.filter,
         },
       },
     }),
@@ -116,13 +143,22 @@ async function fetchBotCommands(jwt: string, botId?: string) {
   return json?.data ?? [];
 }
 
-async function ensureBotCommandId(jwt: string, botId: string) {
+async function ensureBotCommandId(
+  jwt: string,
+  botId: string,
+  command: (typeof botCommands)[number],
+) {
   const commands = await fetchBotCommands(jwt, botId);
-  const existing = commands[0];
+  const existing = commands.find((entry: any) => {
+    return (
+      entry?.attributes?.command === command.commandURL &&
+      entry?.attributes?.filter?.content_type === command.filter.content_type
+    );
+  });
   if (existing?.id) {
     return existing.id as string;
   }
-  return addBotCommand(jwt, botId);
+  return addBotCommand(jwt, botId, command);
 }
 
 // registerRealmUser is idempotent: it logs in and ensures the realm user exists.
@@ -132,7 +168,12 @@ async function ensureBotCommandId(jwt: string, botId: string) {
   if (!botRegistrationId) {
     throw new Error('Bot registration did not return an id');
   }
-  await ensureBotCommandId(jwt, botRegistrationId);
+  for (let command of botCommands) {
+    console.log(
+      `Registering bot command "${command.name}" for registration ${botRegistrationId}`,
+    );
+    await ensureBotCommandId(jwt, botRegistrationId, command);
+  }
   console.log(`Submission bot setup complete for ${userId}`);
 })().catch((error) => {
   console.error('setup-submission-bot failed', error);
