@@ -225,7 +225,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
   let { setRealmPermissions, createAndJoinRoom } = mockMatrixUtils;
 
   hooks.beforeEach(async function () {
-    let { adapter } = withCachedRealmSetup(
+    let { adapter } = await withCachedRealmSetup(
       'create-file-test-realms',
       async () => {
         await setupAcceptanceTestRealm({
