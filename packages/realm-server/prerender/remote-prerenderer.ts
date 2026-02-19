@@ -6,6 +6,7 @@ import {
   type FileRenderResponse,
   type FileRenderArgs,
   type RenderRouteOptions,
+  type RunCommandResponse,
   logger,
 } from '@cardstack/runtime-common';
 import {
@@ -56,7 +57,7 @@ export function createRemotePrerenderer(
     type: string,
     attributes: {
       realm: string;
-      url: string;
+      url?: string;
       auth: string;
       renderOptions?: RenderRouteOptions;
       [key: string]: any;
@@ -217,6 +218,18 @@ export function createRemotePrerenderer(
         },
       );
     },
+    async runCommand({ realm, auth, command, commandInput }) {
+      return await requestWithRetry<RunCommandResponse>(
+        'run-command',
+        'run-command-request',
+        {
+          realm,
+          auth,
+          command,
+          commandInput,
+        },
+      );
+    },
   };
 }
 
@@ -226,6 +239,7 @@ function validatePrerenderAttributes(
     realm?: string;
     url?: string;
     auth?: string;
+    command?: unknown;
   },
 ) {
   let missing: string[] = [];
@@ -233,11 +247,17 @@ function validatePrerenderAttributes(
   if (typeof attrs.realm !== 'string' || attrs.realm.trim().length === 0) {
     missing.push('realm');
   }
-  if (typeof attrs.url !== 'string' || attrs.url.trim().length === 0) {
+  if (
+    requestType !== 'run-command-request' &&
+    (typeof attrs.url !== 'string' || attrs.url.trim().length === 0)
+  ) {
     missing.push('url');
   }
   if (typeof attrs.auth !== 'string' || attrs.auth.trim().length === 0) {
     missing.push('auth');
+  }
+  if (requestType === 'run-command-request' && !attrs.command) {
+    missing.push('command');
   }
 
   if (missing.length > 0) {

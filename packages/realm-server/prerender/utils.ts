@@ -44,10 +44,16 @@ export interface FileExtractCapture {
   nonce?: string;
 }
 
+type TransitionParam =
+  | string
+  | {
+      queryParams?: Record<string, string>;
+    };
+
 export async function transitionTo(
   page: Page,
   routeName: string,
-  ...params: string[]
+  ...params: TransitionParam[]
 ): Promise<void> {
   await page.evaluate(
     (routeName, params) => {
@@ -56,6 +62,25 @@ export async function transitionTo(
     routeName,
     params,
   );
+}
+
+export function buildCommandRunnerURL(
+  page: Page,
+  nonce: string,
+  encodedCommand: string,
+  encodedInput?: string,
+): string {
+  let origin = page.url();
+  try {
+    origin = new URL(origin).origin;
+  } catch {
+    // best effort; fall back to raw page url
+  }
+  let url = `${origin}/command-runner/${encodeURIComponent(nonce)}?command=${encodedCommand}`;
+  if (encodedInput) {
+    url += `&input=${encodedInput}`;
+  }
+  return url;
 }
 
 export async function renderHTML(

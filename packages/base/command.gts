@@ -385,6 +385,12 @@ export class CreateListingPRRequestInput extends CardDef {
   @field listingId = contains(StringField);
 }
 
+export class CreateShowCardRequestInput extends CardDef {
+  @field roomId = contains(StringField);
+  @field cardId = contains(StringField);
+  @field format = contains(StringField);
+}
+
 export class ListingCreateInput extends CardDef {
   @field openCardId = contains(StringField);
   @field codeRef = contains(CodeRefField);
@@ -434,6 +440,7 @@ export class SendBotTriggerEventInput extends CardDef {
   @field roomId = contains(StringField);
   @field type = contains(StringField);
   @field input = contains(JsonField);
+  @field realm = contains(StringField);
 }
 
 export class PreviewFormatInput extends CardDef {

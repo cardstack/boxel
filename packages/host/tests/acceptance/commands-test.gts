@@ -6,6 +6,7 @@ import {
   findAll,
   waitUntil,
   settled,
+  visit,
 } from '@ember/test-helpers';
 
 import { fillIn } from '@ember/test-helpers';
@@ -251,6 +252,26 @@ module('Acceptance | Commands tests', function (hooks) {
       }
     }
 
+    class GreetingCard extends CardDef {
+      static displayName = 'GreetingCard';
+      @field message = contains(StringField);
+      static isolated = class Isolated extends Component<typeof this> {
+        <template>
+          <h2 data-test-command-runner-greeting><@fields.message /></h2>
+        </template>
+      };
+    }
+
+    class HelloCommand extends Command<undefined, typeof GreetingCard> {
+      static displayName = 'HelloCommand';
+      async getInputType() {
+        return undefined;
+      }
+      protected async run(): Promise<GreetingCard> {
+        return new GreetingCard({ message: 'Hello from command runner' });
+      }
+    }
+
     class Person extends CardDef {
       static displayName = 'Person';
       @field firstName = contains(StringField);
@@ -390,6 +411,10 @@ module('Acceptance | Commands tests', function (hooks) {
           friends: [mangoPet],
         }),
         'maybe-boom-command.ts': { default: MaybeBoomCommand },
+        'command-runner-hello-command.ts': {
+          GreetingCard,
+          default: HelloCommand,
+        },
         'search-and-open-card-command.ts': {
           default: SearchAndOpenCardCommand,
         },
@@ -464,6 +489,20 @@ module('Acceptance | Commands tests', function (hooks) {
     assert
       .dom('[data-test-ai-message-content]')
       .includesText('Change the topic of the meeting to "Meeting with Hassan"');
+  });
+
+  test('command-runner route renders command result card', async function (assert) {
+    let commandRef = {
+      module: `${testRealmURL}command-runner-hello-command`,
+      name: 'default',
+    };
+    let commandParam = encodeURIComponent(JSON.stringify(commandRef));
+    await visit(`/command-runner/1?command=${commandParam}`);
+
+    await waitFor('[data-prerender][data-prerender-status="ready"]');
+    assert
+      .dom('[data-test-command-runner-greeting]')
+      .includesText('Hello from command runner');
   });
 
   test('a scripted command can create a card, update it and show it', async function (assert) {

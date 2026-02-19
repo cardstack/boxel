@@ -44,6 +44,33 @@ module(basename(__filename), function () {
             },
           },
         },
+        'command-runner-test.gts': `
+          import { Command } from '@cardstack/runtime-common';
+          import {
+            CardDef,
+            field,
+            contains,
+            StringField,
+          } from 'https://cardstack.com/base/card-api';
+
+          export class CommandResult extends CardDef {
+            static displayName = 'CommandResult';
+            @field message = contains(StringField);
+          }
+
+          export class SayHelloCommand extends Command<
+            undefined,
+            typeof CommandResult
+          > {
+            static displayName = 'SayHelloCommand';
+            async getInputType() {
+              return undefined;
+            }
+            protected async run(): Promise<CommandResult> {
+              return new CommandResult({ message: 'hello from command' });
+            }
+          }
+        `,
       },
     });
 
@@ -191,6 +218,51 @@ module(basename(__filename), function () {
         'definitions captured',
       );
       assert.ok(res.body.meta?.timing?.totalMs >= 0, 'has timing meta');
+      assert.ok(res.body.meta?.pool?.pageId, 'has pool.pageId');
+    });
+
+    test('it handles run-command request', async function (assert) {
+      let permissions = {
+        [realmURL.href]: ['read', 'write', 'realm-owner'] as (
+          | 'read'
+          | 'write'
+          | 'realm-owner'
+        )[],
+      };
+      let auth = testCreatePrerenderAuth(testUserId, permissions);
+      let command = {
+        module: `${realmURL.href}command-runner-test`,
+        name: 'SayHelloCommand',
+      };
+      let res = await request
+        .post('/run-command')
+        .set('Accept', 'application/vnd.api+json')
+        .set('Content-Type', 'application/json')
+        .send({
+          data: {
+            type: 'command-request',
+            attributes: {
+              realm: realmURL.href,
+              auth,
+              command,
+            },
+          },
+        });
+
+      assert.strictEqual(res.status, 201, 'HTTP 201');
+      assert.strictEqual(res.body.data.type, 'command-result', 'type ok');
+      assert.strictEqual(
+        res.body.data.id,
+        command.module,
+        'id is command module',
+      );
+      assert.strictEqual(
+        res.body.data.attributes.status,
+        'ready',
+        'command status ready',
+      );
+      assert.notOk(res.body.data.attributes.error, 'no command error');
+      assert.ok(res.body.meta?.timing?.totalMs >= 0, 'has timing');
       assert.ok(res.body.meta?.pool?.pageId, 'has pool.pageId');
     });
 

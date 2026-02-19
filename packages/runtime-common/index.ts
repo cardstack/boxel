@@ -6,7 +6,7 @@ import type {
   Meta,
   Saved,
 } from './resource-types';
-import type { ResolvedCodeRef } from './code-ref';
+import type { CodeRef, ResolvedCodeRef } from './code-ref';
 import type { RenderRouteOptions } from './render-route-options';
 import type { Definition } from './definitions';
 import type { SerializedError } from './error';
@@ -129,11 +129,25 @@ export type ModulePrerenderArgs = {
 
 export type PrerenderCardArgs = ModulePrerenderArgs;
 
+export type RunCommandArgs = {
+  realm: string;
+  auth: string;
+  command: ResolvedCodeRef;
+  commandInput?: Record<string, any> | null;
+};
+
+export type RunCommandResponse = {
+  status: 'ready' | 'error' | 'unusable';
+  result?: string | null;
+  error?: string | null;
+};
+
 export interface Prerenderer {
   prerenderCard(args: PrerenderCardArgs): Promise<RenderResponse>;
   prerenderModule(args: ModulePrerenderArgs): Promise<ModuleRenderResponse>;
   prerenderFileExtract(args: ModulePrerenderArgs): Promise<FileExtractResponse>;
   prerenderFileRender(args: FileRenderArgs): Promise<FileRenderResponse>;
+  runCommand(args: RunCommandArgs): Promise<RunCommandResponse>;
 }
 
 export type RealmAction = 'read' | 'write' | 'realm-owner' | 'assume-user';
@@ -288,9 +302,6 @@ export type {
   TokenClaims,
   RealmSession,
 } from './realm';
-
-import type { CodeRef } from './code-ref';
-export type { CodeRef };
 
 export * from './code-ref';
 export * from './serializers';

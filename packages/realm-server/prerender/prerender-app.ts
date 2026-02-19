@@ -11,6 +11,7 @@ import {
   type ModuleRenderResponse,
   type FileExtractResponse,
   type FileRenderResponse,
+  type RunCommandResponse,
 } from '@cardstack/runtime-common';
 import {
   ecsMetadata,
@@ -335,6 +336,147 @@ export function buildPrerenderApp(options: {
         );
       }
     },
+  });
+
+  router.post('/run-command', async (ctxt: Koa.Context) => {
+    try {
+      let request = await fetchRequestFromContext(ctxt);
+      let raw = await request.text();
+      let body: any;
+      try {
+        body = raw ? JSON.parse(raw) : {};
+      } catch (e) {
+        ctxt.status = 400;
+        ctxt.body = {
+          errors: [{ status: 400, message: 'Invalid JSON body' }],
+        };
+        return;
+      }
+
+      let attrs = body?.data?.attributes ?? {};
+      let rawRealm = attrs.realm;
+      let rawAuth = attrs.auth;
+      let command = attrs.command;
+      let commandInput = attrs.commandInput;
+
+      let isNonEmptyString = (value: unknown): value is string =>
+        typeof value === 'string' && value.trim().length > 0;
+
+      let missing: string[] = [];
+      if (!isNonEmptyString(rawRealm)) missing.push('realm');
+      if (!isNonEmptyString(rawAuth)) missing.push('auth');
+      if (!command) missing.push('command');
+
+      log.debug(
+        `received command-runner ${command?.module ?? command?.name ?? '<unknown>'}: realm=${rawRealm}`,
+      );
+      if (missing.length > 0) {
+        log.warn(
+          'Rejecting command-runner due to missing attributes (%s); realm=%s authProvided=%s commandProvided=%s',
+          missing.join(', '),
+          (rawRealm as string | undefined) ?? '<missing>',
+          typeof rawAuth === 'string' && rawAuth.trim().length > 0,
+          Boolean(command),
+        );
+        ctxt.status = 400;
+        ctxt.body = {
+          errors: [
+            {
+              status: 400,
+              message:
+                'Missing or invalid required attributes: realm, auth, command',
+            },
+          ],
+        };
+        return;
+      }
+
+      let realm = rawRealm as string;
+      let auth = rawAuth as string;
+
+      let start = Date.now();
+      let execPromise = prerenderer
+        .runCommand({
+          realm,
+          auth,
+          command,
+          commandInput,
+        })
+        .then((result) => ({ result }));
+      let drainPromise = options.drainingPromise
+        ? options.drainingPromise.then(() => ({ draining: true as const }))
+        : null;
+      let raceResult = drainPromise
+        ? await Promise.race([execPromise, drainPromise])
+        : await execPromise;
+      if ('draining' in raceResult) {
+        execPromise.catch((e) =>
+          log.debug('command-runner settled after drain (ignored):', e),
+        );
+        ctxt.status = PRERENDER_SERVER_DRAINING_STATUS_CODE;
+        ctxt.set(
+          PRERENDER_SERVER_STATUS_HEADER,
+          PRERENDER_SERVER_STATUS_DRAINING,
+        );
+        ctxt.body = {
+          errors: [
+            {
+              status: PRERENDER_SERVER_DRAINING_STATUS_CODE,
+              message: 'Prerender server draining',
+            },
+          ],
+        };
+        return;
+      }
+      let { response, timings, pool } = raceResult.result;
+      let totalMs = Date.now() - start;
+      let poolFlags = Object.entries({
+        reused: pool.reused,
+        evicted: pool.evicted,
+        timedOut: pool.timedOut,
+      })
+        .filter(([, value]) => value === true)
+        .map(([key]) => key)
+        .join(', ');
+      let poolFlagSuffix = poolFlags.length > 0 ? ` flags=[${poolFlags}]` : '';
+      log.info(
+        'command-runner total=%dms launch=%dms render=%dms pageId=%s realm=%s%s',
+        totalMs,
+        timings.launchMs,
+        timings.renderMs,
+        pool.pageId,
+        pool.realm,
+        poolFlagSuffix,
+      );
+      ctxt.status = 201;
+      ctxt.set('Content-Type', 'application/vnd.api+json');
+      ctxt.body = {
+        data: {
+          type: 'command-result',
+          id: command?.module ?? 'command',
+          attributes: response as RunCommandResponse,
+        },
+        meta: {
+          timing: {
+            launchMs: timings.launchMs,
+            renderMs: timings.renderMs,
+            totalMs,
+          },
+          pool,
+        },
+      };
+    } catch (err) {
+      log.error('Error running command in prerender server:', err);
+      ctxt.status = 500;
+      ctxt.body = {
+        errors: [
+          {
+            status: 500,
+            message: 'Error running command',
+          },
+        ],
+      };
+    }
   });
 
   // File render route needs additional attributes (fileData, types)

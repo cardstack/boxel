@@ -7,6 +7,8 @@ import {
   type FileRenderResponse,
   type FileRenderArgs,
   type RenderRouteOptions,
+  type RunCommandResponse,
+  type ResolvedCodeRef,
   serializeRenderRouteOptions,
   logger,
 } from '@cardstack/runtime-common';
@@ -27,6 +29,7 @@ import {
   type FileExtractCapture,
   withTimeout,
   transitionTo,
+  buildCommandRunnerURL,
   buildInvalidModuleResponseError,
   buildInvalidFileExtractResponseError,
 } from './utils';
@@ -133,6 +136,10 @@ export class RenderRunner {
       await page.evaluate((sessionAuth) => {
         localStorage.setItem('boxel-session', sessionAuth);
       }, auth);
+      log.info(
+        'command-runner session set: %s',
+        await page.evaluate(() => localStorage.getItem('boxel-session')),
+      );
 
       let renderStart = Date.now();
       let error: RenderError | undefined;
@@ -379,6 +386,139 @@ export class RenderRunner {
       return {
         response,
         timings: { launchMs, renderMs: Date.now() - renderStart },
+        pool: poolInfo,
+      };
+    } finally {
+      release();
+    }
+  }
+
+  async runCommandAttempt({
+    realm,
+    auth,
+    command,
+    commandInput,
+    opts,
+  }: {
+    realm: string;
+    auth: string;
+    command: ResolvedCodeRef;
+    commandInput?: Record<string, unknown> | null;
+    opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
+  }): Promise<{
+    response: RunCommandResponse;
+    timings: { launchMs: number; renderMs: number };
+    pool: {
+      pageId: string;
+      realm: string;
+      reused: boolean;
+      evicted: boolean;
+      timedOut: boolean;
+    };
+  }> {
+    this.#nonce++;
+    log.info(
+      `running command ${command?.module ?? command?.name ?? '<unknown>'}, nonce=${this.#nonce} realm=${realm}`,
+    );
+
+    const { page, reused, launchMs, pageId, release } =
+      await this.#getPageForRealm(realm, auth);
+    const poolInfo = {
+      pageId: pageId ?? 'unknown',
+      realm,
+      reused,
+      evicted: false,
+      timedOut: false,
+    };
+    this.#pagePool.resetConsoleErrors(pageId);
+    const markTimeout = (status?: RunCommandResponse['status']) => {
+      if (!poolInfo.timedOut && status === 'unusable') {
+        poolInfo.timedOut = true;
+      }
+    };
+    try {
+      await page.evaluate((sessionAuth) => {
+        localStorage.setItem('boxel-session', sessionAuth);
+      }, auth);
+
+      let renderStart = Date.now();
+      let encodedCommand = encodeURIComponent(JSON.stringify(command));
+      let encodedInput =
+        commandInput != null
+          ? encodeURIComponent(JSON.stringify(commandInput))
+          : undefined;
+      await transitionTo(page, 'command-runner', String(this.#nonce), {
+        queryParams: {
+          command: encodedCommand,
+          ...(encodedInput ? { input: encodedInput } : {}),
+        },
+      });
+      log.info(
+        'command-runner url: %s',
+        buildCommandRunnerURL(
+          page,
+          String(this.#nonce),
+          encodedCommand,
+          encodedInput,
+        ),
+      );
+
+      await withTimeout(
+        page,
+        async () => {
+          return await captureResult(page, 'textContent', {
+            simulateTimeoutMs: opts?.simulateTimeoutMs,
+          });
+        },
+        opts?.timeoutMs,
+      );
+
+      let payload = await page.evaluate(() => {
+        let container = document.querySelector(
+          '[data-prerender]',
+        ) as HTMLElement | null;
+        let status =
+          (container?.dataset.prerenderStatus as
+            | 'ready'
+            | 'error'
+            | 'unusable'
+            | undefined) ?? 'error';
+        let errorElement = container?.querySelector(
+          '[data-prerender-error]',
+        ) as HTMLElement | null;
+        let resultElement = container?.querySelector(
+          '[data-command-result]',
+        ) as HTMLElement | null;
+        let error = (errorElement?.textContent ?? '').trim();
+        let result = (resultElement?.textContent ?? '').trim();
+        return {
+          status,
+          error: error.length > 0 ? error : null,
+          result: result.length > 0 ? result : null,
+        };
+      });
+
+      let response: RunCommandResponse = {
+        status: payload.status,
+        result: payload.result ?? undefined,
+        error: payload.error ?? undefined,
+      };
+      markTimeout(response.status);
+
+      return {
+        response,
+        timings: { launchMs, renderMs: Date.now() - renderStart },
+        pool: poolInfo,
+      };
+    } catch (e) {
+      log.error('Error running command in headless chrome:', e);
+      let response: RunCommandResponse = {
+        status: 'error',
+        error: e instanceof Error ? `${e.name}: ${e.message}` : `${e}`,
+      };
+      return {
+        response,
+        timings: { launchMs, renderMs: 0 },
         pool: poolInfo,
       };
     } finally {

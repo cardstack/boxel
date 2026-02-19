@@ -1,8 +1,5 @@
 import type { BotTriggerEvent } from 'https://cardstack.com/base/matrix-event';
-import {
-  BOT_TRIGGER_COMMAND_TYPES,
-  BOT_TRIGGER_EVENT_TYPE,
-} from './matrix-constants';
+import { BOT_TRIGGER_EVENT_TYPE } from './matrix-constants';
 
 export function isBotTriggerEvent(value: unknown): value is BotTriggerEvent {
   if (!value || typeof value !== 'object') {
@@ -18,16 +15,16 @@ export function isBotTriggerEvent(value: unknown): value is BotTriggerEvent {
     return false;
   }
 
-  let content = event.content as { type?: unknown; input?: unknown };
+  let content = event.content as {
+    type?: string;
+    input?: Record<string, unknown>;
+    realm?: string;
+  };
   if (typeof content.type !== 'string') {
     return false;
   }
 
-  if (
-    !BOT_TRIGGER_COMMAND_TYPES.includes(
-      content.type as (typeof BOT_TRIGGER_COMMAND_TYPES)[number],
-    )
-  ) {
+  if (typeof content.realm !== 'string') {
     return false;
   }
 
