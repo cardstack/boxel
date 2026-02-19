@@ -25,6 +25,7 @@ function makeBotTriggerEvent(
       content: {
         type: 'create-listing-pr',
         input: {},
+        realm: 'http://localhost:4201/test/',
       },
     },
     getSender: () => sender,
