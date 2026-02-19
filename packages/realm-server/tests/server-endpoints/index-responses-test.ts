@@ -304,27 +304,12 @@ module(`server-endpoints/${basename(__filename)}`, function () {
             },
           });
 
-          writeJSONSync(join(context.testRealmDir, 'card-with-theme.json'), {
-            data: {
-              type: 'card',
-              attributes: {
-                firstName: 'Themed Card',
-              },
-              relationships: {
-                'cardInfo.theme': {
-                  links: {
-                    self: './a-test-theme',
-                  },
-                },
-              },
-              meta: {
-                adoptsFrom: {
-                  module: './person.gts',
-                  name: 'Person',
-                },
-              },
-            },
-          });
+          // NOTE: card-with-theme.json is NOT written here because from-scratch
+          // indexing uses a batched write strategy (boxel_index_working → boxel_index).
+          // Cards within the same batch can't resolve linksTo references to each other
+          // because the data isn't in the production table yet. Instead, card-with-theme
+          // is created via API in the test itself, triggering incremental indexing
+          // after the theme card is already committed to boxel_index.
         },
       });
 
@@ -647,17 +632,66 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       });
 
       test('default head template includes favicon and apple-touch-icon from cardInfo.theme', async function (assert) {
-        // First, check what the indexer stored as head_html
-        let rows = (await context.dbAdapter.execute(
-          `SELECT head_html FROM boxel_index
-           WHERE url LIKE '%card-with-theme%'
-             AND type = 'instance'
-             AND is_deleted IS NOT TRUE
-             AND head_html IS NOT NULL
-           LIMIT 1`,
-        )) as { head_html: string }[];
+        // Create card-with-theme via API so it's indexed incrementally AFTER
+        // the theme card is already in boxel_index (from-scratch indexing
+        // batches writes and can't resolve cross-card linksTo references).
+        let cardWithThemeJSON = JSON.stringify({
+          data: {
+            type: 'card',
+            attributes: {
+              firstName: 'Themed Card',
+            },
+            relationships: {
+              'cardInfo.theme': {
+                links: {
+                  self: './a-test-theme',
+                },
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: './person.gts',
+                name: 'Person',
+              },
+            },
+          },
+        });
 
-        let storedHeadHtml = rows[0]?.head_html ?? '(no head_html in DB)';
+        let writeResponse = await context.request2
+          .post('/test/card-with-theme.json')
+          .set('Accept', 'application/vnd.card+source')
+          .send(cardWithThemeJSON);
+
+        assert.strictEqual(
+          writeResponse.status,
+          204,
+          'card-with-theme file write was accepted',
+        );
+
+        // Wait for the card to be indexed with head_html containing theme icon
+        await waitUntil(
+          async () => {
+            let rows = (await context.dbAdapter.execute(
+              `SELECT head_html FROM boxel_index
+               WHERE url LIKE '%card-with-theme%'
+                 AND type = 'instance'
+                 AND is_deleted IS NOT TRUE
+               LIMIT 1`,
+            )) as { head_html: string | null }[];
+
+            return (
+              rows.length > 0 &&
+              rows[0].head_html != null &&
+              rows[0].head_html.includes('brand-icon.png')
+            );
+          },
+          {
+            timeout: 30000,
+            interval: 500,
+            timeoutMessage:
+              'Timed out waiting for card-with-theme to be indexed with theme icon in head_html',
+          },
+        );
 
         let response = await context.request2
           .get('/test/card-with-theme')
@@ -674,13 +708,13 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           headContent.includes(
             '<link rel="icon" href="https://example.com/brand-icon.png"',
           ),
-          `head HTML includes favicon link from theme. storedHeadHtml=${storedHeadHtml}`,
+          `head HTML includes favicon link from theme`,
         );
         assert.ok(
           headContent.includes(
             '<link rel="apple-touch-icon" href="https://example.com/brand-icon.png"',
           ),
-          `head HTML includes apple-touch-icon link from theme. storedHeadHtml=${storedHeadHtml}`,
+          `head HTML includes apple-touch-icon link from theme`,
         );
       });
 
