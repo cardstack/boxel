@@ -17,10 +17,15 @@ const CommandRunner = <template>
   >
     {{#if @model.error}}
       <pre data-prerender-error>{{@model.error.message}}</pre>
-    {{else if @model.value}}
-      <CardContainer class='command-runner-result'>
-        <CardRenderer @card={{@model.value}} @format='isolated' />
-      </CardContainer>
+    {{else}}
+      {{#if @model.value}}
+        <CardContainer class='command-runner-result'>
+          <CardRenderer @card={{@model.value}} @format='isolated' />
+        </CardContainer>
+      {{/if}}
+      {{#if @model.result}}
+        <pre data-command-result hidden>{{@model.result}}</pre>
+      {{/if}}
     {{/if}}
   </div>
 </template> satisfies TemplateOnlyComponent<{ model: CommandRunnerModel }>;
