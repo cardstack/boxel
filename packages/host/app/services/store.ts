@@ -769,7 +769,13 @@ export default class StoreService extends Service implements StoreInterface {
     }
     return getSearch<T>(parent, getOwner(this)!, getQuery, getRealms, {
       ...opts,
-      onLoad: (load: Promise<unknown>) => this.store.trackLoad(load),
+      onLoad: (load: Promise<unknown>) => {
+        // Swallow rejections from cancelled restartable tasks so they
+        // don't surface as unhandled promise rejections.  trackLoad
+        // uses .finally() for cleanup so it handles both outcomes.
+        load.catch(() => {});
+        this.store.trackLoad(load);
+      },
     }) as unknown as SearchResource<T>;
   }
 
