@@ -25,6 +25,7 @@ import {
   Loader,
   MatrixClient,
   Realm,
+  simpleHash,
   testHostModeRealmURL,
   testRealmInfo,
   testRealmURL,
@@ -59,7 +60,6 @@ import type {
 } from 'https://cardstack.com/base/card-api';
 
 import { TestRealmAdapter } from './adapter';
-import { getCachedSnapshot, setCachedSnapshot } from './db-snapshot-cache';
 import { testRealmServerMatrixUsername } from './mock-matrix';
 import percySnapshot from './percy-snapshot';
 import { setupAuthEndpoints } from './realm-server-mock';
@@ -100,6 +100,9 @@ export {
 const { sqlSchema } = ENV;
 
 type CardAPI = typeof import('https://cardstack.com/base/card-api');
+type ModuleHooks = {
+  after: (callback: () => void | Promise<void>) => void;
+};
 
 const baseTestMatrix = {
   url: new URL(`http://localhost:8008`),
@@ -159,45 +162,109 @@ export async function getDbAdapter() {
   return dbAdapter;
 }
 
+const realmCacheTeardownRegistrations = new WeakMap<ModuleHooks, Set<string>>();
+
+export function setupRealmCacheTeardown(
+  hooks: ModuleHooks,
+  moduleCacheKey?: string,
+): void {
+  let resolvedModuleCacheKey = moduleCacheKey ?? getCurrentModuleCacheKey();
+  let snapshotPrefix = snapshotPrefixForModule(resolvedModuleCacheKey);
+  let registrations = realmCacheTeardownRegistrations.get(hooks);
+  if (!registrations) {
+    registrations = new Set<string>();
+    realmCacheTeardownRegistrations.set(hooks, registrations);
+  }
+  if (registrations.has(snapshotPrefix)) {
+    return;
+  }
+  registrations.add(snapshotPrefix);
+  hooks.after(async () => {
+    let dbAdapter = await getDbAdapter();
+    await dbAdapter.deleteSnapshotsByPrefix(snapshotPrefix);
+  });
+}
+
 export async function withCachedRealmSetup<T>(
-  cacheKeyOrSetup: string | (() => Promise<T>),
+  setupOrAdditionalKey: (() => Promise<T>) | string,
   maybeSetup?: () => Promise<T>,
 ): Promise<T> {
-  let resolvedCacheKey: string;
-  let resolvedSetup: () => Promise<T>;
-  if (typeof cacheKeyOrSetup === 'string') {
+  let moduleCacheKey = getCurrentModuleCacheKey();
+  let additionalKey: string | undefined;
+  let setup: () => Promise<T>;
+
+  if (typeof setupOrAdditionalKey === 'function') {
+    setup = setupOrAdditionalKey;
+  } else {
     if (!maybeSetup) {
       throw new Error(
-        'withCachedRealmSetup(cacheKey, setup) requires a setup callback',
+        'withCachedRealmSetup(additionalKey, setup) requires a setup callback',
       );
     }
-    resolvedCacheKey = cacheKeyOrSetup;
-    resolvedSetup = maybeSetup;
-  } else {
-    resolvedCacheKey = getCurrentModuleCacheKey();
-    resolvedSetup = cacheKeyOrSetup;
+    additionalKey = setupOrAdditionalKey;
+    setup = maybeSetup;
   }
 
+  let snapshotName = snapshotNameForCacheKey(moduleCacheKey, additionalKey);
   let dbAdapter = await getDbAdapter();
-  let cached = getCachedSnapshot(resolvedCacheKey);
-  if (cached) {
-    await dbAdapter.importSnapshot(cached);
-    return await resolvedSetup();
+  if (dbAdapter.hasSnapshot(snapshotName)) {
+    await dbAdapter.importSnapshot(snapshotName);
+    return await setup();
   }
-  let result = await resolvedSetup();
-  let exported = await dbAdapter.exportSnapshot();
-  setCachedSnapshot(resolvedCacheKey, exported);
+  let result = await setup();
+  await dbAdapter.exportSnapshot(snapshotName);
   return result;
 }
 
 function getCurrentModuleCacheKey(): string {
-  let moduleName = QUnit.config.current?.module?.name;
+  let config = QUnit.config as QUnit['config'] & {
+    currentModule?: { name?: string };
+  };
+  let moduleName =
+    QUnit.config.current?.module?.name ?? config.currentModule?.name;
   if (moduleName?.trim()) {
     return moduleName;
   }
   throw new Error(
     'withCachedRealmSetup() was called without an explicit cacheKey, but no active QUnit module name was available',
   );
+}
+
+function snapshotNameForCacheKey(
+  moduleCacheKey: string,
+  additionalKey?: string,
+): string {
+  let trimmedModuleCacheKey = moduleCacheKey.trim();
+  if (!trimmedModuleCacheKey) {
+    throw new Error('snapshotNameForCacheKey() requires a non-empty cache key');
+  }
+
+  let trimmedAdditionalKey = additionalKey?.trim();
+  let effectiveCacheKey = trimmedAdditionalKey
+    ? `${trimmedModuleCacheKey}::${trimmedAdditionalKey}`
+    : trimmedModuleCacheKey;
+
+  let slug = (trimmedAdditionalKey ?? trimmedModuleCacheKey)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 40);
+
+  if (!slug) {
+    slug = 'module';
+  }
+
+  return `${snapshotPrefixForModule(trimmedModuleCacheKey)}${simpleHash(
+    effectiveCacheKey,
+  )}_${slug}`;
+}
+
+function snapshotPrefixForModule(moduleCacheKey: string): string {
+  let trimmedModuleCacheKey = moduleCacheKey.trim();
+  if (!trimmedModuleCacheKey) {
+    throw new Error('snapshotPrefixForModule() requires a non-empty cache key');
+  }
+  return `snapshot_${simpleHash(trimmedModuleCacheKey)}_`;
 }
 
 export async function withSlowSave(
@@ -751,6 +818,7 @@ export const createPrerenderAuth = (
   // Host tests prerender via the in-app card-prerender component, so we don't need real JWT auth.
   return JSON.stringify({});
 };
+
 async function setupTestRealm({
   contents,
   realmURL,

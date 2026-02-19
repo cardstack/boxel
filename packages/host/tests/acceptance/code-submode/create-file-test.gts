@@ -8,6 +8,7 @@ import { baseRealm, Deferred } from '@cardstack/runtime-common';
 import {
   percySnapshot,
   setupLocalIndexing,
+  setupRealmCacheTeardown,
   testRealmURL,
   setupOnSave,
   setupAcceptanceTestRealm,
@@ -201,6 +202,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
   setupOnSave(hooks);
+  setupRealmCacheTeardown(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',

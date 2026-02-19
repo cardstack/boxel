@@ -61,6 +61,9 @@ export default class SQLiteAdapter implements DBAdapter {
   async close() {
     this.assertNotClosed();
     await this.started;
+    for (let snapshotName of Array.from(this.snapshotInfos.keys())) {
+      await this.deleteSnapshot(snapshotName);
+    }
     await this.sqlite('close', { dbId: this.dbId });
     this.#isClosed = true;
   }
@@ -163,10 +166,18 @@ export default class SQLiteAdapter implements DBAdapter {
     return results;
   }
 
-  async exportSnapshot(): Promise<string> {
+  async exportSnapshot(snapshotName?: string): Promise<string> {
     this.assertNotClosed();
     await this.started;
-    let alias = `snapshot_${++this.snapshotCounter}`;
+    let alias = snapshotName ?? `snapshot_${++this.snapshotCounter}`;
+    if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(alias)) {
+      throw new Error(
+        `Snapshot name '${alias}' is invalid. Snapshot names must match /^[A-Za-z][A-Za-z0-9_]*$/.`,
+      );
+    }
+    if (this.snapshotInfos.has(alias)) {
+      throw new Error(`Snapshot database '${alias}' already exists`);
+    }
     let filename = `file:${alias}?mode=memory&cache=shared`;
     let response = await this.sqlite('open', {
       filename,
@@ -214,6 +225,47 @@ export default class SQLiteAdapter implements DBAdapter {
       }
     }
     return alias;
+  }
+
+  hasSnapshot(snapshotName: string): boolean {
+    return this.snapshotInfos.has(snapshotName);
+  }
+
+  async deleteSnapshotsByPrefix(snapshotNamePrefix: string): Promise<void> {
+    this.assertNotClosed();
+    await this.started;
+    let snapshotNames = Array.from(this.snapshotInfos.keys()).filter((name) =>
+      name.startsWith(snapshotNamePrefix),
+    );
+    for (let snapshotName of snapshotNames) {
+      await this.deleteSnapshot(snapshotName);
+    }
+  }
+
+  async deleteSnapshot(snapshotName: string): Promise<void> {
+    this.assertNotClosed();
+    await this.started;
+    let snapshotInfo = this.snapshotInfos.get(snapshotName);
+    if (!snapshotInfo) {
+      return;
+    }
+
+    let attached = (await this.internalExecute(
+      'SELECT name FROM pragma_database_list WHERE name = $1;',
+      { bind: [snapshotName] },
+    )) as { name: string }[];
+
+    if (attached.length) {
+      await this.sqlite('exec', {
+        dbId: this.dbId,
+        sql: `DETACH DATABASE ${this.#quoteIdentifier(snapshotName)};`,
+      });
+    }
+
+    await this.sqlite('close', {
+      dbId: snapshotInfo.dbId,
+    });
+    this.snapshotInfos.delete(snapshotName);
   }
 
   async importSnapshot(snapshotName: string) {
