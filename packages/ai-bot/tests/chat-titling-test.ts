@@ -869,4 +869,124 @@ module('setTitle', () => {
     );
     // The assertions are inside the mock matrixClient.setRoomName function
   });
+
+  test('setTitle passes senderMatrixUserId as user param to OpenAI', async (assert) => {
+    let capturedRequest: any;
+    const mockOpenAI = {
+      chat: {
+        completions: {
+          create: async (request: any) => {
+            capturedRequest = request;
+            return {
+              choices: [{ message: { content: 'Test Title' } }],
+            };
+          },
+        },
+      },
+    } as unknown as OpenAI;
+
+    const mockMatrixClient = {
+      setRoomName: async () => ({ event_id: 'new-event-id' }),
+    } as unknown as MatrixClient;
+
+    const history: DiscreteMatrixEvent[] = [
+      {
+        type: 'm.room.message',
+        event_id: 'msg-1',
+        origin_server_ts: 1234567890,
+        status: EventStatus.SENT,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          body: 'Hello',
+          data: {
+            context: {
+              functions: [],
+            },
+          },
+        },
+        sender: '@user:localhost',
+        room_id: 'test-room-id',
+        unsigned: {
+          age: 1000,
+          transaction_id: '1',
+        },
+      },
+    ];
+
+    await setTitle(
+      mockOpenAI,
+      mockMatrixClient,
+      'test-room-id',
+      history,
+      '@aibot:localhost',
+      undefined,
+      '@user:localhost',
+    );
+
+    assert.equal(
+      capturedRequest.user,
+      '@user:localhost',
+      'user param is set to senderMatrixUserId',
+    );
+  });
+
+  test('setTitle omits user param when senderMatrixUserId is not provided', async (assert) => {
+    let capturedRequest: any;
+    const mockOpenAI = {
+      chat: {
+        completions: {
+          create: async (request: any) => {
+            capturedRequest = request;
+            return {
+              choices: [{ message: { content: 'Test Title' } }],
+            };
+          },
+        },
+      },
+    } as unknown as OpenAI;
+
+    const mockMatrixClient = {
+      setRoomName: async () => ({ event_id: 'new-event-id' }),
+    } as unknown as MatrixClient;
+
+    const history: DiscreteMatrixEvent[] = [
+      {
+        type: 'm.room.message',
+        event_id: 'msg-1',
+        origin_server_ts: 1234567890,
+        status: EventStatus.SENT,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          body: 'Hello',
+          data: {
+            context: {
+              functions: [],
+            },
+          },
+        },
+        sender: '@user:localhost',
+        room_id: 'test-room-id',
+        unsigned: {
+          age: 1000,
+          transaction_id: '1',
+        },
+      },
+    ];
+
+    await setTitle(
+      mockOpenAI,
+      mockMatrixClient,
+      'test-room-id',
+      history,
+      '@aibot:localhost',
+    );
+
+    assert.strictEqual(
+      capturedRequest.user,
+      undefined,
+      'user param is not set when senderMatrixUserId is not provided',
+    );
+  });
 });
