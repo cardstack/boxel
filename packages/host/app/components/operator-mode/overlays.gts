@@ -230,7 +230,9 @@ export default class Overlays extends Component<OverlaySignature> {
       let canWrite = this.realm.canWrite(cardId);
       format = canWrite ? format : 'isolated';
       if (this.args.viewCard) {
-        await this.args.viewCard(new URL(cardId), format, {
+        let target =
+          typeof cardDefOrId === 'string' ? new URL(cardId) : cardDefOrId;
+        await this.args.viewCard(target, format, {
           fieldType,
           fieldName,
         });

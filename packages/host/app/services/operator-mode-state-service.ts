@@ -1139,7 +1139,11 @@ export default class OperatorModeStateService extends Service {
     }));
   });
 
-  openCardInInteractMode(id: string, format: Format = 'isolated') {
+  openCardInInteractMode(
+    id: string,
+    format: Format = 'isolated',
+    type: StackItemType = 'card',
+  ) {
     this.clearStacks();
     // Determine realm URL. If id is a localId, look up the instance in the store to read its realm.
     let realmHref: string | undefined;
@@ -1162,11 +1166,13 @@ export default class OperatorModeStateService extends Service {
       id: `${realmHref}index`,
       stackIndex: 0,
       format: 'isolated',
+      type: 'card',
     });
     let newItem = new StackItem({
       id, // keep provided id (may be localId) so later replacement on save works
       stackIndex: 0,
       format,
+      type,
     });
     this.addItemToStack(indexItem);
     this.addItemToStack(newItem);
@@ -1193,6 +1199,7 @@ export default class OperatorModeStateService extends Service {
       id,
       format: 'isolated',
       stackIndex: 0,
+      type: 'card',
     });
     this.clearStacks();
     this.addItemToStack(stackItem);

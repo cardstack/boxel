@@ -21,13 +21,6 @@ function inferStackItemType(id: string, type?: StackItemType): StackItemType {
   if (type) {
     return type;
   }
-  let withoutJson = id.replace(/\.json$/, '');
-  let path = withoutJson.split(/[?#]/)[0];
-  let lastSegment = path.split('/').pop() ?? '';
-  let lastDotIndex = lastSegment.lastIndexOf('.');
-  if (lastDotIndex > 0 && lastDotIndex < lastSegment.length - 1) {
-    return 'file-meta';
-  }
   return 'card';
 }
 

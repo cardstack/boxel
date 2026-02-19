@@ -24,6 +24,7 @@ import {
   getMenuItems,
   identifyCard,
   isCardInstance,
+  isFileDefInstance,
   isResolvedCodeRef,
 } from '@cardstack/runtime-common';
 
@@ -94,7 +95,11 @@ export default class PreviewPanel extends Component<Signature> {
 
   private openInInteractMode = () => {
     if (this.cardId) {
-      this.operatorModeStateService.openCardInInteractMode(this.cardId);
+      this.operatorModeStateService.openCardInInteractMode(
+        this.cardId,
+        'isolated',
+        isFileDefInstance(this.args.card) ? 'file-meta' : 'card',
+      );
     }
   };
 
