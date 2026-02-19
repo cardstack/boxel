@@ -487,6 +487,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
         'command-module.gts': commandModuleSource,
         'erroring-module.gts': erroringModuleSource,
         'empty-file.gts': '',
+        'sample-styles.css': 'body { color: red; }',
         'person-entry.json': {
           data: {
             type: 'card',
@@ -1560,10 +1561,10 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       .dom('[data-test-card-module-definition]')
       .includesText('custom file');
 
-    // Inherit action should not be available for file defs
+    // Inherit action should be available for exported file defs
     assert
       .dom('[data-test-action-button="Inherit"]')
-      .doesNotExist('Inherit action is not shown for FileDef declarations');
+      .exists('Inherit action is shown for exported FileDef declarations');
   });
 
   test('Schema/Playground/Spec panes render for a focused FileDef declaration', async function (assert) {
@@ -1926,6 +1927,53 @@ export class TestField extends ExportedField {
   static displayName = "Test Field";
 }`.trim(),
         'the source is correct',
+      );
+      deferred.fulfill();
+    });
+    await click('[data-test-create-definition]');
+    await waitFor('[data-test-create-file-modal]', { count: 0 });
+    await deferred.promise;
+  });
+
+  test<TestContextWithSave>('can inherit from an exported file def declaration', async function (assert) {
+    assert.expect(2);
+    let expectedSrc = `
+import { CustomFileDef } from './file-def';
+export class TestFileDef extends CustomFileDef {
+  static displayName = "Test File Def";
+}`.trim();
+    await visitOperatorMode({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}file-def.gts`,
+    });
+
+    await waitFor('[data-boxel-selector-item-text="CustomFileDef"]');
+
+    await click('[data-boxel-selector-item-text="CustomFileDef"]');
+    await waitFor('[data-test-card-module-definition]');
+
+    await click('[data-test-action-button="Inherit"]');
+    await waitFor(
+      `[data-test-create-file-modal][data-test-ready] [data-test-realm-name="Test Workspace B"]`,
+    );
+
+    assert
+      .dom('[data-test-inherits-from-field] .pill')
+      .includesText('custom file', 'the inherits from is correct');
+
+    await fillIn('[data-test-display-name-field]', 'Test File Def');
+    await fillIn('[data-test-file-name-field]', '/test-file-def');
+
+    let deferred = new Deferred<void>();
+    this.onSave((_, content) => {
+      if (typeof content !== 'string') {
+        throw new Error(`expected string save data`);
+      }
+      assert.strictEqual(
+        content,
+        expectedSrc,
+        'the source is correct - no Component import for file defs',
       );
       deferred.fulfill();
     });
@@ -2400,6 +2448,42 @@ export class ExportedCard extends ExportedCardParent {
         .doesNotExist(
           'Create Listing button is not displayed when user lacks write permissions',
         );
+    });
+
+    test('inspector shows file inheritance panel for non-module files', async function (assert) {
+      await visitOperatorMode({
+        stacks: [[]],
+        submode: 'code',
+        codePath: `${testRealmURL}sample-styles.css`,
+      });
+
+      await waitFor('[data-test-card-inspector-panel]');
+      await waitFor('[data-test-inheritance-panel-header]');
+
+      assert
+        .dom('[data-test-inheritance-panel-header]')
+        .hasText('File Inheritance');
+
+      assert
+        .dom('[data-test-card-instance-definition]')
+        .exists('file instance definition is shown');
+      assert
+        .dom(
+          '[data-test-card-instance-definition] [data-test-definition-header]',
+        )
+        .includesText('File Instance');
+      assert
+        .dom(
+          '[data-test-card-instance-definition] [data-test-definition-file-extension]',
+        )
+        .includesText('.css');
+
+      assert
+        .dom('[data-test-card-module-definition]')
+        .exists('file definition (adopts from) is shown');
+      assert
+        .dom('[data-test-card-module-definition]')
+        .includesText('File Definition');
     });
   });
 });

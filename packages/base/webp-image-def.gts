@@ -5,6 +5,7 @@ import { extractWebpDimensions } from './webp-meta-extractor';
 
 export class WebpDef extends ImageDef {
   static displayName = 'WebP Image';
+  static acceptTypes = '.webp,image/webp';
 
   static async extractAttributes(
     url: string,

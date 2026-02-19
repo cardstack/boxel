@@ -47,7 +47,7 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends google-chrome-stable \
     && rm -rf /var/lib/apt/lists/*
 
-RUN npm install -g pnpm@10.17.0
+RUN npm install -g pnpm@10.30.0
 
 RUN groupadd -r pptruser \
     && useradd -r -m -d /home/pptruser -g pptruser -G audio,video pptruser
