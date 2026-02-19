@@ -420,13 +420,17 @@ export default class RenderRoute extends Route<Model> {
     // probably will be, so just optimistically including those
     let fields = cardApi.getFields(instance, { includeComputeds: true });
     for (let [fieldName, field] of Object.entries(fields)) {
-      if (field?.isUsed) {
+      // Touch fields marked isUsed and query-backed fields (linksTo/linksToMany
+      // with a queryDefinition). Query-backed fields create a SearchResource
+      // whose async search must be tracked before store.loaded() is called so
+      // that prerendering waits for the search results.
+      if (field?.isUsed || field?.queryDefinition) {
         try {
           // accessing the field triggers the lazy loading of the linked field
           (instance as any)[fieldName];
         } catch (error) {
           console.warn(
-            `Failed to touch field '${fieldName}' on ${instance.constructor.name} for isUsed=true:`,
+            `Failed to touch field '${fieldName}' on ${instance.constructor.name}:`,
             error,
           );
         }
