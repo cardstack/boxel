@@ -87,6 +87,8 @@ module('Integration | operator-mode | ui', function (hooks) {
   });
 
   test(`click on "links to" the embedded file will open it on the stack`, async function (assert) {
+    let linkedFileId = `${testRealmURL}FileLinkCard/notes.txt`;
+
     await ctx.testRealm.write(
       'file-link-card.gts',
       `
@@ -152,10 +154,18 @@ module('Integration | operator-mode | ui', function (hooks) {
     await waitFor('[data-test-stack-card-index="1"]');
     assert.dom('[data-test-stack-card-index]').exists({ count: 2 });
     assert
-      .dom(
-        '[data-test-stack-card-index="1"] [data-test-boxel-card-header-title]',
-      )
-      .includesText('notes.txt');
+      .dom(`[data-test-stack-card="${linkedFileId}"]`)
+      .exists('linked file opens as a second stack card');
+    assert.strictEqual(
+      ctx.operatorModeStateService.state?.stacks?.[0]?.[1]?.id,
+      linkedFileId,
+      'operator mode state targets the linked file',
+    );
+    assert.strictEqual(
+      ctx.operatorModeStateService.state?.stacks?.[0]?.[1]?.type,
+      'file-meta',
+      'stack item type is file-meta',
+    );
   });
 
   test(`toggles mode switcher`, async function (assert) {
