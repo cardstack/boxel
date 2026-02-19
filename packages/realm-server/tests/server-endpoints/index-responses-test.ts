@@ -693,6 +693,34 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           },
         );
 
+        // Diagnostic: check what was stored in the DB
+        let diagRows = (await context.dbAdapter.execute(
+          `SELECT head_html, isolated_html, error_doc, deps, resource FROM boxel_index
+           WHERE url LIKE '%card-with-theme%'
+             AND type = 'instance'
+             AND is_deleted IS NOT TRUE
+           LIMIT 1`,
+        )) as { head_html: string | null; isolated_html: string | null; error_doc: string | null; deps: string | null; resource: string | null }[];
+        console.log('=== DIAG head_html ===', JSON.stringify(diagRows[0]?.head_html?.substring(0, 500)));
+        console.log('=== DIAG isolated_html length ===', diagRows[0]?.isolated_html?.length ?? 0);
+        console.log('=== DIAG error_doc ===', diagRows[0]?.error_doc?.substring(0, 500));
+        console.log('=== DIAG deps ===', diagRows[0]?.deps);
+        let resource = diagRows[0]?.resource ? JSON.parse(diagRows[0].resource) : null;
+        console.log('=== DIAG resource.relationships ===', JSON.stringify(resource?.relationships));
+
+        // Also check the theme card itself
+        let themeRows = (await context.dbAdapter.execute(
+          `SELECT url, head_html, isolated_html, error_doc, resource FROM boxel_index
+           WHERE url LIKE '%a-test-theme%'
+             AND type = 'instance'
+             AND is_deleted IS NOT TRUE
+           LIMIT 1`,
+        )) as { url: string; head_html: string | null; isolated_html: string | null; error_doc: string | null; resource: string | null }[];
+        let themeResource = themeRows[0]?.resource ? JSON.parse(themeRows[0].resource) : null;
+        console.log('=== DIAG theme card url ===', themeRows[0]?.url);
+        console.log('=== DIAG theme resource.attributes ===', JSON.stringify(themeResource?.attributes)?.substring(0, 300));
+        console.log('=== DIAG theme error_doc ===', themeRows[0]?.error_doc?.substring(0, 300));
+
         let response = await context.request2
           .get('/test/card-with-theme')
           .set('Accept', 'text/html');
@@ -708,7 +736,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           headContent.includes(
             '<link rel="icon" href="https://example.com/brand-icon.png"',
           ),
-          `head HTML includes favicon link from theme`,
+          `head HTML includes favicon link from theme. headContent=${headContent.substring(0, 500)}`,
         );
         assert.ok(
           headContent.includes(
