@@ -16,6 +16,8 @@ import merge from 'lodash/merge';
 import { TrackedObject, TrackedMap } from 'tracked-built-ins';
 
 import {
+  baseFileRef,
+  CardError,
   hasExecutableExtension,
   isCardError,
   isCardInstance,
@@ -23,6 +25,7 @@ import {
   isFileMetaResource,
   isSingleCardDocument,
   isLinkableCollectionDocument,
+  resolveFileDefCodeRef,
   Deferred,
   delay,
   mergeRelationships,
@@ -45,12 +48,14 @@ import {
   type AutoSaveState,
   type CardDocument,
   type SingleCardDocument,
+  type SingleFileMetaDocument,
   type CardResourceMeta,
   type LooseSingleCardDocument,
   type LooseCardResource,
   type CardErrorJSONAPI,
   type CardErrorsJSONAPI,
   type ErrorEntry,
+  type RenderError,
   type FileMetaResource,
   type LooseLinkableResource,
   type LooseSingleResourceDocument,
@@ -73,10 +78,13 @@ import {
   type SearchDataResource,
 } from '../resources/search-data';
 
+import { FileDefAttributesExtractor } from '../utils/file-def-attributes-extractor';
 import {
   enableRenderTimerStub,
   withTimersBlocked,
 } from '../utils/render-timer-stub';
+
+import { errorJsonApiToErrorEntry } from '../lib/window-error-handler';
 
 import type { CardSaveSubscriber } from './card-service';
 import type CardService from './card-service';
@@ -1410,7 +1418,12 @@ export default class StoreService extends Service implements StoreInterface {
         throw new Error(`file-meta reads do not support local ids (${id})`);
       }
       let url = id;
-      let fileMetaDoc = await this.store.loadFileMetaDocument(url);
+      let fileMetaDoc: SingleFileMetaDocument | CardError;
+      if (this.isRenderStore && (globalThis as any).__boxelRenderContext) {
+        fileMetaDoc = await this.extractFileMetaDirectly(url);
+      } else {
+        fileMetaDoc = await this.store.loadFileMetaDocument(url);
+      }
       if (isCardError(fileMetaDoc)) {
         throw fileMetaDoc;
       }
@@ -1436,6 +1449,31 @@ export default class StoreService extends Service implements StoreInterface {
     } finally {
       this.inflightGetFileMeta.delete(id);
     }
+  }
+
+  private async extractFileMetaDirectly(
+    url: string,
+  ): Promise<SingleFileMetaDocument | CardError> {
+    let fileDefCodeRef = resolveFileDefCodeRef(new URL(url));
+    let extractor = new FileDefAttributesExtractor({
+      loaderService: this.loaderService,
+      network: this.network,
+      fileURL: url,
+      fileDefCodeRef,
+      baseFileDefCodeRef: baseFileRef,
+      contentHash: undefined,
+      contentSize: undefined,
+      buildError: (errorUrl, error) => {
+        let errorJSONAPI = formattedError(errorUrl, error).errors[0];
+        return errorJsonApiToErrorEntry(errorJSONAPI) as RenderError;
+      },
+    });
+    let result = await extractor.extract();
+    if (result.status === 'error' || !result.resource) {
+      let msg = result.error?.error?.message ?? 'File extract failed';
+      return new CardError(msg, { status: 500 });
+    }
+    return { data: result.resource };
   }
 
   // this function is used to determine if the instance will be auto-saved or
