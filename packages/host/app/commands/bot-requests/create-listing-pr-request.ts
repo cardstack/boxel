@@ -4,13 +4,14 @@ import { isCardInstance } from '@cardstack/runtime-common';
 
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseCommand from '../../lib/host-base-command';
 
-import UseAiAssistantCommand from './ai-assistant';
+import UseAiAssistantCommand from '../ai-assistant';
+
 import SendBotTriggerEventCommand from './send-bot-trigger-event';
 
-import type MatrixService from '../services/matrix-service';
-import type StoreService from '../services/store';
+import type MatrixService from '../../services/matrix-service';
+import type StoreService from '../../services/store';
 import type { Listing } from '@cardstack/catalog/listing/listing';
 
 export default class CreateListingPRRequestCommand extends HostBaseCommand<
@@ -62,6 +63,7 @@ export default class CreateListingPRRequestCommand extends HostBaseCommand<
 
     await new SendBotTriggerEventCommand(this.commandContext).execute({
       roomId,
+      realm,
       type: 'create-listing-pr',
       input: {
         roomId,
