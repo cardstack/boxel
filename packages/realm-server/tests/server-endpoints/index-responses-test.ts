@@ -668,11 +668,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           'card-with-theme file write was accepted',
         );
 
-        // Wait for the card to be indexed with head_html containing the theme icon.
-        // The card-api fix ensures nested relationships (like cardInfo.theme) are
-        // deserialized even when the parent contains field has no attributes, and
-        // #touchNestedLinksToFields ensures the linked theme is loaded before the
-        // head template renders during prerender.
+        // Wait for the card to be indexed (head_html populated, even if empty string).
         await waitUntil(
           async () => {
             let rows = (await context.dbAdapter.execute(
@@ -695,31 +691,31 @@ module(`server-endpoints/${basename(__filename)}`, function () {
 
         // Diagnostic: check what was stored in the DB
         let diagRows = (await context.dbAdapter.execute(
-          `SELECT head_html, isolated_html, error_doc, deps, resource FROM boxel_index
+          `SELECT head_html, isolated_html, error_doc, deps, pristine_doc FROM boxel_index
            WHERE url LIKE '%card-with-theme%'
              AND type = 'instance'
              AND is_deleted IS NOT TRUE
            LIMIT 1`,
-        )) as { head_html: string | null; isolated_html: string | null; error_doc: string | null; deps: string | null; resource: string | null }[];
+        )) as { head_html: string | null; isolated_html: string | null; error_doc: string | null; deps: string | null; pristine_doc: Record<string, any> | null }[];
         console.log('=== DIAG head_html ===', JSON.stringify(diagRows[0]?.head_html?.substring(0, 500)));
         console.log('=== DIAG isolated_html length ===', diagRows[0]?.isolated_html?.length ?? 0);
-        console.log('=== DIAG error_doc ===', diagRows[0]?.error_doc?.substring(0, 500));
-        console.log('=== DIAG deps ===', diagRows[0]?.deps);
-        let resource = diagRows[0]?.resource ? JSON.parse(diagRows[0].resource) : null;
-        console.log('=== DIAG resource.relationships ===', JSON.stringify(resource?.relationships));
+        console.log('=== DIAG error_doc ===', JSON.stringify(diagRows[0]?.error_doc)?.substring(0, 500));
+        console.log('=== DIAG deps ===', JSON.stringify(diagRows[0]?.deps));
+        let pristineDoc = diagRows[0]?.pristine_doc;
+        console.log('=== DIAG pristine_doc.relationships ===', JSON.stringify((pristineDoc as any)?.data?.relationships));
 
         // Also check the theme card itself
         let themeRows = (await context.dbAdapter.execute(
-          `SELECT url, head_html, isolated_html, error_doc, resource FROM boxel_index
+          `SELECT url, head_html, isolated_html, error_doc, pristine_doc FROM boxel_index
            WHERE url LIKE '%a-test-theme%'
              AND type = 'instance'
              AND is_deleted IS NOT TRUE
            LIMIT 1`,
-        )) as { url: string; head_html: string | null; isolated_html: string | null; error_doc: string | null; resource: string | null }[];
-        let themeResource = themeRows[0]?.resource ? JSON.parse(themeRows[0].resource) : null;
+        )) as { url: string; head_html: string | null; isolated_html: string | null; error_doc: string | null; pristine_doc: Record<string, any> | null }[];
+        let themePristine = themeRows[0]?.pristine_doc;
         console.log('=== DIAG theme card url ===', themeRows[0]?.url);
-        console.log('=== DIAG theme resource.attributes ===', JSON.stringify(themeResource?.attributes)?.substring(0, 300));
-        console.log('=== DIAG theme error_doc ===', themeRows[0]?.error_doc?.substring(0, 300));
+        console.log('=== DIAG theme pristine_doc.attributes ===', JSON.stringify((themePristine as any)?.data?.attributes)?.substring(0, 300));
+        console.log('=== DIAG theme error_doc ===', JSON.stringify(themeRows[0]?.error_doc)?.substring(0, 300));
 
         let response = await context.request2
           .get('/test/card-with-theme')
