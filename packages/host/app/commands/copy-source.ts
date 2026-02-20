@@ -20,14 +20,17 @@ export default class CopySourceCommand extends HostBaseCommand<
     return CopySourceInput;
   }
 
-  requireInputFields = ['fromRealmUrl', 'toRealmUrl'];
+  requireInputFields = ['originSourceUrl', 'destinationSourceUrl'];
 
   protected async run(
     input: BaseCommandModule.CopySourceInput,
   ): Promise<BaseCommandModule.CopySourceResult> {
-    const fromRealmUrl = new URL(input.fromRealmUrl);
-    const toRealmUrl = new URL(input.toRealmUrl);
-    let r = await this.cardService.copySource(fromRealmUrl, toRealmUrl);
+    const originSourceUrl = new URL(input.originSourceUrl);
+    const destinationSourceUrl = new URL(input.destinationSourceUrl);
+    let r = await this.cardService.copySource(
+      originSourceUrl,
+      destinationSourceUrl,
+    );
     let commandModule = await this.loadCommandModule();
     const { CopySourceResult } = commandModule;
     if (r.ok && r.url) {
