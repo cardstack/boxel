@@ -79,12 +79,12 @@ module('Integration | operator-mode | card catalog', function (hooks) {
     assert.dom(`[data-test-search-result]`).exists({ count: 2 });
     assert
       .dom(
-        `[data-test-search-result-index="0"][data-test-search-result="${testRealmURL}Person/burcu"]`,
+        `[data-test-search-result-index="0"] [data-test-search-result="${testRealmURL}Person/burcu"]`,
       )
       .exists();
     assert
       .dom(
-        `[data-test-search-result-index="1"][data-test-search-result="${testRealmURL}Person/fadhlan"]`,
+        `[data-test-search-result-index="1"] [data-test-search-result="${testRealmURL}Person/fadhlan"]`,
       )
       .exists();
   });
@@ -211,7 +211,7 @@ module('Integration | operator-mode | card catalog', function (hooks) {
       .hasText('1 result');
 
     assert.dom('[data-test-card-catalog-item]').exists({ count: 1 });
-    await click('[data-test-select]');
+    await click('[data-test-card-catalog-item]');
 
     await waitFor('[data-test-card-catalog-go-button][disabled]', {
       count: 0,
@@ -269,7 +269,9 @@ module('Integration | operator-mode | card catalog', function (hooks) {
     );
     assert.dom(`[data-test-card-catalog-item]`).exists({ count: 1 });
 
-    await click(`[data-test-select="${testRealmURL}Spec/publishing-packet"]`);
+    await click(
+      `[data-test-card-catalog-item="${testRealmURL}Spec/publishing-packet"]`,
+    );
     await waitUntil(
       () =>
         (
@@ -312,7 +314,9 @@ module('Integration | operator-mode | card catalog', function (hooks) {
 
     await fillIn(`[data-test-search-field]`, `alien`);
     await waitFor('[data-test-card-catalog-item]');
-    assert.dom(`[data-test-select="${testRealmURL}Author/1"]`).exists();
+    assert
+      .dom(`[data-test-card-catalog-item="${testRealmURL}Author/1"]`)
+      .exists();
   });
 
   test(`displays no cards available message if search result does not exist`, async function (assert) {
@@ -330,7 +334,9 @@ module('Integration | operator-mode | card catalog', function (hooks) {
 
     await fillIn(`[data-test-search-field]`, `friend`);
     await waitFor('[data-test-card-catalog-item]', { count: 0 });
-    assert.dom(`[data-test-card-catalog]`).hasText('No cards available');
+    assert
+      .dom(`[data-test-search-content-empty]`)
+      .hasText('No cards available');
   });
 
   test(`can filter by realm after searching in card catalog`, async function (assert) {
@@ -385,37 +391,35 @@ module('Integration | operator-mode | card catalog', function (hooks) {
 
     assert
       .dom(
-        `[data-test-realm="Operator Mode Workspace"] [data-test-select="${testRealmURL}Spec/pet-room"]`,
+        `[data-test-realm="Operator Mode Workspace"] [data-test-card-catalog-item="${testRealmURL}Spec/pet-room"]`,
       )
       .exists();
 
     assert
       .dom(
-        `[data-test-realm="Base Workspace"] [data-test-select="${baseRealm.url}types/card"]`,
+        `[data-test-realm="Base Workspace"] [data-test-card-catalog-item="${baseRealm.url}types/card"]`,
       )
       .exists();
 
-    await click('[data-test-realm-filter-button]');
-    await click('[data-test-boxel-menu-item-text="Base Workspace"]');
+    // Open realm picker and select only Operator Mode Workspace
+    await click('[data-test-realm-picker] [data-test-boxel-picker-trigger]');
+    await click(`[data-test-boxel-picker-option-row="${testRealmURL}"]`);
 
     assert.dom(`[data-test-realm]`).exists({ count: 1 });
     assert.dom('[data-test-realm="Operator Mode Workspace"]').exists();
     assert.dom('[data-test-realm="Base Workspace"]').doesNotExist();
-    assert.dom(`[data-test-select="${testRealmURL}Spec/pet-room"]`).exists();
+    assert
+      .dom(`[data-test-card-catalog-item="${testRealmURL}Spec/pet-room"]`)
+      .exists();
 
-    await click('[data-test-realm-filter-button]');
-    await click('[data-test-boxel-menu-item-text="Operator Mode Workspace"]');
-    assert.dom('[data-test-realm="Operator Mode Workspace"]').doesNotExist();
-    assert.dom('[data-test-realm="Base Workspace"]').doesNotExist();
-    assert.dom(`[data-test-card-catalog-item]`).doesNotExist();
-    assert.dom('[data-test-card-catalog]').hasText('No cards available');
+    // Switch to All Realms by clicking All Realms option
+    await click('[data-test-boxel-picker-option-row="select-all"]');
 
-    await click('[data-test-realm-filter-button]');
-    await click('[data-test-boxel-menu-item-text="Operator Mode Workspace"]');
-    assert.dom(`[data-test-realm]`).exists({ count: 1 });
     assert.dom('[data-test-realm="Operator Mode Workspace"]').exists();
-    assert.dom('[data-test-realm="Base Workspace"]').doesNotExist();
-    assert.dom(`[data-test-select="${testRealmURL}Spec/pet-room"]`).exists();
+    assert.dom('[data-test-realm="Base Workspace"]').exists();
+    assert
+      .dom(`[data-test-card-catalog-item="${testRealmURL}Spec/pet-room"]`)
+      .exists();
   });
 
   test(`can open new card editor in the stack after searching in card catalog`, async function (assert) {
@@ -438,7 +442,7 @@ module('Integration | operator-mode | card catalog', function (hooks) {
     );
     assert.dom(`[data-test-card-catalog-item]`).exists({ count: 2 });
 
-    await click(`[data-test-select="${testRealmURL}Spec/pet-card"]`);
+    await click(`[data-test-card-catalog-item="${testRealmURL}Spec/pet-card"]`);
     assert
       .dom(
         `[data-test-card-catalog-item="${testRealmURL}Spec/pet-card"][data-test-card-catalog-item-selected]`,
@@ -469,7 +473,7 @@ module('Integration | operator-mode | card catalog', function (hooks) {
     await typeIn(`[data-test-search-field]`, `pet`);
     assert.dom(`[data-test-search-field]`).hasValue('pet');
     await waitFor('[data-test-card-catalog-item]', { count: 2 });
-    await click(`[data-test-select="${testRealmURL}Spec/pet-room"]`);
+    await click(`[data-test-card-catalog-item="${testRealmURL}Spec/pet-room"]`);
     assert
       .dom(
         `[data-test-card-catalog-item="${testRealmURL}Spec/pet-room"][data-test-card-catalog-item-selected]`,
@@ -477,7 +481,7 @@ module('Integration | operator-mode | card catalog', function (hooks) {
       .exists({ count: 1 });
 
     await click('[data-test-card-catalog-cancel-button]');
-    await waitFor('[data-test-card-catalog]', { count: 0 });
+    await waitFor('[data-test-card-catalog-modal]', { count: 0 });
 
     assert.dom('[data-test-operator-mode-stack="0"]').exists();
     assert
@@ -511,7 +515,7 @@ module('Integration | operator-mode | card catalog', function (hooks) {
 
     await waitFor('[data-test-card-catalog-item]', { count: 1 });
 
-    await click(`[data-test-select="${testRealmURL}Author/1"]`);
+    await click(`[data-test-card-catalog-item="${testRealmURL}Author/1"]`);
     assert
       .dom(
         `[data-test-card-catalog-item="${testRealmURL}Author/1"][data-test-card-catalog-item-selected]`,
@@ -519,7 +523,7 @@ module('Integration | operator-mode | card catalog', function (hooks) {
       .exists({ count: 1 });
 
     await click('[data-test-card-catalog-cancel-button]');
-    await waitFor('[data-test-card-catalog]', { count: 0 });
+    await waitFor('[data-test-card-catalog-modal]', { count: 0 });
 
     assert
       .dom(`[data-test-field="authorBio"] [data-test-add-new]`)

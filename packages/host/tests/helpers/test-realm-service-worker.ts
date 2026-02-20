@@ -3,6 +3,7 @@ import { getService } from '@universal-ember/test-support';
 import type NetworkService from '@cardstack/host/services/network';
 
 let swReady: Promise<void> | undefined;
+let swRegistration: ServiceWorkerRegistration | undefined;
 
 async function ensureRegistered(): Promise<void> {
   if (swReady) {
@@ -10,6 +11,7 @@ async function ensureRegistered(): Promise<void> {
   }
   swReady = (async () => {
     let reg = await navigator.serviceWorker.register('/test-realm-sw.js');
+    swRegistration = reg;
     let sw = reg.installing || reg.waiting || reg.active;
     if (sw && sw.state !== 'activated') {
       await new Promise<void>((resolve) => {
@@ -74,6 +76,17 @@ export function setupTestRealmServiceWorker(hooks: NestedHooks) {
     if (handler) {
       navigator.serviceWorker.removeEventListener('message', handler);
       handler = undefined;
+    }
+  });
+
+  // Unregister the test-realm SW after the module's tests complete so it
+  // doesn't persist and replace the auth service worker (which would break
+  // the app if the user navigates from /tests back to / during ember serve).
+  hooks.after(async function () {
+    if (swRegistration) {
+      await swRegistration.unregister();
+      swRegistration = undefined;
+      swReady = undefined;
     }
   });
 }

@@ -19,6 +19,7 @@ import window from 'ember-window-mock';
 
 import { TrackedObject } from 'tracked-built-ins';
 
+import { LoadingIndicator } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
 
 import type {
@@ -33,6 +34,7 @@ import {
   type CardResourceMeta,
   isFieldDef,
   isSpecCard,
+  isCardErrorJSONAPI,
   internalKeyFor,
   GetCardsContextName,
   GetCardContextName,
@@ -45,15 +47,13 @@ import {
 
 import CreateSpecCommand from '@cardstack/host/commands/create-specs';
 import CardError from '@cardstack/host/components/operator-mode/card-error';
-import CardRendererPanel from '@cardstack/host/components/operator-mode/card-renderer-panel/index';
 import Playground from '@cardstack/host/components/operator-mode/code-submode/playground/playground';
-
 import SchemaEditor from '@cardstack/host/components/operator-mode/code-submode/schema-editor';
-
 import SpecPreview from '@cardstack/host/components/operator-mode/code-submode/spec-preview';
 import SpecPreviewBadge from '@cardstack/host/components/operator-mode/code-submode/spec-preview-badge';
 
 import ToggleButton from '@cardstack/host/components/operator-mode/code-submode/toggle-button';
+import PreviewPanel from '@cardstack/host/components/operator-mode/preview-panel/index';
 import SyntaxErrorDisplay from '@cardstack/host/components/operator-mode/syntax-error-display';
 import consumeContext from '@cardstack/host/helpers/consume-context';
 
@@ -158,6 +158,53 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
     return state;
   });
 
+  @use private fileDefResource = resource(() => {
+    let state = new TrackedObject<{
+      value: FileDef | undefined;
+      isLoading: boolean;
+      error: unknown;
+    }>({
+      value: undefined,
+      isLoading: false,
+      error: undefined,
+    });
+    if (!this.args.isIncompatibleFile || !this.args.readyFile?.url) {
+      return state;
+    }
+    let fileUrl = this.args.readyFile.url;
+    state.isLoading = true;
+    (async () => {
+      try {
+        let result = await this.store.get(fileUrl, { type: 'file-meta' });
+        if (isCardErrorJSONAPI(result)) {
+          state.error = result;
+          state.value = undefined;
+        } else {
+          state.value = result as unknown as FileDef;
+          state.error = undefined;
+        }
+      } catch (e) {
+        state.error = e;
+        state.value = undefined;
+      } finally {
+        state.isLoading = false;
+      }
+    })();
+    return state;
+  });
+
+  private get fileDefInstance(): FileDef | undefined {
+    return this.fileDefResource?.value;
+  }
+
+  private get fileDefError(): boolean {
+    return this.fileDefResource?.error != null;
+  }
+
+  private get isFileDefLoading(): boolean {
+    return this.fileDefResource?.isLoading ?? false;
+  }
+
   private get selectedDeclarationIsSpec() {
     return this.isSpecResource?.value ?? false;
   }
@@ -261,6 +308,9 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
 
   private get fileIncompatibilityMessage() {
     if (this.args.isIncompatibleFile) {
+      if (this.fileDefError) {
+        return `Unable to load file preview. Choose a file representing a card instance or module.`;
+      }
       return `No tools are available to be used with this file type. Choose a file representing a card instance or module.`;
     }
     return null;
@@ -495,6 +545,16 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
           'File is empty - tools like schema inspector, and file preview, are unavailable.'
         }}
       </div>
+    {{else if this.fileDefInstance}}
+      <PreviewPanel
+        @card={{this.fileDefInstance}}
+        @format={{@previewFormat}}
+        @setFormat={{@setPreviewFormat}}
+      />
+    {{else if this.isFileDefLoading}}
+      <div class='file-loading' data-test-file-preview-loading>
+        <LoadingIndicator />
+      </div>
     {{else if this.fileIncompatibilityMessage}}
       <div
         class='file-incompatible-message'
@@ -602,7 +662,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
         />
       </section>
     {{else if @card}}
-      <CardRendererPanel
+      <PreviewPanel
         @card={{@card}}
         @format={{@previewFormat}}
         @setFormat={{@setPreviewFormat}}
@@ -674,6 +734,14 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
         font-weight: 500;
         text-align: center;
         padding: var(--boxel-sp-xl);
+      }
+
+      .file-loading {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 100%;
+        background-color: var(--boxel-200);
       }
 
       .non-preview-panel-content {

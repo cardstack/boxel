@@ -295,8 +295,8 @@ ${REPLACE_MARKER}`;
     let roomId = '!room:example.com';
     let fileUrl = `${testRealmURL}pet.gts`;
 
-    let originalMaxSize = environmentService.cardSizeLimitBytes;
-    environmentService.cardSizeLimitBytes = 20;
+    let originalMaxSize = environmentService.fileSizeLimitBytes;
+    environmentService.fileSizeLimitBytes = 20;
 
     try {
       let { content } = await cardService.getSource(new URL(fileUrl));
@@ -323,7 +323,7 @@ ${REPLACE_MARKER}`;
         'error mentions size limit',
       );
     } finally {
-      environmentService.cardSizeLimitBytes = originalMaxSize;
+      environmentService.fileSizeLimitBytes = originalMaxSize;
     }
   });
 

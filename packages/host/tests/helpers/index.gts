@@ -32,6 +32,7 @@ import {
   testRealmURLToUsername,
   Worker,
   DEFAULT_CARD_SIZE_LIMIT_BYTES,
+  DEFAULT_FILE_SIZE_LIMIT_BYTES,
   type DefinitionLookup,
   type LooseSingleCardDocument,
   type Prerenderer,
@@ -320,13 +321,15 @@ export async function waitForSyntaxHighlighting(
   );
 }
 export async function showSearchResult(realmName: string, id: string) {
-  await waitFor(`[data-test-realm="${realmName}"] [data-test-select]`);
+  await waitFor(
+    `[data-test-realm="${realmName}"] [data-test-card-catalog-item]`,
+  );
   while (
     document.querySelector(
       `[data-test-realm="${realmName}"] [data-test-show-more-cards]`,
     ) &&
     !document.querySelector(
-      `[data-test-realm="${realmName}"] [data-test-select="${id}"]`,
+      `[data-test-realm="${realmName}"] [data-test-card-catalog-item="${id}"]`,
     )
   ) {
     await click(`[data-test-realm="${realmName}"] [data-test-show-more-cards]`);
@@ -744,12 +747,14 @@ export async function setupAcceptanceTestRealm({
   permissions,
   mockMatrixUtils,
   startMatrix = true,
+  fileSizeLimitBytes,
 }: {
   contents: RealmContents;
   realmURL?: string;
   permissions?: RealmPermissions;
   mockMatrixUtils: MockUtils;
   startMatrix?: boolean;
+  fileSizeLimitBytes?: number;
 }) {
   let resolvedRealmURL = ensureTrailingSlash(realmURL ?? testRealmURL);
   setupAuthEndpoints({
@@ -762,6 +767,7 @@ export async function setupAcceptanceTestRealm({
     permissions,
     mockMatrixUtils,
     startMatrix,
+    fileSizeLimitBytes,
   });
   getTestRealmRegistry().set(result.realm.url, {
     realm: result.realm,
@@ -794,6 +800,7 @@ export async function setupIntegrationTestRealm({
     permissions: permissions as RealmPermissions,
     mockMatrixUtils,
     startMatrix,
+    fileSizeLimitBytes,
   });
   getTestRealmRegistry().set(result.realm.url, {
     realm: result.realm,
@@ -826,6 +833,7 @@ async function setupTestRealm({
   permissions = { '*': ['read', 'write'] },
   mockMatrixUtils,
   startMatrix = true,
+  fileSizeLimitBytes,
 }: {
   contents: RealmContents;
   realmURL?: string;
@@ -833,6 +841,7 @@ async function setupTestRealm({
   permissions?: RealmPermissions;
   mockMatrixUtils: MockUtils;
   startMatrix?: boolean;
+  fileSizeLimitBytes?: number;
 }) {
   let owner = (getContext() as TestContext).owner;
   let { virtualNetwork } = getService('network');
@@ -916,6 +925,11 @@ async function setupTestRealm({
     cardSizeLimitBytes: Number(
       process.env.CARD_SIZE_LIMIT_BYTES ?? DEFAULT_CARD_SIZE_LIMIT_BYTES,
     ),
+    fileSizeLimitBytes:
+      fileSizeLimitBytes ??
+      Number(
+        process.env.FILE_SIZE_LIMIT_BYTES ?? DEFAULT_FILE_SIZE_LIMIT_BYTES,
+      ),
   });
 
   // Register the realm early so realm-server mock _info lookups can resolve
