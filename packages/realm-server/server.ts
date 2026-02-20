@@ -222,6 +222,7 @@ export class RealmServer {
       .use(
         createRoutes({
           dbAdapter: this.dbAdapter,
+          definitionLookup: this.definitionLookup,
           serverURL: this.serverURL.href,
           matrixClient: this.matrixClient,
           realmServerSecretSeed: this.realmServerSecretSeed,

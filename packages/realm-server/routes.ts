@@ -1,6 +1,7 @@
 import type { RealmInfo } from '@cardstack/runtime-common';
 import type {
   DBAdapter,
+  DefinitionLookup,
   QueuePublisher,
   Realm,
   VirtualNetwork,
@@ -69,6 +70,7 @@ import { buildCreatePrerenderAuth } from './prerender/auth';
 export type CreateRoutesArgs = {
   serverURL: string;
   dbAdapter: DBAdapter;
+  definitionLookup: DefinitionLookup;
   matrixClient: MatrixClient;
   realmServerSecretSeed: string;
   grafanaSecret: string;
