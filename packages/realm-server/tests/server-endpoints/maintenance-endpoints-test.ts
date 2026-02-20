@@ -537,6 +537,19 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         );
 
         try {
+          // Seed a modules row to verify it gets cleared
+          await context.dbAdapter.execute(
+            `INSERT INTO modules (url, file_alias, definitions, deps, created_at, resolved_realm_url, cache_scope, auth_user_id)
+             VALUES ('http://example.com/test-module', 'http://example.com/test-module', '{}', '[]', ${Date.now()}, 'http://example.com/', 'public', '')`,
+          );
+          let modulesBefore = await context.dbAdapter.execute(
+            'SELECT * FROM modules',
+          );
+          assert.ok(
+            modulesBefore.length > 0,
+            'modules table has rows before deployment',
+          );
+
           let initialJobs =
             await context.dbAdapter.execute('select * from jobs');
           let initialJobCount = initialJobs.length;
@@ -554,6 +567,15 @@ module(`server-endpoints/${basename(__filename)}`, function () {
               currentChecksum: 'new-checksum-456',
             },
             'response body contains checksum comparison result',
+          );
+
+          let modulesAfter = await context.dbAdapter.execute(
+            'SELECT * FROM modules',
+          );
+          assert.strictEqual(
+            modulesAfter.length,
+            0,
+            'modules table is empty after deployment',
           );
 
           let finalJobs = await context.dbAdapter.execute('select * from jobs');
@@ -594,7 +616,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         }
       });
 
-      test('post-deployment endpoint ignores reindex when checksums match', async function (assert: Assert) {
+      test('post-deployment endpoint clears modules cache even when checksums match', async function (assert: Assert) {
         let compareCurrentBoxelUIChecksumStub = sinon
           .stub(boxelUIChangeChecker, 'compareCurrentBoxelUIChecksum')
           .resolves({
@@ -607,6 +629,19 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         );
 
         try {
+          // Seed a modules row to verify it gets cleared even without reindex
+          await context.dbAdapter.execute(
+            `INSERT INTO modules (url, file_alias, definitions, deps, created_at, resolved_realm_url, cache_scope, auth_user_id)
+             VALUES ('http://example.com/test-module', 'http://example.com/test-module', '{}', '[]', ${Date.now()}, 'http://example.com/', 'public', '')`,
+          );
+          let modulesBefore = await context.dbAdapter.execute(
+            'SELECT * FROM modules',
+          );
+          assert.ok(
+            modulesBefore.length > 0,
+            'modules table has rows before deployment',
+          );
+
           let initialJobs =
             await context.dbAdapter.execute('select * from jobs');
           let initialJobCount = initialJobs.length;
@@ -624,6 +659,15 @@ module(`server-endpoints/${basename(__filename)}`, function () {
               currentChecksum: 'same-checksum-789',
             },
             'response body contains checksum comparison result',
+          );
+
+          let modulesAfter = await context.dbAdapter.execute(
+            'SELECT * FROM modules',
+          );
+          assert.strictEqual(
+            modulesAfter.length,
+            0,
+            'modules table is empty after deployment even when checksums match',
           );
 
           let finalJobs = await context.dbAdapter.execute('select * from jobs');
