@@ -79,24 +79,6 @@ export default class RenderMetaRoute extends Route<Model> {
       ...(await transitiveModuleDeps(directDeps, this.loaderService.loader)),
     ];
 
-    // Include linked card URLs as deps so that backward invalidation
-    // re-indexes this card when a linked card is created or updated.
-    // This is needed because linksTo fields (e.g. cardInfo.theme) may
-    // not be resolvable during initial indexing if the linked card
-    // hasn't been indexed yet.
-    for (let { relationship } of relationshipEntries(
-      serialized.data.relationships,
-    )) {
-      let selfLink = relationship.links?.self;
-      if (typeof selfLink === 'string' && selfLink) {
-        try {
-          deps.push(new URL(selfLink, instanceURL).href);
-        } catch {
-          // ignore malformed URLs
-        }
-      }
-    }
-
     let Klass = getClass(instance);
 
     let types = getTypes(Klass);

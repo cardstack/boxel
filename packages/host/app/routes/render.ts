@@ -432,40 +432,31 @@ export default class RenderRoute extends Route<Model> {
         }
       }
     }
-    // Touch linksTo/linksToMany fields nested within contains FieldDefs so
-    // their async loads are tracked by store.loaded() before the model is
-    // marked as "ready". Without this, the head format template (which
-    // accesses e.g. cardInfo.theme.cardThumbnailURL) would trigger the load
-    // AFTER the model is already "ready", and captureResult would capture
-    // the HTML before the linked card resolves.
-    this.#touchNestedLinksToFields(cardApi, instance);
   }
 
-  #touchNestedLinksToFields(cardApi: typeof CardAPI, instance: CardDef): void {
-    let fields = cardApi.getFields(instance, { includeComputeds: true });
-    for (let [fieldName, field] of Object.entries(fields)) {
-      if (field?.fieldType === 'contains') {
-        let value = (instance as any)[fieldName];
-        if (value != null && typeof value === 'object') {
-          let nestedFields = cardApi.getFields(value, {
-            includeComputeds: true,
-          });
-          for (let [nestedName, nestedField] of Object.entries(nestedFields)) {
-            if (
-              nestedField?.fieldType === 'linksTo' ||
-              nestedField?.fieldType === 'linksToMany'
-            ) {
-              try {
-                // Accessing the field triggers lazy loading of the linked card
-                value[nestedName];
-              } catch {
-                // Errors are expected for not-yet-loaded links
-              }
-            }
-          }
-        }
-      }
+  // Reset model state so that captureResult waits for lazy loads triggered by
+  // subsequent format transitions (e.g., head, fitted). After the first format
+  // (isolated) settles, the model status is "ready". When transitioning to a
+  // new format, the template may access fields not touched by the first format
+  // (e.g., the head template accesses cardInfo.theme), triggering lazy loads.
+  // Resetting to "loading" makes captureResult wait; afterRender will re-settle.
+  #resetModelForFormatTransition() {
+    let model = (globalThis as any).__renderModel as Model | undefined;
+    if (!model) {
+      return;
     }
+    let modelState = this.#modelStates.get(model);
+    if (!modelState || !modelState.isReady) {
+      return;
+    }
+    modelState.isReady = false;
+    modelState.readyWatchdogStarted = false;
+    modelState.readyDeferred = new Deferred<void>();
+    modelState.state.set('status', 'loading');
+    model.readyPromise = modelState.readyDeferred.promise;
+    this.#pendingReadyModels.add(model);
+    scheduleOnce('afterRender', this, this.#processPendingReadyModels);
+    this.#startReadyWatchdog(model);
   }
 
   setupController(controller: Controller, model: Model) {
@@ -614,6 +605,12 @@ export default class RenderRoute extends Route<Model> {
         return;
       }
       if (typeof routeName === 'string' && routeName.startsWith('render.')) {
+        // Reset model state before subsequent format transitions so that
+        // captureResult waits for any lazy loads triggered by the new format
+        // template (e.g., head format accessing cardInfo.theme). Without
+        // this, the model status is already "ready" from the previous format
+        // and captureResult captures before new lazy loads resolve.
+        this.#resetModelForFormatTransition();
         let normalized = [...params];
         if (
           normalized.length >= 3 &&
