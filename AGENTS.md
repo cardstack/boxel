@@ -79,6 +79,7 @@
   - Run tests:
     `pnpm test`
 - Focusing on single test or module:
+- make sure to kill previously running matrix tests if they are still running before starting a new test run.
   Add `--grep` flag to command (`--grep 'it can register a user with a registration token'`)
 
 ### packages/realm-server
@@ -93,10 +94,13 @@
   Add `.only` to module/test declaration (`test.only('returns a 201 response', ...)`)
   Then run `pnpm test`
   Make sure not to commit `.only` to source control
+- make sure to kill previously running realm-server tests if they are still running before starting a new test run.
 - run `pnpm lint` directly in this directory to lint changes made to this package
 
 ### packages/postgres
 - If you need to make a database migration use `pnpm create migration_name` to create a migration file so that the correct date timestamp prefix will be added to the file name. Then implement the migration inside the newly created file.
+- **After creating or modifying a migration, you MUST regenerate the SQLite schema file.** Run `pnpm make-schema` from this directory. This creates a new SQLite schema in `packages/host/config/schema/` with a timestamp matching the latest migration file. The old schema file is automatically removed. If you skip this step, the host app will fail to start with an "SQLite schema is out of date" error.
+  - This script requires Docker (it uses the `boxel-pg` container to dump the Postgres schema). Ensure Docker is running before executing.
 
 
 ### packages/runtime-common

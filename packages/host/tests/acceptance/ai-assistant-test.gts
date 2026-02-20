@@ -74,7 +74,7 @@ async function selectCardFromCatalog(cardId: string) {
   await click('[data-test-attach-button]');
   await click('[data-test-attach-card-btn]');
   await fillIn('[data-test-search-field]', cardId);
-  await click(`[data-test-select="${cardId}"]`);
+  await click(`[data-test-card-catalog-item="${cardId}"]`);
   await click('[data-test-card-catalog-go-button]');
 }
 
@@ -906,7 +906,9 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     assert.dom('[data-test-attached-card]').doesNotExist();
     await click('[data-test-boxel-filter-list-button="All Cards"]');
     await click('[data-test-create-new-card-button]');
-    await click(`[data-test-select="https://cardstack.com/base/types/card"]`);
+    await click(
+      `[data-test-card-catalog-item="https://cardstack.com/base/types/card"]`,
+    );
 
     await click(`[data-test-card-catalog-go-button]`);
 
@@ -1242,7 +1244,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await click('[data-test-attach-button]');
     await click('[data-test-attach-card-btn]');
     await fillIn('[data-test-search-field]', 'Mango');
-    await click(`[data-test-select="${testRealmURL}Pet/mango"]`);
+    await click(`[data-test-card-catalog-item="${testRealmURL}Pet/mango"]`);
     await click('[data-test-card-catalog-go-button]');
     assert.dom('[data-test-autoattached-card]').exists({ count: 1 });
     assert
@@ -2305,7 +2307,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       await click('[data-test-attach-button]');
       await click('[data-test-attach-card-btn]');
       await fillIn('[data-test-search-field]', 'Plant spec');
-      await click(`[data-test-select="${autoAttachedSpecId}"]`);
+      await click(`[data-test-card-catalog-item="${autoAttachedSpecId}"]`);
       await click('[data-test-card-catalog-go-button]');
 
       // Verify the spec card appears only once (not duplicated)
@@ -2385,7 +2387,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await click('[data-test-attach-button]');
     await click('[data-test-attach-card-btn]');
     await fillIn('[data-test-search-field]', 'Plant spec');
-    await click(`[data-test-select="${autoAttachedSpecId}"]`);
+    await click(`[data-test-card-catalog-item="${autoAttachedSpecId}"]`);
     await click('[data-test-card-catalog-go-button]');
 
     await click('[data-test-attach-button]');

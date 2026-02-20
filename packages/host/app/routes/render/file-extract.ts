@@ -40,7 +40,7 @@ type FileDefExport = {
   extractAttributes: (
     url: string,
     getStream: () => Promise<unknown>,
-    options?: { contentHash?: string },
+    options?: { contentHash?: string; contentSize?: number },
   ) => Promise<any>;
 };
 type FileDefModule = Record<string, FileDefExport | undefined>;
@@ -111,6 +111,7 @@ export default class RenderFileExtractRoute extends Route<Model> {
 
     let fileDefCodeRef = parsedOptions.fileDefCodeRef ?? BASE_FILE_DEF_CODE_REF;
     let contentHash: string | undefined = parsedOptions.fileContentHash;
+    let contentSize: number | undefined = parsedOptions.fileContentSize;
     let extractor = new FileDefAttributesExtractor({
       loaderService: this.loaderService,
       network: this.network,
@@ -119,6 +120,7 @@ export default class RenderFileExtractRoute extends Route<Model> {
       fileDefCodeRef,
       baseFileDefCodeRef: BASE_FILE_DEF_CODE_REF,
       contentHash,
+      contentSize,
       buildError: this.#buildError.bind(this),
     });
     let result = await extractor.extract();
@@ -143,6 +145,7 @@ class FileDefAttributesExtractor {
   #fileDefCodeRef: ResolvedCodeRef;
   #baseFileDefCodeRef: ResolvedCodeRef;
   #contentHash: string | undefined;
+  #contentSize: number | undefined;
   #buildError: (url: string, error: unknown) => RenderError;
   #streamsPromise: Promise<
     [
@@ -161,6 +164,7 @@ class FileDefAttributesExtractor {
     fileDefCodeRef,
     baseFileDefCodeRef,
     contentHash,
+    contentSize,
     buildError,
   }: {
     loaderService: LoaderService;
@@ -170,6 +174,7 @@ class FileDefAttributesExtractor {
     fileDefCodeRef: ResolvedCodeRef;
     baseFileDefCodeRef: ResolvedCodeRef;
     contentHash: string | undefined;
+    contentSize: number | undefined;
     buildError: (url: string, error: unknown) => RenderError;
   }) {
     this.#loaderService = loaderService;
@@ -179,6 +184,7 @@ class FileDefAttributesExtractor {
     this.#fileDefCodeRef = fileDefCodeRef;
     this.#baseFileDefCodeRef = baseFileDefCodeRef;
     this.#contentHash = contentHash;
+    this.#contentSize = contentSize;
     this.#buildError = buildError;
   }
 
@@ -237,7 +243,7 @@ class FileDefAttributesExtractor {
         return await klass.extractAttributes(
           this.#fileURL,
           this.#getStreamForAttempt,
-          { contentHash: this.#contentHash },
+          { contentHash: this.#contentHash, contentSize: this.#contentSize },
         );
       } catch (err) {
         console.warn(

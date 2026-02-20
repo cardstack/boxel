@@ -210,6 +210,33 @@ module('Acceptance | host mode tests', function (hooks) {
             },
           },
         },
+        'broken-card.gts': `
+          import { contains, field, Component, CardDef } from 'https://cardstack.com/base/card-api';
+          import StringField from 'https://cardstack.com/base/string';
+          export class BrokenCard extends CardDef {
+            static displayName = 'BrokenCard';
+            @field name = contains(StringField);
+            static isolated = class Isolated extends Component<typeof this> {
+              <template><div>{{this.triggerError}}</div></template>
+              get triggerError() {
+                throw new Error('Intentional rendering error');
+              }
+            };
+          }
+        `,
+        'BrokenCard/broken.json': {
+          data: {
+            attributes: {
+              name: 'Broken',
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testHostModeRealmURL}broken-card`,
+                name: 'BrokenCard',
+              },
+            },
+          },
+        },
         '.realm.json': {
           name: 'Test Workspace B',
           backgroundURL:
@@ -271,9 +298,9 @@ module('Acceptance | host mode tests', function (hooks) {
     gate.fulfill();
 
     await visitPromise;
-    assert
-      .dom('[data-test-error="not-found"]')
-      .hasText(`Card not found: ${testHostModeRealmURL}Pet/non-existent`);
+    await waitFor('[data-test-card-error]');
+    assert.dom('[data-test-card-error]').exists();
+    assert.dom('[data-test-card-error]').containsText('Card not found');
     assert.strictEqual(
       getPageTitle(),
       `Card not found: ${testHostModeRealmURL}Pet/non-existent`,
@@ -281,6 +308,20 @@ module('Acceptance | host mode tests', function (hooks) {
     assert.dom('[data-test-host-loading]').doesNotExist();
 
     store.get = originalGet;
+  });
+
+  test('visiting a card with a rendering error shows an error', async function (assert) {
+    await visit('/test/BrokenCard/broken.json');
+
+    await waitFor('[data-test-card-error]');
+    assert.dom('[data-test-card-error]').exists();
+    assert
+      .dom('[data-test-card-error]')
+      .containsText('This card contains an error');
+    assert.strictEqual(
+      getPageTitle(),
+      `Error rendering ${testHostModeRealmURL}BrokenCard/broken`,
+    );
   });
 
   test('invoking viewCard from a card stacks the linked card', async function (assert) {

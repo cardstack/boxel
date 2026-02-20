@@ -20,7 +20,7 @@ import {
 
 import {
   directModuleDeps,
-  recursiveModuleDeps,
+  transitiveModuleDeps,
 } from '@cardstack/host/lib/prerender-util';
 import type CardService from '@cardstack/host/services/card-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
@@ -70,10 +70,13 @@ export default class RenderMetaRoute extends Route<Model> {
       delete relationship.data;
     }
 
-    let moduleDeps = directModuleDeps(serialized.data, new URL(instance.id));
-    // TODO eventually we need to include instance deps in here
+    let instanceURL = new URL(instance.id);
+    let directDeps = directModuleDeps(serialized.data, instanceURL);
+
+    // `meta.deps` intentionally contains only module deps. Relationship/file
+    // deps are expanded later in index-runner when writing index entries.
     let deps = [
-      ...(await recursiveModuleDeps(moduleDeps, this.loaderService.loader)),
+      ...(await transitiveModuleDeps(directDeps, this.loaderService.loader)),
     ];
 
     let Klass = getClass(instance);

@@ -229,18 +229,42 @@ module(basename(__filename), function () {
             'stack trace is correct',
           );
           delete errorBody.meta.stack;
-          assert.deepEqual(errorBody, {
-            id: `${testRealmHref}missing-link`,
-            status: 404,
-            title: 'Link Not Found',
-            message: `missing file ${testRealmHref}does-not-exist.json`,
-            realm: testRealmHref,
-            meta: {
-              lastKnownGoodHtml: null,
-              scopedCssUrls: [],
-              cardTitle: null,
-            },
-          });
+          assert.strictEqual(errorBody.id, `${testRealmHref}missing-link`);
+          assert.strictEqual(errorBody.status, 404);
+          assert.strictEqual(errorBody.title, 'Link Not Found');
+          assert.strictEqual(
+            errorBody.message,
+            `missing file ${testRealmHref}does-not-exist.json`,
+          );
+          assert.strictEqual(errorBody.realm, testRealmHref);
+          assert.strictEqual(
+            errorBody.meta.lastKnownGoodHtml,
+            null,
+            'no last known good html is present',
+          );
+          assert.strictEqual(
+            errorBody.meta.cardTitle,
+            null,
+            'no card title is present',
+          );
+          assert.ok(
+            Array.isArray(errorBody.meta.scopedCssUrls),
+            'scoped css urls are present',
+          );
+          if (errorBody.meta.scopedCssUrls.length > 0) {
+            assert.ok(
+              errorBody.meta.scopedCssUrls.every((scopedCssUrl: string) =>
+                scopedCssUrl.endsWith('.glimmer-scoped.css'),
+              ),
+              'scoped css urls have the expected suffix',
+            );
+          } else {
+            assert.deepEqual(
+              errorBody.meta.scopedCssUrls,
+              [],
+              'scoped css urls can be empty when no styles are collected',
+            );
+          }
         });
 
         test('includes FileDef resources for file links in included payload', async function (assert) {

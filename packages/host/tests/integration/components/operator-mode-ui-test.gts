@@ -380,10 +380,9 @@ module('Integration | operator-mode | ui', function (hooks) {
     assert.dom(`[data-test-search-sheet="search-prompt"]`).exists();
 
     await typeIn(`[data-test-search-field]`, 'A');
-    await click(`[data-test-search-sheet] .search-sheet-content .section`);
-    assert.dom(`[data-test-search-sheet="search-results"]`).exists();
-
-    await click(`[data-test-search-sheet] .search-sheet-content .section`);
+    await waitFor('[data-test-search-sheet="search-results"]', {
+      timeout: 8000,
+    });
     assert.dom(`[data-test-search-sheet="search-results"]`).exists();
 
     await click(`[data-test-operator-mode-stack]`);

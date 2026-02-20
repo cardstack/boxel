@@ -37,6 +37,26 @@ export async function getContentHash(
   return String(contentHash);
 }
 
+export async function getContentSize(
+  db: DBAdapter,
+  realmURL: string,
+  localPath: string,
+): Promise<number | undefined> {
+  let rows = await query(db, [
+    'SELECT content_size FROM realm_file_meta WHERE realm_url =',
+    param(realmURL),
+    'AND file_path =',
+    param(localPath),
+    'LIMIT 1',
+  ]);
+  if (!rows || rows.length === 0) return undefined;
+  let contentSize = rows[0]['content_size'];
+  if (contentSize == null) return undefined;
+  return typeof contentSize === 'string'
+    ? parseInt(contentSize)
+    : Number(contentSize);
+}
+
 // Ensures a created_at row exists for the given path; returns epoch seconds
 export async function ensureFileCreatedAt(
   db: DBAdapter,
@@ -69,17 +89,19 @@ export async function ensureFileCreatedAt(
 export async function persistFileMeta(
   db: DBAdapter,
   realmURL: string,
-  rows: { path: string; contentHash?: string }[],
-): Promise<Map<string, { createdAt: number; contentHash?: string }>> {
+  rows: { path: string; contentHash?: string; contentSize?: number }[],
+): Promise<
+  Map<string, { createdAt: number; contentHash?: string; contentSize?: number }>
+> {
   let createdMap = new Map<
     string,
-    { createdAt: number; contentHash?: string }
+    { createdAt: number; contentHash?: string; contentSize?: number }
   >();
   if (!db || rows.length === 0) return createdMap;
 
   // Insert rows for all paths; do not overwrite existing ones
   let expr: Expression = [
-    'INSERT INTO realm_file_meta (realm_url, file_path, created_at, content_hash) VALUES',
+    'INSERT INTO realm_file_meta (realm_url, file_path, created_at, content_hash, content_size) VALUES',
   ];
   let now = Math.floor(Date.now() / 1000);
   rows.forEach((row, idx) => {
@@ -93,14 +115,18 @@ export async function persistFileMeta(
       param(now),
       ',',
       param(row.contentHash ?? null),
+      ',',
+      param(row.contentSize ?? null),
       ')',
     );
   });
-  // The ON CONFLICT clause uses COALESCE to preserve existing content_hash values when the new value is null.
+  // The ON CONFLICT clause uses COALESCE to preserve existing values when the new value is null.
   // This is correct behavior for the case where file content hasn't changed.
   expr.push(
     'ON CONFLICT (realm_url, file_path) DO UPDATE SET content_hash =',
     'COALESCE(EXCLUDED.content_hash, realm_file_meta.content_hash)',
+    ', content_size =',
+    'COALESCE(EXCLUDED.content_size, realm_file_meta.content_size)',
   );
   await query(db, expr);
 
@@ -108,7 +134,7 @@ export async function persistFileMeta(
   let uniquePaths = Array.from(new Set(rows.map((row) => row.path)));
   if (uniquePaths.length > 0) {
     let selectExpr: Expression = [
-      'SELECT file_path, created_at, content_hash FROM realm_file_meta WHERE realm_url =',
+      'SELECT file_path, created_at, content_hash, content_size FROM realm_file_meta WHERE realm_url =',
       param(realmURL),
       'AND file_path IN',
       '(',
@@ -123,10 +149,17 @@ export async function persistFileMeta(
       let path = String(row['file_path']);
       let created = row['created_at'];
       let contentHash = row['content_hash'];
+      let contentSize = row['content_size'];
       createdMap.set(path, {
         createdAt:
           typeof created === 'string' ? parseInt(created) : Number(created),
         contentHash: contentHash == null ? undefined : String(contentHash),
+        contentSize:
+          contentSize == null
+            ? undefined
+            : typeof contentSize === 'string'
+              ? parseInt(contentSize)
+              : Number(contentSize),
       });
     }
   }

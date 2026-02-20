@@ -93,6 +93,7 @@
    error_doc BLOB,
    created_at,
    file_alias TEXT,
+   url_hash TEXT GENERATED ALWAYS AS (url) STORED NOT NULL,
    PRIMARY KEY ( url, cache_scope, auth_user_id ) 
 );
 
@@ -110,6 +111,7 @@
    file_path TEXT NOT NULL,
    created_at INTEGER NOT NULL,
    content_hash TEXT,
+   content_size INTEGER,
    PRIMARY KEY ( realm_url, file_path ) 
 );
 

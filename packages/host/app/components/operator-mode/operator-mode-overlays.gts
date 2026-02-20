@@ -44,7 +44,7 @@ import type {
   Format,
 } from 'https://cardstack.com/base/card-api';
 
-import { removeFileExtension } from '../search-sheet/utils';
+import { removeFileExtension } from '../card-search/utils';
 
 import Overlays from './overlays';
 

@@ -130,7 +130,7 @@ export async function fetchRequestFromContext(
   return new Request(url, {
     method: ctxt.method,
     headers: ctxt.req.headers as { [name: string]: string },
-    ...(reqBody !== undefined ? { body: reqBody } : {}),
+    ...(reqBody !== undefined ? { body: reqBody as BodyInit } : {}),
   });
 }
 

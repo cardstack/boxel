@@ -16,12 +16,14 @@ import {
   type QueuePublisher,
   DEFAULT_PERMISSIONS,
   DEFAULT_CARD_SIZE_LIMIT_BYTES,
+  DEFAULT_FILE_SIZE_LIMIT_BYTES,
   PUBLISHED_DIRECTORY_NAME,
   RealmPaths,
   fetchSessionRoom,
   REALM_SERVER_REALM,
   userInitiatedPriority,
   hasExtension,
+  executableExtensions,
 } from '@cardstack/runtime-common';
 import {
   ensureDirSync,
@@ -67,6 +69,8 @@ import {
   injectIsolatedHTML,
   ensureSingleTitle,
 } from './lib/index-html-injection';
+import { sanitizeHeadHTMLToString } from '@cardstack/runtime-common';
+import { JSDOM } from 'jsdom';
 
 export class RealmServer {
   private log = logger('realm-server');
@@ -94,6 +98,7 @@ export class RealmServer {
     | undefined;
   private enableFileWatcher: boolean;
   private cardSizeLimitBytes: number;
+  private fileSizeLimitBytes: number;
   private domainsForPublishedRealms:
     | {
         boxelSpace?: string;
@@ -155,6 +160,9 @@ export class RealmServer {
     this.serverURL = serverURL;
     this.cardSizeLimitBytes = Number(
       process.env.CARD_SIZE_LIMIT_BYTES ?? DEFAULT_CARD_SIZE_LIMIT_BYTES,
+    );
+    this.fileSizeLimitBytes = Number(
+      process.env.FILE_SIZE_LIMIT_BYTES ?? DEFAULT_FILE_SIZE_LIMIT_BYTES,
     );
     this.virtualNetwork = virtualNetwork;
     this.matrixClient = matrixClient;
@@ -412,6 +420,16 @@ export class RealmServer {
     ]);
 
     if (headHTML != null) {
+      let doc = new JSDOM().window.document;
+      let sanitized = sanitizeHeadHTMLToString(headHTML, doc);
+      if (sanitized !== null) {
+        headHTML = sanitized;
+      } else {
+        headHTML = null;
+      }
+    }
+
+    if (headHTML != null) {
       this.headLog.debug(
         `Injecting head HTML for ${cardURL.href} (length ${headHTML.length})\n${this.truncateLogLines(
           headHTML,
@@ -506,14 +524,14 @@ export class RealmServer {
     // - Module: /foo/bar.gts (file_alias: /foo/bar)
     // - Instance: /foo/bar.json (file_alias: /foo/bar)
     // A request for /foo/bar should serve the module, not HTML for the instance.
+    // Prefer the modules table here because copied/published realms do not
+    // carry module rows in boxel_index.
     let moduleRows = await query(this.dbAdapter, [
       `
         SELECT 1
-        FROM boxel_index
-        WHERE type = 'module'
-          AND is_deleted IS NOT TRUE
-          AND
-        `,
+        FROM modules
+        WHERE
+      `,
       ...indexCandidateExpressions(candidates),
       `
         LIMIT 1
@@ -538,7 +556,47 @@ export class RealmServer {
       `,
     ]);
 
-    return rows.length > 0;
+    if (rows.length === 0) {
+      return false;
+    }
+
+    // During publish/copy index races, module rows can lag behind source files.
+    // Only do filesystem probing after we've identified an instance candidate
+    // to avoid extra IO on the hot request path.
+    if (this.hasExtensionlessSourceModule(cardURL)) {
+      return false;
+    }
+
+    return true;
+  }
+
+  private hasExtensionlessSourceModule(cardURL: URL): boolean {
+    let realm = this.findRealmForRequestURL(cardURL);
+    if (!realm?.dir) {
+      return false;
+    }
+
+    let localPath: string;
+    try {
+      localPath = realm.paths.local(cardURL);
+    } catch {
+      return false;
+    }
+
+    if (!localPath || hasExtension(localPath)) {
+      return false;
+    }
+
+    for (let extension of executableExtensions) {
+      if (existsSync(join(realm.dir, `${localPath}${extension}`))) {
+        return true;
+      }
+      if (existsSync(join(realm.dir, localPath, `index${extension}`))) {
+        return true;
+      }
+    }
+
+    return false;
   }
 
   private async hasPublicPermissions(cardURL: URL): Promise<boolean> {
@@ -594,6 +652,7 @@ export class RealmServer {
           assetsURL: this.assetsURL.href,
           realmServerURL: this.serverURL.href,
           cardSizeLimitBytes: this.cardSizeLimitBytes,
+          fileSizeLimitBytes: this.fileSizeLimitBytes,
           publishedRealmDomainOverrides:
             process.env.PUBLISHED_REALM_DOMAIN_OVERRIDES ??
             config.publishedRealmDomainOverrides,
@@ -802,6 +861,7 @@ export class RealmServer {
         realmServerURL: this.serverURL.href,
         definitionLookup: this.definitionLookup,
         cardSizeLimitBytes: this.cardSizeLimitBytes,
+        fileSizeLimitBytes: this.fileSizeLimitBytes,
       },
       Object.keys(realmOptions).length ? realmOptions : undefined,
     );
@@ -872,6 +932,7 @@ export class RealmServer {
             realmServerURL: this.serverURL.href,
             definitionLookup: this.definitionLookup,
             cardSizeLimitBytes: this.cardSizeLimitBytes,
+            fileSizeLimitBytes: this.fileSizeLimitBytes,
           });
           this.virtualNetwork.mount(realm.handle);
           realms.push(realm);
@@ -1003,6 +1064,7 @@ export class RealmServer {
             realmServerURL: this.serverURL.href,
             definitionLookup: this.definitionLookup,
             cardSizeLimitBytes: this.cardSizeLimitBytes,
+            fileSizeLimitBytes: this.fileSizeLimitBytes,
           });
 
           this.virtualNetwork.mount(realm.handle);

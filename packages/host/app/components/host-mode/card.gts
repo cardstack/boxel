@@ -5,6 +5,7 @@ import { cached } from '@glimmer/tracking';
 import { BoxelButton, CardContainer } from '@cardstack/boxel-ui/components';
 
 import CardRenderer from '@cardstack/host/components/card-renderer';
+import CardError from '@cardstack/host/components/operator-mode/card-error';
 import { getCard } from '@cardstack/host/resources/card-resource';
 
 interface Signature {
@@ -31,24 +32,25 @@ export default class HostModeCard extends Component<Signature> {
     return this.cardResource?.card;
   }
 
-  get isError() {
-    return this.cardResource?.cardError;
-  }
-
-  get isLoading() {
-    return Boolean(this.args.cardId) && !this.card && !this.isError;
-  }
-
   get cardError() {
     return this.cardResource?.cardError;
   }
 
-  get errorMessage() {
-    return this.cardError?.message;
+  get cardErrorMessage() {
+    if (this.cardError?.status === 404) {
+      return 'Card not found.';
+    }
+    return undefined;
+  }
+
+  get isLoading() {
+    return Boolean(this.args.cardId) && !this.card && !this.cardError;
   }
 
   get shouldShowEmptyMessage() {
-    return !this.args.cardId && !this.card && !this.isError && !this.isLoading;
+    return (
+      !this.args.cardId && !this.card && !this.cardError && !this.isLoading
+    );
   }
 
   <template>
@@ -57,17 +59,19 @@ export default class HostModeCard extends Component<Signature> {
       displayBoundaries={{@displayBoundaries}}
       ...attributes
     >
-      {{#if this.card}}
+      {{#if this.cardError}}
+        <CardError
+          @error={{this.cardError}}
+          @hideHeader={{true}}
+          @message={{this.cardErrorMessage}}
+        />
+      {{else if this.card}}
         <CardRenderer
           class='card'
           @card={{this.card}}
           @format='isolated'
           data-test-host-mode-card={{@cardId}}
         />
-      {{else if this.isError}}
-        <div class='message message--error' data-test-host-mode-error>
-          <p>{{this.errorMessage}}</p>
-        </div>
       {{else if this.isLoading}}
         <div class='message'>
           <p>Loading card…</p>
@@ -96,6 +100,7 @@ export default class HostModeCard extends Component<Signature> {
         flex: 1;
         z-index: 0;
         overflow: auto;
+        position: relative;
       }
 
       .message {
@@ -105,10 +110,6 @@ export default class HostModeCard extends Component<Signature> {
         min-height: 16rem;
         text-align: center;
         gap: var(--boxel-sp);
-      }
-
-      .message--error {
-        color: var(--boxel-error-100);
       }
 
       .non-publishable-message {
