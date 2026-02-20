@@ -403,7 +403,9 @@ module('Integration | operator-mode | basics', function (hooks) {
         )
         .exists({ count: 3 });
 
-      await click(`[data-test-select="${testRealmURL}Spec/publishing-packet"]`);
+      await click(
+        `[data-test-card-catalog-item="${testRealmURL}Spec/publishing-packet"]`,
+      );
       click('[data-test-card-catalog-go-button]');
       await waitFor('[data-test-stack-card-index="1"]');
       assert
@@ -485,7 +487,9 @@ module('Integration | operator-mode | basics', function (hooks) {
       .dom(`[data-test-realm="${ctx.realmName}"] [data-test-card-catalog-item]`)
       .exists({ count: 3 });
 
-    await click(`[data-test-select="${testRealmURL}Spec/publishing-packet"]`);
+    await click(
+      `[data-test-card-catalog-item="${testRealmURL}Spec/publishing-packet"]`,
+    );
     await click('[data-test-card-catalog-go-button]');
     await waitFor('[data-test-stack-card-index="1"]');
     assert

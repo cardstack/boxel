@@ -817,6 +817,7 @@ module('Acceptance | Commands tests', function (hooks) {
     await click('[data-test-open-ai-assistant]');
 
     // Need to create a new room so this new room will include skills card
+    await waitFor('[data-test-message-field]');
     await fillIn(
       '[data-test-message-field]',
       'Test message to enable new session button',
@@ -907,6 +908,7 @@ module('Acceptance | Commands tests', function (hooks) {
     await waitFor('[data-test-message-field]');
 
     // Need to create a new room so this new room will include skills card
+    await waitFor('[data-test-message-field]');
     await fillIn(
       '[data-test-message-field]',
       'Test message to enable new session button',

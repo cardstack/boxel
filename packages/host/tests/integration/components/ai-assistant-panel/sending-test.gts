@@ -314,7 +314,9 @@ module('Integration | ai-assistant-panel | sending', function (hooks) {
     await click('[data-test-attach-button]');
     await click('[data-test-attach-card-btn]');
     await fillIn('[data-test-search-field]', 'Fadhlan');
-    await click(`[data-test-select="${testRealmURL}Person/fadhlan"]`);
+    await click(
+      `[data-test-card-catalog-item="${testRealmURL}Person/fadhlan"]`,
+    );
     await click('[data-test-card-catalog-go-button]');
 
     await click('[data-test-attach-button]');

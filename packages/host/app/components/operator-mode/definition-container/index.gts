@@ -49,7 +49,9 @@ const ModuleDefinitionContainer: TemplateOnlyComponent<ModSig> = <template>
 </template>;
 
 interface InstanceArgs
-  extends Omit<BaseArgs, 'title' | 'isActive'>, ActiveArgs {}
+  extends Omit<BaseArgs, 'title' | 'isActive'>, ActiveArgs {
+  title?: string;
+}
 
 interface InstSig {
   Element: HTMLElement;
@@ -58,7 +60,7 @@ interface InstSig {
 
 const InstanceDefinitionContainer: TemplateOnlyComponent<InstSig> = <template>
   <BaseDefinitionContainer
-    @title='Card Instance'
+    @title={{if @title @title 'Card Instance'}}
     @fileExtension={{@fileExtension}}
     @name={{@name}}
     @isActive={{true}}
