@@ -262,6 +262,17 @@ module(basename(__filename), function () {
         'command status ready',
       );
       assert.notOk(res.body.data.attributes.error, 'no command error');
+      let cardResultString = res.body.data.attributes.cardResultString;
+      assert.strictEqual(
+        typeof cardResultString,
+        'string',
+        'returns serialized command card',
+      );
+      assert.ok(cardResultString.length > 0, 'serialized card is non-empty');
+      assert.ok(
+        cardResultString.includes('hello from command'),
+        'serialized card includes command output',
+      );
       assert.ok(res.body.meta?.timing?.totalMs >= 0, 'has timing');
       assert.ok(res.body.meta?.pool?.pageId, 'has pool.pageId');
     });
