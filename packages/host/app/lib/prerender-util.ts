@@ -15,7 +15,7 @@ export function directModuleDeps(
   return result;
 }
 
-export async function recursiveModuleDeps(
+export async function transitiveModuleDeps(
   directDeps: string[],
   loader: Loader,
 ) {
