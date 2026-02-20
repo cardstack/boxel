@@ -218,7 +218,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
         realmURL: testRealmURL2,
         mockMatrixUtils,
       });
-      return setupAcceptanceTestRealm({
+      return await setupAcceptanceTestRealm({
         contents: { ...SYSTEM_CARD_FIXTURE_CONTENTS, ...files },
         mockMatrixUtils,
       });

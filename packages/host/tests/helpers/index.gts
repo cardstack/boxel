@@ -209,7 +209,7 @@ export async function withCachedRealmSetup<T>(
   let dbAdapter = await getDbAdapter();
   if (dbAdapter.hasSnapshot(snapshotName)) {
     await dbAdapter.importSnapshot(snapshotName);
-    return await setup();
+    return setup();
   }
   let result = await setup();
   await dbAdapter.exportSnapshot(snapshotName);
