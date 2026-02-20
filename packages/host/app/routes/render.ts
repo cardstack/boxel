@@ -398,15 +398,6 @@ export default class RenderRoute extends Route<Model> {
     }
     if (instance) {
       await this.#authGuard.race(() => this.#touchIsUsedFields(instance));
-      // Pre-load cardInfo.theme so the default head template can render
-      // favicon/apple-touch-icon tags without triggering lazy loads during
-      // format transitions. Accessing the getter triggers the linksTo load;
-      // store.loaded() below will wait for it to settle.
-      try {
-        (instance as any).cardInfo?.theme;
-      } catch {
-        // ignore – the field may not exist on all card types
-      }
     }
     await this.#authGuard.race(() => this.store.loaded());
     if (instance) {
