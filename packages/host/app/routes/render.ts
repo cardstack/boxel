@@ -605,12 +605,18 @@ export default class RenderRoute extends Route<Model> {
         return;
       }
       if (typeof routeName === 'string' && routeName.startsWith('render.')) {
-        // Reset model state before subsequent format transitions so that
+        // Reset model state before render.html transitions so that
         // captureResult waits for any lazy loads triggered by the new format
         // template (e.g., head format accessing cardInfo.theme). Without
         // this, the model status is already "ready" from the previous format
         // and captureResult captures before new lazy loads resolve.
-        this.#resetModelForFormatTransition();
+        // Only reset for render.html — other child routes (render.meta,
+        // render.icon, render.error) do not render card templates, and
+        // render.meta explicitly awaits readyPromise which would deadlock
+        // if we reset it here.
+        if (routeName === 'render.html') {
+          this.#resetModelForFormatTransition();
+        }
         let normalized = [...params];
         if (
           normalized.length >= 3 &&
