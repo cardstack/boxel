@@ -4,12 +4,9 @@ import { cached } from '@glimmer/tracking';
 
 import { BoxelButton, CardContainer } from '@cardstack/boxel-ui/components';
 
-import type { StoreReadType } from '@cardstack/runtime-common';
-
-import { hasExtension } from '@cardstack/runtime-common/url';
-
 import CardRenderer from '@cardstack/host/components/card-renderer';
 import CardError from '@cardstack/host/components/operator-mode/card-error';
+import { inferStoreReadType } from '@cardstack/host/lib/read-type';
 import { getCard } from '@cardstack/host/resources/card-resource';
 
 interface Signature {
@@ -34,9 +31,8 @@ export default class HostModeCard extends Component<Signature> {
     });
   }
 
-  private get readType(): StoreReadType {
-    let id = this.args.cardId ?? '';
-    return hasExtension(id) && !id.endsWith('.json') ? 'file-meta' : 'card';
+  private get readType() {
+    return inferStoreReadType(this.args.cardId);
   }
 
   get card() {

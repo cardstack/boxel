@@ -5,9 +5,8 @@ import Component from '@glimmer/component';
 import { cached } from '@glimmer/tracking';
 
 import { cardTypeIcon, isCardInstance } from '@cardstack/runtime-common';
-import type { StoreReadType } from '@cardstack/runtime-common';
-import { hasExtension } from '@cardstack/runtime-common/url';
 
+import { inferStoreReadType } from '@cardstack/host/lib/read-type';
 import { getCard } from '@cardstack/host/resources/card-resource';
 
 import type { ComponentLike } from '@glint/template';
@@ -33,9 +32,8 @@ export default class HostModeBreadcrumbItem extends Component<Signature> {
     });
   }
 
-  private get readType(): StoreReadType {
-    let id = this.args.cardId;
-    return hasExtension(id) && !id.endsWith('.json') ? 'file-meta' : 'card';
+  private get readType() {
+    return inferStoreReadType(this.args.cardId);
   }
 
   @cached

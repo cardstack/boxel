@@ -10,10 +10,9 @@ import {
   CardCrudFunctionsContextName,
   isCardInstance,
 } from '@cardstack/runtime-common';
-import type { StoreReadType } from '@cardstack/runtime-common';
 import { meta } from '@cardstack/runtime-common/constants';
-import { hasExtension } from '@cardstack/runtime-common/url';
 
+import { inferStoreReadType } from '@cardstack/host/lib/read-type';
 import { getCard } from '@cardstack/host/resources/card-resource';
 
 import type {
@@ -52,9 +51,8 @@ export default class HostModeContent extends Component<Signature> {
     });
   }
 
-  private get primaryReadType(): StoreReadType {
-    let id = this.args.primaryCardId ?? '';
-    return hasExtension(id) && !id.endsWith('.json') ? 'file-meta' : 'card';
+  private get primaryReadType() {
+    return inferStoreReadType(this.args.primaryCardId);
   }
 
   get cardIds() {
