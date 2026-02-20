@@ -38,10 +38,14 @@ function normalizeMarkdown(markdown: string): string {
   return markdown.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 }
 
+const FENCED_CODE_RE = /```[\s\S]*?```/g;
+// content-tag misparses backticks inside regex literals in .gts files
+const INLINE_CODE_RE = new RegExp('`([^`]+)`', 'g');
+
 function stripMarkdown(text: string): string {
   return text
-    .replace(/```[\s\S]*?```/g, '')
-    .replace(/`([^`]+)`/g, '$1')
+    .replace(FENCED_CODE_RE, '')
+    .replace(INLINE_CODE_RE, '$1')
     .replace(/!\[[^\]]*\]\([^)]+\)/g, '')
     .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
     .replace(/^\s*#{1,6}\s+/gm, '')
@@ -73,6 +77,8 @@ function extractTitle(markdown: string, fallback: string): string {
   return fallback;
 }
 
+const HEADING_RE = /^\s*#{1,6}\s+/;
+
 function extractExcerpt(markdown: string): string {
   let normalized = normalizeMarkdown(markdown);
   let paragraphs = normalized.split(/\n\s*\n/);
@@ -82,12 +88,12 @@ function extractExcerpt(markdown: string): string {
       continue;
     }
     let lines = trimmed.split('\n');
-    let hasNonHeading = lines.some((line) => !/^\s*#{1,6}\s+/.test(line));
+    let hasNonHeading = lines.some((line) => !HEADING_RE.test(line));
     if (!hasNonHeading) {
       continue;
     }
     let withoutHeadings = lines
-      .filter((line) => !/^\s*#{1,6}\s+/.test(line))
+      .filter((line) => !HEADING_RE.test(line))
       .join(' ');
     let excerpt = stripMarkdown(withoutHeadings);
     if (excerpt) {
@@ -104,6 +110,10 @@ class Isolated extends Component<typeof MarkdownDef> {
     );
   }
 
+  get content() {
+    return this.args.model?.content ?? null;
+  }
+
   get hasContent() {
     return Boolean(this.args.model?.content?.trim());
   }
@@ -111,7 +121,7 @@ class Isolated extends Component<typeof MarkdownDef> {
   <template>
     <article class='markdown-isolated' data-test-markdown-isolated>
       {{#if this.hasContent}}
-        <MarkdownTemplate @content={{@model.content}} />
+        <MarkdownTemplate @content={{this.content}} />
       {{else}}
         <header class='markdown-isolated__title'>{{this.title}}</header>
       {{/if}}
@@ -147,6 +157,10 @@ class Embedded extends Component<typeof MarkdownDef> {
     );
   }
 
+  get content() {
+    return this.args.model?.content ?? null;
+  }
+
   get contentStartsWithTitle() {
     let content = this.args.model?.content?.trim();
     if (!content) {
@@ -167,7 +181,7 @@ class Embedded extends Component<typeof MarkdownDef> {
         <header class='markdown-embedded__title'>{{this.title}}</header>
       {{/unless}}
       <div class='markdown-embedded__content'>
-        <MarkdownTemplate @content={{@model.content}} />
+        <MarkdownTemplate @content={{this.content}} />
       </div>
     </article>
     <style scoped>
