@@ -640,6 +640,12 @@ module(`server-endpoints/${basename(__filename)}`, function () {
             type: 'card',
             attributes: {
               firstName: 'Themed Card',
+              cardInfo: {
+                name: null,
+                summary: null,
+                cardThumbnailURL: null,
+                notes: null,
+              },
             },
             relationships: {
               'cardInfo.theme': {
