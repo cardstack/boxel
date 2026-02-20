@@ -97,7 +97,7 @@ module(basename(__filename), function () {
           renderCalls.push({ kind: 'command', args });
           return {
             status: 'ready',
-            result: null,
+            cardResultString: null,
           };
         },
       };

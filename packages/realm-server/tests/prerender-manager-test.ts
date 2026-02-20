@@ -1456,7 +1456,7 @@ function makeMockPrerender(): {
           id: body?.data?.attributes?.command?.module || 'command',
           attributes: {
             status: 'ready',
-            result: null,
+            cardResultString: null,
           },
         },
         meta: {

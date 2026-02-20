@@ -31,9 +31,9 @@ import type RealmService from '../services/realm';
 
 class CommandRunState implements CommandInvocation<CardDefConstructor> {
   @tracked status: CommandInvocation<CardDefConstructor>['status'] = 'pending';
-  @tracked value: CardDef | null = null;
+  @tracked cardResult: CardDef | null = null;
   @tracked error: Error | null = null;
-  @tracked result: string | null = null;
+  @tracked cardResultString: string | null = null;
   @tracked commandRef: string | null = null;
   @tracked commandInput: string | null = null;
 
@@ -132,11 +132,13 @@ export default class CommandRunnerRoute extends Route<CommandRunnerModel> {
         resultCard = await commandInstance.execute();
       }
 
-      model.value = resultCard ?? null;
+      model.cardResult = resultCard ?? null;
       let serialized = resultCard
         ? await this.cardService.serializeCard(resultCard)
         : null;
-      model.result = serialized ? JSON.stringify(serialized, null, 2) : '';
+      model.cardResultString = serialized
+        ? JSON.stringify(serialized, null, 2)
+        : '';
       model.status = 'success';
     } catch (error) {
       console.error('Command runner failed', {

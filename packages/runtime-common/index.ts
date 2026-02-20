@@ -138,7 +138,7 @@ export type RunCommandArgs = {
 
 export type RunCommandResponse = {
   status: 'ready' | 'error' | 'unusable';
-  result?: string | null;
+  cardResultString?: string | null;
   error?: string | null;
 };
 
