@@ -31,16 +31,15 @@ import {
   ThreeDotsHorizontal,
 } from '@cardstack/boxel-ui/icons';
 
+import type { CommandContext } from '@cardstack/runtime-common';
 import { isFileDefInstance } from '@cardstack/runtime-common';
 
-import { hasExtension } from '@cardstack/runtime-common/url';
-
-import type { CommandContext } from '@cardstack/runtime-common';
 import {
   CardCrudFunctionsContextName,
   CommandContextName,
   getMenuItems,
 } from '@cardstack/runtime-common';
+import { hasExtension } from '@cardstack/runtime-common/url';
 
 import type {
   CardCrudFunctions,
