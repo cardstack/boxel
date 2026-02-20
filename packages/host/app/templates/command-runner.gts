@@ -18,13 +18,13 @@ const CommandRunner = <template>
     {{#if @model.error}}
       <pre data-prerender-error>{{@model.error.message}}</pre>
     {{else}}
-      {{#if @model.value}}
+      {{#if @model.cardResult}}
         <CardContainer class='command-runner-result'>
-          <CardRenderer @card={{@model.value}} @format='isolated' />
+          <CardRenderer @card={{@model.cardResult}} @format='isolated' />
         </CardContainer>
       {{/if}}
-      {{#if @model.result}}
-        <pre data-command-result hidden>{{@model.result}}</pre>
+      {{#if @model.cardResultString}}
+        <pre data-command-result hidden>{{@model.cardResultString}}</pre>
       {{/if}}
     {{/if}}
   </div>

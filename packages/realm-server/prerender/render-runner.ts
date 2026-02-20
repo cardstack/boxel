@@ -531,21 +531,24 @@ export class RenderRunner {
         let errorElement = container?.querySelector(
           '[data-prerender-error]',
         ) as HTMLElement | null;
-        let resultElement = container?.querySelector(
+        let cardResultStringElement = container?.querySelector(
           '[data-command-result]',
         ) as HTMLElement | null;
         let error = (errorElement?.textContent ?? '').trim();
-        let result = (resultElement?.textContent ?? '').trim();
+        let cardResultString = (
+          cardResultStringElement?.textContent ?? ''
+        ).trim();
         return {
           status,
           error: error.length > 0 ? error : null,
-          result: result.length > 0 ? result : null,
+          cardResultString:
+            cardResultString.length > 0 ? cardResultString : null,
         };
       }, String(this.#nonce));
 
       let response: RunCommandResponse = {
         status: payload.status,
-        result: payload.result ?? undefined,
+        cardResultString: payload.cardResultString ?? undefined,
         error: payload.error ?? undefined,
       };
       markTimeout(response.status);
