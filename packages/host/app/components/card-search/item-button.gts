@@ -28,8 +28,6 @@ interface Signature {
     item: ItemType;
     itemId?: string;
     isSelected: boolean;
-    isCompact: boolean;
-    displayRealmName?: boolean;
     onSelect: (selection: string | NewCardArgs) => void;
     onSubmit?: (selection: string | NewCardArgs) => void;
   };
@@ -117,7 +115,6 @@ export default class ItemButton extends Component<Signature> {
       class={{cn
         'catalog-item'
         selected=@isSelected
-        compact=@isCompact
         create-new-button=this.isNewCard
       }}
       {{on 'click' this.handleClick}}

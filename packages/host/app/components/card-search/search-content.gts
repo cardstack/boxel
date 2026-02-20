@@ -318,6 +318,9 @@ export default class SearchContent extends Component<Signature> {
     if (!cards) {
       return [];
     }
+    if (this.args.isCompact) {
+      return cards;
+    }
     let filtered = cards;
     const term = this.searchTerm;
     if (term) {
@@ -617,17 +620,8 @@ export default class SearchContent extends Component<Signature> {
         {{#if this.recentCardsSection}}
           <SearchResultSection
             @section={{this.recentCardsSection}}
-            @viewOption={{this.activeViewId}}
-            @isCompact={{@isCompact}}
+            @isCompact={{true}}
             @handleSelect={{@handleSelect}}
-            @isFocused={{eq this.focusedSection this.recentCardsSection.sid}}
-            @isCollapsed={{this.isSectionCollapsed this.recentCardsSection.sid}}
-            @onFocusSection={{this.onFocusSection}}
-            @getDisplayedCount={{this.getDisplayedCount}}
-            @onShowMore={{this.onShowMore}}
-            @selectedCard={{@selectedCard}}
-            @offerToCreate={{@offerToCreate}}
-            @onSubmit={{@onSubmit}}
             data-test-search-result-section='recent-cards'
           />
         {{/if}}
@@ -637,7 +631,6 @@ export default class SearchContent extends Component<Signature> {
           <SearchResultSection
             @section={{section}}
             @viewOption={{this.activeViewId}}
-            @isCompact={{@isCompact}}
             @handleSelect={{@handleSelect}}
             @isFocused={{eq this.focusedSection section.sid}}
             @isCollapsed={{this.isSectionCollapsed section.sid}}
