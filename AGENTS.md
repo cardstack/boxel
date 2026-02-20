@@ -115,6 +115,30 @@
 
 - Always run `pnpm lint` in modified packages before committing
 
+## `.gts` file gotcha: regex literals can break content-tag
+
+The `content-tag` preprocessor (used by glint and ember-eslint-parser to parse `.gts` files) has bugs in its JavaScript lexer that cause it to misparse certain regex literals. When this happens, it fails to recognize `<template>` tags later in the file, producing cascading parse errors. Two known triggers:
+
+**1. Backticks inside regex literals** — content-tag mistakes them for template literal delimiters:
+```ts
+// BROKEN — backticks in regex confuse content-tag
+.replace(/`([^`]+)`/g, '$1')
+
+// FIX — use new RegExp() with a string instead
+const INLINE_CODE_RE = new RegExp('`([^`]+)`', 'g');
+.replace(INLINE_CODE_RE, '$1')
+```
+
+**2. `!/regex/` (negation before regex literal)** — content-tag misreads the `/` after `!`:
+```ts
+// BROKEN
+lines.some((line) => !/^\s*#{1,6}\s+/.test(line));
+
+// FIX — extract the regex to a variable
+const HEADING_RE = /^\s*#{1,6}\s+/;
+lines.some((line) => !HEADING_RE.test(line));
+```
+
 ## Base realm imports
 
 - Only card definitions (files run through the card loader) can use static ESM imports from `https://cardstack.com/base/*`. Host-side modules must load the module at runtime via `loader.import(`${baseRealm.url}...`)`. Static value imports from the HTTPS specifier inside host code trigger build-time `webpackMissingModule` failures. Type imports are OK using static ESM syntax.
