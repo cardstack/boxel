@@ -96,7 +96,6 @@ interface Signature {
       relativeTo: URL | undefined;
     };
     onSubmit?: (selection: string | NewCardArgs) => void;
-    showRecents?: boolean;
     showHeader?: boolean;
   };
   Blocks: {};
@@ -155,10 +154,6 @@ export default class SearchContent extends Component<Signature> {
     }
     // In search-sheet mode, skip when empty or URL
     return this.isSearchKeyEmpty || this.searchKeyIsURL;
-  }
-
-  private get showRecents() {
-    return this.args.showRecents !== false;
   }
 
   private get showHeader() {
@@ -291,10 +286,7 @@ export default class SearchContent extends Component<Signature> {
     }
 
     // Recents view (empty search or focused on recents)
-    if (
-      (this.focusedSection === 'recents' || this.isSearchKeyEmpty) &&
-      this.showRecents
-    ) {
+    if (this.focusedSection === 'recents' || this.isSearchKeyEmpty) {
       const count = this.recentCardsSection?.totalCount ?? 0;
       return `${count} in ${pluralize('Recent', count)}`;
     }
@@ -529,8 +521,8 @@ export default class SearchContent extends Component<Signature> {
   private get sections(): SearchSheetSection[] {
     const sections: SearchSheetSection[] = [];
 
-    // Add recents section if enabled
-    if (this.showRecents && this.recentCardsSection) {
+    // Add recents section if present
+    if (this.recentCardsSection) {
       sections.push(this.recentCardsSection);
     }
 
