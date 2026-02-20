@@ -16,7 +16,7 @@ export class CommandExecutionState<CardResultType extends CardDefConstructor>
   implements CommandInvocation<CardResultType>
 {
   @tracked status: 'pending' | 'success' | 'error' = 'pending';
-  @tracked value: CardInstance<CardResultType> | null = null;
+  @tracked cardResult: CardInstance<CardResultType> | null = null;
   @tracked error: Error | null = null;
 
   get isSuccess() {
@@ -29,19 +29,19 @@ export class CommandExecutionState<CardResultType extends CardDefConstructor>
 
   setLoading() {
     this.status = 'pending';
-    this.value = null;
+    this.cardResult = null;
     this.error = null;
   }
 
   setSuccess(result: CardInstance<CardResultType>) {
     this.status = 'success';
-    this.value = result;
+    this.cardResult = result;
     this.error = null;
   }
 
   setError(error: Error) {
     this.status = 'error';
-    this.value = null;
+    this.cardResult = null;
     this.error = error;
   }
 }
