@@ -5,10 +5,14 @@ import { getService } from '@universal-ember/test-support';
 
 import { module, test } from 'qunit';
 
+import type { MenuItemOptions } from '@cardstack/boxel-ui/helpers';
+
 import { baseRealm, getMenuItems } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
+
+import type { GetMenuItemParams } from 'https://cardstack.com/base/card-api';
 
 import {
   testRealmURL,
@@ -81,7 +85,7 @@ module('Integration | overlay-menu-items', function (hooks) {
           return this.title;
         },
       });
-      [getMenuItems](params: any): any[] {
+      [getMenuItems](params: GetMenuItemParams): MenuItemOptions[] {
         let menuItems = super[getMenuItems](params);
         menuItems.push({
           label: 'Custom Action',

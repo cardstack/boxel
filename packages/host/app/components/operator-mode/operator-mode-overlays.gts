@@ -38,7 +38,6 @@ import {
   getMenuItems,
 } from '@cardstack/runtime-common';
 
-
 import type {
   CardCrudFunctions,
   CardDef,
@@ -438,12 +437,21 @@ export default class OperatorModeOverlays extends Overlays {
 
     const cardMenuItems =
       (cardDefOrId as CardDef)[getMenuItems]?.({
-        canEdit: isField ? false : this.realm.canWrite(cardId),
+        canEdit: this.realm.canWrite(cardId),
         cardCrudFunctions: this.cardCrudFunctions,
         menuContext: 'interact',
         commandContext: this.commandContext,
       }) ?? [];
 
-    return toMenuItems([viewCardItem, ...cardMenuItems]);
+    // Delete and New Card of This Type don't make sense from an embedded field
+    // overlay — suppress them by context, not by misreporting canEdit
+    const visibleItems = isField
+      ? cardMenuItems.filter(
+          (item) =>
+            item.label !== 'Delete' && item.label !== 'New Card of This Type',
+        )
+      : cardMenuItems;
+
+    return toMenuItems([viewCardItem, ...visibleItems]);
   }
 }
