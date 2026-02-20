@@ -1,4 +1,5 @@
 import Component from '@glimmer/component';
+import type { ComponentLike } from '@glint/template';
 
 import {
   element,
@@ -8,13 +9,25 @@ import {
   type FittedFormatId,
 } from '../../helpers.ts';
 
+import GridItemContainer, {
+  type GridItemContainerSignature,
+} from './grid-item-container/index.gts';
+
 interface Signature {
   Args: {
+    viewFormat?: 'list' | 'grid';
     size?: FittedFormatId;
+    fullWidthItem?: boolean;
     tag?: keyof HTMLElementTagNameMap;
+    items?: any[];
   };
   Blocks: {
-    default: [];
+    default:
+      | [
+          item: any,
+          GridItemContainer: ComponentLike<GridItemContainerSignature>,
+        ]
+      | [];
   };
   Element: HTMLElement;
 }
@@ -23,25 +36,34 @@ export default class GridContainer extends Component<Signature> {
   <template>
     {{#let (element @tag) as |TagName|}}
       <TagName
-        class='grid-container'
+        class='boxel-grid-container'
         style={{this.containerStyle}}
         ...attributes
       >
-        {{yield}}
+        {{#if @items}}
+          {{#each @items as |item|}}
+            {{yield
+              item
+              (component GridItemContainer size=@size fullWidth=@fullWidthItem)
+            }}
+          {{/each}}
+        {{else}}
+          {{yield}}
+        {{/if}}
       </TagName>
     {{/let}}
 
     <style scoped>
       @layer boxelComponentL1 {
-        .grid-container {
+        .boxel-grid-container {
           display: grid;
           gap: var(--boxel-sp);
         }
       }
 
       @layer reset {
-        .grid-container :deep(h2),
-        .grid-container :deep(h3) {
+        .boxel-grid-container :deep(h2),
+        .boxel-grid-container :deep(h3) {
           margin: 0;
         }
       }
@@ -72,8 +94,22 @@ export default class GridContainer extends Component<Signature> {
       return sanitizeHtmlSafe('');
     }
 
-    return sanitizeHtmlSafe(
-      `grid-template-columns: repeat(auto-fill, ${formatSpec.width}px); grid-auto-rows: ${formatSpec.height}px;`,
-    );
+    if (this.args.items) {
+      if (this.args.viewFormat === 'list') {
+        return sanitizeHtmlSafe('grid-template-columns: 1fr;');
+      }
+      return sanitizeHtmlSafe(
+        `grid-template-columns: repeat(auto-fill, ${formatSpec.width}px);`,
+      );
+    } else {
+      if (this.args.viewFormat === 'list') {
+        return sanitizeHtmlSafe(
+          `grid-template-columns: 1fr; grid-auto-rows: ${formatSpec.height}px`,
+        );
+      }
+      return sanitizeHtmlSafe(
+        `grid-template-columns: repeat(auto-fill, ${formatSpec.width}px); grid-auto-rows: ${formatSpec.height}px`,
+      );
+    }
   }
 }

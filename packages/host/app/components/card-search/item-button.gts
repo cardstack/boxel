@@ -9,7 +9,6 @@ import { IconPlus } from '@cardstack/boxel-ui/icons';
 
 import { isCardInstance } from '@cardstack/runtime-common';
 
-import { urlForRealmLookup } from '@cardstack/host/lib/utils';
 import type RealmService from '@cardstack/host/services/realm';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
@@ -96,13 +95,6 @@ export default class ItemButton extends Component<Signature> {
     return this.args.itemId ?? this.cardItem?.id;
   }
 
-  private get urlForRealmLookup(): string | undefined {
-    if (!this.args.displayRealmName) {
-      return undefined;
-    }
-    return this.cardItem ? urlForRealmLookup(this.cardItem) : this.args.itemId;
-  }
-
   @action handleClick() {
     this.args.onSelect(this.selectPayload);
   }
@@ -120,75 +112,41 @@ export default class ItemButton extends Component<Signature> {
   }
 
   <template>
-    {{#if this.isNewCard}}
-      <Button
-        class={{cn 'create-card' 'catalog-item' selected=@isSelected}}
-        {{on 'click' this.handleClick}}
-        {{on 'dblclick' this.handleDblClick}}
-        {{on 'keydown' this.handleKeydown}}
-        data-test-card-catalog-create-new-button={{this.newCardItem.realmURL}}
-        data-test-card-catalog-item-selected={{if @isSelected 'true'}}
-        ...attributes
-      >
-        <IconPlus
-          class='plus-icon'
-          width='16'
-          height='16'
-          role='presentation'
+    <Button
+      class={{cn 'catalog-item' selected=@isSelected compact=@isCompact}}
+      {{on 'click' this.handleClick}}
+      {{on 'dblclick' this.handleDblClick}}
+      {{on 'keydown' this.handleKeydown}}
+      data-test-card-catalog-create-new-button={{this.newCardItem.realmURL}}
+      data-test-card-catalog-item={{removeFileExtension this.resolvedItemId}}
+      data-test-card-catalog-item-selected={{if @isSelected 'true'}}
+      ...attributes
+    >
+      {{#if this.isNewCard}}
+        <div class='create-card'>
+          <IconPlus
+            class='plus-icon'
+            width='16'
+            height='16'
+            role='presentation'
+          />
+          Create New
+          {{this.cardRefName}}
+        </div>
+      {{else if this.componentItem}}
+        <this.componentItem
+          data-test-search-result={{removeFileExtension this.resolvedItemId}}
         />
-        Create New
-        {{this.cardRefName}}
-      </Button>
-    {{else}}
-      <div class='item-button-container'>
-        {{#if this.componentItem}}
-          <Button
-            class={{cn 'catalog-item' selected=@isSelected compact=@isCompact}}
-            {{on 'click' this.handleClick}}
-            {{on 'dblclick' this.handleDblClick}}
-            {{on 'keydown' this.handleKeydown}}
-            data-test-card-catalog-item={{removeFileExtension
-              this.resolvedItemId
-            }}
-            data-test-card-catalog-item-selected={{if @isSelected 'true'}}
-            ...attributes
-          >
-            {{#let this.componentItem as |CardComponent|}}
-              <CardComponent
-                data-test-search-result={{removeFileExtension
-                  this.resolvedItemId
-                }}
-              />
-            {{/let}}
-          </Button>
-        {{else if this.cardItem}}
-          <Button
-            class={{cn 'catalog-item' selected=@isSelected compact=@isCompact}}
-            {{on 'click' this.handleClick}}
-            {{on 'dblclick' this.handleDblClick}}
-            {{on 'keydown' this.handleKeydown}}
-            data-test-card-catalog-item={{this.resolvedItemId}}
-            data-test-card-catalog-item-selected={{if @isSelected 'true'}}
-            ...attributes
-          >
-            <CardRenderer
-              @card={{this.cardItem}}
-              @format='fitted'
-              @codeRef={{resultsCardRef}}
-              data-test-search-result={{removeFileExtension
-                this.resolvedItemId
-              }}
-            />
-          </Button>
-        {{/if}}
-        {{#if this.urlForRealmLookup}}
-          {{#let (this.realm.info this.urlForRealmLookup) as |realmInfo|}}
-            <div class='realm-name' data-test-realm-name>in
-              {{realmInfo.name}}</div>
-          {{/let}}
-        {{/if}}
-      </div>
-    {{/if}}
+      {{else if this.cardItem}}
+        <CardRenderer
+          @card={{this.cardItem}}
+          @format='fitted'
+          @codeRef={{resultsCardRef}}
+          @displayContainer={{false}}
+          data-test-search-result={{removeFileExtension this.resolvedItemId}}
+        />
+      {{/if}}
+    </Button>
     <style scoped>
       .catalog-item {
         --boxel-button-padding: 0;
@@ -197,6 +155,7 @@ export default class ItemButton extends Component<Signature> {
         height: 100%;
         width: 100%;
         max-width: 100%;
+        text-align: start;
       }
       .catalog-item.selected {
         border-color: var(--boxel-highlight);
@@ -208,35 +167,14 @@ export default class ItemButton extends Component<Signature> {
       .catalog-item.selected:hover {
         border-color: var(--boxel-highlight);
       }
-      .create-card.catalog-item {
-        --boxel-button-padding: var(--boxel-sp-xs) var(--boxel-sp);
-        --boxel-button-letter-spacing: var(--boxel-lsp-xs);
+      .create-card {
+        display: flex;
         gap: var(--boxel-sp-xs);
         flex-wrap: nowrap;
-        justify-content: flex-start;
-        height: var(--item-height, 67px);
-        width: 100%;
-        max-width: 100%;
+        letter-spacing: var(--boxel-lsp-xs);
       }
       .plus-icon > :deep(path) {
         stroke: none;
-      }
-      .item-button-container {
-        display: flex;
-        flex-direction: column;
-        align-items: self-end;
-        width: 100%;
-        height: 100%;
-        max-width: 100%;
-        max-height: 100%;
-      }
-      .realm-name {
-        font: 400 var(--boxel-font);
-        color: var(--boxel-400);
-        padding-top: var(--boxel-sp-4xs);
-        padding-right: var(--boxel-sp-xxs);
-        height: 20px;
-        font-size: var(--boxel-font-size-xs);
       }
     </style>
   </template>

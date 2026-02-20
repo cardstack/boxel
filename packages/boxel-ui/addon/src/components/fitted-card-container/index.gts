@@ -10,6 +10,7 @@ import {
 interface Signature {
   Args: {
     size?: FittedFormatId;
+    fullWidth?: boolean;
   };
   Blocks: { default: [] };
   Element: HTMLDivElement;
@@ -44,14 +45,19 @@ export default class FittedCardContainer extends Component<Signature> {
   }
 
   get containerStyle() {
+    let style = ``;
     let formatSpec = this.formatSpec;
 
     if (!formatSpec) {
-      return sanitizeHtmlSafe('');
+      return sanitizeHtmlSafe(style);
     }
 
-    return sanitizeHtmlSafe(
-      `width: ${formatSpec.width}px; height: ${formatSpec.height}px;`,
-    );
+    if (this.args.fullWidth) {
+      style += `width: 100%; height: ${formatSpec.height}px;`;
+    } else {
+      style += `width: ${formatSpec.width}px; height: ${formatSpec.height}px;`;
+    }
+
+    return sanitizeHtmlSafe(style);
   }
 }

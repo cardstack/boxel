@@ -4,18 +4,17 @@ import { action } from '@ember/object';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
+import type { CardDef } from 'https://cardstack.com/base/card-api';
+
 import HistoryIcon from '@cardstack/boxel-icons/history';
 import pluralize from 'pluralize';
 
-import {
-  Button,
-  GridContainer,
-  FittedCardContainer,
-} from '@cardstack/boxel-ui/components';
+import { Button, GridContainer } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
 
 import type { CodeRef } from '@cardstack/runtime-common';
 
+import { urlForRealmLookup } from '@cardstack/host/lib/utils';
 import type RealmService from '@cardstack/host/services/realm';
 
 import { SECTION_SHOW_MORE_INCREMENT } from './constants';
@@ -157,10 +156,9 @@ export default class SearchResultSection extends Component<Signature> {
         this.urlSection)
     ) {
       return 'grid-view';
-    } else if (this.args.viewOption === 'strip') {
+    } else {
       return 'strip-view';
     }
-    return '';
   }
 
   get displayShowMore() {
@@ -198,6 +196,20 @@ export default class SearchResultSection extends Component<Signature> {
     };
   };
 
+  private get cardSize() {
+    if (this.viewClass === 'compact-view') {
+      return 'single-strip';
+    } else if (this.viewClass === 'strip-view') {
+      return 'double-wide-strip';
+    } else {
+      return 'cardsgrid-tile';
+    }
+  }
+
+  private urlForRealmLookup = (card: CardDef) => {
+    return urlForRealmLookup(card);
+  };
+
   <template>
     <div
       class='search-result-block {{if @isCollapsed "collapsed"}}'
@@ -216,7 +228,8 @@ export default class SearchResultSection extends Component<Signature> {
           />
         {{/unless}}
         <GridContainer
-          @size={{if @isCompact 'single-strip' 'cardsgrid-tile'}}
+          @viewFormat={{if (eq this.viewClass 'grid-view') 'grid' 'list'}}
+          @size={{this.cardSize}}
           data-test-search-cards-result
         >
           {{#if (this.showCreateForRealm this.realmSection.realmUrl)}}
@@ -268,7 +281,10 @@ export default class SearchResultSection extends Component<Signature> {
             @totalCount={{1}}
           />
         {{/unless}}
-        <GridContainer @size={{if @isCompact 'single-strip' 'cardsgrid-tile'}}>
+        <GridContainer
+          @viewFormat={{if (eq this.viewClass 'grid-view') 'grid' 'list'}}
+          @size={{this.cardSize}}
+        >
           <ItemButton
             @item={{this.urlSection.card}}
             @itemId={{this.urlSection.card.id}}
@@ -294,27 +310,41 @@ export default class SearchResultSection extends Component<Signature> {
 
         <GridContainer
           class={{if @isCompact 'recent-cards--strip'}}
-          @size={{if @isCompact 'single-strip' 'cardsgrid-tile'}}
+          @items={{this.displayedRecentsCards}}
+          @viewFormat={{if (eq this.viewClass 'grid-view') 'grid' 'list'}}
+          @size={{this.cardSize}}
+          @fullWidthItem={{eq this.viewClass 'strip-view'}}
+          as |card GridItem i|
         >
-          {{#each this.displayedRecentsCards as |card i|}}
-            {{#if card}}
-              <FittedCardContainer
-                @size={{if @isCompact 'single-strip' 'cardsgrid-tile'}}
-              >
-                <ItemButton
-                  @item={{card}}
-                  @itemId={{card.id}}
-                  @isSelected={{eq this.selectedCardId card.id}}
-                  @isCompact={{@isCompact}}
-                  @displayRealmName={{true}}
-                  @onSelect={{@handleSelect}}
-                  @onSubmit={{@onSubmit}}
-                  data-test-search-result-index={{i}}
-                />
-              </FittedCardContainer>
-            {{/if}}
-          {{/each}}
+          <GridItem class={{if @isCompact 'item-button-container'}}>
+            <:default>
+              <ItemButton
+                @item={{card}}
+                @itemId={{card.id}}
+                @isSelected={{eq this.selectedCardId card.id}}
+                @isCompact={{@isCompact}}
+                @displayRealmName={{true}}
+                @onSelect={{@handleSelect}}
+                @onSubmit={{@onSubmit}}
+                data-test-search-result-index={{i}}
+              />
+            </:default>
+            <:after>
+              {{#if card}}
+                {{#let
+                  (this.realm.info (this.urlForRealmLookup card))
+                  as |realmInfo|
+                }}
+                  <div class='realm-name' data-test-realm-name>
+                    in
+                    {{realmInfo.name}}
+                  </div>
+                {{/let}}
+              {{/if}}
+            </:after>
+          </GridItem>
         </GridContainer>
+
         {{#if this.displayShowMore}}
           <Button
             class='show-more'
@@ -359,7 +389,7 @@ export default class SearchResultSection extends Component<Signature> {
       }
       .recent-cards--strip {
         display: flex;
-        flex-wrap: nowrap;
+        flex-flow: row nowrap;
         gap: var(--boxel-sp-xs);
         padding: var(--boxel-sp-xs) 0;
       }
@@ -383,6 +413,19 @@ export default class SearchResultSection extends Component<Signature> {
       .show-more {
         margin-top: var(--boxel-sp);
         width: fit-content;
+      }
+      .item-button-container {
+        display: flex;
+        flex-direction: column;
+        align-items: self-end;
+      }
+      .realm-name {
+        font: 400 var(--boxel-font);
+        color: var(--boxel-400);
+        padding-top: var(--boxel-sp-4xs);
+        padding-right: var(--boxel-sp-xxs);
+        height: 20px;
+        font-size: var(--boxel-font-size-xs);
       }
     </style>
   </template>
