@@ -402,6 +402,17 @@ export default class RenderRoute extends Route<Model> {
     await this.#authGuard.race(() => this.store.loaded());
     if (instance) {
       model.instance = instance;
+      // Diagnostic: check if cardInfo.theme was loaded
+      try {
+        let ci = (instance as any).cardInfo;
+        let th = ci?.theme;
+        let url = th?.cardThumbnailURL;
+        console.log(
+          `[render-diag] id=${id} cardInfo=${ci != null} theme=${th != null} thumbnailURL=${url}`,
+        );
+      } catch (e: any) {
+        console.log(`[render-diag] id=${id} error=${e.message}`);
+      }
     }
     this.#scheduleReady(model);
 
@@ -447,6 +458,9 @@ export default class RenderRoute extends Route<Model> {
       if (field?.fieldType === 'contains') {
         try {
           let value = (instance as any)[fieldName];
+          console.log(
+            `[touch-nested] field=${fieldName} value=${value != null} type=${typeof value}`,
+          );
           if (value != null && typeof value === 'object') {
             let nestedFields = cardApi.getFields(value, {
               includeComputeds: true,
@@ -459,15 +473,22 @@ export default class RenderRoute extends Route<Model> {
                 nestedField?.fieldType === 'linksToMany'
               ) {
                 try {
-                  value[nestedName];
-                } catch {
-                  // ignore errors from touching nested linksTo fields
+                  let nestedVal = value[nestedName];
+                  console.log(
+                    `[touch-nested]   nested=${nestedName} fieldType=${nestedField.fieldType} value=${nestedVal}`,
+                  );
+                } catch (e: any) {
+                  console.log(
+                    `[touch-nested]   nested=${nestedName} error=${e.message}`,
+                  );
                 }
               }
             }
           }
-        } catch {
-          // ignore errors from accessing contains fields
+        } catch (e: any) {
+          console.log(
+            `[touch-nested] field=${fieldName} access error=${e.message}`,
+          );
         }
       }
     }

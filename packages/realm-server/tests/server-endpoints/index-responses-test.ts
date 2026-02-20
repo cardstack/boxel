@@ -701,20 +701,22 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         console.log('=== DIAG isolated_html length ===', diagRows[0]?.isolated_html?.length ?? 0);
         console.log('=== DIAG error_doc ===', JSON.stringify(diagRows[0]?.error_doc)?.substring(0, 500));
         console.log('=== DIAG deps ===', JSON.stringify(diagRows[0]?.deps));
-        let pristineDoc = diagRows[0]?.pristine_doc;
-        console.log('=== DIAG pristine_doc.relationships ===', JSON.stringify((pristineDoc as any)?.data?.relationships));
+        let pristineDoc = diagRows[0]?.pristine_doc as any;
+        console.log('=== DIAG pristine_doc.relationships ===', JSON.stringify(pristineDoc?.relationships));
+        console.log('=== DIAG pristine_doc keys ===', pristineDoc ? Object.keys(pristineDoc) : 'null');
 
         // Also check the theme card itself
         let themeRows = (await context.dbAdapter.execute(
-          `SELECT url, head_html, isolated_html, error_doc, pristine_doc FROM boxel_index
+          `SELECT url, head_html, error_doc, pristine_doc FROM boxel_index
            WHERE url LIKE '%a-test-theme%'
              AND type = 'instance'
              AND is_deleted IS NOT TRUE
            LIMIT 1`,
-        )) as { url: string; head_html: string | null; isolated_html: string | null; error_doc: string | null; pristine_doc: Record<string, any> | null }[];
-        let themePristine = themeRows[0]?.pristine_doc;
+        )) as { url: string; head_html: string | null; error_doc: string | null; pristine_doc: Record<string, any> | null }[];
+        let themePristine = themeRows[0]?.pristine_doc as any;
         console.log('=== DIAG theme card url ===', themeRows[0]?.url);
-        console.log('=== DIAG theme pristine_doc.attributes ===', JSON.stringify((themePristine as any)?.data?.attributes)?.substring(0, 300));
+        console.log('=== DIAG theme head_html ===', JSON.stringify(themeRows[0]?.head_html?.substring(0, 200)));
+        console.log('=== DIAG theme pristine_doc.attributes ===', JSON.stringify(themePristine?.attributes)?.substring(0, 300));
         console.log('=== DIAG theme error_doc ===', JSON.stringify(themeRows[0]?.error_doc)?.substring(0, 300));
 
         let response = await context.request2
