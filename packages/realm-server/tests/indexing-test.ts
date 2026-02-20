@@ -2036,6 +2036,159 @@ module(basename(__filename), function () {
       );
     });
 
+    // remove this once we have a query based relationship invalidation strategy
+    test('does not capture deps from query-backed relationships', async function (assert) {
+      await realm.write(
+        'query-rel-target.gts',
+        `
+            import { CardDef, Component, contains, field } from "https://cardstack.com/base/card-api";
+            import StringField from "https://cardstack.com/base/string";
+
+            export class QueryRelTarget extends CardDef {
+              @field cardTitle = contains(StringField);
+
+              static embedded = class Embedded extends Component<typeof this> {
+                <template>
+                  <span><@fields.cardTitle /></span>
+                </template>
+              }
+            }
+          `,
+      );
+
+      await realm.write(
+        'query-rel-consumer.gts',
+        `
+            import { CardDef, Component, contains, field, linksTo, linksToMany } from "https://cardstack.com/base/card-api";
+            import StringField from "https://cardstack.com/base/string";
+
+            export class QueryRelConsumer extends CardDef {
+              @field cardTitle = contains(StringField);
+              @field favorite = linksTo(() => CardDef, {
+                query: {
+                  filter: {
+                    eq: {
+                      cardTitle: 'target',
+                    },
+                  },
+                },
+              });
+              @field matches = linksToMany(() => CardDef, {
+                query: {
+                  filter: {
+                    eq: {
+                      cardTitle: 'target',
+                    },
+                  },
+                  page: {
+                    size: 10,
+                    number: 0,
+                  },
+                },
+              });
+
+              static isolated = class Isolated extends Component<typeof this> {
+                <template>
+                  <@fields.favorite />
+                  <@fields.matches />
+                </template>
+              }
+            }
+          `,
+      );
+
+      await realm.write(
+        'query-rel-target-1.json',
+        JSON.stringify({
+          data: {
+            attributes: { cardTitle: 'target' },
+            meta: {
+              adoptsFrom: {
+                module: './query-rel-target',
+                name: 'QueryRelTarget',
+              },
+            },
+          },
+        } as LooseSingleCardDocument),
+      );
+
+      await realm.write(
+        'query-rel-consumer-1.json',
+        JSON.stringify({
+          data: {
+            attributes: { cardTitle: 'consumer' },
+            meta: {
+              adoptsFrom: {
+                module: './query-rel-consumer',
+                name: 'QueryRelConsumer',
+              },
+            },
+          },
+        } as LooseSingleCardDocument),
+      );
+
+      let queryConsumerDoc = await realm.realmIndexQueryEngine.cardDocument(
+        new URL(`${testRealm}query-rel-consumer-1`),
+        { loadLinks: true },
+      );
+      if (queryConsumerDoc?.type === 'doc') {
+        let relationships = queryConsumerDoc.doc.data.relationships ?? {};
+        let favorite = relationships.favorite as
+          | {
+              links?: Record<string, string | null>;
+              data?: { type: string; id: string } | null;
+            }
+          | undefined;
+        let matches = relationships.matches as
+          | {
+              links?: Record<string, string | null>;
+              data?: { type: string; id: string }[];
+            }
+          | undefined;
+        assert.strictEqual(
+          typeof favorite?.links?.search,
+          'string',
+          'query linksTo relationship is present',
+        );
+        assert.deepEqual(
+          favorite?.data,
+          {
+            type: 'card',
+            id: `${testRealm}query-rel-target-1`,
+          },
+          'query linksTo relationship contains matched target',
+        );
+        assert.strictEqual(
+          typeof matches?.links?.search,
+          'string',
+          'query linksToMany relationship is present',
+        );
+        assert.deepEqual(
+          matches?.data,
+          [
+            {
+              type: 'card',
+              id: `${testRealm}query-rel-target-1`,
+            },
+          ],
+          'query linksToMany relationship contains matched targets',
+        );
+      } else {
+        assert.ok(false, 'expected query-backed consumer document');
+      }
+
+      let deps = await depsFor(`${testRealm}query-rel-consumer-1.json`);
+      assert.true(deps.length > 0, 'consumer instance has deps');
+      assert.notOk(
+        deps.includes(`${testRealm}query-rel-target-1.json`),
+        'query-backed relationship target is not tracked as a dependency',
+      );
+      assert.notOk(
+        deps.includes(`${testRealm}query-rel-target`),
+        'query-backed relationship target module is not tracked as a dependency',
+      );
+    });
+
     test('collects glimmer scoped CSS deps from first-degree and second-degree relationship instances', async function (assert) {
       await realm.write(
         'second-rel.gts',
