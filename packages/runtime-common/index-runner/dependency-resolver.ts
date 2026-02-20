@@ -158,7 +158,11 @@ export class IndexRunnerDependencyResolver {
       return deps;
     }
 
-    for (let value of Object.values(relationships)) {
+    let queryFieldPaths = this.queryFieldRelationshipPaths(relationships);
+    for (let [key, value] of Object.entries(relationships)) {
+      if (this.isQueryFieldRelationshipKey(key, queryFieldPaths)) {
+        continue;
+      }
       let entries = Array.isArray(value) ? value : [value];
       for (let relationship of entries) {
         this.addRelationshipDependencyCandidates(
@@ -175,6 +179,7 @@ export class IndexRunnerDependencyResolver {
   extractSearchDocRelationshipDeps(
     searchDoc: Record<string, unknown> | null | undefined,
     relativeTo: URL,
+    queryFieldPaths?: Set<string>,
   ): Set<string> {
     let deps = new Set<string>();
     if (!searchDoc) {
@@ -194,7 +199,7 @@ export class IndexRunnerDependencyResolver {
     }
 
     let visited = new Set<unknown>();
-    let visit = (value: unknown) => {
+    let visit = (value: unknown, path: string[] = []) => {
       if (value == null || typeof value !== 'object') {
         return;
       }
@@ -205,7 +210,7 @@ export class IndexRunnerDependencyResolver {
 
       if (Array.isArray(value)) {
         for (let item of value) {
-          visit(item);
+          visit(item, path);
         }
         return;
       }
@@ -221,8 +226,14 @@ export class IndexRunnerDependencyResolver {
         }
       }
 
-      for (let nested of Object.values(value as Record<string, unknown>)) {
-        visit(nested);
+      for (let [key, nested] of Object.entries(
+        value as Record<string, unknown>,
+      )) {
+        let nextPath = [...path, key];
+        if (this.isQueryFieldSearchDocPath(nextPath, queryFieldPaths)) {
+          continue;
+        }
+        visit(nested, nextPath);
       }
     };
 
@@ -239,13 +250,6 @@ export class IndexRunnerDependencyResolver {
       return deps;
     }
 
-    let addDep = (id: string) => {
-      let normalized = this.normalizeRelationshipDependency(id, relativeTo);
-      if (normalized) {
-        deps.add(normalized);
-      }
-    };
-
     let data = serialized.data as CardResource | undefined;
     for (let dep of this.extractDirectRelationshipDeps(
       data ?? null,
@@ -253,13 +257,9 @@ export class IndexRunnerDependencyResolver {
     )) {
       deps.add(dep);
     }
-
-    for (let resource of serialized.included ?? []) {
-      if (typeof resource.id === 'string') {
-        addDep(resource.id);
-      }
-    }
-
+    // Intentionally do not derive deps from `included` resources. We only track
+    // relationship edges from the consuming resource itself so query-backed
+    // relationships (which can seed included records) do not become deps.
     return deps;
   }
 
@@ -388,6 +388,11 @@ export class IndexRunnerDependencyResolver {
     relationshipSearchDoc?: Record<string, unknown> | null;
     relativeTo: URL;
   }): Promise<Set<string>> {
+    let queryFieldPaths = this.extractQueryFieldRelationshipPaths(
+      relationshipResource,
+      relationshipSourceResource ?? null,
+      (relationshipSerialized?.data as CardResource | undefined) ?? null,
+    );
     let relationshipDeps = new Set<string>([
       ...this.extractRenderedRelationshipDeps({
         renderedResource: relationshipResource,
@@ -401,6 +406,7 @@ export class IndexRunnerDependencyResolver {
       ...this.extractSearchDocRelationshipDeps(
         relationshipSearchDoc,
         relativeTo,
+        queryFieldPaths,
       ),
     ]);
     let [expandedModuleDeps, expandedRelationshipDeps] = await Promise.all([
@@ -634,7 +640,14 @@ export class IndexRunnerDependencyResolver {
 
     let deps = new Set<string>();
     let renderedRelationships = renderedResource.relationships;
+    let queryFieldPaths = this.extractQueryFieldRelationshipPaths(
+      renderedResource,
+      sourceResource ?? null,
+    );
     for (let [key, value] of Object.entries(renderedRelationships)) {
+      if (this.isQueryFieldRelationshipKey(key, queryFieldPaths)) {
+        continue;
+      }
       let renderedEntries = Array.isArray(value) ? value : [value];
       for (let relationship of renderedEntries) {
         this.addRelationshipDependencyCandidates(
@@ -661,6 +674,22 @@ export class IndexRunnerDependencyResolver {
     }
 
     return deps;
+  }
+
+  extractQueryFieldRelationshipPaths(
+    ...resources: RelationshipSource[]
+  ): Set<string> {
+    let paths = new Set<string>();
+    for (let resource of resources) {
+      let relationships = resource?.relationships;
+      if (!relationships) {
+        continue;
+      }
+      for (let fieldPath of this.queryFieldRelationshipPaths(relationships)) {
+        paths.add(fieldPath);
+      }
+    }
+    return paths;
   }
 
   private async getRelationshipDependencyRows(
@@ -898,5 +927,57 @@ export class IndexRunnerDependencyResolver {
       }
     }
     return collected;
+  }
+
+  private queryFieldRelationshipPaths(
+    relationships:
+      | Pick<CardResource, 'relationships'>['relationships']
+      | FileMetaResource['relationships']
+      | undefined,
+  ): Set<string> {
+    let paths = new Set<string>();
+    if (!relationships) {
+      return paths;
+    }
+    for (let [key, value] of Object.entries(relationships)) {
+      if (Array.isArray(value) || /\.\d+$/.test(key)) {
+        continue;
+      }
+      if (typeof value?.links?.search === 'string' && value.links.search) {
+        paths.add(key);
+      }
+    }
+    return paths;
+  }
+
+  private isQueryFieldRelationshipKey(
+    key: string,
+    queryFieldPaths: Set<string>,
+  ): boolean {
+    for (let queryFieldPath of queryFieldPaths) {
+      if (key === queryFieldPath || key.startsWith(`${queryFieldPath}.`)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private isQueryFieldSearchDocPath(
+    path: string[],
+    queryFieldPaths?: Set<string>,
+  ): boolean {
+    if (!queryFieldPaths || queryFieldPaths.size === 0 || path.length === 0) {
+      return false;
+    }
+    let joined = path.join('.');
+    for (let queryFieldPath of queryFieldPaths) {
+      if (
+        joined === queryFieldPath ||
+        joined.startsWith(`${queryFieldPath}.`)
+      ) {
+        return true;
+      }
+    }
+    return false;
   }
 }
