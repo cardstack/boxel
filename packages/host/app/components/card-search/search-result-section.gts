@@ -372,7 +372,7 @@ export default class SearchResultSection extends Component<Signature> {
         margin-bottom: var(--boxel-sp-lg);
       }
       .search-result-block.collapsed {
-        opacity: 0.6;
+        display: none;
       }
       .search-result-block.collapsed :deep(.search-sheet-section-header) {
         margin-bottom: 0;

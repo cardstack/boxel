@@ -135,6 +135,7 @@ export default class ItemButton extends Component<Signature> {
         </div>
       {{else if this.componentItem}}
         <this.componentItem
+          class='hide-boundaries'
           data-test-search-result={{removeFileExtension this.resolvedItemId}}
         />
       {{else if this.cardItem}}
@@ -166,6 +167,12 @@ export default class ItemButton extends Component<Signature> {
       }
       .catalog-item.selected:hover {
         border-color: var(--boxel-highlight);
+      }
+      .catalog-item.compact {
+        box-sizing: content-box;
+      }
+      .catalog-item.compact :deep(*) {
+        box-sizing: border-box;
       }
       .create-card {
         display: flex;
