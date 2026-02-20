@@ -6,7 +6,6 @@ import {
   param,
   query,
   userInitiatedPriority,
-  ensureTrailingSlash,
 } from '@cardstack/runtime-common';
 import { enqueueRunCommandJob } from '@cardstack/runtime-common/jobs/run-command';
 import * as Sentry from '@sentry/node';
@@ -15,8 +14,8 @@ import type {
   PgPrimitive,
   QueuePublisher,
 } from '@cardstack/runtime-common';
-import type { ResolvedCodeRef } from '@cardstack/runtime-common';
 import type { MatrixEvent, Room } from 'matrix-js-sdk';
+import { commandUrlToCodeRef } from './command-parsing-utils';
 
 const log = logger('bot-runner');
 export interface BotRegistration {
@@ -218,55 +217,6 @@ async function getCommandsForRegistration(
     commands.push({ type: filter.content_type, command: row.command });
   }
   return commands;
-}
-
-function commandUrlToCodeRef(
-  commandUrl: string,
-  realmURL: string | undefined,
-): ResolvedCodeRef | undefined {
-  if (!commandUrl) {
-    return undefined;
-  }
-
-  try {
-    let url = new URL(commandUrl);
-    let path = url.pathname;
-
-    // TODO: boxel-host commands are not exposed internally as HTTP URLs; they
-    // are only available via module specifiers, so we map those URLs to code refs.
-    let boxelHostPrefix = '/boxel-host/commands/';
-    if (path.includes(boxelHostPrefix)) {
-      let rest = path.split(boxelHostPrefix)[1] ?? '';
-      let [commandName, exportName = 'default'] = rest.split('/');
-      if (!commandName) {
-        return undefined;
-      }
-      return {
-        module: `@cardstack/boxel-host/commands/${commandName}`,
-        name: exportName || 'default',
-      };
-    }
-
-    let commandsPrefix = '/commands/';
-    if (path.includes(commandsPrefix)) {
-      if (!realmURL) {
-        return undefined;
-      }
-      let rest = path.split(commandsPrefix)[1] ?? '';
-      let [commandName, exportName = 'default'] = rest.split('/');
-      if (!commandName) {
-        return undefined;
-      }
-      return {
-        module: `${ensureTrailingSlash(realmURL)}commands/${commandName}`,
-        name: exportName || 'default',
-      };
-    }
-  } catch {
-    // ignore invalid URLs
-  }
-
-  return undefined;
 }
 
 async function getRegistrationsForUser(
