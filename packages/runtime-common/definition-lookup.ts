@@ -130,6 +130,7 @@ export interface DefinitionLookup {
   lookupDefinition(codeRef: ResolvedCodeRef): Promise<Definition>;
   invalidate(moduleURL: string): Promise<string[]>;
   clearRealmCache(realmURL: string): Promise<void>;
+  clearAllModules(): Promise<void>;
   registerRealm(realm: LocalRealm): void;
   forRealm(realm: LocalRealm): DefinitionLookup;
   getModuleCacheEntry(moduleUrl: string): Promise<ModuleCacheEntry | undefined>;
@@ -392,6 +393,10 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       'WHERE',
       ...(every([['resolved_realm_url =', param(realmURL)]]) as Expression),
     ]);
+  }
+
+  async clearAllModules(): Promise<void> {
+    await this.query(['DELETE FROM', MODULES_TABLE]);
   }
 
   registerRealm(realm: LocalRealm): void {
@@ -1113,6 +1118,10 @@ class RealmScopedDefinitionLookup implements DefinitionLookup {
 
   async clearRealmCache(realmURL: string): Promise<void> {
     await this.#inner.clearRealmCache(realmURL);
+  }
+
+  async clearAllModules(): Promise<void> {
+    await this.#inner.clearAllModules();
   }
 
   registerRealm(realm: LocalRealm): void {
