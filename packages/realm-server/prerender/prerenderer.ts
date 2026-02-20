@@ -376,18 +376,8 @@ export class Prerenderer {
         opts,
       });
     } catch (e) {
-      log.error(
-        `command run attempt failed (realm ${realm}) with error, restarting browser`,
-        e,
-      );
-      await this.#restartBrowser();
-      return await this.#renderRunner.runCommandAttempt({
-        realm,
-        auth,
-        command,
-        commandInput,
-        opts,
-      });
+      log.error(`command run attempt failed (realm ${realm})`, e);
+      throw e;
     }
   }
 
