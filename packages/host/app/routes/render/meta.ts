@@ -5,7 +5,7 @@ import { service } from '@ember/service';
 
 import { isEqual } from 'lodash';
 
-import type { CodeRef, LooseCardResource } from '@cardstack/runtime-common';
+import type { CodeRef } from '@cardstack/runtime-common';
 import {
   baseRef,
   identifyCard,
@@ -20,7 +20,7 @@ import {
 
 import {
   directModuleDeps,
-  recursiveModuleDeps,
+  transitiveModuleDeps,
 } from '@cardstack/host/lib/prerender-util';
 import type CardService from '@cardstack/host/services/card-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
@@ -71,21 +71,12 @@ export default class RenderMetaRoute extends Route<Model> {
     }
 
     let instanceURL = new URL(instance.id);
-    let moduleDeps = directModuleDeps(serialized.data, instanceURL);
+    let directDeps = directModuleDeps(serialized.data, instanceURL);
 
-    // Include module deps from linked card instances (included resources)
-    if (serialized.included) {
-      for (let resource of serialized.included) {
-        if (resource.meta?.adoptsFrom) {
-          moduleDeps.push(
-            ...directModuleDeps(resource as LooseCardResource, instanceURL),
-          );
-        }
-      }
-    }
-
+    // `meta.deps` intentionally contains only module deps. Relationship/file
+    // deps are expanded later in index-runner when writing index entries.
     let deps = [
-      ...(await recursiveModuleDeps(moduleDeps, this.loaderService.loader)),
+      ...(await transitiveModuleDeps(directDeps, this.loaderService.loader)),
     ];
 
     // Include linked card URLs as deps so that backward invalidation

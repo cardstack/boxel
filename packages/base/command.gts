@@ -60,8 +60,8 @@ export class CopyCardResult extends CardDef {
 }
 
 export class CopySourceInput extends CardDef {
-  @field fromRealmUrl = contains(StringField);
-  @field toRealmUrl = contains(StringField);
+  @field originSourceUrl = contains(StringField);
+  @field destinationSourceUrl = contains(StringField);
 }
 
 export class CopySourceResult extends CardDef {
