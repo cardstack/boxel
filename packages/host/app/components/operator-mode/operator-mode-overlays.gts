@@ -39,7 +39,8 @@ import {
   CommandContextName,
   getMenuItems,
 } from '@cardstack/runtime-common';
-import { hasExtension } from '@cardstack/runtime-common/url';
+
+import { isFileMetaId } from '@cardstack/host/lib/read-type';
 
 import type {
   CardCrudFunctions,
@@ -364,7 +365,7 @@ export default class OperatorModeOverlays extends Overlays {
   ): boolean {
     let cardDefOrId = renderedCard.cardDefOrId;
     if (typeof cardDefOrId === 'string') {
-      return hasExtension(cardDefOrId) && !cardDefOrId.endsWith('.json');
+      return isFileMetaId(cardDefOrId);
     }
     return isFileDefInstance(cardDefOrId);
   }
