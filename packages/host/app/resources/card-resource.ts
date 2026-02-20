@@ -59,6 +59,28 @@ export class CardResource extends Resource<Args> {
     return this.#type ?? 'card';
   }
 
+  private get fallbackReadType(): StoreReadType {
+    return this.readType === 'file-meta' ? 'card' : 'file-meta';
+  }
+
+  private peekForType(type: StoreReadType): unknown {
+    if (!this.#id) {
+      return undefined;
+    }
+    return type === 'file-meta'
+      ? (this.store.peek(this.#id, { type: 'file-meta' }) as unknown)
+      : (this.store.peek(this.#id) as unknown);
+  }
+
+  private peekErrorForType(type: StoreReadType) {
+    if (!this.#id) {
+      return undefined;
+    }
+    return type === 'file-meta'
+      ? this.store.peekError(this.#id, { type: 'file-meta' })
+      : this.store.peekError(this.#id);
+  }
+
   // Note that this will return a stale instance when the server state for this
   // id becomes an error. use this.cardError to see the live server state for
   // this instance.
@@ -67,11 +89,8 @@ export class CardResource extends Resource<Args> {
       return undefined;
     }
     let maybeCard =
-      this.readType === 'file-meta'
-        ? ((this.store.peek(this.#id, { type: 'file-meta' }) as unknown) ??
-          (this.store.peek(this.#id) as unknown))
-        : ((this.store.peek(this.#id) as unknown) ??
-          (this.store.peek(this.#id, { type: 'file-meta' }) as unknown));
+      this.peekForType(this.readType) ??
+      this.peekForType(this.fallbackReadType);
     return isCardInstance(maybeCard) || isFileDefInstance(maybeCard)
       ? (maybeCard as BaseDef)
       : undefined;
@@ -81,18 +100,12 @@ export class CardResource extends Resource<Args> {
     if (!this.#id) {
       return undefined;
     }
-    if (
-      this.readType === 'file-meta' &&
-      this.store.peek(this.#id, { type: 'file-meta' })
-    ) {
+    if (this.readType === 'file-meta' && this.peekForType('file-meta')) {
       return undefined;
     }
     let maybeError =
-      this.readType === 'file-meta'
-        ? (this.store.peekError(this.#id, { type: 'file-meta' }) ??
-          this.store.peekError(this.#id))
-        : (this.store.peekError(this.#id) ??
-          this.store.peekError(this.#id, { type: 'file-meta' }));
+      this.peekErrorForType(this.readType) ??
+      this.peekErrorForType(this.fallbackReadType);
     return maybeError && !isCardInstance(maybeError) ? maybeError : undefined;
   }
 
