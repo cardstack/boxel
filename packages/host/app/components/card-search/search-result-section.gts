@@ -8,7 +8,7 @@ import HistoryIcon from '@cardstack/boxel-icons/history';
 import pluralize from 'pluralize';
 
 import { Button, GridContainer } from '@cardstack/boxel-ui/components';
-import { cn, eq } from '@cardstack/boxel-ui/helpers';
+import { cn, eq, type FittedFormatId } from '@cardstack/boxel-ui/helpers';
 
 import type { CodeRef } from '@cardstack/runtime-common';
 
@@ -202,7 +202,7 @@ export default class SearchResultSection extends Component<Signature> {
     };
   };
 
-  private get cardSize() {
+  private get cardSize(): FittedFormatId {
     if (this.viewClass === 'compact-view') {
       return 'single-strip';
     } else if (this.viewClass === 'strip-view') {
@@ -214,7 +214,10 @@ export default class SearchResultSection extends Component<Signature> {
 
   <template>
     <div
-      class='search-result-block {{if @isCollapsed "collapsed"}}'
+      class={{cn
+        'search-result-block'
+        search-result-block--collapsed=@isCollapsed
+      }}
       data-test-realm={{this.sectionRealmName}}
       ...attributes
     >
@@ -371,16 +374,16 @@ export default class SearchResultSection extends Component<Signature> {
         flex-direction: column;
         margin-bottom: var(--boxel-sp-lg);
       }
-      .search-result-block.collapsed {
+      .search-result-block--collapsed {
         opacity: 0.6;
       }
-      .search-result-block.collapsed :deep(.search-sheet-section-header) {
+      .search-result-block--collapsed :deep(.search-sheet-section-header) {
         margin-bottom: 0;
         padding-bottom: var(--boxel-sp-lg);
         border-bottom: 1px solid var(--boxel-400);
       }
-      .search-result-block.collapsed .cards,
-      .search-result-block.collapsed .show-more {
+      .search-result-block--collapsed .cards,
+      .search-result-block--collapsed .show-more {
         display: none;
       }
       .grid-view :deep(.create-new-button) {
