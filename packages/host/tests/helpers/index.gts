@@ -163,6 +163,7 @@ export async function getDbAdapter() {
 }
 
 const realmCacheTeardownRegistrations = new WeakMap<ModuleHooks, Set<string>>();
+let hasGlobalRealmCacheTeardown = false;
 
 export function setupRealmCacheTeardown(
   hooks: ModuleHooks,
@@ -185,10 +186,29 @@ export function setupRealmCacheTeardown(
   });
 }
 
+function setupGlobalRealmCacheTeardown(): void {
+  if (hasGlobalRealmCacheTeardown) {
+    return;
+  }
+  hasGlobalRealmCacheTeardown = true;
+  QUnit.moduleDone((details) => {
+    let moduleCacheKey = details.name?.trim();
+    if (!moduleCacheKey) {
+      return;
+    }
+    let snapshotPrefix = snapshotPrefixForModule(moduleCacheKey);
+    void (async () => {
+      let dbAdapter = await getDbAdapter();
+      await dbAdapter.deleteSnapshotsByPrefix(snapshotPrefix);
+    })();
+  });
+}
+
 export async function withCachedRealmSetup<T>(
   setupOrAdditionalKey: (() => Promise<T>) | string,
   maybeSetup?: () => Promise<T>,
 ): Promise<T> {
+  setupGlobalRealmCacheTeardown();
   let moduleCacheKey = getCurrentModuleCacheKey();
   let additionalKey: string | undefined;
   let setup: () => Promise<T>;
@@ -751,23 +771,33 @@ export async function setupAcceptanceTestRealm({
   mockMatrixUtils: MockUtils;
   startMatrix?: boolean;
 }) {
-  let resolvedRealmURL = ensureTrailingSlash(realmURL ?? testRealmURL);
-  setupAuthEndpoints({
-    [resolvedRealmURL]: deriveTestUserPermissions(permissions),
-  });
-  let result = await setupTestRealm({
-    contents,
-    realmURL: resolvedRealmURL,
-    isAcceptanceTest: true,
-    permissions,
-    mockMatrixUtils,
-    startMatrix,
-  });
-  getTestRealmRegistry().set(result.realm.url, {
-    realm: result.realm,
-    adapter: result.adapter,
-  });
-  return result;
+  return withCachedRealmSetup(
+    setupRealmCacheAdditionalKey('acceptance', {
+      contents,
+      realmURL,
+      permissions,
+      startMatrix,
+    }),
+    async () => {
+      let resolvedRealmURL = ensureTrailingSlash(realmURL ?? testRealmURL);
+      setupAuthEndpoints({
+        [resolvedRealmURL]: deriveTestUserPermissions(permissions),
+      });
+      let result = await setupTestRealm({
+        contents,
+        realmURL: resolvedRealmURL,
+        isAcceptanceTest: true,
+        permissions,
+        mockMatrixUtils,
+        startMatrix,
+      });
+      getTestRealmRegistry().set(result.realm.url, {
+        realm: result.realm,
+        adapter: result.adapter,
+      });
+      return result;
+    },
+  );
 }
 
 export async function setupIntegrationTestRealm({
@@ -783,23 +813,102 @@ export async function setupIntegrationTestRealm({
   mockMatrixUtils: MockUtils;
   startMatrix?: boolean;
 }) {
-  let resolvedRealmURL = ensureTrailingSlash(realmURL ?? testRealmURL);
-  setupAuthEndpoints({
-    [resolvedRealmURL]: deriveTestUserPermissions(permissions),
-  });
-  let result = await setupTestRealm({
-    contents,
-    realmURL: resolvedRealmURL,
-    isAcceptanceTest: false,
-    permissions: permissions as RealmPermissions,
-    mockMatrixUtils,
-    startMatrix,
-  });
-  getTestRealmRegistry().set(result.realm.url, {
-    realm: result.realm,
-    adapter: result.adapter,
-  });
-  return result;
+  return withCachedRealmSetup(
+    setupRealmCacheAdditionalKey('integration', {
+      contents,
+      realmURL,
+      permissions,
+      startMatrix,
+    }),
+    async () => {
+      let resolvedRealmURL = ensureTrailingSlash(realmURL ?? testRealmURL);
+      setupAuthEndpoints({
+        [resolvedRealmURL]: deriveTestUserPermissions(permissions),
+      });
+      let result = await setupTestRealm({
+        contents,
+        realmURL: resolvedRealmURL,
+        isAcceptanceTest: false,
+        permissions: permissions as RealmPermissions,
+        mockMatrixUtils,
+        startMatrix,
+      });
+      getTestRealmRegistry().set(result.realm.url, {
+        realm: result.realm,
+        adapter: result.adapter,
+      });
+      return result;
+    },
+  );
+}
+
+function setupRealmCacheAdditionalKey(
+  mode: 'acceptance' | 'integration',
+  options: {
+    contents: RealmContents;
+    realmURL?: string;
+    permissions?: RealmPermissions;
+    startMatrix?: boolean;
+  },
+): string {
+  return `${mode}_${simpleHash(
+    stableStringify({
+      contents: options.contents,
+      realmURL: options.realmURL ?? testRealmURL,
+      permissions: options.permissions ?? { '*': ['read', 'write'] },
+      startMatrix: options.startMatrix ?? true,
+    }),
+  )}`;
+}
+
+function stableStringify(value: unknown): string {
+  let seen = new WeakSet<object>();
+  return stableStringifyValue(value, seen);
+}
+
+function stableStringifyValue(value: unknown, seen: WeakSet<object>): string {
+  if (value === null) {
+    return 'null';
+  }
+  if (typeof value === 'string') {
+    return JSON.stringify(value);
+  }
+  if (
+    typeof value === 'number' ||
+    typeof value === 'boolean' ||
+    typeof value === 'bigint'
+  ) {
+    return String(value);
+  }
+  if (typeof value === 'undefined') {
+    return 'null';
+  }
+  if (value instanceof Date) {
+    return JSON.stringify(value.toISOString());
+  }
+  if (value instanceof URL) {
+    return JSON.stringify(value.href);
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map((v) => stableStringifyValue(v, seen)).join(',')}]`;
+  }
+  if (typeof value === 'object') {
+    if (seen.has(value)) {
+      throw new Error('stableStringify() cannot serialize circular structures');
+    }
+    seen.add(value);
+    let objectValue = value as Record<string, unknown>;
+    let keys = Object.keys(objectValue).sort();
+    let serialized = `{${keys
+      .map(
+        (key) =>
+          `${JSON.stringify(key)}:${stableStringifyValue(objectValue[key], seen)}`,
+      )
+      .join(',')}}`;
+    seen.delete(value);
+    return serialized;
+  }
+  return JSON.stringify(String(value));
 }
 
 export async function withoutLoaderMonitoring<T>(cb: () => Promise<T>) {

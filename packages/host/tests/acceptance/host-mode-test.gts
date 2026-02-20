@@ -20,14 +20,12 @@ import type StoreService from '@cardstack/host/services/store';
 import {
   percySnapshot,
   setupLocalIndexing,
-  setupRealmCacheTeardown,
   setupOnSave,
   testHostModeRealmURL,
   setupAcceptanceTestRealm,
   SYSTEM_CARD_FIXTURE_CONTENTS,
   setupAuthEndpoints,
   setupUserSubscription,
-  withCachedRealmSetup,
 } from '../helpers';
 import { viewCardDemoCardSource } from '../helpers/cards/view-card-demo';
 import { setupMockMatrix } from '../helpers/mock-matrix';
@@ -59,7 +57,6 @@ module('Acceptance | host mode tests', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
   setupOnSave(hooks);
-  setupRealmCacheTeardown(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
@@ -133,87 +130,86 @@ module('Acceptance | host mode tests', function (hooks) {
         </template>
       };
     }
-    await withCachedRealmSetup(async () => {
-      await setupAcceptanceTestRealm({
-        realmURL: testHostModeRealmURL,
-        mockMatrixUtils,
-        permissions: {
-          '*': ['read'],
+    await setupAcceptanceTestRealm({
+      realmURL: testHostModeRealmURL,
+      mockMatrixUtils,
+      permissions: {
+        '*': ['read'],
+      },
+      contents: {
+        ...SYSTEM_CARD_FIXTURE_CONTENTS,
+        'pet.gts': { Pet },
+        'view-card-demo.gts': viewCardDemoCardSource,
+        'Pet/mango.json': {
+          data: {
+            attributes: {
+              name: 'Mango',
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testHostModeRealmURL}pet`,
+                name: 'Pet',
+              },
+            },
+          },
         },
-        contents: {
-          ...SYSTEM_CARD_FIXTURE_CONTENTS,
-          'pet.gts': { Pet },
-          'view-card-demo.gts': viewCardDemoCardSource,
-          'Pet/mango.json': {
-            data: {
-              attributes: {
-                name: 'Mango',
-              },
-              meta: {
-                adoptsFrom: {
-                  module: `${testHostModeRealmURL}pet`,
-                  name: 'Pet',
-                },
+        'ViewCardDemo/index.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              cardTitle: 'Primary View Demo',
+              targetCardURL: `${testHostModeRealmURL}ViewCardDemo/secondary.json`,
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testHostModeRealmURL}view-card-demo`,
+                name: 'ViewCardDemo',
               },
             },
           },
-          'ViewCardDemo/index.json': {
-            data: {
-              type: 'card',
-              attributes: {
-                cardTitle: 'Primary View Demo',
-                targetCardURL: `${testHostModeRealmURL}ViewCardDemo/secondary.json`,
-              },
-              meta: {
-                adoptsFrom: {
-                  module: `${testHostModeRealmURL}view-card-demo`,
-                  name: 'ViewCardDemo',
-                },
+        },
+        'ViewCardDemo/secondary.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              cardTitle: 'Secondary View Demo',
+              targetCardURL: `${testHostModeRealmURL}ViewCardDemo/tertiary.json`,
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testHostModeRealmURL}view-card-demo`,
+                name: 'ViewCardDemo',
               },
             },
           },
-          'ViewCardDemo/secondary.json': {
-            data: {
-              type: 'card',
-              attributes: {
-                cardTitle: 'Secondary View Demo',
-                targetCardURL: `${testHostModeRealmURL}ViewCardDemo/tertiary.json`,
-              },
-              meta: {
-                adoptsFrom: {
-                  module: `${testHostModeRealmURL}view-card-demo`,
-                  name: 'ViewCardDemo',
-                },
+        },
+        'ViewCardDemo/tertiary.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              cardTitle: 'Tertiary View Demo',
+              targetCardURL: `${testHostModeRealmURL}ViewCardDemo/index.json`,
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testHostModeRealmURL}view-card-demo`,
+                name: 'ViewCardDemo',
               },
             },
           },
-          'ViewCardDemo/tertiary.json': {
-            data: {
-              type: 'card',
-              attributes: {
-                cardTitle: 'Tertiary View Demo',
-                targetCardURL: `${testHostModeRealmURL}ViewCardDemo/index.json`,
-              },
-              meta: {
-                adoptsFrom: {
-                  module: `${testHostModeRealmURL}view-card-demo`,
-                  name: 'ViewCardDemo',
-                },
+        },
+        'index.json': {
+          data: {
+            type: 'card',
+            meta: {
+              adoptsFrom: {
+                module: 'https://cardstack.com/base/cards-grid',
+                name: 'CardsGrid',
               },
             },
           },
-          'index.json': {
-            data: {
-              type: 'card',
-              meta: {
-                adoptsFrom: {
-                  module: 'https://cardstack.com/base/cards-grid',
-                  name: 'CardsGrid',
-                },
-              },
-            },
-          },
-          'broken-card.gts': `
+        },
+        'broken-card.gts': `
           import { contains, field, Component, CardDef } from 'https://cardstack.com/base/card-api';
           import StringField from 'https://cardstack.com/base/string';
           export class BrokenCard extends CardDef {
@@ -227,28 +223,27 @@ module('Acceptance | host mode tests', function (hooks) {
             };
           }
         `,
-          'BrokenCard/broken.json': {
-            data: {
-              attributes: {
-                name: 'Broken',
-              },
-              meta: {
-                adoptsFrom: {
-                  module: `${testHostModeRealmURL}broken-card`,
-                  name: 'BrokenCard',
-                },
+        'BrokenCard/broken.json': {
+          data: {
+            attributes: {
+              name: 'Broken',
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testHostModeRealmURL}broken-card`,
+                name: 'BrokenCard',
               },
             },
           },
-          '.realm.json': {
-            name: 'Test Workspace B',
-            backgroundURL:
-              'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
-            iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
-            publishable: true,
-          },
         },
-      });
+        '.realm.json': {
+          name: 'Test Workspace B',
+          backgroundURL:
+            'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
+          iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
+          publishable: true,
+        },
+      },
     });
 
     setActiveRealms([testHostModeRealmURL]);

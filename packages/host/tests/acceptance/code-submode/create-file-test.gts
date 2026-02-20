@@ -8,14 +8,12 @@ import { baseRealm, Deferred } from '@cardstack/runtime-common';
 import {
   percySnapshot,
   setupLocalIndexing,
-  setupRealmCacheTeardown,
   testRealmURL,
   setupOnSave,
   setupAcceptanceTestRealm,
   SYSTEM_CARD_FIXTURE_CONTENTS,
   getMonacoContent,
   visitOperatorMode as _visitOperatorMode,
-  withCachedRealmSetup,
   type TestContextWithSave,
   setupAuthEndpoints,
   setupUserSubscription,
@@ -202,7 +200,6 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
   setupOnSave(hooks);
-  setupRealmCacheTeardown(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
@@ -212,16 +209,14 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
   let { setRealmPermissions, createAndJoinRoom } = mockMatrixUtils;
 
   hooks.beforeEach(async function () {
-    ({ adapter } = await withCachedRealmSetup(async () => {
-      await setupAcceptanceTestRealm({
-        contents: { ...SYSTEM_CARD_FIXTURE_CONTENTS, ...filesB },
-        realmURL: testRealmURL2,
-        mockMatrixUtils,
-      });
-      return await setupAcceptanceTestRealm({
-        contents: { ...SYSTEM_CARD_FIXTURE_CONTENTS, ...files },
-        mockMatrixUtils,
-      });
+    await setupAcceptanceTestRealm({
+      contents: { ...SYSTEM_CARD_FIXTURE_CONTENTS, ...filesB },
+      realmURL: testRealmURL2,
+      mockMatrixUtils,
+    });
+    ({ adapter } = await setupAcceptanceTestRealm({
+      contents: { ...SYSTEM_CARD_FIXTURE_CONTENTS, ...files },
+      mockMatrixUtils,
     }));
 
     createAndJoinRoom({

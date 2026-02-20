@@ -13,11 +13,9 @@ import {
   testRealmURL,
   setupCardLogs,
   setupLocalIndexing,
-  setupRealmCacheTeardown,
   type CardDocFiles,
   setupIntegrationTestRealm,
   testModuleRealm,
-  withCachedRealmSetup,
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupRenderingTest } from '../helpers/setup';
@@ -28,7 +26,6 @@ let loader: Loader;
 
 module(`Integration | realm querying`, function (hooks) {
   setupRenderingTest(hooks);
-  setupRealmCacheTeardown(hooks);
 
   hooks.beforeEach(function (this: RenderingTestContext) {
     loader = getService('loader-service').loader;
@@ -578,30 +575,28 @@ module(`Integration | realm querying`, function (hooks) {
   let queryEngine: RealmIndexQueryEngine;
 
   hooks.beforeEach(async function () {
-    let { realm } = await withCachedRealmSetup(() =>
-      setupIntegrationTestRealm({
-        mockMatrixUtils,
-        contents: {
-          ...sampleCards,
-          'files/sample.txt': 'Hello world',
-          'files/sample.md': 'Hello markdown',
-          'file-query-card-instance.json': {
-            data: {
-              type: 'card',
-              attributes: {
-                nameFilter: '',
-              },
-              meta: {
-                adoptsFrom: {
-                  module: `${testModuleRealm}file-query-card`,
-                  name: 'FileQueryCard',
-                },
+    let { realm } = await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        ...sampleCards,
+        'files/sample.txt': 'Hello world',
+        'files/sample.md': 'Hello markdown',
+        'file-query-card-instance.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              nameFilter: '',
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testModuleRealm}file-query-card`,
+                name: 'FileQueryCard',
               },
             },
           },
         },
-      }),
-    );
+      },
+    });
     queryEngine = realm.realmIndexQueryEngine;
   });
 
