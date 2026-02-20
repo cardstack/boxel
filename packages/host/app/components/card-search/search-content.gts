@@ -529,6 +529,11 @@ export default class SearchContent extends Component<Signature> {
   private get sections(): SearchSheetSection[] {
     const sections: SearchSheetSection[] = [];
 
+    // Add recents section if enabled
+    if (this.showRecents && this.recentCardsSection) {
+      sections.push(this.recentCardsSection);
+    }
+
     // Add URL section if present
     if (this.cardByUrlSection) {
       sections.push(this.cardByUrlSection);
@@ -537,11 +542,6 @@ export default class SearchContent extends Component<Signature> {
     // Add query sections if present
     if (this.cardsByQuerySection) {
       sections.push(...this.cardsByQuerySection);
-    }
-
-    // Add recents section if enabled
-    if (this.showRecents && this.recentCardsSection) {
-      sections.push(this.recentCardsSection);
     }
 
     return sections;
@@ -621,24 +621,44 @@ export default class SearchContent extends Component<Signature> {
         {{/if}}
       {{/if}}
 
-      {{! Render all sections }}
-      {{#each this.sections as |section i|}}
-        <SearchResultSection
-          @section={{section}}
-          @viewOption={{this.activeViewId}}
-          @isCompact={{@isCompact}}
-          @handleSelect={{@handleSelect}}
-          @isFocused={{eq this.focusedSection section.sid}}
-          @isCollapsed={{this.isSectionCollapsed section.sid}}
-          @onFocusSection={{this.onFocusSection}}
-          @getDisplayedCount={{this.getDisplayedCount}}
-          @onShowMore={{this.onShowMore}}
-          @selectedCard={{@selectedCard}}
-          @offerToCreate={{@offerToCreate}}
-          @onSubmit={{@onSubmit}}
-          data-test-search-result-section={{i}}
-        />
-      {{/each}}
+      {{#if @isCompact}}
+        {{#if this.recentCardsSection}}
+          <SearchResultSection
+            @section={{this.recentCardsSection}}
+            @viewOption={{this.activeViewId}}
+            @isCompact={{@isCompact}}
+            @handleSelect={{@handleSelect}}
+            @isFocused={{eq this.focusedSection this.recentCardsSection.sid}}
+            @isCollapsed={{this.isSectionCollapsed this.recentCardsSection.sid}}
+            @onFocusSection={{this.onFocusSection}}
+            @getDisplayedCount={{this.getDisplayedCount}}
+            @onShowMore={{this.onShowMore}}
+            @selectedCard={{@selectedCard}}
+            @offerToCreate={{@offerToCreate}}
+            @onSubmit={{@onSubmit}}
+            data-test-search-result-section='recent-cards'
+          />
+        {{/if}}
+      {{else}}
+        {{! Render all sections }}
+        {{#each this.sections as |section i|}}
+          <SearchResultSection
+            @section={{section}}
+            @viewOption={{this.activeViewId}}
+            @isCompact={{@isCompact}}
+            @handleSelect={{@handleSelect}}
+            @isFocused={{eq this.focusedSection section.sid}}
+            @isCollapsed={{this.isSectionCollapsed section.sid}}
+            @onFocusSection={{this.onFocusSection}}
+            @getDisplayedCount={{this.getDisplayedCount}}
+            @onShowMore={{this.onShowMore}}
+            @selectedCard={{@selectedCard}}
+            @offerToCreate={{@offerToCreate}}
+            @onSubmit={{@onSubmit}}
+            data-test-search-result-section={{i}}
+          />
+        {{/each}}
+      {{/if}}
 
       {{#if this.hasNoResults}}
         <div class='empty-state' data-test-search-content-empty>

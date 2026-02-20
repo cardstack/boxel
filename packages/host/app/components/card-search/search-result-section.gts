@@ -7,7 +7,11 @@ import Component from '@glimmer/component';
 import HistoryIcon from '@cardstack/boxel-icons/history';
 import pluralize from 'pluralize';
 
-import { Button } from '@cardstack/boxel-ui/components';
+import {
+  Button,
+  GridContainer,
+  FittedCardContainer,
+} from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
 
 import type { CodeRef } from '@cardstack/runtime-common';
@@ -211,7 +215,10 @@ export default class SearchResultSection extends Component<Signature> {
             @onShowOnlyChange={{this.handleShowOnlyChange}}
           />
         {{/unless}}
-        <div class='cards {{this.viewClass}}' data-test-search-cards-result>
+        <GridContainer
+          @size={{if @isCompact 'single-strip' 'cardsgrid-tile'}}
+          data-test-search-cards-result
+        >
           {{#if (this.showCreateForRealm this.realmSection.realmUrl)}}
             <ItemButton
               @item={{this.newCardArgs this.realmSection.realmUrl}}
@@ -235,7 +242,7 @@ export default class SearchResultSection extends Component<Signature> {
               />
             {{/unless}}
           {{/each}}
-        </div>
+        </GridContainer>
         {{#if this.displayShowMore}}
           <Button
             class='show-more'
@@ -261,7 +268,7 @@ export default class SearchResultSection extends Component<Signature> {
             @totalCount={{1}}
           />
         {{/unless}}
-        <div class='cards {{this.viewClass}}'>
+        <GridContainer @size={{if @isCompact 'single-strip' 'cardsgrid-tile'}}>
           <ItemButton
             @item={{this.urlSection.card}}
             @itemId={{this.urlSection.card.id}}
@@ -272,7 +279,7 @@ export default class SearchResultSection extends Component<Signature> {
             @onSubmit={{@onSubmit}}
             data-test-search-sheet-search-result='0'
           />
-        </div>
+        </GridContainer>
       {{else if this.recentsSection}}
         {{#unless @isCompact}}
           <SearchSheetSectionHeader
@@ -284,22 +291,30 @@ export default class SearchResultSection extends Component<Signature> {
             @onShowOnlyChange={{this.handleShowOnlyChange}}
           />
         {{/unless}}
-        <div class='cards {{this.viewClass}}'>
+
+        <GridContainer
+          class={{if @isCompact 'recent-cards--strip'}}
+          @size={{if @isCompact 'single-strip' 'cardsgrid-tile'}}
+        >
           {{#each this.displayedRecentsCards as |card i|}}
             {{#if card}}
-              <ItemButton
-                @item={{card}}
-                @itemId={{card.id}}
-                @isSelected={{eq this.selectedCardId card.id}}
-                @isCompact={{@isCompact}}
-                @displayRealmName={{true}}
-                @onSelect={{@handleSelect}}
-                @onSubmit={{@onSubmit}}
-                data-test-search-result-index={{i}}
-              />
+              <FittedCardContainer
+                @size={{if @isCompact 'single-strip' 'cardsgrid-tile'}}
+              >
+                <ItemButton
+                  @item={{card}}
+                  @itemId={{card.id}}
+                  @isSelected={{eq this.selectedCardId card.id}}
+                  @isCompact={{@isCompact}}
+                  @displayRealmName={{true}}
+                  @onSelect={{@handleSelect}}
+                  @onSubmit={{@onSubmit}}
+                  data-test-search-result-index={{i}}
+                />
+              </FittedCardContainer>
             {{/if}}
           {{/each}}
-        </div>
+        </GridContainer>
         {{#if this.displayShowMore}}
           <Button
             class='show-more'
@@ -342,24 +357,18 @@ export default class SearchResultSection extends Component<Signature> {
         --gap: var(--boxel-sp);
         gap: var(--gap);
       }
-      .cards.compact-view {
-        --item-width: 250px;
-        --item-height: 40px;
+      .recent-cards--strip {
         display: flex;
         flex-wrap: nowrap;
         gap: var(--boxel-sp-xs);
         padding: var(--boxel-sp-xs) 0;
       }
       .cards.grid-view {
-        --item-width: 186.2px;
-        --item-height: 244px;
         display: grid;
         grid-template-columns: repeat(auto-fill, var(--item-width));
         align-content: start;
       }
       .cards.strip-view {
-        --item-height: 65px;
-        --item-width: 100%;
         display: grid;
         grid-template-columns: 1fr;
         align-content: start;

@@ -140,7 +140,7 @@ export default class ItemButton extends Component<Signature> {
         {{this.cardRefName}}
       </Button>
     {{else}}
-      <div class={{cn 'item-button-container' compact=@isCompact}}>
+      <div class='item-button-container'>
         {{#if this.componentItem}}
           <Button
             class={{cn 'catalog-item' selected=@isSelected compact=@isCompact}}
@@ -155,7 +155,6 @@ export default class ItemButton extends Component<Signature> {
           >
             {{#let this.componentItem as |CardComponent|}}
               <CardComponent
-                class='hide-boundaries'
                 data-test-search-result={{removeFileExtension
                   this.resolvedItemId
                 }}
@@ -179,16 +178,13 @@ export default class ItemButton extends Component<Signature> {
               data-test-search-result={{removeFileExtension
                 this.resolvedItemId
               }}
-              class='hide-boundaries'
             />
           </Button>
         {{/if}}
         {{#if this.urlForRealmLookup}}
           {{#let (this.realm.info this.urlForRealmLookup) as |realmInfo|}}
-            <div
-              class='realm-name'
-              data-test-realm-name
-            >{{realmInfo.name}}</div>
+            <div class='realm-name' data-test-realm-name>in
+              {{realmInfo.name}}</div>
           {{/let}}
         {{/if}}
       </div>
@@ -198,14 +194,9 @@ export default class ItemButton extends Component<Signature> {
         --boxel-button-padding: 0;
         --boxel-button-border-radius: var(--boxel-border-radius);
         --boxel-button-border: 1px solid var(--boxel-200);
-        height: var(--item-height, 67px);
+        height: 100%;
         width: 100%;
         max-width: 100%;
-        overflow: hidden;
-        container-name: fitted-card;
-        container-type: size;
-        display: flex;
-        text-align: left;
       }
       .catalog-item.selected {
         border-color: var(--boxel-highlight);
@@ -216,10 +207,6 @@ export default class ItemButton extends Component<Signature> {
       }
       .catalog-item.selected:hover {
         border-color: var(--boxel-highlight);
-      }
-      .catalog-item.compact {
-        width: var(--item-width, 250px);
-        height: var(--item-height, 40px);
       }
       .create-card.catalog-item {
         --boxel-button-padding: var(--boxel-sp-xs) var(--boxel-sp);
@@ -239,6 +226,9 @@ export default class ItemButton extends Component<Signature> {
         flex-direction: column;
         align-items: self-end;
         width: 100%;
+        height: 100%;
+        max-width: 100%;
+        max-height: 100%;
       }
       .realm-name {
         font: 400 var(--boxel-font);
