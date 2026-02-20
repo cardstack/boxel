@@ -4,13 +4,11 @@ import { action } from '@ember/object';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-
 import HistoryIcon from '@cardstack/boxel-icons/history';
 import pluralize from 'pluralize';
 
 import { Button, GridContainer } from '@cardstack/boxel-ui/components';
-import { eq } from '@cardstack/boxel-ui/helpers';
+import { cn, eq } from '@cardstack/boxel-ui/helpers';
 
 import type { CodeRef } from '@cardstack/runtime-common';
 
@@ -206,10 +204,6 @@ export default class SearchResultSection extends Component<Signature> {
     }
   }
 
-  private urlForRealmLookup = (card: CardDef) => {
-    return urlForRealmLookup(card);
-  };
-
   <template>
     <div
       class='search-result-block {{if @isCollapsed "collapsed"}}'
@@ -228,6 +222,7 @@ export default class SearchResultSection extends Component<Signature> {
           />
         {{/unless}}
         <GridContainer
+          class='cards {{this.viewClass}}'
           @viewFormat={{if (eq this.viewClass 'grid-view') 'grid' 'list'}}
           @size={{this.cardSize}}
           data-test-search-cards-result
@@ -282,6 +277,7 @@ export default class SearchResultSection extends Component<Signature> {
           />
         {{/unless}}
         <GridContainer
+          class='cards {{this.viewClass}}'
           @viewFormat={{if (eq this.viewClass 'grid-view') 'grid' 'list'}}
           @size={{this.cardSize}}
         >
@@ -309,7 +305,7 @@ export default class SearchResultSection extends Component<Signature> {
         {{/unless}}
 
         <GridContainer
-          class={{if @isCompact 'recent-cards--strip'}}
+          class='cards {{this.viewClass}}'
           @items={{this.displayedRecentsCards}}
           @viewFormat={{if (eq this.viewClass 'grid-view') 'grid' 'list'}}
           @size={{this.cardSize}}
@@ -332,10 +328,17 @@ export default class SearchResultSection extends Component<Signature> {
             <:after>
               {{#if card}}
                 {{#let
-                  (this.realm.info (this.urlForRealmLookup card))
+                  (this.realm.info (urlForRealmLookup card))
                   as |realmInfo|
                 }}
-                  <div class='realm-name' data-test-realm-name>
+                  <div
+                    class={{cn
+                      'realm-name'
+                      boxel-ellipsize=@isCompact
+                      realm-name--compact=@isCompact
+                    }}
+                    data-test-realm-name
+                  >
                     in
                     {{realmInfo.name}}
                   </div>
@@ -372,7 +375,7 @@ export default class SearchResultSection extends Component<Signature> {
         margin-bottom: var(--boxel-sp-lg);
       }
       .search-result-block.collapsed {
-        display: none;
+        opacity: 0.6;
       }
       .search-result-block.collapsed :deep(.search-sheet-section-header) {
         margin-bottom: 0;
@@ -383,32 +386,15 @@ export default class SearchResultSection extends Component<Signature> {
       .search-result-block.collapsed .show-more {
         display: none;
       }
-      .cards {
-        --gap: var(--boxel-sp);
-        gap: var(--gap);
-      }
-      .recent-cards--strip {
+      .compact-view {
         display: flex;
         flex-flow: row nowrap;
         gap: var(--boxel-sp-xs);
         padding: var(--boxel-sp-xs) 0;
       }
-      .cards.grid-view {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, var(--item-width));
-        align-content: start;
-      }
-      .cards.strip-view {
-        display: grid;
-        grid-template-columns: 1fr;
-        align-content: start;
-      }
-      .cards.grid-view :deep(.create-card) {
-        display: flex;
+      .grid-view :deep(.create-new-button) {
         flex-direction: column;
-        align-items: center;
         justify-content: center;
-        height: 100%;
       }
       .show-more {
         margin-top: var(--boxel-sp);
@@ -420,12 +406,13 @@ export default class SearchResultSection extends Component<Signature> {
         align-items: self-end;
       }
       .realm-name {
-        font: 400 var(--boxel-font);
-        color: var(--boxel-400);
         padding-top: var(--boxel-sp-4xs);
-        padding-right: var(--boxel-sp-xxs);
-        height: 20px;
+        color: var(--boxel-450);
         font-size: var(--boxel-font-size-xs);
+        font-weight: 500;
+      }
+      .realm-name--compact {
+        max-width: 15rem;
       }
     </style>
   </template>

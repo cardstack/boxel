@@ -113,7 +113,13 @@ export default class ItemButton extends Component<Signature> {
 
   <template>
     <Button
-      class={{cn 'catalog-item' selected=@isSelected compact=@isCompact}}
+      @rectangular={{true}}
+      class={{cn
+        'catalog-item'
+        selected=@isSelected
+        compact=@isCompact
+        create-new-button=this.isNewCard
+      }}
       {{on 'click' this.handleClick}}
       {{on 'dblclick' this.handleDblClick}}
       {{on 'keydown' this.handleKeydown}}
@@ -123,16 +129,14 @@ export default class ItemButton extends Component<Signature> {
       ...attributes
     >
       {{#if this.isNewCard}}
-        <div class='create-card'>
-          <IconPlus
-            class='plus-icon'
-            width='16'
-            height='16'
-            role='presentation'
-          />
-          Create New
-          {{this.cardRefName}}
-        </div>
+        <IconPlus
+          class='plus-icon'
+          width='16'
+          height='16'
+          role='presentation'
+        />
+        Create New
+        {{this.cardRefName}}
       {{else if this.componentItem}}
         <this.componentItem
           class='hide-boundaries'
@@ -150,34 +154,40 @@ export default class ItemButton extends Component<Signature> {
     </Button>
     <style scoped>
       .catalog-item {
-        --boxel-button-padding: 0;
-        --boxel-button-border-radius: var(--boxel-border-radius);
-        --boxel-button-border: 1px solid var(--boxel-200);
         height: 100%;
         width: 100%;
         max-width: 100%;
+      }
+      .catalog-item:not(.create-new-button) {
+        --boxel-button-padding: 0;
+
+        box-sizing: content-box;
         text-align: start;
+      }
+      .catalog-item :deep(*) {
+        box-sizing: border-box;
+      }
+      .catalog-item:focus {
+        --host-outline-offset: -1px;
       }
       .catalog-item.selected {
         border-color: var(--boxel-highlight);
         box-shadow: 0 0 0 1px var(--boxel-highlight);
       }
       .catalog-item:hover {
-        border-color: var(--boxel-darker-hover);
+        box-shadow: var(--boxel-box-shadow);
       }
       .catalog-item.selected:hover {
         border-color: var(--boxel-highlight);
+        box-shadow:
+          0 0 0 1px var(--boxel-highlight),
+          var(--boxel-box-shadow);
       }
-      .catalog-item.compact {
-        box-sizing: content-box;
-      }
-      .catalog-item.compact :deep(*) {
-        box-sizing: border-box;
-      }
-      .create-card {
-        display: flex;
+
+      .create-new-button {
         gap: var(--boxel-sp-xs);
         flex-wrap: nowrap;
+        justify-content: flex-start;
         letter-spacing: var(--boxel-lsp-xs);
       }
       .plus-icon > :deep(path) {
