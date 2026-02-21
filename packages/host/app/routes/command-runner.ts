@@ -1,7 +1,6 @@
 import { getOwner, setOwner } from '@ember/owner';
 import Route from '@ember/routing/route';
 import type RouterService from '@ember/routing/router-service';
-import type Transition from '@ember/routing/transition';
 import { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 
@@ -9,13 +8,12 @@ import type {
   Command,
   CommandContext,
   CommandInvocation,
-  CodeRef,
+  ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 import {
-  assertIsResolvedCodeRef,
   CommandContextStamp,
   getClass,
-  isResolvedCodeRef,
+  parseBoxelHostCommandSpecifier,
 } from '@cardstack/runtime-common';
 
 import type {
@@ -34,7 +32,7 @@ class CommandRunState implements CommandInvocation<CardDefConstructor> {
   @tracked cardResult: CardDef | null = null;
   @tracked error: Error | null = null;
   @tracked cardResultString: string | null = null;
-  @tracked commandRef: string | null = null;
+  @tracked commandRef: ResolvedCodeRef | null = null;
   @tracked commandInput: string | null = null;
 
   constructor(readonly nonce: string) {}
@@ -76,14 +74,17 @@ export default class CommandRunnerRoute extends Route<CommandRunnerModel> {
     (globalThis as any).__boxelRenderContext = undefined;
   }
 
-  model(params: { nonce: string }, transition: Transition): CommandRunnerModel {
+  model(params: {
+    command: string;
+    input: string;
+    nonce: string;
+  }): CommandRunnerModel {
     let model = new CommandRunState(params.nonce);
-    let queryParams = transition?.to?.queryParams ?? {};
-    let command = parseResolvedCodeRef(getQueryParam(queryParams, 'command'));
-    let commandInput = parseJson(getQueryParam(queryParams, 'input'));
+    let command = parseCommandParam(params.command);
+    let commandInput = parseCommandInput(params.input);
 
     if (command) {
-      model.commandRef = JSON.stringify(command);
+      model.commandRef = command;
     }
     if (commandInput) {
       model.commandInput = JSON.stringify(commandInput);
@@ -109,13 +110,10 @@ export default class CommandRunnerRoute extends Route<CommandRunnerModel> {
 
   async #runCommand(
     model: CommandRunState,
-    command: CodeRef,
+    command: ResolvedCodeRef,
     commandInput: Record<string, unknown> | undefined,
   ) {
     try {
-      if (!isResolvedCodeRef(command)) {
-        throw new Error('Command must be a resolved code ref');
-      }
       let CommandConstructor = (await getClass(
         command,
         this.loaderService.loader,
@@ -151,38 +149,87 @@ export default class CommandRunnerRoute extends Route<CommandRunnerModel> {
   }
 }
 
-function parseResolvedCodeRef(raw: string | undefined): CodeRef | undefined {
-  if (!raw) {
+function parseJSONish(raw: string | undefined): unknown {
+  if (!raw || raw === 'null' || raw === 'undefined') {
     return undefined;
   }
+
+  // Support both raw JSON path segments and URI-encoded JSON segments.
   try {
-    let decoded = decodeURIComponent(raw);
-    let parsed = JSON.parse(decoded) as CodeRef;
-    assertIsResolvedCodeRef(parsed);
-    return parsed;
+    return JSON.parse(raw);
+  } catch {
+    // noop
+  }
+
+  try {
+    return JSON.parse(decodeURIComponent(raw));
   } catch {
     return undefined;
   }
 }
 
-function parseJson(
+function parseCommandParam(
+  raw: string | undefined,
+): ResolvedCodeRef | undefined {
+  if (typeof raw !== 'string') {
+    return undefined;
+  }
+  let value = safeDecodeURIComponent(raw).trim();
+  if (!value) {
+    return undefined;
+  }
+
+  let specifier = parseBoxelHostCommandSpecifier(value);
+  if (specifier) {
+    return specifier;
+  }
+  if (isBoxelHostCommandSpecifierWithoutExport(value)) {
+    return undefined;
+  }
+
+  try {
+    let url = new URL(value);
+    let pathname = url.pathname.replace(/\/+$/, '');
+    let index = pathname.lastIndexOf('/');
+    if (index <= 0 || index >= pathname.length - 1) {
+      return undefined;
+    }
+    return {
+      module: `${url.origin}${pathname.slice(0, index)}`,
+      name: pathname.slice(index + 1),
+    };
+  } catch {
+    // Accept module specifier forms like "<module>/<exportName>".
+  }
+
+  let index = value.lastIndexOf('/');
+  if (index <= 0 || index >= value.length - 1) {
+    return undefined;
+  }
+  return {
+    module: value.slice(0, index),
+    name: value.slice(index + 1),
+  };
+}
+
+function isBoxelHostCommandSpecifierWithoutExport(value: string): boolean {
+  return /^@?cardstack\/boxel-host\/commands\/[^/?#\s]+$/.test(value);
+}
+
+function safeDecodeURIComponent(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+function parseCommandInput(
   raw: string | undefined,
 ): Record<string, unknown> | undefined {
-  if (!raw) {
+  let parsed = parseJSONish(raw);
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
     return undefined;
   }
-  try {
-    let decoded = decodeURIComponent(raw);
-    return JSON.parse(decoded) as Record<string, unknown>;
-  } catch {
-    return undefined;
-  }
-}
-
-function getQueryParam(
-  queryParams: Record<string, unknown>,
-  key: string,
-): string | undefined {
-  let value = queryParams[key];
-  return typeof value === 'string' ? value : undefined;
+  return parsed as Record<string, unknown>;
 }

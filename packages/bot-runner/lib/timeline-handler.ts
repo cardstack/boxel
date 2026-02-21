@@ -1,7 +1,6 @@
 import {
   isBotTriggerEvent,
   isBotCommandFilter,
-  assertIsResolvedCodeRef,
   logger,
   param,
   query,
@@ -15,7 +14,6 @@ import type {
   QueuePublisher,
 } from '@cardstack/runtime-common';
 import type { MatrixEvent, Room } from 'matrix-js-sdk';
-import { commandUrlToCodeRef } from './command-parsing-utils';
 
 const log = logger('bot-runner');
 export interface BotRegistration {
@@ -162,21 +160,16 @@ async function maybeEnqueueCommand({
   let commandRegistration = allowedCommands.find(
     (entry) => entry.type === eventContent.type,
   );
-  let commandURL = commandRegistration?.command;
-  let command = commandURL
-    ? commandUrlToCodeRef(commandURL, realmURL)
-    : undefined;
+  let command = commandRegistration?.command?.trim();
   let commandInput: Record<string, any> | null = input;
 
-  if (!realmURL || !commandURL || !command) {
+  if (!realmURL || !command) {
     log.warn(
       'bot trigger missing required input for command (need realmURL and command)',
-      { realmURL, commandURL, command },
+      { realmURL, command },
     );
     return;
   }
-
-  assertIsResolvedCodeRef(command);
 
   await enqueueRunCommandJob(
     {

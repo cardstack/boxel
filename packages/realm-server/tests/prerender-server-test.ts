@@ -244,10 +244,7 @@ module(basename(__filename), function () {
           )[],
         };
         let auth = testCreatePrerenderAuth(testUserId, permissions);
-        let command = {
-          module: `${realmURL.href}command-runner-test`,
-          name: 'SayHelloCommand',
-        };
+        let command = `${realmURL.href}command-runner-test/SayHelloCommand`;
         let res = await request
           .post('/run-command')
           .set('Accept', 'application/vnd.api+json')
@@ -265,11 +262,7 @@ module(basename(__filename), function () {
 
         assert.strictEqual(res.status, 201, 'HTTP 201');
         assert.strictEqual(res.body.data.type, 'command-result', 'type ok');
-        assert.strictEqual(
-          res.body.data.id,
-          command.module,
-          'id is command module',
-        );
+        assert.strictEqual(res.body.data.id, command, 'id is command');
         assert.strictEqual(
           res.body.data.attributes.status,
           'ready',
@@ -300,10 +293,7 @@ module(basename(__filename), function () {
           )[],
         };
         let auth = testCreatePrerenderAuth(testUserId, permissions);
-        let command = {
-          module: `${realmURL.href}command-runner-test`,
-          name: 'ThrowErrorCommand',
-        };
+        let command = `${realmURL.href}command-runner-test/ThrowErrorCommand`;
         let res = await request
           .post('/run-command')
           .set('Accept', 'application/vnd.api+json')

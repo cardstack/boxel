@@ -779,8 +779,7 @@ export function buildPrerenderManagerApp(options?: {
         attempts.add(target);
 
         const targetURL = `${normalizeURL(target)}/${pathSuffix}`;
-        let logTarget =
-          attrs.url ?? attrs.command?.module ?? attrs.command ?? '<unknown>';
+        let logTarget = attrs.url ?? attrs.command ?? '<unknown>';
         log.info(
           `proxying ${label} prerender request for ${logTarget} to ${targetURL}`,
         );

@@ -8,7 +8,6 @@ import {
   type FileRenderArgs,
   type RenderRouteOptions,
   type RunCommandResponse,
-  type ResolvedCodeRef,
   serializeRenderRouteOptions,
   logger,
 } from '@cardstack/runtime-common';
@@ -402,7 +401,7 @@ export class RenderRunner {
   }: {
     realm: string;
     auth: string;
-    command: ResolvedCodeRef;
+    command: string;
     commandInput?: Record<string, unknown> | null;
     opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
   }): Promise<{
@@ -418,7 +417,7 @@ export class RenderRunner {
   }> {
     this.#nonce++;
     log.info(
-      `running command ${command?.module ?? command?.name ?? '<unknown>'}, nonce=${this.#nonce} realm=${realm}`,
+      `running command ${command ?? '<unknown>'}, nonce=${this.#nonce} realm=${realm}`,
     );
 
     const { page, reused, launchMs, pageId, release } =
@@ -442,17 +441,17 @@ export class RenderRunner {
       }, auth);
 
       let renderStart = Date.now();
-      let encodedCommand = encodeURIComponent(JSON.stringify(command));
-      let encodedInput =
-        commandInput != null
-          ? encodeURIComponent(JSON.stringify(commandInput))
-          : undefined;
-      await transitionTo(page, 'command-runner', String(this.#nonce), {
-        queryParams: {
-          command: encodedCommand,
-          ...(encodedInput ? { input: encodedInput } : {}),
-        },
-      });
+      let encodedCommand = encodeURIComponent(command);
+      let encodedInput = encodeURIComponent(
+        JSON.stringify(commandInput ?? null),
+      );
+      await transitionTo(
+        page,
+        'command-runner',
+        encodedCommand,
+        encodedInput,
+        String(this.#nonce),
+      );
       log.info(
         'command-runner url: %s',
         buildCommandRunnerURL(
