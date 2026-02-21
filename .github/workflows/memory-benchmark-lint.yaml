@@ -1,0 +1,115 @@
+name: "Memory Benchmark: Lint Test"
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test-web-assets:
+    name: Build test web assets
+    uses: ./.github/workflows/test-web-assets.yaml
+
+  lint-memory-test:
+    name: "Lint memory (run ${{ matrix.run }})"
+    needs: test-web-assets
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        run: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
+      - uses: ./.github/actions/init
+      - name: Download test web assets
+        uses: actions/download-artifact@b14cf4c92620c250e1c074ab0a5800e37df86765 # 4.2.0
+        with:
+          name: ${{ needs.test-web-assets.outputs.artifact_name }}
+          path: .test-web-assets-artifact
+      - name: Restore test web assets into workspace
+        shell: bash
+        run: |
+          shopt -s dotglob
+          cp -a .test-web-assets-artifact/. ./
+      - name: Serve boxel-icons
+        run: pnpm serve &
+        working-directory: packages/boxel-icons
+      - name: Serve host dist for realm server
+        uses: JarvusInnovations/background-action@2428e7b970a846423095c79d43f759abf979a635 # 1.0.7
+        with:
+          run: pnpm serve:dist &
+          working-directory: packages/host
+          wait-for: 3m
+          wait-on: http-get://localhost:4200
+      - name: Start realm servers
+        run: pnpm start:skip-optional-realms | tee -a /tmp/server.log &
+        working-directory: packages/realm-server
+      - name: Create realm users
+        run: pnpm register-realm-users
+        working-directory: packages/matrix
+      - name: Run lint test
+        id: test
+        continue-on-error: true
+        run: pnpm test:wait-for-servers 2>&1 | tee /tmp/test-output.log
+        working-directory: packages/realm-server
+        env:
+          TEST_MODULE: realm-endpoints/lint-test.ts
+      - name: Extract and report memory
+        if: always()
+        shell: bash
+        run: |
+          memory=$(grep -oP 'got \K[0-9.]+(?=MB)' /tmp/test-output.log | tail -1 || true)
+          if [ -z "$memory" ]; then
+            memory="<20 (passed)"
+          fi
+          echo "$memory" > /tmp/memory-result.txt
+          echo "### Run ${{ matrix.run }}: ${memory}MB" >> $GITHUB_STEP_SUMMARY
+      - name: Upload memory result
+        if: always()
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
+        with:
+          name: memory-run-${{ matrix.run }}
+          path: /tmp/memory-result.txt
+          retention-days: 1
+
+  summary:
+    name: Memory Summary
+    needs: lint-memory-test
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all memory results
+        uses: actions/download-artifact@b14cf4c92620c250e1c074ab0a5800e37df86765 # 4.2.0
+        with:
+          pattern: memory-run-*
+          path: memory-results
+      - name: Compute summary
+        shell: bash
+        run: |
+          echo "## Lint Memory Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Run | Memory (MB) |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----|-------------|" >> $GITHUB_STEP_SUMMARY
+          max=0
+          for i in $(seq 1 10); do
+            file="memory-results/memory-run-${i}/memory-result.txt"
+            if [ -f "$file" ]; then
+              mem=$(cat "$file")
+            else
+              mem="N/A"
+            fi
+            echo "| $i | $mem |" >> $GITHUB_STEP_SUMMARY
+            numeric=$(echo "$mem" | grep -oP '^[0-9.]+' || true)
+            if [ -n "$numeric" ]; then
+              is_greater=$(echo "$numeric > $max" | bc -l)
+              if [ "$is_greater" -eq 1 ]; then
+                max=$numeric
+              fi
+            fi
+          done
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Maximum: ${max}MB**" >> $GITHUB_STEP_SUMMARY
+          suggested=$(echo "scale=0; ($max/10+1)*10" | bc)
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Suggested threshold (rounded up to nearest 10MB): ${suggested}MB**" >> $GITHUB_STEP_SUMMARY
