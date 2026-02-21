@@ -16,13 +16,11 @@ import { Deferred, baseRealm } from '@cardstack/runtime-common';
 import {
   setupLocalIndexing,
   setupOnSave,
-  setupRealmCacheTeardown,
   testRealmURL,
   setupAcceptanceTestRealm,
   SYSTEM_CARD_FIXTURE_CONTENTS,
   visitOperatorMode,
   testRealmInfo,
-  withCachedRealmSetup,
 } from '../helpers';
 
 import { CardsGrid, setupBaseRealm } from '../helpers/base-realm';
@@ -195,14 +193,10 @@ module('Acceptance | host submode', function (hooks) {
   });
 
   module('with a realm that is not publishable', function (hooks) {
-    setupRealmCacheTeardown(hooks);
-
     hooks.beforeEach(async function () {
-      await withCachedRealmSetup(async () => {
-        await setupAcceptanceTestRealm({
-          mockMatrixUtils,
-          contents: realmContents,
-        });
+      await setupAcceptanceTestRealm({
+        mockMatrixUtils,
+        contents: realmContents,
       });
     });
 
@@ -229,17 +223,13 @@ module('Acceptance | host submode', function (hooks) {
   });
 
   module('with a realm that is publishable', function (hooks) {
-    setupRealmCacheTeardown(hooks);
-
     hooks.beforeEach(async function () {
       let publishableRealmContents = { ...realmContents };
       publishableRealmContents['.realm.json'].publishable = true;
 
-      await withCachedRealmSetup(async () => {
-        await setupAcceptanceTestRealm({
-          mockMatrixUtils,
-          contents: publishableRealmContents,
-        });
+      await setupAcceptanceTestRealm({
+        mockMatrixUtils,
+        contents: publishableRealmContents,
       });
     });
 

@@ -16,4 +16,12 @@ setApplication(Application.create(config.APP));
 setup(QUnit.assert);
 setupOperatorModeParametersMatchAssertion(QUnit.assert);
 
+const urlParams = new URLSearchParams(window.location.search);
+const isParallelExamRun =
+  urlParams.has('browser') || urlParams.has('partition');
+
+if (isParallelExamRun) {
+  QUnit.config.failOnZeroTests = false;
+}
+
 start();
