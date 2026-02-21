@@ -487,6 +487,11 @@ module('Integration | commands | patch-instance', function (hooks) {
       instance.relationships,
       {
         bestFriend: { links: { self: `./queenzy` } },
+        'cardInfo.theme': {
+          links: {
+            self: null,
+          },
+        },
         friends: {
           links: {
             self: null,

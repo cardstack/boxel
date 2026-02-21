@@ -385,6 +385,11 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
         assert.deepEqual(
           json.data.relationships,
           {
+            'cardInfo.theme': {
+              links: {
+                self: null,
+              },
+            },
             pet: {
               links: {
                 self: null,
