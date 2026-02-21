@@ -398,6 +398,14 @@ export default class RenderRoute extends Route<Model> {
     }
     if (instance) {
       await this.#authGuard.race(() => this.#touchIsUsedFields(instance));
+      // Pre-load cardInfo.theme so the head format template can render
+      // favicon/apple-touch-icon links. This is a nested linksTo inside a
+      // contains FieldDef, so #touchIsUsedFields doesn't reach it.
+      try {
+        (instance as any).cardInfo?.theme;
+      } catch {
+        // ignore — card may not have cardInfo or theme
+      }
     }
     await this.#authGuard.race(() => this.store.loaded());
     if (instance) {
@@ -432,38 +440,6 @@ export default class RenderRoute extends Route<Model> {
         }
       }
     }
-  }
-
-  // Reset model state so that captureResult waits for lazy loads triggered by
-  // subsequent format transitions (e.g., head, fitted). After the first format
-  // (isolated) settles, the model status is "ready". When transitioning to a
-  // new format, the template may access fields not touched by the first format
-  // (e.g., the head template accesses cardInfo.theme), triggering lazy loads.
-  // Resetting to "loading" makes captureResult wait; afterRender will re-settle.
-  #resetModelForFormatTransition() {
-    let model = (globalThis as any).__renderModel as Model | undefined;
-    if (!model) {
-      return;
-    }
-    let modelState = this.#modelStates.get(model);
-    if (!modelState || !modelState.isReady) {
-      return;
-    }
-    // Only reset when the current __renderModel belongs to the active prerender
-    // card. During page reuse the __renderModel may briefly point to the
-    // previous card while the new model is still building; resetting that stale
-    // model would leave its status stuck at "loading" and block the page pool.
-    if (model.nonce !== this.renderBaseParams?.[1]) {
-      return;
-    }
-    modelState.isReady = false;
-    modelState.readyWatchdogStarted = false;
-    modelState.readyDeferred = new Deferred<void>();
-    modelState.state.set('status', 'loading');
-    model.readyPromise = modelState.readyDeferred.promise;
-    this.#pendingReadyModels.add(model);
-    scheduleOnce('afterRender', this, this.#processPendingReadyModels);
-    this.#startReadyWatchdog(model);
   }
 
   setupController(controller: Controller, model: Model) {
@@ -612,18 +588,6 @@ export default class RenderRoute extends Route<Model> {
         return;
       }
       if (typeof routeName === 'string' && routeName.startsWith('render.')) {
-        // Reset model state before render.html transitions so that
-        // captureResult waits for any lazy loads triggered by the new format
-        // template (e.g., head format accessing cardInfo.theme). Without
-        // this, the model status is already "ready" from the previous format
-        // and captureResult captures before new lazy loads resolve.
-        // Only reset for render.html — other child routes (render.meta,
-        // render.icon, render.error) do not render card templates, and
-        // render.meta explicitly awaits readyPromise which would deadlock
-        // if we reset it here.
-        if (routeName === 'render.html') {
-          this.#resetModelForFormatTransition();
-        }
         let normalized = [...params];
         if (
           normalized.length >= 3 &&
