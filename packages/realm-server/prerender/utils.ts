@@ -68,7 +68,7 @@ export function buildCommandRunnerURL(
   page: Page,
   nonce: string,
   encodedCommand: string,
-  encodedInput?: string,
+  encodedInput: string,
 ): string {
   let origin = page.url();
   try {
@@ -76,11 +76,9 @@ export function buildCommandRunnerURL(
   } catch {
     // best effort; fall back to raw page url
   }
-  let url = `${origin}/command-runner/${encodeURIComponent(nonce)}?command=${encodedCommand}`;
-  if (encodedInput) {
-    url += `&input=${encodedInput}`;
-  }
-  return url;
+  return `${origin}/command-runner/${encodedCommand}/${encodedInput}/${encodeURIComponent(
+    nonce,
+  )}`;
 }
 
 export async function renderHTML(

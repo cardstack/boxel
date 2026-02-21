@@ -256,7 +256,10 @@ function validatePrerenderAttributes(
   if (typeof attrs.auth !== 'string' || attrs.auth.trim().length === 0) {
     missing.push('auth');
   }
-  if (requestType === 'run-command-request' && !attrs.command) {
+  if (
+    requestType === 'run-command-request' &&
+    (typeof attrs.command !== 'string' || attrs.command.trim().length === 0)
+  ) {
     missing.push('command');
   }
 

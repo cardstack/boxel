@@ -3,7 +3,6 @@ import type * as JSONTypes from 'json-typescript';
 import type { Task } from './index';
 
 import {
-  type ResolvedCodeRef,
   fetchRealmPermissions,
   jobIdentity,
   type RunCommandResponse,
@@ -15,7 +14,7 @@ export interface RunCommandArgs extends JSONTypes.Object {
   realmURL: string;
   realmUsername: string;
   runAs: string;
-  command: ResolvedCodeRef;
+  command: string;
   commandInput: JSONTypes.Object | null;
 }
 
@@ -63,13 +62,60 @@ const runCommand: Task<RunCommandArgs, RunCommandResponse> = ({
       [normalizedRealmURL]: userPermissions,
     });
 
+    let normalizedCommand = normalizeCommandSpecifier(
+      command,
+      normalizedRealmURL,
+    );
+    if (!normalizedCommand) {
+      let message = `${jobIdentity(jobInfo)} invalid command specifier`;
+      log.error(message, { command, realmURL: normalizedRealmURL });
+      reportStatus(jobInfo, 'finish');
+      return {
+        status: 'error',
+        error: message,
+      };
+    }
+
     let result = await prerenderer.runCommand({
       realm: normalizedRealmURL,
       auth,
-      command,
+      command: normalizedCommand,
       commandInput: commandInput ?? undefined,
     });
 
     reportStatus(jobInfo, 'finish');
     return result;
   };
+
+function normalizeCommandSpecifier(
+  command: string,
+  realmURL: string,
+): string | undefined {
+  let specifier = command.trim();
+  if (!specifier) {
+    return undefined;
+  }
+
+  // Legacy bot command URLs can point at /commands/<name>/<export> on the
+  // realm server host. Resolve those to the target realm before prerendering.
+  let path = toPathname(specifier);
+  if (!path || !path.startsWith('/commands/')) {
+    return specifier;
+  }
+
+  let [commandName, exportName = 'default'] = path
+    .slice('/commands/'.length)
+    .split('/');
+  if (!commandName) {
+    return undefined;
+  }
+  return `${ensureTrailingSlash(realmURL)}commands/${commandName}/${exportName || 'default'}`;
+}
+
+function toPathname(commandSpecifier: string): string | undefined {
+  try {
+    return new URL(commandSpecifier).pathname;
+  } catch {
+    return undefined;
+  }
+}

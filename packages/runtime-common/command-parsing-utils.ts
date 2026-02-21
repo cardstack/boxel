@@ -1,7 +1,20 @@
-import {
-  ensureTrailingSlash,
-  type ResolvedCodeRef,
-} from '@cardstack/runtime-common';
+import type { ResolvedCodeRef } from './code-ref';
+import { ensureTrailingSlash } from './paths';
+
+export function parseBoxelHostCommandSpecifier(
+  commandRef: string,
+): ResolvedCodeRef | undefined {
+  let match = commandRef.match(
+    /^@cardstack\/boxel-host\/commands\/([^/?#\s]+)\/([^/?#\s]+)$/,
+  );
+  if (!match) {
+    return undefined;
+  }
+  return {
+    module: `@cardstack/boxel-host/commands/${match[1]}`,
+    name: match[2],
+  };
+}
 
 export function commandUrlToCodeRef(
   commandUrl: string,
@@ -43,23 +56,6 @@ export function commandUrlToCodeRef(
   }
 
   return undefined;
-}
-
-function parseBoxelHostCommandSpecifier(
-  commandRef: string,
-): ResolvedCodeRef | undefined {
-  let match = commandRef.match(
-    /^@?cardstack\/boxel-host\/commands\/([^/?#\s]+)(?:\/([^/?#\s]+))?$/,
-  );
-  if (!match) {
-    return undefined;
-  }
-  let commandName = match[1];
-  let exportName = match[2] ?? 'default';
-  return {
-    module: `@cardstack/boxel-host/commands/${commandName}`,
-    name: exportName || 'default',
-  };
 }
 
 function toCommandPath(commandRef: string): string | undefined {

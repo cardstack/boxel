@@ -296,10 +296,7 @@ module(basename(__filename), function () {
       });
 
       let realm = 'https://realm.example/CMD';
-      let command = {
-        module: `${realm}/commands/say-hello`,
-        name: 'SayHelloCommand',
-      };
+      let command = `${realm}/commands/say-hello/SayHelloCommand`;
 
       let proxyResponse = await request
         .post('/run-command')
@@ -318,7 +315,7 @@ module(basename(__filename), function () {
       );
       assert.strictEqual(
         proxyResponse.body?.data?.id,
-        command.module,
+        command,
         'command result id echoed',
       );
     });
@@ -1453,7 +1450,7 @@ function makeMockPrerender(): {
       ctxt.body = JSON.stringify({
         data: {
           type: 'command-result',
-          id: body?.data?.attributes?.command?.module || 'command',
+          id: body?.data?.attributes?.command || 'command',
           attributes: {
             status: 'ready',
             cardResultString: null,
@@ -1533,10 +1530,7 @@ function makeModuleBody(realm: string, url: string) {
   };
 }
 
-function makeCommandBody(
-  realm: string,
-  command: { module: string; name?: string },
-) {
+function makeCommandBody(realm: string, command: string) {
   let auth = makeAuth(realm);
   return {
     data: {

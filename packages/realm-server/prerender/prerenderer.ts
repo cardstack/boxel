@@ -7,7 +7,6 @@ import {
   type FileRenderArgs,
   logger,
   type RunCommandResponse,
-  type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 import { BrowserManager } from './browser-manager';
 import { PagePool } from './page-pool';
@@ -350,7 +349,7 @@ export class Prerenderer {
   }: {
     realm: string;
     auth: string;
-    command: ResolvedCodeRef;
+    command: string;
     commandInput?: Record<string, unknown> | null;
     opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
   }): Promise<{

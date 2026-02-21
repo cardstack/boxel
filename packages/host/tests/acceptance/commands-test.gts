@@ -491,18 +491,32 @@ module('Acceptance | Commands tests', function (hooks) {
       .includesText('Change the topic of the meeting to "Meeting with Hassan"');
   });
 
-  test('command-runner route renders command result card', async function (assert) {
-    let commandRef = {
-      module: `${testRealmURL}command-runner-hello-command`,
-      name: 'default',
-    };
-    let commandParam = encodeURIComponent(JSON.stringify(commandRef));
-    await visit(`/command-runner/1?command=${commandParam}`);
+  module('command-runner', function () {
+    test('route renders command result card', async function (assert) {
+      let commandParam = encodeURIComponent(
+        `${testRealmURL}command-runner-hello-command/default`,
+      );
+      let inputParam = encodeURIComponent(JSON.stringify(null));
+      await visit(`/command-runner/${commandParam}/${inputParam}/1`);
 
-    await waitFor('[data-prerender][data-prerender-status="ready"]');
-    assert
-      .dom('[data-test-command-runner-greeting]')
-      .includesText('Hello from command runner');
+      await waitFor('[data-prerender][data-prerender-status="ready"]');
+      assert
+        .dom('[data-test-command-runner-greeting]')
+        .includesText('Hello from command runner');
+    });
+
+    test('route captures command runtime error', async function (assert) {
+      maybeBoomShouldBoom = true;
+      let commandParam = encodeURIComponent(
+        `${testRealmURL}maybe-boom-command/default`,
+      );
+      let inputParam = encodeURIComponent(JSON.stringify(null));
+      await visit(`/command-runner/${commandParam}/${inputParam}/2`);
+
+      await waitFor('[data-prerender][data-prerender-status="error"]');
+      assert.dom('[data-prerender-error]').includesText('Boom!');
+      assert.dom('[data-test-command-runner-greeting]').doesNotExist();
+    });
   });
 
   test('a scripted command can create a card, update it and show it', async function (assert) {

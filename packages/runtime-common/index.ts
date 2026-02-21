@@ -132,7 +132,7 @@ export type PrerenderCardArgs = ModulePrerenderArgs;
 export type RunCommandArgs = {
   realm: string;
   auth: string;
-  command: ResolvedCodeRef;
+  command: string;
   commandInput?: Record<string, any> | null;
 };
 
@@ -304,6 +304,7 @@ export type {
 } from './realm';
 
 export * from './code-ref';
+export * from './command-parsing-utils';
 export * from './serializers';
 
 export type {

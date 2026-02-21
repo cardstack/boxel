@@ -216,11 +216,13 @@ class Isolated extends Component<typeof BotRequestDemo> {
         ? window.location.origin
         : new URL(this.showCardId).origin;
     let nonce = 'demo';
-    let encodedCommand = encodeURIComponent(JSON.stringify(this.codeRef));
-    let encodedInput = encodeURIComponent(
-      JSON.stringify(this.activeCommandInput),
+    let encodedCommand = encodeURIComponent(
+      `${this.codeRef.module}/${this.codeRef.name}`,
     );
-    return `${hostOrigin}/command-runner/${encodeURIComponent(nonce)}?command=${encodedCommand}&input=${encodedInput}`;
+    let encodedInput = encodeURIComponent(
+      JSON.stringify(this.activeCommandInput ?? null),
+    );
+    return `${hostOrigin}/command-runner/${encodedCommand}/${encodedInput}/${encodeURIComponent(nonce)}`;
   }
 
   get sendButtonLabel() {
