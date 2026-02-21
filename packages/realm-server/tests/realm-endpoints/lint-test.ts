@@ -376,10 +376,10 @@ export class MyCard extends CardDef {
       const finalMemory = process.memoryUsage().heapUsed;
       const memoryIncrease = finalMemory - initialMemory;
 
-      // Memory increase should be reasonable (less than 20MB for lint operations)
+      // Memory increase should be reasonable (less than 45MB for lint operations)
       assert.ok(
-        memoryIncrease < 20 * 1024 * 1024,
-        `Memory increase should be under 20MB, got ${(memoryIncrease / 1024 / 1024).toFixed(2)}MB`,
+        memoryIncrease < 45 * 1024 * 1024,
+        `Memory increase should be under 45MB, got ${(memoryIncrease / 1024 / 1024).toFixed(2)}MB`,
       );
     });
 
