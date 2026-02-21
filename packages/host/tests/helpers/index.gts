@@ -782,6 +782,7 @@ export async function setupIntegrationTestRealm({
   permissions,
   mockMatrixUtils,
   startMatrix = true,
+  fileSizeLimitBytes,
 }: {
   contents: RealmContents;
   realmURL?: string;

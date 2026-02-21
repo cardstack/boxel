@@ -14,6 +14,8 @@ import {
   setupLocalIndexing,
   testRealmURL,
   testRealmInfo,
+  setupRealmCacheTeardown,
+  withCachedRealmSetup,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
@@ -48,11 +50,15 @@ module('Integration | commands | write-text-file', function (hooks) {
     fetch = getService('network').fetch;
   });
 
+  setupRealmCacheTeardown(hooks);
+
   hooks.beforeEach(async function () {
-    await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      contents: {},
-    });
+    await withCachedRealmSetup(async () =>
+      setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {},
+      }),
+    );
   });
 
   test('writes a text file', async function (assert) {

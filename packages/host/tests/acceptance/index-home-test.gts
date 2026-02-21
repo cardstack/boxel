@@ -19,8 +19,10 @@ import {
   setupAuthEndpoints,
   setupLocalIndexing,
   setupOnSave,
+  setupRealmCacheTeardown,
   setupUserSubscription,
   SYSTEM_CARD_FIXTURE_CONTENTS,
+  withCachedRealmSetup,
 } from '../helpers';
 import { setupBaseRealm } from '../helpers/base-realm';
 import { setupMockMatrix } from '../helpers/mock-matrix';
@@ -164,6 +166,7 @@ module('Acceptance | index card home resolution', function (hooks) {
   module('host mode', function (hooks) {
     let { setActiveRealms, setExpiresInSec, createAndJoinRoom } =
       mockMatrixUtils;
+    setupRealmCacheTeardown(hooks);
 
     hooks.beforeEach(async function () {
       createAndJoinRoom({
@@ -180,13 +183,15 @@ module('Acceptance | index card home resolution', function (hooks) {
         },
       };
       setExpiresInSec(60 * 60);
-      await setupAcceptanceTestRealm({
-        realmURL: testHostModeRealmURL,
-        mockMatrixUtils,
-        contents,
-        permissions: {
-          '*': ['read'],
-        },
+      await withCachedRealmSetup(async () => {
+        await setupAcceptanceTestRealm({
+          realmURL: testHostModeRealmURL,
+          mockMatrixUtils,
+          contents,
+          permissions: {
+            '*': ['read'],
+          },
+        });
       });
 
       setActiveRealms([testHostModeRealmURL]);
@@ -212,10 +217,14 @@ module('Acceptance | index card home resolution', function (hooks) {
   });
 
   module('operator submodes', function (hooks) {
+    setupRealmCacheTeardown(hooks);
+
     hooks.beforeEach(async function () {
-      await setupAcceptanceTestRealm({
-        mockMatrixUtils,
-        contents: realmContents,
+      await withCachedRealmSetup(async () => {
+        await setupAcceptanceTestRealm({
+          mockMatrixUtils,
+          contents: realmContents,
+        });
       });
     });
 

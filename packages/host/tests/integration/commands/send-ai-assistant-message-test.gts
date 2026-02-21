@@ -15,6 +15,8 @@ import {
   setupLocalIndexing,
   testRealmURL,
   testRealmInfo,
+  setupRealmCacheTeardown,
+  withCachedRealmSetup,
 } from '../../helpers';
 
 import { setupMockMatrix } from '../../helpers/mock-matrix';
@@ -44,11 +46,15 @@ module('Integration | commands | send-ai-assistant-message', function (hooks) {
     getOwner(this)!.register('service:realm', StubRealmService);
   });
 
+  setupRealmCacheTeardown(hooks);
+
   hooks.beforeEach(async function () {
-    await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      contents: {},
-    });
+    await withCachedRealmSetup(async () =>
+      setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {},
+      }),
+    );
   });
 
   test('send an ai assistant message', async function (assert) {

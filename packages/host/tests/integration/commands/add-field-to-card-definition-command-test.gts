@@ -13,6 +13,8 @@ import {
   setupLocalIndexing,
   testRealmURL,
   testRealmInfo,
+  setupRealmCacheTeardown,
+  withCachedRealmSetup,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
@@ -37,11 +39,14 @@ module(
       getOwner(this)!.register('service:realm', StubRealmService);
     });
 
+    setupRealmCacheTeardown(hooks);
+
     hooks.beforeEach(async function () {
-      await setupIntegrationTestRealm({
-        mockMatrixUtils,
-        contents: {
-          'person.gts': `
+      await withCachedRealmSetup(async () =>
+        setupIntegrationTestRealm({
+          mockMatrixUtils,
+          contents: {
+            'person.gts': `
           import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
           import StringField from "https://cardstack.com/base/string";
           export class Person extends CardDef {
@@ -49,9 +54,10 @@ module(
             @field firstName = contains(StringField);
           }
         `,
-        },
-        realmURL: 'http://test-realm/test/',
-      });
+          },
+          realmURL: 'http://test-realm/test/',
+        }),
+      );
     });
 
     test('adds a field to a card definition', async function (assert) {

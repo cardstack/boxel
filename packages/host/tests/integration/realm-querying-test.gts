@@ -16,6 +16,8 @@ import {
   type CardDocFiles,
   setupIntegrationTestRealm,
   testModuleRealm,
+  setupRealmCacheTeardown,
+  withCachedRealmSetup,
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupRenderingTest } from '../helpers/setup';
@@ -574,29 +576,33 @@ module(`Integration | realm querying`, function (hooks) {
 
   let queryEngine: RealmIndexQueryEngine;
 
+  setupRealmCacheTeardown(hooks);
+
   hooks.beforeEach(async function () {
-    let { realm } = await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      contents: {
-        ...sampleCards,
-        'files/sample.txt': 'Hello world',
-        'files/sample.md': 'Hello markdown',
-        'file-query-card-instance.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              nameFilter: '',
-            },
-            meta: {
-              adoptsFrom: {
-                module: `${testModuleRealm}file-query-card`,
-                name: 'FileQueryCard',
+    let { realm } = await withCachedRealmSetup(async () =>
+      setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {
+          ...sampleCards,
+          'files/sample.txt': 'Hello world',
+          'files/sample.md': 'Hello markdown',
+          'file-query-card-instance.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                nameFilter: '',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `${testModuleRealm}file-query-card`,
+                  name: 'FileQueryCard',
+                },
               },
             },
           },
         },
-      },
-    });
+      }),
+    );
     queryEngine = realm.realmIndexQueryEngine;
   });
 
