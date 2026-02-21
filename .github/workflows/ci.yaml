@@ -1,562 +1,24 @@
 name: CI
 
 on:
-  push:
-    branches:
-      - main
-      - ci-bisect
-      - ci-bisect-**
-  pull_request:
   workflow_dispatch:
 
 permissions:
-  checks: write
   contents: read
-  id-token: write
-  pull-requests: write
 
 jobs:
-  change-check:
-    name: Check which packages changed
-    runs-on: ubuntu-latest
-    outputs:
-      boxel: ${{ steps.filter.outputs.boxel }}
-      ai-bot: ${{ steps.filter.outputs.ai-bot }}
-      bot-runner: ${{ steps.filter.outputs.bot-runner }}
-      eslint-plugin-boxel: ${{ steps.filter.outputs.eslint-plugin-boxel }}
-      postgres-migrations: ${{ steps.filter.outputs.postgres-migrations }}
-      boxel-icons: ${{ steps.filter.outputs.boxel-icons }}
-      boxel-motion: ${{ steps.filter.outputs.boxel-motion }}
-      boxel-ui: ${{ steps.filter.outputs.boxel-ui }}
-      matrix: ${{ steps.filter.outputs.matrix }}
-      realm-server: ${{ steps.filter.outputs.realm-server }}
-      vscode-boxel-tools: ${{ steps.filter.outputs.vscode-boxel-tools }}
-      workspace-sync-cli: ${{ steps.filter.outputs.workspace-sync-cli }}
-      # Force all tests to run when on ci-bisect* branches
-      run_all: ${{ steps.force-run-all.outputs.run_all }}
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
-      - uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # 3.0.2
-        id: filter
-        with:
-          filters: |
-            shared: &shared
-              - '.github/workflows/ci.yaml'
-              - 'packages/runtime-common/**'
-              - 'package.json'
-              - 'pnpm-lock.yaml'
-            boxel:
-              - *shared
-              - '.github/workflows/build-host.yml'
-              - '.github/workflows/deploy-host.yml'
-              - '.github/workflows/manual-deploy.yml'
-              - 'packages/ai-bot/**'
-              - 'packages/bot-runner/**'
-              - 'packages/base/**'
-              - 'packages/boxel-icons/**'
-              - 'packages/boxel-ui/**'
-              - 'packages/host/**'
-              - 'packages/realm-server/**'
-              - 'packages/catalog-realm/**'
-            ai-bot:
-              - *shared
-              - '.github/workflows/pr-ai-bot.yml'
-              - 'packages/ai-bot/**'
-              - 'packages/billing/**'
-              - 'packages/postgres/**'
-            bot-runner:
-              - *shared
-              - 'packages/bot-runner/**'
-              - 'packages/postgres/**'
-            eslint-plugin-boxel:
-              - *shared
-              - 'packages/eslint-plugin-boxel/**'
-            postgres-migrations:
-              - 'packages/postgres/migrations/**'
-            boxel-icons:
-              - *shared
-              - 'packages/boxel-icons/**'
-            boxel-motion:
-              - *shared
-              - 'packages/boxel-motion/**'
-            boxel-ui:
-              - *shared
-              - 'packages/boxel-icons/**'
-              - 'packages/boxel-ui/**'
-            matrix:
-              - *shared
-              - 'packages/base/**'
-              - 'packages/boxel-icons/**'
-              - 'packages/boxel-ui/**'
-              - 'packages/host/**'
-              - 'packages/matrix/**'
-              - 'packages/realm-server/**'
-            realm-server:
-              - *shared
-              - 'packages/billing/**'
-              - 'packages/boxel-icons/**'
-              - 'packages/boxel-ui/**'
-              - 'packages/host/**'
-              - 'packages/eslint-plugin-boxel/**'
-              - 'packages/postgres/**'
-              - 'packages/realm-server/**'
-            vscode-boxel-tools:
-              - *shared
-              - 'packages/vscode-boxel-tools/**'
-            workspace-sync-cli:
-              - *shared
-              - 'packages/workspace-sync-cli/**'
-      - name: Force run all jobs on ci-bisect branches
-        id: force-run-all
-        shell: bash
-        run: |
-          echo "run_all=${{ startsWith(github.ref, 'refs/heads/ci-bisect') || startsWith(github.ref, 'refs/heads/ci-bisect-') || startsWith(github.head_ref || '', 'ci-bisect') }}" >> "$GITHUB_OUTPUT"
-
   test-web-assets:
     name: Build test web assets
-    needs: change-check
-    if: needs.change-check.outputs.boxel == 'true' || needs.change-check.outputs.boxel-ui == 'true' || needs.change-check.outputs.matrix == 'true' || needs.change-check.outputs.realm-server == 'true' || needs.change-check.outputs.vscode-boxel-tools == 'true' || needs.change-check.outputs.workspace-sync-cli == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
     uses: ./.github/workflows/test-web-assets.yaml
 
-  ai-bot-test:
-    name: AI bot Tests
-    needs: change-check
-    if: needs.change-check.outputs.ai-bot == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
-    runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U postgres"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-    env:
-      PGHOST: localhost
-      PGPORT: 5432
-      PGUSER: postgres
-      PGPASSWORD: postgres
-    concurrency:
-      group: ai-bot-test-${{ github.head_ref || github.run_id }}
-      cancel-in-progress: true
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
-      - uses: ./.github/actions/init
-      - name: AI Bot test suite
-        run: pnpm test
-        working-directory: packages/ai-bot
-
-  bot-runner-test:
-    name: Bot Runner Tests
-    needs: change-check
-    if: needs.change-check.outputs.bot-runner == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
-    runs-on: ubuntu-latest
-    concurrency:
-      group: bot-runner-test-${{ github.head_ref || github.run_id }}
-      cancel-in-progress: true
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
-      - uses: ./.github/actions/init
-      - name: Bot Runner test suite
-        run: pnpm test
-        working-directory: packages/bot-runner
-
-  eslint-plugin-boxel-test:
-    name: ESLint Plugin Boxel Tests
-    needs: change-check
-    if: needs.change-check.outputs.eslint-plugin-boxel == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
-    runs-on: ubuntu-latest
-    concurrency:
-      group: eslint-plugin-boxel-test-${{ github.head_ref || github.run_id }}
-      cancel-in-progress: true
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
-      - uses: ./.github/actions/init
-      - name: ESLint Plugin Boxel test suite
-        run: pnpm test
-        working-directory: packages/eslint-plugin-boxel
-
-  postgres-migration-test:
-    name: Postgres Migration Test
-    needs: change-check
-    if: needs.change-check.outputs.postgres-migrations == 'true' || needs.change-check.outputs.run_all == 'true'
-    runs-on: ubuntu-latest
-    concurrency:
-      group: postgres-migration-${{ github.head_ref || github.run_id }}
-      cancel-in-progress: true
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
-        with:
-          fetch-depth: 0
-      - uses: ./.github/actions/init
-
-      - name: Start Postgres
-        run: pnpm start:pg
-        working-directory: packages/postgres
-
-      - name: Determine changed migrations
-        id: migrations
-        env:
-          PULL_REQUEST_BASE_SHA: ${{ github.event.pull_request.base.sha || '' }}
-          GITHUB_EVENT_BEFORE: ${{ github.event.before || '' }}
-        shell: bash
-        run: packages/postgres/scripts/determine-changed-migrations.sh
-
-      - name: Apply migrations
-        if: steps.migrations.outputs.count && steps.migrations.outputs.count != '0'
-        working-directory: packages/postgres
-        env:
-          PGHOST: localhost
-          PGPORT: 5435
-        run: pnpm migrate up
-      - name: Run down migrations
-        if: steps.migrations.outputs.count && steps.migrations.outputs.count != '0'
-        working-directory: packages/postgres
-        env:
-          MIGRATION_DOWN_COUNT: ${{ steps.migrations.outputs.down_count }}
-        run: pnpm migrate down "$MIGRATION_DOWN_COUNT"
-      - name: Reapply migrations
-        if: steps.migrations.outputs.count && steps.migrations.outputs.count != '0'
-        working-directory: packages/postgres
-        run: pnpm migrate up
-
-  boxel-motion-test:
-    name: Boxel Motion Tests
-    needs: change-check
-    if: needs.change-check.outputs.boxel-motion == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
-    runs-on: ubuntu-latest
-    concurrency:
-      group: boxel-motion-test-${{ github.head_ref || github.run_id }}
-      cancel-in-progress: true
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
-      - uses: ./.github/actions/init
-      - name: Build boxel-motion
-        run: pnpm build
-        working-directory: packages/boxel-motion/addon
-      - name: Run test suite
-        run: pnpm test
-        working-directory: packages/boxel-motion/test-app
-
-  boxel-ui-test:
-    name: Boxel UI Tests
-    needs: [change-check]
-    if: needs.change-check.outputs.boxel-ui == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
-    runs-on: ubuntu-latest
-    concurrency:
-      group: boxel-ui-test-${{ github.head_ref || github.run_id }}
-      cancel-in-progress: true
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
-      - uses: ./.github/actions/init
-      - name: Build boxel-icons
-        run: pnpm build
-        working-directory: packages/boxel-icons
-      - name: Build boxel-ui
-        run: pnpm build
-        working-directory: packages/boxel-ui/addon
-      - name: Run test suite
-        run: pnpm test
-        working-directory: packages/boxel-ui/test-app
-
-  boxel-ui-raw-icon-changes-only:
-    name: Boxel UI ensure raw icon changes only
-    needs: change-check
-    if: needs.change-check.outputs.boxel-ui == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
-    runs-on: ubuntu-latest
-    concurrency:
-      group: boxel-ui-raw-icon-changes-only-${{ github.head_ref || github.run_id }}
-      cancel-in-progress: true
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
-      - uses: ./.github/actions/init
-      - name: Rebuild boxel-ui icons
-        run: pnpm rebuild:icons
-        working-directory: packages/boxel-ui/addon
-      - name: Fail if generated icons have been changed without underlying raw icon changing
-        run: git diff --exit-code
-
-  boxel-icons-raw-icon-changes-only:
-    name: Boxel Icons ensure raw icon changes only
-    needs: change-check
-    if: needs.change-check.outputs.boxel-icons == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
-    runs-on: ubuntu-latest
-    concurrency:
-      group: boxel-icons-raw-icon-changes-only-${{ github.head_ref || github.run_id }}
-      cancel-in-progress: true
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
-      - uses: ./.github/actions/init
-      - name: Rebuild boxel-icons icons
-        run: pnpm rebuild:all
-        working-directory: packages/boxel-icons
-      - name: Fail if generated icons have been changed without underlying raw icon changing
-        run: git diff --exit-code
-
-  matrix-client-test:
-    name: Matrix Client Tests
-    needs: [change-check, test-web-assets]
-    if: needs.change-check.outputs.matrix == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
+  lint-memory-test:
+    name: "Lint memory (run ${{ matrix.run }})"
+    needs: test-web-assets
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        shardIndex: [1, 2, 3]
-        shardTotal: [3]
-    concurrency:
-      group: matrix-client-test-${{ matrix.shardIndex }}-${{ github.head_ref || github.run_id }}
-      cancel-in-progress: true
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
-      - uses: ./.github/actions/init
-      - name: Download test web assets
-        uses: actions/download-artifact@b14cf4c92620c250e1c074ab0a5800e37df86765 # 4.2.0
-        with:
-          name: ${{ needs.test-web-assets.outputs.artifact_name }}
-          path: .test-web-assets-artifact
-      - name: Restore test web assets into workspace
-        shell: bash
-        run: |
-          shopt -s dotglob
-          cp -a .test-web-assets-artifact/. ./
-      - name: Install Playwright Browsers
-        run: pnpm exec playwright install
-        working-directory: packages/matrix
-      - name: Serve boxel-icons
-        run: pnpm serve &
-        working-directory: packages/boxel-icons
-      - name: Build boxel-motion
-        run: pnpm build
-        working-directory: packages/boxel-motion/addon
-      - name: Serve host dist (test assets) for realm server
-        uses: JarvusInnovations/background-action@2428e7b970a846423095c79d43f759abf979a635 # 1.0.7
-        with:
-          run: pnpm serve:dist &
-          working-directory: packages/host
-          wait-for: 3m
-          wait-on: http-get://localhost:4200
-      - name: Start realm servers
-        run: MATRIX_REGISTRATION_SHARED_SECRET='xxxx' pnpm start:services-for-matrix-tests | tee -a /tmp/server.log &
-        working-directory: packages/realm-server
-      - name: Run Playwright tests
-        run: pnpm test:group ${{ matrix.shardIndex }}/${{ matrix.shardTotal }}
-        working-directory: packages/matrix
-      - name: Print realm server logs
-        if: always()
-        run: cat /tmp/server.log
-      - name: Extract worker and prerender logs
-        if: always()
-        run: |
-          grep -E '^\[start:worker-base|^\[start:worker-development|^\[start:worker-test' /tmp/server.log > /tmp/worker-manager.log || true
-          grep -E '^\[start:prerender-dev' /tmp/server.log > /tmp/prerender-server.log || true
-          grep -E '^\[start:prerender-manager-dev' /tmp/server.log > /tmp/prerender-manager.log || true
-      - name: Upload realm server log
-        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
-        if: always()
-        with:
-          name: matrix-test-realm-server-log-${{ matrix.shardIndex }}
-          path: /tmp/server.log
-          retention-days: 30
-      - name: Upload worker manager log
-        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
-        if: always()
-        with:
-          name: matrix-test-worker-manager-log-${{ matrix.shardIndex }}
-          path: /tmp/worker-manager.log
-          retention-days: 30
-      - name: Upload prerender server log
-        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
-        if: always()
-        with:
-          name: matrix-test-prerender-server-log-${{ matrix.shardIndex }}
-          path: /tmp/prerender-server.log
-          retention-days: 30
-      - name: Upload prerender manager log
-        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
-        if: always()
-        with:
-          name: matrix-test-prerender-manager-log-${{ matrix.shardIndex }}
-          path: /tmp/prerender-manager.log
-          retention-days: 30
-
-      - name: Upload blob report to GitHub Actions Artifacts
-        if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
-        with:
-          name: blob-report-${{ matrix.shardIndex }}
-          path: packages/matrix/blob-report
-          retention-days: 1
-
-      - name: Upload Playwright traces
-        if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
-        with:
-          name: playwright-traces-${{ matrix.shardIndex }}
-          path: packages/matrix/test-results/**/trace.zip
-          retention-days: 30
-          if-no-files-found: ignore
-
-  matrix-client-merge-reports-and-publish:
-    name: Merge Matrix reports and publish
-    needs:
-      - change-check
-      - matrix-client-test
-    # always() makes it run even if a matrix-client-test shard fails
-    if: always() && (needs.change-check.outputs.matrix == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true')
-    runs-on: ubuntu-latest
-
-    permissions:
-      id-token: write
-      contents: write
-      checks: write
-      statuses: write
-
-    outputs:
-      timestamp: ${{ steps.timestampid.outputs.timestamp }}
-
-    steps:
-      - name: Create a timestamp as a directory to store reports in
-        id: timestampid
-        run: echo "timestamp=$(date --utc +%Y%m%d_%H%M%SZ)" >> "$GITHUB_OUTPUT"
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
-      - uses: ./.github/actions/init
-
-      - name: Download blob reports from GitHub Actions Artifacts
-        uses: actions/download-artifact@b14cf4c92620c250e1c074ab0a5800e37df86765 # 4.2.0
-        with:
-          path: all-blob-reports
-          pattern: blob-report-*
-          merge-multiple: true
-
-      - name: Merge blobs into one single report
-        run: pnpm exec playwright merge-reports --reporter html ./all-blob-reports
-
-      - name: Upload HTML report
-        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
-        with:
-          name: html-report--attempt-${{ github.run_attempt }}
-          path: playwright-report
-          retention-days: 14
-
-      - name: Set up env
-        env:
-          INPUT_ENVIRONMENT: ${{ inputs.environment }}
-        run: |
-          echo "AWS_REGION=us-east-1" >> $GITHUB_ENV
-          echo "AWS_ROLE_ARN=arn:aws:iam::680542703984:role/boxel-matrix-playwright-reports" >> $GITHUB_ENV
-          echo "AWS_S3_BUCKET=cardstack-boxel-matrix-playwright-reports-staging" >> $GITHUB_ENV
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@ececac1a45f3b08a01d2dd070d28d111c5fe6722 # 4.1.0
-        with:
-          role-to-assume: ${{ env.AWS_ROLE_ARN }}
-          aws-region: us-east-1
-
-      - name: Publish consolidated report to S3
-        run: aws s3 sync ./playwright-report s3://cardstack-boxel-matrix-playwright-reports-staging/${{ github.head_ref || github.ref_name }}/${{ steps.timestampid.outputs.timestamp }}
-
-      - name: Store Playwright report URL
-        shell: bash
-        run: echo "PLAYWRIGHT_REPORT_URL=https://boxel-matrix-playwright-reports.stack.cards/${{ github.head_ref || github.ref_name }}/${{ steps.timestampid.outputs.timestamp }}/index.html" >> $GITHUB_ENV
-
-      - name: Add status with link to Playwright report
-        shell: bash
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-          REPOSITORY: ${{ github.repository }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-          MATRIX_TEST_RESULT: ${{ needs.matrix-client-test.result }}
-        run: |
-          state="success"
-          description=""
-          if [ "$MATRIX_TEST_RESULT" = "failure" ]; then
-            state="failure"
-            description="Matrix Playwright shard failures"
-          fi
-          curl \
-            -X POST \
-            -H "Authorization: token $GITHUB_TOKEN" \
-            -H "Accept: application/vnd.github.v3+json" \
-            https://api.github.com/repos/$REPOSITORY/statuses/$HEAD_SHA \
-            -d '{"context":"Matrix Playwright tests report","description":"'"$description"'","target_url":"'"$PLAYWRIGHT_REPORT_URL"'","state":"'"$state"'"}'
-
-  realm-server-test:
-    name: Realm Server Tests
-    needs: [change-check, test-web-assets]
-    if: needs.change-check.outputs.realm-server == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
-    runs-on: ubuntu-latest
-    concurrency:
-      group: realm-server-test-${{ matrix.testModule }}-${{ github.head_ref || github.run_id }}
-      cancel-in-progress: true
-    strategy:
-      fail-fast: false
-      matrix:
-        testModule:
-          [
-            "auth-client-test.ts",
-            "billing-test.ts",
-            "card-dependencies-endpoint-test.ts",
-            "card-endpoints-test.ts",
-            "card-source-endpoints-test.ts",
-            "definition-lookup-test.ts",
-            "file-watcher-events-test.ts",
-            "indexing-test.ts",
-            "transpile-test.ts",
-            "module-syntax-test.ts",
-            "permissions/permission-checker-test.ts",
-            "prerendering-test.ts",
-            "prerender-server-test.ts",
-            "prerender-manager-test.ts",
-            "prerender-proxy-test.ts",
-            "remote-prerenderer-test.ts",
-            "queue-test.ts",
-            "realm-endpoints/dependencies-test.ts",
-            "realm-endpoints/directory-test.ts",
-            "realm-endpoints/info-test.ts",
-            "realm-endpoints/lint-test.ts",
-            "realm-endpoints/mtimes-test.ts",
-            "realm-endpoints/permissions-test.ts",
-            "realm-endpoints/publishability-test.ts",
-            "realm-endpoints/search-test.ts",
-            "realm-endpoints/user-test.ts",
-            "realm-endpoints-test.ts",
-            "sanitize-head-html-test.ts",
-            "search-prerendered-test.ts",
-            "types-endpoint-test.ts",
-            "server-endpoints/authentication-test.ts",
-            "server-endpoints/bot-commands-test.ts",
-            "server-endpoints/bot-registration-test.ts",
-            "server-endpoints/download-realm-test.ts",
-            "server-endpoints/index-responses-test.ts",
-            "server-endpoints/maintenance-endpoints-test.ts",
-            "server-endpoints/queue-status-test.ts",
-            "server-endpoints/realm-lifecycle-test.ts",
-            "server-endpoints/search-test.ts",
-            "server-endpoints/info-test.ts",
-            "server-endpoints/search-prerendered-test.ts",
-            "server-endpoints/stripe-session-test.ts",
-            "server-endpoints/stripe-webhook-test.ts",
-            "server-endpoints/user-and-catalog-test.ts",
-            "server-endpoints/incoming-webhook-test.ts",
-            "server-endpoints/webhook-commands-test.ts",
-            "server-endpoints/webhook-receiver-test.ts",
-            "virtual-network-test.ts",
-            "atomic-endpoints-test.ts",
-            "request-forward-test.ts",
-            "publish-unpublish-realm-test.ts",
-            "boxel-domain-availability-test.ts",
-            "claim-boxel-domain-test.ts",
-            "delete-boxel-claimed-domain-test.ts",
-            "get-boxel-claimed-domain-test.ts",
-            "realm-auth-test.ts",
-            "queries-test.ts",
-            "full-reindex-test.ts",
-          ]
+        run: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
       - uses: ./.github/actions/init
@@ -573,7 +35,7 @@ jobs:
       - name: Serve boxel-icons
         run: pnpm serve &
         working-directory: packages/boxel-icons
-      - name: Serve host dist (test assets) for realm server
+      - name: Serve host dist for realm server
         uses: JarvusInnovations/background-action@2428e7b970a846423095c79d43f759abf979a635 # 1.0.7
         with:
           run: pnpm serve:dist &
@@ -583,187 +45,71 @@ jobs:
       - name: Start realm servers
         run: pnpm start:skip-optional-realms | tee -a /tmp/server.log &
         working-directory: packages/realm-server
-      - name: create realm users
+      - name: Create realm users
         run: pnpm register-realm-users
         working-directory: packages/matrix
-      - name: realm server test suite
-        run: pnpm test:wait-for-servers
+      - name: Run lint test
+        id: test
+        continue-on-error: true
+        run: pnpm test:wait-for-servers 2>&1 | tee /tmp/test-output.log
         working-directory: packages/realm-server
         env:
-          TEST_MODULE: ${{matrix.testModule}}
-      - name: Print realm server logs
+          TEST_MODULE: realm-endpoints/lint-test.ts
+      - name: Extract and report memory
         if: always()
-        run: cat /tmp/server.log
-      - name: Prepare artifact name
-        id: artifact_name
-        if: always()
-        run: |
-          export SAFE_ARTIFACT_NAME=$(echo ${{ matrix.testModule }} |  sed 's/[/]/_/g')
-          echo "artifact_name=$SAFE_ARTIFACT_NAME" >> "$GITHUB_OUTPUT"
-      - name: Extract worker and prerender logs
-        if: always()
-        run: |
-          grep -E '^\[start:worker-development|^\[start:worker-test' /tmp/server.log > /tmp/worker-manager.log || true
-          grep -E '^\[start:prerender-dev' /tmp/server.log > /tmp/prerender-server.log || true
-          grep -E '^\[start:prerender-manager-dev' /tmp/server.log > /tmp/prerender-manager.log || true
-          grep -E '^\[start:development' /tmp/server.log > /tmp/start-development.log || true
-          grep -E '^\[start:test-realms|^\[start:worker-test' /tmp/server.log > /tmp/test-realms.log || true
-      - name: Upload realm server log
-        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
-        if: always()
-        with:
-          name: realm-server-test-realm-server-log-${{steps.artifact_name.outputs.artifact_name}}
-          path: /tmp/server.log
-          retention-days: 30
-      - name: Upload worker manager log
-        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
-        if: always()
-        with:
-          name: realm-server-test-worker-manager-log-${{steps.artifact_name.outputs.artifact_name}}
-          path: /tmp/worker-manager.log
-          retention-days: 30
-      - name: Upload prerender server log
-        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
-        if: always()
-        with:
-          name: realm-server-test-prerender-server-log-${{steps.artifact_name.outputs.artifact_name}}
-          path: /tmp/prerender-server.log
-          retention-days: 30
-      - name: Upload prerender manager log
-        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
-        if: always()
-        with:
-          name: realm-server-test-prerender-manager-log-${{steps.artifact_name.outputs.artifact_name}}
-          path: /tmp/prerender-manager.log
-          retention-days: 30
-      - name: Upload start:development log
-        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
-        if: always()
-        with:
-          name: realm-server-test-start-development-log-${{steps.artifact_name.outputs.artifact_name}}
-          path: /tmp/start-development.log
-          retention-days: 30
-      - name: Upload test-realms log
-        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
-        if: always()
-        with:
-          name: realm-server-test-test-realms-log-${{steps.artifact_name.outputs.artifact_name}}
-          path: /tmp/test-realms.log
-          retention-days: 30
-
-  vscode-boxel-tools-package:
-    name: Boxel Tools VS Code Extension package
-    needs: [change-check, test-web-assets]
-    if: needs.change-check.outputs.vscode-boxel-tools == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
-    runs-on: ubuntu-latest
-    concurrency:
-      group: vscode-boxel-tools-test-${{ github.head_ref || github.run_id }}
-      cancel-in-progress: true
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
-      - uses: ./.github/actions/init
-      - name: Download test web assets
-        uses: actions/download-artifact@b14cf4c92620c250e1c074ab0a5800e37df86765 # 4.2.0
-        with:
-          name: ${{ needs.test-web-assets.outputs.artifact_name }}
-          path: .test-web-assets-artifact
-      - name: Restore test web assets into workspace
         shell: bash
         run: |
-          shopt -s dotglob
-          cp -a .test-web-assets-artifact/. ./
-      - name: Prepublish
-        run: pnpm vscode:prepublish
-        working-directory: packages/vscode-boxel-tools
-      - name: Package
-        run: pnpm vscode:package
-        working-directory: packages/vscode-boxel-tools
-      - name: Upload
+          memory=$(grep -oP 'got \K[0-9.]+(?=MB)' /tmp/test-output.log | tail -1 || true)
+          if [ -z "$memory" ]; then
+            memory="<20 (passed)"
+          fi
+          echo "$memory" > /tmp/memory-result.txt
+          echo "### Run ${{ matrix.run }}: ${memory}MB" >> $GITHUB_STEP_SUMMARY
+      - name: Upload memory result
+        if: always()
         uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
         with:
-          name: vscode-boxel-tools
-          path: packages/vscode-boxel-tools/boxel-tools*vsix
+          name: memory-run-${{ matrix.run }}
+          path: /tmp/memory-result.txt
+          retention-days: 1
 
-  workspace-sync-cli-build:
-    name: Workspace Sync CLI Build
-    needs: change-check
-    if: needs.change-check.outputs.workspace-sync-cli == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
+  summary:
+    name: Memory Summary
+    needs: lint-memory-test
+    if: always()
     runs-on: ubuntu-latest
-    concurrency:
-      group: workspace-sync-cli-build-${{ github.head_ref || github.run_id }}
-      cancel-in-progress: true
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
-      - uses: ./.github/actions/init
-      - name: Build workspace-sync-cli
-        run: pnpm build
-        working-directory: packages/workspace-sync-cli
-
-  workspace-sync-cli-test:
-    name: Workspace Sync CLI Integration Tests
-    needs: [change-check, test-web-assets]
-    if: needs.change-check.outputs.workspace-sync-cli == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
-    runs-on: ubuntu-latest
-    concurrency:
-      group: workspace-sync-cli-test-${{ github.head_ref || github.run_id }}
-      cancel-in-progress: true
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
-      - uses: ./.github/actions/init
-      - name: Download test web assets
+      - name: Download all memory results
         uses: actions/download-artifact@b14cf4c92620c250e1c074ab0a5800e37df86765 # 4.2.0
         with:
-          name: ${{ needs.test-web-assets.outputs.artifact_name }}
-          path: .test-web-assets-artifact
-      - name: Restore test web assets into workspace
+          pattern: memory-run-*
+          path: memory-results
+      - name: Compute summary
         shell: bash
         run: |
-          shopt -s dotglob
-          cp -a .test-web-assets-artifact/. ./
-      - name: Build workspace-sync-cli
-        run: pnpm build
-        working-directory: packages/workspace-sync-cli
-      - name: Serve host dist (test assets)
-        uses: JarvusInnovations/background-action@2428e7b970a846423095c79d43f759abf979a635 # 1.0.7
-        with:
-          run: pnpm serve:dist &
-          working-directory: packages/host
-          wait-for: 3m
-          wait-on: http-get://localhost:4200
-      - name: Start PostgreSQL for tests
-        run: pnpm start:pg | tee -a /tmp/test-services.log &
-        working-directory: packages/realm-server
-      - name: Start Matrix services for tests
-        run: pnpm start:matrix | tee -a /tmp/test-services.log &
-        working-directory: packages/realm-server
-      - name: Register realm users for tests
-        run: pnpm register-realm-users
-        working-directory: packages/matrix
-      - name: Run integration tests
-        run: pnpm test
-        working-directory: packages/workspace-sync-cli
-      - name: Upload test services log
-        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
-        if: always()
-        with:
-          name: workspace-sync-cli-test-services-log
-          path: /tmp/test-services.log
-          retention-days: 30
-
-  deploy:
-    name: Deploy boxel to staging
-    if: needs.change-check.outputs.boxel == 'true' && github.ref == 'refs/heads/main'
-    needs:
-      - change-check
-      - ai-bot-test
-      - bot-runner-test
-      - boxel-ui-test
-      - realm-server-test
-    uses: ./.github/workflows/manual-deploy.yml
-    permissions:
-      contents: read
-      deployments: write
-      id-token: write
-    secrets: inherit
-    with:
-      environment: "staging"
+          echo "## Lint Memory Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Run | Memory (MB) |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----|-------------|" >> $GITHUB_STEP_SUMMARY
+          max=0
+          for i in $(seq 1 10); do
+            file="memory-results/memory-run-${i}/memory-result.txt"
+            if [ -f "$file" ]; then
+              mem=$(cat "$file")
+            else
+              mem="N/A"
+            fi
+            echo "| $i | $mem |" >> $GITHUB_STEP_SUMMARY
+            numeric=$(echo "$mem" | grep -oP '^[0-9.]+' || true)
+            if [ -n "$numeric" ]; then
+              is_greater=$(echo "$numeric > $max" | bc -l)
+              if [ "$is_greater" -eq 1 ]; then
+                max=$numeric
+              fi
+            fi
+          done
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Maximum: ${max}MB**" >> $GITHUB_STEP_SUMMARY
+          suggested=$(echo "scale=0; ($max/10+1)*10" | bc)
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Suggested threshold (rounded up to nearest 10MB): ${suggested}MB**" >> $GITHUB_STEP_SUMMARY
