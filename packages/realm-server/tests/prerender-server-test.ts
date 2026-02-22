@@ -275,6 +275,10 @@ module(basename(__filename), function () {
           'string',
           'returns serialized command card',
         );
+        assert.notOk(
+          res.body.data.attributes.cardResult,
+          'does not return raw card instance over HTTP',
+        );
         assert.ok(cardResultString.length > 0, 'serialized card is non-empty');
         assert.ok(
           cardResultString.includes('hello from command'),
@@ -325,6 +329,10 @@ module(basename(__filename), function () {
         assert.notOk(
           res.body.data.attributes.cardResultString,
           'no serialized card result on command error',
+        );
+        assert.notOk(
+          res.body.data.attributes.cardResult,
+          'no raw card instance on command error',
         );
         assert.ok(res.body.meta?.timing?.totalMs >= 0, 'has timing');
         assert.ok(res.body.meta?.pool?.pageId, 'has pool.pageId');
