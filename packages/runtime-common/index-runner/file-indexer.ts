@@ -14,7 +14,7 @@ import {
   type ResolvedCodeRef,
 } from '../index';
 import { CardError, isCardError, serializableError } from '../error';
-import type { IndexRunnerDependencyResolver } from './dependency-resolver';
+import type { IndexRunnerDependencyManager } from './dependency-resolver';
 import {
   BASE_FILE_DEF_CODE_REF,
   resolveFileDefCodeRef,
@@ -31,12 +31,25 @@ interface FileIndexerOptions {
   jobInfo: JobInfo;
   prerenderer: Prerenderer;
   consumeClearCacheForRender(): boolean;
-  dependencyResolver: IndexRunnerDependencyResolver;
+  dependencyResolver: IndexRunnerDependencyManager;
   updateEntry(
     entryURL: URL,
     entry: FileEntry | FileErrorIndexEntry,
   ): Promise<void>;
   logWarn(message: string): void;
+}
+
+function uniqueDeps(...groups: Array<Iterable<string> | undefined>): string[] {
+  let deps = new Set<string>();
+  for (let group of groups) {
+    if (!group) {
+      continue;
+    }
+    for (let dep of group) {
+      deps.add(dep);
+    }
+  }
+  return [...deps];
 }
 
 export async function performFileIndexing({
@@ -123,28 +136,18 @@ export async function performFileIndexing({
       extractResult?.error,
       uncaughtError,
     );
-    renderError.error.deps = renderError.error.deps ?? [];
-    renderError.error.deps.push(fileURL, fileDefCodeRef.module);
-    if (extractResult?.deps) {
-      renderError.error.deps.push(...extractResult.deps);
-    }
-
     let relationshipDeps = dependencyResolver.extractDirectRelationshipDeps(
       extractResult?.resource ?? null,
       entryURL,
     );
-    renderError.error.deps.push(...relationshipDeps);
-
-    let [expandedModuleDeps, expandedRelationshipDeps] = await Promise.all([
-      dependencyResolver.collectTransitiveModuleDeps(
-        renderError.error.deps,
-        entryURL,
-      ),
-      dependencyResolver.collectTransitiveRelationshipDeps(relationshipDeps),
-    ]);
-    renderError.error.deps = [
-      ...new Set([...expandedModuleDeps, ...expandedRelationshipDeps]),
-    ];
+    // Runtime deps are authoritative. Direct relationship deps are fallback
+    // edges for short-circuit extractor errors.
+    renderError.error.deps = uniqueDeps(
+      renderError.error.deps,
+      [fileURL, fileDefCodeRef.module],
+      extractResult?.deps,
+      relationshipDeps,
+    );
 
     logWarn(
       `${jobIdentity(jobInfo)} encountered error indexing file ${path}: ${renderError.error.message}`,
@@ -165,10 +168,10 @@ export async function performFileIndexing({
   let fileTypes = extractResult.types ?? fallbackTypes;
   let deps = new Set(extractResult.deps ?? []);
 
-  let dependencyError = await dependencyResolver.dependencyErrorForEntry(
-    deps,
-    entryURL,
-  );
+  // Runtime deps are the source of truth. Use index-backed lookup only to
+  // detect whether any dependency currently has an errored row.
+  let dependencyError =
+    await dependencyResolver.indexBackedDependencyErrorForEntry(deps, entryURL);
   if (dependencyError) {
     await updateEntry(entryURL, {
       type: 'file-error',

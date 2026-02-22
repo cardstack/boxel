@@ -691,6 +691,11 @@ export default class RenderRoute extends Route<Model> {
     cardType?: string,
     context?: { cardId?: string; nonce?: string },
   ): string {
+    let transitionId = this.#transitionCardId(transition);
+    let fallbackDeps = this.#fallbackDepsFromIds([
+      context?.cardId,
+      transitionId,
+    ]);
     let normalizationContext = {
       cardId: context?.cardId,
       normalizeCardId: (id: string) => this.#normalizeCardId(id),
@@ -705,22 +710,12 @@ export default class RenderRoute extends Route<Model> {
         coerceFromValue,
         normalizationContext,
       );
-      let withType = withCardType(normalized, cardType);
-      let withTimerSummary = this.#appendTimerSummary(withType);
-      return JSON.stringify(
-        this.#stripLastKnownGoodHtml(withTimerSummary),
-        null,
-        2,
+      return this.#serializeNormalizedRenderError(
+        normalized,
+        cardType,
+        fallbackDeps,
       );
     }
-    let current: Transition['to'] | null = transition?.to;
-    let id: string | undefined;
-    do {
-      id = current?.params?.id as string | undefined;
-      if (!id) {
-        current = current?.parent;
-      }
-    } while (current && !id);
     if (isCardError(error)) {
       let normalized = normalizeRenderError(
         {
@@ -729,28 +724,63 @@ export default class RenderRoute extends Route<Model> {
         },
         normalizationContext,
       );
-      let withType = withCardType(normalized, cardType);
-      let withTimerSummary = this.#appendTimerSummary(withType);
-      return JSON.stringify(
-        this.#stripLastKnownGoodHtml(withTimerSummary),
-        null,
-        2,
+      return this.#serializeNormalizedRenderError(
+        normalized,
+        cardType,
+        fallbackDeps,
       );
     }
+    let id = transitionId;
     let errorJSONAPI = formattedError(id, error).errors[0];
     let errorPayload = normalizeRenderError(
       errorJsonApiToErrorEntry(errorJSONAPI) as RenderError,
       normalizationContext,
     );
+    return this.#serializeNormalizedRenderError(
+      errorPayload as RenderError,
+      cardType,
+      fallbackDeps,
+    );
+  }
+
+  #serializeNormalizedRenderError(
+    renderError: RenderError,
+    cardType?: string,
+    fallbackDeps: string[] = [],
+  ): string {
+    let withType = withCardType(renderError, cardType);
+    let withTimerSummary = this.#appendTimerSummary(withType);
+    let withRuntimeDeps = this.#appendRuntimeDeps(
+      withTimerSummary,
+      fallbackDeps,
+    );
     return JSON.stringify(
-      this.#stripLastKnownGoodHtml(
-        this.#appendTimerSummary(
-          withCardType(errorPayload as RenderError, cardType),
-        ),
-      ),
+      this.#stripLastKnownGoodHtml(withRuntimeDeps),
       null,
       2,
     );
+  }
+
+  #appendRuntimeDeps(
+    renderError: RenderError,
+    fallbackDeps: string[],
+  ): RenderError {
+    let runtimeDeps = snapshotRuntimeDependencies({
+      excludeQueryOnly: true,
+    }).deps;
+    let mergedDeps = [
+      ...new Set([...(renderError.error.deps ?? []), ...runtimeDeps]),
+    ];
+    if (mergedDeps.length === 0 && fallbackDeps.length > 0) {
+      mergedDeps = [...new Set(fallbackDeps)];
+    }
+    return {
+      ...renderError,
+      error: {
+        ...renderError.error,
+        deps: mergedDeps,
+      },
+    };
   }
 
   #appendTimerSummary(renderError: RenderError): RenderError {
@@ -976,12 +1006,18 @@ export default class RenderRoute extends Route<Model> {
     let { container, errorElement } = this.#ensurePrerenderElements();
     let reason = this.renderErrorState.reason ?? '';
     let parsedReason: any;
+    let fallbackDeps = this.#fallbackDepsFromTransitionParams(params);
     try {
       parsedReason = JSON.parse(reason);
     } catch {
       parsedReason = undefined;
     }
     if (parsedReason && typeof parsedReason === 'object') {
+      if (parsedReason.error && typeof parsedReason.error === 'object') {
+        parsedReason.error.deps = [
+          ...new Set([...(parsedReason.error.deps ?? []), ...fallbackDeps]),
+        ];
+      }
       parsedReason.evict = true;
       reason = JSON.stringify(parsedReason, null, 2);
     } else {
@@ -993,6 +1029,7 @@ export default class RenderRoute extends Route<Model> {
             title: 'Render failed',
             message: reason || 'Render failed before model hook',
             additionalErrors: null,
+            deps: fallbackDeps,
           },
           evict: true,
         },
@@ -1018,5 +1055,58 @@ export default class RenderRoute extends Route<Model> {
       }
       this.#writePrerenderError(errorElement, reason);
     }
+  }
+
+  #fallbackDepsFromTransitionParams(
+    params?:
+      | {
+          id?: string;
+        }
+      | undefined,
+  ): string[] {
+    let id = params?.id;
+    if (!id && typeof window !== 'undefined') {
+      try {
+        let path = window.location.pathname;
+        let match = /\/render\/([^/]+)\//.exec(path);
+        if (match?.[1]) {
+          id = decodeURIComponent(match[1]);
+        }
+      } catch (_err) {
+        // best effort only
+      }
+    }
+    return this.#fallbackDepsFromIds([id]);
+  }
+
+  #transitionCardId(transition?: Transition): string | undefined {
+    let current: Transition['to'] | null = transition?.to;
+    let id: string | undefined;
+    do {
+      id = current?.params?.id as string | undefined;
+      if (!id) {
+        current = current?.parent;
+      }
+    } while (current && !id);
+    return id;
+  }
+
+  #fallbackDepsFromIds(ids: (string | undefined)[]): string[] {
+    let deps = new Set<string>();
+    for (let id of ids) {
+      if (!id) {
+        continue;
+      }
+      deps.add(id);
+      let normalized = this.#normalizeCardId(id);
+      deps.add(normalized);
+      if (!id.endsWith('.json')) {
+        deps.add(`${id}.json`);
+      }
+      if (!normalized.endsWith('.json')) {
+        deps.add(`${normalized}.json`);
+      }
+    }
+    return [...deps];
   }
 }

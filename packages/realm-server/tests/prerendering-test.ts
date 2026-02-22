@@ -686,6 +686,23 @@ module(basename(__filename), function () {
         ),
         `error message mentions empty prerender container, got: ${result.response.error?.error.message}`,
       );
+      let errorDeps = result.response.error?.error.deps;
+      assert.notStrictEqual(
+        errorDeps,
+        null,
+        'short-circuit invalid render response includes non-null deps',
+      );
+      let deps = errorDeps ?? [];
+      assert.true(
+        Array.isArray(deps),
+        'short-circuit invalid render response deps are an array',
+      );
+      assert.true(
+        [`${realmURL}no-icon`, `${realmURL}no-icon.json`].some((dep) =>
+          deps.includes(dep),
+        ),
+        `synthesized invalid render error includes fallback dep context (deps: ${JSON.stringify(deps)})`,
+      );
     });
 
     test('card prerender surfaces runtime render errors without timing out', async function (assert) {
@@ -891,6 +908,23 @@ module(basename(__filename), function () {
           'error payload flags eviction',
         );
         assert.false(result.pool.timedOut, 'error is not treated as timeout');
+        let errorDeps = result.response.error?.error.deps;
+        assert.notStrictEqual(
+          errorDeps,
+          null,
+          'pre-model short-circuit error includes non-null deps',
+        );
+        let deps = errorDeps ?? [];
+        assert.true(
+          Array.isArray(deps),
+          'pre-model short-circuit deps are an array',
+        );
+        assert.true(
+          [`${realmURL}1.json`, `${realmURL}1`].some((dep) =>
+            deps.includes(dep),
+          ),
+          `pre-model fallback error includes dep context from transition params (deps: ${JSON.stringify(deps)})`,
+        );
       } finally {
         PagePool.prototype.getPage = originalGetPage;
       }

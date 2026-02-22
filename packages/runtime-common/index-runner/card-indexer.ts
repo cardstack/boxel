@@ -16,8 +16,8 @@ import {
   type RenderRouteOptions,
 } from '../index';
 import { CardError, isCardError, serializableError } from '../error';
-import type { IndexRunnerDependencyResolver } from './dependency-resolver';
-import { canonicalURL } from './dependency-resolver';
+import type { IndexRunnerDependencyManager } from './dependency-resolver';
+import { canonicalURL } from './dependency-url';
 
 interface CardIndexerOptions {
   path: LocalPath;
@@ -32,12 +32,25 @@ interface CardIndexerOptions {
   prerenderer: Prerenderer;
   consumeClearCacheForRender(): boolean;
   ensureRealmInfo(): Promise<RealmInfo>;
-  dependencyResolver: IndexRunnerDependencyResolver;
+  dependencyResolver: IndexRunnerDependencyManager;
   updateEntry(
     instanceURL: URL,
     entry: InstanceEntry | InstanceErrorIndexEntry,
   ): Promise<void>;
   logWarn(message: string): void;
+}
+
+function uniqueDeps(...groups: Array<Iterable<string> | undefined>): string[] {
+  let deps = new Set<string>();
+  for (let group of groups) {
+    if (!group) {
+      continue;
+    }
+    for (let dep of group) {
+      deps.add(dep);
+    }
+  }
+  return [...deps];
 }
 
 export async function performCardIndexing({
@@ -133,24 +146,15 @@ export async function performCardIndexing({
     };
 
     renderError = normalizeToErrorEntry(renderResult?.error, uncaughtError);
-
-    if (
+    let runtimeErrorDeps = renderResult?.deps ?? [];
+    let metaModuleDeps = modulesConsumedInMeta(resource.meta).map((m) =>
+      canonicalURL(m, instanceURL.href),
+    );
+    let errorIdDep =
       renderError.error.id &&
       renderError.error.id.replace(/\.json$/, '') !== instanceURL.href
-    ) {
-      renderError.error.deps = renderError.error.deps ?? [];
-      renderError.error.deps.push(
-        canonicalURL(renderError.error.id, instanceURL.href),
-      );
-    }
-
-    // always include the modules that we see in serialized as deps
-    renderError.error.deps = renderError.error.deps ?? [];
-    renderError.error.deps.push(
-      ...modulesConsumedInMeta(resource.meta).map((m) =>
-        canonicalURL(m, instanceURL.href),
-      ),
-    );
+        ? [canonicalURL(renderError.error.id, instanceURL.href)]
+        : undefined;
 
     let queryFieldPaths = dependencyResolver.extractQueryFieldRelationshipPaths(
       resource,
@@ -171,19 +175,15 @@ export async function performCardIndexing({
         queryFieldPaths,
       ),
     ]);
-    renderError.error.deps.push(...relationshipDeps);
-    renderError.error.deps = [...new Set(renderError.error.deps)];
-
-    let [expandedModuleDeps, expandedRelationshipDeps] = await Promise.all([
-      dependencyResolver.collectTransitiveModuleDeps(
-        renderError.error.deps,
-        instanceURL,
-      ),
-      dependencyResolver.collectTransitiveRelationshipDeps(relationshipDeps),
-    ]);
-    renderError.error.deps = [
-      ...new Set([...expandedModuleDeps, ...expandedRelationshipDeps]),
-    ];
+    // Runtime deps are authoritative. Relationship deps from source/search-doc
+    // remain as a direct-edge fallback for short-circuit error paths.
+    renderError.error.deps = uniqueDeps(
+      renderError.error.deps,
+      runtimeErrorDeps,
+      metaModuleDeps,
+      errorIdDep,
+      relationshipDeps,
+    );
 
     if (renderError.cardType) {
       renderError.searchData = {
@@ -192,7 +192,9 @@ export async function performCardIndexing({
       };
     }
 
-    renderError = await dependencyResolver.appendDependencyErrors(
+    // Index-backed error propagation augments runtime-seeded deps with
+    // existing dependency errors (module cache + index rows).
+    renderError = await dependencyResolver.appendIndexBackedDependencyErrors(
       renderError,
       instanceURL,
     );
@@ -220,10 +222,13 @@ export async function performCardIndexing({
 
   let deps = new Set(runtimeDeps ?? []);
 
-  let dependencyError = await dependencyResolver.dependencyErrorForEntry(
-    deps,
-    instanceURL,
-  );
+  // Runtime deps are the source of truth. Use index-backed lookup only to
+  // detect whether any dependency currently has an errored row.
+  let dependencyError =
+    await dependencyResolver.indexBackedDependencyErrorForEntry(
+      deps,
+      instanceURL,
+    );
   if (dependencyError) {
     await updateEntry(instanceURL, {
       type: 'instance-error',
