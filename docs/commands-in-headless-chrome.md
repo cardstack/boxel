@@ -1,33 +1,30 @@
-## Demo 
+## Demo
 
 https://www.loom.com/share/2fe9a3e58a7c459ba574b2c0f747a667
 
 ## Testing Locally
 
 1. Start `bot-runner` with `pnpm start:development`.
-2. Start Realm server with `pnpm start:all`
-2. Inside `packages/matrix`, `pnpm setup-submission-bot`
-2. Open http://localhost:4200/experiments/BotRequestDemo/bot-request-demo.
-3. Click **Send Show Card Bot Request** on the demo card.
-
+2. Start realm server with `pnpm start:all`.
+3. Inside `packages/matrix`, run `pnpm setup-submission-bot`.
+4. Open http://localhost:4200/experiments/BotRequestDemo/bot-request-demo.
+5. Click **Send Show Card Bot Request** on the demo card.
 
 ## Flow Diagram
 
 ### User issuing task
 
-Have made an example card in experiments to simulate but commands can be called from anywhere
+Example source is the experiments demo card, but the same flow is used for any `app.boxel.bot-trigger` event.
 
 ```mermaid
 flowchart TD
 
-    B["Trigger 'Send Show Card Bot Request'" from UI]
+    B["Trigger 'Send Show Card Bot Request' from UI"]
     B --> D["CreateShowCardRequestCommand.execute()"]
     D --> E["SendBotTriggerEventCommand.execute()"]
     E --> F["sendEvent('app.boxel.bot-trigger')"]
-
     F --> G["bot-runner receives timeline event"]
-    G --> H["enqueueRunCommandJob() to DB"] 
-
+    G --> H["enqueueRunCommandJob() to jobs table"]
 ```
 
 ### Command runner architecture
@@ -35,24 +32,24 @@ flowchart TD
 ```mermaid
 flowchart TD
 
-    A["Bot Runner DB access"] -->|enqueue job| B["Queue jobs table"]
-    B --> C["Worker runtime common"]
-    C -->|run command task| D["Prerenderer remote"]
-    D -->|run command request| E["Prerender Manager"]
-    E -->|proxy to prerender server| F["Prerender App"]
-    F -->|run command in tab| G["Headless Chrome tab"]
-    G -->|execute command| H["Host app command-runner route"]
-    H -->|result in DOM| G
-    G -->|capture result| F
+    A["bot-runner"]
+    A -->|enqueue run-command job with command string| B["jobs table"]
+    B --> C["runtime-common worker"]
+    C -->|runCommand task| D["remote prerenderer"]
+    D -->|POST /run-command| E["prerender manager"]
+    E -->|proxy| F["prerender server app"]
+    F -->|transitionTo command-runner route| G["headless Chrome tab"]
+    G --> H["host command-runner route"]
+    H -->|command executes + DOM status| G
+    G -->|capture data-prerender + data-command-result| F
     F --> D
     D --> C
     C --> B
-
 ```
 
-## Matrix Event Payload (app.boxel.bot-trigger)
-```ts
+## Matrix Event Payload (`app.boxel.bot-trigger`)
 
+```ts
 const event = {
   type: 'app.boxel.bot-trigger',
   content: {
@@ -62,11 +59,11 @@ const event = {
       cardId: 'http://localhost:4201/experiments/Author/jane-doe',
       format: 'isolated',
     },
-  } 
+  },
 };
 ```
 
-## Bot Trigger Data Structures (with realm)
+## Bot Trigger Data Structures
 
 ```ts
 type SendBotTriggerEventInput = {
@@ -83,17 +80,15 @@ type BotTriggerContent = {
 };
 ```
 
-## Bot-runner filter
+## Submission Bot Commands (DB)
 
-### Commands registered for submission-bot
-
-The bot runner checks if the matrix events comes thru via the filter blob
+`setup-submission-bot` now writes canonical scoped command specifiers into `bot_commands.command`.
 
 ```json
 [
   {
     "name": "create-listing-pr",
-    "command": "http://localhost:4201/commands/create-listing-pr/default",
+    "command": "@cardstack/boxel-host/commands/create-listing-pr/default",
     "filter": {
       "type": "matrix-event",
       "event_type": "app.boxel.bot-trigger",
@@ -102,17 +97,26 @@ The bot runner checks if the matrix events comes thru via the filter blob
   },
   {
     "name": "show-card",
-    "command": "http://localhost:4201/boxel-host/commands/show-card/default",
+    "command": "@cardstack/boxel-host/commands/show-card/default",
     "filter": {
       "type": "matrix-event",
       "event_type": "app.boxel.bot-trigger",
       "content_type": "show-card"
     }
+  },
+  {
+    "name": "patch-card-instance",
+    "command": "@cardstack/boxel-host/commands/patch-card-instance/default",
+    "filter": {
+      "type": "matrix-event",
+      "event_type": "app.boxel.bot-trigger",
+      "content_type": "patch-card-instance"
+    }
   }
 ]
 ```
 
-## Run Command Task
+## Run Command Job Payload
 
 `RunCommandArgs.realmURL` is derived from `event.content.realm`.
 
@@ -121,10 +125,7 @@ The bot runner checks if the matrix events comes thru via the filter blob
   "realmURL": "http://localhost:4201/experiments/",
   "realmUsername": "@alice:localhost",
   "runAs": "@alice:localhost",
-  "command": {
-    "module": "@cardstack/boxel-host/commands/show-card",
-    "name": "default"
-  },
+  "command": "@cardstack/boxel-host/commands/show-card/default",
   "commandInput": {
     "cardId": "http://localhost:4201/experiments/Author/jane-doe",
     "format": "isolated"
@@ -132,45 +133,37 @@ The bot runner checks if the matrix events comes thru via the filter blob
 }
 ```
 
-## Command Runner Route on Host
+### Command Normalization in `run-command` task
+
+- Command stays a `string` across bot-runner, job queue, and prerender request.
+- `runtime-common/tasks/run-command.ts` normalizes legacy realm-server URL forms (`/commands/<name>/<export>`) into a realm-local module specifier path when needed.
+- String -> `ResolvedCodeRef` conversion happens in the host `command-runner` route when it parses `:command`.
+
+## Host `command-runner` Route
+
 ```ts
-route: /command-runner/:nonce
+route: /command-runner/:command/:input/:nonce
 
 type CommandRunnerRouteParams = {
+  command: string;
+  input: string;
   nonce: string;
-};
-
-type CommandRunnerQueryParams = {
-  command?: string;
-  input?: string;
 };
 ```
 
-### Example (URL + queryParams)
+### Example (`command` and `input` as path params)
+
 ```ts
-const url = 'http://localhost:4200/command-runner/2';
+const command = '@cardstack/boxel-host/commands/show-card/default';
+const input = JSON.stringify({
+  cardId: 'http://localhost:4201/experiments/Author/jane-doe',
+  format: 'isolated',
+});
+const nonce = '2';
 
-// human-readable command id
-const commandId = '@cardstack/boxel-host/commands/show-card/default';
-
-// command-runner query param expects an encoded ResolvedCodeRef JSON object
-const commandCodeRef = {
-  module: '@cardstack/boxel-host/commands/show-card',
-  name: 'default',
-};
-
-const queryParams: { command: string; input: string } = {
-  command: encodeURIComponent(JSON.stringify(commandCodeRef)),
-  input:
-    encodeURIComponent(
-      JSON.stringify({
-        cardId: 'http://localhost:4201/experiments/Author/jane-doe',
-        format: 'isolated',
-      }),
-    ),
-};
+const url = `http://localhost:4200/command-runner/${encodeURIComponent(command)}/${encodeURIComponent(input)}/${encodeURIComponent(nonce)}`;
 ```
 
 ```txt
-http://localhost:4200/command-runner/2?command=%7B%22module%22%3A%22%40cardstack%2Fboxel-host%2Fcommands%2Fshow-card%22%2C%22name%22%3A%22default%22%7D&input=%7B%22cardId%22%3A%22http%3A%2F%2Flocalhost%3A4201%2Fexperiments%2FAuthor%2Fjane-doe%22%2C%22format%22%3A%22isolated%22%7D
+http://localhost:4200/command-runner/%40cardstack%2Fboxel-host%2Fcommands%2Fshow-card%2Fdefault/%7B%22cardId%22%3A%22http%3A%2F%2Flocalhost%3A4201%2Fexperiments%2FAuthor%2Fjane-doe%22%2C%22format%22%3A%22isolated%22%7D/2
 ```
