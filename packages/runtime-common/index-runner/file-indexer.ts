@@ -15,6 +15,7 @@ import {
 } from '../index';
 import { CardError, isCardError, serializableError } from '../error';
 import type { IndexRunnerDependencyManager } from './dependency-resolver';
+import { uniqueDeps } from './dependency-collections';
 import {
   BASE_FILE_DEF_CODE_REF,
   resolveFileDefCodeRef,
@@ -37,19 +38,6 @@ interface FileIndexerOptions {
     entry: FileEntry | FileErrorIndexEntry,
   ): Promise<void>;
   logWarn(message: string): void;
-}
-
-function uniqueDeps(...groups: Array<Iterable<string> | undefined>): string[] {
-  let deps = new Set<string>();
-  for (let group of groups) {
-    if (!group) {
-      continue;
-    }
-    for (let dep of group) {
-      deps.add(dep);
-    }
-  }
-  return [...deps];
 }
 
 export async function performFileIndexing({
