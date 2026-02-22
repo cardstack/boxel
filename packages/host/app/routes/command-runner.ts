@@ -32,8 +32,6 @@ class CommandRunState implements CommandInvocation<CardDefConstructor> {
   @tracked cardResult: CardDef | null = null;
   @tracked error: Error | null = null;
   @tracked cardResultString: string | null = null;
-  @tracked commandRef: ResolvedCodeRef | null = null;
-  @tracked commandInput: string | null = null;
 
   constructor(readonly nonce: string) {}
 
@@ -82,13 +80,6 @@ export default class CommandRunnerRoute extends Route<CommandRunnerModel> {
     let model = new CommandRunState(params.nonce);
     let command = parseCommandParam(params.command);
     let commandInput = parseCommandInput(params.input);
-
-    if (command) {
-      model.commandRef = command;
-    }
-    if (commandInput) {
-      model.commandInput = JSON.stringify(commandInput);
-    }
 
     if (!command) {
       model.status = 'error';
