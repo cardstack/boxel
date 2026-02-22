@@ -170,17 +170,13 @@ class Isolated extends Component<typeof BotRequestDemo> {
 
   get commandURLPreview() {
     if (this.isShowCardTab) {
-      return new URL('/experiments/commands/show-card/default', this.showCardId)
-        .href;
+      return '@cardstack/boxel-host/commands/show-card/default';
     }
     if (this.isPatchCardInstanceTab) {
-      return new URL(
-        '/boxel-host/commands/patch-card-instance/default',
-        this.showCardId,
-      ).href;
+      return '@cardstack/boxel-host/commands/patch-card-instance/default';
     }
 
-    return new URL('/commands/create-listing-pr/default', this.showCardId).href;
+    return '@cardstack/boxel-host/commands/create-listing-pr/default';
   }
 
   get codeRef() {
@@ -198,10 +194,7 @@ class Isolated extends Component<typeof BotRequestDemo> {
     }
 
     return {
-      module: new URL(
-        './commands/create-listing-pr',
-        this.createListingPRTargetRealm,
-      ).href,
+      module: '@cardstack/boxel-host/commands/create-listing-pr',
       name: 'default',
     };
   }
@@ -400,7 +393,7 @@ class Isolated extends Component<typeof BotRequestDemo> {
       <section class='payload'>
         <h3>Resolved Command</h3>
         <p class='hint'>
-          Bot registration command URL pattern:
+          Bot registration command reference:
         </p>
         <pre>{{this.commandURLPreview}}</pre>
         <p class='hint'>
