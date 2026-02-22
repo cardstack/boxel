@@ -135,10 +135,6 @@ export class RenderRunner {
       await page.evaluate((sessionAuth) => {
         localStorage.setItem('boxel-session', sessionAuth);
       }, auth);
-      log.info(
-        'prerender session set: %s',
-        await page.evaluate(() => localStorage.getItem('boxel-session')),
-      );
 
       let renderStart = Date.now();
       let error: RenderError | undefined;
@@ -153,7 +149,7 @@ export class RenderRunner {
       };
 
       log.debug(
-        `manually visit prerendered url ${url} at: ${this.#boxelHostURL}/render/${encodeURIComponent(url)}/${this.#nonce}/${optionsSegment}/html/isolated/0 with localStorage boxel-session=${auth}`,
+        `manually visit prerendered url ${url} at: ${this.#boxelHostURL}/render/${encodeURIComponent(url)}/${this.#nonce}/${optionsSegment}/html/isolated/0`,
       );
 
       // We need to render the isolated HTML view first, as the template will pull linked fields.
