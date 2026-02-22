@@ -81,6 +81,56 @@ module('command parsing utils', () => {
     );
   });
 
+  test('parses absolute /commands URL without export into default export', async function (assert) {
+    assert.deepEqual(
+      commandUrlToCodeRef(
+        'http://localhost:4200/commands/create-listing-pr',
+        'http://localhost:4201/test/',
+      ),
+      {
+        module: 'http://localhost:4201/test/commands/create-listing-pr',
+        name: 'default',
+      },
+    );
+  });
+
+  test('rejects nested /commands paths', async function (assert) {
+    assert.strictEqual(
+      commandUrlToCodeRef(
+        'http://localhost:4200/commands/../../admin/commands/dangerous/action',
+        'http://localhost:4201/test/',
+      ),
+      undefined,
+    );
+  });
+
+  test('rejects traversal-like command segments', async function (assert) {
+    assert.strictEqual(
+      commandUrlToCodeRef(
+        'http://localhost:4200/commands/%2E%2E/default',
+        'http://localhost:4201/test/',
+      ),
+      undefined,
+    );
+    assert.strictEqual(
+      commandUrlToCodeRef(
+        'http://localhost:4200/commands/create-listing-pr/%2E%2E',
+        'http://localhost:4201/test/',
+      ),
+      undefined,
+    );
+  });
+
+  test('rejects extra path segments beyond command and export', async function (assert) {
+    assert.strictEqual(
+      commandUrlToCodeRef(
+        'http://localhost:4200/commands/create-listing-pr/default/extra',
+        'http://localhost:4201/test/',
+      ),
+      undefined,
+    );
+  });
+
   test('returns undefined for unknown command formats', async function (assert) {
     assert.strictEqual(
       commandUrlToCodeRef(

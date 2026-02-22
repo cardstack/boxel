@@ -35,27 +35,19 @@ export function commandUrlToCodeRef(
   }
 
   let path = toCommandPath(commandRef);
-  if (!path) {
+  if (!path || !realmURL) {
     return undefined;
   }
 
-  let commandsPrefix = '/commands/';
-  if (path.includes(commandsPrefix)) {
-    if (!realmURL) {
-      return undefined;
-    }
-    let rest = path.split(commandsPrefix)[1] ?? '';
-    let [commandName, exportName = 'default'] = rest.split('/');
-    if (!commandName) {
-      return undefined;
-    }
-    return {
-      module: `${ensureTrailingSlash(realmURL)}commands/${commandName}`,
-      name: exportName || 'default',
-    };
+  let parsedPath = parseCommandPath(path);
+  if (!parsedPath) {
+    return undefined;
   }
 
-  return undefined;
+  return {
+    module: `${ensureTrailingSlash(realmURL)}commands/${parsedPath.commandName}`,
+    name: parsedPath.exportName,
+  };
 }
 
 function toCommandPath(commandRef: string): string | undefined {
@@ -65,4 +57,57 @@ function toCommandPath(commandRef: string): string | undefined {
     // Accept absolute URL command references only.
   }
   return undefined;
+}
+
+type ParsedCommandPath = {
+  commandName: string;
+  exportName: string;
+};
+
+function parseCommandPath(pathname: string): ParsedCommandPath | undefined {
+  if (!pathname.startsWith('/commands/')) {
+    return undefined;
+  }
+
+  // Accept only /commands/<name> or /commands/<name>/<export>. This avoids
+  // matching nested /commands/ paths and traversal-like payloads.
+  let segments = pathname.split('/').filter(Boolean);
+  if (
+    segments[0] !== 'commands' ||
+    segments.length < 2 ||
+    segments.length > 3
+  ) {
+    return undefined;
+  }
+
+  let [_, rawCommandName, rawExportName] = segments;
+  let commandName = decodePathSegment(rawCommandName);
+  if (!commandName || isUnsafeCommandSegment(commandName)) {
+    return undefined;
+  }
+
+  let exportName = rawExportName ? decodePathSegment(rawExportName) : 'default';
+  if (!exportName || isUnsafeCommandSegment(exportName)) {
+    return undefined;
+  }
+
+  return { commandName, exportName };
+}
+
+function decodePathSegment(segment: string): string | undefined {
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    return undefined;
+  }
+}
+
+function isUnsafeCommandSegment(segment: string): boolean {
+  return (
+    segment === '.' ||
+    segment === '..' ||
+    segment.includes('/') ||
+    segment.includes('\\') ||
+    /\s/.test(segment)
+  );
 }
