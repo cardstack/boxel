@@ -121,8 +121,85 @@ module(basename(__filename), function (hooks) {
       'unscoped query module is reported as unscoped',
     );
     assert.notOk(
-      snapshot.excludedQueryOnlyDeps.includes('https://example.com/query-module'),
+      snapshot.excludedQueryOnlyDeps.includes(
+        'https://example.com/query-module',
+      ),
       'unscoped query module is not treated as query-only excluded',
+    );
+  });
+
+  test('retains dep seen in both query and non-query contexts', async function (assert) {
+    beginRuntimeDependencyTrackingSession({
+      sessionKey: 'query-non-query-overlap',
+      rootURL: 'https://example.com/root.json',
+      rootKind: 'instance',
+    });
+
+    await withRuntimeDependencyTrackingContext(
+      {
+        mode: 'query',
+        queryField: 'matches',
+        source: 'test:query-overlap',
+        consumer: 'https://example.com/root.json',
+        consumerKind: 'instance',
+      },
+      async () => {
+        trackRuntimeInstanceDependency('https://example.com/shared-target');
+      },
+    );
+    await withRuntimeDependencyTrackingContext(
+      {
+        mode: 'non-query',
+        source: 'test:non-query-overlap',
+        consumer: 'https://example.com/root.json',
+        consumerKind: 'instance',
+      },
+      async () => {
+        trackRuntimeInstanceDependency('https://example.com/shared-target');
+      },
+    );
+
+    let snapshot = snapshotRuntimeDependencies({ excludeQueryOnly: true });
+    assert.true(
+      snapshot.deps.includes('https://example.com/shared-target.json'),
+      'shared dep is retained when also seen in non-query context',
+    );
+    assert.notOk(
+      snapshot.excludedQueryOnlyDeps.includes(
+        'https://example.com/shared-target.json',
+      ),
+      'shared dep is not marked query-only',
+    );
+  });
+
+  test('excludes root from deps even when tracked directly', async function (assert) {
+    beginRuntimeDependencyTrackingSession({
+      sessionKey: 'root-exclusion',
+      rootURL: 'https://example.com/root.json',
+      rootKind: 'instance',
+    });
+
+    await withRuntimeDependencyTrackingContext(
+      {
+        mode: 'non-query',
+        source: 'test:root-exclusion',
+        consumer: 'https://example.com/root.json',
+        consumerKind: 'instance',
+      },
+      async () => {
+        trackRuntimeInstanceDependency('https://example.com/root.json');
+        trackRuntimeInstanceDependency('https://example.com/other-dep');
+      },
+    );
+
+    let snapshot = snapshotRuntimeDependencies({ excludeQueryOnly: true });
+    assert.notOk(
+      snapshot.deps.includes('https://example.com/root.json'),
+      'root resource is excluded from deps',
+    );
+    assert.true(
+      snapshot.deps.includes('https://example.com/other-dep.json'),
+      'non-root dep is still included',
     );
   });
 
@@ -183,4 +260,36 @@ module(basename(__filename), function (hooks) {
     assert.strictEqual(fetchCount, 1, 'cache-hit import does not refetch');
   });
 
+  test('getter-level attribution tracks only accessed relationship targets', async function (assert) {
+    beginRuntimeDependencyTrackingSession({
+      sessionKey: 'getter-level-attribution',
+      rootURL: 'https://example.com/root.json',
+      rootKind: 'instance',
+    });
+
+    // This models relationship getter-level attribution: we only track the link
+    // whose getter was actually consumed during render.
+    await withRuntimeDependencyTrackingContext(
+      {
+        mode: 'non-query',
+        source: 'test:getter-level-attribution',
+        consumer: 'https://example.com/root.json',
+        consumerKind: 'instance',
+      },
+      async () => {
+        trackRuntimeInstanceDependency('https://example.com/rendered-link');
+        // intentionally do not track hidden-link because its getter was not read
+      },
+    );
+
+    let snapshot = snapshotRuntimeDependencies({ excludeQueryOnly: true });
+    assert.true(
+      snapshot.deps.includes('https://example.com/rendered-link.json'),
+      'rendered relationship target is captured',
+    );
+    assert.notOk(
+      snapshot.deps.includes('https://example.com/hidden-link.json'),
+      'non-rendered relationship target is not captured',
+    );
+  });
 });

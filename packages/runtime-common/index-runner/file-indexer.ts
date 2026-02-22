@@ -163,7 +163,7 @@ export async function performFileIndexing({
     internalKeyFor(ref, undefined),
   );
   let fileTypes = extractResult.types ?? fallbackTypes;
-  let deps = new Set([...(extractResult.deps ?? []), fileURL]);
+  let deps = new Set(extractResult.deps ?? []);
 
   let dependencyError = await dependencyResolver.dependencyErrorForEntry(
     deps,

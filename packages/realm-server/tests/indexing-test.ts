@@ -3064,7 +3064,7 @@ module(basename(__filename), function () {
         Boolean(fileTargetBeforeError?.hasError),
         'FileDef relationship target is marked errored in the index',
       );
-      assert.ok(
+      let fileTargetHasExpectedErrorDetail =
         hasErrorDetail(
           (fileTargetBeforeError?.errorDoc ?? {}) as {
             message?: string;
@@ -3072,13 +3072,15 @@ module(basename(__filename), function () {
           },
           'Received HTTP 404 from server',
         ) ||
-          hasErrorDetail(
-            (fileTargetBeforeError?.errorDoc ?? {}) as {
-              message?: string;
-              additionalErrors?: { message?: string }[] | null;
-            },
-            'missing-child',
-          ),
+        hasErrorDetail(
+          (fileTargetBeforeError?.errorDoc ?? {}) as {
+            message?: string;
+            additionalErrors?: { message?: string }[] | null;
+          },
+          'missing-child',
+        );
+      assert.ok(
+        fileTargetHasExpectedErrorDetail,
         'FileDef target error doc includes file extract failure details',
       );
 
@@ -3099,11 +3101,13 @@ module(basename(__filename), function () {
         'second-degree relationship consumer is in error while delegated FileDef target is broken',
       );
       if (grandParentBefore?.type === 'instance-error') {
-        assert.ok(
+        let delegatedHasExpectedErrorDetail =
           hasErrorDetail(
             grandParentBefore.error,
             'Received HTTP 404 from server',
-          ) || hasErrorDetail(grandParentBefore.error, 'missing-child'),
+          ) || hasErrorDetail(grandParentBefore.error, 'missing-child');
+        assert.ok(
+          delegatedHasExpectedErrorDetail,
           'delegated relationship consumer receives nested FileDef error details',
         );
       } else {

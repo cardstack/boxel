@@ -150,10 +150,7 @@ export class RuntimeDependencyTracker {
     this.#contextStack = [];
   }
 
-  withContext<T>(
-    context: RuntimeDependencyTrackingContext,
-    cb: () => T,
-  ): T {
+  withContext<T>(context: RuntimeDependencyTrackingContext, cb: () => T): T {
     if (!this.#isActive) {
       return cb();
     }
@@ -208,7 +205,11 @@ export class RuntimeDependencyTracker {
       if (excludeQueryOnly) {
         let hasNonQueryContext = record.nonQueryContexts.size > 0;
         let hasQueryContext = record.queryContexts.size > 0;
-        if (!hasNonQueryContext && hasQueryContext && !record.hasUnscopedAccess) {
+        if (
+          !hasNonQueryContext &&
+          hasQueryContext &&
+          !record.hasUnscopedAccess
+        ) {
           excludedQueryOnlyDeps.push(dep);
           continue;
         }

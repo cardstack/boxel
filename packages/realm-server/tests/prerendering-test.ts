@@ -183,6 +183,77 @@ module(basename(__filename), function () {
                 },
               },
             },
+            'dep-reset-consumer.gts': `
+              import { CardDef, field, linksTo, Component } from 'https://cardstack.com/base/card-api';
+              import { Person } from './person';
+              export class DepResetConsumer extends CardDef {
+                static displayName = 'Dep Reset Consumer';
+                @field friend = linksTo(() => Person);
+                static isolated = class extends Component<typeof this> {
+                  <template><@fields.friend/></template>
+                }
+              }
+            `,
+            'dep-reset-consumer-a.json': {
+              data: {
+                relationships: {
+                  friend: {
+                    links: {
+                      self: './dep-reset-friend-a',
+                    },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: './dep-reset-consumer',
+                    name: 'DepResetConsumer',
+                  },
+                },
+              },
+            },
+            'dep-reset-consumer-b.json': {
+              data: {
+                relationships: {
+                  friend: {
+                    links: {
+                      self: './dep-reset-friend-b',
+                    },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: './dep-reset-consumer',
+                    name: 'DepResetConsumer',
+                  },
+                },
+              },
+            },
+            'dep-reset-friend-a.json': {
+              data: {
+                attributes: {
+                  name: 'Friend A',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: './person',
+                    name: 'Person',
+                  },
+                },
+              },
+            },
+            'dep-reset-friend-b.json': {
+              data: {
+                attributes: {
+                  name: 'Friend B',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: './person',
+                    name: 'Person',
+                  },
+                },
+              },
+            },
             'no-icon.gts': `
               import { CardDef, field, contains, StringField, Component } from 'https://cardstack.com/base/card-api';
               export class NoIcon extends CardDef {
@@ -400,6 +471,34 @@ module(basename(__filename), function () {
         second.response.serialized?.data.attributes?.name,
         'Juniper',
         'second render picks up updated value',
+      );
+    });
+
+    test('resets runtime deps between consecutive prerenders', async function (assert) {
+      let first = await prerenderer.prerenderCard({
+        realm: realmURL,
+        url: `${realmURL}dep-reset-consumer-a`,
+        auth: auth(),
+      });
+      let firstDeps = first.response.deps ?? [];
+      assert.true(
+        firstDeps.includes(`${realmURL}dep-reset-friend-a.json`),
+        'first prerender includes first relationship target',
+      );
+
+      let second = await prerenderer.prerenderCard({
+        realm: realmURL,
+        url: `${realmURL}dep-reset-consumer-b`,
+        auth: auth(),
+      });
+      let secondDeps = second.response.deps ?? [];
+      assert.true(
+        secondDeps.includes(`${realmURL}dep-reset-friend-b.json`),
+        'second prerender includes second relationship target',
+      );
+      assert.false(
+        secondDeps.includes(`${realmURL}dep-reset-friend-a.json`),
+        'second prerender deps do not leak first prerender relationship target',
       );
     });
 
@@ -880,9 +979,9 @@ module(basename(__filename), function () {
         result.response.deps.includes(`${baseRealm.url}file-api`),
         'deps include base file-api module',
       );
-      assert.ok(
+      assert.notOk(
         result.response.deps.includes(fileURL),
-        'deps include file url',
+        'deps exclude the file url itself',
       );
     });
 
@@ -926,10 +1025,11 @@ module(basename(__filename), function () {
         ),
         `error message should mention module 404, got: ${result.response.error?.error.message}`,
       );
+      let messageIncludesTimeoutMarker = Boolean(
+        result.response.error?.error.message?.includes('Prerender request to'),
+      );
       assert.false(
-        result.response.error?.error.message?.includes(
-          'Prerender request to',
-        ) ?? false,
+        messageIncludesTimeoutMarker,
         'error should not be reported as a remote prerender request timeout',
       );
       assert.false(

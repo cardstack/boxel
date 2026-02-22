@@ -506,6 +506,7 @@ jobs:
             "definition-lookup-test.ts",
             "file-watcher-events-test.ts",
             "indexing-test.ts",
+            "runtime-dependency-tracker-test.ts",
             "transpile-test.ts",
             "module-syntax-test.ts",
             "permissions/permission-checker-test.ts",
