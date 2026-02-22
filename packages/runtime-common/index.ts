@@ -142,6 +142,7 @@ export {
   CardError,
   isCardError,
   formattedError,
+  type SerializedError,
   type CardErrorJSONAPI,
   type CardErrorsJSONAPI,
   isCardErrorJSONAPI,
@@ -229,6 +230,7 @@ export * from './prerendered-html-format';
 export * from './query-field-utils';
 export * from './relationship-utils';
 export * from './formats';
+export * from './dependency-tracker';
 export { getCreatedTime } from './file-meta';
 export { mergeRelationships } from './merge-relationships';
 export { makeLogDefinitions, logger } from './log';

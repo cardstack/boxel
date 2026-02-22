@@ -88,6 +88,11 @@ export function ensureQueryFieldSearchResource(
     },
     {
       isLive: true,
+      dependencyTracking: {
+        mode: 'query',
+        fieldPath: field.name,
+        consumerId: (instance as CardDef).id,
+      },
       seed: seedRecords
         ? {
             cards: seedRecords,

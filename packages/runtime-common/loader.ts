@@ -6,6 +6,7 @@ import { trimExecutableExtension, logger } from './index';
 
 import { CardError } from './error';
 import flatMap from 'lodash/flatMap';
+import { trackRuntimeModuleDependency } from './dependency-tracker';
 
 type FetchingModule = {
   state: 'fetching';
@@ -215,8 +216,12 @@ export class Loader {
     moduleIdentifier = this.resolveImport(moduleIdentifier);
     let resolvedModule = new URL(moduleIdentifier);
     let resolvedModuleIdentifier = resolvedModule.href;
+    if (!this.moduleShims.has(resolvedModuleIdentifier)) {
+      trackRuntimeModuleDependency(resolvedModuleIdentifier);
+    }
 
     await this.advanceToState(resolvedModule, 'evaluated');
+    this.trackKnownModuleDependencies(resolvedModuleIdentifier);
     let module = this.getModule(resolvedModuleIdentifier);
     switch (module?.state) {
       case 'evaluated':
@@ -228,6 +233,57 @@ export class Loader {
         throw new Error(
           `bug: advanceToState('${moduleIdentifier}', 'evaluated') resulted in state ${module?.state}`,
         );
+    }
+  }
+
+  private trackKnownModuleDependencies(rootModuleIdentifier: string): void {
+    let pending = [rootModuleIdentifier];
+    let visited = new Set<string>();
+
+    while (pending.length > 0) {
+      let moduleIdentifier = pending.pop()!;
+      if (visited.has(moduleIdentifier)) {
+        continue;
+      }
+      visited.add(moduleIdentifier);
+
+      if (!this.moduleShims.has(moduleIdentifier)) {
+        trackRuntimeModuleDependency(moduleIdentifier);
+      }
+
+      let module = this.getModule(moduleIdentifier);
+      if (!module) {
+        continue;
+      }
+
+      switch (module.state) {
+        case 'evaluated':
+        case 'preparing':
+        case 'broken':
+          for (let consumed of module.consumedModules) {
+            pending.push(consumed);
+          }
+          break;
+        case 'registered':
+          for (let entry of module.dependencyList) {
+            if (entry.type === 'dep') {
+              pending.push(entry.moduleURL.href);
+            }
+          }
+          break;
+        case 'registered-completing-deps':
+        case 'registered-with-deps':
+          for (let entry of module.dependencies) {
+            if (entry.type === 'dep' || entry.type === 'completing-dep') {
+              pending.push(entry.moduleURL.href);
+            }
+          }
+          break;
+        case 'fetching':
+          break;
+        default:
+          throw assertNever(module);
+      }
     }
   }
 

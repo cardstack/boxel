@@ -757,6 +757,11 @@ export default class StoreService extends Service implements StoreInterface {
     opts?: {
       isLive?: boolean;
       doWhileRefreshing?: (() => void) | undefined;
+      dependencyTracking?: {
+        mode: 'query';
+        fieldPath: string;
+        consumerId?: string;
+      };
       seed?: {
         cards: T[];
         searchURL?: string;

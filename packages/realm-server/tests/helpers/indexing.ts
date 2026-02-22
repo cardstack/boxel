@@ -159,3 +159,37 @@ export async function typeForIndexEntry(
   ] as Expression)) as { type: string }[];
   return rows[0]?.type ?? null;
 }
+
+export async function errorDocForIndexEntry(
+  dbAdapter: DBAdapter,
+  url: string,
+  type: 'instance' | 'file' = 'instance',
+): Promise<{ hasError: boolean; errorDoc: unknown | null } | null> {
+  let rows = (await query(dbAdapter, [
+    `SELECT has_error, error_doc FROM boxel_index WHERE`,
+    ...every([
+      ['url =', param(url)],
+      ['type =', param(type)],
+    ]),
+    `ORDER BY realm_version DESC LIMIT 1`,
+  ] as Expression)) as {
+    has_error: boolean | null;
+    error_doc: unknown | string | null;
+  }[];
+  let row = rows[0];
+  if (!row) {
+    return null;
+  }
+  let errorDoc = row.error_doc;
+  if (typeof errorDoc === 'string') {
+    try {
+      errorDoc = JSON.parse(errorDoc);
+    } catch (_err) {
+      // Keep the original string when DB driver already returns serialized JSON.
+    }
+  }
+  return {
+    hasError: Boolean(row.has_error),
+    errorDoc: errorDoc ?? null,
+  };
+}

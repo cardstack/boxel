@@ -20,6 +20,10 @@ import { CardError } from './error';
 import { meta, relativeTo } from './constants';
 import type { LooseCardResource, FileMetaResource } from './index';
 import { isUrlLike, trimExecutableExtension } from './index';
+import {
+  withRuntimeDependencyTrackingContext,
+  type RuntimeDependencyTrackingContext,
+} from './dependency-tracker';
 
 export type ResolvedCodeRef = {
   module: string;
@@ -160,37 +164,51 @@ export async function getClass(ref: ResolvedCodeRef, loader: Loader) {
 
 export async function loadCardDef(
   ref: CodeRef,
-  opts: { loader: Loader; relativeTo?: URL },
+  opts: {
+    loader: Loader;
+    relativeTo?: URL;
+    dependencyTrackingContext?: RuntimeDependencyTrackingContext;
+  },
 ): Promise<typeof BaseDef> {
-  let maybeCard: unknown;
-  let loader = opts.loader;
-  if (!('type' in ref)) {
-    let resolvedModuleURL = new URL(ref.module, opts?.relativeTo).href;
-    let module = await loader.import<Record<string, any>>(resolvedModuleURL);
-    maybeCard = module[ref.name];
-  } else if (ref.type === 'ancestorOf') {
-    let child = await loadCardDef(ref.card, opts);
-    maybeCard = getAncestor(child);
-  } else if (ref.type === 'fieldOf') {
-    let parent = await loadCardDef(ref.card, opts);
-    let field = getField(parent, ref.field);
-    maybeCard = field?.card;
-  } else {
-    throw assertNever(ref);
-  }
+  let run = async () => {
+    let maybeCard: unknown;
+    let loader = opts.loader;
+    if (!('type' in ref)) {
+      let resolvedModuleURL = new URL(ref.module, opts?.relativeTo).href;
+      let module = await loader.import<Record<string, any>>(resolvedModuleURL);
+      maybeCard = module[ref.name];
+    } else if (ref.type === 'ancestorOf') {
+      let child = await loadCardDef(ref.card, opts);
+      maybeCard = getAncestor(child);
+    } else if (ref.type === 'fieldOf') {
+      let parent = await loadCardDef(ref.card, opts);
+      let field = getField(parent, ref.field);
+      maybeCard = field?.card;
+    } else {
+      throw assertNever(ref);
+    }
 
-  if (isBaseDef(maybeCard)) {
-    return maybeCard;
-  }
+    if (isBaseDef(maybeCard)) {
+      return maybeCard;
+    }
 
-  let err = new CardError(
-    `Cannot find card ${humanReadable(ref)}. Make sure ${new URL(moduleFrom(ref), opts?.relativeTo).href} exports ${exportFrom(ref)}`,
-    {
-      status: 404,
-    },
-  );
-  err.deps = [moduleFrom(ref)];
-  throw err;
+    let err = new CardError(
+      `Cannot find card ${humanReadable(ref)}. Make sure ${new URL(moduleFrom(ref), opts?.relativeTo).href} exports ${exportFrom(ref)}`,
+      {
+        status: 404,
+      },
+    );
+    err.deps = [moduleFrom(ref)];
+    throw err;
+  };
+
+  if (opts.dependencyTrackingContext) {
+    return await withRuntimeDependencyTrackingContext(
+      opts.dependencyTrackingContext,
+      run,
+    );
+  }
+  return await run();
 }
 
 export function identifyCard(

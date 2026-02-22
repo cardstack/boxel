@@ -885,6 +885,58 @@ module(basename(__filename), function () {
         'deps include file url',
       );
     });
+
+    test('file extract surfaces broken FileDef module error without remote prerender timeout', async function (assert) {
+      await realmAdapter.write(
+        'filedef-mismatch.gts',
+        `
+          import { FileDef as BaseFileDef } from "https://cardstack.com/base/file-api";
+          import { MissingChild } from "./missing-child";
+
+          export class FileDef extends BaseFileDef {
+            static missingChild = MissingChild;
+          }
+        `,
+      );
+      await realmAdapter.write('broken-file.mismatch', 'broken mismatch file');
+      realm.__testOnlyClearCaches();
+
+      let result = await prerenderer.prerenderFileExtract({
+        realm: realmURL,
+        url: `${realmURL}broken-file.mismatch`,
+        auth: auth(),
+        renderOptions: {
+          fileExtract: true,
+          fileDefCodeRef: {
+            module: `${realmURL}filedef-mismatch`,
+            name: 'FileDef',
+          },
+        },
+      });
+
+      assert.strictEqual(
+        result.response.status,
+        'error',
+        'file extract reports error for broken FileDef module',
+      );
+      assert.ok(result.response.error, 'error payload is present');
+      assert.ok(
+        result.response.error?.error.message?.includes(
+          'Received HTTP 404 from server',
+        ),
+        `error message should mention module 404, got: ${result.response.error?.error.message}`,
+      );
+      assert.false(
+        result.response.error?.error.message?.includes(
+          'Prerender request to',
+        ) ?? false,
+        'error should not be reported as a remote prerender request timeout',
+      );
+      assert.false(
+        result.pool.timedOut,
+        'pool should not mark this as a prerender timeout',
+      );
+    });
   });
 
   module('prerender - permissioned auth failures', function (hooks) {

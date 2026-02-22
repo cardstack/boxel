@@ -163,17 +163,7 @@ export async function performFileIndexing({
     internalKeyFor(ref, undefined),
   );
   let fileTypes = extractResult.types ?? fallbackTypes;
-  let directDeps = extractResult.deps ?? [];
-  let moduleDeps = directDeps.filter((dep) => dep !== fileURL);
-
-  let expandedDeps = await dependencyResolver.collectExpandedDeps({
-    moduleDeps,
-    relationshipResource: extractResult.resource ?? null,
-    relationshipSourceResource: extractResult.resource ?? null,
-    relationshipSearchDoc: extractResult.searchDoc ?? null,
-    relativeTo: entryURL,
-  });
-  let deps = new Set([...expandedDeps, fileURL]);
+  let deps = new Set([...(extractResult.deps ?? []), fileURL]);
 
   let dependencyError = await dependencyResolver.dependencyErrorForEntry(
     deps,

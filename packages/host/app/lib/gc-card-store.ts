@@ -6,10 +6,13 @@ import {
   isPrimitive,
   isCardInstance,
   isFileDefInstance,
+  isBaseInstance,
   isLocalId,
   localId as localIdSymbol,
   loadCardDocument,
   loadFileMetaDocument,
+  trackRuntimeFileDependency,
+  trackRuntimeInstanceDependency,
   type Query,
   type QueryResultsMeta,
   type ErrorEntry,
@@ -20,6 +23,7 @@ import {
 } from '@cardstack/runtime-common';
 
 import type {
+  BaseDef,
   CardDef,
   CardStore,
   GetSearchResourceFuncOpts,
@@ -42,6 +46,11 @@ type StoreHooks = {
     opts?: {
       isLive?: boolean;
       doWhileRefreshing?: (() => void) | undefined;
+      dependencyTracking?: {
+        mode: 'query';
+        fieldPath: string;
+        consumerId?: string;
+      };
       seed?:
         | {
             cards: T[];
@@ -49,6 +58,12 @@ type StoreHooks = {
             realms?: string[];
             meta?: QueryResultsMeta;
             errors?: ErrorEntry[];
+            queryErrors?: Array<{
+              realm: string;
+              type: string;
+              message: string;
+              status?: number;
+            }>;
           }
         | undefined;
     },
@@ -190,6 +205,7 @@ export default class CardStoreWithGarbageCollection implements CardStore {
   }
 
   async loadCardDocument(url: string) {
+    trackRuntimeInstanceDependency(url);
     let promise = this.#cardDocsInFlight.get(url);
     if (promise) {
       this.trackLoad(promise);
@@ -208,6 +224,7 @@ export default class CardStoreWithGarbageCollection implements CardStore {
   async loadFileMetaDocument(
     url: string,
   ): Promise<SingleFileMetaDocument | CardError> {
+    trackRuntimeFileDependency(url);
     let promise = this.#fileMetaDocsInFlight.get(url);
     if (promise) {
       this.trackLoad(promise);
@@ -810,36 +827,78 @@ export function getDeps(
 ): Array<CardDef | FileDef> {
   let fields = api.getFields(
     Reflect.getPrototypeOf(instance)!.constructor as typeof CardDef,
-    { includeComputeds: true },
+    { includeComputeds: false },
   );
   let deps: Array<CardDef | FileDef> = [];
   for (let [fieldName, field] of Object.entries(fields)) {
-    let value = (instance as any)[fieldName];
+    let value = api.peekAtField(instance, fieldName);
     if (isPrimitive(field.card) || !value || typeof value !== 'object') {
       continue;
     }
-    deps.push(...findInstances(value));
+    deps.push(...findInstances(api, value));
   }
   return deps;
 }
 
-function findInstances(obj: object): Array<CardDef | FileDef> {
+function findInstances(
+  api: typeof CardAPI,
+  obj: unknown,
+  visited = new WeakSet<object>(),
+): Array<CardDef | FileDef> {
+  if (!obj || typeof obj !== 'object') {
+    return [];
+  }
+  if (visited.has(obj)) {
+    return [];
+  }
+  visited.add(obj);
   if (isCardInstance(obj)) {
     return [obj];
   }
   if (isFileDefInstance(obj)) {
     return [obj];
   }
+  if (
+    (obj as { type?: unknown; reference?: unknown }).type === 'not-loaded' &&
+    typeof (obj as { reference?: unknown }).reference === 'string'
+  ) {
+    return [];
+  }
+  if (isBaseDefInstance(obj)) {
+    let deps: Array<CardDef | FileDef> = [];
+    let fields = api.getFields(obj, { includeComputeds: false });
+    for (let [fieldName, field] of Object.entries(fields)) {
+      let value = api.peekAtField(obj, fieldName);
+      if (isPrimitive(field.card) || !value || typeof value !== 'object') {
+        continue;
+      }
+      deps.push(...findInstances(api, value, visited));
+    }
+    return deps;
+  }
   if (Array.isArray(obj)) {
-    return obj.reduce((acc, item) => acc.concat(findInstances(item)), []);
+    return obj.reduce(
+      (acc, item) =>
+        item && typeof item === 'object'
+          ? acc.concat(findInstances(api, item, visited))
+          : acc,
+      [] as Array<CardDef | FileDef>,
+    );
   }
   if (obj && typeof obj === 'object') {
     return Object.values(obj).reduce(
-      (acc, value) => acc.concat(findInstances(value)),
-      [],
+      (acc, value) =>
+        value && typeof value === 'object'
+          ? acc.concat(findInstances(api, value, visited))
+          : acc,
+      [] as Array<CardDef | FileDef>,
     );
   }
   return [];
+}
+
+function isBaseDefInstance(value: object): value is BaseDef {
+  return isBaseInstance in value;
 }
 
 // only touch the entry in the tracked map if it's different so we don't trigger

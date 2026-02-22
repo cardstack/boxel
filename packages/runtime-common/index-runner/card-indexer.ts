@@ -208,7 +208,7 @@ export async function performCardIndexing({
     serialized,
     searchDoc,
     displayNames,
-    deps,
+    deps: runtimeDeps,
     types,
     isolatedHTML,
     headHTML,
@@ -218,18 +218,10 @@ export async function performCardIndexing({
     iconHTML,
   } = renderResult;
 
-  let expandedDeps = await dependencyResolver.collectExpandedDeps({
-    moduleDeps: deps ?? [],
-    relationshipResource:
-      (serialized?.data as CardResource | undefined) ?? null,
-    relationshipSourceResource: resource,
-    relationshipSerialized: serialized ?? null,
-    relationshipSearchDoc: searchDoc ?? null,
-    relativeTo: instanceURL,
-  });
+  let deps = new Set(runtimeDeps ?? []);
 
   let dependencyError = await dependencyResolver.dependencyErrorForEntry(
-    expandedDeps,
+    deps,
     instanceURL,
   );
   if (dependencyError) {
@@ -260,6 +252,6 @@ export async function performCardIndexing({
     resourceCreatedAt,
     types: types!,
     displayNames: displayNames ?? [],
-    deps: expandedDeps,
+    deps,
   });
 }

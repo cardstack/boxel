@@ -20,6 +20,7 @@ import {
   normalizeQueryForSignature,
   buildQueryParamValue,
   parseSearchURL,
+  withRuntimeDependencyTrackingContext,
 } from '@cardstack/runtime-common';
 import type { Query } from '@cardstack/runtime-common/query';
 
@@ -55,6 +56,13 @@ export interface Args<T extends CardDef | FileDef = CardDef> {
           }>;
         }
       | undefined;
+    dependencyTracking?:
+      | {
+          mode: 'query';
+          fieldPath: string;
+          consumerId?: string;
+        }
+      | undefined;
     owner: Owner;
   };
 }
@@ -79,6 +87,13 @@ export class SearchResource<
   #previousQuery: Query | undefined;
   #previousQueryString: string | undefined;
   #previousRealms: string[] | undefined;
+  #dependencyTracking:
+    | {
+        mode: 'query';
+        fieldPath: string;
+        consumerId?: string;
+      }
+    | undefined;
   #log = runtimeLogger('search-resource');
 
   constructor(owner: object) {
@@ -107,6 +122,7 @@ export class SearchResource<
     );
     this.#isLive = isLive;
     this.#doWhileRefreshing = doWhileRefreshing;
+    this.#dependencyTracking = named.dependencyTracking;
     this.realmsToSearch =
       realms === undefined || realms.length === 0
         ? this.realmServer.availableRealmURLs
@@ -266,12 +282,37 @@ export class SearchResource<
     return this.store.flush();
   }
 
+  private async withDependencyTrackingContext<T>(
+    source: string,
+    cb: () => Promise<T>,
+  ): Promise<T> {
+    let context = this.#dependencyTracking;
+    if (!context) {
+      return await cb();
+    }
+    return await withRuntimeDependencyTrackingContext(
+      {
+        mode: 'query',
+        queryField: context.fieldPath,
+        consumer: context.consumerId,
+        consumerKind: 'instance',
+        source,
+      },
+      cb,
+    );
+  }
+
   private applySeed = task(
     async (seed: NonNullable<Args<T>['named']['seed']>) => {
-      await Promise.resolve();
-      this._meta = seed.meta ?? { page: { total: seed.cards.length } };
-      this._errors = seed.errors;
-      await this.updateInstances(seed.cards);
+      await this.withDependencyTrackingContext(
+        'search-resource:applySeed',
+        async () => {
+          await Promise.resolve();
+          this._meta = seed.meta ?? { page: { total: seed.cards.length } };
+          this._errors = seed.errors;
+          await this.updateInstances(seed.cards);
+        },
+      );
     },
   );
 
@@ -284,10 +325,12 @@ export class SearchResource<
     // uncancellable it results in a flaky test.
     let token = waiter.beginAsync();
     try {
-      let { instances, meta } = await this.store.search<T>(
-        query,
-        this.realmsToSearch,
-        { includeMeta: true },
+      let { instances, meta } = await this.withDependencyTrackingContext(
+        'search-resource:search',
+        async () =>
+          await this.store.search<T>(query, this.realmsToSearch, {
+            includeMeta: true,
+          }),
       );
       this.#log.info(
         `search task complete; total instances=${instances.length}; refs=${instances
@@ -334,6 +377,13 @@ export function getSearch<T extends CardDef | FileDef = CardDef>(
           }>;
         }
       | undefined;
+    dependencyTracking?:
+      | {
+          mode: 'query';
+          fieldPath: string;
+          consumerId?: string;
+        }
+      | undefined;
   },
 ) {
   let resource = SearchResource.from(parent, () => ({
@@ -344,6 +394,7 @@ export function getSearch<T extends CardDef | FileDef = CardDef>(
       // TODO refactor this out
       doWhileRefreshing: opts?.doWhileRefreshing,
       seed: opts?.seed,
+      dependencyTracking: opts?.dependencyTracking,
       owner,
     },
   }));

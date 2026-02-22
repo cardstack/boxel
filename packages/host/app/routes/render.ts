@@ -13,8 +13,11 @@ import RSVP from 'rsvp';
 import { TrackedMap } from 'tracked-built-ins';
 
 import {
+  beginRuntimeDependencyTrackingSession,
+  endRuntimeDependencyTrackingSession,
   formattedError,
   baseRealm,
+  snapshotRuntimeDependencies,
   SupportedMimeType,
   isCardError,
   type CardErrorsJSONAPI,
@@ -62,6 +65,7 @@ export type Model = {
   nonce: string;
   cardId: string;
   renderOptions: ReturnType<typeof parseRenderRouteOptions>;
+  capturedDeps?: string[];
   readonly status: RenderStatus;
   readonly ready: boolean;
   readyPromise: Promise<void>;
@@ -154,6 +158,7 @@ export default class RenderRoute extends Route<Model> {
     this.#restoreRenderTimers = undefined;
     this.#releaseTimerBlock?.();
     this.#releaseTimerBlock = undefined;
+    endRuntimeDependencyTrackingSession();
   }
 
   async beforeModel(transition: Transition) {
@@ -195,6 +200,14 @@ export default class RenderRoute extends Route<Model> {
     if (existing) {
       return await existing;
     }
+    beginRuntimeDependencyTrackingSession({
+      sessionKey: key,
+      rootURL: id,
+      rootKind:
+        parsedOptions.fileExtract || parsedOptions.fileRender
+          ? 'file'
+          : 'instance',
+    });
 
     // the window.boxelTransitionTo() function helper first normalizes the base
     // params by transitioning the router back to 'render' before it goes on to
@@ -392,6 +405,7 @@ export default class RenderRoute extends Route<Model> {
     } catch (e: any) {
       console.warn(
         `Encountered error when deserializing doc for ${id}: ${e.message}: ${e.responseText}`,
+        e?.stack,
       );
       this.#dispositionModel(model, 'error');
       throw e;
@@ -503,6 +517,10 @@ export default class RenderRoute extends Route<Model> {
     modelState.state.set('status', 'ready');
     modelState.isReady = true;
     modelState.readyDeferred.fulfill();
+    await modelState.readyDeferred.promise;
+    model.capturedDeps = snapshotRuntimeDependencies({
+      excludeQueryOnly: true,
+    }).deps;
   }
 
   #settleModelAfterRenderSafely(model: Model) {
