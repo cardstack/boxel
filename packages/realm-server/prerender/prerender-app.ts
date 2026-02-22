@@ -212,7 +212,7 @@ export function buildPrerenderApp(options: {
       errorContext: string;
       execute: (args: A) => Promise<PrerenderExecResult<R>>;
       afterResponse?: (target: string, response: R) => void;
-      parseAttributes?: (attrs: any) => RouteParseResult<A>;
+      parseAttributes: (attrs: any) => RouteParseResult<A>;
       errorMessage?: string | ((err: any) => string);
       drainingPromise?: Promise<void>;
     },
@@ -238,9 +238,7 @@ export function buildPrerenderApp(options: {
         }
 
         let attrs = body?.data?.attributes ?? {};
-        let parsed = options.parseAttributes
-          ? options.parseAttributes(attrs)
-          : (parseDefaultPrerenderAttributes(attrs) as RouteParseResult<A>);
+        let parsed = options.parseAttributes(attrs);
         let routeArgs = parsed.args;
         let realmForLog = routeArgs?.realm ?? (attrs.realm as string);
         let renderOptionsForLog = routeArgs?.renderOptions ?? {};
@@ -367,6 +365,7 @@ export function buildPrerenderApp(options: {
     infoLabel: 'prerendered',
     warnTimeoutMessage: (url) => `render of ${url} timed out`,
     errorContext: '/prerender-card',
+    parseAttributes: parseDefaultPrerenderAttributes,
     execute: (args) => prerenderer.prerenderCard(args),
     drainingPromise: options.drainingPromise,
     afterResponse: (url, response) => {
@@ -389,6 +388,7 @@ export function buildPrerenderApp(options: {
     infoLabel: 'module prerendered',
     warnTimeoutMessage: (url) => `module render of ${url} timed out`,
     errorContext: '/prerender-module',
+    parseAttributes: parseDefaultPrerenderAttributes,
     execute: (args) => prerenderer.prerenderModule(args),
     drainingPromise: options.drainingPromise,
     afterResponse: (url, response) => {
@@ -407,6 +407,7 @@ export function buildPrerenderApp(options: {
     infoLabel: 'file extract prerendered',
     warnTimeoutMessage: (url) => `file extract render of ${url} timed out`,
     errorContext: '/prerender-file-extract',
+    parseAttributes: parseDefaultPrerenderAttributes,
     execute: (args) => prerenderer.prerenderFileExtract(args),
     drainingPromise: options.drainingPromise,
     afterResponse: (url, response) => {
