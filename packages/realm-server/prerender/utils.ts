@@ -76,8 +76,12 @@ export function buildCommandRunnerURL(
   let origin = page.url();
   try {
     origin = new URL(origin).origin;
-  } catch {
-    // best effort; fall back to raw page url
+  } catch (error) {
+    let detail =
+      error instanceof Error ? error.message : 'Unknown URL parsing error';
+    throw new Error(
+      `Could not build command-runner URL from page URL "${origin}": ${detail}`,
+    );
   }
   return `${origin}/command-runner/${encodedCommand}/${encodedInput}/${encodeURIComponent(
     nonce,
