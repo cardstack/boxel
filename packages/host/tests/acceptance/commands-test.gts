@@ -29,6 +29,7 @@ import {
   APP_BOXEL_MESSAGE_MSGTYPE,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
   APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+  APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
   APP_BOXEL_LLM_MODE,
 } from '@cardstack/runtime-common/matrix-constants';
@@ -739,7 +740,7 @@ module('Acceptance | Commands tests', function (hooks) {
     let message = getRoomEvents(roomId).pop()!;
     assert.strictEqual(
       message.content.msgtype,
-      APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+      APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
     );
     assert.strictEqual(
       message.content['m.relates_to']?.rel_type,
@@ -931,7 +932,7 @@ module('Acceptance | Commands tests', function (hooks) {
     let message = getRoomEvents(roomId).pop()!;
     assert.strictEqual(
       message.content.msgtype,
-      APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+      APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
     );
     assert.strictEqual(
       message.content['m.relates_to']?.rel_type,
