@@ -50,6 +50,10 @@ class Isolated extends Component<typeof BotRequestDemo> {
     return new URL('./Author/jane-doe', this.experimentsRealmURL).href;
   }
 
+  get showCardTargetRealm() {
+    return this.experimentsRealmURL;
+  }
+
   get showCardFormat() {
     return 'isolated';
   }
@@ -86,12 +90,14 @@ class Isolated extends Component<typeof BotRequestDemo> {
       return {
         cardId: this.showCardId,
         format: this.showCardFormat,
+        realm: this.showCardTargetRealm,
       };
     }
     if (this.isPatchCardInstanceTab) {
       return {
         cardId: this.showCardId,
         patch: this.patchCardPatch,
+        realm: this.showCardTargetRealm,
       };
     }
 
@@ -119,7 +125,7 @@ class Isolated extends Component<typeof BotRequestDemo> {
           type: 'app.boxel.bot-trigger',
           content: {
             type: 'show-card',
-            realm: this.experimentsRealmURL,
+            realm: this.showCardTargetRealm,
             input: {
               cardId: this.showCardId,
               format: this.showCardFormat,
@@ -137,7 +143,7 @@ class Isolated extends Component<typeof BotRequestDemo> {
           type: 'app.boxel.bot-trigger',
           content: {
             type: 'patch-card-instance',
-            realm: this.experimentsRealmURL,
+            realm: this.showCardTargetRealm,
             input: {
               cardId: this.showCardId,
               patch: this.patchCardPatch,
@@ -264,6 +270,7 @@ class Isolated extends Component<typeof BotRequestDemo> {
     await new CreateShowCardRequestCommand(commandContext).execute({
       cardId: this.showCardId,
       format: this.showCardFormat,
+      realm: this.showCardTargetRealm,
     });
   }
 
@@ -294,6 +301,7 @@ class Isolated extends Component<typeof BotRequestDemo> {
     await new CreatePatchCardInstanceRequestCommand(commandContext).execute({
       cardId: this.showCardId,
       patch: this.patchCardPatch,
+      realm: this.showCardTargetRealm,
     });
   }
 

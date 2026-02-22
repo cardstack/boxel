@@ -20,23 +20,3 @@ export async function ensureSubmissionBotIsInRoom(
     }
   }
 }
-
-export function realmURLFromCardId(cardId: string): string {
-  let url: URL;
-  try {
-    url = new URL(cardId);
-  } catch {
-    throw new Error('cardId must be an absolute URL');
-  }
-
-  let pathSegments = url.pathname.split('/').filter(Boolean);
-  if (pathSegments.length < 2) {
-    throw new Error('cardId must include card type and card slug');
-  }
-
-  let realmSegments = pathSegments.slice(0, -2);
-  url.pathname = `/${realmSegments.join('/')}${realmSegments.length ? '/' : ''}`;
-  url.search = '';
-  url.hash = '';
-  return url.href;
-}

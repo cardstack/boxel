@@ -1,28 +1,36 @@
 import { Command } from '@cardstack/runtime-common';
 
 import { PatchCardInput } from 'https://cardstack.com/base/command';
+import { StringField, contains, field } from 'https://cardstack.com/base/card-api';
 
 import UseAiAssistantCommand from '@cardstack/boxel-host/commands/ai-assistant';
 import SendBotTriggerEventCommand from '@cardstack/boxel-host/commands/send-bot-trigger-event';
-import {
-  ensureSubmissionBotIsInRoom,
-  realmURLFromCardId,
-} from './bot-request-utils';
+import { ensureSubmissionBotIsInRoom } from './bot-request-utils';
+
+export class CreatePatchCardInstanceRequestInput extends PatchCardInput {
+  @field realm = contains(StringField);
+}
 
 export default class CreatePatchCardInstanceRequestCommand extends Command<
-  typeof PatchCardInput,
+  typeof CreatePatchCardInstanceRequestInput,
   undefined
 > {
   description = 'Request patching a card instance via the bot runner.';
 
   async getInputType() {
-    return PatchCardInput;
+    return CreatePatchCardInstanceRequestInput;
   }
 
-  protected async run(input: PatchCardInput): Promise<undefined> {
+  protected async run(
+    input: CreatePatchCardInstanceRequestInput,
+  ): Promise<undefined> {
     let cardId = input.cardId?.trim();
+    let realm = input.realm?.trim();
     if (!cardId) {
       throw new Error('cardId is required');
+    }
+    if (!realm) {
+      throw new Error('realm is required');
     }
     if (!input.patch || typeof input.patch !== 'object') {
       throw new Error('patch is required');
@@ -44,7 +52,7 @@ export default class CreatePatchCardInstanceRequestCommand extends Command<
 
     await new SendBotTriggerEventCommand(this.commandContext).execute({
       roomId,
-      realm: realmURLFromCardId(cardId),
+      realm,
       type: 'patch-card-instance',
       input: {
         cardId,
