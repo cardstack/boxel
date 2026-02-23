@@ -41,7 +41,7 @@ export default class FittedCardContainerUsage extends Component {
               @fullWidth={{this.fullWidth}}
             >
               <CardContainer @displayBoundaries={{true}}>
-                <h4>{{this.formatTitle this.selectedSize}}</h4>
+                <h3>{{this.formatTitle this.selectedSize}}</h3>
                 {{this.formatDimensions this.selectedSize}}
               </CardContainer>
             </FittedCardContainer>
@@ -49,7 +49,7 @@ export default class FittedCardContainerUsage extends Component {
             {{#each this.fittedFormats as |size|}}
               <FittedCardContainer @size={{size}} @fullWidth={{this.fullWidth}}>
                 <CardContainer @displayBoundaries={{true}}>
-                  <h4>{{this.formatTitle size}}</h4>
+                  <h3>{{this.formatTitle size}}</h3>
                   {{this.formatDimensions size}}
                 </CardContainer>
               </FittedCardContainer>

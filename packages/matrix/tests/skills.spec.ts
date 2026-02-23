@@ -348,7 +348,7 @@ test.describe('Skills', () => {
     );
   });
 
-  test.only('ensure that the skill card from boxel index is not overwritten by the skill card from matrix store', async ({
+  test('ensure that the skill card from boxel index is not overwritten by the skill card from matrix store', async ({
     page,
   }) => {
     const { username } = await createSubscribedUserAndLogin(
