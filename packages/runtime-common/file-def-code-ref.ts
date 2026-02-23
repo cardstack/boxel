@@ -1,6 +1,8 @@
 import { baseRealm, baseFileRef } from './constants';
 import type { ResolvedCodeRef } from './code-ref';
 
+export const BASE_FILE_DEF_CODE_REF = baseFileRef;
+
 const FILEDEF_CODE_REF_BY_EXTENSION: Record<string, ResolvedCodeRef> = {
   // TODO: Replace with realm metadata configuration.
   '.markdown': {
