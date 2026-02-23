@@ -1843,6 +1843,78 @@ module('Integration | Store', function (hooks) {
     );
   });
 
+  test('reference count is balanced when used with CardResource for file-meta that is destroyed', async function (assert) {
+    class Driver {
+      @tracked showComponent = false;
+      @tracked id: string | undefined;
+    }
+
+    let driver = new Driver();
+    let firstFile = `${testRealmURL}notes.txt`;
+    let secondFile = `${testRealmURL}README.txt`;
+    await testRealm.write('notes.txt', 'notes');
+    await testRealm.write('README.txt', 'readme');
+
+    class ResourceConsumer extends GlimmerComponent {
+      resource = getCard(this, () => driver.id, { type: 'file-meta' });
+      <template>
+        {{#if this.resource.card}}
+          <div data-test-rendered-file={{this.resource.id}} />
+        {{/if}}
+      </template>
+    }
+
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          {{#if driver.showComponent}}
+            <ResourceConsumer />
+          {{/if}}
+        </template>
+      },
+    );
+
+    driver.showComponent = true;
+    driver.id = firstFile;
+    await waitFor(`[data-test-rendered-file="${firstFile}"]`);
+    assert.strictEqual(
+      storeService.getReferenceCount(firstFile),
+      1,
+      `reference count for ${firstFile} is 1`,
+    );
+    assert.strictEqual(
+      storeService.getReferenceCount(secondFile),
+      0,
+      `reference count for ${secondFile} is 0`,
+    );
+
+    driver.id = secondFile;
+    await waitFor(`[data-test-rendered-file="${secondFile}"]`);
+    assert.strictEqual(
+      storeService.getReferenceCount(firstFile),
+      0,
+      `reference count for ${firstFile} is 0`,
+    );
+    assert.strictEqual(
+      storeService.getReferenceCount(secondFile),
+      1,
+      `reference count for ${secondFile} is 1`,
+    );
+
+    driver.showComponent = false;
+    await waitFor(`[data-test-rendered-file]`, { count: 0 });
+    assert.strictEqual(
+      storeService.getReferenceCount(firstFile),
+      0,
+      `reference count for ${firstFile} is 0`,
+    );
+    assert.strictEqual(
+      storeService.getReferenceCount(secondFile),
+      0,
+      `reference count for ${secondFile} is 0`,
+    );
+  });
+
   test<TestContextWithSave>('reference count is balanced during auto saving', async function (assert) {
     let hassan = `${testRealmURL}Person/hassan`;
 
