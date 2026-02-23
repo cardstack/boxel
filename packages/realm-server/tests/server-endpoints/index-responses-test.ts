@@ -304,6 +304,27 @@ module(`server-endpoints/${basename(__filename)}`, function () {
             },
           });
 
+          writeJSONSync(
+            join(context.testRealmDir, 'a-brand-guide-theme.json'),
+            {
+              data: {
+                type: 'card',
+                attributes: {
+                  markUsage: {
+                    socialMediaProfileIcon:
+                      'https://example.com/social-icon.png',
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: 'https://cardstack.com/base/brand-guide',
+                    name: 'BrandGuide',
+                  },
+                },
+              },
+            },
+          );
+
           // NOTE: card-with-theme.json is NOT written here because from-scratch
           // indexing uses a batched write strategy (boxel_index_working → boxel_index).
           // Cards within the same batch can't resolve linksTo references to each other
@@ -717,6 +738,91 @@ module(`server-endpoints/${basename(__filename)}`, function () {
             '<link rel="apple-touch-icon" href="https://example.com/brand-icon.png"',
           ),
           `head HTML includes apple-touch-icon link from theme`,
+        );
+      });
+
+      test('default head template uses markUsage.socialMediaProfileIcon from BrandGuide theme', async function (assert) {
+        let cardJSON = JSON.stringify({
+          data: {
+            type: 'card',
+            attributes: {
+              firstName: 'BrandGuide Themed Card',
+              cardInfo: {
+                name: null,
+                summary: null,
+                cardThumbnailURL: null,
+                notes: null,
+              },
+            },
+            relationships: {
+              'cardInfo.theme': {
+                links: {
+                  self: './a-brand-guide-theme',
+                },
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: './person.gts',
+                name: 'Person',
+              },
+            },
+          },
+        });
+
+        let writeResponse = await context.request2
+          .post('/test/card-with-brand-guide-theme.json')
+          .set('Accept', 'application/vnd.card+source')
+          .send(cardJSON);
+
+        assert.strictEqual(
+          writeResponse.status,
+          204,
+          'card file write was accepted',
+        );
+
+        await waitUntil(
+          async () => {
+            let rows = (await context.dbAdapter.execute(
+              `SELECT url, head_html FROM boxel_index
+               WHERE url LIKE '%card-with-brand-guide-theme%'
+                 AND type = 'instance'
+                 AND is_deleted IS NOT TRUE
+               LIMIT 1`,
+            )) as { url: string; head_html: string | null }[];
+
+            return rows.length > 0 && rows[0].head_html != null;
+          },
+          {
+            timeout: 30000,
+            interval: 500,
+            timeoutMessage:
+              'Timed out waiting for card-with-brand-guide-theme to be indexed',
+          },
+        );
+
+        let response = await context.request2
+          .get('/test/card-with-brand-guide-theme')
+          .set('Accept', 'text/html');
+
+        assert.strictEqual(response.status, 200, 'serves HTML response');
+
+        let headMatch = response.text.match(
+          /data-boxel-head-start[^>]*>([\s\S]*?)data-boxel-head-end/,
+        );
+        let headContent = headMatch?.[1] ?? '';
+
+        assert.ok(
+          headContent.includes(
+            '<link rel="icon" href="https://example.com/social-icon.png"',
+          ),
+          `head HTML includes favicon from BrandGuide markUsage.socialMediaProfileIcon. headContent=${headContent.substring(0, 500)}`,
+        );
+        assert.ok(
+          headContent.includes(
+            '<link rel="apple-touch-icon" href="https://example.com/social-icon.png"',
+          ),
+          `head HTML includes apple-touch-icon from BrandGuide markUsage.socialMediaProfileIcon`,
         );
       });
 
