@@ -166,8 +166,8 @@ module('Integration | operator-mode | ui', function (hooks) {
     );
     assert.strictEqual(
       ctx.operatorModeStateService.state?.stacks?.[0]?.[1]?.type,
-      'file-meta',
-      'stack item type is file-meta',
+      'file',
+      'stack item type is file',
     );
   });
 

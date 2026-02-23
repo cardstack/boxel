@@ -267,12 +267,12 @@ export default class InteractSubmode extends Component {
       typeof cardOrURL === 'object' &&
       !(cardOrURL instanceof URL)
     ) {
-      return isFileDefInstance(cardOrURL as CardDef) ? 'file-meta' : 'card';
+      return isFileDefInstance(cardOrURL as CardDef) ? 'file' : 'card';
     }
     let fileMetaInstanceOrError =
       this.store.peek(cardId, { type: 'file-meta' }) ??
       this.store.peekError(cardId, { type: 'file-meta' });
-    return fileMetaInstanceOrError ? 'file-meta' : 'card';
+    return fileMetaInstanceOrError ? 'file' : 'card';
   }
 
   private saveCard = (id: string): void => {

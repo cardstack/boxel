@@ -12,7 +12,6 @@ import {
 } from '@cardstack/runtime-common';
 import { meta } from '@cardstack/runtime-common/constants';
 
-import { inferStoreReadType } from '@cardstack/host/lib/read-type';
 import { getCard } from '@cardstack/host/resources/card-resource';
 
 import type {
@@ -46,13 +45,7 @@ export default class HostModeContent extends Component<Signature> {
       return undefined;
     }
 
-    return getCard(this, () => this.args.primaryCardId!, {
-      type: this.primaryReadType,
-    });
-  }
-
-  private get primaryReadType() {
-    return inferStoreReadType(this.args.primaryCardId);
+    return getCard(this, () => this.args.primaryCardId!);
   }
 
   get cardIds() {

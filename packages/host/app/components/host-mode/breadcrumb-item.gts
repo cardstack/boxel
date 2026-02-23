@@ -6,7 +6,6 @@ import { cached } from '@glimmer/tracking';
 
 import { cardTypeIcon, isCardInstance } from '@cardstack/runtime-common';
 
-import { inferStoreReadType } from '@cardstack/host/lib/read-type';
 import { getCard } from '@cardstack/host/resources/card-resource';
 
 import type { ComponentLike } from '@glint/template';
@@ -27,13 +26,7 @@ export default class HostModeBreadcrumbItem extends Component<Signature> {
       return undefined;
     }
 
-    return getCard(this, () => this.args.cardId, {
-      type: this.readType,
-    });
-  }
-
-  private get readType() {
-    return inferStoreReadType(this.args.cardId);
+    return getCard(this, () => this.args.cardId);
   }
 
   @cached

@@ -11,7 +11,6 @@ import { cached, tracked } from '@glimmer/tracking';
 import { ContextButton } from '@cardstack/boxel-ui/components';
 import { and, bool } from '@cardstack/boxel-ui/helpers';
 
-import { inferStoreReadType } from '@cardstack/host/lib/read-type';
 import { getCard } from '@cardstack/host/resources/card-resource';
 
 import HostModeCard from './card';
@@ -38,13 +37,7 @@ export default class HostModeStackItem extends Component<Signature> {
     if (!this.args.cardId) {
       return undefined;
     }
-    return getCard(this, () => this.args.cardId, {
-      type: this.readType,
-    });
-  }
-
-  private get readType() {
-    return inferStoreReadType(this.args.cardId);
+    return getCard(this, () => this.args.cardId);
   }
 
   @cached

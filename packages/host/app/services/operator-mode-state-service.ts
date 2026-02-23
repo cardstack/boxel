@@ -414,7 +414,7 @@ export default class OperatorModeStateService extends Service {
 
   editCardOnStack(stackIndex: number, card: CardDef): void {
     let item = this.findCardInStack(card, stackIndex);
-    if (item.type === 'file-meta') {
+    if (item.type === 'file') {
       return;
     }
     this.replaceItemInStack(

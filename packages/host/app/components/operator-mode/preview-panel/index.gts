@@ -98,7 +98,7 @@ export default class PreviewPanel extends Component<Signature> {
       this.operatorModeStateService.openCardInInteractMode(
         this.cardId,
         'isolated',
-        isFileDefInstance(this.args.card) ? 'file-meta' : 'card',
+        isFileDefInstance(this.args.card) ? 'file' : 'card',
       );
     }
   };

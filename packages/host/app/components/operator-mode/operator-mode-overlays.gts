@@ -1,6 +1,7 @@
 import { array, fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
+import { service } from '@ember/service';
 
 import { consume } from 'ember-provide-consume-context';
 import { velcro } from 'ember-velcro';
@@ -40,8 +41,6 @@ import {
   getMenuItems,
 } from '@cardstack/runtime-common';
 
-import { isFileMetaId } from '@cardstack/host/lib/read-type';
-
 import type {
   CardCrudFunctions,
   CardDef,
@@ -55,9 +54,11 @@ import Overlays from './overlays';
 import type { StackItemRenderedCardForOverlayActions } from './stack-item';
 
 import type { CardDefOrId } from './stack-item';
+import type StoreService from '../../services/store';
 
 export default class OperatorModeOverlays extends Overlays {
   overlayClassName = 'actions-overlay';
+  @service declare private store: StoreService;
 
   @consume(CardCrudFunctionsContextName)
   declare private cardCrudFunctions: CardCrudFunctions;
@@ -365,7 +366,10 @@ export default class OperatorModeOverlays extends Overlays {
   ): boolean {
     let cardDefOrId = renderedCard.cardDefOrId;
     if (typeof cardDefOrId === 'string') {
-      return isFileMetaId(cardDefOrId);
+      return Boolean(
+        this.store.peek(cardDefOrId, { type: 'file-meta' }) ??
+        this.store.peekError(cardDefOrId, { type: 'file-meta' }),
+      );
     }
     return isFileDefInstance(cardDefOrId);
   }

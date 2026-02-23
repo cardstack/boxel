@@ -1,4 +1,5 @@
 import type { Deferred } from '@cardstack/runtime-common';
+import type { StoreReadType } from '@cardstack/runtime-common';
 
 import type { Format } from 'https://cardstack.com/base/card-api';
 
@@ -15,13 +16,16 @@ interface Args {
   };
 }
 
-export type StackItemType = 'card' | 'file-meta';
+export type StackItemType = 'card' | 'file';
 
 function inferStackItemType(type?: StackItemType): StackItemType {
-  if (type) {
-    return type;
-  }
-  return 'card';
+  return type === 'file' ? 'file' : 'card';
+}
+
+export function stackItemTypeToStoreReadType(
+  type: StackItemType,
+): StoreReadType {
+  return type === 'file' ? 'file-meta' : 'card';
 }
 
 export class StackItem {

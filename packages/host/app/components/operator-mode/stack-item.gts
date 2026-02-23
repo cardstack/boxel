@@ -58,7 +58,10 @@ import {
   getMenuItems,
 } from '@cardstack/runtime-common';
 
-import type { StackItem } from '@cardstack/host/lib/stack-item';
+import {
+  stackItemTypeToStoreReadType,
+  type StackItem,
+} from '@cardstack/host/lib/stack-item';
 import { urlForRealmLookup } from '@cardstack/host/lib/utils';
 
 import type {
@@ -180,7 +183,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
 
   private makeCardResource = () => {
     this.cardResource = this.getCard(this, () => this.args.item.id, {
-      type: this.args.item.type,
+      type: stackItemTypeToStoreReadType(this.args.item.type),
     });
   };
 
@@ -670,7 +673,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
 
   private get isFileCard() {
     return (
-      this.args.item.type === 'file-meta' ||
+      this.args.item.type === 'file' ||
       (this.card ? isFileDefInstance(this.card) : false)
     );
   }

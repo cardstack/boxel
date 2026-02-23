@@ -47,7 +47,7 @@ module('Acceptance | file chooser tests', function (hooks) {
           {
             id: fileId,
             format: 'isolated',
-            type: 'file-meta',
+            type: 'file',
           },
         ],
       ],
