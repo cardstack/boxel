@@ -789,6 +789,7 @@ export async function setupIntegrationTestRealm({
   permissions?: RealmPermissions;
   mockMatrixUtils: MockUtils;
   startMatrix?: boolean;
+  fileSizeLimitBytes?: number;
 }) {
   let resolvedRealmURL = ensureTrailingSlash(realmURL ?? testRealmURL);
   setupAuthEndpoints({
