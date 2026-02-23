@@ -3,7 +3,6 @@ import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { service } from '@ember/service';
 
-import { dropTask } from 'ember-concurrency';
 import { consume } from 'ember-provide-consume-context';
 import { velcro } from 'ember-velcro';
 
@@ -34,7 +33,6 @@ import {
 } from '@cardstack/boxel-ui/icons';
 
 import type { CommandContext } from '@cardstack/runtime-common';
-import { isFileDefInstance } from '@cardstack/runtime-common';
 
 import {
   CardCrudFunctionsContextName,
@@ -47,6 +45,8 @@ import type {
   CardDef,
   Format,
 } from 'https://cardstack.com/base/card-api';
+
+import { detectStackItemTypeForTarget } from '../../lib/stack-item';
 
 import { removeFileExtension } from '../card-search/utils';
 
@@ -369,37 +369,28 @@ export default class OperatorModeOverlays extends Overlays {
   }
 
   private getTypeForCardTarget(cardDefOrId: CardDefOrId): 'card' | 'file' {
-    if (typeof cardDefOrId === 'string') {
-      let fileMetaInstanceOrError =
-        this.store.peek(cardDefOrId, { type: 'file-meta' }) ??
-        this.store.peekError(cardDefOrId, { type: 'file-meta' });
-      return fileMetaInstanceOrError ? 'file' : 'card';
-    }
-    return isFileDefInstance(cardDefOrId) ? 'file' : 'card';
+    return detectStackItemTypeForTarget(
+      cardDefOrId,
+      this.getCardId(cardDefOrId),
+      this.store,
+    );
   }
 
-  protected override viewCard = dropTask(
-    async (
-      cardDefOrId: CardDefOrId,
-      format: Format = 'isolated',
-      fieldType?: 'linksTo' | 'contains' | 'containsMany' | 'linksToMany',
-      fieldName?: string,
-    ) => {
-      let cardId =
-        typeof cardDefOrId === 'string' ? cardDefOrId : cardDefOrId.id;
-      let canWrite = this.realm.canWrite(cardId);
-      format = canWrite ? format : 'isolated';
-      if (this.args.viewCard) {
-        let target =
-          typeof cardDefOrId === 'string' ? new URL(cardId) : cardDefOrId;
-        await this.args.viewCard(target, format, {
-          type: this.getTypeForCardTarget(cardDefOrId),
-          fieldType,
-          fieldName,
-        });
-      }
-    },
-  );
+  protected override buildViewCardOpts(
+    cardDefOrId: CardDefOrId,
+    fieldType?: 'linksTo' | 'contains' | 'containsMany' | 'linksToMany',
+    fieldName?: string,
+  ): {
+    type?: 'card' | 'file';
+    fieldType?: 'linksTo' | 'contains' | 'containsMany' | 'linksToMany';
+    fieldName?: string;
+  } {
+    return {
+      type: this.getTypeForCardTarget(cardDefOrId),
+      fieldType,
+      fieldName,
+    };
+  }
 
   @action
   private registerDropdownAPI(

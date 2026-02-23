@@ -232,13 +232,29 @@ export default class Overlays extends Component<OverlaySignature> {
       if (this.args.viewCard) {
         let target =
           typeof cardDefOrId === 'string' ? new URL(cardId) : cardDefOrId;
-        await this.args.viewCard(target, format, {
-          fieldType,
-          fieldName,
-        });
+        await this.args.viewCard(
+          target,
+          format,
+          this.buildViewCardOpts(cardDefOrId, fieldType, fieldName),
+        );
       }
     },
   );
+
+  protected buildViewCardOpts(
+    _cardDefOrId: CardDefOrId,
+    fieldType?: 'linksTo' | 'contains' | 'containsMany' | 'linksToMany',
+    fieldName?: string,
+  ): {
+    type?: 'card' | 'file';
+    fieldType?: 'linksTo' | 'contains' | 'containsMany' | 'linksToMany';
+    fieldName?: string;
+  } {
+    return {
+      fieldType,
+      fieldName,
+    };
+  }
 
   protected zIndexStyle(element: HTMLElement, overlayZIndexStyle?: SafeString) {
     if (overlayZIndexStyle) {

@@ -1,5 +1,6 @@
+import { isFileDefInstance } from '@cardstack/runtime-common';
 import type { Deferred } from '@cardstack/runtime-common';
-import type { StoreReadType } from '@cardstack/runtime-common';
+import type { Store, StoreReadType } from '@cardstack/runtime-common';
 
 import type { Format } from 'https://cardstack.com/base/card-api';
 
@@ -26,6 +27,27 @@ export function stackItemTypeToStoreReadType(
   type: StackItemType,
 ): StoreReadType {
   return type === 'file' ? 'file-meta' : 'card';
+}
+
+export function detectStackItemTypeForTarget(
+  cardOrURL: unknown,
+  cardId: string | undefined,
+  store: Pick<Store, 'peek' | 'peekError'>,
+): StackItemType {
+  if (
+    cardOrURL &&
+    typeof cardOrURL === 'object' &&
+    !(cardOrURL instanceof URL)
+  ) {
+    return isFileDefInstance(cardOrURL) ? 'file' : 'card';
+  }
+  if (!cardId) {
+    return 'card';
+  }
+  let fileMetaInstanceOrError =
+    store.peek(cardId, { type: 'file-meta' }) ??
+    store.peekError(cardId, { type: 'file-meta' });
+  return fileMetaInstanceOrError ? 'file' : 'card';
 }
 
 export class StackItem {

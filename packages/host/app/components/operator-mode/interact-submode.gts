@@ -36,7 +36,6 @@ import {
   codeRefWithAbsoluteURL,
   identifyCard,
   isCardInstance,
-  isFileDefInstance,
   isResolvedCodeRef,
   CardError,
   loadCardDef,
@@ -54,7 +53,11 @@ import {
 
 import CopyCardToStackCommand from '@cardstack/host/commands/copy-card-to-stack';
 
-import { StackItem, type StackItemType } from '@cardstack/host/lib/stack-item';
+import {
+  detectStackItemTypeForTarget,
+  StackItem,
+  type StackItemType,
+} from '@cardstack/host/lib/stack-item';
 
 import { stackBackgroundsResource } from '@cardstack/host/resources/stack-backgrounds';
 
@@ -263,17 +266,7 @@ export default class InteractSubmode extends Component {
     cardOrURL: CardDef | URL | string,
     cardId: string,
   ): StackItemType {
-    if (
-      cardOrURL &&
-      typeof cardOrURL === 'object' &&
-      !(cardOrURL instanceof URL)
-    ) {
-      return isFileDefInstance(cardOrURL as CardDef) ? 'file' : 'card';
-    }
-    let fileMetaInstanceOrError =
-      this.store.peek(cardId, { type: 'file-meta' }) ??
-      this.store.peekError(cardId, { type: 'file-meta' });
-    return fileMetaInstanceOrError ? 'file' : 'card';
+    return detectStackItemTypeForTarget(cardOrURL, cardId, this.store);
   }
 
   private saveCard = (id: string): void => {
