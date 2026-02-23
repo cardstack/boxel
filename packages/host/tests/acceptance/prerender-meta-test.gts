@@ -281,6 +281,11 @@ module('Acceptance | prerender | meta', function (hooks) {
                 self: '../Pet/paper',
               },
             },
+            'cardInfo.theme': {
+              links: {
+                self: null,
+              },
+            },
           },
           meta: {
             adoptsFrom: {
@@ -346,7 +351,9 @@ module('Acceptance | prerender | meta', function (hooks) {
       {
         id: `${testRealmURL}Pet/mango`,
         _cardType: 'Pet',
-        cardInfo: {},
+        cardInfo: {
+          theme: null,
+        },
         name: 'Mango',
         cardTitle: 'Mango',
       },
@@ -364,7 +371,9 @@ module('Acceptance | prerender | meta', function (hooks) {
       {
         id: `${testRealmURL}Pet/paper`,
         _cardType: 'Cat',
-        cardInfo: {},
+        cardInfo: {
+          theme: null,
+        },
         name: 'Paper',
         cardTitle: 'Paper',
         aliases: ['Satan', "Satan's Mistress"],

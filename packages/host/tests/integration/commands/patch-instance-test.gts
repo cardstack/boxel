@@ -492,6 +492,11 @@ module('Integration | commands | patch-instance', function (hooks) {
             self: null,
           },
         },
+        'cardInfo.theme': {
+          links: {
+            self: null,
+          },
+        },
       },
       'the relationships are correct',
     );
