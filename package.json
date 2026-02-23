@@ -91,8 +91,8 @@
     "pnpm": "^10"
   },
   "volta": {
-    "node": "22.20.0",
-    "pnpm": "10.17.0"
+    "node": "24.13.1",
+    "pnpm": "10.30.0"
   },
   "dependencies": {
     "matrix-js-sdk": "38.3.0"

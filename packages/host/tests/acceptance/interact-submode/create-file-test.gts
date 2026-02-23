@@ -309,7 +309,7 @@ module('Acceptance | interact submode | create-file tests', function (hooks) {
 
     await click('[data-test-new-file-button]');
     await click('[data-test-boxel-menu-item-text="Choose a card type..."]');
-    await click(`[data-test-select="${testRealmURL}spec/person"]`);
+    await click(`[data-test-card-catalog-item="${testRealmURL}spec/person"]`);
     await click('[data-test-card-catalog-go-button]');
     await assertCardCreated(assert, 'Person', testRealmURL, 0, 1);
     assert.dom(`[data-test-stack-card-index]`).exists({ count: 2 });
@@ -341,7 +341,7 @@ module('Acceptance | interact submode | create-file tests', function (hooks) {
 
     await click('[data-test-new-file-button]');
     await click('[data-test-boxel-menu-item-text="Choose a card type..."]');
-    await click(`[data-test-select="${testRealmURL}spec/person"]`);
+    await click(`[data-test-card-catalog-item="${testRealmURL}spec/person"]`);
     await click('[data-test-card-catalog-go-button]');
     await assertCardCreated(assert, 'Person', testRealmURL, 1, 2);
     assert

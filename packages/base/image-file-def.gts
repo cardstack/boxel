@@ -46,6 +46,7 @@ class Isolated extends Component<typeof ImageDef> {
         gap: var(--boxel-sp-xs);
         color: var(--boxel-600);
         font-size: var(--boxel-font-sm);
+        padding-bottom: var(--boxel-sp-xs);
       }
 
       .image-isolated__name {
@@ -65,11 +66,7 @@ class Atom extends Component<typeof ImageDef> {
   <template>
     <div class='image-atom'>
       {{#if @model.url}}
-        <img
-          class='image-atom__img'
-          src={{@model.url}}
-          alt={{@model.name}}
-        />
+        <img class='image-atom__img' src={{@model.url}} alt={{@model.name}} />
       {{/if}}
       <span class='image-atom__name'>{{@model.name}}</span>
     </div>
@@ -196,6 +193,7 @@ class Fitted extends Component<typeof ImageDef> {
 
 export class ImageDef extends FileDef {
   static displayName = 'Image';
+  static acceptTypes = 'image/*';
 
   @field width = contains(NumberField);
   @field height = contains(NumberField);

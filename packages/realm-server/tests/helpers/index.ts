@@ -33,6 +33,7 @@ import {
   RealmPaths,
   PUBLISHED_DIRECTORY_NAME,
   DEFAULT_CARD_SIZE_LIMIT_BYTES,
+  DEFAULT_FILE_SIZE_LIMIT_BYTES,
   type MatrixConfig,
   type QueuePublisher,
   type QueueRunner,
@@ -445,6 +446,7 @@ export async function createRealm({
   withWorker,
   enableFileWatcher = false,
   cardSizeLimitBytes,
+  fileSizeLimitBytes,
 }: {
   dir: string;
   definitionLookup: DefinitionLookup;
@@ -459,6 +461,7 @@ export async function createRealm({
   deferStartUp?: true;
   enableFileWatcher?: boolean;
   cardSizeLimitBytes?: number;
+  fileSizeLimitBytes?: number;
   // if you are creating a realm  to test it directly without a server, you can
   // also specify `withWorker: true` to also include a worker with your realm
   withWorker?: true;
@@ -519,6 +522,11 @@ export async function createRealm({
       Number(
         process.env.CARD_SIZE_LIMIT_BYTES ?? DEFAULT_CARD_SIZE_LIMIT_BYTES,
       ),
+    fileSizeLimitBytes:
+      fileSizeLimitBytes ??
+      Number(
+        process.env.FILE_SIZE_LIMIT_BYTES ?? DEFAULT_FILE_SIZE_LIMIT_BYTES,
+      ),
   });
   if (worker) {
     virtualNetwork.mount(realm.handle);
@@ -541,6 +549,7 @@ export async function runTestRealmServer({
   permissions = { '*': ['read'] },
   enableFileWatcher = false,
   cardSizeLimitBytes,
+  fileSizeLimitBytes,
   domainsForPublishedRealms = {
     boxelSpace: 'localhost',
     boxelSite: 'localhost',
@@ -559,6 +568,7 @@ export async function runTestRealmServer({
   matrixConfig?: MatrixConfig;
   enableFileWatcher?: boolean;
   cardSizeLimitBytes?: number;
+  fileSizeLimitBytes?: number;
   domainsForPublishedRealms?: {
     boxelSpace?: string;
     boxelSite?: string;
@@ -596,6 +606,7 @@ export async function runTestRealmServer({
     enableFileWatcher,
     definitionLookup,
     cardSizeLimitBytes,
+    fileSizeLimitBytes,
   });
 
   await testRealm.logInToMatrix();
@@ -1145,6 +1156,7 @@ export function setupPermissionedRealm(
     mode = 'beforeEach',
     published = false,
     cardSizeLimitBytes,
+    fileSizeLimitBytes,
   }: {
     permissions: RealmPermissions;
     realmURL?: URL;
@@ -1162,6 +1174,7 @@ export function setupPermissionedRealm(
     mode?: 'beforeEach' | 'before';
     published?: boolean;
     cardSizeLimitBytes?: number;
+    fileSizeLimitBytes?: number;
   },
 ) {
   let testRealmServer: Awaited<ReturnType<typeof runTestRealmServer>>;
@@ -1227,6 +1240,7 @@ export function setupPermissionedRealm(
         fileSystem,
         enableFileWatcher: subscribeToRealmEvents,
         cardSizeLimitBytes,
+        fileSizeLimitBytes,
       });
 
       let request = supertest(testRealmServer.testRealmHttpServer);

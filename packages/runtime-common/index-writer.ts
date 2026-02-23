@@ -7,6 +7,7 @@ import {
   type JobInfo,
   jobIdentity,
   trimExecutableExtension,
+  hasExecutableExtension,
   RealmPaths,
   unixTime,
   logger,
@@ -60,7 +61,7 @@ export class IndexWriter {
   }
 }
 
-export type IndexEntry = InstanceEntry | ModuleEntry | ErrorEntry | FileEntry;
+export type IndexEntry = InstanceEntry | IndexErrorEntry | FileEntry;
 export type LastModifiedTimes = Map<
   string,
   { type: string; lastModified: number | null; hasError: boolean }
@@ -83,23 +84,37 @@ export interface InstanceEntry {
   deps: Set<string>;
 }
 
-export interface ErrorEntry {
-  type: 'instance-error' | 'module-error' | 'file-error';
+export interface IndexErrorEntry {
+  type: 'instance-error' | 'file-error';
   error: SerializedError;
   types?: string[];
   searchData?: Record<string, any>;
   cardType?: string;
 }
 
-function isErrorEntry(entry: IndexEntry): entry is ErrorEntry {
-  return entry.type.endsWith('-error');
+export type InstanceErrorIndexEntry = IndexErrorEntry & {
+  type: 'instance-error';
+};
+export type FileErrorIndexEntry = IndexErrorEntry & { type: 'file-error' };
+export type SearchIndexErrorEntry =
+  | InstanceErrorIndexEntry
+  | FileErrorIndexEntry;
+export type SearchIndexEntry =
+  | InstanceEntry
+  | SearchIndexErrorEntry
+  | FileEntry;
+
+export interface DependencyIndexRow {
+  url: string;
+  type: BoxelIndexTable['type'];
+  deps: string[] | null;
+  hasError: boolean;
+  isDeleted: boolean;
+  errorDoc: SerializedError | null;
 }
 
-interface ModuleEntry {
-  type: 'module';
-  lastModified: number;
-  resourceCreatedAt: number;
-  deps: Set<string>;
+function isErrorEntry(entry: { type: string }): entry is IndexErrorEntry {
+  return entry.type === 'instance-error' || entry.type === 'file-error';
 }
 
 export interface FileEntry {
@@ -161,8 +176,8 @@ export class Batch {
     let results = (await this.#query([
       `SELECT i.url, i.type, i.last_modified, i.has_error
        FROM boxel_index as i
-          WHERE i.realm_url =`,
-      param(this.realmURL.href),
+          WHERE`,
+      ...every([[`i.realm_url =`, param(this.realmURL.href)]]),
     ] as Expression)) as Pick<
       BoxelIndexTable,
       'url' | 'type' | 'last_modified' | 'has_error'
@@ -177,34 +192,6 @@ export class Batch {
       });
     }
     return result;
-  }
-
-  async getModuleErrors(urls: string[]): Promise<SerializedError[]> {
-    let candidates = [...new Set(urls)].filter(
-      (url) => url && !url.endsWith('.json'),
-    );
-    if (candidates.length === 0) {
-      return [];
-    }
-    let params = candidates.map((url) => [param(url)]);
-    let rows = (await this.#query([
-      `SELECT i.error_doc`,
-      `FROM boxel_index_working as i`,
-      'WHERE',
-      ...every([
-        ['i.realm_url =', param(this.realmURL.href)],
-        ['i.type =', param('module')],
-        ['i.has_error = TRUE'],
-        any([
-          ['i.url IN', ...addExplicitParens(separatedByCommas(params))],
-          ['i.file_alias IN', ...addExplicitParens(separatedByCommas(params))],
-        ]),
-        any([['i.is_deleted = FALSE'], ['i.is_deleted IS NULL']]),
-      ]),
-    ] as Expression)) as Pick<BoxelIndexTable, 'error_doc'>[];
-    return rows
-      .map((row) => row.error_doc)
-      .filter((errorDoc): errorDoc is SerializedError => Boolean(errorDoc));
   }
 
   async copyFrom(sourceRealmURL: URL, destRealmInfo: RealmInfo): Promise<void> {
@@ -299,7 +286,7 @@ export class Batch {
     ]);
   }
 
-  async updateEntry(url: URL, entry: IndexEntry): Promise<void> {
+  async updateEntry(url: URL, entry: SearchIndexEntry): Promise<void> {
     if (!new RealmPaths(this.realmURL).inRealm(url)) {
       // TODO this is a workaround for CS-6886. after we have solved that issue we can
       // drop this band-aid
@@ -335,17 +322,6 @@ export class Batch {
           has_error: false,
         };
         break;
-      case 'module':
-        entryPayload = {
-          type: 'module',
-          deps: [...entry.deps],
-          last_known_good_deps: [...entry.deps],
-          last_modified: entry.lastModified,
-          resource_created_at: entry.resourceCreatedAt,
-          error_doc: null,
-          has_error: false,
-        };
-        break;
       case 'file':
         entryPayload = {
           type: 'file',
@@ -368,7 +344,6 @@ export class Batch {
         };
         break;
       case 'instance-error':
-      case 'module-error':
       case 'file-error':
         entryPayload = {
           types: entry.types,
@@ -390,7 +365,9 @@ export class Batch {
         };
         break;
       default:
-        throw new Error(`Unsupported index entry type`);
+        throw new Error(
+          `Unsupported index entry type: ${(entry as { type: string }).type}`,
+        );
     }
     let preparedEntry = {
       url: href,
@@ -757,10 +734,114 @@ export class Batch {
     this.#invalidations = new Set([...this.#invalidations, ...invalidations]);
   }
 
+  async getDependencyRows(urls: string[]): Promise<DependencyIndexRow[]> {
+    await this.ready;
+    if (urls.length === 0) {
+      return [];
+    }
+
+    let uniqueUrls = [...new Set(urls)];
+    // SQLite has a lower parameter limit than Postgres. Chunk URL lookups to
+    // keep IN-clause parameter counts within safe bounds for both adapters.
+    let urlBatchSize = this.#dbAdapter.kind === 'sqlite' ? 900 : 5000;
+    let workingRows: DependencyIndexRow[] = [];
+    let productionRows: DependencyIndexRow[] = [];
+    for (let i = 0; i < uniqueUrls.length; i += urlBatchSize) {
+      let urlBatch = uniqueUrls.slice(i, i + urlBatchSize);
+      let [workingBatchRows, productionBatchRows] = await Promise.all([
+        this.queryDependencyRows('boxel_index_working', urlBatch),
+        this.queryDependencyRows('boxel_index', urlBatch),
+      ]);
+      workingRows.push(...workingBatchRows);
+      productionRows.push(...productionBatchRows);
+    }
+
+    let rowsByKey = new Map<
+      string,
+      {
+        working?: DependencyIndexRow;
+        production?: DependencyIndexRow;
+      }
+    >();
+
+    for (let row of workingRows) {
+      let key = `${row.url}|${row.type}`;
+      let existing = rowsByKey.get(key) ?? {};
+      existing.working = row;
+      rowsByKey.set(key, existing);
+    }
+
+    for (let row of productionRows) {
+      let key = `${row.url}|${row.type}`;
+      let existing = rowsByKey.get(key) ?? {};
+      existing.production = row;
+      rowsByKey.set(key, existing);
+    }
+
+    let selectedRows: DependencyIndexRow[] = [];
+    for (let { working, production } of rowsByKey.values()) {
+      if (working && !working.isDeleted) {
+        selectedRows.push(working);
+        continue;
+      }
+      if (working?.isDeleted && production) {
+        selectedRows.push(production);
+        continue;
+      }
+      if (working) {
+        selectedRows.push(working);
+        continue;
+      }
+      if (production) {
+        selectedRows.push(production);
+      }
+    }
+
+    return selectedRows;
+  }
+
+  private async queryDependencyRows(
+    tableName: 'boxel_index' | 'boxel_index_working',
+    urls: string[],
+  ): Promise<DependencyIndexRow[]> {
+    if (urls.length === 0) {
+      return [];
+    }
+
+    let rows = (await this.#query([
+      `SELECT url, type, deps, has_error, is_deleted, error_doc FROM ${tableName} WHERE`,
+      ...every([
+        ['realm_url =', param(this.realmURL.href)],
+        [
+          'url IN',
+          ...addExplicitParens(
+            separatedByCommas(urls.map((url) => [param(url)])),
+          ),
+        ],
+        any([
+          ['type =', param('instance')],
+          ['type =', param('file')],
+        ]),
+      ]),
+    ] as Expression)) as Pick<
+      BoxelIndexTable,
+      'url' | 'type' | 'deps' | 'has_error' | 'is_deleted' | 'error_doc'
+    >[];
+
+    return rows.map((row) => ({
+      url: row.url,
+      type: row.type,
+      deps: row.deps ?? null,
+      hasError: Boolean(row.has_error),
+      isDeleted: Boolean(row.is_deleted),
+      errorDoc: row.error_doc ?? null,
+    }));
+  }
+
   private async itemsThatReference(resolvedPath: string): Promise<
     {
       url: string;
-      alias: string;
+      alias: string | null;
       type: BoxelIndexTable['type'];
     }[]
   > {
@@ -793,9 +874,6 @@ export class Batch {
             }),
             param({ sqlite: resolvedPath, pg: `["${resolvedPath}"]` }),
           ],
-          // css is a subset of modules, so there won't by any references that
-          // are css entries that aren't already represented by a module entry
-          [`i.type != 'css'`],
           // probably need to reevaluate this condition when we get to cross
           // realm invalidation
           [`i.realm_url =`, param(this.realmURL.href)],
@@ -832,21 +910,41 @@ export class Batch {
     visited.add(resolvedPath);
     let items = await this.itemsThatReference(resolvedPath);
     let invalidations = items.map(({ url }) => url);
-    let aliases = items.map(({ alias: moduleAlias, type, url }) =>
-      type === 'instance'
-        ? // for instances we expect that the deps for an entry always includes .json extension
-          url
-        : moduleAlias,
+    let aliases = items.map(({ alias, type, url }) =>
+      this.invalidationTraversalAlias({ alias, type, url }),
     );
     let results = [
       ...invalidations,
       ...flatten(
         await Promise.all(
-          aliases.map((a) => this.calculateInvalidations(a, visited)),
+          aliases
+            .filter((a): a is string => Boolean(a))
+            .map((a) => this.calculateInvalidations(a, visited)),
         ),
       ),
     ];
     return [...new Set(results)];
+  }
+
+  private invalidationTraversalAlias({
+    alias,
+    type,
+    url,
+  }: {
+    alias: string | null;
+    type: BoxelIndexTable['type'];
+    url: string;
+  }): string {
+    if (type === 'instance') {
+      // for instances we expect that deps include concrete .json URLs
+      return url;
+    }
+    if (hasExecutableExtension(url) && alias) {
+      // executable file invalidation needs node-style alias traversal
+      return alias;
+    }
+    // non-executable files should recurse by concrete URL
+    return url;
   }
 
   private copiedRealmURL(fromRealm: URL, file: URL): URL {
@@ -928,13 +1026,11 @@ export class Batch {
 }
 
 function baseTypeFromError(
-  entry: ErrorEntry,
-): Extract<BoxelIndexTable['type'], 'instance' | 'module' | 'file'> {
+  entry: SearchIndexErrorEntry,
+): Extract<BoxelIndexTable['type'], 'instance' | 'file'> {
   switch (entry.type) {
     case 'instance-error':
       return 'instance';
-    case 'module-error':
-      return 'module';
     case 'file-error':
       return 'file';
   }

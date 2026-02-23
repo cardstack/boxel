@@ -5,6 +5,7 @@ import { extractPngDimensions } from './png-meta-extractor';
 
 export class PngDef extends ImageDef {
   static displayName = 'PNG Image';
+  static acceptTypes = '.png,image/png';
 
   static async extractAttributes(
     url: string,

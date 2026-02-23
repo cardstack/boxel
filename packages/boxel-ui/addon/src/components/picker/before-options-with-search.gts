@@ -1,3 +1,4 @@
+import { autoFocus } from '@cardstack/boxel-ui/modifiers';
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
 import type { Select } from 'ember-power-select/components/power-select';
@@ -43,6 +44,7 @@ export default class PickerBeforeOptionsWithSearch extends Component<BeforeOptio
           @onInput={{this.updateSearchTerm}}
           @placeholder={{this.searchPlaceholder}}
           class='picker-before-options__search-input'
+          {{autoFocus}}
         />
       </div>
     </div>

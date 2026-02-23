@@ -996,7 +996,7 @@ module(basename(__filename), function () {
             '*': ['read', 'write'],
             '@node-test_realm:localhost': ['read', 'realm-owner'],
           },
-          cardSizeLimitBytes: 512,
+          fileSizeLimitBytes: 512,
           onRealmSetup,
         });
 
@@ -1199,7 +1199,7 @@ module(basename(__filename), function () {
               '*': ['read', 'write'],
               '@node-test_realm:localhost': ['read', 'realm-owner'],
             },
-            cardSizeLimitBytes: 512,
+            fileSizeLimitBytes: 512,
             onRealmSetup,
           });
 

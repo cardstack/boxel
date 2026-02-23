@@ -580,7 +580,7 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
     assert.dom('[data-test-field="trips"] [data-test-add-new]').exists();
     await click('[data-test-links-to-many="countries"] [data-test-add-new]');
     await waitFor(`[data-test-card-catalog-item="${testRealmURL}japan"]`);
-    await click(`[data-test-select="${testRealmURL}japan"]`);
+    await click(`[data-test-card-catalog-item="${testRealmURL}japan"]`);
     await click('[data-test-card-catalog-go-button]');
 
     await waitFor('[card-catalog-modal]', { count: 0 });
@@ -590,7 +590,7 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
 
     await click('[data-test-links-to-many="countries"] [data-test-add-new]');
     await waitFor(`[data-test-card-catalog-item="${testRealmURL}usa"]`);
-    await click(`[data-test-select="${testRealmURL}usa"]`);
+    await click(`[data-test-card-catalog-item="${testRealmURL}usa"]`);
     await click('[data-test-card-catalog-go-button]');
 
     await waitFor('[card-catalog-modal]', { count: 0 });

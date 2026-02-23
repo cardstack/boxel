@@ -385,7 +385,7 @@ module('Integration | card-basics', function (hooks) {
       assert.true(instanceOf(new ExteriorField(), FieldDef));
     });
 
-    test('linksTo FileDef renders without editor controls in edit format', async function (assert) {
+    test('linksTo FileDef renders editor controls in edit format', async function (assert) {
       class ImageDef extends FileDef {
         static fitted = class Fitted extends Component<typeof this> {
           <template>
@@ -420,13 +420,13 @@ module('Integration | card-basics', function (hooks) {
 
       assert
         .dom('[data-test-links-to-editor="hero"]')
-        .doesNotExist('FileDef links should not show linksTo editor UI');
+        .exists('FileDef links should show linksTo editor UI');
       assert
         .dom('[data-test-image-def]')
         .hasText('hero.png', 'FileDef uses delegated fitted view');
     });
 
-    test('linksToMany FileDef renders without editor controls in edit format', async function (assert) {
+    test('linksToMany FileDef renders editor controls in edit format', async function (assert) {
       class ImageDef extends FileDef {
         static fitted = class Fitted extends Component<typeof this> {
           <template>
@@ -468,10 +468,7 @@ module('Integration | card-basics', function (hooks) {
 
       assert
         .dom('[data-test-links-to-many="attachments"]')
-        .doesNotExist('FileDef links should not show linksToMany editor UI');
-      assert
-        .dom('[data-test-plural-view-field="attachments"]')
-        .exists('FileDef links render via the plural view');
+        .exists('FileDef links should show linksToMany editor UI');
       assert
         .dom('[data-test-image-def]')
         .exists(

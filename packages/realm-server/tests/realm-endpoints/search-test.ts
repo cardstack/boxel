@@ -515,6 +515,230 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
           );
         });
       });
+
+      module('fields-based link loading', function (hooks) {
+        setupPermissionedRealm(hooks, {
+          permissions: {
+            '*': ['read'],
+          },
+          realmURL: new URL('http://127.0.0.1:4444/test/'),
+          fileSystem: {
+            'friend.gts': `
+              import {
+                contains,
+                linksTo,
+                linksToMany,
+                field,
+                CardDef,
+                Component,
+              } from 'https://cardstack.com/base/card-api';
+              import StringField from 'https://cardstack.com/base/string';
+
+              export class Friend extends CardDef {
+                @field firstName = contains(StringField);
+                @field friend = linksTo(() => Friend);
+                @field friends = linksToMany(() => Friend);
+                static isolated = class Isolated extends Component<typeof this> {
+                  <template>
+                    <@fields.firstName />
+                  </template>
+                };
+              }
+            `,
+            'friend-1.json': {
+              data: {
+                type: 'card',
+                attributes: {
+                  firstName: 'Alice',
+                },
+                relationships: {
+                  friend: {
+                    links: {
+                      self: './friend-2',
+                    },
+                  },
+                  'friends.0': {
+                    links: {
+                      self: './friend-2',
+                    },
+                  },
+                  'friends.1': {
+                    links: {
+                      self: './friend-3',
+                    },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: './friend',
+                    name: 'Friend',
+                  },
+                },
+              },
+            },
+            'friend-2.json': {
+              data: {
+                type: 'card',
+                attributes: {
+                  firstName: 'Bob',
+                },
+                relationships: {
+                  friend: {
+                    links: {
+                      self: './friend-3',
+                    },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: './friend',
+                    name: 'Friend',
+                  },
+                },
+              },
+            },
+            'friend-3.json': {
+              data: {
+                type: 'card',
+                attributes: {
+                  firstName: 'Charlie',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: './friend',
+                    name: 'Friend',
+                  },
+                },
+              },
+            },
+          },
+          onRealmSetup,
+        });
+
+        function buildFriendQuery(firstName: string): Query {
+          return {
+            filter: {
+              on: {
+                module: `${realmHref}friend`,
+                name: 'Friend',
+              },
+              eq: {
+                firstName,
+              },
+            },
+          };
+        }
+
+        test('fields with relationship field name loads that relationship into included', async function (assert) {
+          let response = await request
+            .post(searchPath)
+            .set('Accept', 'application/vnd.card+json')
+            .set('X-HTTP-Method-Override', 'QUERY')
+            .send({
+              ...buildFriendQuery('Alice'),
+              fields: { card: ['firstName', 'friend'] },
+              asData: true,
+            });
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          let json = response.body;
+          assert.strictEqual(json.data.length, 1, 'one result is returned');
+          assert.strictEqual(
+            json.data[0].attributes.firstName,
+            'Alice',
+            'correct card returned',
+          );
+          assert.ok(json.included, 'included array is present');
+          assert.ok(json.included.length > 0, 'included has resources');
+          let includedIds = json.included.map((r: { id: string }) => r.id);
+          assert.ok(
+            includedIds.some((id: string) => id.includes('friend-2')),
+            'linked friend resource is in included',
+          );
+        });
+
+        test('fields with only attribute field names does not load links', async function (assert) {
+          let response = await request
+            .post(searchPath)
+            .set('Accept', 'application/vnd.card+json')
+            .set('X-HTTP-Method-Override', 'QUERY')
+            .send({
+              ...buildFriendQuery('Alice'),
+              fields: { card: ['firstName'] },
+              asData: true,
+            });
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          let json = response.body;
+          assert.strictEqual(json.data.length, 1, 'one result is returned');
+          assert.strictEqual(
+            json.data[0].attributes.firstName,
+            'Alice',
+            'correct card returned',
+          );
+          assert.strictEqual(
+            json.included,
+            undefined,
+            'no included array when fields has no relationship names',
+          );
+        });
+
+        test('fields filter applies only at root level - nested relationships are fully loaded', async function (assert) {
+          // Alice links to Bob via `friend`, and Bob links to Charlie via
+          // `friend`. When we request only `friend` in fields, Bob's nested
+          // link to Charlie should also be included because linkFields is
+          // cleared for recursive link loading.
+          let response = await request
+            .post(searchPath)
+            .set('Accept', 'application/vnd.card+json')
+            .set('X-HTTP-Method-Override', 'QUERY')
+            .send({
+              ...buildFriendQuery('Alice'),
+              fields: { card: ['friend'] },
+              asData: true,
+            });
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          let json = response.body;
+          assert.strictEqual(json.data.length, 1, 'one result is returned');
+          assert.ok(json.included, 'included array is present');
+          let includedIds = json.included.map((r: { id: string }) => r.id);
+          assert.ok(
+            includedIds.some((id: string) => id.includes('friend-2')),
+            'directly linked friend (Bob) is in included',
+          );
+          assert.ok(
+            includedIds.some((id: string) => id.includes('friend-3')),
+            "Bob's nested friend (Charlie) is also in included",
+          );
+        });
+
+        test('fields with linksToMany relationship loads those links', async function (assert) {
+          let response = await request
+            .post(searchPath)
+            .set('Accept', 'application/vnd.card+json')
+            .set('X-HTTP-Method-Override', 'QUERY')
+            .send({
+              ...buildFriendQuery('Alice'),
+              fields: { card: ['friends'] },
+              asData: true,
+            });
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          let json = response.body;
+          assert.strictEqual(json.data.length, 1, 'one result is returned');
+          assert.ok(json.included, 'included array is present');
+          let includedIds = json.included.map((r: { id: string }) => r.id);
+          assert.ok(
+            includedIds.some((id: string) => id.includes('friend-2')),
+            'first linked friend is in included',
+          );
+          assert.ok(
+            includedIds.some((id: string) => id.includes('friend-3')),
+            'second linked friend is in included',
+          );
+        });
+      });
     });
 
     module('QUERY request (permissioned realm)', function (_hooks) {
