@@ -80,6 +80,7 @@ import {
   withRuntimeDependencyTrackingContext,
   trackRuntimeFileDependency,
   trackRuntimeInstanceDependency,
+  trackRuntimeModuleDependency,
   type RuntimeDependencyTrackingContext,
 } from '@cardstack/runtime-common';
 import {
@@ -1231,7 +1232,7 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
     let cachedInstance = isFileDef(this.card)
       ? store.getFileMeta(href)
       : store.getCard(href);
-    if (cachedInstance) {
+    if (cachedInstance && instanceOf(cachedInstance, this.card)) {
       cachedInstance[isSavedInstance] = true;
       return cachedInstance as BaseInstanceType<CardT>;
     }
@@ -1739,7 +1740,7 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
           ? store.getFileMeta(normalizedReference)
           : store.getCard(normalizedReference);
 
-        if (cachedInstance) {
+        if (cachedInstance && instanceOf(cachedInstance, this.card)) {
           cachedInstance[isSavedInstance] = true;
           return cachedInstance;
         }
@@ -2936,9 +2937,11 @@ function trackRuntimeRelationshipDependency(
   }
   if (isFileDef(declaredCard)) {
     trackRuntimeFileDependency(id);
+    trackRuntimeRelationshipModuleDependencies(value);
     return;
   }
   trackRuntimeInstanceDependency(id);
+  trackRuntimeRelationshipModuleDependencies(value);
 }
 
 function trackRuntimeRelationshipDependencies(
@@ -2947,6 +2950,33 @@ function trackRuntimeRelationshipDependencies(
 ): void {
   for (let value of values) {
     trackRuntimeRelationshipDependency(value, declaredCard);
+  }
+}
+
+function trackRuntimeRelationshipModuleDependencies(value: unknown): void {
+  if (!value || typeof value !== 'object') {
+    return;
+  }
+
+  let ctor = Reflect.getPrototypeOf(value)?.constructor;
+  if (typeof ctor !== 'function') {
+    return;
+  }
+
+  let identity = Loader.identify(ctor);
+  if (!identity) {
+    return;
+  }
+
+  trackRuntimeModuleDependency(identity.module);
+
+  let loader = Loader.getLoaderFor(ctor);
+  if (!loader) {
+    return;
+  }
+
+  for (let dep of loader.getKnownConsumedModules(identity.module)) {
+    trackRuntimeModuleDependency(dep);
   }
 }
 
@@ -3159,7 +3189,9 @@ async function _createFromSerialized<T extends BaseDefConstructor>(
       isFileMetaResource(resource) || isFileDef(card)
         ? store.getFileMeta(resourceId)
         : store.getCard(resourceId);
-    instance = cachedInstance as BaseInstanceType<T> | undefined;
+    if (cachedInstance && instanceOf(cachedInstance, card as any)) {
+      instance = cachedInstance as BaseInstanceType<T>;
+    }
   }
   if (!instance) {
     instance = new card({

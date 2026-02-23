@@ -231,6 +231,36 @@ module(basename(__filename), function () {
       });
     });
 
+    test('serves markdown file meta subclass for noCache requests', async function (assert) {
+      await testRealm.write(
+        'guide.md',
+        '# Guide\n\nThis markdown file should resolve to MarkdownDef.',
+      );
+
+      let response = await request
+        .get(`/guide.md?noCache=true`)
+        .set('Accept', SupportedMimeType.FileMeta)
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`,
+        );
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      assert.ok(
+        response.headers['content-type']?.startsWith(
+          SupportedMimeType.FileMeta,
+        ),
+        'content-type uses file meta mime type',
+      );
+      let json = response.body as LooseSingleCardDocument;
+      assert.strictEqual(json.data.type, 'file-meta');
+      assert.strictEqual(json.data.attributes?.name, 'guide.md');
+      assert.deepEqual(json.data.meta?.adoptsFrom, {
+        module: `${baseRealm.url}markdown-file-def`,
+        name: 'MarkdownDef',
+      });
+    });
+
     test('sets canonical path header for nested module requests', async function (assert) {
       let response = await request
         .get(`/nested/example`)

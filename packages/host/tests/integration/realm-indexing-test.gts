@@ -229,7 +229,8 @@ module(`Integration | realm indexing`, function (hooks) {
       fileEntry?.deps?.includes(`${baseRealm.url}file-api`),
       'deps include base file-api module',
     );
-    assert.ok(fileEntry?.deps?.includes(fileURL.href), 'deps include file URL');
+    let includesSelfFileDependency = fileEntry?.deps?.includes(fileURL.href);
+    assert.false(includesSelfFileDependency, 'deps exclude self file URL');
   });
 
   test('full indexing skips over unchanged items in index', async function (assert) {
@@ -351,12 +352,12 @@ module(`Integration | realm indexing`, function (hooks) {
           `missing file ${testRealmURL}Person/owner.json`,
         );
         assert.deepEqual(
-          mango.error.errorDetail.deps,
+          [...(mango.error.errorDetail.deps ?? [])].sort(),
           [
             `${testRealmURL}Person/owner`,
             `${testRealmURL}Person/owner.json`,
             'http://localhost:4202/test/pet',
-          ],
+          ].sort(),
           'error deps are correct',
         );
       } else {

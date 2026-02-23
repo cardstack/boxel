@@ -1064,6 +1064,10 @@ export default class RenderRoute extends Route<Model> {
         }
       | undefined,
   ): string[] {
+    // When render fails before model() initializes, runtime dependency capture
+    // has not started yet. Recover the requested card id from transition params
+    // (or URL path as a last resort) so the error doc still carries enough deps
+    // for downstream invalidation/error propagation.
     let id = params?.id;
     if (!id && typeof window !== 'undefined') {
       try {
@@ -1092,6 +1096,10 @@ export default class RenderRoute extends Route<Model> {
   }
 
   #fallbackDepsFromIds(ids: (string | undefined)[]): string[] {
+    // Seed dependency ids in every shape we might see in index/module rows:
+    // original id, normalized card id, and `.json` variants. This keeps error
+    // propagation resilient when callers provide extensionless ids while index
+    // entries are stored with concrete instance urls.
     let deps = new Set<string>();
     for (let id of ids) {
       if (!id) {

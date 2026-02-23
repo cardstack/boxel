@@ -135,6 +135,7 @@ import { RealmIndexUpdater } from './realm-index-updater';
 import serialize from './file-serializer';
 import { validateWriteSize } from './write-size-validation';
 import { md5 } from 'super-fast-md5';
+import { resolveFileDefCodeRef } from './file-def-code-ref';
 
 import type { Utils } from './matrix-backend-authentication';
 import { MatrixBackendAuthentication } from './matrix-backend-authentication';
@@ -201,10 +202,6 @@ const CACHE_HIT_VALUE = 'hit';
 const CACHE_MISS_VALUE = 'miss';
 const MODULE_ETAG_VARIANT = 'module';
 const SOURCE_ETAG_VARIANT = 'source';
-const FILE_DEF_CODE_REF: ResolvedCodeRef = {
-  module: `${baseRealm.url}file-api`,
-  name: 'FileDef',
-};
 export const FILE_META_RESERVED_KEYS = new Set([
   'name',
   'url',
@@ -2335,6 +2332,7 @@ export class Realm {
       return undefined;
     }
     let fileURL = this.paths.fileURL(localPath).href;
+    let fileDefCodeRef = resolveFileDefCodeRef(new URL(fileURL));
     let name = localPath.split('/').pop() ?? localPath;
     let inferredContentType = inferContentType(name);
     let createdAt = await this.getCreatedTime(localPath);
@@ -2362,7 +2360,7 @@ export class Realm {
           createdAt: createdAt ?? fileRef.lastModified,
         },
         meta: {
-          adoptsFrom: FILE_DEF_CODE_REF,
+          adoptsFrom: fileDefCodeRef,
           realmInfo,
           realmURL: this.url,
         },
@@ -2407,7 +2405,7 @@ export class Realm {
       codeRefFromInternalKey(fileEntry.types?.[0]) ??
       (isCodeRef(fileEntry.resource?.meta?.adoptsFrom)
         ? fileEntry.resource?.meta?.adoptsFrom
-        : FILE_DEF_CODE_REF);
+        : resolveFileDefCodeRef(new URL(fileURL)));
     let resourceAttributes =
       (fileEntry as IndexedFile).resource?.attributes ?? {};
     let baseAttributes = {

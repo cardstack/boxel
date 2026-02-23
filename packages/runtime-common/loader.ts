@@ -236,7 +236,28 @@ export class Loader {
     }
   }
 
+  getKnownConsumedModules(moduleIdentifier: string): string[] {
+    let resolvedModuleIdentifier = this.resolveImport(moduleIdentifier);
+    let knownDependencies = this.collectKnownModuleDependencies(
+      resolvedModuleIdentifier,
+    );
+    knownDependencies.delete(resolvedModuleIdentifier);
+    return [...knownDependencies];
+  }
+
   private trackKnownModuleDependencies(rootModuleIdentifier: string): void {
+    for (let moduleIdentifier of this.collectKnownModuleDependencies(
+      rootModuleIdentifier,
+    )) {
+      if (!this.moduleShims.has(moduleIdentifier)) {
+        trackRuntimeModuleDependency(moduleIdentifier);
+      }
+    }
+  }
+
+  private collectKnownModuleDependencies(
+    rootModuleIdentifier: string,
+  ): Set<string> {
     let pending = [rootModuleIdentifier];
     let visited = new Set<string>();
 
@@ -246,10 +267,6 @@ export class Loader {
         continue;
       }
       visited.add(moduleIdentifier);
-
-      if (!this.moduleShims.has(moduleIdentifier)) {
-        trackRuntimeModuleDependency(moduleIdentifier);
-      }
 
       let module = this.getModule(moduleIdentifier);
       if (!module) {
@@ -285,6 +302,8 @@ export class Loader {
           throw assertNever(module);
       }
     }
+
+    return visited;
   }
 
   private async advanceToState(
