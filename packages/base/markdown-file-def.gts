@@ -38,8 +38,8 @@ function normalizeMarkdown(markdown: string): string {
   return markdown.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 }
 
-const FENCED_CODE_RE = /```[\s\S]*?```/g;
 // content-tag misparses backticks inside regex literals in .gts files
+const FENCED_CODE_RE = new RegExp('```[\\s\\S]*?```', 'g');
 const INLINE_CODE_RE = new RegExp('`([^`]+)`', 'g');
 
 function stripMarkdown(text: string): string {
@@ -103,11 +103,15 @@ function extractExcerpt(markdown: string): string {
   return '';
 }
 
+function markdownTitle(
+  model: { title?: string | null; name?: string | null } | null | undefined,
+): string {
+  return model?.title ?? model?.name ?? 'Untitled markdown';
+}
+
 class Isolated extends Component<typeof MarkdownDef> {
   get title() {
-    return (
-      this.args.model?.title ?? this.args.model?.name ?? 'Untitled markdown'
-    );
+    return markdownTitle(this.args.model);
   }
 
   get content() {
@@ -152,9 +156,7 @@ class Isolated extends Component<typeof MarkdownDef> {
 
 class Embedded extends Component<typeof MarkdownDef> {
   get title() {
-    return (
-      this.args.model?.title ?? this.args.model?.name ?? 'Untitled markdown'
-    );
+    return markdownTitle(this.args.model);
   }
 
   get content() {
@@ -222,9 +224,7 @@ class Embedded extends Component<typeof MarkdownDef> {
 
 class Fitted extends Component<typeof MarkdownDef> {
   get title() {
-    return (
-      this.args.model?.title ?? this.args.model?.name ?? 'Untitled markdown'
-    );
+    return markdownTitle(this.args.model);
   }
 
   get excerpt() {
@@ -362,9 +362,7 @@ class Fitted extends Component<typeof MarkdownDef> {
 
 class Atom extends Component<typeof MarkdownDef> {
   get title() {
-    return (
-      this.args.model?.title ?? this.args.model?.name ?? 'Untitled markdown'
-    );
+    return markdownTitle(this.args.model);
   }
 
   <template>
@@ -398,7 +396,7 @@ class Atom extends Component<typeof MarkdownDef> {
 
 class Head extends Component<typeof MarkdownDef> {
   get title() {
-    return this.args.model?.title ?? this.args.model?.name ?? 'Untitled markdown';
+    return markdownTitle(this.args.model);
   }
 
   get description() {
