@@ -3,6 +3,7 @@ import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { service } from '@ember/service';
 
+import { dropTask } from 'ember-concurrency';
 import { consume } from 'ember-provide-consume-context';
 import { velcro } from 'ember-velcro';
 
@@ -364,15 +365,41 @@ export default class OperatorModeOverlays extends Overlays {
   private isFileMetaTarget(
     renderedCard: StackItemRenderedCardForOverlayActions,
   ): boolean {
-    let cardDefOrId = renderedCard.cardDefOrId;
-    if (typeof cardDefOrId === 'string') {
-      return Boolean(
-        this.store.peek(cardDefOrId, { type: 'file-meta' }) ??
-        this.store.peekError(cardDefOrId, { type: 'file-meta' }),
-      );
-    }
-    return isFileDefInstance(cardDefOrId);
+    return this.getTypeForCardTarget(renderedCard.cardDefOrId) === 'file';
   }
+
+  private getTypeForCardTarget(cardDefOrId: CardDefOrId): 'card' | 'file' {
+    if (typeof cardDefOrId === 'string') {
+      let fileMetaInstanceOrError =
+        this.store.peek(cardDefOrId, { type: 'file-meta' }) ??
+        this.store.peekError(cardDefOrId, { type: 'file-meta' });
+      return fileMetaInstanceOrError ? 'file' : 'card';
+    }
+    return isFileDefInstance(cardDefOrId) ? 'file' : 'card';
+  }
+
+  protected override viewCard = dropTask(
+    async (
+      cardDefOrId: CardDefOrId,
+      format: Format = 'isolated',
+      fieldType?: 'linksTo' | 'contains' | 'containsMany' | 'linksToMany',
+      fieldName?: string,
+    ) => {
+      let cardId =
+        typeof cardDefOrId === 'string' ? cardDefOrId : cardDefOrId.id;
+      let canWrite = this.realm.canWrite(cardId);
+      format = canWrite ? format : 'isolated';
+      if (this.args.viewCard) {
+        let target =
+          typeof cardDefOrId === 'string' ? new URL(cardId) : cardDefOrId;
+        await this.args.viewCard(target, format, {
+          type: this.getTypeForCardTarget(cardDefOrId),
+          fieldType,
+          fieldName,
+        });
+      }
+    },
+  );
 
   @action
   private registerDropdownAPI(

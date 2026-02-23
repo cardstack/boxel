@@ -198,6 +198,7 @@ export default class InteractSubmode extends Component {
     cardOrURL: CardDef | URL | string,
     format: Format | Event = 'isolated',
     opts?: {
+      type?: StackItemType;
       openCardInRightMostStack?: boolean;
       stackIndex?: number;
       fieldType?: 'linksTo' | 'linksToMany' | 'contains' | 'containsMany';
@@ -234,7 +235,7 @@ export default class InteractSubmode extends Component {
       }
       stackIndex = opts.stackIndex;
     }
-    let stackItemType = this.getStackItemType(cardOrURL, cardId);
+    let stackItemType = opts?.type ?? this.getStackItemType(cardOrURL, cardId);
     let newItem = new StackItem({
       id: cardId,
       format,
