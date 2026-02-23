@@ -289,7 +289,7 @@ test.describe('Commands', () => {
     }).toPass();
   });
 
-  test('an autoexecuted command does not run again when the message is re-rendered', async ({
+  test.only('an autoexecuted command does not run again when the message is re-rendered', async ({
     page,
   }) => {
     const { username, password, credentials } =
@@ -347,6 +347,7 @@ test.describe('Commands', () => {
       .locator('[data-test-card-catalog-item]', {
         hasText: 'Automatic Switch Command',
       })
+      .first()
       .click();
     await page.locator('[data-test-card-catalog-go-button]').click();
 

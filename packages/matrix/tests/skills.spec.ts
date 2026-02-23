@@ -369,6 +369,7 @@ test.describe('Skills', () => {
       .locator(
         '[data-test-card-catalog-item="https://cardstack.com/base/cards/skill"]',
       )
+      .first()
       .click();
     await page.locator('[data-test-card-catalog-go-button]').click();
     await page
