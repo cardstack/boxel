@@ -362,13 +362,31 @@ test.describe('Room creation', () => {
     await isInRoom(page, room2); // remains in same room
     await deleteRoom(page, room2); // current room is deleted
     await page.locator('[data-test-ai-assistant-panel]').click();
+    let newRoom: string | undefined;
+    await waitUntil(async () => {
+      try {
+        let roomId = await getRoomId(page);
+        if (roomId !== room1 && roomId !== room2 && roomId !== room3) {
+          newRoom = roomId;
+          return true;
+        }
+        return false;
+      } catch {
+        return false;
+      }
+    }, 30000);
+    if (!newRoom) {
+      throw new Error('expected to enter a newly-created room after deletion');
+    }
 
-    await expect(async () => {
-      let newRoom = await getRoomId(page);
-      await isInRoom(page, newRoom);
-      await assertRooms(page, [newRoom]);
-      await expect(page.locator('[data-test-room-is-empty]')).toHaveCount(1);
-    }).toPass();
+    await isInRoom(page, newRoom);
+    await page.locator('[data-test-past-sessions-button]').click();
+    await expect(page.locator('[data-test-joined-room]')).toHaveCount(1);
+    await expect(
+      page.locator(`[data-test-joined-room="${newRoom}"]`),
+    ).toHaveCount(1);
+    await page.locator('[data-test-ai-assistant-panel]').click();
+    await expect(page.locator('[data-test-room-is-empty]')).toHaveCount(1);
   });
 
   // skipping flaky test - re-enabled while we work on the fix.
