@@ -730,12 +730,7 @@ export class RealmIndexQueryEngine {
           );
         }
         let relationshipType = relationship.data?.type;
-        // Legacy relationship payloads may still use "file" as the type.
-        // Treat it as file-meta so linksTo(MarkdownDef) and similar FileDef
-        // relationships resolve through the file index path.
-        let expectsFileMeta =
-          relationshipType === FileMetaResourceType ||
-          relationshipType === 'file';
+        let expectsFileMeta = relationshipType === FileMetaResourceType;
         let expectsCard = relationshipType === CardResourceType;
         // Stale index payloads can incorrectly record file relationships as
         // type "card" (or omit type entirely) when linked files were indexed
