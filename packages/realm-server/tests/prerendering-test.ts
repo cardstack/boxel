@@ -183,6 +183,77 @@ module(basename(__filename), function () {
                 },
               },
             },
+            'dep-reset-consumer.gts': `
+              import { CardDef, field, linksTo, Component } from 'https://cardstack.com/base/card-api';
+              import { Person } from './person';
+              export class DepResetConsumer extends CardDef {
+                static displayName = 'Dep Reset Consumer';
+                @field friend = linksTo(() => Person);
+                static isolated = class extends Component<typeof this> {
+                  <template><@fields.friend/></template>
+                }
+              }
+            `,
+            'dep-reset-consumer-a.json': {
+              data: {
+                relationships: {
+                  friend: {
+                    links: {
+                      self: './dep-reset-friend-a',
+                    },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: './dep-reset-consumer',
+                    name: 'DepResetConsumer',
+                  },
+                },
+              },
+            },
+            'dep-reset-consumer-b.json': {
+              data: {
+                relationships: {
+                  friend: {
+                    links: {
+                      self: './dep-reset-friend-b',
+                    },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: './dep-reset-consumer',
+                    name: 'DepResetConsumer',
+                  },
+                },
+              },
+            },
+            'dep-reset-friend-a.json': {
+              data: {
+                attributes: {
+                  name: 'Friend A',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: './person',
+                    name: 'Person',
+                  },
+                },
+              },
+            },
+            'dep-reset-friend-b.json': {
+              data: {
+                attributes: {
+                  name: 'Friend B',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: './person',
+                    name: 'Person',
+                  },
+                },
+              },
+            },
             'no-icon.gts': `
               import { CardDef, field, contains, StringField, Component } from 'https://cardstack.com/base/card-api';
               export class NoIcon extends CardDef {
@@ -403,6 +474,34 @@ module(basename(__filename), function () {
       );
     });
 
+    test('resets runtime deps between consecutive prerenders', async function (assert) {
+      let first = await prerenderer.prerenderCard({
+        realm: realmURL,
+        url: `${realmURL}dep-reset-consumer-a`,
+        auth: auth(),
+      });
+      let firstDeps = first.response.deps ?? [];
+      assert.true(
+        firstDeps.includes(`${realmURL}dep-reset-friend-a.json`),
+        'first prerender includes first relationship target',
+      );
+
+      let second = await prerenderer.prerenderCard({
+        realm: realmURL,
+        url: `${realmURL}dep-reset-consumer-b`,
+        auth: auth(),
+      });
+      let secondDeps = second.response.deps ?? [];
+      assert.true(
+        secondDeps.includes(`${realmURL}dep-reset-friend-b.json`),
+        'second prerender includes second relationship target',
+      );
+      assert.false(
+        secondDeps.includes(`${realmURL}dep-reset-friend-a.json`),
+        'second prerender deps do not leak first prerender relationship target',
+      );
+    });
+
     test('prerenderModule returns module metadata', async function (assert) {
       const moduleURL = `${realmURL}person.gts`;
 
@@ -586,6 +685,23 @@ module(basename(__filename), function () {
           '[data-prerender] has no child element to capture',
         ),
         `error message mentions empty prerender container, got: ${result.response.error?.error.message}`,
+      );
+      let errorDeps = result.response.error?.error.deps;
+      assert.notStrictEqual(
+        errorDeps,
+        null,
+        'short-circuit invalid render response includes non-null deps',
+      );
+      let deps = errorDeps ?? [];
+      assert.true(
+        Array.isArray(deps),
+        'short-circuit invalid render response deps are an array',
+      );
+      assert.true(
+        [`${realmURL}no-icon`, `${realmURL}no-icon.json`].some((dep) =>
+          deps.includes(dep),
+        ),
+        `synthesized invalid render error includes fallback dep context (deps: ${JSON.stringify(deps)})`,
       );
     });
 
@@ -792,6 +908,23 @@ module(basename(__filename), function () {
           'error payload flags eviction',
         );
         assert.false(result.pool.timedOut, 'error is not treated as timeout');
+        let errorDeps = result.response.error?.error.deps;
+        assert.notStrictEqual(
+          errorDeps,
+          null,
+          'pre-model short-circuit error includes non-null deps',
+        );
+        let deps = errorDeps ?? [];
+        assert.true(
+          Array.isArray(deps),
+          'pre-model short-circuit deps are an array',
+        );
+        assert.true(
+          [`${realmURL}1.json`, `${realmURL}1`].some((dep) =>
+            deps.includes(dep),
+          ),
+          `pre-model fallback error includes dep context from transition params (deps: ${JSON.stringify(deps)})`,
+        );
       } finally {
         PagePool.prototype.getPage = originalGetPage;
       }
@@ -880,9 +1013,62 @@ module(basename(__filename), function () {
         result.response.deps.includes(`${baseRealm.url}file-api`),
         'deps include base file-api module',
       );
-      assert.ok(
+      assert.notOk(
         result.response.deps.includes(fileURL),
-        'deps include file url',
+        'deps exclude the file url itself',
+      );
+    });
+
+    test('file extract surfaces broken FileDef module error without remote prerender timeout', async function (assert) {
+      await realmAdapter.write(
+        'filedef-mismatch.gts',
+        `
+          import { FileDef as BaseFileDef } from "https://cardstack.com/base/file-api";
+          import { MissingChild } from "./missing-child";
+
+          export class FileDef extends BaseFileDef {
+            static missingChild = MissingChild;
+          }
+        `,
+      );
+      await realmAdapter.write('broken-file.mismatch', 'broken mismatch file');
+      realm.__testOnlyClearCaches();
+
+      let result = await prerenderer.prerenderFileExtract({
+        realm: realmURL,
+        url: `${realmURL}broken-file.mismatch`,
+        auth: auth(),
+        renderOptions: {
+          fileExtract: true,
+          fileDefCodeRef: {
+            module: `${realmURL}filedef-mismatch`,
+            name: 'FileDef',
+          },
+        },
+      });
+
+      assert.strictEqual(
+        result.response.status,
+        'error',
+        'file extract reports error for broken FileDef module',
+      );
+      assert.ok(result.response.error, 'error payload is present');
+      assert.ok(
+        result.response.error?.error.message?.includes(
+          'Received HTTP 404 from server',
+        ),
+        `error message should mention module 404, got: ${result.response.error?.error.message}`,
+      );
+      let messageIncludesTimeoutMarker = Boolean(
+        result.response.error?.error.message?.includes('Prerender request to'),
+      );
+      assert.false(
+        messageIncludesTimeoutMarker,
+        'error should not be reported as a remote prerender request timeout',
+      );
+      assert.false(
+        result.pool.timedOut,
+        'pool should not mark this as a prerender timeout',
       );
     });
   });

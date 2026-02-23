@@ -7,19 +7,23 @@ import { isTesting } from '@embroider/macros';
 import {
   baseFileRef,
   formattedError,
-  type FileExtractResponse,
+  snapshotRuntimeDependencies,
+  withRuntimeDependencyTrackingContext,
   type RenderError,
 } from '@cardstack/runtime-common';
 
 import { errorJsonApiToErrorEntry } from '../../lib/window-error-handler';
 import { createAuthErrorGuard } from '../../utils/auth-error-guard';
-import { FileDefAttributesExtractor } from '../../utils/file-def-attributes-extractor';
+import {
+  FileDefAttributesExtractor,
+  type FileDefExtractResult,
+} from '../../utils/file-def-attributes-extractor';
 
 import type LoaderService from '../../services/loader-service';
 import type NetworkService from '../../services/network';
 import type RealmService from '../../services/realm';
 import type { Model as RenderModel } from '../render';
-export type Model = FileExtractResponse;
+export type Model = { id: string; nonce: string } & FileDefExtractResult;
 
 export default class RenderFileExtractRoute extends Route<Model> {
   @service declare loaderService: LoaderService;
@@ -87,11 +91,32 @@ export default class RenderFileExtractRoute extends Route<Model> {
       contentSize,
       buildError: this.#buildError.bind(this),
     });
-    let result = await extractor.extract();
+    let result: FileDefExtractResult;
+    try {
+      result = await withRuntimeDependencyTrackingContext(
+        {
+          mode: 'non-query',
+          source: 'render:file-extract',
+          consumer: id,
+          consumerKind: 'file',
+        },
+        async () => await extractor.extract(),
+      );
+    } catch (error) {
+      result = {
+        status: 'error',
+        searchDoc: null,
+        deps: [fileDefCodeRef.module],
+        error: this.#buildError(id, error),
+      };
+    }
+    let { deps } = snapshotRuntimeDependencies({ excludeQueryOnly: true });
+    let mergedDeps = [...new Set([...(result.deps ?? []), ...deps])];
     return {
       id,
       nonce,
       ...result,
+      deps: mergedDeps,
     };
   }
 

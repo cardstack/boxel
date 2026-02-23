@@ -23,6 +23,7 @@ import {
   type State,
   type ModuleDeclaration,
   isCardOrFieldDeclaration,
+  isReexportCardOrField,
 } from '../resources/module-contents';
 import { findDeclarationByName } from '../services/module-contents-service';
 
@@ -168,7 +169,8 @@ export default class CodeSemanticsService extends Service {
   get selectedCardOrField() {
     if (
       this.selectedDeclaration !== undefined &&
-      isCardOrFieldDeclaration(this.selectedDeclaration)
+      (isCardOrFieldDeclaration(this.selectedDeclaration) ||
+        isReexportCardOrField(this.selectedDeclaration))
     ) {
       return this.selectedDeclaration;
     }

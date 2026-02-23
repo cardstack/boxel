@@ -18,10 +18,12 @@ import type NetworkService from '@cardstack/host/services/network';
 import {
   setupLocalIndexing,
   setupOnSave,
+  setupRealmCacheTeardown,
   testRealmURL,
   setupAcceptanceTestRealm,
   SYSTEM_CARD_FIXTURE_CONTENTS,
   capturePrerenderResult,
+  withCachedRealmSetup,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupApplicationTest } from '../../helpers/setup';
@@ -57,6 +59,7 @@ module('Acceptance | gif image def', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
   setupOnSave(hooks);
+  setupRealmCacheTeardown(hooks);
   setupTestRealmServiceWorker(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
@@ -131,14 +134,16 @@ module('Acceptance | gif image def', function (hooks) {
 
   hooks.beforeEach(async function () {
     let gifBytes = makeMinimalGif(6, 7);
-    ({ realm } = await setupAcceptanceTestRealm({
-      mockMatrixUtils,
-      contents: {
-        ...SYSTEM_CARD_FIXTURE_CONTENTS,
-        'sample.gif': gifBytes,
-        'not-a-gif.gif': 'This is plain text, not a GIF file.',
-      },
-    }));
+    ({ realm } = await withCachedRealmSetup(async () =>
+      setupAcceptanceTestRealm({
+        mockMatrixUtils,
+        contents: {
+          ...SYSTEM_CARD_FIXTURE_CONTENTS,
+          'sample.gif': gifBytes,
+          'not-a-gif.gif': 'This is plain text, not a GIF file.',
+        },
+      }),
+    ));
   });
 
   hooks.afterEach(function () {

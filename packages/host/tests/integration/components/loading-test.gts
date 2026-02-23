@@ -12,6 +12,8 @@ import {
   setupIntegrationTestRealm,
   setupLocalIndexing,
   setupOnSave,
+  setupRealmCacheTeardown,
+  withCachedRealmSetup,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderCard } from '../../helpers/render-component';
@@ -41,6 +43,8 @@ module('Integration | loading', function (hooks) {
     autostart: true,
   });
 
+  setupRealmCacheTeardown(hooks);
+
   hooks.beforeEach(async function () {
     let cardWithBrokenIconDefSource = `
       import NonExistentIcon from '@cardstack/boxel-icons/non-existent';
@@ -52,13 +56,15 @@ module('Integration | loading', function (hooks) {
       }
     `;
 
-    await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      contents: {
-        'card-with-broken-icon.gts': cardWithBrokenIconDefSource,
-        '.realm.json': `{ "name": "${realmName}", "iconURL": "https://boxel-images.boxel.ai/icons/Letter-o.png" }`,
-      },
-    });
+    await withCachedRealmSetup(async () =>
+      setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {
+          'card-with-broken-icon.gts': cardWithBrokenIconDefSource,
+          '.realm.json': `{ "name": "${realmName}", "iconURL": "https://boxel-images.boxel.ai/icons/Letter-o.png" }`,
+        },
+      }),
+    );
   });
 
   test('Cards attempting to import boxel icon that does not exist renders a 404 icon instead', async function (assert) {

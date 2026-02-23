@@ -20,6 +20,8 @@ import {
   testRealmURL,
   setupIntegrationTestRealm,
   setupLocalIndexing,
+  setupRealmCacheTeardown,
+  withCachedRealmSetup,
 } from '../../helpers';
 import { setupBaseRealm } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
@@ -38,11 +40,14 @@ module('Integration | commands | patch-code', function (hooks) {
   const jsonFileUrl = `${testRealmURL}${jsonFileName}`;
   let adapter: any;
 
+  setupRealmCacheTeardown(hooks);
+
   hooks.beforeEach(async function () {
-    let realmSetup = await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      contents: {
-        [testFileName]: `import {
+    let realmSetup = await withCachedRealmSetup(async () =>
+      setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {
+          [testFileName]: `import {
   contains,
   field,
   CardDef,
@@ -56,13 +61,14 @@ export class Task extends CardDef {
   @field cardDescription = contains(StringField);
   @field priority = contains(NumberField);
 }`,
-        [jsonFileName]: `{
+          [jsonFileName]: `{
   "title": "Old title",
   "count": 1
 }
 `,
-      },
-    });
+        },
+      }),
+    );
     adapter = realmSetup.adapter;
     adapter.lintStub = async (
       request: Request,

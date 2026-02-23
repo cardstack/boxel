@@ -18,9 +18,11 @@ import type NetworkService from '@cardstack/host/services/network';
 import {
   setupLocalIndexing,
   setupOnSave,
+  setupRealmCacheTeardown,
   testRealmURL,
   setupAcceptanceTestRealm,
   SYSTEM_CARD_FIXTURE_CONTENTS,
+  withCachedRealmSetup,
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
@@ -29,6 +31,7 @@ module('Acceptance | markdown file def', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
   setupOnSave(hooks);
+  setupRealmCacheTeardown(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
@@ -90,18 +93,20 @@ module('Acceptance | markdown file def', function (hooks) {
   }
 
   hooks.beforeEach(async function () {
-    ({ realm } = await setupAcceptanceTestRealm({
-      mockMatrixUtils,
-      contents: {
-        ...SYSTEM_CARD_FIXTURE_CONTENTS,
-        'readme.md': `# Project Overview
+    ({ realm } = await withCachedRealmSetup(async () =>
+      setupAcceptanceTestRealm({
+        mockMatrixUtils,
+        contents: {
+          ...SYSTEM_CARD_FIXTURE_CONTENTS,
+          'readme.md': `# Project Overview
 
 This is the first paragraph.
 
 Another paragraph follows.`,
-        'notes.txt': 'Plain text file contents.',
-      },
-    }));
+          'notes.txt': 'Plain text file contents.',
+        },
+      }),
+    ));
   });
 
   hooks.afterEach(function () {

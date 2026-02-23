@@ -25,6 +25,8 @@ import {
   setupCardLogs,
   setupLocalIndexing,
   setupIntegrationTestRealm,
+  setupRealmCacheTeardown,
+  withCachedRealmSetup,
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupRenderingTest } from '../helpers/setup';
@@ -57,11 +59,15 @@ module('Integration | message service subscription', function (hooks) {
     async () => await loader.import(`${baseRealm.url}card-api`),
   );
 
+  setupRealmCacheTeardown(hooks);
+
   hooks.beforeEach(async function (this: RenderingTestContext) {
-    await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      contents: {},
-    });
+    await withCachedRealmSetup(async () =>
+      setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {},
+      }),
+    );
   });
 
   test('realm event subscriptions are released when the subscriber is destroyed', async function (assert) {
