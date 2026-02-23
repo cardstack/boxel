@@ -33,6 +33,7 @@ import { CodeModePanelHeights } from '@cardstack/host/utils/local-storage-keys';
 import {
   elementIsVisible,
   getMonacoContent,
+  makeMinimalPng,
   percySnapshot,
   setupLocalIndexing,
   setupRealmCacheTeardown,
@@ -401,6 +402,10 @@ const fileDefSource = `
   }
 `;
 
+const pngDefModuleSource = `
+  export { PngDef } from 'https://cardstack.com/base/png-image-def';
+`;
+
 const localInheritSource = `
   import {
     contains,
@@ -488,6 +493,9 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
           're-export.gts': reExportSource,
           'local-inherit.gts': localInheritSource,
           'file-def.gts': fileDefSource,
+          'png-def-module.gts': pngDefModuleSource,
+          'images/sample.png': makeMinimalPng(),
+          'images/logo.png': makeMinimalPng(2, 2),
           'command-module.gts': commandModuleSource,
           'erroring-module.gts': erroringModuleSource,
           'empty-file.gts': '',
@@ -502,7 +510,6 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
                 ref: {
                   module: `./person`,
                   name: 'Person',
-                },
               },
               meta: {
                 adoptsFrom: {
@@ -1606,6 +1613,25 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       .dom('[data-test-active-module-inspector-view="preview"]')
       .exists('playground pane renders for FileDef');
 
+    // CustomFileDef has no matching file instances, so "no instances" message should show
+    await waitFor('[data-test-playground-filedef-message]');
+    assert
+      .dom('[data-test-playground-filedef-message]')
+      .includesText(
+        'No file instances found',
+        'shows no-instances message for FileDef with no matching files',
+      );
+    assert
+      .dom('[data-test-instance-chooser]')
+      .doesNotExist(
+        'instance chooser is not shown when there are no file instances',
+      );
+    assert
+      .dom('[data-test-playground-format-chooser]')
+      .doesNotExist(
+        'format chooser is not shown when there are no file instances',
+      );
+
     // Switch to Spec pane - should not crash
     await click('[data-test-module-inspector-view="spec"]');
     assert
@@ -1618,6 +1644,181 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       .dom('[data-test-active-module-inspector-view="schema"]')
       .exists('schema pane renders for FileDef');
     assert.dom('[data-test-card-schema="custom file"]').exists();
+  });
+
+  test('Playground displays file-meta instances for PngDef with preview, instance chooser, and format chooser', async function (assert) {
+    await visitOperatorMode({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}png-def-module.gts`,
+    });
+
+    await waitFor('[data-test-card-inspector-panel]');
+    await waitFor('[data-test-current-module-name]');
+    await waitFor('[data-test-in-this-file-selector]');
+
+    // Select the PngDef declaration
+    await click('[data-test-boxel-selector-item-text="PngDef"]');
+
+    // Switch to Playground pane
+    await click('[data-test-module-inspector-view="preview"]');
+
+    // Wait for file-meta search to complete and render the instance chooser
+    await waitFor('[data-test-instance-chooser]', { timeout: 10000 });
+
+    // Core layout: preview + instance chooser + format chooser all present
+    assert
+      .dom('[data-test-playground-panel]')
+      .exists('playground panel renders');
+    assert
+      .dom('[data-test-instance-chooser]')
+      .exists('instance chooser is shown');
+    assert
+      .dom('[data-test-playground-format-chooser]')
+      .exists('format chooser is shown');
+    assert
+      .dom('[data-test-playground-filedef-message]')
+      .doesNotExist('no-instances message is NOT shown when instances exist');
+
+    // Instance title shows the filename
+    assert
+      .dom('[data-test-selected-item]')
+      .exists('selected item is displayed');
+    assert
+      .dom('[data-test-selected-item]')
+      .containsText('.png', 'selected item title contains filename');
+
+    // CardHeader shows the file type display name
+    assert
+      .dom('[data-test-playground-panel] [data-test-boxel-card-header-title]')
+      .exists('card header renders for file preview');
+
+    // Format chooser has the correct formats (isolated, embedded, fitted, atom — NO edit)
+    assert
+      .dom(
+        '[data-test-playground-format-chooser] [data-test-format-chooser="isolated"]',
+      )
+      .exists('isolated format available');
+    assert
+      .dom(
+        '[data-test-playground-format-chooser] [data-test-format-chooser="embedded"]',
+      )
+      .exists('embedded format available');
+    assert
+      .dom(
+        '[data-test-playground-format-chooser] [data-test-format-chooser="fitted"]',
+      )
+      .exists('fitted format available');
+    assert
+      .dom(
+        '[data-test-playground-format-chooser] [data-test-format-chooser="atom"]',
+      )
+      .exists('atom format available');
+    assert
+      .dom(
+        '[data-test-playground-format-chooser] [data-test-format-chooser="edit"]',
+      )
+      .doesNotExist('edit format is NOT available for FileDef');
+
+    // Default format is isolated
+    assert
+      .dom('[data-test-format-chooser="isolated"]')
+      .hasClass('active', 'isolated is the default active format');
+  });
+
+  test('Playground FileDef format switching renders different formats', async function (assert) {
+    await visitOperatorMode({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}png-def-module.gts`,
+    });
+
+    await waitFor('[data-test-card-inspector-panel]');
+    await waitFor('[data-test-current-module-name]');
+    await waitFor('[data-test-in-this-file-selector]');
+    await click('[data-test-boxel-selector-item-text="PngDef"]');
+    await click('[data-test-module-inspector-view="preview"]');
+    await waitFor('[data-test-instance-chooser]', { timeout: 10000 });
+
+    // Default: isolated is active
+    assert
+      .dom('[data-test-format-chooser="isolated"]')
+      .hasClass('active', 'starts in isolated format');
+
+    // Switch to embedded
+    await click('[data-test-format-chooser="embedded"]');
+    assert
+      .dom('[data-test-format-chooser="isolated"]')
+      .hasNoClass('active', 'isolated no longer active');
+    assert
+      .dom('[data-test-format-chooser="embedded"]')
+      .hasClass('active', 'embedded is now active');
+
+    // Switch to atom
+    await click('[data-test-format-chooser="atom"]');
+    assert
+      .dom('[data-test-format-chooser="embedded"]')
+      .hasNoClass('active', 'embedded no longer active');
+    assert
+      .dom('[data-test-format-chooser="atom"]')
+      .hasClass('active', 'atom is now active');
+    assert
+      .dom('[data-test-atom-preview]')
+      .exists('atom preview container renders');
+
+    // Switch to fitted
+    await click('[data-test-format-chooser="fitted"]');
+    assert
+      .dom('[data-test-format-chooser="atom"]')
+      .hasNoClass('active', 'atom no longer active');
+    assert
+      .dom('[data-test-format-chooser="fitted"]')
+      .hasClass('active', 'fitted is now active');
+  });
+
+  test('Playground FileDef instance selection switches the displayed file', async function (assert) {
+    await visitOperatorMode({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}png-def-module.gts`,
+    });
+
+    await waitFor('[data-test-card-inspector-panel]');
+    await waitFor('[data-test-current-module-name]');
+    await waitFor('[data-test-in-this-file-selector]');
+    await click('[data-test-boxel-selector-item-text="PngDef"]');
+    await click('[data-test-module-inspector-view="preview"]');
+    await waitFor('[data-test-instance-chooser]', { timeout: 10000 });
+
+    // Capture the initial selected item title
+    let initialTitle =
+      document
+        .querySelector('[data-test-selected-item]')
+        ?.textContent?.trim() ?? '';
+    assert.ok(initialTitle.length > 0, 'initial selection has a title');
+
+    // Open the dropdown and verify there are multiple options (we added 2 PNGs)
+    await click('[data-test-instance-chooser]');
+    assert
+      .dom('[data-option-index="0"]')
+      .exists('first dropdown option exists');
+    assert
+      .dom('[data-option-index="1"]')
+      .exists('second dropdown option exists');
+
+    // Select the second option using the data-option-index selector
+    await click('[data-option-index="1"]');
+
+    let newTitle =
+      document
+        .querySelector('[data-test-selected-item]')
+        ?.textContent?.trim() ?? '';
+    assert.ok(newTitle.length > 0, 'new selection has a title');
+    assert.notEqual(
+      newTitle,
+      initialTitle,
+      'selected instance changed after clicking a different option',
+    );
   });
 
   test('"in-this-file" panel displays local grandfather card. selection will move cursor and display card or field schema', async function (assert) {

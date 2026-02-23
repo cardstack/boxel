@@ -62,6 +62,7 @@ import type { Ready } from '@cardstack/host/resources/file';
 import { isReady } from '@cardstack/host/resources/file';
 import {
   type CardOrFieldDeclaration,
+  type CardOrFieldReexport,
   type ModuleAnalysis,
   isCardOrFieldDeclaration,
   type ModuleDeclaration,
@@ -114,7 +115,10 @@ interface ModuleInspectorSignature {
     moduleAnalysis: ModuleAnalysis;
     previewFormat: Format;
     readyFile: Ready;
-    selectedCardOrField: CardOrFieldDeclaration | undefined;
+    selectedCardOrField:
+      | CardOrFieldDeclaration
+      | CardOrFieldReexport
+      | undefined;
     selectedCodeRef: ResolvedCodeRef | undefined;
     selectedDeclaration: ModuleDeclaration | undefined;
     setPreviewFormat: (format: Format) => void;
