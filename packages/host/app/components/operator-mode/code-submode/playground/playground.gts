@@ -2,7 +2,7 @@ import Component from '@glimmer/component';
 
 import { not } from '@cardstack/boxel-ui/helpers';
 
-import { isFieldDef, isPrimitive } from '@cardstack/runtime-common';
+import { isFieldDef, isFileDef, isPrimitive } from '@cardstack/runtime-common';
 import type { ResolvedCodeRef } from '@cardstack/runtime-common';
 
 import type { BaseDef, ViewCardFn } from 'https://cardstack.com/base/card-api';
@@ -77,6 +77,7 @@ export default class Playground extends Component<Signature> {
     return {
       codeRef: this.args.codeRef,
       isFieldDef: isFieldDef(this.args.cardOrField),
+      isFileDef: isFileDef(this.args.cardOrField),
       isUpdating: this.args.isUpdating,
     };
   }
@@ -86,6 +87,7 @@ export default class Playground extends Component<Signature> {
       <PlaygroundPanel
         @codeRef={{this.playgroundPanelArgs.codeRef}}
         @isFieldDef={{this.playgroundPanelArgs.isFieldDef}}
+        @isFileDef={{this.playgroundPanelArgs.isFileDef}}
         @isUpdating={{this.playgroundPanelArgs.isUpdating}}
         @viewCard={{@viewCard}}
       />

@@ -1601,6 +1601,26 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       .dom('[data-test-active-module-inspector-view="preview"]')
       .exists('playground pane renders for FileDef');
 
+    // FileDef info message should be displayed
+    assert
+      .dom('[data-test-playground-filedef-message]')
+      .exists('FileDef info message is shown');
+    assert
+      .dom('[data-test-playground-filedef-message]')
+      .includesText(
+        'Playground preview is not yet available for file definitions',
+      );
+
+    // No instance chooser dropdown should be rendered
+    assert
+      .dom('[data-playground-instance-chooser]')
+      .doesNotExist('no instance chooser dropdown for FileDef');
+
+    // No "Create new instance" menu item
+    assert
+      .dom('[data-test-boxel-menu-item-text="Create new instance"]')
+      .doesNotExist('no create new instance menu for FileDef');
+
     // Switch to Spec pane - should not crash
     await click('[data-test-module-inspector-view="spec"]');
     assert

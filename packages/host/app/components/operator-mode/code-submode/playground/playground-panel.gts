@@ -104,6 +104,7 @@ interface Signature {
   Args: {
     codeRef: ResolvedCodeRef;
     isFieldDef?: boolean;
+    isFileDef?: boolean;
     isUpdating?: boolean;
     viewCard?: ViewCardFn;
   };
@@ -188,6 +189,9 @@ export default class PlaygroundPanel extends Component<Signature> {
   }
 
   private get afterMenuOptions(): MenuItem[] {
+    if (this.args.isFileDef) {
+      return [];
+    }
     let menuItems: MenuItem[] = [
       new MenuItem({
         label: 'Create new instance',
@@ -306,7 +310,7 @@ export default class PlaygroundPanel extends Component<Signature> {
   }
 
   private get isLoading() {
-    return this.args.isFieldDef && this.args.isUpdating;
+    return (this.args.isFieldDef || this.args.isFileDef) && this.args.isUpdating;
   }
 
   private makeCardResource = () => {
@@ -414,7 +418,7 @@ export default class PlaygroundPanel extends Component<Signature> {
   }
 
   private get query(): Query | undefined {
-    if (this.args.isFieldDef) {
+    if (this.args.isFieldDef || this.args.isFileDef) {
       return undefined;
     }
     return {
@@ -432,7 +436,7 @@ export default class PlaygroundPanel extends Component<Signature> {
   }
 
   private get expandedQuery(): Query | undefined {
-    if (this.args.isFieldDef) {
+    if (this.args.isFieldDef || this.args.isFileDef) {
       return undefined;
     }
     return {
@@ -584,6 +588,9 @@ export default class PlaygroundPanel extends Component<Signature> {
   });
 
   private autoGenerateInstance = restartableTask(async () => {
+    if (this.args.isFileDef) {
+      return;
+    }
     this.#creationError = false;
     try {
       if (this.args.isFieldDef && this.specCard) {
@@ -597,6 +604,9 @@ export default class PlaygroundPanel extends Component<Signature> {
   });
 
   @action private createNew() {
+    if (this.args.isFileDef) {
+      return;
+    }
     this.#creationError = false;
     this.args.isFieldDef && this.specCard
       ? this.createNewField.perform(this.specCard)
@@ -737,6 +747,7 @@ export default class PlaygroundPanel extends Component<Signature> {
   private showResults = (cards: PrerenderedCardLike[] | undefined) => {
     return (
       !this.args.isFieldDef &&
+      !this.args.isFileDef &&
       (cards?.length ||
         this.persistedCardId ||
         this.createNewIsRunning ||
@@ -957,6 +968,16 @@ export default class PlaygroundPanel extends Component<Signature> {
                   @realms={{this.realmServer.availableRealmURLs}}
                   @createNewCard={{this.createNew}}
                 />
+              {{else if @isFileDef}}
+                <p
+                  class='filedef-info-message'
+                  data-test-playground-filedef-message
+                >
+                  <span>
+                    Playground preview is not yet available for file definitions.
+                    File instances are created by uploading files to a realm.
+                  </span>
+                </p>
               {{/if}}
             {{/let}}
           {{/let}}
@@ -1037,6 +1058,23 @@ export default class PlaygroundPanel extends Component<Signature> {
         flex: 1;
         min-height: 100%;
         width: 100%;
+      }
+      .filedef-info-message {
+        display: flex;
+        flex-wrap: wrap;
+        align-content: center;
+        justify-content: center;
+        text-align: center;
+        height: 100%;
+        background-color: var(--boxel-200);
+        font: var(--boxel-font-sm);
+        color: var(--boxel-450);
+        font-weight: 500;
+        padding: var(--boxel-sp-xl);
+        margin-block: 0;
+      }
+      .filedef-info-message > span {
+        max-width: 400px;
       }
 
       .playground-panel-content:has(.social-preview-container) {
