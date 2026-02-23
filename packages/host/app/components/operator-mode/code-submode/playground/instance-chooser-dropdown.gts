@@ -83,13 +83,16 @@ interface AfterOptionsSignature {
   Args: {
     menuItems: MenuItem[];
     closeMenu?: () => void;
+    hideTitle?: boolean;
   };
 }
 const AfterOptions: TemplateOnlyComponent<AfterOptionsSignature> = <template>
   <div class='after-options'>
-    <span class='title'>
-      Action
-    </span>
+    {{#unless @hideTitle}}
+      <span class='title'>
+        Action
+      </span>
+    {{/unless}}
     <Menu
       class='after-options-menu'
       @items={{@menuItems}}
@@ -159,6 +162,7 @@ interface OptionsDropdownSignature {
     afterMenuOptions: MenuItem[];
     beforeOptionsLabel?: string;
     selectedItemLabel?: string;
+    hideAfterOptionsTitle?: boolean;
   };
 }
 
@@ -199,6 +203,7 @@ export const OptionsDropdown: TemplateOnlyComponent<OptionsDropdownSignature> =
           AfterOptions
           menuItems=@afterMenuOptions
           closeMenu=closeInstanceChooser
+          hideTitle=@hideAfterOptionsTitle
         )
       }}
       @verticalPosition='above'
@@ -303,6 +308,7 @@ export default class InstanceSelectDropdown extends Component<Signature> {
         @afterMenuOptions={{@afterMenuOptions}}
         @beforeOptionsLabel='Files'
         @selectedItemLabel='File:'
+        @hideAfterOptionsTitle={{true}}
       />
     {{else if @isFieldDef}}
       <OptionsDropdown

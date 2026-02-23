@@ -619,7 +619,7 @@ export default class PlaygroundPanel extends Component<Signature> {
   private get fileDefAfterMenuOptions(): MenuItem[] {
     return [
       new MenuItem({
-        label: 'Choose another file',
+        label: 'Choose file\u2026',
         action: () => this.chooseFileMeta.perform(),
         icon: Folder,
       }),
