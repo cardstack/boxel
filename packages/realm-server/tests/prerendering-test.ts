@@ -1200,6 +1200,19 @@ module(basename(__filename), function () {
                 },
               },
             },
+            '2.json': {
+              data: {
+                attributes: {
+                  name: 'Mango',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: './person',
+                    name: 'Person',
+                  },
+                },
+              },
+            },
           },
         },
         {
@@ -1248,6 +1261,38 @@ module(basename(__filename), function () {
                 }
               }
             `,
+            'dog-many.gts': `
+              import { CardDef, field, contains, linksToMany, StringField, Component } from 'https://cardstack.com/base/card-api';
+              import { Person } from '${realmURL1}person';
+              export class DogMany extends CardDef {
+                static displayName = "Dog Many";
+                @field name = contains(StringField);
+                @field owners = linksToMany(Person, { isUsed: true });
+                static isolated = class extends Component<typeof this> {
+                  // owners is intentionally not in isolated template, this is included in search doc via isUsed=true
+                  <template>{{@model.name}}</template>
+                }
+              }
+            `,
+            'dog-profile.gts': `
+              import { CardDef, FieldDef, field, contains, linksTo, linksToMany, StringField, Component } from 'https://cardstack.com/base/card-api';
+              import { Person } from '${realmURL1}person';
+
+              class DogProfileField extends FieldDef {
+                @field primaryOwner = linksTo(Person);
+                @field caretakers = linksToMany(Person);
+              }
+
+              export class DogProfile extends CardDef {
+                static displayName = "Dog Profile";
+                @field name = contains(StringField);
+                @field profile = contains(DogProfileField, { isUsed: true });
+                static isolated = class extends Component<typeof this> {
+                  // profile is intentionally not in isolated template, this is included in search doc via isUsed=true
+                  <template>{{@model.name}}</template>
+                }
+              }
+            `,
             '1.json': {
               data: {
                 attributes: {
@@ -1280,6 +1325,52 @@ module(basename(__filename), function () {
                   adoptsFrom: {
                     module: './dog',
                     name: 'Dog',
+                  },
+                },
+              },
+            },
+            'is-used-many.json': {
+              data: {
+                attributes: {
+                  name: 'Mango Many',
+                },
+                relationships: {
+                  'owners.0': {
+                    links: { self: `${realmURL1}1` },
+                  },
+                  'owners.1': {
+                    links: { self: `${realmURL1}2` },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: './dog-many',
+                    name: 'DogMany',
+                  },
+                },
+              },
+            },
+            'is-used-field-def.json': {
+              data: {
+                attributes: {
+                  name: 'Mango Profile',
+                  profile: {},
+                },
+                relationships: {
+                  'profile.primaryOwner': {
+                    links: { self: `${realmURL1}1` },
+                  },
+                  'profile.caretakers.0': {
+                    links: { self: `${realmURL1}1` },
+                  },
+                  'profile.caretakers.1': {
+                    links: { self: `${realmURL1}2` },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: './dog-profile',
+                    name: 'DogProfile',
                   },
                 },
               },
@@ -1661,6 +1752,85 @@ module(basename(__filename), function () {
           response.searchDoc?.owner.name,
           'Hassan',
           'linked field is included in search doc via isUsed=true',
+        );
+      });
+
+      test('isUsed linksToMany field includes links in search doc that are not rendered in template', async function (assert) {
+        const testCardURL = `${realmURL2}is-used-many`;
+        let { response } = await prerenderer.prerenderCard({
+          realm: realmURL2,
+          url: testCardURL,
+          auth: auth(),
+        });
+
+        assert.ok(
+          /Mango Many/.test(response.isolatedHTML!),
+          `failed to match isolated html:${response.isolatedHTML}`,
+        );
+        assert.false(
+          /data-test-field="owners"/.test(response.isolatedHTML!),
+          `owners field is not rendered in isolated html`,
+        );
+        assert.strictEqual(
+          response.searchDoc?.owners?.[0]?.name,
+          'Hassan',
+          'first linked record is included in search doc via isUsed=true',
+        );
+        assert.strictEqual(
+          response.searchDoc?.owners?.[1]?.name,
+          'Mango',
+          'second linked record is included in search doc via isUsed=true',
+        );
+      });
+
+      test('isUsed compound field includes nested linksTo relationship in search doc', async function (assert) {
+        const testCardURL = `${realmURL2}is-used-field-def`;
+        let { response } = await prerenderer.prerenderCard({
+          realm: realmURL2,
+          url: testCardURL,
+          auth: auth(),
+        });
+
+        assert.ok(
+          /Mango Profile/.test(response.isolatedHTML!),
+          `failed to match isolated html:${response.isolatedHTML}`,
+        );
+        assert.false(
+          /data-test-field="profile"/.test(response.isolatedHTML!),
+          `profile field is not rendered in isolated html`,
+        );
+        assert.strictEqual(
+          response.searchDoc?.profile?.primaryOwner?.name,
+          'Hassan',
+          'nested linksTo relationship is included in search doc via isUsed=true on compound field',
+        );
+      });
+
+      test('isUsed compound field includes nested linksToMany relationships in search doc', async function (assert) {
+        const testCardURL = `${realmURL2}is-used-field-def`;
+        let { response } = await prerenderer.prerenderCard({
+          realm: realmURL2,
+          url: testCardURL,
+          auth: auth(),
+        });
+
+        assert.ok(
+          /Mango Profile/.test(response.isolatedHTML!),
+          `failed to match isolated html:${response.isolatedHTML}`,
+        );
+        assert.false(
+          /data-test-field="profile"/.test(response.isolatedHTML!),
+          `profile field is not rendered in isolated html`,
+        );
+        assert.strictEqual(
+          response.searchDoc?.profile?.caretakers?.[0]?.name,
+          'Hassan',
+          'first nested linksToMany relationship is included in search doc via isUsed=true on compound field',
+        );
+        assert.strictEqual(
+          response.searchDoc?.profile?.caretakers?.[1]?.name,
+          'Mango',
+          'second nested linksToMany relationship is included in search doc via isUsed=true on compound field',
         );
       });
     });

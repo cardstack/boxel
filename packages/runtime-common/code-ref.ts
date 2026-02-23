@@ -83,6 +83,10 @@ export function isBaseDef(cardOrField: any): cardOrField is typeof BaseDef {
   return typeof cardOrField === 'function' && 'baseDef' in cardOrField;
 }
 
+export function isBaseDefInstance(value: unknown): value is BaseDef {
+  return typeof value === 'object' && value !== null && isBaseInstance in value;
+}
+
 export function isCardDef(card: any): card is typeof CardDef;
 export function isCardDef(codeRef: CodeRef, loader: Loader): Promise<boolean>;
 export function isCardDef(

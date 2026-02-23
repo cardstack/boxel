@@ -17,6 +17,7 @@ import {
   baseRealm,
   SupportedMimeType,
   isCardError,
+  isBaseDefInstance,
   type CardErrorsJSONAPI,
   type LooseSingleCardDocument,
   type RenderError,
@@ -421,15 +422,68 @@ export default class RenderRoute extends Route<Model> {
     let fields = cardApi.getFields(instance, { includeComputeds: true });
     for (let [fieldName, field] of Object.entries(fields)) {
       if (field?.isUsed) {
-        try {
-          // accessing the field triggers the lazy loading of the linked field
-          (instance as any)[fieldName];
-        } catch (error) {
-          console.warn(
-            `Failed to touch field '${fieldName}' on ${instance.constructor.name} for isUsed=true:`,
-            error,
+        let fieldValue = this.#touchFieldSafely(instance, fieldName);
+        if (
+          field &&
+          (field.fieldType === 'contains' || field.fieldType === 'containsMany')
+        ) {
+          this.#touchRelationshipFieldsInCompoundField(
+            cardApi,
+            fieldValue,
+            new WeakSet<object>(),
           );
         }
+      }
+    }
+  }
+
+  #touchFieldSafely(container: any, fieldName: string): unknown {
+    try {
+      // accessing the field triggers lazy loading for links
+      return container?.[fieldName];
+    } catch (error) {
+      console.warn(
+        `Failed to touch field '${fieldName}' on ${container?.constructor?.name ?? 'Unknown'} for isUsed=true:`,
+        error,
+      );
+      return undefined;
+    }
+  }
+
+  #touchRelationshipFieldsInCompoundField(
+    cardApi: typeof CardAPI,
+    value: unknown,
+    visited: WeakSet<object>,
+  ): void {
+    if (Array.isArray(value)) {
+      for (let item of value) {
+        this.#touchRelationshipFieldsInCompoundField(cardApi, item, visited);
+      }
+      return;
+    }
+    if (!isBaseDefInstance(value)) {
+      return;
+    }
+    if (visited.has(value)) {
+      return;
+    }
+    visited.add(value);
+
+    let fields = cardApi.getFields(value, { includeComputeds: true });
+    for (let [fieldName, field] of Object.entries(fields)) {
+      if (!field) {
+        continue;
+      }
+      if (field.fieldType === 'linksTo' || field.fieldType === 'linksToMany') {
+        this.#touchFieldSafely(value, fieldName);
+        continue;
+      }
+      if (
+        field.fieldType === 'contains' ||
+        field.fieldType === 'containsMany'
+      ) {
+        let nested = this.#touchFieldSafely(value, fieldName);
+        this.#touchRelationshipFieldsInCompoundField(cardApi, nested, visited);
       }
     }
   }
