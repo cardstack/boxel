@@ -15,6 +15,7 @@ export default class GeoPointCoordinateInput extends GlimmerComponent<Coordinate
   get latState(): 'valid' | 'invalid' | 'none' {
     const lat = this.args.model.lat;
     if (lat == null) return 'none';
+    if (Number.isNaN(lat)) return 'invalid';
     return lat >= -90 && lat <= 90 ? 'valid' : 'invalid';
   }
 
@@ -27,6 +28,7 @@ export default class GeoPointCoordinateInput extends GlimmerComponent<Coordinate
   get lonState(): 'valid' | 'invalid' | 'none' {
     const lon = this.args.model.lon;
     if (lon == null) return 'none';
+    if (Number.isNaN(lon)) return 'invalid';
     return lon >= -180 && lon <= 180 ? 'valid' : 'invalid';
   }
 
@@ -39,14 +41,24 @@ export default class GeoPointCoordinateInput extends GlimmerComponent<Coordinate
   @action
   setLat(val: string) {
     if (this.args.model) {
-      this.args.model.lat = val === '' ? null : Number(val);
+      if (val === '') {
+        this.args.model.lat = null;
+      } else {
+        const num = Number(val);
+        this.args.model.lat = Number.isNaN(num) ? null : num;
+      }
     }
   }
 
   @action
   setLon(val: string) {
     if (this.args.model) {
-      this.args.model.lon = val === '' ? null : Number(val);
+      if (val === '') {
+        this.args.model.lon = null;
+      } else {
+        const num = Number(val);
+        this.args.model.lon = Number.isNaN(num) ? null : num;
+      }
     }
   }
 

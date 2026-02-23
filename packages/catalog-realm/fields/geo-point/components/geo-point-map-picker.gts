@@ -2,6 +2,7 @@ import GlimmerComponent from '@glimmer/component';
 import { action } from '@ember/object';
 import { htmlSafe } from '@ember/template';
 import MapPinIcon from '@cardstack/boxel-icons/map-pin';
+import { or } from '@cardstack/boxel-ui/helpers';
 import { MapRender, type Coordinate } from '../../../components/map-render';
 import { hasValidCoordinates, formatCoordinates } from '../util/index';
 import type { GeoModel } from '../util/index';
@@ -66,7 +67,7 @@ export default class GeoPointMapPicker extends GlimmerComponent<MapPickerSignatu
 
   <template>
     <div class='geo-point-map-picker'>
-      {{#if this.hasCoordinates}}
+      {{#if (or this.hasCoordinates @canEdit)}}
         <div class='map-container' style={{this.mapContainerStyle}}>
           {{#if @canEdit}}
             <MapRender
@@ -81,10 +82,17 @@ export default class GeoPointMapPicker extends GlimmerComponent<MapPickerSignatu
             />
           {{/if}}
         </div>
-        <div class='coordinate-display'>
-          📍
-          {{this.coordinateDisplay}}
-        </div>
+        {{#if this.hasCoordinates}}
+          <div class='coordinate-display'>
+            📍
+            {{this.coordinateDisplay}}
+          </div>
+        {{else}}
+          <div class='no-location-placeholder-text'>
+            <MapPinIcon class='placeholder-icon' />
+            <span class='placeholder-text'>{{this.coordinateDisplay}}</span>
+          </div>
+        {{/if}}
       {{else}}
         <div class='no-location-placeholder'>
           <MapPinIcon class='placeholder-icon' />
@@ -118,6 +126,14 @@ export default class GeoPointMapPicker extends GlimmerComponent<MapPickerSignatu
         background: var(--coordinate-display-bg-color);
         border-left: 3px solid var(--coordinate-display-border-color);
         color: var(--boxel-dark);
+      }
+
+      .no-location-placeholder-text {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-xs);
+        color: var(--boxel-text-muted);
+        font-size: var(--boxel-font-size-sm);
       }
 
       .no-location-placeholder {

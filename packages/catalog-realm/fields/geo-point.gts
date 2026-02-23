@@ -52,11 +52,14 @@ export class GeoPointEmbedded extends Component<typeof GeoPointField> {
   }
 
   get mapOptions() {
-    const opts = this.config.options;
-    if (!opts) return undefined;
+    const { options, variant } = this.config;
+    if (variant !== 'map-picker' || !options) {
+      return undefined;
+    }
+    const mapOpts = options as GeoPointBaseOptions & GeoPointMapOptions;
     return {
-      mapHeight: (opts as GeoPointMapOptions).mapHeight,
-      tileserverUrl: (opts as GeoPointMapOptions).tileserverUrl,
+      mapHeight: mapOpts.mapHeight,
+      tileserverUrl: mapOpts.tileserverUrl,
     };
   }
 

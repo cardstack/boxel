@@ -20,6 +20,8 @@ const recentSearchesStorage = new WeakMap<
   string[]
 >();
 
+const DEFAULT_CONFIG: GeoSearchPointConfiguration = {};
+
 interface GeoSearchPointEditFieldSignature {
   Args: {
     model: GeoSearchModel;
@@ -42,7 +44,7 @@ export default class GeoSearchPointEditField extends GlimmerComponent<GeoSearchP
   }
 
   get config(): GeoSearchPointConfiguration {
-    return (this.args.configuration as GeoSearchPointConfiguration) ?? {};
+    return (this.args.configuration as GeoSearchPointConfiguration) ?? DEFAULT_CONFIG;
   }
 
   private get options(): GeoSearchPointOptions {
@@ -142,6 +144,11 @@ export default class GeoSearchPointEditField extends GlimmerComponent<GeoSearchP
   private debouncedSearch = debounce((query: string) => {
     this.performSearchTask.perform(query);
   }, 1000);
+
+  willDestroy(): void {
+    this.debouncedSearch.cancel();
+    super.willDestroy?.();
+  }
 
   @action
   handleSearchInput(value: string) {

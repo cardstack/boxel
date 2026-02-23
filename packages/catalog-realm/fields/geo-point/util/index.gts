@@ -12,8 +12,8 @@ export function hasValidCoordinates(model: GeoModel | null | undefined): boolean
     lon != null &&
     typeof lat === 'number' &&
     typeof lon === 'number' &&
-    !isNaN(lat) &&
-    !isNaN(lon)
+    !Number.isNaN(lat) &&
+    !Number.isNaN(lon)
   );
 }
 
@@ -47,8 +47,8 @@ export async function geocodeLocation(
   const lon = parseFloat(data[0].lon);
 
   if (
-    isNaN(lat) ||
-    isNaN(lon) ||
+    Number.isNaN(lat) ||
+    Number.isNaN(lon) ||
     lat < -90 ||
     lat > 90 ||
     lon < -180 ||
