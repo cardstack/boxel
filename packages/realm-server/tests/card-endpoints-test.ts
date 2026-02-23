@@ -534,6 +534,106 @@ module(basename(__filename), function () {
             'linksTo relationship for a CardDef should use type "card" even when data.type is missing from stale index and the linked instance is unavailable',
           );
         });
+        test('stale linksTo(FileDef subclass) relationship data.type of card is corrected to file-meta', async function (assert) {
+          let { testRealm: realm, request, dbAdapter } = getRealmSetup();
+
+          await realm.writeMany(
+            new Map<string, string | Uint8Array>([
+              [
+                'skill-card.gts',
+                `
+                  import { CardDef, field, contains, linksTo } from "https://cardstack.com/base/card-api";
+                  import StringField from "https://cardstack.com/base/string";
+                  import { MarkdownDef } from "https://cardstack.com/base/markdown-file-def";
+
+                  export class SkillCard extends CardDef {
+                    @field cardTitle = contains(StringField);
+                    @field instructionsSource = linksTo(MarkdownDef);
+                  }
+                `,
+              ],
+              [
+                'Skill/example.json',
+                JSON.stringify({
+                  data: {
+                    attributes: {
+                      cardTitle: 'Example Skill',
+                    },
+                    relationships: {
+                      instructionsSource: {
+                        links: {
+                          self: '../instructions.md',
+                        },
+                      },
+                    },
+                    meta: {
+                      adoptsFrom: {
+                        module: '../skill-card.gts',
+                        name: 'SkillCard',
+                      },
+                    },
+                  },
+                }),
+              ],
+              ['instructions.md', '# Example Instructions'],
+            ]),
+          );
+
+          let response = await request
+            .get('/Skill/example')
+            .set('Accept', 'application/vnd.card+json');
+          assert.strictEqual(
+            response.status,
+            200,
+            `HTTP 200 status: ${response.text}`,
+          );
+
+          let doc = response.body as LooseSingleCardDocument;
+          let relationship = doc.data.relationships
+            ?.instructionsSource as Relationship;
+          assert.deepEqual(relationship?.data, {
+            type: 'file-meta',
+            id: `${testRealmHref}instructions.md`,
+          });
+
+          let included = doc.included ?? [];
+          let linkedFile = included.find(
+            (resource) => resource.id === `${testRealmHref}instructions.md`,
+          );
+          assert.ok(linkedFile, 'includes linked markdown file');
+          assert.strictEqual(linkedFile?.type, 'file-meta');
+
+          let instanceAlias = `${testRealmHref}Skill/example`;
+          let markdownFileURL = `${testRealmHref}instructions.md`;
+          await dbAdapter.execute(
+            `UPDATE boxel_index
+             SET pristine_doc = jsonb_set(
+               pristine_doc,
+               '{relationships,instructionsSource,data}',
+               '{"type":"card","id":"${markdownFileURL}"}'::jsonb,
+               true
+             )
+             WHERE file_alias = '${instanceAlias}'
+             AND type = 'instance'`,
+          );
+
+          let staleResponse = await request
+            .get('/Skill/example')
+            .set('Accept', 'application/vnd.card+json');
+          assert.strictEqual(
+            staleResponse.status,
+            200,
+            `HTTP 200 status after stale relationship type: ${staleResponse.text}`,
+          );
+
+          let staleDoc = staleResponse.body as LooseSingleCardDocument;
+          let staleRelationship = staleDoc.data.relationships
+            ?.instructionsSource as Relationship;
+          assert.deepEqual(staleRelationship?.data, {
+            type: 'file-meta',
+            id: markdownFileURL,
+          });
+        });
         test('card-level query-backed relationships resolve via search at read time', async function (assert) {
           let { testRealm: realm, request } = getRealmSetup();
 

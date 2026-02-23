@@ -20,6 +20,7 @@ import { CardError } from './error';
 import { meta, relativeTo } from './constants';
 import type { LooseCardResource, FileMetaResource } from './index';
 import { isUrlLike, trimExecutableExtension } from './index';
+import type { RuntimeDependencyTrackingContext } from './dependency-tracker';
 
 export type ResolvedCodeRef = {
   module: string;
@@ -160,13 +161,20 @@ export async function getClass(ref: ResolvedCodeRef, loader: Loader) {
 
 export async function loadCardDef(
   ref: CodeRef,
-  opts: { loader: Loader; relativeTo?: URL },
+  opts: {
+    loader: Loader;
+    relativeTo?: URL;
+    dependencyTrackingContext?: RuntimeDependencyTrackingContext;
+  },
 ): Promise<typeof BaseDef> {
   let maybeCard: unknown;
   let loader = opts.loader;
   if (!('type' in ref)) {
     let resolvedModuleURL = new URL(ref.module, opts?.relativeTo).href;
-    let module = await loader.import<Record<string, any>>(resolvedModuleURL);
+    let module = await loader.import<Record<string, any>>(
+      resolvedModuleURL,
+      opts.dependencyTrackingContext,
+    );
     maybeCard = module[ref.name];
   } else if (ref.type === 'ancestorOf') {
     let child = await loadCardDef(ref.card, opts);

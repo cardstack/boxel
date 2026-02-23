@@ -12,7 +12,11 @@ import difference from 'lodash/difference';
 import isEqual from 'lodash/isEqual';
 import { TrackedArray } from 'tracked-built-ins';
 
-import type { QueryResultsMeta, ErrorEntry } from '@cardstack/runtime-common';
+import type {
+  QueryResultsMeta,
+  ErrorEntry,
+  RuntimeDependencyTrackingContext,
+} from '@cardstack/runtime-common';
 import {
   subscribeToRealm,
   isFileDefInstance,
@@ -20,6 +24,7 @@ import {
   normalizeQueryForSignature,
   buildQueryParamValue,
   parseSearchURL,
+  runtimeDependencyContextWithSource,
 } from '@cardstack/runtime-common';
 import type { Query } from '@cardstack/runtime-common/query';
 
@@ -55,6 +60,7 @@ export interface Args<T extends CardDef | FileDef = CardDef> {
           }>;
         }
       | undefined;
+    dependencyTracking?: RuntimeDependencyTrackingContext | undefined;
     owner: Owner;
   };
 }
@@ -79,6 +85,7 @@ export class SearchResource<
   #previousQuery: Query | undefined;
   #previousQueryString: string | undefined;
   #previousRealms: string[] | undefined;
+  #dependencyTracking: RuntimeDependencyTrackingContext | undefined;
   #log = runtimeLogger('search-resource');
 
   constructor(owner: object) {
@@ -107,6 +114,7 @@ export class SearchResource<
     );
     this.#isLive = isLive;
     this.#doWhileRefreshing = doWhileRefreshing;
+    this.#dependencyTracking = named.dependencyTracking;
     this.realmsToSearch =
       realms === undefined || realms.length === 0
         ? this.realmServer.availableRealmURLs
@@ -216,7 +224,10 @@ export class SearchResource<
     return this._errors;
   }
 
-  private async updateInstances(newInstances: T[]) {
+  private async updateInstances(
+    newInstances: T[],
+    dependencyTrackingContext?: RuntimeDependencyTrackingContext,
+  ) {
     let oldReferences = this._instances.map((i) => i.id);
     // Please note 3 things there:
     // 1. we are mutating this._instances, not replacing it
@@ -246,11 +257,17 @@ export class SearchResource<
         (card as unknown as { type?: string })?.type !== 'not-loaded' // TODO: under what circumstances could this happen?
       ) {
         if (isFileMeta) {
-          await this.store.get(card.id, { type: 'file-meta' });
+          await this.store.get(card.id, {
+            type: 'file-meta',
+            dependencyTrackingContext,
+          });
         } else {
           await this.store.add(
             card as CardDef,
-            { doNotPersist: true }, // search results always have id's
+            {
+              doNotPersist: true,
+              dependencyTrackingContext,
+            }, // search results always have id's
           );
         }
       }
@@ -266,12 +283,21 @@ export class SearchResource<
     return this.store.flush();
   }
 
+  private dependencyTrackingContext(
+    source: string,
+  ): RuntimeDependencyTrackingContext | undefined {
+    return runtimeDependencyContextWithSource(this.#dependencyTracking, source);
+  }
+
   private applySeed = task(
     async (seed: NonNullable<Args<T>['named']['seed']>) => {
+      let dependencyTrackingContext = this.dependencyTrackingContext(
+        'search-resource:applySeed',
+      );
       await Promise.resolve();
       this._meta = seed.meta ?? { page: { total: seed.cards.length } };
       this._errors = seed.errors;
-      await this.updateInstances(seed.cards);
+      await this.updateInstances(seed.cards, dependencyTrackingContext);
     },
   );
 
@@ -284,10 +310,16 @@ export class SearchResource<
     // uncancellable it results in a flaky test.
     let token = waiter.beginAsync();
     try {
+      let dependencyTrackingContext = this.dependencyTrackingContext(
+        'search-resource:search',
+      );
       let { instances, meta } = await this.store.search<T>(
         query,
         this.realmsToSearch,
-        { includeMeta: true },
+        {
+          includeMeta: true,
+          dependencyTrackingContext,
+        },
       );
       this.#log.info(
         `search task complete; total instances=${instances.length}; refs=${instances
@@ -296,7 +328,7 @@ export class SearchResource<
       );
       this._meta = meta;
       this._errors = undefined;
-      await this.updateInstances(instances);
+      await this.updateInstances(instances, dependencyTrackingContext);
     } finally {
       waiter.endAsync(token);
     }
@@ -334,6 +366,7 @@ export function getSearch<T extends CardDef | FileDef = CardDef>(
           }>;
         }
       | undefined;
+    dependencyTracking?: RuntimeDependencyTrackingContext | undefined;
   },
 ) {
   let resource = SearchResource.from(parent, () => ({
@@ -344,6 +377,7 @@ export function getSearch<T extends CardDef | FileDef = CardDef>(
       // TODO refactor this out
       doWhileRefreshing: opts?.doWhileRefreshing,
       seed: opts?.seed,
+      dependencyTracking: opts?.dependencyTracking,
       owner,
     },
   }));
