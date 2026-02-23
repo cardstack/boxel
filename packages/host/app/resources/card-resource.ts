@@ -106,10 +106,11 @@ export class CardResource extends Resource<Args> {
       return primaryError;
     }
 
-    if (
-      this.readType === 'file-meta' &&
-      isFileDefInstance(this.peekForType('file-meta'))
-    ) {
+    let primaryInstance = this.peekForType(this.readType);
+    if (this.readType === 'card' && isCardInstance(primaryInstance)) {
+      return undefined;
+    }
+    if (this.readType === 'file-meta' && isFileDefInstance(primaryInstance)) {
       return undefined;
     }
 
