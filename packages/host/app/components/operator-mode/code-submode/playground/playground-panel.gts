@@ -39,6 +39,7 @@ import {
   type getCard,
   type getCards,
   chooseCard,
+  chooseFile,
   loadCardDef,
   specRef,
   trimJsonExtension,
@@ -136,13 +137,11 @@ export default class PlaygroundPanel extends Component<Signature> {
 
   @tracked private cardOptions: PrerenderedCardLike[] = [];
   @tracked private selectedFileMetaId: string | undefined;
-  @tracked private showAllFileMetaInstances = false;
   @use private moduleChangeTracker = resource(() => {
     let moduleId = internalKeyFor(this.args.codeRef, undefined);
     if (moduleId !== this.#currentModuleId) {
       this.#currentModuleId = moduleId;
       this.#creationError = false;
-      this.showAllFileMetaInstances = false;
     }
     return moduleId;
   });
@@ -361,10 +360,7 @@ export default class PlaygroundPanel extends Component<Signature> {
     if (!instances) {
       return undefined;
     }
-    if (
-      this.showAllFileMetaInstances ||
-      instances.length <= PlaygroundPanel.FILE_META_DROPDOWN_LIMIT
-    ) {
+    if (instances.length <= PlaygroundPanel.FILE_META_DROPDOWN_LIMIT) {
       return instances;
     }
     return instances.slice(0, PlaygroundPanel.FILE_META_DROPDOWN_LIMIT);
@@ -621,24 +617,26 @@ export default class PlaygroundPanel extends Component<Signature> {
   }
 
   private get fileDefAfterMenuOptions(): MenuItem[] {
-    let allInstances = this.fileMetaInstances;
-    if (
-      !allInstances ||
-      this.showAllFileMetaInstances ||
-      allInstances.length <= PlaygroundPanel.FILE_META_DROPDOWN_LIMIT
-    ) {
-      return [];
-    }
     return [
       new MenuItem({
-        label: `Show all ${allInstances.length} files`,
-        action: () => {
-          this.showAllFileMetaInstances = true;
-        },
+        label: 'Choose another file',
+        action: () => this.chooseFileMeta.perform(),
         icon: Folder,
       }),
     ];
   }
+
+  private chooseFileMeta = task(async () => {
+    this.closeInstanceChooser();
+    let chosenFile = await chooseFile({
+      fileType: this.args.codeRef,
+      fileTypeName: this.args.codeRef.name,
+    });
+    if (chosenFile?.id) {
+      this.selectedFileMetaId = chosenFile.id;
+      this.persistSelections(chosenFile.id);
+    }
+  });
 
   private get format(): Format {
     return (
