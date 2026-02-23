@@ -318,7 +318,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
                 meta: {
                   adoptsFrom: {
                     module: 'https://cardstack.com/base/brand-guide',
-                    name: 'BrandGuide',
+                    name: 'default',
                   },
                 },
               },
