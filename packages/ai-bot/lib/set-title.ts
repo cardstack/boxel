@@ -31,6 +31,7 @@ export async function setTitle(
   history: DiscreteMatrixEvent[],
   userId: string,
   event?: MatrixEvent,
+  senderMatrixUserId?: string,
 ) {
   let startOfConversation: OpenAIPromptMessage[] = [
     {
@@ -50,6 +51,7 @@ export async function setTitle(
       model: 'gpt-4o',
       messages: startOfConversation as ChatCompletionMessageParam[],
       stream: false,
+      ...(senderMatrixUserId ? { user: senderMatrixUserId } : {}),
     },
     {
       maxRetries: 5,

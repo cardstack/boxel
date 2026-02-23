@@ -104,7 +104,7 @@ class Assistant {
     );
   }
 
-  getResponse(prompt: PromptParts) {
+  getResponse(prompt: PromptParts, senderMatrixUserId?: string) {
     if (!prompt.model) {
       throw new Error('Model is required');
     }
@@ -125,6 +125,10 @@ class Assistant {
     ) {
       request.tools = prompt.tools;
       request.tool_choice = prompt.toolChoice;
+    }
+
+    if (senderMatrixUserId) {
+      request.user = senderMatrixUserId;
     }
 
     return this.openai.chat.completions.stream(request);
@@ -153,8 +157,17 @@ class Assistant {
     roomId: string,
     history: DiscreteMatrixEvent[],
     event?: MatrixEvent,
+    senderMatrixUserId?: string,
   ) {
-    return setTitle(this.openai, this.client, roomId, history, this.id, event);
+    return setTitle(
+      this.openai,
+      this.client,
+      roomId,
+      history,
+      this.id,
+      event,
+      senderMatrixUserId,
+    );
   }
 }
 
@@ -446,7 +459,7 @@ Common issues are:
             });
           }
           const runner = assistant
-            .getResponse(promptParts)
+            .getResponse(promptParts, senderMatrixUserId)
             .on('chunk', async (chunk, snapshot) => {
               log.info(`[${eventId}] Received chunk %s`, chunk.id);
               if (profEnabled() && firstChunkAt == null) {
@@ -524,7 +537,12 @@ Common issues are:
             // immediately after responder.finalize(), and we need to make sure
             // the room lock is released.
             assistant
-              .setTitle(room.roomId, promptParts.history, event)
+              .setTitle(
+                room.roomId,
+                promptParts.history,
+                event,
+                senderMatrixUserId,
+              )
               .catch((error) => {
                 log.error(`[${eventId}] Error setting room title`);
                 log.error(error);
@@ -589,7 +607,12 @@ Common issues are:
         async () => constructHistory(eventList, client),
       );
       return await profTime(event.getId()!, 'title:setTitle', async () =>
-        assistant.setTitle(room.roomId, history, event),
+        assistant.setTitle(
+          room.roomId,
+          history,
+          event,
+          event.getSender() ?? undefined,
+        ),
       );
     } catch (e) {
       log.error(e);
