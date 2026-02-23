@@ -21,6 +21,10 @@ export default class DefaultHeadTemplate extends GlimmerComponent<{
     return this.args.model?.cardThumbnailURL;
   }
 
+  get themeIcon(): string | undefined {
+    return this.args.model?.cardInfo?.theme?.cardThumbnailURL;
+  }
+
   <template>
     {{! template-lint-disable no-forbidden-elements }}
     <title data-test-card-head-title>{{this.title}}</title>
@@ -41,6 +45,11 @@ export default class DefaultHeadTemplate extends GlimmerComponent<{
       <meta name='twitter:card' content='summary_large_image' />
     {{else}}
       <meta name='twitter:card' content='summary' />
+    {{/if}}
+
+    {{#if this.themeIcon}}
+      <link rel='icon' href={{this.themeIcon}} />
+      <link rel='apple-touch-icon' href={{this.themeIcon}} />
     {{/if}}
 
     <meta property='og:type' content='website' />
