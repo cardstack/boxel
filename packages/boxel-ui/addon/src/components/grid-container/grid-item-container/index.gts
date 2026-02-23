@@ -1,19 +1,19 @@
-import Component from '@glimmer/component';
+import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
-import FittedCardContainer from '../../fitted-card-container/index.gts';
 import { type FittedFormatId } from '../../../helpers.ts';
+import FittedCardContainer from '../../fitted-card-container/index.gts';
 
 export interface GridItemContainerSignature {
-  Args: { size?: FittedFormatId; fullWidth?: boolean };
+  Args: { fullWidth?: boolean; size?: FittedFormatId };
   Blocks: {
-    default: [];
-    before?: [];
     after?: [];
+    before?: [];
+    default: [];
   };
   Element: HTMLElement;
 }
 
-export default class GridItemContainer extends Component<GridItemContainerSignature> {
+const GridItemContainer: TemplateOnlyComponent<GridItemContainerSignature> =
   <template>
     <div class='boxel-grid-item-container' ...attributes>
       {{#if (has-block 'before')}}
@@ -28,5 +28,6 @@ export default class GridItemContainer extends Component<GridItemContainerSignat
         {{yield to='after'}}
       {{/if}}
     </div>
-  </template>
-}
+  </template>;
+
+export default GridItemContainer;

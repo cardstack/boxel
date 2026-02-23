@@ -1,16 +1,16 @@
 import Component from '@glimmer/component';
 
 import {
+  type FittedFormatId,
   fittedFormatById,
   fittedFormatIds,
   sanitizeHtmlSafe,
-  type FittedFormatId,
 } from '../../helpers.ts';
 
 interface Signature {
   Args: {
-    size?: FittedFormatId;
     fullWidth?: boolean;
+    size?: FittedFormatId;
   };
   Blocks: { default: [] };
   Element: HTMLDivElement;

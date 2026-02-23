@@ -2,9 +2,9 @@ import Component from '@glimmer/component';
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
 
 import {
+  type FittedFormatId,
   fittedFormatById,
   fittedFormatIds,
-  type FittedFormatId,
 } from '../../helpers.ts';
 import FittedCardContainer from './index.gts';
 

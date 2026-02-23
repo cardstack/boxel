@@ -289,7 +289,7 @@ test.describe('Commands', () => {
     }).toPass();
   });
 
-  test.only('an autoexecuted command does not run again when the message is re-rendered', async ({
+  test('an autoexecuted command does not run again when the message is re-rendered', async ({
     page,
   }) => {
     const { username, password, credentials } =

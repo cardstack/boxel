@@ -17,10 +17,10 @@ export type FittedFormatId =
   | 'triple-wide-strip';
 
 export type FittedFormatSpec = {
+  height: number;
   id: FittedFormatId;
   title: string;
   width: number;
-  height: number;
 };
 
 type FittedFormatGallery = ReadonlyArray<{

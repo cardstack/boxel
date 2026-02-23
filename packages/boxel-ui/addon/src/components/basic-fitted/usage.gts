@@ -6,17 +6,17 @@ import { tracked } from '@glimmer/tracking';
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
 
 import {
+  type FittedFormatSpec,
   cn,
+  FITTED_FORMATS,
   gt,
   gte,
-  FITTED_FORMATS,
-  type FittedFormatSpec,
 } from '../../helpers.ts';
 import type { Icon } from '../../icons.ts';
 import CardContainer from '../card-container/index.gts';
 import BasicFitted from './index.gts';
 
-type Spec = Partial<FittedFormatSpec> & { width: number; height: number };
+type Spec = Partial<FittedFormatSpec> & { height: number; width: number };
 
 const OTHER_SIZES: Spec[] = [
   { width: 226, height: 226 },

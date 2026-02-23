@@ -2,24 +2,23 @@ import Component from '@glimmer/component';
 import type { ComponentLike } from '@glint/template';
 
 import {
+  type FittedFormatId,
   element,
   fittedFormatById,
   fittedFormatIds,
   sanitizeHtmlSafe,
-  type FittedFormatId,
 } from '../../helpers.ts';
-
 import GridItemContainer, {
   type GridItemContainerSignature,
 } from './grid-item-container/index.gts';
 
 interface Signature {
   Args: {
-    viewFormat?: 'list' | 'grid';
-    size?: FittedFormatId;
     fullWidthItem?: boolean;
-    tag?: keyof HTMLElementTagNameMap;
     items?: any[];
+    size?: FittedFormatId;
+    tag?: keyof HTMLElementTagNameMap;
+    viewFormat?: 'list' | 'grid';
   };
   Blocks: {
     default:
