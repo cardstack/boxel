@@ -6,7 +6,10 @@ import { trimExecutableExtension, logger } from './index';
 
 import { CardError } from './error';
 import flatMap from 'lodash/flatMap';
-import { trackRuntimeModuleDependency } from './dependency-tracker';
+import {
+  trackRuntimeModuleDependency,
+  type RuntimeDependencyTrackingContext,
+} from './dependency-tracker';
 
 type FetchingModule = {
   state: 'fetching';
@@ -212,16 +215,25 @@ export class Loader {
     return undefined;
   }
 
-  async import<T extends object>(moduleIdentifier: string): Promise<T> {
+  async import<T extends object>(
+    moduleIdentifier: string,
+    dependencyTrackingContext?: RuntimeDependencyTrackingContext,
+  ): Promise<T> {
     moduleIdentifier = this.resolveImport(moduleIdentifier);
     let resolvedModule = new URL(moduleIdentifier);
     let resolvedModuleIdentifier = resolvedModule.href;
     if (!this.moduleShims.has(resolvedModuleIdentifier)) {
-      trackRuntimeModuleDependency(resolvedModuleIdentifier);
+      trackRuntimeModuleDependency(
+        resolvedModuleIdentifier,
+        dependencyTrackingContext,
+      );
     }
 
     await this.advanceToState(resolvedModule, 'evaluated');
-    this.trackKnownModuleDependencies(resolvedModuleIdentifier);
+    this.trackKnownModuleDependencies(
+      resolvedModuleIdentifier,
+      dependencyTrackingContext,
+    );
     let module = this.getModule(resolvedModuleIdentifier);
     switch (module?.state) {
       case 'evaluated':
@@ -245,12 +257,18 @@ export class Loader {
     return [...knownDependencies];
   }
 
-  private trackKnownModuleDependencies(rootModuleIdentifier: string): void {
+  private trackKnownModuleDependencies(
+    rootModuleIdentifier: string,
+    dependencyTrackingContext?: RuntimeDependencyTrackingContext,
+  ): void {
     for (let moduleIdentifier of this.collectKnownModuleDependencies(
       rootModuleIdentifier,
     )) {
       if (!this.moduleShims.has(moduleIdentifier)) {
-        trackRuntimeModuleDependency(moduleIdentifier);
+        trackRuntimeModuleDependency(
+          moduleIdentifier,
+          dependencyTrackingContext,
+        );
       }
     }
   }

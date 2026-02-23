@@ -15,6 +15,7 @@ import {
   trackRuntimeInstanceDependency,
   type Query,
   type QueryResultsMeta,
+  type RuntimeDependencyTrackingContext,
   type ErrorEntry,
   type CardErrorJSONAPI,
   type CardError,
@@ -46,11 +47,7 @@ type StoreHooks = {
     opts?: {
       isLive?: boolean;
       doWhileRefreshing?: (() => void) | undefined;
-      dependencyTracking?: {
-        mode: 'query';
-        fieldPath: string;
-        consumerId?: string;
-      };
+      dependencyTracking?: RuntimeDependencyTrackingContext;
       seed?:
         | {
             cards: T[];
@@ -204,8 +201,11 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     this.setFileMetaItem(id, instance, true);
   }
 
-  async loadCardDocument(url: string) {
-    trackRuntimeInstanceDependency(url);
+  async loadCardDocument(
+    url: string,
+    opts?: { dependencyTrackingContext?: RuntimeDependencyTrackingContext },
+  ) {
+    trackRuntimeInstanceDependency(url, opts?.dependencyTrackingContext);
     let promise = this.#cardDocsInFlight.get(url);
     if (promise) {
       this.trackLoad(promise);
@@ -223,8 +223,9 @@ export default class CardStoreWithGarbageCollection implements CardStore {
 
   async loadFileMetaDocument(
     url: string,
+    opts?: { dependencyTrackingContext?: RuntimeDependencyTrackingContext },
   ): Promise<SingleFileMetaDocument | CardError> {
-    trackRuntimeFileDependency(url);
+    trackRuntimeFileDependency(url, opts?.dependencyTrackingContext);
     let promise = this.#fileMetaDocsInFlight.get(url);
     if (promise) {
       this.trackLoad(promise);

@@ -43,6 +43,7 @@ import {
   type Query,
   type DataQuery,
   type QueryResultsMeta,
+  type RuntimeDependencyTrackingContext,
   type PatchData,
   type Relationship,
   type AutoSaveState,
@@ -108,6 +109,11 @@ const realmEventsLogger = logger('realm:events');
 const storeLogger = logger('store');
 
 type PersistOptions = CreateOptions & { clientRequestId?: string };
+type DependencyTrackingOptions = {
+  dependencyTrackingContext?: RuntimeDependencyTrackingContext;
+};
+type TrackedCreateOptions = CreateOptions & DependencyTrackingOptions;
+type TrackedAddOptions = AddOptions & DependencyTrackingOptions;
 
 export default class StoreService extends Service implements StoreInterface {
   @service declare private realm: RealmService;
@@ -285,7 +291,7 @@ export default class StoreService extends Service implements StoreInterface {
   // This method creates a new instance in the store and return the new card ID
   async create(
     doc: LooseSingleCardDocument,
-    opts?: CreateOptions,
+    opts?: TrackedCreateOptions,
   ): Promise<string | CardErrorJSONAPI> {
     return await this.withTestWaiters(async () => {
       if (opts?.realm) {
@@ -297,6 +303,7 @@ export default class StoreService extends Service implements StoreInterface {
         realm: opts?.realm,
         opts: {
           localDir: opts?.localDir,
+          dependencyTrackingContext: opts?.dependencyTrackingContext,
         },
       });
       if (isCardInstance(cardOrError)) {
@@ -312,19 +319,19 @@ export default class StoreService extends Service implements StoreInterface {
 
   async add<T extends CardDef>(
     instanceOrDoc: T | LooseSingleCardDocument,
-    opts?: CreateOptions & { doNotPersist: true },
+    opts?: TrackedCreateOptions & { doNotPersist: true },
   ): Promise<T>;
   async add<T extends CardDef>(
     instanceOrDoc: T | LooseSingleCardDocument,
-    opts?: CreateOptions & { doNotWaitForPersist: true },
+    opts?: TrackedCreateOptions & { doNotWaitForPersist: true },
   ): Promise<T>;
   async add<T extends CardDef>(
     instanceOrDoc: T | LooseSingleCardDocument,
-    opts?: CreateOptions,
+    opts?: TrackedCreateOptions,
   ): Promise<T | CardErrorJSONAPI>;
   async add<T extends CardDef>(
     instanceOrDoc: T | LooseSingleCardDocument,
-    opts?: AddOptions,
+    opts?: TrackedAddOptions,
   ): Promise<T | CardErrorJSONAPI> {
     let instance: T;
     if (!isCardInstance(instanceOrDoc)) {
@@ -332,6 +339,7 @@ export default class StoreService extends Service implements StoreInterface {
         instanceOrDoc.data,
         instanceOrDoc,
         opts?.relativeTo,
+        opts?.dependencyTrackingContext,
       );
     } else {
       instance = instanceOrDoc;
@@ -432,23 +440,36 @@ export default class StoreService extends Service implements StoreInterface {
 
   async get<T extends CardDef>(
     id: string,
-    opts?: { type?: 'card' },
+    opts?: {
+      type?: 'card';
+      dependencyTrackingContext?: RuntimeDependencyTrackingContext;
+    },
   ): Promise<T | CardErrorJSONAPI>;
   async get<T extends FileDef>(
     id: string,
-    opts: { type: 'file-meta' },
+    opts: {
+      type: 'file-meta';
+      dependencyTrackingContext?: RuntimeDependencyTrackingContext;
+    },
   ): Promise<T | CardErrorJSONAPI>;
   async get<T extends CardDef | FileDef>(
     id: string,
-    opts?: { type?: StoreReadType },
+    opts?: {
+      type?: StoreReadType;
+      dependencyTrackingContext?: RuntimeDependencyTrackingContext;
+    },
   ): Promise<T | CardErrorJSONAPI> {
     let readType = opts?.type ?? 'card';
     if (readType === 'file-meta') {
       return await this.getFileMetaInstance<T & FileDef>({
         idOrDoc: id,
+        opts: { dependencyTrackingContext: opts?.dependencyTrackingContext },
       });
     }
-    return await this.getCardInstance<T & CardDef>({ idOrDoc: id });
+    return await this.getCardInstance<T & CardDef>({
+      idOrDoc: id,
+      opts: { dependencyTrackingContext: opts?.dependencyTrackingContext },
+    });
   }
 
   // Bypass cached state and fetch from source of truth
@@ -597,7 +618,10 @@ export default class StoreService extends Service implements StoreInterface {
   async search(
     query: DataQuery,
     realms: string[] | undefined,
-    opts: { includeMeta: true },
+    opts: {
+      includeMeta: true;
+      dependencyTrackingContext?: RuntimeDependencyTrackingContext;
+    },
   ): Promise<{
     resources: (CardResource<Saved> | FileMetaResource)[];
     meta: QueryResultsMeta;
@@ -609,12 +633,18 @@ export default class StoreService extends Service implements StoreInterface {
   async search<T extends CardDef | FileDef = CardDef>(
     query: Query,
     realms: string[] | undefined,
-    opts: { includeMeta: true },
+    opts: {
+      includeMeta: true;
+      dependencyTrackingContext?: RuntimeDependencyTrackingContext;
+    },
   ): Promise<{ instances: T[]; meta: QueryResultsMeta }>;
   async search<T extends CardDef | FileDef = CardDef>(
     query: Query,
     realms?: string[],
-    opts?: { includeMeta?: boolean },
+    opts?: {
+      includeMeta?: boolean;
+      dependencyTrackingContext?: RuntimeDependencyTrackingContext;
+    },
   ): Promise<
     | T[]
     | (CardResource<Saved> | FileMetaResource)[]
@@ -648,6 +678,7 @@ export default class StoreService extends Service implements StoreInterface {
     let result = await this.fetchAndHydrateSearchResults<T>(
       query,
       searchRealms,
+      opts?.dependencyTrackingContext,
     );
     return opts?.includeMeta ? result : result.instances;
   }
@@ -657,6 +688,7 @@ export default class StoreService extends Service implements StoreInterface {
   >(
     query: Query,
     realms: string[],
+    dependencyTrackingContext?: RuntimeDependencyTrackingContext,
   ): Promise<{ instances: T[]; meta: QueryResultsMeta }> {
     let realmServerURLs = this.realmServer.getRealmServersForRealms(realms);
     // TODO remove this assertion after multi-realm server/federated identity is supported
@@ -695,7 +727,10 @@ export default class StoreService extends Service implements StoreInterface {
       await Promise.all(
         collectionDoc.data.map(async (resource) => {
           try {
-            return await this.addResourceFromSearchData<T>(resource);
+            return await this.addResourceFromSearchData<T>(
+              resource,
+              dependencyTrackingContext,
+            );
           } catch (error) {
             storeLogger.warn(
               `Failed to hydrate resource from search results (id: ${'id' in resource ? resource.id : 'unknown'})`,
@@ -757,11 +792,7 @@ export default class StoreService extends Service implements StoreInterface {
     opts?: {
       isLive?: boolean;
       doWhileRefreshing?: (() => void) | undefined;
-      dependencyTracking?: {
-        mode: 'query';
-        fieldPath: string;
-        consumerId?: string;
-      };
+      dependencyTracking?: RuntimeDependencyTrackingContext;
       seed?: {
         cards: T[];
         searchURL?: string;
@@ -914,6 +945,7 @@ export default class StoreService extends Service implements StoreInterface {
     resource: LooseCardResource,
     doc: LooseSingleCardDocument | CardDocument,
     relativeTo?: URL | undefined,
+    dependencyTrackingContext?: RuntimeDependencyTrackingContext,
   ): Promise<T> {
     let api = await this.cardService.getAPI();
     let shouldStubTimers =
@@ -921,6 +953,7 @@ export default class StoreService extends Service implements StoreInterface {
     let performCreate = async () =>
       (await api.createFromSerialized(resource, doc, relativeTo, {
         store: this.store,
+        dependencyTrackingContext,
       })) as T;
     let card = shouldStubTimers
       ? await withStubbedRenderTimers(performCreate)
@@ -1183,10 +1216,12 @@ export default class StoreService extends Service implements StoreInterface {
     resource: LooseLinkableResource<FileMetaResource>,
     doc: LooseSingleResourceDocument<FileMetaResource>,
     relativeTo: URL | undefined,
+    dependencyTrackingContext?: RuntimeDependencyTrackingContext,
   ): Promise<FileDef> {
     let api = await this.cardService.getAPI();
     let instance = (await api.createFromSerialized(resource, doc, relativeTo, {
       store: this.store,
+      dependencyTrackingContext,
     })) as unknown as FileDef;
     this.setIdentityContext(instance, 'file-meta');
     return instance;
@@ -1197,6 +1232,7 @@ export default class StoreService extends Service implements StoreInterface {
   // Not part of the public API since it's meant for internal search result processing.
   private async addResourceFromSearchData<T extends CardDef | FileDef>(
     resource: CardResource<Saved> | FileMetaResource,
+    dependencyTrackingContext?: RuntimeDependencyTrackingContext,
   ): Promise<T | undefined> {
     if (!resource.id) {
       throw new Error('resource must have an id');
@@ -1213,6 +1249,7 @@ export default class StoreService extends Service implements StoreInterface {
         resource,
         doc,
         new URL(resource.id),
+        dependencyTrackingContext,
       ) as Promise<T>;
     }
 
@@ -1224,6 +1261,7 @@ export default class StoreService extends Service implements StoreInterface {
     return this.add({ data: resource } as SingleCardDocument, {
       doNotPersist: true,
       relativeTo: new URL(resource.id),
+      dependencyTrackingContext,
     }) as Promise<T>;
   }
 
@@ -1261,7 +1299,11 @@ export default class StoreService extends Service implements StoreInterface {
     idOrDoc: string | LooseSingleCardDocument;
     relativeTo?: URL;
     realm?: string; // used for new cards
-    opts?: { noCache?: boolean; localDir?: string };
+    opts?: {
+      noCache?: boolean;
+      localDir?: string;
+      dependencyTrackingContext?: RuntimeDependencyTrackingContext;
+    };
   }): Promise<T | CardErrorJSONAPI> {
     let deferred: Deferred<T | CardErrorJSONAPI> | undefined;
     let id = asURL(idOrDoc);
@@ -1285,6 +1327,7 @@ export default class StoreService extends Service implements StoreInterface {
             doc.data,
             doc,
             relativeTo,
+            opts?.dependencyTrackingContext,
           );
           let maybeError = await this.persistAndUpdate(newInstance, {
             realm,
@@ -1350,6 +1393,7 @@ export default class StoreService extends Service implements StoreInterface {
         doc.data,
         doc,
         new URL(doc.data.id!), // instances from the server will have id's
+        opts?.dependencyTrackingContext,
       );
       // in case the url is an alias for the id (like index card without the
       // "/index") we also add this
@@ -1396,7 +1440,10 @@ export default class StoreService extends Service implements StoreInterface {
     opts,
   }: {
     idOrDoc: string | LooseSingleCardDocument;
-    opts?: { noCache?: boolean };
+    opts?: {
+      noCache?: boolean;
+      dependencyTrackingContext?: RuntimeDependencyTrackingContext;
+    };
   }): Promise<T | CardErrorJSONAPI> {
     let deferred: Deferred<T | CardErrorJSONAPI> | undefined;
     let id = asURL(idOrDoc);
@@ -1426,7 +1473,9 @@ export default class StoreService extends Service implements StoreInterface {
       if (this.isRenderStore && (globalThis as any).__boxelRenderContext) {
         fileMetaDoc = await this.extractFileMetaDirectly(url);
       } else {
-        fileMetaDoc = await this.store.loadFileMetaDocument(url);
+        fileMetaDoc = await this.store.loadFileMetaDocument(url, {
+          dependencyTrackingContext: opts?.dependencyTrackingContext,
+        });
       }
       if (isCardError(fileMetaDoc)) {
         throw fileMetaDoc;
@@ -1436,7 +1485,10 @@ export default class StoreService extends Service implements StoreInterface {
         fileMetaDoc.data,
         fileMetaDoc,
         fileMetaDoc.data.id ? new URL(fileMetaDoc.data.id) : new URL(url),
-        { store: this.store },
+        {
+          store: this.store,
+          dependencyTrackingContext: opts?.dependencyTrackingContext,
+        },
       );
       this.setIdentityContext(fileInstance as unknown as FileDef, 'file-meta');
       deferred.fulfill(fileInstance as T);

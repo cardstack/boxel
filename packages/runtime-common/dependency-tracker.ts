@@ -24,6 +24,11 @@ export interface RuntimeDependencyTrackerSnapshot {
   unscopedDeps: string[];
 }
 
+export interface RuntimeDependencyConsumerContext {
+  consumer?: string;
+  consumerKind?: Extract<RuntimeDependencyNodeKind, 'instance' | 'file'>;
+}
+
 interface NodeRecord {
   kinds: Set<RuntimeDependencyNodeKind>;
   queryContexts: Set<string>;
@@ -35,6 +40,11 @@ interface EdgeRecord {
   from: string;
   to: string;
   contexts: Set<string>;
+}
+
+interface ContextStackEntry {
+  token: symbol;
+  context: RuntimeDependencyTrackingContext;
 }
 
 function canonicalURL(url: string): string | undefined {
@@ -115,7 +125,7 @@ export class RuntimeDependencyTracker {
   #edgesLog: ReturnType<typeof logger> | undefined;
   #sessionKey: string | undefined;
   #isActive = false;
-  #contextStack: RuntimeDependencyTrackingContext[] = [];
+  #contextStack: ContextStackEntry[] = [];
   #nodes = new Map<string, NodeRecord>();
   #edges = new Map<string, EdgeRecord>();
   #rootCandidates = new Set<string>();
@@ -159,33 +169,41 @@ export class RuntimeDependencyTracker {
       ...this.#currentContext(),
       ...context,
     } satisfies RuntimeDependencyTrackingContext;
-    this.#contextStack.push(merged);
+    let token = Symbol('runtime-dependency-context');
+    this.#contextStack.push({ token, context: merged });
 
     try {
       let result = cb();
       if (isPromiseLike(result)) {
         return result.finally(() => {
-          this.#contextStack.pop();
+          this.#removeContextByToken(token);
         }) as T;
       }
-      this.#contextStack.pop();
+      this.#removeContextByToken(token);
       return result;
     } catch (err) {
-      this.#contextStack.pop();
+      this.#removeContextByToken(token);
       throw err;
     }
   }
 
-  trackModule(url: string): void {
-    this.#track('module', url);
+  #removeContextByToken(token: symbol): void {
+    let index = this.#contextStack.findIndex((entry) => entry.token === token);
+    if (index !== -1) {
+      this.#contextStack.splice(index, 1);
+    }
   }
 
-  trackInstance(url: string): void {
-    this.#track('instance', url);
+  trackModule(url: string, context?: RuntimeDependencyTrackingContext): void {
+    this.#track('module', url, context);
   }
 
-  trackFile(url: string): void {
-    this.#track('file', url);
+  trackInstance(url: string, context?: RuntimeDependencyTrackingContext): void {
+    this.#track('instance', url, context);
+  }
+
+  trackFile(url: string, context?: RuntimeDependencyTrackingContext): void {
+    this.#track('file', url, context);
   }
 
   snapshot({
@@ -252,7 +270,11 @@ export class RuntimeDependencyTracker {
     this.#rootCandidates.add(`${extensionless}.json`);
   }
 
-  #track(kind: RuntimeDependencyNodeKind, rawURL: string): void {
+  #track(
+    kind: RuntimeDependencyNodeKind,
+    rawURL: string,
+    explicitContext?: RuntimeDependencyTrackingContext,
+  ): void {
     if (!this.#isActive) {
       return;
     }
@@ -261,7 +283,7 @@ export class RuntimeDependencyTracker {
       return;
     }
 
-    let context = this.#currentContext();
+    let context = explicitContext ?? this.#currentContext();
     let label = contextLabel(context);
     let consumer = this.#normalizeConsumer(context);
 
@@ -342,7 +364,7 @@ export class RuntimeDependencyTracker {
   }
 
   #currentContext(): RuntimeDependencyTrackingContext {
-    return this.#contextStack[this.#contextStack.length - 1] ?? {};
+    return this.#contextStack[this.#contextStack.length - 1]?.context ?? {};
   }
 
   #summaryLogger(): ReturnType<typeof logger> {
@@ -390,20 +412,70 @@ export function withRuntimeDependencyTrackingContext<T>(
   return getTracker().withContext(context, cb);
 }
 
-export function trackRuntimeModuleDependency(url: string): void {
-  getTracker().trackModule(url);
+export function trackRuntimeModuleDependency(
+  url: string,
+  context?: RuntimeDependencyTrackingContext,
+): void {
+  getTracker().trackModule(url, context);
 }
 
-export function trackRuntimeInstanceDependency(url: string): void {
-  getTracker().trackInstance(url);
+export function trackRuntimeInstanceDependency(
+  url: string,
+  context?: RuntimeDependencyTrackingContext,
+): void {
+  getTracker().trackInstance(url, context);
 }
 
-export function trackRuntimeFileDependency(url: string): void {
-  getTracker().trackFile(url);
+export function trackRuntimeFileDependency(
+  url: string,
+  context?: RuntimeDependencyTrackingContext,
+): void {
+  getTracker().trackFile(url, context);
 }
 
 export function snapshotRuntimeDependencies(opts?: {
   excludeQueryOnly?: boolean;
 }): RuntimeDependencyTrackerSnapshot {
   return getTracker().snapshot(opts);
+}
+
+export function runtimeQueryDependencyContext(
+  opts: RuntimeDependencyConsumerContext & {
+    queryField: string;
+    source: string;
+  },
+): RuntimeDependencyTrackingContext {
+  return {
+    mode: 'query',
+    queryField: opts.queryField,
+    source: opts.source,
+    consumer: opts.consumer,
+    consumerKind: opts.consumerKind ?? 'instance',
+  };
+}
+
+export function runtimeNonQueryDependencyContext(
+  opts: RuntimeDependencyConsumerContext & {
+    source: string;
+  },
+): RuntimeDependencyTrackingContext {
+  return {
+    mode: 'non-query',
+    source: opts.source,
+    consumer: opts.consumer,
+    consumerKind: opts.consumerKind ?? 'instance',
+  };
+}
+
+export function runtimeDependencyContextWithSource(
+  context: RuntimeDependencyTrackingContext | undefined,
+  source: string,
+): RuntimeDependencyTrackingContext | undefined {
+  if (!context) {
+    return undefined;
+  }
+  return {
+    ...context,
+    source,
+  };
 }

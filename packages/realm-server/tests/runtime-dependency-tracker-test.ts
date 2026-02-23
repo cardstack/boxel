@@ -240,6 +240,71 @@ module(basename(__filename), function (hooks) {
     );
   });
 
+  test('explicit dependency contexts remain isolated across overlapping async work', async function (assert) {
+    beginRuntimeDependencyTrackingSession({
+      sessionKey: 'explicit-overlap-contexts',
+      rootURL: 'https://example.com/root.json',
+      rootKind: 'instance',
+    });
+
+    let releaseQuery: (() => void) | undefined;
+    let releaseNonQuery: (() => void) | undefined;
+    let queryGate = new Promise<void>((resolve) => (releaseQuery = resolve));
+    let nonQueryGate = new Promise<void>(
+      (resolve) => (releaseNonQuery = resolve),
+    );
+
+    let queryContext = {
+      mode: 'query' as const,
+      queryField: 'matches',
+      source: 'test:explicit-query-overlap',
+      consumer: 'https://example.com/query-consumer.json',
+      consumerKind: 'instance' as const,
+    };
+    let nonQueryContext = {
+      mode: 'non-query' as const,
+      source: 'test:explicit-non-query-overlap',
+      consumer: 'https://example.com/non-query-consumer.json',
+      consumerKind: 'instance' as const,
+    };
+
+    let queryPromise = (async () => {
+      await queryGate;
+      trackRuntimeInstanceDependency(
+        'https://example.com/query-target',
+        queryContext,
+      );
+    })();
+    let nonQueryPromise = (async () => {
+      await nonQueryGate;
+      trackRuntimeInstanceDependency(
+        'https://example.com/non-query-target',
+        nonQueryContext,
+      );
+    })();
+
+    releaseQuery!();
+    await Promise.resolve();
+    releaseNonQuery!();
+    await Promise.all([queryPromise, nonQueryPromise]);
+
+    let snapshot = snapshotRuntimeDependencies({ excludeQueryOnly: true });
+    assert.notOk(
+      snapshot.deps.includes('https://example.com/query-target.json'),
+      'query dep is excluded when tracked with explicit query context',
+    );
+    assert.true(
+      snapshot.excludedQueryOnlyDeps.includes(
+        'https://example.com/query-target.json',
+      ),
+      'query dep is classified as query-only with explicit context',
+    );
+    assert.true(
+      snapshot.deps.includes('https://example.com/non-query-target.json'),
+      'non-query dep is retained when tracked with explicit non-query context',
+    );
+  });
+
   test('tracks module deps on loader cache hits without refetch', async function (assert) {
     let fetchCount = 0;
     let loader = new Loader(async () => {
