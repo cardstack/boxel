@@ -227,13 +227,23 @@ module('Unit | query', function (hooks) {
             });
         }
       },
-      async invalidate(_realmURL: string): Promise<void> {
+      async invalidate(_realmURL: string): Promise<string[]> {
         // no-op for tests
+        return [];
       },
       async clearRealmCache(_realmURL: string): Promise<void> {
         // no-op for tests
       },
+      async getModuleCacheEntry(): Promise<undefined> {
+        return undefined;
+      },
+      async getModuleCacheEntries(): Promise<Record<string, never>> {
+        return {};
+      },
       registerRealm() {},
+      async clearAllModules(): Promise<void> {
+        // no-op for tests
+      },
       forRealm() {
         return this;
       },

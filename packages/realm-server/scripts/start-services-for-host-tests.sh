@@ -46,15 +46,24 @@ done
 
 export CATALOG_REALM_PATH="$CATALOG_TEMP_PATH"
 
+# Make host-test startup logs focus on indexing progress rather than per-request noise.
+HOST_TEST_LOG_LEVELS="${HOST_TEST_LOG_LEVELS:-*=info,realm:requests=warn,realm-index-updater=debug,index-runner=debug,index-perf=debug,index-writer=debug,worker=debug,worker-manager=debug}"
+
+# There is a race condition starting up the servers that setting up the
+# submission realm triggers which triggers the start-development.sh script to
+# SIGTERM. currently we don't need the submission realm for host tests to
+# skipping that. but this issue needs to be fixed.
 WAIT_ON_TIMEOUT=900000 \
   SKIP_EXPERIMENTS=true \
   SKIP_CATALOG=true \
   SKIP_BOXEL_HOMEPAGE=true \
+  SKIP_SUBMISSION=true \
   CATALOG_REALM_PATH="$CATALOG_TEMP_PATH" \
+  LOG_LEVELS="$HOST_TEST_LOG_LEVELS" \
   NODE_NO_WARNINGS=1 \
   start-server-and-test \
-    'run-p start:pg start:prerender-dev start:prerender-manager-dev start:matrix start:smtp start:worker-development start:development' \
+    'run-p -ln start:pg start:prerender-dev start:prerender-manager-dev start:matrix start:smtp start:worker-development start:development' \
     'http-get://localhost:4201/base/_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson|http://localhost:8008|http://localhost:5001' \
-    'run-p start:worker-test start:test-realms' \
+    'run-p -ln start:worker-test start:test-realms' \
     'http-get://localhost:4202/node-test/_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson' \
     'wait'

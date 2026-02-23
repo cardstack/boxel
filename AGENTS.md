@@ -55,6 +55,7 @@
   `ember test --path dist --filter "some text that appears in module name or test name"`  
   Note that the filter is matched against the module name and test name, not the file name! Try to avoid using pipe characters in the filter, since they can confuse auto-approval tool use filters set up by the user.
 - run `pnpm lint` in this directory to lint changes made to this package
+- run `pnpm lint:fix` directly in this directory to apply fixes for lint failures made to this package that can be automatically fixed.
 
 #### Iterating on host tests with the Chrome MCP server
 
@@ -79,6 +80,7 @@
   - Run tests:
     `pnpm test`
 - Focusing on single test or module:
+- make sure to kill previously running matrix tests if they are still running before starting a new test run.
   Add `--grep` flag to command (`--grep 'it can register a user with a registration token'`)
 
 ### packages/realm-server
@@ -93,16 +95,21 @@
   Add `.only` to module/test declaration (`test.only('returns a 201 response', ...)`)
   Then run `pnpm test`
   Make sure not to commit `.only` to source control
+- make sure to kill previously running realm-server tests if they are still running before starting a new test run.
 - run `pnpm lint` directly in this directory to lint changes made to this package
+- run `pnpm lint:fix` directly in this directory to apply fixes for lint failures made to this package that can be automatically fixed.
 
 ### packages/postgres
 - If you need to make a database migration use `pnpm create migration_name` to create a migration file so that the correct date timestamp prefix will be added to the file name. Then implement the migration inside the newly created file.
+- **After creating or modifying a migration, you MUST regenerate the SQLite schema file.** Run `pnpm make-schema` from this directory. This creates a new SQLite schema in `packages/host/config/schema/` with a timestamp matching the latest migration file. The old schema file is automatically removed. If you skip this step, the host app will fail to start with an "SQLite schema is out of date" error.
+  - This script requires Docker (it uses the `boxel-pg` container to dump the Postgres schema). Ensure Docker is running before executing.
 
 
 ### packages/runtime-common
 
 - Functionality is tested via host and/or realm-server tests
-- run `pnpm lint` directly in packages/host or directly in packages/realm-server to lint for changes made in this package. This package will be linted since both packages/host and package/realm-server consume this package.
+- run `pnpm lint` directly in this directory to lint changes made to this package
+- run `pnpm lint:js:fix` directly in this directory to apply fixes for js lint failures made to this package that can be automatically fixed.
 
 ## PR Instructions
 

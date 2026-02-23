@@ -11,20 +11,20 @@ import { gt } from '@cardstack/boxel-ui/helpers';
 import { ImageDef } from 'https://cardstack.com/base/image-file-def';
 
 /**
- * Playground card for demonstrating ImageDef/PngDef capabilities.
+ * Playground card for demonstrating ImageDef capabilities.
  *
- * This card shows how ImageDef (and its subclass PngDef):
+ * This card shows how ImageDef (and its subclasses):
  * - Automatically extracts image dimensions (width, height)
  * - Renders images in different formats (isolated, embedded, atom, fitted)
  * - Works with linksTo and linksToMany fields
  */
-export class PngDefPlayground extends CardDef {
+export class ImageDefPlayground extends CardDef {
   static displayName = 'Image Def Playground';
 
   @field title = contains(StringField);
   @field description = contains(StringField);
 
-  // Single image link (accepts ImageDef or PngDef)
+  // Single image link (accepts any ImageDef)
   @field featuredImage = linksTo(ImageDef);
 
   // Multiple image links
@@ -32,7 +32,7 @@ export class PngDefPlayground extends CardDef {
 
   static isolated = class Isolated extends Component<typeof this> {
     <template>
-      <article class='png-playground'>
+      <article class='image-def-playground'>
         <header>
           <h1>{{@model.title}}</h1>
           {{#if @model.description}}
@@ -109,7 +109,7 @@ export class PngDefPlayground extends CardDef {
       </article>
 
       <style scoped>
-        .png-playground {
+        .image-def-playground {
           padding: var(--boxel-sp-lg);
           font-family: var(--boxel-font-family);
           max-width: 800px;

@@ -11,6 +11,8 @@ import { use, resource } from 'ember-resources';
 
 import startCase from 'lodash/startCase';
 
+import { TrackedObject } from 'tracked-built-ins';
+
 import {
   LoadingIndicator,
   ContextButton,
@@ -29,7 +31,9 @@ import {
   isCardDocumentString,
   isCardDef,
   isFieldDef,
+  isFileDef,
   isBaseDef,
+  isCardErrorJSONAPI,
   internalKeyFor,
   type ResolvedCodeRef,
   type CardErrorJSONAPI,
@@ -49,6 +53,7 @@ import {
 import { getResolvedCodeRefFromType } from '@cardstack/host/services/card-type-service';
 import type CommandService from '@cardstack/host/services/command-service';
 import type RealmService from '@cardstack/host/services/realm';
+import type StoreService from '@cardstack/host/services/store';
 
 import type { CardDef, BaseDef } from 'https://cardstack.com/base/card-api';
 
@@ -106,6 +111,7 @@ export default class DetailPanel extends Component<Signature> {
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private realm: RealmService;
   @service declare private commandService: CommandService;
+  @service declare private store: StoreService;
 
   private lastModified = lastModifiedDate(this, () => this.args.readyFile);
 
@@ -116,6 +122,50 @@ export default class DetailPanel extends Component<Signature> {
   @use private cardInstanceType = resource(() => {
     if (this.args.cardInstance !== undefined) {
       let cardDefinition = this.args.cardInstance.constructor as typeof BaseDef;
+      return getCardType(this, () => cardDefinition);
+    }
+    return undefined;
+  });
+
+  @use private fileDefResource = resource(() => {
+    let state = new TrackedObject<{
+      value: BaseDef | undefined;
+      isLoading: boolean;
+      error: unknown;
+    }>({
+      value: undefined,
+      isLoading: false,
+      error: undefined,
+    });
+    if (!this.isNonModuleFile) {
+      return state;
+    }
+    let fileUrl = this.args.readyFile.url;
+    state.isLoading = true;
+    (async () => {
+      try {
+        let result = await this.store.get(fileUrl, { type: 'file-meta' });
+        if (isCardErrorJSONAPI(result)) {
+          state.error = result;
+          state.value = undefined;
+        } else {
+          state.value = result as unknown as BaseDef;
+          state.error = undefined;
+        }
+      } catch (e) {
+        state.error = e;
+        state.value = undefined;
+      } finally {
+        state.isLoading = false;
+      }
+    })();
+    return state;
+  });
+
+  @use private fileDefInstanceType = resource(() => {
+    let fileDefInstance = this.fileDefResource?.value;
+    if (fileDefInstance !== undefined) {
+      let cardDefinition = fileDefInstance.constructor as typeof BaseDef;
       return getCardType(this, () => cardDefinition);
     }
     return undefined;
@@ -143,7 +193,8 @@ export default class DetailPanel extends Component<Signature> {
         this.args.selectedDeclaration &&
         (isCardOrFieldDeclaration(this.args.selectedDeclaration) ||
           isReexportCardOrField(this.args.selectedDeclaration))) ||
-      this.isCardInstance
+      this.isCardInstance ||
+      this.isFileDefInstance
     );
   }
 
@@ -175,7 +226,11 @@ export default class DetailPanel extends Component<Signature> {
   }
 
   private get isLoading() {
-    return this.cardInstanceType?.isLoading;
+    return (
+      this.cardInstanceType?.isLoading ||
+      this.fileDefResource?.isLoading ||
+      this.fileDefInstanceType?.isLoading
+    );
   }
 
   private get definitionActions() {
@@ -209,7 +264,7 @@ export default class DetailPanel extends Component<Signature> {
             },
           ]
         : []),
-      // the inherit feature performs in the inheritance in a new module,
+      // the inherit feature performs the inheritance in a new module,
       // this means that the Card/Field that we are inheriting must be exported
       ...(this.args.selectedDeclaration?.exportName
         ? [
@@ -322,9 +377,13 @@ export default class DetailPanel extends Component<Signature> {
       ? 'card-definition'
       : isFieldDef(this.args.selectedDeclaration.cardOrField)
         ? 'field-definition'
-        : undefined;
+        : isFileDef(this.args.selectedDeclaration.cardOrField)
+          ? 'file-definition'
+          : undefined;
     if (!id) {
-      throw new Error(`Can only call inherit() on card def or field def`);
+      throw new Error(
+        `Can only call inherit() on card def, field def, or file def`,
+      );
     }
     let ref = this.selectedDeclarationAsCodeRef;
     let displayName = this.args.selectedDeclaration.cardOrField.displayName;
@@ -401,6 +460,30 @@ export default class DetailPanel extends Component<Signature> {
 
   private get isModule() {
     return hasExecutableExtension(this.args.readyFile.url);
+  }
+
+  private get inheritancePanelHeader() {
+    if (this.isFileDefInstance) {
+      return 'File Inheritance';
+    }
+    if (
+      this.args.selectedDeclaration &&
+      (isCardOrFieldDeclaration(this.args.selectedDeclaration) ||
+        isReexportCardOrField(this.args.selectedDeclaration))
+    ) {
+      if (isFileDef(this.args.selectedDeclaration.cardOrField)) {
+        return 'File Def Inheritance';
+      }
+    }
+    return 'Card Inheritance';
+  }
+
+  private get isNonModuleFile() {
+    return !this.isModule && !isCardDocumentString(this.args.readyFile.content);
+  }
+
+  private get isFileDefInstance() {
+    return this.fileDefResource?.value !== undefined;
   }
 
   private get fileExtension() {
@@ -512,7 +595,7 @@ export default class DetailPanel extends Component<Signature> {
             aria-label='Inheritance Panel Header'
             data-test-inheritance-panel-header
           >
-            Card Inheritance
+            {{this.inheritancePanelHeader}}
           </PanelHeader>
           {{#if this.isCardInstance}}
             {{! JSON case when visting, eg Author/1.json }}
@@ -534,6 +617,31 @@ export default class DetailPanel extends Component<Signature> {
                   @fileURL={{this.cardInstanceType.type.module}}
                   @name={{this.cardInstanceType.type.displayName}}
                   @fileExtension={{this.cardInstanceType.type.moduleInfo.extension}}
+                  @goToDefinition={{@goToDefinition}}
+                  @codeRef={{codeRef}}
+                />
+              {{/let}}
+            {{/if}}
+          {{else if this.isFileDefInstance}}
+            <InstanceDefinitionContainer
+              @title='File Instance'
+              @fileURL={{@readyFile.url}}
+              @name={{@readyFile.name}}
+              @fileExtension={{this.fileExtension}}
+              @infoText={{this.lastModified.value}}
+              @actions={{this.miscFileActions}}
+            />
+            <Divider @label='Adopts From' />
+            {{#if this.fileDefInstanceType.type}}
+              {{#let
+                (getResolvedCodeRefFromType this.fileDefInstanceType.type)
+                as |codeRef|
+              }}
+                <ClickableModuleDefinitionContainer
+                  @title='File Definition'
+                  @fileURL={{this.fileDefInstanceType.type.module}}
+                  @name={{this.fileDefInstanceType.type.displayName}}
+                  @fileExtension={{this.fileDefInstanceType.type.moduleInfo.extension}}
                   @goToDefinition={{@goToDefinition}}
                   @codeRef={{codeRef}}
                 />
@@ -659,6 +767,8 @@ function getDefinitionTitle(declaration: ModuleDeclaration) {
       return 'Card Definition';
     } else if (isFieldDef(declaration.cardOrField)) {
       return 'Field Definition';
+    } else if (isFileDef(declaration.cardOrField)) {
+      return 'File Definition';
     } else if (isBaseDef(declaration.cardOrField)) {
       return 'Base Definition';
     }
@@ -668,6 +778,8 @@ function getDefinitionTitle(declaration: ModuleDeclaration) {
       return 'Re-exported Card Definition';
     } else if (isFieldDef(declaration.cardOrField)) {
       return 'Re-exported Field Definition';
+    } else if (isFileDef(declaration.cardOrField)) {
+      return 'Re-exported File Definition';
     } else if (isBaseDef(declaration.cardOrField)) {
       return 'Re-exported Base Definition';
     }

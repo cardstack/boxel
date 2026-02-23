@@ -298,7 +298,7 @@ export default class UploadImageCommand extends Command<
       }
     }
 
-    const blob = new Blob([byteArray], { type: mimeType });
+    const blob = new Blob([byteArray as BlobPart], { type: mimeType });
     if (providedFileName) {
       providedFileName = providedFileName.replace(/^"(.*)"$/, '$1');
       try {

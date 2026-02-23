@@ -52,6 +52,7 @@ const fromScratchIndex: Task<FromScratchArgs, FromScratchResult> = ({
   getReader,
   getAuthedFetch,
   prerenderer,
+  definitionLookup,
   createPrerenderAuth,
 }) =>
   async function (args) {
@@ -74,11 +75,13 @@ const fromScratchIndex: Task<FromScratchArgs, FromScratchResult> = ({
       realmURL: new URL(realmURL),
       reader,
       indexWriter,
+      definitionLookup,
       jobInfo,
       reportStatus,
       auth,
       fetch: _fetch,
       prerenderer,
+      realmOwnerUserId: userId,
     });
     let { stats, ignoreData } = await IndexRunner.fromScratch(currentRun);
 
@@ -103,6 +106,7 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
   getReader,
   getAuthedFetch,
   prerenderer,
+  definitionLookup,
   createPrerenderAuth,
 }) =>
   async function (args) {
@@ -126,12 +130,14 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
       realmURL: new URL(realmURL),
       reader,
       indexWriter,
+      definitionLookup,
       jobInfo,
       reportStatus,
       auth,
       fetch: _fetch,
       prerenderer,
       ignoreData: args.ignoreData,
+      realmOwnerUserId: userId,
     });
     let { stats, invalidations, ignoreData } = await IndexRunner.incremental(
       currentRun,

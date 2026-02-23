@@ -16,7 +16,6 @@ import {
   type LooseCardResource,
   type DBAdapter,
   type QueryOptions,
-  type IndexedModuleOrError,
   type InstanceOrError,
   type IndexedFile,
   type DefinitionLookup,
@@ -52,6 +51,7 @@ import {
 
 type Options = {
   loadLinks?: true;
+  linkFields?: string[];
 } & QueryOptions;
 
 type SearchResult = SearchResultDoc | SearchResultError;
@@ -131,8 +131,9 @@ export class RealmIndexQueryEngine {
     opts?: Options,
   ): Promise<LinkableCollectionDocument> {
     let doc: LinkableCollectionDocument;
+    let isFileMetaQuery = await this.queryTargetsFileMeta(query.filter, opts);
 
-    if (await this.queryTargetsFileMeta(query.filter, opts)) {
+    if (isFileMetaQuery) {
       let { files, meta } = await this.#indexQueryEngine.searchFiles(
         new URL(this.#realm.url),
         query,
@@ -175,6 +176,10 @@ export class RealmIndexQueryEngine {
     // fill in the included resources for links that were not cached (e.g.
     // volatile fields)
     if (opts?.loadLinks) {
+      let linkFields = isFileMetaQuery
+        ? query.fields?.['file-meta']
+        : query.fields?.['card'];
+      let linkOpts = linkFields ? { ...opts, linkFields } : opts;
       let omit = doc.data.map((r) => r.id).filter(Boolean) as string[];
       let included: (CardResource<Saved> | FileMetaResource)[] = [];
       for (let resource of doc.data) {
@@ -185,7 +190,7 @@ export class RealmIndexQueryEngine {
             omit,
             included,
           },
-          opts,
+          linkOpts,
         );
       }
       if (included.length > 0) {
@@ -338,13 +343,6 @@ export class RealmIndexQueryEngine {
     return { type: 'doc', doc };
   }
 
-  async module(
-    url: URL,
-    opts?: Options,
-  ): Promise<IndexedModuleOrError | undefined> {
-    return await this.#indexQueryEngine.getModule(url, opts);
-  }
-
   async instance(
     url: URL,
     opts?: QueryOptions,
@@ -381,6 +379,10 @@ export class RealmIndexQueryEngine {
           fieldDefinition.type !== 'linksToMany') ||
         !queryDefinition
       ) {
+        continue;
+      }
+
+      if (opts?.linkFields && !opts.linkFields.includes(fieldName)) {
         continue;
       }
 
@@ -712,8 +714,11 @@ export class RealmIndexQueryEngine {
     let processedRelationships = new Set<string>();
     let processRelationships = async () => {
       for (let entry of relationshipEntries(resource.relationships)) {
-        let { relationship, key } = entry;
+        let { relationship, key, fieldName } = entry;
         if (processedRelationships.has(key)) {
+          continue;
+        }
+        if (opts?.linkFields && !opts.linkFields.includes(fieldName)) {
           continue;
         }
         if (!relationship.links?.self) {
@@ -800,6 +805,14 @@ export class RealmIndexQueryEngine {
         // index based on keeping track of the rendered fields and invalidate the
         // index as consumed cards change
         if (linkResource && stack.length <= maxLinkDepth) {
+          // When linkFields is set, we only apply it at the first level of
+          // link loading. For nested relationships, we clear linkFields so
+          // that all deeper relationships are fully loaded (up to
+          // maxLinkDepth). This means linkFields only constrains the
+          // immediate relationships of the root card.
+          let recursiveOpts = opts?.linkFields
+            ? { ...opts, linkFields: undefined }
+            : opts;
           for (let includedResource of await this.loadLinks(
             {
               realmURL,
@@ -809,7 +822,7 @@ export class RealmIndexQueryEngine {
               visited,
               stack: [...(resource.id != null ? [resource.id] : []), ...stack],
             },
-            opts,
+            recursiveOpts,
           )) {
             foundLinks = true;
             if (

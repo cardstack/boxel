@@ -249,6 +249,7 @@ test.describe('Host mode', () => {
 
     await page.goto(publishedCardURL);
     await expect(page.locator('[data-test-host-mode-isolated]')).toBeVisible();
+    await expect(page.locator('body.boxel-ready')).toBeAttached();
   });
 
   test('printed isolated card produces a stable page count', async ({

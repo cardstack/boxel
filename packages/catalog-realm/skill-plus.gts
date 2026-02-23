@@ -9,12 +9,14 @@ import {
   field,
   contains,
   containsMany,
+  linksTo,
   StringField,
   type BaseDefComponent,
 } from 'https://cardstack.com/base/card-api';
 import MarkdownField from 'https://cardstack.com/base/markdown';
 import { Skill, CommandField } from 'https://cardstack.com/base/skill';
 import FileIcon from '@cardstack/boxel-icons/file';
+import { MarkdownDef } from 'https://cardstack.com/base/markdown-file-def';
 
 // Shared slugify function - SINGLE SOURCE OF TRUTH for ID generation
 export function slugifyHeading(text: string): string {
@@ -678,4 +680,27 @@ export class SkillPlus extends Skill {
       </DocLayout>
     </template>
   };
+}
+
+export class SkillPlusMarkdown extends SkillPlus {
+  static displayName = 'Skill Plus Markdown';
+  static prefersWideFormat = true;
+
+  // Override instructions field to be computed of instructionsSource.content
+  @field instructionsSource = linksTo(MarkdownDef);
+  @field instructions = contains(MarkdownField, {
+    computeVia: function (this: SkillPlusMarkdown) {
+      return this.instructionsSource?.content;
+    },
+  });
+  // override skill card's title field to be computed of cardInfo.name
+  @field cardTitle = contains(StringField, {
+    computeVia: function (this: SkillPlusMarkdown) {
+      return (
+        this.cardInfo?.name ??
+        this.instructionsSource?.title ??
+        `Untitled ${SkillPlus.displayName}`
+      );
+    },
+  });
 }
