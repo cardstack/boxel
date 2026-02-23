@@ -152,6 +152,10 @@ export async function performCardIndexing({
       ),
     );
 
+    let queryFieldPaths = dependencyResolver.extractQueryFieldRelationshipPaths(
+      resource,
+      (renderResult?.serialized?.data as CardResource | undefined) ?? null,
+    );
     let relationshipDeps = new Set<string>([
       ...dependencyResolver.extractDirectRelationshipDeps(
         resource,
@@ -164,6 +168,7 @@ export async function performCardIndexing({
       ...dependencyResolver.extractSearchDocRelationshipDeps(
         renderError.searchData ?? null,
         instanceURL,
+        queryFieldPaths,
       ),
     ]);
     renderError.error.deps.push(...relationshipDeps);

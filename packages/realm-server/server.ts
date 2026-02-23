@@ -681,6 +681,7 @@ export class RealmServer {
     if (!this.routerMiddleware) {
       this.routerMiddleware = createRoutes({
         dbAdapter: this.dbAdapter,
+        definitionLookup: this.definitionLookup,
         serverURL: this.serverURL.href,
         matrixClient: this.matrixClient,
         realmServerSecretSeed: this.realmServerSecretSeed,
@@ -799,24 +800,6 @@ export class RealmServer {
     };
     writeJSONSync(join(realmPath, '.realm.json'), info);
     writeJSONSync(join(realmPath, 'index.json'), {
-      data: {
-        type: 'card',
-        meta: {
-          adoptsFrom: {
-            module: 'https://cardstack.com/base/index',
-            name: 'IndexCard',
-          },
-        },
-        relationships: {
-          cardsGrid: {
-            links: {
-              self: './cards-grid',
-            },
-          },
-        },
-      },
-    });
-    writeJSONSync(join(realmPath, 'cards-grid.json'), {
       data: {
         type: 'card',
         meta: {

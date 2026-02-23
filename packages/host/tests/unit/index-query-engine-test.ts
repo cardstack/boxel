@@ -241,6 +241,9 @@ module('Unit | query', function (hooks) {
         return {};
       },
       registerRealm() {},
+      async clearAllModules(): Promise<void> {
+        // no-op for tests
+      },
       forRealm() {
         return this;
       },
