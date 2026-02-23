@@ -136,11 +136,13 @@ export default class PlaygroundPanel extends Component<Signature> {
 
   @tracked private cardOptions: PrerenderedCardLike[] = [];
   @tracked private selectedFileMetaId: string | undefined;
+  @tracked private showAllFileMetaInstances = false;
   @use private moduleChangeTracker = resource(() => {
     let moduleId = internalKeyFor(this.args.codeRef, undefined);
     if (moduleId !== this.#currentModuleId) {
       this.#currentModuleId = moduleId;
       this.#creationError = false;
+      this.showAllFileMetaInstances = false;
     }
     return moduleId;
   });
@@ -348,8 +350,24 @@ export default class PlaygroundPanel extends Component<Signature> {
     };
   }
 
+  static FILE_META_DROPDOWN_LIMIT = 20;
+
   private get fileMetaInstances(): FileDef[] | undefined {
     return this.fileSearchResults?.instances as FileDef[] | undefined;
+  }
+
+  private get fileMetaDropdownOptions(): FileDef[] | undefined {
+    let instances = this.fileMetaInstances;
+    if (!instances) {
+      return undefined;
+    }
+    if (
+      this.showAllFileMetaInstances ||
+      instances.length <= PlaygroundPanel.FILE_META_DROPDOWN_LIMIT
+    ) {
+      return instances;
+    }
+    return instances.slice(0, PlaygroundPanel.FILE_META_DROPDOWN_LIMIT);
   }
 
   private get selectedFileMetaInstance(): FileDef | undefined {
@@ -603,7 +621,23 @@ export default class PlaygroundPanel extends Component<Signature> {
   }
 
   private get fileDefAfterMenuOptions(): MenuItem[] {
-    return [];
+    let allInstances = this.fileMetaInstances;
+    if (
+      !allInstances ||
+      this.showAllFileMetaInstances ||
+      allInstances.length <= PlaygroundPanel.FILE_META_DROPDOWN_LIMIT
+    ) {
+      return [];
+    }
+    return [
+      new MenuItem({
+        label: `Show all ${allInstances.length} files`,
+        action: () => {
+          this.showAllFileMetaInstances = true;
+        },
+        icon: Folder,
+      }),
+    ];
   }
 
   private get format(): Format {
@@ -978,7 +1012,7 @@ export default class PlaygroundPanel extends Component<Signature> {
                 isFileDef=@isFileDef
                 cardOptions=this.cardOptions
                 fieldOptions=this.fieldInstances
-                fileMetaOptions=this.fileMetaInstances
+                fileMetaOptions=this.fileMetaDropdownOptions
                 findSelectedCard=this.findSelectedCard
                 selection=this.dropdownSelection
                 onSelect=this.onSelect
