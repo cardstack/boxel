@@ -176,7 +176,9 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
     state.isLoading = true;
     (async () => {
       try {
-        let result = await this.store.getWithoutCache(fileUrl, { type: 'file-meta' });
+        let result = await this.store.getWithoutCache(fileUrl, {
+          type: 'file-meta',
+        });
         if (isCardErrorJSONAPI(result)) {
           state.error = result;
           state.value = undefined;
