@@ -80,7 +80,7 @@ class Isolated extends Component<typeof TextFileDef> {
       }
 
       .text-isolated__content {
-        font-family: monospace;
+        font-family: var(--boxel-monospace-font-family, monospace);
         white-space: pre-wrap;
         word-wrap: break-word;
         margin: 0;
@@ -133,7 +133,7 @@ class Embedded extends Component<typeof TextFileDef> {
       }
 
       .text-embedded__pre {
-        font-family: monospace;
+        font-family: var(--boxel-monospace-font-family, monospace);
         white-space: pre-wrap;
         word-wrap: break-word;
         margin: 0;

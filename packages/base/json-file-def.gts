@@ -70,9 +70,9 @@ function highlightJson(json: string): string {
     /(&quot;)((?:[^&]|&(?!quot;))*)(&quot;)\s*:/g,
     '<span class="json-key">$1$2$3</span>:',
   );
-  // Highlight string values (quoted strings not followed by colon)
+  // Highlight string values (quoted strings not followed by colon or </span>:)
   escaped = escaped.replace(
-    /(&quot;)((?:[^&]|&(?!quot;))*)(&quot;)(?!\s*:)/g,
+    /(&quot;)((?:[^&]|&(?!quot;))*)(&quot;)(?!\s*(?:<\/span>)?\s*:)/g,
     '<span class="json-string">$1$2$3</span>',
   );
   // Highlight numbers
