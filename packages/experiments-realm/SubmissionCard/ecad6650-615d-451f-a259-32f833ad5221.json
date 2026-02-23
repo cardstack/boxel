@@ -1,0 +1,28 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "roomId": "!WjQugTdxaCsZZPdRGB:localhost",
+      "branchName": "room-IVdqUXVnVGR4YUNzWlpQZFJHQjpsb2NhbGhvc3Q/blog-app",
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      }
+    },
+    "relationships": {
+      "listing": {
+        "links": {
+          "self": "http://localhost:4201/catalog/AppListing/95cbe2c7-9b60-4afd-8a3c-1382b610e316"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "http://localhost:4201/catalog/submission-card/submission-card",
+        "name": "SubmissionCard"
+      }
+    }
+  }
+}

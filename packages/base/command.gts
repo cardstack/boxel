@@ -379,6 +379,17 @@ export class CreateListingPRResult extends CardDef {
   @field prNumber = contains(NumberField);
 }
 
+export class CreateSubmissionInput extends CardDef {
+  @field roomId = contains(StringField);
+  @field realm = contains(RealmField);
+  @field listingId = contains(StringField);
+}
+
+export class CreateSubmissionResult extends CardDef {
+  @field listing = linksTo(CardDef);
+  @field filesWithContent = containsMany(JsonField);
+}
+
 export class CreateListingPRRequestInput extends CardDef {
   @field roomId = contains(StringField);
   @field realm = contains(RealmField);

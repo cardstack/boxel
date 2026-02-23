@@ -3,6 +3,8 @@
   "dependencies": {
     "@cardstack/postgres": "workspace:*",
     "@cardstack/runtime-common": "workspace:*",
+    "@octokit/rest": "catalog:",
+    "@octokit/types": "16.0.0",
     "@sentry/node": "catalog:",
     "matrix-js-sdk": "catalog:",
     "ts-node": "^10.9.2",

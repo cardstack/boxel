@@ -1,0 +1,22 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "roomId": "!XezEDqUlIJcNdsuaFB:localhost",
+      "branchName": "room-IVhlekVEcVVsSUpjTmRzdWFGQjpsb2NhbGhvc3Q/some-sample-listing"
+    },
+    "relationships": {
+      "listing": {
+        "links": {
+          "self": "../CardListing/a6d41a6d-9b63-4b37-b1f0-54b5e8c3d901"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../submission-card/submission-card",
+        "name": "SubmissionCard"
+      }
+    }
+  }
+}

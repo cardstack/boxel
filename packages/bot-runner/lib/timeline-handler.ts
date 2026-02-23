@@ -9,6 +9,16 @@ import {
 import { enqueueRunCommandJob } from '@cardstack/runtime-common/jobs/run-command';
 import * as Sentry from '@sentry/node';
 import type { DBAdapter, QueuePublisher } from '@cardstack/runtime-common';
+import {
+  openCreateListingPR,
+  type BotTriggerEventContent,
+} from './create-listing-pr-handler';
+import type { GitHubClient } from './github';
+import type {
+  DBAdapter,
+  PgPrimitive,
+  QueuePublisher,
+} from '@cardstack/runtime-common';
 import type { MatrixEvent, Room } from 'matrix-js-sdk';
 
 const log = logger('bot-runner');
@@ -22,12 +32,16 @@ export interface TimelineHandlerOptions {
   authUserId: string;
   dbAdapter: DBAdapter;
   queuePublisher: QueuePublisher;
+  githubClient: GitHubClient;
+  startTime: number;
 }
 
 export function onTimelineEvent({
   authUserId,
   dbAdapter,
   queuePublisher,
+  githubClient,
+  startTime,
 }: TimelineHandlerOptions) {
   return async function handleTimelineEvent(
     event: MatrixEvent,
@@ -40,6 +54,10 @@ export function onTimelineEvent({
       }
       let rawEvent = event.event ?? event;
       if (!isBotTriggerEvent(rawEvent)) {
+        return;
+      }
+      let eventTimestamp = rawEvent.origin_server_ts;
+      if (eventTimestamp == null || eventTimestamp < startTime) {
         return;
       }
       let eventContent = rawEvent.content;
@@ -73,6 +91,11 @@ export function onTimelineEvent({
           eventTimestamp == null ||
           eventTimestamp < registration.created_at_ms
         ) {
+        let createdAt = Date.parse(registration.created_at);
+        if (Number.isNaN(createdAt)) {
+          continue;
+        }
+        if (eventTimestamp < createdAt) {
           continue;
         }
         log.debug(
@@ -89,6 +112,7 @@ export function onTimelineEvent({
           runAs: senderUsername,
           eventContent,
           allowedCommands,
+          githubClient,
         });
       }
       for (let registration of registrations) {
@@ -97,6 +121,11 @@ export function onTimelineEvent({
           eventTimestamp == null ||
           eventTimestamp < registration.created_at_ms
         ) {
+        let createdAt = Date.parse(registration.created_at);
+        if (Number.isNaN(createdAt)) {
+          continue;
+        }
+        if (eventTimestamp < createdAt) {
           continue;
         }
         // TODO: filter out events we want to handle based on the registration (e.g. command messages, system events)
@@ -114,6 +143,7 @@ export function onTimelineEvent({
           runAs: senderUsername,
           eventContent,
           allowedCommands,
+          githubClient,
         });
       }
     } catch (error) {
@@ -129,54 +159,74 @@ async function maybeEnqueueCommand({
   runAs,
   eventContent,
   allowedCommands,
+  githubClient,
 }: {
   dbAdapter: DBAdapter;
   queuePublisher: QueuePublisher;
   runAs: string;
-  eventContent: { type?: unknown; input?: unknown; realm?: unknown };
+  eventContent: BotTriggerEventContent;
   allowedCommands: { type: string; command: string }[];
-}) {
-  if (
-    !allowedCommands.length ||
-    typeof eventContent.type !== 'string' ||
-    !allowedCommands.some((entry) => entry.type === eventContent.type)
-  ) {
-    return;
-  }
+  githubClient: GitHubClient;
+}): Promise<void> {
+  try {
+    if (
+      !allowedCommands.length ||
+      typeof eventContent.type !== 'string' ||
+      !allowedCommands.some((entry) => entry.type === eventContent.type)
+    ) {
+      return;
+    }
 
-  if (!eventContent?.input || typeof eventContent.input !== 'object') {
-    return;
-  }
+    if (eventContent.type === 'pr-listing-create') {
+      // Temporary workaround: handle PR creation directly until this flow is moved to a proper command path.
+      await openCreateListingPR({
+        eventContent,
+        runAs,
+        githubClient,
+      });
+    }
 
-  let input = eventContent.input as Record<string, unknown>;
-  let realmURL =
-    typeof eventContent.realm === 'string' ? eventContent.realm : undefined;
-  let commandRegistration = allowedCommands.find(
-    (entry) => entry.type === eventContent.type,
-  );
-  let command = commandRegistration?.command?.trim();
-  let commandInput: Record<string, any> | null = input;
+    if (!eventContent?.input || typeof eventContent.input !== 'object') {
+      return;
+    }
 
-  if (!realmURL || !command) {
-    log.warn(
-      'bot trigger missing required input for command (need realmURL and command)',
-      { realmURL, command },
+    let input = eventContent.input as Record<string, unknown>;
+    let realmURL =
+      typeof eventContent.realm === 'string' ? eventContent.realm : undefined;
+    let commandRegistration = allowedCommands.find(
+      (entry) => entry.type === eventContent.type,
     );
-    return;
-  }
+    let command = commandRegistration?.command?.trim();
+    let commandInput: Record<string, any> | null = input;
 
-  await enqueueRunCommandJob(
-    {
-      realmURL,
-      realmUsername: runAs,
+    if (!realmURL || !command) {
+      log.warn(
+        'bot trigger missing required input for command (need realmURL and command)',
+        { realmURL, command },
+      );
+      return;
+    }
+
+    await enqueueRunCommandJob(
+      {
+        realmURL,
+        realmUsername: runAs,
+        runAs,
+        command,
+        commandInput,
+      },
+      queuePublisher,
+      dbAdapter,
+      userInitiatedPriority,
+    );
+  } catch (error) {
+    log.error('error in maybeEnqueueCommand', {
       runAs,
-      command,
-      commandInput,
-    },
-    queuePublisher,
-    dbAdapter,
-    userInitiatedPriority,
-  );
+      eventType: eventContent.type,
+      error,
+    });
+    throw error;
+  }
 }
 
 function getRoomCreator(room: Room | undefined): string | undefined {

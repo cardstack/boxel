@@ -972,6 +972,12 @@ importers:
       '@cardstack/runtime-common':
         specifier: workspace:*
         version: link:../runtime-common
+      '@octokit/rest':
+        specifier: 'catalog:'
+        version: 22.0.1
+      '@octokit/types':
+        specifier: 16.0.0
+        version: 16.0.0
       '@sentry/node':
         specifier: 'catalog:'
         version: 8.55.0

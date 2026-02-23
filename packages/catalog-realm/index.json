@@ -56,6 +56,11 @@
           "self": "./AppListing/1d17b731-7108-42db-b4fb-93643288553c"
         }
       },
+      "new.8": {
+        "links": {
+          "self": "./CardListing/a6d41a6d-9b63-4b37-b1f0-54b5e8c3d901"
+        }
+      },
       "featured.0": {
         "links": {
           "self": "./AppListing/4c9a74c6-b8d4-47fc-ade7-d7e7b2999b6b"

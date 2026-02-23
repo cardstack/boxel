@@ -39,12 +39,12 @@ export default class CreateListingPRRequestCommand extends HostBaseCommand<
     let { realm, listingId } = input;
     let roomId = input.roomId;
     let listingName: string | undefined;
+    let listing = await this.store.get<Listing>(listingId);
+    if (listing && isCardInstance(listing)) {
+      listingName = listing.name ?? listing.id;
+    }
 
     if (!roomId) {
-      let listing = await this.store.get<Listing>(listingId);
-      if (listing && isCardInstance(listing)) {
-        listingName = listing.name ?? listing.id;
-      }
       let useAiAssistantCommand = new UseAiAssistantCommand(
         this.commandContext,
       );
@@ -64,11 +64,12 @@ export default class CreateListingPRRequestCommand extends HostBaseCommand<
     await new SendBotTriggerEventCommand(this.commandContext).execute({
       roomId,
       realm,
-      type: 'create-listing-pr',
+      type: 'pr-listing-create',
       input: {
         roomId,
         realm,
         listingId,
+        ...(listingName ? { listingName } : {}),
       },
     });
   }

@@ -245,6 +245,7 @@ export * from './query-field-utils';
 export * from './relationship-utils';
 export * from './formats';
 export * from './dependency-tracker';
+export * from './github-submissions';
 export { getCreatedTime } from './file-meta';
 export { mergeRelationships } from './merge-relationships';
 export { makeLogDefinitions, logger } from './log';

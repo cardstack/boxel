@@ -6,18 +6,22 @@ import { module, test } from 'qunit';
 
 import { isBotTriggerEvent } from '@cardstack/runtime-common';
 
-import SendBotTriggerEventCommand from '@cardstack/host/commands/bot-requests/send-bot-trigger-event';
-
+import CreateListingPRRequestCommand from '@cardstack/host/commands/bot-requests/create-listing-pr-request';
 import RealmService from '@cardstack/host/services/realm';
 
 import {
   setupIntegrationTestRealm,
   setupLocalIndexing,
-  testRealmURL,
   testRealmInfo,
-  setupRealmCacheTeardown,
-  withCachedRealmSetup,
+  testRealmURL,
 } from '../../helpers';
+import {
+  CardDef,
+  contains,
+  field,
+  setupBaseRealm,
+  StringField,
+} from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
@@ -30,9 +34,10 @@ class StubRealmService extends RealmService {
   }
 }
 
-module('Integration | commands | send-bot-trigger-event', function (hooks) {
+module('Integration | commands | create-listing-pr-request', function (hooks) {
   setupRenderingTest(hooks);
   setupLocalIndexing(hooks);
+  setupBaseRealm(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
@@ -45,30 +50,34 @@ module('Integration | commands | send-bot-trigger-event', function (hooks) {
     getOwner(this)!.register('service:realm', StubRealmService);
   });
 
-  setupRealmCacheTeardown(hooks);
-
   hooks.beforeEach(async function () {
-    await withCachedRealmSetup(async () =>
-      setupIntegrationTestRealm({
-        mockMatrixUtils,
-        contents: {},
-      }),
-    );
+    class Listing extends CardDef {
+      @field name = contains(StringField);
+    }
+
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'listing.gts': { Listing },
+        'Listing/test-listing.json': new Listing({ name: 'Some Listing' }),
+      },
+    });
   });
 
-  test('sends a bot trigger event', async function (assert) {
+  test('sends listingName in pr-listing-create trigger input', async function (assert) {
     let roomId = createAndJoinRoom({
       sender: '@testuser:localhost',
       name: 'room-test',
     });
     let commandService = getService('command-service');
 
-    let command = new SendBotTriggerEventCommand(commandService.commandContext);
+    let command = new CreateListingPRRequestCommand(
+      commandService.commandContext,
+    );
     await command.execute({
       roomId,
-      type: 'pr-listing-create',
       realm: testRealmURL,
-      input: { listingId: 'catalog/listing-1' },
+      listingId: `${testRealmURL}Listing/test-listing`,
     });
 
     let event = getRoomEvents(roomId).pop()!;
@@ -76,6 +85,11 @@ module('Integration | commands | send-bot-trigger-event', function (hooks) {
     assert.strictEqual(event.content.type, 'pr-listing-create');
     assert.strictEqual(event.content.realm, testRealmURL);
     assert.strictEqual(event.content.userId, '@testuser:localhost');
-    assert.deepEqual(event.content.input, { listingId: 'catalog/listing-1' });
+    assert.deepEqual(event.content.input, {
+      roomId,
+      realm: testRealmURL,
+      listingId: `${testRealmURL}Listing/test-listing`,
+      listingName: 'Some Listing',
+    });
   });
 });

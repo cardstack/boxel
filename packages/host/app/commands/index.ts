@@ -15,6 +15,7 @@ import * as CopySourceCommandModule from './copy-source';
 import * as CreateAIAssistantRoomCommandModule from './create-ai-assistant-room';
 import * as CreateListingPRCommandModule from './create-listing-pr';
 import * as CreateSpecCommandModule from './create-specs';
+import * as CreateSubmissionCommandModule from './create-submission';
 import * as GenerateExampleCardsCommandModule from './generate-example-cards';
 import * as GenerateReadmeSpecCommandModule from './generate-readme-spec';
 import * as GenerateThemeExampleCommandModule from './generate-theme-example';
@@ -159,6 +160,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/create-listing-pr',
     CreateListingPRCommandModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/create-submission',
+    CreateSubmissionCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/create-listing-pr-request',
@@ -356,6 +361,7 @@ export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
   ListingInstallCommandModule.default,
   ListingRemixCommandModule.default,
   CreateListingPRCommandModule.default,
+  CreateSubmissionCommandModule.default,
   CreateListingPRRequestCommandModule.default,
   ListingUpdateSpecsCommandModule.default,
   ListingUseCommandModule.default,
