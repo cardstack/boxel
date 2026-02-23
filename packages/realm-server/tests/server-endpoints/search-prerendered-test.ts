@@ -17,7 +17,6 @@ import {
   closeServer,
   createVirtualNetwork,
   setupDB,
-  insertUser,
   matrixURL,
   realmSecretSeed,
   runTestRealmServerWithRealms,
@@ -140,8 +139,6 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
     });
 
     test('QUERY /_search-prerendered federates results across realms', async function (assert) {
-      await insertUser(dbAdapter, ownerUserId, 'stripe-test-user', null);
-
       let realmServerToken = createRealmServerJWT(
         { user: ownerUserId, sessionRoom: 'session-room-test' },
         realmSecretSeed,
@@ -194,8 +191,6 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
     });
 
     test('GET /_search-prerendered returns 400 for unsupported method', async function (assert) {
-      await insertUser(dbAdapter, ownerUserId, 'stripe-test-user', null);
-
       let realmServerToken = createRealmServerJWT(
         { user: ownerUserId, sessionRoom: 'session-room-test' },
         realmSecretSeed,
@@ -294,7 +289,6 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
     });
 
     test('QUERY /_search-prerendered returns 400 for invalid query', async function (assert) {
-      await insertUser(dbAdapter, ownerUserId, 'stripe-test-user', null);
       let realmServerToken = createRealmServerJWT(
         { user: ownerUserId, sessionRoom: 'session-room-test' },
         realmSecretSeed,

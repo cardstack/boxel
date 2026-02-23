@@ -385,7 +385,7 @@ module('Integration | realm', function (hooks) {
               backgroundURL:
                 'https://i.postimg.cc/tgRHRV8C/pawel-czerwinski-h-Nrd99q5pe-I-unsplash.jpg',
               iconURL: 'https://boxel-images.boxel.ai/icons/cardstack.png',
-              realmUserId: '@test_realm:localhost',
+              realmUserId: '@realm_server:localhost',
               showAsCatalog: null,
               visibility: 'public',
               publishable: null,
@@ -3288,7 +3288,7 @@ module('Integration | realm', function (hooks) {
               backgroundURL:
                 'https://i.postimg.cc/tgRHRV8C/pawel-czerwinski-h-Nrd99q5pe-I-unsplash.jpg',
               iconURL: 'https://boxel-images.boxel.ai/icons/cardstack.png',
-              realmUserId: '@test_realm:localhost',
+              realmUserId: '@realm_server:localhost',
               showAsCatalog: null,
               visibility: 'public',
               publishable: null,
@@ -3575,7 +3575,7 @@ posts/ignore-me.gts
             name: 'Example Workspace',
             backgroundURL: 'https://example-background-url.com',
             iconURL: 'https://example-icon-url.com',
-            realmUserId: '@realm/test-realm-test:localhost',
+            realmUserId: '@realm_server:localhost',
             showAsCatalog: null,
             visibility: 'public',
             publishable: null,

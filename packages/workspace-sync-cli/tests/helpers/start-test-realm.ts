@@ -9,6 +9,7 @@ export interface TestRealmServer {
   realmProcess: ChildProcess;
   workerProcess: ChildProcess;
   stop: () => Promise<void>;
+  executeSQL: (sql: string) => Promise<Record<string, any>[]>;
 }
 
 export async function startTestRealmServer(
@@ -81,7 +82,6 @@ export async function startTestRealmServer(
       }
     });
   });
-
   // Start worker manager first
   const workerArgs = [
     '--transpileOnly',
@@ -214,6 +214,30 @@ export async function startTestRealmServer(
     });
   });
 
+  let sqlResults: ((results: string) => void) | undefined;
+  let sqlError: ((error: string) => void) | undefined;
+
+  realmProcess.on('message', (message) => {
+    if (typeof message === 'string' && message.startsWith('sql-results:')) {
+      let results = message.substring('sql-results:'.length);
+      if (!sqlResults) {
+        console.error(`received unprompted SQL: ${results}`);
+        return;
+      }
+      sqlResults(results);
+    } else if (
+      typeof message === 'string' &&
+      message.startsWith('sql-error:')
+    ) {
+      let error = message.substring('sql-error:'.length);
+      if (!sqlError) {
+        console.error(`received unprompted SQL error: ${error}`);
+        return;
+      }
+      sqlError(error);
+    }
+  });
+
   // Create stop function
   const stop = async () => {
     const realmServerStopped = new Promise<void>((resolve) => {
@@ -244,8 +268,22 @@ export async function startTestRealmServer(
       prerenderServer.close(() => resolve()),
     );
   };
+  const executeSQL = async (sql: string): Promise<Record<string, any>[]> => {
+    let execute = new Promise<string>(
+      (resolve, reject: (reason: string) => void) => {
+        sqlResults = resolve;
+        sqlError = reject;
+      },
+    );
+    console.log('Executing SQL in realm server:', sql);
+    realmProcess.send(`execute-sql:${sql}`);
+    let resultsStr = await execute;
+    sqlResults = undefined;
+    sqlError = undefined;
+    return JSON.parse(resultsStr);
+  };
 
-  return { realmProcess, workerProcess, stop };
+  return { realmProcess, workerProcess, stop, executeSQL };
 }
 
 export async function waitForServer(

@@ -90,6 +90,7 @@ module(basename(__filename), function () {
         setupPermissionedRealm(hooks, {
           permissions: {
             john: ['read'],
+            '@node-test_realm:localhost': ['read', 'realm-owner'],
           },
           onRealmSetup,
         });

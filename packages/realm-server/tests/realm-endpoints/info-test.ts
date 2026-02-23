@@ -80,7 +80,6 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
               type: 'realm-info',
               attributes: {
                 ...testRealmInfo,
-                realmUserId: '@node-test_realm:localhost',
               },
             },
           },
@@ -92,7 +91,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
     module('permissioned realm', function (hooks) {
       setupPermissionedRealm(hooks, {
         permissions: {
-          john: ['read', 'write'],
+          '@node-test_realm:localhost': ['read', 'realm-owner'],
         },
         realmURL,
         onRealmSetup,
@@ -124,7 +123,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
           .post(infoPath)
           .set('X-HTTP-Method-Override', 'QUERY')
           .set('Accept', 'application/vnd.api+json')
-          .set('Authorization', `Bearer ${createJWT(testRealm, 'not-john')}`);
+          .set('Authorization', `Bearer ${createJWT(testRealm, 'not-a-user')}`);
 
         assert.strictEqual(response.status, 403, 'HTTP 403 status');
       });
@@ -137,7 +136,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
           .set('Accept', 'application/vnd.api+json')
           .set(
             'Authorization',
-            `Bearer ${createJWT(testRealm, 'john', ['read', 'write'])}`,
+            `Bearer ${createJWT(testRealm, '@node-test_realm:localhost', ['read', 'realm-owner'])}`,
           );
 
         assert.strictEqual(response.status, 200, 'HTTP 200 status');
@@ -151,7 +150,6 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
               attributes: {
                 ...testRealmInfo,
                 visibility: 'private',
-                realmUserId: '@node-test_realm:localhost',
               },
             },
           },
@@ -166,6 +164,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
         setupPermissionedRealm(hooks, {
           permissions: {
             users: ['read'],
+            '@node-test_realm:localhost': ['read', 'realm-owner'],
           },
           realmURL,
           onRealmSetup,
@@ -193,7 +192,6 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
                 attributes: {
                   ...testRealmInfo,
                   visibility: 'shared',
-                  realmUserId: '@node-test_realm:localhost',
                 },
               },
             },
@@ -209,6 +207,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
           bob: ['read'],
           jane: ['read'],
           john: ['read', 'write'],
+          '@node-test_realm:localhost': ['read', 'realm-owner'],
         },
         realmURL,
         onRealmSetup,
@@ -236,7 +235,6 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
               attributes: {
                 ...testRealmInfo,
                 visibility: 'shared',
-                realmUserId: '@node-test_realm:localhost',
               },
             },
           },
