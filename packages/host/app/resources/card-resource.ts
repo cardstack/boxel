@@ -100,12 +100,20 @@ export class CardResource extends Resource<Args> {
     if (!this.#id) {
       return undefined;
     }
-    if (this.readType === 'file-meta' && this.peekForType('file-meta')) {
+
+    let primaryError = this.peekErrorForType(this.readType);
+    if (primaryError && !isCardInstance(primaryError)) {
+      return primaryError;
+    }
+
+    if (
+      this.readType === 'file-meta' &&
+      isFileDefInstance(this.peekForType('file-meta'))
+    ) {
       return undefined;
     }
-    let maybeError =
-      this.peekErrorForType(this.readType) ??
-      this.peekErrorForType(this.fallbackReadType);
+
+    let maybeError = this.peekErrorForType(this.fallbackReadType);
     return maybeError && !isCardInstance(maybeError) ? maybeError : undefined;
   }
 
@@ -117,9 +125,10 @@ export class CardResource extends Resource<Args> {
     if (!this.#id) {
       return false;
     }
-    return this.readType === 'file-meta'
-      ? Boolean(this.store.peek(this.#id, { type: 'file-meta' }))
-      : Boolean(this.store.peek(this.#id));
+    let maybeInstanceOrError =
+      this.peekForType(this.readType) ??
+      this.peekForType(this.fallbackReadType);
+    return Boolean(maybeInstanceOrError);
   }
 
   get autoSaveState() {
