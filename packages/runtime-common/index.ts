@@ -437,7 +437,7 @@ export type AutoSaveState = {
   lastSaveError: CardErrorJSONAPI | Error | undefined;
   lastSavedErrorMsg: string | undefined;
 };
-export type getCard<T extends CardDef = CardDef> = (
+export type getCard<T extends CardDef | FileDef = CardDef> = (
   parent: object,
   id: () => string | undefined,
   opts?: { type?: StoreReadType },
