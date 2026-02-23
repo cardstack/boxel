@@ -644,7 +644,11 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   get isReadOnly() {
-    return !this.realm.canWrite(this.readyFile.url) || this.isFileDefInstance;
+    return (
+      !this.realm.canWrite(this.readyFile.url) ||
+      this.isFileDefInstance ||
+      this.fileDefResource?.isLoading
+    );
   }
 
   @provide(PermissionsContextName)
