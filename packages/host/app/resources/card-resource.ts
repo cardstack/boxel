@@ -59,10 +59,6 @@ export class CardResource extends Resource<Args> {
     return this.#type ?? 'card';
   }
 
-  private get fallbackReadType(): StoreReadType {
-    return this.readType === 'file-meta' ? 'card' : 'file-meta';
-  }
-
   private peekForType(type: StoreReadType): unknown {
     if (!this.#id) {
       return undefined;
@@ -88,9 +84,7 @@ export class CardResource extends Resource<Args> {
     if (!this.#id) {
       return undefined;
     }
-    let maybeCard =
-      this.peekForType(this.readType) ??
-      this.peekForType(this.fallbackReadType);
+    let maybeCard = this.peekForType(this.readType);
     return isCardInstance(maybeCard) || isFileDefInstance(maybeCard)
       ? (maybeCard as BaseDef)
       : undefined;
@@ -100,22 +94,7 @@ export class CardResource extends Resource<Args> {
     if (!this.#id) {
       return undefined;
     }
-
-    let primaryError = this.peekErrorForType(this.readType);
-    if (primaryError && !isCardInstance(primaryError)) {
-      return primaryError;
-    }
-
-    let primaryInstance = this.peekForType(this.readType);
-    if (this.readType === 'card' && isCardInstance(primaryInstance)) {
-      return undefined;
-    }
-    if (this.readType === 'file-meta' && isFileDefInstance(primaryInstance)) {
-      return undefined;
-    }
-
-    let maybeError = this.peekErrorForType(this.fallbackReadType);
-    return maybeError && !isCardInstance(maybeError) ? maybeError : undefined;
+    return this.peekErrorForType(this.readType);
   }
 
   get id() {
@@ -126,9 +105,7 @@ export class CardResource extends Resource<Args> {
     if (!this.#id) {
       return false;
     }
-    let maybeInstanceOrError =
-      this.peekForType(this.readType) ??
-      this.peekForType(this.fallbackReadType);
+    let maybeInstanceOrError = this.peekForType(this.readType);
     return Boolean(maybeInstanceOrError);
   }
 
