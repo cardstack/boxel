@@ -7,7 +7,7 @@ import { getService } from '@universal-ember/test-support';
 import { module, skip } from 'qunit';
 
 import type { Loader } from '@cardstack/runtime-common';
-import { baseRealm, type Realm } from '@cardstack/runtime-common';
+import { baseRealm } from '@cardstack/runtime-common';
 
 import { ensureTrailingSlash } from '@cardstack/runtime-common';
 import {
@@ -105,14 +105,6 @@ module('Integration | create app module via ai-assistant', function (hooks) {
     );
     let roomId = await openAiAssistant();
     return roomId;
-  }
-
-  async function getModule(realm: Realm, url: URL) {
-    let maybeInstance = await realm.realmIndexQueryEngine.module(url);
-    if (maybeInstance?.type === 'module-error') {
-      return undefined;
-    }
-    return maybeInstance;
   }
 
   // This doesn’t work when the generator is in experiments instead of catalog
@@ -231,10 +223,10 @@ module('Integration | create app module via ai-assistant', function (hooks) {
     let moduleURL = (
       document.querySelector('[data-test-view-module]') as HTMLElement
     )?.innerText;
-    let module = await getModule(realm, new URL(moduleURL));
-    assert.ok(module, 'module entry exists');
-    assert.strictEqual(module?.type, 'module');
-    assert.strictEqual(module?.canonicalURL, moduleURL);
+    let moduleFile = await realm.realmIndexQueryEngine.file(new URL(moduleURL));
+    assert.ok(moduleFile, 'module file entry exists');
+    assert.strictEqual(moduleFile?.type, 'file');
+    assert.strictEqual(moduleFile?.canonicalURL, moduleURL);
 
     await click('[data-test-view-module]');
     assert.dom('[data-test-code-mode]').exists();

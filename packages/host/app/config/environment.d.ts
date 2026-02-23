@@ -41,4 +41,5 @@ declare const config: {
   publishedRealmDomainOverrides: string;
   defaultSystemCardId: string;
   cardSizeLimitBytes: number;
+  fileSizeLimitBytes: number;
 };

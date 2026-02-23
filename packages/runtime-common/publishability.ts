@@ -4,7 +4,7 @@ import type { RealmVisibility } from './realm';
 export interface ResourceIndexEntry {
   canonicalUrl: string;
   realmUrl: string;
-  entryType: 'instance' | 'module' | 'file';
+  entryType: 'instance' | 'file';
   hasError: boolean;
   dependencies: string[];
 }

@@ -409,7 +409,11 @@ export default class CodeSubmode extends Component<Signature> {
 
   private get menuItems(): MenuItem[] {
     return newFileTypes.flatMap(({ id, icon, description, extension }) => {
-      if (id === 'duplicate-instance' || id === 'spec-instance') {
+      if (
+        id === 'duplicate-instance' ||
+        id === 'spec-instance' ||
+        id === 'file-definition'
+      ) {
         return [];
       }
       let displayName = capitalize(startCase(id));
