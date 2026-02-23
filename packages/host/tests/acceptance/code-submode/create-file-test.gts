@@ -4,7 +4,6 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import { baseRealm, Deferred } from '@cardstack/runtime-common';
-import { Loader } from '@cardstack/runtime-common';
 import {
   percySnapshot,
   setupLocalIndexing,
