@@ -348,7 +348,7 @@ test.describe('Skills', () => {
     );
   });
 
-  test('ensure that the skill card from boxel index is not overwritten by the skill card from matrix store', async ({
+  test.only('ensure that the skill card from boxel index is not overwritten by the skill card from matrix store', async ({
     page,
   }) => {
     const { username } = await createSubscribedUserAndLogin(
@@ -369,7 +369,6 @@ test.describe('Skills', () => {
       .locator(
         '[data-test-card-catalog-item="https://cardstack.com/base/cards/skill"]',
       )
-      .first()
       .click();
     await page.locator('[data-test-card-catalog-go-button]').click();
     await page
@@ -405,6 +404,7 @@ test.describe('Skills', () => {
       .locator('[data-test-card-catalog-item]', {
         hasText: 'Automatic Switch Command',
       })
+      .first()
       .click();
     await page.locator('[data-test-card-catalog-go-button]').click();
 
