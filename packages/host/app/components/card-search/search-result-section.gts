@@ -312,7 +312,7 @@ export default class SearchResultSection extends Component<Signature> {
           @viewFormat={{this.viewFormat}}
           @size={{this.cardSize}}
           @fullWidthItem={{eq this.viewClass 'strip-view'}}
-          as |card GridItem i|
+          as |card GridItem|
         >
           <GridItem class={{if @isCompact 'recent-card-item--compact'}}>
             <:default>
@@ -322,7 +322,6 @@ export default class SearchResultSection extends Component<Signature> {
                 @isSelected={{eq this.selectedCardId card.id}}
                 @onSelect={{@handleSelect}}
                 @onSubmit={{@onSubmit}}
-                data-test-search-result-index={{i}}
               />
             </:default>
             <:after>

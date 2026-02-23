@@ -40,10 +40,12 @@ export default class GridContainer extends Component<Signature> {
         ...attributes
       >
         {{#if @items}}
-          {{#each @items as |item|}}
+          {{#each @items as |item i|}}
             {{yield
               item
-              (component GridItemContainer size=@size fullWidth=@fullWidthItem)
+              (component
+                GridItemContainer size=@size fullWidth=@fullWidthItem index=i
+              )
             }}
           {{/each}}
         {{else}}

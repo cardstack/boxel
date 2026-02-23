@@ -4,7 +4,7 @@ import { type FittedFormatId } from '../../../helpers.ts';
 import FittedCardContainer from '../../fitted-card-container/index.gts';
 
 export interface GridItemContainerSignature {
-  Args: { fullWidth?: boolean; size?: FittedFormatId };
+  Args: { fullWidth?: boolean; index?: number; size?: FittedFormatId };
   Blocks: {
     after?: [];
     before?: [];
@@ -20,7 +20,11 @@ const GridItemContainer: TemplateOnlyComponent<GridItemContainerSignature> =
         {{yield to='before'}}
       {{/if}}
 
-      <FittedCardContainer @size={{@size}} @fullWidth={{@fullWidth}}>
+      <FittedCardContainer
+        @size={{@size}}
+        @fullWidth={{@fullWidth}}
+        data-test-grid-item-index={{@index}}
+      >
         {{yield}}
       </FittedCardContainer>
 
