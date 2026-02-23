@@ -38,10 +38,12 @@ const getItemTitle = (selection: SelectedInstance | undefined) => {
   return `${title} - Example ${fieldIndex + 1}`;
 };
 
-const SelectedItem: TemplateOnlyComponent<{ Args: { title?: string } }> =
+const SelectedItem: TemplateOnlyComponent<{
+  Args: { title?: string; label?: string };
+}> =
   <template>
     <div class='selected-item' data-test-selected-item>
-      <span class='label'>Instance:</span>
+      <span class='label'>{{if @label @label "Instance:"}}</span>
       <span class='item'>{{@title}}</span>
     </div>
     <style scoped>
@@ -60,10 +62,11 @@ const SelectedItem: TemplateOnlyComponent<{ Args: { title?: string } }> =
     </style>
   </template>;
 
-const BeforeOptions: TemplateOnlyComponent = <template>
-  <div class='before-options'>
-    Recent
-  </div>
+const BeforeOptions: TemplateOnlyComponent<{ Args: { label?: string } }> =
+  <template>
+    <div class='before-options'>
+      {{if @label @label "Recent"}}
+    </div>
   <style scoped>
     .before-options {
       width: 100%;
@@ -154,6 +157,8 @@ interface OptionsDropdownSignature {
     selection: SelectedInstance | undefined;
     onSelect: (item: PrerenderedCardLike | FieldOption | FileDef) => void;
     afterMenuOptions: MenuItem[];
+    beforeOptionsLabel?: string;
+    selectedItemLabel?: string;
   };
 }
 
@@ -175,6 +180,7 @@ export const OptionsDropdown: TemplateOnlyComponent<OptionsDropdownSignature> =
       @selectedItemComponent={{component
         SelectedItem
         title=(getItemTitle @selection)
+        label=@selectedItemLabel
       }}
       @renderInPlace={{true}}
       @onChange={{@onSelect}}
@@ -183,11 +189,17 @@ export const OptionsDropdown: TemplateOnlyComponent<OptionsDropdownSignature> =
         "file"
         (if @isField "field" "card")
       }} instance'
-      @beforeOptionsComponent={{component BeforeOptions}}
-      @afterOptionsComponent={{component
-        AfterOptions
-        menuItems=@afterMenuOptions
-        closeMenu=closeInstanceChooser
+      @beforeOptionsComponent={{component
+        BeforeOptions
+        label=@beforeOptionsLabel
+      }}
+      @afterOptionsComponent={{if
+        @afterMenuOptions.length
+        (component
+          AfterOptions
+          menuItems=@afterMenuOptions
+          closeMenu=closeInstanceChooser
+        )
       }}
       @verticalPosition='above'
       data-playground-instance-chooser
@@ -195,9 +207,9 @@ export const OptionsDropdown: TemplateOnlyComponent<OptionsDropdownSignature> =
       as |item|
     >
       {{#if @isFileMeta}}
-        <CardContainer class='field' @displayBoundaries={{true}}>
+        <div class='file-item'>
           <CardRenderer @card={{item}} @format='atom' />
-        </CardContainer>
+        </div>
       {{else if @isField}}
         <CardContainer class='field' @displayBoundaries={{true}}>
           <CardRenderer @card={{item.field}} @format='atom' />
@@ -251,7 +263,8 @@ export const OptionsDropdown: TemplateOnlyComponent<OptionsDropdownSignature> =
         width: 100%;
       }
 
-      :deep(.ember-power-select-option:hover .card) {
+      :deep(.ember-power-select-option:hover .card),
+      :deep(.ember-power-select-option:hover .file-item) {
         background-color: var(--boxel-100);
       }
       .card,
@@ -268,6 +281,13 @@ export const OptionsDropdown: TemplateOnlyComponent<OptionsDropdownSignature> =
         text-overflow: ellipsis;
         white-space: nowrap;
       }
+      .file-item {
+        display: flex;
+        align-items: center;
+        padding: var(--boxel-sp-xxxs) var(--boxel-sp-xs);
+        min-width: 0;
+        background-color: var(--boxel-light);
+      }
     </style>
   </template>;
 
@@ -281,6 +301,8 @@ export default class InstanceSelectDropdown extends Component<Signature> {
         @selection={{@selection}}
         @onSelect={{@onSelect}}
         @afterMenuOptions={{@afterMenuOptions}}
+        @beforeOptionsLabel='Files'
+        @selectedItemLabel='File:'
       />
     {{else if @isFieldDef}}
       <OptionsDropdown
