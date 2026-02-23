@@ -140,6 +140,7 @@ module(basename(__filename), function () {
         setupPermissionedRealmAtURL(hooks, realmURL, {
           permissions: {
             '*': ['read'],
+            '@node-test_realm:localhost': ['read', 'realm-owner'],
           },
           onRealmSetup,
         });
@@ -191,11 +192,7 @@ module(basename(__filename), function () {
                   module: `./person`,
                   name: 'Person',
                 },
-                // FIXME see elsewhere… global fix?
-                realmInfo: {
-                  ...testRealmInfo,
-                  realmUserId: '@node-test_realm:localhost',
-                },
+                realmInfo: testRealmInfo,
                 realmURL: testRealmHref,
               },
               links: {
@@ -874,6 +871,7 @@ module(basename(__filename), function () {
         setupPermissionedRealmAtURL(hooks, realmURL, {
           permissions: {
             '*': ['read'],
+            '@node-test_realm:localhost': ['read', 'realm-owner'],
           },
           onRealmSetup,
           published: true,
@@ -923,10 +921,7 @@ module(basename(__filename), function () {
                   module: `./person`,
                   name: 'Person',
                 },
-                realmInfo: {
-                  ...testRealmInfo,
-                  realmUserId: '@node-test_realm:localhost',
-                },
+                realmInfo: testRealmInfo,
                 realmURL: testRealmHref,
               },
               relationships: {
@@ -949,6 +944,7 @@ module(basename(__filename), function () {
         setupPermissionedRealmAtURL(hooks, realmURL, {
           permissions: {
             '*': ['read', 'write'],
+            '@node-test_realm:localhost': ['read', 'realm-owner'],
           },
           onRealmSetup,
         });
@@ -1023,7 +1019,7 @@ module(basename(__filename), function () {
         setupPermissionedRealmAtURL(hooks, realmURL, {
           permissions: {
             john: ['read'],
-            '@node-test_realm:localhost': ['read'],
+            '@node-test_realm:localhost': ['read', 'realm-owner'],
           },
           onRealmSetup,
         });
@@ -1129,6 +1125,7 @@ module(basename(__filename), function () {
         setupPermissionedRealmAtURL(hooks, realmURL, {
           permissions: {
             '*': ['read', 'write'],
+            '@node-test_realm:localhost': ['read', 'realm-owner'],
           },
           onRealmSetup,
         });
@@ -1496,10 +1493,7 @@ module(basename(__filename), function () {
                   name: 'Friend',
                   module: 'http://localhost:4202/node-test/friend',
                 },
-                realmInfo: {
-                  ...testRealmInfo,
-                  realmUserId: '@node-test_realm:localhost',
-                },
+                realmInfo: testRealmInfo,
                 realmURL: testRealmHref,
               },
               links: {
@@ -1686,10 +1680,7 @@ module(basename(__filename), function () {
                   name: 'Friend',
                   module: 'http://localhost:4202/node-test/friend',
                 },
-                realmInfo: {
-                  ...testRealmInfo,
-                  realmUserId: '@node-test_realm:localhost',
-                },
+                realmInfo: testRealmInfo,
                 realmURL: testRealmHref,
               },
               links: {
@@ -1812,10 +1803,7 @@ module(basename(__filename), function () {
                     name: 'Friend',
                     module: 'http://localhost:4202/node-test/friend',
                   },
-                  realmInfo: {
-                    ...testRealmInfo,
-                    realmUserId: '@node-test_realm:localhost',
-                  },
+                  realmInfo: testRealmInfo,
                   realmURL: testRealmHref,
                 },
                 links: {
@@ -1867,10 +1855,7 @@ module(basename(__filename), function () {
                     name: 'Friend',
                     module: 'http://localhost:4202/node-test/friend',
                   },
-                  realmInfo: {
-                    ...testRealmInfo,
-                    realmUserId: '@node-test_realm:localhost',
-                  },
+                  realmInfo: testRealmInfo,
                   realmURL: testRealmHref,
                 },
                 links: {
@@ -2084,10 +2069,7 @@ module(basename(__filename), function () {
                   name: 'Friend',
                   module: 'http://localhost:4202/node-test/friend',
                 },
-                realmInfo: {
-                  ...testRealmInfo,
-                  realmUserId: '@node-test_realm:localhost',
-                },
+                realmInfo: testRealmInfo,
                 realmURL: testRealmHref,
               },
               links: {
@@ -2102,7 +2084,7 @@ module(basename(__filename), function () {
         setupPermissionedRealmAtURL(hooks, realmURL, {
           permissions: {
             john: ['read', 'write'],
-            '@node-test_realm:localhost': ['read'],
+            '@node-test_realm:localhost': ['read', 'realm-owner'],
           },
           onRealmSetup,
         });
@@ -2180,6 +2162,7 @@ module(basename(__filename), function () {
         setupPermissionedRealmAtURL(hooks, realmURL, {
           permissions: {
             '*': ['read', 'write'],
+            '@node-test_realm:localhost': ['read', 'realm-owner'],
           },
           onRealmSetup,
         });
@@ -2768,10 +2751,7 @@ module(basename(__filename), function () {
                   name: 'Friend',
                   module: './friend',
                 },
-                realmInfo: {
-                  ...testRealmInfo,
-                  realmUserId: '@node-test_realm:localhost',
-                },
+                realmInfo: testRealmInfo,
                 realmURL: testRealmHref,
               },
               links: {
@@ -2958,10 +2938,7 @@ module(basename(__filename), function () {
                   name: 'Friend',
                   module: '../friend',
                 },
-                realmInfo: {
-                  ...testRealmInfo,
-                  realmUserId: '@node-test_realm:localhost',
-                },
+                realmInfo: testRealmInfo,
                 realmURL: testRealmHref,
               },
               links: {
@@ -3084,10 +3061,7 @@ module(basename(__filename), function () {
                     name: 'Friend',
                     module: '../friend',
                   },
-                  realmInfo: {
-                    ...testRealmInfo,
-                    realmUserId: '@node-test_realm:localhost',
-                  },
+                  realmInfo: testRealmInfo,
                   realmURL: testRealmHref,
                 },
                 links: {
@@ -3139,10 +3113,7 @@ module(basename(__filename), function () {
                     name: 'Friend',
                     module: '../friend',
                   },
-                  realmInfo: {
-                    ...testRealmInfo,
-                    realmUserId: '@node-test_realm:localhost',
-                  },
+                  realmInfo: testRealmInfo,
                   realmURL: testRealmHref,
                 },
                 links: {
@@ -3344,10 +3315,7 @@ module(basename(__filename), function () {
                   module:
                     'http://localhost:4202/node-test/friend-with-used-link',
                 },
-                realmInfo: {
-                  ...testRealmInfo,
-                  realmUserId: '@node-test_realm:localhost',
-                },
+                realmInfo: testRealmInfo,
                 realmURL: testRealmHref,
               },
               links: {
@@ -3442,10 +3410,7 @@ module(basename(__filename), function () {
                   module:
                     'http://localhost:4202/node-test/friend-with-used-link',
                 },
-                realmInfo: {
-                  ...testRealmInfo,
-                  realmUserId: '@node-test_realm:localhost',
-                },
+                realmInfo: testRealmInfo,
                 realmURL: testRealmHref,
               },
               links: {
@@ -3600,6 +3565,7 @@ module(basename(__filename), function () {
         setupPermissionedRealmAtURL(hooks, realmURL, {
           permissions: {
             '*': ['read', 'write'],
+            '@node-test_realm:localhost': ['read', 'realm-owner'],
           },
           cardSizeLimitBytes: 512,
           onRealmSetup,
@@ -3647,7 +3613,7 @@ module(basename(__filename), function () {
         setupPermissionedRealmAtURL(hooks, realmURL, {
           permissions: {
             john: ['read', 'write'],
-            '@node-test_realm:localhost': ['read'],
+            '@node-test_realm:localhost': ['read', 'realm-owner'],
           },
           onRealmSetup,
         });
@@ -3718,6 +3684,7 @@ module(basename(__filename), function () {
         setupPermissionedRealmAtURL(hooks, realmURL, {
           permissions: {
             '*': ['read', 'write'],
+            '@node-test_realm:localhost': ['read', 'realm-owner'],
           },
           onRealmSetup,
         });
@@ -3828,7 +3795,7 @@ module(basename(__filename), function () {
         setupPermissionedRealmAtURL(hooks, realmURL, {
           permissions: {
             john: ['read', 'write'],
-            '@node-test_realm:localhost': ['read'],
+            '@node-test_realm:localhost': ['read', 'realm-owner'],
           },
           onRealmSetup,
         });
@@ -3870,6 +3837,7 @@ module(basename(__filename), function () {
       setupPermissionedRealmAtURL(hooks, realmURL, {
         permissions: {
           '*': ['read', 'write'],
+          '@node-test_realm:localhost': ['read', 'realm-owner'],
         },
         fileSystem: {
           'greeting.txt': 'hello',
@@ -3936,6 +3904,7 @@ module(basename(__filename), function () {
           realmURL: providerRealmURL,
           permissions: {
             '*': ['read', 'write', 'realm-owner'],
+            '@node-test_realm:localhost': ['read', 'realm-owner'],
           },
           fileSystem: {
             'person.gts': `
@@ -3965,6 +3934,7 @@ module(basename(__filename), function () {
           realmURL: consumerRealmURL,
           permissions: {
             '*': ['read', 'write', 'realm-owner'],
+            '@node-test_realm:localhost': ['read', 'realm-owner'],
           },
           fileSystem: {
             'favorite-finder.gts': `

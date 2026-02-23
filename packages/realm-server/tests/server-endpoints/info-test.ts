@@ -14,7 +14,6 @@ import {
   closeServer,
   createVirtualNetwork,
   setupDB,
-  insertUser,
   matrixURL,
   realmSecretSeed,
   runTestRealmServerWithRealms,
@@ -103,8 +102,6 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
     });
 
     test('QUERY /_info federates info across realms and includes public list header', async function (assert) {
-      await insertUser(dbAdapter, ownerUserId, 'stripe-test-user', null);
-
       let realmServerToken = createRealmServerJWT(
         { user: ownerUserId, sessionRoom: 'session-room-test' },
         realmSecretSeed,

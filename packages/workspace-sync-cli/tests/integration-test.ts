@@ -172,6 +172,9 @@ module('Workspace Sync CLI Integration Tests', function (hooks) {
       console.error('❌ Failed to start shared realm server:', error);
       throw error;
     }
+    await sharedRealmServer.executeSQL(
+      `INSERT INTO users (matrix_user_id) VALUES ('@test_realm:localhost') ON CONFLICT (matrix_user_id) DO NOTHING`,
+    );
   });
 
   hooks.after(async function () {
@@ -203,6 +206,7 @@ module('Workspace Sync CLI Integration Tests', function (hooks) {
     // Reset realm content between tests (safely)
     await clearRealmContent(sharedRealmDir);
     await createRealmContent(sharedRealmDir);
+    console.log('✅ Test environment is ready!\n');
   });
 
   hooks.afterEach(async function () {

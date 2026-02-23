@@ -374,7 +374,6 @@ export default function handlePublishRealm({
       let realm = createAndMountRealm(
         publishedRealmPath,
         publishedRealmURL,
-        realmUsername,
         new URL(sourceRealmURL),
         false,
       );

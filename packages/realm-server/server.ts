@@ -20,7 +20,6 @@ import {
   PUBLISHED_DIRECTORY_NAME,
   RealmPaths,
   fetchSessionRoom,
-  REALM_SERVER_REALM,
   userInitiatedPriority,
   hasExtension,
   executableExtensions,
@@ -40,7 +39,6 @@ import {
   methodOverrideSupport,
   proxyAsset,
 } from './middleware';
-import { registerUser } from './synapse';
 import convertAcceptHeaderQueryParam from './middleware/convert-accept-header-qp';
 import convertAuthHeaderQueryParam from './middleware/convert-auth-header-qp';
 import { NodeAdapter } from './node-realm';
@@ -50,10 +48,7 @@ import merge from 'lodash/merge';
 import { extractSupportedMimeType } from '@cardstack/runtime-common/router';
 import * as Sentry from '@sentry/node';
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
-import {
-  passwordFromSeed,
-  getMatrixUsername,
-} from '@cardstack/runtime-common/matrix-client';
+import { getMatrixUsername } from '@cardstack/runtime-common/matrix-client';
 import { createRoutes } from './routes';
 import { APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE } from '@cardstack/runtime-common/matrix-constants';
 import type { Prerenderer } from '@cardstack/runtime-common';
@@ -756,18 +751,7 @@ export class RealmServer {
     let realmPath = resolve(join(this.realmsRootPath, ownerUsername, endpoint));
     ensureDirSync(realmPath);
 
-    let username = `realm/${ownerUsername}_${endpoint}`;
-    let { userId } = await registerUser({
-      matrixURL: this.matrixClient.matrixURL,
-      displayname: username,
-      username,
-      password: await passwordFromSeed(username, this.realmSecretSeed),
-      registrationSecret: await this.getMatrixRegistrationSecret(),
-    });
-    this.log.debug(`created realm bot user '${userId}' for new realm ${url}`);
-
     await insertPermissions(this.dbAdapter, new URL(url), {
-      [userId]: DEFAULT_PERMISSIONS,
       [ownerUserId]: DEFAULT_PERMISSIONS,
     });
 
@@ -783,24 +767,6 @@ export class RealmServer {
         type: 'card',
         meta: {
           adoptsFrom: {
-            module: 'https://cardstack.com/base/index',
-            name: 'IndexCard',
-          },
-        },
-        relationships: {
-          cardsGrid: {
-            links: {
-              self: './cards-grid',
-            },
-          },
-        },
-      },
-    });
-    writeJSONSync(join(realmPath, 'cards-grid.json'), {
-      data: {
-        type: 'card',
-        meta: {
-          adoptsFrom: {
             module: 'https://cardstack.com/base/cards-grid',
             name: 'CardsGrid',
           },
@@ -811,12 +777,10 @@ export class RealmServer {
     let realm = this.createAndMountRealm(
       realmPath,
       url,
-      username,
       undefined,
       undefined,
       userInitiatedPriority,
     );
-    await realm.ensureSessionRoom(ownerUserId);
 
     return {
       realm,
@@ -827,7 +791,6 @@ export class RealmServer {
   private createAndMountRealm = (
     path: string,
     url: string,
-    username: string,
     copiedFromRealm?: URL,
     enableFileWatcher?: boolean,
     fromScratchIndexPriority?: number,
@@ -854,11 +817,7 @@ export class RealmServer {
         virtualNetwork: this.virtualNetwork,
         dbAdapter: this.dbAdapter,
         queue: this.queue,
-        matrix: {
-          url: new URL(this.matrixClient.matrixURL),
-          username,
-        },
-        realmServerMatrixClient: this.matrixClient,
+        matrixClient: this.matrixClient,
         realmServerURL: this.serverURL.href,
         definitionLookup: this.definitionLookup,
         cardSizeLimitBytes: this.cardSizeLimitBytes,
@@ -917,7 +876,6 @@ export class RealmServer {
             continue;
           }
           let adapter = new NodeAdapter(realmPath, this.enableFileWatcher);
-          let username = `realm/${owner}_${realmName}`;
           let realm = new Realm({
             url,
             adapter,
@@ -925,11 +883,7 @@ export class RealmServer {
             virtualNetwork: this.virtualNetwork,
             dbAdapter: this.dbAdapter,
             queue: this.queue,
-            matrix: {
-              url: this.matrixClient.matrixURL,
-              username,
-            },
-            realmServerMatrixClient: this.matrixClient,
+            matrixClient: this.matrixClient,
             realmServerURL: this.serverURL.href,
             definitionLookup: this.definitionLookup,
             cardSizeLimitBytes: this.cardSizeLimitBytes,
@@ -1048,7 +1002,6 @@ export class RealmServer {
           }
 
           let adapter = new NodeAdapter(realmPath, this.enableFileWatcher);
-          let username = publishedRealmRow.owner_username;
 
           let realm = new Realm({
             url: publishedRealmUrl,
@@ -1057,11 +1010,7 @@ export class RealmServer {
             virtualNetwork: this.virtualNetwork,
             dbAdapter: this.dbAdapter,
             queue: this.queue,
-            matrix: {
-              url: this.matrixClient.matrixURL,
-              username,
-            },
-            realmServerMatrixClient: this.matrixClient,
+            matrixClient: this.matrixClient,
             realmServerURL: this.serverURL.href,
             definitionLookup: this.definitionLookup,
             cardSizeLimitBytes: this.cardSizeLimitBytes,
@@ -1107,11 +1056,10 @@ export class RealmServer {
     eventType: string,
     data?: Record<string, any>,
   ) => {
-    let roomId = await fetchSessionRoom(
-      this.dbAdapter,
-      REALM_SERVER_REALM,
-      user,
-    );
+    if (!this.matrixClient.isLoggedIn()) {
+      await this.matrixClient.login();
+    }
+    let roomId = await fetchSessionRoom(this.dbAdapter, user);
     if (!roomId) {
       console.error(
         `Failed to send event: ${eventType}, cannot find session room for user: ${user}`,

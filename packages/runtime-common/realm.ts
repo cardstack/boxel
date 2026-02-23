@@ -117,7 +117,7 @@ import { createResponse } from './create-response';
 import { mergeRelationships } from './merge-relationships';
 import { getCardDirectoryName } from './helpers/card-directory-name';
 import {
-  MatrixClient,
+  type MatrixClient,
   ensureFullMatrixUserId,
   getMatrixUsername,
 } from './matrix-client';
@@ -141,6 +141,7 @@ import type { Utils } from './matrix-backend-authentication';
 import { MatrixBackendAuthentication } from './matrix-backend-authentication';
 
 import type {
+  FileWatcherEventContent,
   RealmEventContent,
   UpdateRealmEventContent,
 } from 'https://cardstack.com/base/matrix-event';
@@ -158,6 +159,7 @@ import {
   fetchSessionRoom,
   upsertSessionRoom,
 } from './db-queries/session-room-queries';
+import { userExists } from './db-queries/user-queries';
 import {
   analyzeRealmPublishability,
   type PublishabilityViolation,
@@ -318,7 +320,7 @@ async function computeContentHashFromRef(
 export interface TokenClaims {
   user: string;
   realm: string;
-  sessionRoom: string;
+  sessionRoom: string | undefined; // TODO: remove when we create users on demand in ensureSessionRoom
   permissions: RealmPermissions['user'];
   realmServerURL: string;
 }
@@ -388,7 +390,7 @@ export interface RealmAdapter {
 
   fileWatcherEnabled: boolean;
 
-  subscribe(cb: (message: UpdateRealmEventContent) => void): Promise<void>;
+  subscribe(cb: (message: FileWatcherEventContent) => void): Promise<void>;
 
   unsubscribe(): void;
 
@@ -428,7 +430,7 @@ export type RequestContext = { realm: Realm; permissions: RealmPermissions };
 export class Realm {
   #startedUp = new Deferred<void>();
   #matrixClient: MatrixClient;
-  #realmServerMatrixClient: MatrixClient;
+  #matrixClientUserId: string;
   #realmServerURL: string;
   #realmIndexUpdater: RealmIndexUpdater;
   #realmIndexQueryEngine: RealmIndexQueryEngine;
@@ -443,7 +445,6 @@ export class Realm {
   #disableModuleCaching = false;
   #fullIndexOnStartup = false;
   #fromScratchIndexPriority = systemInitiatedPriority;
-  #realmServerMatrixUserId: string;
   #definitionLookup: DefinitionLookup;
   #copiedFromRealm: URL | undefined;
   #sourceCache = new AliasCache<SourceCacheEntry>();
@@ -496,12 +497,11 @@ export class Realm {
     {
       url,
       adapter,
-      matrix,
       secretSeed,
       dbAdapter,
       queue,
       virtualNetwork,
-      realmServerMatrixClient,
+      matrixClient,
       realmServerURL,
       definitionLookup,
       cardSizeLimitBytes,
@@ -509,12 +509,11 @@ export class Realm {
     }: {
       url: string;
       adapter: RealmAdapter;
-      matrix: MatrixConfig;
       secretSeed: string;
       dbAdapter: DBAdapter;
       queue: QueuePublisher;
       virtualNetwork: VirtualNetwork;
-      realmServerMatrixClient: MatrixClient;
+      matrixClient: MatrixClient;
       realmServerURL: string;
       definitionLookup: DefinitionLookup;
       cardSizeLimitBytes?: number;
@@ -523,7 +522,6 @@ export class Realm {
     opts?: Options,
   ) {
     this.paths = new RealmPaths(new URL(url));
-    let { username, url: matrixURL } = matrix;
     this.#realmSecretSeed = secretSeed;
     this.#dbAdapter = dbAdapter;
     this.#adapter = adapter;
@@ -531,21 +529,16 @@ export class Realm {
     this.#fullIndexOnStartup = opts?.fullIndexOnStartup ?? false;
     this.#fromScratchIndexPriority =
       opts?.fromScratchIndexPriority ?? systemInitiatedPriority;
-    this.#realmServerMatrixClient = realmServerMatrixClient;
+    this.#matrixClient = matrixClient;
+    this.#matrixClientUserId = userIdFromUsername(
+      this.#matrixClient.username,
+      this.#matrixClient.matrixURL.href,
+    );
     this.#realmServerURL = ensureTrailingSlash(realmServerURL);
     this.#cardSizeLimitBytes =
       cardSizeLimitBytes ?? DEFAULT_CARD_SIZE_LIMIT_BYTES;
     this.#fileSizeLimitBytes =
       fileSizeLimitBytes ?? DEFAULT_FILE_SIZE_LIMIT_BYTES;
-    this.#realmServerMatrixUserId = userIdFromUsername(
-      realmServerMatrixClient.username,
-      realmServerMatrixClient.matrixURL.href,
-    );
-    this.#matrixClient = new MatrixClient({
-      matrixURL,
-      username,
-      seed: secretSeed,
-    });
     this.#disableModuleCaching = Boolean(opts?.disableModuleCaching);
     this.#copiedFromRealm = opts?.copiedFromRealm;
     let owner: string | undefined;
@@ -575,7 +568,7 @@ export class Realm {
         // server so that we can assume user that owns this realm. refactor this
         // back to using the realm's own matrix client after running cards in
         // headless chrome lands.
-        new RealmAuthDataSource(this.#realmServerMatrixClient, () => _fetch),
+        new RealmAuthDataSource(this.#matrixClient, () => _fetch),
       ),
     ]);
 
@@ -729,22 +722,18 @@ export class Realm {
     await this.#matrixClient.login();
   }
 
-  async ensureSessionRoom(matrixUserId: string): Promise<string> {
-    let sessionRoom = await fetchSessionRoom(
-      this.#dbAdapter,
-      this.url,
-      matrixUserId,
-    );
+  async ensureSessionRoom(matrixUserId: string): Promise<string | undefined> {
+    let sessionRoom = await fetchSessionRoom(this.#dbAdapter, matrixUserId);
 
     if (!sessionRoom) {
       await this.#matrixClient.login();
+      let userExistsInDB = await userExists(this.#dbAdapter, matrixUserId);
+      if (!userExistsInDB) {
+        // TODO: should we create it if it doesn't exist?
+        return undefined;
+      }
       sessionRoom = await this.#matrixClient.createDM(matrixUserId);
-      await upsertSessionRoom(
-        this.#dbAdapter,
-        this.url,
-        matrixUserId,
-        sessionRoom,
-      );
+      await upsertSessionRoom(this.#dbAdapter, matrixUserId, sessionRoom);
     }
 
     return sessionRoom;
@@ -924,6 +913,7 @@ export class Realm {
       indexType: 'incremental',
       invalidations: [...invalidations],
       clientRequestId,
+      realmURL: this.url,
     });
     return results.map(({ path, lastModified }) => ({
       path,
@@ -1254,7 +1244,7 @@ export class Realm {
   }
 
   private getTrackedWrite(
-    data: UpdateRealmEventContent,
+    data: FileWatcherEventContent,
   ): { isTracked: boolean; url: URL } | undefined {
     let file: string;
     let type: string | undefined;
@@ -1302,6 +1292,7 @@ export class Realm {
           eventName: 'index',
           indexType: 'incremental',
           invalidations: invalidatedURLs.map((u) => u.href),
+          realmURL: this.url,
         });
       },
     });
@@ -1336,6 +1327,7 @@ export class Realm {
           eventName: 'index',
           indexType: 'incremental',
           invalidations: invalidatedURLs.map((u) => u.href),
+          realmURL: this.url,
         });
       },
     });
@@ -1356,6 +1348,7 @@ export class Realm {
     this.broadcastRealmEvent({
       eventName: 'index',
       indexType: 'full',
+      realmURL: this.url,
     });
   }
 
@@ -1368,6 +1361,7 @@ export class Realm {
         eventName: 'index',
         indexType: 'copy',
         sourceRealmURL: this.#copiedFromRealm.href,
+        realmURL: this.url,
       });
     } else {
       let isNewIndex = await this.#realmIndexUpdater.isNewIndex();
@@ -1384,6 +1378,7 @@ export class Realm {
         this.broadcastRealmEvent({
           eventName: 'index',
           indexType: 'full',
+          realmURL: this.url,
         });
       }
     }
@@ -1432,6 +1427,8 @@ export class Realm {
       return userId;
     }
     // hard coded test URLs
+
+    // TODO::`( this should be removed.
     if ((globalThis as any).__environment === 'test') {
       let url = new URL(this.url);
       if (url.hostname === '127.0.0.1') {
@@ -1501,8 +1498,6 @@ export class Realm {
         },
         ensureSessionRoom: async (userId: string) =>
           this.ensureSessionRoom(userId),
-        setSessionRoom: (userId: string, roomId: string) =>
-          upsertSessionRoom(this.#dbAdapter, this.url, userId, roomId),
       } as Utils,
     );
 
@@ -1946,7 +1941,7 @@ export class Realm {
       }
 
       // if the client is the realm matrix user then we permit all actions
-      if (user === this.#matrixClient.getUserId()) {
+      if (user === this.#matrixClientUserId) {
         return;
       }
 
@@ -4395,7 +4390,10 @@ export class Realm {
         await this.#definitionLookup.invalidate(tracked.url.href);
       }
 
-      this.broadcastRealmEvent(data);
+      this.broadcastRealmEvent({
+        ...data,
+        realmURL: this.url,
+      } as UpdateRealmEventContent);
       this.#updateItems.push({
         operation: ('added' in data
           ? 'add'
@@ -4427,6 +4425,7 @@ export class Realm {
             eventName: 'index',
             indexType: 'incremental',
             invalidations: invalidatedURLs.map((u) => u.href),
+            realmURL: this.url,
           });
         },
         ...(operation === 'removed' ? { delete: true } : {}),
@@ -4440,6 +4439,7 @@ export class Realm {
       eventName: 'index',
       indexType: 'incremental-index-initiation',
       updatedFile,
+      realmURL: this.url,
     });
   }
 
@@ -4482,12 +4482,12 @@ export class Realm {
 
     if (shouldUseWorldReadable) {
       permissions = {
-        [this.#realmServerMatrixUserId]: ['assume-user'],
+        [this.#matrixClientUserId]: ['assume-user'],
         '*': ['read'],
       };
     } else {
       permissions = {
-        [this.#realmServerMatrixUserId]: ['assume-user'],
+        [this.#matrixClientUserId]: ['assume-user'],
         ...(await fetchRealmPermissions(this.#dbAdapter, new URL(this.url))),
       };
     }

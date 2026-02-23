@@ -44,7 +44,11 @@ export default class MessageService extends Service {
     }
   }
 
-  relayRealmEvent(realmURL: string, event: RealmEventContent) {
+  relayRealmEvent(event: RealmEventContent) {
+    const realmURL = event.realmURL;
+    if (!realmURL) {
+      return;
+    }
     this.listenerCallbacks.get(realmURL)?.forEach((cb) => {
       cb(event);
     });
