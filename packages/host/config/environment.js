@@ -48,7 +48,7 @@ module.exports = function (environment) {
     fileSizeLimitBytes: Number(
       process.env.FILE_SIZE_LIMIT_BYTES ?? DEFAULT_FILE_SIZE_LIMIT_BYTES,
     ),
-    iconsURL: process.env.ICONS_URL || 'https://boxel-icons.boxel.ai',
+    iconsURL: process.env.ICONS_URL || 'http://localhost:4206',
     publishedRealmBoxelSpaceDomain:
       process.env.PUBLISHED_REALM_BOXEL_SPACE_DOMAIN || 'localhost:4201',
     publishedRealmBoxelSiteDomain:

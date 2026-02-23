@@ -3539,6 +3539,7 @@ module(basename(__filename), function () {
         },
         consumer: {
           '*': ['read', 'write'],
+          '@node-test_realm:localhost': ['read', 'realm-owner'],
         },
       });
 

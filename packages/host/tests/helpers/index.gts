@@ -27,7 +27,6 @@ import {
   testHostModeRealmURL,
   testRealmInfo,
   testRealmURL,
-  testRealmURLToUsername,
   Worker,
   DEFAULT_CARD_SIZE_LIMIT_BYTES,
   DEFAULT_FILE_SIZE_LIMIT_BYTES,
@@ -796,15 +795,11 @@ async function setupTestRealm({
   realm = new Realm({
     url: realmURL,
     adapter,
-    matrix: {
-      ...baseTestMatrix,
-      username: testRealmURLToUsername(realmURL),
-    },
     secretSeed: testRealmSecretSeed,
     virtualNetwork,
     dbAdapter,
     queue,
-    realmServerMatrixClient: new MatrixClient({
+    matrixClient: new MatrixClient({
       matrixURL: baseTestMatrix.url,
       username: testRealmServerMatrixUsername,
       seed: testRealmSecretSeed,

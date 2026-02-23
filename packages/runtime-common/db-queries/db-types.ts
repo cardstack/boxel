@@ -4,6 +4,7 @@ export interface User {
   stripeCustomerId: string;
   stripeCustomerEmail: string | null;
   matrixRegistrationToken: string | null;
+  sessionRoomId: string | null;
 }
 
 export interface Plan {

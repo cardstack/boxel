@@ -1,6 +1,6 @@
 import type { DBAdapter } from '../db';
 
-import { query, asExpressions, insert } from '../expression';
+import { query, asExpressions, insert, param } from '../expression';
 import type { User } from './db-types';
 
 export async function insertUser(
@@ -19,4 +19,17 @@ export async function insertUser(
   );
 
   return result[0] as unknown as User;
+}
+
+export async function userExists(
+  dbAdapter: DBAdapter,
+  matrixUserId: string,
+): Promise<boolean> {
+  let [row] = await query(dbAdapter, [
+    'SELECT EXISTS (SELECT 1 FROM users WHERE matrix_user_id =',
+    param(matrixUserId),
+    ') AS user_exists',
+  ]);
+
+  return Boolean(row.user_exists);
 }
