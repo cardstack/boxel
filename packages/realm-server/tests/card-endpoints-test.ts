@@ -2182,7 +2182,7 @@ module(basename(__filename), function () {
           };
 
           response = await request
-            .post('/_search')
+            .post('/_federated-search')
             .set('Accept', 'application/vnd.card+json')
             .set('X-HTTP-Method-Override', 'QUERY')
             .send({ ...query, realms: [testRealmHref] });
