@@ -49,6 +49,10 @@ const FILEDEF_CODE_REF_BY_EXTENSION: Record<string, ResolvedCodeRef> = {
     module: `${baseRealm.url}text-file-def`,
     name: 'TextFileDef',
   },
+  '.json': {
+    module: `${baseRealm.url}json-file-def`,
+    name: 'JsonFileDef',
+  },
   '.mismatch': { module: './filedef-mismatch', name: 'FileDef' },
 };
 
