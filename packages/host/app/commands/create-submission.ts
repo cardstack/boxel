@@ -51,12 +51,6 @@ export default class CreateSubmissionCommand extends HostBaseCommand<
     return CreateSubmissionInput;
   }
 
-  async getResultType() {
-    let commandModule = await this.loadCommandModule();
-    const { CreateSubmissionResult } = commandModule;
-    return CreateSubmissionResult;
-  }
-
   requireInputFields = ['roomId', 'realm', 'listingId'];
 
   protected async run(
@@ -123,7 +117,6 @@ export default class CreateSubmissionCommand extends HostBaseCommand<
     const { CreateSubmissionResult } = commandModule;
     return new CreateSubmissionResult({
       listing,
-      filesWithContent,
     });
   }
 
@@ -237,14 +230,10 @@ export default class CreateSubmissionCommand extends HostBaseCommand<
       },
     };
 
-    let createdCardId = await this.store.create(doc, {
+    await this.store.add(doc, {
       realm: realmURL,
+      doNotWaitForPersist: true,
     });
-    if (typeof createdCardId !== 'string') {
-      throw new Error(
-        `unable to create submission card: ${JSON.stringify(createdCardId, null, 2)}`,
-      );
-    }
   }
 
   // Walk relationships by fetching linked cards and enqueueing their ids.
