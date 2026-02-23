@@ -431,24 +431,7 @@ export default class RenderRoute extends Route<Model> {
     let cardApi = await this.loaderService.loader.import<typeof CardAPI>(
       `${baseRealm.url}card-api`,
     );
-    // a computed linksTo/linksToMany isn't a thing yet, but some day it
-    // probably will be, so just optimistically including those
-    let fields = cardApi.getFields(instance, { includeComputeds: true });
-    for (let [fieldName, field] of Object.entries(fields)) {
-      if (field?.isUsed) {
-        let fieldValue = this.#touchFieldSafely(instance, fieldName);
-        if (
-          field &&
-          (field.fieldType === 'contains' || field.fieldType === 'containsMany')
-        ) {
-          this.#touchRelationshipFieldsInCompoundField(
-            cardApi,
-            fieldValue,
-            new WeakSet<object>(),
-          );
-        }
-      }
-    }
+    this.#touchIsUsedRelationships(cardApi, instance, new WeakSet<object>());
   }
 
   #touchFieldSafely(container: any, fieldName: string): unknown {
@@ -464,14 +447,14 @@ export default class RenderRoute extends Route<Model> {
     }
   }
 
-  #touchRelationshipFieldsInCompoundField(
+  #touchIsUsedRelationships(
     cardApi: typeof CardAPI,
     value: unknown,
     visited: WeakSet<object>,
   ): void {
     if (Array.isArray(value)) {
       for (let item of value) {
-        this.#touchRelationshipFieldsInCompoundField(cardApi, item, visited);
+        this.#touchIsUsedRelationships(cardApi, item, visited);
       }
       return;
     }
@@ -489,7 +472,9 @@ export default class RenderRoute extends Route<Model> {
         continue;
       }
       if (field.fieldType === 'linksTo' || field.fieldType === 'linksToMany') {
-        this.#touchFieldSafely(value, fieldName);
+        if (field.isUsed) {
+          this.#touchFieldSafely(value, fieldName);
+        }
         continue;
       }
       if (
@@ -497,7 +482,7 @@ export default class RenderRoute extends Route<Model> {
         field.fieldType === 'containsMany'
       ) {
         let nested = this.#touchFieldSafely(value, fieldName);
-        this.#touchRelationshipFieldsInCompoundField(cardApi, nested, visited);
+        this.#touchIsUsedRelationships(cardApi, nested, visited);
       }
     }
   }

@@ -1465,14 +1465,14 @@ module(basename(__filename), function () {
               import { Person } from '${realmURL1}person';
 
               class DogProfileField extends FieldDef {
-                @field primaryOwner = linksTo(Person);
-                @field caretakers = linksToMany(Person);
+                @field primaryOwner = linksTo(Person, { isUsed: true });
+                @field caretakers = linksToMany(Person, { isUsed: true });
               }
 
               export class DogProfile extends CardDef {
                 static displayName = "Dog Profile";
                 @field name = contains(StringField);
-                @field profile = contains(DogProfileField, { isUsed: true });
+                @field profile = contains(DogProfileField);
                 static isolated = class extends Component<typeof this> {
                   // profile is intentionally not in isolated template, this is included in search doc via isUsed=true
                   <template>{{@model.name}}</template>
@@ -1988,7 +1988,7 @@ module(basename(__filename), function () {
         assert.strictEqual(
           response.searchDoc?.profile?.primaryOwner?.name,
           'Hassan',
-          'nested linksTo relationship is included in search doc via isUsed=true on compound field',
+          'nested linksTo relationship is included in search doc via isUsed=true on the relationship field',
         );
       });
 
@@ -2011,12 +2011,12 @@ module(basename(__filename), function () {
         assert.strictEqual(
           response.searchDoc?.profile?.caretakers?.[0]?.name,
           'Hassan',
-          'first nested linksToMany relationship is included in search doc via isUsed=true on compound field',
+          'first nested linksToMany relationship is included in search doc via isUsed=true on the relationship field',
         );
         assert.strictEqual(
           response.searchDoc?.profile?.caretakers?.[1]?.name,
           'Mango',
-          'second nested linksToMany relationship is included in search doc via isUsed=true on compound field',
+          'second nested linksToMany relationship is included in search doc via isUsed=true on the relationship field',
         );
       });
     });
