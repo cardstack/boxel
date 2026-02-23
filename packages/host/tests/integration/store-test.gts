@@ -416,6 +416,32 @@ module('Integration | Store', function (hooks) {
     );
   });
 
+  test('realm subscription is removed when file-meta reference count drops to zero', async function (assert) {
+    await testRealm.write('hero.png', 'mock hero image');
+    let fileUrl = `${testRealmURL}hero.png`;
+    let subscriptions = (storeService as any).subscriptions as Map<
+      string,
+      { unsubscribe: () => void }
+    >;
+
+    assert.false(
+      subscriptions.has(testRealmURL),
+      'realm is not subscribed before adding file-meta reference',
+    );
+
+    storeService.addReference(fileUrl, { type: 'file-meta' });
+    assert.true(
+      subscriptions.has(testRealmURL),
+      'realm subscription is created for file-meta reference',
+    );
+
+    storeService.dropReference(fileUrl);
+    assert.false(
+      subscriptions.has(testRealmURL),
+      'realm subscription is removed when file-meta reference reaches zero',
+    );
+  });
+
   test('add stores FileDef dependencies', async function (assert) {
     class FileCard extends CardDef {
       @field attachment = linksTo(FileDef);

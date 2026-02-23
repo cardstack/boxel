@@ -941,33 +941,33 @@ export default class StoreService extends Service implements StoreInterface {
 
   private unsubscribeFromInstance(id: string) {
     let instance = this.store.getCard(id);
-    if (instance) {
-      if (this.cardApiCache && instance) {
-        this.cardApiCache?.unsubscribeFromChanges(
-          instance,
-          this.onInstanceUpdated,
-        );
+    if (instance && this.cardApiCache) {
+      this.cardApiCache.unsubscribeFromChanges(
+        instance,
+        this.onInstanceUpdated,
+      );
+    }
 
-        // if there are no more subscribers to this realm then unsubscribe from realm
-        let realm = instance[this.cardApiCache.realmURL];
-        if (!realm) {
-          return;
-        }
+    // if there are no more subscribers to this realm then unsubscribe from realm
+    let realmHref = !isLocalId(id)
+      ? this.realm.realmOfURL(new URL(id))?.href
+      : undefined;
+    if (!realmHref) {
+      return;
+    }
 
-        let subscription = this.subscriptions.get(realm.href);
-        if (
-          subscription &&
-          ![...this.referenceCount.entries()].find(
-            ([id, count]) =>
-              id.startsWith('http') &&
-              count > 0 &&
-              this.realm.realmOfURL(new URL(id))?.href === realm!.href,
-          )
-        ) {
-          subscription.unsubscribe();
-          this.subscriptions.delete(realm.href);
-        }
-      }
+    let subscription = this.subscriptions.get(realmHref);
+    if (
+      subscription &&
+      ![...this.referenceCount.entries()].find(
+        ([referenceId, count]) =>
+          !isLocalId(referenceId) &&
+          count > 0 &&
+          this.realm.realmOfURL(new URL(referenceId))?.href === realmHref,
+      )
+    ) {
+      subscription.unsubscribe();
+      this.subscriptions.delete(realmHref);
     }
   }
 
