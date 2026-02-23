@@ -218,6 +218,16 @@ module(`server-endpoints/${basename(__filename)}`, function () {
             import { LinkedCssBase } from './linked-css-base.gts';
 
             export class LinkedCssChild extends LinkedCssBase {
+              static isolated = class Isolated extends Component<typeof this> {
+                <template>
+                  <div class="linked-child-marker" data-test-linked-child>Linked Child</div>
+                  <style scoped>
+                    .linked-child-marker {
+                      --linked-child-css: 1;
+                    }
+                  </style>
+                </template>
+              };
               static embedded = class Embedded extends Component<typeof this> {
                 <template>
                   <div class="linked-child-marker" data-test-linked-child>Linked Child</div>
@@ -243,7 +253,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
               static isolated = class Isolated extends Component<typeof this> {
                 <template>
                   <div data-test-linked-parent>Parent</div>
-                  <@fields.child />
+                  <@fields.child @format='embedded' />
                 </template>
               };
             }

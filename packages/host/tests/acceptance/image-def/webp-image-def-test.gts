@@ -18,10 +18,12 @@ import type NetworkService from '@cardstack/host/services/network';
 import {
   setupLocalIndexing,
   setupOnSave,
+  setupRealmCacheTeardown,
   testRealmURL,
   setupAcceptanceTestRealm,
   SYSTEM_CARD_FIXTURE_CONTENTS,
   capturePrerenderResult,
+  withCachedRealmSetup,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupApplicationTest } from '../../helpers/setup';
@@ -42,6 +44,7 @@ module('Acceptance | webp image def', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
   setupOnSave(hooks);
+  setupRealmCacheTeardown(hooks);
   setupTestRealmServiceWorker(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
@@ -115,14 +118,16 @@ module('Acceptance | webp image def', function (hooks) {
   }
 
   hooks.beforeEach(async function () {
-    ({ realm } = await setupAcceptanceTestRealm({
-      mockMatrixUtils,
-      contents: {
-        ...SYSTEM_CARD_FIXTURE_CONTENTS,
-        'sample.webp': VALID_WEBP_8x9,
-        'not-a-webp.webp': 'This is plain text, not a WebP file.',
-      },
-    }));
+    ({ realm } = await withCachedRealmSetup(async () =>
+      setupAcceptanceTestRealm({
+        mockMatrixUtils,
+        contents: {
+          ...SYSTEM_CARD_FIXTURE_CONTENTS,
+          'sample.webp': VALID_WEBP_8x9,
+          'not-a-webp.webp': 'This is plain text, not a WebP file.',
+        },
+      }),
+    ));
   });
 
   hooks.afterEach(function () {

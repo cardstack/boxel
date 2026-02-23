@@ -18,10 +18,12 @@ import type NetworkService from '@cardstack/host/services/network';
 import {
   setupLocalIndexing,
   setupOnSave,
+  setupRealmCacheTeardown,
   testRealmURL,
   setupAcceptanceTestRealm,
   SYSTEM_CARD_FIXTURE_CONTENTS,
   capturePrerenderResult,
+  withCachedRealmSetup,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupApplicationTest } from '../../helpers/setup';
@@ -35,6 +37,7 @@ module('Acceptance | svg image def', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
   setupOnSave(hooks);
+  setupRealmCacheTeardown(hooks);
   setupTestRealmServiceWorker(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
@@ -108,16 +111,18 @@ module('Acceptance | svg image def', function (hooks) {
   }
 
   hooks.beforeEach(async function () {
-    ({ realm } = await setupAcceptanceTestRealm({
-      mockMatrixUtils,
-      contents: {
-        ...SYSTEM_CARD_FIXTURE_CONTENTS,
-        'sample.svg': makeMinimalSvg(120, 80),
-        'viewbox-only.svg':
-          '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 150"><circle cx="100" cy="75" r="50"/></svg>',
-        'not-an-svg.svg': 'This is plain text, not an SVG file.',
-      },
-    }));
+    ({ realm } = await withCachedRealmSetup(async () =>
+      setupAcceptanceTestRealm({
+        mockMatrixUtils,
+        contents: {
+          ...SYSTEM_CARD_FIXTURE_CONTENTS,
+          'sample.svg': makeMinimalSvg(120, 80),
+          'viewbox-only.svg':
+            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 150"><circle cx="100" cy="75" r="50"/></svg>',
+          'not-an-svg.svg': 'This is plain text, not an SVG file.',
+        },
+      }),
+    ));
   });
 
   hooks.afterEach(function () {

@@ -14,6 +14,8 @@ import {
   setupRealmServerEndpoints,
   testRealmInfo,
   testRealmURL,
+  setupRealmCacheTeardown,
+  withCachedRealmSetup,
 } from '../../helpers';
 import { setupBaseRealm } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
@@ -109,15 +111,19 @@ module('Integration | commands | bot-registration', function (hooks) {
     },
   ]);
 
+  setupRealmCacheTeardown(hooks);
+
   hooks.beforeEach(async function (this: RenderingTestContext) {
     getOwner(this)!.register('service:realm', StubRealmService);
     botRegistrations = [];
     // we are setting this up to get the matrixClient started
-    await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      realmURL: testRealmURL,
-      contents: {},
-    });
+    await withCachedRealmSetup(async () =>
+      setupIntegrationTestRealm({
+        mockMatrixUtils,
+        realmURL: testRealmURL,
+        contents: {},
+      }),
+    );
   });
 
   test('register-bot returns botRegistrationId', async function (assert) {

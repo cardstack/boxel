@@ -28,6 +28,8 @@ import {
   setupOnSave,
   testRealmURL,
   testRealmInfo,
+  setupRealmCacheTeardown,
+  withCachedRealmSetup,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
@@ -144,11 +146,14 @@ module('Integration | Command | show-card', function (hooks) {
   let mockOperatorModeStateService: MockOperatorModeStateService;
   let mockPlaygroundPanelService: MockPlaygroundPanelService;
 
+  setupRealmCacheTeardown(hooks);
+
   hooks.beforeEach(async function (this: RenderingTestContext) {
-    await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      contents: {
-        'person.gts': `
+    await withCachedRealmSetup(async () =>
+      setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {
+          'person.gts': `
           import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
           import StringField from 'https://cardstack.com/base/string';
 
@@ -163,7 +168,7 @@ module('Integration | Command | show-card', function (hooks) {
             });
           }
         `,
-        'pet.gts': `
+          'pet.gts': `
           import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
           import StringField from 'https://cardstack.com/base/string';
 
@@ -178,54 +183,55 @@ module('Integration | Command | show-card', function (hooks) {
             });
           }
         `,
-        'Person/alice.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              firstName: 'Alice',
-              lastName: 'Johnson',
-            },
-            meta: {
-              adoptsFrom: {
-                module: `../person`,
-                name: 'Person',
+          'Person/alice.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                firstName: 'Alice',
+                lastName: 'Johnson',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `../person`,
+                  name: 'Person',
+                },
               },
             },
           },
-        },
-        'Person/bob.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              firstName: 'Bob',
-              lastName: 'Smith',
-            },
-            meta: {
-              adoptsFrom: {
-                module: `../person`,
-                name: 'Person',
+          'Person/bob.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                firstName: 'Bob',
+                lastName: 'Smith',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `../person`,
+                  name: 'Person',
+                },
               },
             },
           },
-        },
-        'Pet/fluffy.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              name: 'Fluffy',
-              species: 'Cat',
-            },
-            meta: {
-              adoptsFrom: {
-                module: `../pet`,
-                name: 'Pet',
+          'Pet/fluffy.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                name: 'Fluffy',
+                species: 'Cat',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `../pet`,
+                  name: 'Pet',
+                },
               },
             },
           },
+          '.realm.json': `{ "name": "${realmName}", "iconURL": "https://boxel-images.boxel.ai/icons/Letter-s.png" }`,
         },
-        '.realm.json': `{ "name": "${realmName}", "iconURL": "https://boxel-images.boxel.ai/icons/Letter-s.png" }`,
-      },
-    });
+      }),
+    );
 
     mockOperatorModeStateService = new MockOperatorModeStateService();
     mockPlaygroundPanelService = new MockPlaygroundPanelService();

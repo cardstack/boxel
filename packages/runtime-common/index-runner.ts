@@ -27,7 +27,7 @@ import {
 } from './index';
 import type { CacheScope, DefinitionLookup } from './definition-lookup';
 import { isCardError } from './error';
-import { IndexRunnerDependencyResolver } from './index-runner/dependency-resolver';
+import { IndexRunnerDependencyManager } from './index-runner/dependency-resolver';
 import { discoverInvalidations } from './index-runner/discover-invalidations';
 import { visitFileForIndexing } from './index-runner/visit-file';
 import { performCardIndexing } from './index-runner/card-indexer';
@@ -55,7 +55,7 @@ export class IndexRunner {
   #realmOwnerUserId: string;
   #definitionLookup: DefinitionLookup;
   #jobInfo: JobInfo;
-  #dependencyResolver: IndexRunnerDependencyResolver;
+  #dependencyResolver: IndexRunnerDependencyManager;
   #reportStatus?: (
     jobInfo: JobInfo | undefined,
     status: 'start' | 'finish',
@@ -109,7 +109,7 @@ export class IndexRunner {
     this.#fetch = fetch;
     this.#realmOwnerUserId = realmOwnerUserId;
     this.#definitionLookup = definitionLookup;
-    this.#dependencyResolver = new IndexRunnerDependencyResolver({
+    this.#dependencyResolver = new IndexRunnerDependencyManager({
       realmURL: this.#realmURL,
       readModuleCacheEntries: async (moduleIds) => {
         if (moduleIds.length === 0) {

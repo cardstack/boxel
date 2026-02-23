@@ -16,6 +16,7 @@ import type MonacoService from '@cardstack/host/services/monaco-service';
 
 import {
   setupLocalIndexing,
+  setupRealmCacheTeardown,
   testRealmURL,
   setupAcceptanceTestRealm,
   SYSTEM_CARD_FIXTURE_CONTENTS,
@@ -25,6 +26,7 @@ import {
   setupAuthEndpoints,
   setupUserSubscription,
   type TestContextWithSave,
+  withCachedRealmSetup,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupApplicationTest } from '../../helpers/setup';
@@ -248,6 +250,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
   setupOnSave(hooks);
+  setupRealmCacheTeardown(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
@@ -266,94 +269,96 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
 
     // this seeds the loader used during index which obtains url mappings
     // from the global loader
-    await setupAcceptanceTestRealm({
-      mockMatrixUtils,
-      contents: {
-        ...SYSTEM_CARD_FIXTURE_CONTENTS,
-        'index.gts': indexCardSource,
-        'empty.gts': ' ',
-        'pet-person.gts': personCardSource,
-        'person.gts': personCardSource,
-        'friend.gts': friendCardSource,
-        'employee.gts': employeeCardSource,
-        'in-this-file.gts': inThisFileSource,
-        'ambiguous-display-names.gts': ambiguousDisplayNamesCardSource,
-        'person-entry.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              cardTitle: 'Person',
-              cardDescription: 'Spec',
-              specType: 'card',
-              ref: {
-                module: `./person`,
-                name: 'Person',
+    await withCachedRealmSetup(async () => {
+      await setupAcceptanceTestRealm({
+        mockMatrixUtils,
+        contents: {
+          ...SYSTEM_CARD_FIXTURE_CONTENTS,
+          'index.gts': indexCardSource,
+          'empty.gts': ' ',
+          'pet-person.gts': personCardSource,
+          'person.gts': personCardSource,
+          'friend.gts': friendCardSource,
+          'employee.gts': employeeCardSource,
+          'in-this-file.gts': inThisFileSource,
+          'ambiguous-display-names.gts': ambiguousDisplayNamesCardSource,
+          'person-entry.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                cardTitle: 'Person',
+                cardDescription: 'Spec',
+                specType: 'card',
+                ref: {
+                  module: `./person`,
+                  name: 'Person',
+                },
               },
-            },
-            meta: {
-              adoptsFrom: {
-                module: `${baseRealm.url}spec`,
-                name: 'Spec',
-              },
-            },
-          },
-        },
-        'index.json': {
-          data: {
-            type: 'card',
-            attributes: {},
-            meta: {
-              adoptsFrom: {
-                module: './index',
-                name: 'Index',
+              meta: {
+                adoptsFrom: {
+                  module: `${baseRealm.url}spec`,
+                  name: 'Spec',
+                },
               },
             },
           },
-        },
-        'not-json.json': 'I am not JSON.',
-        'Person/1.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              firstName: 'Hassan',
-              lastName: 'Abdel-Rahman',
-            },
-            meta: {
-              adoptsFrom: {
-                module: '../person',
-                name: 'Person',
+          'index.json': {
+            data: {
+              type: 'card',
+              attributes: {},
+              meta: {
+                adoptsFrom: {
+                  module: './index',
+                  name: 'Index',
+                },
               },
             },
           },
+          'not-json.json': 'I am not JSON.',
+          'Person/1.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                firstName: 'Hassan',
+                lastName: 'Abdel-Rahman',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: '../person',
+                  name: 'Person',
+                },
+              },
+            },
+          },
+          'z00.json': '{}',
+          'z01.json': '{}',
+          'z02.json': '{}',
+          'z03.json': '{}',
+          'z04.json': '{}',
+          'z05.json': '{}',
+          'z06.json': '{}',
+          'z07.json': '{}',
+          'z08.json': '{}',
+          'z09.json': '{}',
+          'z10.json': '{}',
+          'z11.json': '{}',
+          'z12.json': '{}',
+          'z13.json': '{}',
+          'z14.json': '{}',
+          'z15.json': '{}',
+          'z16.json': '{}',
+          'z17.json': '{}',
+          'z18.json': '{}',
+          'z19.json': '{}',
+          'zzz/zzz/file.json': '{}',
+          '.realm.json': {
+            name: 'Test Workspace B',
+            backgroundURL:
+              'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
+            iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
+          },
         },
-        'z00.json': '{}',
-        'z01.json': '{}',
-        'z02.json': '{}',
-        'z03.json': '{}',
-        'z04.json': '{}',
-        'z05.json': '{}',
-        'z06.json': '{}',
-        'z07.json': '{}',
-        'z08.json': '{}',
-        'z09.json': '{}',
-        'z10.json': '{}',
-        'z11.json': '{}',
-        'z12.json': '{}',
-        'z13.json': '{}',
-        'z14.json': '{}',
-        'z15.json': '{}',
-        'z16.json': '{}',
-        'z17.json': '{}',
-        'z18.json': '{}',
-        'z19.json': '{}',
-        'zzz/zzz/file.json': '{}',
-        '.realm.json': {
-          name: 'Test Workspace B',
-          backgroundURL:
-            'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
-          iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
-        },
-      },
+      });
     });
 
     monacoService = getService('monaco-service');

@@ -13,8 +13,11 @@ import RSVP from 'rsvp';
 import { TrackedMap } from 'tracked-built-ins';
 
 import {
+  beginRuntimeDependencyTrackingSession,
+  endRuntimeDependencyTrackingSession,
   formattedError,
   baseRealm,
+  snapshotRuntimeDependencies,
   SupportedMimeType,
   isCardError,
   type CardErrorsJSONAPI,
@@ -62,6 +65,7 @@ export type Model = {
   nonce: string;
   cardId: string;
   renderOptions: ReturnType<typeof parseRenderRouteOptions>;
+  capturedDeps?: string[];
   readonly status: RenderStatus;
   readonly ready: boolean;
   readyPromise: Promise<void>;
@@ -154,6 +158,7 @@ export default class RenderRoute extends Route<Model> {
     this.#restoreRenderTimers = undefined;
     this.#releaseTimerBlock?.();
     this.#releaseTimerBlock = undefined;
+    endRuntimeDependencyTrackingSession();
   }
 
   async beforeModel(transition: Transition) {
@@ -195,6 +200,14 @@ export default class RenderRoute extends Route<Model> {
     if (existing) {
       return await existing;
     }
+    beginRuntimeDependencyTrackingSession({
+      sessionKey: key,
+      rootURL: id,
+      rootKind:
+        parsedOptions.fileExtract || parsedOptions.fileRender
+          ? 'file'
+          : 'instance',
+    });
 
     // the window.boxelTransitionTo() function helper first normalizes the base
     // params by transitioning the router back to 'render' before it goes on to
@@ -392,6 +405,7 @@ export default class RenderRoute extends Route<Model> {
     } catch (e: any) {
       console.warn(
         `Encountered error when deserializing doc for ${id}: ${e.message}: ${e.responseText}`,
+        e?.stack,
       );
       this.#dispositionModel(model, 'error');
       throw e;
@@ -503,6 +517,10 @@ export default class RenderRoute extends Route<Model> {
     modelState.state.set('status', 'ready');
     modelState.isReady = true;
     modelState.readyDeferred.fulfill();
+    await modelState.readyDeferred.promise;
+    model.capturedDeps = snapshotRuntimeDependencies({
+      excludeQueryOnly: true,
+    }).deps;
   }
 
   #settleModelAfterRenderSafely(model: Model) {
@@ -673,6 +691,11 @@ export default class RenderRoute extends Route<Model> {
     cardType?: string,
     context?: { cardId?: string; nonce?: string },
   ): string {
+    let transitionId = this.#transitionCardId(transition);
+    let fallbackDeps = this.#fallbackDepsFromIds([
+      context?.cardId,
+      transitionId,
+    ]);
     let normalizationContext = {
       cardId: context?.cardId,
       normalizeCardId: (id: string) => this.#normalizeCardId(id),
@@ -687,22 +710,12 @@ export default class RenderRoute extends Route<Model> {
         coerceFromValue,
         normalizationContext,
       );
-      let withType = withCardType(normalized, cardType);
-      let withTimerSummary = this.#appendTimerSummary(withType);
-      return JSON.stringify(
-        this.#stripLastKnownGoodHtml(withTimerSummary),
-        null,
-        2,
+      return this.#serializeNormalizedRenderError(
+        normalized,
+        cardType,
+        fallbackDeps,
       );
     }
-    let current: Transition['to'] | null = transition?.to;
-    let id: string | undefined;
-    do {
-      id = current?.params?.id as string | undefined;
-      if (!id) {
-        current = current?.parent;
-      }
-    } while (current && !id);
     if (isCardError(error)) {
       let normalized = normalizeRenderError(
         {
@@ -711,28 +724,63 @@ export default class RenderRoute extends Route<Model> {
         },
         normalizationContext,
       );
-      let withType = withCardType(normalized, cardType);
-      let withTimerSummary = this.#appendTimerSummary(withType);
-      return JSON.stringify(
-        this.#stripLastKnownGoodHtml(withTimerSummary),
-        null,
-        2,
+      return this.#serializeNormalizedRenderError(
+        normalized,
+        cardType,
+        fallbackDeps,
       );
     }
+    let id = transitionId;
     let errorJSONAPI = formattedError(id, error).errors[0];
     let errorPayload = normalizeRenderError(
       errorJsonApiToErrorEntry(errorJSONAPI) as RenderError,
       normalizationContext,
     );
+    return this.#serializeNormalizedRenderError(
+      errorPayload as RenderError,
+      cardType,
+      fallbackDeps,
+    );
+  }
+
+  #serializeNormalizedRenderError(
+    renderError: RenderError,
+    cardType?: string,
+    fallbackDeps: string[] = [],
+  ): string {
+    let withType = withCardType(renderError, cardType);
+    let withTimerSummary = this.#appendTimerSummary(withType);
+    let withRuntimeDeps = this.#appendRuntimeDeps(
+      withTimerSummary,
+      fallbackDeps,
+    );
     return JSON.stringify(
-      this.#stripLastKnownGoodHtml(
-        this.#appendTimerSummary(
-          withCardType(errorPayload as RenderError, cardType),
-        ),
-      ),
+      this.#stripLastKnownGoodHtml(withRuntimeDeps),
       null,
       2,
     );
+  }
+
+  #appendRuntimeDeps(
+    renderError: RenderError,
+    fallbackDeps: string[],
+  ): RenderError {
+    let runtimeDeps = snapshotRuntimeDependencies({
+      excludeQueryOnly: true,
+    }).deps;
+    let mergedDeps = [
+      ...new Set([...(renderError.error.deps ?? []), ...runtimeDeps]),
+    ];
+    if (mergedDeps.length === 0 && fallbackDeps.length > 0) {
+      mergedDeps = [...new Set(fallbackDeps)];
+    }
+    return {
+      ...renderError,
+      error: {
+        ...renderError.error,
+        deps: mergedDeps,
+      },
+    };
   }
 
   #appendTimerSummary(renderError: RenderError): RenderError {
@@ -958,12 +1006,18 @@ export default class RenderRoute extends Route<Model> {
     let { container, errorElement } = this.#ensurePrerenderElements();
     let reason = this.renderErrorState.reason ?? '';
     let parsedReason: any;
+    let fallbackDeps = this.#fallbackDepsFromTransitionParams(params);
     try {
       parsedReason = JSON.parse(reason);
     } catch {
       parsedReason = undefined;
     }
     if (parsedReason && typeof parsedReason === 'object') {
+      if (parsedReason.error && typeof parsedReason.error === 'object') {
+        parsedReason.error.deps = [
+          ...new Set([...(parsedReason.error.deps ?? []), ...fallbackDeps]),
+        ];
+      }
       parsedReason.evict = true;
       reason = JSON.stringify(parsedReason, null, 2);
     } else {
@@ -975,6 +1029,7 @@ export default class RenderRoute extends Route<Model> {
             title: 'Render failed',
             message: reason || 'Render failed before model hook',
             additionalErrors: null,
+            deps: fallbackDeps,
           },
           evict: true,
         },
@@ -1000,5 +1055,66 @@ export default class RenderRoute extends Route<Model> {
       }
       this.#writePrerenderError(errorElement, reason);
     }
+  }
+
+  #fallbackDepsFromTransitionParams(
+    params?:
+      | {
+          id?: string;
+        }
+      | undefined,
+  ): string[] {
+    // When render fails before model() initializes, runtime dependency capture
+    // has not started yet. Recover the requested card id from transition params
+    // (or URL path as a last resort) so the error doc still carries enough deps
+    // for downstream invalidation/error propagation.
+    let id = params?.id;
+    if (!id && typeof window !== 'undefined') {
+      try {
+        let path = window.location.pathname;
+        let match = /\/render\/([^/]+)\//.exec(path);
+        if (match?.[1]) {
+          id = decodeURIComponent(match[1]);
+        }
+      } catch (_err) {
+        // best effort only
+      }
+    }
+    return this.#fallbackDepsFromIds([id]);
+  }
+
+  #transitionCardId(transition?: Transition): string | undefined {
+    let current: Transition['to'] | null = transition?.to;
+    let id: string | undefined;
+    do {
+      id = current?.params?.id as string | undefined;
+      if (!id) {
+        current = current?.parent;
+      }
+    } while (current && !id);
+    return id;
+  }
+
+  #fallbackDepsFromIds(ids: (string | undefined)[]): string[] {
+    // Seed dependency ids in every shape we might see in index/module rows:
+    // original id, normalized card id, and `.json` variants. This keeps error
+    // propagation resilient when callers provide extensionless ids while index
+    // entries are stored with concrete instance urls.
+    let deps = new Set<string>();
+    for (let id of ids) {
+      if (!id) {
+        continue;
+      }
+      deps.add(id);
+      let normalized = this.#normalizeCardId(id);
+      deps.add(normalized);
+      if (!id.endsWith('.json')) {
+        deps.add(`${id}.json`);
+      }
+      if (!normalized.endsWith('.json')) {
+        deps.add(`${normalized}.json`);
+      }
+    }
+    return [...deps];
   }
 }
