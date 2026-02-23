@@ -1,5 +1,6 @@
 import GlimmerComponent from '@glimmer/component';
 import type { BaseDef, CardDef } from '../card-api';
+import type BrandGuide from 'https://cardstack.com/base/brand-guide';
 
 export default class DefaultHeadTemplate extends GlimmerComponent<{
   Args: {
@@ -22,7 +23,11 @@ export default class DefaultHeadTemplate extends GlimmerComponent<{
   }
 
   get themeIcon(): string | undefined {
-    return this.args.model?.cardInfo?.theme?.cardThumbnailURL;
+    let theme = this.args.model?.cardInfo?.theme;
+    return (
+      (theme as BrandGuide | undefined)?.markUsage?.socialMediaProfileIcon ??
+      theme?.cardThumbnailURL
+    );
   }
 
   <template>
