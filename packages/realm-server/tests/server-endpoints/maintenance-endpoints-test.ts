@@ -419,9 +419,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           assert.deepEqual(response.body, {
             fileErrors: 0,
             filesIndexed: 1,
-            moduleErrors: 0,
             instanceErrors: 0,
-            modulesIndexed: 0,
             instancesIndexed: 1,
             totalIndexEntries: 2,
           });
