@@ -40,44 +40,43 @@ const getItemTitle = (selection: SelectedInstance | undefined) => {
 
 const SelectedItem: TemplateOnlyComponent<{
   Args: { title?: string; label?: string };
-}> =
-  <template>
-    <div class='selected-item' data-test-selected-item>
-      <span class='label'>{{if @label @label "Instance:"}}</span>
-      <span class='item'>{{@title}}</span>
-    </div>
-    <style scoped>
-      .selected-item {
-        font: 500 var(--boxel-font-xs);
-        letter-spacing: var(--boxel-lsp-sm);
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
+}> = <template>
+  <div class='selected-item' data-test-selected-item>
+    <span class='label'>{{if @label @label 'Instance:'}}</span>
+    <span class='item'>{{@title}}</span>
+  </div>
+  <style scoped>
+    .selected-item {
+      font: 500 var(--boxel-font-xs);
+      letter-spacing: var(--boxel-lsp-sm);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
 
-      .label {
-        font-weight: 600;
-        margin-right: var(--boxel-sp-xxs);
-      }
-    </style>
-  </template>;
+    .label {
+      font-weight: 600;
+      margin-right: var(--boxel-sp-xxs);
+    }
+  </style>
+</template>;
 
 const BeforeOptions: TemplateOnlyComponent<{ Args: { label?: string } }> =
   <template>
     <div class='before-options'>
-      {{if @label @label "Recent"}}
+      {{if @label @label 'Recent'}}
     </div>
-  <style scoped>
-    .before-options {
-      width: 100%;
-      background-color: var(--boxel-light);
-      padding: var(--boxel-sp-xs) var(--boxel-sp);
-      font: 500 var(--boxel-font-sm);
-      letter-spacing: var(--boxel-lsp-xs);
-      text-align: left;
-    }
-  </style>
-</template>;
+    <style scoped>
+      .before-options {
+        width: 100%;
+        background-color: var(--boxel-light);
+        padding: var(--boxel-sp-xs) var(--boxel-sp);
+        font: 500 var(--boxel-font-sm);
+        letter-spacing: var(--boxel-lsp-xs);
+        text-align: left;
+      }
+    </style>
+  </template>;
 
 interface AfterOptionsSignature {
   Args: {
