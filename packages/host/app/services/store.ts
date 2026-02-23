@@ -950,7 +950,9 @@ export default class StoreService extends Service implements StoreInterface {
 
     // if there are no more subscribers to this realm then unsubscribe from realm
     let realmHref = !isLocalId(id)
-      ? this.realm.realmOfURL(new URL(id))?.href
+      ? [...this.subscriptions.keys()].find((realmURL) =>
+          id.startsWith(realmURL),
+        )
       : undefined;
     if (!realmHref) {
       return;
@@ -963,7 +965,7 @@ export default class StoreService extends Service implements StoreInterface {
         ([referenceId, count]) =>
           !isLocalId(referenceId) &&
           count > 0 &&
-          this.realm.realmOfURL(new URL(referenceId))?.href === realmHref,
+          referenceId.startsWith(realmHref),
       )
     ) {
       subscription.unsubscribe();
