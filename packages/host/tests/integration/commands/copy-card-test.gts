@@ -33,8 +33,8 @@ module('Integration | commands | copy-card', function (hooks) {
   setupRealmCacheTeardown(hooks);
 
   hooks.beforeEach(async function () {
-    await withCachedRealmSetup(async () =>
-      setupIntegrationTestRealm({
+    await withCachedRealmSetup(async () => {
+      await setupIntegrationTestRealm({
         mockMatrixUtils,
         realmURL: testRealmURL,
         contents: {
@@ -61,11 +61,9 @@ module('Integration | commands | copy-card', function (hooks) {
             },
           },
         },
-      }),
-    );
+      });
 
-    await withCachedRealmSetup(async () =>
-      setupIntegrationTestRealm({
+      await setupIntegrationTestRealm({
         mockMatrixUtils,
         realmURL: testRealm2URL,
         contents: {
@@ -95,8 +93,8 @@ module('Integration | commands | copy-card', function (hooks) {
             },
           },
         },
-      }),
-    );
+      });
+    });
 
     // Ensure realms are logged in with write permissions
     let realmService = getService('realm');
