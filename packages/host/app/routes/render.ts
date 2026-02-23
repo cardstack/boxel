@@ -431,7 +431,12 @@ export default class RenderRoute extends Route<Model> {
     let cardApi = await this.loaderService.loader.import<typeof CardAPI>(
       `${baseRealm.url}card-api`,
     );
-    this.#touchIsUsedRelationships(cardApi, instance, new WeakSet<object>());
+    this.#touchIsUsedRelationships(
+      cardApi,
+      instance,
+      new WeakSet<object>(),
+      new WeakMap<object, boolean>(),
+    );
   }
 
   #touchFieldSafely(container: any, fieldName: string): unknown {
@@ -451,10 +456,16 @@ export default class RenderRoute extends Route<Model> {
     cardApi: typeof CardAPI,
     value: unknown,
     visited: WeakSet<object>,
+    typeHasUsedRelationshipCache: WeakMap<object, boolean>,
   ): void {
     if (Array.isArray(value)) {
       for (let item of value) {
-        this.#touchIsUsedRelationships(cardApi, item, visited);
+        this.#touchIsUsedRelationships(
+          cardApi,
+          item,
+          visited,
+          typeHasUsedRelationshipCache,
+        );
       }
       return;
     }
@@ -481,10 +492,70 @@ export default class RenderRoute extends Route<Model> {
         field.fieldType === 'contains' ||
         field.fieldType === 'containsMany'
       ) {
+        if (
+          !this.#typeHasIsUsedRelationship(
+            cardApi,
+            field.card as CardAPI.BaseDefConstructor,
+            new WeakSet<object>(),
+            typeHasUsedRelationshipCache,
+          )
+        ) {
+          continue;
+        }
         let nested = this.#touchFieldSafely(value, fieldName);
-        this.#touchIsUsedRelationships(cardApi, nested, visited);
+        this.#touchIsUsedRelationships(
+          cardApi,
+          nested,
+          visited,
+          typeHasUsedRelationshipCache,
+        );
       }
     }
+  }
+
+  #typeHasIsUsedRelationship(
+    cardApi: typeof CardAPI,
+    type: CardAPI.BaseDefConstructor,
+    visitedTypes: WeakSet<object>,
+    cache: WeakMap<object, boolean>,
+  ): boolean {
+    if (cache.has(type)) {
+      return cache.get(type)!;
+    }
+    if (visitedTypes.has(type)) {
+      return false;
+    }
+    visitedTypes.add(type);
+
+    let fields = cardApi.getFields(type, { includeComputeds: true });
+    for (let field of Object.values(fields)) {
+      if (!field) {
+        continue;
+      }
+      if (
+        (field.fieldType === 'linksTo' || field.fieldType === 'linksToMany') &&
+        field.isUsed
+      ) {
+        cache.set(type, true);
+        return true;
+      }
+      if (
+        (field.fieldType === 'contains' ||
+          field.fieldType === 'containsMany') &&
+        this.#typeHasIsUsedRelationship(
+          cardApi,
+          field.card as CardAPI.BaseDefConstructor,
+          visitedTypes,
+          cache,
+        )
+      ) {
+        cache.set(type, true);
+        return true;
+      }
+    }
+
+    cache.set(type, false);
+    return false;
   }
 
   setupController(controller: Controller, model: Model) {
