@@ -172,10 +172,13 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
       return state;
     }
     let fileUrl = this.args.readyFile.url;
+    void this.args.readyFile?.lastModified; // track lastModified to re-run on save
     state.isLoading = true;
     (async () => {
       try {
-        let result = await this.store.get(fileUrl, { type: 'file-meta' });
+        let result = await this.store.getWithoutCache(fileUrl, {
+          type: 'file-meta',
+        });
         if (isCardErrorJSONAPI(result)) {
           state.error = result;
           state.value = undefined;
