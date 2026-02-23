@@ -219,29 +219,7 @@ export class RealmServer {
       .use(convertAcceptHeaderQueryParam)
       .use(convertAuthHeaderQueryParam)
       .use(methodOverrideSupport)
-      .use(
-        createRoutes({
-          dbAdapter: this.dbAdapter,
-          serverURL: this.serverURL.href,
-          matrixClient: this.matrixClient,
-          realmServerSecretSeed: this.realmServerSecretSeed,
-          realmSecretSeed: this.realmSecretSeed,
-          grafanaSecret: this.grafanaSecret,
-          virtualNetwork: this.virtualNetwork,
-          createRealm: this.createRealm,
-          serveIndex: this.serveIndex,
-          serveFromRealm: this.serveFromRealm,
-          sendEvent: this.sendEvent,
-          queue: this.queue,
-          realms: this.realms,
-          assetsURL: this.assetsURL,
-          realmsRootPath: this.realmsRootPath,
-          getMatrixRegistrationSecret: this.getMatrixRegistrationSecret,
-          createAndMountRealm: this.createAndMountRealm,
-          domainsForPublishedRealms: this.domainsForPublishedRealms,
-          prerenderer: this.prerenderer,
-        }),
-      )
+      .use(this.serveRoutes)
       .use(proxyAsset('/auth-service-worker.js', this.assetsURL))
       .use(this.serveIndex)
       .use(this.serveFromRealm);
@@ -306,7 +284,7 @@ export class RealmServer {
 
     if (includesHtmlMimeType) {
       if (includesVndMimeType) {
-        let isHostModeRequest = await this.isHostModeRequest(requestURL);
+        let isHostModeRequest = await this.isHostModeRequestCached(ctxt);
 
         if (isHostModeRequest) {
           return next();
@@ -321,7 +299,7 @@ export class RealmServer {
         return next();
       }
 
-      let isHostModeRequest = await this.isHostModeRequest(requestURL);
+      let isHostModeRequest = await this.isHostModeRequestCached(ctxt);
 
       if (!isHostModeRequest) {
         return next();
@@ -504,6 +482,17 @@ export class RealmServer {
     return rows.length > 0;
   }
 
+  private async isHostModeRequestCached(ctx: Koa.Context): Promise<boolean> {
+    let state = ctx.state as Record<string, unknown>;
+    if ('isHostModeRequest' in state) {
+      return state['isHostModeRequest'] as boolean;
+    }
+    let requestURL = new URL(`${ctx.protocol}://${ctx.host}${ctx.originalUrl}`);
+    let result = await this.isHostModeRequest(requestURL);
+    state['isHostModeRequest'] = result;
+    return result;
+  }
+
   // Check if the URL corresponds to an indexed card instance.
   // This is used to distinguish card URLs from module URLs when deciding
   // whether to serve HTML for published realms.
@@ -682,6 +671,38 @@ export class RealmServer {
     truncated[maxLines - 1] = `${truncated[maxLines - 1]} ...`;
     return truncated.join('\n');
   }
+
+  private routerMiddleware: Koa.Middleware | undefined;
+
+  private serveRoutes = async (ctx: Koa.Context, next: Koa.Next) => {
+    if (await this.isHostModeRequestCached(ctx)) {
+      return next();
+    }
+    if (!this.routerMiddleware) {
+      this.routerMiddleware = createRoutes({
+        dbAdapter: this.dbAdapter,
+        serverURL: this.serverURL.href,
+        matrixClient: this.matrixClient,
+        realmServerSecretSeed: this.realmServerSecretSeed,
+        realmSecretSeed: this.realmSecretSeed,
+        grafanaSecret: this.grafanaSecret,
+        virtualNetwork: this.virtualNetwork,
+        createRealm: this.createRealm,
+        serveIndex: this.serveIndex,
+        serveFromRealm: this.serveFromRealm,
+        sendEvent: this.sendEvent,
+        queue: this.queue,
+        realms: this.realms,
+        assetsURL: this.assetsURL,
+        realmsRootPath: this.realmsRootPath,
+        getMatrixRegistrationSecret: this.getMatrixRegistrationSecret,
+        createAndMountRealm: this.createAndMountRealm,
+        domainsForPublishedRealms: this.domainsForPublishedRealms,
+        prerenderer: this.prerenderer,
+      }) as Koa.Middleware;
+    }
+    await this.routerMiddleware!(ctx, next);
+  };
 
   private serveFromRealm = async (ctxt: Koa.Context, _next: Koa.Next) => {
     if (ctxt.request.path === '/_boom') {
