@@ -6,6 +6,7 @@ import {
   endRuntimeDependencyTrackingSession,
   resetRuntimeDependencyTracker,
   snapshotRuntimeDependencies,
+  trackRuntimeFileDependency,
   trackRuntimeInstanceDependency,
   trackRuntimeModuleDependency,
   withRuntimeDependencyTrackingContext,
@@ -200,6 +201,42 @@ module(basename(__filename), function (hooks) {
     assert.true(
       snapshot.deps.includes('https://example.com/other-dep.json'),
       'non-root dep is still included',
+    );
+  });
+
+  test('excludes file root across extensionless and .json aliases', async function (assert) {
+    beginRuntimeDependencyTrackingSession({
+      sessionKey: 'file-root-alias-exclusion',
+      rootURL: 'https://example.com/file-root',
+      rootKind: 'file',
+    });
+
+    await withRuntimeDependencyTrackingContext(
+      {
+        mode: 'non-query',
+        source: 'test:file-root-alias-exclusion',
+        consumer: 'https://example.com/file-root',
+        consumerKind: 'file',
+      },
+      async () => {
+        trackRuntimeFileDependency('https://example.com/file-root');
+        trackRuntimeInstanceDependency('https://example.com/file-root');
+        trackRuntimeInstanceDependency('https://example.com/other-instance');
+      },
+    );
+
+    let snapshot = snapshotRuntimeDependencies({ excludeQueryOnly: true });
+    assert.notOk(
+      snapshot.deps.includes('https://example.com/file-root'),
+      'file root is excluded from deps',
+    );
+    assert.notOk(
+      snapshot.deps.includes('https://example.com/file-root.json'),
+      'file root .json alias is excluded from deps',
+    );
+    assert.true(
+      snapshot.deps.includes('https://example.com/other-instance.json'),
+      'non-root deps are retained',
     );
   });
 

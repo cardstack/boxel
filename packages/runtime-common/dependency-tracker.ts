@@ -245,12 +245,11 @@ export class RuntimeDependencyTracker {
       return;
     }
     this.#rootCandidates.add(normalized);
-    if (rootKind === 'instance') {
-      this.#rootCandidates.add(normalized.replace(/\.json$/, ''));
-    } else {
-      this.#rootCandidates.add(normalized.replace(/\.json$/, ''));
-      this.#rootCandidates.add(`${normalized}.json`);
-    }
+    // Root exclusion needs to account for callers that may reference the same
+    // resource via extensionless and `.json` forms.
+    let extensionless = normalized.replace(/\.json$/, '');
+    this.#rootCandidates.add(extensionless);
+    this.#rootCandidates.add(`${extensionless}.json`);
   }
 
   #track(kind: RuntimeDependencyNodeKind, rawURL: string): void {
