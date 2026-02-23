@@ -510,6 +510,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
                 ref: {
                   module: `./person`,
                   name: 'Person',
+                },
               },
               meta: {
                 adoptsFrom: {
