@@ -10,8 +10,6 @@ exports.up = (pgm) => {
     WHERE users.matrix_user_id = sr.matrix_user_id
       AND sr.realm_url = '__realm-server__'
   `);
-
-  pgm.dropTable('session_rooms');
 };
 
 exports.down = (pgm) => {
