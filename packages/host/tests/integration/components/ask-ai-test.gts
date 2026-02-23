@@ -20,6 +20,8 @@ import {
   setupOnSave,
   assertMessages,
   setupOperatorModeStateCleanup,
+  setupRealmCacheTeardown,
+  withCachedRealmSetup,
 } from '../../helpers';
 import { setupBaseRealm } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
@@ -41,6 +43,7 @@ module('Integration | ask-ai', function (hooks) {
 
   setupLocalIndexing(hooks);
   setupOnSave(hooks);
+  setupRealmCacheTeardown(hooks);
   setupCardLogs(
     hooks,
     async () => await loader.import(`${baseRealm.url}card-api`),
@@ -68,34 +71,36 @@ module('Integration | ask-ai', function (hooks) {
       };
     }`;
 
-    await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      contents: {
-        'pet.gts': petCard,
-        'Pet/marco.json': {
-          data: {
-            attributes: { cardTitle: 'Marco' },
-            meta: {
-              adoptsFrom: {
-                module: `${testRealmURL}pet`,
-                name: 'Pet',
+    await withCachedRealmSetup(async () => {
+      await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {
+          'pet.gts': petCard,
+          'Pet/marco.json': {
+            data: {
+              attributes: { cardTitle: 'Marco' },
+              meta: {
+                adoptsFrom: {
+                  module: `${testRealmURL}pet`,
+                  name: 'Pet',
+                },
               },
             },
           },
-        },
-        'Pet/mango.json': {
-          data: {
-            attributes: { cardTitle: 'Mango' },
-            meta: {
-              adoptsFrom: {
-                module: `${testRealmURL}pet`,
-                name: 'Pet',
+          'Pet/mango.json': {
+            data: {
+              attributes: { cardTitle: 'Mango' },
+              meta: {
+                adoptsFrom: {
+                  module: `${testRealmURL}pet`,
+                  name: 'Pet',
+                },
               },
             },
           },
+          '.realm.json': `{ "name": "Operator Mode Workspace" }`,
         },
-        '.realm.json': `{ "name": "Operator Mode Workspace" }`,
-      },
+      });
     });
   });
 

@@ -10,6 +10,7 @@ import { RecentFiles } from '@cardstack/host/utils/local-storage-keys';
 import {
   setupLocalIndexing,
   setupOnSave,
+  setupRealmCacheTeardown,
   testRealmURL,
   setupAcceptanceTestRealm,
   SYSTEM_CARD_FIXTURE_CONTENTS,
@@ -17,6 +18,7 @@ import {
   setupAuthEndpoints,
   setupUserSubscription,
   setMonacoContent,
+  withCachedRealmSetup,
 } from '../../helpers';
 
 import { setupMockMatrix } from '../../helpers/mock-matrix';
@@ -69,6 +71,7 @@ module('Acceptance | code submode | head format preview', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
   setupOnSave(hooks);
+  setupRealmCacheTeardown(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
@@ -92,42 +95,44 @@ module('Acceptance | code submode | head format preview', function (hooks) {
       JSON.stringify([[testRealmURL, 'HeadPreview/example.json']]),
     );
 
-    await setupAcceptanceTestRealm({
-      mockMatrixUtils,
-      contents: {
-        ...SYSTEM_CARD_FIXTURE_CONTENTS,
-        'head-preview.gts': headPreviewCardSource,
-        'head-preview-unsafe.gts': headPreviewWithDisallowedTagsSource,
-        'HeadPreview/example.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              title: 'Preview Title',
-              description: 'Preview description',
+    await withCachedRealmSetup(async () => {
+      await setupAcceptanceTestRealm({
+        mockMatrixUtils,
+        contents: {
+          ...SYSTEM_CARD_FIXTURE_CONTENTS,
+          'head-preview.gts': headPreviewCardSource,
+          'head-preview-unsafe.gts': headPreviewWithDisallowedTagsSource,
+          'HeadPreview/example.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                title: 'Preview Title',
+                description: 'Preview description',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `${testRealmURL}head-preview`,
+                  name: 'HeadPreview',
+                },
+              },
             },
-            meta: {
-              adoptsFrom: {
-                module: `${testRealmURL}head-preview`,
-                name: 'HeadPreview',
+          },
+          'HeadPreviewUnsafe/example.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                title: 'Unsafe Card',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `${testRealmURL}head-preview-unsafe`,
+                  name: 'HeadPreviewUnsafe',
+                },
               },
             },
           },
         },
-        'HeadPreviewUnsafe/example.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              title: 'Unsafe Card',
-            },
-            meta: {
-              adoptsFrom: {
-                module: `${testRealmURL}head-preview-unsafe`,
-                name: 'HeadPreviewUnsafe',
-              },
-            },
-          },
-        },
-      },
+      });
     });
   });
 

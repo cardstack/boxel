@@ -15,6 +15,8 @@ import {
   setupLocalIndexing,
   testRealmURL,
   testRealmInfo,
+  setupRealmCacheTeardown,
+  withCachedRealmSetup,
 } from '../../helpers';
 
 import { setupMockMatrix } from '../../helpers/mock-matrix';
@@ -42,11 +44,14 @@ module('Integration | commands | read-card-for-ai-assistant', function (hooks) {
     getOwner(this)!.register('service:realm', StubRealmService);
   });
 
+  setupRealmCacheTeardown(hooks);
+
   hooks.beforeEach(async function () {
-    await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      contents: {
-        'person.gts': `
+    await withCachedRealmSetup(async () =>
+      setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {
+          'person.gts': `
             import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
             import StringField from "https://cardstack.com/base/string";
             import NumberField from "https://cardstack.com/base/number";
@@ -84,21 +89,22 @@ module('Integration | commands | read-card-for-ai-assistant', function (hooks) {
               }
             }
           `,
-        'mango.json': {
-          data: {
-            attributes: {
-              firstName: 'Mango',
-            },
-            meta: {
-              adoptsFrom: {
-                module: './person',
-                name: 'Person',
+          'mango.json': {
+            data: {
+              attributes: {
+                firstName: 'Mango',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: './person',
+                  name: 'Person',
+                },
               },
             },
           },
         },
-      },
-    });
+      }),
+    );
   });
 
   test('read card', async function (assert) {

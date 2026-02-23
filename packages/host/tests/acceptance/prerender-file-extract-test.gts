@@ -16,9 +16,11 @@ import type RenderStoreService from '@cardstack/host/services/render-store';
 import {
   setupLocalIndexing,
   setupOnSave,
+  setupRealmCacheTeardown,
   testRealmURL,
   setupAcceptanceTestRealm,
   SYSTEM_CARD_FIXTURE_CONTENTS,
+  withCachedRealmSetup,
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
@@ -27,6 +29,7 @@ module('Acceptance | prerender | file-extract', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
   setupOnSave(hooks);
+  setupRealmCacheTeardown(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
@@ -90,11 +93,12 @@ module('Acceptance | prerender | file-extract', function (hooks) {
   }
 
   hooks.beforeEach(async function () {
-    await setupAcceptanceTestRealm({
-      mockMatrixUtils,
-      contents: {
-        ...SYSTEM_CARD_FIXTURE_CONTENTS,
-        'filedef-success.gts': `
+    await withCachedRealmSetup(async () => {
+      await setupAcceptanceTestRealm({
+        mockMatrixUtils,
+        contents: {
+          ...SYSTEM_CARD_FIXTURE_CONTENTS,
+          'filedef-success.gts': `
           import { FileDef as BaseFileDef } from "${baseRealm.url}file-api";
 
           export class SuccessDef extends BaseFileDef {
@@ -108,7 +112,7 @@ module('Acceptance | prerender | file-extract', function (hooks) {
             }
           }
         `,
-        'filedef-mismatch.gts': `
+          'filedef-mismatch.gts': `
           import {
             FileDef as BaseFileDef,
             FileContentMismatchError,
@@ -120,7 +124,7 @@ module('Acceptance | prerender | file-extract', function (hooks) {
             }
           }
         `,
-        'filedef-throws.gts': `
+          'filedef-throws.gts': `
           import { FileDef as BaseFileDef } from "${baseRealm.url}file-api";
 
           export class ThrowingDef extends BaseFileDef {
@@ -129,12 +133,13 @@ module('Acceptance | prerender | file-extract', function (hooks) {
             }
           }
         `,
-        'filedef-missing.gts': `
+          'filedef-missing.gts': `
           export const NotFileDef = {};
         `,
-        'sample.txt': 'hello world',
-        'mismatch.txt': 'mismatch content',
-      },
+          'sample.txt': 'hello world',
+          'mismatch.txt': 'mismatch content',
+        },
+      });
     });
   });
 
