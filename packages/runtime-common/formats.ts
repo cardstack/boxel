@@ -4,7 +4,8 @@ export type Format =
   | 'fitted'
   | 'edit'
   | 'atom'
-  | 'head';
+  | 'head'
+  | 'metadata';
 
 export function isValidFormat(
   format: string,

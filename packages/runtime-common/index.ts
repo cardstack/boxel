@@ -24,6 +24,11 @@ export interface LooseSingleCardDocument {
   included?: LinkableResource[];
 }
 
+export interface LooseSingleFileMetaDocument {
+  data: LooseLinkableResource<FileMetaResource>;
+  included?: LinkableResource[];
+}
+
 export type PatchData = {
   attributes?: CardResource['attributes'];
   relationships?: CardResource['relationships'];

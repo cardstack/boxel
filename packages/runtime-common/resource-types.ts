@@ -101,6 +101,7 @@ export type LooseLinkableResource<T extends LinkableResource> = Omit<
 };
 
 export type LooseCardResource = LooseLinkableResource<CardResource>;
+export type LooseFileMetaResource = LooseLinkableResource<FileMetaResource>;
 
 //prerendered cards
 export interface PrerenderedCardResource {
