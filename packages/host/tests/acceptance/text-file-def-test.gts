@@ -148,10 +148,7 @@ And a blank line too.`,
 
     let result = await captureFileExtractResult('ready');
     assert.strictEqual(result.status, 'ready');
-    assert.true(
-      result.mismatch,
-      'marks mismatch when extension is not .txt or .text',
-    );
+    assert.true(result.mismatch, 'marks mismatch when extension is not .txt or .text');
     assert.strictEqual(result.searchDoc?.name, 'readme.md');
   });
 
