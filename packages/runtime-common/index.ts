@@ -194,6 +194,7 @@ export { v4 as uuidv4 } from '@lukeed/uuid'; // isomorphic UUID's using Math.ran
 import type { LocalPath } from './paths';
 import type { CardTypeFilter, Query, DataQuery, EveryFilter } from './query';
 import { Loader } from './loader';
+import { resolveCardReference } from './card-reference-resolver';
 export * from './paths';
 export * from './cached-fetch';
 export * from './definition-lookup';
@@ -627,7 +628,9 @@ export function internalKeyFor(
   relativeTo: URL | undefined,
 ): string {
   if (!('type' in ref)) {
-    let module = trimExecutableExtension(new URL(ref.module, relativeTo)).href;
+    let module = trimExecutableExtension(
+      new URL(resolveCardReference(ref.module, relativeTo)),
+    ).href;
     return `${module}/${ref.name}`;
   }
   switch (ref.type) {

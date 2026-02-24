@@ -20,6 +20,7 @@ import { CardError } from './error';
 import { meta, relativeTo } from './constants';
 import type { LooseCardResource, FileMetaResource } from './index';
 import { isUrlLike, trimExecutableExtension } from './index';
+import { resolveCardReference } from './card-reference-resolver';
 import type { RuntimeDependencyTrackingContext } from './dependency-tracker';
 
 export type ResolvedCodeRef = {
@@ -141,13 +142,14 @@ export function codeRefWithAbsoluteURL(
   opts?: { trimExecutableExtension?: true },
 ): CodeRef {
   if (!('type' in ref)) {
-    if (isUrlLike(ref.module)) {
-      let moduleURL = new URL(ref.module, relativeTo);
+    try {
+      let moduleHref = resolveCardReference(ref.module, relativeTo);
+      let moduleURL = new URL(moduleHref);
       if (opts?.trimExecutableExtension) {
         moduleURL = trimExecutableExtension(moduleURL);
       }
       return { ...ref, module: moduleURL.href };
-    } else {
+    } catch {
       return { ...ref };
     }
   }
@@ -170,7 +172,7 @@ export async function loadCardDef(
   let maybeCard: unknown;
   let loader = opts.loader;
   if (!('type' in ref)) {
-    let resolvedModuleURL = new URL(ref.module, opts?.relativeTo).href;
+    let resolvedModuleURL = resolveCardReference(ref.module, opts?.relativeTo);
     let module = await loader.import<Record<string, any>>(
       resolvedModuleURL,
       opts.dependencyTrackingContext,
@@ -192,7 +194,7 @@ export async function loadCardDef(
   }
 
   let err = new CardError(
-    `Cannot find card ${humanReadable(ref)}. Make sure ${new URL(moduleFrom(ref), opts?.relativeTo).href} exports ${exportFrom(ref)}`,
+    `Cannot find card ${humanReadable(ref)}. Make sure ${resolveCardReference(moduleFrom(ref), opts?.relativeTo)} exports ${exportFrom(ref)}`,
     {
       status: 404,
     },

@@ -90,7 +90,7 @@ function absolutizeInstanceURL(
     setURL(url);
     return;
   }
-  setURL(new URL(url, resourceId).href);
+  setURL(resolveCardReference(url, resourceId));
 }
 
 export class RealmIndexQueryEngine {
@@ -961,7 +961,9 @@ function relativizeResource(
     setURL(maybeRelativeURL(urlObj, primaryURL, realmURL));
   });
   visitModuleDeps(resource, (moduleURL, setModuleURL) => {
-    let absoluteModuleURL = new URL(moduleURL, resource.id ?? primaryURL);
+    let absoluteModuleURL = new URL(
+      resolveCardReference(moduleURL, resource.id ?? primaryURL),
+    );
     setModuleURL(maybeRelativeURL(absoluteModuleURL, primaryURL, realmURL));
   });
 }
