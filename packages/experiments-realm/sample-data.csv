@@ -1,0 +1,11 @@
+name,email,department,role,start_date,salary
+Alice Johnson,alice@example.com,Engineering,Senior Developer,2021-03-15,125000
+Bob Smith,bob@example.com,Marketing,Campaign Manager,2022-07-01,95000
+Charlie Davis,charlie@example.com,Engineering,Staff Developer,2019-11-20,145000
+Diana Martinez,diana@example.com,Design,Lead Designer,2020-06-10,115000
+Eve Thompson,eve@example.com,Sales,Account Executive,2023-01-09,88000
+Frank Wilson,frank@example.com,Engineering,Junior Developer,2024-02-12,82000
+Grace Lee,grace@example.com,Marketing,Content Strategist,2021-09-30,91000
+Henry Brown,henry@example.com,Design,UX Researcher,2022-04-18,105000
+Ivy Chen,ivy@example.com,Sales,Sales Director,2018-08-05,135000
+Jack Taylor,jack@example.com,Engineering,DevOps Engineer,2023-06-22,118000
