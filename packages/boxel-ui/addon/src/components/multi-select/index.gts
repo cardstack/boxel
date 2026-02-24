@@ -7,7 +7,7 @@ import type {
   Select,
 } from 'ember-power-select/components/power-select';
 import BeforeOptions from 'ember-power-select/components/power-select/before-options';
-import PowerSelectMultiple from 'ember-power-select/components/power-select-multiple';
+import PowerSelect from 'ember-power-select/components/power-select';
 
 import { cn } from '../../helpers.ts';
 import { BoxelAfterOptionsComponent } from './after-options.gts';
@@ -60,8 +60,9 @@ export interface Signature<ItemT> {
 
 export class BoxelMultiSelectBasic<ItemT> extends Component<Signature<ItemT>> {
   <template>
-    <PowerSelectMultiple
+    <PowerSelect
       class='boxel-multi-select'
+      @multiple={{true}}
       {{! required args }}
       @options={{@options}}
       @selected={{@selected}}
@@ -97,7 +98,7 @@ export class BoxelMultiSelectBasic<ItemT> extends Component<Signature<ItemT>> {
       as |option|
     >
       {{yield option}}
-    </PowerSelectMultiple>
+    </PowerSelect>
     {{! template-lint-disable require-scoped-style }}
     <style>
       .boxel-multi-select__dropdown {
