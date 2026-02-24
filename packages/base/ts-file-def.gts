@@ -53,9 +53,10 @@ function spanWrap(className: string, text: string): string {
 }
 
 // Use RegExp constructor for patterns with < > to avoid content-tag misparsing
+// TEMPLATE_TAG_RE uses string concat to hide 'template' from content-tag parser
 const BLOCK_COMMENT_RE = new RegExp('/\\*[\\s\\S]*?\\*/', 'g');
 const LINE_COMMENT_RE = new RegExp('//[^\n]*', 'g');
-const TEMPLATE_TAG_RE = new RegExp('</?template>', 'g');
+const TEMPLATE_TAG_RE = new RegExp('</?t' + 'emplate>', 'g');
 const STRING_DOUBLE_RE = new RegExp('"(?:[^"\\\\]|\\\\.)*"', 'g');
 const STRING_SINGLE_RE = new RegExp("'(?:[^'\\\\]|\\\\.)*'", 'g');
 const STRING_TEMPLATE_RE = new RegExp('`(?:[^`\\\\]|\\\\.)*`', 'g');

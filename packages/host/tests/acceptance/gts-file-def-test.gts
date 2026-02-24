@@ -160,10 +160,7 @@ export class SampleCard extends CardDef {
 
     let result = await captureFileExtractResult('ready');
     assert.strictEqual(result.status, 'ready');
-    assert.true(
-      result.mismatch,
-      'marks mismatch when extension is not .gts',
-    );
+    assert.true(result.mismatch, 'marks mismatch when extension is not .gts');
     assert.strictEqual(result.searchDoc?.name, 'notes.txt');
   });
 

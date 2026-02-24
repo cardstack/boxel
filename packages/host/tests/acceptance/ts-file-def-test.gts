@@ -151,10 +151,7 @@ export const MAX_RETRIES = 3;`,
 
     let result = await captureFileExtractResult('ready');
     assert.strictEqual(result.status, 'ready');
-    assert.true(
-      result.mismatch,
-      'marks mismatch when extension is not .ts',
-    );
+    assert.true(result.mismatch, 'marks mismatch when extension is not .ts');
     assert.strictEqual(result.searchDoc?.name, 'notes.txt');
   });
 
