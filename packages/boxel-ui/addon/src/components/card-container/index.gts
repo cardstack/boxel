@@ -58,11 +58,8 @@ const CardContainer: TemplateOnlyComponent<Signature> = <template>
       width: 100%;
       overflow: hidden;
     }
-    :global(.boxel-card-container--boundaries) {
+    :global(.boxel-card-container--boundaries:not(.hide-boundaries)) {
       box-shadow: 0 0 0 1px var(--border, var(--boxel-border-color));
-    }
-    :global(.boxel-card-container--boundaries.hide-boundaries) {
-      box-shadow: none;
     }
 
     :global(.boxel-card-container--themed) {

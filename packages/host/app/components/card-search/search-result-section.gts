@@ -7,11 +7,12 @@ import Component from '@glimmer/component';
 import HistoryIcon from '@cardstack/boxel-icons/history';
 import pluralize from 'pluralize';
 
-import { Button } from '@cardstack/boxel-ui/components';
-import { eq } from '@cardstack/boxel-ui/helpers';
+import { Button, GridContainer } from '@cardstack/boxel-ui/components';
+import { cn, eq, type FittedFormatId } from '@cardstack/boxel-ui/helpers';
 
 import type { CodeRef } from '@cardstack/runtime-common';
 
+import { urlForRealmLookup } from '@cardstack/host/lib/utils';
 import type RealmService from '@cardstack/host/services/realm';
 
 import { SECTION_SHOW_MORE_INCREMENT } from './constants';
@@ -30,12 +31,12 @@ interface Signature {
   Element: HTMLElement;
   Args: {
     section: SearchSheetSection;
-    viewOption: string;
-    isCompact: boolean;
+    viewOption?: string;
+    isCompact?: boolean;
     handleSelect: (selection: string | NewCardArgs) => void;
-    isFocused: boolean;
-    isCollapsed: boolean;
-    onFocusSection: (sectionId: string | null) => void;
+    isFocused?: boolean;
+    isCollapsed?: boolean;
+    onFocusSection?: (sectionId: string | null) => void;
     getDisplayedCount?: (sectionId: string, totalCount: number) => number;
     onShowMore?: (sectionId: string, totalCount: number) => void;
     selectedCard?: string | NewCardArgs;
@@ -110,6 +111,10 @@ export default class SearchResultSection extends Component<Signature> {
   get displayedRecentsCards() {
     const section = this.recentsSection;
     if (!section) return [];
+    if (this.args.isCompact) {
+      // do not limit the cards in the quick menu and keep last-updated sort order
+      return section.cards;
+    }
     const sid = this.args.section.sid;
     const getDisplayedCount = this.args.getDisplayedCount;
     if (!sid || !getDisplayedCount) return section.cards;
@@ -153,10 +158,13 @@ export default class SearchResultSection extends Component<Signature> {
         this.urlSection)
     ) {
       return 'grid-view';
-    } else if (this.args.viewOption === 'strip') {
+    } else {
       return 'strip-view';
     }
-    return '';
+  }
+
+  get viewFormat() {
+    return this.viewClass === 'grid-view' ? 'grid' : 'list';
   }
 
   get displayShowMore() {
@@ -194,29 +202,44 @@ export default class SearchResultSection extends Component<Signature> {
     };
   };
 
+  private get cardSize(): FittedFormatId {
+    if (this.viewClass === 'compact-view') {
+      return 'single-strip';
+    } else if (this.viewClass === 'strip-view') {
+      return 'double-wide-strip';
+    } else {
+      return 'cardsgrid-tile';
+    }
+  }
+
   <template>
     <div
-      class='search-result-block {{if @isCollapsed "collapsed"}}'
+      class={{cn
+        'search-result-block'
+        search-result-block--collapsed=@isCollapsed
+      }}
       data-test-realm={{this.sectionRealmName}}
       ...attributes
     >
       {{#if this.realmSection}}
-        {{#unless @isCompact}}
-          <SearchSheetSectionHeader
-            @realmInfo={{this.realmSection.realmInfo}}
-            @title={{this.realmSection.realmInfo.name}}
-            @totalCount={{this.realmSection.totalCount}}
-            @showOnlyLabel={{this.realmSection.realmInfo.name}}
-            @showOnlyChecked={{@isFocused}}
-            @onShowOnlyChange={{this.handleShowOnlyChange}}
-          />
-        {{/unless}}
-        <div class='cards {{this.viewClass}}' data-test-search-cards-result>
+        <SearchSheetSectionHeader
+          @realmInfo={{this.realmSection.realmInfo}}
+          @title={{this.realmSection.realmInfo.name}}
+          @totalCount={{this.realmSection.totalCount}}
+          @showOnlyLabel={{this.realmSection.realmInfo.name}}
+          @showOnlyChecked={{@isFocused}}
+          @onShowOnlyChange={{this.handleShowOnlyChange}}
+        />
+        <GridContainer
+          class='cards {{this.viewClass}}'
+          @viewFormat={{this.viewFormat}}
+          @size={{this.cardSize}}
+          data-test-search-cards-result
+        >
           {{#if (this.showCreateForRealm this.realmSection.realmUrl)}}
             <ItemButton
               @item={{this.newCardArgs this.realmSection.realmUrl}}
               @isSelected={{this.isCreateNewSelected}}
-              @isCompact={{@isCompact}}
               @onSelect={{@handleSelect}}
               @onSubmit={{@onSubmit}}
             />
@@ -227,15 +250,13 @@ export default class SearchResultSection extends Component<Signature> {
                 @item={{card.component}}
                 @itemId={{card.url}}
                 @isSelected={{eq this.selectedCardId card.url}}
-                @isCompact={{@isCompact}}
-                @displayRealmName={{@isCompact}}
                 @onSelect={{@handleSelect}}
                 @onSubmit={{@onSubmit}}
                 data-test-search-sheet-search-result={{i}}
               />
             {{/unless}}
           {{/each}}
-        </div>
+        </GridContainer>
         {{#if this.displayShowMore}}
           <Button
             class='show-more'
@@ -254,25 +275,25 @@ export default class SearchResultSection extends Component<Signature> {
           </Button>
         {{/if}}
       {{else if this.urlSection}}
-        {{#unless @isCompact}}
-          <SearchSheetSectionHeader
-            @realmInfo={{this.urlSection.realmInfo}}
-            @title={{this.urlSection.realmInfo.name}}
-            @totalCount={{1}}
-          />
-        {{/unless}}
-        <div class='cards {{this.viewClass}}'>
+        <SearchSheetSectionHeader
+          @realmInfo={{this.urlSection.realmInfo}}
+          @title={{this.urlSection.realmInfo.name}}
+          @totalCount={{1}}
+        />
+        <GridContainer
+          class='cards {{this.viewClass}}'
+          @viewFormat={{this.viewFormat}}
+          @size={{this.cardSize}}
+        >
           <ItemButton
             @item={{this.urlSection.card}}
             @itemId={{this.urlSection.card.id}}
             @isSelected={{eq this.selectedCardId this.urlSection.card.id}}
-            @isCompact={{@isCompact}}
-            @displayRealmName={{@isCompact}}
             @onSelect={{@handleSelect}}
             @onSubmit={{@onSubmit}}
             data-test-search-sheet-search-result='0'
           />
-        </div>
+        </GridContainer>
       {{else if this.recentsSection}}
         {{#unless @isCompact}}
           <SearchSheetSectionHeader
@@ -284,22 +305,48 @@ export default class SearchResultSection extends Component<Signature> {
             @onShowOnlyChange={{this.handleShowOnlyChange}}
           />
         {{/unless}}
-        <div class='cards {{this.viewClass}}'>
-          {{#each this.displayedRecentsCards as |card i|}}
-            {{#if card}}
+
+        <GridContainer
+          class='cards {{this.viewClass}}'
+          @items={{this.displayedRecentsCards}}
+          @viewFormat={{this.viewFormat}}
+          @size={{this.cardSize}}
+          @fullWidthItem={{eq this.viewClass 'strip-view'}}
+          as |card GridItem|
+        >
+          <GridItem class={{if @isCompact 'recent-card-item--compact'}}>
+            <:default>
               <ItemButton
                 @item={{card}}
                 @itemId={{card.id}}
                 @isSelected={{eq this.selectedCardId card.id}}
-                @isCompact={{@isCompact}}
-                @displayRealmName={{true}}
                 @onSelect={{@handleSelect}}
                 @onSubmit={{@onSubmit}}
-                data-test-search-result-index={{i}}
               />
-            {{/if}}
-          {{/each}}
-        </div>
+            </:default>
+            <:after>
+              {{#if card}}
+                {{#let
+                  (this.realm.info (urlForRealmLookup card))
+                  as |realmInfo|
+                }}
+                  <div
+                    class={{cn
+                      'realm-name'
+                      realm-name--compact=@isCompact
+                      boxel-ellipsize=@isCompact
+                    }}
+                    data-test-realm-name
+                  >
+                    in
+                    {{realmInfo.name}}
+                  </div>
+                {{/let}}
+              {{/if}}
+            </:after>
+          </GridItem>
+        </GridContainer>
+
         {{#if this.displayShowMore}}
           <Button
             class='show-more'
@@ -326,54 +373,45 @@ export default class SearchResultSection extends Component<Signature> {
         flex-direction: column;
         margin-bottom: var(--boxel-sp-lg);
       }
-      .search-result-block.collapsed {
+      .search-result-block--collapsed {
         opacity: 0.6;
       }
-      .search-result-block.collapsed :deep(.search-sheet-section-header) {
+      .search-result-block--collapsed :deep(.search-sheet-section-header) {
         margin-bottom: 0;
         padding-bottom: var(--boxel-sp-lg);
         border-bottom: 1px solid var(--boxel-400);
       }
-      .search-result-block.collapsed .cards,
-      .search-result-block.collapsed .show-more {
+      .search-result-block--collapsed .cards,
+      .search-result-block--collapsed .show-more {
         display: none;
       }
-      .cards {
-        --gap: var(--boxel-sp);
-        gap: var(--gap);
-      }
-      .cards.compact-view {
-        --item-width: 250px;
-        --item-height: 40px;
-        display: flex;
-        flex-wrap: nowrap;
-        gap: var(--boxel-sp-xs);
-        padding: var(--boxel-sp-xs) 0;
-      }
-      .cards.grid-view {
-        --item-width: 186.2px;
-        --item-height: 244px;
-        display: grid;
-        grid-template-columns: repeat(auto-fill, var(--item-width));
-        align-content: start;
-      }
-      .cards.strip-view {
-        --item-height: 65px;
-        --item-width: 100%;
-        display: grid;
-        grid-template-columns: 1fr;
-        align-content: start;
-      }
-      .cards.grid-view :deep(.create-card) {
-        display: flex;
+      .grid-view :deep(.create-new-button) {
         flex-direction: column;
-        align-items: center;
         justify-content: center;
-        height: 100%;
       }
       .show-more {
         margin-top: var(--boxel-sp);
         width: fit-content;
+      }
+      .realm-name {
+        padding-top: var(--boxel-sp-4xs);
+        color: var(--boxel-450);
+        font-size: var(--boxel-font-size-xs);
+        font-weight: 500;
+      }
+      .compact-view {
+        display: flex;
+        flex-flow: row nowrap;
+        gap: var(--boxel-sp-xs);
+        padding: var(--boxel-sp-xs) 0;
+      }
+      .recent-card-item--compact {
+        display: flex;
+        flex-direction: column;
+        align-items: self-end;
+      }
+      .realm-name--compact {
+        max-width: 15rem;
       }
     </style>
   </template>

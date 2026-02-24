@@ -39,7 +39,6 @@ import {
   type ResolvedCodeRef,
   type getCard,
   CardContextName,
-  isFileDefInstance,
 } from '@cardstack/runtime-common';
 import { isEquivalentBodyPosition } from '@cardstack/runtime-common/schema-analysis-plugin';
 
@@ -640,16 +639,9 @@ export default class CodeSubmode extends Component<Signature> {
     return state;
   });
 
-  private get isFileDefInstance() {
-    return (
-      this.fileDefResource && isFileDefInstance(this.fileDefResource.value)
-    );
-  }
-
   get isReadOnly() {
     return (
       !this.realm.canWrite(this.readyFile.url) ||
-      this.isFileDefInstance ||
       this.fileDefResource?.isLoading
     );
   }
