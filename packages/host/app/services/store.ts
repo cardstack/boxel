@@ -245,10 +245,11 @@ export default class StoreService extends Service implements StoreInterface {
     }
   }
 
-  addReference(id: string | undefined) {
+  addReference(id: string | undefined, opts?: { type?: StoreReadType }) {
     if (!id) {
       return;
     }
+    let readType: StoreReadType = opts?.type ?? 'card';
     // synchronously update the reference count so we don't run into race
     // conditions requiring a mutex
     let currentReferenceCount = this.referenceCount.get(id) ?? 0;
@@ -272,7 +273,7 @@ export default class StoreService extends Service implements StoreInterface {
       this.subscribeToRealm(new URL(id));
       // intentionally not awaiting this. we keep track of the promise in
       // this.newReferencePromises
-      this.wireUpNewReference(id);
+      this.wireUpNewReference(id, readType);
     }
   }
 
@@ -902,12 +903,26 @@ export default class StoreService extends Service implements StoreInterface {
     deferred.fulfill();
   }
 
-  private async wireUpNewReference(url: string) {
+  private async wireUpNewReference(
+    url: string,
+    readType: StoreReadType = 'card',
+  ) {
     let deferred = new Deferred<void>();
     await this.withTestWaiters(async () => {
       this.newReferencePromises.push(deferred.promise);
       try {
         await this.ready;
+        if (readType === 'file-meta') {
+          let instanceOrError = await this.getFileMetaInstance<FileDef>({
+            idOrDoc: url,
+          });
+          this.setIdentityContext(
+            instanceOrError as FileDef | CardErrorJSONAPI,
+            'file-meta',
+          );
+          deferred.fulfill();
+          return;
+        }
         // Check file-meta map as well as card map — file-meta instances
         // are loaded into their own map by store.get(id, { type: 'file-meta' })
         let fileMetaInstance =
@@ -971,33 +986,35 @@ export default class StoreService extends Service implements StoreInterface {
 
   private unsubscribeFromInstance(id: string) {
     let instance = this.store.getCard(id);
-    if (instance) {
-      if (this.cardApiCache && instance) {
-        this.cardApiCache?.unsubscribeFromChanges(
-          instance,
-          this.onInstanceUpdated,
-        );
+    if (instance && this.cardApiCache) {
+      this.cardApiCache.unsubscribeFromChanges(
+        instance,
+        this.onInstanceUpdated,
+      );
+    }
 
-        // if there are no more subscribers to this realm then unsubscribe from realm
-        let realm = instance[this.cardApiCache.realmURL];
-        if (!realm) {
-          return;
-        }
+    // if there are no more subscribers to this realm then unsubscribe from realm
+    let realmHref = !isLocalId(id)
+      ? [...this.subscriptions.keys()].find((realmURL) =>
+          id.startsWith(realmURL),
+        )
+      : undefined;
+    if (!realmHref) {
+      return;
+    }
 
-        let subscription = this.subscriptions.get(realm.href);
-        if (
-          subscription &&
-          ![...this.referenceCount.entries()].find(
-            ([id, count]) =>
-              id.startsWith('http') &&
-              count > 0 &&
-              this.realm.realmOfURL(new URL(id))?.href === realm!.href,
-          )
-        ) {
-          subscription.unsubscribe();
-          this.subscriptions.delete(realm.href);
-        }
-      }
+    let subscription = this.subscriptions.get(realmHref);
+    if (
+      subscription &&
+      ![...this.referenceCount.entries()].find(
+        ([referenceId, count]) =>
+          !isLocalId(referenceId) &&
+          count > 0 &&
+          referenceId.startsWith(realmHref),
+      )
+    ) {
+      subscription.unsubscribe();
+      this.subscriptions.delete(realmHref);
     }
   }
 
