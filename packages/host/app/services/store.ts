@@ -506,6 +506,13 @@ export default class StoreService extends Service implements StoreInterface {
     });
   }
 
+  async serializeFileDefAsDocument(
+    fileDef: FileDef,
+  ): Promise<SingleFileMetaDocument> {
+    let api = await this.cardService.getAPI();
+    return api.serializeFileDef(fileDef) as SingleFileMetaDocument;
+  }
+
   async delete(id: string): Promise<void> {
     if (!id) {
       // the card isn't actually saved yet, so do nothing
