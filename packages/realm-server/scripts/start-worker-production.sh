@@ -20,11 +20,8 @@ NODE_NO_WARNINGS=1 \
   --fromUrl='https://app.boxel.ai/experiments/' \
   --toUrl='https://app.boxel.ai/experiments/' \
   \
-  --fromUrl="${CATALOG_REALM_URL}" \
+  --fromUrl='@cardstack/catalog/' \
   --toUrl="${CATALOG_REALM_URL}" \
   \
   --fromUrl='https://app.boxel.ai/skills/' \
-  --toUrl='https://app.boxel.ai/skills/' \
-  \
-  --fromUrl='https://cardstack.com/catalog/' \
-  --toUrl="${CATALOG_REALM_URL}"
+  --toUrl='https://app.boxel.ai/skills/'

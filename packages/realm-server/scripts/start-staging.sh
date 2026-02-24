@@ -38,7 +38,7 @@ NODE_NO_WARNINGS=1 \
   \
   --path='/persistent/catalog' \
   --username='catalog_realm' \
-  --fromUrl="${CATALOG_REALM_URL}" \
+  --fromUrl='@cardstack/catalog/' \
   --toUrl="${CATALOG_REALM_URL}" \
   \
   --path="${SUBMISSION_REALM_PATH}" \
@@ -59,7 +59,4 @@ NODE_NO_WARNINGS=1 \
   --path='/persistent/experiments' \
   --username='experiments_realm' \
   --fromUrl='https://realms-staging.stack.cards/experiments/' \
-  --toUrl='https://realms-staging.stack.cards/experiments/' \
-  \
-  --fromUrl='https://cardstack.com/catalog/' \
-  --toUrl="${CATALOG_REALM_URL}"
+  --toUrl='https://realms-staging.stack.cards/experiments/'

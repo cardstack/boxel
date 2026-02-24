@@ -3,9 +3,10 @@ import './setup-logger'; // This should be first
 import {
   Worker,
   VirtualNetwork,
+  isUrlLike,
   logger,
   IndexWriter,
-  catalogRealm,
+  registerCardReferencePrefix,
   type StatusArgs,
 } from '@cardstack/runtime-common';
 import yargs from 'yargs';
@@ -99,16 +100,16 @@ if (fromUrls.length !== toUrls.length) {
 }
 
 let virtualNetwork = new VirtualNetwork();
-let urlMappings = fromUrls.map((fromUrl, i) => [
-  new URL(String(fromUrl)),
-  new URL(String(toUrls[i])),
-]);
-for (let [from, to] of urlMappings) {
-  virtualNetwork.addURLMapping(from, to);
+for (let i = 0; i < fromUrls.length; i++) {
+  let from = String(fromUrls[i]);
+  let to = new URL(String(toUrls[i]));
+  if (isUrlLike(from)) {
+    virtualNetwork.addURLMapping(new URL(from), to);
+  } else {
+    registerCardReferencePrefix(from, to.href);
+    virtualNetwork.addImportMap(from, (rest) => new URL(rest, to).href);
+  }
 }
-virtualNetwork.addImportMap('@cardstack/catalog/', (rest) => {
-  return new URL(rest, catalogRealm.url).href;
-});
 let autoMigrate = migrateDB || undefined;
 
 (async () => {

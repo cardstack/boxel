@@ -3,9 +3,6 @@ import type { ResolvedCodeRef } from './code-ref';
 import type { RealmPermissions } from './index';
 
 export const baseRealm = new RealmPaths(new URL('https://cardstack.com/base/'));
-export const catalogRealm = new RealmPaths(
-  new URL('https://cardstack.com/catalog/'),
-);
 
 export const devSkillLocalPath = 'Skill/boxel-development';
 export const envSkillLocalPath = 'Skill/boxel-environment';

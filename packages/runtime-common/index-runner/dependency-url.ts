@@ -1,13 +1,9 @@
-import { catalogRealm } from '../constants';
-
-const CATALOG_PREFIX = '@cardstack/catalog/';
+import { resolveCardReference } from '../card-reference-resolver';
 
 export function canonicalURL(url: string, relativeTo?: string): string {
-  if (url.startsWith(CATALOG_PREFIX)) {
-    url = catalogRealm.url + url.slice(CATALOG_PREFIX.length);
-  }
   try {
-    let parsed = new URL(url, relativeTo);
+    let resolved = resolveCardReference(url, relativeTo);
+    let parsed = new URL(resolved);
     parsed.search = '';
     parsed.hash = '';
     return parsed.href;
