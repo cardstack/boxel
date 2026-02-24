@@ -120,7 +120,6 @@ export default class CardCatalogModal extends Component<Signature> {
               @selectedCard={{this.state.selectedCard}}
               @baseFilter={{this.state.baseFilter}}
               @offerToCreate={{this.offerToCreateArg}}
-              @showRecents={{false}}
             />
           </:content>
           <:footer>
