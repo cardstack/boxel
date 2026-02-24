@@ -153,10 +153,7 @@ module('Acceptance | json file def', function (hooks) {
 
     let result = await captureFileExtractResult('ready');
     assert.strictEqual(result.status, 'ready');
-    assert.true(
-      result.mismatch,
-      'marks mismatch when extension is not .json',
-    );
+    assert.true(result.mismatch, 'marks mismatch when extension is not .json');
     assert.strictEqual(result.searchDoc?.name, 'readme.md');
   });
 
