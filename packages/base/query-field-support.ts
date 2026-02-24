@@ -113,8 +113,7 @@ export function ensureQueryFieldSearchResource(
       seed: seedRecords
         ? {
             cards: seedRecords,
-            searchURL:
-              seedRecords.length > 0 ? seedSearchURL ?? undefined : undefined,
+            searchURL: seedSearchURL ?? undefined,
             realms: fieldState?.seedRealms,
             queryErrors: fieldState?.seedErrors,
           }
