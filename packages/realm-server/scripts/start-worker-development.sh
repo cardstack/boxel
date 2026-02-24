@@ -33,8 +33,11 @@ NODE_ENV=development \
   --fromUrl='http://localhost:4201/experiments/' \
   --toUrl='http://localhost:4201/experiments/' \
   \
-  --fromUrl='https://cardstack.com/catalog/' \
+  --fromUrl="${CATALOG_REALM_URL}" \
   --toUrl="${CATALOG_REALM_URL}" \
   \
   --fromUrl='http://localhost:4201/skills/' \
-  --toUrl='http://localhost:4201/skills/'
+  --toUrl='http://localhost:4201/skills/' \
+  \
+  --fromUrl='https://cardstack.com/catalog/' \
+  --toUrl="${CATALOG_REALM_URL}"

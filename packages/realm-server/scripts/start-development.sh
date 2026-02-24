@@ -83,7 +83,7 @@ LOW_CREDIT_THRESHOLD="${LOW_CREDIT_THRESHOLD:-2000}" \
   \
   ${START_CATALOG:+--path="${CATALOG_REALM_PATH}"} \
   ${START_CATALOG:+--username='catalog_realm'} \
-  ${START_CATALOG:+--fromUrl='https://cardstack.com/catalog/'} \
+  ${START_CATALOG:+--fromUrl="${CATALOG_REALM_URL}"} \
   ${START_CATALOG:+--toUrl="${CATALOG_REALM_URL}"} \
   \
   --path='../skills-realm/contents' \
@@ -104,4 +104,7 @@ LOW_CREDIT_THRESHOLD="${LOW_CREDIT_THRESHOLD:-2000}" \
   ${START_EXPERIMENTS:+--path='../experiments-realm'} \
   ${START_EXPERIMENTS:+--username='experiments_realm'} \
   ${START_EXPERIMENTS:+--fromUrl='http://localhost:4201/experiments/'} \
-  ${START_EXPERIMENTS:+--toUrl='http://localhost:4201/experiments/'}
+  ${START_EXPERIMENTS:+--toUrl='http://localhost:4201/experiments/'} \
+  \
+  ${START_CATALOG:+--fromUrl='https://cardstack.com/catalog/'} \
+  ${START_CATALOG:+--toUrl="${CATALOG_REALM_URL}"}

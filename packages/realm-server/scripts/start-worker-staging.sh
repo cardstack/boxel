@@ -20,9 +20,12 @@ NODE_NO_WARNINGS=1 \
   --fromUrl='https://realms-staging.stack.cards/experiments/' \
   --toUrl='https://realms-staging.stack.cards/experiments/' \
   \
-  --fromUrl='https://cardstack.com/catalog/' \
+  --fromUrl="${CATALOG_REALM_URL}" \
   --toUrl="${CATALOG_REALM_URL}" \
   \
   --fromUrl='https://realms-staging.stack.cards/skills/' \
   --toUrl='https://realms-staging.stack.cards/skills/' \
-  
+  \
+  --fromUrl='https://cardstack.com/catalog/' \
+  --toUrl="${CATALOG_REALM_URL}"
+
