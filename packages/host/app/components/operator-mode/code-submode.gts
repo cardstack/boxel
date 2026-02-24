@@ -16,9 +16,11 @@ import perform from 'ember-concurrency/helpers/perform';
 import FromElseWhere from 'ember-elsewhere/components/from-elsewhere';
 
 import { consume, provide } from 'ember-provide-consume-context';
+import { use, resource } from 'ember-resources';
 import window from 'ember-window-mock';
 
 import startCase from 'lodash/startCase';
+import { TrackedObject } from 'tracked-built-ins';
 
 import {
   LoadingIndicator,
@@ -30,12 +32,14 @@ import { File } from '@cardstack/boxel-ui/icons';
 import type { CodeRef } from '@cardstack/runtime-common';
 import {
   isCardDocumentString,
+  isCardErrorJSONAPI,
   RealmPaths,
   PermissionsContextName,
   GetCardContextName,
   type ResolvedCodeRef,
   type getCard,
   CardContextName,
+  isFileDefInstance,
 } from '@cardstack/runtime-common';
 import { isEquivalentBodyPosition } from '@cardstack/runtime-common/schema-analysis-plugin';
 
@@ -57,8 +61,10 @@ import type PlaygroundPanelService from '@cardstack/host/services/playground-pan
 import type RealmService from '@cardstack/host/services/realm';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 import type SpecPanelService from '@cardstack/host/services/spec-panel-service';
+import type StoreService from '@cardstack/host/services/store';
 
 import type {
+  BaseDef,
   CardDef,
   Format,
   CardContext,
@@ -143,6 +149,7 @@ export default class CodeSubmode extends Component<Signature> {
   @service declare private recentFilesService: RecentFilesService;
   @service declare private realm: RealmService;
   @service declare private specPanelService: SpecPanelService;
+  @service declare private store: StoreService;
 
   @tracked private loadFileError: string | null = null;
   @tracked private userHasDismissedURLError = false;
@@ -594,8 +601,57 @@ export default class CodeSubmode extends Component<Signature> {
     this.operatorModeStateService.updateCardPreviewFormat(format);
   }
 
+  private get isNonModuleFile() {
+    return !this.isModule && !isCardDocumentString(this.readyFile.content);
+  }
+
+  @use private fileDefResource = resource(() => {
+    let state = new TrackedObject<{
+      value: BaseDef | undefined;
+      isLoading: boolean;
+      error: unknown;
+    }>({
+      value: undefined,
+      isLoading: false,
+      error: undefined,
+    });
+    if (!this.isNonModuleFile) {
+      return state;
+    }
+    let fileUrl = this.readyFile.url;
+    state.isLoading = true;
+    (async () => {
+      try {
+        let result = await this.store.get(fileUrl, { type: 'file-meta' });
+        if (isCardErrorJSONAPI(result)) {
+          state.error = result;
+          state.value = undefined;
+        } else {
+          state.value = result as unknown as BaseDef;
+          state.error = undefined;
+        }
+      } catch (e) {
+        state.error = e;
+        state.value = undefined;
+      } finally {
+        state.isLoading = false;
+      }
+    })();
+    return state;
+  });
+
+  private get isFileDefInstance() {
+    return (
+      this.fileDefResource && isFileDefInstance(this.fileDefResource.value)
+    );
+  }
+
   get isReadOnly() {
-    return !this.realm.canWrite(this.readyFile.url);
+    return (
+      !this.realm.canWrite(this.readyFile.url) ||
+      this.isFileDefInstance ||
+      this.fileDefResource?.isLoading
+    );
   }
 
   @provide(PermissionsContextName)

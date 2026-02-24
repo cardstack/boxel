@@ -19,7 +19,7 @@ import { uniqueDeps } from './dependency-collections';
 import {
   BASE_FILE_DEF_CODE_REF,
   resolveFileDefCodeRef,
-} from './file-def-code-ref';
+} from '../file-def-code-ref';
 
 interface FileIndexerOptions {
   path: LocalPath;
