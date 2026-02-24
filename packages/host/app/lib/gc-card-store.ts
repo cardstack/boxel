@@ -266,12 +266,18 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     loadTrackingLogger.debug(
       `trackLoad start id=${loadId} generation=${this.#loadGeneration} pending=${this.#inFlight.size}`,
     );
-    load.finally(() => {
-      this.#inFlight.delete(load);
-      loadTrackingLogger.debug(
-        `trackLoad settled id=${loadId} pending=${this.#inFlight.size}`,
-      );
-    });
+    void load
+      .finally(() => {
+        this.#inFlight.delete(load);
+        loadTrackingLogger.debug(
+          `trackLoad settled id=${loadId} pending=${this.#inFlight.size}`,
+        );
+      })
+      .catch((error) => {
+        loadTrackingLogger.debug(
+          `trackLoad rejected id=${loadId} error=${String(error)}`,
+        );
+      });
   }
 
   async loaded() {

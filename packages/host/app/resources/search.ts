@@ -5,7 +5,7 @@ import { service } from '@ember/service';
 import { buildWaiter } from '@ember/test-waiters';
 import { tracked, cached } from '@glimmer/tracking';
 
-import { restartableTask, task } from 'ember-concurrency';
+import { didCancel, restartableTask, task } from 'ember-concurrency';
 import { Resource } from 'ember-modify-based-class-resource';
 
 import difference from 'lodash/difference';
@@ -107,14 +107,29 @@ export class SearchResource<
       `trackStoreLoad start #${loadNumber} source=${source} query=${this.#previousQueryString ?? '(unknown)'}`,
     );
     this.runtimeStore.trackLoad(load);
-    void load.finally(() => {
-      // Ignore stale completions from superseded loads; keep test-facing
-      // `loaded` aligned with the most recent request.
-      if (this.loaded !== load) {
-        return;
-      }
-      this.#log.info(`trackStoreLoad settled #${loadNumber} source=${source}`);
-    });
+    void load
+      .finally(() => {
+        // Ignore stale completions from superseded loads; keep test-facing
+        // `loaded` aligned with the most recent request.
+        if (this.loaded !== load) {
+          return;
+        }
+        this.#log.info(
+          `trackStoreLoad settled #${loadNumber} source=${source}`,
+        );
+      })
+      .catch((error) => {
+        if (didCancel(error)) {
+          this.#log.debug(
+            `trackStoreLoad canceled #${loadNumber} source=${source}`,
+          );
+          return;
+        }
+        this.#log.error(
+          `trackStoreLoad rejected #${loadNumber} source=${source}`,
+          error,
+        );
+      });
   }
 
   constructor(owner: object) {
@@ -141,9 +156,7 @@ export class SearchResource<
     } = named;
 
     setOwner(this, owner); // works around problem where lifetime parent is used as owner when they should be allowed to differ
-    if (storeService) {
-      this.#storeServiceOverride = storeService;
-    }
+    this.#storeServiceOverride = storeService;
 
     if (query === undefined) {
       return;
