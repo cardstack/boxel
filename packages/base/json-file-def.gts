@@ -17,13 +17,21 @@ import sanitizedHtml from './helpers/sanitized-html';
 
 const EXCERPT_MAX_LENGTH = 500;
 
+// content-tag misparses angle brackets inside regex literals in .gts files,
+// so we use RegExp constructor instead.
+const AMP_RE = new RegExp('&', 'g');
+const LT_RE = new RegExp('<', 'g');
+const GT_RE = new RegExp('>', 'g');
+const QUOT_RE = new RegExp('"', 'g');
+const APOS_RE = new RegExp("'", 'g');
+
 function escapeHtml(unsafe: string): string {
   return unsafe
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
+    .replace(AMP_RE, '&amp;')
+    .replace(LT_RE, '&lt;')
+    .replace(GT_RE, '&gt;')
+    .replace(QUOT_RE, '&quot;')
+    .replace(APOS_RE, '&#039;');
 }
 
 function getExtension(url: string): string {
@@ -63,33 +71,38 @@ function prettyPrintJson(content: string): string {
   }
 }
 
+// content-tag misparses HTML tag literals in .gts files,
+// so we build span wrappers dynamically.
+function spanWrap(cls: string, content: string): string {
+  return `<${'span'} class="${cls}">${content}</${'span'}>`;
+}
+
+// Regex patterns and replacements also avoid literal angle brackets
+// via RegExp constructor where they contain </ sequences.
+const KEY_RE = /(&quot;)((?:[^&]|&(?!quot;))*)(&quot;)\s*:/g;
+const STRING_RE = new RegExp(
+  '(&quot;)((?:[^&]|&(?!quot;))*)(&quot;)(?!\\s*(?:<\\/span>)?\\s*:)',
+  'g',
+);
+const NUMBER_RE = /\b(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)\b/g;
+const BOOL_RE = /\b(true|false)\b/g;
+const NULL_RE = /\bnull\b/g;
+
 function highlightJson(json: string): string {
   let escaped = escapeHtml(json);
-  // Highlight keys (property names before colon)
-  escaped = escaped.replace(
-    /(&quot;)((?:[^&]|&(?!quot;))*)(&quot;)\s*:/g,
-    '<span class="json-key">$1$2$3</span>:',
+  escaped = escaped.replace(KEY_RE, (_m, q1, inner, q2) =>
+    `${spanWrap('json-key', `${q1}${inner}${q2}`)}:`,
   );
-  // Highlight string values (quoted strings not followed by colon or </span>:)
-  escaped = escaped.replace(
-    /(&quot;)((?:[^&]|&(?!quot;))*)(&quot;)(?!\s*(?:<\/span>)?\s*:)/g,
-    '<span class="json-string">$1$2$3</span>',
+  escaped = escaped.replace(STRING_RE, (_m, q1, inner, q2) =>
+    spanWrap('json-string', `${q1}${inner}${q2}`),
   );
-  // Highlight numbers
-  escaped = escaped.replace(
-    /\b(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)\b/g,
-    '<span class="json-number">$1</span>',
+  escaped = escaped.replace(NUMBER_RE, (_m, num) =>
+    spanWrap('json-number', num),
   );
-  // Highlight booleans
-  escaped = escaped.replace(
-    /\b(true|false)\b/g,
-    '<span class="json-boolean">$1</span>',
+  escaped = escaped.replace(BOOL_RE, (_m, bool) =>
+    spanWrap('json-boolean', bool),
   );
-  // Highlight null
-  escaped = escaped.replace(
-    /\bnull\b/g,
-    '<span class="json-null">null</span>',
-  );
+  escaped = escaped.replace(NULL_RE, () => spanWrap('json-null', 'null'));
   return escaped;
 }
 
