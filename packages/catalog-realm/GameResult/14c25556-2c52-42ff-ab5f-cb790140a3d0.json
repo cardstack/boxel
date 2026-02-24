@@ -8,7 +8,7 @@
         }
       },
       "ref": {
-        "module": "http://localhost:4201/catalog/solitaire/solitaire",
+        "module": "@cardstack/catalog/solitaire/solitaire",
         "name": "Solitaire"
       },
       "cardInfo": {
