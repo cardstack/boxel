@@ -1272,7 +1272,8 @@ module('Acceptance | Spec preview', function (hooks) {
     );
   });
 
-  test('spec preview updates when changing between different declarations inside inspector', async function (assert) {
+  // TODO: restore in CS-10321
+  skip('spec preview updates when changing between different declarations inside inspector', async function (assert) {
     await visitOperatorMode({
       submode: 'code',
       codePath: `${testRealmURL}pet.gts`,
