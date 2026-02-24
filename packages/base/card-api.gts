@@ -2431,7 +2431,7 @@ export class CardInfoField extends FieldDef {
   @field name = contains(StringField);
   @field summary = contains(StringField);
   @field cardThumbnailURL = contains(MaybeBase64Field);
-  @field theme = linksTo(() => Theme);
+  @field theme = linksTo(() => Theme, { isUsed: true });
   @field notes = contains(MarkdownField);
 }
 
