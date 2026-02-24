@@ -52,6 +52,7 @@ const FILEDEF_CODE_REF_BY_EXTENSION: Record<string, ResolvedCodeRef> = {
   '.json': {
     module: `${baseRealm.url}json-file-def`,
     name: 'JsonFileDef',
+  },
   '.csv': {
     module: `${baseRealm.url}csv-file-def`,
     name: 'CsvFileDef',
