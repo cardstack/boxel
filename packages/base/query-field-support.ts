@@ -134,10 +134,11 @@ function trackQueryFieldLoads(
 ) {
   if (!fieldState.renderCycleBarrier) {
     // Query resources can kick off their load after the getter returns
-    // (via resource modify scheduling). This barrier keeps render-route
-    // settle from completing in the same frame before query loads can join.
+    // (via resource modify scheduling). This microtask barrier keeps
+    // render-route settle from completing in the same frame before query
+    // loads can join.
     log.debug(`tracking query field render barrier for field=${fieldName}`);
-    let barrier = waitForNextRenderCycle();
+    let barrier = waitForNextMicrotaskTurn();
     fieldState.renderCycleBarrier = barrier;
     store.trackLoad(barrier);
     void barrier.finally(() => {
@@ -148,7 +149,7 @@ function trackQueryFieldLoads(
   }
 }
 
-function waitForNextRenderCycle(): Promise<void> {
+function waitForNextMicrotaskTurn(): Promise<void> {
   return Promise.resolve().then(() => Promise.resolve());
 }
 
