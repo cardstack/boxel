@@ -8,6 +8,7 @@ import {
   CachingDefinitionLookup,
   DEFAULT_CARD_SIZE_LIMIT_BYTES,
   DEFAULT_FILE_SIZE_LIMIT_BYTES,
+  catalogRealm,
 } from '@cardstack/runtime-common';
 import { NodeAdapter } from './node-realm';
 import yargs from 'yargs';
@@ -200,6 +201,9 @@ let urlMappings = fromUrls.map((fromUrl, i) => [
 for (let [from, to] of urlMappings) {
   virtualNetwork.addURLMapping(from, to);
 }
+virtualNetwork.addImportMap('@cardstack/catalog/', (rest) => {
+  return new URL(rest, catalogRealm.url).href;
+});
 let hrefs = urlMappings.map(([from, to]) => [from.href, to.href]);
 let dist: URL = new URL(distURL);
 let autoMigrate = migrateDB || undefined;

@@ -5,6 +5,7 @@ import {
   VirtualNetwork,
   logger,
   IndexWriter,
+  catalogRealm,
   type StatusArgs,
 } from '@cardstack/runtime-common';
 import yargs from 'yargs';
@@ -105,6 +106,9 @@ let urlMappings = fromUrls.map((fromUrl, i) => [
 for (let [from, to] of urlMappings) {
   virtualNetwork.addURLMapping(from, to);
 }
+virtualNetwork.addImportMap('@cardstack/catalog/', (rest) => {
+  return new URL(rest, catalogRealm.url).href;
+});
 let autoMigrate = migrateDB || undefined;
 
 (async () => {

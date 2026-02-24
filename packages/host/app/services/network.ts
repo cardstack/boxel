@@ -5,6 +5,7 @@ import {
   VirtualNetwork,
   authorizationMiddleware,
   baseRealm,
+  catalogRealm,
   fetcher,
 } from '@cardstack/runtime-common';
 
@@ -54,13 +55,18 @@ export default class NetworkService extends Service {
       withTrailingSlash(config.resolvedBaseRealmURL),
     );
     virtualNetwork.addURLMapping(new URL(baseRealm.url), resolvedBaseRealmURL);
+    if (config.resolvedCatalogRealmURL) {
+      virtualNetwork.addURLMapping(
+        new URL(catalogRealm.url),
+        new URL(withTrailingSlash(config.resolvedCatalogRealmURL)),
+      );
+    }
     shimExternals(virtualNetwork);
     virtualNetwork.addImportMap('@cardstack/boxel-icons/', (rest) => {
       return `${config.iconsURL}/@cardstack/boxel-icons/v1/icons/${rest}.js`;
     });
     virtualNetwork.addImportMap('@cardstack/catalog/', (rest) => {
-      return new URL(rest, withTrailingSlash(config.resolvedCatalogRealmURL))
-        .href;
+      return new URL(rest, catalogRealm.url).href;
     });
     return virtualNetwork;
   }

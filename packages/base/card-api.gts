@@ -83,6 +83,7 @@ import {
   runtimeNonQueryDependencyContext,
   runtimeQueryDependencyContext,
   type RuntimeDependencyTrackingContext,
+  resolveCardReference,
 } from '@cardstack/runtime-common';
 import {
   captureQueryFieldSeedData,
@@ -1226,7 +1227,7 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
     if (reference == null || reference === '') {
       return null;
     }
-    let href = new URL(reference, relativeTo).href;
+    let href = resolveCardReference(reference, relativeTo);
     let cachedInstance = isFileDef(this.card)
       ? store.getFileMeta(href)
       : store.getCard(href);
@@ -1732,7 +1733,7 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
         if (reference == null) {
           return null;
         }
-        let normalizedReference = new URL(reference, relativeTo).href;
+        let normalizedReference = resolveCardReference(reference, relativeTo);
         let cachedInstance = isFileDef(this.card)
           ? store.getFileMeta(normalizedReference)
           : store.getCard(normalizedReference);

@@ -200,6 +200,7 @@ export * from './definition-lookup';
 export * from './definitions';
 export * from './catalog';
 export * from './commands';
+export * from './card-reference-resolver';
 export * from './constants';
 export * from './helpers/const';
 export * from './document';

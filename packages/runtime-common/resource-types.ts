@@ -1,5 +1,6 @@
 import type { RealmInfo } from './realm';
 import { type CodeRef, isCodeRef, moduleFrom } from './code-ref';
+import { resolveCardReference } from './card-reference-resolver';
 
 export const CardResourceType = 'card';
 export const FileMetaResourceType = 'file-meta';
@@ -338,7 +339,7 @@ export function extractRelationshipIds(
   }
   let resolveId = (id: string) => {
     try {
-      return new URL(id, baseUrl).href;
+      return resolveCardReference(id, baseUrl);
     } catch {
       return id;
     }

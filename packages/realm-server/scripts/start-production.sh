@@ -38,7 +38,7 @@ NODE_NO_WARNINGS=1 \
   \
   --path='/persistent/catalog' \
   --username='catalog_realm' \
-  --fromUrl="${CATALOG_REALM_URL}" \
+  --fromUrl='https://cardstack.com/catalog/' \
   --toUrl="${CATALOG_REALM_URL}" \
   \
   --path="${SUBMISSION_REALM_PATH}" \
