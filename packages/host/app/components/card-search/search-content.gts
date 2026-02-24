@@ -318,10 +318,14 @@ export default class SearchContent extends Component<Signature> {
     if (!cards) {
       return [];
     }
+    const realms = this.realms;
+    const realmFiltered = cards.filter(
+      (c) => c.id && realms.some((realmUrl) => c.id.startsWith(realmUrl)),
+    );
     if (this.args.isCompact) {
-      return cards;
+      return realmFiltered;
     }
-    let filtered = cards;
+    let filtered = realmFiltered;
     const term = this.searchTerm;
     if (term) {
       const lowerTerm = term.toLowerCase();
