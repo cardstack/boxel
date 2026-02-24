@@ -78,7 +78,7 @@
   --boxel-sp-6xl: calc(var(--boxel-sp-5xl) * var(--boxel-ratio)); /* 119.84px */
 
   /* common icon sizes */
-  --boxel-icon-xxs: 0.75rem; /* 12px */
+  --boxel-icon-2xs: 0.75rem; /* 12px */
   --boxel-icon-xs: 1rem; /* 16px */
   --boxel-icon-sm: 1.25rem; /* 20px */
   --boxel-icon-med: 1.875rem; /* 30px */

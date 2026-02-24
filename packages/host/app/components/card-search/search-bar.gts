@@ -48,12 +48,16 @@ export default class SearchBar extends Component<Signature> {
   }
 
   <template>
-    <div class='search-sheet__search-bar' data-test-search-sheet-search-bar>
+    <div
+      class='search-sheet__search-bar'
+      data-test-search-sheet-search-bar
+      ...attributes
+    >
       <div class='search-sheet__search-bar-icon' aria-hidden='true'>
         <IconSearch
           class='search-sheet__search-bar-search-icon'
-          width='20'
-          height='20'
+          width='18'
+          height='18'
         />
       </div>
       <div class='search-sheet__search-bar-picker'>
@@ -62,7 +66,6 @@ export default class SearchBar extends Component<Signature> {
           @onChange={{@onRealmChange}}
         />
       </div>
-      <div class='search-sheet__search-bar-separator' aria-hidden='true'></div>
       {{! template-lint-disable no-invalid-interactive }}
       <div
         class='search-sheet__search-bar-input-wrap'
@@ -71,7 +74,6 @@ export default class SearchBar extends Component<Signature> {
         <BoxelInput
           class='search-sheet__search-bar-input'
           @type='text'
-          @size='large'
           @bottomTreatment={{@bottomTreatment}}
           @value={{@value}}
           @state={{@state}}
@@ -103,6 +105,7 @@ export default class SearchBar extends Component<Signature> {
         align-items: center;
         gap: var(--boxel-sp-xs);
         flex-wrap: wrap;
+        min-height: 3.125rem;
         background-color: var(--search-bar-bg);
         color: var(--search-bar-color);
         border: 1px solid var(--search-bar-border-color);
@@ -125,6 +128,9 @@ export default class SearchBar extends Component<Signature> {
       .search-sheet__search-bar .search-sheet__search-bar-input {
         outline: none !important;
       }
+      .search-sheet__search-bar-input {
+        padding-left: var(--boxel-sp-2xs);
+      }
 
       .search-sheet__search-bar :deep(.boxel-input:focus),
       .search-sheet__search-bar :deep(.boxel-input:focus-visible) {
@@ -143,7 +149,7 @@ export default class SearchBar extends Component<Signature> {
         display: flex;
         align-items: center;
         justify-content: center;
-        padding-left: var(--boxel-sp-sm);
+        padding-left: var(--boxel-sp-xs);
         flex-shrink: 0;
       }
 
@@ -160,7 +166,6 @@ export default class SearchBar extends Component<Signature> {
         align-items: center;
         flex-shrink: 0;
         min-width: 0;
-        padding: var(--boxel-sp-xs);
       }
 
       .search-sheet__search-bar-picker :deep(.boxel-trigger) {
