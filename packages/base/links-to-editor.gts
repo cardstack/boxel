@@ -87,7 +87,10 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
             />
           {{/if}}
           <DefaultFormatsProvider
-            @value={{hash cardDef='fitted' fieldDef='embedded'}}
+            @value={{hash
+              cardDef='fitted'
+              fieldDef='embedded'
+            }}
           >
             <this.linkedCard />
           </DefaultFormatsProvider>

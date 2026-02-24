@@ -86,6 +86,91 @@ module('Integration | operator-mode | ui', function (hooks) {
       .includesText('Author');
   });
 
+  test(`click on "links to" the embedded file will open it on the stack`, async function (assert) {
+    let linkedFileId = `${testRealmURL}FileLinkCard/notes.txt`;
+
+    await ctx.testRealm.write(
+      'file-link-card.gts',
+      `
+        import { CardDef, Component, field, contains, linksTo, StringField } from 'https://cardstack.com/base/card-api';
+        import { FileDef } from 'https://cardstack.com/base/file-api';
+
+        export class FileLinkCard extends CardDef {
+          static displayName = 'File Link Card';
+          @field title = contains(StringField);
+          @field attachment = linksTo(FileDef);
+
+          static isolated = class Isolated extends Component<typeof this> {
+            <template>
+              <h2 data-test-file-link-card-title><@fields.title /></h2>
+              <div data-test-file-link-attachment>
+                <@fields.attachment />
+              </div>
+            </template>
+          };
+        }
+      `,
+    );
+
+    await ctx.testRealm.write(
+      'FileLinkCard/notes.txt',
+      'Hello from a file link',
+    );
+    await ctx.testRealm.write(
+      'FileLinkCard/with-file.json',
+      JSON.stringify({
+        data: {
+          type: 'card',
+          attributes: {
+            title: 'Linked file example',
+          },
+          relationships: {
+            attachment: {
+              links: {
+                self: './notes.txt',
+              },
+              data: {
+                type: 'file-meta',
+                id: './notes.txt',
+              },
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: '../file-link-card',
+              name: 'FileLinkCard',
+            },
+          },
+        },
+      }),
+    );
+
+    ctx.setCardInOperatorModeState(`${testRealmURL}FileLinkCard/with-file`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+
+    await waitFor('[data-test-file-link-attachment] [data-test-card]');
+    await click('[data-test-file-link-attachment] [data-test-card]');
+    await waitFor('[data-test-stack-card-index="1"]');
+    assert.dom('[data-test-stack-card-index]').exists({ count: 2 });
+    assert
+      .dom(`[data-test-stack-card="${linkedFileId}"]`)
+      .exists('linked file opens as a second stack card');
+    assert.strictEqual(
+      ctx.operatorModeStateService.state?.stacks?.[0]?.[1]?.id,
+      linkedFileId,
+      'operator mode state targets the linked file',
+    );
+    assert.strictEqual(
+      ctx.operatorModeStateService.state?.stacks?.[0]?.[1]?.type,
+      'file',
+      'stack item type is file',
+    );
+  });
+
   test(`toggles mode switcher`, async function (assert) {
     ctx.setCardInOperatorModeState(`${testRealmURL}BlogPost/1`);
     await renderComponent(

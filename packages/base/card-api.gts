@@ -2212,6 +2212,7 @@ export type ViewCardFn = (
   cardOrURL: CardDef | URL,
   format?: Format,
   opts?: {
+    type?: 'card' | 'file';
     openCardInRightMostStack?: boolean;
     stackIndex?: number;
     fieldType?: 'linksTo' | 'contains' | 'containsMany' | 'linksToMany';
