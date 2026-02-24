@@ -17,6 +17,7 @@ import {
   loadFileMetaDocument,
   type CardError,
   type CodeRef,
+  type RuntimeDependencyTrackingContext,
   type SingleCardDocument,
   type SingleFileMetaDocument,
 } from '@cardstack/runtime-common';
@@ -86,7 +87,10 @@ export class CardStoreWithErrors implements CardStore {
 
   readonly errors = new Set<string>();
 
-  async loadCardDocument(url: string) {
+  async loadCardDocument(
+    url: string,
+    _opts?: { dependencyTrackingContext?: RuntimeDependencyTrackingContext },
+  ) {
     let promise = this.#cardDocsInFlight.get(url);
     if (promise) {
       return await promise;
@@ -100,7 +104,10 @@ export class CardStoreWithErrors implements CardStore {
     }
   }
 
-  async loadFileMetaDocument(url: string) {
+  async loadFileMetaDocument(
+    url: string,
+    _opts?: { dependencyTrackingContext?: RuntimeDependencyTrackingContext },
+  ) {
     let promise = this.#fileMetaDocsInFlight.get(url);
     if (promise) {
       return await promise;

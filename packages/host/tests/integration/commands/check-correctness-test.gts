@@ -19,6 +19,8 @@ import {
   testRealmURL,
   setupIntegrationTestRealm,
   setupLocalIndexing,
+  setupRealmCacheTeardown,
+  withCachedRealmSetup,
 } from '../../helpers';
 import { setupBaseRealm } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
@@ -34,11 +36,14 @@ module('Integration | commands | check-correctness', function (hooks) {
     activeRealms: [testRealmURL],
   });
 
+  setupRealmCacheTeardown(hooks);
+
   hooks.beforeEach(async function () {
-    await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      contents: {
-        'pet.gts': `
+    await withCachedRealmSetup(async () =>
+      setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {
+          'pet.gts': `
           import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
           import StringField from "https://cardstack.com/base/string";
           import BooleanField from "https://cardstack.com/base/boolean";
@@ -56,23 +61,24 @@ module('Integration | commands | check-correctness', function (hooks) {
             });
           }
         `,
-        'Pet/billy.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              name: 'Billy',
-              hasError: false,
-            },
-            meta: {
-              adoptsFrom: {
-                module: '../pet',
-                name: 'Pet',
+          'Pet/billy.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                name: 'Billy',
+                hasError: false,
+              },
+              meta: {
+                adoptsFrom: {
+                  module: '../pet',
+                  name: 'Pet',
+                },
               },
             },
           },
         },
-      },
-    });
+      }),
+    );
     let realmService = getService('realm');
     let messageService = getService('message-service');
     messageService.register();

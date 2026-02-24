@@ -19,6 +19,8 @@ import {
   setupOnSave,
   testRealmURL,
   testRealmInfo,
+  setupRealmCacheTeardown,
+  withCachedRealmSetup,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
@@ -59,11 +61,14 @@ module('Integration | Command | preview-format', function (hooks) {
 
   let command: PreviewFormatCommand;
 
+  setupRealmCacheTeardown(hooks);
+
   hooks.beforeEach(async function (this: RenderingTestContext) {
-    await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      contents: {
-        'rental-item.gts': `
+    await withCachedRealmSetup(async () =>
+      setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {
+          'rental-item.gts': `
           import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
           import StringField from 'https://cardstack.com/base/string';
           import NumberField from 'https://cardstack.com/base/number';
@@ -80,25 +85,26 @@ module('Integration | Command | preview-format', function (hooks) {
             });
           }
         `,
-        'RentalItem/example.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              name: 'Bike Rental',
-              cardDescription: 'Mountain bike for rent',
-              price: 25,
-            },
-            meta: {
-              adoptsFrom: {
-                module: `../rental-item`,
-                name: 'RentalItem',
+          'RentalItem/example.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                name: 'Bike Rental',
+                cardDescription: 'Mountain bike for rent',
+                price: 25,
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `../rental-item`,
+                  name: 'RentalItem',
+                },
               },
             },
           },
+          '.realm.json': `{ "name": "${realmName}", "iconURL": "https://boxel-images.boxel.ai/icons/Letter-s.png" }`,
         },
-        '.realm.json': `{ "name": "${realmName}", "iconURL": "https://boxel-images.boxel.ai/icons/Letter-s.png" }`,
-      },
-    });
+      }),
+    );
 
     command = new PreviewFormatCommand(
       getService('command-service').commandContext,

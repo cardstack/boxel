@@ -130,7 +130,6 @@ module('Acceptance | host mode tests', function (hooks) {
         </template>
       };
     }
-
     await setupAcceptanceTestRealm({
       realmURL: testHostModeRealmURL,
       mockMatrixUtils,

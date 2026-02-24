@@ -9,6 +9,7 @@ import type {
   LooseCardResource,
   LooseSingleCardDocument,
   Meta,
+  RuntimeDependencyTrackingContext,
 } from '@cardstack/runtime-common';
 import type { BaseDef, BaseDefConstructor, CardDef } from './card-api';
 import type { ResourceID } from '@cardstack/runtime-common';
@@ -66,6 +67,7 @@ export interface SerializeOpts {
 
 export interface DeserializeOpts {
   ignoreBrokenLinks?: true;
+  dependencyTrackingContext?: RuntimeDependencyTrackingContext;
 }
 
 // --- Serialization Symbols ---

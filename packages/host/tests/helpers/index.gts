@@ -12,6 +12,7 @@ import { tracked } from '@glimmer/tracking';
 
 import { getService } from '@universal-ember/test-support';
 
+import QUnit from 'qunit';
 import { validate as uuidValidate } from 'uuid';
 
 import {
@@ -24,10 +25,10 @@ import {
   Loader,
   MatrixClient,
   Realm,
+  simpleHash,
   testHostModeRealmURL,
   testRealmInfo,
   testRealmURL,
-  testRealmURLToUsername,
   Worker,
   DEFAULT_CARD_SIZE_LIMIT_BYTES,
   DEFAULT_FILE_SIZE_LIMIT_BYTES,
@@ -99,6 +100,9 @@ export {
 const { sqlSchema } = ENV;
 
 type CardAPI = typeof import('https://cardstack.com/base/card-api');
+type ModuleHooks = {
+  after: (callback: () => void | Promise<void>) => void;
+};
 
 const baseTestMatrix = {
   url: new URL(`http://localhost:8008`),
@@ -156,6 +160,111 @@ export async function getDbAdapter() {
     (globalThis as any).__sqliteAdapter = dbAdapter;
   }
   return dbAdapter;
+}
+
+const realmCacheTeardownRegistrations = new WeakMap<ModuleHooks, Set<string>>();
+
+export function setupRealmCacheTeardown(
+  hooks: ModuleHooks,
+  moduleCacheKey?: string,
+): void {
+  let resolvedModuleCacheKey = moduleCacheKey ?? getCurrentModuleCacheKey();
+  let snapshotPrefix = snapshotPrefixForModule(resolvedModuleCacheKey);
+  let registrations = realmCacheTeardownRegistrations.get(hooks);
+  if (!registrations) {
+    registrations = new Set<string>();
+    realmCacheTeardownRegistrations.set(hooks, registrations);
+  }
+  if (registrations.has(snapshotPrefix)) {
+    return;
+  }
+  registrations.add(snapshotPrefix);
+  hooks.after(async () => {
+    let dbAdapter = await getDbAdapter();
+    await dbAdapter.deleteSnapshotsByPrefix(snapshotPrefix);
+  });
+}
+
+export async function withCachedRealmSetup<T>(
+  setupOrAdditionalKey: (() => Promise<T>) | string,
+  maybeSetup?: () => Promise<T>,
+): Promise<T> {
+  let moduleCacheKey = getCurrentModuleCacheKey();
+  let additionalKey: string | undefined;
+  let setup: () => Promise<T>;
+
+  if (typeof setupOrAdditionalKey === 'function') {
+    setup = setupOrAdditionalKey;
+  } else {
+    if (!maybeSetup) {
+      throw new Error(
+        'withCachedRealmSetup(additionalKey, setup) requires a setup callback',
+      );
+    }
+    additionalKey = setupOrAdditionalKey;
+    setup = maybeSetup;
+  }
+
+  let snapshotName = snapshotNameForCacheKey(moduleCacheKey, additionalKey);
+  let dbAdapter = await getDbAdapter();
+  if (dbAdapter.hasSnapshot(snapshotName)) {
+    await dbAdapter.importSnapshot(snapshotName);
+    return setup();
+  }
+  let result = await setup();
+  await dbAdapter.exportSnapshot(snapshotName);
+  return result;
+}
+
+function getCurrentModuleCacheKey(): string {
+  let config = QUnit.config as QUnit['config'] & {
+    currentModule?: { name?: string };
+  };
+  let moduleName =
+    QUnit.config.current?.module?.name ?? config.currentModule?.name;
+  if (moduleName?.trim()) {
+    return moduleName;
+  }
+  throw new Error(
+    'withCachedRealmSetup() was called without an explicit cacheKey, but no active QUnit module name was available',
+  );
+}
+
+function snapshotNameForCacheKey(
+  moduleCacheKey: string,
+  additionalKey?: string,
+): string {
+  let trimmedModuleCacheKey = moduleCacheKey.trim();
+  if (!trimmedModuleCacheKey) {
+    throw new Error('snapshotNameForCacheKey() requires a non-empty cache key');
+  }
+
+  let trimmedAdditionalKey = additionalKey?.trim();
+  let effectiveCacheKey = trimmedAdditionalKey
+    ? `${trimmedModuleCacheKey}::${trimmedAdditionalKey}`
+    : trimmedModuleCacheKey;
+
+  let slug = (trimmedAdditionalKey ?? trimmedModuleCacheKey)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 40);
+
+  if (!slug) {
+    slug = 'module';
+  }
+
+  return `${snapshotPrefixForModule(trimmedModuleCacheKey)}${simpleHash(
+    effectiveCacheKey,
+  )}_${slug}`;
+}
+
+function snapshotPrefixForModule(moduleCacheKey: string): string {
+  let trimmedModuleCacheKey = moduleCacheKey.trim();
+  if (!trimmedModuleCacheKey) {
+    throw new Error('snapshotPrefixForModule() requires a non-empty cache key');
+  }
+  return `snapshot_${simpleHash(trimmedModuleCacheKey)}_`;
 }
 
 export async function withSlowSave(
@@ -672,12 +781,14 @@ export async function setupIntegrationTestRealm({
   permissions,
   mockMatrixUtils,
   startMatrix = true,
+  fileSizeLimitBytes,
 }: {
   contents: RealmContents;
   realmURL?: string;
   permissions?: RealmPermissions;
   mockMatrixUtils: MockUtils;
   startMatrix?: boolean;
+  fileSizeLimitBytes?: number;
 }) {
   let resolvedRealmURL = ensureTrailingSlash(realmURL ?? testRealmURL);
   setupAuthEndpoints({
@@ -690,6 +801,7 @@ export async function setupIntegrationTestRealm({
     permissions: permissions as RealmPermissions,
     mockMatrixUtils,
     startMatrix,
+    fileSizeLimitBytes,
   });
   getTestRealmRegistry().set(result.realm.url, {
     realm: result.realm,
@@ -714,6 +826,7 @@ export const createPrerenderAuth = (
   // Host tests prerender via the in-app card-prerender component, so we don't need real JWT auth.
   return JSON.stringify({});
 };
+
 async function setupTestRealm({
   contents,
   realmURL,
@@ -778,7 +891,6 @@ async function setupTestRealm({
       'definition-lookup:main',
     ) as DefinitionLookup;
   }
-
   await insertPermissions(dbAdapter, new URL(realmURL), permissions);
   let worker = new Worker({
     indexWriter: new IndexWriter(dbAdapter),
@@ -796,15 +908,11 @@ async function setupTestRealm({
   realm = new Realm({
     url: realmURL,
     adapter,
-    matrix: {
-      ...baseTestMatrix,
-      username: testRealmURLToUsername(realmURL),
-    },
     secretSeed: testRealmSecretSeed,
     virtualNetwork,
     dbAdapter,
     queue,
-    realmServerMatrixClient: new MatrixClient({
+    matrixClient: new MatrixClient({
       matrixURL: baseTestMatrix.url,
       username: testRealmServerMatrixUsername,
       seed: testRealmSecretSeed,

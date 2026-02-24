@@ -23,6 +23,8 @@ import {
   setupLocalIndexing,
   setupOnSave,
   setupOperatorModeStateCleanup,
+  setupRealmCacheTeardown,
+  withCachedRealmSetup,
 } from '../../../helpers';
 import {
   CardDef,
@@ -51,6 +53,7 @@ module('Integration | ai-assistant-panel | scrolling', function (hooks) {
 
   setupLocalIndexing(hooks);
   setupOnSave(hooks);
+  setupRealmCacheTeardown(hooks);
   setupCardLogs(
     hooks,
     async () => await loader.import(`${baseRealm.url}card-api`),
@@ -101,15 +104,17 @@ module('Integration | ai-assistant-panel | scrolling', function (hooks) {
       };
     }
 
-    await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      contents: {
-        'person.gts': { Person },
-        'Person/fadhlan.json': new Person({
-          firstName: 'Fadhlan',
-        }),
-        '.realm.json': `{ "name": "${realmName}" }`,
-      },
+    await withCachedRealmSetup(async () => {
+      await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {
+          'person.gts': { Person },
+          'Person/fadhlan.json': new Person({
+            firstName: 'Fadhlan',
+          }),
+          '.realm.json': `{ "name": "${realmName}" }`,
+        },
+      });
     });
   });
 

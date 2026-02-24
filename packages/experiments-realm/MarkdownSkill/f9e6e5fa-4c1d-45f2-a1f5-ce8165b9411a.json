@@ -15,7 +15,7 @@
           "self": "./talk-like-a-pirate.md"
         },
         "data": {
-          "type": "file",
+          "type": "file-meta",
           "id": "./talk-like-a-pirate.md"
         }
       },

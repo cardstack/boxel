@@ -1,6 +1,13 @@
 import { byteStreamToUint8Array } from '@cardstack/runtime-common';
-import { StringField, contains, field } from './card-api';
-import MarkdownFilePreview from './markdown-file-preview';
+import MarkdownIcon from '@cardstack/boxel-icons/align-box-left-middle';
+import {
+  BaseDefComponent,
+  Component,
+  StringField,
+  contains,
+  field,
+} from './card-api';
+import MarkdownTemplate from './default-templates/markdown';
 import {
   FileContentMismatchError,
   FileDef,
@@ -9,7 +16,7 @@ import {
 } from './file-api';
 
 const MARKDOWN_EXTENSIONS = new Set(['.md', '.markdown']);
-const EXCERPT_MAX_LENGTH = 240;
+const EXCERPT_MAX_LENGTH = 500;
 
 function getExtension(url: string): string {
   try {
@@ -31,10 +38,14 @@ function normalizeMarkdown(markdown: string): string {
   return markdown.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 }
 
+// content-tag misparses backticks inside regex literals in .gts files
+const FENCED_CODE_RE = new RegExp('```[\\s\\S]*?```', 'g');
+const INLINE_CODE_RE = new RegExp('`([^`]+)`', 'g');
+
 function stripMarkdown(text: string): string {
   return text
-    .replace(/```[\s\S]*?```/g, '')
-    .replace(/`([^`]+)`/g, '$1')
+    .replace(FENCED_CODE_RE, '')
+    .replace(INLINE_CODE_RE, '$1')
     .replace(/!\[[^\]]*\]\([^)]+\)/g, '')
     .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
     .replace(/^\s*#{1,6}\s+/gm, '')
@@ -66,6 +77,8 @@ function extractTitle(markdown: string, fallback: string): string {
   return fallback;
 }
 
+const HEADING_RE = /^\s*#{1,6}\s+/;
+
 function extractExcerpt(markdown: string): string {
   let normalized = normalizeMarkdown(markdown);
   let paragraphs = normalized.split(/\n\s*\n/);
@@ -75,12 +88,12 @@ function extractExcerpt(markdown: string): string {
       continue;
     }
     let lines = trimmed.split('\n');
-    let hasNonHeading = lines.some((line) => !/^\s*#{1,6}\s+/.test(line));
+    let hasNonHeading = lines.some((line) => !HEADING_RE.test(line));
     if (!hasNonHeading) {
       continue;
     }
     let withoutHeadings = lines
-      .filter((line) => !/^\s*#{1,6}\s+/.test(line))
+      .filter((line) => !HEADING_RE.test(line))
       .join(' ');
     let excerpt = stripMarkdown(withoutHeadings);
     if (excerpt) {
@@ -88,6 +101,325 @@ function extractExcerpt(markdown: string): string {
     }
   }
   return '';
+}
+
+function markdownTitle(
+  model: { title?: string | null; name?: string | null } | null | undefined,
+): string {
+  return model?.title ?? model?.name ?? 'Untitled markdown';
+}
+
+class Isolated extends Component<typeof MarkdownDef> {
+  get title() {
+    return markdownTitle(this.args.model);
+  }
+
+  get content() {
+    return this.args.model?.content ?? null;
+  }
+
+  get hasContent() {
+    return Boolean(this.args.model?.content?.trim());
+  }
+
+  <template>
+    <article class='markdown-isolated' data-test-markdown-isolated>
+      {{#if this.hasContent}}
+        <MarkdownTemplate @content={{this.content}} />
+      {{else}}
+        <header class='markdown-isolated__title'>{{this.title}}</header>
+      {{/if}}
+    </article>
+    <style scoped>
+      .markdown-isolated {
+        padding: var(--boxel-sp-lg);
+        max-width: 100%;
+      }
+
+      .markdown-isolated__title {
+        color: var(--boxel-900);
+        font-weight: 600;
+        font-size: var(--boxel-font-size-lg);
+      }
+
+      .markdown-isolated :deep(h1:first-child),
+      .markdown-isolated :deep(h2:first-child),
+      .markdown-isolated :deep(h3:first-child),
+      .markdown-isolated :deep(h4:first-child),
+      .markdown-isolated :deep(h5:first-child),
+      .markdown-isolated :deep(h6:first-child) {
+        margin-top: 0;
+      }
+    </style>
+  </template>
+}
+
+class Embedded extends Component<typeof MarkdownDef> {
+  get title() {
+    return markdownTitle(this.args.model);
+  }
+
+  get content() {
+    return this.args.model?.content ?? null;
+  }
+
+  get contentStartsWithTitle() {
+    let content = this.args.model?.content?.trim();
+    if (!content) {
+      return false;
+    }
+    let firstLine = content.split('\n')[0].trim();
+    let match = firstLine.match(/^\s*#{1,6}\s+(.+?)\s*#*\s*$/);
+    if (!match?.[1]) {
+      return false;
+    }
+    let headingText = stripMarkdown(match[1]);
+    return headingText === this.title;
+  }
+
+  <template>
+    <article class='markdown-embedded' data-test-markdown-embedded>
+      {{#unless this.contentStartsWithTitle}}
+        <header class='markdown-embedded__title'>{{this.title}}</header>
+      {{/unless}}
+      <div class='markdown-embedded__content'>
+        <MarkdownTemplate @content={{this.content}} />
+      </div>
+    </article>
+    <style scoped>
+      .markdown-embedded {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-xs);
+        padding: var(--boxel-sp);
+      }
+
+      .markdown-embedded__title {
+        color: var(--boxel-900);
+        font-weight: 600;
+      }
+
+      .markdown-embedded__content {
+        max-height: 200px;
+        overflow: hidden;
+        mask-image: linear-gradient(to bottom, black 60%, transparent 100%);
+        -webkit-mask-image: linear-gradient(
+          to bottom,
+          black 60%,
+          transparent 100%
+        );
+      }
+
+      .markdown-embedded__content :deep(h1:first-child),
+      .markdown-embedded__content :deep(h2:first-child),
+      .markdown-embedded__content :deep(h3:first-child),
+      .markdown-embedded__content :deep(h4:first-child),
+      .markdown-embedded__content :deep(h5:first-child),
+      .markdown-embedded__content :deep(h6:first-child) {
+        margin-top: 0;
+      }
+    </style>
+  </template>
+}
+
+class Fitted extends Component<typeof MarkdownDef> {
+  get title() {
+    return markdownTitle(this.args.model);
+  }
+
+  get excerpt() {
+    return this.args.model?.excerpt ?? '';
+  }
+
+  get hasExcerpt() {
+    return Boolean(this.excerpt);
+  }
+
+  <template>
+    <article class='markdown-fitted' data-test-markdown-fitted>
+      <div class='markdown-fitted__icon'>
+        <MarkdownIcon width='100%' height='100%' />
+      </div>
+      <div class='markdown-fitted__text'>
+        <header class='markdown-fitted__title'>{{this.title}}</header>
+        {{#if this.hasExcerpt}}
+          <p class='markdown-fitted__excerpt'>{{this.excerpt}}</p>
+        {{/if}}
+      </div>
+    </article>
+    <style scoped>
+      .markdown-fitted {
+        container-name: fitted-card;
+        container-type: size;
+        width: 100%;
+        height: 100%;
+        display: flex;
+        align-items: flex-start;
+        gap: var(--boxel-sp-xs);
+        padding: var(--boxel-sp-xs);
+        overflow: hidden;
+      }
+
+      .markdown-fitted__icon {
+        flex-shrink: 0;
+        width: 20px;
+        height: 20px;
+        color: var(--boxel-600);
+      }
+
+      .markdown-fitted__text {
+        min-width: 0;
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-4xs);
+      }
+
+      .markdown-fitted__title {
+        color: var(--boxel-900);
+        font-weight: 600;
+        font-size: var(--boxel-font-sm);
+        overflow: hidden;
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
+      }
+
+      .markdown-fitted__excerpt {
+        color: var(--boxel-600);
+        font-size: var(--boxel-font-xs);
+        margin: 0;
+        overflow: hidden;
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 3;
+      }
+
+      /* Portrait tall: icon above text */
+      @container fitted-card (aspect-ratio <= 1.0) and (height >= 120px) {
+        .markdown-fitted {
+          flex-direction: column;
+          align-items: center;
+          text-align: center;
+        }
+
+        .markdown-fitted__icon {
+          width: 28px;
+          height: 28px;
+        }
+
+        .markdown-fitted__title {
+          -webkit-line-clamp: 3;
+        }
+      }
+
+      /* Portrait short: hide excerpt */
+      @container fitted-card (aspect-ratio <= 1.0) and (height < 120px) {
+        .markdown-fitted__excerpt {
+          display: none;
+        }
+      }
+
+      /* Portrait very short: hide icon too */
+      @container fitted-card (aspect-ratio <= 1.0) and (height < 80px) {
+        .markdown-fitted__icon {
+          display: none;
+        }
+      }
+
+      /* Landscape: icon left of text */
+      @container fitted-card (1.0 < aspect-ratio) {
+        .markdown-fitted {
+          align-items: flex-start;
+        }
+      }
+
+      /* Landscape short: hide excerpt */
+      @container fitted-card (1.0 < aspect-ratio) and (height < 80px) {
+        .markdown-fitted__excerpt {
+          display: none;
+        }
+      }
+
+      /* Very small: title only, smaller font */
+      @container fitted-card (height <= 57px) {
+        .markdown-fitted__icon {
+          display: none;
+        }
+
+        .markdown-fitted__excerpt {
+          display: none;
+        }
+
+        .markdown-fitted__title {
+          font-size: var(--boxel-font-xs);
+          -webkit-line-clamp: 1;
+        }
+      }
+    </style>
+  </template>
+}
+
+class Atom extends Component<typeof MarkdownDef> {
+  get title() {
+    return markdownTitle(this.args.model);
+  }
+
+  <template>
+    <span class='markdown-atom' data-test-markdown-atom>
+      <MarkdownIcon class='markdown-atom__icon' width='16' height='16' />
+      <span class='markdown-atom__title'>{{this.title}}</span>
+    </span>
+    <style scoped>
+      .markdown-atom {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--boxel-sp-4xs);
+        min-width: 0;
+      }
+
+      .markdown-atom__icon {
+        flex-shrink: 0;
+        color: var(--boxel-600);
+      }
+
+      .markdown-atom__title {
+        color: var(--boxel-900);
+        font-size: var(--boxel-font-sm);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+    </style>
+  </template>
+}
+
+class Head extends Component<typeof MarkdownDef> {
+  get title() {
+    return markdownTitle(this.args.model);
+  }
+
+  get description() {
+    return this.args.model?.excerpt;
+  }
+
+  <template>
+    {{! template-lint-disable no-forbidden-elements }}
+    <title data-test-card-head-title>{{this.title}}</title>
+
+    <meta property='og:title' content={{this.title}} />
+    <meta name='twitter:title' content={{this.title}} />
+    <meta property='og:url' content={{@model.id}} />
+
+    {{#if this.description}}
+      <meta name='description' content={{this.description}} />
+      <meta property='og:description' content={{this.description}} />
+      <meta name='twitter:description' content={{this.description}} />
+    {{/if}}
+
+    <meta name='twitter:card' content='summary' />
+    <meta property='og:type' content='article' />
+  </template>
 }
 
 export class MarkdownDef extends FileDef {
@@ -98,9 +430,11 @@ export class MarkdownDef extends FileDef {
   @field excerpt = contains(StringField);
   @field content = contains(StringField);
 
-  static embedded = MarkdownFilePreview;
-  static fitted = MarkdownFilePreview;
-  static isolated = MarkdownFilePreview;
+  static isolated: BaseDefComponent = Isolated;
+  static embedded: BaseDefComponent = Embedded;
+  static fitted: BaseDefComponent = Fitted;
+  static atom: BaseDefComponent = Atom;
+  static head: BaseDefComponent = Head;
 
   static async extractAttributes(
     url: string,

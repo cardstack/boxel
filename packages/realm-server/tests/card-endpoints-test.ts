@@ -4,7 +4,7 @@ import supertest from 'supertest';
 import { join, basename } from 'path';
 import type { Server } from 'http';
 import type { DirResult } from 'tmp';
-import { existsSync, readJSONSync, statSync } from 'fs-extra';
+import { existsSync, readJSONSync, statSync, writeFileSync } from 'fs-extra';
 import type {
   Realm,
   Relationship,
@@ -140,6 +140,7 @@ module(basename(__filename), function () {
         setupPermissionedRealmAtURL(hooks, realmURL, {
           permissions: {
             '*': ['read'],
+            '@node-test_realm:localhost': ['read', 'realm-owner'],
           },
           onRealmSetup,
         });
@@ -191,11 +192,7 @@ module(basename(__filename), function () {
                   module: `./person`,
                   name: 'Person',
                 },
-                // FIXME see elsewhere… global fix?
-                realmInfo: {
-                  ...testRealmInfo,
-                  realmUserId: '@node-test_realm:localhost',
-                },
+                realmInfo: testRealmInfo,
                 realmURL: testRealmHref,
               },
               links: {
@@ -268,12 +265,25 @@ module(basename(__filename), function () {
         });
 
         test('includes FileDef resources for file links in included payload', async function (assert) {
-          let { testRealm: realm, request } = getRealmSetup();
+          let { testRealm: realm, request, dir: testDir } = getRealmSetup();
 
-          let writes = new Map<string, string | Uint8Array>([
-            [
-              'gallery.gts',
-              `
+          // Write image files directly to the filesystem so they are on disk
+          // but NOT yet in the index. This exercises the render-store's
+          // extractFileMetaDirectly path: when the card is prerendered, the
+          // images haven't been indexed yet, so getFileMetaInstance must fetch
+          // and extract attributes directly from the raw file bytes.
+          let realmDir = join(testDir.name, 'realm_server_1', 'test');
+          let pngBytes = makeMinimalPng();
+          writeFileSync(join(realmDir, 'hero.png'), pngBytes);
+          writeFileSync(join(realmDir, 'first.png'), pngBytes);
+          writeFileSync(join(realmDir, 'second.png'), pngBytes);
+
+          // Write module + card instance — card is indexed before images
+          await realm.writeMany(
+            new Map<string, string>([
+              [
+                'gallery.gts',
+                `
                 import { CardDef, field, linksTo, linksToMany } from "https://cardstack.com/base/card-api";
                 import { FileDef } from "https://cardstack.com/base/file-api";
 
@@ -282,44 +292,49 @@ module(basename(__filename), function () {
                   @field attachments = linksToMany(FileDef);
                 }
               `,
-            ],
-            [
-              'gallery.json',
-              JSON.stringify({
-                data: {
-                  attributes: {},
-                  relationships: {
-                    hero: {
-                      links: {
-                        self: './hero.png',
+              ],
+              [
+                'gallery.json',
+                JSON.stringify({
+                  data: {
+                    attributes: {},
+                    relationships: {
+                      hero: {
+                        links: {
+                          self: './hero.png',
+                        },
+                      },
+                      'attachments.0': {
+                        links: {
+                          self: './first.png',
+                        },
+                      },
+                      'attachments.1': {
+                        links: {
+                          self: './second.png',
+                        },
                       },
                     },
-                    'attachments.0': {
-                      links: {
-                        self: './first.png',
-                      },
-                    },
-                    'attachments.1': {
-                      links: {
-                        self: './second.png',
+                    meta: {
+                      adoptsFrom: {
+                        module: './gallery.gts',
+                        name: 'Gallery',
                       },
                     },
                   },
-                  meta: {
-                    adoptsFrom: {
-                      module: './gallery.gts',
-                      name: 'Gallery',
-                    },
-                  },
-                },
-              }),
-            ],
-            ['hero.png', makeMinimalPng()],
-            ['first.png', makeMinimalPng()],
-            ['second.png', makeMinimalPng()],
-          ]);
+                }),
+              ],
+            ]),
+          );
 
-          await realm.writeMany(writes);
+          // Now index the image files so they appear in loadLinks results
+          await realm.writeMany(
+            new Map<string, Uint8Array>([
+              ['hero.png', pngBytes],
+              ['first.png', pngBytes],
+              ['second.png', pngBytes],
+            ]),
+          );
 
           let response = await request
             .get('/gallery')
@@ -518,6 +533,106 @@ module(basename(__filename), function () {
             'card',
             'linksTo relationship for a CardDef should use type "card" even when data.type is missing from stale index and the linked instance is unavailable',
           );
+        });
+        test('stale linksTo(FileDef subclass) relationship data.type of card is corrected to file-meta', async function (assert) {
+          let { testRealm: realm, request, dbAdapter } = getRealmSetup();
+
+          await realm.writeMany(
+            new Map<string, string | Uint8Array>([
+              [
+                'skill-card.gts',
+                `
+                  import { CardDef, field, contains, linksTo } from "https://cardstack.com/base/card-api";
+                  import StringField from "https://cardstack.com/base/string";
+                  import { MarkdownDef } from "https://cardstack.com/base/markdown-file-def";
+
+                  export class SkillCard extends CardDef {
+                    @field cardTitle = contains(StringField);
+                    @field instructionsSource = linksTo(MarkdownDef);
+                  }
+                `,
+              ],
+              [
+                'Skill/example.json',
+                JSON.stringify({
+                  data: {
+                    attributes: {
+                      cardTitle: 'Example Skill',
+                    },
+                    relationships: {
+                      instructionsSource: {
+                        links: {
+                          self: '../instructions.md',
+                        },
+                      },
+                    },
+                    meta: {
+                      adoptsFrom: {
+                        module: '../skill-card.gts',
+                        name: 'SkillCard',
+                      },
+                    },
+                  },
+                }),
+              ],
+              ['instructions.md', '# Example Instructions'],
+            ]),
+          );
+
+          let response = await request
+            .get('/Skill/example')
+            .set('Accept', 'application/vnd.card+json');
+          assert.strictEqual(
+            response.status,
+            200,
+            `HTTP 200 status: ${response.text}`,
+          );
+
+          let doc = response.body as LooseSingleCardDocument;
+          let relationship = doc.data.relationships
+            ?.instructionsSource as Relationship;
+          assert.deepEqual(relationship?.data, {
+            type: 'file-meta',
+            id: `${testRealmHref}instructions.md`,
+          });
+
+          let included = doc.included ?? [];
+          let linkedFile = included.find(
+            (resource) => resource.id === `${testRealmHref}instructions.md`,
+          );
+          assert.ok(linkedFile, 'includes linked markdown file');
+          assert.strictEqual(linkedFile?.type, 'file-meta');
+
+          let instanceAlias = `${testRealmHref}Skill/example`;
+          let markdownFileURL = `${testRealmHref}instructions.md`;
+          await dbAdapter.execute(
+            `UPDATE boxel_index
+             SET pristine_doc = jsonb_set(
+               pristine_doc,
+               '{relationships,instructionsSource,data}',
+               '{"type":"card","id":"${markdownFileURL}"}'::jsonb,
+               true
+             )
+             WHERE file_alias = '${instanceAlias}'
+             AND type = 'instance'`,
+          );
+
+          let staleResponse = await request
+            .get('/Skill/example')
+            .set('Accept', 'application/vnd.card+json');
+          assert.strictEqual(
+            staleResponse.status,
+            200,
+            `HTTP 200 status after stale relationship type: ${staleResponse.text}`,
+          );
+
+          let staleDoc = staleResponse.body as LooseSingleCardDocument;
+          let staleRelationship = staleDoc.data.relationships
+            ?.instructionsSource as Relationship;
+          assert.deepEqual(staleRelationship?.data, {
+            type: 'file-meta',
+            id: markdownFileURL,
+          });
         });
         test('card-level query-backed relationships resolve via search at read time', async function (assert) {
           let { testRealm: realm, request } = getRealmSetup();
@@ -756,6 +871,7 @@ module(basename(__filename), function () {
         setupPermissionedRealmAtURL(hooks, realmURL, {
           permissions: {
             '*': ['read'],
+            '@node-test_realm:localhost': ['read', 'realm-owner'],
           },
           onRealmSetup,
           published: true,
@@ -805,10 +921,7 @@ module(basename(__filename), function () {
                   module: `./person`,
                   name: 'Person',
                 },
-                realmInfo: {
-                  ...testRealmInfo,
-                  realmUserId: '@node-test_realm:localhost',
-                },
+                realmInfo: testRealmInfo,
                 realmURL: testRealmHref,
               },
               relationships: {
@@ -831,6 +944,7 @@ module(basename(__filename), function () {
         setupPermissionedRealmAtURL(hooks, realmURL, {
           permissions: {
             '*': ['read', 'write'],
+            '@node-test_realm:localhost': ['read', 'realm-owner'],
           },
           onRealmSetup,
         });
@@ -905,7 +1019,7 @@ module(basename(__filename), function () {
         setupPermissionedRealmAtURL(hooks, realmURL, {
           permissions: {
             john: ['read'],
-            '@node-test_realm:localhost': ['read'],
+            '@node-test_realm:localhost': ['read', 'realm-owner'],
           },
           onRealmSetup,
         });
@@ -1011,6 +1125,7 @@ module(basename(__filename), function () {
         setupPermissionedRealmAtURL(hooks, realmURL, {
           permissions: {
             '*': ['read', 'write'],
+            '@node-test_realm:localhost': ['read', 'realm-owner'],
           },
           onRealmSetup,
         });
@@ -1378,10 +1493,7 @@ module(basename(__filename), function () {
                   name: 'Friend',
                   module: 'http://localhost:4202/node-test/friend',
                 },
-                realmInfo: {
-                  ...testRealmInfo,
-                  realmUserId: '@node-test_realm:localhost',
-                },
+                realmInfo: testRealmInfo,
                 realmURL: testRealmHref,
               },
               links: {
@@ -1568,10 +1680,7 @@ module(basename(__filename), function () {
                   name: 'Friend',
                   module: 'http://localhost:4202/node-test/friend',
                 },
-                realmInfo: {
-                  ...testRealmInfo,
-                  realmUserId: '@node-test_realm:localhost',
-                },
+                realmInfo: testRealmInfo,
                 realmURL: testRealmHref,
               },
               links: {
@@ -1694,10 +1803,7 @@ module(basename(__filename), function () {
                     name: 'Friend',
                     module: 'http://localhost:4202/node-test/friend',
                   },
-                  realmInfo: {
-                    ...testRealmInfo,
-                    realmUserId: '@node-test_realm:localhost',
-                  },
+                  realmInfo: testRealmInfo,
                   realmURL: testRealmHref,
                 },
                 links: {
@@ -1749,10 +1855,7 @@ module(basename(__filename), function () {
                     name: 'Friend',
                     module: 'http://localhost:4202/node-test/friend',
                   },
-                  realmInfo: {
-                    ...testRealmInfo,
-                    realmUserId: '@node-test_realm:localhost',
-                  },
+                  realmInfo: testRealmInfo,
                   realmURL: testRealmHref,
                 },
                 links: {
@@ -1966,10 +2069,7 @@ module(basename(__filename), function () {
                   name: 'Friend',
                   module: 'http://localhost:4202/node-test/friend',
                 },
-                realmInfo: {
-                  ...testRealmInfo,
-                  realmUserId: '@node-test_realm:localhost',
-                },
+                realmInfo: testRealmInfo,
                 realmURL: testRealmHref,
               },
               links: {
@@ -1984,7 +2084,7 @@ module(basename(__filename), function () {
         setupPermissionedRealmAtURL(hooks, realmURL, {
           permissions: {
             john: ['read', 'write'],
-            '@node-test_realm:localhost': ['read'],
+            '@node-test_realm:localhost': ['read', 'realm-owner'],
           },
           onRealmSetup,
         });
@@ -2062,6 +2162,7 @@ module(basename(__filename), function () {
         setupPermissionedRealmAtURL(hooks, realmURL, {
           permissions: {
             '*': ['read', 'write'],
+            '@node-test_realm:localhost': ['read', 'realm-owner'],
           },
           onRealmSetup,
         });
@@ -2650,10 +2751,7 @@ module(basename(__filename), function () {
                   name: 'Friend',
                   module: './friend',
                 },
-                realmInfo: {
-                  ...testRealmInfo,
-                  realmUserId: '@node-test_realm:localhost',
-                },
+                realmInfo: testRealmInfo,
                 realmURL: testRealmHref,
               },
               links: {
@@ -2840,10 +2938,7 @@ module(basename(__filename), function () {
                   name: 'Friend',
                   module: '../friend',
                 },
-                realmInfo: {
-                  ...testRealmInfo,
-                  realmUserId: '@node-test_realm:localhost',
-                },
+                realmInfo: testRealmInfo,
                 realmURL: testRealmHref,
               },
               links: {
@@ -2966,10 +3061,7 @@ module(basename(__filename), function () {
                     name: 'Friend',
                     module: '../friend',
                   },
-                  realmInfo: {
-                    ...testRealmInfo,
-                    realmUserId: '@node-test_realm:localhost',
-                  },
+                  realmInfo: testRealmInfo,
                   realmURL: testRealmHref,
                 },
                 links: {
@@ -3021,10 +3113,7 @@ module(basename(__filename), function () {
                     name: 'Friend',
                     module: '../friend',
                   },
-                  realmInfo: {
-                    ...testRealmInfo,
-                    realmUserId: '@node-test_realm:localhost',
-                  },
+                  realmInfo: testRealmInfo,
                   realmURL: testRealmHref,
                 },
                 links: {
@@ -3226,10 +3315,7 @@ module(basename(__filename), function () {
                   module:
                     'http://localhost:4202/node-test/friend-with-used-link',
                 },
-                realmInfo: {
-                  ...testRealmInfo,
-                  realmUserId: '@node-test_realm:localhost',
-                },
+                realmInfo: testRealmInfo,
                 realmURL: testRealmHref,
               },
               links: {
@@ -3324,10 +3410,7 @@ module(basename(__filename), function () {
                   module:
                     'http://localhost:4202/node-test/friend-with-used-link',
                 },
-                realmInfo: {
-                  ...testRealmInfo,
-                  realmUserId: '@node-test_realm:localhost',
-                },
+                realmInfo: testRealmInfo,
                 realmURL: testRealmHref,
               },
               links: {
@@ -3482,6 +3565,7 @@ module(basename(__filename), function () {
         setupPermissionedRealmAtURL(hooks, realmURL, {
           permissions: {
             '*': ['read', 'write'],
+            '@node-test_realm:localhost': ['read', 'realm-owner'],
           },
           cardSizeLimitBytes: 512,
           onRealmSetup,
@@ -3529,7 +3613,7 @@ module(basename(__filename), function () {
         setupPermissionedRealmAtURL(hooks, realmURL, {
           permissions: {
             john: ['read', 'write'],
-            '@node-test_realm:localhost': ['read'],
+            '@node-test_realm:localhost': ['read', 'realm-owner'],
           },
           onRealmSetup,
         });
@@ -3600,6 +3684,7 @@ module(basename(__filename), function () {
         setupPermissionedRealmAtURL(hooks, realmURL, {
           permissions: {
             '*': ['read', 'write'],
+            '@node-test_realm:localhost': ['read', 'realm-owner'],
           },
           onRealmSetup,
         });
@@ -3710,7 +3795,7 @@ module(basename(__filename), function () {
         setupPermissionedRealmAtURL(hooks, realmURL, {
           permissions: {
             john: ['read', 'write'],
-            '@node-test_realm:localhost': ['read'],
+            '@node-test_realm:localhost': ['read', 'realm-owner'],
           },
           onRealmSetup,
         });
@@ -3752,6 +3837,7 @@ module(basename(__filename), function () {
       setupPermissionedRealmAtURL(hooks, realmURL, {
         permissions: {
           '*': ['read', 'write'],
+          '@node-test_realm:localhost': ['read', 'realm-owner'],
         },
         fileSystem: {
           'greeting.txt': 'hello',
@@ -3818,6 +3904,7 @@ module(basename(__filename), function () {
           realmURL: providerRealmURL,
           permissions: {
             '*': ['read', 'write', 'realm-owner'],
+            '@node-test_realm:localhost': ['read', 'realm-owner'],
           },
           fileSystem: {
             'person.gts': `
@@ -3847,6 +3934,7 @@ module(basename(__filename), function () {
           realmURL: consumerRealmURL,
           permissions: {
             '*': ['read', 'write', 'realm-owner'],
+            '@node-test_realm:localhost': ['read', 'realm-owner'],
           },
           fileSystem: {
             'favorite-finder.gts': `

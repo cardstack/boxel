@@ -142,6 +142,7 @@ export {
   CardError,
   isCardError,
   formattedError,
+  type SerializedError,
   type CardErrorJSONAPI,
   type CardErrorsJSONAPI,
   isCardErrorJSONAPI,
@@ -229,6 +230,7 @@ export * from './prerendered-html-format';
 export * from './query-field-utils';
 export * from './relationship-utils';
 export * from './formats';
+export * from './dependency-tracker';
 export { getCreatedTime } from './file-meta';
 export { mergeRelationships } from './merge-relationships';
 export { makeLogDefinitions, logger } from './log';
@@ -248,6 +250,7 @@ export * from './url';
 export * from './render-route-options';
 export * from './publishability';
 export * from './pr-manifest';
+export * from './file-def-code-ref';
 
 export const executableExtensions = ['.js', '.gjs', '.ts', '.gts'];
 export { createResponse } from './create-response';

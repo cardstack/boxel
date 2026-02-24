@@ -14,6 +14,8 @@ import {
   setupIntegrationTestRealm,
   setupLocalIndexing,
   testRealmURL,
+  setupRealmCacheTeardown,
+  withCachedRealmSetup,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
@@ -29,12 +31,15 @@ module('Integration | commands | copy-and-edit', function (hooks) {
     activeRealms: [testRealmURL, otherRealmURL],
   });
 
+  setupRealmCacheTeardown(hooks);
+
   hooks.beforeEach(async function () {
-    await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      realmURL: testRealmURL,
-      contents: {
-        'content-card.gts': `
+    await withCachedRealmSetup(async () =>
+      setupIntegrationTestRealm({
+        mockMatrixUtils,
+        realmURL: testRealmURL,
+        contents: {
+          'content-card.gts': `
           import { CardDef, contains, field, linksTo, linksToMany } from "https://cardstack.com/base/card-api";
           import StringField from "https://cardstack.com/base/string";
 
@@ -49,45 +54,45 @@ module('Integration | commands | copy-and-edit', function (hooks) {
             @field children = linksToMany(() => Child);
           }
         `,
-        'Child/og.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              name: 'Original',
-            },
-            meta: {
-              adoptsFrom: {
-                module: '../content-card',
-                name: 'Child',
+          'Child/og.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                name: 'Original',
               },
-            },
-          },
-        },
-        'Parent/root.json': {
-          data: {
-            type: 'card',
-            relationships: {
-              child: {
-                data: {
-                  type: 'card',
-                  id: '../Child/og',
-                },
-              },
-              'children.0': {
-                links: {
-                  self: '../Child/og',
+              meta: {
+                adoptsFrom: {
+                  module: '../content-card',
+                  name: 'Child',
                 },
               },
             },
-            meta: {
-              adoptsFrom: {
-                module: '../content-card',
-                name: 'Parent',
+          },
+          'Parent/root.json': {
+            data: {
+              type: 'card',
+              relationships: {
+                child: {
+                  data: {
+                    type: 'card',
+                    id: '../Child/og',
+                  },
+                },
+                'children.0': {
+                  links: {
+                    self: '../Child/og',
+                  },
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: '../content-card',
+                  name: 'Parent',
+                },
               },
             },
           },
-        },
-        'simple-card.gts': `
+          'simple-card.gts': `
           import { CardDef, field, contains } from "https://cardstack.com/base/card-api";
           import StringField from "https://cardstack.com/base/string";
 
@@ -100,49 +105,51 @@ module('Integration | commands | copy-and-edit', function (hooks) {
             static displayName = 'SimpleCard';
           }
         `,
-        'Theme/og.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              name: 'Original Theme',
-            },
-            meta: {
-              adoptsFrom: {
-                module: 'https://cardstack.com/base/theme',
-                name: 'default',
+          'Theme/og.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                name: 'Original Theme',
               },
-            },
-          },
-        },
-        'simple-card-instance.json': {
-          data: {
-            type: 'card',
-            attributes: {},
-            relationships: {
-              // Establish nested relationship via dotted path
-              'cardInfo.theme': {
-                data: {
-                  type: 'card',
-                  id: './Theme/og',
+              meta: {
+                adoptsFrom: {
+                  module: 'https://cardstack.com/base/theme',
+                  name: 'default',
                 },
               },
             },
-            meta: {
-              adoptsFrom: {
-                module: './simple-card',
-                name: 'SimpleCard',
+          },
+          'simple-card-instance.json': {
+            data: {
+              type: 'card',
+              attributes: {},
+              relationships: {
+                // Establish nested relationship via dotted path
+                'cardInfo.theme': {
+                  data: {
+                    type: 'card',
+                    id: './Theme/og',
+                  },
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: './simple-card',
+                  name: 'SimpleCard',
+                },
               },
             },
           },
         },
-      },
-    });
+      }),
+    );
 
-    await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      realmURL: otherRealmURL,
-      contents: {
-        'content-card.gts': `
+    await withCachedRealmSetup(async () =>
+      setupIntegrationTestRealm({
+        mockMatrixUtils,
+        realmURL: otherRealmURL,
+        contents: {
+          'content-card.gts': `
           import { CardDef, contains, field } from "https://cardstack.com/base/card-api";
           import StringField from "https://cardstack.com/base/string";
 
@@ -151,22 +158,23 @@ module('Integration | commands | copy-and-edit', function (hooks) {
             @field name = contains(StringField);
           }
         `,
-        'Child/remote.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              name: 'RemoteChild',
-            },
-            meta: {
-              adoptsFrom: {
-                module: `${testRealmURL}content-card`,
-                name: 'Child',
+          'Child/remote.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                name: 'RemoteChild',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `${testRealmURL}content-card`,
+                  name: 'Child',
+                },
               },
             },
           },
         },
-      },
-    });
+      }),
+    );
 
     let realmService = getService('realm');
     await realmService.login(testRealmURL);

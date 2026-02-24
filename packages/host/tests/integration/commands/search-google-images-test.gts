@@ -8,6 +8,8 @@ import {
   setupLocalIndexing,
   testRealmURL,
   setupRealmServerEndpoints,
+  setupRealmCacheTeardown,
+  withCachedRealmSetup,
 } from '../../helpers';
 import { setupBaseRealm } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
@@ -137,11 +139,15 @@ module('Integration | commands | search-google-images', function (hooks) {
     },
   ]);
 
+  setupRealmCacheTeardown(hooks);
+
   hooks.beforeEach(async function () {
-    await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      contents: {},
-    });
+    await withCachedRealmSetup(async () =>
+      setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {},
+      }),
+    );
   });
 
   test('successfully searches Google Images and returns results', async function (assert) {

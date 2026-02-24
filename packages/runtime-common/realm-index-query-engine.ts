@@ -732,6 +732,22 @@ export class RealmIndexQueryEngine {
         let relationshipType = relationship.data?.type;
         let expectsFileMeta = relationshipType === FileMetaResourceType;
         let expectsCard = relationshipType === CardResourceType;
+        // Stale index payloads can incorrectly record file relationships as
+        // type "card" (or omit type entirely) when linked files were indexed
+        // after instances. In that case, trust the field declaration.
+        if (
+          !expectsFileMeta &&
+          (relationshipType === CardResourceType || !relationshipType)
+        ) {
+          expectsFileMeta = await this.fieldExpectsFileMeta(
+            resource,
+            key,
+            opts,
+          );
+          if (expectsFileMeta) {
+            expectsCard = false;
+          }
+        }
         processedRelationships.add(key);
         let linkURL = new URL(
           relationship.links.self,
@@ -739,7 +755,7 @@ export class RealmIndexQueryEngine {
         );
         let linkResource: CardResource<Saved> | FileMetaResource | undefined;
         if (realmPath.inRealm(linkURL)) {
-          if (expectsCard || !relationshipType) {
+          if (expectsCard || (!relationshipType && !expectsFileMeta)) {
             let maybeResult = await this.#indexQueryEngine.getInstance(
               linkURL,
               opts,
@@ -749,20 +765,7 @@ export class RealmIndexQueryEngine {
             }
           }
           if (!linkResource) {
-            // Determine whether to try the file index:
-            // - If data.type explicitly says file-meta, try it
-            // - If data.type is missing (stale index data), consult the
-            //   field definition to avoid incorrectly degrading a CardDef
-            //   relationship to file-meta
-            let shouldTryFile = expectsFileMeta;
-            if (!shouldTryFile && !relationshipType) {
-              shouldTryFile = await this.fieldExpectsFileMeta(
-                resource,
-                key,
-                opts,
-              );
-            }
-            if (shouldTryFile) {
+            if (expectsFileMeta) {
               let fileEntry = await this.#indexQueryEngine.getFile(
                 linkURL,
                 opts,

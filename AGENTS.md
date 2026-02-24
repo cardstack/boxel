@@ -55,6 +55,7 @@
   `ember test --path dist --filter "some text that appears in module name or test name"`  
   Note that the filter is matched against the module name and test name, not the file name! Try to avoid using pipe characters in the filter, since they can confuse auto-approval tool use filters set up by the user.
 - run `pnpm lint` in this directory to lint changes made to this package
+- run `pnpm lint:fix` directly in this directory to apply fixes for lint failures made to this package that can be automatically fixed.
 
 #### Iterating on host tests with the Chrome MCP server
 
@@ -96,6 +97,7 @@
   Make sure not to commit `.only` to source control
 - make sure to kill previously running realm-server tests if they are still running before starting a new test run.
 - run `pnpm lint` directly in this directory to lint changes made to this package
+- run `pnpm lint:fix` directly in this directory to apply fixes for lint failures made to this package that can be automatically fixed.
 
 ### packages/postgres
 - If you need to make a database migration use `pnpm create migration_name` to create a migration file so that the correct date timestamp prefix will be added to the file name. Then implement the migration inside the newly created file.
@@ -106,11 +108,36 @@
 ### packages/runtime-common
 
 - Functionality is tested via host and/or realm-server tests
-- run `pnpm lint` directly in packages/host or directly in packages/realm-server to lint for changes made in this package. This package will be linted since both packages/host and package/realm-server consume this package.
+- run `pnpm lint` directly in this directory to lint changes made to this package
+- run `pnpm lint:js:fix` directly in this directory to apply fixes for js lint failures made to this package that can be automatically fixed.
 
 ## PR Instructions
 
 - Always run `pnpm lint` in modified packages before committing
+
+## `.gts` file gotcha: regex literals can break content-tag
+
+The `content-tag` preprocessor (used by glint and ember-eslint-parser to parse `.gts` files) has bugs in its JavaScript lexer that cause it to misparse certain regex literals. When this happens, it fails to recognize `<template>` tags later in the file, producing cascading parse errors. Two known triggers:
+
+**1. Backticks inside regex literals** — content-tag mistakes them for template literal delimiters:
+```ts
+// BROKEN — backticks in regex confuse content-tag
+.replace(/`([^`]+)`/g, '$1')
+
+// FIX — use new RegExp() with a string instead
+const INLINE_CODE_RE = new RegExp('`([^`]+)`', 'g');
+.replace(INLINE_CODE_RE, '$1')
+```
+
+**2. `!/regex/` (negation before regex literal)** — content-tag misreads the `/` after `!`:
+```ts
+// BROKEN
+lines.some((line) => !/^\s*#{1,6}\s+/.test(line));
+
+// FIX — extract the regex to a variable
+const HEADING_RE = /^\s*#{1,6}\s+/;
+lines.some((line) => !HEADING_RE.test(line));
+```
 
 ## Base realm imports
 
