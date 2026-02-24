@@ -16,6 +16,7 @@ import {
   getField,
   getSingularRelationship,
   identifyCard,
+  isCardInstance,
   THIS_INTERPOLATION_PREFIX,
   THIS_REALM_TOKEN,
   realmURL as realmURLSymbol,
@@ -40,6 +41,7 @@ interface QueryFieldState {
     status?: number;
   }>;
   searchResource?: StoreSearchResource;
+  renderCycleBarrier?: Promise<void>;
 }
 
 const queryFieldStates = initSharedState(
@@ -73,9 +75,18 @@ export function ensureQueryFieldSearchResource(
     });
 
   let queryFieldState = queryFieldStates.get(instance);
-  let fieldState = queryFieldState?.get(field.name);
-  let searchResource = fieldState?.searchResource;
+  if (!queryFieldState) {
+    queryFieldState = new Map<string, QueryFieldState>();
+    queryFieldStates.set(instance, queryFieldState);
+  }
+  let fieldState = queryFieldState.get(field.name);
+  if (!fieldState) {
+    fieldState = {};
+    queryFieldState.set(field.name, fieldState);
+  }
+  let searchResource = fieldState.searchResource;
   if (searchResource) {
+    trackQueryFieldLoads(store, field.name, fieldState);
     log.debug(
       `ensureQueryFieldSearchResource: reusing existing resource from fieldState for field=${field.name}`,
     );
@@ -84,7 +95,6 @@ export function ensureQueryFieldSearchResource(
 
   let seedRecords = fieldState?.seedRecords;
   let seedSearchURL = fieldState?.seedSearchURL;
-
   let args = () => resolveQueryAndRealm(instance, field, fieldDefinition);
 
   log.info(
@@ -103,24 +113,43 @@ export function ensureQueryFieldSearchResource(
       seed: seedRecords
         ? {
             cards: seedRecords,
-            searchURL: seedSearchURL ?? undefined,
+            searchURL:
+              seedRecords.length > 0 ? seedSearchURL ?? undefined : undefined,
             realms: fieldState?.seedRealms,
             queryErrors: fieldState?.seedErrors,
           }
         : undefined,
     },
   );
-  if (!queryFieldState) {
-    queryFieldState = new Map<string, QueryFieldState>();
-    queryFieldStates.set(instance, queryFieldState);
-  }
-  if (!fieldState) {
-    fieldState = {};
-    queryFieldState.set(field.name, fieldState);
-  }
   fieldState.searchResource = searchResource;
+  trackQueryFieldLoads(store, field.name, fieldState);
 
   return searchResource;
+}
+
+function trackQueryFieldLoads(
+  store: CardStore,
+  fieldName: string,
+  fieldState: QueryFieldState,
+) {
+  if (!fieldState.renderCycleBarrier) {
+    // Query resources can kick off their load after the getter returns
+    // (via resource modify scheduling). This barrier keeps render-route
+    // settle from completing in the same frame before query loads can join.
+    log.debug(`tracking query field render barrier for field=${fieldName}`);
+    let barrier = waitForNextRenderCycle();
+    fieldState.renderCycleBarrier = barrier;
+    store.trackLoad(barrier);
+    void barrier.finally(() => {
+      if (fieldState.renderCycleBarrier === barrier) {
+        fieldState.renderCycleBarrier = undefined;
+      }
+    });
+  }
+}
+
+function waitForNextRenderCycle(): Promise<void> {
+  return Promise.resolve().then(() => Promise.resolve());
 }
 
 export function validateRelationshipQuery(
@@ -274,7 +303,9 @@ export function captureQueryFieldSeedData(
     fieldState = {};
     queryFieldState.set(fieldName, fieldState);
   }
-  fieldState.seedRecords = value;
+  // Query-field deserialize can contain unresolved placeholders in some paths;
+  // only persist concrete card instances as seed records.
+  fieldState.seedRecords = value.filter((entry) => isCardInstance(entry));
   let relationship = getSingularRelationship(resource.relationships, fieldName);
   fieldState.seedSearchURL = relationship?.links?.search ?? null;
   fieldState.seedRealms = fieldState.seedSearchURL

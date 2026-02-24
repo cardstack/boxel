@@ -281,6 +281,10 @@ export default class StoreService extends Service implements StoreInterface {
     return this.store.loaded();
   }
 
+  trackLoad(load: Promise<unknown>): void {
+    this.store.trackLoad(load);
+  }
+
   get cardDocsInFlight() {
     return this.store.cardDocsInFlight;
   }
@@ -811,13 +815,10 @@ export default class StoreService extends Service implements StoreInterface {
     if (this.isRenderStore && opts) {
       opts.isLive = false;
     }
-    return getSearch<T>(
-      parent,
-      getOwner(this)!,
-      getQuery,
-      getRealms,
-      opts,
-    ) as unknown as SearchResource<T>;
+    return getSearch<T>(parent, getOwner(this)!, getQuery, getRealms, {
+      ...opts,
+      storeService: this,
+    }) as unknown as SearchResource<T>;
   }
 
   getSearchDataResource(
