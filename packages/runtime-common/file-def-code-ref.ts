@@ -49,6 +49,10 @@ const FILEDEF_CODE_REF_BY_EXTENSION: Record<string, ResolvedCodeRef> = {
     module: `${baseRealm.url}gts-file-def`,
     name: 'GtsFileDef',
   },
+  '.csv': {
+    module: `${baseRealm.url}csv-file-def`,
+    name: 'CsvFileDef',
+  },
   '.mismatch': { module: './filedef-mismatch', name: 'FileDef' },
 };
 
