@@ -12,17 +12,17 @@ export function installRealmServerAssertOwnRealmServerBypassPatch(): {
   // it performs _search, so without this patch search can bail out too early and
   // we never get to exercise query-load tracking behavior.
   let originalGetPage = PagePool.prototype.getPage;
-  let observedPage: any;
+  let patchedPages = new Map<any, (...args: any[]) => Promise<any>>();
 
   // Intercept page acquisition so we can inject one browser-runtime patch
   // before route transitions/captures run.
   PagePool.prototype.getPage = async function (this: PagePool, realm: string) {
     let pageInfo = await originalGetPage.call(this, realm);
     let page = pageInfo.page as any;
-    observedPage = page;
     let originalEvaluate = page?.evaluate?.bind(page);
 
-    if (originalEvaluate) {
+    if (originalEvaluate && !patchedPages.has(page)) {
+      patchedPages.set(page, originalEvaluate);
       // Per-page guard. A single page can be reused by the page pool; we only
       // need to install our patch once for that page instance.
       let injected = false;
@@ -82,9 +82,12 @@ export function installRealmServerAssertOwnRealmServerBypassPatch(): {
 
   return {
     restore: async () => {
-      if (observedPage) {
+      for (let [page, originalEvaluate] of patchedPages) {
         try {
-          await observedPage.evaluate(() => {
+          // Restore the original evaluate first to avoid leaving wrapped
+          // evaluate functions behind on pooled pages that survive this test.
+          page.evaluate = originalEvaluate;
+          await originalEvaluate(() => {
             // Cleanup mirrors setup above: locate the same service module and
             // restore the original assertOwnRealmServer implementation.
             let entries =
@@ -116,6 +119,7 @@ export function installRealmServerAssertOwnRealmServerBypassPatch(): {
           // best effort cleanup: page may already be gone
         }
       }
+      patchedPages.clear();
       // Always restore Node-side monkeypatch as well.
       PagePool.prototype.getPage = originalGetPage;
     },
