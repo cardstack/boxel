@@ -156,7 +156,11 @@ export class SearchResource<
     } = named;
 
     setOwner(this, owner); // works around problem where lifetime parent is used as owner when they should be allowed to differ
-    this.#storeServiceOverride = storeService;
+    // Keep the previously provided override when optional args are omitted on
+    // subsequent modify() calls.
+    if (storeService !== undefined) {
+      this.#storeServiceOverride = storeService;
+    }
 
     if (query === undefined) {
       return;
