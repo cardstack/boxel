@@ -63,6 +63,7 @@ import {
   type StoreReadType,
   type CardResource,
   type Saved,
+  resolveCardReference,
 } from '@cardstack/runtime-common';
 
 import type { CardDef, BaseDef } from 'https://cardstack.com/base/card-api';
@@ -1948,7 +1949,7 @@ export default class StoreService extends Service implements StoreInterface {
     }
     let id = rel.links.self;
     let instance = await this.getCardInstance({
-      idOrDoc: new URL(id, relativeTo).href,
+      idOrDoc: resolveCardReference(id, relativeTo),
     });
     return isCardInstance(instance) ? instance : undefined;
   }
