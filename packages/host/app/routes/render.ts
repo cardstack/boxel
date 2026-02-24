@@ -571,7 +571,7 @@ export default class RenderRoute extends Route<Model> {
     if (!modelState || modelState.isReady) {
       return;
     }
-    renderReadyLogger.info(
+    renderReadyLogger.debug(
       `scheduling ready settlement for cardId=${model.cardId}`,
     );
     this.#pendingReadyModels.add(model);
@@ -629,11 +629,11 @@ export default class RenderRoute extends Route<Model> {
     if (!modelState || modelState.isReady) {
       return;
     }
-    renderReadyLogger.info(
+    renderReadyLogger.debug(
       `settleModelAfterRender start cardId=${model.cardId} status=${model.status}`,
     );
     await this.#authGuard.race(() => this.store.loaded());
-    renderReadyLogger.info(
+    renderReadyLogger.debug(
       `settleModelAfterRender store.loaded resolved cardId=${model.cardId}`,
     );
     modelState.state.set('status', 'ready');
@@ -643,7 +643,7 @@ export default class RenderRoute extends Route<Model> {
     model.capturedDeps = snapshotRuntimeDependencies({
       excludeQueryOnly: true,
     }).deps;
-    renderReadyLogger.info(
+    renderReadyLogger.debug(
       `settleModelAfterRender done cardId=${model.cardId} deps=${model.capturedDeps?.length ?? 0}`,
     );
   }

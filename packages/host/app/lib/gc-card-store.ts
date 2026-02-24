@@ -256,33 +256,33 @@ export default class CardStoreWithGarbageCollection implements CardStore {
 
   trackLoad(load: Promise<unknown>) {
     if (this.#inFlight.has(load)) {
-      loadTrackingLogger.info('trackLoad skipped duplicate promise');
+      loadTrackingLogger.debug('trackLoad skipped duplicate promise');
       return;
     }
     let loadId = this.#nextLoadId++;
     this.#loadIds.set(load, loadId);
     this.#inFlight.add(load);
     this.#loadGeneration++;
-    loadTrackingLogger.info(
+    loadTrackingLogger.debug(
       `trackLoad start id=${loadId} generation=${this.#loadGeneration} pending=${this.#inFlight.size}`,
     );
     load.finally(() => {
       this.#inFlight.delete(load);
-      loadTrackingLogger.info(
+      loadTrackingLogger.debug(
         `trackLoad settled id=${loadId} pending=${this.#inFlight.size}`,
       );
     });
   }
 
   async loaded() {
-    loadTrackingLogger.info(
+    loadTrackingLogger.debug(
       `loaded() begin generation=${this.#loadGeneration} pending=${this.#inFlight.size}`,
     );
     let observedGeneration = this.#loadGeneration;
     for (;;) {
       if (this.#inFlight.size === 0) {
         // allow microtasks (like settled promise continuations) to enqueue more loads
-        loadTrackingLogger.info(
+        loadTrackingLogger.debug(
           'loaded() no pending loads, waiting one microtask',
         );
         await Promise.resolve();
@@ -291,7 +291,7 @@ export default class CardStoreWithGarbageCollection implements CardStore {
         let pendingIds = pendingLoads
           .map((pendingLoad) => this.#loadIds.get(pendingLoad))
           .filter((id): id is number => id != null);
-        loadTrackingLogger.info(
+        loadTrackingLogger.debug(
           `loaded() waiting for pending loads ids=[${pendingIds.join(',')}] count=${pendingLoads.length}`,
         );
         await Promise.allSettled(pendingLoads);
@@ -300,12 +300,12 @@ export default class CardStoreWithGarbageCollection implements CardStore {
         this.#inFlight.size === 0 &&
         this.#loadGeneration === observedGeneration
       ) {
-        loadTrackingLogger.info(
+        loadTrackingLogger.debug(
           `loaded() complete generation=${this.#loadGeneration}`,
         );
         return;
       }
-      loadTrackingLogger.info(
+      loadTrackingLogger.debug(
         `loaded() continuing; generation moved ${observedGeneration} -> ${this.#loadGeneration}, pending=${this.#inFlight.size}`,
       );
       observedGeneration = this.#loadGeneration;
