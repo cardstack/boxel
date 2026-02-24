@@ -387,6 +387,7 @@ export class CreateSubmissionInput extends CardDef {
 
 export class CreateSubmissionResult extends CardDef {
   @field listing = linksTo(CardDef);
+  @field submission = linksTo(CardDef);
   @field filesWithContent = containsMany(JsonField);
 }
 

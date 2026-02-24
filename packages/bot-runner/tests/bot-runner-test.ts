@@ -148,6 +148,9 @@ module('timeline handler', () => {
       ref: 'refs/heads/room-branch',
       sha: 'abc123',
     }),
+    createEmptyCommit: async () => ({
+      sha: 'def456',
+    }),
   };
 
   test('enqueues command when event matches', async (assert) => {

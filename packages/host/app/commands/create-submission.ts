@@ -18,6 +18,7 @@ import type { CopyModuleMeta } from '@cardstack/runtime-common/catalog';
 
 import ENV from '@cardstack/host/config/environment';
 
+import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import HostBaseCommand from '../lib/host-base-command';
@@ -106,17 +107,20 @@ export default class CreateSubmissionCommand extends HostBaseCommand<
 
     log.debug(`Prepared submission with ${filesWithContent.length} files`);
 
-    await this.createSubmissionCard({
+    let submission = await this.createSubmissionCard({
       listing,
       branchName,
       roomId,
       realmURL: realmUrl,
+      filesWithContent,
     });
 
     const commandModule = await this.loadCommandModule();
     const { CreateSubmissionResult } = commandModule;
     return new CreateSubmissionResult({
       listing,
+      submission,
+      filesWithContent,
     });
   }
 
@@ -126,17 +130,22 @@ export default class CreateSubmissionCommand extends HostBaseCommand<
     realmUrl: string,
   ): Promise<FileWithContent[]> {
     const toRepoRelativePath = (fullUrl: string, extension: string): string => {
-      let url = fullUrl;
-      if (url.startsWith(realmUrl)) {
-        url = url.slice(realmUrl.length);
+      let path = fullUrl;
+      if (path.startsWith(realmUrl)) {
+        path = path.slice(realmUrl.length);
       }
-      if (url.startsWith('/')) {
-        url = url.slice(1);
+      try {
+        path = decodeURIComponent(new URL(path).pathname);
+      } catch {
+        // keep non-URL input as-is
       }
-      if (!url.endsWith(extension)) {
-        url = url + extension;
+      if (path.startsWith('/')) {
+        path = path.slice(1);
       }
-      return url;
+      if (!path.endsWith(extension)) {
+        path = path + extension;
+      }
+      return path;
     };
 
     const filesWithContent: FileWithContent[] = [];
@@ -195,12 +204,14 @@ export default class CreateSubmissionCommand extends HostBaseCommand<
     branchName,
     roomId,
     realmURL,
+    filesWithContent,
   }: {
     listing: Listing;
     branchName: string;
     roomId: string;
     realmURL: string;
-  }): Promise<void> {
+    filesWithContent: FileWithContent[];
+  }): Promise<CardDef> {
     if (!listing.id) {
       throw new Error('Missing listing.id for submission card creation');
     }
@@ -220,6 +231,10 @@ export default class CreateSubmissionCommand extends HostBaseCommand<
         attributes: {
           roomId,
           branchName,
+          allFileContents: filesWithContent.map((file) => ({
+            filename: file.path,
+            contents: file.content,
+          })),
         },
         meta: {
           adoptsFrom: {
@@ -230,7 +245,7 @@ export default class CreateSubmissionCommand extends HostBaseCommand<
       },
     };
 
-    await this.store.add(doc, {
+    return await this.store.add(doc, {
       realm: realmURL,
       doNotWaitForPersist: true,
     });

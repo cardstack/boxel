@@ -1,6 +1,8 @@
 import {
   CardDef,
+  FieldDef,
   contains,
+  containsMany,
   field,
   linksTo,
 } from 'https://cardstack.com/base/card-api';
@@ -17,6 +19,11 @@ function encodeBranchName(branchName: string): string {
     .join('/');
 }
 
+export class FileContentField extends FieldDef {
+  @field filename = contains(StringField);
+  @field contents = contains(StringField);
+}
+
 export class SubmissionCard extends CardDef {
   static displayName = 'SubmissionCard';
 
@@ -31,4 +38,5 @@ export class SubmissionCard extends CardDef {
     },
   });
   @field listing = linksTo(() => Listing);
+  @field allFileContents = containsMany(FileContentField);
 }

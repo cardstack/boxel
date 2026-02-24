@@ -10,7 +10,9 @@ import { enqueueRunCommandJob } from '@cardstack/runtime-common/jobs/run-command
 import * as Sentry from '@sentry/node';
 import type { DBAdapter, QueuePublisher } from '@cardstack/runtime-common';
 import {
+  addContentsToCommit,
   openCreateListingPR,
+  ensureCreateListingBranch,
   type BotTriggerEventContent,
 } from './create-listing-pr-handler';
 import type { GitHubClient } from './github';
@@ -18,6 +20,7 @@ import type {
   DBAdapter,
   PgPrimitive,
   QueuePublisher,
+  RunCommandResponse,
 } from '@cardstack/runtime-common';
 import type { MatrixEvent, Room } from 'matrix-js-sdk';
 
@@ -167,7 +170,7 @@ async function maybeEnqueueCommand({
   eventContent: BotTriggerEventContent;
   allowedCommands: { type: string; command: string }[];
   githubClient: GitHubClient;
-}): Promise<void> {
+}): Promise<void | RunCommandResponse> {
   try {
     if (
       !allowedCommands.length ||
@@ -175,15 +178,6 @@ async function maybeEnqueueCommand({
       !allowedCommands.some((entry) => entry.type === eventContent.type)
     ) {
       return;
-    }
-
-    if (eventContent.type === 'pr-listing-create') {
-      // Temporary workaround: handle PR creation directly until this flow is moved to a proper command path.
-      await openCreateListingPR({
-        eventContent,
-        runAs,
-        githubClient,
-      });
     }
 
     if (!eventContent?.input || typeof eventContent.input !== 'object') {
@@ -207,7 +201,35 @@ async function maybeEnqueueCommand({
       return;
     }
 
-    await enqueueRunCommandJob(
+    if (eventContent.type === 'pr-listing-create') {
+      await ensureCreateListingBranch({ eventContent, githubClient });
+      let job = await enqueueRunCommandJob(
+        {
+          realmURL,
+          realmUsername: runAs,
+          runAs,
+          command,
+          commandInput,
+        },
+        queuePublisher,
+        dbAdapter,
+        userInitiatedPriority,
+      );
+      let result: RunCommandResponse = await job.done;
+      await addContentsToCommit({
+        eventContent,
+        githubClient,
+        runCommandResult: result,
+      });
+      await openCreateListingPR({
+        eventContent,
+        runAs,
+        githubClient,
+      });
+      return result;
+    }
+
+    let job = await enqueueRunCommandJob(
       {
         realmURL,
         realmUsername: runAs,
@@ -219,6 +241,7 @@ async function maybeEnqueueCommand({
       dbAdapter,
       userInitiatedPriority,
     );
+    return await job.done;
   } catch (error) {
     log.error('error in maybeEnqueueCommand', {
       runAs,
