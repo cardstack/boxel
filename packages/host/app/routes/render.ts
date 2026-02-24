@@ -20,6 +20,7 @@ import {
   snapshotRuntimeDependencies,
   SupportedMimeType,
   isCardError,
+  isBaseDefInstance,
   type CardErrorsJSONAPI,
   type LooseSingleCardDocument,
   type RenderError,
@@ -430,22 +431,131 @@ export default class RenderRoute extends Route<Model> {
     let cardApi = await this.loaderService.loader.import<typeof CardAPI>(
       `${baseRealm.url}card-api`,
     );
-    // a computed linksTo/linksToMany isn't a thing yet, but some day it
-    // probably will be, so just optimistically including those
-    let fields = cardApi.getFields(instance, { includeComputeds: true });
+    this.#touchIsUsedRelationships(
+      cardApi,
+      instance,
+      new WeakSet<object>(),
+      new WeakMap<object, boolean>(),
+    );
+  }
+
+  #touchFieldSafely(container: any, fieldName: string): unknown {
+    try {
+      // accessing the field triggers lazy loading for links
+      return container?.[fieldName];
+    } catch (error) {
+      console.warn(
+        `Failed to touch field '${fieldName}' on ${container?.constructor?.name ?? 'Unknown'} for isUsed=true:`,
+        error,
+      );
+      return undefined;
+    }
+  }
+
+  #touchIsUsedRelationships(
+    cardApi: typeof CardAPI,
+    value: unknown,
+    visited: WeakSet<object>,
+    typeHasUsedRelationshipCache: WeakMap<object, boolean>,
+  ): void {
+    if (Array.isArray(value)) {
+      for (let item of value) {
+        this.#touchIsUsedRelationships(
+          cardApi,
+          item,
+          visited,
+          typeHasUsedRelationshipCache,
+        );
+      }
+      return;
+    }
+    if (!isBaseDefInstance(value)) {
+      return;
+    }
+    if (visited.has(value)) {
+      return;
+    }
+    visited.add(value);
+
+    let fields = cardApi.getFields(value, { includeComputeds: true });
     for (let [fieldName, field] of Object.entries(fields)) {
-      if (field?.isUsed) {
-        try {
-          // accessing the field triggers the lazy loading of the linked field
-          (instance as any)[fieldName];
-        } catch (error) {
-          console.warn(
-            `Failed to touch field '${fieldName}' on ${instance.constructor.name} for isUsed=true:`,
-            error,
-          );
+      if (!field) {
+        continue;
+      }
+      if (field.fieldType === 'linksTo' || field.fieldType === 'linksToMany') {
+        if (field.isUsed) {
+          this.#touchFieldSafely(value, fieldName);
         }
+        continue;
+      }
+      if (
+        field.fieldType === 'contains' ||
+        field.fieldType === 'containsMany'
+      ) {
+        if (
+          !this.#typeHasIsUsedRelationship(
+            cardApi,
+            field.card as CardAPI.BaseDefConstructor,
+            new WeakSet<object>(),
+            typeHasUsedRelationshipCache,
+          )
+        ) {
+          continue;
+        }
+        let nested = this.#touchFieldSafely(value, fieldName);
+        this.#touchIsUsedRelationships(
+          cardApi,
+          nested,
+          visited,
+          typeHasUsedRelationshipCache,
+        );
       }
     }
+  }
+
+  #typeHasIsUsedRelationship(
+    cardApi: typeof CardAPI,
+    type: CardAPI.BaseDefConstructor,
+    visitedTypes: WeakSet<object>,
+    cache: WeakMap<object, boolean>,
+  ): boolean {
+    if (cache.has(type)) {
+      return cache.get(type)!;
+    }
+    if (visitedTypes.has(type)) {
+      return false;
+    }
+    visitedTypes.add(type);
+
+    let fields = cardApi.getFields(type, { includeComputeds: true });
+    for (let field of Object.values(fields)) {
+      if (!field) {
+        continue;
+      }
+      if (
+        (field.fieldType === 'linksTo' || field.fieldType === 'linksToMany') &&
+        field.isUsed
+      ) {
+        cache.set(type, true);
+        return true;
+      }
+      if (
+        (field.fieldType === 'contains' ||
+          field.fieldType === 'containsMany') &&
+        this.#typeHasIsUsedRelationship(
+          cardApi,
+          field.card as CardAPI.BaseDefConstructor,
+          visitedTypes,
+          cache,
+        )
+      ) {
+        cache.set(type, true);
+        return true;
+      }
+    }
+
+    cache.set(type, false);
+    return false;
   }
 
   setupController(controller: Controller, model: Model) {
