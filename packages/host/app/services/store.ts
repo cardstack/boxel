@@ -107,6 +107,9 @@ let waiter = buildWaiter('store-service');
 
 const realmEventsLogger = logger('realm:events');
 const storeLogger = logger('store');
+const queryFieldSeedFromSearchSymbol = Symbol.for(
+  'cardstack-query-field-seed-from-search',
+);
 
 type PersistOptions = CreateOptions & { clientRequestId?: string };
 type DependencyTrackingOptions = {
@@ -1276,6 +1279,9 @@ export default class StoreService extends Service implements StoreInterface {
     if (existingInstance && isCardInstance(existingInstance)) {
       return existingInstance as T;
     }
+    // Mark resources that came from `_search` so query-field seed handling can
+    // distinguish unresolved empty seeds from explicit empty card-GET results.
+    (resource as any)[queryFieldSeedFromSearchSymbol] = true;
     return this.add({ data: resource } as SingleCardDocument, {
       doNotPersist: true,
       relativeTo: new URL(resource.id),

@@ -44,6 +44,10 @@ interface QueryFieldState {
   renderCycleBarrier?: Promise<void>;
 }
 
+const queryFieldSeedFromSearchSymbol = Symbol.for(
+  'cardstack-query-field-seed-from-search',
+);
+
 const queryFieldStates = initSharedState(
   'queryFieldStates',
   () => new WeakMap<BaseDef, Map<string, QueryFieldState>>(),
@@ -307,7 +311,18 @@ export function captureQueryFieldSeedData(
   // only persist concrete card instances as seed records.
   fieldState.seedRecords = value.filter((entry) => isCardInstance(entry));
   let relationship = getSingularRelationship(resource.relationships, fieldName);
-  fieldState.seedSearchURL = relationship?.links?.search ?? null;
+  let seedComesFromSearch = Boolean(
+    (resource as any)[queryFieldSeedFromSearchSymbol],
+  );
+  // Empty query-backed relationships arriving on search result resources are
+  // not guaranteed to be fully resolved (for example nested query fields on
+  // each result). In that case we should still run the client-side query
+  // fallback instead of treating the empty seed as authoritative.
+  let shouldTreatEmptySeedAsUnresolved =
+    seedComesFromSearch && fieldState.seedRecords.length === 0;
+  fieldState.seedSearchURL = shouldTreatEmptySeedAsUnresolved
+    ? null
+    : relationship?.links?.search ?? null;
   fieldState.seedRealms = fieldState.seedSearchURL
     ? [parseSearchURL(new URL(fieldState.seedSearchURL)).realm.href]
     : [];
