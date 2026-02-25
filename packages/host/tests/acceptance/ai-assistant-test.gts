@@ -1024,7 +1024,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await click('[data-test-file="person.gts"]');
     await click('[data-test-choose-file-modal-add-button]');
     assert.dom('[data-test-attached-file]').exists({ count: 1 });
-    assert.dom('[data-test-attached-file]').hasText('person.gts');
+    assert.dom('[data-test-attached-file]').hasText('person');
     // Add attachment item
     await click('[data-test-attach-button]');
     await click('[data-test-attach-file-btn]');
@@ -1033,16 +1033,16 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     assert.dom('[data-test-attached-file]').exists({ count: 2 });
     assert
       .dom(`[data-test-attached-file="${testRealmURL}person.gts"]`)
-      .hasText('person.gts');
+      .hasText('person');
     assert
       .dom(`[data-test-attached-file="${testRealmURL}pet.gts"]`)
-      .hasText('pet.gts');
+      .hasText('pet');
 
     // Add remove attachment item
     await click(
       `[data-test-attached-file="${testRealmURL}person.gts"] [data-test-remove-file-btn]`,
     );
-    assert.dom('[data-test-attached-file]').hasText('pet.gts');
+    assert.dom('[data-test-attached-file]').hasText('pet');
 
     await fillIn('[data-test-message-field]', `Message With File`);
     await click('[data-test-send-message-btn]');
@@ -1072,7 +1072,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await waitFor(`[data-room-settled]`);
     await click('[data-test-file="person.gts"]');
     assert.dom('[data-test-autoattached-file]').exists();
-    assert.dom(`[data-test-autoattached-file]`).hasText('person.gts');
+    assert.dom(`[data-test-autoattached-file]`).hasText('person');
 
     await click('[data-test-file-browser-toggle]');
     await click(`[data-test-autoattached-file] [data-test-remove-file-btn]`);
@@ -1081,12 +1081,12 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await click('[data-test-file-browser-toggle]');
     await click('[data-test-file="pet.gts"]');
     assert.dom('[data-test-autoattached-file]').exists();
-    assert.dom(`[data-test-autoattached-file]`).hasText('pet.gts');
+    assert.dom(`[data-test-autoattached-file]`).hasText('pet');
 
     await click('[data-test-file-browser-toggle]');
     await click('[data-test-file="person.gts"]');
     assert.dom('[data-test-autoattached-file]').exists();
-    assert.dom(`[data-test-autoattached-file]`).hasText('person.gts');
+    assert.dom(`[data-test-autoattached-file]`).hasText('person');
   });
 
   test('loads more AI rooms when scrolling', async function (assert) {
