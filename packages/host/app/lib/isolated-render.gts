@@ -41,20 +41,20 @@ export function render(
   let {
     state: { owner: _owner, builder: _builder, context: _context },
   } = owner.lookup('renderer:-dom') as any;
+  let self = createConstRef({}, 'this');
+  let layout = (getComponentTemplate as any)(root)(_owner).asLayout();
 
-  let result: ActiveRender | undefined;
+  let iterator = renderMain(
+    _context,
+    _owner,
+    self,
+    _builder(_context.env, { element }),
+    layout,
+  );
+  let vm = (iterator as any).vm;
 
   try {
-    inTransaction(_context.env, () => {
-      let iterator = glimmerRenderComponent(
-        _context,
-        _builder(_context.env, { element }),
-        _owner,
-        C,
-        { format },
-      );
-      result = iterator.sync();
-    });
+    inTransaction(_context.env, () => vm._execute());
   } catch (err: any) {
     resetTracking();
     let error = new CardError(
