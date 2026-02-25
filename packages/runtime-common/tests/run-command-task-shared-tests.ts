@@ -1,4 +1,3 @@
-import { module, test } from 'qunit';
 import type {
   DBAdapter,
   ExecuteOptions,
@@ -6,6 +5,7 @@ import type {
   QueuePublisher,
   RunCommandResponse,
 } from '../index';
+import type { SharedTests } from '../helpers';
 import type { TaskArgs } from '../tasks';
 import { runCommand } from '../tasks/run-command';
 
@@ -89,8 +89,8 @@ function makeTaskArgs({
   };
 }
 
-module('run-command task', () => {
-  test('returns error when runAs has no realm permissions', async function (assert) {
+const tests = Object.freeze({
+  'returns error when runAs has no realm permissions': async (assert) => {
     assert.expect(4);
     let statuses: Array<'start' | 'finish'> = [];
     let ranPrerender = false;
@@ -121,9 +121,9 @@ module('run-command task', () => {
     );
     assert.false(ranPrerender, 'does not call prerenderer');
     assert.deepEqual(statuses, ['start', 'finish'], 'reports start/finish');
-  });
+  },
 
-  test('returns error when command specifier is invalid', async function (assert) {
+  'returns error when command specifier is invalid': async (assert) => {
     assert.expect(3);
     let statuses: Array<'start' | 'finish'> = [];
     let ranPrerender = false;
@@ -157,9 +157,11 @@ module('run-command task', () => {
     assert.strictEqual(result.status, 'error');
     assert.false(ranPrerender, 'does not call prerenderer for invalid command');
     assert.deepEqual(statuses, ['start', 'finish'], 'reports start/finish');
-  });
+  },
 
-  test('normalizes legacy /commands URL and defaults export name', async function (assert) {
+  'normalizes legacy /commands URL and defaults export name': async (
+    assert,
+  ) => {
     assert.expect(4);
     let prerenderCall:
       | {
@@ -217,9 +219,9 @@ module('run-command task', () => {
       undefined,
       'null commandInput is converted to undefined',
     );
-  });
+  },
 
-  test('passes scoped command through unchanged', async function (assert) {
+  'passes scoped command through unchanged': async (assert) => {
     assert.expect(2);
     let prerenderCall:
       | {
@@ -262,5 +264,7 @@ module('run-command task', () => {
     assert.deepEqual(prerenderCall?.commandInput, {
       listingId: 'http://localhost:4201/catalog/AppListing/1',
     });
-  });
-});
+  },
+} as SharedTests<{}>);
+
+export default tests;

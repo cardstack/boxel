@@ -1,11 +1,13 @@
-import { module, test } from 'qunit';
+import type { SharedTests } from '../helpers';
 import {
   commandUrlToCodeRef,
   parseBoxelHostCommandSpecifier,
 } from '../command-parsing-utils';
 
-module('command parsing utils', () => {
-  test('parseBoxelHostCommandSpecifier parses scoped command specifier', async function (assert) {
+const tests = Object.freeze({
+  'parseBoxelHostCommandSpecifier parses scoped command specifier': async (
+    assert,
+  ) => {
     assert.deepEqual(
       parseBoxelHostCommandSpecifier(
         '@cardstack/boxel-host/commands/show-card/default',
@@ -15,25 +17,30 @@ module('command parsing utils', () => {
         name: 'default',
       },
     );
-  });
+  },
 
-  test('parseBoxelHostCommandSpecifier rejects unscoped command specifier', async function (assert) {
+  'parseBoxelHostCommandSpecifier rejects unscoped command specifier': async (
+    assert,
+  ) => {
     assert.strictEqual(
       parseBoxelHostCommandSpecifier(
         'cardstack/boxel-host/commands/show-card/execute',
       ),
       undefined,
     );
-  });
+  },
 
-  test('parseBoxelHostCommandSpecifier rejects specifier without export name', async function (assert) {
-    assert.strictEqual(
-      parseBoxelHostCommandSpecifier('cardstack/boxel-host/commands/show-card'),
-      undefined,
-    );
-  });
+  'parseBoxelHostCommandSpecifier rejects specifier without export name':
+    async (assert) => {
+      assert.strictEqual(
+        parseBoxelHostCommandSpecifier(
+          'cardstack/boxel-host/commands/show-card',
+        ),
+        undefined,
+      );
+    },
 
-  test('parseBoxelHostCommandSpecifier rejects query/hash forms', async function (assert) {
+  'parseBoxelHostCommandSpecifier rejects query/hash forms': async (assert) => {
     assert.strictEqual(
       parseBoxelHostCommandSpecifier(
         '@cardstack/boxel-host/commands/show-card/default?foo=bar',
@@ -46,16 +53,20 @@ module('command parsing utils', () => {
       ),
       undefined,
     );
-  });
+  },
 
-  test('requires explicit export for cardstack/boxel-host command specifier', async function (assert) {
+  'requires explicit export for cardstack/boxel-host command specifier': async (
+    assert,
+  ) => {
     assert.strictEqual(
       commandUrlToCodeRef('cardstack/boxel-host/commands/show-card', undefined),
       undefined,
     );
-  });
+  },
 
-  test('parses cardstack/boxel-host command specifier with explicit export', async function (assert) {
+  'parses cardstack/boxel-host command specifier with explicit export': async (
+    assert,
+  ) => {
     assert.deepEqual(
       commandUrlToCodeRef(
         '@cardstack/boxel-host/commands/show-card/execute',
@@ -66,9 +77,9 @@ module('command parsing utils', () => {
         name: 'execute',
       },
     );
-  });
+  },
 
-  test('parses absolute /commands URL into realm code ref', async function (assert) {
+  'parses absolute /commands URL into realm code ref': async (assert) => {
     assert.deepEqual(
       commandUrlToCodeRef(
         'http://localhost:4200/commands/create-listing-pr/default',
@@ -79,9 +90,11 @@ module('command parsing utils', () => {
         name: 'default',
       },
     );
-  });
+  },
 
-  test('parses absolute /commands URL without export into default export', async function (assert) {
+  'parses absolute /commands URL without export into default export': async (
+    assert,
+  ) => {
     assert.deepEqual(
       commandUrlToCodeRef(
         'http://localhost:4200/commands/create-listing-pr',
@@ -92,9 +105,9 @@ module('command parsing utils', () => {
         name: 'default',
       },
     );
-  });
+  },
 
-  test('rejects nested /commands paths', async function (assert) {
+  'rejects nested /commands paths': async (assert) => {
     assert.strictEqual(
       commandUrlToCodeRef(
         'http://localhost:4200/commands/../../admin/commands/dangerous/action',
@@ -102,9 +115,9 @@ module('command parsing utils', () => {
       ),
       undefined,
     );
-  });
+  },
 
-  test('rejects traversal-like command segments', async function (assert) {
+  'rejects traversal-like command segments': async (assert) => {
     assert.strictEqual(
       commandUrlToCodeRef(
         'http://localhost:4200/commands/%2E%2E/default',
@@ -119,9 +132,9 @@ module('command parsing utils', () => {
       ),
       undefined,
     );
-  });
+  },
 
-  test('rejects extra path segments beyond command and export', async function (assert) {
+  'rejects extra path segments beyond command and export': async (assert) => {
     assert.strictEqual(
       commandUrlToCodeRef(
         'http://localhost:4200/commands/create-listing-pr/default/extra',
@@ -129,9 +142,9 @@ module('command parsing utils', () => {
       ),
       undefined,
     );
-  });
+  },
 
-  test('returns undefined for unknown command formats', async function (assert) {
+  'returns undefined for unknown command formats': async (assert) => {
     assert.strictEqual(
       commandUrlToCodeRef(
         'https://example.com/not-commands/create-listing-pr',
@@ -139,5 +152,7 @@ module('command parsing utils', () => {
       ),
       undefined,
     );
-  });
-});
+  },
+} as SharedTests<{}>);
+
+export default tests;
