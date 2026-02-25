@@ -5,7 +5,7 @@ import { service } from '@ember/service';
 
 import { isEqual } from 'lodash';
 
-import type { CodeRef, LooseCardResource } from '@cardstack/runtime-common';
+import type { CodeRef } from '@cardstack/runtime-common';
 import {
   baseRef,
   identifyCard,
@@ -13,17 +13,13 @@ import {
   maybeRelativeURL,
   relationshipEntries,
   realmURL,
+  snapshotRuntimeDependencies,
   type SingleCardDocument,
   type PrerenderMeta,
   type RenderError,
 } from '@cardstack/runtime-common';
 
-import {
-  directModuleDeps,
-  recursiveModuleDeps,
-} from '@cardstack/host/lib/prerender-util';
 import type CardService from '@cardstack/host/services/card-service';
-import type LoaderService from '@cardstack/host/services/loader-service';
 
 import type { BaseDef, CardDef } from 'https://cardstack.com/base/card-api';
 
@@ -35,7 +31,6 @@ export type Model = PrerenderMeta | RenderError | undefined;
 
 export default class RenderMetaRoute extends Route<Model> {
   @service declare cardService: CardService;
-  @service declare loaderService: LoaderService;
 
   async model(_: unknown, transition: Transition) {
     let api = await this.cardService.getAPI();
@@ -54,6 +49,10 @@ export default class RenderMetaRoute extends Route<Model> {
       return;
     }
 
+    let deps =
+      renderModel?.capturedDeps ??
+      snapshotRuntimeDependencies({ excludeQueryOnly: true }).deps;
+
     let serialized = api.serializeCard(instance, {
       includeComputeds: true,
       maybeRelativeURL: (url: string) =>
@@ -69,24 +68,6 @@ export default class RenderMetaRoute extends Route<Model> {
       // we want to emulate the file serialization here
       delete relationship.data;
     }
-
-    let instanceURL = new URL(instance.id);
-    let moduleDeps = directModuleDeps(serialized.data, instanceURL);
-
-    // Include module deps from linked card instances (included resources)
-    if (serialized.included) {
-      for (let resource of serialized.included) {
-        if (resource.meta?.adoptsFrom) {
-          moduleDeps.push(
-            ...directModuleDeps(resource as LooseCardResource, instanceURL),
-          );
-        }
-      }
-    }
-
-    let deps = [
-      ...(await recursiveModuleDeps(moduleDeps, this.loaderService.loader)),
-    ];
 
     let Klass = getClass(instance);
 

@@ -416,6 +416,32 @@ module('Integration | Store', function (hooks) {
     );
   });
 
+  test('realm subscription is removed when file-meta reference count drops to zero', async function (assert) {
+    await testRealm.write('hero.png', 'mock hero image');
+    let fileUrl = `${testRealmURL}hero.png`;
+    let subscriptions = (storeService as any).subscriptions as Map<
+      string,
+      { unsubscribe: () => void }
+    >;
+
+    assert.false(
+      subscriptions.has(testRealmURL),
+      'realm is not subscribed before adding file-meta reference',
+    );
+
+    storeService.addReference(fileUrl, { type: 'file-meta' });
+    assert.true(
+      subscriptions.has(testRealmURL),
+      'realm subscription is created for file-meta reference',
+    );
+
+    storeService.dropReference(fileUrl);
+    assert.false(
+      subscriptions.has(testRealmURL),
+      'realm subscription is removed when file-meta reference reaches zero',
+    );
+  });
+
   test('add stores FileDef dependencies', async function (assert) {
     class FileCard extends CardDef {
       @field attachment = linksTo(FileDef);
@@ -1843,6 +1869,78 @@ module('Integration | Store', function (hooks) {
     );
   });
 
+  test('reference count is balanced when used with CardResource for file-meta that is destroyed', async function (assert) {
+    class Driver {
+      @tracked showComponent = false;
+      @tracked id: string | undefined;
+    }
+
+    let driver = new Driver();
+    let firstFile = `${testRealmURL}notes.txt`;
+    let secondFile = `${testRealmURL}README.txt`;
+    await testRealm.write('notes.txt', 'notes');
+    await testRealm.write('README.txt', 'readme');
+
+    class ResourceConsumer extends GlimmerComponent {
+      resource = getCard(this, () => driver.id, { type: 'file-meta' });
+      <template>
+        {{#if this.resource.card}}
+          <div data-test-rendered-file={{this.resource.id}} />
+        {{/if}}
+      </template>
+    }
+
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          {{#if driver.showComponent}}
+            <ResourceConsumer />
+          {{/if}}
+        </template>
+      },
+    );
+
+    driver.showComponent = true;
+    driver.id = firstFile;
+    await waitFor(`[data-test-rendered-file="${firstFile}"]`);
+    assert.strictEqual(
+      storeService.getReferenceCount(firstFile),
+      1,
+      `reference count for ${firstFile} is 1`,
+    );
+    assert.strictEqual(
+      storeService.getReferenceCount(secondFile),
+      0,
+      `reference count for ${secondFile} is 0`,
+    );
+
+    driver.id = secondFile;
+    await waitFor(`[data-test-rendered-file="${secondFile}"]`);
+    assert.strictEqual(
+      storeService.getReferenceCount(firstFile),
+      0,
+      `reference count for ${firstFile} is 0`,
+    );
+    assert.strictEqual(
+      storeService.getReferenceCount(secondFile),
+      1,
+      `reference count for ${secondFile} is 1`,
+    );
+
+    driver.showComponent = false;
+    await waitFor(`[data-test-rendered-file]`, { count: 0 });
+    assert.strictEqual(
+      storeService.getReferenceCount(firstFile),
+      0,
+      `reference count for ${firstFile} is 0`,
+    );
+    assert.strictEqual(
+      storeService.getReferenceCount(secondFile),
+      0,
+      `reference count for ${secondFile} is 0`,
+    );
+  });
+
   test<TestContextWithSave>('reference count is balanced during auto saving', async function (assert) {
     let hassan = `${testRealmURL}Person/hassan`;
 
@@ -1983,12 +2081,11 @@ module('Integration | Store', function (hooks) {
       get card() {
         return this.resource.instances[0];
       }
-      get renderedCard() {
-        return this.card?.constructor.getComponent(this.card);
-      }
       <template>
         {{#if this.card}}
-          <this.renderedCard data-test-rendered-card={{this.card.id}} />
+          <div data-test-rendered-card={{this.card.id}}>
+            {{this.card.id}}
+          </div>
         {{/if}}
       </template>
     }
@@ -2008,7 +2105,12 @@ module('Integration | Store', function (hooks) {
     let hassan = `${testRealmURL}Person/hassan`;
 
     driver.id = hassan;
-    await waitFor(`[data-test-rendered-card="${hassan}"]`, { timeout: 5_000 });
+    await waitUntil(
+      () =>
+        storeService.getReferenceCount(hassan) === 1 &&
+        storeService.getReferenceCount(jade) === 0,
+      { timeout: 10_000 },
+    );
     assert.strictEqual(
       storeService.getReferenceCount(jade),
       0,
@@ -2021,7 +2123,12 @@ module('Integration | Store', function (hooks) {
     );
 
     driver.id = jade;
-    await waitFor(`[data-test-rendered-card="${jade}"]`, { timeout: 5_000 });
+    await waitUntil(
+      () =>
+        storeService.getReferenceCount(jade) === 1 &&
+        storeService.getReferenceCount(hassan) === 0,
+      { timeout: 10_000 },
+    );
     assert.strictEqual(
       storeService.getReferenceCount(jade),
       1,
@@ -2034,7 +2141,12 @@ module('Integration | Store', function (hooks) {
     );
 
     driver.showComponent = false;
-    await waitFor(`[data-test-rendered-card]`, { count: 0 });
+    await waitUntil(
+      () =>
+        storeService.getReferenceCount(jade) === 0 &&
+        storeService.getReferenceCount(hassan) === 0,
+      { timeout: 10_000 },
+    );
     assert.strictEqual(
       storeService.getReferenceCount(jade),
       0,

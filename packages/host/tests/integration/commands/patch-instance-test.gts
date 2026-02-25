@@ -20,6 +20,8 @@ import {
   setupOnSave,
   withSlowSave,
   type TestContextWithSave,
+  setupRealmCacheTeardown,
+  withCachedRealmSetup,
 } from '../../helpers';
 import {
   CardDef,
@@ -46,6 +48,8 @@ module('Integration | commands | patch-instance', function (hooks) {
   let PersonDef: typeof CardDefType;
   let indexQuery: RealmIndexQueryEngine;
 
+  setupRealmCacheTeardown(hooks);
+
   hooks.beforeEach(async function () {
     commandService = getService('command-service');
     class Person extends CardDef {
@@ -56,16 +60,18 @@ module('Integration | commands | patch-instance', function (hooks) {
     }
     PersonDef = Person;
 
-    let { realm } = await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      contents: {
-        'person.gts': { Person },
-        'Person/hassan.json': new Person({ name: 'Hassan' }),
-        'Person/jade.json': new Person({ name: 'Jade' }),
-        'Person/queenzy.json': new Person({ name: 'Queenzy' }),
-        'Person/germaine.json': new Person({ name: 'Germaine' }),
-      },
-    });
+    let { realm } = await withCachedRealmSetup(async () =>
+      setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {
+          'person.gts': { Person },
+          'Person/hassan.json': new Person({ name: 'Hassan' }),
+          'Person/jade.json': new Person({ name: 'Jade' }),
+          'Person/queenzy.json': new Person({ name: 'Queenzy' }),
+          'Person/germaine.json': new Person({ name: 'Germaine' }),
+        },
+      }),
+    );
     indexQuery = realm.realmIndexQueryEngine;
   });
 
@@ -487,6 +493,7 @@ module('Integration | commands | patch-instance', function (hooks) {
       instance.relationships,
       {
         bestFriend: { links: { self: `./queenzy` } },
+        'cardInfo.theme': { links: { self: null } },
         friends: {
           links: {
             self: null,

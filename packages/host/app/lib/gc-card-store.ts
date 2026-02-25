@@ -6,12 +6,17 @@ import {
   isPrimitive,
   isCardInstance,
   isFileDefInstance,
+  isBaseInstance,
   isLocalId,
   localId as localIdSymbol,
   loadCardDocument,
   loadFileMetaDocument,
+  trackRuntimeFileDependency,
+  trackRuntimeInstanceDependency,
+  logger,
   type Query,
   type QueryResultsMeta,
+  type RuntimeDependencyTrackingContext,
   type ErrorEntry,
   type CardErrorJSONAPI,
   type CardError,
@@ -20,6 +25,7 @@ import {
 } from '@cardstack/runtime-common';
 
 import type {
+  BaseDef,
   CardDef,
   CardStore,
   GetSearchResourceFuncOpts,
@@ -29,6 +35,8 @@ import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type { FileDef } from 'https://cardstack.com/base/file-api';
 
 export type ReferenceCount = Map<string, number>;
+
+const loadTrackingLogger = logger('store-load-tracking');
 
 type LocalId = string;
 type InstanceGraph = Map<LocalId, Set<LocalId>>;
@@ -42,6 +50,7 @@ type StoreHooks = {
     opts?: {
       isLive?: boolean;
       doWhileRefreshing?: (() => void) | undefined;
+      dependencyTracking?: RuntimeDependencyTrackingContext;
       seed?:
         | {
             cards: T[];
@@ -49,6 +58,12 @@ type StoreHooks = {
             realms?: string[];
             meta?: QueryResultsMeta;
             errors?: ErrorEntry[];
+            queryErrors?: Array<{
+              realm: string;
+              type: string;
+              message: string;
+              status?: number;
+            }>;
           }
         | undefined;
     },
@@ -142,6 +157,8 @@ export default class CardStoreWithGarbageCollection implements CardStore {
   #fetch: typeof globalThis.fetch;
   #inFlight: Set<Promise<unknown>> = new Set();
   #loadGeneration = 0; // increments whenever a new load is tracked
+  #nextLoadId = 1;
+  #loadIds: WeakMap<Promise<unknown>, number> = new WeakMap();
   #cardDocsInFlight: Map<string, Promise<SingleCardDocument | CardError>> =
     new Map();
   #fileMetaDocsInFlight: Map<
@@ -189,7 +206,11 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     this.setFileMetaItem(id, instance, true);
   }
 
-  async loadCardDocument(url: string) {
+  async loadCardDocument(
+    url: string,
+    opts?: { dependencyTrackingContext?: RuntimeDependencyTrackingContext },
+  ) {
+    trackRuntimeInstanceDependency(url, opts?.dependencyTrackingContext);
     let promise = this.#cardDocsInFlight.get(url);
     if (promise) {
       this.trackLoad(promise);
@@ -207,7 +228,9 @@ export default class CardStoreWithGarbageCollection implements CardStore {
 
   async loadFileMetaDocument(
     url: string,
+    opts?: { dependencyTrackingContext?: RuntimeDependencyTrackingContext },
   ): Promise<SingleFileMetaDocument | CardError> {
+    trackRuntimeFileDependency(url, opts?.dependencyTrackingContext);
     let promise = this.#fileMetaDocsInFlight.get(url);
     if (promise) {
       this.trackLoad(promise);
@@ -233,31 +256,64 @@ export default class CardStoreWithGarbageCollection implements CardStore {
 
   trackLoad(load: Promise<unknown>) {
     if (this.#inFlight.has(load)) {
+      loadTrackingLogger.debug('trackLoad skipped duplicate promise');
       return;
     }
+    let loadId = this.#nextLoadId++;
+    this.#loadIds.set(load, loadId);
     this.#inFlight.add(load);
     this.#loadGeneration++;
-    load.finally(() => {
-      this.#inFlight.delete(load);
-    });
+    loadTrackingLogger.debug(
+      `trackLoad start id=${loadId} generation=${this.#loadGeneration} pending=${this.#inFlight.size}`,
+    );
+    void load
+      .finally(() => {
+        this.#inFlight.delete(load);
+        loadTrackingLogger.debug(
+          `trackLoad settled id=${loadId} pending=${this.#inFlight.size}`,
+        );
+      })
+      .catch((error) => {
+        loadTrackingLogger.debug(
+          `trackLoad rejected id=${loadId} error=${String(error)}`,
+        );
+      });
   }
 
   async loaded() {
+    loadTrackingLogger.debug(
+      `loaded() begin generation=${this.#loadGeneration} pending=${this.#inFlight.size}`,
+    );
     let observedGeneration = this.#loadGeneration;
     for (;;) {
       if (this.#inFlight.size === 0) {
         // allow microtasks (like settled promise continuations) to enqueue more loads
+        loadTrackingLogger.debug(
+          'loaded() no pending loads, waiting one microtask',
+        );
         await Promise.resolve();
       } else {
         let pendingLoads = Array.from(this.#inFlight);
+        let pendingIds = pendingLoads
+          .map((pendingLoad) => this.#loadIds.get(pendingLoad))
+          .filter((id): id is number => id != null);
+        loadTrackingLogger.debug(
+          `loaded() waiting for pending loads ids=[${pendingIds.join(',')}] count=${pendingLoads.length}`,
+        );
         await Promise.allSettled(pendingLoads);
       }
       if (
         this.#inFlight.size === 0 &&
         this.#loadGeneration === observedGeneration
       ) {
+        loadTrackingLogger.debug(
+          `loaded() complete generation=${this.#loadGeneration}`,
+        );
         return;
       }
+      loadTrackingLogger.debug(
+        `loaded() continuing; generation moved ${observedGeneration} -> ${this.#loadGeneration}, pending=${this.#inFlight.size}`,
+      );
       observedGeneration = this.#loadGeneration;
     }
   }
@@ -810,36 +866,78 @@ export function getDeps(
 ): Array<CardDef | FileDef> {
   let fields = api.getFields(
     Reflect.getPrototypeOf(instance)!.constructor as typeof CardDef,
-    { includeComputeds: true },
+    { includeComputeds: false },
   );
   let deps: Array<CardDef | FileDef> = [];
   for (let [fieldName, field] of Object.entries(fields)) {
-    let value = (instance as any)[fieldName];
+    let value = api.peekAtField(instance, fieldName);
     if (isPrimitive(field.card) || !value || typeof value !== 'object') {
       continue;
     }
-    deps.push(...findInstances(value));
+    deps.push(...findInstances(api, value));
   }
   return deps;
 }
 
-function findInstances(obj: object): Array<CardDef | FileDef> {
+function findInstances(
+  api: typeof CardAPI,
+  obj: unknown,
+  visited = new WeakSet<object>(),
+): Array<CardDef | FileDef> {
+  if (!obj || typeof obj !== 'object') {
+    return [];
+  }
+  if (visited.has(obj)) {
+    return [];
+  }
+  visited.add(obj);
   if (isCardInstance(obj)) {
     return [obj];
   }
   if (isFileDefInstance(obj)) {
     return [obj];
   }
+  if (
+    (obj as { type?: unknown; reference?: unknown }).type === 'not-loaded' &&
+    typeof (obj as { reference?: unknown }).reference === 'string'
+  ) {
+    return [];
+  }
+  if (isBaseDefInstance(obj)) {
+    let deps: Array<CardDef | FileDef> = [];
+    let fields = api.getFields(obj, { includeComputeds: false });
+    for (let [fieldName, field] of Object.entries(fields)) {
+      let value = api.peekAtField(obj, fieldName);
+      if (isPrimitive(field.card) || !value || typeof value !== 'object') {
+        continue;
+      }
+      deps.push(...findInstances(api, value, visited));
+    }
+    return deps;
+  }
   if (Array.isArray(obj)) {
-    return obj.reduce((acc, item) => acc.concat(findInstances(item)), []);
+    return obj.reduce(
+      (acc, item) =>
+        item && typeof item === 'object'
+          ? acc.concat(findInstances(api, item, visited))
+          : acc,
+      [] as Array<CardDef | FileDef>,
+    );
   }
   if (obj && typeof obj === 'object') {
     return Object.values(obj).reduce(
-      (acc, value) => acc.concat(findInstances(value)),
-      [],
+      (acc, value) =>
+        value && typeof value === 'object'
+          ? acc.concat(findInstances(api, value, visited))
+          : acc,
+      [] as Array<CardDef | FileDef>,
     );
   }
   return [];
+}
+
+function isBaseDefInstance(value: object): value is BaseDef {
+  return isBaseInstance in value;
 }
 
 // only touch the entry in the tracked map if it's different so we don't trigger

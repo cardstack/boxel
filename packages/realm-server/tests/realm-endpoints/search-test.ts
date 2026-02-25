@@ -824,6 +824,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
         setupPermissionedRealm(hooks, {
           permissions: {
             john: ['read'],
+            '@node-test_realm:localhost': ['read', 'realm-owner'],
           },
           realmURL: new URL('http://127.0.0.1:4444/test/'),
           onRealmSetup,
@@ -880,6 +881,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
         setupPermissionedRealm(hooks, {
           permissions: {
             '*': ['read'],
+            '@node-test_realm:localhost': ['read', 'realm-owner'],
           },
           realmURL: new URL('http://127.0.0.1:4444/test/'),
           onRealmSetup,

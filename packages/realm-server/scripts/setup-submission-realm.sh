@@ -28,28 +28,6 @@ if [ ! -f "$SUBMISSION_REALM_PATH/index.json" ]; then
     "type": "card",
     "meta": {
       "adoptsFrom": {
-        "module": "https://cardstack.com/base/index",
-        "name": "IndexCard"
-      }
-    },
-    "relationships": {
-      "cardsGrid": {
-        "links": {
-          "self": "./cards-grid"
-        }
-      }
-    }
-  }
-}
-EOF
-fi
-if [ ! -f "$SUBMISSION_REALM_PATH/cards-grid.json" ]; then
-  cat > "$SUBMISSION_REALM_PATH/cards-grid.json" << 'EOF'
-{
-  "data": {
-    "type": "card",
-    "meta": {
-      "adoptsFrom": {
         "module": "https://cardstack.com/base/cards-grid",
         "name": "CardsGrid"
       }

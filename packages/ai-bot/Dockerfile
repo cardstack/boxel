@@ -1,4 +1,4 @@
-FROM node:22.20.0-slim
+FROM node:24.13.1-slim
 ARG CI=1
 RUN apt-get update && apt-get install -y python3 build-essential
 RUN npm install -g pnpm@10.30.0

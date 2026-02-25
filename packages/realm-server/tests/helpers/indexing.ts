@@ -2,6 +2,8 @@ import type { MatrixEvent } from 'https://cardstack.com/base/matrix-event';
 import { findRealmEvent, waitUntil } from './index';
 import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 import { trimJsonExtension } from '@cardstack/runtime-common';
+import type { DBAdapter, Expression } from '@cardstack/runtime-common';
+import { every, param, query } from '@cardstack/runtime-common';
 import type {
   IncrementalIndexEventContent,
   IncrementalIndexInitiationContent,
@@ -88,12 +90,14 @@ export async function expectIncrementalIndexEvent(
     eventName: 'index',
     indexType: 'incremental-index-initiation',
     updatedFile: targetUrl,
+    realmURL: realm,
   });
 
   let expectedIncrementalContent: any = {
     eventName: 'index',
     indexType: 'incremental',
     invalidations: [invalidation],
+    realmURL: realm,
   };
 
   let actualContent = { ...incrementalEventContent };
@@ -101,4 +105,93 @@ export async function expectIncrementalIndexEvent(
 
   assert.deepEqual(actualContent, expectedIncrementalContent);
   return incrementalEventContent;
+}
+
+export async function depsForIndexEntry(
+  dbAdapter: DBAdapter,
+  url: string,
+  type: 'instance' | 'file' = 'instance',
+): Promise<string[]> {
+  let rows = (await query(dbAdapter, [
+    `SELECT deps FROM boxel_index WHERE`,
+    ...every([
+      ['url =', param(url)],
+      ['type =', param(type)],
+    ]),
+    `ORDER BY realm_version DESC LIMIT 1`,
+  ] as Expression)) as { deps: string[] | string | null }[];
+  let rawDeps = rows[0]?.deps ?? [];
+  if (Array.isArray(rawDeps)) {
+    return rawDeps;
+  }
+  if (typeof rawDeps === 'string') {
+    return JSON.parse(rawDeps) as string[];
+  }
+  return [];
+}
+
+export async function indexedAtForIndexEntry(
+  dbAdapter: DBAdapter,
+  url: string,
+  type: 'instance' | 'file' = 'instance',
+): Promise<string | null> {
+  let rows = (await query(dbAdapter, [
+    `SELECT indexed_at FROM boxel_index WHERE`,
+    ...every([
+      ['url =', param(url)],
+      ['type =', param(type)],
+    ]),
+    `ORDER BY realm_version DESC LIMIT 1`,
+  ] as Expression)) as { indexed_at: string | number | null }[];
+  let value = rows[0]?.indexed_at ?? null;
+  if (value == null) {
+    return null;
+  }
+  return String(value);
+}
+
+export async function typeForIndexEntry(
+  dbAdapter: DBAdapter,
+  url: string,
+): Promise<string | null> {
+  let rows = (await query(dbAdapter, [
+    `SELECT type FROM boxel_index WHERE`,
+    ...every([['url =', param(url)]]),
+    `ORDER BY realm_version DESC LIMIT 1`,
+  ] as Expression)) as { type: string }[];
+  return rows[0]?.type ?? null;
+}
+
+export async function errorDocForIndexEntry(
+  dbAdapter: DBAdapter,
+  url: string,
+  type: 'instance' | 'file' = 'instance',
+): Promise<{ hasError: boolean; errorDoc: unknown | null } | null> {
+  let rows = (await query(dbAdapter, [
+    `SELECT has_error, error_doc FROM boxel_index WHERE`,
+    ...every([
+      ['url =', param(url)],
+      ['type =', param(type)],
+    ]),
+    `ORDER BY realm_version DESC LIMIT 1`,
+  ] as Expression)) as {
+    has_error: boolean | null;
+    error_doc: unknown | string | null;
+  }[];
+  let row = rows[0];
+  if (!row) {
+    return null;
+  }
+  let errorDoc = row.error_doc;
+  if (typeof errorDoc === 'string') {
+    try {
+      errorDoc = JSON.parse(errorDoc);
+    } catch (_err) {
+      // Keep the original string when DB driver already returns serialized JSON.
+    }
+  }
+  return {
+    hasError: Boolean(row.has_error),
+    errorDoc: errorDoc ?? null,
+  };
 }

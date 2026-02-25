@@ -13,6 +13,8 @@ import {
   setupIntegrationTestRealm,
   setupLocalIndexing,
   testRealmURL,
+  setupRealmCacheTeardown,
+  withCachedRealmSetup,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
@@ -28,12 +30,15 @@ module('Integration | commands | copy-card', function (hooks) {
     activeRealms: [testRealmURL, testRealm2URL],
   });
 
+  setupRealmCacheTeardown(hooks);
+
   hooks.beforeEach(async function () {
-    await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      realmURL: testRealmURL,
-      contents: {
-        'pet.gts': `
+    await withCachedRealmSetup(async () => {
+      await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        realmURL: testRealmURL,
+        contents: {
+          'pet.gts': `
           import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
           import StringField from "https://cardstack.com/base/string";
           export class Pet extends CardDef {
@@ -41,53 +46,54 @@ module('Integration | commands | copy-card', function (hooks) {
             @field firstName = contains(StringField);
           }
         `,
-        'Pet/mango.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              firstName: 'Mango',
-            },
-            meta: {
-              adoptsFrom: {
-                module: '../pet',
-                name: 'Pet',
+          'Pet/mango.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                firstName: 'Mango',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: '../pet',
+                  name: 'Pet',
+                },
               },
             },
           },
         },
-      },
-    });
+      });
 
-    await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      realmURL: testRealm2URL,
-      contents: {
-        'index.json': {
-          data: {
-            type: 'card',
-            meta: {
-              adoptsFrom: {
-                module: 'https://cardstack.com/base/cards-grid',
-                name: 'CardsGrid',
+      await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        realmURL: testRealm2URL,
+        contents: {
+          'index.json': {
+            data: {
+              type: 'card',
+              meta: {
+                adoptsFrom: {
+                  module: 'https://cardstack.com/base/cards-grid',
+                  name: 'CardsGrid',
+                },
+              },
+            },
+          },
+          'Pet/fluffy.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                firstName: 'Fluffy',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `${testRealmURL}pet`,
+                  name: 'Pet',
+                },
               },
             },
           },
         },
-        'Pet/fluffy.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              firstName: 'Fluffy',
-            },
-            meta: {
-              adoptsFrom: {
-                module: `${testRealmURL}pet`,
-                name: 'Pet',
-              },
-            },
-          },
-        },
-      },
+      });
     });
 
     // Ensure realms are logged in with write permissions

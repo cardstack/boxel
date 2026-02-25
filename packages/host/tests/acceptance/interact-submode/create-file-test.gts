@@ -7,6 +7,7 @@ import { baseRealm, specRef } from '@cardstack/runtime-common';
 
 import {
   setupLocalIndexing,
+  setupRealmCacheTeardown,
   testRealmURL,
   setupOnSave,
   setupAcceptanceTestRealm,
@@ -15,6 +16,7 @@ import {
   setupAuthEndpoints,
   setupUserSubscription,
   type TestContextWithSave,
+  withCachedRealmSetup,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import {
@@ -207,6 +209,7 @@ module('Acceptance | interact submode | create-file tests', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
   setupOnSave(hooks);
+  setupRealmCacheTeardown(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
@@ -220,26 +223,28 @@ module('Acceptance | interact submode | create-file tests', function (hooks) {
     cardsGrid = await loader.import(`${baseRealm.url}cards-grid`);
     let { CardsGrid } = cardsGrid;
 
-    await Promise.all([
-      setupAcceptanceTestRealm({
-        mockMatrixUtils,
-        realmURL: testRealmURL,
-        contents: {
-          ...SYSTEM_CARD_FIXTURE_CONTENTS,
-          'index.json': new CardsGrid(),
-          ...testRealmFiles,
-        },
-      }),
-      setupAcceptanceTestRealm({
-        mockMatrixUtils,
-        realmURL: userRealm,
-        contents: {
-          ...SYSTEM_CARD_FIXTURE_CONTENTS,
-          'index.json': new CardsGrid(),
-          ...userRealmFiles,
-        },
-      }),
-    ]);
+    await withCachedRealmSetup(async () => {
+      await Promise.all([
+        setupAcceptanceTestRealm({
+          mockMatrixUtils,
+          realmURL: testRealmURL,
+          contents: {
+            ...SYSTEM_CARD_FIXTURE_CONTENTS,
+            'index.json': new CardsGrid(),
+            ...testRealmFiles,
+          },
+        }),
+        setupAcceptanceTestRealm({
+          mockMatrixUtils,
+          realmURL: userRealm,
+          contents: {
+            ...SYSTEM_CARD_FIXTURE_CONTENTS,
+            'index.json': new CardsGrid(),
+            ...userRealmFiles,
+          },
+        }),
+      ]);
+    });
 
     createAndJoinRoom({
       sender: '@testuser:localhost',
@@ -309,7 +314,7 @@ module('Acceptance | interact submode | create-file tests', function (hooks) {
 
     await click('[data-test-new-file-button]');
     await click('[data-test-boxel-menu-item-text="Choose a card type..."]');
-    await click(`[data-test-select="${testRealmURL}spec/person"]`);
+    await click(`[data-test-card-catalog-item="${testRealmURL}spec/person"]`);
     await click('[data-test-card-catalog-go-button]');
     await assertCardCreated(assert, 'Person', testRealmURL, 0, 1);
     assert.dom(`[data-test-stack-card-index]`).exists({ count: 2 });
@@ -341,7 +346,7 @@ module('Acceptance | interact submode | create-file tests', function (hooks) {
 
     await click('[data-test-new-file-button]');
     await click('[data-test-boxel-menu-item-text="Choose a card type..."]');
-    await click(`[data-test-select="${testRealmURL}spec/person"]`);
+    await click(`[data-test-card-catalog-item="${testRealmURL}spec/person"]`);
     await click('[data-test-card-catalog-go-button]');
     await assertCardCreated(assert, 'Person', testRealmURL, 1, 2);
     assert

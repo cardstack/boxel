@@ -10,9 +10,11 @@ import {
   setupAcceptanceTestRealm,
   setupLocalIndexing,
   setupOnSave,
+  setupRealmCacheTeardown,
   SYSTEM_CARD_FIXTURE_CONTENTS,
   testRealmURL,
   visitOperatorMode,
+  withCachedRealmSetup,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupApplicationTest } from '../../helpers/setup';
@@ -21,6 +23,7 @@ module('Acceptance | code submode | file def navigation', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
   setupOnSave(hooks);
+  setupRealmCacheTeardown(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
@@ -56,40 +59,42 @@ module('Acceptance | code submode | file def navigation', function (hooks) {
       };
     }
 
-    await setupAcceptanceTestRealm({
-      mockMatrixUtils,
-      contents: {
-        ...SYSTEM_CARD_FIXTURE_CONTENTS,
-        'file-link-card.gts': { FileLinkCard },
-        'FileLinkCard/notes.md': `# Notes
+    await withCachedRealmSetup(async () => {
+      await setupAcceptanceTestRealm({
+        mockMatrixUtils,
+        contents: {
+          ...SYSTEM_CARD_FIXTURE_CONTENTS,
+          'file-link-card.gts': { FileLinkCard },
+          'FileLinkCard/notes.md': `# Notes
 
 Some markdown content.`,
-        'FileLinkCard/with-markdown.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              title: 'Linked markdown example',
-            },
-            relationships: {
-              attachment: {
-                links: {
-                  self: './notes.md',
-                },
-                data: {
-                  type: 'file-meta',
-                  id: './notes.md',
+          'FileLinkCard/with-markdown.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                title: 'Linked markdown example',
+              },
+              relationships: {
+                attachment: {
+                  links: {
+                    self: './notes.md',
+                  },
+                  data: {
+                    type: 'file-meta',
+                    id: './notes.md',
+                  },
                 },
               },
-            },
-            meta: {
-              adoptsFrom: {
-                module: '../file-link-card',
-                name: 'FileLinkCard',
+              meta: {
+                adoptsFrom: {
+                  module: '../file-link-card',
+                  name: 'FileLinkCard',
+                },
               },
             },
           },
         },
-      },
+      });
     });
   });
 
@@ -127,5 +132,17 @@ Some markdown content.`,
     });
 
     assert.dom('[data-test-card-url-bar-input]').hasValue(expectedMarkdownUrl);
+  });
+
+  test('file def instance is editable in code mode', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}FileLinkCard/notes.md`,
+    });
+
+    await waitFor('[data-test-editor]');
+    assert
+      .dom('[data-test-realm-indicator-not-writable]')
+      .doesNotExist('read-only indicator is not shown for file def instance');
   });
 });

@@ -2,6 +2,15 @@
 SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
 . "$SCRIPTS_DIR/wait-for-pg.sh"
 
+sh "$SCRIPTS_DIR/start-icons.sh" &
+ICONS_PID=$!
+cleanup_icons_server() {
+  if [ -n "$ICONS_PID" ]; then
+    kill "$ICONS_PID" >/dev/null 2>&1 || true
+  fi
+}
+trap cleanup_icons_server EXIT INT TERM
+
 wait_for_postgres
 
 pnpm --dir=../skills-realm skills:setup

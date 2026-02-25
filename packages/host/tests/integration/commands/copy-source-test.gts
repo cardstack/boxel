@@ -14,6 +14,8 @@ import {
   setupLocalIndexing,
   testRealmURL,
   testRealmInfo,
+  setupRealmCacheTeardown,
+  withCachedRealmSetup,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
@@ -40,12 +42,15 @@ module('Integration | commands | copy-source', function (hooks) {
     fetch = getService('network').fetch;
   });
 
+  setupRealmCacheTeardown(hooks);
+
   hooks.beforeEach(async function () {
-    await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      realmURL: testRealmURL,
-      contents: {
-        'person.gts': `
+    await withCachedRealmSetup(async () =>
+      setupIntegrationTestRealm({
+        mockMatrixUtils,
+        realmURL: testRealmURL,
+        contents: {
+          'person.gts': `
           import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
           import StringField from "https://cardstack.com/base/string";
           export class Person extends CardDef {
@@ -53,8 +58,9 @@ module('Integration | commands | copy-source', function (hooks) {
             @field firstName = contains(StringField);
           }
         `,
-      },
-    });
+        },
+      }),
+    );
   });
 
   test('able to copy source or file', async function (assert) {
@@ -62,15 +68,15 @@ module('Integration | commands | copy-source', function (hooks) {
     let copySourceCommand = new CopySourceCommand(
       commandService.commandContext,
     );
-    const fromRealmUrl = testRealmURL + 'person.gts';
-    const toRealmUrl = testRealmURL + 'person-copy.gts';
+    const originSourceUrl = testRealmURL + 'person.gts';
+    const destinationSourceUrl = testRealmURL + 'person-copy.gts';
     await copySourceCommand.execute({
-      fromRealmUrl,
-      toRealmUrl,
+      originSourceUrl,
+      destinationSourceUrl,
     });
-    let personResponse = await fetch(new URL(fromRealmUrl));
+    let personResponse = await fetch(new URL(originSourceUrl));
     let personContent = await personResponse.text();
-    let personCopyResponse = await fetch(new URL(toRealmUrl));
+    let personCopyResponse = await fetch(new URL(destinationSourceUrl));
     let personCopyContent = await personCopyResponse.text();
 
     assert.strictEqual(personCopyContent, personContent);

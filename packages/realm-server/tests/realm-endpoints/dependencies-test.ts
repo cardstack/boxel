@@ -65,7 +65,16 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
     assert.strictEqual(entry.attributes.realmUrl, testRealm.url);
     assert.strictEqual(entry.attributes.entryType, 'file');
     assert.false(entry.attributes.hasError);
-    assert.true(entry.attributes.dependencies.includes(targetUrl));
+    assert.true(
+      entry.attributes.dependencies.includes(
+        'https://cardstack.com/base/card-api',
+      ),
+      'includes consumed card-api module dependency',
+    );
+    assert.false(
+      entry.attributes.dependencies.includes(targetUrl),
+      'self url is excluded from dependencies',
+    );
   });
 
   test('returns empty array for unknown resources', async function (assert) {

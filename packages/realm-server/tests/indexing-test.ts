@@ -24,6 +24,12 @@ import {
   setupPermissionedRealms,
   cardInfo,
 } from './helpers';
+import {
+  depsForIndexEntry,
+  errorDocForIndexEntry,
+  indexedAtForIndexEntry,
+  typeForIndexEntry,
+} from './helpers/indexing';
 import stripScopedCSSAttributes from '@cardstack/runtime-common/helpers/strip-scoped-css-attributes';
 import { join, basename } from 'path';
 import { resetCatalogRealms } from '../handlers/handle-fetch-catalog-realms';
@@ -1094,8 +1100,8 @@ module(basename(__filename), function () {
       assert.deepEqual(
         doc.data.meta?.adoptsFrom,
         {
-          module: 'https://cardstack.com/base/file-api',
-          name: 'FileDef',
+          module: 'https://cardstack.com/base/text-file-def',
+          name: 'TextFileDef',
         },
         'adoptsFrom sourced from pristine file resource',
       );
@@ -1142,6 +1148,38 @@ module(basename(__filename), function () {
     let realm: Realm;
     let adapter: RealmAdapter;
     let testRealmServer: TestRealmServerResult | undefined;
+
+    async function depsFor(
+      url: string,
+      type: 'instance' | 'file' = 'instance',
+    ): Promise<string[]> {
+      return depsForIndexEntry(testDbAdapter, url, type);
+    }
+
+    async function indexedAtFor(
+      url: string,
+      type: 'instance' | 'file' = 'instance',
+    ): Promise<string | null> {
+      return indexedAtForIndexEntry(testDbAdapter, url, type);
+    }
+
+    function hasErrorDetail(
+      error: {
+        message?: string;
+        additionalErrors?: { message?: string }[] | null;
+      },
+      needle: string,
+    ): boolean {
+      let additionalErrors = Array.isArray(error.additionalErrors)
+        ? error.additionalErrors
+        : [];
+      return (
+        String(error.message ?? '').includes(needle) ||
+        additionalErrors.some((additionalError) =>
+          String(additionalError.message ?? '').includes(needle),
+        )
+      );
+    }
 
     setupDB(hooks, {
       beforeEach: async (dbAdapter, publisher, runner) => {
@@ -1771,6 +1809,1473 @@ module(basename(__filename), function () {
       }
     });
 
+    test('collects deep relationship deps from rendered links including field-def linksToMany', async function (assert) {
+      await realm.write(
+        'person-rel.gts',
+        `
+          import { CardDef, Component, contains, field, linksTo } from "https://cardstack.com/base/card-api";
+          import StringField from "https://cardstack.com/base/string";
+
+          export class PersonRel extends CardDef {
+            @field name = contains(StringField);
+            @field next = linksTo(() => PersonRel);
+
+            static atom = class Atom extends Component<typeof this> {
+              <template>
+                <p><@fields.name /></p>
+              </template>
+            }
+            static embedded = class Embedded extends Component<typeof this> {
+              <template>
+                <p><@fields.name /></p>
+              </template>
+            }
+            static isolated = class Isolated extends Component<typeof this> {
+              <template>
+                <p><@fields.name /></p>
+              </template>
+            }
+            static fitted = class Fitted extends Component<typeof this> {
+              <template>
+                <p><@fields.name /></p>
+                <@fields.next />
+              </template>
+            }
+          }
+        `,
+      );
+
+      await realm.write(
+        'connection-field.gts',
+        `
+          import { Component, FieldDef, field, linksTo, linksToMany } from "https://cardstack.com/base/card-api";
+          import { PersonRel } from "./person-rel";
+
+          export class ConnectionField extends FieldDef {
+            @field bestFriend = linksTo(() => PersonRel);
+            @field teammates = linksToMany(() => PersonRel);
+            @field hiddenFriend = linksTo(() => PersonRel);
+
+            static atom = class Atom extends Component<typeof this> {
+              <template>
+                <@fields.bestFriend />
+                <@fields.teammates />
+              </template>
+            }
+            static isolated = class Isolated extends Component<typeof this> {
+              <template>
+                <@fields.bestFriend />
+                <@fields.teammates />
+              </template>
+            }
+            static embedded = class Embedded extends Component<typeof this> {
+              <template>
+                <@fields.bestFriend />
+                <@fields.teammates />
+              </template>
+            }
+            static fitted = class Fitted extends Component<typeof this> {
+              <template>
+                <@fields.bestFriend />
+                <@fields.teammates />
+              </template>
+            }
+          }
+        `,
+      );
+
+      await realm.write(
+        'relationship-consumer.gts',
+        `
+          import { CardDef, Component, contains, field } from "https://cardstack.com/base/card-api";
+          import { ConnectionField } from "./connection-field";
+
+          export class RelationshipConsumer extends CardDef {
+            @field connection = contains(ConnectionField);
+
+            static isolated = class Isolated extends Component<typeof this> {
+              <template>
+                <@fields.connection />
+              </template>
+            }
+          }
+        `,
+      );
+
+      let personType = {
+        module: './person-rel',
+        name: 'PersonRel',
+      };
+
+      await realm.write(
+        'deep-1.json',
+        JSON.stringify({
+          data: {
+            attributes: { name: 'Deep One' },
+            meta: { adoptsFrom: personType },
+          },
+        } as LooseSingleCardDocument),
+      );
+      await realm.write(
+        'hidden-deep.json',
+        JSON.stringify({
+          data: {
+            attributes: { name: 'Hidden Deep' },
+            meta: { adoptsFrom: personType },
+          },
+        } as LooseSingleCardDocument),
+      );
+      await realm.write(
+        'friend-a.json',
+        JSON.stringify({
+          data: {
+            attributes: { name: 'Friend A' },
+            relationships: {
+              next: { links: { self: './deep-1' } },
+            },
+            meta: { adoptsFrom: personType },
+          },
+        } as LooseSingleCardDocument),
+      );
+      await realm.write(
+        'friend-b.json',
+        JSON.stringify({
+          data: {
+            attributes: { name: 'Friend B' },
+            meta: { adoptsFrom: personType },
+          },
+        } as LooseSingleCardDocument),
+      );
+      await realm.write(
+        'friend-c.json',
+        JSON.stringify({
+          data: {
+            attributes: { name: 'Friend C' },
+            meta: { adoptsFrom: personType },
+          },
+        } as LooseSingleCardDocument),
+      );
+      await realm.write(
+        'hidden-friend.json',
+        JSON.stringify({
+          data: {
+            attributes: { name: 'Hidden Friend' },
+            relationships: {
+              next: { links: { self: './hidden-deep' } },
+            },
+            meta: { adoptsFrom: personType },
+          },
+        } as LooseSingleCardDocument),
+      );
+      await realm.write(
+        'consumer-relationship.json',
+        JSON.stringify({
+          data: {
+            attributes: {
+              connection: {},
+            },
+            relationships: {
+              'connection.bestFriend': { links: { self: './friend-a' } },
+              'connection.teammates.0': { links: { self: './friend-b' } },
+              'connection.teammates.1': { links: { self: './friend-c' } },
+              'connection.hiddenFriend': {
+                links: { self: './hidden-friend' },
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: './relationship-consumer',
+                name: 'RelationshipConsumer',
+              },
+            },
+          },
+        } as LooseSingleCardDocument),
+      );
+
+      let deps = await depsFor(`${testRealm}consumer-relationship.json`);
+      let entryType = await typeForIndexEntry(
+        testDbAdapter,
+        `${testRealm}consumer-relationship.json`,
+      );
+      assert.ok(true, `consumer-relationship entry type: ${entryType}`);
+      assert.ok(true, `relationship deps debug: ${JSON.stringify(deps)}`);
+      assert.ok(
+        deps.includes(`${testRealm}friend-a.json`),
+        `deps include first-degree linksTo relationship (deps: ${JSON.stringify(
+          deps,
+        )})`,
+      );
+      assert.ok(
+        deps.includes(`${testRealm}friend-b.json`),
+        'deps include first linksToMany relationship target',
+      );
+      assert.ok(
+        deps.includes(`${testRealm}friend-c.json`),
+        'deps include second linksToMany relationship target',
+      );
+      assert.ok(
+        deps.includes(`${testRealm}deep-1.json`),
+        'deps include second-degree relationship exposed by first-degree embedded template',
+      );
+      assert.notOk(
+        deps.includes(`${testRealm}hidden-friend.json`),
+        `deps do not include hidden first-degree relationship that is not rendered (type=${entryType}; deps: ${JSON.stringify(
+          deps,
+        )})`,
+      );
+      assert.notOk(
+        deps.includes(`${testRealm}hidden-deep.json`),
+        `deps do not include hidden second-degree relationship that is not rendered (type=${entryType}; deps: ${JSON.stringify(
+          deps,
+        )})`,
+      );
+      assert.notOk(
+        deps.includes(`${testRealm}friend-a`),
+        'instance relationship deps use concrete .json URL form',
+      );
+
+      let beforeLinksToInvalidation = await indexedAtFor(
+        `${testRealm}consumer-relationship.json`,
+      );
+      await realm.write(
+        'friend-a.json',
+        JSON.stringify({
+          data: {
+            attributes: { name: 'Friend A Updated' },
+            relationships: {
+              next: { links: { self: './deep-1' } },
+            },
+            meta: { adoptsFrom: personType },
+          },
+        } as LooseSingleCardDocument),
+      );
+      let afterLinksToInvalidation = await indexedAtFor(
+        `${testRealm}consumer-relationship.json`,
+      );
+      assert.notStrictEqual(
+        afterLinksToInvalidation,
+        beforeLinksToInvalidation,
+        'updating linksTo relationship target invalidates consumer instance',
+      );
+
+      let beforeLinksToManyInvalidation = afterLinksToInvalidation;
+      await realm.write(
+        'friend-b.json',
+        JSON.stringify({
+          data: {
+            attributes: { name: 'Friend B Updated' },
+            meta: { adoptsFrom: personType },
+          },
+        } as LooseSingleCardDocument),
+      );
+      let afterLinksToManyInvalidation = await indexedAtFor(
+        `${testRealm}consumer-relationship.json`,
+      );
+      assert.notStrictEqual(
+        afterLinksToManyInvalidation,
+        beforeLinksToManyInvalidation,
+        'updating linksToMany relationship target invalidates consumer instance',
+      );
+    });
+
+    // remove this once we have a query based relationship invalidation strategy
+    test('does not capture deps from query-backed relationships', async function (assert) {
+      await realm.write(
+        'query-rel-target.gts',
+        `
+            import { CardDef, Component, contains, field } from "https://cardstack.com/base/card-api";
+            import StringField from "https://cardstack.com/base/string";
+
+            export class QueryRelTarget extends CardDef {
+              @field cardTitle = contains(StringField);
+
+              static embedded = class Embedded extends Component<typeof this> {
+                <template>
+                  <span><@fields.cardTitle /></span>
+                </template>
+              }
+            }
+          `,
+      );
+
+      await realm.write(
+        'query-rel-consumer.gts',
+        `
+            import { CardDef, Component, contains, field, linksTo, linksToMany } from "https://cardstack.com/base/card-api";
+            import StringField from "https://cardstack.com/base/string";
+
+            export class QueryRelConsumer extends CardDef {
+              @field cardTitle = contains(StringField);
+              @field favorite = linksTo(() => CardDef, {
+                query: {
+                  filter: {
+                    eq: {
+                      cardTitle: 'target',
+                    },
+                  },
+                },
+              });
+              @field matches = linksToMany(() => CardDef, {
+                query: {
+                  filter: {
+                    eq: {
+                      cardTitle: 'target',
+                    },
+                  },
+                  page: {
+                    size: 10,
+                    number: 0,
+                  },
+                },
+              });
+
+              static isolated = class Isolated extends Component<typeof this> {
+                <template>
+                  <@fields.favorite />
+                  <@fields.matches />
+                </template>
+              }
+            }
+          `,
+      );
+
+      await realm.write(
+        'query-rel-target-1.json',
+        JSON.stringify({
+          data: {
+            attributes: { cardTitle: 'target' },
+            meta: {
+              adoptsFrom: {
+                module: './query-rel-target',
+                name: 'QueryRelTarget',
+              },
+            },
+          },
+        } as LooseSingleCardDocument),
+      );
+
+      await realm.write(
+        'query-rel-consumer-1.json',
+        JSON.stringify({
+          data: {
+            attributes: { cardTitle: 'consumer' },
+            meta: {
+              adoptsFrom: {
+                module: './query-rel-consumer',
+                name: 'QueryRelConsumer',
+              },
+            },
+          },
+        } as LooseSingleCardDocument),
+      );
+
+      let queryConsumerDoc = await realm.realmIndexQueryEngine.cardDocument(
+        new URL(`${testRealm}query-rel-consumer-1`),
+        { loadLinks: true },
+      );
+      if (queryConsumerDoc?.type === 'doc') {
+        let relationships = queryConsumerDoc.doc.data.relationships ?? {};
+        let favorite = relationships.favorite as
+          | {
+              links?: Record<string, string | null>;
+              data?: { type: string; id: string } | null;
+            }
+          | undefined;
+        let matches = relationships.matches as
+          | {
+              links?: Record<string, string | null>;
+              data?: { type: string; id: string }[];
+            }
+          | undefined;
+        assert.strictEqual(
+          typeof favorite?.links?.search,
+          'string',
+          'query linksTo relationship is present',
+        );
+        assert.deepEqual(
+          favorite?.data,
+          {
+            type: 'card',
+            id: `${testRealm}query-rel-target-1`,
+          },
+          'query linksTo relationship contains matched target',
+        );
+        assert.strictEqual(
+          typeof matches?.links?.search,
+          'string',
+          'query linksToMany relationship is present',
+        );
+        assert.deepEqual(
+          matches?.data,
+          [
+            {
+              type: 'card',
+              id: `${testRealm}query-rel-target-1`,
+            },
+          ],
+          'query linksToMany relationship contains matched targets',
+        );
+      } else {
+        assert.ok(false, 'expected query-backed consumer document');
+      }
+
+      let deps = await depsFor(`${testRealm}query-rel-consumer-1.json`);
+      assert.true(deps.length > 0, 'consumer instance has deps');
+      assert.notOk(
+        deps.includes(`${testRealm}query-rel-target-1.json`),
+        'query-backed relationship target is not tracked as a dependency',
+      );
+      assert.notOk(
+        deps.includes(`${testRealm}query-rel-target`),
+        'query-backed relationship target module is not tracked as a dependency',
+      );
+    });
+
+    test('retains deps that are consumed in both query and non-query contexts', async function (assert) {
+      await realm.write(
+        'query-rel-overlap-target.gts',
+        `
+            import { CardDef, Component, contains, field } from "https://cardstack.com/base/card-api";
+            import StringField from "https://cardstack.com/base/string";
+
+            export class QueryRelOverlapTarget extends CardDef {
+              @field cardTitle = contains(StringField);
+
+              static embedded = class Embedded extends Component<typeof this> {
+                <template>
+                  <span><@fields.cardTitle /></span>
+                </template>
+              }
+            }
+          `,
+      );
+
+      await realm.write(
+        'query-rel-overlap-consumer.gts',
+        `
+            import { CardDef, Component, field, linksTo, linksToMany } from "https://cardstack.com/base/card-api";
+
+            export class QueryRelOverlapConsumer extends CardDef {
+              @field direct = linksTo(() => CardDef);
+              @field matches = linksToMany(() => CardDef, {
+                query: {
+                  filter: {
+                    eq: {
+                      cardTitle: 'target',
+                    },
+                  },
+                  page: {
+                    size: 10,
+                    number: 0,
+                  },
+                },
+              });
+
+              static isolated = class Isolated extends Component<typeof this> {
+                <template>
+                  <@fields.direct />
+                  <@fields.matches />
+                </template>
+              }
+            }
+          `,
+      );
+
+      await realm.write(
+        'query-rel-overlap-target-1.json',
+        JSON.stringify({
+          data: {
+            attributes: { cardTitle: 'target' },
+            meta: {
+              adoptsFrom: {
+                module: './query-rel-overlap-target',
+                name: 'QueryRelOverlapTarget',
+              },
+            },
+          },
+        } as LooseSingleCardDocument),
+      );
+
+      await realm.write(
+        'query-rel-overlap-consumer-1.json',
+        JSON.stringify({
+          data: {
+            relationships: {
+              direct: { links: { self: './query-rel-overlap-target-1' } },
+            },
+            meta: {
+              adoptsFrom: {
+                module: './query-rel-overlap-consumer',
+                name: 'QueryRelOverlapConsumer',
+              },
+            },
+          },
+        } as LooseSingleCardDocument),
+      );
+
+      let overlapConsumerDoc = await realm.realmIndexQueryEngine.cardDocument(
+        new URL(`${testRealm}query-rel-overlap-consumer-1`),
+        { loadLinks: true },
+      );
+      if (overlapConsumerDoc?.type === 'doc') {
+        let relationships = overlapConsumerDoc.doc.data.relationships ?? {};
+        let direct = relationships.direct as
+          | {
+              data?: { type: string; id: string } | null;
+            }
+          | undefined;
+        let matches = relationships.matches as
+          | {
+              links?: Record<string, string | null>;
+              data?: { type: string; id: string }[];
+            }
+          | undefined;
+        assert.deepEqual(
+          direct?.data,
+          {
+            type: 'card',
+            id: `${testRealm}query-rel-overlap-target-1`,
+          },
+          'non-query linksTo relationship contains target',
+        );
+        assert.strictEqual(
+          typeof matches?.links?.search,
+          'string',
+          'query linksToMany relationship is present',
+        );
+        assert.deepEqual(
+          matches?.data,
+          [
+            {
+              type: 'card',
+              id: `${testRealm}query-rel-overlap-target-1`,
+            },
+          ],
+          'query linksToMany relationship matched the overlapping target',
+        );
+      } else {
+        assert.ok(false, 'expected overlap consumer document');
+      }
+
+      let deps = await depsFor(`${testRealm}query-rel-overlap-consumer-1.json`);
+      assert.ok(
+        deps.includes(`${testRealm}query-rel-overlap-target-1.json`),
+        'target instance is retained in deps because it is also consumed via non-query relationship',
+      );
+      assert.ok(
+        deps.includes(`${testRealm}query-rel-overlap-target`),
+        'target module is retained in deps because it is also consumed via non-query relationship',
+      );
+    });
+
+    test('collects glimmer scoped CSS deps from first-degree and second-degree relationship instances', async function (assert) {
+      await realm.write(
+        'second-rel.gts',
+        `
+          import { CardDef, Component, contains, field } from "https://cardstack.com/base/card-api";
+          import StringField from "https://cardstack.com/base/string";
+
+          export class SecondRel extends CardDef {
+            @field name = contains(StringField);
+
+            static atom = class Atom extends Component<typeof this> {
+              <template>
+                <span class="second-name"><@fields.name /></span>
+                <style scoped>
+                  .second-name {
+                    color: teal;
+                  }
+                </style>
+              </template>
+            }
+            static embedded = class Embedded extends Component<typeof this> {
+              <template>
+                <span class="second-name"><@fields.name /></span>
+                <style scoped>
+                  .second-name {
+                    color: teal;
+                  }
+                </style>
+              </template>
+            }
+            static isolated = class Isolated extends Component<typeof this> {
+              <template>
+                <span class="second-name"><@fields.name /></span>
+                <style scoped>
+                  .second-name {
+                    color: teal;
+                  }
+                </style>
+              </template>
+            }
+            static fitted = class Fitted extends Component<typeof this> {
+              <template>
+                <span class="second-name"><@fields.name /></span>
+                <style scoped>
+                  .second-name {
+                    color: teal;
+                  }
+                </style>
+              </template>
+            }
+          }
+        `,
+      );
+
+      await realm.write(
+        'first-rel.gts',
+        `
+          import { CardDef, Component, contains, field, linksTo } from "https://cardstack.com/base/card-api";
+          import StringField from "https://cardstack.com/base/string";
+          import { SecondRel } from "./second-rel";
+
+          export class FirstRel extends CardDef {
+            @field name = contains(StringField);
+            @field next = linksTo(() => SecondRel);
+
+            static atom = class Atom extends Component<typeof this> {
+              <template>
+                <span class="first-name"><@fields.name /></span>
+                <@fields.next />
+                <style scoped>
+                  .first-name {
+                    color: olive;
+                  }
+                </style>
+              </template>
+            }
+            static embedded = class Embedded extends Component<typeof this> {
+              <template>
+                <span class="first-name"><@fields.name /></span>
+                <@fields.next />
+                <style scoped>
+                  .first-name {
+                    color: olive;
+                  }
+                </style>
+              </template>
+            }
+            static isolated = class Isolated extends Component<typeof this> {
+              <template>
+                <span class="first-name"><@fields.name /></span>
+                <@fields.next />
+                <style scoped>
+                  .first-name {
+                    color: olive;
+                  }
+                </style>
+              </template>
+            }
+            static fitted = class Fitted extends Component<typeof this> {
+              <template>
+                <span class="first-name"><@fields.name /></span>
+                <@fields.next />
+                <style scoped>
+                  .first-name {
+                    color: olive;
+                  }
+                </style>
+              </template>
+            }
+          }
+        `,
+      );
+
+      await realm.write(
+        'css-relationship-consumer.gts',
+        `
+          import { CardDef, Component, field, linksTo } from "https://cardstack.com/base/card-api";
+          import { FirstRel } from "./first-rel";
+
+          export class CssRelationshipConsumer extends CardDef {
+            @field first = linksTo(() => FirstRel);
+
+            static isolated = class Isolated extends Component<typeof this> {
+              <template>
+                <@fields.first />
+              </template>
+            }
+          }
+        `,
+      );
+
+      await realm.write(
+        'second-rel-1.json',
+        JSON.stringify({
+          data: {
+            attributes: { name: 'Second One' },
+            meta: {
+              adoptsFrom: {
+                module: './second-rel',
+                name: 'SecondRel',
+              },
+            },
+          },
+        } as LooseSingleCardDocument),
+      );
+
+      await realm.write(
+        'first-rel-1.json',
+        JSON.stringify({
+          data: {
+            attributes: { name: 'First One' },
+            relationships: {
+              next: { links: { self: './second-rel-1' } },
+            },
+            meta: {
+              adoptsFrom: {
+                module: './first-rel',
+                name: 'FirstRel',
+              },
+            },
+          },
+        } as LooseSingleCardDocument),
+      );
+
+      await realm.write(
+        'css-relationship-consumer-1.json',
+        JSON.stringify({
+          data: {
+            relationships: {
+              first: { links: { self: './first-rel-1' } },
+            },
+            meta: {
+              adoptsFrom: {
+                module: './css-relationship-consumer',
+                name: 'CssRelationshipConsumer',
+              },
+            },
+          },
+        } as LooseSingleCardDocument),
+      );
+
+      let deps = await depsFor(`${testRealm}css-relationship-consumer-1.json`);
+      assert.ok(
+        deps.includes(`${testRealm}first-rel-1.json`),
+        'deps include first-degree relationship instance',
+      );
+      assert.ok(
+        deps.includes(`${testRealm}second-rel-1.json`),
+        'deps include second-degree relationship instance via delegated first-degree rendering',
+      );
+
+      let assertCssDependency = (
+        depList: string[],
+        pattern: RegExp,
+        fileName: string,
+      ) => {
+        assert.true(
+          depList.some((dep) => pattern.test(dep)),
+          `deps include glimmer scoped css for ${fileName}`,
+        );
+      };
+
+      assertCssDependency(
+        deps,
+        /first-rel\.gts.*\.glimmer-scoped\.css$/,
+        'first-rel.gts',
+      );
+      assertCssDependency(
+        deps,
+        /second-rel\.gts.*\.glimmer-scoped\.css$/,
+        'second-rel.gts',
+      );
+    });
+
+    test('handles relationship cycles in deps and invalidation', async function (assert) {
+      await realm.write(
+        'loop-card.gts',
+        `
+          import { CardDef, Component, contains, field, linksTo } from "https://cardstack.com/base/card-api";
+          import StringField from "https://cardstack.com/base/string";
+
+          export class LoopCard extends CardDef {
+            @field name = contains(StringField);
+            @field next = linksTo(() => LoopCard);
+
+            static atom = class Atom extends Component<typeof this> {
+              <template>
+                <p><@fields.name /></p>
+              </template>
+            }
+            static embedded = class Embedded extends Component<typeof this> {
+              <template>
+                <p><@fields.name /></p>
+                <p>next <@fields.next @format='atom'/></p>
+              </template>
+            }
+            static fitted = class Fitted extends Component<typeof this> {
+              <template>
+                <p><@fields.name /></p>
+                <p>next <@fields.next @format='atom'/></p>
+              </template>
+            }
+            static isolated = class Isolated extends Component<typeof this> {
+              <template>
+                <p><@fields.name /></p>
+                <@fields.next />
+              </template>
+            }
+          }
+        `,
+      );
+
+      await realm.write(
+        'loop-consumer.gts',
+        `
+          import { CardDef, Component, field, linksTo } from "https://cardstack.com/base/card-api";
+          import { LoopCard } from "./loop-card";
+
+          export class LoopConsumer extends CardDef {
+            @field root = linksTo(() => LoopCard);
+
+            static isolated = class Isolated extends Component<typeof this> {
+              <template>
+                <@fields.root />
+              </template>
+            }
+          }
+        `,
+      );
+
+      await realm.write(
+        'loop-a.json',
+        JSON.stringify({
+          data: {
+            attributes: { name: 'Loop A' },
+            relationships: {
+              next: { links: { self: './loop-b' } },
+            },
+            meta: {
+              adoptsFrom: {
+                module: './loop-card',
+                name: 'LoopCard',
+              },
+            },
+          },
+        } as LooseSingleCardDocument),
+      );
+      await realm.write(
+        'loop-b.json',
+        JSON.stringify({
+          data: {
+            attributes: { name: 'Loop B' },
+            relationships: {
+              next: { links: { self: './loop-a' } },
+            },
+            meta: {
+              adoptsFrom: {
+                module: './loop-card',
+                name: 'LoopCard',
+              },
+            },
+          },
+        } as LooseSingleCardDocument),
+      );
+      await realm.write(
+        'loop-consumer.json',
+        JSON.stringify({
+          data: {
+            relationships: {
+              root: { links: { self: './loop-a' } },
+            },
+            meta: {
+              adoptsFrom: {
+                module: './loop-consumer',
+                name: 'LoopConsumer',
+              },
+            },
+          },
+        } as LooseSingleCardDocument),
+      );
+
+      let deps = await depsFor(`${testRealm}loop-consumer.json`);
+      assert.ok(
+        deps.includes(`${testRealm}loop-a.json`),
+        'deps include first node in relationship cycle',
+      );
+      assert.ok(
+        deps.includes(`${testRealm}loop-b.json`),
+        'deps include second node in relationship cycle',
+      );
+
+      let beforeIndexedAt = await indexedAtFor(
+        `${testRealm}loop-consumer.json`,
+      );
+      await realm.write(
+        'loop-b.json',
+        JSON.stringify({
+          data: {
+            attributes: { name: 'Loop B Updated' },
+            relationships: {
+              next: { links: { self: './loop-a' } },
+            },
+            meta: {
+              adoptsFrom: {
+                module: './loop-card',
+                name: 'LoopCard',
+              },
+            },
+          },
+        } as LooseSingleCardDocument),
+      );
+      let afterIndexedAt = await indexedAtFor(`${testRealm}loop-consumer.json`);
+      assert.notStrictEqual(
+        afterIndexedAt,
+        beforeIndexedAt,
+        'updating one cycle node invalidates and reindexes consumer',
+      );
+
+      let loopA = await realm.realmIndexQueryEngine.instance(
+        new URL(`${testRealm}loop-a`),
+      );
+      assert.strictEqual(
+        loopA?.type,
+        'instance',
+        'first cycle node remains indexable after cycle invalidation',
+      );
+      let loopB = await realm.realmIndexQueryEngine.instance(
+        new URL(`${testRealm}loop-b`),
+      );
+      assert.strictEqual(
+        loopB?.type,
+        'instance',
+        'second cycle node remains indexable after cycle invalidation',
+      );
+
+      let loopConsumer = await realm.realmIndexQueryEngine.instance(
+        new URL(`${testRealm}loop-consumer`),
+      );
+      assert.strictEqual(
+        loopConsumer?.type,
+        'instance',
+        'consumer remains indexable after cycle invalidation',
+      );
+    });
+
+    test('repairs relationship consumers when an errored relationship target is fixed', async function (assert) {
+      await realm.write(
+        'relationship-parent.gts',
+        `
+          import { CardDef, Component, field, linksTo } from "https://cardstack.com/base/card-api";
+
+          export class RelationshipParent extends CardDef {
+            @field child = linksTo(() => CardDef);
+
+            static atom = class Atom extends Component<typeof this> {
+              <template>
+                <@fields.child />
+              </template>
+            }
+            static isolated = class Isolated extends Component<typeof this> {
+              <template>
+                <@fields.child />
+              </template>
+            }
+            static embedded = class Embedded extends Component<typeof this> {
+              <template>
+                <@fields.child />
+              </template>
+            }
+            static fitted = class Fitted extends Component<typeof this> {
+              <template>
+                <@fields.child />
+              </template>
+            }
+          }
+        `,
+      );
+
+      await realm.write(
+        'relationship-grandparent.gts',
+        `
+          import { CardDef, Component, field, linksTo } from "https://cardstack.com/base/card-api";
+
+          export class RelationshipGrandParent extends CardDef {
+            @field parent = linksTo(() => CardDef);
+
+            static atom = class Atom extends Component<typeof this> {
+              <template>
+                <@fields.parent />
+              </template>
+            }
+            static isolated = class Isolated extends Component<typeof this> {
+              <template>
+                <@fields.parent />
+              </template>
+            }
+            static embedded = class Embedded extends Component<typeof this> {
+              <template>
+                <@fields.parent />
+              </template>
+            }
+            static fitted = class Fitted extends Component<typeof this> {
+              <template>
+                <@fields.parent />
+              </template>
+            }
+          }
+        `,
+      );
+
+      await realm.write(
+        'child-error.json',
+        JSON.stringify({
+          data: {
+            attributes: {
+              title: 'Broken Child',
+            },
+            meta: {
+              adoptsFrom: {
+                module: './missing-child',
+                name: 'MissingChild',
+              },
+            },
+          },
+        } as LooseSingleCardDocument),
+      );
+      await realm.write(
+        'parent-rel.json',
+        JSON.stringify({
+          data: {
+            relationships: {
+              child: { links: { self: './child-error' } },
+            },
+            meta: {
+              adoptsFrom: {
+                module: './relationship-parent',
+                name: 'RelationshipParent',
+              },
+            },
+          },
+        } as LooseSingleCardDocument),
+      );
+      await realm.write(
+        'grandparent-rel.json',
+        JSON.stringify({
+          data: {
+            relationships: {
+              parent: { links: { self: './parent-rel' } },
+            },
+            meta: {
+              adoptsFrom: {
+                module: './relationship-grandparent',
+                name: 'RelationshipGrandParent',
+              },
+            },
+          },
+        } as LooseSingleCardDocument),
+      );
+
+      let parentBefore = await realm.realmIndexQueryEngine.instance(
+        new URL(`${testRealm}parent-rel`),
+      );
+      assert.strictEqual(
+        parentBefore?.type,
+        'instance-error',
+        'parent is in error while relationship target is broken',
+      );
+      let grandParentBefore = await realm.realmIndexQueryEngine.instance(
+        new URL(`${testRealm}grandparent-rel`),
+      );
+      assert.strictEqual(
+        grandParentBefore?.type,
+        'instance-error',
+        'grandparent is in error while downstream relationship target is broken',
+      );
+      if (grandParentBefore?.type === 'instance-error') {
+        assert.ok(
+          hasErrorDetail(grandParentBefore.error, 'missing-child'),
+          'two-hop relationship error details include missing child module context',
+        );
+      } else {
+        assert.ok(false, 'expected grandparent to be an instance error');
+      }
+
+      await realm.write(
+        'missing-child.gts',
+        `
+          import { CardDef, contains, field } from "https://cardstack.com/base/card-api";
+          import StringField from "https://cardstack.com/base/string";
+
+          export class MissingChild extends CardDef {
+            @field title = contains(StringField);
+          }
+        `,
+      );
+
+      let parentAfter = await realm.realmIndexQueryEngine.instance(
+        new URL(`${testRealm}parent-rel`),
+      );
+      assert.strictEqual(
+        parentAfter?.type,
+        'instance',
+        'parent repairs after relationship target is fixed',
+      );
+      let grandParentAfter = await realm.realmIndexQueryEngine.instance(
+        new URL(`${testRealm}grandparent-rel`),
+      );
+      assert.strictEqual(
+        grandParentAfter?.type,
+        'instance',
+        'grandparent repairs after downstream relationship target is fixed',
+      );
+
+      let parentDeps = await depsFor(`${testRealm}parent-rel.json`);
+      assert.ok(
+        parentDeps.includes(`${testRealm}child-error.json`),
+        'parent deps include direct relationship target URL',
+      );
+      let grandParentDeps = await depsFor(`${testRealm}grandparent-rel.json`);
+      assert.ok(
+        grandParentDeps.includes(`${testRealm}parent-rel.json`),
+        'grandparent deps include direct relationship target URL',
+      );
+      assert.ok(
+        grandParentDeps.includes(`${testRealm}child-error.json`),
+        'grandparent deps include transitive relationship target URL',
+      );
+    });
+
+    test('repairs relationship consumers when an errored second-degree FileDef target is fixed', async function (assert) {
+      await realm.write(
+        'filedef-mismatch.gts',
+        `
+          import { FileDef as BaseFileDef } from "https://cardstack.com/base/file-api";
+          import { MissingChild } from "./missing-child";
+
+          export class FileDef extends BaseFileDef {
+            static missingChild = MissingChild;
+          }
+        `,
+      );
+
+      await realm.write(
+        'relationship-file-parent.gts',
+        `
+          import { CardDef, Component, field, linksTo, linksToMany } from "https://cardstack.com/base/card-api";
+          import { FileDef } from "https://cardstack.com/base/file-api";
+
+          export class RelationshipFileParent extends CardDef {
+            @field attachment = linksTo(() => FileDef);
+            @field attachments = linksToMany(() => FileDef);
+
+            static isolated = class Isolated extends Component<typeof this> {
+              <template>
+                <@fields.attachment />
+                <@fields.attachments />
+              </template>
+            }
+            static embedded = class Embedded extends Component<typeof this> {
+              <template>
+                <@fields.attachment />
+                <@fields.attachments />
+              </template>
+            }
+            static fitted = class Fitted extends Component<typeof this> {
+              <template>
+                <@fields.attachment />
+                <@fields.attachments />
+              </template>
+            }
+          }
+        `,
+      );
+
+      await realm.write(
+        'relationship-file-grandparent.gts',
+        `
+          import { CardDef, Component, field, linksTo } from "https://cardstack.com/base/card-api";
+
+          export class RelationshipFileGrandParent extends CardDef {
+            @field parent = linksTo(() => CardDef);
+
+            static isolated = class Isolated extends Component<typeof this> {
+              <template>
+                <@fields.parent />
+              </template>
+            }
+            static embedded = class Embedded extends Component<typeof this> {
+              <template>
+                <@fields.parent />
+              </template>
+            }
+            static fitted = class Fitted extends Component<typeof this> {
+              <template>
+                <@fields.parent />
+              </template>
+            }
+          }
+        `,
+      );
+
+      await realm.write(
+        'parent-file-rel.json',
+        JSON.stringify({
+          data: {
+            relationships: {
+              attachment: { links: { self: './random-file.mismatch' } },
+              'attachments.0': {
+                links: { self: './random-file.mismatch' },
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: './relationship-file-parent',
+                name: 'RelationshipFileParent',
+              },
+            },
+          },
+        } as LooseSingleCardDocument),
+      );
+
+      await realm.write(
+        'grandparent-file-rel.json',
+        JSON.stringify({
+          data: {
+            relationships: {
+              parent: { links: { self: './parent-file-rel' } },
+            },
+            meta: {
+              adoptsFrom: {
+                module: './relationship-file-grandparent',
+                name: 'RelationshipFileGrandParent',
+              },
+            },
+          },
+        } as LooseSingleCardDocument),
+      );
+
+      let fileTargetBeforeType = await typeForIndexEntry(
+        testDbAdapter,
+        `${testRealm}random-file.mismatch`,
+      );
+      assert.strictEqual(
+        fileTargetBeforeType,
+        'file',
+        'FileDef relationship target keeps file type in the index while errored',
+      );
+      let fileTargetBeforeError = await errorDocForIndexEntry(
+        testDbAdapter,
+        `${testRealm}random-file.mismatch`,
+        'file',
+      );
+      assert.true(
+        Boolean(fileTargetBeforeError?.hasError),
+        'FileDef relationship target is marked errored in the index',
+      );
+      let fileTargetHasExpectedErrorDetail =
+        hasErrorDetail(
+          (fileTargetBeforeError?.errorDoc ?? {}) as {
+            message?: string;
+            additionalErrors?: { message?: string }[] | null;
+          },
+          'Received HTTP 404 from server',
+        ) ||
+        hasErrorDetail(
+          (fileTargetBeforeError?.errorDoc ?? {}) as {
+            message?: string;
+            additionalErrors?: { message?: string }[] | null;
+          },
+          'missing-child',
+        );
+      assert.ok(
+        fileTargetHasExpectedErrorDetail,
+        'FileDef target error doc includes file extract failure details',
+      );
+
+      let parentBefore = await realm.realmIndexQueryEngine.instance(
+        new URL(`${testRealm}parent-file-rel`),
+      );
+      assert.strictEqual(
+        parentBefore?.type,
+        'instance-error',
+        'first-degree relationship consumer is in error while FileDef target is broken',
+      );
+      let grandParentBefore = await realm.realmIndexQueryEngine.instance(
+        new URL(`${testRealm}grandparent-file-rel`),
+      );
+      assert.strictEqual(
+        grandParentBefore?.type,
+        'instance-error',
+        'second-degree relationship consumer is in error while delegated FileDef target is broken',
+      );
+      if (grandParentBefore?.type === 'instance-error') {
+        let delegatedHasExpectedErrorDetail =
+          hasErrorDetail(
+            grandParentBefore.error,
+            'Received HTTP 404 from server',
+          ) || hasErrorDetail(grandParentBefore.error, 'missing-child');
+        assert.ok(
+          delegatedHasExpectedErrorDetail,
+          'delegated relationship consumer receives nested FileDef error details',
+        );
+      } else {
+        assert.ok(
+          false,
+          'expected delegated relationship consumer error details',
+        );
+      }
+
+      await realm.write(
+        'filedef-mismatch.gts',
+        `
+          import {
+            FileDef as BaseFileDef,
+            FileContentMismatchError,
+          } from "https://cardstack.com/base/file-api";
+
+          export class FileDef extends BaseFileDef {
+            static async extractAttributes() {
+              throw new FileContentMismatchError('content mismatch');
+            }
+          }
+        `,
+      );
+
+      let fileTargetAfterError = await errorDocForIndexEntry(
+        testDbAdapter,
+        `${testRealm}random-file.mismatch`,
+        'file',
+      );
+      assert.false(
+        Boolean(fileTargetAfterError?.hasError),
+        'FileDef relationship target clears error state after FileDef module is fixed',
+      );
+
+      let parentAfter = await realm.realmIndexQueryEngine.instance(
+        new URL(`${testRealm}parent-file-rel`),
+      );
+      assert.strictEqual(
+        parentAfter?.type,
+        'instance',
+        'first-degree relationship consumer repairs after FileDef target is fixed',
+      );
+      let grandParentAfter = await realm.realmIndexQueryEngine.instance(
+        new URL(`${testRealm}grandparent-file-rel`),
+      );
+      assert.strictEqual(
+        grandParentAfter?.type,
+        'instance',
+        'delegated second-degree relationship consumer repairs after FileDef target is fixed',
+      );
+
+      let parentDeps = await depsFor(`${testRealm}parent-file-rel.json`);
+      assert.ok(
+        parentDeps.includes(`${testRealm}random-file.mismatch`),
+        'first-degree consumer deps include direct FileDef linksTo target URL',
+      );
+      assert.ok(
+        parentDeps.includes(`${testRealm}random-file.mismatch`),
+        'first-degree consumer deps include direct FileDef linksToMany target URL',
+      );
+
+      let grandParentDeps = await depsFor(
+        `${testRealm}grandparent-file-rel.json`,
+      );
+      assert.ok(
+        grandParentDeps.includes(`${testRealm}parent-file-rel.json`),
+        'delegated second-degree consumer deps include first-degree relationship target URL',
+      );
+      assert.ok(
+        grandParentDeps.includes(`${testRealm}random-file.mismatch`),
+        'delegated second-degree consumer deps include transitive FileDef linksTo target URL',
+      );
+      assert.ok(
+        grandParentDeps.includes(`${testRealm}random-file.mismatch`),
+        'delegated second-degree consumer deps include transitive FileDef linksToMany target URL',
+      );
+    });
+
+    test('tracks and invalidates FileDef relationship deps for linksTo and linksToMany', async function (assert) {
+      await realm.write(
+        'file-relationship-consumer.gts',
+        `
+          import { CardDef, Component, field, linksTo, linksToMany } from "https://cardstack.com/base/card-api";
+          import { FileDef } from "https://cardstack.com/base/file-api";
+
+          export class FileRelationshipConsumer extends CardDef {
+            @field primaryFile = linksTo(() => FileDef);
+            @field attachments = linksToMany(() => FileDef);
+
+            static isolated = class Isolated extends Component<typeof this> {
+              <template>
+                <@fields.primaryFile />
+                <@fields.attachments />
+              </template>
+            }
+            static embedded = class Embedded extends Component<typeof this> {
+              <template>
+                <@fields.primaryFile />
+                <@fields.attachments />
+              </template>
+            }
+          }
+        `,
+      );
+
+      await realm.write('primary-note.txt', 'primary note v1');
+      await realm.write('attachment-a.txt', 'attachment a v1');
+      await realm.write('attachment-b.txt', 'attachment b v1');
+
+      await realm.write(
+        'file-relationship-consumer.json',
+        JSON.stringify({
+          data: {
+            relationships: {
+              primaryFile: { links: { self: './primary-note.txt' } },
+              'attachments.0': { links: { self: './attachment-a.txt' } },
+              'attachments.1': { links: { self: './attachment-b.txt' } },
+            },
+            meta: {
+              adoptsFrom: {
+                module: './file-relationship-consumer',
+                name: 'FileRelationshipConsumer',
+              },
+            },
+          },
+        } as LooseSingleCardDocument),
+      );
+
+      let deps = await depsFor(`${testRealm}file-relationship-consumer.json`);
+      assert.ok(
+        deps.includes(`${testRealm}primary-note.txt`),
+        'deps include FileDef linksTo relationship target URL',
+      );
+      assert.ok(
+        deps.includes(`${testRealm}attachment-a.txt`),
+        'deps include first FileDef linksToMany relationship target URL',
+      );
+      assert.ok(
+        deps.includes(`${testRealm}attachment-b.txt`),
+        'deps include second FileDef linksToMany relationship target URL',
+      );
+
+      let beforeLinksToInvalidation = await indexedAtFor(
+        `${testRealm}file-relationship-consumer.json`,
+      );
+      await realm.write('primary-note.txt', 'primary note v2');
+      let afterLinksToInvalidation = await indexedAtFor(
+        `${testRealm}file-relationship-consumer.json`,
+      );
+      assert.notStrictEqual(
+        afterLinksToInvalidation,
+        beforeLinksToInvalidation,
+        'updating FileDef linksTo target invalidates consumer instance',
+      );
+
+      let beforeLinksToManyInvalidation = afterLinksToInvalidation;
+      await realm.write('attachment-a.txt', 'attachment a v2');
+      let afterLinksToManyInvalidation = await indexedAtFor(
+        `${testRealm}file-relationship-consumer.json`,
+      );
+      assert.notStrictEqual(
+        afterLinksToManyInvalidation,
+        beforeLinksToManyInvalidation,
+        'updating FileDef linksToMany target invalidates consumer instance',
+      );
+    });
+
     test('can incrementally index deleted instance', async function (assert) {
       await realm.delete('mango.json');
 
@@ -2357,6 +3862,7 @@ module(basename(__filename), function () {
         },
         consumer: {
           '*': ['read', 'write'],
+          '@node-test_realm:localhost': ['read', 'realm-owner'],
         },
       });
 

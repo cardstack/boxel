@@ -33,8 +33,10 @@ import { CodeModePanelHeights } from '@cardstack/host/utils/local-storage-keys';
 import {
   elementIsVisible,
   getMonacoContent,
+  makeMinimalPng,
   percySnapshot,
   setupLocalIndexing,
+  setupRealmCacheTeardown,
   testRealmURL,
   setupAcceptanceTestRealm,
   SYSTEM_CARD_FIXTURE_CONTENTS,
@@ -44,6 +46,7 @@ import {
   setupUserSubscription,
   type TestContextWithSave,
   setMonacoContent,
+  withCachedRealmSetup,
 } from '../../helpers';
 
 import { setupMockMatrix } from '../../helpers/mock-matrix';
@@ -399,6 +402,10 @@ const fileDefSource = `
   }
 `;
 
+const pngDefModuleSource = `
+  export { PngDef } from 'https://cardstack.com/base/png-image-def';
+`;
+
 const localInheritSource = `
   import {
     contains,
@@ -438,6 +445,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
   setupOnSave(hooks);
+  setupRealmCacheTeardown(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
@@ -462,135 +470,141 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
 
     // this seeds the loader used during index which obtains url mappings
     // from the global loader
-    await setupAcceptanceTestRealm({
-      mockMatrixUtils,
-      contents: { ...SYSTEM_CARD_FIXTURE_CONTENTS, ...realmAFiles },
-      realmURL: testRealmURL2,
-    });
-    ({ adapter } = await setupAcceptanceTestRealm({
-      mockMatrixUtils,
-      contents: {
-        ...SYSTEM_CARD_FIXTURE_CONTENTS,
-        'index.gts': indexCardSource,
-        'pet-person.gts': personCardSource,
-        'person.gts': personCardSource,
-        'pet.gts': petCardSource,
-        'friend.gts': friendCardSource,
-        'employee.gts': employeeCardSource,
-        'in-this-file.gts': inThisFileSource,
-        'exports.gts': exportsSource,
-        'special-exports.gts': specialExportsSource,
-        'imports.gts': importsSource,
-        're-export.gts': reExportSource,
-        'local-inherit.gts': localInheritSource,
-        'file-def.gts': fileDefSource,
-        'command-module.gts': commandModuleSource,
-        'erroring-module.gts': erroringModuleSource,
-        'empty-file.gts': '',
-        'person-entry.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              cardTitle: 'Person',
-              cardDescription: 'Spec',
-              specType: 'card',
-              ref: {
-                module: `./person`,
-                name: 'Person',
+    ({ adapter } = await withCachedRealmSetup(async () => {
+      await setupAcceptanceTestRealm({
+        mockMatrixUtils,
+        contents: { ...SYSTEM_CARD_FIXTURE_CONTENTS, ...realmAFiles },
+        realmURL: testRealmURL2,
+      });
+      return setupAcceptanceTestRealm({
+        mockMatrixUtils,
+        contents: {
+          ...SYSTEM_CARD_FIXTURE_CONTENTS,
+          'index.gts': indexCardSource,
+          'pet-person.gts': personCardSource,
+          'person.gts': personCardSource,
+          'pet.gts': petCardSource,
+          'friend.gts': friendCardSource,
+          'employee.gts': employeeCardSource,
+          'in-this-file.gts': inThisFileSource,
+          'exports.gts': exportsSource,
+          'special-exports.gts': specialExportsSource,
+          'imports.gts': importsSource,
+          're-export.gts': reExportSource,
+          'local-inherit.gts': localInheritSource,
+          'file-def.gts': fileDefSource,
+          'png-def-module.gts': pngDefModuleSource,
+          'images/sample.png': makeMinimalPng(),
+          'images/logo.png': makeMinimalPng(2, 2),
+          'command-module.gts': commandModuleSource,
+          'erroring-module.gts': erroringModuleSource,
+          'empty-file.gts': '',
+          'sample-styles.css': 'body { color: red; }',
+          'person-entry.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                cardTitle: 'Person',
+                cardDescription: 'Spec',
+                specType: 'card',
+                ref: {
+                  module: `./person`,
+                  name: 'Person',
+                },
               },
-            },
-            meta: {
-              adoptsFrom: {
-                module: `${baseRealm.url}spec`,
-                name: 'Spec',
-              },
-            },
-          },
-        },
-        'index.json': {
-          data: {
-            type: 'card',
-            attributes: {},
-            meta: {
-              adoptsFrom: {
-                module: './index',
-                name: 'Index',
+              meta: {
+                adoptsFrom: {
+                  module: `${baseRealm.url}spec`,
+                  name: 'Spec',
+                },
               },
             },
           },
-        },
-        'léame.md': 'hola mundo',
-        'readme.md': 'hello world',
-        'not-json.json': 'I am not JSON.',
-        'Person/1.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              firstName: 'Hassan',
-              lastName: 'Abdel-Rahman',
-            },
-            meta: {
-              adoptsFrom: {
-                module: '../person',
-                name: 'Person',
+          'index.json': {
+            data: {
+              type: 'card',
+              attributes: {},
+              meta: {
+                adoptsFrom: {
+                  module: './index',
+                  name: 'Index',
+                },
               },
             },
           },
-        },
-        'Pet/mango.json': {
-          data: {
-            attributes: {
-              name: 'Mango',
-            },
-            meta: {
-              adoptsFrom: {
-                module: `${testRealmURL}pet`,
-                name: 'Pet',
+          'léame.md': 'hola mundo',
+          'readme.md': 'hello world',
+          'not-json.json': 'I am not JSON.',
+          'Person/1.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                firstName: 'Hassan',
+                lastName: 'Abdel-Rahman',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: '../person',
+                  name: 'Person',
+                },
               },
             },
           },
-        },
-        'Pet/vangogh.json': {
-          data: {
-            attributes: {
-              name: 'Van Gogh',
-            },
-            meta: {
-              adoptsFrom: {
-                module: `${testRealmURL}pet`,
-                name: 'Pet',
+          'Pet/mango.json': {
+            data: {
+              attributes: {
+                name: 'Mango',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `${testRealmURL}pet`,
+                  name: 'Pet',
+                },
               },
             },
           },
+          'Pet/vangogh.json': {
+            data: {
+              attributes: {
+                name: 'Van Gogh',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `${testRealmURL}pet`,
+                  name: 'Pet',
+                },
+              },
+            },
+          },
+          'z00.json': '{}',
+          'z01.json': '{}',
+          'z02.json': '{}',
+          'z03.json': '{}',
+          'z04.json': '{}',
+          'z05.json': '{}',
+          'z06.json': '{}',
+          'z07.json': '{}',
+          'z08.json': '{}',
+          'z09.json': '{}',
+          'z10.json': '{}',
+          'z11.json': '{}',
+          'z12.json': '{}',
+          'z13.json': '{}',
+          'z14.json': '{}',
+          'z15.json': '{}',
+          'z16.json': '{}',
+          'z17.json': '{}',
+          'z18.json': '{}',
+          'z19.json': '{}',
+          'zzz/zzz/file.json': '{}',
+          '.realm.json': {
+            name: 'Test Workspace B',
+            backgroundURL:
+              'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
+            iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
+          },
         },
-        'z00.json': '{}',
-        'z01.json': '{}',
-        'z02.json': '{}',
-        'z03.json': '{}',
-        'z04.json': '{}',
-        'z05.json': '{}',
-        'z06.json': '{}',
-        'z07.json': '{}',
-        'z08.json': '{}',
-        'z09.json': '{}',
-        'z10.json': '{}',
-        'z11.json': '{}',
-        'z12.json': '{}',
-        'z13.json': '{}',
-        'z14.json': '{}',
-        'z15.json': '{}',
-        'z16.json': '{}',
-        'z17.json': '{}',
-        'z18.json': '{}',
-        'z19.json': '{}',
-        'zzz/zzz/file.json': '{}',
-        '.realm.json': {
-          name: 'Test Workspace B',
-          backgroundURL:
-            'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
-          iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
-        },
-      },
+      });
     }));
 
     monacoService = getService('monaco-service');
@@ -1560,10 +1574,10 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       .dom('[data-test-card-module-definition]')
       .includesText('custom file');
 
-    // Inherit action should not be available for file defs
+    // Inherit action should be available for exported file defs
     assert
       .dom('[data-test-action-button="Inherit"]')
-      .doesNotExist('Inherit action is not shown for FileDef declarations');
+      .exists('Inherit action is shown for exported FileDef declarations');
   });
 
   test('Schema/Playground/Spec panes render for a focused FileDef declaration', async function (assert) {
@@ -1600,6 +1614,25 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       .dom('[data-test-active-module-inspector-view="preview"]')
       .exists('playground pane renders for FileDef');
 
+    // CustomFileDef has no matching file instances, so "no instances" message should show
+    await waitFor('[data-test-playground-filedef-message]');
+    assert
+      .dom('[data-test-playground-filedef-message]')
+      .includesText(
+        'No file instances found',
+        'shows no-instances message for FileDef with no matching files',
+      );
+    assert
+      .dom('[data-test-instance-chooser]')
+      .doesNotExist(
+        'instance chooser is not shown when there are no file instances',
+      );
+    assert
+      .dom('[data-test-playground-format-chooser]')
+      .doesNotExist(
+        'format chooser is not shown when there are no file instances',
+      );
+
     // Switch to Spec pane - should not crash
     await click('[data-test-module-inspector-view="spec"]');
     assert
@@ -1612,6 +1645,181 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       .dom('[data-test-active-module-inspector-view="schema"]')
       .exists('schema pane renders for FileDef');
     assert.dom('[data-test-card-schema="custom file"]').exists();
+  });
+
+  test('Playground displays file-meta instances for PngDef with preview, instance chooser, and format chooser', async function (assert) {
+    await visitOperatorMode({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}png-def-module.gts`,
+    });
+
+    await waitFor('[data-test-card-inspector-panel]');
+    await waitFor('[data-test-current-module-name]');
+    await waitFor('[data-test-in-this-file-selector]');
+
+    // Select the PngDef declaration
+    await click('[data-test-boxel-selector-item-text="PngDef"]');
+
+    // Switch to Playground pane
+    await click('[data-test-module-inspector-view="preview"]');
+
+    // Wait for file-meta search to complete and render the instance chooser
+    await waitFor('[data-test-instance-chooser]', { timeout: 10000 });
+
+    // Core layout: preview + instance chooser + format chooser all present
+    assert
+      .dom('[data-test-playground-panel]')
+      .exists('playground panel renders');
+    assert
+      .dom('[data-test-instance-chooser]')
+      .exists('instance chooser is shown');
+    assert
+      .dom('[data-test-playground-format-chooser]')
+      .exists('format chooser is shown');
+    assert
+      .dom('[data-test-playground-filedef-message]')
+      .doesNotExist('no-instances message is NOT shown when instances exist');
+
+    // Instance title shows the filename
+    assert
+      .dom('[data-test-selected-item]')
+      .exists('selected item is displayed');
+    assert
+      .dom('[data-test-selected-item]')
+      .containsText('.png', 'selected item title contains filename');
+
+    // CardHeader shows the file type display name
+    assert
+      .dom('[data-test-playground-panel] [data-test-boxel-card-header-title]')
+      .exists('card header renders for file preview');
+
+    // Format chooser has the correct formats (isolated, embedded, fitted, atom — NO edit)
+    assert
+      .dom(
+        '[data-test-playground-format-chooser] [data-test-format-chooser="isolated"]',
+      )
+      .exists('isolated format available');
+    assert
+      .dom(
+        '[data-test-playground-format-chooser] [data-test-format-chooser="embedded"]',
+      )
+      .exists('embedded format available');
+    assert
+      .dom(
+        '[data-test-playground-format-chooser] [data-test-format-chooser="fitted"]',
+      )
+      .exists('fitted format available');
+    assert
+      .dom(
+        '[data-test-playground-format-chooser] [data-test-format-chooser="atom"]',
+      )
+      .exists('atom format available');
+    assert
+      .dom(
+        '[data-test-playground-format-chooser] [data-test-format-chooser="edit"]',
+      )
+      .doesNotExist('edit format is NOT available for FileDef');
+
+    // Default format is isolated
+    assert
+      .dom('[data-test-format-chooser="isolated"]')
+      .hasClass('active', 'isolated is the default active format');
+  });
+
+  test('Playground FileDef format switching renders different formats', async function (assert) {
+    await visitOperatorMode({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}png-def-module.gts`,
+    });
+
+    await waitFor('[data-test-card-inspector-panel]');
+    await waitFor('[data-test-current-module-name]');
+    await waitFor('[data-test-in-this-file-selector]');
+    await click('[data-test-boxel-selector-item-text="PngDef"]');
+    await click('[data-test-module-inspector-view="preview"]');
+    await waitFor('[data-test-instance-chooser]', { timeout: 10000 });
+
+    // Default: isolated is active
+    assert
+      .dom('[data-test-format-chooser="isolated"]')
+      .hasClass('active', 'starts in isolated format');
+
+    // Switch to embedded
+    await click('[data-test-format-chooser="embedded"]');
+    assert
+      .dom('[data-test-format-chooser="isolated"]')
+      .hasNoClass('active', 'isolated no longer active');
+    assert
+      .dom('[data-test-format-chooser="embedded"]')
+      .hasClass('active', 'embedded is now active');
+
+    // Switch to atom
+    await click('[data-test-format-chooser="atom"]');
+    assert
+      .dom('[data-test-format-chooser="embedded"]')
+      .hasNoClass('active', 'embedded no longer active');
+    assert
+      .dom('[data-test-format-chooser="atom"]')
+      .hasClass('active', 'atom is now active');
+    assert
+      .dom('[data-test-atom-preview]')
+      .exists('atom preview container renders');
+
+    // Switch to fitted
+    await click('[data-test-format-chooser="fitted"]');
+    assert
+      .dom('[data-test-format-chooser="atom"]')
+      .hasNoClass('active', 'atom no longer active');
+    assert
+      .dom('[data-test-format-chooser="fitted"]')
+      .hasClass('active', 'fitted is now active');
+  });
+
+  test('Playground FileDef instance selection switches the displayed file', async function (assert) {
+    await visitOperatorMode({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}png-def-module.gts`,
+    });
+
+    await waitFor('[data-test-card-inspector-panel]');
+    await waitFor('[data-test-current-module-name]');
+    await waitFor('[data-test-in-this-file-selector]');
+    await click('[data-test-boxel-selector-item-text="PngDef"]');
+    await click('[data-test-module-inspector-view="preview"]');
+    await waitFor('[data-test-instance-chooser]', { timeout: 10000 });
+
+    // Capture the initial selected item title
+    let initialTitle =
+      document
+        .querySelector('[data-test-selected-item]')
+        ?.textContent?.trim() ?? '';
+    assert.ok(initialTitle.length > 0, 'initial selection has a title');
+
+    // Open the dropdown and verify there are multiple options (we added 2 PNGs)
+    await click('[data-test-instance-chooser]');
+    assert
+      .dom('[data-option-index="0"]')
+      .exists('first dropdown option exists');
+    assert
+      .dom('[data-option-index="1"]')
+      .exists('second dropdown option exists');
+
+    // Select the second option using the data-option-index selector
+    await click('[data-option-index="1"]');
+
+    let newTitle =
+      document
+        .querySelector('[data-test-selected-item]')
+        ?.textContent?.trim() ?? '';
+    assert.ok(newTitle.length > 0, 'new selection has a title');
+    assert.notEqual(
+      newTitle,
+      initialTitle,
+      'selected instance changed after clicking a different option',
+    );
   });
 
   test('"in-this-file" panel displays local grandfather card. selection will move cursor and display card or field schema', async function (assert) {
@@ -1926,6 +2134,53 @@ export class TestField extends ExportedField {
   static displayName = "Test Field";
 }`.trim(),
         'the source is correct',
+      );
+      deferred.fulfill();
+    });
+    await click('[data-test-create-definition]');
+    await waitFor('[data-test-create-file-modal]', { count: 0 });
+    await deferred.promise;
+  });
+
+  test<TestContextWithSave>('can inherit from an exported file def declaration', async function (assert) {
+    assert.expect(2);
+    let expectedSrc = `
+import { CustomFileDef } from './file-def';
+export class TestFileDef extends CustomFileDef {
+  static displayName = "Test File Def";
+}`.trim();
+    await visitOperatorMode({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}file-def.gts`,
+    });
+
+    await waitFor('[data-boxel-selector-item-text="CustomFileDef"]');
+
+    await click('[data-boxel-selector-item-text="CustomFileDef"]');
+    await waitFor('[data-test-card-module-definition]');
+
+    await click('[data-test-action-button="Inherit"]');
+    await waitFor(
+      `[data-test-create-file-modal][data-test-ready] [data-test-realm-name="Test Workspace B"]`,
+    );
+
+    assert
+      .dom('[data-test-inherits-from-field] .pill')
+      .includesText('custom file', 'the inherits from is correct');
+
+    await fillIn('[data-test-display-name-field]', 'Test File Def');
+    await fillIn('[data-test-file-name-field]', '/test-file-def');
+
+    let deferred = new Deferred<void>();
+    this.onSave((_, content) => {
+      if (typeof content !== 'string') {
+        throw new Error(`expected string save data`);
+      }
+      assert.strictEqual(
+        content,
+        expectedSrc,
+        'the source is correct - no Component import for file defs',
       );
       deferred.fulfill();
     });
@@ -2400,6 +2655,42 @@ export class ExportedCard extends ExportedCardParent {
         .doesNotExist(
           'Create Listing button is not displayed when user lacks write permissions',
         );
+    });
+
+    test('inspector shows file inheritance panel for non-module files', async function (assert) {
+      await visitOperatorMode({
+        stacks: [[]],
+        submode: 'code',
+        codePath: `${testRealmURL}sample-styles.css`,
+      });
+
+      await waitFor('[data-test-card-inspector-panel]');
+      await waitFor('[data-test-inheritance-panel-header]');
+
+      assert
+        .dom('[data-test-inheritance-panel-header]')
+        .hasText('File Inheritance');
+
+      assert
+        .dom('[data-test-card-instance-definition]')
+        .exists('file instance definition is shown');
+      assert
+        .dom(
+          '[data-test-card-instance-definition] [data-test-definition-header]',
+        )
+        .includesText('File Instance');
+      assert
+        .dom(
+          '[data-test-card-instance-definition] [data-test-definition-file-extension]',
+        )
+        .includesText('.css');
+
+      assert
+        .dom('[data-test-card-module-definition]')
+        .exists('file definition (adopts from) is shown');
+      assert
+        .dom('[data-test-card-module-definition]')
+        .includesText('File Definition');
     });
   });
 });

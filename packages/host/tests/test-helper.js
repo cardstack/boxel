@@ -16,6 +16,12 @@ export function start(options) {
 
   setup(QUnit.assert);
   setupOperatorModeParametersMatchAssertion(QUnit.assert);
+  const urlParams = new URLSearchParams(window.location.search);
+  const isParallelExamRun =
+    urlParams.has('browser') || urlParams.has('partition');
 
+  if (isParallelExamRun) {
+    QUnit.config.failOnZeroTests = false;
+  }
   examStart(options);
 }

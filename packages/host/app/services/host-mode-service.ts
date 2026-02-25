@@ -243,7 +243,7 @@ export default class HostModeService extends Service {
     ) {
       realmServerURL = hostModeOrigin;
     }
-    let searchURL = new URL('_search-prerendered', realmServerURL);
+    let searchURL = new URL('_federated-search-prerendered', realmServerURL);
     let cardJsonURL = cardURL.endsWith('.json') ? cardURL : `${cardURL}.json`;
     let response = await fetch(searchURL.toString(), {
       method: 'QUERY',

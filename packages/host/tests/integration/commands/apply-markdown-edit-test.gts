@@ -19,6 +19,8 @@ import {
   testRealmURL,
   testRealmInfo,
   setupRealmServerEndpoints,
+  setupRealmCacheTeardown,
+  withCachedRealmSetup,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
@@ -102,14 +104,17 @@ module('Integration | commands | apply-markdown-edit', function (hooks) {
     },
   ]);
 
+  setupRealmCacheTeardown(hooks);
+
   hooks.beforeEach(async function (this: RenderingTestContext) {
     forwardRequests = [];
     parsedRequestBodies = [];
 
-    await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      contents: {
-        'article.gts': `
+    await withCachedRealmSetup(async () =>
+      setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {
+          'article.gts': `
           import { CardDef, field, contains } from "https://cardstack.com/base/card-api";
           import MarkdownField from "https://cardstack.com/base/markdown";
 
@@ -119,47 +124,48 @@ module('Integration | commands | apply-markdown-edit', function (hooks) {
             @field body = contains(MarkdownField);
           }
         `,
-        'Article/ambiguous.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              body: 'Repeat me.\n\nRepeat me.\n\nKeep me.',
-            },
-            meta: {
-              adoptsFrom: {
-                module: '../article',
-                name: 'Article',
+          'Article/ambiguous.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                body: 'Repeat me.\n\nRepeat me.\n\nKeep me.',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: '../article',
+                  name: 'Article',
+                },
               },
             },
           },
-        },
-        'Article/1.json': {
-          data: {
-            type: 'card',
-            attributes: { body: post1 },
-            meta: {
-              adoptsFrom: {
-                module: '../article',
-                name: 'Article',
+          'Article/1.json': {
+            data: {
+              type: 'card',
+              attributes: { body: post1 },
+              meta: {
+                adoptsFrom: {
+                  module: '../article',
+                  name: 'Article',
+                },
               },
             },
           },
-        },
-        'Article/2.json': {
-          data: {
-            type: 'card',
-            attributes: { intro: post2 },
-            meta: {
-              adoptsFrom: {
-                module: '../article',
-                name: 'Article',
+          'Article/2.json': {
+            data: {
+              type: 'card',
+              attributes: { intro: post2 },
+              meta: {
+                adoptsFrom: {
+                  module: '../article',
+                  name: 'Article',
+                },
               },
             },
           },
+          '.realm.json': `{ "name": "${realmName}", "iconURL": "https://boxel-images.boxel.ai/icons/Letter-m.png" }`,
         },
-        '.realm.json': `{ "name": "${realmName}", "iconURL": "https://boxel-images.boxel.ai/icons/Letter-m.png" }`,
-      },
-    });
+      }),
+    );
 
     command = new ApplyMarkdownEditCommand(
       getService('command-service').commandContext,

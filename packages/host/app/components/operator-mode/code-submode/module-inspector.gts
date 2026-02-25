@@ -48,9 +48,7 @@ import {
 import CreateSpecCommand from '@cardstack/host/commands/create-specs';
 import CardError from '@cardstack/host/components/operator-mode/card-error';
 import Playground from '@cardstack/host/components/operator-mode/code-submode/playground/playground';
-
 import SchemaEditor from '@cardstack/host/components/operator-mode/code-submode/schema-editor';
-
 import SpecPreview from '@cardstack/host/components/operator-mode/code-submode/spec-preview';
 import SpecPreviewBadge from '@cardstack/host/components/operator-mode/code-submode/spec-preview-badge';
 
@@ -64,6 +62,7 @@ import type { Ready } from '@cardstack/host/resources/file';
 import { isReady } from '@cardstack/host/resources/file';
 import {
   type CardOrFieldDeclaration,
+  type CardOrFieldReexport,
   type ModuleAnalysis,
   isCardOrFieldDeclaration,
   type ModuleDeclaration,
@@ -116,7 +115,10 @@ interface ModuleInspectorSignature {
     moduleAnalysis: ModuleAnalysis;
     previewFormat: Format;
     readyFile: Ready;
-    selectedCardOrField: CardOrFieldDeclaration | undefined;
+    selectedCardOrField:
+      | CardOrFieldDeclaration
+      | CardOrFieldReexport
+      | undefined;
     selectedCodeRef: ResolvedCodeRef | undefined;
     selectedDeclaration: ModuleDeclaration | undefined;
     setPreviewFormat: (format: Format) => void;
@@ -174,10 +176,13 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
       return state;
     }
     let fileUrl = this.args.readyFile.url;
+    void this.args.readyFile?.lastModified; // track lastModified to re-run on save
     state.isLoading = true;
     (async () => {
       try {
-        let result = await this.store.get(fileUrl, { type: 'file-meta' });
+        let result = await this.store.getWithoutCache(fileUrl, {
+          type: 'file-meta',
+        });
         if (isCardErrorJSONAPI(result)) {
           state.error = result;
           state.value = undefined;

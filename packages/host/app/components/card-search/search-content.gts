@@ -12,6 +12,8 @@ import pluralize from 'pluralize';
 import { eq } from '@cardstack/boxel-ui/helpers';
 
 import {
+  type CodeRef,
+  type Filter,
   CardContextName,
   type getCard,
   type getCardCollection,
@@ -44,6 +46,8 @@ import SearchResultSection from './search-result-section';
 import { getCodeRefFromSearchKey } from './utils';
 
 import type { PrerenderedCard } from '../prerendered-card-search';
+
+import type { NewCardArgs } from './utils';
 
 const OWNER_DESTROYED_ERROR = 'OWNER_DESTROYED_ERROR';
 
@@ -84,12 +88,20 @@ interface Signature {
     searchKey: string;
     selectedRealmURLs: string[];
     isCompact: boolean;
-    handleCardSelect: (cardId: string) => void;
+    handleSelect: (selection: string | NewCardArgs) => void;
+    selectedCard?: string | NewCardArgs;
+    baseFilter?: Filter;
+    offerToCreate?: {
+      ref: CodeRef;
+      relativeTo: URL | undefined;
+    };
+    onSubmit?: (selection: string | NewCardArgs) => void;
+    showHeader?: boolean;
   };
   Blocks: {};
 }
 
-export default class SearchSheetContent extends Component<Signature> {
+export default class SearchContent extends Component<Signature> {
   @service declare loaderService: LoaderService;
   @service declare realm: RealmService;
   @service declare realmServer: RealmServerService;
@@ -127,14 +139,26 @@ export default class SearchSheetContent extends Component<Signature> {
     this,
     getOwner(this)!,
     () => ({
-      query:
-        this.isSearchKeyEmpty || this.searchKeyIsURL ? undefined : this.query,
+      query: this.shouldSkipQuery ? undefined : this.query,
       format: 'fitted',
       realms: this.realms,
       isLive: true,
       cardComponentModifier: this.cardComponentModifier,
     }),
   );
+
+  private get shouldSkipQuery() {
+    // In baseFilter mode (modal), only skip when search key is a URL
+    if (this.args.baseFilter) {
+      return this.searchKeyIsURL;
+    }
+    // In search-sheet mode, skip when empty or URL
+    return this.isSearchKeyEmpty || this.searchKeyIsURL;
+  }
+
+  private get showHeader() {
+    return this.args.showHeader !== false;
+  }
 
   private get isSearchKeyEmpty() {
     return (this.args.searchKey?.trim() ?? '') === '';
@@ -191,6 +215,30 @@ export default class SearchSheetContent extends Component<Signature> {
 
   private get query() {
     const { searchKey } = this.args;
+
+    // Modal mode: use the externally-provided base filter
+    if (this.args.baseFilter) {
+      const searchTerm = searchKey?.trim() || undefined;
+      return {
+        filter: {
+          every: [
+            this.args.baseFilter,
+            ...(searchTerm
+              ? [
+                  {
+                    contains: {
+                      cardTitle: searchTerm,
+                    },
+                  },
+                ]
+              : []),
+          ],
+        },
+        sort: this.activeSort.sort,
+      };
+    }
+
+    // Search-sheet mode: existing logic (type detection, specRef exclusion)
     const type = getCodeRefFromSearchKey(searchKey);
     const searchTerm = !type ? searchKey : undefined;
     return {
@@ -270,7 +318,14 @@ export default class SearchSheetContent extends Component<Signature> {
     if (!cards) {
       return [];
     }
-    let filtered = cards;
+    const realms = this.realms;
+    const realmFiltered = cards.filter(
+      (c) => c.id && realms.some((realmUrl) => c.id.startsWith(realmUrl)),
+    );
+    if (this.args.isCompact) {
+      return realmFiltered;
+    }
+    let filtered = realmFiltered;
     const term = this.searchTerm;
     if (term) {
       const lowerTerm = term.toLowerCase();
@@ -398,7 +453,12 @@ export default class SearchSheetContent extends Component<Signature> {
   }
 
   private get cardsByQuerySection(): SearchSheetSection[] | null {
-    if (this.isSearchKeyEmpty || this.searchKeyIsURL) {
+    if (this.searchKeyIsURL) {
+      return null;
+    }
+
+    // In search-sheet mode (no baseFilter), skip when search key is empty
+    if (!this.args.baseFilter && this.isSearchKeyEmpty) {
       return null;
     }
 
@@ -428,6 +488,29 @@ export default class SearchSheetContent extends Component<Signature> {
       });
     }
 
+    // When offerToCreate is provided, include empty sections for all
+    // available/selected realms that have no results, so users can
+    // create new cards in those realms.
+    if (this.args.offerToCreate) {
+      for (const realmUrl of this.realms) {
+        if (!byRealm.has(realmUrl)) {
+          const realmInfo = this.realm.info(realmUrl);
+          sections.push({
+            sid: `realm:${realmUrl}`,
+            type: 'realm',
+            realmUrl,
+            realmInfo: {
+              name: realmInfo?.name ?? this.realmNameFromUrl(realmUrl),
+              iconURL: realmInfo?.iconURL ?? null,
+              publishable: realmInfo?.publishable ?? null,
+            },
+            cards: [],
+            totalCount: 0,
+          });
+        }
+      }
+    }
+
     return sections;
   }
 
@@ -445,6 +528,11 @@ export default class SearchSheetContent extends Component<Signature> {
   private get sections(): SearchSheetSection[] {
     const sections: SearchSheetSection[] = [];
 
+    // Add recents section if present
+    if (this.recentCardsSection) {
+      sections.push(this.recentCardsSection);
+    }
+
     // Add URL section if present
     if (this.cardByUrlSection) {
       sections.push(this.cardByUrlSection);
@@ -453,11 +541,6 @@ export default class SearchSheetContent extends Component<Signature> {
     // Add query sections if present
     if (this.cardsByQuerySection) {
       sections.push(...this.cardsByQuerySection);
-    }
-
-    // Add recents section if present
-    if (this.recentCardsSection) {
-      sections.push(this.recentCardsSection);
     }
 
     return sections;
@@ -499,21 +582,31 @@ export default class SearchSheetContent extends Component<Signature> {
     return !!this.focusedSection && this.focusedSection !== sectionId;
   }
 
+  private get hasNoResults(): boolean {
+    return (
+      this.sections.length === 0 &&
+      !this.searchPrerenderedCards.isLoading &&
+      !this.shouldSkipQuery
+    );
+  }
+
   <template>
     {{consumeContext this.getRecentCardCollection}}
     {{consumeContext this.makeCardResource}}
     <div class='search-sheet-content {{if @isCompact "compact"}}'>
-      {{#unless @isCompact}}
-        <SearchResultHeader
-          @summaryText={{this.summaryText}}
-          @viewOptions={{VIEW_OPTIONS}}
-          @activeViewId={{this.activeViewId}}
-          @activeSort={{this.activeSort}}
-          @sortOptions={{SORT_OPTIONS}}
-          @onChangeView={{this.onChangeView}}
-          @onChangeSort={{this.onChangeSort}}
-        />
-      {{/unless}}
+      {{#if this.showHeader}}
+        {{#unless @isCompact}}
+          <SearchResultHeader
+            @summaryText={{this.summaryText}}
+            @viewOptions={{VIEW_OPTIONS}}
+            @activeViewId={{this.activeViewId}}
+            @activeSort={{this.activeSort}}
+            @sortOptions={{SORT_OPTIONS}}
+            @onChangeView={{this.onChangeView}}
+            @onChangeSort={{this.onChangeSort}}
+          />
+        {{/unless}}
+      {{/if}}
 
       {{! Handle empty URL search state — only after loading completes }}
       {{#if this.searchKeyIsURL}}
@@ -527,21 +620,40 @@ export default class SearchSheetContent extends Component<Signature> {
         {{/if}}
       {{/if}}
 
-      {{! Render all sections }}
-      {{#each this.sections as |section i|}}
-        <SearchResultSection
-          @section={{section}}
-          @viewOption={{this.activeViewId}}
-          @isCompact={{@isCompact}}
-          @handleCardSelect={{@handleCardSelect}}
-          @isFocused={{eq this.focusedSection section.sid}}
-          @isCollapsed={{this.isSectionCollapsed section.sid}}
-          @onFocusSection={{this.onFocusSection}}
-          @getDisplayedCount={{this.getDisplayedCount}}
-          @onShowMore={{this.onShowMore}}
-          data-test-search-result-section={{i}}
-        />
-      {{/each}}
+      {{#if @isCompact}}
+        {{#if this.recentCardsSection}}
+          <SearchResultSection
+            @section={{this.recentCardsSection}}
+            @isCompact={{true}}
+            @handleSelect={{@handleSelect}}
+            data-test-search-result-section='recent-cards'
+          />
+        {{/if}}
+      {{else}}
+        {{! Render all sections }}
+        {{#each this.sections as |section i|}}
+          <SearchResultSection
+            @section={{section}}
+            @viewOption={{this.activeViewId}}
+            @handleSelect={{@handleSelect}}
+            @isFocused={{eq this.focusedSection section.sid}}
+            @isCollapsed={{this.isSectionCollapsed section.sid}}
+            @onFocusSection={{this.onFocusSection}}
+            @getDisplayedCount={{this.getDisplayedCount}}
+            @onShowMore={{this.onShowMore}}
+            @selectedCard={{@selectedCard}}
+            @offerToCreate={{@offerToCreate}}
+            @onSubmit={{@onSubmit}}
+            data-test-search-result-section={{i}}
+          />
+        {{/each}}
+      {{/if}}
+
+      {{#if this.hasNoResults}}
+        <div class='empty-state' data-test-search-content-empty>
+          No cards available
+        </div>
+      {{/if}}
     </div>
     <style scoped>
       .search-sheet-content {
@@ -552,7 +664,6 @@ export default class SearchSheetContent extends Component<Signature> {
 
         height: 100%;
         background-color: var(--boxel-light);
-        border-bottom: 1px solid var(--boxel-200);
         padding: 0 var(--boxel-sp-lg);
         transition: opacity calc(var(--boxel-transition) / 4);
       }

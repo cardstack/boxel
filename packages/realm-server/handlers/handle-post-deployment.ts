@@ -15,6 +15,7 @@ import {
 
 export default function handlePostDeployment({
   assetsURL,
+  definitionLookup,
   realms,
   queue,
   realmServerSecretSeed,
@@ -24,6 +25,8 @@ export default function handlePostDeployment({
       sendResponseForUnauthorizedRequest(ctxt, 'Unauthorized');
       return;
     }
+
+    await definitionLookup.clearAllModules();
 
     let boxelUiChangeCheckerResult =
       await compareCurrentBoxelUIChecksum(assetsURL);

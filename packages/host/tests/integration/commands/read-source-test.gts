@@ -13,6 +13,8 @@ import {
   setupLocalIndexing,
   testRealmURL,
   testRealmInfo,
+  setupRealmCacheTeardown,
+  withCachedRealmSetup,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
@@ -37,13 +39,17 @@ module('Integration | commands | read-source', function (hooks) {
   });
 
   let readSourceCommand: ReadSourceCommand;
+  setupRealmCacheTeardown(hooks);
+
   hooks.beforeEach(async function () {
-    await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      contents: {
-        'component.gts': `import Component from '@glimmer/component';\n\nexport default class TestComponent extends Component {}`,
-      },
-    });
+    await withCachedRealmSetup(async () =>
+      setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {
+          'component.gts': `import Component from '@glimmer/component';\n\nexport default class TestComponent extends Component {}`,
+        },
+      }),
+    );
     let commandService = getService('command-service');
     readSourceCommand = new ReadSourceCommand(commandService.commandContext);
   });
