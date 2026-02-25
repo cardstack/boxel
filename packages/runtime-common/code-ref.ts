@@ -19,7 +19,7 @@ import {
 import { CardError } from './error';
 import { meta, relativeTo } from './constants';
 import type { LooseCardResource, FileMetaResource } from './index';
-import { isUrlLike, trimExecutableExtension } from './index';
+import { trimExecutableExtension } from './index';
 import { resolveCardReference } from './card-reference-resolver';
 import type { RuntimeDependencyTrackingContext } from './dependency-tracker';
 
