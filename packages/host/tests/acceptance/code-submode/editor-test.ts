@@ -347,6 +347,19 @@ module('Acceptance | code submode | editor tests', function (hooks) {
     // await percySnapshot(assert);
   });
 
+  test('text file in writable realm is not read-only', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}README.txt`,
+    });
+
+    await waitFor('[data-test-editor]');
+    assert.false(
+      monacoService?.editor?.getOption(MonacoSDK.editor.EditorOption.readOnly),
+      'editor should not be read-only for a .txt file in a writable realm',
+    );
+  });
+
   test<TestContextWithSave>('allows fixing broken cards', async function (assert) {
     await visitOperatorMode({
       stacks: [
