@@ -2,14 +2,16 @@ import { module, test } from 'qunit';
 import { basename } from 'path';
 import type {
   RealmPermissions,
-  Realm,
   RealmAdapter,
   RenderResponse,
   ModuleRenderResponse,
   FileExtractResponse,
   RenderRouteOptions,
 } from '@cardstack/runtime-common';
-import { baseRealm } from '@cardstack/runtime-common';
+import {
+  baseRealm,
+  type Realm as RuntimeRealm,
+} from '@cardstack/runtime-common';
 import type { Prerenderer } from '../prerender/index';
 import { PagePool } from '../prerender/page-pool';
 import { RenderRunner } from '../prerender/render-runner';
@@ -25,6 +27,10 @@ import {
   baseCardRef,
   trimExecutableExtension,
 } from '@cardstack/runtime-common';
+import {
+  installDelayedRuntimeRealmSearchPatch,
+  installRealmServerAssertOwnRealmServerBypassPatch,
+} from './helpers/prerender-page-patches';
 
 class TestSemaphore {
   #available: number;
@@ -131,11 +137,22 @@ module(basename(__filename), function () {
     let realmURL = 'http://127.0.0.1:4450/test/';
     let prerenderServerURL = new URL(realmURL).origin;
     let testUserId = '@user1:localhost';
-    let permissions: RealmPermissions = {};
+    let permissions: RealmPermissions = {
+      [realmURL]: ['read', 'write', 'realm-owner'],
+    };
     let prerenderer: Prerenderer;
     let realmAdapter: RealmAdapter;
-    let realm: Realm;
-    let auth = () => testCreatePrerenderAuth(testUserId, permissions);
+    let realm: RuntimeRealm;
+    let auth = () => {
+      let sessions = JSON.parse(
+        testCreatePrerenderAuth(testUserId, permissions),
+      ) as Record<string, string>;
+      let token = sessions[realmURL];
+      if (token) {
+        sessions[new URL(realmURL).origin + '/'] = token;
+      }
+      return JSON.stringify(sessions);
+    };
 
     hooks.before(async () => {
       prerenderer = getPrerendererForTesting({
@@ -157,6 +174,7 @@ module(basename(__filename), function () {
         {
           realmURL,
           permissions: {
+            '*': ['read'],
             [testUserId]: ['read', 'write', 'realm-owner'],
           },
           fileSystem: {
@@ -397,6 +415,243 @@ module(basename(__filename), function () {
                   adoptsFrom: {
                     module: './console-no-error',
                     name: 'ConsoleNoError',
+                  },
+                },
+              },
+            },
+            'directory-query.gts': `
+              import { CardDef, field, contains, linksTo, linksToMany, StringField, Component, queryableValue } from 'https://cardstack.com/base/card-api';
+
+              export class Person extends CardDef {
+                static displayName = 'Person';
+                @field name = contains(StringField);
+                @field team = contains(StringField);
+                @field managerName = contains(StringField);
+                @field manager = linksTo(() => Person);
+                @field reports = linksToMany(() => Person, {
+                  query: {
+                    filter: {
+                      eq: {
+                        managerName: '$this.name',
+                      },
+                    },
+                    page: {
+                      size: 10,
+                      number: 0,
+                    },
+                  },
+                });
+
+                // Keep person-instance indexing deterministic for this test:
+                // this avoids firing query fields when Person cards are
+                // prerendered in isolation during indexing.
+                static isolated = class extends Component<typeof this> {
+                  <template>
+                    <span data-test-person-name>{{@model.name}}</span>
+                    <span data-test-person-team>{{@model.team}}</span>
+                  </template>
+                };
+              }
+
+              export class Directory extends CardDef {
+                static displayName = 'Directory';
+                @field teamFilter = contains(StringField);
+                @field staff = linksToMany(() => Person, {
+                  query: {
+                    filter: {
+                      eq: {
+                        team: '$this.teamFilter',
+                      },
+                    },
+                    page: {
+                      size: 10,
+                      number: 0,
+                    },
+                  },
+                });
+
+                static [queryableValue](value: Directory | null) {
+                  if (!value) {
+                    return null;
+                  }
+                  return {
+                    teamFilter: value.teamFilter,
+                    staff: (value.staff ?? []).map((person) => ({
+                      name: person.name,
+                      manager: person.manager
+                        ? {
+                            name: person.manager.name,
+                          }
+                        : null,
+                      reports: (person.reports ?? []).map((report) => ({
+                        name: report.name,
+                        manager: report.manager
+                          ? {
+                              name: report.manager.name,
+                            }
+                          : null,
+                      })),
+                    })),
+                  };
+                }
+
+                static isolated = class extends Component<typeof this> {
+                  <template>
+                    <div data-test-directory-team>{{@model.teamFilter}}</div>
+                    <ul data-test-directory-staff>
+                      {{#each @model.staff as |person|}}
+                        <li data-test-staff-name>{{person.name}}</li>
+                        <div data-test-staff-manager>
+                          {{#if person.manager}}
+                            {{person.manager.name}}
+                          {{/if}}
+                        </div>
+                        <ul data-test-staff-reports>
+                          {{#each person.reports as |report|}}
+                            <li data-test-staff-report>
+                              {{report.name}}
+                              <span data-test-staff-report-manager>
+                                {{#if report.manager}}
+                                  {{report.manager.name}}
+                                {{/if}}
+                              </span>
+                            </li>
+                          {{/each}}
+                        </ul>
+                      {{/each}}
+                    </ul>
+                  </template>
+                };
+              }
+            `,
+            'directory-ops.json': {
+              data: {
+                attributes: {
+                  teamFilter: 'Ops',
+                },
+                relationships: {
+                  staff: {
+                    links: { self: null },
+                    data: [],
+                    meta: {
+                      errors: [
+                        {
+                          realm: 'https://unreachable-realm.example.com/',
+                          type: 'fetch-error',
+                          message: 'Could not reach remote realm',
+                          status: 502,
+                        },
+                      ],
+                    },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: './directory-query',
+                    name: 'Directory',
+                  },
+                },
+              },
+            },
+            'person-alice.json': {
+              data: {
+                attributes: {
+                  name: 'Alice',
+                  team: 'Leadership',
+                  managerName: '',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: './directory-query',
+                    name: 'Person',
+                  },
+                },
+              },
+            },
+            'person-bob.json': {
+              data: {
+                attributes: {
+                  name: 'Bob',
+                  team: 'Ops',
+                  managerName: 'Alice',
+                },
+                relationships: {
+                  manager: {
+                    links: {
+                      self: './person-alice',
+                    },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: './directory-query',
+                    name: 'Person',
+                  },
+                },
+              },
+            },
+            'person-carol.json': {
+              data: {
+                attributes: {
+                  name: 'Carol',
+                  team: 'Ops',
+                  managerName: 'Alice',
+                },
+                relationships: {
+                  manager: {
+                    links: {
+                      self: './person-alice',
+                    },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: './directory-query',
+                    name: 'Person',
+                  },
+                },
+              },
+            },
+            'person-dave.json': {
+              data: {
+                attributes: {
+                  name: 'Dave',
+                  team: 'Ops',
+                  managerName: 'Bob',
+                },
+                relationships: {
+                  manager: {
+                    links: {
+                      self: './person-bob',
+                    },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: './directory-query',
+                    name: 'Person',
+                  },
+                },
+              },
+            },
+            'person-eve.json': {
+              data: {
+                attributes: {
+                  name: 'Eve',
+                  team: 'Sales',
+                  managerName: 'Bob',
+                },
+                relationships: {
+                  manager: {
+                    links: {
+                      self: './person-bob',
+                    },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: './directory-query',
+                    name: 'Person',
                   },
                 },
               },
@@ -927,6 +1182,76 @@ module(basename(__filename), function () {
         );
       } finally {
         PagePool.prototype.getPage = originalGetPage;
+      }
+    });
+
+    test('card prerender waits for query fallback search and nested relationship loads', async function (assert) {
+      const cardURL = `${realmURL}directory-ops`;
+      let realmServerPatch =
+        installRealmServerAssertOwnRealmServerBypassPatch();
+      let delayedSearchPatch = installDelayedRuntimeRealmSearchPatch(150);
+      try {
+        let result = await prerenderer.prerenderCard({
+          realm: realmURL,
+          url: cardURL,
+          auth: auth(),
+        });
+
+        assert.notOk(result.response.error, 'prerender succeeds');
+        assert.true(
+          delayedSearchPatch.getRequestCount() > 0,
+          'fallback _search requests occurred and were delayed',
+        );
+
+        let isolatedHTML = cleanWhiteSpace(result.response.isolatedHTML ?? '');
+        assert.ok(
+          /data-test-staff-name[^>]*>\s*Bob\s*</.test(isolatedHTML),
+          `isolated html includes query results: ${isolatedHTML}`,
+        );
+        assert.ok(
+          /data-test-staff-manager[^>]*>\s*Alice\s*</.test(isolatedHTML),
+          `isolated html includes lazy relationship from query result: ${isolatedHTML}`,
+        );
+        assert.ok(
+          /data-test-staff-report[^>]*>\s*Eve/.test(isolatedHTML),
+          `isolated html includes nested query results: ${isolatedHTML}`,
+        );
+        assert.ok(
+          /data-test-staff-report-manager[^>]*>\s*Bob\s*</.test(isolatedHTML),
+          `isolated html includes nested relationship loads: ${isolatedHTML}`,
+        );
+
+        let staff = result.response.searchDoc?.staff as
+          | Array<Record<string, any>>
+          | undefined;
+        assert.ok(
+          Array.isArray(staff),
+          'searchDoc includes query field results',
+        );
+
+        let bob = staff?.find((entry) => entry?.name === 'Bob');
+        assert.ok(bob, 'searchDoc includes Bob from query results');
+        assert.strictEqual(
+          bob?.manager?.name,
+          'Alice',
+          'searchDoc includes loaded manager relationship',
+        );
+
+        let bobReports = bob?.reports as Array<Record<string, any>> | undefined;
+        assert.ok(
+          Array.isArray(bobReports),
+          'searchDoc includes nested query results',
+        );
+        let hasEveWithManager = bobReports?.some(
+          (report) => report?.name === 'Eve' && report?.manager?.name === 'Bob',
+        );
+        assert.true(
+          Boolean(hasEveWithManager),
+          'searchDoc includes nested loaded relationships',
+        );
+      } finally {
+        await realmServerPatch.restore();
+        delayedSearchPatch.restore();
       }
     });
 

@@ -26,6 +26,7 @@ import {
   type RenderError,
   parseRenderRouteOptions,
   serializeRenderRouteOptions,
+  logger as runtimeLogger,
 } from '@cardstack/runtime-common';
 import { Deferred } from '@cardstack/runtime-common/deferred';
 import { serializableError } from '@cardstack/runtime-common/error';
@@ -78,6 +79,8 @@ type ModelState = {
   isReady: boolean;
   readyWatchdogStarted?: boolean;
 };
+
+const renderReadyLogger = runtimeLogger('render-ready');
 
 export default class RenderRoute extends Route<Model> {
   @service('render-store') declare store: RenderStoreService;
@@ -568,6 +571,9 @@ export default class RenderRoute extends Route<Model> {
     if (!modelState || modelState.isReady) {
       return;
     }
+    renderReadyLogger.debug(
+      `scheduling ready settlement for cardId=${model.cardId}`,
+    );
     this.#pendingReadyModels.add(model);
     scheduleOnce('afterRender', this, this.#processPendingReadyModels);
     this.#startReadyWatchdog(model);
@@ -623,7 +629,13 @@ export default class RenderRoute extends Route<Model> {
     if (!modelState || modelState.isReady) {
       return;
     }
+    renderReadyLogger.debug(
+      `settleModelAfterRender start cardId=${model.cardId} status=${model.status}`,
+    );
     await this.#authGuard.race(() => this.store.loaded());
+    renderReadyLogger.debug(
+      `settleModelAfterRender store.loaded resolved cardId=${model.cardId}`,
+    );
     modelState.state.set('status', 'ready');
     modelState.isReady = true;
     modelState.readyDeferred.fulfill();
@@ -631,6 +643,9 @@ export default class RenderRoute extends Route<Model> {
     model.capturedDeps = snapshotRuntimeDependencies({
       excludeQueryOnly: true,
     }).deps;
+    renderReadyLogger.debug(
+      `settleModelAfterRender done cardId=${model.cardId} deps=${model.capturedDeps?.length ?? 0}`,
+    );
   }
 
   #settleModelAfterRenderSafely(model: Model) {
