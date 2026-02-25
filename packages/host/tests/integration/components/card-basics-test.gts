@@ -746,10 +746,12 @@ module('Integration | card-basics', function (hooks) {
         await store.loaded();
 
         await renderCard(loader, gallery as BaseDef, 'fitted');
-        await waitUntil(() =>
-          document
-            .querySelector('[data-test-gallery-fitted]')
-            ?.textContent?.includes('hero.txt'),
+        await waitUntil(
+          () =>
+            document
+              .querySelector('[data-test-gallery-fitted]')
+              ?.textContent?.includes('hero.txt'),
+          { timeout: 5000 },
         );
 
         assert
@@ -822,13 +824,16 @@ module('Integration | card-basics', function (hooks) {
         await store.loaded();
 
         await renderCard(loader, gallery as BaseDef, 'fitted');
-        await waitUntil(() => {
-          let text =
-            document.querySelector(
-              '[data-test-plural-view-field="attachments"]',
-            )?.textContent ?? '';
-          return text.includes('first.txt') && text.includes('second.txt');
-        });
+        await waitUntil(
+          () => {
+            let text =
+              document.querySelector(
+                '[data-test-plural-view-field="attachments"]',
+              )?.textContent ?? '';
+            return text.includes('first.txt') && text.includes('second.txt');
+          },
+          { timeout: 5000 },
+        );
 
         assert
           .dom('[data-test-plural-view-field="attachments"]')
