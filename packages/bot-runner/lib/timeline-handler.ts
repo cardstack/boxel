@@ -8,17 +8,13 @@ import {
 } from '@cardstack/runtime-common';
 import { enqueueRunCommandJob } from '@cardstack/runtime-common/jobs/run-command';
 import * as Sentry from '@sentry/node';
-import type {
-  DBAdapter,
-  PgPrimitive,
-  QueuePublisher,
-} from '@cardstack/runtime-common';
+import type { DBAdapter, QueuePublisher } from '@cardstack/runtime-common';
 import type { MatrixEvent, Room } from 'matrix-js-sdk';
 
 const log = logger('bot-runner');
 export interface BotRegistration {
   id: string;
-  created_at: string;
+  created_at_ms: number;
   username: string;
 }
 
@@ -72,12 +68,11 @@ export function onTimelineEvent({
         `received event from ${senderUsername} in room ${room.roomId} with ${registrations.length} registrations`,
       );
       for (let registration of submissionBotRegistrations) {
-        let createdAt = Date.parse(registration.created_at);
-        if (Number.isNaN(createdAt)) {
-          continue;
-        }
         let eventTimestamp = event.event.origin_server_ts;
-        if (eventTimestamp == null || eventTimestamp < createdAt) {
+        if (
+          eventTimestamp == null ||
+          eventTimestamp < registration.created_at_ms
+        ) {
           continue;
         }
         log.debug(
@@ -97,12 +92,11 @@ export function onTimelineEvent({
         });
       }
       for (let registration of registrations) {
-        let createdAt = Date.parse(registration.created_at);
-        if (Number.isNaN(createdAt)) {
-          continue;
-        }
         let eventTimestamp = event.event.origin_server_ts;
-        if (eventTimestamp == null || eventTimestamp < createdAt) {
+        if (
+          eventTimestamp == null ||
+          eventTimestamp < registration.created_at_ms
+        ) {
           continue;
         }
         // TODO: filter out events we want to handle based on the registration (e.g. command messages, system events)
@@ -234,18 +228,33 @@ async function getRegistrationsForUser(
 }
 
 function toBotRegistration(
-  row: Record<string, PgPrimitive>,
+  row: Record<string, unknown>,
 ): BotRegistration | null {
-  if (
-    typeof row.id !== 'string' ||
-    typeof row.username !== 'string' ||
-    typeof row.created_at !== 'object'
-  ) {
+  if (typeof row.id !== 'string' || typeof row.username !== 'string') {
+    return null;
+  }
+  let createdAtMs = toEpochMs(row.created_at);
+  if (createdAtMs == null) {
     return null;
   }
   return {
     id: row.id,
     username: row.username,
-    created_at: String(row.created_at),
+    created_at_ms: createdAtMs,
   };
+}
+
+function toEpochMs(value: unknown): number | null {
+  if (value instanceof Date) {
+    let time = value.getTime();
+    return Number.isFinite(time) ? time : null;
+  }
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null;
+  }
+  if (typeof value === 'string') {
+    let parsed = Date.parse(value);
+    return Number.isNaN(parsed) ? null : parsed;
+  }
+  return null;
 }

@@ -37,6 +37,14 @@ interface StoredCommandRequest {
   createdAt?: number;
 }
 
+type GenericCommand = Command<
+  CardDefConstructor | undefined,
+  CardDefConstructor
+>;
+type GenericCommandConstructor = {
+  new (context: CommandContext): GenericCommand;
+};
+
 class CommandRunState implements CommandInvocation<CardDefConstructor> {
   @tracked status: CommandInvocation<CardDefConstructor>['status'] = 'pending';
   @tracked cardResult: CardDef | null = null;
@@ -118,7 +126,7 @@ export default class CommandRunnerRoute extends Route<CommandRunnerModel> {
       let CommandConstructor = (await getClass(
         command,
         this.loaderService.loader,
-      )) as { new (context: CommandContext): Command<any, any> } | undefined;
+      )) as GenericCommandConstructor | undefined;
       if (!CommandConstructor) {
         throw new Error('Command not found for provided CodeRef');
       }
@@ -126,7 +134,7 @@ export default class CommandRunnerRoute extends Route<CommandRunnerModel> {
       let commandInstance = new CommandConstructor(this.commandContext);
       let resultCard: CardDef | undefined;
       if (commandInput) {
-        resultCard = await commandInstance.execute(commandInput as any);
+        resultCard = await commandInstance.execute(commandInput);
       } else {
         resultCard = await commandInstance.execute();
       }
