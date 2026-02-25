@@ -2105,7 +2105,12 @@ module('Integration | Store', function (hooks) {
     let hassan = `${testRealmURL}Person/hassan`;
 
     driver.id = hassan;
-    await waitFor(`[data-test-rendered-card="${hassan}"]`, { timeout: 5_000 });
+    await waitUntil(
+      () =>
+        storeService.getReferenceCount(hassan) === 1 &&
+        storeService.getReferenceCount(jade) === 0,
+      { timeout: 10_000 },
+    );
     assert.strictEqual(
       storeService.getReferenceCount(jade),
       0,
@@ -2118,7 +2123,12 @@ module('Integration | Store', function (hooks) {
     );
 
     driver.id = jade;
-    await waitFor(`[data-test-rendered-card="${jade}"]`, { timeout: 5_000 });
+    await waitUntil(
+      () =>
+        storeService.getReferenceCount(jade) === 1 &&
+        storeService.getReferenceCount(hassan) === 0,
+      { timeout: 10_000 },
+    );
     assert.strictEqual(
       storeService.getReferenceCount(jade),
       1,
@@ -2131,7 +2141,12 @@ module('Integration | Store', function (hooks) {
     );
 
     driver.showComponent = false;
-    await waitFor(`[data-test-rendered-card]`, { count: 0 });
+    await waitUntil(
+      () =>
+        storeService.getReferenceCount(jade) === 0 &&
+        storeService.getReferenceCount(hassan) === 0,
+      { timeout: 10_000 },
+    );
     assert.strictEqual(
       storeService.getReferenceCount(jade),
       0,
