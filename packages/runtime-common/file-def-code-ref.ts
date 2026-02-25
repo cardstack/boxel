@@ -41,6 +41,14 @@ const FILEDEF_CODE_REF_BY_EXTENSION: Record<string, ResolvedCodeRef> = {
     module: `${baseRealm.url}avif-image-def`,
     name: 'AvifDef',
   },
+  '.ts': {
+    module: `${baseRealm.url}ts-file-def`,
+    name: 'TsFileDef',
+  },
+  '.gts': {
+    module: `${baseRealm.url}gts-file-def`,
+    name: 'GtsFileDef',
+  },
   '.txt': {
     module: `${baseRealm.url}text-file-def`,
     name: 'TextFileDef',

@@ -227,8 +227,8 @@ module(basename(__filename), function () {
       assert.strictEqual(json.data.type, 'file-meta');
       assert.strictEqual(json.data.attributes?.name, 'person.gts');
       assert.deepEqual(json.data.meta?.adoptsFrom, {
-        module: `${baseRealm.url}file-api`,
-        name: 'FileDef',
+        module: `${baseRealm.url}gts-file-def`,
+        name: 'GtsFileDef',
       });
     });
 
