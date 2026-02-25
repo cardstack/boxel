@@ -218,7 +218,9 @@ module(basename(__filename), function () {
                 `${format} html includes expected snippet: ${json.data[0].attributes.html}`,
               );
               assert.true(
-                json.data[0].attributes.html.includes('Hello from FileDef content'),
+                json.data[0].attributes.html.includes(
+                  'Hello from FileDef content',
+                ),
                 `${format} html includes file content/title`,
               );
               assert.strictEqual(
