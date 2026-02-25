@@ -933,12 +933,12 @@ module('Acceptance | code submode tests', function (_hooks) {
 
       assert.dom('[data-test-code-mode-card-renderer-body]').exists();
 
-      // File preview header shows "File" type
+      // File preview header shows "JSON" type (JsonFileDef)
       assert
         .dom(
           '[data-test-code-mode-card-renderer-header] [data-test-boxel-card-header-title]',
         )
-        .includesText('File');
+        .includesText('JSON');
 
       // No edit format option for file previews
       assert.dom('[data-test-format-chooser="edit"]').doesNotExist();

@@ -690,6 +690,13 @@ module('Integration | serialization', function (hooks) {
           firstName: 'Mango',
           cardInfo,
         },
+        relationships: {
+          'cardInfo.theme': {
+            links: {
+              self: null,
+            },
+          },
+        },
         meta: {
           adoptsFrom: {
             module: `../test-cards`,
@@ -1094,6 +1101,11 @@ module('Integration | serialization', function (hooks) {
               type: 'card',
             },
           },
+          'cardInfo.theme': {
+            links: {
+              self: null,
+            },
+          },
         },
         meta: {
           adoptsFrom: {
@@ -1109,6 +1121,13 @@ module('Integration | serialization', function (hooks) {
           attributes: {
             cardDescription: 'Toilet paper ghost: Poooo!',
             cardInfo,
+          },
+          relationships: {
+            'cardInfo.theme': {
+              links: {
+                self: null,
+              },
+            },
           },
           meta: {
             adoptsFrom: {
@@ -1132,6 +1151,11 @@ module('Integration | serialization', function (hooks) {
               data: {
                 id: `${testRealmURL}Toy/spookyToiletPaper`,
                 type: 'card',
+              },
+            },
+            'cardInfo.theme': {
+              links: {
+                self: null,
               },
             },
           },
@@ -1224,6 +1248,11 @@ module('Integration | serialization', function (hooks) {
               type: 'card',
             },
           },
+          'cardInfo.theme': {
+            links: {
+              self: null,
+            },
+          },
         },
         meta: {
           adoptsFrom: {
@@ -1239,6 +1268,13 @@ module('Integration | serialization', function (hooks) {
           attributes: {
             cardDescription: 'Toilet paper ghost: Poooo!',
             cardInfo,
+          },
+          relationships: {
+            'cardInfo.theme': {
+              links: {
+                self: null,
+              },
+            },
           },
           meta: {
             adoptsFrom: {
@@ -1259,6 +1295,11 @@ module('Integration | serialization', function (hooks) {
               data: {
                 lid: spookyToiletPaper[localId],
                 type: 'card',
+              },
+            },
+            'cardInfo.theme': {
+              links: {
+                self: null,
               },
             },
           },
@@ -1308,6 +1349,11 @@ module('Integration | serialization', function (hooks) {
               type: 'card',
             },
           },
+          'cardInfo.theme': {
+            links: {
+              self: null,
+            },
+          },
         },
         meta: {
           adoptsFrom: {
@@ -1323,6 +1369,13 @@ module('Integration | serialization', function (hooks) {
           attributes: {
             cardDescription: 'Toilet paper ghost: Poooo!',
             cardInfo: {},
+          },
+          relationships: {
+            'cardInfo.theme': {
+              links: {
+                self: null,
+              },
+            },
           },
           meta: {
             adoptsFrom: {
@@ -1346,6 +1399,11 @@ module('Integration | serialization', function (hooks) {
               data: {
                 id: `${testRealmURL}Toy/spookyToiletPaper`,
                 type: 'card',
+              },
+            },
+            'cardInfo.theme': {
+              links: {
+                self: null,
               },
             },
           },
@@ -1511,6 +1569,11 @@ module('Integration | serialization', function (hooks) {
               id: `${testRealmURL}Pet/mango`,
             },
           },
+          'cardInfo.theme': {
+            links: {
+              self: null,
+            },
+          },
         },
         meta: {
           adoptsFrom: {
@@ -1571,6 +1634,11 @@ module('Integration | serialization', function (hooks) {
               self: null,
             },
           },
+          'cardInfo.theme': {
+            links: {
+              self: null,
+            },
+          },
         },
         meta: {
           adoptsFrom: {
@@ -1593,6 +1661,11 @@ module('Integration | serialization', function (hooks) {
         },
         relationships: {
           pet: {
+            links: {
+              self: null,
+            },
+          },
+          'cardInfo.theme': {
             links: {
               self: null,
             },
@@ -1815,6 +1888,11 @@ module('Integration | serialization', function (hooks) {
               type: 'card',
             },
           },
+          'cardInfo.theme': {
+            links: {
+              self: null,
+            },
+          },
         },
         meta: {
           adoptsFrom: {
@@ -1833,6 +1911,11 @@ module('Integration | serialization', function (hooks) {
           },
           relationships: {
             friend: {
+              links: {
+                self: null,
+              },
+            },
+            'cardInfo.theme': {
               links: {
                 self: null,
               },
@@ -1878,6 +1961,11 @@ module('Integration | serialization', function (hooks) {
             data: {
               lid: mango[localId],
               type: 'card',
+            },
+          },
+          'cardInfo.theme': {
+            links: {
+              self: null,
             },
           },
         },
@@ -2052,6 +2140,11 @@ module('Integration | serialization', function (hooks) {
               id: `${testRealmURL}Toy/spookyToiletPaper`,
             },
           },
+          'cardInfo.theme': {
+            links: {
+              self: null,
+            },
+          },
         },
         meta: {
           adoptsFrom: {
@@ -2067,6 +2160,13 @@ module('Integration | serialization', function (hooks) {
           attributes: {
             cardDescription: 'Toilet paper ghost: Poooo!',
             cardInfo,
+          },
+          relationships: {
+            'cardInfo.theme': {
+              links: {
+                self: null,
+              },
+            },
           },
           meta: {
             adoptsFrom: {
@@ -2184,6 +2284,11 @@ module('Integration | serialization', function (hooks) {
               id: `${testRealmURL}Toy/spookyToiletPaper`,
             },
           },
+          'cardInfo.theme': {
+            links: {
+              self: null,
+            },
+          },
         },
         meta: {
           adoptsFrom: {
@@ -2199,6 +2304,13 @@ module('Integration | serialization', function (hooks) {
           attributes: {
             cardDescription: 'Toilet paper ghost: Poooo!',
             cardInfo,
+          },
+          relationships: {
+            'cardInfo.theme': {
+              links: {
+                self: null,
+              },
+            },
           },
           meta: {
             adoptsFrom: {
@@ -2326,6 +2438,11 @@ module('Integration | serialization', function (hooks) {
               id: `${testRealmURL}Toy/spookyToiletPaper`,
             },
           },
+          'cardInfo.theme': {
+            links: {
+              self: null,
+            },
+          },
         },
         meta: {
           adoptsFrom: {
@@ -2341,6 +2458,13 @@ module('Integration | serialization', function (hooks) {
           attributes: {
             cardDescription: 'Toilet paper ghost: Poooo!',
             cardInfo,
+          },
+          relationships: {
+            'cardInfo.theme': {
+              links: {
+                self: null,
+              },
+            },
           },
           meta: {
             adoptsFrom: {
@@ -3251,6 +3375,11 @@ module('Integration | serialization', function (hooks) {
             links: { self: `${testRealmURL}Pet/mango` },
             data: { id: `${testRealmURL}Pet/mango`, type: 'card' },
           },
+          'cardInfo.theme': {
+            links: {
+              self: null,
+            },
+          },
         },
         meta: {
           adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Person' },
@@ -3267,6 +3396,13 @@ module('Integration | serialization', function (hooks) {
             cardDescription: 'Pet',
             cardThumbnailURL: '../pet.svg',
             cardInfo,
+          },
+          relationships: {
+            'cardInfo.theme': {
+              links: {
+                self: null,
+              },
+            },
           },
           meta: {
             adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Pet' },
@@ -3289,6 +3425,11 @@ module('Integration | serialization', function (hooks) {
             },
             friend: { links: { self: null } },
             friendPet: { links: { self: null } },
+            'cardInfo.theme': {
+              links: {
+                self: null,
+              },
+            },
           },
           meta: {
             adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Person' },
@@ -3443,6 +3584,11 @@ module('Integration | serialization', function (hooks) {
             pet: { links: { self: null } },
             friend: { links: { self: null } },
             friendPet: { links: { self: null } },
+            'cardInfo.theme': {
+              links: {
+                self: null,
+              },
+            },
           },
           meta: {
             adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Person' },
@@ -3766,6 +3912,13 @@ module('Integration | serialization', function (hooks) {
             cardThumbnailURL: './intro.png',
             cardInfo,
           },
+          relationships: {
+            'cardInfo.theme': {
+              links: {
+                self: null,
+              },
+            },
+          },
           meta: {
             adoptsFrom: {
               module: `${testRealmURL}test-cards`,
@@ -3839,6 +3992,13 @@ module('Integration | serialization', function (hooks) {
           },
           cardInfo,
         },
+        relationships: {
+          'cardInfo.theme': {
+            links: {
+              self: null,
+            },
+          },
+        },
         meta: {
           adoptsFrom: {
             module: `${testRealmURL}test-cards`,
@@ -3909,6 +4069,13 @@ module('Integration | serialization', function (hooks) {
             department: 'wagging',
           },
           cardInfo,
+        },
+        relationships: {
+          'cardInfo.theme': {
+            links: {
+              self: null,
+            },
+          },
         },
         meta: {
           adoptsFrom: {
@@ -4017,6 +4184,13 @@ module('Integration | serialization', function (hooks) {
             },
           },
           cardInfo,
+        },
+        relationships: {
+          'cardInfo.theme': {
+            links: {
+              self: null,
+            },
+          },
         },
         meta: {
           adoptsFrom: {
@@ -4140,6 +4314,13 @@ module('Integration | serialization', function (hooks) {
             },
           ],
           cardInfo,
+        },
+        relationships: {
+          'cardInfo.theme': {
+            links: {
+              self: null,
+            },
+          },
         },
         meta: {
           adoptsFrom: {
@@ -4426,6 +4607,13 @@ module('Integration | serialization', function (hooks) {
           },
           cardInfo,
         },
+        relationships: {
+          'cardInfo.theme': {
+            links: {
+              self: null,
+            },
+          },
+        },
         meta: {
           adoptsFrom: {
             module: `${testRealmURL}test-cards`,
@@ -4592,6 +4780,13 @@ module('Integration | serialization', function (hooks) {
             },
           ],
           cardInfo,
+        },
+        relationships: {
+          'cardInfo.theme': {
+            links: {
+              self: null,
+            },
+          },
         },
         meta: {
           adoptsFrom: {
@@ -4807,6 +5002,11 @@ module('Integration | serialization', function (hooks) {
               type: 'card',
             },
           },
+          'cardInfo.theme': {
+            links: {
+              self: null,
+            },
+          },
         },
         meta: {
           adoptsFrom: {
@@ -4823,6 +5023,13 @@ module('Integration | serialization', function (hooks) {
             name: '808 Analog Kit',
             cardInfo: {},
           },
+          relationships: {
+            'cardInfo.theme': {
+              links: {
+                self: null,
+              },
+            },
+          },
           meta: {
             adoptsFrom: {
               module: `${testRealmURL}test-cards`,
@@ -4836,6 +5043,13 @@ module('Integration | serialization', function (hooks) {
           attributes: {
             cardTitle: 'Beat Maker Studio',
             cardInfo: {},
+          },
+          relationships: {
+            'cardInfo.theme': {
+              links: {
+                self: null,
+              },
+            },
           },
           meta: {
             adoptsFrom: {
@@ -4917,6 +5131,11 @@ module('Integration | serialization', function (hooks) {
               },
             },
           ],
+          'cardInfo.theme': {
+            links: {
+              self: null,
+            },
+          },
         },
         meta: {
           adoptsFrom: {
@@ -4933,6 +5152,13 @@ module('Integration | serialization', function (hooks) {
             name: '808 Analog Kit',
             cardInfo: {},
           },
+          relationships: {
+            'cardInfo.theme': {
+              links: {
+                self: null,
+              },
+            },
+          },
           meta: {
             adoptsFrom: {
               module: `${testRealmURL}test-cards`,
@@ -4946,6 +5172,13 @@ module('Integration | serialization', function (hooks) {
           attributes: {
             cardTitle: 'Beat Maker Studio',
             cardInfo: {},
+          },
+          relationships: {
+            'cardInfo.theme': {
+              links: {
+                self: null,
+              },
+            },
           },
           meta: {
             adoptsFrom: {
@@ -5026,6 +5259,13 @@ module('Integration | serialization', function (hooks) {
           attributes: {
             firstName: 'Mango',
             cardInfo,
+          },
+          relationships: {
+            'cardInfo.theme': {
+              links: {
+                self: null,
+              },
+            },
           },
           meta: {
             adoptsFrom: {
@@ -5109,6 +5349,13 @@ module('Integration | serialization', function (hooks) {
               firstName: 'Mango',
             },
             cardInfo,
+          },
+          relationships: {
+            'cardInfo.theme': {
+              links: {
+                self: null,
+              },
+            },
           },
           meta: {
             adoptsFrom: {
@@ -5228,6 +5475,13 @@ module('Integration | serialization', function (hooks) {
             ],
             cardInfo,
           },
+          relationships: {
+            'cardInfo.theme': {
+              links: {
+                self: null,
+              },
+            },
+          },
           meta: {
             adoptsFrom: {
               module: `./blog`,
@@ -5340,6 +5594,11 @@ module('Integration | serialization', function (hooks) {
               type: 'card',
             },
           },
+          'cardInfo.theme': {
+            links: {
+              self: null,
+            },
+          },
         },
         meta: {
           adoptsFrom: {
@@ -5358,6 +5617,13 @@ module('Integration | serialization', function (hooks) {
             cardThumbnailURL: null,
             cardInfo: {},
           },
+          relationships: {
+            'cardInfo.theme': {
+              links: {
+                self: null,
+              },
+            },
+          },
           meta: {
             adoptsFrom: {
               module: `${testRealmURL}test-cards`,
@@ -5374,6 +5640,13 @@ module('Integration | serialization', function (hooks) {
             cardThumbnailURL: null,
             cardInfo: {},
           },
+          relationships: {
+            'cardInfo.theme': {
+              links: {
+                self: null,
+              },
+            },
+          },
           meta: {
             adoptsFrom: {
               module: `${testRealmURL}test-cards`,
@@ -5389,6 +5662,13 @@ module('Integration | serialization', function (hooks) {
             earnedOn: '2023-10-01',
             cardThumbnailURL: null,
             cardInfo: {},
+          },
+          relationships: {
+            'cardInfo.theme': {
+              links: {
+                self: null,
+              },
+            },
           },
           meta: {
             adoptsFrom: {
@@ -5472,6 +5752,11 @@ module('Integration | serialization', function (hooks) {
                 self: `${testRealmURL}Certificate/2`,
               },
             },
+            'cardInfo.theme': {
+              links: {
+                self: null,
+              },
+            },
           },
           meta: {
             adoptsFrom: {
@@ -5494,6 +5779,13 @@ module('Integration | serialization', function (hooks) {
                 name: 'Certificate',
               },
             },
+            relationships: {
+              'cardInfo.theme': {
+                links: {
+                  self: null,
+                },
+              },
+            },
             type: 'card',
           },
           {
@@ -5509,6 +5801,13 @@ module('Integration | serialization', function (hooks) {
                 name: 'Certificate',
               },
             },
+            relationships: {
+              'cardInfo.theme': {
+                links: {
+                  self: null,
+                },
+              },
+            },
             type: 'card',
           },
           {
@@ -5522,6 +5821,13 @@ module('Integration | serialization', function (hooks) {
               adoptsFrom: {
                 module: `${testRealmURL}test-cards`,
                 name: 'Certificate',
+              },
+            },
+            relationships: {
+              'cardInfo.theme': {
+                links: {
+                  self: null,
+                },
               },
             },
             type: 'card',
@@ -5644,6 +5950,13 @@ module('Integration | serialization', function (hooks) {
           unRenderedField: null,
           cardInfo,
         },
+        relationships: {
+          'cardInfo.theme': {
+            links: {
+              self: null,
+            },
+          },
+        },
         meta: {
           adoptsFrom: {
             module: `../test-cards`,
@@ -5688,6 +6001,13 @@ module('Integration | serialization', function (hooks) {
           attributes: {
             name: 'Mango',
             cardInfo,
+          },
+          relationships: {
+            'cardInfo.theme': {
+              links: {
+                self: null,
+              },
+            },
           },
           meta: {
             adoptsFrom: {
@@ -5741,6 +6061,13 @@ module('Integration | serialization', function (hooks) {
           attributes: {
             name: 'Mango',
             cardInfo,
+          },
+          relationships: {
+            'cardInfo.theme': {
+              links: {
+                self: null,
+              },
+            },
           },
           meta: {
             adoptsFrom: {
@@ -5865,6 +6192,11 @@ module('Integration | serialization', function (hooks) {
               },
               data: { id: `${testRealmURL}Pet/vanGogh`, type: 'card' },
             },
+            'cardInfo.theme': {
+              links: {
+                self: null,
+              },
+            },
           },
           meta: {
             adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Person' },
@@ -5878,6 +6210,13 @@ module('Integration | serialization', function (hooks) {
               firstName: 'Mango',
               cardInfo,
             },
+            relationships: {
+              'cardInfo.theme': {
+                links: {
+                  self: null,
+                },
+              },
+            },
             meta: {
               adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Pet' },
             },
@@ -5888,6 +6227,13 @@ module('Integration | serialization', function (hooks) {
             attributes: {
               firstName: 'Van Gogh',
               cardInfo,
+            },
+            relationships: {
+              'cardInfo.theme': {
+                links: {
+                  self: null,
+                },
+              },
             },
             meta: {
               adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Pet' },
@@ -5948,6 +6294,11 @@ module('Integration | serialization', function (hooks) {
             'pets.1': {
               data: { lid: vanGogh[localId], type: 'card' },
             },
+            'cardInfo.theme': {
+              links: {
+                self: null,
+              },
+            },
           },
           meta: {
             adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Person' },
@@ -5961,6 +6312,13 @@ module('Integration | serialization', function (hooks) {
               firstName: 'Mango',
               cardInfo,
             },
+            relationships: {
+              'cardInfo.theme': {
+                links: {
+                  self: null,
+                },
+              },
+            },
             meta: {
               adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Pet' },
             },
@@ -5971,6 +6329,13 @@ module('Integration | serialization', function (hooks) {
             attributes: {
               firstName: 'Van Gogh',
               cardInfo,
+            },
+            relationships: {
+              'cardInfo.theme': {
+                links: {
+                  self: null,
+                },
+              },
             },
             meta: {
               adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Pet' },
@@ -6022,6 +6387,11 @@ module('Integration | serialization', function (hooks) {
                 type: 'card',
               },
             },
+            'cardInfo.theme': {
+              links: {
+                self: null,
+              },
+            },
           },
           meta: {
             adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Person' },
@@ -6037,6 +6407,13 @@ module('Integration | serialization', function (hooks) {
               cardThumbnailURL: null,
               cardInfo: {},
             },
+            relationships: {
+              'cardInfo.theme': {
+                links: {
+                  self: null,
+                },
+              },
+            },
             meta: {
               adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Pet' },
             },
@@ -6049,6 +6426,13 @@ module('Integration | serialization', function (hooks) {
               firstName: 'Van Gogh',
               cardThumbnailURL: null,
               cardInfo: {},
+            },
+            relationships: {
+              'cardInfo.theme': {
+                links: {
+                  self: null,
+                },
+              },
             },
             meta: {
               adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Pet' },
@@ -6146,6 +6530,11 @@ module('Integration | serialization', function (hooks) {
                 },
               },
             ],
+            'cardInfo.theme': {
+              links: {
+                self: null,
+              },
+            },
           },
           meta: {
             adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Person' },
@@ -6161,6 +6550,13 @@ module('Integration | serialization', function (hooks) {
               cardThumbnailURL: null,
               cardInfo: {},
             },
+            relationships: {
+              'cardInfo.theme': {
+                links: {
+                  self: null,
+                },
+              },
+            },
             meta: {
               adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Pet' },
             },
@@ -6173,6 +6569,13 @@ module('Integration | serialization', function (hooks) {
               firstName: 'Van Gogh',
               cardThumbnailURL: null,
               cardInfo: {},
+            },
+            relationships: {
+              'cardInfo.theme': {
+                links: {
+                  self: null,
+                },
+              },
             },
             meta: {
               adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Pet' },
@@ -6298,6 +6701,11 @@ module('Integration | serialization', function (hooks) {
               },
               data: { id: `${testRealmURL}Pet/mango`, type: 'card' },
             },
+            'cardInfo.theme': {
+              links: {
+                self: null,
+              },
+            },
           },
           meta: {
             adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Person' },
@@ -6310,6 +6718,13 @@ module('Integration | serialization', function (hooks) {
             attributes: {
               cardDescription: 'Toilet paper ghost: Poooo!',
               cardInfo,
+            },
+            relationships: {
+              'cardInfo.theme': {
+                links: {
+                  self: null,
+                },
+              },
             },
             meta: {
               adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Toy' },
@@ -6330,6 +6745,11 @@ module('Integration | serialization', function (hooks) {
                 data: {
                   id: `${testRealmURL}Toy/spookyToiletPaper`,
                   type: 'card',
+                },
+              },
+              'cardInfo.theme': {
+                links: {
+                  self: null,
                 },
               },
             },
@@ -6421,6 +6841,11 @@ module('Integration | serialization', function (hooks) {
                 self: null,
               },
             },
+            'cardInfo.theme': {
+              links: {
+                self: null,
+              },
+            },
           },
           meta: {
             adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Person' },
@@ -6440,6 +6865,11 @@ module('Integration | serialization', function (hooks) {
           },
           relationships: {
             pets: {
+              links: {
+                self: null,
+              },
+            },
+            'cardInfo.theme': {
               links: {
                 self: null,
               },
@@ -6478,6 +6908,11 @@ module('Integration | serialization', function (hooks) {
           },
           relationships: {
             pets: {
+              links: {
+                self: null,
+              },
+            },
+            'cardInfo.theme': {
               links: {
                 self: null,
               },
@@ -6560,6 +6995,11 @@ module('Integration | serialization', function (hooks) {
                 type: 'card',
               },
             },
+            'cardInfo.theme': {
+              links: {
+                self: null,
+              },
+            },
           },
           meta: {
             adoptsFrom: {
@@ -6575,6 +7015,13 @@ module('Integration | serialization', function (hooks) {
             attributes: {
               firstName: 'Mango',
               cardInfo,
+            },
+            relationships: {
+              'cardInfo.theme': {
+                links: {
+                  self: null,
+                },
+              },
             },
             meta: {
               adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Pet' },
@@ -6638,6 +7085,11 @@ module('Integration | serialization', function (hooks) {
               },
               data: { type: 'card', id: `${testRealmURL}Pet/vanGogh` },
             },
+            'cardInfo.theme': {
+              links: {
+                self: null,
+              },
+            },
           },
           meta: {
             adoptsFrom: {
@@ -6653,6 +7105,13 @@ module('Integration | serialization', function (hooks) {
             attributes: {
               firstName: 'Mango',
               cardInfo,
+            },
+            relationships: {
+              'cardInfo.theme': {
+                links: {
+                  self: null,
+                },
+              },
             },
             meta: {
               adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Pet' },
@@ -6712,6 +7171,11 @@ module('Integration | serialization', function (hooks) {
               links: { self: `./vanGogh` },
               data: { id: `${testRealmURL}Person/vanGogh`, type: 'card' },
             },
+            'cardInfo.theme': {
+              links: {
+                self: null,
+              },
+            },
           },
           meta: {
             adoptsFrom: { module: `../test-cards`, name: 'Person' },
@@ -6727,6 +7191,11 @@ module('Integration | serialization', function (hooks) {
             },
             relationships: {
               friends: { links: { self: null } },
+              'cardInfo.theme': {
+                links: {
+                  self: null,
+                },
+              },
             },
             meta: {
               adoptsFrom: { module: `../test-cards`, name: 'Person' },
@@ -6741,6 +7210,11 @@ module('Integration | serialization', function (hooks) {
             },
             relationships: {
               friends: { links: { self: null } },
+              'cardInfo.theme': {
+                links: {
+                  self: null,
+                },
+              },
             },
             meta: {
               adoptsFrom: { module: `../test-cards`, name: 'Person' },
@@ -6914,6 +7388,11 @@ module('Integration | serialization', function (hooks) {
             links: { self: `${testRealmURL}Pet/van-gogh` },
             data: { id: `${testRealmURL}Pet/van-gogh`, type: 'card' },
           },
+          'cardInfo.theme': {
+            links: {
+              self: null,
+            },
+          },
         },
         meta: {
           adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Person' },
@@ -6931,6 +7410,13 @@ module('Integration | serialization', function (hooks) {
             cardThumbnailURL: null,
             cardInfo,
           },
+          relationships: {
+            'cardInfo.theme': {
+              links: {
+                self: null,
+              },
+            },
+          },
           meta: {
             adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Pet' },
           },
@@ -6944,6 +7430,13 @@ module('Integration | serialization', function (hooks) {
             cardDescription: null,
             cardThumbnailURL: null,
             cardInfo,
+          },
+          relationships: {
+            'cardInfo.theme': {
+              links: {
+                self: null,
+              },
+            },
           },
           meta: {
             adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Pet' },
@@ -6967,6 +7460,11 @@ module('Integration | serialization', function (hooks) {
             'pets.1': {
               links: { self: `${testRealmURL}Pet/van-gogh` },
               data: { id: `${testRealmURL}Pet/van-gogh`, type: 'card' },
+            },
+            'cardInfo.theme': {
+              links: {
+                self: null,
+              },
             },
           },
           meta: {
@@ -7134,6 +7632,11 @@ module('Integration | serialization', function (hooks) {
           relationships: {
             friend: { links: { self: null } },
             friendPets: { links: { self: null } },
+            'cardInfo.theme': {
+              links: {
+                self: null,
+              },
+            },
           },
           meta: {
             adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Person' },
@@ -7292,6 +7795,11 @@ module('Integration | serialization', function (hooks) {
         includeComputeds: true,
       });
       assert.deepEqual(serialized.data.relationships, {
+        'cardInfo.theme': {
+          links: {
+            self: null,
+          },
+        },
         friend: {
           links: { self: `${testRealmURL}Friend/hassan` },
           data: { type: 'card', id: `${testRealmURL}Friend/hassan` },

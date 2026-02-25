@@ -107,6 +107,9 @@ let waiter = buildWaiter('store-service');
 
 const realmEventsLogger = logger('realm:events');
 const storeLogger = logger('store');
+const queryFieldSeedFromSearchSymbol = Symbol.for(
+  'cardstack-query-field-seed-from-search',
+);
 
 type PersistOptions = CreateOptions & { clientRequestId?: string };
 type DependencyTrackingOptions = {
@@ -279,6 +282,10 @@ export default class StoreService extends Service implements StoreInterface {
 
   loaded(): Promise<void> {
     return this.store.loaded();
+  }
+
+  trackLoad(load: Promise<unknown>): void {
+    this.store.trackLoad(load);
   }
 
   get cardDocsInFlight() {
@@ -695,7 +702,7 @@ export default class StoreService extends Service implements StoreInterface {
     // TODO remove this assertion after multi-realm server/federated identity is supported
     this.realmServer.assertOwnRealmServer(realmServerURLs);
     let [realmServerURL] = realmServerURLs;
-    let searchURL = new URL('_search', realmServerURL);
+    let searchURL = new URL('_federated-search', realmServerURL);
     let response = await this.realmServer.maybeAuthedFetch(searchURL.href, {
       method: 'QUERY',
       headers: {
@@ -757,7 +764,7 @@ export default class StoreService extends Service implements StoreInterface {
     // TODO remove this assertion after multi-realm server/federated identity is supported
     this.realmServer.assertOwnRealmServer(realmServerURLs);
     let [realmServerURL] = realmServerURLs;
-    let searchURL = new URL('_search', realmServerURL);
+    let searchURL = new URL('_federated-search', realmServerURL);
     let response = await this.realmServer.maybeAuthedFetch(searchURL.href, {
       method: 'QUERY',
       headers: {
@@ -811,13 +818,10 @@ export default class StoreService extends Service implements StoreInterface {
     if (this.isRenderStore && opts) {
       opts.isLive = false;
     }
-    return getSearch<T>(
-      parent,
-      getOwner(this)!,
-      getQuery,
-      getRealms,
-      opts,
-    ) as unknown as SearchResource<T>;
+    return getSearch<T>(parent, getOwner(this)!, getQuery, getRealms, {
+      ...opts,
+      storeService: this,
+    }) as unknown as SearchResource<T>;
   }
 
   getSearchDataResource(
@@ -1275,6 +1279,9 @@ export default class StoreService extends Service implements StoreInterface {
     if (existingInstance && isCardInstance(existingInstance)) {
       return existingInstance as T;
     }
+    // Mark resources that came from `_search` so query-field seed handling can
+    // distinguish unresolved empty seeds from explicit empty card-GET results.
+    (resource as any)[queryFieldSeedFromSearchSymbol] = true;
     return this.add({ data: resource } as SingleCardDocument, {
       doNotPersist: true,
       relativeTo: new URL(resource.id),

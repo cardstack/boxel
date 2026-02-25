@@ -62,7 +62,6 @@ export default class RecentCardsService extends Service {
   @cached
   // return in descending order: most recent to oldest
   get recentCardIds(): string[] {
-    console.log(this.recentCards);
     return this.recentCards.map((c) => c.cardId);
   }
 

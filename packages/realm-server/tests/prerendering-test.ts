@@ -2,14 +2,16 @@ import { module, test } from 'qunit';
 import { basename } from 'path';
 import type {
   RealmPermissions,
-  Realm,
   RealmAdapter,
   RenderResponse,
   ModuleRenderResponse,
   FileExtractResponse,
   RenderRouteOptions,
 } from '@cardstack/runtime-common';
-import { baseRealm } from '@cardstack/runtime-common';
+import {
+  baseRealm,
+  type Realm as RuntimeRealm,
+} from '@cardstack/runtime-common';
 import type { Prerenderer } from '../prerender/index';
 import { PagePool } from '../prerender/page-pool';
 import { RenderRunner } from '../prerender/render-runner';
@@ -25,6 +27,10 @@ import {
   baseCardRef,
   trimExecutableExtension,
 } from '@cardstack/runtime-common';
+import {
+  installDelayedRuntimeRealmSearchPatch,
+  installRealmServerAssertOwnRealmServerBypassPatch,
+} from './helpers/prerender-page-patches';
 
 class TestSemaphore {
   #available: number;
@@ -131,11 +137,22 @@ module(basename(__filename), function () {
     let realmURL = 'http://127.0.0.1:4450/test/';
     let prerenderServerURL = new URL(realmURL).origin;
     let testUserId = '@user1:localhost';
-    let permissions: RealmPermissions = {};
+    let permissions: RealmPermissions = {
+      [realmURL]: ['read', 'write', 'realm-owner'],
+    };
     let prerenderer: Prerenderer;
     let realmAdapter: RealmAdapter;
-    let realm: Realm;
-    let auth = () => testCreatePrerenderAuth(testUserId, permissions);
+    let realm: RuntimeRealm;
+    let auth = () => {
+      let sessions = JSON.parse(
+        testCreatePrerenderAuth(testUserId, permissions),
+      ) as Record<string, string>;
+      let token = sessions[realmURL];
+      if (token) {
+        sessions[new URL(realmURL).origin + '/'] = token;
+      }
+      return JSON.stringify(sessions);
+    };
 
     hooks.before(async () => {
       prerenderer = getPrerendererForTesting({
@@ -157,6 +174,7 @@ module(basename(__filename), function () {
         {
           realmURL,
           permissions: {
+            '*': ['read'],
             [testUserId]: ['read', 'write', 'realm-owner'],
           },
           fileSystem: {
@@ -397,6 +415,243 @@ module(basename(__filename), function () {
                   adoptsFrom: {
                     module: './console-no-error',
                     name: 'ConsoleNoError',
+                  },
+                },
+              },
+            },
+            'directory-query.gts': `
+              import { CardDef, field, contains, linksTo, linksToMany, StringField, Component, queryableValue } from 'https://cardstack.com/base/card-api';
+
+              export class Person extends CardDef {
+                static displayName = 'Person';
+                @field name = contains(StringField);
+                @field team = contains(StringField);
+                @field managerName = contains(StringField);
+                @field manager = linksTo(() => Person);
+                @field reports = linksToMany(() => Person, {
+                  query: {
+                    filter: {
+                      eq: {
+                        managerName: '$this.name',
+                      },
+                    },
+                    page: {
+                      size: 10,
+                      number: 0,
+                    },
+                  },
+                });
+
+                // Keep person-instance indexing deterministic for this test:
+                // this avoids firing query fields when Person cards are
+                // prerendered in isolation during indexing.
+                static isolated = class extends Component<typeof this> {
+                  <template>
+                    <span data-test-person-name>{{@model.name}}</span>
+                    <span data-test-person-team>{{@model.team}}</span>
+                  </template>
+                };
+              }
+
+              export class Directory extends CardDef {
+                static displayName = 'Directory';
+                @field teamFilter = contains(StringField);
+                @field staff = linksToMany(() => Person, {
+                  query: {
+                    filter: {
+                      eq: {
+                        team: '$this.teamFilter',
+                      },
+                    },
+                    page: {
+                      size: 10,
+                      number: 0,
+                    },
+                  },
+                });
+
+                static [queryableValue](value: Directory | null) {
+                  if (!value) {
+                    return null;
+                  }
+                  return {
+                    teamFilter: value.teamFilter,
+                    staff: (value.staff ?? []).map((person) => ({
+                      name: person.name,
+                      manager: person.manager
+                        ? {
+                            name: person.manager.name,
+                          }
+                        : null,
+                      reports: (person.reports ?? []).map((report) => ({
+                        name: report.name,
+                        manager: report.manager
+                          ? {
+                              name: report.manager.name,
+                            }
+                          : null,
+                      })),
+                    })),
+                  };
+                }
+
+                static isolated = class extends Component<typeof this> {
+                  <template>
+                    <div data-test-directory-team>{{@model.teamFilter}}</div>
+                    <ul data-test-directory-staff>
+                      {{#each @model.staff as |person|}}
+                        <li data-test-staff-name>{{person.name}}</li>
+                        <div data-test-staff-manager>
+                          {{#if person.manager}}
+                            {{person.manager.name}}
+                          {{/if}}
+                        </div>
+                        <ul data-test-staff-reports>
+                          {{#each person.reports as |report|}}
+                            <li data-test-staff-report>
+                              {{report.name}}
+                              <span data-test-staff-report-manager>
+                                {{#if report.manager}}
+                                  {{report.manager.name}}
+                                {{/if}}
+                              </span>
+                            </li>
+                          {{/each}}
+                        </ul>
+                      {{/each}}
+                    </ul>
+                  </template>
+                };
+              }
+            `,
+            'directory-ops.json': {
+              data: {
+                attributes: {
+                  teamFilter: 'Ops',
+                },
+                relationships: {
+                  staff: {
+                    links: { self: null },
+                    data: [],
+                    meta: {
+                      errors: [
+                        {
+                          realm: 'https://unreachable-realm.example.com/',
+                          type: 'fetch-error',
+                          message: 'Could not reach remote realm',
+                          status: 502,
+                        },
+                      ],
+                    },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: './directory-query',
+                    name: 'Directory',
+                  },
+                },
+              },
+            },
+            'person-alice.json': {
+              data: {
+                attributes: {
+                  name: 'Alice',
+                  team: 'Leadership',
+                  managerName: '',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: './directory-query',
+                    name: 'Person',
+                  },
+                },
+              },
+            },
+            'person-bob.json': {
+              data: {
+                attributes: {
+                  name: 'Bob',
+                  team: 'Ops',
+                  managerName: 'Alice',
+                },
+                relationships: {
+                  manager: {
+                    links: {
+                      self: './person-alice',
+                    },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: './directory-query',
+                    name: 'Person',
+                  },
+                },
+              },
+            },
+            'person-carol.json': {
+              data: {
+                attributes: {
+                  name: 'Carol',
+                  team: 'Ops',
+                  managerName: 'Alice',
+                },
+                relationships: {
+                  manager: {
+                    links: {
+                      self: './person-alice',
+                    },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: './directory-query',
+                    name: 'Person',
+                  },
+                },
+              },
+            },
+            'person-dave.json': {
+              data: {
+                attributes: {
+                  name: 'Dave',
+                  team: 'Ops',
+                  managerName: 'Bob',
+                },
+                relationships: {
+                  manager: {
+                    links: {
+                      self: './person-bob',
+                    },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: './directory-query',
+                    name: 'Person',
+                  },
+                },
+              },
+            },
+            'person-eve.json': {
+              data: {
+                attributes: {
+                  name: 'Eve',
+                  team: 'Sales',
+                  managerName: 'Bob',
+                },
+                relationships: {
+                  manager: {
+                    links: {
+                      self: './person-bob',
+                    },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: './directory-query',
+                    name: 'Person',
                   },
                 },
               },
@@ -930,6 +1185,76 @@ module(basename(__filename), function () {
       }
     });
 
+    test('card prerender waits for query fallback search and nested relationship loads', async function (assert) {
+      const cardURL = `${realmURL}directory-ops`;
+      let realmServerPatch =
+        installRealmServerAssertOwnRealmServerBypassPatch();
+      let delayedSearchPatch = installDelayedRuntimeRealmSearchPatch(150);
+      try {
+        let result = await prerenderer.prerenderCard({
+          realm: realmURL,
+          url: cardURL,
+          auth: auth(),
+        });
+
+        assert.notOk(result.response.error, 'prerender succeeds');
+        assert.true(
+          delayedSearchPatch.getRequestCount() > 0,
+          'fallback _search requests occurred and were delayed',
+        );
+
+        let isolatedHTML = cleanWhiteSpace(result.response.isolatedHTML ?? '');
+        assert.ok(
+          /data-test-staff-name[^>]*>\s*Bob\s*</.test(isolatedHTML),
+          `isolated html includes query results: ${isolatedHTML}`,
+        );
+        assert.ok(
+          /data-test-staff-manager[^>]*>\s*Alice\s*</.test(isolatedHTML),
+          `isolated html includes lazy relationship from query result: ${isolatedHTML}`,
+        );
+        assert.ok(
+          /data-test-staff-report[^>]*>\s*Eve/.test(isolatedHTML),
+          `isolated html includes nested query results: ${isolatedHTML}`,
+        );
+        assert.ok(
+          /data-test-staff-report-manager[^>]*>\s*Bob\s*</.test(isolatedHTML),
+          `isolated html includes nested relationship loads: ${isolatedHTML}`,
+        );
+
+        let staff = result.response.searchDoc?.staff as
+          | Array<Record<string, any>>
+          | undefined;
+        assert.ok(
+          Array.isArray(staff),
+          'searchDoc includes query field results',
+        );
+
+        let bob = staff?.find((entry) => entry?.name === 'Bob');
+        assert.ok(bob, 'searchDoc includes Bob from query results');
+        assert.strictEqual(
+          bob?.manager?.name,
+          'Alice',
+          'searchDoc includes loaded manager relationship',
+        );
+
+        let bobReports = bob?.reports as Array<Record<string, any>> | undefined;
+        assert.ok(
+          Array.isArray(bobReports),
+          'searchDoc includes nested query results',
+        );
+        let hasEveWithManager = bobReports?.some(
+          (report) => report?.name === 'Eve' && report?.manager?.name === 'Bob',
+        );
+        assert.true(
+          Boolean(hasEveWithManager),
+          'searchDoc includes nested loaded relationships',
+        );
+      } finally {
+        await realmServerPatch.restore();
+        delayedSearchPatch.restore();
+      }
+    });
+
     test('module prerender evicts pooled page on timeout', async function (assert) {
       const moduleURL = `${realmURL}person.gts`;
 
@@ -1386,6 +1711,19 @@ module(basename(__filename), function () {
                 },
               },
             },
+            '2.json': {
+              data: {
+                attributes: {
+                  name: 'Mango',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: './person',
+                    name: 'Person',
+                  },
+                },
+              },
+            },
           },
         },
         {
@@ -1434,6 +1772,38 @@ module(basename(__filename), function () {
                 }
               }
             `,
+            'dog-many.gts': `
+              import { CardDef, field, contains, linksToMany, StringField, Component } from 'https://cardstack.com/base/card-api';
+              import { Person } from '${realmURL1}person';
+              export class DogMany extends CardDef {
+                static displayName = "Dog Many";
+                @field name = contains(StringField);
+                @field owners = linksToMany(Person, { isUsed: true });
+                static isolated = class extends Component<typeof this> {
+                  // owners is intentionally not in isolated template, this is included in search doc via isUsed=true
+                  <template>{{@model.name}}</template>
+                }
+              }
+            `,
+            'dog-profile.gts': `
+              import { CardDef, FieldDef, field, contains, linksTo, linksToMany, StringField, Component } from 'https://cardstack.com/base/card-api';
+              import { Person } from '${realmURL1}person';
+
+              class DogProfileField extends FieldDef {
+                @field primaryOwner = linksTo(Person, { isUsed: true });
+                @field caretakers = linksToMany(Person, { isUsed: true });
+              }
+
+              export class DogProfile extends CardDef {
+                static displayName = "Dog Profile";
+                @field name = contains(StringField);
+                @field profile = contains(DogProfileField);
+                static isolated = class extends Component<typeof this> {
+                  // profile is intentionally not in isolated template, this is included in search doc via isUsed=true
+                  <template>{{@model.name}}</template>
+                }
+              }
+            `,
             '1.json': {
               data: {
                 attributes: {
@@ -1466,6 +1836,52 @@ module(basename(__filename), function () {
                   adoptsFrom: {
                     module: './dog',
                     name: 'Dog',
+                  },
+                },
+              },
+            },
+            'is-used-many.json': {
+              data: {
+                attributes: {
+                  name: 'Mango Many',
+                },
+                relationships: {
+                  'owners.0': {
+                    links: { self: `${realmURL1}1` },
+                  },
+                  'owners.1': {
+                    links: { self: `${realmURL1}2` },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: './dog-many',
+                    name: 'DogMany',
+                  },
+                },
+              },
+            },
+            'is-used-field-def.json': {
+              data: {
+                attributes: {
+                  name: 'Mango Profile',
+                  profile: {},
+                },
+                relationships: {
+                  'profile.primaryOwner': {
+                    links: { self: `${realmURL1}1` },
+                  },
+                  'profile.caretakers.0': {
+                    links: { self: `${realmURL1}1` },
+                  },
+                  'profile.caretakers.1': {
+                    links: { self: `${realmURL1}2` },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: './dog-profile',
+                    name: 'DogProfile',
                   },
                 },
               },
@@ -1847,6 +2263,85 @@ module(basename(__filename), function () {
           response.searchDoc?.owner.name,
           'Hassan',
           'linked field is included in search doc via isUsed=true',
+        );
+      });
+
+      test('isUsed linksToMany field includes links in search doc that are not rendered in template', async function (assert) {
+        const testCardURL = `${realmURL2}is-used-many`;
+        let { response } = await prerenderer.prerenderCard({
+          realm: realmURL2,
+          url: testCardURL,
+          auth: auth(),
+        });
+
+        assert.ok(
+          /Mango Many/.test(response.isolatedHTML!),
+          `failed to match isolated html:${response.isolatedHTML}`,
+        );
+        assert.false(
+          /data-test-field="owners"/.test(response.isolatedHTML!),
+          `owners field is not rendered in isolated html`,
+        );
+        assert.strictEqual(
+          response.searchDoc?.owners?.[0]?.name,
+          'Hassan',
+          'first linked record is included in search doc via isUsed=true',
+        );
+        assert.strictEqual(
+          response.searchDoc?.owners?.[1]?.name,
+          'Mango',
+          'second linked record is included in search doc via isUsed=true',
+        );
+      });
+
+      test('isUsed compound field includes nested linksTo relationship in search doc', async function (assert) {
+        const testCardURL = `${realmURL2}is-used-field-def`;
+        let { response } = await prerenderer.prerenderCard({
+          realm: realmURL2,
+          url: testCardURL,
+          auth: auth(),
+        });
+
+        assert.ok(
+          /Mango Profile/.test(response.isolatedHTML!),
+          `failed to match isolated html:${response.isolatedHTML}`,
+        );
+        assert.false(
+          /data-test-field="profile"/.test(response.isolatedHTML!),
+          `profile field is not rendered in isolated html`,
+        );
+        assert.strictEqual(
+          response.searchDoc?.profile?.primaryOwner?.name,
+          'Hassan',
+          'nested linksTo relationship is included in search doc via isUsed=true on the relationship field',
+        );
+      });
+
+      test('isUsed compound field includes nested linksToMany relationships in search doc', async function (assert) {
+        const testCardURL = `${realmURL2}is-used-field-def`;
+        let { response } = await prerenderer.prerenderCard({
+          realm: realmURL2,
+          url: testCardURL,
+          auth: auth(),
+        });
+
+        assert.ok(
+          /Mango Profile/.test(response.isolatedHTML!),
+          `failed to match isolated html:${response.isolatedHTML}`,
+        );
+        assert.false(
+          /data-test-field="profile"/.test(response.isolatedHTML!),
+          `profile field is not rendered in isolated html`,
+        );
+        assert.strictEqual(
+          response.searchDoc?.profile?.caretakers?.[0]?.name,
+          'Hassan',
+          'first nested linksToMany relationship is included in search doc via isUsed=true on the relationship field',
+        );
+        assert.strictEqual(
+          response.searchDoc?.profile?.caretakers?.[1]?.name,
+          'Mango',
+          'second nested linksToMany relationship is included in search doc via isUsed=true on the relationship field',
         );
       });
     });

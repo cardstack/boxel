@@ -295,6 +295,52 @@ module(`server-endpoints/${basename(__filename)}`, function () {
               },
             },
           );
+
+          // Cards for testing default head template with cardInfo.theme
+          writeJSONSync(join(context.testRealmDir, 'a-test-theme.json'), {
+            data: {
+              type: 'card',
+              attributes: {
+                cardInfo: {
+                  cardThumbnailURL: 'https://example.com/brand-icon.png',
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: 'https://cardstack.com/base/card-api',
+                  name: 'Theme',
+                },
+              },
+            },
+          });
+
+          writeJSONSync(
+            join(context.testRealmDir, 'a-brand-guide-theme.json'),
+            {
+              data: {
+                type: 'card',
+                attributes: {
+                  markUsage: {
+                    socialMediaProfileIcon:
+                      'https://example.com/social-icon.png',
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: 'https://cardstack.com/base/brand-guide',
+                    name: 'default',
+                  },
+                },
+              },
+            },
+          );
+
+          // NOTE: card-with-theme.json is NOT written here because from-scratch
+          // indexing uses a batched write strategy (boxel_index_working → boxel_index).
+          // Cards within the same batch can't resolve linksTo references to each other
+          // because the data isn't in the production table yet. Instead, card-with-theme
+          // is created via API in the test itself, triggering incremental indexing
+          // after the theme card is already committed to boxel_index.
         },
       });
 
@@ -553,6 +599,243 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         );
       });
 
+      test('HTML response always includes default static favicon and apple-touch-icon', async function (assert) {
+        // Even a card with no theme should get the static icons from index.html
+        // (which live outside the head injection markers)
+        let response = await context.request2
+          .get('/test/isolated-test')
+          .set('Accept', 'text/html');
+
+        assert.strictEqual(response.status, 200, 'serves HTML response');
+        assert.ok(
+          response.text.includes('rel="icon"'),
+          'static favicon link is present in the HTML response',
+        );
+        assert.ok(
+          response.text.includes('rel="apple-touch-icon"'),
+          'static apple-touch-icon link is present in the HTML response',
+        );
+      });
+
+      test('head HTML does not include icon links when card has no theme', async function (assert) {
+        let response = await context.request2
+          .get('/test/isolated-test')
+          .set('Accept', 'text/html');
+
+        assert.strictEqual(response.status, 200, 'serves HTML response');
+
+        let headMatch = response.text.match(
+          /data-boxel-head-start[^>]*>([\s\S]*?)data-boxel-head-end/,
+        );
+        let headContent = headMatch?.[1] ?? '';
+
+        // The default head template should NOT emit icon links when there's no theme
+        // (the static icons from index.html serve as defaults)
+        assert.notOk(
+          headContent.includes('rel="icon"'),
+          'injected head HTML does not contain favicon link (static ones from index.html are the default)',
+        );
+        assert.notOk(
+          headContent.includes('rel="apple-touch-icon"'),
+          'injected head HTML does not contain apple-touch-icon link',
+        );
+      });
+
+      test('non-public realm preserves static favicon and apple-touch-icon', async function (assert) {
+        await context.dbAdapter.execute(
+          `DELETE FROM realm_user_permissions WHERE realm_url = '${testRealm2URL.href}' AND username = '*'`,
+        );
+
+        let response = await context.request2
+          .get('/test/private-index-test')
+          .set('Accept', 'text/html');
+
+        assert.strictEqual(response.status, 200, 'serves HTML response');
+        // Even without head injection, static icons from index.html remain
+        assert.ok(
+          response.text.includes('rel="icon"'),
+          'static favicon link is present even without head injection',
+        );
+        assert.ok(
+          response.text.includes('rel="apple-touch-icon"'),
+          'static apple-touch-icon link is present even without head injection',
+        );
+      });
+
+      test('default head template includes favicon and apple-touch-icon from cardInfo.theme', async function (assert) {
+        // Create card-with-theme via API so it's indexed incrementally AFTER
+        // the theme card is already in boxel_index (from-scratch indexing
+        // batches writes and can't resolve cross-card linksTo references).
+        let cardWithThemeJSON = JSON.stringify({
+          data: {
+            type: 'card',
+            attributes: {
+              firstName: 'Themed Card',
+              cardInfo: {
+                name: null,
+                summary: null,
+                cardThumbnailURL: null,
+                notes: null,
+              },
+            },
+            relationships: {
+              'cardInfo.theme': {
+                links: {
+                  self: './a-test-theme',
+                },
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: './person.gts',
+                name: 'Person',
+              },
+            },
+          },
+        });
+
+        let writeResponse = await context.request2
+          .post('/test/card-with-theme.json')
+          .set('Accept', 'application/vnd.card+source')
+          .send(cardWithThemeJSON);
+
+        assert.strictEqual(
+          writeResponse.status,
+          204,
+          'card-with-theme file write was accepted',
+        );
+
+        // Wait for the card to be indexed (head_html populated, even if empty string).
+        await waitUntil(
+          async () => {
+            let rows = (await context.dbAdapter.execute(
+              `SELECT url, head_html FROM boxel_index
+               WHERE url LIKE '%card-with-theme%'
+                 AND type = 'instance'
+                 AND is_deleted IS NOT TRUE
+               LIMIT 1`,
+            )) as { url: string; head_html: string | null }[];
+
+            return rows.length > 0 && rows[0].head_html != null;
+          },
+          {
+            timeout: 30000,
+            interval: 500,
+            timeoutMessage:
+              'Timed out waiting for card-with-theme to be indexed',
+          },
+        );
+
+        let response = await context.request2
+          .get('/test/card-with-theme')
+          .set('Accept', 'text/html');
+
+        assert.strictEqual(response.status, 200, 'serves HTML response');
+
+        let headMatch = response.text.match(
+          /data-boxel-head-start[^>]*>([\s\S]*?)data-boxel-head-end/,
+        );
+        let headContent = headMatch?.[1] ?? '';
+
+        assert.ok(
+          headContent.includes(
+            '<link rel="icon" href="https://example.com/brand-icon.png"',
+          ),
+          `head HTML includes favicon link from theme. headContent=${headContent.substring(0, 500)}`,
+        );
+        assert.ok(
+          headContent.includes(
+            '<link rel="apple-touch-icon" href="https://example.com/brand-icon.png"',
+          ),
+          `head HTML includes apple-touch-icon link from theme`,
+        );
+      });
+
+      test('default head template uses markUsage.socialMediaProfileIcon from BrandGuide theme', async function (assert) {
+        let cardJSON = JSON.stringify({
+          data: {
+            type: 'card',
+            attributes: {
+              firstName: 'BrandGuide Themed Card',
+              cardInfo: {
+                name: null,
+                summary: null,
+                cardThumbnailURL: null,
+                notes: null,
+              },
+            },
+            relationships: {
+              'cardInfo.theme': {
+                links: {
+                  self: './a-brand-guide-theme',
+                },
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: './person.gts',
+                name: 'Person',
+              },
+            },
+          },
+        });
+
+        let writeResponse = await context.request2
+          .post('/test/card-with-brand-guide-theme.json')
+          .set('Accept', 'application/vnd.card+source')
+          .send(cardJSON);
+
+        assert.strictEqual(
+          writeResponse.status,
+          204,
+          'card file write was accepted',
+        );
+
+        await waitUntil(
+          async () => {
+            let rows = (await context.dbAdapter.execute(
+              `SELECT url, head_html FROM boxel_index
+               WHERE url LIKE '%card-with-brand-guide-theme%'
+                 AND type = 'instance'
+                 AND is_deleted IS NOT TRUE
+               LIMIT 1`,
+            )) as { url: string; head_html: string | null }[];
+
+            return rows.length > 0 && rows[0].head_html != null;
+          },
+          {
+            timeout: 30000,
+            interval: 500,
+            timeoutMessage:
+              'Timed out waiting for card-with-brand-guide-theme to be indexed',
+          },
+        );
+
+        let response = await context.request2
+          .get('/test/card-with-brand-guide-theme')
+          .set('Accept', 'text/html');
+
+        assert.strictEqual(response.status, 200, 'serves HTML response');
+
+        let headMatch = response.text.match(
+          /data-boxel-head-start[^>]*>([\s\S]*?)data-boxel-head-end/,
+        );
+        let headContent = headMatch?.[1] ?? '';
+
+        assert.ok(
+          headContent.includes(
+            '<link rel="icon" href="https://example.com/social-icon.png"',
+          ),
+          `head HTML includes favicon from BrandGuide markUsage.socialMediaProfileIcon. headContent=${headContent.substring(0, 500)}`,
+        );
+        assert.ok(
+          headContent.includes(
+            '<link rel="apple-touch-icon" href="https://example.com/social-icon.png"',
+          ),
+          `head HTML includes apple-touch-icon from BrandGuide markUsage.socialMediaProfileIcon`,
+        );
+      });
+
       test('returns 404 for request that has malformed URI', async function (assert) {
         let response = await context.request2.get('/%c0').set('Accept', '*/*');
         assert.strictEqual(response.status, 404, 'HTTP 404 status');
@@ -665,10 +948,9 @@ module(`server-endpoints/${basename(__filename)}`, function () {
   );
 
   module('Published realm index responses', function (hooks) {
-    // Use a URL with a path segment to avoid conflicts with server-level routes
-    // like /_info, /_search, etc. Without a path segment, requests to /_info
-    // would match the server's multi-realm info route instead of the realm's
-    // single-realm info handler.
+    // Use a URL with a path segment. Server-level routes are now namespaced
+    // as /_federated-info, /_federated-search, etc., so they no longer collide
+    // with the realm's own /_info and /_search handlers.
     let realmURL = new URL('http://127.0.0.1:4444/published/');
     let request: SuperTest<Test>;
     let testRealm: Realm;

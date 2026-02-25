@@ -96,7 +96,6 @@ interface Signature {
       relativeTo: URL | undefined;
     };
     onSubmit?: (selection: string | NewCardArgs) => void;
-    showRecents?: boolean;
     showHeader?: boolean;
   };
   Blocks: {};
@@ -155,10 +154,6 @@ export default class SearchContent extends Component<Signature> {
     }
     // In search-sheet mode, skip when empty or URL
     return this.isSearchKeyEmpty || this.searchKeyIsURL;
-  }
-
-  private get showRecents() {
-    return this.args.showRecents !== false;
   }
 
   private get showHeader() {
@@ -291,10 +286,7 @@ export default class SearchContent extends Component<Signature> {
     }
 
     // Recents view (empty search or focused on recents)
-    if (
-      (this.focusedSection === 'recents' || this.isSearchKeyEmpty) &&
-      this.showRecents
-    ) {
+    if (this.focusedSection === 'recents' || this.isSearchKeyEmpty) {
       const count = this.recentCardsSection?.totalCount ?? 0;
       return `${count} in ${pluralize('Recent', count)}`;
     }
@@ -326,7 +318,14 @@ export default class SearchContent extends Component<Signature> {
     if (!cards) {
       return [];
     }
-    let filtered = cards;
+    const realms = this.realms;
+    const realmFiltered = cards.filter(
+      (c) => c.id && realms.some((realmUrl) => c.id.startsWith(realmUrl)),
+    );
+    if (this.args.isCompact) {
+      return realmFiltered;
+    }
+    let filtered = realmFiltered;
     const term = this.searchTerm;
     if (term) {
       const lowerTerm = term.toLowerCase();
@@ -529,6 +528,11 @@ export default class SearchContent extends Component<Signature> {
   private get sections(): SearchSheetSection[] {
     const sections: SearchSheetSection[] = [];
 
+    // Add recents section if present
+    if (this.recentCardsSection) {
+      sections.push(this.recentCardsSection);
+    }
+
     // Add URL section if present
     if (this.cardByUrlSection) {
       sections.push(this.cardByUrlSection);
@@ -537,11 +541,6 @@ export default class SearchContent extends Component<Signature> {
     // Add query sections if present
     if (this.cardsByQuerySection) {
       sections.push(...this.cardsByQuerySection);
-    }
-
-    // Add recents section if enabled
-    if (this.showRecents && this.recentCardsSection) {
-      sections.push(this.recentCardsSection);
     }
 
     return sections;
@@ -621,24 +620,34 @@ export default class SearchContent extends Component<Signature> {
         {{/if}}
       {{/if}}
 
-      {{! Render all sections }}
-      {{#each this.sections as |section i|}}
-        <SearchResultSection
-          @section={{section}}
-          @viewOption={{this.activeViewId}}
-          @isCompact={{@isCompact}}
-          @handleSelect={{@handleSelect}}
-          @isFocused={{eq this.focusedSection section.sid}}
-          @isCollapsed={{this.isSectionCollapsed section.sid}}
-          @onFocusSection={{this.onFocusSection}}
-          @getDisplayedCount={{this.getDisplayedCount}}
-          @onShowMore={{this.onShowMore}}
-          @selectedCard={{@selectedCard}}
-          @offerToCreate={{@offerToCreate}}
-          @onSubmit={{@onSubmit}}
-          data-test-search-result-section={{i}}
-        />
-      {{/each}}
+      {{#if @isCompact}}
+        {{#if this.recentCardsSection}}
+          <SearchResultSection
+            @section={{this.recentCardsSection}}
+            @isCompact={{true}}
+            @handleSelect={{@handleSelect}}
+            data-test-search-result-section='recent-cards'
+          />
+        {{/if}}
+      {{else}}
+        {{! Render all sections }}
+        {{#each this.sections as |section i|}}
+          <SearchResultSection
+            @section={{section}}
+            @viewOption={{this.activeViewId}}
+            @handleSelect={{@handleSelect}}
+            @isFocused={{eq this.focusedSection section.sid}}
+            @isCollapsed={{this.isSectionCollapsed section.sid}}
+            @onFocusSection={{this.onFocusSection}}
+            @getDisplayedCount={{this.getDisplayedCount}}
+            @onShowMore={{this.onShowMore}}
+            @selectedCard={{@selectedCard}}
+            @offerToCreate={{@offerToCreate}}
+            @onSubmit={{@onSubmit}}
+            data-test-search-result-section={{i}}
+          />
+        {{/each}}
+      {{/if}}
 
       {{#if this.hasNoResults}}
         <div class='empty-state' data-test-search-content-empty>

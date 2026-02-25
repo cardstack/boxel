@@ -347,6 +347,7 @@ test.describe('Commands', () => {
       .locator('[data-test-card-catalog-item]', {
         hasText: 'Automatic Switch Command',
       })
+      .first()
       .click();
     await page.locator('[data-test-card-catalog-go-button]').click();
 
