@@ -26,7 +26,7 @@
 
     <div id="ember-basic-dropdown-wormhole"></div>
 
-    <script type="module">
+    <script>
       globalThis.process = {
         env: {},
         cwd() {
@@ -34,8 +34,6 @@
         },
       };
       globalThis.global = globalThis;
-      import * as contentTag from 'content-tag';
-      globalThis.ContentTagGlobal = contentTag;
     </script>
 
     <script src="/testem.js" integrity="" data-embroider-ignore></script>
