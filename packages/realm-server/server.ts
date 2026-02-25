@@ -389,10 +389,7 @@ export class RealmServer {
     let hasPublicPermissions = await this.hasPublicPermissions(cardURL);
 
     if (!hasPublicPermissions) {
-      ctxt.body = injectHeadHTML(
-        indexHTML,
-        this.defaultIconLinks().join('\n'),
-      );
+      ctxt.body = injectHeadHTML(indexHTML, this.defaultIconLinks().join('\n'));
       return;
     }
 
@@ -467,9 +464,10 @@ export class RealmServer {
     let headHasIcons = false;
     if (headHTML != null) {
       let fragment = doc.createRange().createContextualFragment(headHTML);
-      headHasIcons = fragment.querySelector(
-        'link[rel~="icon"], link[rel~="apple-touch-icon"]',
-      ) != null;
+      headHasIcons =
+        fragment.querySelector(
+          'link[rel~="icon"], link[rel~="apple-touch-icon"]',
+        ) != null;
     }
     if (!headHasIcons) {
       headFragments.push(...this.defaultIconLinks());
