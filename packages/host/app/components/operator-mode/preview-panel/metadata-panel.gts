@@ -50,12 +50,27 @@ const NULL_RE = /\bnull\b/g;
 
 function highlightJson(json: string): string {
   let escaped = escapeHtml(json);
-  escaped = escaped.replace(KEY_RE, (_m, q1, inner, q2) =>
-    `${spanWrap('json-key', `${q1}${inner}${q2}`)}:`,
-  );
-  escaped = escaped.replace(STRING_RE, (_m, q1, inner, q2) =>
-    spanWrap('json-string', `${q1}${inner}${q2}`),
-  );
+
+  // Use a placeholder strategy to prevent number/boolean/null regexes from
+  // matching inside already-highlighted key and string spans.
+  // We replace keys and strings with unique placeholders first, apply
+  // number/boolean/null highlighting on the remaining text, then restore.
+  let placeholders: string[] = [];
+
+  escaped = escaped.replace(KEY_RE, (_m, q1, inner, q2) => {
+    let html = `${spanWrap('json-key', `${q1}${inner}${q2}`)}:`;
+    let idx = placeholders.length;
+    placeholders.push(html);
+    return `\x00PH${idx}\x00`;
+  });
+  escaped = escaped.replace(STRING_RE, (_m, q1, inner, q2) => {
+    let html = spanWrap('json-string', `${q1}${inner}${q2}`);
+    let idx = placeholders.length;
+    placeholders.push(html);
+    return `\x00PH${idx}\x00`;
+  });
+
+  // Now number/boolean/null regexes only see text outside of key/string spans.
   escaped = escaped.replace(NUMBER_RE, (_m, num) =>
     spanWrap('json-number', num),
   );
@@ -63,6 +78,11 @@ function highlightJson(json: string): string {
     spanWrap('json-boolean', bool),
   );
   escaped = escaped.replace(NULL_RE, () => spanWrap('json-null', 'null'));
+
+  // Restore placeholders with the actual highlighted HTML.
+  let PLACEHOLDER_RE = /\x00PH(\d+)\x00/g;
+  escaped = escaped.replace(PLACEHOLDER_RE, (_m, idx) => placeholders[idx]);
+
   return escaped;
 }
 
