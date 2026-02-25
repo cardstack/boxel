@@ -2978,9 +2978,6 @@ importers:
       '@types/flat':
         specifier: 'catalog:'
         version: 5.0.5
-      '@types/jsonwebtoken':
-        specifier: 'catalog:'
-        version: 9.0.10
       '@types/lodash':
         specifier: 'catalog:'
         version: 4.17.23
@@ -3050,9 +3047,6 @@ importers:
       json-typescript:
         specifier: 'catalog:'
         version: 1.1.2
-      jsonwebtoken:
-        specifier: 'catalog:'
-        version: 9.0.3
       lodash:
         specifier: 'catalog:'
         version: 4.17.21
