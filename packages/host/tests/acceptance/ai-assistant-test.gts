@@ -1072,7 +1072,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await waitFor(`[data-room-settled]`);
     await click('[data-test-file="person.gts"]');
     assert.dom('[data-test-autoattached-file]').exists();
-    assert.dom(`[data-test-autoattached-file]`).hasText('person');
+    assert.dom(`[data-test-autoattached-file]`).hasText('person.gts');
 
     await click('[data-test-file-browser-toggle]');
     await click(`[data-test-autoattached-file] [data-test-remove-file-btn]`);
@@ -1081,12 +1081,12 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await click('[data-test-file-browser-toggle]');
     await click('[data-test-file="pet.gts"]');
     assert.dom('[data-test-autoattached-file]').exists();
-    assert.dom(`[data-test-autoattached-file]`).hasText('pet');
+    assert.dom(`[data-test-autoattached-file]`).hasText('pet.gts');
 
     await click('[data-test-file-browser-toggle]');
     await click('[data-test-file="person.gts"]');
     assert.dom('[data-test-autoattached-file]').exists();
-    assert.dom(`[data-test-autoattached-file]`).hasText('person');
+    assert.dom(`[data-test-autoattached-file]`).hasText('person.gts');
   });
 
   test('loads more AI rooms when scrolling', async function (assert) {
