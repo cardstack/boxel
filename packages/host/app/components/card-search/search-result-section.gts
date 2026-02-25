@@ -322,6 +322,7 @@ export default class SearchResultSection extends Component<Signature> {
                 @isSelected={{eq this.selectedCardId card.id}}
                 @onSelect={{@handleSelect}}
                 @onSubmit={{@onSubmit}}
+                data-test-recent-card-result={{card.id}}
               />
             </:default>
             <:after>

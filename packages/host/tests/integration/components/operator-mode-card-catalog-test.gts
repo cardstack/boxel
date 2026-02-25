@@ -289,6 +289,7 @@ module('Integration | operator-mode | card catalog', function (hooks) {
     test(`filters cards by type for "Find Instances" search`, async function (assert) {
       let recentCardsService = getService('recent-cards-service');
       recentCardsService.add(`${testRealmURL}Pet/mango`);
+      recentCardsService.add(`${testRealmURL}BoomPet/paper`);
       recentCardsService.add(`${testRealmURL}Person/fadhlan`);
 
       ctx.setCardInOperatorModeState(`${testRealmURL}grid`);
@@ -303,27 +304,23 @@ module('Integration | operator-mode | card catalog', function (hooks) {
       // Simulate searchForInstances for Person — carddef: prefix + absolute module/name key
       await fillIn(
         `[data-test-search-field]`,
-        `carddef:${testRealmURL}person/Person`,
+        `carddef:${testRealmURL}pet/Pet`,
       );
-      await waitFor(
-        `[data-test-search-result="${testRealmURL}Person/fadhlan"]`,
-      );
+      await waitFor(`[data-test-search-result="${testRealmURL}Pet/mango"]`);
 
       assert
-        .dom(`[data-test-search-result="${testRealmURL}Person/fadhlan"]`)
-        .exists(
-          'Person recent card appears when searching for Person instances',
-        );
+        .dom(`[data-test-recent-card-result="${testRealmURL}Pet/mango"]`)
+        .exists('Pet appears when searching for Pet instances');
       assert
-        .dom(`[data-test-search-result="${testRealmURL}Pet/mango"]`)
-        .doesNotExist(
-          'non-Person recent cards are filtered out when searching for Person instances',
-        );
+        .dom(`[data-test-recent-card-result="${testRealmURL}BoomPet/paper"]`)
+        .exists('BoomPet appears when searching for Pet instances');
+      assert
+        .dom(`[data-test-recent-card-result="${testRealmURL}Person/fadhlan"]`)
+        .doesNotExist('non-Pet recent cards are filtered out');
     });
 
     test(`filters cards by type for card catalog modal`, async function (assert) {
       let recentCardsService = getService('recent-cards-service');
-      // Add both a Spec card and a non-Spec card to recents
       recentCardsService.add(`${testRealmURL}Pet/mango`);
       recentCardsService.add(`${testRealmURL}Spec/pet-card`);
 
@@ -341,20 +338,18 @@ module('Integration | operator-mode | card catalog', function (hooks) {
       await settled();
 
       assert
-        .dom(`[data-test-card-catalog-item="${testRealmURL}Pet/mango"]`)
-        .doesNotExist(
-          'non-Spec recent cards are filtered out in the card catalog modal',
-        );
+        .dom(`[data-test-recent-card-result="${testRealmURL}Pet/mango"]`)
+        .doesNotExist('non-Spec recent cards are filtered out');
       assert
-        .dom(`[data-test-card-catalog-item="${testRealmURL}Spec/pet-card"]`)
-        .exists('Spec recent card appears in the card catalog modal');
+        .dom(`[data-test-recent-card-result="${testRealmURL}Spec/pet-card"]`)
+        .exists('Spec recent card appears');
     });
 
     test(`filters cards by type for linksTo card picker`, async function (assert) {
       let recentCardsService = getService('recent-cards-service');
-      // Add a Pet card and a non-Pet card to recents
       recentCardsService.add(`${testRealmURL}Pet/mango`);
       recentCardsService.add(`${testRealmURL}Person/fadhlan`);
+      recentCardsService.add(`${testRealmURL}BoomPet/paper`);
 
       // Person/hassan has no pet set, so the linksTo add button is available
       ctx.setCardInOperatorModeState(`${testRealmURL}Person/hassan`, 'edit');
@@ -370,22 +365,22 @@ module('Integration | operator-mode | card catalog', function (hooks) {
       await settled();
 
       assert
-        .dom(`[data-test-card-catalog-item="${testRealmURL}Pet/mango"]`)
+        .dom(`[data-test-recent-card-result="${testRealmURL}Pet/mango"]`)
         .exists('Pet recent card appears in the linksTo picker');
       assert
-        .dom(`[data-test-card-catalog-item="${testRealmURL}Person/fadhlan"]`)
-        .doesNotExist(
-          'non-Pet recent cards are filtered out in the linksTo picker',
-        );
+        .dom(`[data-test-recent-card-result="${testRealmURL}BoomPet/paper"]`)
+        .exists('BoomPet recent card appears');
+      assert
+        .dom(`[data-test-recent-card-result="${testRealmURL}Person/fadhlan"]`)
+        .doesNotExist('non-Pet recent cards are filtered out');
     });
 
     test(`filters cards by type for linksToMany card picker`, async function (assert) {
       let recentCardsService = getService('recent-cards-service');
-      // Add a Pet card and a non-Pet card to recents
+      recentCardsService.add(`${testRealmURL}BoomPet/paper`);
       recentCardsService.add(`${testRealmURL}Pet/mango`);
       recentCardsService.add(`${testRealmURL}Author/1`);
 
-      // Person/hassan has friends: null, so the linksToMany add button is available
       ctx.setCardInOperatorModeState(`${testRealmURL}Person/hassan`, 'edit');
       await renderComponent(
         class TestDriver extends GlimmerComponent {
@@ -399,13 +394,14 @@ module('Integration | operator-mode | card catalog', function (hooks) {
       await settled();
 
       assert
-        .dom(`[data-test-card-catalog-item="${testRealmURL}Pet/mango"]`)
+        .dom(`[data-test-recent-card-result="${testRealmURL}Pet/mango"]`)
         .exists('Pet recent card appears in the linksToMany picker');
       assert
-        .dom(`[data-test-card-catalog-item="${testRealmURL}Author/1"]`)
-        .doesNotExist(
-          'non-Pet recent cards are filtered out in the linksToMany picker',
-        );
+        .dom(`[data-test-recent-card-result="${testRealmURL}BoomPet/paper"]`)
+        .exists('BoomPet recent card appears');
+      assert
+        .dom(`[data-test-recent-card-result="${testRealmURL}Author/1"]`)
+        .doesNotExist('non-Pet recent cards are filtered out');
     });
   });
 
