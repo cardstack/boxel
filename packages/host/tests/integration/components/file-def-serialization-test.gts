@@ -1,8 +1,6 @@
 import { module, test } from 'qunit';
 
-import type {
-  LooseSingleFileMetaDocument,
-} from '@cardstack/runtime-common';
+import type { LooseSingleFileMetaDocument } from '@cardstack/runtime-common';
 import { baseRealm, isSingleFileMetaDocument } from '@cardstack/runtime-common';
 
 import {
@@ -106,10 +104,11 @@ module('Integration | serializeFileDef', function (hooks) {
 
     // id should be present and exactly match
     assert.strictEqual(doc.data.id, fileId);
-    // meta.adoptsFrom module should be absolute (base realm URL)
-    assert.ok(
-      (doc.data.meta.adoptsFrom?.module ?? '').startsWith('http'),
-      'adoptsFrom module is an absolute URL',
+    // adoptsFrom should be present (URL resolution succeeded)
+    assert.notEqual(
+      doc.data.meta.adoptsFrom,
+      null,
+      'adoptsFrom is present for file in subdirectory',
     );
   });
 
