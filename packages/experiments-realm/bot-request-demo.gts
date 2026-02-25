@@ -215,13 +215,19 @@ class Isolated extends Component<typeof BotRequestDemo> {
         ? window.location.origin
         : new URL(this.showCardId).origin;
     let nonce = 'demo';
-    let encodedCommand = encodeURIComponent(
-      `${this.codeRef.module}/${this.codeRef.name}`,
-    );
-    let encodedInput = encodeURIComponent(
-      JSON.stringify(this.activeCommandInput ?? null),
-    );
-    return `${hostOrigin}/command-runner/${encodedCommand}/${encodedInput}/${encodeURIComponent(nonce)}`;
+    let requestId = 'bot-request-demo-command-runner-request';
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(
+        `boxel-command-request:${requestId}`,
+        JSON.stringify({
+          command: `${this.codeRef.module}/${this.codeRef.name}`,
+          input: this.activeCommandInput ?? null,
+          nonce,
+          createdAt: Date.now(),
+        }),
+      );
+    }
+    return `${hostOrigin}/command-runner/${encodeURIComponent(requestId)}/${encodeURIComponent(nonce)}`;
   }
 
   get sendButtonLabel() {

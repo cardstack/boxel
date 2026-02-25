@@ -27,6 +27,16 @@ import type CardService from '../services/card-service';
 import type LoaderService from '../services/loader-service';
 import type RealmService from '../services/realm';
 
+const commandRequestStorageKeyPrefix = 'boxel-command-request:';
+const commandRequestTtlMs = 5 * 60 * 1000;
+
+interface StoredCommandRequest {
+  command: string;
+  input?: unknown;
+  nonce?: string;
+  createdAt?: number;
+}
+
 class CommandRunState implements CommandInvocation<CardDefConstructor> {
   @tracked status: CommandInvocation<CardDefConstructor>['status'] = 'pending';
   @tracked cardResult: CardDef | null = null;
@@ -72,18 +82,18 @@ export default class CommandRunnerRoute extends Route<CommandRunnerModel> {
     (globalThis as any).__boxelRenderContext = undefined;
   }
 
-  model(params: {
-    command: string;
-    input: string;
-    nonce: string;
-  }): CommandRunnerModel {
+  model(params: { request_id: string; nonce: string }): CommandRunnerModel {
     let model = new CommandRunState(params.nonce);
-    let command = parseCommandParam(params.command);
-    let commandInput = parseCommandInput(params.input);
+    let request = this.#consumeStoredCommandRequest(
+      params.request_id,
+      params.nonce,
+    );
+    let command = parseCommandParam(request?.command);
+    let commandInput = parseCommandInputValue(request?.input);
 
     if (!command) {
       model.status = 'error';
-      model.error = new Error('Missing or invalid command');
+      model.error = new Error('Missing, expired, or invalid command request');
       return model;
     }
 
@@ -138,29 +148,53 @@ export default class CommandRunnerRoute extends Route<CommandRunnerModel> {
       model.status = 'error';
     }
   }
-}
 
-function parseJSONish(raw: string | undefined): unknown {
-  if (!raw || raw === 'null' || raw === 'undefined') {
-    return undefined;
-  }
+  #consumeStoredCommandRequest(
+    requestId: string | undefined,
+    expectedNonce: string,
+  ): StoredCommandRequest | undefined {
+    if (typeof window === 'undefined' || !window.localStorage) {
+      return undefined;
+    }
+    if (!requestId || typeof requestId !== 'string') {
+      return undefined;
+    }
+    let key = `${commandRequestStorageKeyPrefix}${requestId}`;
+    let raw = window.localStorage.getItem(key);
+    if (!raw) {
+      return undefined;
+    }
+    window.localStorage.removeItem(key);
 
-  // Support both raw JSON path segments and URI-encoded JSON segments.
-  try {
-    return JSON.parse(raw);
-  } catch {
-    // noop
-  }
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      return undefined;
+    }
 
-  try {
-    return JSON.parse(decodeURIComponent(raw));
-  } catch {
-    return undefined;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return undefined;
+    }
+    let request = parsed as StoredCommandRequest;
+    if (
+      typeof request.nonce === 'string' &&
+      request.nonce.trim() !== expectedNonce
+    ) {
+      return undefined;
+    }
+    if (typeof request.createdAt === 'number') {
+      let ageMs = Date.now() - request.createdAt;
+      if (ageMs > commandRequestTtlMs) {
+        return undefined;
+      }
+    }
+    return request;
   }
 }
 
 function parseCommandParam(
-  raw: string | undefined,
+  raw: string | undefined | unknown,
 ): ResolvedCodeRef | undefined {
   if (typeof raw !== 'string') {
     return undefined;
@@ -215,10 +249,9 @@ function safeDecodeURIComponent(value: string): string {
   }
 }
 
-function parseCommandInput(
-  raw: string | undefined,
+function parseCommandInputValue(
+  parsed: unknown,
 ): Record<string, unknown> | undefined {
-  let parsed = parseJSONish(raw);
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
     return undefined;
   }
