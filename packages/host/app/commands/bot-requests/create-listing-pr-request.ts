@@ -1,6 +1,6 @@
 import { service } from '@ember/service';
 
-import { isCardInstance } from '@cardstack/runtime-common';
+import { isCardInstance, logger } from '@cardstack/runtime-common';
 
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
@@ -10,14 +10,18 @@ import UseAiAssistantCommand from '../ai-assistant';
 
 import SendBotTriggerEventCommand from './send-bot-trigger-event';
 
-import type MatrixService from '../../services/matrix-service';
-import type StoreService from '../../services/store';
+import type MatrixService from '../services/matrix-service';
+import type RealmServerService from '../services/realm-server';
+import type StoreService from '../services/store';
 import type { Listing } from '@cardstack/catalog/listing/listing';
+
+const log = logger('commands:create-listing-pr-request');
 
 export default class CreateListingPRRequestCommand extends HostBaseCommand<
   typeof BaseCommandModule.CreateListingPRRequestInput
 > {
   @service declare private matrixService: MatrixService;
+  @service declare private realmServer: RealmServerService;
   @service declare private store: StoreService;
 
   description =
@@ -61,6 +65,8 @@ export default class CreateListingPRRequestCommand extends HostBaseCommand<
       await this.matrixService.inviteUserToRoom(roomId, submissionBotId);
     }
 
+    await this.registerPRWebhook();
+
     await new SendBotTriggerEventCommand(this.commandContext).execute({
       roomId,
       realm,
@@ -72,5 +78,39 @@ export default class CreateListingPRRequestCommand extends HostBaseCommand<
         ...(listingName ? { listingName } : {}),
       },
     });
+  }
+
+  private async registerPRWebhook(): Promise<void> {
+    try {
+      // TODO: Avoid the list+find round-trip by storing the webhook ID (output
+      // by register-github-webhook script) as a realm config or env var so the
+      // command can fetch the GitHub webhook directly by ID.
+      const webhooks = await this.realmServer.listIncomingWebhooks();
+      const githubWebhook = webhooks.find(
+        (w) => w.verificationType === 'HMAC_SHA256_HEADER',
+      );
+
+      if (!githubWebhook) {
+        log.warn(
+          'No GitHub incoming webhook found. Run the register-github-webhook script first to set up the shared webhook for this environment.',
+        );
+        return;
+      }
+
+      await this.realmServer.createWebhookCommand({
+        incomingWebhookId: githubWebhook.id,
+        command: `${this.realmServer.url.href}catalog-realm/commands/process-github-event`,
+        filter: {
+          submissionRealmUrl: this.realmServer.submissionRealmURL,
+        },
+      });
+
+      log.debug('Registered webhook commands for room:', {
+        webhookUrl: `${this.realmServer.url.href}_webhooks/${githubWebhook.webhookPath}`,
+      });
+    } catch (error: any) {
+      log.error('Failed to register PR webhook:', error);
+      // Don't fail the PR request if webhook registration fails
+    }
   }
 }
