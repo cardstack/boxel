@@ -326,7 +326,7 @@ export default class PreviewPanel extends Component<Signature> {
         transform: translateX(50%);
         position: absolute;
         bottom: var(--boxel-sp-sm);
-        width: 380px;
+        width: 460px;
         border-radius: var(--boxel-border-radius);
       }
       :deep(.fitted-format-gallery) {
