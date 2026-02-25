@@ -1,4 +1,8 @@
-import { logger, toBranchName } from '@cardstack/runtime-common';
+import {
+  logger,
+  toBranchName,
+  type RunCommandResponse,
+} from '@cardstack/runtime-common';
 import type { BotTriggerContent } from 'https://cardstack.com/base/matrix-event';
 import { createHash } from 'node:crypto';
 import type { GitHubClient } from './github';
@@ -7,15 +11,10 @@ const log = logger('bot-runner:create-listing-pr');
 
 const DEFAULT_REPO = 'cardstack/boxel-catalog';
 const DEFAULT_BASE_BRANCH = 'main';
+const USER_LABEL_COLOR = '1d76db';
+const ROOM_LABEL_COLOR = '0e8a16';
 
 export type BotTriggerEventContent = BotTriggerContent;
-
-export type CreateListingPRHandler = (args: {
-  eventContent: BotTriggerEventContent;
-  runAs: string;
-  githubClient: GitHubClient;
-  runCommandResult?: { cardResultString?: string | null } | null;
-}) => Promise<void>;
 
 interface CreateListingPRContext {
   owner: string;
@@ -24,6 +23,7 @@ interface CreateListingPRContext {
   head: string;
   title: string;
   listingDisplayName: string;
+  roomId: string;
 }
 
 function getCreateListingPRContext(
@@ -46,7 +46,7 @@ function getCreateListingPRContext(
   let title =
     typeof input.title === 'string' && input.title.trim()
       ? input.title.trim()
-      : `Add listing: ${listingDisplayName}`;
+      : `Add ${listingDisplayName} listing`;
   let headBranch = toBranchName(roomId, listingDisplayName);
 
   if (!headBranch) {
@@ -72,119 +72,163 @@ function getCreateListingPRContext(
     head: headBranch,
     title,
     listingDisplayName,
+    roomId,
   };
 }
 
-export async function ensureCreateListingBranch(args: {
-  eventContent: BotTriggerEventContent;
-  githubClient: GitHubClient;
-}): Promise<void> {
-  let context = getCreateListingPRContext(args.eventContent);
-  if (!context) {
-    return;
+export class CreateListingPRHandler {
+  constructor(private githubClient: GitHubClient) {}
+
+  async ensureCreateListingBranch(
+    eventContent: BotTriggerEventContent,
+  ): Promise<void> {
+    let context = getCreateListingPRContext(eventContent);
+    if (!context) {
+      return;
+    }
+    try {
+      await this.githubClient.createBranch({
+        owner: context.owner,
+        repo: context.repoName,
+        branch: context.head,
+        fromBranch: DEFAULT_BASE_BRANCH,
+      });
+    } catch (error) {
+      let message = error instanceof Error ? error.message : String(error);
+      if (!message.includes('Reference already exists')) {
+        throw error;
+      }
+    }
   }
-  try {
-    await args.githubClient.createBranch({
+
+  async addContentsToCommit(
+    eventContent: BotTriggerEventContent,
+    runCommandResult?: RunCommandResponse | null,
+  ): Promise<void> {
+    let context = getCreateListingPRContext(eventContent);
+    if (!context) {
+      return;
+    }
+    let branchWrite = await getContentsFromRealm(
+      runCommandResult?.cardResultString,
+    );
+    if (branchWrite.files.length === 0) {
+      return;
+    }
+    await this.githubClient.writeFilesToBranch({
       owner: context.owner,
       repo: context.repoName,
       branch: context.head,
-      fromBranch: DEFAULT_BASE_BRANCH,
+      files: branchWrite.files,
+      message: `add ${context.listingDisplayName} changes [boxel-content-hash:${branchWrite.hash}]`,
     });
-  } catch (error) {
-    let message = error instanceof Error ? error.message : String(error);
-    if (!message.includes('Reference already exists')) {
+  }
+
+  async openCreateListingPR(
+    eventContent: BotTriggerEventContent,
+    runAs: string,
+    runCommandResult?: RunCommandResponse | null,
+  ): Promise<void> {
+    let context = getCreateListingPRContext(eventContent);
+    if (!context) {
+      return;
+    }
+    let { owner, repoName, repo, head, title, listingDisplayName, roomId } =
+      context;
+
+    try {
+      let body = await this.getSubmissionSummary(
+        eventContent,
+        runAs,
+        runCommandResult,
+      );
+      let prParams = {
+        owner,
+        repo: repoName,
+        title,
+        head,
+        base: DEFAULT_BASE_BRANCH,
+        body: body ?? undefined,
+      };
+      let prOptions = {
+        labels: [
+          { name: runAs, color: USER_LABEL_COLOR },
+          { name: `room-id:${roomId}`, color: ROOM_LABEL_COLOR },
+        ],
+      };
+      let result = await this.githubClient.openPullRequest(prParams, prOptions);
+
+      log.info('opened PR from pr-listing-create trigger', {
+        runAs,
+        repo,
+        prUrl: result.html_url,
+      });
+    } catch (error) {
+      let message = error instanceof Error ? error.message : String(error);
+      if (message.includes('No commits between')) {
+        log.info('cannot open PR because branch has no commits beyond base', {
+          runAs,
+          repo,
+          head,
+          listingDisplayName,
+          error: message,
+        });
+        return;
+      }
+
+      if (message.includes('A pull request already exists')) {
+        log.info('PR already exists for submission branch', {
+          runAs,
+          repo,
+          head,
+          error: message,
+        });
+        return;
+      }
+
+      log.error('failed to open PR from pr-listing-create trigger', {
+        runAs,
+        repo,
+        head,
+        error: message,
+      });
       throw error;
     }
   }
-}
 
-export async function addContentsToCommit(args: {
-  eventContent: BotTriggerEventContent;
-  githubClient: GitHubClient;
-  runCommandResult?: { cardResultString?: string | null } | null;
-}): Promise<void> {
-  let context = getCreateListingPRContext(args.eventContent);
-  if (!context) {
-    return;
-  }
-  let branchWrite = await getContentsFromRealm(
-    args.runCommandResult?.cardResultString,
-  );
-  if (branchWrite.files.length === 0) {
-    return;
-  }
-  await args.githubClient.writeFilesToBranch({
-    owner: context.owner,
-    repo: context.repoName,
-    branch: context.head,
-    files: branchWrite.files,
-    message: `chore: add submission output [boxel-content-hash:${branchWrite.hash}]`,
-  });
-}
-
-export const openCreateListingPR: CreateListingPRHandler = async ({
-  eventContent,
-  runAs,
-  githubClient,
-}) => {
-  let context = getCreateListingPRContext(eventContent);
-  if (!context) {
-    return;
-  }
-  let { owner, repoName, repo, head, title, listingDisplayName } = context;
-
-  try {
-    let prParams = {
-      owner,
-      repo: repoName,
-      title,
-      head,
-      base: DEFAULT_BASE_BRANCH,
-    };
-    let prOptions = {
-      label: runAs,
-    };
-    let result = await githubClient.openPullRequest(prParams, prOptions);
-
-    log.info('opened PR from pr-listing-create trigger', {
-      runAs,
-      repo,
-      prUrl: result.html_url,
-    });
-  } catch (error) {
-    let message = error instanceof Error ? error.message : String(error);
-    if (message.includes('No commits between')) {
-      log.info('cannot open PR because branch has no commits beyond base', {
-        runAs,
-        repo,
-        head,
-        listingDisplayName,
-        error: message,
-      });
-      return;
+  async getSubmissionSummary(
+    eventContent: BotTriggerEventContent,
+    runAs: string,
+    runCommandResult?: RunCommandResponse | null,
+  ): Promise<string | null> {
+    let context = getCreateListingPRContext(eventContent);
+    if (!context) {
+      return null;
     }
+    let input =
+      eventContent.input && typeof eventContent.input === 'object'
+        ? (eventContent.input as Record<string, unknown>)
+        : {};
+    let listingDescription =
+      typeof input.listingDescription === 'string'
+        ? input.listingDescription.trim()
+        : typeof input.description === 'string'
+          ? input.description.trim()
+          : '';
+    let files = await getContentsFromRealm(runCommandResult?.cardResultString);
+    let descriptionValue = listingDescription || '_No description provided_';
 
-    if (message.includes('A pull request already exists')) {
-      log.info('PR already exists for submission branch', {
-        runAs,
-        repo,
-        head,
-        error: message,
-      });
-      return;
-    }
-
-    log.error('failed to open PR from pr-listing-create trigger', {
-      runAs,
-      repo,
-      head,
-      error: message,
-    });
-    throw error;
+    return [
+      '## Summary',
+      '',
+      `- Listing Name: ${context.listingDisplayName}`,
+      `- Listing Description: ${descriptionValue}`,
+      `- Room ID: \`${context.roomId}\``,
+      `- User ID: \`${runAs}\``,
+      `- Number of Files: ${files.files.length}`,
+    ].join('\n');
   }
-
-  return;
-};
+}
 
 async function getContentsFromRealm(cardResultString?: string | null): Promise<{
   files: { path: string; content: string }[];

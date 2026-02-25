@@ -18,7 +18,10 @@ import type { CopyModuleMeta } from '@cardstack/runtime-common/catalog';
 
 import ENV from '@cardstack/host/config/environment';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
+import type {
+  CardDef,
+  CardDefConstructor,
+} from 'https://cardstack.com/base/card-api';
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import HostBaseCommand from '../lib/host-base-command';
@@ -39,7 +42,7 @@ interface FileWithContent {
 
 export default class CreateSubmissionCommand extends HostBaseCommand<
   typeof BaseCommandModule.CreateSubmissionInput,
-  typeof BaseCommandModule.CreateSubmissionResult
+  CardDefConstructor
 > {
   @service declare private cardService: CardService;
   @service declare private store: StoreService;
@@ -56,7 +59,7 @@ export default class CreateSubmissionCommand extends HostBaseCommand<
 
   protected async run(
     input: BaseCommandModule.CreateSubmissionInput,
-  ): Promise<BaseCommandModule.CreateSubmissionResult> {
+  ): Promise<CardDef> {
     let { listingId, realm, roomId } = input;
     let realmUrl = new RealmPaths(new URL(realm)).url;
 
@@ -115,13 +118,7 @@ export default class CreateSubmissionCommand extends HostBaseCommand<
       filesWithContent,
     });
 
-    const commandModule = await this.loadCommandModule();
-    const { CreateSubmissionResult } = commandModule;
-    return new CreateSubmissionResult({
-      listing,
-      submission,
-      filesWithContent,
-    });
+    return submission;
   }
 
   private async collectAndFetchFiles(

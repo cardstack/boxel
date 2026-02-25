@@ -3,6 +3,9 @@ import { Octokit } from '@octokit/rest';
 type CreatePullRequest = Octokit['rest']['pulls']['create'];
 type RequestReviewers = Octokit['rest']['pulls']['requestReviewers'];
 type AddLabels = Octokit['rest']['issues']['addLabels'];
+type GetLabel = Octokit['rest']['issues']['getLabel'];
+type CreateLabel = Octokit['rest']['issues']['createLabel'];
+type UpdateLabel = Octokit['rest']['issues']['updateLabel'];
 
 export interface OpenPullRequestParams {
   owner: string;
@@ -58,7 +61,7 @@ export interface WriteFilesToBranchResult {
 const HARDCODED_REVIEWER = 'tintinthong';
 
 export interface OpenPullRequestOptions {
-  label: string;
+  labels: { name: string; color?: string }[];
 }
 
 export interface GitHubClient {
@@ -85,9 +88,9 @@ export class OctokitGitHubClient implements GitHubClient {
     options: OpenPullRequestOptions,
   ): Promise<OpenPullRequestResult> {
     let octokit = this.getClient();
-    let label = options.label?.trim();
-    if (!label) {
-      throw new Error('label is required');
+    let labels = dedupeLabels(options.labels ?? []);
+    if (labels.length === 0) {
+      throw new Error('at least one label is required');
     }
     try {
       let prParams: Parameters<CreatePullRequest>[0] = {
@@ -100,11 +103,20 @@ export class OctokitGitHubClient implements GitHubClient {
         pull_number: response.data.number,
         reviewers: [HARDCODED_REVIEWER],
       } as Parameters<RequestReviewers>[0]);
+      for (let label of labels) {
+        if (label.color) {
+          await this.ensureLabelColor({
+            owner: prParams.owner,
+            repo: prParams.repo,
+            label: { name: label.name, color: label.color },
+          });
+        }
+      }
       await octokit.rest.issues.addLabels({
         owner: prParams.owner,
         repo: prParams.repo,
         issue_number: response.data.number,
-        labels: [label],
+        labels: labels.map((label) => label.name),
       } as Parameters<AddLabels>[0]);
       return {
         number: response.data.number,
@@ -258,6 +270,79 @@ export class OctokitGitHubClient implements GitHubClient {
     }
     return this.octokit;
   }
+
+  private async ensureLabelColor(args: {
+    owner: string;
+    repo: string;
+    label: { name: string; color: string };
+  }): Promise<void> {
+    let octokit = this.getClient();
+    let color = normalizeLabelColor(args.label.color);
+    if (!color) {
+      return;
+    }
+    let name = args.label.name.trim();
+    if (!name) {
+      return;
+    }
+
+    try {
+      let existing = await octokit.rest.issues.getLabel({
+        owner: args.owner,
+        repo: args.repo,
+        name,
+      } as Parameters<GetLabel>[0]);
+      if ((existing.data.color ?? '').toLowerCase() !== color.toLowerCase()) {
+        await octokit.rest.issues.updateLabel({
+          owner: args.owner,
+          repo: args.repo,
+          name,
+          color,
+        } as Parameters<UpdateLabel>[0]);
+      }
+      return;
+    } catch (error: any) {
+      if (error?.status !== 404) {
+        throw toGitHubError('get/update label', error);
+      }
+    }
+
+    try {
+      await octokit.rest.issues.createLabel({
+        owner: args.owner,
+        repo: args.repo,
+        name,
+        color,
+      } as Parameters<CreateLabel>[0]);
+    } catch (error: any) {
+      throw toGitHubError('create label', error);
+    }
+  }
+}
+
+function normalizeLabelColor(color: string | undefined): string | undefined {
+  if (!color) {
+    return undefined;
+  }
+  let normalized = color.trim().replace(/^#/, '').toLowerCase();
+  if (!/^[0-9a-f]{6}$/.test(normalized)) {
+    return undefined;
+  }
+  return normalized;
+}
+
+function dedupeLabels(
+  labels: { name: string; color?: string }[],
+): { name: string; color?: string }[] {
+  let deduped = new Map<string, { name: string; color?: string }>();
+  for (let label of labels) {
+    let name = label.name?.trim();
+    if (!name) {
+      continue;
+    }
+    deduped.set(name, { name, color: label.color });
+  }
+  return [...deduped.values()];
 }
 
 export function createGitHubClientFromEnv(): GitHubClient {

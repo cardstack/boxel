@@ -99,6 +99,9 @@ module('timeline handler', () => {
   let queuePublisher: QueuePublisher;
   let githubClient: GitHubClient;
   let publishedJobs: unknown[] = [];
+  let queueJobDoneResult: unknown = undefined;
+  let branchWrites: unknown[] = [];
+  let createdBranches: unknown[] = [];
   let senderRegistrations: Record<string, PgPrimitive>[] = [];
   let submissionBotRegistrations: Record<string, PgPrimitive>[] = [];
   let commandsByRegistrationId = new Map<string, Record<string, PgPrimitive>[]>();
@@ -135,7 +138,7 @@ module('timeline handler', () => {
   queuePublisher = {
     publish: async (job: unknown) => {
       publishedJobs.push(job);
-      return { id: 1, done: Promise.resolve(undefined) } as any;
+      return { id: 1, done: Promise.resolve(queueJobDoneResult) } as any;
     },
     destroy: async () => {},
   };
@@ -144,13 +147,22 @@ module('timeline handler', () => {
       number: 1,
       html_url: 'https://example.com/pr/1',
     }),
-    createBranch: async () => ({
-      ref: 'refs/heads/room-branch',
-      sha: 'abc123',
+    createBranch: async (params) => {
+      createdBranches.push(params);
+      return {
+        ref: 'refs/heads/room-branch',
+        sha: 'abc123',
+      };
+    },
+    writeFileToBranch: async () => ({
+      commitSha: 'def456',
     }),
-    createEmptyCommit: async () => ({
-      sha: 'def456',
-    }),
+    writeFilesToBranch: async (params) => {
+      branchWrites.push(params);
+      return {
+        commitSha: 'def456',
+      };
+    },
   };
 
   test('enqueues command when event matches', async (assert) => {
@@ -178,6 +190,9 @@ module('timeline handler', () => {
       ],
     ]);
     publishedJobs = [];
+    queueJobDoneResult = undefined;
+    branchWrites = [];
+    createdBranches = [];
 
     let handleTimelineEvent = onTimelineEvent({
       authUserId: '@submissionbot:localhost',
@@ -213,7 +228,7 @@ module('timeline handler', () => {
     );
   });
 
-  test('does not enqueue command when event type is pr-listing-create', async (assert) => {
+  test('handles pr-listing-create by writing files and opening a PR', async (assert) => {
     senderRegistrations = [];
     submissionBotRegistrations = [
       {
@@ -238,6 +253,32 @@ module('timeline handler', () => {
       ],
     ]);
     publishedJobs = [];
+    queueJobDoneResult = {
+      status: 'ready',
+      cardResultString: JSON.stringify({
+        data: {
+          type: 'card',
+          id: 'http://localhost:4201/catalog/AppListing/95cbe2c7-9b60-4afd-8a3c-1382b610e316',
+          attributes: {
+            allFileContents: [
+              {
+                path: 'experiments/MyListing/listing.json',
+                content: '{\"data\":{\"type\":\"card\"}}',
+              },
+              {
+                filename: 'experiments/MyListing/readme.md',
+                contents: '# My Listing',
+              },
+            ],
+          },
+          links: {
+            self: 'http://localhost:4201/catalog/AppListing/95cbe2c7-9b60-4afd-8a3c-1382b610e316',
+          },
+        },
+      }),
+    };
+    branchWrites = [];
+    createdBranches = [];
 
     let handleTimelineEvent = onTimelineEvent({
       authUserId: '@submissionbot:localhost',
@@ -248,19 +289,77 @@ module('timeline handler', () => {
     });
 
     await handleTimelineEvent(
-      makeBotTriggerEvent('@alice:localhost', 1000, 'pr-listing-create'),
+      {
+        event: {
+          origin_server_ts: 1000,
+          type: 'app.boxel.bot-trigger',
+          content: {
+            type: 'pr-listing-create',
+            input: {
+              roomId: '!abc123:localhost',
+              listingName: 'My Listing',
+            },
+            realm: 'http://localhost:4201/test/',
+            userId: '@alice:localhost',
+          },
+        },
+        getSender: () => '@alice:localhost',
+      } as unknown as MatrixEvent,
       makeRoom('join'),
       false,
     );
 
     assert.strictEqual(
       publishedJobs.length,
-      0,
-      'does not enqueue run-command job for pr-listing-create',
+      1,
+      'enqueues run-command job for pr-listing-create',
+    );
+    assert.strictEqual(
+      createdBranches.length,
+      1,
+      'creates branch before committing',
+    );
+    assert.strictEqual(
+      branchWrites.length,
+      1,
+      'writes fileContents to a commit',
+    );
+    let write = branchWrites[0] as Record<string, unknown>;
+    assert.propContains(
+      write,
+      {
+        owner: 'cardstack',
+        repo: 'boxel-catalog',
+      },
+      'commit targets the expected repo/branch',
+    );
+    assert.true(
+      write.branch?.toString().includes('my-listing'),
+      'commit branch includes listing slug',
+    );
+    assert.deepEqual(
+      write.files,
+      [
+        {
+          path: 'experiments/MyListing/listing.json',
+          content: '{"data":{"type":"card"}}',
+        },
+        {
+          path: 'experiments/MyListing/readme.md',
+          content: '# My Listing',
+        },
+      ],
+      'commit payload contains parsed files from allFileContents',
+    );
+    assert.true(
+      write.message
+        ?.toString()
+        .startsWith('add My Listing changes [boxel-content-hash:'),
+      'commit message includes listing name and content hash marker',
     );
   });
 
-  test('does not enqueue command for pr-listing-create across submission bot and sender registration paths', async (assert) => {
+  test('does not duplicate pr-listing-create commit when both sender and bot have same registration', async (assert) => {
     senderRegistrations = [
       {
         id: 'sender-registration-1',
@@ -304,6 +403,24 @@ module('timeline handler', () => {
       ],
     ]);
     publishedJobs = [];
+    queueJobDoneResult = {
+      status: 'ready',
+      cardResultString: JSON.stringify({
+        data: {
+          type: 'card',
+          attributes: {
+            allFileContents: [
+              {
+                path: 'catalog/Listing/listing.json',
+                content: '{}',
+              },
+            ],
+          },
+        },
+      }),
+    };
+    branchWrites = [];
+    createdBranches = [];
 
     let handleTimelineEvent = onTimelineEvent({
       authUserId: '@submissionbot:localhost',
@@ -314,15 +431,35 @@ module('timeline handler', () => {
     });
 
     await handleTimelineEvent(
-      makeBotTriggerEvent('@alice:localhost', 1000, 'pr-listing-create'),
+      {
+        event: {
+          origin_server_ts: 1000,
+          type: 'app.boxel.bot-trigger',
+          content: {
+            type: 'pr-listing-create',
+            input: {
+              roomId: '!room-id:localhost',
+              listingName: 'Dupe Test',
+            },
+            realm: 'http://localhost:4201/test/',
+            userId: '@alice:localhost',
+          },
+        },
+        getSender: () => '@alice:localhost',
+      } as unknown as MatrixEvent,
       makeRoom('join'),
       false,
     );
 
     assert.strictEqual(
       publishedJobs.length,
-      0,
-      'does not enqueue run-command job for pr-listing-create',
+      2,
+      'current behavior enqueues once per matching registration',
+    );
+    assert.strictEqual(
+      branchWrites.length,
+      2,
+      'writes fileContents for each matching registration path',
     );
   });
 
