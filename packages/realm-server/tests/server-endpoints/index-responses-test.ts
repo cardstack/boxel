@@ -1071,7 +1071,9 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       );
       let request: SuperTest<Test>;
       let testRealm: Realm;
-      let dbAdapter: { execute: (sql: string) => Promise<Record<string, any>[]> };
+      let dbAdapter: {
+        execute: (sql: string) => Promise<Record<string, any>[]>;
+      };
 
       setupPermissionedRealmAtURL(hooks, publishedRealmURL, {
         permissions: {
