@@ -237,7 +237,7 @@ const getIndexHTML = async () => {
     await waitForWorkerManager(workerManagerPort);
   }
 
-  let realmServerMatrixClient = new MatrixClient({
+  let matrixClient = new MatrixClient({
     matrixURL: new URL(MATRIX_URL),
     username: REALM_SERVER_MATRIX_USERNAME,
     seed: REALM_SECRET_SEED,
@@ -273,12 +273,11 @@ const getIndexHTML = async () => {
       {
         url,
         adapter: realmAdapter,
-        matrix: { url: new URL(matrixURL), username },
         secretSeed: REALM_SECRET_SEED,
         virtualNetwork,
         dbAdapter,
         queue,
-        realmServerMatrixClient,
+        matrixClient,
         realmServerURL: serverURL,
         definitionLookup,
         cardSizeLimitBytes: Number(
@@ -323,7 +322,7 @@ const getIndexHTML = async () => {
   let server = new RealmServer({
     realms,
     virtualNetwork,
-    matrixClient: realmServerMatrixClient,
+    matrixClient,
     realmsRootPath,
     realmServerSecretSeed: REALM_SERVER_SECRET_SEED,
     realmSecretSeed: REALM_SECRET_SEED,

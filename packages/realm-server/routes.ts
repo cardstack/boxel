@@ -83,7 +83,6 @@ export type CreateRoutesArgs = {
   createAndMountRealm: (
     path: string,
     url: string,
-    username: string,
     copiedFromRealm?: URL,
     enableFileWatcher?: boolean,
     fromScratchIndexPriority?: number,
@@ -156,14 +155,18 @@ export function createRoutes(args: CreateRoutesArgs) {
       dbAdapter: args.dbAdapter,
     }),
   );
-  router.all('/_search', multiRealmAuthorization(args), handleSearch());
   router.all(
-    '/_info',
+    '/_federated-search',
+    multiRealmAuthorization(args),
+    handleSearch(),
+  );
+  router.all(
+    '/_federated-info',
     multiRealmAuthorization(args),
     handleRealmInfo({ dbAdapter: args.dbAdapter }),
   );
   router.all(
-    '/_search-prerendered',
+    '/_federated-search-prerendered',
     multiRealmAuthorization(args),
     handleSearchPrerendered(),
   );

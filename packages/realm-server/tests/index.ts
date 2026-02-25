@@ -171,4 +171,5 @@ import './delete-boxel-claimed-domain-test';
 import './realm-auth-test';
 import './queries-test';
 import './remote-prerenderer-test';
+import './runtime-dependency-tracker-test';
 import './sanitize-head-html-test';

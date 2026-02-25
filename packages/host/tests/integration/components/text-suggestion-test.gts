@@ -15,6 +15,8 @@ import {
   testRealmURL,
   setupIntegrationTestRealm,
   setupLocalIndexing,
+  setupRealmCacheTeardown,
+  withCachedRealmSetup,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
@@ -26,6 +28,7 @@ let loader: Loader;
 module('Integration | text-suggestion | card-chooser-title', function (hooks) {
   setupRenderingTest(hooks);
   setupLocalIndexing(hooks);
+  setupRealmCacheTeardown(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks);
 
@@ -66,15 +69,17 @@ module('Integration | text-suggestion | card-chooser-title', function (hooks) {
       @field booker = contains(StringField);
     }
 
-    await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      contents: {
-        'article.gts': { Article },
-        'blog-post.gts': { BlogPost },
-        'book.gts': { Book },
-        'booking.gts': { Booking },
-        'post.gts': { Post },
-      },
+    await withCachedRealmSetup(async () => {
+      await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {
+          'article.gts': { Article },
+          'blog-post.gts': { BlogPost },
+          'book.gts': { Book },
+          'booking.gts': { Booking },
+          'post.gts': { Post },
+        },
+      });
     });
   });
 

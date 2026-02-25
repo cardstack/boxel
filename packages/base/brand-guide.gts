@@ -1,5 +1,6 @@
 import { tracked } from '@glimmer/tracking';
 import { get } from '@ember/object';
+// @ts-ignore no types
 import cssUrl from 'ember-css-url';
 import {
   Component,

@@ -183,6 +183,77 @@ module(basename(__filename), function () {
                 },
               },
             },
+            'dep-reset-consumer.gts': `
+              import { CardDef, field, linksTo, Component } from 'https://cardstack.com/base/card-api';
+              import { Person } from './person';
+              export class DepResetConsumer extends CardDef {
+                static displayName = 'Dep Reset Consumer';
+                @field friend = linksTo(() => Person);
+                static isolated = class extends Component<typeof this> {
+                  <template><@fields.friend/></template>
+                }
+              }
+            `,
+            'dep-reset-consumer-a.json': {
+              data: {
+                relationships: {
+                  friend: {
+                    links: {
+                      self: './dep-reset-friend-a',
+                    },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: './dep-reset-consumer',
+                    name: 'DepResetConsumer',
+                  },
+                },
+              },
+            },
+            'dep-reset-consumer-b.json': {
+              data: {
+                relationships: {
+                  friend: {
+                    links: {
+                      self: './dep-reset-friend-b',
+                    },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: './dep-reset-consumer',
+                    name: 'DepResetConsumer',
+                  },
+                },
+              },
+            },
+            'dep-reset-friend-a.json': {
+              data: {
+                attributes: {
+                  name: 'Friend A',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: './person',
+                    name: 'Person',
+                  },
+                },
+              },
+            },
+            'dep-reset-friend-b.json': {
+              data: {
+                attributes: {
+                  name: 'Friend B',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: './person',
+                    name: 'Person',
+                  },
+                },
+              },
+            },
             'no-icon.gts': `
               import { CardDef, field, contains, StringField, Component } from 'https://cardstack.com/base/card-api';
               export class NoIcon extends CardDef {
@@ -403,6 +474,34 @@ module(basename(__filename), function () {
       );
     });
 
+    test('resets runtime deps between consecutive prerenders', async function (assert) {
+      let first = await prerenderer.prerenderCard({
+        realm: realmURL,
+        url: `${realmURL}dep-reset-consumer-a`,
+        auth: auth(),
+      });
+      let firstDeps = first.response.deps ?? [];
+      assert.true(
+        firstDeps.includes(`${realmURL}dep-reset-friend-a.json`),
+        'first prerender includes first relationship target',
+      );
+
+      let second = await prerenderer.prerenderCard({
+        realm: realmURL,
+        url: `${realmURL}dep-reset-consumer-b`,
+        auth: auth(),
+      });
+      let secondDeps = second.response.deps ?? [];
+      assert.true(
+        secondDeps.includes(`${realmURL}dep-reset-friend-b.json`),
+        'second prerender includes second relationship target',
+      );
+      assert.false(
+        secondDeps.includes(`${realmURL}dep-reset-friend-a.json`),
+        'second prerender deps do not leak first prerender relationship target',
+      );
+    });
+
     test('prerenderModule returns module metadata', async function (assert) {
       const moduleURL = `${realmURL}person.gts`;
 
@@ -586,6 +685,23 @@ module(basename(__filename), function () {
           '[data-prerender] has no child element to capture',
         ),
         `error message mentions empty prerender container, got: ${result.response.error?.error.message}`,
+      );
+      let errorDeps = result.response.error?.error.deps;
+      assert.notStrictEqual(
+        errorDeps,
+        null,
+        'short-circuit invalid render response includes non-null deps',
+      );
+      let deps = errorDeps ?? [];
+      assert.true(
+        Array.isArray(deps),
+        'short-circuit invalid render response deps are an array',
+      );
+      assert.true(
+        [`${realmURL}no-icon`, `${realmURL}no-icon.json`].some((dep) =>
+          deps.includes(dep),
+        ),
+        `synthesized invalid render error includes fallback dep context (deps: ${JSON.stringify(deps)})`,
       );
     });
 
@@ -792,6 +908,23 @@ module(basename(__filename), function () {
           'error payload flags eviction',
         );
         assert.false(result.pool.timedOut, 'error is not treated as timeout');
+        let errorDeps = result.response.error?.error.deps;
+        assert.notStrictEqual(
+          errorDeps,
+          null,
+          'pre-model short-circuit error includes non-null deps',
+        );
+        let deps = errorDeps ?? [];
+        assert.true(
+          Array.isArray(deps),
+          'pre-model short-circuit deps are an array',
+        );
+        assert.true(
+          [`${realmURL}1.json`, `${realmURL}1`].some((dep) =>
+            deps.includes(dep),
+          ),
+          `pre-model fallback error includes dep context from transition params (deps: ${JSON.stringify(deps)})`,
+        );
       } finally {
         PagePool.prototype.getPage = originalGetPage;
       }
@@ -880,9 +1013,62 @@ module(basename(__filename), function () {
         result.response.deps.includes(`${baseRealm.url}file-api`),
         'deps include base file-api module',
       );
-      assert.ok(
+      assert.notOk(
         result.response.deps.includes(fileURL),
-        'deps include file url',
+        'deps exclude the file url itself',
+      );
+    });
+
+    test('file extract surfaces broken FileDef module error without remote prerender timeout', async function (assert) {
+      await realmAdapter.write(
+        'filedef-mismatch.gts',
+        `
+          import { FileDef as BaseFileDef } from "https://cardstack.com/base/file-api";
+          import { MissingChild } from "./missing-child";
+
+          export class FileDef extends BaseFileDef {
+            static missingChild = MissingChild;
+          }
+        `,
+      );
+      await realmAdapter.write('broken-file.mismatch', 'broken mismatch file');
+      realm.__testOnlyClearCaches();
+
+      let result = await prerenderer.prerenderFileExtract({
+        realm: realmURL,
+        url: `${realmURL}broken-file.mismatch`,
+        auth: auth(),
+        renderOptions: {
+          fileExtract: true,
+          fileDefCodeRef: {
+            module: `${realmURL}filedef-mismatch`,
+            name: 'FileDef',
+          },
+        },
+      });
+
+      assert.strictEqual(
+        result.response.status,
+        'error',
+        'file extract reports error for broken FileDef module',
+      );
+      assert.ok(result.response.error, 'error payload is present');
+      assert.ok(
+        result.response.error?.error.message?.includes(
+          'Received HTTP 404 from server',
+        ),
+        `error message should mention module 404, got: ${result.response.error?.error.message}`,
+      );
+      let messageIncludesTimeoutMarker = Boolean(
+        result.response.error?.error.message?.includes('Prerender request to'),
+      );
+      assert.false(
+        messageIncludesTimeoutMarker,
+        'error should not be reported as a remote prerender request timeout',
+      );
+      assert.false(
+        result.pool.timedOut,
+        'pool should not mark this as a prerender timeout',
       );
     });
   });
@@ -1200,6 +1386,19 @@ module(basename(__filename), function () {
                 },
               },
             },
+            '2.json': {
+              data: {
+                attributes: {
+                  name: 'Mango',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: './person',
+                    name: 'Person',
+                  },
+                },
+              },
+            },
           },
         },
         {
@@ -1248,6 +1447,38 @@ module(basename(__filename), function () {
                 }
               }
             `,
+            'dog-many.gts': `
+              import { CardDef, field, contains, linksToMany, StringField, Component } from 'https://cardstack.com/base/card-api';
+              import { Person } from '${realmURL1}person';
+              export class DogMany extends CardDef {
+                static displayName = "Dog Many";
+                @field name = contains(StringField);
+                @field owners = linksToMany(Person, { isUsed: true });
+                static isolated = class extends Component<typeof this> {
+                  // owners is intentionally not in isolated template, this is included in search doc via isUsed=true
+                  <template>{{@model.name}}</template>
+                }
+              }
+            `,
+            'dog-profile.gts': `
+              import { CardDef, FieldDef, field, contains, linksTo, linksToMany, StringField, Component } from 'https://cardstack.com/base/card-api';
+              import { Person } from '${realmURL1}person';
+
+              class DogProfileField extends FieldDef {
+                @field primaryOwner = linksTo(Person, { isUsed: true });
+                @field caretakers = linksToMany(Person, { isUsed: true });
+              }
+
+              export class DogProfile extends CardDef {
+                static displayName = "Dog Profile";
+                @field name = contains(StringField);
+                @field profile = contains(DogProfileField);
+                static isolated = class extends Component<typeof this> {
+                  // profile is intentionally not in isolated template, this is included in search doc via isUsed=true
+                  <template>{{@model.name}}</template>
+                }
+              }
+            `,
             '1.json': {
               data: {
                 attributes: {
@@ -1280,6 +1511,52 @@ module(basename(__filename), function () {
                   adoptsFrom: {
                     module: './dog',
                     name: 'Dog',
+                  },
+                },
+              },
+            },
+            'is-used-many.json': {
+              data: {
+                attributes: {
+                  name: 'Mango Many',
+                },
+                relationships: {
+                  'owners.0': {
+                    links: { self: `${realmURL1}1` },
+                  },
+                  'owners.1': {
+                    links: { self: `${realmURL1}2` },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: './dog-many',
+                    name: 'DogMany',
+                  },
+                },
+              },
+            },
+            'is-used-field-def.json': {
+              data: {
+                attributes: {
+                  name: 'Mango Profile',
+                  profile: {},
+                },
+                relationships: {
+                  'profile.primaryOwner': {
+                    links: { self: `${realmURL1}1` },
+                  },
+                  'profile.caretakers.0': {
+                    links: { self: `${realmURL1}1` },
+                  },
+                  'profile.caretakers.1': {
+                    links: { self: `${realmURL1}2` },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: './dog-profile',
+                    name: 'DogProfile',
                   },
                 },
               },
@@ -1661,6 +1938,85 @@ module(basename(__filename), function () {
           response.searchDoc?.owner.name,
           'Hassan',
           'linked field is included in search doc via isUsed=true',
+        );
+      });
+
+      test('isUsed linksToMany field includes links in search doc that are not rendered in template', async function (assert) {
+        const testCardURL = `${realmURL2}is-used-many`;
+        let { response } = await prerenderer.prerenderCard({
+          realm: realmURL2,
+          url: testCardURL,
+          auth: auth(),
+        });
+
+        assert.ok(
+          /Mango Many/.test(response.isolatedHTML!),
+          `failed to match isolated html:${response.isolatedHTML}`,
+        );
+        assert.false(
+          /data-test-field="owners"/.test(response.isolatedHTML!),
+          `owners field is not rendered in isolated html`,
+        );
+        assert.strictEqual(
+          response.searchDoc?.owners?.[0]?.name,
+          'Hassan',
+          'first linked record is included in search doc via isUsed=true',
+        );
+        assert.strictEqual(
+          response.searchDoc?.owners?.[1]?.name,
+          'Mango',
+          'second linked record is included in search doc via isUsed=true',
+        );
+      });
+
+      test('isUsed compound field includes nested linksTo relationship in search doc', async function (assert) {
+        const testCardURL = `${realmURL2}is-used-field-def`;
+        let { response } = await prerenderer.prerenderCard({
+          realm: realmURL2,
+          url: testCardURL,
+          auth: auth(),
+        });
+
+        assert.ok(
+          /Mango Profile/.test(response.isolatedHTML!),
+          `failed to match isolated html:${response.isolatedHTML}`,
+        );
+        assert.false(
+          /data-test-field="profile"/.test(response.isolatedHTML!),
+          `profile field is not rendered in isolated html`,
+        );
+        assert.strictEqual(
+          response.searchDoc?.profile?.primaryOwner?.name,
+          'Hassan',
+          'nested linksTo relationship is included in search doc via isUsed=true on the relationship field',
+        );
+      });
+
+      test('isUsed compound field includes nested linksToMany relationships in search doc', async function (assert) {
+        const testCardURL = `${realmURL2}is-used-field-def`;
+        let { response } = await prerenderer.prerenderCard({
+          realm: realmURL2,
+          url: testCardURL,
+          auth: auth(),
+        });
+
+        assert.ok(
+          /Mango Profile/.test(response.isolatedHTML!),
+          `failed to match isolated html:${response.isolatedHTML}`,
+        );
+        assert.false(
+          /data-test-field="profile"/.test(response.isolatedHTML!),
+          `profile field is not rendered in isolated html`,
+        );
+        assert.strictEqual(
+          response.searchDoc?.profile?.caretakers?.[0]?.name,
+          'Hassan',
+          'first nested linksToMany relationship is included in search doc via isUsed=true on the relationship field',
+        );
+        assert.strictEqual(
+          response.searchDoc?.profile?.caretakers?.[1]?.name,
+          'Mango',
+          'second nested linksToMany relationship is included in search doc via isUsed=true on the relationship field',
         );
       });
     });

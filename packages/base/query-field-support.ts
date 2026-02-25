@@ -10,6 +10,7 @@ import type {
   LooseCardResource,
   Query,
   QueryWithInterpolations,
+  RuntimeDependencyTrackingContext,
 } from '@cardstack/runtime-common';
 import {
   getField,
@@ -25,6 +26,7 @@ import {
   normalizeQueryDefinition,
 } from '@cardstack/runtime-common';
 import { logger as runtimeLogger } from '@cardstack/runtime-common';
+import { runtimeQueryDependencyContext } from '@cardstack/runtime-common';
 import { initSharedState } from './shared-state';
 
 interface QueryFieldState {
@@ -51,6 +53,7 @@ export function ensureQueryFieldSearchResource(
   store: CardStore,
   instance: BaseDef,
   field: Field,
+  dependencyTrackingContext?: RuntimeDependencyTrackingContext,
 ): ReturnType<CardStore['getSearchResource']> | undefined {
   if (!field.queryDefinition) {
     log.info(`field ${field.name} is not a query field, skipping`);
@@ -61,6 +64,14 @@ export function ensureQueryFieldSearchResource(
     log.warn(`field ${field.name} missing fieldDefinition, skipping`);
     return undefined;
   }
+  let trackingContext =
+    dependencyTrackingContext ??
+    runtimeQueryDependencyContext({
+      queryField: field.name,
+      consumer: (instance as CardDef).id,
+      source: 'query-field-support:ensure-search-resource',
+    });
+
   let queryFieldState = queryFieldStates.get(instance);
   let fieldState = queryFieldState?.get(field.name);
   let searchResource = fieldState?.searchResource;
@@ -88,6 +99,7 @@ export function ensureQueryFieldSearchResource(
     },
     {
       isLive: true,
+      dependencyTracking: trackingContext,
       seed: seedRecords
         ? {
             cards: seedRecords,

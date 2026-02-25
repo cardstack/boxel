@@ -35,8 +35,11 @@ import {
   internalKeyFor,
   type ResolvedCodeRef,
   GetCardContextName,
+  GetCardsContextName,
   type getCard,
+  type getCards,
   chooseCard,
+  chooseFile,
   loadCardDef,
   specRef,
   trimJsonExtension,
@@ -90,7 +93,7 @@ import PlaygroundPreview from './playground-preview';
 import SpecSearch from './spec-search';
 
 export type SelectedInstance = {
-  card: CardDef;
+  card: CardDef | FileDef;
   fieldIndex: number | undefined;
 };
 
@@ -104,6 +107,7 @@ interface Signature {
   Args: {
     codeRef: ResolvedCodeRef;
     isFieldDef?: boolean;
+    isFileDef?: boolean;
     isUpdating?: boolean;
     viewCard?: ViewCardFn;
   };
@@ -112,6 +116,7 @@ interface Signature {
 
 export default class PlaygroundPanel extends Component<Signature> {
   @consume(GetCardContextName) declare private getCard: getCard;
+  @consume(GetCardsContextName) declare private getCards: getCards;
   @consume(CardContextName) declare private cardContext: CardContext;
   @service declare private aiAssistantPanelService: AiAssistantPanelService;
   @service declare private commandService: CommandService;
@@ -126,10 +131,12 @@ export default class PlaygroundPanel extends Component<Signature> {
   @service declare private store: StoreService;
 
   @tracked private cardResource: ReturnType<getCard> | undefined;
+  @tracked private fileSearchResults: ReturnType<getCards> | undefined;
   @tracked private fieldChooserIsOpen = false;
   @tracked private newCardNonce = 0;
 
   @tracked private cardOptions: PrerenderedCardLike[] = [];
+  @tracked private selectedFileMetaId: string | undefined;
   @use private moduleChangeTracker = resource(() => {
     let moduleId = internalKeyFor(this.args.codeRef, undefined);
     if (moduleId !== this.#currentModuleId) {
@@ -140,6 +147,7 @@ export default class PlaygroundPanel extends Component<Signature> {
   });
 
   private fieldFormats: Format[] = ['embedded', 'fitted', 'atom', 'edit'];
+  private fileDefFormats: Format[] = ['isolated', 'embedded', 'fitted', 'atom'];
   #creationError = false;
   #currentModuleId: string | undefined;
 
@@ -247,6 +255,13 @@ export default class PlaygroundPanel extends Component<Signature> {
   }
 
   private get realmInfo() {
+    if (this.args.isFileDef) {
+      let fileId = this.selectedFileMetaInstance?.id;
+      if (!fileId) {
+        return undefined;
+      }
+      return this.realm.info(fileId);
+    }
     let url = this.card ? urlForRealmLookup(this.card) : undefined;
     if (!url) {
       return undefined;
@@ -306,10 +321,82 @@ export default class PlaygroundPanel extends Component<Signature> {
   }
 
   private get isLoading() {
+    if (this.args.isFileDef) {
+      return this.fileSearchResults?.isLoading;
+    }
     return this.args.isFieldDef && this.args.isUpdating;
   }
 
+  private searchFileMeta = () => {
+    if (!this.args.isFileDef) {
+      return;
+    }
+    this.fileSearchResults = this.getCards(
+      this,
+      () => this.fileMetaQuery,
+      () => this.realmServer.availableRealmURLs,
+      { isLive: true },
+    );
+  };
+
+  private get fileMetaQuery(): Query | undefined {
+    if (!this.args.isFileDef) {
+      return undefined;
+    }
+    return {
+      filter: { type: this.args.codeRef },
+      sort: [{ by: 'lastModified', direction: 'desc' }],
+    };
+  }
+
+  static FILE_META_DROPDOWN_LIMIT = 20;
+
+  private get fileMetaInstances(): FileDef[] | undefined {
+    return this.fileSearchResults?.instances as FileDef[] | undefined;
+  }
+
+  private get fileMetaDropdownOptions(): FileDef[] | undefined {
+    let instances = this.fileMetaInstances;
+    if (!instances) {
+      return undefined;
+    }
+    if (instances.length <= PlaygroundPanel.FILE_META_DROPDOWN_LIMIT) {
+      return instances;
+    }
+    return instances.slice(0, PlaygroundPanel.FILE_META_DROPDOWN_LIMIT);
+  }
+
+  private get selectedFileMetaInstance(): FileDef | undefined {
+    let instances = this.fileMetaInstances;
+    if (!instances?.length) {
+      return undefined;
+    }
+    let selectedId = this.selectedFileMetaId ?? this.persistedCardId;
+    if (selectedId) {
+      let found = instances.find((f) => f.id === selectedId);
+      if (found) {
+        return found;
+      }
+    }
+    return instances[0];
+  }
+
+  private processFileMetaResults = () => {
+    let instances = this.fileMetaInstances;
+    if (!instances?.length || this.persistedCardId) {
+      return;
+    }
+    let first = instances[0];
+    if (first?.id) {
+      this.selectedFileMetaId = first.id;
+      this.persistSelections(first.id);
+    }
+  };
+
   private makeCardResource = () => {
+    if (this.args.isFileDef) {
+      return;
+    }
     this.cardResource = this.getCard(
       this,
       () => this.playgroundSelection?.cardId,
@@ -414,7 +501,7 @@ export default class PlaygroundPanel extends Component<Signature> {
   }
 
   private get query(): Query | undefined {
-    if (this.args.isFieldDef) {
+    if (this.args.isFieldDef || this.args.isFileDef) {
       return undefined;
     }
     return {
@@ -432,7 +519,7 @@ export default class PlaygroundPanel extends Component<Signature> {
   }
 
   private get expandedQuery(): Query | undefined {
-    if (this.args.isFieldDef) {
+    if (this.args.isFieldDef || this.args.isFileDef) {
       return undefined;
     }
     return {
@@ -485,6 +572,13 @@ export default class PlaygroundPanel extends Component<Signature> {
   }
 
   private get dropdownSelection(): SelectedInstance | undefined {
+    if (this.args.isFileDef) {
+      let instance = this.selectedFileMetaInstance;
+      if (!instance) {
+        return undefined;
+      }
+      return { card: instance, fieldIndex: undefined };
+    }
     if (!this.card) {
       return undefined;
     }
@@ -494,8 +588,12 @@ export default class PlaygroundPanel extends Component<Signature> {
     };
   }
 
-  @action private onSelect(item: PrerenderedCardLike | FieldOption) {
-    if (this.args.isFieldDef) {
+  @action private onSelect(item: PrerenderedCardLike | FieldOption | FileDef) {
+    if (this.args.isFileDef) {
+      let fileId = (item as FileDef).id!;
+      this.selectedFileMetaId = fileId;
+      this.persistSelections(fileId);
+    } else if (this.args.isFieldDef) {
       this.persistSelections(
         this.card!.id,
         this.format,
@@ -517,6 +615,28 @@ export default class PlaygroundPanel extends Component<Signature> {
   private get defaultFormat() {
     return this.args.isFieldDef ? 'embedded' : 'isolated';
   }
+
+  private get fileDefAfterMenuOptions(): MenuItem[] {
+    return [
+      new MenuItem({
+        label: 'Choose file\u2026',
+        action: () => this.chooseFileMeta.perform(),
+        icon: Folder,
+      }),
+    ];
+  }
+
+  private chooseFileMeta = task(async () => {
+    this.closeInstanceChooser();
+    let chosenFile = await chooseFile({
+      fileType: this.args.codeRef,
+      fileTypeName: this.args.codeRef.name,
+    });
+    if (chosenFile?.id) {
+      this.selectedFileMetaId = chosenFile.id;
+      this.persistSelections(chosenFile.id);
+    }
+  });
 
   private get format(): Format {
     return (
@@ -821,6 +941,7 @@ export default class PlaygroundPanel extends Component<Signature> {
 
   <template>
     {{consumeContext this.makeCardResource}}
+    {{consumeContext this.searchFileMeta}}
 
     {{#if this.query}}
       <PrerenderedCardSearch
@@ -874,20 +995,31 @@ export default class PlaygroundPanel extends Component<Signature> {
             <LoadingIndicator @color='var(--boxel-light)' />
           </div>
         {{else}}
-          {{#let (if @isFieldDef this.field this.card) as |card|}}
+          {{#let
+            (if
+              @isFieldDef
+              this.field
+              (if @isFileDef this.selectedFileMetaInstance this.card)
+            )
+            as |card|
+          }}
             {{#let
               (component
                 InstanceSelectDropdown
                 isFieldDef=@isFieldDef
+                isFileDef=@isFileDef
                 cardOptions=this.cardOptions
                 fieldOptions=this.fieldInstances
+                fileMetaOptions=this.fileMetaDropdownOptions
                 findSelectedCard=this.findSelectedCard
                 selection=this.dropdownSelection
                 onSelect=this.onSelect
                 moduleId=this.moduleId
                 persistSelections=this.persistSelections
                 recentCardIds=this.recentCardIds
-                afterMenuOptions=this.afterMenuOptions
+                afterMenuOptions=(if
+                  @isFileDef this.fileDefAfterMenuOptions this.afterMenuOptions
+                )
               )
               as |InstanceChooser|
             }}
@@ -914,6 +1046,7 @@ export default class PlaygroundPanel extends Component<Signature> {
                   </CardContainer>
                 {{/if}}
               {{else if card}}
+                {{afterRender this.processFileMetaResults}}
                 <div
                   class='preview-area'
                   data-test-field-preview-card={{@isFieldDef}}
@@ -928,20 +1061,31 @@ export default class PlaygroundPanel extends Component<Signature> {
                     @card={{card}}
                     @format={{this.format}}
                     @realmInfo={{this.realmInfo}}
-                    @contextMenuItems={{this.contextMenuItems}}
-                    @onEdit={{if this.setEditMode (fn this.setFormat 'edit')}}
+                    @contextMenuItems={{unless
+                      @isFileDef
+                      this.contextMenuItems
+                    }}
+                    @onEdit={{unless
+                      @isFileDef
+                      (if this.setEditMode (fn this.setFormat 'edit'))
+                    }}
                     @onFinishEditing={{if
                       (eq this.format 'edit')
                       (fn this.setFormat this.defaultFormat)
                     }}
                     @isFieldDef={{@isFieldDef}}
+                    @isFileDef={{@isFileDef}}
                   />
                 </div>
                 <section class='instance-chooser-container'>
                   <InstanceChooser />
                   <FormatChooser
                     class='format-chooser'
-                    @formats={{if @isFieldDef this.fieldFormats}}
+                    @formats={{if
+                      @isFileDef
+                      this.fileDefFormats
+                      (if @isFieldDef this.fieldFormats)
+                    }}
                     @format={{this.format}}
                     @setFormat={{this.setFormat}}
                     data-test-playground-format-chooser
@@ -957,6 +1101,14 @@ export default class PlaygroundPanel extends Component<Signature> {
                   @realms={{this.realmServer.availableRealmURLs}}
                   @createNewCard={{this.createNew}}
                 />
+              {{else if @isFileDef}}
+                <p
+                  class='filedef-info-message'
+                  data-test-playground-filedef-message
+                >
+                  <span>No file instances found. File instances are created by
+                    uploading files to a realm.</span>
+                </p>
               {{/if}}
             {{/let}}
           {{/let}}
@@ -1037,6 +1189,21 @@ export default class PlaygroundPanel extends Component<Signature> {
         flex: 1;
         min-height: 100%;
         width: 100%;
+      }
+      .filedef-info-message {
+        display: flex;
+        flex-wrap: wrap;
+        align-content: center;
+        justify-content: center;
+        text-align: center;
+        height: 100%;
+        color: var(--boxel-450);
+        font-weight: 500;
+        padding: var(--boxel-sp-xl);
+        margin-block: 0;
+      }
+      .filedef-info-message > span {
+        max-width: 400px;
       }
 
       .playground-panel-content:has(.social-preview-container) {

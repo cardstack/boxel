@@ -26,6 +26,8 @@ import {
   setupOnSave,
   testRealmInfo,
   testRealmURL,
+  setupRealmCacheTeardown,
+  withCachedRealmSetup,
 } from '../../helpers';
 import { setupBaseRealm, CommandField, Skill } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
@@ -123,12 +125,15 @@ module('Integration | Command | update-room-skills', function (hooks) {
 
   let matrixRoomId: string;
   module('run', function (hooks) {
+    setupRealmCacheTeardown(hooks);
+
     hooks.beforeEach(async function () {
-      await setupIntegrationTestRealm({
-        mockMatrixUtils,
-        realmURL: testRealmURL,
-        contents: {
-          'test-command.gts': `import { Command } from '@cardstack/runtime-common';
+      await withCachedRealmSetup(async () =>
+        setupIntegrationTestRealm({
+          mockMatrixUtils,
+          realmURL: testRealmURL,
+          contents: {
+            'test-command.gts': `import { Command } from '@cardstack/runtime-common';
 
 export class DoThing extends Command {
   static displayName = 'Test Command';
@@ -136,40 +141,41 @@ export class DoThing extends Command {
     return undefined;
   }
 }`,
-          'skill-with-commands.json': new Skill({
-            cardTitle: 'Skill with invalid command',
-            cardDescription: 'test',
-            instructions: 'test',
-            commands: [
-              new CommandField({
-                codeRef: { module: '', name: '' },
-                requiresApproval: false,
-              }),
-              new CommandField({
-                codeRef: {
-                  module: `${testRealmURL}test-command.gts`,
-                  name: 'DoThing',
-                },
-                requiresApproval: false,
-              }),
-            ],
-          }),
-          'Skill/boxel-environment.json': new Skill({
-            title: 'Boxel Environment',
-            description: 'Test environment skill',
-            instructions: 'Test skill card for environment commands',
-            commands: [
-              new CommandField({
-                codeRef: {
-                  module: `${testRealmURL}test-command.gts`,
-                  name: 'DoThing',
-                },
-                requiresApproval: false,
-              }),
-            ],
-          }),
-        },
-      });
+            'skill-with-commands.json': new Skill({
+              cardTitle: 'Skill with invalid command',
+              cardDescription: 'test',
+              instructions: 'test',
+              commands: [
+                new CommandField({
+                  codeRef: { module: '', name: '' },
+                  requiresApproval: false,
+                }),
+                new CommandField({
+                  codeRef: {
+                    module: `${testRealmURL}test-command.gts`,
+                    name: 'DoThing',
+                  },
+                  requiresApproval: false,
+                }),
+              ],
+            }),
+            'Skill/boxel-environment.json': new Skill({
+              title: 'Boxel Environment',
+              description: 'Test environment skill',
+              instructions: 'Test skill card for environment commands',
+              commands: [
+                new CommandField({
+                  codeRef: {
+                    module: `${testRealmURL}test-command.gts`,
+                    name: 'DoThing',
+                  },
+                  requiresApproval: false,
+                }),
+              ],
+            }),
+          },
+        }),
+      );
       let matrixService = getService('matrix-service') as any;
       await matrixService.ready;
       matrixRoomId = mockMatrixUtils.createAndJoinRoom({

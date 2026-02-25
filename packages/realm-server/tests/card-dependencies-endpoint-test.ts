@@ -56,8 +56,12 @@ module(basename(__filename), function () {
           let result: string[] = JSON.parse(response.text.trim());
 
           assert.ok(
+            result.includes('https://cardstack.com/base/card-api'),
+            'card-api is a dependency',
+          );
+          assert.false(
             result.includes('http://127.0.0.1:4444/person'),
-            'person.gts is a dependency',
+            'self module is excluded from dependencies',
           );
         });
 
@@ -72,8 +76,12 @@ module(basename(__filename), function () {
           let result: string[] = JSON.parse(response.text.trim());
 
           assert.ok(
+            result.includes('https://cardstack.com/base/card-api'),
+            'card-api is a dependency',
+          );
+          assert.false(
             result.includes('http://127.0.0.1:4444/person'),
-            'person.gts is a dependency',
+            'self module is excluded from dependencies',
           );
         });
 
@@ -90,6 +98,7 @@ module(basename(__filename), function () {
         setupPermissionedRealm(hooks, {
           permissions: {
             john: ['read'],
+            '@node-test_realm:localhost': ['read', 'realm-owner'],
           },
           onRealmSetup,
         });

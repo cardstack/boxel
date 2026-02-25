@@ -12,6 +12,8 @@ import {
   setupCardLogs,
   setupLocalIndexing,
   setupIntegrationTestRealm,
+  setupRealmCacheTeardown,
+  withCachedRealmSetup,
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupRenderingTest } from '../helpers/setup';
@@ -37,69 +39,73 @@ module('Unit | loader prefetch', function (hooks) {
 
   let loader: Loader;
 
+  setupRealmCacheTeardown(hooks);
+
   hooks.beforeEach(async function (this: RenderingTestContext) {
     loader = getService('loader-service').loader;
 
-    await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      contents: {
-        // Base prefetch fixtures
-        'prefetch/main.js': `
+    await withCachedRealmSetup(async () =>
+      setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {
+          // Base prefetch fixtures
+          'prefetch/main.js': `
           import { slowValue } from './slow-dep';
           export function mainValue() { return slowValue; }
         `,
-        'prefetch/slow-dep.js': `
+          'prefetch/slow-dep.js': `
           export const slowValue = 'slow';
         `,
 
-        // Broken dependency fixtures
-        'prefetch/broken-main.js': `
+          // Broken dependency fixtures
+          'prefetch/broken-main.js': `
           import './broken-dep';
           export function usesBroken() { return true; }
         `,
-        'prefetch/broken-dep.js': `
+          'prefetch/broken-dep.js': `
           export const shouldNotLoad = true;
         `,
 
-        // Shared dep fixtures
-        'prefetch/shared-parent.js': `
+          // Shared dep fixtures
+          'prefetch/shared-parent.js': `
           import { shared } from './shared-dep';
           export function parent() { return shared; }
         `,
-        'prefetch/shared-dep.js': `
+          'prefetch/shared-dep.js': `
           export const shared = 'shared';
         `,
 
-        // Two-parents race fixtures
-        'prefetch/parent-a.js': `
+          // Two-parents race fixtures
+          'prefetch/parent-a.js': `
           import { shared } from './shared-dep';
           export const a = shared;
         `,
-        'prefetch/parent-b.js': `
+          'prefetch/parent-b.js': `
           import { shared } from './shared-dep';
           export const b = shared;
         `,
 
-        // Transitive prefetch fixtures
-        'prefetch/deep-main.js': `
+          // Transitive prefetch fixtures
+          'prefetch/deep-main.js': `
           import './mid';
           export const ok = true;
         `,
-        'prefetch/mid.js': `
+          'prefetch/mid.js': `
           import { leaf } from './leaf';
           export const mid = leaf;
         `,
-        'prefetch/leaf.js': `
+          'prefetch/leaf.js': `
           export const leaf = 'leaf';
         `,
 
-        // Shim fixture (no file for './shimmed' on purpose; it's shimmed)
-        'prefetch/uses-shim.js': `
+          // Shim fixture (no file for './shimmed' on purpose; it's shimmed)
+          'prefetch/uses-shim.js': `
           import { x } from './shimmed';
           export const y = x;
         `,
-      },
-    });
+        },
+      }),
+    );
   });
 
   setupCardLogs(

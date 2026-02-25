@@ -26,6 +26,7 @@ import {
   setupAcceptanceTestRealm,
   setupAuthEndpoints,
   setupLocalIndexing,
+  setupRealmCacheTeardown,
   setMonacoContent,
   setupOnSave,
   setupUserSubscription,
@@ -35,6 +36,7 @@ import {
   withoutLoaderMonitoring,
   type TestContextWithSave,
   assertMessages,
+  withCachedRealmSetup,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import {
@@ -224,6 +226,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       mockMatrixUtils;
 
     setupOnSave(hooks);
+    setupRealmCacheTeardown(hooks);
 
     hooks.beforeEach(async function () {
       let loader = getService('loader-service').loader;
@@ -238,177 +241,179 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       setupUserSubscription();
       setupAuthEndpoints();
 
-      ({ realm } = await setupAcceptanceTestRealm({
-        mockMatrixUtils,
-        realmURL: testRealmURL,
-        contents: {
-          ...SYSTEM_CARD_FIXTURE_CONTENTS,
-          'index.json': new CardsGrid(),
-          'author.gts': authorCard,
-          'blog-post.gts': blogPostCard,
-          'code-ref-driver.gts': codeRefDriverCard,
-          'test-spec.gts': testSpecCard,
-          'person.gts': personCard,
-          'head-preview.gts': headPreviewCard,
-          'Author/jane-doe.json': {
-            data: {
-              attributes: {
-                firstName: 'Jane',
-                lastName: 'Doe',
-                bio: "Jane Doe is the Senior Managing Editor at <em>Ramped.com</em>, where she leads content strategy, editorial direction, and ensures the highest standards of quality across all publications. With over a decade of experience in digital media and editorial management, Jane has a proven track record of shaping impactful narratives, growing engaged audiences, and collaborating with cross-functional teams to deliver compelling content. When she's not editing, you can find her exploring new books, hiking, or indulging in her love of photography.",
-              },
-              meta: {
-                adoptsFrom: {
-                  module: `${testRealmURL}author`,
-                  name: 'Author',
+      ({ realm } = await withCachedRealmSetup(async () =>
+        setupAcceptanceTestRealm({
+          mockMatrixUtils,
+          realmURL: testRealmURL,
+          contents: {
+            ...SYSTEM_CARD_FIXTURE_CONTENTS,
+            'index.json': new CardsGrid(),
+            'author.gts': authorCard,
+            'blog-post.gts': blogPostCard,
+            'code-ref-driver.gts': codeRefDriverCard,
+            'test-spec.gts': testSpecCard,
+            'person.gts': personCard,
+            'head-preview.gts': headPreviewCard,
+            'Author/jane-doe.json': {
+              data: {
+                attributes: {
+                  firstName: 'Jane',
+                  lastName: 'Doe',
+                  bio: "Jane Doe is the Senior Managing Editor at <em>Ramped.com</em>, where she leads content strategy, editorial direction, and ensures the highest standards of quality across all publications. With over a decade of experience in digital media and editorial management, Jane has a proven track record of shaping impactful narratives, growing engaged audiences, and collaborating with cross-functional teams to deliver compelling content. When she's not editing, you can find her exploring new books, hiking, or indulging in her love of photography.",
                 },
-              },
-            },
-          },
-          'HeadPreview/example.json': {
-            data: {
-              attributes: {
-                cardTitle: 'Definition Title',
-                cardDescription: 'Definition description',
-                url: 'https://example.com/definition',
-              },
-              meta: {
-                adoptsFrom: {
-                  module: `${testRealmURL}head-preview`,
-                  name: 'HeadPreview',
-                },
-              },
-            },
-          },
-          'BlogPost/remote-work.json': {
-            data: {
-              attributes: {
-                title: 'The Ultimate Guide to Remote Work',
-                cardDescription:
-                  'In today’s digital age, remote work has transformed from a luxury to a necessity. This comprehensive guide will help you navigate the world of remote work, offering tips, tools, and best practices for success.',
-              },
-              relationships: {
-                author: {
-                  links: {
-                    self: `${testRealmURL}Author/jane-doe`,
+                meta: {
+                  adoptsFrom: {
+                    module: `${testRealmURL}author`,
+                    name: 'Author',
                   },
                 },
               },
-              meta: {
-                adoptsFrom: {
-                  module: `${testRealmURL}blog-post`,
-                  name: 'BlogPost',
-                },
-              },
             },
-          },
-          'BlogPost/mad-hatter.json': {
-            data: {
-              attributes: { cardTitle: 'Mad As a Hatter' },
-              relationships: {
-                author: {
-                  links: {
-                    self: `${testRealmURL}Author/jane-doe`,
+            'HeadPreview/example.json': {
+              data: {
+                attributes: {
+                  cardTitle: 'Definition Title',
+                  cardDescription: 'Definition description',
+                  url: 'https://example.com/definition',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: `${testRealmURL}head-preview`,
+                    name: 'HeadPreview',
                   },
                 },
               },
-              meta: {
-                adoptsFrom: {
-                  module: `${testRealmURL}blog-post`,
-                  name: 'BlogPost',
-                },
-              },
             },
-          },
-          'BlogPost/urban-living.json': {
-            data: {
-              attributes: {
-                cardTitle:
-                  'The Future of Urban Living: Skyscrapers or Sustainable Communities?',
-              },
-              relationships: {
-                author: {
-                  links: {
-                    self: `${testRealmURL}Author/jane-doe`,
+            'BlogPost/remote-work.json': {
+              data: {
+                attributes: {
+                  title: 'The Ultimate Guide to Remote Work',
+                  cardDescription:
+                    'In today’s digital age, remote work has transformed from a luxury to a necessity. This comprehensive guide will help you navigate the world of remote work, offering tips, tools, and best practices for success.',
+                },
+                relationships: {
+                  author: {
+                    links: {
+                      self: `${testRealmURL}Author/jane-doe`,
+                    },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: `${testRealmURL}blog-post`,
+                    name: 'BlogPost',
                   },
                 },
               },
-              meta: {
-                adoptsFrom: {
-                  module: `${testRealmURL}blog-post`,
-                  name: 'BlogPost',
+            },
+            'BlogPost/mad-hatter.json': {
+              data: {
+                attributes: { cardTitle: 'Mad As a Hatter' },
+                relationships: {
+                  author: {
+                    links: {
+                      self: `${testRealmURL}Author/jane-doe`,
+                    },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: `${testRealmURL}blog-post`,
+                    name: 'BlogPost',
+                  },
+                },
+              },
+            },
+            'BlogPost/urban-living.json': {
+              data: {
+                attributes: {
+                  cardTitle:
+                    'The Future of Urban Living: Skyscrapers or Sustainable Communities?',
+                },
+                relationships: {
+                  author: {
+                    links: {
+                      self: `${testRealmURL}Author/jane-doe`,
+                    },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: `${testRealmURL}blog-post`,
+                    name: 'BlogPost',
+                  },
+                },
+              },
+            },
+            'Category/city-design.json': {
+              data: {
+                attributes: { cardInfo: { name: 'City Design' } },
+                meta: {
+                  adoptsFrom: {
+                    module: `${testRealmURL}blog-post`,
+                    name: 'Category',
+                  },
+                },
+              },
+            },
+            'Category/future-tech.json': {
+              data: {
+                attributes: { cardInfo: { name: 'Future Tech' } },
+                meta: {
+                  adoptsFrom: {
+                    module: `${testRealmURL}blog-post`,
+                    name: 'Category',
+                  },
+                },
+              },
+            },
+            'Category/interior-design.json': {
+              data: {
+                attributes: { cardInfo: { name: 'Interior Design' } },
+                meta: {
+                  adoptsFrom: {
+                    module: `${testRealmURL}blog-post`,
+                    name: 'Category',
+                  },
+                },
+              },
+            },
+            'Category/landscaping.json': {
+              data: {
+                attributes: { cardInfo: { name: 'Landscaping' } },
+                meta: {
+                  adoptsFrom: {
+                    module: `${testRealmURL}blog-post`,
+                    name: 'Category',
+                  },
+                },
+              },
+            },
+            'Category/home-gym.json': {
+              data: {
+                attributes: { cardInfo: { name: 'Home Gym' } },
+                meta: {
+                  adoptsFrom: {
+                    module: `${testRealmURL}blog-post`,
+                    name: 'Category',
+                  },
+                },
+              },
+            },
+            'Person/pet-mango.json': {
+              data: {
+                attributes: { cardInfo: { name: 'Mango' } },
+                meta: {
+                  adoptsFrom: {
+                    module: `${testRealmURL}person`,
+                    name: 'Pet',
+                  },
                 },
               },
             },
           },
-          'Category/city-design.json': {
-            data: {
-              attributes: { cardInfo: { name: 'City Design' } },
-              meta: {
-                adoptsFrom: {
-                  module: `${testRealmURL}blog-post`,
-                  name: 'Category',
-                },
-              },
-            },
-          },
-          'Category/future-tech.json': {
-            data: {
-              attributes: { cardInfo: { name: 'Future Tech' } },
-              meta: {
-                adoptsFrom: {
-                  module: `${testRealmURL}blog-post`,
-                  name: 'Category',
-                },
-              },
-            },
-          },
-          'Category/interior-design.json': {
-            data: {
-              attributes: { cardInfo: { name: 'Interior Design' } },
-              meta: {
-                adoptsFrom: {
-                  module: `${testRealmURL}blog-post`,
-                  name: 'Category',
-                },
-              },
-            },
-          },
-          'Category/landscaping.json': {
-            data: {
-              attributes: { cardInfo: { name: 'Landscaping' } },
-              meta: {
-                adoptsFrom: {
-                  module: `${testRealmURL}blog-post`,
-                  name: 'Category',
-                },
-              },
-            },
-          },
-          'Category/home-gym.json': {
-            data: {
-              attributes: { cardInfo: { name: 'Home Gym' } },
-              meta: {
-                adoptsFrom: {
-                  module: `${testRealmURL}blog-post`,
-                  name: 'Category',
-                },
-              },
-            },
-          },
-          'Person/pet-mango.json': {
-            data: {
-              attributes: { cardInfo: { name: 'Mango' } },
-              meta: {
-                adoptsFrom: {
-                  module: `${testRealmURL}person`,
-                  name: 'Pet',
-                },
-              },
-            },
-          },
-        },
-      }));
+        }),
+      ));
 
       setRecentFiles([
         [testRealmURL, 'blog-post.gts'],
@@ -1513,6 +1518,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
 
     let { setActiveRealms, setRealmPermissions, createAndJoinRoom } =
       mockMatrixUtils;
+    setupRealmCacheTeardown(hooks);
 
     hooks.beforeEach(async function () {
       createAndJoinRoom({
@@ -1527,33 +1533,36 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       additionalRealmURL = `${realmServerService.url}testuser/aaa/`; // writeable realm that is lexically before the personal realm
       setActiveRealms([additionalRealmURL, personalRealmURL]);
 
-      await setupAcceptanceTestRealm({
-        mockMatrixUtils,
-        realmURL: personalRealmURL,
-        contents: {
-          ...SYSTEM_CARD_FIXTURE_CONTENTS,
-          'author-card.gts': authorCard,
-          'StyleReference/local-style.json': localStyleReferenceCard,
-          '.realm.json': {
-            name: `Test User's Workspace`,
-            backgroundURL: 'https://i.postimg.cc/NjcjbyD3/4k-origami-flock.jpg',
-            iconURL: 'https://i.postimg.cc/Rq550Bwv/T.png',
+      await withCachedRealmSetup(async () => {
+        await setupAcceptanceTestRealm({
+          mockMatrixUtils,
+          realmURL: personalRealmURL,
+          contents: {
+            ...SYSTEM_CARD_FIXTURE_CONTENTS,
+            'author-card.gts': authorCard,
+            'StyleReference/local-style.json': localStyleReferenceCard,
+            '.realm.json': {
+              name: `Test User's Workspace`,
+              backgroundURL:
+                'https://i.postimg.cc/NjcjbyD3/4k-origami-flock.jpg',
+              iconURL: 'https://i.postimg.cc/Rq550Bwv/T.png',
+            },
           },
-        },
-      });
+        });
 
-      await setupAcceptanceTestRealm({
-        mockMatrixUtils,
-        realmURL: additionalRealmURL,
-        contents: {
-          ...SYSTEM_CARD_FIXTURE_CONTENTS,
-          'author-card.gts': authorCard,
-          '.realm.json': {
-            name: `Additional Workspace`,
-            backgroundURL: 'https://i.postimg.cc/4ycXQZ94/4k-powder-puff.jpg',
-            iconURL: 'https://i.postimg.cc/BZwv0LyC/A.png',
+        await setupAcceptanceTestRealm({
+          mockMatrixUtils,
+          realmURL: additionalRealmURL,
+          contents: {
+            ...SYSTEM_CARD_FIXTURE_CONTENTS,
+            'author-card.gts': authorCard,
+            '.realm.json': {
+              name: `Additional Workspace`,
+              backgroundURL: 'https://i.postimg.cc/4ycXQZ94/4k-powder-puff.jpg',
+              iconURL: 'https://i.postimg.cc/BZwv0LyC/A.png',
+            },
           },
-        },
+        });
       });
 
       setRealmPermissions({
@@ -1655,6 +1664,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
     setupApplicationTest(hooks);
     setupLocalIndexing(hooks);
     setupOnSave(hooks);
+    setupRealmCacheTeardown(hooks);
 
     let mockMatrixUtils = setupMockMatrix(hooks, {
       loggedInAs: '@testuser:localhost',
@@ -1734,28 +1744,30 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       setRealmPermissions({
         [testRealmURL]: ['read', 'write'],
       });
-      ({ realm } = await setupAcceptanceTestRealm({
-        mockMatrixUtils,
-        realmURL: testRealmURL,
-        contents: {
-          ...SYSTEM_CARD_FIXTURE_CONTENTS,
-          'boom-pet.gts': boomPet,
-          'person.gts': personCard,
-          'boom-person.gts': boomPerson,
-          'syntax-error.gts': syntaxError,
-          'Person/delilah.json': {
-            data: {
-              attributes: { cardInfo: { name: 'Delilah' } },
-              meta: {
-                adoptsFrom: {
-                  module: `${testRealmURL}person`,
-                  name: 'Person',
+      ({ realm } = await withCachedRealmSetup(async () =>
+        setupAcceptanceTestRealm({
+          mockMatrixUtils,
+          realmURL: testRealmURL,
+          contents: {
+            ...SYSTEM_CARD_FIXTURE_CONTENTS,
+            'boom-pet.gts': boomPet,
+            'person.gts': personCard,
+            'boom-person.gts': boomPerson,
+            'syntax-error.gts': syntaxError,
+            'Person/delilah.json': {
+              data: {
+                attributes: { cardInfo: { name: 'Delilah' } },
+                meta: {
+                  adoptsFrom: {
+                    module: `${testRealmURL}person`,
+                    name: 'Person',
+                  },
                 },
               },
             },
           },
-        },
-      }));
+        }),
+      ));
     });
 
     test('it renders a module error', async function (assert) {

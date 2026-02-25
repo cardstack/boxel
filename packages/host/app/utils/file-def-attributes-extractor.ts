@@ -110,11 +110,7 @@ export class FileDefAttributesExtractor {
       return {
         status: 'error',
         searchDoc: null,
-        deps: [
-          this.#fileURL,
-          this.#fileDefCodeRef.module,
-          this.#baseFileDefCodeRef.module,
-        ],
+        deps: [this.#fileDefCodeRef.module, this.#baseFileDefCodeRef.module],
         error: this.#buildError(
           this.#fileURL,
           new Error('Base FileDef module did not export extractAttributes'),
@@ -122,7 +118,7 @@ export class FileDefAttributesExtractor {
       };
     }
 
-    let deps = [this.#fileURL, this.#fileDefCodeRef.module];
+    let deps = [this.#fileDefCodeRef.module];
     let error: RenderError | undefined;
     let mismatch = false;
 

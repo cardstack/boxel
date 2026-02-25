@@ -418,10 +418,10 @@ module(`server-endpoints/${basename(__filename)}`, function () {
             .set('Content-Type', 'application/json');
           assert.deepEqual(response.body, {
             fileErrors: 0,
-            filesIndexed: 2,
+            filesIndexed: 1,
             instanceErrors: 0,
-            instancesIndexed: 2,
-            totalIndexEntries: 4,
+            instancesIndexed: 1,
+            totalIndexEntries: 2,
           });
         }
         let finalJobs = await context.dbAdapter.execute('select * from jobs');
