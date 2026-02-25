@@ -104,6 +104,12 @@ export default class FileUploadService extends Service {
         return;
       }
 
+      if (!file.name.includes('.')) {
+        throw new Error(
+          `The file "${file.name}" has no extension. Please select a file with an extension (e.g. .png, .txt, .gts).`,
+        );
+      }
+
       task.fileName = file.name;
       task.state = 'uploading';
 

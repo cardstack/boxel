@@ -26,8 +26,8 @@ import {
   LoadingIndicator,
   ResizablePanelGroup,
 } from '@cardstack/boxel-ui/components';
-import { not, MenuItem } from '@cardstack/boxel-ui/helpers';
-import { File } from '@cardstack/boxel-ui/icons';
+import { not, MenuItem, MenuDivider } from '@cardstack/boxel-ui/helpers';
+import { File, Upload } from '@cardstack/boxel-ui/icons';
 
 import type { CodeRef } from '@cardstack/runtime-common';
 import {
@@ -54,6 +54,7 @@ import type {
 } from '@cardstack/host/resources/module-contents';
 import type CardService from '@cardstack/host/services/card-service';
 import type CodeSemanticsService from '@cardstack/host/services/code-semantics-service';
+import type FileUploadService from '@cardstack/host/services/file-upload';
 import type { FileView } from '@cardstack/host/services/operator-mode-state-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type PlaygroundPanelService from '@cardstack/host/services/playground-panel-service';
@@ -143,6 +144,7 @@ export default class CodeSubmode extends Component<Signature> {
 
   @service declare private cardService: CardService;
   @service declare private codeSemanticsService: CodeSemanticsService;
+  @service('file-upload') declare private fileUpload: FileUploadService;
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private playgroundPanelService: PlaygroundPanelService;
   @service declare private recentFilesService: RecentFilesService;
@@ -413,26 +415,37 @@ export default class CodeSubmode extends Component<Signature> {
     );
   }
 
-  private get menuItems(): MenuItem[] {
-    return newFileTypes.flatMap(({ id, icon, description, extension }) => {
-      if (
-        id === 'duplicate-instance' ||
-        id === 'spec-instance' ||
-        id === 'file-definition'
-      ) {
-        return [];
-      }
-      let displayName = capitalize(startCase(id));
-      return [
-        new MenuItem({
-          label: displayName,
-          action: () => this.createFile.perform({ id, displayName }),
-          subtext: description,
-          icon,
-          postscript: extension,
-        }),
-      ];
-    });
+  private get menuItems(): (MenuItem | MenuDivider)[] {
+    let items: (MenuItem | MenuDivider)[] = newFileTypes.flatMap(
+      ({ id, icon, description, extension }) => {
+        if (
+          id === 'duplicate-instance' ||
+          id === 'spec-instance' ||
+          id === 'file-definition'
+        ) {
+          return [];
+        }
+        let displayName = capitalize(startCase(id));
+        return [
+          new MenuItem({
+            label: displayName,
+            action: () => this.createFile.perform({ id, displayName }),
+            subtext: description,
+            icon,
+            postscript: extension,
+          }),
+        ];
+      },
+    );
+    items.push(new MenuDivider());
+    items.push(
+      new MenuItem({
+        label: 'Upload File…',
+        action: () => this.uploadFile.perform(),
+        icon: Upload,
+      }),
+    );
+    return items;
   }
 
   private get newFileOptions(): NewFileOptions {
@@ -559,6 +572,18 @@ export default class CodeSubmode extends Component<Signature> {
       }
     },
   );
+
+  private uploadFile = dropTask(async () => {
+    let realmURL = this.operatorModeStateService.realmURL;
+    if (!realmURL) {
+      throw new Error('No realm available for upload');
+    }
+    let task = this.fileUpload.uploadFile({ realmURL: new URL(realmURL) });
+    let fileDef = await task.result;
+    if (fileDef?.url) {
+      await this.operatorModeStateService.updateCodePath(new URL(fileDef.url));
+    }
+  });
 
   private async withTestWaiters<T>(cb: () => Promise<T>) {
     let token = waiter.beginAsync();
