@@ -7,6 +7,7 @@ import type {
   FileMetaResource,
   Loader,
   LooseCardResource,
+  LooseFileMetaResource,
   LooseSingleCardDocument,
   LooseSingleFileMetaDocument,
   Meta,
@@ -254,7 +255,7 @@ export function serializeCardResource(
   opts?: SerializeOpts,
   visited: Set<string> = new Set(),
   resourceType: string = CardResourceType,
-): LooseCardResource {
+): LooseCardResource | LooseFileMetaResource {
   let adoptsFrom = identifyCard(
     model.constructor,
     opts?.useAbsoluteURL ? undefined : opts?.maybeRelativeURL,
@@ -318,7 +319,7 @@ export function serializeFileDef(
           let url = maybeURL(possibleURL, modelRelativeTo);
           if (!url) {
             throw new Error(
-              `could not determine url from '${maybeRelativeURL}' relative to ${modelRelativeTo}`,
+              `could not determine url from '${possibleURL}' relative to ${modelRelativeTo}`,
             );
           }
           if (!modelRelativeTo) {
