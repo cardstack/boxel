@@ -6,6 +6,8 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
 import { consume } from 'ember-provide-consume-context';
+import { resource, use } from 'ember-resources';
+import { TrackedObject } from 'tracked-built-ins';
 
 import pluralize from 'pluralize';
 
@@ -19,8 +21,13 @@ import {
   type getCardCollection,
   GetCardCollectionContextName,
   GetCardContextName,
+  loadCardDef,
   specRef,
 } from '@cardstack/runtime-common';
+import {
+  isCardTypeFilter,
+  isEveryFilter,
+} from '@cardstack/runtime-common/query';
 
 import consumeContext from '@cardstack/host/helpers/consume-context';
 import { urlForRealmLookup } from '@cardstack/host/lib/utils';
@@ -31,7 +38,7 @@ import type RealmServerService from '@cardstack/host/services/realm-server';
 import type RecentCards from '@cardstack/host/services/recent-cards-service';
 import type StoreService from '@cardstack/host/services/store';
 
-import type { CardContext, CardDef } from 'https://cardstack.com/base/card-api';
+import type { BaseDef, CardContext, CardDef } from 'https://cardstack.com/base/card-api';
 
 import {
   SECTION_DISPLAY_LIMIT_FOCUSED,
@@ -134,6 +141,50 @@ export default class SearchContent extends Component<Signature> {
   private makeCardResource = () => {
     this.cardResource = this.getCard(this, () => this.searchKeyAsURL);
   };
+
+  private get filterTypeRef(): CodeRef | undefined {
+    const filter = this.args.baseFilter;
+    if (!filter) {
+      return undefined;
+    }
+    // EveryFilter with 'on' scoping (e.g. specRef in chooseCard)
+    if ('on' in filter && filter.on) {
+      return filter.on;
+    }
+    // Top-level CardTypeFilter { type: CodeRef } (e.g. linksTo)
+    if (isCardTypeFilter(filter)) {
+      return filter.type;
+    }
+    // EveryFilter containing a CardTypeFilter (e.g. linksToMany)
+    if (isEveryFilter(filter)) {
+      for (const sub of filter.every) {
+        if (isCardTypeFilter(sub)) {
+          return sub.type;
+        }
+      }
+    }
+    return undefined;
+  }
+
+  @use private filterTypeClassResource = resource(() => {
+    let state = new TrackedObject<{
+      value: typeof BaseDef | undefined;
+    }>({ value: undefined });
+    const typeRef = this.filterTypeRef;
+    if (!typeRef) {
+      return state;
+    }
+    (async () => {
+      try {
+        state.value = await loadCardDef(typeRef, {
+          loader: this.loaderService.loader,
+        });
+      } catch (_e) {
+        state.value = undefined;
+      }
+    })();
+    return state;
+  });
 
   private searchPrerenderedCards = getPrerenderedSearch(
     this,
@@ -322,14 +373,21 @@ export default class SearchContent extends Component<Signature> {
     const realmFiltered = cards.filter(
       (c) => c.id && realms.some((realmUrl) => c.id.startsWith(realmUrl)),
     );
+
+    // Apply type filter when baseFilter specifies a type (modal/chooseCard mode)
+    const filterTypeClass = this.filterTypeClassResource?.value;
+    const typeFiltered = filterTypeClass
+      ? realmFiltered.filter((c) => c instanceof filterTypeClass)
+      : realmFiltered;
+
     if (this.args.isCompact) {
-      return realmFiltered;
+      return typeFiltered;
     }
-    let filtered = realmFiltered;
+    let filtered = typeFiltered;
     const term = this.searchTerm;
     if (term) {
       const lowerTerm = term.toLowerCase();
-      filtered = cards.filter((c) =>
+      filtered = typeFiltered.filter((c) =>
         (c.cardTitle ?? '').toLowerCase().includes(lowerTerm),
       );
     }

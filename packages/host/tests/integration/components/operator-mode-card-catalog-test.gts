@@ -825,6 +825,35 @@ module('Integration | operator-mode | card catalog', function (hooks) {
       .doesNotExist('Pet/mango is hidden when its realm is not selected');
   });
 
+  test(`card catalog modal recents only shows cards matching the type filter`, async function (assert) {
+    let recentCardsService = getService('recent-cards-service');
+    // Add both a Spec card and a non-Spec card to recents
+    recentCardsService.add(`${testRealmURL}Pet/mango`);
+    recentCardsService.add(`${testRealmURL}Spec/pet-card`);
+
+    ctx.setCardInOperatorModeState(`${testRealmURL}grid`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+    await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
+    await click(`[data-test-boxel-filter-list-button="All Cards"]`);
+    await waitFor(`[data-test-cards-grid-item]`);
+    await click(`[data-test-create-new-card-button]`);
+    await waitFor('[data-test-card-catalog-modal]');
+    await settled();
+
+    assert
+      .dom(`[data-test-card-catalog-item="${testRealmURL}Pet/mango"]`)
+      .doesNotExist(
+        'non-Spec recent cards are filtered out in the card catalog modal',
+      );
+    assert
+      .dom(`[data-test-card-catalog-item="${testRealmURL}Spec/pet-card"]`)
+      .exists('Spec recent card appears in the card catalog modal');
+  });
+
   test(`compact mode shows no full header and recents remain clickable`, async function (assert) {
     ctx.setCardInOperatorModeState(`${testRealmURL}grid`);
     await renderComponent(
