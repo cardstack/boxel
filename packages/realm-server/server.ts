@@ -418,8 +418,8 @@ export class RealmServer {
       }),
     ]);
 
+    let doc = new JSDOM().window.document;
     if (headHTML != null) {
-      let doc = new JSDOM().window.document;
       let sanitized = sanitizeHeadHTMLToString(headHTML, doc);
       if (sanitized !== null) {
         headHTML = sanitized;
@@ -464,9 +464,13 @@ export class RealmServer {
       );
     }
 
-    let headHasIcons =
-      headHTML != null &&
-      /rel=["'](?:icon|apple-touch-icon)["']/.test(headHTML);
+    let headHasIcons = false;
+    if (headHTML != null) {
+      let fragment = doc.createRange().createContextualFragment(headHTML);
+      headHasIcons = fragment.querySelector(
+        'link[rel~="icon"], link[rel~="apple-touch-icon"]',
+      ) != null;
+    }
     if (!headHasIcons) {
       headFragments.push(...this.defaultIconLinks());
     }
