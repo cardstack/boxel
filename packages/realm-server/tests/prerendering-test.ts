@@ -1552,6 +1552,14 @@ module(basename(__filename), function () {
     });
 
     hooks.before(async function () {
+      // setupPermissionedRealms(..., { mode: 'before' }) registers its own
+      // hooks.before that runs first and populates permissionedRealms via
+      // onRealmSetup(). This guard makes that ordering contract explicit.
+      if (permissionedRealms.length === 0) {
+        throw new Error(
+          'expected permissionedRealms to be populated before indexing wait',
+        );
+      }
       await Promise.all(permissionedRealms.map((realm) => realm.indexing()));
     });
 
