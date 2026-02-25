@@ -3,7 +3,7 @@ import type { Test, SuperTest } from 'supertest';
 import { basename } from 'path';
 import type { Realm } from '@cardstack/runtime-common';
 import { setupPermissionedRealm, createJWT } from './helpers';
-import { PRERENDERED_HTML_FORMATS } from '@cardstack/runtime-common';
+import { PRERENDERED_HTML_FORMATS, baseRealm } from '@cardstack/runtime-common';
 import type { Query } from '@cardstack/runtime-common/query';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
@@ -74,6 +74,7 @@ module(basename(__filename), function () {
                   },
                 },
               },
+              'hello.md': '# Hello from FileDef content',
             },
             onRealmSetup,
           });
@@ -147,6 +148,48 @@ module(basename(__filename), function () {
               cardDefModuleDependencies,
             );
 
+            assert.strictEqual(
+              json.meta.page.total,
+              1,
+              'total count is correct',
+            );
+          });
+
+          test('returns prerendered file-meta results for FileDef queries', async function (assert) {
+            let query: Query & { prerenderedHtmlFormat: string } = {
+              filter: {
+                on: {
+                  module: `${baseRealm.url}file-api`,
+                  name: 'FileDef',
+                },
+                eq: {
+                  url: `${realmHref}hello.md`,
+                },
+              },
+              prerenderedHtmlFormat: 'embedded',
+            };
+            let response = await request
+              .post(searchPath)
+              .set('Accept', 'application/vnd.card+json')
+              .set('X-HTTP-Method-Override', 'QUERY')
+              .send(query);
+
+            assert.strictEqual(response.status, 200, 'HTTP 200 status');
+            let json = response.body;
+
+            assert.strictEqual(
+              json.data.length,
+              1,
+              'one file-meta entry is returned in the search results',
+            );
+            assert.strictEqual(json.data[0].type, 'prerendered-card');
+            assert.strictEqual(json.data[0].id, `${realmHref}hello.md`);
+            assert.true(
+              json.data[0].attributes.html.includes(
+                'Hello from FileDef content',
+              ),
+              `embedded html is from the prerendered FileDef: ${json.data[0].attributes.html}`,
+            );
             assert.strictEqual(
               json.meta.page.total,
               1,

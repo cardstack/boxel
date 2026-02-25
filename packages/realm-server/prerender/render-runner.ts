@@ -695,7 +695,7 @@ export class RenderRunner {
     url,
     auth,
     fileData,
-    types: _types,
+    types,
     opts,
     renderOptions,
   }: {
@@ -749,6 +749,7 @@ export class RenderRunner {
 
       let renderStart = Date.now();
       let error: RenderError | undefined;
+      let shortCircuit = false;
       let options: RenderRouteOptions = {
         ...(renderOptions ?? {}),
         fileRender: true,
@@ -769,11 +770,8 @@ export class RenderRunner {
         `file render: visit ${url} at: ${this.#boxelHostURL}/render/${encodeURIComponent(url)}/${this.#nonce}/${optionsSegment}/html/isolated/0`,
       );
 
-      // Render isolated HTML only – additional formats (head, atom, icon,
-      // fitted, embedded) are deferred to keep boot-indexing fast.  Each
-      // Puppeteer transition costs 2-3 s, so rendering all formats for every
-      // file would make boot-time O(files × formats × 3 s) which easily
-      // exceeds test timeouts.
+      // We render isolated first since it eagerly exercises linked field paths
+      // and surfaces fundamental render errors early.
       let result = await withTimeout(
         page,
         async () => {
@@ -801,6 +799,10 @@ export class RenderRunner {
         );
         if (evicted) {
           poolInfo.evicted = true;
+          shortCircuit = true;
+        }
+        if (this.#isAuthError(error)) {
+          shortCircuit = true;
         }
       } else {
         let capture = result as RenderCapture;
@@ -819,18 +821,139 @@ export class RenderRunner {
           );
           if (evicted) {
             poolInfo.evicted = true;
+            shortCircuit = true;
+          }
+          if (this.#isAuthError(error)) {
+            shortCircuit = true;
+          }
+        }
+      }
+
+      if (shortCircuit) {
+        let response: FileRenderResponse = {
+          ...(error ? { error } : {}),
+          iconHTML: null,
+          isolatedHTML,
+          headHTML: null,
+          atomHTML: null,
+          embeddedHTML: null,
+          fittedHTML: null,
+        };
+        response.error = this.#mergeConsoleErrors(pageId, response.error);
+        return {
+          response,
+          timings: { launchMs, renderMs: Date.now() - renderStart },
+          pool: poolInfo,
+        };
+      }
+
+      let headHTML: string | null = null,
+        atomHTML: string | null = null,
+        iconHTML: string | null = null,
+        embeddedHTML: Record<string, string> | null = null,
+        fittedHTML: Record<string, string> | null = null;
+
+      if (!shortCircuit) {
+        let headHTMLResult = await this.#step(realm, 'file head render', () =>
+          withTimeout(
+            page,
+            () => renderHTML(page, 'head', 0, captureOptions),
+            opts?.timeoutMs,
+          ),
+        );
+        if (headHTMLResult.ok) {
+          headHTML = headHTMLResult.value as string;
+        } else {
+          error = error ?? headHTMLResult.error;
+          markTimeout(headHTMLResult.error);
+          if (headHTMLResult.evicted) {
+            poolInfo.evicted = true;
+            shortCircuit = true;
+          }
+          if (this.#isAuthError(error)) {
+            shortCircuit = true;
+          }
+        }
+      }
+
+      if (!shortCircuit) {
+        // Render remaining formats sequentially and stop if page becomes unusable.
+        let steps: Array<{
+          name: string;
+          cb: () => Promise<string | Record<string, string> | RenderError>;
+          assign: (value: string | Record<string, string>) => void;
+        }> = [];
+
+        if (types.length > 0) {
+          steps.push(
+            {
+              name: 'file fitted render',
+              cb: () => renderAncestors(page, 'fitted', types, captureOptions),
+              assign: (v: string | Record<string, string>) => {
+                fittedHTML = v as Record<string, string>;
+              },
+            },
+            {
+              name: 'file embedded render',
+              cb: () =>
+                renderAncestors(page, 'embedded', types, captureOptions),
+              assign: (v: string | Record<string, string>) => {
+                embeddedHTML = v as Record<string, string>;
+              },
+            },
+          );
+        }
+
+        steps.push(
+          {
+            name: 'file atom render',
+            cb: () => renderHTML(page, 'atom', 0, captureOptions),
+            assign: (v: string | Record<string, string>) => {
+              atomHTML = v as string;
+            },
+          },
+          {
+            name: 'file icon render',
+            cb: () => renderIcon(page, captureOptions),
+            assign: (v: string | Record<string, string>) => {
+              iconHTML = v as string;
+            },
+          },
+        );
+
+        for (let step of steps) {
+          if (shortCircuit) {
+            break;
+          }
+          let res = await this.#step(realm, step.name, () =>
+            withTimeout(page, step.cb, opts?.timeoutMs),
+          );
+          if (res.ok) {
+            step.assign(res.value);
+          } else {
+            error = error ?? res.error;
+            markTimeout(res.error);
+            if (res.evicted) {
+              poolInfo.evicted = true;
+              shortCircuit = true;
+              break;
+            }
+            if (this.#isAuthError(error)) {
+              shortCircuit = true;
+              break;
+            }
           }
         }
       }
 
       let response: FileRenderResponse = {
         ...(error ? { error } : {}),
-        iconHTML: null,
+        iconHTML,
         isolatedHTML,
-        headHTML: null,
-        atomHTML: null,
-        embeddedHTML: null,
-        fittedHTML: null,
+        headHTML,
+        atomHTML,
+        embeddedHTML,
+        fittedHTML,
       };
       response.error = this.#mergeConsoleErrors(pageId, response.error);
       return {

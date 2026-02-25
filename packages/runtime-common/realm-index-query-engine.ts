@@ -19,6 +19,8 @@ import {
   type InstanceOrError,
   type IndexedFile,
   type DefinitionLookup,
+  type ResolvedCodeRef,
+  internalKeyFor,
   visitInstanceURLs,
   maybeRelativeURL,
   codeRefFromInternalKey,
@@ -277,13 +279,90 @@ export class RealmIndexQueryEngine {
   }
 
   async searchPrerendered(query: Query, opts?: Options) {
-    let results = await this.#indexQueryEngine.searchPrerendered(
+    let isFileMetaQuery = await this.queryTargetsFileMeta(query.filter, opts);
+    if (isFileMetaQuery) {
+      // File-meta prerendered search currently returns non-error rows.
+      let { includeErrors: _includeErrors, ...fileSearchOpts } = opts ?? {};
+      let { files, meta } = await this.#indexQueryEngine.searchFiles(
+        new URL(this.#realm.url),
+        query,
+        fileSearchOpts,
+      );
+
+      let scopedCssUrls = new Set<string>();
+      let prerenderedCards = files.map((file) => {
+        (file.deps ?? []).forEach((dep) => {
+          if (isScopedCSSRequest(dep)) {
+            scopedCssUrls.add(dep);
+          }
+        });
+        return this.fileEntryToPrerenderedCard(file, opts);
+      });
+
+      return {
+        prerenderedCards,
+        scopedCssUrls: [...scopedCssUrls],
+        meta,
+      };
+    }
+    return await this.#indexQueryEngine.searchPrerendered(
       new URL(this.#realm.url),
       query,
       opts,
     );
+  }
 
-    return results;
+  private fileEntryToPrerenderedCard(file: IndexedFile, opts?: Options) {
+    let html: string | null = null;
+    let usedRenderTypeKey: string | undefined;
+    switch (opts?.htmlFormat) {
+      case 'head':
+        html = file.headHtml;
+        break;
+      case 'embedded':
+      case 'fitted': {
+        let htmlByType =
+          opts.htmlFormat === 'embedded' ? file.embeddedHtml : file.fittedHtml;
+        if (htmlByType) {
+          if (opts.renderType) {
+            let renderTypeKey = internalKeyFor(opts.renderType, undefined);
+            if (htmlByType[renderTypeKey] != null) {
+              html = htmlByType[renderTypeKey];
+              usedRenderTypeKey = renderTypeKey;
+            }
+          }
+          if (html == null) {
+            let defaultTypeKey = file.types?.[0];
+            if (defaultTypeKey && htmlByType[defaultTypeKey] != null) {
+              html = htmlByType[defaultTypeKey];
+              usedRenderTypeKey = defaultTypeKey;
+            }
+          }
+        }
+        break;
+      }
+      case 'atom':
+      default:
+        html = file.atomHtml;
+    }
+
+    if (!usedRenderTypeKey) {
+      usedRenderTypeKey = file.types?.[0];
+    }
+
+    let usedRenderType: ResolvedCodeRef | undefined;
+    if (usedRenderTypeKey) {
+      let codeRef = codeRefFromInternalKey(usedRenderTypeKey);
+      if (isResolvedCodeRef(codeRef)) {
+        usedRenderType = codeRef;
+      }
+    }
+
+    return {
+      url: file.canonicalURL,
+      html,
+      ...(usedRenderType ? { usedRenderType } : {}),
+    };
   }
 
   async getCardDependencies(url: URL): Promise<string[]> {
