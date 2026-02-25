@@ -5,10 +5,25 @@ const path = require('path');
 const DEFAULT_CARD_RENDER_TIMEOUT_MS = 30_000;
 const DEFAULT_CARD_SIZE_LIMIT_BYTES = 512 * 1024; // 512KB
 const DEFAULT_FILE_SIZE_LIMIT_BYTES = 5 * 1024 * 1024; // 5MB
+const isCodespaces =
+  process.env.CODESPACES === 'true' &&
+  Boolean(process.env.CODESPACE_NAME) &&
+  Boolean(process.env.GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN);
 
 let sqlSchema = fs.readFileSync(getLatestSchemaFile(), 'utf8');
 
 module.exports = function (environment) {
+  let defaultRealmServerURL =
+    process.env.REALM_SERVER_DOMAIN || getDefaultServiceURL(4201, '/');
+  let defaultBaseRealmURL =
+    process.env.RESOLVED_BASE_REALM_URL || getDefaultServiceURL(4201, '/base/');
+  let defaultCatalogRealmURL =
+    process.env.RESOLVED_CATALOG_REALM_URL ||
+    getDefaultServiceURL(4201, '/catalog/');
+  let defaultSkillsRealmURL =
+    process.env.RESOLVED_SKILLS_REALM_URL ||
+    getDefaultServiceURL(4201, '/skills/');
+
   const ENV = {
     modulePrefix: '@cardstack/host',
     environment,
@@ -31,7 +46,7 @@ module.exports = function (environment) {
     },
     logLevels:
       process.env.LOG_LEVELS || '*=info,matrix=info,realm:events=debug',
-    matrixURL: process.env.MATRIX_URL || 'http://localhost:8008',
+    matrixURL: process.env.MATRIX_URL || getDefaultServiceURL(8008),
     matrixServerName: process.env.MATRIX_SERVER_NAME || 'localhost',
     autoSaveDelayMs: 500,
     monacoDebounceMs: 500,
@@ -48,7 +63,7 @@ module.exports = function (environment) {
     fileSizeLimitBytes: Number(
       process.env.FILE_SIZE_LIMIT_BYTES ?? DEFAULT_FILE_SIZE_LIMIT_BYTES,
     ),
-    iconsURL: process.env.ICONS_URL || 'http://localhost:4206',
+    iconsURL: process.env.ICONS_URL || getDefaultServiceURL(4206),
     publishedRealmBoxelSpaceDomain:
       process.env.PUBLISHED_REALM_BOXEL_SPACE_DOMAIN || 'localhost:4201',
     publishedRealmBoxelSiteDomain:
@@ -56,15 +71,12 @@ module.exports = function (environment) {
 
     // the fields below may be rewritten by the realm server
     hostsOwnAssets: true,
-    realmServerURL: process.env.REALM_SERVER_DOMAIN || 'http://localhost:4201/',
-    resolvedBaseRealmURL:
-      process.env.RESOLVED_BASE_REALM_URL || 'http://localhost:4201/base/',
+    realmServerURL: defaultRealmServerURL,
+    resolvedBaseRealmURL: defaultBaseRealmURL,
     resolvedCatalogRealmURL: process.env.SKIP_CATALOG
       ? undefined
-      : process.env.RESOLVED_CATALOG_REALM_URL ||
-        'http://localhost:4201/catalog/',
-    resolvedSkillsRealmURL:
-      process.env.RESOLVED_SKILLS_REALM_URL || 'http://localhost:4201/skills/',
+      : defaultCatalogRealmURL,
+    resolvedSkillsRealmURL: defaultSkillsRealmURL,
     featureFlags: {
       SHOW_ASK_AI: process.env.SHOW_ASK_AI === 'true' || false,
     },
@@ -78,8 +90,10 @@ module.exports = function (environment) {
     // ENV.APP.LOG_VIEW_LOOKUPS = true;
     ENV.defaultSystemCardId = process.env.DEFAULT_SYSTEM_CARD_ID;
     if (!ENV.defaultSystemCardId && !process.env.SKIP_CATALOG) {
-      ENV.defaultSystemCardId =
-        'http://localhost:4201/catalog/SystemCard/default';
+      ENV.defaultSystemCardId = getDefaultServiceURL(
+        4201,
+        '/catalog/SystemCard/default',
+      );
     }
   }
 
@@ -151,4 +165,13 @@ function getLatestSchemaFile() {
     );
   }
   return path.join(schemaDir, latestSchemaFile);
+}
+
+function getDefaultServiceURL(port, pathname = '') {
+  if (isCodespaces) {
+    return `https://${process.env.CODESPACE_NAME}-${port}.${process.env.GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}${
+      pathname
+    }`;
+  }
+  return `http://localhost:${port}${pathname}`;
 }
