@@ -599,25 +599,31 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         );
       });
 
-      test('HTML response always includes default static favicon and apple-touch-icon', async function (assert) {
-        // Even a card with no theme should get the static icons from index.html
-        // (which live outside the head injection markers)
+      test('HTML response includes exactly one favicon and one apple-touch-icon', async function (assert) {
         let response = await context.request2
           .get('/test/isolated-test')
           .set('Accept', 'text/html');
 
         assert.strictEqual(response.status, 200, 'serves HTML response');
-        assert.ok(
-          response.text.includes('rel="icon"'),
-          'static favicon link is present in the HTML response',
+
+        let faviconCount = (response.text.match(/rel="icon"/g) || []).length;
+        let appleTouchIconCount = (
+          response.text.match(/rel="apple-touch-icon"/g) || []
+        ).length;
+
+        assert.strictEqual(
+          faviconCount,
+          1,
+          'exactly one favicon link is present in the HTML response',
         );
-        assert.ok(
-          response.text.includes('rel="apple-touch-icon"'),
-          'static apple-touch-icon link is present in the HTML response',
+        assert.strictEqual(
+          appleTouchIconCount,
+          1,
+          'exactly one apple-touch-icon link is present in the HTML response',
         );
       });
 
-      test('head HTML does not include icon links when card has no theme', async function (assert) {
+      test('default icon links are injected when card has no theme', async function (assert) {
         let response = await context.request2
           .get('/test/isolated-test')
           .set('Accept', 'text/html');
@@ -629,19 +635,25 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         );
         let headContent = headMatch?.[1] ?? '';
 
-        // The default head template should NOT emit icon links when there's no theme
-        // (the static icons from index.html serve as defaults)
-        assert.notOk(
+        assert.ok(
           headContent.includes('rel="icon"'),
-          'injected head HTML does not contain favicon link (static ones from index.html are the default)',
+          'default favicon link is injected into head when no theme is present',
         );
-        assert.notOk(
+        assert.ok(
           headContent.includes('rel="apple-touch-icon"'),
-          'injected head HTML does not contain apple-touch-icon link',
+          'default apple-touch-icon link is injected into head when no theme is present',
+        );
+        assert.ok(
+          headContent.includes('boxel-favicon.png'),
+          'default favicon points to boxel-favicon.png',
+        );
+        assert.ok(
+          headContent.includes('boxel-webclip.png'),
+          'default apple-touch-icon points to boxel-webclip.png',
         );
       });
 
-      test('non-public realm preserves static favicon and apple-touch-icon', async function (assert) {
+      test('non-public realm includes exactly one favicon and one apple-touch-icon', async function (assert) {
         await context.dbAdapter.execute(
           `DELETE FROM realm_user_permissions WHERE realm_url = '${testRealm2URL.href}' AND username = '*'`,
         );
@@ -651,14 +663,21 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           .set('Accept', 'text/html');
 
         assert.strictEqual(response.status, 200, 'serves HTML response');
-        // Even without head injection, static icons from index.html remain
-        assert.ok(
-          response.text.includes('rel="icon"'),
-          'static favicon link is present even without head injection',
+
+        let faviconCount = (response.text.match(/rel="icon"/g) || []).length;
+        let appleTouchIconCount = (
+          response.text.match(/rel="apple-touch-icon"/g) || []
+        ).length;
+
+        assert.strictEqual(
+          faviconCount,
+          1,
+          'exactly one favicon link is present even without head injection',
         );
-        assert.ok(
-          response.text.includes('rel="apple-touch-icon"'),
-          'static apple-touch-icon link is present even without head injection',
+        assert.strictEqual(
+          appleTouchIconCount,
+          1,
+          'exactly one apple-touch-icon link is present even without head injection',
         );
       });
 
@@ -749,6 +768,21 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           ),
           `head HTML includes apple-touch-icon link from theme`,
         );
+
+        let faviconCount = (response.text.match(/rel="icon"/g) || []).length;
+        let appleTouchIconCount = (
+          response.text.match(/rel="apple-touch-icon"/g) || []
+        ).length;
+        assert.strictEqual(
+          faviconCount,
+          1,
+          'exactly one favicon link in response (no duplicate from defaults)',
+        );
+        assert.strictEqual(
+          appleTouchIconCount,
+          1,
+          'exactly one apple-touch-icon link in response (no duplicate from defaults)',
+        );
       });
 
       test('default head template uses markUsage.socialMediaProfileIcon from BrandGuide theme', async function (assert) {
@@ -833,6 +867,21 @@ module(`server-endpoints/${basename(__filename)}`, function () {
             '<link rel="apple-touch-icon" href="https://example.com/social-icon.png"',
           ),
           `head HTML includes apple-touch-icon from BrandGuide markUsage.socialMediaProfileIcon`,
+        );
+
+        let faviconCount = (response.text.match(/rel="icon"/g) || []).length;
+        let appleTouchIconCount = (
+          response.text.match(/rel="apple-touch-icon"/g) || []
+        ).length;
+        assert.strictEqual(
+          faviconCount,
+          1,
+          'exactly one favicon link in response (no duplicate from defaults)',
+        );
+        assert.strictEqual(
+          appleTouchIconCount,
+          1,
+          'exactly one apple-touch-icon link in response (no duplicate from defaults)',
         );
       });
 
