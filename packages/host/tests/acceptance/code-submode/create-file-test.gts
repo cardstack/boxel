@@ -353,10 +353,11 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
 
       await waitUntil(
         () =>
-          document
-            .querySelector('[data-test-card-url-bar-input]')
-            ?.getAttribute('value')
-            ?.includes('uploaded-via-menu.txt'),
+          (
+            document.querySelector(
+              '[data-test-card-url-bar-input]',
+            ) as HTMLInputElement | null
+          )?.value?.includes('uploaded-via-menu.txt'),
         {
           timeout: 10000,
           timeoutMessage:

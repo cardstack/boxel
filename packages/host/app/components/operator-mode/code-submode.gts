@@ -441,7 +441,7 @@ export default class CodeSubmode extends Component<Signature> {
     items.push(
       new MenuItem({
         label: 'Upload File…',
-        action: () => this.uploadFile.perform(),
+        action: () => this.triggerUploadFile(),
         icon: Upload,
       }),
     );
@@ -573,17 +573,19 @@ export default class CodeSubmode extends Component<Signature> {
     },
   );
 
-  private uploadFile = dropTask(async () => {
+  @action
+  private triggerUploadFile() {
     let realmURL = this.operatorModeStateService.realmURL;
     if (!realmURL) {
       throw new Error('No realm available for upload');
     }
     let task = this.fileUpload.uploadFile({ realmURL: new URL(realmURL) });
-    let fileDef = await task.result;
-    if (fileDef?.url) {
-      await this.operatorModeStateService.updateCodePath(new URL(fileDef.url));
-    }
-  });
+    task.result.then((fileDef) => {
+      if (fileDef?.url) {
+        this.operatorModeStateService.updateCodePath(new URL(fileDef.url));
+      }
+    });
+  }
 
   private async withTestWaiters<T>(cb: () => Promise<T>) {
     let token = waiter.beginAsync();
