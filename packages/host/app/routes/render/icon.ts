@@ -25,6 +25,12 @@ export default class RenderIconRoute extends Route<Model> {
     if (!instance) {
       throw new Error('Missing render instance');
     }
-    return { Component: cardTypeIcon(instance) };
+    let component = cardTypeIcon(instance);
+    if (!component) {
+      throw new Error(
+        `static icon is undefined — check that the import resolves to a valid icon component`,
+      );
+    }
+    return { Component: component };
   }
 }
