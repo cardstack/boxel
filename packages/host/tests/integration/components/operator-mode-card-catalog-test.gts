@@ -825,7 +825,7 @@ module('Integration | operator-mode | card catalog', function (hooks) {
       .doesNotExist('Pet/mango is hidden when its realm is not selected');
   });
 
-  test(`card catalog modal recents only shows cards matching the type filter`, async function (assert) {
+  test(`card catalog modal recents are filtered by card type`, async function (assert) {
     let recentCardsService = getService('recent-cards-service');
     // Add both a Spec card and a non-Spec card to recents
     recentCardsService.add(`${testRealmURL}Pet/mango`);
@@ -852,6 +852,64 @@ module('Integration | operator-mode | card catalog', function (hooks) {
     assert
       .dom(`[data-test-card-catalog-item="${testRealmURL}Spec/pet-card"]`)
       .exists('Spec recent card appears in the card catalog modal');
+  });
+
+  test(`linksTo card picker recents are filtered by card type`, async function (assert) {
+    let recentCardsService = getService('recent-cards-service');
+    // Add a Pet card and a non-Pet card to recents
+    recentCardsService.add(`${testRealmURL}Pet/mango`);
+    recentCardsService.add(`${testRealmURL}Person/fadhlan`);
+
+    // Person/hassan has no pet set, so the linksTo add button is available
+    ctx.setCardInOperatorModeState(`${testRealmURL}Person/hassan`, 'edit');
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+    await waitFor(`[data-test-stack-card="${testRealmURL}Person/hassan"]`);
+    await waitFor(`[data-test-add-new="pet"]`);
+    await click(`[data-test-add-new="pet"]`);
+    await waitFor('[data-test-card-catalog-modal]');
+    await settled();
+
+    assert
+      .dom(`[data-test-card-catalog-item="${testRealmURL}Pet/mango"]`)
+      .exists('Pet recent card appears in the linksTo picker');
+    assert
+      .dom(`[data-test-card-catalog-item="${testRealmURL}Person/fadhlan"]`)
+      .doesNotExist(
+        'non-Pet recent cards are filtered out in the linksTo picker',
+      );
+  });
+
+  test(`linksToMany card picker recents are filtered by card type`, async function (assert) {
+    let recentCardsService = getService('recent-cards-service');
+    // Add a Pet card and a non-Pet card to recents
+    recentCardsService.add(`${testRealmURL}Pet/mango`);
+    recentCardsService.add(`${testRealmURL}Author/1`);
+
+    // Person/hassan has friends: null, so the linksToMany add button is available
+    ctx.setCardInOperatorModeState(`${testRealmURL}Person/hassan`, 'edit');
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+    await waitFor(`[data-test-stack-card="${testRealmURL}Person/hassan"]`);
+    await waitFor(`[data-test-add-new="friends"]`);
+    await click(`[data-test-add-new="friends"]`);
+    await waitFor('[data-test-card-catalog-modal]');
+    await settled();
+
+    assert
+      .dom(`[data-test-card-catalog-item="${testRealmURL}Pet/mango"]`)
+      .exists('Pet recent card appears in the linksToMany picker');
+    assert
+      .dom(`[data-test-card-catalog-item="${testRealmURL}Author/1"]`)
+      .doesNotExist(
+        'non-Pet recent cards are filtered out in the linksToMany picker',
+      );
   });
 
   test(`compact mode shows no full header and recents remain clickable`, async function (assert) {

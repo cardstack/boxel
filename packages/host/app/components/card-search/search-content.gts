@@ -6,8 +6,6 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
 import { consume } from 'ember-provide-consume-context';
-import { resource, use } from 'ember-resources';
-import { TrackedObject } from 'tracked-built-ins';
 
 import pluralize from 'pluralize';
 
@@ -21,7 +19,9 @@ import {
   type getCardCollection,
   GetCardCollectionContextName,
   GetCardContextName,
-  loadCardDef,
+  identifyCard,
+  isBaseDef,
+  isResolvedCodeRef,
   specRef,
 } from '@cardstack/runtime-common';
 import {
@@ -38,7 +38,7 @@ import type RealmServerService from '@cardstack/host/services/realm-server';
 import type RecentCards from '@cardstack/host/services/recent-cards-service';
 import type StoreService from '@cardstack/host/services/store';
 
-import type { BaseDef, CardContext, CardDef } from 'https://cardstack.com/base/card-api';
+import type { CardContext, CardDef } from 'https://cardstack.com/base/card-api';
 
 import {
   SECTION_DISPLAY_LIMIT_FOCUSED,
@@ -57,6 +57,26 @@ import type { PrerenderedCard } from '../prerendered-card-search';
 import type { NewCardArgs } from './utils';
 
 const OWNER_DESTROYED_ERROR = 'OWNER_DESTROYED_ERROR';
+
+function cardMatchesTypeRef(card: CardDef, typeRef: CodeRef): boolean {
+  if (!isResolvedCodeRef(typeRef)) {
+    return false;
+  }
+  let cls: unknown = card.constructor;
+  while (cls && isBaseDef(cls)) {
+    const ref = identifyCard(cls);
+    if (
+      ref &&
+      isResolvedCodeRef(ref) &&
+      ref.module === typeRef.module &&
+      ref.name === typeRef.name
+    ) {
+      return true;
+    }
+    cls = Reflect.getPrototypeOf(cls as object);
+  }
+  return false;
+}
 
 export interface RealmSectionInfo {
   name: string;
@@ -165,26 +185,6 @@ export default class SearchContent extends Component<Signature> {
     }
     return undefined;
   }
-
-  @use private filterTypeClassResource = resource(() => {
-    let state = new TrackedObject<{
-      value: typeof BaseDef | undefined;
-    }>({ value: undefined });
-    const typeRef = this.filterTypeRef;
-    if (!typeRef) {
-      return state;
-    }
-    (async () => {
-      try {
-        state.value = await loadCardDef(typeRef, {
-          loader: this.loaderService.loader,
-        });
-      } catch (_e) {
-        state.value = undefined;
-      }
-    })();
-    return state;
-  });
 
   private searchPrerenderedCards = getPrerenderedSearch(
     this,
@@ -375,9 +375,9 @@ export default class SearchContent extends Component<Signature> {
     );
 
     // Apply type filter when baseFilter specifies a type (modal/chooseCard mode)
-    const filterTypeClass = this.filterTypeClassResource?.value;
-    const typeFiltered = filterTypeClass
-      ? realmFiltered.filter((c) => c instanceof filterTypeClass)
+    const typeRef = this.filterTypeRef;
+    const typeFiltered = typeRef
+      ? realmFiltered.filter((c) => cardMatchesTypeRef(c, typeRef))
       : realmFiltered;
 
     if (this.args.isCompact) {
