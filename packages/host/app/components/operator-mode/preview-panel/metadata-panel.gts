@@ -1,5 +1,6 @@
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
+
 import { resource, use } from 'ember-resources';
 import { TrackedObject } from 'tracked-built-ins';
 
@@ -61,13 +62,13 @@ function highlightJson(json: string): string {
     let html = `${spanWrap('json-key', `${q1}${inner}${q2}`)}:`;
     let idx = placeholders.length;
     placeholders.push(html);
-    return `\x00PH${idx}\x00`;
+    return `\uE000PH${idx}\uE000`;
   });
   escaped = escaped.replace(STRING_RE, (_m, q1, inner, q2) => {
     let html = spanWrap('json-string', `${q1}${inner}${q2}`);
     let idx = placeholders.length;
     placeholders.push(html);
-    return `\x00PH${idx}\x00`;
+    return `\uE000PH${idx}\uE000`;
   });
 
   // Now number/boolean/null regexes only see text outside of key/string spans.
@@ -80,7 +81,7 @@ function highlightJson(json: string): string {
   escaped = escaped.replace(NULL_RE, () => spanWrap('json-null', 'null'));
 
   // Restore placeholders with the actual highlighted HTML.
-  let PLACEHOLDER_RE = /\x00PH(\d+)\x00/g;
+  let PLACEHOLDER_RE = /\uE000PH(\d+)\uE000/g;
   escaped = escaped.replace(PLACEHOLDER_RE, (_m, idx) => placeholders[idx]);
 
   return escaped;
