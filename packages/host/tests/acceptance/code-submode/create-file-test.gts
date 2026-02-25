@@ -1,4 +1,10 @@
-import { click, fillIn, settled, waitFor, waitUntil } from '@ember/test-helpers';
+import {
+  click,
+  fillIn,
+  settled,
+  waitFor,
+  waitUntil,
+} from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
@@ -328,9 +334,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
       await waitFor('[data-test-code-mode][data-test-save-idle]');
       await waitFor('[data-test-new-file-button]');
       await click('[data-test-new-file-button]');
-      await click(
-        '[data-test-boxel-menu-item-text="Upload File\u2026"]',
-      );
+      await click('[data-test-boxel-menu-item-text="Upload File\u2026"]');
 
       let fileUpload = getService('file-upload') as FileUploadService;
       await waitUntil(() => fileUpload.activeUploads.length > 0, {
@@ -360,8 +364,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
           )?.value?.includes('uploaded-via-menu.txt'),
         {
           timeout: 10000,
-          timeoutMessage:
-            'code editor did not navigate to the uploaded file',
+          timeoutMessage: 'code editor did not navigate to the uploaded file',
         },
       );
 
@@ -378,9 +381,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
       await waitFor('[data-test-code-mode][data-test-save-idle]');
       await waitFor('[data-test-new-file-button]');
       await click('[data-test-new-file-button]');
-      await click(
-        '[data-test-boxel-menu-item-text="Upload File\u2026"]',
-      );
+      await click('[data-test-boxel-menu-item-text="Upload File\u2026"]');
 
       let fileUpload = getService('file-upload') as FileUploadService;
       await waitUntil(() => fileUpload.activeUploads.length > 0, {
