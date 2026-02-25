@@ -58,17 +58,20 @@ function highlightJson(json: string): string {
   // number/boolean/null highlighting on the remaining text, then restore.
   let placeholders: string[] = [];
 
+  // Use a runtime-constructed sentinel to avoid control characters in regex
+  // literals (no-control-regex) and content-tag parse issues with regex literals.
+  let PH = String.fromCharCode(0xe000);
   escaped = escaped.replace(KEY_RE, (_m, q1, inner, q2) => {
     let html = `${spanWrap('json-key', `${q1}${inner}${q2}`)}:`;
     let idx = placeholders.length;
     placeholders.push(html);
-    return `\uE000PH${idx}\uE000`;
+    return `${PH}PH${idx}${PH}`;
   });
   escaped = escaped.replace(STRING_RE, (_m, q1, inner, q2) => {
     let html = spanWrap('json-string', `${q1}${inner}${q2}`);
     let idx = placeholders.length;
     placeholders.push(html);
-    return `\uE000PH${idx}\uE000`;
+    return `${PH}PH${idx}${PH}`;
   });
 
   // Now number/boolean/null regexes only see text outside of key/string spans.
@@ -81,7 +84,8 @@ function highlightJson(json: string): string {
   escaped = escaped.replace(NULL_RE, () => spanWrap('json-null', 'null'));
 
   // Restore placeholders with the actual highlighted HTML.
-  let PLACEHOLDER_RE = /\uE000PH(\d+)\uE000/g;
+  // content-tag misparses regex literals in .gts files; use RegExp constructor.
+  let PLACEHOLDER_RE = new RegExp(`${PH}PH(\\d+)${PH}`, 'g');
   escaped = escaped.replace(PLACEHOLDER_RE, (_m, idx) => placeholders[idx]);
 
   return escaped;
