@@ -955,9 +955,7 @@ function relativizeResource(
   realmURL: URL,
 ) {
   visitInstanceURLs(resource, (url, setURL) => {
-    let urlObj = new URL(
-      resolveCardReference(url, resource.id ?? primaryURL),
-    );
+    let urlObj = new URL(resolveCardReference(url, resource.id ?? primaryURL));
     setURL(maybeRelativeURL(urlObj, primaryURL, realmURL));
   });
   visitModuleDeps(resource, (moduleURL, setModuleURL) => {
