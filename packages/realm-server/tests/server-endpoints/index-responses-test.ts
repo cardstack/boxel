@@ -1054,4 +1054,129 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       );
     });
   });
+
+  // This module exercises from-scratch indexing of a published realm where a
+  // card's cardInfo.theme linksTo a BrandGuide that lives in the same realm.
+  // During from-scratch indexing, entries are batched in boxel_index_working and
+  // only committed to boxel_index at the end. The prerenderer fetches linked
+  // cards from boxel_index (the production table), so linksTo targets indexed
+  // in the same batch are invisible. This means isUsed-triggered lazy loads
+  // fail silently, the theme resolves to null, and the head template renders
+  // without icon links.
+  module(
+    'Published realm: theme icon links after from-scratch indexing',
+    function (hooks) {
+      let publishedRealmURL = new URL(
+        'http://127.0.0.1:4444/published-theme-test/',
+      );
+      let request: SuperTest<Test>;
+      let testRealm: Realm;
+      let dbAdapter: { execute: (sql: string) => Promise<Record<string, any>[]> };
+
+      setupPermissionedRealmAtURL(hooks, publishedRealmURL, {
+        permissions: {
+          '*': ['read'],
+        },
+        published: true,
+        fileSystem: {
+          'brand-guide-theme.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                markUsage: {
+                  socialMediaProfileIcon:
+                    'https://example.com/published-theme-icon.png',
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: 'https://cardstack.com/base/brand-guide',
+                  name: 'default',
+                },
+              },
+            },
+          },
+          'themed-card.json': {
+            data: {
+              type: 'card',
+              attributes: {},
+              relationships: {
+                'cardInfo.theme': {
+                  links: {
+                    self: './brand-guide-theme',
+                  },
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: 'https://cardstack.com/base/card-api',
+                  name: 'CardDef',
+                },
+              },
+            },
+          },
+        },
+        onRealmSetup(args) {
+          request = args.request;
+          testRealm = args.testRealm;
+          dbAdapter = args.dbAdapter;
+        },
+      });
+
+      hooks.beforeEach(async function () {
+        await testRealm.indexing();
+      });
+
+      // BUG (CS-10228): During from-scratch indexing the batched-write strategy
+      // (boxel_index_working → boxel_index) means linked cards in the same realm
+      // are not yet visible in the production table when the prerenderer runs.
+      // The isUsed lazy load for cardInfo.theme silently fails and the head
+      // template renders without icon links. The server then falls back to
+      // default boxel icons instead of the theme's socialMediaProfileIcon.
+      test('themed card in published realm includes theme icon links in head HTML after from-scratch indexing', async function (assert) {
+        let response = await request
+          .get('/published-theme-test/themed-card')
+          .set('Accept', 'text/html');
+
+        assert.strictEqual(response.status, 200, 'serves HTML response');
+
+        let headMatch = response.text.match(
+          /data-boxel-head-start[^>]*>([\s\S]*?)data-boxel-head-end/,
+        );
+        let headContent = headMatch?.[1] ?? '';
+
+        assert.ok(
+          headContent.includes(
+            '<link rel="icon" href="https://example.com/published-theme-icon.png"',
+          ),
+          `head HTML includes favicon from BrandGuide theme after from-scratch indexing. headContent=${headContent.substring(0, 500)}`,
+        );
+        assert.ok(
+          headContent.includes(
+            '<link rel="apple-touch-icon" href="https://example.com/published-theme-icon.png"',
+          ),
+          `head HTML includes apple-touch-icon from BrandGuide theme after from-scratch indexing`,
+        );
+
+        // Verify the pristine_doc preserves the theme relationship
+        let rows = (await dbAdapter.execute(
+          `SELECT pristine_doc::text FROM boxel_index
+           WHERE url LIKE '%themed-card%'
+             AND type = 'instance'
+             AND is_deleted IS NOT TRUE
+           LIMIT 1`,
+        )) as { pristine_doc: string }[];
+
+        assert.ok(rows.length > 0, 'themed-card instance entry exists');
+
+        let pristineDoc = JSON.parse(rows[0].pristine_doc);
+        let themeRel =
+          pristineDoc?.relationships?.['cardInfo.theme']?.links?.self;
+        assert.ok(
+          themeRel != null,
+          `pristine_doc preserves the cardInfo.theme relationship URL (got ${themeRel})`,
+        );
+      });
+    },
+  );
 });
