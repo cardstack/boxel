@@ -2081,12 +2081,11 @@ module('Integration | Store', function (hooks) {
       get card() {
         return this.resource.instances[0];
       }
-      get renderedCard() {
-        return this.card?.constructor.getComponent(this.card);
-      }
       <template>
         {{#if this.card}}
-          <this.renderedCard data-test-rendered-card={{this.card.id}} />
+          <div data-test-rendered-card={{this.card.id}}>
+            {{this.card.id}}
+          </div>
         {{/if}}
       </template>
     }
