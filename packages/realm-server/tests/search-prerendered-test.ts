@@ -156,7 +156,7 @@ module(basename(__filename), function () {
           });
 
           test('returns prerendered file-meta results for FileDef queries', async function (assert) {
-            let query: Query & { prerenderedHtmlFormat: string } = {
+            let queryBase: Query = {
               filter: {
                 on: {
                   module: `${baseRealm.url}file-api`,
@@ -166,35 +166,67 @@ module(basename(__filename), function () {
                   url: `${realmHref}hello.md`,
                 },
               },
-              prerenderedHtmlFormat: 'embedded',
             };
-            let response = await request
-              .post(searchPath)
-              .set('Accept', 'application/vnd.card+json')
-              .set('X-HTTP-Method-Override', 'QUERY')
-              .send(query);
+            let formatsAndExpected: Array<{
+              format: 'embedded' | 'fitted' | 'atom' | 'head';
+              expectedSnippet: string;
+            }> = [
+              {
+                format: 'embedded',
+                expectedSnippet: 'data-test-markdown-embedded',
+              },
+              {
+                format: 'fitted',
+                expectedSnippet: 'data-test-markdown-fitted',
+              },
+              {
+                format: 'atom',
+                expectedSnippet: 'data-test-markdown-atom',
+              },
+              {
+                format: 'head',
+                expectedSnippet: 'data-test-card-head-title',
+              },
+            ];
 
-            assert.strictEqual(response.status, 200, 'HTTP 200 status');
-            let json = response.body;
+            for (let { format, expectedSnippet } of formatsAndExpected) {
+              let response = await request
+                .post(searchPath)
+                .set('Accept', 'application/vnd.card+json')
+                .set('X-HTTP-Method-Override', 'QUERY')
+                .send({
+                  ...queryBase,
+                  prerenderedHtmlFormat: format,
+                } as Query & { prerenderedHtmlFormat: string });
 
-            assert.strictEqual(
-              json.data.length,
-              1,
-              'one file-meta entry is returned in the search results',
-            );
-            assert.strictEqual(json.data[0].type, 'prerendered-card');
-            assert.strictEqual(json.data[0].id, `${realmHref}hello.md`);
-            assert.true(
-              json.data[0].attributes.html.includes(
-                'Hello from FileDef content',
-              ),
-              `embedded html is from the prerendered FileDef: ${json.data[0].attributes.html}`,
-            );
-            assert.strictEqual(
-              json.meta.page.total,
-              1,
-              'total count is correct',
-            );
+              assert.strictEqual(
+                response.status,
+                200,
+                `HTTP 200 status for ${format}`,
+              );
+              let json = response.body;
+
+              assert.strictEqual(
+                json.data.length,
+                1,
+                `one file-meta entry is returned in ${format} results`,
+              );
+              assert.strictEqual(json.data[0].type, 'prerendered-card');
+              assert.strictEqual(json.data[0].id, `${realmHref}hello.md`);
+              assert.true(
+                json.data[0].attributes.html.includes(expectedSnippet),
+                `${format} html includes expected snippet: ${json.data[0].attributes.html}`,
+              );
+              assert.true(
+                json.data[0].attributes.html.includes('Hello from FileDef content'),
+                `${format} html includes file content/title`,
+              );
+              assert.strictEqual(
+                json.meta.page.total,
+                1,
+                `total count is correct for ${format}`,
+              );
+            }
           });
         },
       );
