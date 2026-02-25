@@ -1748,6 +1748,10 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
             `linksToMany field '${this.name}' cannot deserialize a list of resource ids`,
           );
         }
+        // links.self is used to tell the consumer of this payload how to get the resource via HTTP.
+        // data.id is used to tell the consumer how to find the resource in the included bucket.
+        // Prefer data.id for resourceFrom(), and fall back to links.self when data.id is missing
+        // (the array-style linksToMany format omits data.id).
         let resourceId =
           value.data && 'id' in value.data ? value.data?.id : undefined;
         let reference = value.links?.self ?? resourceId;
@@ -1763,10 +1767,6 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
           cachedInstance[isSavedInstance] = true;
           return cachedInstance;
         }
-        // links.self is used to tell the consumer of this payload how to get the resource via HTTP.
-        // data.id is used to tell the consumer how to find the resource in the included bucket.
-        // Prefer data.id for resourceFrom(), but fall back to links.self when data.id is missing
-        // (the array-style linksToMany format omits data.id).
         if (!resourceId) {
           resourceId = normalizedReference;
         }
