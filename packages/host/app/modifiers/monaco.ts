@@ -39,6 +39,7 @@ export default class Monaco extends Modifier<Signature> {
   private editor: MonacoSDK.editor.IStandaloneCodeEditor | undefined;
   private lastLanguage: string | undefined;
   private lastContent: string | undefined;
+  private lastReadOnly: boolean | undefined;
   private lastModified = Date.now();
   private lastCursorPosition: MonacoSDK.Position | undefined;
   private waiterManager = createMonacoWaiterManager();
@@ -74,6 +75,10 @@ export default class Monaco extends Modifier<Signature> {
       ) {
         this.lastContent = content;
         this.model.setValue(content);
+      }
+      if (readOnly !== this.lastReadOnly) {
+        this.editor.updateOptions({ readOnly });
+        this.lastReadOnly = readOnly;
       }
     } else {
       this.setupEditor({
@@ -137,6 +142,7 @@ export default class Monaco extends Modifier<Signature> {
     }
 
     this.editor = monacoSDK.editor.create(element, editorOptions);
+    this.lastReadOnly = readOnly;
 
     // Track editor initialization for test waiters
     if (this.waiterManager) {
