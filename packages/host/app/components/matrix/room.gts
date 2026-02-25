@@ -79,6 +79,7 @@ import RoomMessage from './room-message';
 
 import type RoomData from '../../lib/matrix-classes/room';
 import type { RoomSkill } from '../../resources/room';
+import type { DraftFileUpload } from '../ai-assistant/attachment-picker/types';
 import type { MatrixEvent } from 'matrix-js-sdk';
 
 interface Signature {
@@ -195,6 +196,9 @@ export default class Room extends Component<Signature> {
             @removeCard={{this.removeCard}}
             @chooseFile={{this.chooseFile}}
             @removeFile={{this.removeFile}}
+            @pendingUploads={{this.pendingUploads}}
+            @retryFileUpload={{this.retryFileUpload}}
+            @removePendingFileUpload={{this.removePendingFileUpload}}
             @autoAttachedFiles={{this.autoAttachedFiles}}
             @filesToAttach={{this.filesToAttach}}
             @autoAttachedCardTooltipMessage={{if
@@ -460,6 +464,7 @@ export default class Room extends Component<Signature> {
   });
   private removedAttachedCardIds = new TrackedArray<string>();
   private removedAttachedFileUrls: string[] = [];
+  private pendingUploads = new TrackedArray<DraftFileUpload>();
   private lastAutoAttachedFileUrlsKey: string | undefined;
   private getConversationScrollability: (() => boolean) | undefined;
   private scrollConversationToBottom: (() => void) | undefined;
@@ -1039,10 +1044,16 @@ export default class Room extends Component<Signature> {
       this.removeAutoAttachedFile(file.sourceUrl ?? undefined);
     }
 
-    let files = this.filesToAttach;
-    if (!files?.find((f) => f.sourceUrl === file.sourceUrl)) {
-      this.matrixService.setFilesToSend(this.args.roomId, [...files, file]);
+    if (this.hasUploadedOrPendingFile(file)) {
+      return;
     }
+    let uploadId = uuidv4();
+    this.pendingUploads.push({
+      id: uploadId,
+      file,
+      state: 'uploading',
+    });
+    this.uploadChosenFileTask.perform(uploadId);
   }
 
   @action
@@ -1076,6 +1087,91 @@ export default class Room extends Component<Signature> {
 
     this.markAttachedFileRemoved(file.sourceUrl);
   }
+
+  @action
+  private retryFileUpload(uploadId: string) {
+    let upload = this.pendingUploads.find((item) => item.id === uploadId);
+    if (!upload) {
+      return;
+    }
+    this.replacePendingUpload(uploadId, {
+      ...upload,
+      state: 'uploading',
+      error: undefined,
+    });
+    this.uploadChosenFileTask.perform(uploadId);
+  }
+
+  @action
+  private removePendingFileUpload(uploadId: string) {
+    this.removePendingUpload(uploadId);
+  }
+
+  private hasUploadedOrPendingFile(file: FileDef) {
+    if (
+      this.filesToAttach.some(
+        (existing) => existing.sourceUrl === file.sourceUrl,
+      )
+    ) {
+      return true;
+    }
+    return this.pendingUploads.some(
+      (pending) => pending.file.sourceUrl === file.sourceUrl,
+    );
+  }
+
+  private removePendingUpload(uploadId: string) {
+    let index = this.pendingUploads.findIndex((item) => item.id === uploadId);
+    if (index === -1) {
+      return;
+    }
+    this.pendingUploads.splice(index, 1);
+  }
+
+  private replacePendingUpload(uploadId: string, nextValue: DraftFileUpload) {
+    let index = this.pendingUploads.findIndex((item) => item.id === uploadId);
+    if (index === -1) {
+      return;
+    }
+    this.pendingUploads.splice(index, 1, nextValue);
+  }
+
+  private uploadChosenFileTask = task(async (uploadId: string) => {
+    let pending = this.pendingUploads.find((item) => item.id === uploadId);
+    if (!pending) {
+      return;
+    }
+    try {
+      let [uploaded] = await this.matrixService.uploadFiles([pending.file]);
+      if (!uploaded) {
+        throw new Error('Upload failed');
+      }
+
+      this.removePendingUpload(uploadId);
+      let files = this.filesToAttach;
+      let alreadyExists = files.some(
+        (existing) =>
+          existing.sourceUrl === uploaded.sourceUrl ||
+          (existing.contentHash &&
+            uploaded.contentHash &&
+            existing.contentHash === uploaded.contentHash),
+      );
+      if (!alreadyExists) {
+        this.matrixService.setFilesToSend(this.args.roomId, [
+          ...files,
+          uploaded,
+        ]);
+      }
+    } catch (error: unknown) {
+      let message =
+        error instanceof Error ? error.message : 'Attachment upload failed';
+      this.replacePendingUpload(uploadId, {
+        ...pending,
+        state: 'error',
+        error: message,
+      });
+    }
+  });
 
   private doSendMessage = enqueueTask(
     async (
@@ -1208,9 +1304,12 @@ export default class Room extends Component<Signature> {
       !this.doSendMessage.isRunning &&
       Boolean(
         this.messageToSend?.trim() ||
+        this.filesToAttach.length > 0 ||
+        this.autoAttachedFiles.length > 0 ||
         this.cardIdsToAttach?.length ||
         this.autoAttachedCardIds.size !== 0,
       ) &&
+      this.pendingUploads.length === 0 &&
       !!this.room &&
       !this.messages.some((m) => this.isPendingMessage(m)) &&
       !this.matrixService.isLoadingTimeline &&
@@ -1269,6 +1368,7 @@ export default class Room extends Component<Signature> {
   private get displayAttachedItems() {
     return (
       this.filesToAttach?.length ||
+      this.pendingUploads.length > 0 ||
       this.cardIdsToAttach?.length ||
       this.autoAttachedFiles.length > 0 ||
       this.autoAttachedCardIds?.size

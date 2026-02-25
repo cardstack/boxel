@@ -11,6 +11,7 @@ import {
   baseRealm,
   codeRefWithAbsoluteURL,
   getClass,
+  inferContentType,
   SupportedMimeType,
   relativeTo,
   type LooseSingleCardDocument,
@@ -48,6 +49,8 @@ interface CacheEntry {
   content: string;
   timestamp: number;
 }
+
+type UploadableContent = string | Uint8Array;
 
 const CACHE_EXPIRATION_MS = 30 * 60 * 1000; // 30 minutes
 
@@ -93,7 +96,28 @@ export interface FileDefManager {
 export interface PrivilegedFileDefManager extends FileDefManager {
   contentHashCache: Map<string, string>;
   invalidUrlCache: Set<string>;
-  getContentHash(content: string): Promise<string>;
+  getContentHash(content: UploadableContent): Promise<string>;
+}
+
+const LOCAL_FILE_ATTACHMENT = Symbol.for('boxel-local-file-attachment');
+
+export function attachLocalFileToFileDef(
+  fileDef: FileDef,
+  file: File,
+): FileDef {
+  (fileDef as unknown as Record<symbol, unknown>)[LOCAL_FILE_ATTACHMENT] = file;
+  return fileDef;
+}
+
+function getLocalFileFromFileDef(fileDef: FileDef): File | undefined {
+  let value = (fileDef as unknown as Record<symbol, unknown>)[
+    LOCAL_FILE_ATTACHMENT
+  ];
+  return value instanceof File ? value : undefined;
+}
+
+function clearLocalFileFromFileDef(fileDef: FileDef): void {
+  delete (fileDef as unknown as Record<symbol, unknown>)[LOCAL_FILE_ATTACHMENT];
 }
 
 export default class FileDefManagerImpl
@@ -139,28 +163,40 @@ export default class FileDefManagerImpl
     return this.getCardAPI();
   }
 
-  async getContentHash(content: string): Promise<string> {
+  async getContentHash(content: UploadableContent): Promise<string> {
     return md5(content);
   }
 
   private async getCachedUrlForContent(
-    content: string,
+    content: UploadableContent,
   ): Promise<string | null> {
     const hash = await this.getContentHash(content);
     return this.contentHashCache.get(hash) || null;
   }
 
   async uploadContentWithCaching(
-    content: string,
+    content: UploadableContent,
     contentType: string,
+    name?: string,
   ): Promise<string> {
     // Check if we already have this content cached
     const cachedUrl = await this.getCachedUrlForContent(content);
     if (cachedUrl) {
       return cachedUrl;
     }
-    let response = await this.client.uploadContent(content, {
+    let uploadBody: XMLHttpRequestBodyInit;
+    if (typeof content === 'string') {
+      uploadBody = content;
+    } else {
+      // Ensure we're uploading bytes backed by a regular ArrayBuffer
+      // so Matrix SDK body types remain compatible with TS DOM types.
+      let binaryContent = new Uint8Array(content.byteLength);
+      binaryContent.set(content);
+      uploadBody = new Blob([binaryContent], { type: contentType });
+    }
+    let response = await this.client.uploadContent(uploadBody, {
       type: contentType,
+      name,
     });
     let url = this.client.mxcUrlToHttp(
       response.content_uri,
@@ -350,28 +386,75 @@ export default class FileDefManagerImpl
   async uploadFiles(files: FileDef[]) {
     let uploadedFiles = await Promise.all(
       files.map(async (file) => {
-        if (!file.sourceUrl) {
-          throw new Error('File needs a realm server source URL to upload');
+        let sourceUrl = file.sourceUrl;
+        let localFile = getLocalFileFromFileDef(file);
+
+        if (file.contentHash && file.url && file.url !== file.sourceUrl) {
+          if (!this.contentHashCache.has(file.contentHash)) {
+            this.contentHashCache.set(file.contentHash, file.url);
+          }
+          return file;
+        } else if (file.contentHash) {
+          let cachedUrl = this.contentHashCache.get(file.contentHash);
+          if (cachedUrl) {
+            file.url = cachedUrl;
+            return file;
+          }
         }
 
-        let response = await this.network.authedFetch(file.sourceUrl, {
-          headers: {
-            Accept: 'application/vnd.card+source',
-          },
-        });
-
-        // We only support uploading text files (code) for now.
-        // When we start supporting other file types (pdfs, images, etc)
-        // we will need to update this to support those file types.
-        let text = await response.text();
-        let contentType = response.headers.get('content-type');
+        let contentType: string | undefined;
+        let bytes: Uint8Array;
+        if (localFile) {
+          sourceUrl = file.sourceUrl;
+          bytes = new Uint8Array(await localFile.arrayBuffer());
+          contentType =
+            localFile.type ||
+            file.contentType ||
+            inferContentType(localFile.name || file.name);
+        } else {
+          if (!sourceUrl) {
+            throw new Error('File needs a source URL to upload');
+          }
+          let response = await this.network.authedFetch(sourceUrl);
+          if (!response.ok) {
+            throw new Error(
+              `Failed to read file at ${sourceUrl}: ${response.status} ${response.statusText}`,
+            );
+          }
+          bytes = new Uint8Array(await response.arrayBuffer());
+          contentType =
+            response.headers.get('content-type') ||
+            file.contentType ||
+            inferContentType(file.name ?? sourceUrl.split('/').pop() ?? '');
+        }
 
         if (!contentType) {
-          throw new Error(`File has no content type: ${file.sourceUrl}`);
+          throw new Error(
+            `File has no content type: ${sourceUrl ?? file.name ?? '(unknown file)'}`,
+          );
         }
-        file.url = await this.uploadContentWithCaching(text, contentType);
+        let contentHash = await this.getContentHash(bytes);
+        let cachedUrl = this.contentHashCache.get(contentHash);
+        if (cachedUrl) {
+          file.url = cachedUrl;
+        } else {
+          file.url = await this.uploadContentWithCaching(
+            bytes,
+            contentType,
+            file.name,
+          );
+          this.contentHashCache.set(contentHash, file.url);
+        }
+
         file.contentType = contentType;
-        file.contentHash = await this.getContentHash(text);
+        file.contentHash = contentHash;
+        file.contentSize = bytes.byteLength;
+
+        if (!file.sourceUrl && file.contentHash) {
+          let fileName = file.name ?? 'attachment';
+          file.sourceUrl = `boxel-attachment://${file.contentHash}/${encodeURIComponent(fileName)}`;
+        }
+        clearLocalFileFromFileDef(file);
 
         return file;
       }),

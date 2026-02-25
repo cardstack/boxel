@@ -385,4 +385,57 @@ module('Integration | ai-assistant-panel | sending', function (hooks) {
       )
       .doesNotExist();
   });
+
+  test('failed file upload blocks send until retry succeeds or upload is removed', async function (assert) {
+    operatorModeStateService.restore({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}Person/fadhlan`,
+            format: 'isolated',
+          },
+        ],
+      ],
+      submode: Submodes.Code,
+      codePath: `${testRealmURL}person.gts`,
+    });
+
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+
+    await openAiAssistant();
+    await fillIn('[data-test-message-field]', 'Message with attachment');
+
+    let matrixService = getService('matrix-service') as any;
+    let originalUploadFiles = matrixService.uploadFiles.bind(matrixService);
+    matrixService.uploadFiles = async () => {
+      throw new Error('Upload failed in test');
+    };
+
+    await click('[data-test-attach-button]');
+    await click('[data-test-attach-file-btn]');
+    await click('[data-test-file="person.gts"]');
+    await click('[data-test-choose-file-modal-add-button]');
+
+    await waitFor('[data-test-pending-upload-error]');
+    assert
+      .dom('[data-test-send-message-btn]')
+      .isDisabled('send is blocked while a failed upload exists');
+
+    matrixService.uploadFiles = originalUploadFiles;
+    await click('[data-test-pending-upload-retry]');
+    await waitUntil(
+      () =>
+        !document.querySelector('[data-test-pending-upload]') &&
+        Boolean(document.querySelector('[data-test-attached-file]')),
+      {
+        timeout: 5000,
+        timeoutMessage: 'upload retry did not finish',
+      },
+    );
+    assert.dom('[data-test-send-message-btn]').isEnabled();
+  });
 });

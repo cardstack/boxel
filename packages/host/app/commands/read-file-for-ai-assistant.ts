@@ -29,6 +29,12 @@ export default class ReadFileForAssistantCommand extends HostBaseCommand<
     let { matrixService } = this;
 
     let fileUrl = input.fileUrl;
+    let roomId = input.roomId || matrixService.currentRoomId;
+    if (roomId && !matrixService.hasAttachedFileInRoom(roomId, fileUrl)) {
+      throw new Error(
+        `File ${fileUrl} is not attached in this conversation. You can only read files that were previously attached in this room.`,
+      );
+    }
 
     await matrixService.ready;
     let file: FileDef | undefined = matrixService.fileAPI.createFileDef({

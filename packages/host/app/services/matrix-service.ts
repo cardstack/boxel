@@ -268,6 +268,16 @@ export default class MatrixService extends Service {
     return this.filesToSend.get(roomId);
   }
 
+  hasAttachedFileInRoom(roomId: string, sourceUrl: string): boolean {
+    let roomResource = this.roomResources.get(roomId);
+    if (!roomResource) {
+      return false;
+    }
+    return roomResource.messages.some((message) =>
+      message.attachedFiles?.some((file) => file.sourceUrl === sourceUrl),
+    );
+  }
+
   private setAgentId() {
     this.agentId = this.localPersistenceService.getAgentId();
   }

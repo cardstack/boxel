@@ -841,7 +841,9 @@ export class MockClient implements ExtendedClient {
     fileDefManager.contentHashCache.set(contentHash, url);
 
     let contentArrayBuffer = this.serverState.getContent(url);
-    let content = contentArrayBuffer?.toString();
+    let content = contentArrayBuffer
+      ? new TextDecoder().decode(new Uint8Array(contentArrayBuffer))
+      : undefined;
     if (!content) {
       throw new Error('No content found for URL: ' + url);
     }
@@ -859,14 +861,30 @@ export class MockClient implements ExtendedClient {
   }
 
   async uploadContent(
-    _content: string,
-    _opts?: { type?: string; name?: string },
+    _content: XMLHttpRequestBodyInit,
+    _opts?: MatrixSDK.UploadOpts,
   ): Promise<any> {
     let contentUri = `mxc://mock-server/${Math.random()}`;
-    this.serverState.addContent(
-      this.mxcUrlToHttp(contentUri),
-      _content as unknown as ArrayBuffer,
-    );
+    let contentBytes: ArrayBuffer;
+    if (typeof _content === 'string') {
+      contentBytes = new TextEncoder().encode(_content).buffer;
+    } else if (_content instanceof Blob) {
+      contentBytes = await _content.arrayBuffer();
+    } else if (_content instanceof ArrayBuffer) {
+      contentBytes = _content;
+    } else if (ArrayBuffer.isView(_content)) {
+      let view = _content as ArrayBufferView;
+      let bytes = new Uint8Array(view.byteLength);
+      bytes.set(new Uint8Array(view.buffer, view.byteOffset, view.byteLength));
+      contentBytes = bytes.buffer;
+    } else if (_content instanceof URLSearchParams) {
+      contentBytes = new TextEncoder().encode(_content.toString()).buffer;
+    } else if (_content instanceof FormData) {
+      throw new Error('FormData upload is not implemented in mock client');
+    } else {
+      throw new Error('Unsupported upload body type in mock client');
+    }
+    this.serverState.addContent(this.mxcUrlToHttp(contentUri), contentBytes);
     return { content_uri: contentUri };
   }
 
@@ -877,7 +895,9 @@ export class MockClient implements ExtendedClient {
     if (!content) {
       throw new Error(`content not found for ${serializedFile.url}`);
     }
-    return JSON.parse(content.toString()) as LooseSingleCardDocument;
+    return JSON.parse(
+      new TextDecoder().decode(new Uint8Array(content)),
+    ) as LooseSingleCardDocument;
   }
 
   async downloadAsFileInBrowser(

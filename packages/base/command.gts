@@ -94,6 +94,7 @@ export class CopyAndEditInput extends CardDef {
 
 export class FileUrlCard extends CardDef {
   @field fileUrl = contains(StringField);
+  @field roomId = contains(StringField);
 }
 
 export class RealmUrlCard extends CardDef {

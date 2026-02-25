@@ -9,6 +9,7 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
 import onKeyMod from 'ember-keyboard/modifiers/on-key';
+import { v4 as uuidv4 } from 'uuid';
 
 import {
   BoxelButton,
@@ -22,6 +23,7 @@ import { eq } from '@cardstack/boxel-ui/helpers';
 import {
   Deferred,
   RealmPaths,
+  inferContentType,
   isCardErrorJSONAPI,
   loadCardDef,
   type CodeRef,
@@ -29,10 +31,14 @@ import {
 } from '@cardstack/runtime-common';
 
 import ModalContainer from '@cardstack/host/components/modal-container';
+import { attachLocalFileToFileDef } from '@cardstack/host/lib/file-def-manager';
 
+import type EnvironmentService from '@cardstack/host/services/environment-service';
 import type FileUploadService from '@cardstack/host/services/file-upload';
+import type { FilePickerTask } from '@cardstack/host/services/file-upload';
 import type { FileUploadTask } from '@cardstack/host/services/file-upload';
 import type LoaderService from '@cardstack/host/services/loader-service';
+import type MatrixService from '@cardstack/host/services/matrix-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
 import type StoreService from '@cardstack/host/services/store';
@@ -52,11 +58,14 @@ export default class ChooseFileModal extends Component<Signature> {
   @tracked fileTypeFilter?: CodeRef;
   @tracked fileTypeName?: string;
   @tracked acceptTypes?: string;
-  @tracked currentUpload?: FileUploadTask;
+  @tracked uploadTarget: 'realm' | 'matrix' = 'realm';
+  @tracked currentUpload?: FileUploadTask | FilePickerTask;
 
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private realm: RealmService;
   @service declare private store: StoreService;
+  @service declare private matrixService: MatrixService;
+  @service declare private environmentService: EnvironmentService;
   @service('file-upload') declare private fileUpload: FileUploadService;
   @service('loader-service') declare private loaderService: LoaderService;
 
@@ -84,10 +93,12 @@ export default class ChooseFileModal extends Component<Signature> {
   async chooseFile<T extends FileDef>(opts?: {
     fileType?: CodeRef;
     fileTypeName?: string;
+    uploadTarget?: 'realm' | 'matrix';
   }): Promise<undefined | T> {
     this.deferred = new Deferred();
     this.fileTypeFilter = opts?.fileType;
     this.fileTypeName = opts?.fileTypeName;
+    this.uploadTarget = opts?.uploadTarget ?? 'realm';
     this.acceptTypes = undefined;
     this.currentUpload = undefined;
     let defaultRealm = this.knownRealms.find(
@@ -140,6 +151,10 @@ export default class ChooseFileModal extends Component<Signature> {
 
   @action
   private triggerUpload() {
+    if (this.uploadTarget === 'matrix') {
+      this.pickAndAttachLocalFile();
+      return;
+    }
     let task = this.fileUpload.uploadFile({
       realmURL: this.selectedRealm.url,
       acceptTypes: this.acceptTypes,
@@ -155,12 +170,42 @@ export default class ChooseFileModal extends Component<Signature> {
     });
   }
 
+  private pickAndAttachLocalFile() {
+    let task = this.fileUpload.pickFile({
+      acceptTypes: this.acceptTypes,
+      maxSizeBytes: this.environmentService.fileSizeLimitBytes,
+    });
+    this.currentUpload = task;
+    task.result.then((selectedFile) => {
+      if (selectedFile && this.deferred) {
+        let fileName = selectedFile.name || 'attachment';
+        let contentType =
+          selectedFile.type ||
+          inferContentType(fileName) ||
+          'application/octet-stream';
+        let localSourceUrl = `boxel-local-upload://${uuidv4()}/${encodeURIComponent(fileName)}`;
+        let fileDef = this.matrixService.fileAPI.createFileDef({
+          sourceUrl: localSourceUrl,
+          name: fileName,
+          contentType,
+          contentSize: selectedFile.size,
+        });
+        attachLocalFileToFileDef(fileDef, selectedFile);
+        this.deferred.fulfill(fileDef);
+        this.resetState();
+      } else if (task.state !== 'error') {
+        this.currentUpload = undefined;
+      }
+    });
+  }
+
   private resetState() {
     this.selectedRealm = this.knownRealms[0];
     this.selectedFile = undefined;
     this.fileTypeFilter = undefined;
     this.fileTypeName = undefined;
     this.acceptTypes = undefined;
+    this.uploadTarget = 'realm';
     this.currentUpload = undefined;
     this.deferred = undefined;
   }

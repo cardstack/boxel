@@ -11,8 +11,11 @@ import type {
 import { constructHistory } from './history';
 import {
   downloadFile,
+  downloadFileAsDataUrl,
   extractCodePatchBlocks,
   isCommandOrCodePatchResult,
+  isImageContentType,
+  isTextLikeContentType,
 } from './matrix-utils';
 import { isRecognisedDebugCommand } from './debug';
 import type {
@@ -96,6 +99,8 @@ export async function getPromptParts(
   let disabledSkillIds = await getDisabledSkillIds(eventList);
   let tools = await getTools(eventList, skills, aiBotUserId, client);
   let toolChoice = getToolChoice(history, aiBotUserId);
+  let { model, toolsSupported, reasoningEffort } =
+    getActiveLLMDetails(eventList);
   let messages = await buildPromptForModel(
     history,
     aiBotUserId,
@@ -103,9 +108,8 @@ export async function getPromptParts(
     skills,
     disabledSkillIds,
     client,
+    model,
   );
-  let { model, toolsSupported, reasoningEffort } =
-    getActiveLLMDetails(eventList);
   return {
     shouldRespond,
     tools,
@@ -413,6 +417,26 @@ export function hasSomeAttachedCards(
   return false;
 }
 
+function shouldIncludeAttachmentContent(
+  matrixEvent: MatrixEventWithBoxelContext,
+  history: DiscreteMatrixEvent[],
+  sourceUrl?: string,
+) {
+  if (!sourceUrl) {
+    return true;
+  }
+  return !history.slice(history.indexOf(matrixEvent) + 1).some((event) => {
+    return (
+      (event as MatrixEventWithBoxelContext).content?.data?.attachedFiles?.some(
+        (file: SerializedFileDef) => file.sourceUrl === sourceUrl,
+      ) ||
+      (event as MatrixEventWithBoxelContext).content?.data?.attachedCards?.some(
+        (card: SerializedFileDef) => card.sourceUrl === sourceUrl,
+      )
+    );
+  });
+}
+
 export async function getAttachedCards(
   client: MatrixClient,
   matrixEvent: MatrixEventWithBoxelContext,
@@ -421,18 +445,11 @@ export async function getAttachedCards(
   let attachedCards = matrixEvent.content?.data?.attachedCards ?? [];
   let results = await Promise.all(
     attachedCards.map(async (attachedCard: SerializedFileDef) => {
-      // If the file is attached later in the history, we should not include the content here
-      let shouldIncludeContent = !history
-        .slice(history.indexOf(matrixEvent) + 1)
-        .some((event) => {
-          // event is not always MatrixEventWithBoxelContext but casting lets us safely check attachedCards
-          return (
-            event as MatrixEventWithBoxelContext
-          ).content?.data?.attachedCards?.some(
-            (cardAttachment: SerializedFileDef) =>
-              cardAttachment.sourceUrl === attachedCard.sourceUrl,
-          );
-        });
+      let shouldIncludeContent = shouldIncludeAttachmentContent(
+        matrixEvent,
+        history,
+        attachedCard.sourceUrl,
+      );
       let result: SerializedFileDef = {
         url: attachedCard.url,
         sourceUrl: attachedCard.sourceUrl ?? '',
@@ -470,18 +487,11 @@ export async function getAttachedFiles(
   let attachedFiles = matrixEvent.content?.data?.attachedFiles ?? [];
   return Promise.all(
     attachedFiles.map(async (attachedFile: SerializedFileDef) => {
-      // If the file is attached later in the history, we should not include the content here
-      let shouldIncludeContent = !history
-        .slice(history.indexOf(matrixEvent) + 1)
-        .some((event) => {
-          // event is not always MatrixEventWithBoxelContext but casting lets us safely check attachedFiles
-          return (
-            event as MatrixEventWithBoxelContext
-          ).content?.data?.attachedFiles?.some(
-            (file: SerializedFileDef) =>
-              file.sourceUrl === attachedFile.sourceUrl,
-          );
-        });
+      let shouldIncludeContent = shouldIncludeAttachmentContent(
+        matrixEvent,
+        history,
+        attachedFile.sourceUrl,
+      );
 
       let result: SerializedFileDef = {
         url: attachedFile.url,
@@ -489,7 +499,10 @@ export async function getAttachedFiles(
         name: attachedFile.name,
         contentType: attachedFile.contentType,
       };
-      if (shouldIncludeContent) {
+      if (
+        shouldIncludeContent &&
+        isTextLikeContentType(attachedFile.contentType)
+      ) {
         try {
           result.content = await downloadFile(client, attachedFile);
         } catch (error) {
@@ -501,6 +514,71 @@ export async function getAttachedFiles(
       return result;
     }),
   );
+}
+
+function modelSupportsImageInput(model: string): boolean {
+  let normalized = model.toLowerCase();
+  return (
+    normalized.includes('gpt-4o') ||
+    normalized.includes('gpt-5') ||
+    normalized.includes('claude') ||
+    normalized.includes('gemini')
+  );
+}
+
+async function getAttachedImageParts(
+  client: MatrixClient,
+  matrixEvent: MatrixEventWithBoxelContext,
+  history: DiscreteMatrixEvent[],
+  model: string,
+): Promise<
+  {
+    type: 'image_url';
+    image_url: {
+      url: string;
+      detail?: string;
+    };
+  }[]
+> {
+  if (!modelSupportsImageInput(model)) {
+    return [];
+  }
+
+  let attachedFiles = matrixEvent.content?.data?.attachedFiles ?? [];
+  let results: {
+    type: 'image_url';
+    image_url: { url: string; detail?: string };
+  }[] = [];
+  for (let attachedFile of attachedFiles) {
+    if (!isImageContentType(attachedFile.contentType)) {
+      continue;
+    }
+    if (
+      !shouldIncludeAttachmentContent(
+        matrixEvent,
+        history,
+        attachedFile.sourceUrl,
+      )
+    ) {
+      continue;
+    }
+    try {
+      let dataUrl = await downloadFileAsDataUrl(client, attachedFile);
+      results.push({
+        type: 'image_url',
+        image_url: {
+          url: dataUrl,
+          detail: 'auto',
+        },
+      });
+    } catch (error) {
+      getLog().error(
+        `Failed to fetch image attachment ${attachedFile.url}:`,
+        error,
+      );
+    }
+  }
+  return results;
 }
 
 export async function loadCurrentlySerializedFileDefs(
@@ -540,6 +618,15 @@ export async function loadCurrentlySerializedFileDefs(
 
   return Promise.all(
     attachedFiles.map(async (attachedFile: SerializedFileDef) => {
+      if (!isTextLikeContentType(attachedFile.contentType)) {
+        return {
+          url: attachedFile.url,
+          sourceUrl: attachedFile.sourceUrl ?? '',
+          name: attachedFile.name,
+          contentType: attachedFile.contentType,
+          content: undefined,
+        };
+      }
       try {
         let content = await downloadFile(client, attachedFile);
 
@@ -1179,6 +1266,7 @@ export async function buildPromptForModel(
   skillCards: LooseCardResource[] = [],
   disabledSkillIds: string[] = [],
   client: MatrixClient,
+  model: string = DEFAULT_LLM,
 ) {
   // Need to make sure the passed in username is a full id
   if (
@@ -1236,11 +1324,29 @@ export async function buildPromptForModel(
         event as CardMessageEvent,
         history,
       );
-      let content = [body, attachments].filter(Boolean).join('\n\n');
-      if (content) {
+      let textContent = [body, attachments].filter(Boolean).join('\n\n');
+      let imageParts = await getAttachedImageParts(
+        client,
+        event as CardMessageEvent,
+        history,
+        model,
+      );
+      if (imageParts.length > 0) {
+        let contentParts: OpenAIPromptMessage['content'] = [
+          {
+            type: 'text',
+            text: textContent || 'User shared image attachments.',
+          },
+          ...imageParts,
+        ];
         historicalMessages.push({
           role: 'user',
-          content,
+          content: contentParts,
+        });
+      } else if (textContent) {
+        historicalMessages.push({
+          role: 'user',
+          content: textContent,
         });
       }
     }

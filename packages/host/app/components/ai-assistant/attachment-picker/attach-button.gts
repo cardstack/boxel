@@ -142,7 +142,9 @@ export default class AttachButton extends Component<Signature> {
   });
 
   private doChooseFile = restartableTask(async () => {
-    let chosenFile: FileDef | undefined = await chooseFile();
+    let chosenFile: FileDef | undefined = await chooseFile({
+      uploadTarget: 'matrix',
+    });
     if (chosenFile) {
       this.args.chooseFile(chosenFile);
     }

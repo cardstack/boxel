@@ -15,6 +15,8 @@ import type { FileDef } from 'https://cardstack.com/base/file-api';
 import AttachButton from './attach-button';
 import AttachedItems from './attached-items';
 
+import type { DraftFileUpload } from './types';
+
 import type { WithBoundArgs } from '@glint/template';
 import type { TrackedSet } from 'tracked-built-ins';
 
@@ -29,6 +31,9 @@ interface Signature {
     removeCard: (cardId: string) => void;
     chooseFile: (file: FileDef) => void;
     removeFile: (file: FileDef) => void;
+    pendingUploads?: DraftFileUpload[];
+    retryFileUpload?: (uploadId: string) => void;
+    removePendingFileUpload?: (uploadId: string) => void;
     autoAttachedCardTooltipMessage?: string;
   };
   Blocks: {
@@ -42,6 +47,9 @@ interface Signature {
         | 'removeFile'
         | 'chooseCard'
         | 'chooseFile'
+        | 'pendingUploads'
+        | 'retryFileUpload'
+        | 'removePendingFileUpload'
         | 'autoAttachedCardTooltipMessage'
         | 'isLoaded'
       >,
@@ -64,6 +72,9 @@ export default class AiAssistantAttachmentPicker extends Component<Signature> {
         removeFile=@removeFile
         chooseCard=@chooseCard
         chooseFile=@chooseFile
+        pendingUploads=@pendingUploads
+        retryFileUpload=@retryFileUpload
+        removePendingFileUpload=@removePendingFileUpload
         autoAttachedCardTooltipMessage=@autoAttachedCardTooltipMessage
       )
       (component AttachButton chooseCard=@chooseCard chooseFile=@chooseFile)

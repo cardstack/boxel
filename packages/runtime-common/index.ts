@@ -388,6 +388,7 @@ export interface FileChooser {
   chooseFile<T>(opts?: {
     fileType?: CodeRef;
     fileTypeName?: string;
+    uploadTarget?: 'realm' | 'matrix';
   }): Promise<undefined | T>;
 }
 
@@ -419,6 +420,7 @@ export async function chooseCard(
 export async function chooseFile<T extends FileDef>(opts?: {
   fileType?: CodeRef;
   fileTypeName?: string;
+  uploadTarget?: 'realm' | 'matrix';
 }): Promise<undefined | T> {
   let here = globalThis as any;
   if (!here._CARDSTACK_FILE_CHOOSER) {

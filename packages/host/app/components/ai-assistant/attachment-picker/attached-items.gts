@@ -6,7 +6,7 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
 import { Tooltip, Pill } from '@cardstack/boxel-ui/components';
-import { and, gt, not } from '@cardstack/boxel-ui/helpers';
+import { and, eq, gt, not } from '@cardstack/boxel-ui/helpers';
 
 import type { CardErrorJSONAPI } from '@cardstack/runtime-common';
 import {
@@ -24,6 +24,7 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type { FileDef } from 'https://cardstack.com/base/file-api';
 
+import type { DraftFileUpload } from './types';
 import type { TrackedSet } from 'tracked-built-ins';
 
 const MAX_ITEMS_TO_DISPLAY = 4;
@@ -38,6 +39,9 @@ interface Signature {
     removeFile: (file: FileDef) => void;
     chooseCard?: (cardId: string) => void;
     chooseFile?: (file: FileDef) => void;
+    pendingUploads?: DraftFileUpload[];
+    retryFileUpload?: (uploadId: string) => void;
+    removePendingFileUpload?: (uploadId: string) => void;
     isLoaded: boolean;
     autoAttachedCardTooltipMessage?: string;
   };
@@ -52,6 +56,10 @@ export default class AttachedItems extends Component<Signature> {
     return this.areAllItemsDisplayed
       ? this.args.items
       : this.args.items.slice(0, MAX_ITEMS_TO_DISPLAY);
+  }
+
+  get pendingUploads() {
+    return this.args.pendingUploads ?? [];
   }
 
   private isCard = (item: CardDef | FileDef): item is CardDef => {
@@ -105,6 +113,16 @@ export default class AttachedItems extends Component<Signature> {
   @action
   private handleRemoveFile(file: FileDef) {
     this.args.removeFile(file);
+  }
+
+  @action
+  private retryFileUpload(uploadId: string) {
+    this.args.retryFileUpload?.(uploadId);
+  }
+
+  @action
+  private removePendingFileUpload(uploadId: string) {
+    this.args.removePendingFileUpload?.(uploadId);
   }
 
   <template>
@@ -221,6 +239,48 @@ export default class AttachedItems extends Component<Signature> {
             View All ({{@items.length}})
           </Pill>
         {{/if}}
+        {{#each this.pendingUploads as |upload|}}
+          <Pill
+            @kind='button'
+            class='pending-upload-pill'
+            data-test-pending-upload={{upload.id}}
+          >
+            <:iconLeft>
+              {{#if (eq upload.state 'uploading')}}
+                <span class='pending-upload-spinner' />
+              {{/if}}
+            </:iconLeft>
+            <:default>
+              <span class='pending-upload-name'>{{upload.file.name}}</span>
+              {{#if (eq upload.state 'error')}}
+                <span
+                  class='pending-upload-error'
+                  data-test-pending-upload-error={{upload.id}}
+                >{{upload.error}}</span>
+              {{/if}}
+            </:default>
+            <:iconRight>
+              {{#if (eq upload.state 'error')}}
+                <button
+                  type='button'
+                  class='pending-upload-retry'
+                  {{on 'click' (fn this.retryFileUpload upload.id)}}
+                  data-test-pending-upload-retry={{upload.id}}
+                >
+                  Retry
+                </button>
+              {{/if}}
+              <button
+                type='button'
+                class='pending-upload-remove'
+                {{on 'click' (fn this.removePendingFileUpload upload.id)}}
+                data-test-pending-upload-remove={{upload.id}}
+              >
+                Remove
+              </button>
+            </:iconRight>
+          </Pill>
+        {{/each}}
       {{/if}}
     </div>
     <style scoped>
@@ -230,6 +290,51 @@ export default class AttachedItems extends Component<Signature> {
         display: flex;
         flex-wrap: wrap;
         gap: var(--boxel-sp-xxxs);
+      }
+      .pending-upload-pill {
+        max-width: 100%;
+      }
+      .pending-upload-name {
+        max-width: 140px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .pending-upload-error {
+        color: var(--boxel-error-200);
+        margin-left: var(--boxel-sp-xxs);
+        max-width: 180px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .pending-upload-spinner {
+        display: inline-block;
+        width: 12px;
+        height: 12px;
+        border: 2px solid var(--boxel-300);
+        border-top-color: var(--boxel-700);
+        border-radius: 50%;
+        animation: spin 0.9s linear infinite;
+      }
+      .pending-upload-retry,
+      .pending-upload-remove {
+        border: none;
+        background: transparent;
+        padding: 0 var(--boxel-sp-3xs);
+        cursor: pointer;
+        font: var(--boxel-font-xs);
+      }
+      .pending-upload-retry {
+        color: var(--boxel-dark);
+      }
+      .pending-upload-remove {
+        color: var(--boxel-error-200);
+      }
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
       }
     </style>
   </template>

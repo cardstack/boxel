@@ -283,10 +283,7 @@ export async function downloadFile(
   client: MatrixClient,
   attachedFile: SerializedFileDef,
 ): Promise<string> {
-  if (
-    !attachedFile?.contentType?.includes('text/') &&
-    !attachedFile.contentType?.includes('application/vnd.card+json')
-  ) {
+  if (!isTextLikeContentType(attachedFile?.contentType)) {
     throw new Error(
       `Unsupported file type: ${attachedFile.contentType}. For now, only text files are supported.`,
     );
@@ -315,10 +312,13 @@ export async function downloadFile(
 
   // create an in-flight promise and store it so others can await
   const fetchPromise = (async () => {
+    let accessToken = client?.getAccessToken?.();
     let response = await (globalThis as any).fetch(attachedFile.url, {
-      headers: {
-        Authorization: `Bearer ${client.getAccessToken()}`,
-      },
+      headers: accessToken
+        ? {
+            Authorization: `Bearer ${accessToken}`,
+          }
+        : {},
     });
     if (!response.ok) {
       throw new Error(`HTTP error. Status: ${response.status}`);
@@ -345,6 +345,70 @@ export async function downloadFile(
   } finally {
     inFlightFetches.delete(inFlightKey);
   }
+}
+
+export function isTextLikeContentType(contentType?: string | null): boolean {
+  if (!contentType) {
+    return false;
+  }
+  let normalized = contentType.toLowerCase();
+  return (
+    normalized.includes('text/') ||
+    normalized.includes('application/vnd.card+json') ||
+    normalized.includes('application/json') ||
+    normalized.includes('+json') ||
+    normalized.includes('application/xml') ||
+    normalized.includes('application/javascript') ||
+    normalized.includes('application/x-javascript') ||
+    normalized.includes('application/typescript') ||
+    normalized.includes('application/x-typescript')
+  );
+}
+
+export function isImageContentType(contentType?: string | null): boolean {
+  if (!contentType) {
+    return false;
+  }
+  return contentType.startsWith('image/');
+}
+
+function bytesToBase64(bytes: Uint8Array): string {
+  let bufferCtor = (globalThis as any).Buffer;
+  if (bufferCtor) {
+    return bufferCtor.from(bytes).toString('base64');
+  }
+  let binary = '';
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
+}
+
+export async function downloadFileAsDataUrl(
+  client: MatrixClient,
+  attachedFile: SerializedFileDef,
+): Promise<string> {
+  if (!isImageContentType(attachedFile?.contentType)) {
+    throw new Error(
+      `Unsupported image file type: ${attachedFile?.contentType}`,
+    );
+  }
+
+  let accessToken = client?.getAccessToken?.();
+  let response = await (globalThis as any).fetch(attachedFile.url, {
+    headers: accessToken
+      ? {
+          Authorization: `Bearer ${accessToken}`,
+        }
+      : {},
+  });
+  if (!response.ok) {
+    throw new Error(`HTTP error. Status: ${response.status}`);
+  }
+
+  let bytes = new Uint8Array(await response.arrayBuffer());
+  let mimeType = attachedFile.contentType || 'image/png';
+  return `data:${mimeType};base64,${bytesToBase64(bytes)}`;
 }
 
 export function isCommandOrCodePatchResult(

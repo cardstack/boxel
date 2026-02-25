@@ -1030,7 +1030,7 @@ Attached Files (files with newer versions don't show their content):
 [spaghetti-recipe.gts](http://test-realm-server/my-realm/spaghetti-recipe.gts)
 [best-friends.txt](http://test-realm-server/my-realm/best-friends.txt)
 [file-that-does-not-exist.txt](http://test.com/my-realm/file-that-does-not-exist.txt): Error loading attached file: HTTP error. Status: 404
-[example.pdf](http://test.com/my-realm/example.pdf): Error loading attached file: Unsupported file type: application/pdf. For now, only text files are supported.
+[example.pdf](http://test.com/my-realm/example.pdf)
       `.trim(),
       ),
     );

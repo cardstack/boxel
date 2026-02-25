@@ -65,9 +65,9 @@ module('Integration | commands | read-file-for-ai-assistant', function (hooks) {
       fileUrl: `${testRealmURL}files/test.txt`,
     });
     assert.true(!!result.fileForAttachment.contentHash);
-    assert.strictEqual(
-      result.fileForAttachment.contentType,
-      'text/plain; charset=utf-8',
+    assert.true(
+      result.fileForAttachment.contentType?.startsWith('text/plain'),
+      `expected text/plain content type, got ${result.fileForAttachment.contentType}`,
     );
     assert.strictEqual(result.fileForAttachment.name, 'test.txt');
     assert.strictEqual(
@@ -75,5 +75,25 @@ module('Integration | commands | read-file-for-ai-assistant', function (hooks) {
       `${testRealmURL}files/test.txt`,
     );
     assert.true(!!result.fileForAttachment.url);
+  });
+
+  test('rejects reading files not previously attached in the room', async function (assert) {
+    let commandService = getService('command-service');
+    let roomId = mockMatrixUtils.createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'attachment-guard-room',
+    });
+
+    let command = new ReadFileForAiAssistantCommand(
+      commandService.commandContext,
+    );
+
+    await assert.rejects(
+      command.execute({
+        fileUrl: `${testRealmURL}files/test.txt`,
+        roomId,
+      }),
+      /not attached in this conversation/,
+    );
   });
 });

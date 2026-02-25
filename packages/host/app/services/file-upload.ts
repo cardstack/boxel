@@ -46,6 +46,37 @@ export class FileUploadTask {
   }
 }
 
+export class FilePickerTask {
+  @tracked state: 'picking' | 'complete' | 'error' = 'picking';
+  @tracked error?: string;
+  @tracked fileName?: string;
+  result: Promise<File | undefined>;
+
+  private _fileDeferred = new Deferred<File | null>();
+  private _resultDeferred = new Deferred<File | undefined>();
+
+  constructor() {
+    this.result = this._resultDeferred.promise;
+  }
+
+  // Test seam: provide a file without the native picker
+  __provideFileForTesting(file: File | null) {
+    this._fileDeferred.fulfill(file);
+  }
+
+  _resolveFile(file: File | null) {
+    this._fileDeferred.fulfill(file);
+  }
+
+  awaitFile(): Promise<File | null> {
+    return this._fileDeferred.promise;
+  }
+
+  _fulfill(value: File | undefined) {
+    this._resultDeferred.fulfill(value);
+  }
+}
+
 export default class FileUploadService extends Service {
   @service declare private network: NetworkService;
   @service declare private store: StoreService;
@@ -67,7 +98,24 @@ export default class FileUploadService extends Service {
     return task;
   }
 
-  private _openFilePicker(task: FileUploadTask, acceptTypes?: string) {
+  pickFile(opts: {
+    acceptTypes?: string;
+    maxSizeBytes?: number;
+  }): FilePickerTask {
+    let task = new FilePickerTask();
+
+    if (!isTesting()) {
+      this._openFilePicker(task, opts.acceptTypes);
+    }
+
+    this._processPick(task, opts.maxSizeBytes);
+    return task;
+  }
+
+  private _openFilePicker(
+    task: FileUploadTask | FilePickerTask,
+    acceptTypes?: string,
+  ) {
     let input = document.createElement('input');
     input.type = 'file';
     input.accept = acceptTypes ?? '';
@@ -145,6 +193,32 @@ export default class FileUploadService extends Service {
     } catch (e: any) {
       task.state = 'error';
       task.error = e.message ?? 'Upload failed';
+      task._fulfill(undefined);
+    }
+  }
+
+  private async _processPick(task: FilePickerTask, maxSizeBytes?: number) {
+    try {
+      let file = await task.awaitFile();
+      if (!file) {
+        task.state = 'complete';
+        task._fulfill(undefined);
+        return;
+      }
+
+      task.fileName = file.name;
+      if (maxSizeBytes && file.size > maxSizeBytes) {
+        task.state = 'error';
+        task.error = `File "${file.name}" exceeds maximum allowed size (${maxSizeBytes} bytes)`;
+        task._fulfill(undefined);
+        return;
+      }
+
+      task.state = 'complete';
+      task._fulfill(file);
+    } catch (e: any) {
+      task.state = 'error';
+      task.error = e.message ?? 'File selection failed';
       task._fulfill(undefined);
     }
   }
