@@ -1307,7 +1307,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         let themeRel =
           pristineDoc?.relationships?.['cardInfo.theme']?.links?.self;
         assert.ok(
-          themeRel != null,
+          themeRel,
           `pristine_doc preserves the cardInfo.theme relationship URL (got ${themeRel})`,
         );
       });
