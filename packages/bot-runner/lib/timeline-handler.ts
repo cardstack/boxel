@@ -89,16 +89,7 @@ export function onTimelineEvent({
         `received event from ${senderUsername} in room ${room.roomId} with ${registrations.length} registrations`,
       );
       for (let registration of submissionBotRegistrations) {
-        let eventTimestamp = event.event.origin_server_ts;
-        if (
-          eventTimestamp == null ||
-          eventTimestamp < registration.created_at_ms
-        ) {
-        let createdAt = Date.parse(registration.created_at);
-        if (Number.isNaN(createdAt)) {
-          continue;
-        }
-        if (eventTimestamp < createdAt) {
+        if (eventTimestamp < registration.created_at_ms) {
           continue;
         }
         log.debug(
@@ -119,16 +110,7 @@ export function onTimelineEvent({
         });
       }
       for (let registration of registrations) {
-        let eventTimestamp = event.event.origin_server_ts;
-        if (
-          eventTimestamp == null ||
-          eventTimestamp < registration.created_at_ms
-        ) {
-        let createdAt = Date.parse(registration.created_at);
-        if (Number.isNaN(createdAt)) {
-          continue;
-        }
-        if (eventTimestamp < createdAt) {
+        if (eventTimestamp < registration.created_at_ms) {
           continue;
         }
         // TODO: filter out events we want to handle based on the registration (e.g. command messages, system events)
