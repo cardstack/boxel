@@ -164,26 +164,27 @@ export default class SearchContent extends Component<Signature> {
 
   private get filterTypeRef(): CodeRef | undefined {
     const filter = this.args.baseFilter;
-    if (!filter) {
-      return undefined;
-    }
-    // EveryFilter with 'on' scoping (e.g. specRef in chooseCard)
-    if ('on' in filter && filter.on) {
-      return filter.on;
-    }
-    // Top-level CardTypeFilter { type: CodeRef } (e.g. linksTo)
-    if (isCardTypeFilter(filter)) {
-      return filter.type;
-    }
-    // EveryFilter containing a CardTypeFilter (e.g. linksToMany)
-    if (isEveryFilter(filter)) {
-      for (const sub of filter.every) {
-        if (isCardTypeFilter(sub)) {
-          return sub.type;
+    if (filter) {
+      // EveryFilter with 'on' scoping (e.g. specRef in chooseCard)
+      if ('on' in filter && filter.on) {
+        return filter.on;
+      }
+      // Top-level CardTypeFilter { type: CodeRef } (e.g. linksTo)
+      if (isCardTypeFilter(filter)) {
+        return filter.type;
+      }
+      // EveryFilter containing a CardTypeFilter (e.g. linksToMany)
+      if (isEveryFilter(filter)) {
+        for (const sub of filter.every) {
+          if (isCardTypeFilter(sub)) {
+            return sub.type;
+          }
         }
       }
+      return undefined;
     }
-    return undefined;
+    // Search-sheet mode: extract type from carddef: search key (searchForInstances)
+    return getCodeRefFromSearchKey(this.args.searchKey);
   }
 
   private searchPrerenderedCards = getPrerenderedSearch(

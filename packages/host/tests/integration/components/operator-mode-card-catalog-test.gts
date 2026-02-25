@@ -825,6 +825,37 @@ module('Integration | operator-mode | card catalog', function (hooks) {
       .doesNotExist('Pet/mango is hidden when its realm is not selected');
   });
 
+  test(`Recents section filters cards by type when searching for instances of a card def`, async function (assert) {
+    let recentCardsService = getService('recent-cards-service');
+    recentCardsService.add(`${testRealmURL}Pet/mango`);
+    recentCardsService.add(`${testRealmURL}Person/fadhlan`);
+
+    ctx.setCardInOperatorModeState(`${testRealmURL}grid`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+    await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
+    await click(`[data-test-open-search-field]`);
+
+    // Simulate searchForInstances for Person — carddef: prefix + absolute module/name key
+    await fillIn(
+      `[data-test-search-field]`,
+      `carddef:${testRealmURL}person/Person`,
+    );
+    await waitFor(`[data-test-search-result="${testRealmURL}Person/fadhlan"]`);
+
+    assert
+      .dom(`[data-test-search-result="${testRealmURL}Person/fadhlan"]`)
+      .exists('Person recent card appears when searching for Person instances');
+    assert
+      .dom(`[data-test-search-result="${testRealmURL}Pet/mango"]`)
+      .doesNotExist(
+        'non-Person recent cards are filtered out when searching for Person instances',
+      );
+  });
+
   test(`card catalog modal recents are filtered by card type`, async function (assert) {
     let recentCardsService = getService('recent-cards-service');
     // Add both a Spec card and a non-Spec card to recents
