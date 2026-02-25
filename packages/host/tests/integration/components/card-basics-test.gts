@@ -750,15 +750,15 @@ module('Integration | card-basics', function (hooks) {
           () =>
             document
               .querySelector('[data-test-gallery-fitted]')
-              ?.textContent?.includes('hero.txt'),
+              ?.textContent?.includes('hero'),
           { timeout: 5000 },
         );
 
         assert
           .dom('[data-test-gallery-fitted]')
           .includesText(
-            'hero.txt',
-            'FileDef renders delegated view from file meta',
+            'hero',
+            'TextFileDef renders delegated view with title from file meta',
           );
       });
 
@@ -830,7 +830,7 @@ module('Integration | card-basics', function (hooks) {
               document.querySelector(
                 '[data-test-plural-view-field="attachments"]',
               )?.textContent ?? '';
-            return text.includes('first.txt') && text.includes('second.txt');
+            return text.includes('first') && text.includes('second');
           },
           { timeout: 5000 },
         );
@@ -841,14 +841,14 @@ module('Integration | card-basics', function (hooks) {
         assert
           .dom('[data-test-plural-view-field="attachments"]')
           .includesText(
-            'first.txt',
-            'FileDef renders delegated view from file meta',
+            'first',
+            'TextFileDef renders delegated view with title from file meta',
           );
         assert
           .dom('[data-test-plural-view-field="attachments"]')
           .includesText(
-            'second.txt',
-            'FileDef renders delegated view from file meta',
+            'second',
+            'TextFileDef renders delegated view with title from file meta',
           );
       });
     });
