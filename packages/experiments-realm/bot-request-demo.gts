@@ -160,7 +160,7 @@ class Isolated extends Component<typeof BotRequestDemo> {
       {
         type: 'app.boxel.bot-trigger',
         content: {
-          type: 'create-listing-pr',
+          type: 'pr-listing-create',
           realm: this.createListingPRTargetRealm,
           input: {
             roomId: '<resolved room id>',
