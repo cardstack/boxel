@@ -18,5 +18,9 @@ setupDeprecationWorkflow({
       handler: 'silence',
       matchId: 'deprecate-import-env-from-ember',
     },
+    {
+      handler: 'silence',
+      matchId: 'deprecate-import-onerror-from-ember',
+    },
   ],
 });
