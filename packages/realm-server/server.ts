@@ -389,7 +389,10 @@ export class RealmServer {
     let hasPublicPermissions = await this.hasPublicPermissions(cardURL);
 
     if (!hasPublicPermissions) {
-      ctxt.body = indexHTML;
+      ctxt.body = injectHeadHTML(
+        indexHTML,
+        this.defaultIconLinks().join('\n'),
+      );
       return;
     }
 
@@ -459,6 +462,13 @@ export class RealmServer {
       headFragments.push(
         `<style data-boxel-scoped-css>\n${scopedCSS}\n</style>`,
       );
+    }
+
+    let headHasIcons =
+      headHTML != null &&
+      /rel=["'](?:icon|apple-touch-icon)["']/.test(headHTML);
+    if (!headHasIcons) {
+      headFragments.push(...this.defaultIconLinks());
     }
 
     if (headFragments.length > 0) {
@@ -667,6 +677,15 @@ export class RealmServer {
 
     deferred.fulfill(indexHTML);
     return indexHTML;
+  }
+
+  private defaultIconLinks(): string[] {
+    let faviconURL = new URL('boxel-favicon.png', this.assetsURL).href;
+    let webclipURL = new URL('boxel-webclip.png', this.assetsURL).href;
+    return [
+      `<link href="${faviconURL}" rel="icon" type="image/x-icon" />`,
+      `<link href="${webclipURL}" rel="apple-touch-icon" />`,
+    ];
   }
 
   private truncateLogLines(value: string, maxLines = 3): string {
