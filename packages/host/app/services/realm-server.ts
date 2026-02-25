@@ -630,6 +630,28 @@ export default class RealmServerService extends Service {
     });
   }
 
+  maybeAuthedFetchForRealms(
+    url: string,
+    realms: string[],
+    options: RequestInit = {},
+  ) {
+    const headers = new Headers(options.headers);
+    if (!headers.has('Authorization')) {
+      if (this.token) {
+        headers.set('Authorization', `Bearer ${this.token}`);
+      } else {
+        let realmToken = this.getRealmTokenForRealms(realms);
+        if (realmToken) {
+          headers.set('Authorization', `Bearer ${realmToken}`);
+        }
+      }
+    }
+    return this.network.fetch(url, {
+      ...options,
+      headers,
+    });
+  }
+
   // args is of type `RequestForwardBody` in realm-server/handlers/handle-request-forward
   async requestForward(args: {
     url: string;
@@ -1032,6 +1054,27 @@ export default class RealmServerService extends Service {
     }
 
     return this.token;
+  }
+
+  private getRealmTokenForRealms(realms: string[]): string | undefined {
+    let sessionTokens: Record<string, string> = {};
+    let sessionStr = window.localStorage.getItem(SessionLocalStorageKey);
+    if (!sessionStr) {
+      return undefined;
+    }
+    try {
+      sessionTokens = JSON.parse(sessionStr) as Record<string, string>;
+    } catch {
+      return undefined;
+    }
+    for (let realmURL of realms) {
+      let normalizedRealmURL = ensureTrailingSlash(realmURL);
+      let token = sessionTokens[normalizedRealmURL] ?? sessionTokens[realmURL];
+      if (token) {
+        return token;
+      }
+    }
+    return undefined;
   }
 }
 

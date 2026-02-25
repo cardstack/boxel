@@ -81,6 +81,8 @@ type ModelState = {
 };
 
 const renderReadyLogger = runtimeLogger('render-ready');
+const READY_SETTLE_MAX_PASSES = 20;
+const READY_SETTLE_REQUIRED_STABLE_PASSES = 2;
 
 export default class RenderRoute extends Route<Model> {
   @service('render-store') declare store: RenderStoreService;
@@ -632,7 +634,7 @@ export default class RenderRoute extends Route<Model> {
     renderReadyLogger.debug(
       `settleModelAfterRender start cardId=${model.cardId} status=${model.status}`,
     );
-    await this.#authGuard.race(() => this.store.loaded());
+    await this.#waitForRenderLoadStability(model.cardId);
     renderReadyLogger.debug(
       `settleModelAfterRender store.loaded resolved cardId=${model.cardId}`,
     );
@@ -645,6 +647,40 @@ export default class RenderRoute extends Route<Model> {
     }).deps;
     renderReadyLogger.debug(
       `settleModelAfterRender done cardId=${model.cardId} deps=${model.capturedDeps?.length ?? 0}`,
+    );
+  }
+
+  async #waitForRenderLoadStability(cardId: string): Promise<void> {
+    let stablePasses = 0;
+    let observedGeneration = this.store.loadGeneration;
+    for (let pass = 0; pass < READY_SETTLE_MAX_PASSES; pass++) {
+      await this.#authGuard.race(() => this.store.loaded());
+      await this.#waitForNextRenderFrame();
+      let nextGeneration = this.store.loadGeneration;
+      let generationChanged = nextGeneration !== observedGeneration;
+      if (generationChanged) {
+        observedGeneration = nextGeneration;
+        stablePasses = 0;
+      } else {
+        stablePasses++;
+      }
+      renderReadyLogger.debug(
+        `waitForRenderLoadStability pass=${pass + 1}/${READY_SETTLE_MAX_PASSES} cardId=${cardId} generation=${nextGeneration} stablePasses=${stablePasses}`,
+      );
+      if (stablePasses >= READY_SETTLE_REQUIRED_STABLE_PASSES) {
+        break;
+      }
+    }
+    await this.#authGuard.race(() => this.store.loaded());
+  }
+
+  async #waitForNextRenderFrame(): Promise<void> {
+    if (typeof requestAnimationFrame !== 'function') {
+      await Promise.resolve();
+      return;
+    }
+    await new Promise<void>((resolve) =>
+      requestAnimationFrame(() => resolve()),
     );
   }
 

@@ -153,3 +153,61 @@ export function installDelayedRuntimeRealmSearchPatch(delayMs: number): {
     },
   };
 }
+
+export function installSearchRequestObserverPatch(): {
+  getRequests: () => Array<{
+    url: string;
+    method: string;
+    hasAuthorization: boolean;
+  }>;
+  restore: () => void;
+} {
+  let originalGetPage = PagePool.prototype.getPage;
+  let observedRequests: Array<{
+    url: string;
+    method: string;
+    hasAuthorization: boolean;
+  }> = [];
+  let pageRequestListeners = new Map<any, (request: any) => void>();
+
+  PagePool.prototype.getPage = async function (this: PagePool, realm: string) {
+    let pageInfo = await originalGetPage.call(this, realm);
+    let page = pageInfo.page as any;
+    if (page && !pageRequestListeners.has(page)) {
+      let listener = (request: any) => {
+        let url = request.url?.();
+        if (!url || !url.endsWith('/_search')) {
+          return;
+        }
+        let headers =
+          (request.headers?.() as Record<string, string> | undefined) ?? {};
+        observedRequests.push({
+          url,
+          method: request.method?.() ?? 'UNKNOWN',
+          hasAuthorization: Boolean(
+            headers.authorization ?? headers.Authorization,
+          ),
+        });
+      };
+      pageRequestListeners.set(page, listener);
+      page.on?.('request', listener);
+    }
+    return { ...pageInfo, page };
+  };
+
+  return {
+    getRequests: () => [...observedRequests],
+    restore: () => {
+      for (let [page, listener] of pageRequestListeners) {
+        try {
+          page.off?.('request', listener);
+        } catch {
+          // best-effort cleanup
+        }
+      }
+      pageRequestListeners.clear();
+      observedRequests = [];
+      PagePool.prototype.getPage = originalGetPage;
+    },
+  };
+}

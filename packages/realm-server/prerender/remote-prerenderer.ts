@@ -12,8 +12,8 @@ import {
   PRERENDER_SERVER_DRAINING_STATUS_CODE,
   PRERENDER_SERVER_STATUS_DRAINING,
   PRERENDER_SERVER_STATUS_HEADER,
+  resolvePrerenderManagerRequestTimeoutMs,
 } from './prerender-constants';
-import { renderTimeoutMs } from './utils';
 
 const log = logger('remote-prerenderer');
 const jsonApiHeaders = {
@@ -49,10 +49,7 @@ export function createRemotePrerenderer(
     1000,
     Number(process.env.PRERENDER_MANAGER_MAX_DELAY_MS ?? 180_000),
   );
-  const requestTimeoutMs = Math.max(
-    1000,
-    Number(process.env.PRERENDER_MANAGER_REQUEST_TIMEOUT_MS ?? renderTimeoutMs),
-  );
+  const requestTimeoutMs = resolvePrerenderManagerRequestTimeoutMs();
 
   async function requestWithRetry<T>(
     path: string,

@@ -5,15 +5,12 @@ import {
   type PrerenderMeta,
   type RenderError,
 } from '@cardstack/runtime-common';
+import { prerenderRenderTimeoutMs } from './prerender-constants';
 
 import type { Page } from 'puppeteer';
 
 const log = logger('prerenderer');
-const DEFAULT_CARD_RENDER_TIMEOUT_MS = 30_000;
-
-export const cardRenderTimeout = Number(
-  process.env.RENDER_TIMEOUT_MS ?? DEFAULT_CARD_RENDER_TIMEOUT_MS,
-);
+export const cardRenderTimeout = prerenderRenderTimeoutMs;
 export const renderTimeoutMs = cardRenderTimeout;
 
 export type RenderStatus = 'ready' | 'error' | 'unusable';
