@@ -97,6 +97,7 @@ let MaybeBase64Field: (typeof CardAPIModule)['MaybeBase64Field'];
 let createFromSerialized: (typeof CardAPIModule)['createFromSerialized'];
 let updateFromSerialized: (typeof CardAPIModule)['updateFromSerialized'];
 let serializeCard: (typeof CardAPIModule)['serializeCard'];
+let serializeFileDef: (typeof CardAPIModule)['serializeFileDef'];
 let isSaved: (typeof CardAPIModule)['isSaved'];
 let relationshipMeta: (typeof CardAPIModule)['relationshipMeta'];
 let getQueryableValue: (typeof CardAPIModule)['getQueryableValue'];
@@ -220,6 +221,7 @@ async function initialize() {
     createFromSerialized,
     updateFromSerialized,
     serializeCard,
+    serializeFileDef,
     isSaved,
     relationshipMeta,
     getQueryableValue,
@@ -282,6 +284,7 @@ export {
   createFromSerialized,
   updateFromSerialized,
   serializeCard,
+  serializeFileDef,
   isSaved,
   relationshipMeta,
   getQueryableValue,
