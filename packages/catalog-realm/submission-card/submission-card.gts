@@ -7,6 +7,7 @@ import {
   linksTo,
 } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
+import BotIcon from '@cardstack/boxel-icons/bot';
 import { Listing } from '../catalog-app/listing/listing';
 
 const GITHUB_BRANCH_URL_PREFIX =
@@ -26,7 +27,13 @@ export class FileContentField extends FieldDef {
 
 export class SubmissionCard extends CardDef {
   static displayName = 'SubmissionCard';
+  static icon = BotIcon;
 
+  @field cardTitle = contains(StringField, {
+    computeVia: function (this: SubmissionCard) {
+      return this.listing?.name ?? this.listing?.cardTitle ?? 'Untitled Submission';
+    },
+  });
   @field roomId = contains(StringField);
   @field branchName = contains(StringField);
   @field githubURL = contains(StringField, {
