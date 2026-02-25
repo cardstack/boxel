@@ -9,8 +9,8 @@ export function installRealmServerAssertOwnRealmServerBypassPatch(): {
   // against dynamic realm origins (for example 127.0.0.1:4450), while the host's
   // RealmServerService.assertOwnRealmServer check assumes a single configured
   // realm server origin. Query-field search calls through that assertion before
-  // it performs _search, so without this patch search can bail out too early and
-  // we never get to exercise query-load tracking behavior.
+  // it performs federated search, so without this patch search can bail out too
+  // early and we never get to exercise query-load tracking behavior.
   let originalGetPage = PagePool.prototype.getPage;
   let patchedPages = new Map<any, (...args: any[]) => Promise<any>>();
 
@@ -140,7 +140,7 @@ export function installDelayedRuntimeRealmSearchPatch(delayMs: number): {
     this: RuntimeRealm,
     query: Parameters<RuntimeRealm['search']>[0],
   ): Promise<Awaited<ReturnType<RuntimeRealm['search']>>> {
-    // Exposed to tests as a stable signal that fallback _search actually ran.
+    // Exposed to tests as a stable signal that fallback search actually ran.
     delayedSearchRequestCount++;
     await new Promise((resolve) => setTimeout(resolve, delayMs));
     return await originalSearch.call(this, query);
@@ -176,7 +176,10 @@ export function installSearchRequestObserverPatch(): {
     if (page && !pageRequestListeners.has(page)) {
       let listener = (request: any) => {
         let url = request.url?.();
-        if (!url || !url.endsWith('/_search')) {
+        if (
+          !url ||
+          (!url.endsWith('/_federated-search') && !url.endsWith('/_search'))
+        ) {
           return;
         }
         let headers =

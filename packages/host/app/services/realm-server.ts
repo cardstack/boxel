@@ -436,7 +436,7 @@ export default class RealmServerService extends Service {
 
     await this.login();
 
-    let infoURL = new URL('_info', realmServerURL);
+    let infoURL = new URL('_federated-info', realmServerURL);
 
     let response = await this.authedFetch(infoURL.href, {
       method: 'QUERY',

@@ -706,7 +706,7 @@ export default class StoreService extends Service implements StoreInterface {
     // TODO remove this assertion after multi-realm server/federated identity is supported
     this.realmServer.assertOwnRealmServer(realmServerURLs);
     let [realmServerURL] = realmServerURLs;
-    let searchURL = new URL('_search', realmServerURL);
+    let searchURL = new URL('_federated-search', realmServerURL);
     let response = await this.realmServer.maybeAuthedFetchForRealms(
       searchURL.href,
       realms,
@@ -772,7 +772,7 @@ export default class StoreService extends Service implements StoreInterface {
     // TODO remove this assertion after multi-realm server/federated identity is supported
     this.realmServer.assertOwnRealmServer(realmServerURLs);
     let [realmServerURL] = realmServerURLs;
-    let searchURL = new URL('_search', realmServerURL);
+    let searchURL = new URL('_federated-search', realmServerURL);
     let response = await this.realmServer.maybeAuthedFetchForRealms(
       searchURL.href,
       realms,

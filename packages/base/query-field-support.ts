@@ -332,12 +332,11 @@ export function captureQueryFieldSeedData(
     (seedComesFromSearch || relationshipHasUnhydratedTargets);
   fieldState.seedSearchURL = shouldTreatEmptySeedAsUnresolved
     ? null
-    : relationship?.links?.search ?? null;
+    : (relationship?.links?.search ?? null);
   fieldState.seedRealms = fieldState.seedSearchURL
     ? [parseSearchURL(new URL(fieldState.seedSearchURL)).realm.href]
     : [];
-  fieldState.seedErrors =
-    (relationship?.meta as any)?.errors ?? undefined;
+  fieldState.seedErrors = (relationship?.meta as any)?.errors ?? undefined;
 }
 
 function resolveQueryAndRealm(

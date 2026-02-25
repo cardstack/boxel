@@ -2268,7 +2268,7 @@ module(basename(__filename), function () {
             .post('/_search')
             .set('Accept', 'application/vnd.card+json')
             .set('X-HTTP-Method-Override', 'QUERY')
-            .send({ ...query, realms: [testRealmHref] });
+            .send({ ...query });
 
           assert.strictEqual(response.status, 200, 'HTTP 200 status');
           assert.strictEqual(response.body.data.length, 1, 'found one card');

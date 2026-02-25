@@ -1413,10 +1413,10 @@ module(basename(__filename), function () {
   module('prerender - permissioned auth failures', function (hooks) {
     let providerRealmURL = 'http://127.0.0.1:4451/test/';
     let consumerRealmURL = 'http://127.0.0.1:4452/test/';
-    let privateConsumerRealmURL = 'http://127.0.0.1:4453/test/';
     let prerenderServerURL = new URL(consumerRealmURL).origin;
     let testUserId = '@user1:localhost';
     let permissions: RealmPermissions = {};
+    let permissionedRealms: RuntimeRealm[] = [];
     let prerenderer: Prerenderer;
     let auth = () => testCreatePrerenderAuth(testUserId, permissions);
 
@@ -1434,7 +1434,6 @@ module(basename(__filename), function () {
     hooks.beforeEach(function () {
       permissions = {
         [consumerRealmURL]: ['read', 'write', 'realm-owner'],
-        [privateConsumerRealmURL]: ['read', 'write', 'realm-owner'],
       };
     });
 
@@ -1442,114 +1441,7 @@ module(basename(__filename), function () {
       await Promise.all([
         prerenderer.disposeRealm(providerRealmURL),
         prerenderer.disposeRealm(consumerRealmURL),
-        prerenderer.disposeRealm(privateConsumerRealmURL),
       ]);
-    });
-
-    let makeQueryDirectoryFileSystem = () => ({
-      'person.gts': `
-        import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
-        import StringField from "https://cardstack.com/base/string";
-
-        export class Person extends CardDef {
-          @field name = contains(StringField);
-        }
-      `,
-      'person-1.json': {
-        data: {
-          attributes: {
-            name: 'Alpha',
-          },
-          meta: {
-            adoptsFrom: {
-              module: './person',
-              name: 'Person',
-            },
-          },
-        },
-      },
-      'person-2.json': {
-        data: {
-          attributes: {
-            name: 'Beta',
-          },
-          meta: {
-            adoptsFrom: {
-              module: './person',
-              name: 'Person',
-            },
-          },
-        },
-      },
-      'query-directory.gts': `
-        import { field, CardDef, Component, linksToMany } from "https://cardstack.com/base/card-api";
-        import { Person } from "./person";
-
-        export class QueryDirectory extends CardDef {
-          @field people = linksToMany(() => Person, {
-            query: {
-              filter: {
-                eq: {
-                  name: "Beta",
-                },
-              },
-            },
-          });
-
-          static isolated = class extends Component<typeof this> {
-            <template>
-              <ul data-test-directory-people>
-                {{#each @model.people as |person|}}
-                  <li data-test-directory-person-name>{{person.name}}</li>
-                {{/each}}
-              </ul>
-            </template>
-          };
-        }
-      `,
-      'query-directory-1.json': {
-        data: {
-          attributes: {},
-          meta: {
-            adoptsFrom: {
-              module: './query-directory',
-              name: 'QueryDirectory',
-            },
-          },
-        },
-      },
-      'query-directory-proxy.gts': `
-        import { field, CardDef, Component, linksTo } from "https://cardstack.com/base/card-api";
-        import { QueryDirectory } from "./query-directory";
-
-        export class QueryDirectoryProxy extends CardDef {
-          @field directory = linksTo(() => QueryDirectory);
-
-          static isolated = class extends Component<typeof this> {
-            <template>
-              <@fields.directory @format="isolated" />
-            </template>
-          };
-        }
-      `,
-      'query-directory-proxy-1.json': {
-        data: {
-          attributes: {},
-          relationships: {
-            directory: {
-              links: {
-                self: './query-directory-1',
-              },
-            },
-          },
-          meta: {
-            adoptsFrom: {
-              module: './query-directory-proxy',
-              name: 'QueryDirectoryProxy',
-            },
-          },
-        },
-      },
     });
 
     setupPermissionedRealms(hooks, {
@@ -1648,25 +1540,19 @@ module(basename(__filename), function () {
                 },
               },
             },
-            ...makeQueryDirectoryFileSystem(),
-          },
-        },
-        {
-          realmURL: privateConsumerRealmURL,
-          permissions: {
-            [testUserId]: ['read', 'write', 'realm-owner'],
-          },
-          fileSystem: {
-            ...makeQueryDirectoryFileSystem(),
           },
         },
       ],
-      onRealmSetup() {
+      onRealmSetup({ realms }) {
+        permissionedRealms = realms.map(({ realm }) => realm);
         permissions = {
           [consumerRealmURL]: ['read', 'write', 'realm-owner'],
-          [privateConsumerRealmURL]: ['read', 'write', 'realm-owner'],
         };
       },
+    });
+
+    hooks.before(async function () {
+      await Promise.all(permissionedRealms.map((realm) => realm.indexing()));
     });
 
     test('module prerender surfaces auth error without timing out', async function (assert) {
@@ -1782,15 +1668,171 @@ module(basename(__filename), function () {
       );
       assert.false(result.pool.timedOut, 'prerender did not time out');
     });
+  });
+
+  module('prerender - public query fallback', function (hooks) {
+    let publicRealmURL = 'http://127.0.0.1:4454/test/';
+    let prerenderServerURL = new URL(publicRealmURL).origin;
+    let testUserId = '@user1:localhost';
+    let permissions: RealmPermissions = {};
+    let prerenderer: Prerenderer;
+    let auth = () => testCreatePrerenderAuth(testUserId, permissions);
+
+    hooks.before(async () => {
+      prerenderer = getPrerendererForTesting({
+        maxPages: 2,
+        serverURL: prerenderServerURL,
+      });
+    });
+
+    hooks.after(async () => {
+      await prerenderer.stop();
+    });
+
+    hooks.beforeEach(function () {
+      permissions = {
+        [publicRealmURL]: ['read', 'write', 'realm-owner'],
+      };
+    });
+
+    hooks.afterEach(async () => {
+      await prerenderer.disposeRealm(publicRealmURL);
+    });
+
+    let makeQueryDirectoryFileSystem = () => ({
+      'person.gts': `
+        import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
+        import StringField from "https://cardstack.com/base/string";
+
+        export class Person extends CardDef {
+          @field name = contains(StringField);
+        }
+      `,
+      'person-1.json': {
+        data: {
+          attributes: {
+            name: 'Alpha',
+          },
+          meta: {
+            adoptsFrom: {
+              module: './person',
+              name: 'Person',
+            },
+          },
+        },
+      },
+      'person-2.json': {
+        data: {
+          attributes: {
+            name: 'Beta',
+          },
+          meta: {
+            adoptsFrom: {
+              module: './person',
+              name: 'Person',
+            },
+          },
+        },
+      },
+      'query-directory.gts': `
+        import { field, CardDef, Component, linksToMany } from "https://cardstack.com/base/card-api";
+        import { Person } from "./person";
+
+        export class QueryDirectory extends CardDef {
+          @field people = linksToMany(() => Person, {
+            query: {
+              filter: {
+                eq: {
+                  name: "Beta",
+                },
+              },
+            },
+          });
+
+          static isolated = class extends Component<typeof this> {
+            <template>
+              <ul data-test-directory-people>
+                {{#each @model.people as |person|}}
+                  <li data-test-directory-person-name>{{person.name}}</li>
+                {{/each}}
+              </ul>
+            </template>
+          };
+        }
+      `,
+      'query-directory-1.json': {
+        data: {
+          attributes: {},
+          meta: {
+            adoptsFrom: {
+              module: './query-directory',
+              name: 'QueryDirectory',
+            },
+          },
+        },
+      },
+      'query-directory-proxy.gts': `
+        import { field, CardDef, Component, linksTo } from "https://cardstack.com/base/card-api";
+        import { QueryDirectory } from "./query-directory";
+
+        export class QueryDirectoryProxy extends CardDef {
+          @field directory = linksTo(() => QueryDirectory);
+
+          static isolated = class extends Component<typeof this> {
+            <template>
+              <@fields.directory @format="isolated" />
+            </template>
+          };
+        }
+      `,
+      'query-directory-proxy-1.json': {
+        data: {
+          attributes: {},
+          relationships: {
+            directory: {
+              links: {
+                self: './query-directory-1',
+              },
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: './query-directory-proxy',
+              name: 'QueryDirectoryProxy',
+            },
+          },
+        },
+      },
+    });
+
+    setupPermissionedRealms(hooks, {
+      mode: 'beforeEach',
+      realms: [
+        {
+          realmURL: publicRealmURL,
+          permissions: {
+            '*': ['read', 'write', 'realm-owner'],
+          },
+          fileSystem: {
+            ...makeQueryDirectoryFileSystem(),
+          },
+        },
+      ],
+      onRealmSetup() {
+        permissions = {
+          [publicRealmURL]: ['read', 'write', 'realm-owner'],
+        };
+      },
+    });
 
     test('card prerender in a public realm authorizes query fallback search for source-loaded linked cards', async function (assert) {
-      const cardURL = `${consumerRealmURL}query-directory-proxy-1`;
+      const cardURL = `${publicRealmURL}query-directory-proxy-1.json`;
       let realmServerPatch =
         installRealmServerAssertOwnRealmServerBypassPatch();
       let delayedSearchPatch = installDelayedRuntimeRealmSearchPatch(150);
       try {
         let result = await prerenderer.prerenderCard({
-          realm: consumerRealmURL,
+          realm: publicRealmURL,
           url: cardURL,
           auth: auth(),
         });
@@ -1801,7 +1843,7 @@ module(basename(__filename), function () {
         );
         assert.true(
           delayedSearchPatch.getRequestCount() > 0,
-          'fallback _search requests occurred',
+          'fallback search requests occurred',
         );
 
         let isolatedHTML = cleanWhiteSpace(result.response.isolatedHTML ?? '');
@@ -1812,60 +1854,223 @@ module(basename(__filename), function () {
       } finally {
         await realmServerPatch.restore();
         delayedSearchPatch.restore();
-      }
-    });
-
-    test('card prerender in a private realm sends auth header on query fallback _search', async function (assert) {
-      const cardURL = `${privateConsumerRealmURL}query-directory-proxy-1`;
-      let realmServerPatch =
-        installRealmServerAssertOwnRealmServerBypassPatch();
-      let searchRequestObserverPatch = installSearchRequestObserverPatch();
-      let delayedSearchPatch = installDelayedRuntimeRealmSearchPatch(150);
-      try {
-        let result = await prerenderer.prerenderCard({
-          realm: privateConsumerRealmURL,
-          url: cardURL,
-          auth: auth(),
-        });
-
-        assert.notOk(
-          result.response.error,
-          'prerender succeeds for linked query-backed card in private realm',
-        );
-        assert.true(
-          delayedSearchPatch.getRequestCount() > 0,
-          'fallback _search requests occurred',
-        );
-
-        let isolatedHTML = cleanWhiteSpace(result.response.isolatedHTML ?? '');
-        assert.ok(
-          /data-test-directory-person-name[^>]*>\s*Beta\s*</.test(isolatedHTML),
-          `isolated html includes query result Beta: ${isolatedHTML}`,
-        );
-
-        let searchRequests = searchRequestObserverPatch.getRequests();
-        assert.true(
-          searchRequests.length > 0,
-          '_search request was observed at browser layer',
-        );
-        let querySearchRequests = searchRequests.filter(
-          (request) => request.method === 'QUERY',
-        );
-        assert.true(
-          querySearchRequests.length > 0,
-          '_search QUERY request was observed',
-        );
-        assert.true(
-          querySearchRequests.every((request) => request.hasAuthorization),
-          `all _search QUERY requests include Authorization header: ${JSON.stringify(searchRequests)}`,
-        );
-      } finally {
-        delayedSearchPatch.restore();
-        searchRequestObserverPatch.restore();
-        await realmServerPatch.restore();
       }
     });
   });
+
+  module(
+    'prerender - permissioned auth failures (private query fallback)',
+    function (hooks) {
+      let privateRealmURL = 'http://127.0.0.1:4453/test/';
+      let prerenderServerURL = new URL(privateRealmURL).origin;
+      let testUserId = '@user1:localhost';
+      let permissions: RealmPermissions = {};
+      let prerenderer: Prerenderer;
+      let auth = () => testCreatePrerenderAuth(testUserId, permissions);
+
+      hooks.before(async () => {
+        prerenderer = getPrerendererForTesting({
+          maxPages: 2,
+          serverURL: prerenderServerURL,
+        });
+      });
+
+      hooks.after(async () => {
+        await prerenderer.stop();
+      });
+
+      hooks.beforeEach(function () {
+        permissions = {
+          [privateRealmURL]: ['read', 'write', 'realm-owner'],
+        };
+      });
+
+      hooks.afterEach(async () => {
+        await prerenderer.disposeRealm(privateRealmURL);
+      });
+
+      let makeQueryDirectoryFileSystem = () => ({
+        'person.gts': `
+          import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
+          import StringField from "https://cardstack.com/base/string";
+
+          export class Person extends CardDef {
+            @field name = contains(StringField);
+          }
+        `,
+        'person-1.json': {
+          data: {
+            attributes: {
+              name: 'Alpha',
+            },
+            meta: {
+              adoptsFrom: {
+                module: './person',
+                name: 'Person',
+              },
+            },
+          },
+        },
+        'person-2.json': {
+          data: {
+            attributes: {
+              name: 'Beta',
+            },
+            meta: {
+              adoptsFrom: {
+                module: './person',
+                name: 'Person',
+              },
+            },
+          },
+        },
+        'query-directory.gts': `
+          import { field, CardDef, Component, linksToMany } from "https://cardstack.com/base/card-api";
+          import { Person } from "./person";
+
+          export class QueryDirectory extends CardDef {
+            @field people = linksToMany(() => Person, {
+              query: {
+                filter: {
+                  eq: {
+                    name: "Beta",
+                  },
+                },
+              },
+            });
+
+            static isolated = class extends Component<typeof this> {
+              <template>
+                <ul data-test-directory-people>
+                  {{#each @model.people as |person|}}
+                    <li data-test-directory-person-name>{{person.name}}</li>
+                  {{/each}}
+                </ul>
+              </template>
+            };
+          }
+        `,
+        'query-directory-1.json': {
+          data: {
+            attributes: {},
+            meta: {
+              adoptsFrom: {
+                module: './query-directory',
+                name: 'QueryDirectory',
+              },
+            },
+          },
+        },
+        'query-directory-proxy.gts': `
+          import { field, CardDef, Component, linksTo } from "https://cardstack.com/base/card-api";
+          import { QueryDirectory } from "./query-directory";
+
+          export class QueryDirectoryProxy extends CardDef {
+            @field directory = linksTo(() => QueryDirectory);
+
+            static isolated = class extends Component<typeof this> {
+              <template>
+                <@fields.directory @format="isolated" />
+              </template>
+            };
+          }
+        `,
+        'query-directory-proxy-1.json': {
+          data: {
+            attributes: {},
+            relationships: {
+              directory: {
+                links: {
+                  self: './query-directory-1',
+                },
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: './query-directory-proxy',
+                name: 'QueryDirectoryProxy',
+              },
+            },
+          },
+        },
+      });
+
+      setupPermissionedRealms(hooks, {
+        mode: 'beforeEach',
+        realms: [
+          {
+            realmURL: privateRealmURL,
+            permissions: {
+              [testUserId]: ['read', 'write', 'realm-owner'],
+            },
+            fileSystem: {
+              ...makeQueryDirectoryFileSystem(),
+            },
+          },
+        ],
+        onRealmSetup() {
+          permissions = {
+            [privateRealmURL]: ['read', 'write', 'realm-owner'],
+          };
+        },
+      });
+
+      test('card prerender in a private realm sends auth header on query fallback federated search', async function (assert) {
+        const cardURL = `${privateRealmURL}query-directory-proxy-1.json`;
+        let realmServerPatch =
+          installRealmServerAssertOwnRealmServerBypassPatch();
+        let searchRequestObserverPatch = installSearchRequestObserverPatch();
+        let delayedSearchPatch = installDelayedRuntimeRealmSearchPatch(150);
+        try {
+          let result = await prerenderer.prerenderCard({
+            realm: privateRealmURL,
+            url: cardURL,
+            auth: auth(),
+          });
+
+          assert.notOk(
+            result.response.error,
+            'prerender succeeds for linked query-backed card in private realm',
+          );
+          assert.true(
+            delayedSearchPatch.getRequestCount() > 0,
+            'fallback search requests occurred',
+          );
+
+          let isolatedHTML = cleanWhiteSpace(
+            result.response.isolatedHTML ?? '',
+          );
+          assert.ok(
+            /data-test-directory-person-name[^>]*>\s*Beta\s*</.test(
+              isolatedHTML,
+            ),
+            `isolated html includes query result Beta: ${isolatedHTML}`,
+          );
+
+          let searchRequests = searchRequestObserverPatch.getRequests();
+          assert.true(
+            searchRequests.length > 0,
+            'federated search request was observed at browser layer',
+          );
+          let querySearchRequests = searchRequests.filter(
+            (request) => request.method === 'QUERY',
+          );
+          assert.true(
+            querySearchRequests.length > 0,
+            'federated search QUERY request was observed',
+          );
+          assert.true(
+            querySearchRequests.every((request) => request.hasAuthorization),
+            `all federated search QUERY requests include Authorization header: ${JSON.stringify(searchRequests)}`,
+          );
+        } finally {
+          delayedSearchPatch.restore();
+          searchRequestObserverPatch.restore();
+          await realmServerPatch.restore();
+        }
+      });
+    },
+  );
 
   module('prerender - static tests', function (hooks) {
     let realmURL1 = 'http://127.0.0.1:4447/test/';
