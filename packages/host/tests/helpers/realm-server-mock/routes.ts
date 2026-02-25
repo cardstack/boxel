@@ -70,7 +70,7 @@ export function registerDefaultRoutes() {
 
 function registerSearchRoutes() {
   registerRealmServerRoute({
-    path: '/_search',
+    path: '/_federated-search',
     handler: async (req, _url) => {
       let realmList: string[];
       let payload: unknown;
@@ -107,7 +107,7 @@ function registerSearchRoutes() {
   });
 
   registerRealmServerRoute({
-    path: '/_search-prerendered',
+    path: '/_federated-search-prerendered',
     handler: async (req, _url) => {
       let realmList: string[];
       let payload: unknown;
@@ -151,7 +151,7 @@ function registerSearchRoutes() {
 
 function registerInfoRoutes() {
   registerRealmServerRoute({
-    path: '/_info',
+    path: '/_federated-info',
     handler: async (req) => {
       let payload;
       try {

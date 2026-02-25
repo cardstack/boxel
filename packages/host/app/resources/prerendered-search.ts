@@ -218,7 +218,7 @@ export class PrerenderedSearchResource extends Resource<Args> {
     let realmServerURLs = this.realmServer.getRealmServersForRealms(realms);
     this.realmServer.assertOwnRealmServer(realmServerURLs);
     let [realmServerURL] = realmServerURLs;
-    let searchURL = new URL('_search-prerendered', realmServerURL);
+    let searchURL = new URL('_federated-search-prerendered', realmServerURL);
 
     let response = await this.realmServer.maybeAuthedFetch(searchURL.href, {
       method: 'QUERY',

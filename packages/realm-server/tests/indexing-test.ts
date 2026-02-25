@@ -1100,8 +1100,8 @@ module(basename(__filename), function () {
       assert.deepEqual(
         doc.data.meta?.adoptsFrom,
         {
-          module: 'https://cardstack.com/base/file-api',
-          name: 'FileDef',
+          module: 'https://cardstack.com/base/text-file-def',
+          name: 'TextFileDef',
         },
         'adoptsFrom sourced from pristine file resource',
       );

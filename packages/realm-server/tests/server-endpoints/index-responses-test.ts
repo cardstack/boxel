@@ -997,10 +997,9 @@ module(`server-endpoints/${basename(__filename)}`, function () {
   );
 
   module('Published realm index responses', function (hooks) {
-    // Use a URL with a path segment to avoid conflicts with server-level routes
-    // like /_info, /_search, etc. Without a path segment, requests to /_info
-    // would match the server's multi-realm info route instead of the realm's
-    // single-realm info handler.
+    // Use a URL with a path segment. Server-level routes are now namespaced
+    // as /_federated-info, /_federated-search, etc., so they no longer collide
+    // with the realm's own /_info and /_search handlers.
     let realmURL = new URL('http://127.0.0.1:4444/published/');
     let request: SuperTest<Test>;
     let testRealm: Realm;

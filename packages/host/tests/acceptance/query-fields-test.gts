@@ -211,7 +211,7 @@ module(
       let interceptedSearchRequests: string[] = [];
       let handler = async (request: Request) => {
         let url = new URL(request.url);
-        if (url.pathname.endsWith('/_search')) {
+        if (url.pathname.endsWith('/_federated-search')) {
           interceptedSearchRequests.push(request.url);
         }
         return null;
@@ -238,7 +238,7 @@ module(
         assert.strictEqual(
           interceptedSearchRequests.length,
           0,
-          'no _search requests were triggered while materializing query-backed relationships',
+          'no _federated-search requests were triggered while materializing query-backed relationships',
         );
         assert
           .dom(`${cardSelector} [data-test-favorite]`)
@@ -283,7 +283,7 @@ module(
       let interceptedSearchRequests: string[] = [];
       let handler = async (request: Request) => {
         let url = new URL(request.url);
-        if (url.pathname.endsWith('/_search')) {
+        if (url.pathname.endsWith('/_federated-search')) {
           interceptedSearchRequests.push(request.url);
         }
         return null;
@@ -333,7 +333,7 @@ module(
       let interceptedSearchRequests: string[] = [];
       let handler = async (request: Request) => {
         let url = new URL(request.url);
-        if (url.pathname.endsWith('/_search')) {
+        if (url.pathname.endsWith('/_federated-search')) {
           interceptedSearchRequests.push(request.url);
         }
         return null;
@@ -391,7 +391,7 @@ module(
           'realm invalidation triggers a refresh for each query-backed field',
         );
         assert.ok(
-          interceptedSearchRequests[0].includes('_search'),
+          interceptedSearchRequests[0].includes('_federated-search'),
           'query refresh targets the realm search endpoint',
         );
         assert.strictEqual(
@@ -410,7 +410,7 @@ module(
       let interceptedSearchRequests: string[] = [];
       let handler = async (request: Request) => {
         let url = new URL(request.url);
-        if (url.pathname.endsWith('/_search')) {
+        if (url.pathname.endsWith('/_federated-search')) {
           interceptedSearchRequests.push(request.url);
         }
         return null;
@@ -454,7 +454,7 @@ module(
       let interceptedSearchRequests: string[] = [];
       let handler = async (request: Request) => {
         let url = new URL(request.url);
-        if (url.pathname.endsWith('/_search')) {
+        if (url.pathname.endsWith('/_federated-search')) {
           interceptedSearchRequests.push(request.url);
         }
         return null;
@@ -507,7 +507,7 @@ module(
           'realm invalidation triggers a refresh for each query-backed field',
         );
         assert.ok(
-          interceptedSearchRequests[0].includes('_search'),
+          interceptedSearchRequests[0].includes('_federated-search'),
           'query refresh targets the realm search endpoint',
         );
         let cardSelector = `[data-test-stack-card="${QUERY_CARD_2_URL}"]`;
@@ -641,7 +641,7 @@ module(
         let url = new URL(request.url);
 
         // Track client-side search requests
-        if (url.pathname.endsWith('/_search')) {
+        if (url.pathname.endsWith('/_federated-search')) {
           interceptedSearchRequests.push(request.url);
         }
 
@@ -675,7 +675,7 @@ module(
 
         assert.ok(
           interceptedSearchRequests.length > 0,
-          'client-side _search request was triggered as a fallback for the errored query field',
+          'client-side _federated-search request was triggered as a fallback for the errored query field',
         );
 
         let matchElements = findAll(`${cardSelector} [data-test-match]`);
@@ -731,7 +731,7 @@ module(
       let handler = async (request: Request) => {
         let url = new URL(request.url);
 
-        if (url.pathname.endsWith('/_search')) {
+        if (url.pathname.endsWith('/_federated-search')) {
           interceptedSearchRequests.push(request.url);
         }
 
@@ -764,7 +764,7 @@ module(
 
         assert.ok(
           interceptedSearchRequests.length > 0,
-          'client-side _search request was triggered as a fallback',
+          'client-side _federated-search request was triggered as a fallback',
         );
 
         let matchElements = findAll(`${cardSelector} [data-test-match]`);
@@ -787,7 +787,7 @@ module(
       let interceptedSearchRequests: string[] = [];
       let handler = async (request: Request) => {
         let url = new URL(request.url);
-        if (url.pathname.endsWith('/_search')) {
+        if (url.pathname.endsWith('/_federated-search')) {
           interceptedSearchRequests.push(request.url);
         }
         return null;
@@ -807,7 +807,7 @@ module(
         assert.strictEqual(
           interceptedSearchRequests.length,
           0,
-          'no _search requests were triggered — server-populated results were used directly',
+          'no _federated-search requests were triggered — server-populated results were used directly',
         );
 
         let matchElements = findAll(`${cardSelector} [data-test-match]`);
@@ -865,7 +865,7 @@ module(
       let handler = async (request: Request) => {
         let url = new URL(request.url);
 
-        if (url.pathname.endsWith('/_search')) {
+        if (url.pathname.endsWith('/_federated-search')) {
           interceptedSearchRequests.push(request.url);
         }
 
@@ -898,7 +898,7 @@ module(
 
         assert.ok(
           interceptedSearchRequests.length > 0,
-          'client-side _search request was triggered as a fallback',
+          'client-side _federated-search request was triggered as a fallback',
         );
 
         let matchElements = findAll(`${cardSelector} [data-test-match]`);
