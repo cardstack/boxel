@@ -1,9 +1,11 @@
-import { click, fillIn, waitFor } from '@ember/test-helpers';
+import { click, fillIn, settled, waitFor, waitUntil } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import { baseRealm, Deferred } from '@cardstack/runtime-common';
+
+import type FileUploadService from '@cardstack/host/services/file-upload';
 
 import {
   percySnapshot,
@@ -252,7 +254,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
       });
     });
 
-    test('new file button has options to create card def, field def, card instance, and text files', async function (assert) {
+    test('new file button has options to create card def, field def, card instance, text files, and upload file', async function (assert) {
       await visitOperatorMode();
       await waitFor('[data-test-code-mode][data-test-save-idle]');
       await waitFor('[data-test-new-file-button]');
@@ -262,7 +264,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
         .dom(
           '[data-test-new-file-dropdown-menu] [data-test-boxel-menu-item-text]',
         )
-        .exists({ count: 4 });
+        .exists({ count: 5 });
       assert
         .dom(
           '[data-test-new-file-dropdown-menu] [data-test-boxel-menu-item-text="Card Definition"]',
@@ -281,6 +283,11 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
       assert
         .dom(
           '[data-test-new-file-dropdown-menu] [data-test-boxel-menu-item-text="Text File"]',
+        )
+        .exists();
+      assert
+        .dom(
+          '[data-test-new-file-dropdown-menu] [data-test-boxel-menu-item-text="Upload File\u2026"]',
         )
         .exists();
     });
@@ -314,6 +321,85 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
       await deferred.promise;
       assert.ok(savedUrls.some((url) => url.endsWith('notes.txt')));
       assert.ok(savedUrls.some((url) => url.endsWith('readme.md')));
+    });
+
+    test('can upload a file via the New menu', async function (assert) {
+      await visitOperatorMode();
+      await waitFor('[data-test-code-mode][data-test-save-idle]');
+      await waitFor('[data-test-new-file-button]');
+      await click('[data-test-new-file-button]');
+      await click(
+        '[data-test-boxel-menu-item-text="Upload File\u2026"]',
+      );
+
+      let fileUpload = getService('file-upload') as FileUploadService;
+      await waitUntil(() => fileUpload.activeUploads.length > 0, {
+        timeout: 2000,
+        timeoutMessage: 'upload task was not created',
+      });
+
+      let task = fileUpload.activeUploads[0];
+      assert.strictEqual(
+        task.state,
+        'picking',
+        'task is in picking state waiting for file',
+      );
+
+      task.__provideFileForTesting(
+        new File(['hello upload'], 'uploaded-via-menu.txt', {
+          type: 'text/plain',
+        }),
+      );
+
+      await waitUntil(
+        () =>
+          document
+            .querySelector('[data-test-card-url-bar-input]')
+            ?.getAttribute('value')
+            ?.includes('uploaded-via-menu.txt'),
+        {
+          timeout: 10000,
+          timeoutMessage:
+            'code editor did not navigate to the uploaded file',
+        },
+      );
+
+      assert
+        .dom('[data-test-card-url-bar-input]')
+        .hasValue(
+          `${testRealmURL}uploaded-via-menu.txt`,
+          'code editor navigated to the uploaded file',
+        );
+    });
+
+    test('cancelling upload file picker does not cause errors', async function (assert) {
+      await visitOperatorMode();
+      await waitFor('[data-test-code-mode][data-test-save-idle]');
+      await waitFor('[data-test-new-file-button]');
+      await click('[data-test-new-file-button]');
+      await click(
+        '[data-test-boxel-menu-item-text="Upload File\u2026"]',
+      );
+
+      let fileUpload = getService('file-upload') as FileUploadService;
+      await waitUntil(() => fileUpload.activeUploads.length > 0, {
+        timeout: 2000,
+        timeoutMessage: 'upload task was not created',
+      });
+
+      let task = fileUpload.activeUploads[0];
+
+      // Simulate cancelling the native file picker
+      task.__provideFileForTesting(null);
+
+      await settled();
+
+      assert
+        .dom('[data-test-card-url-bar-input]')
+        .hasValue(
+          `${testRealmURL}index.json`,
+          'URL bar still shows the original file',
+        );
     });
 
     test('filename is auto-populated from display name', async function (assert) {
