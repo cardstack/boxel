@@ -1,10 +1,33 @@
 import { module, test } from 'qunit';
 import { join, basename } from 'path';
+import supertest from 'supertest';
 import type { Test, SuperTest } from 'supertest';
-import { systemInitiatedPriority, type Realm } from '@cardstack/runtime-common';
+import type { Server } from 'http';
+import { dirSync, type DirResult } from 'tmp';
+import {
+  DEFAULT_PERMISSIONS,
+  systemInitiatedPriority,
+  type Realm,
+} from '@cardstack/runtime-common';
+import type { PgAdapter } from '@cardstack/postgres';
 import { setupServerEndpointsTest, testRealm2URL } from './helpers';
-import { setupPermissionedRealmAtURL, waitUntil } from '../helpers';
-import { ensureDirSync, writeFileSync, writeJSONSync } from 'fs-extra';
+import {
+  closeServer,
+  createVirtualNetwork,
+  matrixURL,
+  realmSecretSeed,
+  runTestRealmServer,
+  setupDB,
+  setupPermissionedRealmAtURL,
+  waitUntil,
+} from '../helpers';
+import { createJWT as createRealmServerJWT } from '../../utils/jwt';
+import {
+  copySync,
+  ensureDirSync,
+  writeFileSync,
+  writeJSONSync,
+} from 'fs-extra';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
 module(`server-endpoints/${basename(__filename)}`, function () {
@@ -1064,69 +1087,176 @@ module(`server-endpoints/${basename(__filename)}`, function () {
   // fail silently, the theme resolves to null, and the head template renders
   // without icon links.
   module(
-    'Published realm: theme icon links after from-scratch indexing',
+    'Published realm: theme icon links after _publish-realm',
     function (hooks) {
-      let publishedRealmURL = new URL(
-        'http://127.0.0.1:4444/published-theme-test/',
-      );
+      let testRealmHttpServer: Server;
       let request: SuperTest<Test>;
-      let testRealm: Realm;
-      let dbAdapter: {
-        execute: (sql: string) => Promise<Record<string, any>[]>;
-      };
+      let dbAdapter: PgAdapter;
+      let dir: DirResult;
+      let sourceRealmUrlString: string;
+      let publishedRealmURLString: string;
+      let publishedRealmHost: string;
+      let publishedRealmPath: string;
+      let ownerUserId = '@mango:localhost';
 
-      setupPermissionedRealmAtURL(hooks, publishedRealmURL, {
-        permissions: {
-          '*': ['read'],
-        },
-        published: true,
-        fileSystem: {
-          'brand-guide-theme.json': {
-            data: {
-              type: 'card',
-              attributes: {
-                markUsage: {
-                  socialMediaProfileIcon:
-                    'https://example.com/published-theme-icon.png',
-                },
-              },
-              meta: {
-                adoptsFrom: {
-                  module: 'https://cardstack.com/base/brand-guide',
-                  name: 'default',
-                },
-              },
-            },
-          },
-          'themed-card.json': {
-            data: {
-              type: 'card',
-              attributes: {},
-              relationships: {
-                'cardInfo.theme': {
-                  links: {
-                    self: './brand-guide-theme',
-                  },
-                },
-              },
-              meta: {
-                adoptsFrom: {
-                  module: 'https://cardstack.com/base/card-api',
-                  name: 'CardDef',
-                },
-              },
-            },
-          },
-        },
-        onRealmSetup(args) {
-          request = args.request;
-          testRealm = args.testRealm;
-          dbAdapter = args.dbAdapter;
-        },
+      hooks.beforeEach(function () {
+        dir = dirSync();
+        copySync(join(__dirname, '..', 'cards'), dir.name);
       });
 
-      hooks.beforeEach(async function () {
-        await testRealm.indexing();
+      setupDB(hooks, {
+        beforeEach: async (_dbAdapter, _publisher, _runner) => {
+          dbAdapter = _dbAdapter;
+          let virtualNetwork = createVirtualNetwork();
+          let testRealmDir = join(dir.name, 'realm_server_theme', 'test');
+          ensureDirSync(testRealmDir);
+          copySync(join(__dirname, '..', 'cards'), testRealmDir);
+
+          ({ testRealmHttpServer } = await runTestRealmServer({
+            virtualNetwork,
+            testRealmDir,
+            realmsRootPath: join(dir.name, 'realm_server_theme'),
+            realmURL: new URL('http://127.0.0.1:4444/test/'),
+            dbAdapter: _dbAdapter,
+            publisher: _publisher,
+            runner: _runner,
+            matrixURL,
+            permissions: {
+              '*': ['read', 'write'],
+              [ownerUserId]: DEFAULT_PERMISSIONS,
+            },
+            domainsForPublishedRealms: {
+              boxelSpace: 'localhost',
+              boxelSite: 'localhost:4444',
+            },
+          }));
+          request = supertest(testRealmHttpServer);
+
+          // Create a publishable source realm
+          let endpoint = 'theme-source';
+          let createResponse = await request
+            .post('/_create-realm')
+            .set('Accept', 'application/vnd.api+json')
+            .set('Content-Type', 'application/json')
+            .set(
+              'Authorization',
+              `Bearer ${createRealmServerJWT(
+                { user: ownerUserId, sessionRoom: 'session-room-test' },
+                realmSecretSeed,
+              )}`,
+            )
+            .send(
+              JSON.stringify({
+                data: {
+                  type: 'realm',
+                  attributes: { name: 'Theme Source Realm', endpoint },
+                },
+              }),
+            );
+
+          sourceRealmUrlString = createResponse.body.data.id;
+          let sourceRealmPath = new URL(sourceRealmUrlString).pathname;
+
+          // Make the source realm publicly accessible
+          await _dbAdapter.execute(`
+            INSERT INTO realm_user_permissions (realm_url, username, read, write, realm_owner)
+            VALUES ('${sourceRealmUrlString}', '*', true, true, true)
+          `);
+
+          // Write a BrandGuide theme card with a custom icon
+          let themeResponse = await request
+            .post(`${sourceRealmPath}brand-guide-theme.json`)
+            .set('Accept', 'application/vnd.card+source')
+            .send(
+              JSON.stringify({
+                data: {
+                  type: 'card',
+                  id: `${sourceRealmUrlString}brand-guide-theme`,
+                  attributes: {
+                    markUsage: {
+                      socialMediaProfileIcon:
+                        'https://example.com/published-theme-icon.png',
+                    },
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: 'https://cardstack.com/base/brand-guide',
+                      name: 'default',
+                    },
+                  },
+                },
+              }),
+            );
+          if (themeResponse.status !== 204) {
+            throw new Error(
+              `Failed to write brand-guide-theme: ${themeResponse.status} ${themeResponse.text}`,
+            );
+          }
+
+          // Write a card that links to the BrandGuide via cardInfo.theme
+          let cardResponse = await request
+            .post(`${sourceRealmPath}themed-card.json`)
+            .set('Accept', 'application/vnd.card+source')
+            .send(
+              JSON.stringify({
+                data: {
+                  type: 'card',
+                  id: `${sourceRealmUrlString}themed-card`,
+                  attributes: {},
+                  relationships: {
+                    'cardInfo.theme': {
+                      links: {
+                        self: `${sourceRealmUrlString}brand-guide-theme`,
+                      },
+                    },
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: 'https://cardstack.com/base/card-api',
+                      name: 'CardDef',
+                    },
+                  },
+                },
+              }),
+            );
+          if (cardResponse.status !== 204) {
+            throw new Error(
+              `Failed to write themed-card: ${cardResponse.status} ${cardResponse.text}`,
+            );
+          }
+
+          // Publish the source realm — this triggers a full from-scratch reindex
+          publishedRealmURLString =
+            'http://themetest.localhost:4444/theme-source/';
+          publishedRealmHost = new URL(publishedRealmURLString).host;
+          publishedRealmPath = new URL(publishedRealmURLString).pathname;
+
+          let publishResponse = await request
+            .post('/_publish-realm')
+            .set('Accept', 'application/vnd.api+json')
+            .set('Content-Type', 'application/json')
+            .set(
+              'Authorization',
+              `Bearer ${createRealmServerJWT(
+                { user: ownerUserId, sessionRoom: 'session-room-test' },
+                realmSecretSeed,
+              )}`,
+            )
+            .send(
+              JSON.stringify({
+                sourceRealmURL: sourceRealmUrlString,
+                publishedRealmURL: publishedRealmURLString,
+              }),
+            );
+          if (publishResponse.status !== 201) {
+            throw new Error(
+              `Failed to publish realm: ${publishResponse.status} ${publishResponse.text}`,
+            );
+          }
+        },
+        afterEach: async () => {
+          await closeServer(testRealmHttpServer);
+        },
       });
 
       // BUG (CS-10228): During from-scratch indexing the batched-write strategy
@@ -1135,9 +1265,10 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       // The isUsed lazy load for cardInfo.theme silently fails and the head
       // template renders without icon links. The server then falls back to
       // default boxel icons instead of the theme's socialMediaProfileIcon.
-      test('themed card in published realm includes theme icon links in head HTML after from-scratch indexing', async function (assert) {
+      test('themed card in published realm includes theme icon links in head HTML', async function (assert) {
         let response = await request
-          .get('/published-theme-test/themed-card')
+          .get(`${publishedRealmPath}themed-card`)
+          .set('Host', publishedRealmHost)
           .set('Accept', 'text/html');
 
         assert.strictEqual(response.status, 200, 'serves HTML response');
@@ -1151,19 +1282,20 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           headContent.includes(
             '<link rel="icon" href="https://example.com/published-theme-icon.png"',
           ),
-          `head HTML includes favicon from BrandGuide theme after from-scratch indexing. headContent=${headContent.substring(0, 500)}`,
+          `head HTML includes favicon from BrandGuide theme. headContent=${headContent.substring(0, 500)}`,
         );
         assert.ok(
           headContent.includes(
             '<link rel="apple-touch-icon" href="https://example.com/published-theme-icon.png"',
           ),
-          `head HTML includes apple-touch-icon from BrandGuide theme after from-scratch indexing`,
+          `head HTML includes apple-touch-icon from BrandGuide theme`,
         );
 
         // Verify the pristine_doc preserves the theme relationship
         let rows = (await dbAdapter.execute(
           `SELECT pristine_doc::text FROM boxel_index
            WHERE url LIKE '%themed-card%'
+             AND realm_url = '${publishedRealmURLString}'
              AND type = 'instance'
              AND is_deleted IS NOT TRUE
            LIMIT 1`,
