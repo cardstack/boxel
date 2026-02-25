@@ -1,45 +1,20 @@
-## Demo
+## Running Commands in Headless Chrome 
 
-https://www.loom.com/share/2fe9a3e58a7c459ba574b2c0f747a667
-
-## Testing Locally
-
-1. Start `bot-runner` with `pnpm start:development`.
-2. Start realm server with `pnpm start:all`.
-3. Inside `packages/matrix`, run `pnpm setup-submission-bot`.
-4. Open http://localhost:4200/experiments/BotRequestDemo/bot-request-demo.
-5. Click **Send Show Card Bot Request** on the demo card.
-
-## Flow Diagram
-
-### User issuing task
-
-Example source is the experiments demo card, but the same flow is used for any `app.boxel.bot-trigger` event.
-
-```mermaid
-flowchart TD
-
-    B["Trigger 'Send Show Card Bot Request' from UI"]
-    B --> D["CreateShowCardRequestCommand.execute()"]
-    D --> E["SendBotTriggerEventCommand.execute()"]
-    E --> F["sendEvent('app.boxel.bot-trigger')"]
-    F --> G["bot-runner receives timeline event"]
-    G --> H["enqueueRunCommandJob() to jobs table"]
-```
 
 ### Command runner architecture
 
 ```mermaid
 flowchart TD
 
-    A["bot-runner"]
+    A["db queue"]
     A -->|enqueue run-command job with command string| B["jobs table"]
     B --> C["runtime-common worker"]
     C -->|runCommand task| D["remote prerenderer"]
     D -->|POST /run-command| E["prerender manager"]
     E -->|proxy| F["prerender server app"]
-    F -->|transitionTo command-runner route| G["headless Chrome tab"]
-    G --> H["host command-runner route"]
+    F -->|set localStorage command request payload| G["headless Chrome tab"]
+    G -->|transitionTo command-runner/:request_id/:nonce| H["host command-runner route"]
+    H -->|consume localStorage request payload| H
     H -->|command executes + DOM status| G
     G -->|capture data-prerender + data-command-result| F
     F --> D
@@ -82,39 +57,33 @@ type BotTriggerContent = {
 
 ## Submission Bot Commands (DB)
 
-`setup-submission-bot` now writes canonical scoped command specifiers into `bot_commands.command`.
+Moved to:
+- [`packages/bot-runner/README.md#submission-bot-commands-db`](../packages/bot-runner/README.md#submission-bot-commands-db)
+- [`packages/bot-runner/README.md#user-issuing-task`](../packages/bot-runner/README.md#user-issuing-task)
 
-```json
-[
-  {
-    "name": "create-listing-pr",
-    "command": "@cardstack/boxel-host/commands/create-listing-pr/default",
-    "filter": {
-      "type": "matrix-event",
-      "event_type": "app.boxel.bot-trigger",
-      "content_type": "create-listing-pr"
-    }
+## Example: Triggering Headless Chrome Command from Bot Runner
+
+1. Ensure bot registrations and command mappings exist:
+  - `pnpm setup-submission-bot` (from `packages/matrix`)
+  - This seeds `bot_commands.command` values such as `@cardstack/boxel-host/commands/show-card/default`.
+2. Emit an `app.boxel.bot-trigger` event in the room:
+
+```ts
+const event = {
+  type: 'app.boxel.bot-trigger',
+  content: {
+    type: 'show-card',
+    realm: 'http://localhost:4201/experiments/',
+    input: {
+      cardId: 'http://localhost:4201/experiments/Author/jane-doe',
+      format: 'isolated',
+    },
   },
-  {
-    "name": "show-card",
-    "command": "@cardstack/boxel-host/commands/show-card/default",
-    "filter": {
-      "type": "matrix-event",
-      "event_type": "app.boxel.bot-trigger",
-      "content_type": "show-card"
-    }
-  },
-  {
-    "name": "patch-card-instance",
-    "command": "@cardstack/boxel-host/commands/patch-card-instance/default",
-    "filter": {
-      "type": "matrix-event",
-      "event_type": "app.boxel.bot-trigger",
-      "content_type": "patch-card-instance"
-    }
-  }
-]
+};
 ```
+
+3. Bot runner receives the timeline event, matches `content.type` to a registered bot command, and enqueues `run-command`.
+4. Worker calls prerender `/run-command`, prerender server writes request payload into headless Chrome localStorage, and transitions to `/command-runner/:request_id/:nonce`.
 
 ## Run Command Job Payload
 
@@ -137,33 +106,83 @@ type BotTriggerContent = {
 
 - Command stays a `string` across bot-runner, job queue, and prerender request.
 - `runtime-common/tasks/run-command.ts` normalizes legacy realm-server URL forms (`/commands/<name>/<export>`) into a realm-local module specifier path when needed.
-- String -> `ResolvedCodeRef` conversion happens in the host `command-runner` route when it parses `:command`.
+- String -> `ResolvedCodeRef` conversion happens in the host `command-runner` route when it parses the `command` field from the stored localStorage request.
 
 ## Host `command-runner` Route
 
 ```ts
-route: /command-runner/:command/:input/:nonce
+route: /command-runner/:request_id/:nonce
 
 type CommandRunnerRouteParams = {
-  command: string;
-  input: string;
+  request_id: string;
   nonce: string;
 };
 ```
 
-### Example (`command` and `input` as path params)
+### Request payload handoff via localStorage
 
 ```ts
+const requestId = '6f5508cf-0f10-44a8-a288-0f11f74c4f20';
 const command = '@cardstack/boxel-host/commands/show-card/default';
-const input = JSON.stringify({
+const input = {
   cardId: 'http://localhost:4201/experiments/Author/jane-doe',
   format: 'isolated',
-});
+};
 const nonce = '2';
 
-const url = `http://localhost:4200/command-runner/${encodeURIComponent(command)}/${encodeURIComponent(input)}/${encodeURIComponent(nonce)}`;
+localStorage.setItem(
+  `boxel-command-request:${requestId}`,
+  JSON.stringify({
+    command,
+    input,
+    nonce,
+    createdAt: Date.now(),
+  }),
+);
+
+const url = `http://localhost:4200/command-runner/${encodeURIComponent(requestId)}/${encodeURIComponent(nonce)}`;
 ```
 
 ```txt
-http://localhost:4200/command-runner/%40cardstack%2Fboxel-host%2Fcommands%2Fshow-card%2Fdefault/%7B%22cardId%22%3A%22http%3A%2F%2Flocalhost%3A4201%2Fexperiments%2FAuthor%2Fjane-doe%22%2C%22format%22%3A%22isolated%22%7D/2
+http://localhost:4200/command-runner/6f5508cf-0f10-44a8-a288-0f11f74c4f20/2
 ```
+
+### Host-side consumption behavior
+
+- Host route reads and removes `boxel-command-request:${request_id}` from localStorage (one-time consume).
+- Route validates nonce match before command execution.
+- Route rejects stale entries using `createdAt` TTL checks.
+
+## Manual Host Simulation (No Bot Runner)
+
+Use this when you want to test `command-runner` directly in the browser.
+
+1. Open host in a browser:
+  - `http://localhost:4200`
+2. Open browser devtools console and run:
+
+```js
+const requestId = '6f5508cf-0f10-44a8-a288-0f11f74c4f20';
+const nonce = '2';
+
+localStorage.setItem(
+  `boxel-command-request:${requestId}`,
+  JSON.stringify({
+    command: '@cardstack/boxel-host/commands/show-card/default',
+    input: {
+      cardId: 'http://localhost:4201/experiments/Author/jane-doe',
+      format: 'isolated',
+    },
+    nonce,
+    createdAt: Date.now(),
+  }),
+);
+```
+
+3. Visit this URL (or refresh if already there):
+  - `http://localhost:4200/command-runner/6f5508cf-0f10-44a8-a288-0f11f74c4f20/2`
+
+Notes:
+- `request_id` in the URL must match the localStorage key suffix.
+- `nonce` in the URL must match the `nonce` in stored JSON.
+- The entry is consumed once; set it again before another refresh.

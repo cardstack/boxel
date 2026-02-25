@@ -19,7 +19,7 @@ Router.map(function () {
   this.route('connect', { path: '/connect/:origin' });
   this.route('standby');
   this.route('command-runner', {
-    path: '/command-runner/:command/:input/:nonce',
+    path: '/command-runner/:request_id/:nonce',
   });
 
   this.route('index', { path: '/*path' });

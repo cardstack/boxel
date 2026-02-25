@@ -32,8 +32,10 @@ import {
   buildInvalidModuleResponseError,
   buildInvalidFileExtractResponseError,
 } from './utils';
+import { randomUUID } from 'crypto';
 
 const log = logger('prerenderer');
+const commandRequestStorageKeyPrefix = 'boxel-command-request:';
 
 const CLEAR_CACHE_RETRY_SIGNATURES: readonly (readonly string[])[] = [
   // this is a side effect of glimmer scoped styles moving a DOM node that
@@ -432,30 +434,34 @@ export class RenderRunner {
       }
     };
     try {
-      await page.evaluate((sessionAuth) => {
-        localStorage.setItem('boxel-session', sessionAuth);
-      }, auth);
-
       let renderStart = Date.now();
-      let encodedCommand = encodeURIComponent(command);
-      let encodedInput = encodeURIComponent(
-        JSON.stringify(commandInput ?? null),
+      let requestId = randomUUID();
+      let nonce = String(this.#nonce);
+      let storageKey = `${commandRequestStorageKeyPrefix}${requestId}`;
+      await page.evaluate(
+        (sessionAuth, key, commandToRun, input, requestNonce, createdAt) => {
+          localStorage.setItem('boxel-session', sessionAuth);
+          localStorage.setItem(
+            key,
+            JSON.stringify({
+              command: commandToRun,
+              input,
+              nonce: requestNonce,
+              createdAt,
+            }),
+          );
+        },
+        auth,
+        storageKey,
+        command,
+        commandInput ?? null,
+        nonce,
+        Date.now(),
       );
-      await transitionTo(
-        page,
-        'command-runner',
-        encodedCommand,
-        encodedInput,
-        String(this.#nonce),
-      );
+      await transitionTo(page, 'command-runner', requestId, nonce);
       log.info(
         'command-runner url: %s',
-        buildCommandRunnerURL(
-          page,
-          String(this.#nonce),
-          encodedCommand,
-          encodedInput,
-        ),
+        buildCommandRunnerURL(page, nonce, requestId),
       );
 
       let waitResult = await withTimeout(

@@ -493,12 +493,33 @@ module('Acceptance | Commands tests', function (hooks) {
   });
 
   module('command-runner', function () {
-    test('route renders command result card', async function (assert) {
-      let commandParam = encodeURIComponent(
-        `${testRealmURL}command-runner-hello-command/default`,
+    function setCommandRunnerRequest(
+      requestId: string,
+      nonce: string,
+      command: string,
+      input: Record<string, unknown> | null,
+    ) {
+      window.localStorage.setItem(
+        `boxel-command-request:${requestId}`,
+        JSON.stringify({
+          command,
+          input,
+          nonce,
+          createdAt: Date.now(),
+        }),
       );
-      let inputParam = encodeURIComponent(JSON.stringify(null));
-      await visit(`/command-runner/${commandParam}/${inputParam}/1`);
+    }
+
+    test('route renders command result card', async function (assert) {
+      let requestId = 'command-runner-test-success';
+      let nonce = '1';
+      setCommandRunnerRequest(
+        requestId,
+        nonce,
+        `${testRealmURL}command-runner-hello-command/default`,
+        null,
+      );
+      await visit(`/command-runner/${requestId}/${nonce}`);
 
       await waitFor('[data-prerender][data-prerender-status="ready"]');
       assert
@@ -508,11 +529,15 @@ module('Acceptance | Commands tests', function (hooks) {
 
     test('route captures command runtime error', async function (assert) {
       maybeBoomShouldBoom = true;
-      let commandParam = encodeURIComponent(
+      let requestId = 'command-runner-test-error';
+      let nonce = '2';
+      setCommandRunnerRequest(
+        requestId,
+        nonce,
         `${testRealmURL}maybe-boom-command/default`,
+        null,
       );
-      let inputParam = encodeURIComponent(JSON.stringify(null));
-      await visit(`/command-runner/${commandParam}/${inputParam}/2`);
+      await visit(`/command-runner/${requestId}/${nonce}`);
 
       await waitFor('[data-prerender][data-prerender-status="error"]');
       assert.dom('[data-prerender-error]').includesText('Boom!');

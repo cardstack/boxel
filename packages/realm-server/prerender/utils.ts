@@ -67,8 +67,7 @@ export async function transitionTo(
 export function buildCommandRunnerURL(
   page: Page,
   nonce: string,
-  encodedCommand: string,
-  encodedInput: string,
+  requestId: string,
 ): string {
   let origin = page.url();
   try {
@@ -80,7 +79,7 @@ export function buildCommandRunnerURL(
       `Could not build command-runner URL from page URL "${origin}": ${detail}`,
     );
   }
-  return `${origin}/command-runner/${encodedCommand}/${encodedInput}/${encodeURIComponent(
+  return `${origin}/command-runner/${encodeURIComponent(requestId)}/${encodeURIComponent(
     nonce,
   )}`;
 }
