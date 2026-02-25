@@ -104,7 +104,8 @@ export default class FileUploadService extends Service {
         return;
       }
 
-      if (!file.name.includes('.')) {
+      let lastDotIndex = file.name.lastIndexOf('.');
+      if (lastDotIndex <= 0 || lastDotIndex >= file.name.length - 1) {
         throw new Error(
           `The file "${file.name}" has no extension. Please select a file with an extension (e.g. .png, .txt, .gts).`,
         );

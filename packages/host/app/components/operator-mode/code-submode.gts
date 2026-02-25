@@ -580,11 +580,15 @@ export default class CodeSubmode extends Component<Signature> {
       throw new Error('No realm available for upload');
     }
     let task = this.fileUpload.uploadFile({ realmURL: new URL(realmURL) });
-    task.result.then((fileDef) => {
-      if (fileDef?.url) {
-        this.operatorModeStateService.updateCodePath(new URL(fileDef.url));
-      }
-    });
+    task.result
+      .then((fileDef) => {
+        if (fileDef?.url) {
+          this.operatorModeStateService.updateCodePath(new URL(fileDef.url));
+        }
+      })
+      .catch((error) => {
+        console.error('Unexpected error during file upload', error);
+      });
   }
 
   private async withTestWaiters<T>(cb: () => Promise<T>) {
