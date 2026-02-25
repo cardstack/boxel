@@ -36,7 +36,7 @@ test.describe('Live Cards', () => {
         },
         meta: {
           adoptsFrom: {
-            module: 'https://cardstack.com/base/card-api',
+            module: '@cardstack/base/card-api',
             name: 'CardDef',
           },
         },
@@ -63,7 +63,7 @@ test.describe('Live Cards', () => {
         },
         meta: {
           adoptsFrom: {
-            module: 'https://cardstack.com/base/card-api',
+            module: '@cardstack/base/card-api',
             name: 'CardDef',
           },
         },
@@ -83,8 +83,8 @@ test.describe('Live Cards', () => {
       realmURL,
       'sample-card.gts',
       `
-      import { CardDef, field, contains, StringField } from 'https://cardstack.com/base/card-api';
-      import { Component } from 'https://cardstack.com/base/card-api';
+      import { CardDef, field, contains, StringField } from '@cardstack/base/card-api';
+      import { Component } from '@cardstack/base/card-api';
       export class SampleCard extends CardDef {
         @field name = contains(StringField);
         static isolated = class Isolated extends Component<typeof this> {
@@ -125,8 +125,8 @@ test.describe('Live Cards', () => {
       realmURL,
       `sample-card.gts`,
       `
-          import { CardDef, field, contains, StringField } from 'https://cardstack.com/base/card-api';
-          import { Component } from 'https://cardstack.com/base/card-api';
+          import { CardDef, field, contains, StringField } from '@cardstack/base/card-api';
+          import { Component } from '@cardstack/base/card-api';
           export class SampleCard extends CardDef {
             @field name = contains(StringField);
             static isolated = class Isolated extends Component<typeof this> {
@@ -179,7 +179,7 @@ test.describe('Live Cards', () => {
         },
         meta: {
           adoptsFrom: {
-            module: 'https://cardstack.com/base/card-api',
+            module: '@cardstack/base/card-api',
             name: 'CardDef',
           },
         },

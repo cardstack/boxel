@@ -164,7 +164,7 @@ module('Acceptance | png image def', function (hooks) {
   const makeFileURL = (path: string) => new URL(path, testRealmURL).href;
 
   const pngDefCodeRef = (): ResolvedCodeRef => ({
-    module: `${baseRealm.url}png-image-def`,
+    module: `@cardstack/base/png-image-def`,
     name: 'PngDef',
   });
 

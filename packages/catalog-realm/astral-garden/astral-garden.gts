@@ -6,10 +6,10 @@ import {
   field,
   contains,
   Component,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-import MarkdownField from 'https://cardstack.com/base/markdown';
-import DateField from 'https://cardstack.com/base/date';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+import MarkdownField from '@cardstack/base/markdown';
+import DateField from '@cardstack/base/date';
 import { Button } from '@cardstack/boxel-ui/components';
 import { formatDateTime, eq } from '@cardstack/boxel-ui/helpers';
 import { on } from '@ember/modifier';

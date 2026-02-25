@@ -12,14 +12,14 @@ import {
   type BaseDef,
   linksToMany,
   realmURL,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 import {
   Query,
   isCardInstance,
   AnyFilter,
   Filter,
 } from '@cardstack/runtime-common';
-import StringField from 'https://cardstack.com/base/string';
+import StringField from '@cardstack/base/string';
 
 import FilterSidebar, { type FilterItem } from './components/filter-section';
 import ShowcaseView from './components/showcase-view';

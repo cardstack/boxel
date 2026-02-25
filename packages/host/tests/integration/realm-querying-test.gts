@@ -38,7 +38,7 @@ module(`Integration | realm querying`, function (hooks) {
 
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await loader.import(`@cardstack/base/card-api`),
   );
 
   const sampleCards: CardDocFiles = {
@@ -193,7 +193,7 @@ module(`Integration | realm querying`, function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${baseRealm.url}spec`,
+            module: `@cardstack/base/spec`,
             name: 'Spec',
           },
         },
@@ -213,7 +213,7 @@ module(`Integration | realm querying`, function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${baseRealm.url}spec`,
+            module: `@cardstack/base/spec`,
             name: 'Spec',
           },
         },
@@ -726,7 +726,7 @@ module(`Integration | realm querying`, function (hooks) {
     let { data: matching } = await queryEngine.searchCards({
       filter: {
         on: {
-          module: `${baseRealm.url}spec`,
+          module: `@cardstack/base/spec`,
           name: 'Spec',
         },
         eq: {
@@ -744,7 +744,7 @@ module(`Integration | realm querying`, function (hooks) {
   });
 
   test('can search for file-meta entries by FileDef type', async function (assert) {
-    let fileDefRef = { module: `${baseRealm.url}file-api`, name: 'FileDef' };
+    let fileDefRef = { module: `@cardstack/base/file-api`, name: 'FileDef' };
     let result = (await queryEngine.searchCards({
       filter: {
         type: fileDefRef,
@@ -764,7 +764,7 @@ module(`Integration | realm querying`, function (hooks) {
   });
 
   test('can search for file-meta entries by url', async function (assert) {
-    let fileDefRef = { module: `${baseRealm.url}file-api`, name: 'FileDef' };
+    let fileDefRef = { module: `@cardstack/base/file-api`, name: 'FileDef' };
     let targetUrl = `${testRealmURL}files/sample.txt`;
     let result = (await queryEngine.searchCards({
       filter: {
@@ -788,7 +788,7 @@ module(`Integration | realm querying`, function (hooks) {
 
   test('can search for file-meta entries by FileDef subclass type', async function (assert) {
     let markdownRef = {
-      module: `${baseRealm.url}markdown-file-def`,
+      module: `@cardstack/base/markdown-file-def`,
       name: 'MarkdownDef',
     };
     let result = (await queryEngine.searchCards({

@@ -3,9 +3,9 @@ import {
   field,
   contains,
   linksTo,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-import DateField from 'https://cardstack.com/base/date';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+import DateField from '@cardstack/base/date';
 import UseAiAssistantCommand from '@cardstack/boxel-host/commands/ai-assistant';
 import {
   Command,

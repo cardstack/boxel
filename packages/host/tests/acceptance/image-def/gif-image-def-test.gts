@@ -90,7 +90,7 @@ module('Acceptance | gif image def', function (hooks) {
   const makeFileURL = (path: string) => new URL(path, testRealmURL).href;
 
   const gifDefCodeRef = (): ResolvedCodeRef => ({
-    module: `${baseRealm.url}gif-image-def`,
+    module: `@cardstack/base/gif-image-def`,
     name: 'GifDef',
   });
 

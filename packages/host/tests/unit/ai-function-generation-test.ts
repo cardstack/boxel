@@ -15,18 +15,18 @@ import {
 } from '@cardstack/runtime-common/helpers/ai';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
-import type { primitive as primitiveType } from 'https://cardstack.com/base/card-api';
+import type { primitive as primitiveType } from '@cardstack/base/card-api';
 
 import { setupLocalIndexing, setupOnSave, setupCardLogs } from '../helpers';
 import { setupRenderingTest } from '../helpers/setup';
 
-let cardApi: typeof import('https://cardstack.com/base/card-api');
-let string: typeof import('https://cardstack.com/base/string');
-let number: typeof import('https://cardstack.com/base/number');
-let biginteger: typeof import('https://cardstack.com/base/big-integer');
-let date: typeof import('https://cardstack.com/base/date');
-let datetime: typeof import('https://cardstack.com/base/datetime');
-let boolean: typeof import('https://cardstack.com/base/boolean');
+let cardApi: typeof import('@cardstack/base/card-api');
+let string: typeof import('@cardstack/base/string');
+let number: typeof import('@cardstack/base/number');
+let biginteger: typeof import('@cardstack/base/big-integer');
+let date: typeof import('@cardstack/base/date');
+let datetime: typeof import('@cardstack/base/datetime');
+let boolean: typeof import('@cardstack/base/boolean');
 let primitive: typeof primitiveType;
 let mappings: Map<typeof cardApi.FieldDef, any>;
 
@@ -38,14 +38,14 @@ module('Unit | ai-function-generation-test', function (hooks) {
     loader = getService('loader-service').loader;
   });
   hooks.beforeEach(async function () {
-    cardApi = await loader.import(`${baseRealm.url}card-api`);
+    cardApi = await loader.import(`@cardstack/base/card-api`);
     primitive = cardApi.primitive;
-    string = await loader.import(`${baseRealm.url}string`);
-    number = await loader.import(`${baseRealm.url}number`);
-    biginteger = await loader.import(`${baseRealm.url}big-integer`);
-    date = await loader.import(`${baseRealm.url}date`);
-    datetime = await loader.import(`${baseRealm.url}datetime`);
-    boolean = await loader.import(`${baseRealm.url}boolean`);
+    string = await loader.import(`@cardstack/base/string`);
+    number = await loader.import(`@cardstack/base/number`);
+    biginteger = await loader.import(`@cardstack/base/big-integer`);
+    date = await loader.import(`@cardstack/base/date`);
+    datetime = await loader.import(`@cardstack/base/datetime`);
+    boolean = await loader.import(`@cardstack/base/boolean`);
     mappings = await basicMappings(loader);
   });
 
@@ -53,7 +53,7 @@ module('Unit | ai-function-generation-test', function (hooks) {
   setupOnSave(hooks);
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await loader.import(`@cardstack/base/card-api`),
   );
 
   const cardDefAttributesProperties: { [fieldName: string]: AttributesSchema } =

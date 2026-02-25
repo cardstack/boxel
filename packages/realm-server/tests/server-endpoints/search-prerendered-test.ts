@@ -45,7 +45,7 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: 'https://cardstack.com/base/card-api',
+              module: '@cardstack/base/card-api',
               name: 'CardDef',
             },
           },
@@ -61,7 +61,7 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: 'https://cardstack.com/base/card-api',
+              module: '@cardstack/base/card-api',
               name: 'CardDef',
             },
           },

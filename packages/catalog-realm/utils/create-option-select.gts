@@ -1,6 +1,6 @@
 import { fn } from '@ember/helper';
-import { Component } from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
+import { Component } from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 import { BoxelSelect, RadioInput } from '@cardstack/boxel-ui/components';
 
 type OptionLike = string | { label: string; value: string };

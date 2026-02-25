@@ -17,10 +17,10 @@ import {
   isResolvedCodeRef,
 } from '@cardstack/runtime-common/code-ref';
 
-import type { BaseDef, CardDef } from 'https://cardstack.com/base/card-api';
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
-import type { Spec } from 'https://cardstack.com/base/spec';
-import type { SpecType } from 'https://cardstack.com/base/spec';
+import type { BaseDef, CardDef } from '@cardstack/base/card-api';
+import type * as BaseCommandModule from '@cardstack/base/command';
+import type { Spec } from '@cardstack/base/spec';
+import type { SpecType } from '@cardstack/base/spec';
 
 import HostBaseCommand from '../lib/host-base-command';
 import {
@@ -100,7 +100,7 @@ class SpecTypeGuesser {
     return (
       superModule === '@glimmer/component' ||
       (superName === 'Component' &&
-        superModule === 'https://cardstack.com/base/card-api') ||
+        superModule === '@cardstack/base/card-api') ||
       superName === 'GlimmerComponent' ||
       superName?.includes('Component')
     );

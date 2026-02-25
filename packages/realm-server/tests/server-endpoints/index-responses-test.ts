@@ -33,7 +33,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           writeFileSync(
             join(context.testRealmDir, 'isolated-card.gts'),
             `
-              import { Component, CardDef } from 'https://cardstack.com/base/card-api';
+              import { Component, CardDef } from '@cardstack/base/card-api';
 
               export class IsolatedCard extends CardDef {
                 static isolated = class Isolated extends Component<typeof this> {
@@ -61,7 +61,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           writeFileSync(
             join(context.testRealmDir, 'dollar-sign-card.gts'),
             `
-            import { Component, CardDef } from 'https://cardstack.com/base/card-api';
+            import { Component, CardDef } from '@cardstack/base/card-api';
 
             export class DollarSignCard extends CardDef {
               static isolated = class Isolated extends Component<typeof this> {
@@ -89,7 +89,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           writeFileSync(
             join(context.testRealmDir, 'head-card.gts'),
             `
-            import { Component, CardDef } from 'https://cardstack.com/base/card-api';
+            import { Component, CardDef } from '@cardstack/base/card-api';
 
             export class HeadCard extends CardDef {
               static isolated = class Isolated extends Component<typeof this> {
@@ -123,7 +123,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           writeFileSync(
             join(context.testRealmDir, 'unsafe-head-card.gts'),
             `
-            import { Component, CardDef } from 'https://cardstack.com/base/card-api';
+            import { Component, CardDef } from '@cardstack/base/card-api';
 
             export class UnsafeHeadCard extends CardDef {
               static isolated = class Isolated extends Component<typeof this> {
@@ -161,7 +161,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           writeFileSync(
             join(context.testRealmDir, 'scoped-css-card.gts'),
             `
-            import { Component, CardDef } from 'https://cardstack.com/base/card-api';
+            import { Component, CardDef } from '@cardstack/base/card-api';
 
             export class ScopedCssCard extends CardDef {
               static isolated = class Isolated extends Component<typeof this> {
@@ -199,7 +199,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           writeFileSync(
             join(context.testRealmDir, 'linked-css-base.gts'),
             `
-            import { Component, CardDef } from 'https://cardstack.com/base/card-api';
+            import { Component, CardDef } from '@cardstack/base/card-api';
 
             export class LinkedCssBase extends CardDef {
               static embedded = class Embedded extends Component<typeof this> {
@@ -214,7 +214,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           writeFileSync(
             join(context.testRealmDir, 'linked-css-child.gts'),
             `
-            import { Component } from 'https://cardstack.com/base/card-api';
+            import { Component } from '@cardstack/base/card-api';
             import { LinkedCssBase } from './linked-css-base.gts';
 
             export class LinkedCssChild extends LinkedCssBase {
@@ -245,7 +245,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           writeFileSync(
             join(context.testRealmDir, 'linked-css-parent.gts'),
             `
-            import { Component, CardDef, field, linksTo } from 'https://cardstack.com/base/card-api';
+            import { Component, CardDef, field, linksTo } from '@cardstack/base/card-api';
             import { LinkedCssBase } from './linked-css-base.gts';
 
             export class LinkedCssParent extends CardDef {

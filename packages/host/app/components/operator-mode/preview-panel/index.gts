@@ -47,7 +47,7 @@ import type {
   CardDef,
   Format,
   ViewCardFn,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 
 import FormatChooser from '../code-submode/format-chooser';
 

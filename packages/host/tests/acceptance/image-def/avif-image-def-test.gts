@@ -135,7 +135,7 @@ module('Acceptance | avif image def', function (hooks) {
   const makeFileURL = (path: string) => new URL(path, testRealmURL).href;
 
   const avifDefCodeRef = (): ResolvedCodeRef => ({
-    module: `${baseRealm.url}avif-image-def`,
+    module: `@cardstack/base/avif-image-def`,
     name: 'AvifDef',
   });
 

@@ -82,7 +82,7 @@ module('Integration | components | realm field', function (hooks) {
 
   setupCardLogs(hooks, async () => {
     return await getService('loader-service').loader.import(
-      `${baseRealm.url}card-api`,
+      `@cardstack/base/card-api`,
     );
   });
 

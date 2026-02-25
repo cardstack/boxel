@@ -43,7 +43,7 @@ export const SORT_OPTIONS: SortOption[] = [
     sort: [
       {
         on: {
-          module: `${baseRealm.url}card-api`,
+          module: `@cardstack/base/card-api`,
           name: 'CardDef',
         },
         by: 'cardTitle',

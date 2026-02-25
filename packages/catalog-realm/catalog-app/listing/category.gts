@@ -4,7 +4,7 @@ import {
   contains,
   StringField,
   linksTo,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 
 import { Sphere } from './sphere';
 

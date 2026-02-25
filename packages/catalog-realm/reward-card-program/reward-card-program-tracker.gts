@@ -6,11 +6,11 @@ import {
   containsMany,
   linksTo,
   Component,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-import BooleanField from 'https://cardstack.com/base/boolean';
-import DateField from 'https://cardstack.com/base/date';
-import MarkdownField from 'https://cardstack.com/base/markdown';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+import BooleanField from '@cardstack/base/boolean';
+import DateField from '@cardstack/base/date';
+import MarkdownField from '@cardstack/base/markdown';
 import { RewardCardProgram, Benefit } from './reward-card-program';
 import { gt, eq, and, or } from '@cardstack/boxel-ui/helpers';
 import { formatDateTime, formatCurrency } from '@cardstack/boxel-ui/helpers';

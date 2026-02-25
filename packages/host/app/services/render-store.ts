@@ -4,7 +4,7 @@ import type {
   LooseSingleResourceDocument,
 } from '@cardstack/runtime-common';
 
-import type { FileDef } from 'https://cardstack.com/base/file-api';
+import type { FileDef } from '@cardstack/base/file-api';
 
 import StoreService from './store';
 

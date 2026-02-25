@@ -1257,7 +1257,7 @@ function getField(
         isPrimitive: true,
         isComputed: false,
         fieldOrCard: {
-          module: `${baseRealm.url}card-api`,
+          module: `@cardstack/base/card-api`,
           name: 'StringField',
         },
       } as FieldDefinition;

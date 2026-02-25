@@ -89,7 +89,7 @@ module('Acceptance | jpg image def', function (hooks) {
   const makeFileURL = (path: string) => new URL(path, testRealmURL).href;
 
   const jpgDefCodeRef = (): ResolvedCodeRef => ({
-    module: `${baseRealm.url}jpg-image-def`,
+    module: `@cardstack/base/jpg-image-def`,
     name: 'JpgDef',
   });
 

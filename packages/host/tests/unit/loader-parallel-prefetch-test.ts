@@ -110,7 +110,7 @@ module('Unit | loader prefetch', function (hooks) {
 
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await loader.import(`@cardstack/base/card-api`),
   );
 
   test('prefetch kicks off dependency fetch without waiting for completion', async function (assert) {

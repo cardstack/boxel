@@ -66,11 +66,11 @@ import {
   resolveCardReference,
 } from '@cardstack/runtime-common';
 
-import type { CardDef, BaseDef } from 'https://cardstack.com/base/card-api';
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
-import type { FileDef } from 'https://cardstack.com/base/file-api';
+import type { CardDef, BaseDef } from '@cardstack/base/card-api';
+import type * as CardAPI from '@cardstack/base/card-api';
+import type { FileDef } from '@cardstack/base/file-api';
 
-import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
+import type { RealmEventContent } from '@cardstack/base/matrix-event';
 
 import CardStore, { getDeps, type ReferenceCount } from '../lib/gc-card-store';
 

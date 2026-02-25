@@ -3,7 +3,7 @@ import {
   field,
   Component,
   FieldDef,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 import { Country } from './country';
 
 export class Trips extends FieldDef {

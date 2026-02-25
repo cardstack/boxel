@@ -5,14 +5,14 @@ import {
   contains,
   containsMany,
   FieldDef,
-} from 'https://cardstack.com/base/card-api';
-import { Component } from 'https://cardstack.com/base/card-api';
-import NumberField from 'https://cardstack.com/base/number';
-import StringField from 'https://cardstack.com/base/string';
-import MarkdownField from 'https://cardstack.com/base/markdown';
-import BooleanField from 'https://cardstack.com/base/boolean';
-import DateField from 'https://cardstack.com/base/date';
-import DateRangeField from 'https://cardstack.com/base/date-range-field';
+} from '@cardstack/base/card-api';
+import { Component } from '@cardstack/base/card-api';
+import NumberField from '@cardstack/base/number';
+import StringField from '@cardstack/base/string';
+import MarkdownField from '@cardstack/base/markdown';
+import BooleanField from '@cardstack/base/boolean';
+import DateField from '@cardstack/base/date';
+import DateRangeField from '@cardstack/base/date-range-field';
 import { gt } from '@cardstack/boxel-ui/helpers';
 import { concat } from '@ember/helper';
 import { htmlSafe } from '@ember/template';

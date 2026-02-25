@@ -373,14 +373,14 @@ export class SkillList extends vscode.TreeItem {
         {
           by: 'title',
           on: {
-            module: 'https://cardstack.com/base/card-api',
+            module: '@cardstack/base/card-api',
             name: 'CardDef',
           },
         },
       ],
       filter: {
         type: {
-          module: 'https://cardstack.com/base/skill',
+          module: '@cardstack/base/skill',
           name: 'Skill',
         },
       },

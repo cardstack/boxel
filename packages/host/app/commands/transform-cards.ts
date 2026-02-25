@@ -1,6 +1,6 @@
 import { getClass } from '@cardstack/runtime-common';
 
-import type { VisitCardsInput } from 'https://cardstack.com/base/command';
+import type { VisitCardsInput } from '@cardstack/base/command';
 
 import HostBaseCommand from '../lib/host-base-command';
 

@@ -1,4 +1,4 @@
-import type { BotTriggerEvent } from 'https://cardstack.com/base/matrix-event';
+import type { BotTriggerEvent } from '@cardstack/base/matrix-event';
 import {
   BOT_TRIGGER_COMMAND_TYPES,
   BOT_TRIGGER_EVENT_TYPE,

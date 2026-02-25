@@ -1,9 +1,9 @@
-import EmailField from 'https://cardstack.com/base/email';
-import PhoneNumberField from 'https://cardstack.com/base/phone-number';
-import UrlField from 'https://cardstack.com/base/url';
-import WebsiteField from 'https://cardstack.com/base/website';
-import AddressField from 'https://cardstack.com/base/address';
-import PercentageField from 'https://cardstack.com/base/percentage';
+import EmailField from '@cardstack/base/email';
+import PhoneNumberField from '@cardstack/base/phone-number';
+import UrlField from '@cardstack/base/url';
+import WebsiteField from '@cardstack/base/website';
+import AddressField from '@cardstack/base/address';
+import PercentageField from '@cardstack/base/percentage';
 
 import { FeaturedImageField } from './fields/featured-image';
 import { ContactLinkField } from './fields/contact-link';
@@ -17,8 +17,8 @@ import {
   containsMany,
   type BaseDefConstructor,
   type Field,
-} from 'https://cardstack.com/base/card-api';
-import { Component } from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
+import { Component } from '@cardstack/base/card-api';
 import { FieldContainer } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
 import { getField } from '@cardstack/runtime-common';

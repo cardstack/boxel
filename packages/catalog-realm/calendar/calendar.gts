@@ -6,12 +6,12 @@ import {
   Component,
   realmURL,
   linksTo,
-} from 'https://cardstack.com/base/card-api'; // ¹ Core imports
-import StringField from 'https://cardstack.com/base/string';
-import NumberField from 'https://cardstack.com/base/number';
-import DateField from 'https://cardstack.com/base/date';
-import DatetimeField from 'https://cardstack.com/base/datetime';
-import TextAreaField from 'https://cardstack.com/base/text-area';
+} from '@cardstack/base/card-api'; // ¹ Core imports
+import StringField from '@cardstack/base/string';
+import NumberField from '@cardstack/base/number';
+import DateField from '@cardstack/base/date';
+import DatetimeField from '@cardstack/base/datetime';
+import TextAreaField from '@cardstack/base/text-area';
 import { Button } from '@cardstack/boxel-ui/components'; // ² UI components
 import { fn, concat } from '@ember/helper';
 import { on } from '@ember/modifier';

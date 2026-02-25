@@ -2,26 +2,26 @@ import { getService } from '@universal-ember/test-support';
 
 import { baseRealm } from '@cardstack/runtime-common';
 
-import type * as Base64ImageFieldModule from 'https://cardstack.com/base/base64-image';
-import type * as BigIntegerModule from 'https://cardstack.com/base/big-integer';
-import type * as BooleanFieldModule from 'https://cardstack.com/base/boolean';
-import type * as CardAPIModule from 'https://cardstack.com/base/card-api';
-import type * as CardsGridModule from 'https://cardstack.com/base/cards-grid';
-import type * as CodeRefModule from 'https://cardstack.com/base/code-ref';
-import type * as DateFieldModule from 'https://cardstack.com/base/date';
-import type * as DatetimeFieldModule from 'https://cardstack.com/base/datetime';
-import type * as EmailFieldModule from 'https://cardstack.com/base/email';
-import type * as EnumModule from 'https://cardstack.com/base/enum';
-import type * as EthereumAddressModule from 'https://cardstack.com/base/ethereum-address';
-import type * as FileApiModule from 'https://cardstack.com/base/file-api';
-import type * as MarkdownFieldModule from 'https://cardstack.com/base/markdown';
-import type * as NumberFieldModule from 'https://cardstack.com/base/number';
-import type * as PhoneNumberFieldModule from 'https://cardstack.com/base/phone-number';
-import type * as RealmFieldModule from 'https://cardstack.com/base/realm';
-import type * as SkillModule from 'https://cardstack.com/base/skill';
-import type * as StringFieldModule from 'https://cardstack.com/base/string';
-import type * as SystemCardModule from 'https://cardstack.com/base/system-card';
-import type * as TextAreaFieldModule from 'https://cardstack.com/base/text-area';
+import type * as Base64ImageFieldModule from '@cardstack/base/base64-image';
+import type * as BigIntegerModule from '@cardstack/base/big-integer';
+import type * as BooleanFieldModule from '@cardstack/base/boolean';
+import type * as CardAPIModule from '@cardstack/base/card-api';
+import type * as CardsGridModule from '@cardstack/base/cards-grid';
+import type * as CodeRefModule from '@cardstack/base/code-ref';
+import type * as DateFieldModule from '@cardstack/base/date';
+import type * as DatetimeFieldModule from '@cardstack/base/datetime';
+import type * as EmailFieldModule from '@cardstack/base/email';
+import type * as EnumModule from '@cardstack/base/enum';
+import type * as EthereumAddressModule from '@cardstack/base/ethereum-address';
+import type * as FileApiModule from '@cardstack/base/file-api';
+import type * as MarkdownFieldModule from '@cardstack/base/markdown';
+import type * as NumberFieldModule from '@cardstack/base/number';
+import type * as PhoneNumberFieldModule from '@cardstack/base/phone-number';
+import type * as RealmFieldModule from '@cardstack/base/realm';
+import type * as SkillModule from '@cardstack/base/skill';
+import type * as StringFieldModule from '@cardstack/base/string';
+import type * as SystemCardModule from '@cardstack/base/system-card';
+import type * as TextAreaFieldModule from '@cardstack/base/text-area';
 
 type StringField = (typeof StringFieldModule)['default'];
 let StringField: StringField;
@@ -118,92 +118,92 @@ async function initialize() {
   let loader = getService('loader-service').loader;
 
   StringField = (
-    await loader.import<typeof StringFieldModule>(`${baseRealm.url}string`)
+    await loader.import<typeof StringFieldModule>(`@cardstack/base/string`)
   ).default;
 
   NumberField = (
-    await loader.import<typeof NumberFieldModule>(`${baseRealm.url}number`)
+    await loader.import<typeof NumberFieldModule>(`@cardstack/base/number`)
   ).default;
 
   DateField = (
-    await loader.import<typeof DateFieldModule>(`${baseRealm.url}date`)
+    await loader.import<typeof DateFieldModule>(`@cardstack/base/date`)
   ).default;
 
   DatetimeField = (
-    await loader.import<typeof DatetimeFieldModule>(`${baseRealm.url}datetime`)
+    await loader.import<typeof DatetimeFieldModule>(`@cardstack/base/datetime`)
   ).default;
 
   EmailField = (
-    await loader.import<typeof EmailFieldModule>(`${baseRealm.url}email`)
+    await loader.import<typeof EmailFieldModule>(`@cardstack/base/email`)
   ).default;
 
   Base64ImageField = (
     await loader.import<typeof Base64ImageFieldModule>(
-      `${baseRealm.url}base64-image`,
+      `@cardstack/base/base64-image`,
     )
   ).default;
 
   CodeRefField = (
-    await loader.import<typeof CodeRefModule>(`${baseRealm.url}code-ref`)
+    await loader.import<typeof CodeRefModule>(`@cardstack/base/code-ref`)
   ).default;
 
   CommandField = (
-    await loader.import<typeof SkillModule>(`${baseRealm.url}skill`)
+    await loader.import<typeof SkillModule>(`@cardstack/base/skill`)
   ).CommandField;
 
   BigIntegerField = (
-    await loader.import<typeof BigIntegerModule>(`${baseRealm.url}big-integer`)
+    await loader.import<typeof BigIntegerModule>(`@cardstack/base/big-integer`)
   ).default;
 
   EthereumAddressField = (
     await loader.import<typeof EthereumAddressModule>(
-      `${baseRealm.url}ethereum-address`,
+      `@cardstack/base/ethereum-address`,
     )
   ).default;
 
   BooleanField = (
-    await loader.import<typeof BooleanFieldModule>(`${baseRealm.url}boolean`)
+    await loader.import<typeof BooleanFieldModule>(`@cardstack/base/boolean`)
   ).default;
 
   MarkdownField = (
-    await loader.import<typeof MarkdownFieldModule>(`${baseRealm.url}markdown`)
+    await loader.import<typeof MarkdownFieldModule>(`@cardstack/base/markdown`)
   ).default;
 
   TextAreaField = (
-    await loader.import<typeof TextAreaFieldModule>(`${baseRealm.url}text-area`)
+    await loader.import<typeof TextAreaFieldModule>(`@cardstack/base/text-area`)
   ).default;
 
   RealmField = (
-    await loader.import<typeof RealmFieldModule>(`${baseRealm.url}realm`)
+    await loader.import<typeof RealmFieldModule>(`@cardstack/base/realm`)
   ).default;
 
   PhoneNumberField = (
     await loader.import<typeof PhoneNumberFieldModule>(
-      `${baseRealm.url}phone-number`,
+      `@cardstack/base/phone-number`,
     )
   ).default;
 
   CardsGrid = (
-    await loader.import<typeof CardsGridModule>(`${baseRealm.url}cards-grid`)
+    await loader.import<typeof CardsGridModule>(`@cardstack/base/cards-grid`)
   ).CardsGrid;
 
-  Skill = (await loader.import<typeof SkillModule>(`${baseRealm.url}skill`))
+  Skill = (await loader.import<typeof SkillModule>(`@cardstack/base/skill`))
     .Skill;
 
   ModelConfiguration = (
-    await loader.import<typeof SystemCardModule>(`${baseRealm.url}system-card`)
+    await loader.import<typeof SystemCardModule>(`@cardstack/base/system-card`)
   ).ModelConfiguration;
 
   SystemCard = (
-    await loader.import<typeof SystemCardModule>(`${baseRealm.url}system-card`)
+    await loader.import<typeof SystemCardModule>(`@cardstack/base/system-card`)
   ).SystemCard;
 
   FileDef = (
-    await loader.import<typeof FileApiModule>(`${baseRealm.url}file-api`)
+    await loader.import<typeof FileApiModule>(`@cardstack/base/file-api`)
   ).FileDef;
 
   cardAPI = await loader.import<typeof CardAPIModule>(
-    `${baseRealm.url}card-api`,
+    `@cardstack/base/card-api`,
   );
 
   ({
@@ -234,10 +234,10 @@ async function initialize() {
     CardInfoField,
   } = cardAPI);
 
-  enumField = (await loader.import<typeof EnumModule>(`${baseRealm.url}enum`))
+  enumField = (await loader.import<typeof EnumModule>(`@cardstack/base/enum`))
     .default;
   const enumModule = await loader.import<typeof EnumModule>(
-    `${baseRealm.url}enum`,
+    `@cardstack/base/enum`,
   );
   enumOptions = enumModule.enumOptions;
   enumValues = enumModule.enumValues;

@@ -48,7 +48,7 @@ test.describe('Commands', () => {
         },
         meta: {
           adoptsFrom: {
-            module: 'https://cardstack.com/base/card-api',
+            module: '@cardstack/base/card-api',
             name: 'CardDef',
           },
         },
@@ -105,7 +105,7 @@ test.describe('Commands', () => {
         },
         meta: {
           adoptsFrom: {
-            module: 'https://cardstack.com/base/card-api',
+            module: '@cardstack/base/card-api',
             name: 'CardDef',
           },
         },
@@ -160,7 +160,7 @@ test.describe('Commands', () => {
         },
         meta: {
           adoptsFrom: {
-            module: 'https://cardstack.com/base/card-api',
+            module: '@cardstack/base/card-api',
             name: 'CardDef',
           },
         },
@@ -310,7 +310,7 @@ test.describe('Commands', () => {
     await page.locator('[data-test-search-field]').fill('Skill');
     await page
       .locator(
-        '[data-test-card-catalog-item="https://cardstack.com/base/cards/skill"]',
+        '[data-test-card-catalog-item="@cardstack/base/cards/skill"]',
       )
       .click();
     await page.locator('[data-test-card-catalog-go-button]').click();

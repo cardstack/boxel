@@ -29,8 +29,8 @@ import type {
   Format,
   CardStore,
   BoxComponent,
-} from 'https://cardstack.com/base/card-api';
-import type { FileDef } from 'https://cardstack.com/base/file-api';
+} from '@cardstack/base/card-api';
+import type { FileDef } from '@cardstack/base/file-api';
 
 import { render } from '../lib/isolated-render';
 

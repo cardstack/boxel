@@ -249,7 +249,7 @@
       },
       "shortcutSettings.3.requiredSkills.0": {
         "links": {
-          "self": "https://cardstack.com/base/Skill/boxel-environment"
+          "self": "@cardstack/base/Skill/boxel-environment"
         }
       }
     },

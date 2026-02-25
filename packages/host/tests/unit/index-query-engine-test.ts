@@ -22,8 +22,8 @@ import ENV from '@cardstack/host/config/environment';
 import { shimExternals } from '@cardstack/host/lib/externals';
 import type SQLiteAdapter from '@cardstack/host/lib/sqlite-adapter';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
+import type { CardDef } from '@cardstack/base/card-api';
+import type * as CardAPI from '@cardstack/base/card-api';
 
 import {
   testRealmURL,
@@ -34,12 +34,12 @@ import {
   serializeCard,
 } from '../helpers';
 
-let cardApi: typeof import('https://cardstack.com/base/card-api');
-let string: typeof import('https://cardstack.com/base/string');
-let date: typeof import('https://cardstack.com/base/date');
-let number: typeof import('https://cardstack.com/base/number');
-let boolean: typeof import('https://cardstack.com/base/boolean');
-let codeRef: typeof import('https://cardstack.com/base/code-ref');
+let cardApi: typeof import('@cardstack/base/card-api');
+let string: typeof import('@cardstack/base/string');
+let date: typeof import('@cardstack/base/date');
+let number: typeof import('@cardstack/base/number');
+let boolean: typeof import('@cardstack/base/boolean');
+let codeRef: typeof import('@cardstack/base/code-ref');
 let { resolvedBaseRealmURL } = ENV;
 
 module('Unit | query', function (hooks) {
@@ -69,12 +69,12 @@ module('Unit | query', function (hooks) {
     ]);
     loader = new Loader(fetch, virtualNetwork.resolveImport);
 
-    cardApi = await loader.import(`${baseRealm.url}card-api`);
-    string = await loader.import(`${baseRealm.url}string`);
-    date = await loader.import(`${baseRealm.url}date`);
-    number = await loader.import(`${baseRealm.url}number`);
-    boolean = await loader.import(`${baseRealm.url}boolean`);
-    codeRef = await loader.import(`${baseRealm.url}code-ref`);
+    cardApi = await loader.import(`@cardstack/base/card-api`);
+    string = await loader.import(`@cardstack/base/string`);
+    date = await loader.import(`@cardstack/base/date`);
+    number = await loader.import(`@cardstack/base/number`);
+    boolean = await loader.import(`@cardstack/base/boolean`);
+    codeRef = await loader.import(`@cardstack/base/code-ref`);
 
     let {
       field,
@@ -131,14 +131,14 @@ module('Unit | query', function (hooks) {
     let stringFieldEntry = new SimpleSpec({
       cardTitle: 'String Field',
       ref: {
-        module: `${baseRealm.url}string`,
+        module: `@cardstack/base/string`,
         name: 'default',
       },
     });
     let numberFieldEntry = new SimpleSpec({
       cardTitle: 'Number Field',
       ref: {
-        module: `${baseRealm.url}number`,
+        module: `@cardstack/base/number`,
         name: 'default',
       },
     });
@@ -196,7 +196,7 @@ module('Unit | query', function (hooks) {
       setCardAsSavedForTest(card);
     }
 
-    let api = await loader.import<typeof CardAPI>(`${baseRealm.url}card-api`);
+    let api = await loader.import<typeof CardAPI>(`@cardstack/base/card-api`);
 
     async function buildDefinition(cardDef: typeof CardDef) {
       return {
@@ -678,7 +678,7 @@ module('Unit | query', function (hooks) {
           on: type,
           eq: {
             ref: {
-              module: `${baseRealm.url}string`,
+              module: `@cardstack/base/string`,
               name: 'default',
             },
           },
@@ -2575,7 +2575,7 @@ module('Unit | query', function (hooks) {
         deps: [],
         types: [
           `${testRealmURL}person/Person`,
-          'https://cardstack.com/base/card-api/CardDef',
+          '@cardstack/base/card-api/CardDef',
         ],
         last_modified: '1',
         resource_created_at: '1',
@@ -2589,7 +2589,7 @@ module('Unit | query', function (hooks) {
         deps: [],
         types: [
           `${testRealmURL}person/Person`,
-          'https://cardstack.com/base/card-api/CardDef',
+          '@cardstack/base/card-api/CardDef',
         ],
         last_modified: '3',
         resource_created_at: '3',
@@ -2603,7 +2603,7 @@ module('Unit | query', function (hooks) {
         deps: [],
         types: [
           `${testRealmURL}person/Person`,
-          'https://cardstack.com/base/card-api/CardDef',
+          '@cardstack/base/card-api/CardDef',
         ],
         last_modified: '2',
         resource_created_at: '2',
@@ -2702,15 +2702,15 @@ module('Unit | query', function (hooks) {
         realm_version: 1,
         realm_url: testRealmURL,
         deps: [],
-        types: [personKey, 'https://cardstack.com/base/card-api/CardDef'],
+        types: [personKey, '@cardstack/base/card-api/CardDef'],
         embedded_html: {
           [personKey]: '<div>Van Gogh (Person embedded template)</div>',
-          'https://cardstack.com/base/card-api/CardDef':
+          '@cardstack/base/card-api/CardDef':
             '<div>Van Gogh (CardDef embedded template)</div>',
         },
         fitted_html: {
           [personKey]: '<div>Van Gogh (Person fitted template)</div>',
-          'https://cardstack.com/base/card-api/CardDef':
+          '@cardstack/base/card-api/CardDef':
             '<div>Van Gogh (CardDef fitted template)</div>',
         },
         atom_html: 'Van Gogh',
@@ -2723,15 +2723,15 @@ module('Unit | query', function (hooks) {
         realm_version: 1,
         realm_url: testRealmURL,
         deps: [],
-        types: [personKey, 'https://cardstack.com/base/card-api/CardDef'],
+        types: [personKey, '@cardstack/base/card-api/CardDef'],
         embedded_html: {
           [personKey]: '<div>Jimmy (Person embedded template)</div>',
-          'https://cardstack.com/base/card-api/CardDef':
+          '@cardstack/base/card-api/CardDef':
             '<div>Jimmy (CardDef embedded template)</div>',
         },
         fitted_html: {
           [personKey]: '<div>Jimmy (Person fitted template)</div>',
-          'https://cardstack.com/base/card-api/CardDef':
+          '@cardstack/base/card-api/CardDef':
             '<div>Jimmy (CardDef fitted template)</div>',
         },
         atom_html: 'Jimmy',
@@ -2748,18 +2748,18 @@ module('Unit | query', function (hooks) {
         types: [
           fancyPersonKey,
           personKey,
-          'https://cardstack.com/base/card-api/CardDef',
+          '@cardstack/base/card-api/CardDef',
         ],
         embedded_html: {
           [fancyPersonKey]: '<div>Donald (FancyPerson embedded template)</div>',
           [personKey]: '<div>Donald (Person embedded template)</div>',
-          'https://cardstack.com/base/card-api/CardDef':
+          '@cardstack/base/card-api/CardDef':
             '<div>Donald (CardDef embedded template)</div>',
         },
         fitted_html: {
           [fancyPersonKey]: '<div>Donald (FancyPerson fitted template)</div>',
           [personKey]: '<div>Donald (Person fitted template)</div>',
-          'https://cardstack.com/base/card-api/CardDef':
+          '@cardstack/base/card-api/CardDef':
             '<div>Donald (CardDef fitted template)</div>',
         },
         atom_html: 'Donald',
@@ -2942,15 +2942,15 @@ module('Unit | query', function (hooks) {
         realm_version: 1,
         realm_url: testRealmURL,
         deps: [],
-        types: [personKey, 'https://cardstack.com/base/card-api/CardDef'],
+        types: [personKey, '@cardstack/base/card-api/CardDef'],
         embedded_html: {
           [personKey]: '<div>Van Gogh (Person embedded template)</div>',
-          'https://cardstack.com/base/card-api/CardDef':
+          '@cardstack/base/card-api/CardDef':
             '<div>Van Gogh (CardDef embedded template)</div>',
         },
         fitted_html: {
           [personKey]: '<div>Van Gogh (Person fitted template)</div>',
-          'https://cardstack.com/base/card-api/CardDef':
+          '@cardstack/base/card-api/CardDef':
             '<div>Van Gogh (CardDef fitted template)</div>',
         },
         atom_html: 'Van Gogh',
@@ -2966,18 +2966,18 @@ module('Unit | query', function (hooks) {
         types: [
           fancyPersonKey,
           personKey,
-          'https://cardstack.com/base/card-api/CardDef',
+          '@cardstack/base/card-api/CardDef',
         ],
         embedded_html: {
           [fancyPersonKey]: '<div>Jimmy (FancyPerson embedded template)</div>',
           [personKey]: '<div>Jimmy (Person embedded template)</div>',
-          'https://cardstack.com/base/card-api/CardDef':
+          '@cardstack/base/card-api/CardDef':
             '<div>Jimmy (CardDef embedded template)</div>',
         },
         fitted_html: {
           [fancyPersonKey]: '<div>Jimmy (FancyPerson fitted template)</div>',
           [personKey]: '<div>Jimmy (Person fitted template)</div>',
-          'https://cardstack.com/base/card-api/CardDef':
+          '@cardstack/base/card-api/CardDef':
             '<div>Jimmy (CardDef fitted template)</div>',
         },
         atom_html: 'Jimmy',
@@ -2994,18 +2994,18 @@ module('Unit | query', function (hooks) {
         types: [
           fancyPersonKey,
           personKey,
-          'https://cardstack.com/base/card-api/CardDef',
+          '@cardstack/base/card-api/CardDef',
         ],
         embedded_html: {
           [fancyPersonKey]: '<div>Donald (FancyPerson embedded template)</div>',
           [personKey]: '<div>Donald (Person embedded template)</div>',
-          'https://cardstack.com/base/card-api/CardDef':
+          '@cardstack/base/card-api/CardDef':
             '<div>Donald (CardDef embedded template)</div>',
         },
         fitted_html: {
           [fancyPersonKey]: '<div>Donald (FancyPerson fitted template)</div>',
           [personKey]: '<div>Donald (Person fitted template)</div>',
-          'https://cardstack.com/base/card-api/CardDef':
+          '@cardstack/base/card-api/CardDef':
             '<div>Donald (CardDef fitted template)</div>',
         },
         atom_html: 'Donald',
@@ -3023,13 +3023,13 @@ module('Unit | query', function (hooks) {
         embedded_html: {
           [fancyPersonKey]: '<div>Paper (FancyPerson embedded template)</div>',
           [personKey]: '<div>Paper (Person embedded template)</div>',
-          'https://cardstack.com/base/card-api/CardDef':
+          '@cardstack/base/card-api/CardDef':
             '<div>Paper (CardDef embedded template)</div>',
         },
         fitted_html: {
           [fancyPersonKey]: '<div>Paper (FancyPerson fitted template)</div>',
           [personKey]: '<div>Paper (Person fitted template)</div>',
-          'https://cardstack.com/base/card-api/CardDef':
+          '@cardstack/base/card-api/CardDef':
             '<div>Paper (CardDef fitted template)</div>',
         },
         atom_html: 'Paper',

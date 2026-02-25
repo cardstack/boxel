@@ -12,7 +12,7 @@ import type { Loader } from '@cardstack/runtime-common/loader';
 
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
-import type { GetMenuItemParams } from 'https://cardstack.com/base/card-api';
+import type { GetMenuItemParams } from '@cardstack/base/card-api';
 
 import {
   testRealmURL,
@@ -42,7 +42,7 @@ module('Integration | overlay-menu-items', function (hooks) {
   setupOnSave(hooks);
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await loader.import(`@cardstack/base/card-api`),
   );
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
@@ -69,10 +69,10 @@ module('Integration | overlay-menu-items', function (hooks) {
       });
     };
 
-    let cardApi: typeof import('https://cardstack.com/base/card-api');
-    let string: typeof import('https://cardstack.com/base/string');
-    cardApi = await loader.import(`${baseRealm.url}card-api`);
-    string = await loader.import(`${baseRealm.url}string`);
+    let cardApi: typeof import('@cardstack/base/card-api');
+    let string: typeof import('@cardstack/base/string');
+    cardApi = await loader.import(`@cardstack/base/card-api`);
+    string = await loader.import(`@cardstack/base/string`);
 
     let { field, contains, linksTo, CardDef, Component } = cardApi;
     let { default: StringField } = string;
@@ -127,7 +127,7 @@ module('Integration | overlay-menu-items', function (hooks) {
             type: 'card',
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/cards-grid',
+                module: '@cardstack/base/cards-grid',
                 name: 'CardsGrid',
               },
             },

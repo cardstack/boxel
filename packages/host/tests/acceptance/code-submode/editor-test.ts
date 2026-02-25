@@ -78,8 +78,8 @@ module('Acceptance | code submode | editor tests', function (hooks) {
         contents: {
           ...SYSTEM_CARD_FIXTURE_CONTENTS,
           'pet.gts': `
-        import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
-        import StringField from "https://cardstack.com/base/string";
+        import { contains, field, Component, CardDef } from "@cardstack/base/card-api";
+        import StringField from "@cardstack/base/string";
 
         export class Pet extends CardDef {
           static displayName = 'Pet';
@@ -99,8 +99,8 @@ module('Acceptance | code submode | editor tests', function (hooks) {
         }
       `,
           'shipping-info.gts': `
-        import { contains, field, Component, FieldDef } from "https://cardstack.com/base/card-api";
-        import StringField from "https://cardstack.com/base/string";
+        import { contains, field, Component, FieldDef } from "@cardstack/base/card-api";
+        import StringField from "@cardstack/base/string";
         export class ShippingInfo extends FieldDef {
           static displayName = 'Shipping Info';
           @field preferredCarrier = contains(StringField);
@@ -119,8 +119,8 @@ module('Acceptance | code submode | editor tests', function (hooks) {
         }
       `,
           'address.gts': `
-        import { contains, field, Component, FieldDef } from "https://cardstack.com/base/card-api";
-        import StringField from "https://cardstack.com/base/string";
+        import { contains, field, Component, FieldDef } from "@cardstack/base/card-api";
+        import StringField from "@cardstack/base/string";
         import { ShippingInfo } from "./shipping-info";
         import { FieldContainer } from '@cardstack/boxel-ui/components';
 
@@ -155,8 +155,8 @@ module('Acceptance | code submode | editor tests', function (hooks) {
         }
       `,
           'person.gts': `
-        import { contains, linksTo, field, Component, CardDef, linksToMany } from "https://cardstack.com/base/card-api";
-        import StringField from "https://cardstack.com/base/string";
+        import { contains, linksTo, field, Component, CardDef, linksToMany } from "@cardstack/base/card-api";
+        import StringField from "@cardstack/base/string";
         import { Pet } from "./pet";
         import { Address } from "./address";
 
@@ -252,7 +252,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
               attributes: {},
               meta: {
                 adoptsFrom: {
-                  module: 'https://cardstack.com/base/cards-grid',
+                  module: '@cardstack/base/cards-grid',
                   name: 'CardsGrid',
                 },
               },
@@ -293,7 +293,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
               meta: {
                 adoptsFrom: {
                   name: 'Theme',
-                  module: 'https://cardstack.com/base/card-api',
+                  module: '@cardstack/base/card-api',
                 },
               },
               attributes: {
@@ -695,8 +695,8 @@ module('Acceptance | code submode | editor tests', function (hooks) {
 
   test<TestContextWithSave>('card definition change made in monaco editor is auto-saved', async function (assert) {
     let expected = `
-    import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
-    import StringField from "https://cardstack.com/base/string";
+    import { contains, field, Component, CardDef } from "@cardstack/base/card-api";
+    import StringField from "@cardstack/base/string";
 
     export class Pet extends CardDef {
       static displayName = 'PetXXX';  // this is the change

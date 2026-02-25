@@ -2,8 +2,8 @@ import { service } from '@ember/service';
 
 import { isCardInstance } from '@cardstack/runtime-common';
 
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as CardAPI from '@cardstack/base/card-api';
+import type * as BaseCommandModule from '@cardstack/base/command';
 
 import HostBaseCommand from '../lib/host-base-command';
 
@@ -34,7 +34,7 @@ export default class CopyAndEditCommand extends HostBaseCommand<
   private async loadCardAPI() {
     if (!this.#cardAPI) {
       this.#cardAPI = await this.loaderService.loader.import<typeof CardAPI>(
-        'https://cardstack.com/base/card-api',
+        '@cardstack/base/card-api',
       );
     }
     return this.#cardAPI;

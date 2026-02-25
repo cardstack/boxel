@@ -3,7 +3,7 @@
     "meta": {
       "adoptsFrom": {
         "name": "SystemCard",
-        "module": "https://cardstack.com/base/system-card"
+        "module": "@cardstack/base/system-card"
       }
     },
     "type": "card",

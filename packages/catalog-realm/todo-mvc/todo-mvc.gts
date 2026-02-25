@@ -5,10 +5,10 @@ import {
   field,
   contains,
   containsMany,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-import BooleanField from 'https://cardstack.com/base/boolean';
-import DateField from 'https://cardstack.com/base/date';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+import BooleanField from '@cardstack/base/boolean';
+import DateField from '@cardstack/base/date';
 import { eq, gt, not } from '@cardstack/boxel-ui/helpers';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';

@@ -38,7 +38,7 @@ module('Integration | PhoneNumberField', function (hooks) {
 
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await loader.import(`@cardstack/base/card-api`),
   );
 
   test('edit format persists normalized phone numbers', async function (assert) {

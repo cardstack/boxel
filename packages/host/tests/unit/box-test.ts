@@ -8,7 +8,7 @@ import { baseRealm } from '@cardstack/runtime-common';
 
 import { setupRenderingTest } from '../helpers/setup';
 
-let cardApi: typeof import('https://cardstack.com/base/card-api');
+let cardApi: typeof import('@cardstack/base/card-api');
 
 let loader: Loader;
 
@@ -18,7 +18,7 @@ module('Unit | box', function (hooks) {
     loader = getService('loader-service').loader;
   });
   hooks.beforeEach(async function () {
-    cardApi = await loader.import(`${baseRealm.url}card-api`);
+    cardApi = await loader.import(`@cardstack/base/card-api`);
   });
 
   test('Box children maintain object strict equality after re-ordering', async function (assert) {

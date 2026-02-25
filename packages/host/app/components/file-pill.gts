@@ -10,7 +10,7 @@ import { IconButton, Pill } from '@cardstack/boxel-ui/components';
 import { cn, cssVar } from '@cardstack/boxel-ui/helpers';
 import { IconX, Download } from '@cardstack/boxel-ui/icons';
 
-import type { FileDef } from 'https://cardstack.com/base/file-api';
+import type { FileDef } from '@cardstack/base/file-api';
 
 import AttachedFileDropdownMenu from './ai-assistant/attached-file-dropdown-menu';
 

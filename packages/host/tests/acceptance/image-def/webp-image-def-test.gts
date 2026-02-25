@@ -75,7 +75,7 @@ module('Acceptance | webp image def', function (hooks) {
   const makeFileURL = (path: string) => new URL(path, testRealmURL).href;
 
   const webpDefCodeRef = (): ResolvedCodeRef => ({
-    module: `${baseRealm.url}webp-image-def`,
+    module: `@cardstack/base/webp-image-def`,
     name: 'WebpDef',
   });
 

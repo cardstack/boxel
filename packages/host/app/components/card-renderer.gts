@@ -24,7 +24,7 @@ import type {
   Format,
   Field,
   CardContext,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 
 interface Signature {
   Element: any;

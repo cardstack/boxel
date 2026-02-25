@@ -1,4 +1,4 @@
-import StringField from 'https://cardstack.com/base/string';
+import StringField from '@cardstack/base/string';
 import {
   Component,
   CardDef,
@@ -6,9 +6,9 @@ import {
   contains,
   linksTo,
   containsMany,
-} from 'https://cardstack.com/base/card-api';
-import { ContactPhoneNumber } from 'https://cardstack.com/base/phone-number';
-import EmailField from 'https://cardstack.com/base/email';
+} from '@cardstack/base/card-api';
+import { ContactPhoneNumber } from '@cardstack/base/phone-number';
+import EmailField from '@cardstack/base/email';
 
 import {
   Avatar,

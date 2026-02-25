@@ -17,7 +17,7 @@ import {
 
 import CardRenderer from '@cardstack/host/components/card-renderer';
 
-import type { FileDef } from 'https://cardstack.com/base/file-api';
+import type { FileDef } from '@cardstack/base/file-api';
 
 import type { FieldOption, SelectedInstance } from './playground-panel';
 

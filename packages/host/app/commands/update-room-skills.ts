@@ -3,11 +3,11 @@ import { service } from '@ember/service';
 import { isCardInstance } from '@cardstack/runtime-common';
 import { APP_BOXEL_ROOM_SKILLS_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
-import type { SerializedFile } from 'https://cardstack.com/base/file-api';
+import type { CardDef } from '@cardstack/base/card-api';
+import type * as BaseCommandModule from '@cardstack/base/command';
+import type { SerializedFile } from '@cardstack/base/file-api';
 
-import type * as SkillModule from 'https://cardstack.com/base/skill';
+import type * as SkillModule from '@cardstack/base/skill';
 
 import { isSkillCard } from '../lib/file-def-manager';
 

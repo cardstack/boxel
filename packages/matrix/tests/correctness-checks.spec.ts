@@ -519,8 +519,8 @@ ${originalContent}
     const modulePath = 'import-check.gts';
     const moduleUrl = `${realmURL}${modulePath}`;
     const originalModuleSource = `
-import { CardDef, field, contains, StringField } from 'https://cardstack.com/base/card-api';
-import { Component } from 'https://cardstack.com/base/card-api';
+import { CardDef, field, contains, StringField } from '@cardstack/base/card-api';
+import { Component } from '@cardstack/base/card-api';
 export class ImportCheck extends CardDef {
   @field title = contains(StringField);
   static isolated = class Isolated extends Component<typeof this> {
@@ -532,8 +532,8 @@ export class ImportCheck extends CardDef {
 `.trim();
     const originalModuleContent = `${originalModuleSource}\n`;
     const brokenModuleContent = originalModuleContent.replace(
-      `https://cardstack.com/base/card-api'`,
-      `https://cardstack.com/base/card-api-broken'`,
+      `@cardstack/base/card-api'`,
+      `@cardstack/base/card-api-broken'`,
     );
 
     await postCardSource(page, realmURL, modulePath, originalModuleContent);
@@ -718,16 +718,16 @@ ${brokenModuleContent}
       failingResult.data.attributes.errors.some(
         (err: string) =>
           err.includes(moduleUrl.replace('.gts', '')) &&
-          err.includes('https://cardstack.com/base/card-api-broken not found'),
+          err.includes('@cardstack/base/card-api-broken not found'),
       ),
     ).toBe(true);
 
     const fixMessageBody = `\`\`\`
 ${moduleUrl}
 ╔═══ SEARCH ════╗
-} from 'https://cardstack.com/base/card-api-broken';
+} from '@cardstack/base/card-api-broken';
 ╠═══════════════╣
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 ╚═══ REPLACE ═══╝
 \`\`\``;
     await applyPatchMessage(fixMessageBody);

@@ -6,13 +6,13 @@
       "cardDescription": "A field that represents an executable command within a skill",
       "specType": "field",
       "ref": {
-        "module": "https://cardstack.com/base/skill",
+        "module": "@cardstack/base/skill",
         "name": "CommandField"
       }
     },
     "meta": {
       "adoptsFrom": {
-        "module": "https://cardstack.com/base/spec",
+        "module": "@cardstack/base/spec",
         "name": "Spec"
       }
     }

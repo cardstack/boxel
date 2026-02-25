@@ -8,7 +8,7 @@ import type { Type } from '@cardstack/host/services/card-type-service';
 
 import type CardTypeService from '@cardstack/host/services/card-type-service';
 
-import type { BaseDef } from 'https://cardstack.com/base/card-api';
+import type { BaseDef } from '@cardstack/base/card-api';
 
 interface Args {
   named: {

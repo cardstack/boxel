@@ -21,8 +21,8 @@ import {
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
-let cardApi: typeof import('https://cardstack.com/base/card-api');
-let string: typeof import('https://cardstack.com/base/string');
+let cardApi: typeof import('@cardstack/base/card-api');
+let string: typeof import('@cardstack/base/string');
 let loader: Loader;
 
 module('Integration | text-suggestion | card-chooser-title', function (hooks) {
@@ -37,8 +37,8 @@ module('Integration | text-suggestion | card-chooser-title', function (hooks) {
   });
 
   hooks.beforeEach(async function () {
-    cardApi = await loader.import(`${baseRealm.url}card-api`);
-    string = await loader.import(`${baseRealm.url}string`);
+    cardApi = await loader.import(`@cardstack/base/card-api`);
+    string = await loader.import(`@cardstack/base/string`);
 
     let { contains, field, CardDef, linksTo } = cardApi;
     let { default: StringField } = string;
@@ -214,7 +214,7 @@ module('Integration | text-suggestion | card-chooser-title', function (hooks) {
 
   test('filter by card instance', async function (assert) {
     let filter = {
-      type: { module: `${baseRealm.url}card-api`, name: 'CardDef' },
+      type: { module: `@cardstack/base/card-api`, name: 'CardDef' },
     };
     let suggestions = await suggestCardChooserTitle(filter, 0, { loader });
     assert.deepEqual(suggestions, [
@@ -237,7 +237,7 @@ module('Integration | text-suggestion | card-chooser-title', function (hooks) {
         { eq: { cardTitle: 'Card 1' } },
         { not: { eq: { 'author.firstName': 'Cardy' } } },
       ],
-      type: { module: `${baseRealm.url}card-api`, name: 'CardDef' },
+      type: { module: `@cardstack/base/card-api`, name: 'CardDef' },
     };
     let suggestions = await suggestCardChooserTitle(filter, 0, { loader });
     assert.deepEqual(suggestions, [
@@ -260,7 +260,7 @@ module('Integration | text-suggestion | card-chooser-title', function (hooks) {
     let filter = {
       every: [
         {
-          type: { module: `${baseRealm.url}card-api`, name: 'CardDef' },
+          type: { module: `@cardstack/base/card-api`, name: 'CardDef' },
         },
         {
           on: {

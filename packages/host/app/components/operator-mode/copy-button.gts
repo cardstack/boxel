@@ -20,7 +20,7 @@ import {
 
 import type { StackItem } from '@cardstack/host/lib/stack-item';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
+import type { CardDef } from '@cardstack/base/card-api';
 
 import consumeContext from '../../helpers/consume-context';
 

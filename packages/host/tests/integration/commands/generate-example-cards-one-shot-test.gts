@@ -77,8 +77,8 @@ module(
         setupIntegrationTestRealm({
           mockMatrixUtils,
           contents: {
-            'test-card.gts': `import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
+            'test-card.gts': `import { CardDef, field, contains } from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 
 export class TestCard extends CardDef {
   static displayName = 'Test Card';

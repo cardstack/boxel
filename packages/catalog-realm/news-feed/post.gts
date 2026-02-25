@@ -4,10 +4,10 @@ import {
   contains,
   Component,
   linksTo,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-import TextAreaField from 'https://cardstack.com/base/text-area';
-import DatetimeField from 'https://cardstack.com/base/datetime';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+import TextAreaField from '@cardstack/base/text-area';
+import DatetimeField from '@cardstack/base/datetime';
 import GeoSearchPointField from '../fields/geo-search-point';
 
 import { formatDateTime, not } from '@cardstack/boxel-ui/helpers';

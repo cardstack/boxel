@@ -1,4 +1,4 @@
-import { CardDef } from 'https://cardstack.com/base/card-api';
+import { CardDef } from '@cardstack/base/card-api';
 import GlimmerComponent from '@glimmer/component';
 
 interface PlayerPreviewSignature {

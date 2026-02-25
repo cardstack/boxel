@@ -1,8 +1,8 @@
-import { Component, FieldDef } from 'https://cardstack.com/base/card-api';
+import { Component, FieldDef } from '@cardstack/base/card-api';
 import { action } from '@ember/object';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
-import StringField from 'https://cardstack.com/base/string';
-import { contains, field } from 'https://cardstack.com/base/card-api';
+import StringField from '@cardstack/base/string';
+import { contains, field } from '@cardstack/base/card-api';
 
 class AtomTemplate extends Component<typeof LeafletMapConfigField> {
   get displayValue() {

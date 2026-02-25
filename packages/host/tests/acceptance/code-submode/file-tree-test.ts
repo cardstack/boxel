@@ -34,7 +34,7 @@ import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupApplicationTest } from '../../helpers/setup';
 
 const indexCardSource = `
-  import { CardDef, Component } from "https://cardstack.com/base/card-api";
+  import { CardDef, Component } from "@cardstack/base/card-api";
 
   export class Index extends CardDef {
     static isolated = class Isolated extends Component<typeof this> {
@@ -48,8 +48,8 @@ const indexCardSource = `
 `;
 
 const personCardSource = `
-  import { contains, containsMany, field, linksToMany, CardDef, Component } from "https://cardstack.com/base/card-api";
-  import StringField from "https://cardstack.com/base/string";
+  import { contains, containsMany, field, linksToMany, CardDef, Component } from "@cardstack/base/card-api";
+  import StringField from "@cardstack/base/string";
 import WriteTextFileCommand from '../../../app/commands/write-text-file';
   import { Friend } from './friend';
 
@@ -89,8 +89,8 @@ const employeeCardSource = `
     contains,
     field,
     Component,
-  } from 'https://cardstack.com/base/card-api';
-  import StringField from 'https://cardstack.com/base/string';
+  } from '@cardstack/base/card-api';
+  import StringField from '@cardstack/base/string';
   import { Person } from './person';
 
   export class Employee extends Person {
@@ -113,8 +113,8 @@ const inThisFileSource = `
     field,
     CardDef,
     FieldDef,
-  } from 'https://cardstack.com/base/card-api';
-  import StringField from 'https://cardstack.com/base/string';
+  } from '@cardstack/base/card-api';
+  import StringField from '@cardstack/base/string';
 
   export const exportedVar = 'exported var';
 
@@ -159,8 +159,8 @@ const inThisFileSource = `
 `;
 
 const friendCardSource = `
-  import { contains, linksTo, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-  import StringField from "https://cardstack.com/base/string";
+  import { contains, linksTo, field, CardDef, Component } from "@cardstack/base/card-api";
+  import StringField from "@cardstack/base/string";
 
   export class Friend extends CardDef {
     static displayName = 'Friend';
@@ -254,7 +254,7 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
               },
               meta: {
                 adoptsFrom: {
-                  module: `${baseRealm.url}spec`,
+                  module: `@cardstack/base/spec`,
                   name: 'Spec',
                 },
               },
@@ -961,7 +961,7 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
       ],
       submode: 'code',
       fileView: 'browser',
-      codePath: `https://cardstack.com/base/cards-grid.gts`,
+      codePath: `@cardstack/base/cards-grid.gts`,
     });
 
     await waitFor('[data-test-file="cards-grid.gts"]');
@@ -983,7 +983,7 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
       ],
       submode: 'code',
       fileView: 'browser',
-      codePath: `https://cardstack.com/base/cards-grid.gts`,
+      codePath: `@cardstack/base/cards-grid.gts`,
     });
 
     await waitFor('[data-test-togglable-left-panel]');
@@ -1059,7 +1059,7 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
     await writeTextFileCommand.execute({
       path: `${newDirName}/${newFileName}`,
       content:
-        'import { CardDef, Component } from "https://cardstack.com/base/card-api";\n\nexport class NewFile extends CardDef {\n  static isolated = class Isolated extends Component<typeof this> {\n    <template>\n      <div data-test-new-file>New File Content</div>\n    </template>\n  };\n}',
+        'import { CardDef, Component } from "@cardstack/base/card-api";\n\nexport class NewFile extends CardDef {\n  static isolated = class Isolated extends Component<typeof this> {\n    <template>\n      <div data-test-new-file>New File Content</div>\n    </template>\n  };\n}',
       realm: testRealmURL,
     });
     await settled();

@@ -95,10 +95,10 @@ module('Acceptance | operator mode tests', function (hooks) {
     setExpiresInSec(60 * 60);
 
     let loader = getService('loader-service').loader;
-    let cardApi: typeof import('https://cardstack.com/base/card-api');
-    let string: typeof import('https://cardstack.com/base/string');
-    cardApi = await loader.import(`${baseRealm.url}card-api`);
-    string = await loader.import(`${baseRealm.url}string`);
+    let cardApi: typeof import('@cardstack/base/card-api');
+    let string: typeof import('@cardstack/base/string');
+    cardApi = await loader.import(`@cardstack/base/card-api`);
+    string = await loader.import(`@cardstack/base/string`);
 
     let {
       field,
@@ -319,7 +319,7 @@ module('Acceptance | operator mode tests', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/spec',
+                module: '@cardstack/base/spec',
                 name: 'Spec',
               },
             },
@@ -418,7 +418,7 @@ module('Acceptance | operator mode tests', function (hooks) {
             attributes: {},
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/cards-grid',
+                module: '@cardstack/base/cards-grid',
                 name: 'CardsGrid',
               },
             },
@@ -429,7 +429,7 @@ module('Acceptance | operator mode tests', function (hooks) {
             type: 'card',
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/cards-grid',
+                module: '@cardstack/base/cards-grid',
                 name: 'CardsGrid',
               },
             },

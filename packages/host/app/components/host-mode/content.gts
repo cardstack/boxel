@@ -18,7 +18,7 @@ import type {
   CardDef,
   ViewCardFn,
   CardCrudFunctions,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 
 import HostModeBreadcrumbs from './breadcrumbs';
 import HostModeCard from './card';

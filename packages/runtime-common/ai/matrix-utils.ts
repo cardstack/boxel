@@ -13,11 +13,11 @@ import {
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
   APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
 } from '../matrix-constants';
-import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
+import type { MatrixEvent as DiscreteMatrixEvent } from '@cardstack/base/matrix-event';
 import type { MatrixEvent } from 'matrix-js-sdk';
 import type { PromptParts } from './types';
 import { encodeUri } from 'matrix-js-sdk/lib/utils';
-import type { SerializedFileDef } from 'https://cardstack.com/base/file-api';
+import type { SerializedFileDef } from '@cardstack/base/file-api';
 
 function getLog() {
   return logger('ai-bot');

@@ -6,8 +6,8 @@ import { isCardInstance, SupportedMimeType } from '@cardstack/runtime-common';
 
 import { realmURL as realmURLSymbol } from '@cardstack/runtime-common';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
-import type { Spec } from 'https://cardstack.com/base/spec';
+import type * as BaseCommandModule from '@cardstack/base/command';
+import type { Spec } from '@cardstack/base/spec';
 
 import HostBaseCommand from '../lib/host-base-command';
 

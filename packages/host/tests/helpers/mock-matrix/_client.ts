@@ -34,11 +34,11 @@ import type { ExtendedClient } from '@cardstack/host/services/matrix-sdk-loader'
 
 import { assertNever } from '@cardstack/host/utils/assert-never';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-import type { SerializedFile } from 'https://cardstack.com/base/file-api';
-import type { FileDef } from 'https://cardstack.com/base/file-api';
-import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
-import type { CommandField } from 'https://cardstack.com/base/skill';
+import type { CardDef } from '@cardstack/base/card-api';
+import type { SerializedFile } from '@cardstack/base/file-api';
+import type { FileDef } from '@cardstack/base/file-api';
+import type { MatrixEvent as DiscreteMatrixEvent } from '@cardstack/base/matrix-event';
+import type { CommandField } from '@cardstack/base/skill';
 
 import type { MockSDK } from './_sdk';
 

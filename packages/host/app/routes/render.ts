@@ -29,8 +29,8 @@ import {
 import { Deferred } from '@cardstack/runtime-common/deferred';
 import { serializableError } from '@cardstack/runtime-common/error';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
+import type { CardDef } from '@cardstack/base/card-api';
+import type * as CardAPI from '@cardstack/base/card-api';
 
 import {
   windowErrorHandler,
@@ -428,7 +428,7 @@ export default class RenderRoute extends Route<Model> {
 
   async #touchIsUsedFields(instance: CardDef): Promise<void> {
     let cardApi = await this.loaderService.loader.import<typeof CardAPI>(
-      `${baseRealm.url}card-api`,
+      `@cardstack/base/card-api`,
     );
     // a computed linksTo/linksToMany isn't a thing yet, but some day it
     // probably will be, so just optimistically including those

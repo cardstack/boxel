@@ -3,9 +3,9 @@ import {
   field,
   contains,
   Component,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-import NumberField from 'https://cardstack.com/base/number';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+import NumberField from '@cardstack/base/number';
 import BottleIcon from '@cardstack/boxel-icons/wine';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';

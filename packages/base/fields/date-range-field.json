@@ -5,14 +5,14 @@
       "cardTitle": "Date Range Field",
       "cardDescription": "A field that captures date range values.",
       "ref": {
-        "module": "https://cardstack.com/base/date-range-field",
+        "module": "@cardstack/base/date-range-field",
         "name": "default"
       },
       "specType": "field"
     },
     "meta": {
       "adoptsFrom": {
-        "module": "https://cardstack.com/base/spec",
+        "module": "@cardstack/base/spec",
         "name": "Spec"
       }
     }

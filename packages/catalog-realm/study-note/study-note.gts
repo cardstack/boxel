@@ -5,10 +5,10 @@ import {
   contains,
   Component,
   containsMany,
-} from 'https://cardstack.com/base/card-api'; // ¹ Core imports
-import StringField from 'https://cardstack.com/base/string';
-import DatetimeField from 'https://cardstack.com/base/datetime';
-import MarkdownField from 'https://cardstack.com/base/markdown';
+} from '@cardstack/base/card-api'; // ¹ Core imports
+import StringField from '@cardstack/base/string';
+import DatetimeField from '@cardstack/base/datetime';
+import MarkdownField from '@cardstack/base/markdown';
 import { formatDateTime, gt, lt, subtract } from '@cardstack/boxel-ui/helpers'; // ³ Formatters
 import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';

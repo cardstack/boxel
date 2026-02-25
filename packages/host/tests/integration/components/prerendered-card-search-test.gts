@@ -108,7 +108,7 @@ module(`Integration | prerendered-card-search`, function (hooks) {
     }
 
     const BookGtsImpl = `
-    import { Component, field, contains, linksTo, CardDef, StringField } from 'https://cardstack.com/base/card-api';
+    import { Component, field, contains, linksTo, CardDef, StringField } from '@cardstack/base/card-api';
     import { PersonField } from './person';
     import { Publisher } from './publisher';
     export class Book extends CardDef {
@@ -291,7 +291,7 @@ module(`Integration | prerendered-card-search`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${baseRealm.url}spec`,
+              module: `@cardstack/base/spec`,
               name: 'Spec',
             },
           },
@@ -311,7 +311,7 @@ module(`Integration | prerendered-card-search`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${baseRealm.url}spec`,
+              module: `@cardstack/base/spec`,
               name: 'Spec',
             },
           },

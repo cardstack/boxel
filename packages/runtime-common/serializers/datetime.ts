@@ -2,7 +2,7 @@ import { format, parseISO } from 'date-fns';
 import type {
   BaseDefConstructor,
   BaseInstanceType,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 
 export const datetimeFormat = `yyyy-MM-dd'T'HH:mm`;
 

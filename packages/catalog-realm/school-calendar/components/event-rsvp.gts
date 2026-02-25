@@ -6,12 +6,12 @@ import {
   field,
   contains,
   containsMany,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-import BooleanField from 'https://cardstack.com/base/boolean';
-import NumberField from 'https://cardstack.com/base/number';
-import EmailField from 'https://cardstack.com/base/email';
-import TextAreaField from 'https://cardstack.com/base/text-area';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+import BooleanField from '@cardstack/base/boolean';
+import NumberField from '@cardstack/base/number';
+import EmailField from '@cardstack/base/email';
+import TextAreaField from '@cardstack/base/text-area';
 import { Button } from '@cardstack/boxel-ui/components';
 import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';

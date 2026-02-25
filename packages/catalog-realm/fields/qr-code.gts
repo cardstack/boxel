@@ -1,16 +1,16 @@
-import { FieldDef } from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
+import { FieldDef } from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 import {
   Component,
   contains,
   field,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 import Modifier, { NamedArgs } from 'ember-modifier';
 import QRCodeIcon from '@cardstack/boxel-icons/qr-code';
 //@ts-ignore
 import QRCode from 'https://cdn.jsdelivr.net/npm/qrcode@1.5.4/+esm';
-import ColorField from 'https://cardstack.com/base/color';
-import NumberField from 'https://cardstack.com/base/number';
+import ColorField from '@cardstack/base/color';
+import NumberField from '@cardstack/base/number';
 
 class QRConfigField extends FieldDef {
   @field foreground = contains(ColorField);

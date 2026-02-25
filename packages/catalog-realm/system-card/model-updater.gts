@@ -4,9 +4,9 @@ import {
   Component,
   field,
   contains,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-import NumberField from 'https://cardstack.com/base/number';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+import NumberField from '@cardstack/base/number';
 import { restartableTask } from 'ember-concurrency';
 import { Button } from '@cardstack/boxel-ui/components';
 import { on } from '@ember/modifier';

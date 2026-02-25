@@ -22,7 +22,7 @@ import {
   coerceTypes,
 } from '@cardstack/runtime-common';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
+import type { CardDef } from '@cardstack/base/card-api';
 
 import { testRealmURL } from './index';
 

@@ -58,7 +58,7 @@ export function setupOperatorModeTests(
   setupOnSave(hooks);
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await loader.import(`@cardstack/base/card-api`),
   );
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
@@ -68,17 +68,17 @@ export function setupOperatorModeTests(
   });
 
   hooks.beforeEach(async function () {
-    let cardApi: typeof import('https://cardstack.com/base/card-api');
-    let string: typeof import('https://cardstack.com/base/string');
-    let textArea: typeof import('https://cardstack.com/base/text-area');
-    let cardsGrid: typeof import('https://cardstack.com/base/cards-grid');
-    let spec: typeof import('https://cardstack.com/base/spec');
+    let cardApi: typeof import('@cardstack/base/card-api');
+    let string: typeof import('@cardstack/base/string');
+    let textArea: typeof import('@cardstack/base/text-area');
+    let cardsGrid: typeof import('@cardstack/base/cards-grid');
+    let spec: typeof import('@cardstack/base/spec');
 
-    cardApi = await loader.import(`${baseRealm.url}card-api`);
-    string = await loader.import(`${baseRealm.url}string`);
-    textArea = await loader.import(`${baseRealm.url}text-area`);
-    cardsGrid = await loader.import(`${baseRealm.url}cards-grid`);
-    spec = await loader.import(`${baseRealm.url}spec`);
+    cardApi = await loader.import(`@cardstack/base/card-api`);
+    string = await loader.import(`@cardstack/base/string`);
+    textArea = await loader.import(`@cardstack/base/text-area`);
+    cardsGrid = await loader.import(`@cardstack/base/cards-grid`);
+    spec = await loader.import(`@cardstack/base/spec`);
 
     let {
       field,
@@ -98,7 +98,7 @@ export function setupOperatorModeTests(
 
     // use string source so we can get the transpiled scoped CSS
     let friendWithCSSSource = `
-      import { Component, field, contains, linksTo, CardDef, StringField } from 'https://cardstack.com/base/card-api';
+      import { Component, field, contains, linksTo, CardDef, StringField } from '@cardstack/base/card-api';
       export class FriendWithCSS extends CardDef {
         static displayName = 'Friend';
         @field cardTitle = contains(StringField);

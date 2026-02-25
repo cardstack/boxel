@@ -54,7 +54,13 @@ export default class NetworkService extends Service {
     let resolvedBaseRealmURL = new URL(
       withTrailingSlash(config.resolvedBaseRealmURL),
     );
+    let baseRealmHref = resolvedBaseRealmURL.href;
+    registerCardReferencePrefix('@cardstack/base/', baseRealmHref);
     virtualNetwork.addURLMapping(new URL(baseRealm.url), resolvedBaseRealmURL);
+    virtualNetwork.addImportMap(
+      '@cardstack/base/',
+      (rest) => new URL(rest, baseRealmHref).href,
+    );
     shimExternals(virtualNetwork);
     virtualNetwork.addImportMap('@cardstack/boxel-icons/', (rest) => {
       return `${config.iconsURL}/@cardstack/boxel-icons/v1/icons/${rest}.js`;

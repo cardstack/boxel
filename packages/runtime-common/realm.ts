@@ -145,7 +145,7 @@ import type {
   FileWatcherEventContent,
   RealmEventContent,
   UpdateRealmEventContent,
-} from 'https://cardstack.com/base/matrix-event';
+} from '@cardstack/base/matrix-event';
 import type {
   AtomicOperation,
   AtomicOperationResult,

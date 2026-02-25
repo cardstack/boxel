@@ -38,7 +38,7 @@ import {
 import type {
   BaseDef,
   SignatureFor,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 
 import {
   cleanWhiteSpace,
@@ -103,7 +103,7 @@ module('Integration | card-basics', function (hooks) {
   });
 
   setupCardLogs(hooks, async () => {
-    return await loader.import(`${baseRealm.url}card-api`);
+    return await loader.import(`@cardstack/base/card-api`);
   });
 
   module('cards are read-only', function (_hooks) {

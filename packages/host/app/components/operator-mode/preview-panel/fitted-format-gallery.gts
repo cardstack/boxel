@@ -12,7 +12,7 @@ import {
   FITTED_FORMATS,
 } from '@cardstack/runtime-common';
 
-import type { BaseDef } from 'https://cardstack.com/base/card-api';
+import type { BaseDef } from '@cardstack/base/card-api';
 
 interface Signature {
   Args: {

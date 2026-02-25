@@ -68,7 +68,7 @@ module('Acceptance | svg image def', function (hooks) {
   const makeFileURL = (path: string) => new URL(path, testRealmURL).href;
 
   const svgDefCodeRef = (): ResolvedCodeRef => ({
-    module: `${baseRealm.url}svg-image-def`,
+    module: `@cardstack/base/svg-image-def`,
     name: 'SvgDef',
   });
 

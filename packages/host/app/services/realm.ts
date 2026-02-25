@@ -37,7 +37,7 @@ import { assertNever } from '@cardstack/host/utils/assert-never';
 import type {
   IndexRealmEventContent,
   RealmEventContent,
-} from 'https://cardstack.com/base/matrix-event';
+} from '@cardstack/base/matrix-event';
 
 import {
   syncTokenToServiceWorker,

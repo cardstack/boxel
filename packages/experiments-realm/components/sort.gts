@@ -16,7 +16,7 @@ import ArrowUp from '@cardstack/boxel-icons/arrow-up';
 export const sortByCardTitleAsc: Sort = [
   {
     on: {
-      module: `${baseRealm.url}card-api`,
+      module: `@cardstack/base/card-api`,
       name: 'CardDef',
     },
     by: 'cardTitle',

@@ -1,7 +1,7 @@
 import { service } from '@ember/service';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
-import type { FileDef } from 'https://cardstack.com/base/file-api';
+import type * as BaseCommandModule from '@cardstack/base/command';
+import type { FileDef } from '@cardstack/base/file-api';
 
 import HostBaseCommand from '../lib/host-base-command';
 

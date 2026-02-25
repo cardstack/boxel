@@ -37,7 +37,7 @@ import type {
 import type {
   FileWatcherEventContent,
   RealmEventContent,
-} from 'https://cardstack.com/base/matrix-event';
+} from '@cardstack/base/matrix-event';
 import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 import { createJWT, verifyJWT } from './jwt';
 

@@ -16,7 +16,7 @@ module(basename(__filename), function () {
         return new Response(null, {
           status: 302,
           headers: {
-            Location: 'https://cardstack.com/base/__boxel/assets/', // This virtual url should be converted to a real url so that the client can follow the redirect
+            Location: '@cardstack/base/__boxel/assets/', // This virtual url should be converted to a real url so that the client can follow the redirect
           },
         }) as ResponseWithNodeStream;
       });

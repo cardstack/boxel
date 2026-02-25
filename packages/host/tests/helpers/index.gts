@@ -57,7 +57,7 @@ import type {
   CardStore,
   CardDef,
   FieldDef,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 
 import { TestRealmAdapter } from './adapter';
 import { testRealmServerMatrixUsername } from './mock-matrix';
@@ -99,7 +99,7 @@ export {
 
 const { sqlSchema } = ENV;
 
-type CardAPI = typeof import('https://cardstack.com/base/card-api');
+type CardAPI = typeof import('@cardstack/base/card-api');
 type ModuleHooks = {
   after: (callback: () => void | Promise<void>) => void;
 };
@@ -641,7 +641,7 @@ export const SYSTEM_CARD_FIXTURE_CONTENTS: RealmContents = {
       },
       meta: {
         adoptsFrom: {
-          module: 'https://cardstack.com/base/system-card',
+          module: '@cardstack/base/system-card',
           name: 'ModelConfiguration',
         },
       },
@@ -670,7 +670,7 @@ export const SYSTEM_CARD_FIXTURE_CONTENTS: RealmContents = {
       },
       meta: {
         adoptsFrom: {
-          module: 'https://cardstack.com/base/system-card',
+          module: '@cardstack/base/system-card',
           name: 'ModelConfiguration',
         },
       },
@@ -699,7 +699,7 @@ export const SYSTEM_CARD_FIXTURE_CONTENTS: RealmContents = {
       },
       meta: {
         adoptsFrom: {
-          module: 'https://cardstack.com/base/system-card',
+          module: '@cardstack/base/system-card',
           name: 'ModelConfiguration',
         },
       },
@@ -733,7 +733,7 @@ export const SYSTEM_CARD_FIXTURE_CONTENTS: RealmContents = {
       },
       meta: {
         adoptsFrom: {
-          module: 'https://cardstack.com/base/system-card',
+          module: '@cardstack/base/system-card',
           name: 'SystemCard',
         },
       },
@@ -1049,7 +1049,7 @@ export async function saveCard(
   store?: CardStore,
   realmURL?: string,
 ) {
-  let api = await loader.import<CardAPI>(`${baseRealm.url}card-api`);
+  let api = await loader.import<CardAPI>(`@cardstack/base/card-api`);
   let doc = api.serializeCard(instance);
   doc.data.id = id;
   if (realmURL) {

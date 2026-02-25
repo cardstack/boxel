@@ -99,7 +99,7 @@ module('Acceptance | prerender | file-extract', function (hooks) {
         contents: {
           ...SYSTEM_CARD_FIXTURE_CONTENTS,
           'filedef-success.gts': `
-          import { FileDef as BaseFileDef } from "${baseRealm.url}file-api";
+          import { FileDef as BaseFileDef } from "@cardstack/base/file-api";
 
           export class SuccessDef extends BaseFileDef {
             static async extractAttributes(url) {
@@ -116,7 +116,7 @@ module('Acceptance | prerender | file-extract', function (hooks) {
           import {
             FileDef as BaseFileDef,
             FileContentMismatchError,
-          } from "${baseRealm.url}file-api";
+          } from "@cardstack/base/file-api";
 
           export class MismatchDef extends BaseFileDef {
             static async extractAttributes() {
@@ -125,7 +125,7 @@ module('Acceptance | prerender | file-extract', function (hooks) {
           }
         `,
           'filedef-throws.gts': `
-          import { FileDef as BaseFileDef } from "${baseRealm.url}file-api";
+          import { FileDef as BaseFileDef } from "@cardstack/base/file-api";
 
           export class ThrowingDef extends BaseFileDef {
             static async extractAttributes() {

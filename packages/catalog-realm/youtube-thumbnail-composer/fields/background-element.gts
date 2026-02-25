@@ -8,10 +8,10 @@ import {
   field,
   contains,
   Component,
-} from 'https://cardstack.com/base/card-api';
-import ColorField from 'https://cardstack.com/base/color';
-import NumberField from 'https://cardstack.com/base/number';
-import UrlField from 'https://cardstack.com/base/url';
+} from '@cardstack/base/card-api';
+import ColorField from '@cardstack/base/color';
+import NumberField from '@cardstack/base/number';
+import UrlField from '@cardstack/base/url';
 
 // Local imports
 import ImageField from '../../fields/image';

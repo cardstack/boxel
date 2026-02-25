@@ -7,8 +7,8 @@ import {
 } from '@cardstack/runtime-common/helpers/ai';
 import { Loader } from '@cardstack/runtime-common/loader';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type { CardDef } from '@cardstack/base/card-api';
+import type * as BaseCommandModule from '@cardstack/base/command';
 
 import { FieldPathParser } from '../lib/field-path-parser';
 import HostBaseCommand from '../lib/host-base-command';
@@ -76,8 +76,8 @@ export default class PatchFieldsCommand extends HostBaseCommand<
   ): Promise<ValidateFieldPathResult> {
     // Load card-api dynamically to get getFields function
     const cardApi = await this.loaderService.loader.import<
-      typeof import('https://cardstack.com/base/card-api')
-    >('https://cardstack.com/base/card-api');
+      typeof import('@cardstack/base/card-api')
+    >('@cardstack/base/card-api');
 
     return FieldPathParser.validatedFieldPath(
       fieldPath,
@@ -218,8 +218,8 @@ export default class PatchFieldsCommand extends HostBaseCommand<
 
     if (configuredCardType) {
       const cardApi = await loaderForSchema.import<
-        typeof import('https://cardstack.com/base/card-api')
-      >('https://cardstack.com/base/card-api');
+        typeof import('@cardstack/base/card-api')
+      >('@cardstack/base/card-api');
       const cardFields = cardApi.getFields(configuredCardType, {
         usedLinksToFieldsOnly: false,
       });

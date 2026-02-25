@@ -7,7 +7,7 @@ import {
   APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY,
 } from '@cardstack/runtime-common';
 import { sendErrorEvent, sendMessageEvent } from '@cardstack/runtime-common/ai';
-import type { CardMessageContent } from 'https://cardstack.com/base/matrix-event';
+import type { CardMessageContent } from '@cardstack/base/matrix-event';
 import ResponseEventData from './response-event-data';
 import { logger } from '@cardstack/runtime-common';
 import type { MatrixClient } from 'matrix-js-sdk';

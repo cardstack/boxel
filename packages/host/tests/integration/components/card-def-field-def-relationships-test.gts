@@ -64,7 +64,7 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
   setupBaseRealm(hooks);
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await loader.import(`@cardstack/base/card-api`),
   );
 
   hooks.beforeEach(async function () {

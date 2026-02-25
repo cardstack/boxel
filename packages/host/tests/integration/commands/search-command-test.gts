@@ -36,7 +36,7 @@ module('Integration | commands | search', function (hooks) {
   setupRealmCacheTeardown(hooks);
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await loader.import(`@cardstack/base/card-api`),
   );
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
@@ -47,11 +47,11 @@ module('Integration | commands | search', function (hooks) {
 
   hooks.beforeEach(async function () {
     loader = getService('loader-service').loader;
-    let cardApi: typeof import('https://cardstack.com/base/card-api');
-    let string: typeof import('https://cardstack.com/base/string');
+    let cardApi: typeof import('@cardstack/base/card-api');
+    let string: typeof import('@cardstack/base/string');
 
-    cardApi = await loader.import(`${baseRealm.url}card-api`);
-    string = await loader.import(`${baseRealm.url}string`);
+    cardApi = await loader.import(`@cardstack/base/card-api`);
+    string = await loader.import(`@cardstack/base/string`);
 
     let { field, contains, CardDef } = cardApi;
     let { default: StringField } = string;

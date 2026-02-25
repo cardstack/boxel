@@ -10,8 +10,8 @@ import {
   InstallPlan,
 } from '@cardstack/runtime-common';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-import type { Spec } from 'https://cardstack.com/base/spec';
+import type { CardDef } from '@cardstack/base/card-api';
+import type { Spec } from '@cardstack/base/spec';
 
 const sourceRealmURL = new URL('https://localhost:4201/catalog/');
 const targetRealmURL = new URL('https://localhost:4201/experiments/');

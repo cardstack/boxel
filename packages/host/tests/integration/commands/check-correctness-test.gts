@@ -44,9 +44,9 @@ module('Integration | commands | check-correctness', function (hooks) {
         mockMatrixUtils,
         contents: {
           'pet.gts': `
-          import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
-          import StringField from "https://cardstack.com/base/string";
-          import BooleanField from "https://cardstack.com/base/boolean";
+          import { contains, field, CardDef } from "@cardstack/base/card-api";
+          import StringField from "@cardstack/base/string";
+          import BooleanField from "@cardstack/base/boolean";
           export class Pet extends CardDef {
             static displayName = 'Pet';
             @field name = contains(StringField);

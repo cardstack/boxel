@@ -68,8 +68,8 @@ import type {
   CardDef,
   Format,
   CardContext,
-} from 'https://cardstack.com/base/card-api';
-import type { SpecType } from 'https://cardstack.com/base/spec';
+} from '@cardstack/base/card-api';
+import type { SpecType } from '@cardstack/base/spec';
 
 import {
   CodeModePanelWidths,

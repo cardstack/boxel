@@ -4,10 +4,10 @@ import {
   contains,
   containsMany,
   Component,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-import NumberField from 'https://cardstack.com/base/number';
-import TextAreaField from 'https://cardstack.com/base/text-area';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+import NumberField from '@cardstack/base/number';
+import TextAreaField from '@cardstack/base/text-area';
 import { IngredientField } from './fields/ingredient-field';
 import { GarnishField } from './fields/garnish-field';
 import GlassIcon from '@cardstack/boxel-icons/wine';

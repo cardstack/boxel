@@ -4,13 +4,13 @@ import {
   field,
   contains,
   Component,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-import MarkdownField from 'https://cardstack.com/base/markdown';
-import DateField from 'https://cardstack.com/base/date';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+import MarkdownField from '@cardstack/base/markdown';
+import DateField from '@cardstack/base/date';
 import BookOpenIcon from '@cardstack/boxel-icons/book-open';
 import { formatDateTime } from '@cardstack/boxel-ui/helpers';
-import { AbsoluteCodeRefField } from 'https://cardstack.com/base/code-ref';
+import { AbsoluteCodeRefField } from '@cardstack/base/code-ref';
 
 export class PolicyManual extends CardDef {
   static displayName = 'Policy Manual';

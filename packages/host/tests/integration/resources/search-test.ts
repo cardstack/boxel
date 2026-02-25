@@ -56,8 +56,8 @@ module(`Integration | search resource`, function (hooks) {
   let loaderService: LoaderService;
   let storeService: StoreService;
   let realm: Realm;
-  let cardApi: typeof import('https://cardstack.com/base/card-api');
-  let string: typeof import('https://cardstack.com/base/string');
+  let cardApi: typeof import('@cardstack/base/card-api');
+  let string: typeof import('@cardstack/base/string');
 
   setupRenderingTest(hooks);
   hooks.beforeEach(function () {
@@ -76,8 +76,8 @@ module(`Integration | search resource`, function (hooks) {
   });
   setupBaseRealm(hooks);
   hooks.beforeEach(async function (this: RenderingTestContext) {
-    cardApi = await loader.import(`${baseRealm.url}card-api`);
-    string = await loader.import(`${baseRealm.url}string`);
+    cardApi = await loader.import(`@cardstack/base/card-api`);
+    string = await loader.import(`@cardstack/base/string`);
 
     let { contains, field, CardDef, FieldDef, linksTo } = cardApi;
     let { default: StringField } = string;
@@ -260,7 +260,7 @@ module(`Integration | search resource`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${baseRealm.url}spec`,
+              module: `@cardstack/base/spec`,
               name: 'Spec',
             },
           },
@@ -280,7 +280,7 @@ module(`Integration | search resource`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${baseRealm.url}spec`,
+              module: `@cardstack/base/spec`,
               name: 'Spec',
             },
           },
@@ -595,7 +595,7 @@ module(`Integration | search resource`, function (hooks) {
     let query: Query = {
       filter: {
         type: {
-          module: `${baseRealm.url}file-api`,
+          module: `@cardstack/base/file-api`,
           name: 'FileDef',
         },
       },
@@ -634,7 +634,7 @@ module(`Integration | search resource`, function (hooks) {
     let query: Query = {
       filter: {
         type: {
-          module: `${baseRealm.url}file-api`,
+          module: `@cardstack/base/file-api`,
           name: 'FileDef',
         },
       },

@@ -6,13 +6,13 @@
       "cardDescription": "A field that captures string values",
       "specType": "field",
       "ref": {
-        "module": "https://cardstack.com/base/card-api",
+        "module": "@cardstack/base/card-api",
         "name": "StringField"
       }
     },
     "meta": {
       "adoptsFrom": {
-        "module": "https://cardstack.com/base/spec",
+        "module": "@cardstack/base/spec",
         "name": "Spec"
       }
     }

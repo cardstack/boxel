@@ -15,8 +15,8 @@ import type {
   CardStore,
   CardDef as CardDefType,
   StoreSearchResource,
-} from 'https://cardstack.com/base/card-api';
-import type { FileDef } from 'https://cardstack.com/base/file-api';
+} from '@cardstack/base/card-api';
+import type { FileDef } from '@cardstack/base/file-api';
 
 import {
   testRealmURL,
@@ -194,7 +194,7 @@ module('Integration | field configuration', function (hooks) {
 
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await loader.import(`@cardstack/base/card-api`),
   );
   hooks.beforeEach(async function (this: RenderingTestContext) {
     class ColorField extends FieldDef {

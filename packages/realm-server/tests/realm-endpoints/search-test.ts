@@ -43,7 +43,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
       return {
         filter: {
           type: {
-            module: `${baseRealm.url}file-api`,
+            module: `@cardstack/base/file-api`,
             name: 'FileDef',
           },
         },
@@ -219,7 +219,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
             .send({
               filter: {
                 on: {
-                  module: `${baseRealm.url}file-api`,
+                  module: `@cardstack/base/file-api`,
                   name: 'FileDef',
                 },
                 eq: {
@@ -251,7 +251,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
             .send({
               filter: {
                 type: {
-                  module: `${baseRealm.url}markdown-file-def`,
+                  module: `@cardstack/base/markdown-file-def`,
                   name: 'MarkdownDef',
                 },
               },
@@ -531,8 +531,8 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
                 field,
                 CardDef,
                 Component,
-              } from 'https://cardstack.com/base/card-api';
-              import StringField from 'https://cardstack.com/base/string';
+              } from '@cardstack/base/card-api';
+              import StringField from '@cardstack/base/string';
 
               export class Friend extends CardDef {
                 @field firstName = contains(StringField);

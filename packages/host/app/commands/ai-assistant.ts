@@ -2,10 +2,10 @@ import { inject as service } from '@ember/service';
 
 import { isCardInstance } from '@cardstack/runtime-common';
 
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as CardAPI from '@cardstack/base/card-api';
+import type * as BaseCommandModule from '@cardstack/base/command';
 
-import type { Skill } from 'https://cardstack.com/base/skill';
+import type { Skill } from '@cardstack/base/skill';
 
 import HostBaseCommand from '../lib/host-base-command';
 
@@ -41,7 +41,7 @@ export default class UseAiAssistantCommand extends HostBaseCommand<
   async loadCardAPI() {
     if (!this.#cardAPI) {
       this.#cardAPI = await this.loaderService.loader.import<typeof CardAPI>(
-        'https://cardstack.com/base/card-api',
+        '@cardstack/base/card-api',
       );
     }
     return this.#cardAPI;

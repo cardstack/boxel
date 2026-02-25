@@ -82,7 +82,7 @@
           "name": "Search Results",
           "contentType": "application/vnd.card+json",
           "contentHash": "2f111846167f5ffe476ec32f9daa09db",
-          "content": "{\"data\":{\"type\":\"card\",\"lid\":\"95197459-f975-4224-b4fa-35c965cc976d\",\"attributes\":{\"cardIds\":[\"http://test-realm-server/user/test-realm/Postcard/46268158-2eb9-4025-804d-45c299017e8f\"],\"title\":\"Search Results\",\"description\":\"Query: {\\n  \\\"contains\\\": {\\n    \\\"title\\\": \\\"Nashville\\\"\\n  }\\n}\",\"thumbnailURL\":null},\"meta\":{\"adoptsFrom\":{\"module\":\"https://cardstack.com/base/commands/search-card-result\",\"name\":\"SearchCardsResult\"}}}}"
+          "content": "{\"data\":{\"type\":\"card\",\"lid\":\"95197459-f975-4224-b4fa-35c965cc976d\",\"attributes\":{\"cardIds\":[\"http://test-realm-server/user/test-realm/Postcard/46268158-2eb9-4025-804d-45c299017e8f\"],\"title\":\"Search Results\",\"description\":\"Query: {\\n  \\\"contains\\\": {\\n    \\\"title\\\": \\\"Nashville\\\"\\n  }\\n}\",\"thumbnailURL\":null},\"meta\":{\"adoptsFrom\":{\"module\":\"@cardstack/base/commands/search-card-result\",\"name\":\"SearchCardsResult\"}}}}"
         }
       }
     },

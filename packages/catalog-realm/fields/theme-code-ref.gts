@@ -1,4 +1,4 @@
-import CodeRefField from 'https://cardstack.com/base/code-ref';
+import CodeRefField from '@cardstack/base/code-ref';
 import type { ResolvedCodeRef } from '@cardstack/runtime-common';
 import { BoxelSelect } from '@cardstack/boxel-ui/components';
 
@@ -6,28 +6,28 @@ const THEME_CODE_REF_OPTIONS: Array<{ label: string; ref: ResolvedCodeRef }> = [
   {
     label: 'Theme',
     ref: {
-      module: 'https://cardstack.com/base/theme',
+      module: '@cardstack/base/theme',
       name: 'default',
     },
   },
   {
     label: 'Style Reference',
     ref: {
-      module: 'https://cardstack.com/base/style-reference',
+      module: '@cardstack/base/style-reference',
       name: 'default',
     },
   },
   {
     label: 'Brand Guide',
     ref: {
-      module: 'https://cardstack.com/base/brand-guide',
+      module: '@cardstack/base/brand-guide',
       name: 'default',
     },
   },
   {
     label: 'Structured Theme',
     ref: {
-      module: 'https://cardstack.com/base/structured-theme',
+      module: '@cardstack/base/structured-theme',
       name: 'default',
     },
   },

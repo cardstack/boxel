@@ -12,7 +12,7 @@ import TransformCardsCommand from '@cardstack/host/commands/transform-cards';
 
 import RealmService from '@cardstack/host/services/realm';
 
-import type * as CommandModule from 'https://cardstack.com/base/command';
+import type * as CommandModule from '@cardstack/base/command';
 
 import {
   setupCardLogs,
@@ -49,7 +49,7 @@ module('Integration | commands | transform-cards', function (hooks) {
   setupOnSave(hooks);
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await loader.import(`@cardstack/base/card-api`),
   );
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
@@ -60,13 +60,13 @@ module('Integration | commands | transform-cards', function (hooks) {
 
   hooks.beforeEach(async function () {
     loader = getService('loader-service').loader;
-    let cardApi: typeof import('https://cardstack.com/base/card-api');
-    let string: typeof import('https://cardstack.com/base/string');
-    let CommandModule: typeof import('https://cardstack.com/base/command');
+    let cardApi: typeof import('@cardstack/base/card-api');
+    let string: typeof import('@cardstack/base/string');
+    let CommandModule: typeof import('@cardstack/base/command');
 
-    cardApi = await loader.import(`${baseRealm.url}card-api`);
-    string = await loader.import(`${baseRealm.url}string`);
-    CommandModule = await loader.import(`${baseRealm.url}command`);
+    cardApi = await loader.import(`@cardstack/base/card-api`);
+    string = await loader.import(`@cardstack/base/string`);
+    CommandModule = await loader.import(`@cardstack/base/command`);
 
     let { field, contains, CardDef } = cardApi;
     let { default: StringField } = string;

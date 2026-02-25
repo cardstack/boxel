@@ -1,4 +1,4 @@
-import type { BaseDef } from 'https://cardstack.com/base/card-api';
+import type { BaseDef } from '@cardstack/base/card-api';
 
 import type { JobInfo } from './worker';
 

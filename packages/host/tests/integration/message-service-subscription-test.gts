@@ -18,7 +18,7 @@ import SubscribeToRealms from '@cardstack/host/helpers/subscribe-to-realms';
 
 import { renderComponent } from '@cardstack/host/tests/helpers/render-component';
 
-import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
+import type { RealmEventContent } from '@cardstack/base/matrix-event';
 
 import {
   testRealmURL,
@@ -56,7 +56,7 @@ module('Integration | message service subscription', function (hooks) {
 
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await loader.import(`@cardstack/base/card-api`),
   );
 
   setupRealmCacheTeardown(hooks);

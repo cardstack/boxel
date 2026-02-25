@@ -45,11 +45,11 @@ module('Acceptance | workspace-delete-multiple', function (hooks) {
     let loaderService = getService('loader-service');
     let loader = loaderService.loader;
     let { field, contains, CardDef, Component } = await loader.import<
-      typeof import('https://cardstack.com/base/card-api')
-    >(`${baseRealm.url}card-api`);
+      typeof import('@cardstack/base/card-api')
+    >(`@cardstack/base/card-api`);
     let { default: StringField } = await loader.import<
-      typeof import('https://cardstack.com/base/string')
-    >(`${baseRealm.url}string`);
+      typeof import('@cardstack/base/string')
+    >(`@cardstack/base/string`);
 
     class Pet extends CardDef {
       static displayName = 'Pet';

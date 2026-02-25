@@ -10,14 +10,14 @@ import {
   realmURL,
   FieldDef,
   StringField,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 
-import BooleanField from 'https://cardstack.com/base/boolean';
-import DateField from 'https://cardstack.com/base/date';
-import MarkdownField from 'https://cardstack.com/base/markdown';
-import AddressField from 'https://cardstack.com/base/address';
-import WebsiteField from 'https://cardstack.com/base/website';
-import PercentageField from 'https://cardstack.com/base/percentage';
+import BooleanField from '@cardstack/base/boolean';
+import DateField from '@cardstack/base/date';
+import MarkdownField from '@cardstack/base/markdown';
+import AddressField from '@cardstack/base/address';
+import WebsiteField from '@cardstack/base/website';
+import PercentageField from '@cardstack/base/percentage';
 
 import { Query } from '@cardstack/runtime-common';
 import type { LooseSingleCardDocument } from '@cardstack/runtime-common';

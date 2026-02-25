@@ -12,7 +12,7 @@ import {
   type Relationship,
 } from '@cardstack/runtime-common';
 
-import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
+import type { RealmEventContent } from '@cardstack/base/matrix-event';
 
 import type LoaderService from '../services/loader-service';
 import type MessageService from '../services/message-service';

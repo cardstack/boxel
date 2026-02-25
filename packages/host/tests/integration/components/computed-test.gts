@@ -58,7 +58,7 @@ module('Integration | computeds', function (hooks) {
 
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await loader.import(`@cardstack/base/card-api`),
   );
 
   test('can render a synchronous computed field', async function (assert) {

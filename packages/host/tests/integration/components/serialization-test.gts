@@ -28,7 +28,7 @@ import type { Loader } from '@cardstack/runtime-common/loader';
 
 import type CardService from '@cardstack/host/services/card-service';
 
-import type { CardDef as CardDefType } from 'https://cardstack.com/base/card-api';
+import type { CardDef as CardDefType } from '@cardstack/base/card-api';
 
 import {
   p,
@@ -108,7 +108,7 @@ module('Integration | serialization', function (hooks) {
 
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await loader.import(`@cardstack/base/card-api`),
   );
 
   test('can deserialize field', async function (assert) {

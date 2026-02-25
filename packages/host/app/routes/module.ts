@@ -38,8 +38,8 @@ import {
   type SerializedError,
 } from '@cardstack/runtime-common/error';
 
-import type { CardDef, BaseDef } from 'https://cardstack.com/base/card-api';
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
+import type { CardDef, BaseDef } from '@cardstack/base/card-api';
+import type * as CardAPI from '@cardstack/base/card-api';
 
 import { createAuthErrorGuard } from '../utils/auth-error-guard';
 import { registerBoxelTransitionTo } from '../utils/register-boxel-transition';
@@ -350,7 +350,7 @@ async function makeDefinition(
 ): Promise<ModuleDefinitionResult | ErrorEntry> {
   try {
     let api = await context.loaderService.loader.import<typeof CardAPI>(
-      `${baseRealm.url}card-api`,
+      `@cardstack/base/card-api`,
     );
     let fields = getFieldDefinitions(api, cardOrFieldDef);
     let codeRef = identifyCard(cardOrFieldDef) as ResolvedCodeRef;

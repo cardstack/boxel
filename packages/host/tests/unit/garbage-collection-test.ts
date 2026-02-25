@@ -15,8 +15,8 @@ import CardStore, {
   type ReferenceCount,
 } from '@cardstack/host/lib/gc-card-store';
 
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
-import type { CardDef as CardInstance } from 'https://cardstack.com/base/card-api';
+import type * as CardAPI from '@cardstack/base/card-api';
+import type { CardDef as CardInstance } from '@cardstack/base/card-api';
 
 import { saveCard, testRealmURL } from '../helpers';
 import {
@@ -40,7 +40,7 @@ module('Unit | identity-context garbage collection', function (hooks) {
 
   hooks.beforeEach(async function (this: RenderingTestContext) {
     loader = getService('loader-service').loader;
-    api = await loader.import(`${baseRealm.url}card-api`);
+    api = await loader.import(`@cardstack/base/card-api`);
     delete (globalThis as any).__boxelRenderContext;
   });
 

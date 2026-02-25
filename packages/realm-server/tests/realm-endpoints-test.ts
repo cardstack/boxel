@@ -60,7 +60,7 @@ import type {
   MatrixEvent,
   RealmEvent,
   RealmEventContent,
-} from 'https://cardstack.com/base/matrix-event';
+} from '@cardstack/base/matrix-event';
 
 const testRealm2URL = new URL('http://127.0.0.1:4445/test/');
 
@@ -227,7 +227,7 @@ module(basename(__filename), function () {
       assert.strictEqual(json.data.type, 'file-meta');
       assert.strictEqual(json.data.attributes?.name, 'person.gts');
       assert.deepEqual(json.data.meta?.adoptsFrom, {
-        module: `${baseRealm.url}file-api`,
+        module: `@cardstack/base/file-api`,
         name: 'FileDef',
       });
     });
@@ -257,7 +257,7 @@ module(basename(__filename), function () {
       assert.strictEqual(json.data.type, 'file-meta');
       assert.strictEqual(json.data.attributes?.name, 'guide.md');
       assert.deepEqual(json.data.meta?.adoptsFrom, {
-        module: `${baseRealm.url}markdown-file-def`,
+        module: `@cardstack/base/markdown-file-def`,
         name: 'MarkdownDef',
       });
     });
@@ -729,7 +729,7 @@ module(basename(__filename), function () {
         field,
         Component,
         FieldDef,
-      } from 'https://cardstack.com/base/card-api';
+      } from '@cardstack/base/card-api';
       import { Country } from './country';
 
       export class TranspileTestField extends FieldDef {

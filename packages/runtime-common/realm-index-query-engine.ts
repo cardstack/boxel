@@ -1002,7 +1002,7 @@ function fileResourceFromIndex(
     (isCodeRef(fileEntry.resource?.meta?.adoptsFrom)
       ? fileEntry.resource?.meta?.adoptsFrom
       : {
-          module: `${baseRealm.url}file-api`,
+          module: `@cardstack/base/file-api`,
           name: 'FileDef',
         });
   let resourceAttributes = fileEntry.resource?.attributes ?? {};

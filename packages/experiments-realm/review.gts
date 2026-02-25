@@ -2,7 +2,7 @@ import {
   Component,
   field,
   contains,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 import { setBackgroundImage } from './components/layout';
 import { formatDatetime } from './blog-app';
 import { categoryStyle } from './blog-category';

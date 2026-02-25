@@ -4,8 +4,8 @@ import {
   contains,
   field,
   Component,
-} from 'https://cardstack.com/base/card-api';
-import ColorField from 'https://cardstack.com/base/color';
+} from '@cardstack/base/card-api';
+import ColorField from '@cardstack/base/color';
 import TagIcon from '@cardstack/boxel-icons/tag';
 import { Pill } from '@cardstack/boxel-ui/components';
 

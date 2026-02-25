@@ -19,7 +19,7 @@ import { StackItem } from '@cardstack/host/lib/stack-item';
 import type { OperatorModeState } from '@cardstack/host/services/operator-mode-state-service';
 import RealmService from '@cardstack/host/services/realm';
 
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
+import type * as CardAPI from '@cardstack/base/card-api';
 
 import {
   setupCardLogs,
@@ -133,7 +133,7 @@ module('Integration | Command | show-card', function (hooks) {
   setupOnSave(hooks);
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await loader.import(`@cardstack/base/card-api`),
   );
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
@@ -154,8 +154,8 @@ module('Integration | Command | show-card', function (hooks) {
         mockMatrixUtils,
         contents: {
           'person.gts': `
-          import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
-          import StringField from 'https://cardstack.com/base/string';
+          import { CardDef, field, contains } from '@cardstack/base/card-api';
+          import StringField from '@cardstack/base/string';
 
           export class Person extends CardDef {
             static displayName = 'Person';
@@ -169,8 +169,8 @@ module('Integration | Command | show-card', function (hooks) {
           }
         `,
           'pet.gts': `
-          import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
-          import StringField from 'https://cardstack.com/base/string';
+          import { CardDef, field, contains } from '@cardstack/base/card-api';
+          import StringField from '@cardstack/base/string';
 
           export class Pet extends CardDef {
             static displayName = 'Pet';
@@ -546,7 +546,7 @@ module('Integration | Command | show-card', function (hooks) {
       let loader = getService('loader-service').loader;
       let mappings = await basicMappings(loader);
       let cardAPI = await loader.import<typeof CardAPI>(
-        `${baseRealm.url}card-api`,
+        `@cardstack/base/card-api`,
       );
       const inputSchema = await command.getInputJsonSchema(cardAPI, mappings);
       assert.ok(inputSchema, 'Input JSON schema is defined');
