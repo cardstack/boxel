@@ -209,27 +209,6 @@ class Isolated extends Component<typeof BotRequestDemo> {
     return JSON.stringify(this.codeRef, null, 2);
   }
 
-  get commandRunnerURL() {
-    let hostOrigin =
-      typeof window !== 'undefined'
-        ? window.location.origin
-        : new URL(this.showCardId).origin;
-    let nonce = 'demo';
-    let requestId = 'bot-request-demo-command-runner-request';
-    if (typeof window !== 'undefined') {
-      window.localStorage.setItem(
-        `boxel-command-request:${requestId}`,
-        JSON.stringify({
-          command: `${this.codeRef.module}/${this.codeRef.name}`,
-          input: this.activeCommandInput ?? null,
-          nonce,
-          createdAt: Date.now(),
-        }),
-      );
-    }
-    return `${hostOrigin}/command-runner/${encodeURIComponent(requestId)}/${encodeURIComponent(nonce)}`;
-  }
-
   get sendButtonLabel() {
     if (this.isShowCardTab) {
       return 'Send Show Card Bot Request';
@@ -416,19 +395,6 @@ class Isolated extends Component<typeof BotRequestDemo> {
         <pre>{{this.codeRefPreview}}</pre>
       </section>
 
-      <section class='payload'>
-        <h3>Command Runner URL</h3>
-        <pre>{{this.commandRunnerURL}}</pre>
-        <a
-          class='runner-link'
-          href={{this.commandRunnerURL}}
-          rel='noopener noreferrer'
-          target='_blank'
-        >
-          Open command-runner URL
-        </a>
-      </section>
-
       {{#if this.statusMessage}}
         <p class='status status--success'>{{this.statusMessage}}</p>
       {{/if}}
@@ -487,11 +453,6 @@ class Isolated extends Component<typeof BotRequestDemo> {
         white-space: pre-wrap;
         font-family: var(--boxel-font-monospace);
         font-size: var(--boxel-font-sm);
-      }
-      .runner-link {
-        display: inline-block;
-        margin-top: var(--boxel-sp-sm);
-        color: var(--boxel-link);
       }
       .actions {
         display: flex;
