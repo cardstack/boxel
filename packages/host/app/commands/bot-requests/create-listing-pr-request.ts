@@ -92,9 +92,15 @@ export default class CreateListingPRRequestCommand extends HostBaseCommand<
         return;
       }
 
+      let catalogRealmURL = this.realmServer.catalogRealmURLs[0];
+      if (!catalogRealmURL) {
+        log.warn('No catalog realm URL found, skipping webhook command registration.');
+        return;
+      }
+
       await this.realmServer.createWebhookCommand({
         incomingWebhookId: githubWebhook.id,
-        command: `${this.realmServer.url.href}catalog-realm/commands/process-github-event`,
+        command: `${catalogRealmURL}commands/process-github-event/default`,
         filter: {
           submissionRealmUrl: this.realmServer.submissionRealmURL,
         },
