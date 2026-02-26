@@ -162,6 +162,7 @@ export default class SearchContent extends Component<Signature> {
 
   private get filterTypeRef(): TypeRefResult[] | undefined {
     const filter = this.args.baseFilter;
+    // baseFilter takes precedence; searchKey fallback is only used in search-sheet mode
     if (filter) {
       return getTypeRefsFromFilter(filter);
     }
