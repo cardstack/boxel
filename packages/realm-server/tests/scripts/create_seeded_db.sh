@@ -17,7 +17,7 @@ docker rm -f "$TEST_PG_SEED_CONTAINER" >/dev/null 2>&1 || true
 
 cid=$(docker run -d \
   --name "$TEST_PG_SEED_CONTAINER" \
-  -p "${TEST_PG_SEED_PORT}:5432" \
+  -p "127.0.0.1:${TEST_PG_SEED_PORT}:5432" \
   -e POSTGRES_HOST_AUTH_METHOD=trust \
   postgres:16.3-alpine \
   -c fsync=off \
