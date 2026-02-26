@@ -142,7 +142,6 @@ export default class SearchSheet extends Component<Signature> {
 
   @action
   private doExternallyTriggeredSearch(term: string) {
-    console.log('doExternallyTriggeredSearch', term);
     this.searchKey = term;
   }
 
