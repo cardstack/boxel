@@ -11,8 +11,8 @@ import {
   isAnyFilter,
   isCardTypeFilter,
   isEveryFilter,
+  isNotFilter,
   normalizeQueryForSignature,
-  type CardTypeFilter,
   type Filter,
   type Query,
   type QueryWithInterpolations,
@@ -352,29 +352,42 @@ function injectOnIntoLeafFilters(
   }
 }
 
-export function getTypeRefsFromFilter(filter: Filter): CodeRef[] | undefined {
-  // EveryFilter with 'on' scoping (e.g. specRef in chooseCard)
+export interface TypeRefResult {
+  ref: CodeRef;
+  negated: boolean;
+}
+
+export function getTypeRefsFromFilter(
+  filter: Filter,
+): TypeRefResult[] | undefined {
+  // Any filter with an explicit 'on' scoping (e.g. specRef in chooseCard)
   if ('on' in filter && filter.on) {
-    return [filter.on];
+    return [{ ref: filter.on, negated: false }];
   }
   // Top-level CardTypeFilter { type: CodeRef } (e.g. linksTo)
   if (isCardTypeFilter(filter)) {
-    return [filter.type];
+    return [{ ref: filter.type, negated: false }];
   }
-  // EveryFilter containing a CardTypeFilter (e.g. linksToMany)
+  // NotFilter: recurse and flip negated flag on all results
+  if (isNotFilter(filter)) {
+    const inner = getTypeRefsFromFilter(filter.not);
+    return inner
+      ? inner.map((r) => ({ ref: r.ref, negated: !r.negated }))
+      : undefined;
+  }
+  // EveryFilter: recurse into all children and collect
   if (isEveryFilter(filter)) {
-    for (const sub of filter.every) {
-      if (isCardTypeFilter(sub)) {
-        return [sub.type];
-      }
-    }
+    const results = filter.every.flatMap(
+      (sub: Filter) => getTypeRefsFromFilter(sub) ?? [],
+    );
+    return results.length > 0 ? results : undefined;
   }
-  // AnyFilter containing CardTypeFilters (may have multiple types)
+  // AnyFilter: recurse into all children and collect
   if (isAnyFilter(filter)) {
-    const typeFilters = filter.any.filter(isCardTypeFilter);
-    if (typeFilters.length > 0) {
-      return typeFilters.map((f: CardTypeFilter) => f.type);
-    }
+    const results = filter.any.flatMap(
+      (sub: Filter) => getTypeRefsFromFilter(sub) ?? [],
+    );
+    return results.length > 0 ? results : undefined;
   }
   return undefined;
 }

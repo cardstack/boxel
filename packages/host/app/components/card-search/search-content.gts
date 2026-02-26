@@ -20,6 +20,7 @@ import {
   GetCardCollectionContextName,
   GetCardContextName,
   getTypeRefsFromFilter,
+  type TypeRefResult,
   identifyCard,
   isBaseDef,
   isResolvedCodeRef,
@@ -159,14 +160,14 @@ export default class SearchContent extends Component<Signature> {
     this.cardResource = this.getCard(this, () => this.searchKeyAsURL);
   };
 
-  private get filterTypeRef(): CodeRef[] | undefined {
+  private get filterTypeRef(): TypeRefResult[] | undefined {
     const filter = this.args.baseFilter;
     if (filter) {
       return getTypeRefsFromFilter(filter);
     }
     // Search-sheet mode: extract type from carddef: search key (searchForInstances)
     const ref = getCodeRefFromSearchKey(this.args.searchKey);
-    return ref ? [ref] : undefined;
+    return ref ? [{ ref, negated: false }] : undefined;
   }
 
   private searchPrerenderedCards = getPrerenderedSearch(
@@ -359,11 +360,19 @@ export default class SearchContent extends Component<Signature> {
 
     // Apply type filter when baseFilter specifies a type (modal/chooseCard mode)
     const typeRefs = this.filterTypeRef;
-    const typeFiltered = typeRefs
+    const positiveRefs = typeRefs
+      ?.filter((r) => !r.negated)
+      .map((r) => r.ref);
+    const negatedRefs = typeRefs?.filter((r) => r.negated).map((r) => r.ref);
+    const typeFiltered = positiveRefs?.length
       ? realmFiltered.filter((c) =>
-          typeRefs.some((ref) => cardMatchesTypeRef(c, ref)),
+          positiveRefs.some((ref) => cardMatchesTypeRef(c, ref)),
         )
-      : realmFiltered;
+      : negatedRefs?.length
+        ? realmFiltered.filter(
+            (c) => !negatedRefs.some((ref) => cardMatchesTypeRef(c, ref)),
+          )
+        : realmFiltered;
 
     if (this.args.isCompact) {
       return typeFiltered;
