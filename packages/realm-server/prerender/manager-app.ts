@@ -7,6 +7,7 @@ import {
   PRERENDER_SERVER_DRAINING_STATUS_CODE,
   PRERENDER_SERVER_STATUS_DRAINING,
   PRERENDER_SERVER_STATUS_HEADER,
+  resolvePrerenderServerProxyTimeoutMs,
 } from './prerender-constants';
 
 type ServerInfo = {
@@ -80,10 +81,7 @@ export function buildPrerenderManagerApp(options?: {
   let lastRegistrySnapshot: string | undefined;
 
   const multiplex = Math.max(1, Number(process.env.PRERENDER_MULTIPLEX ?? 1));
-  const proxyTimeoutMs = Math.max(
-    1000,
-    Number(process.env.PRERENDER_SERVER_TIMEOUT_MS ?? 60000),
-  );
+  const proxyTimeoutMs = resolvePrerenderServerProxyTimeoutMs();
   const heartbeatTimeoutMs = Math.max(
     1000,
     Number(

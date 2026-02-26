@@ -981,6 +981,7 @@ export class RenderRunner {
 
   #evictionReason(renderError: RenderError): 'timeout' | 'unusable' | null {
     let status = Number(renderError.error?.status);
+    let normalizedTitle = (renderError.error?.title ?? '').trim().toLowerCase();
     if (status === 401 || status === 403) {
       // Auth failures are not signs of a bad page; do not evict on auth errors.
       return null;
@@ -989,6 +990,19 @@ export class RenderRunner {
       return 'timeout';
     }
     if ((renderError as any).evict) {
+      return 'unusable';
+    }
+    let normalizedMessage = (renderError.error?.message ?? '')
+      .trim()
+      .toLowerCase();
+    if (
+      status >= 500 &&
+      (normalizedTitle === '' || normalizedTitle === 'unknown') &&
+      (normalizedMessage.includes('reject') ||
+        normalizedMessage.includes('rsvp'))
+    ) {
+      // Promise rejections can leave pooled pages in an unreliable state,
+      // even when the payload is not explicitly marked as evictable.
       return 'unusable';
     }
     return null;
