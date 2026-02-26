@@ -194,7 +194,9 @@ export default class EditFieldModal extends Component<Signature> {
 
         // This transforms relative module paths, such as "../person", to absolute ones -
         // we need that absolute path to load realm info
-        this.fieldModuleURL = new URL(resolveCardReference(spec.ref.module, spec.id));
+        this.fieldModuleURL = new URL(
+          resolveCardReference(spec.ref.module, spec.id),
+        );
       }
     }
   });
