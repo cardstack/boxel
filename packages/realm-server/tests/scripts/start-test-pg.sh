@@ -2,11 +2,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-
-TEST_PG_CONTAINER="${TEST_PG_CONTAINER:-boxel-realm-test-pg}"
-TEST_PG_PORT="${TEST_PG_PORT:-55436}"
-TEST_PG_SEED_DB="${TEST_PG_SEED_DB:-boxel_migrated}"
-TEST_PG_SEED_TAR="${TEST_PG_SEED_TAR:-/tmp/boxel-realm-test-pgdata-seeded.tar}"
+source "${SCRIPT_DIR}/test-pg-config.sh"
 
 if [ ! -f "$TEST_PG_SEED_TAR" ]; then
   echo "Seed tar not found at $TEST_PG_SEED_TAR. Run ./tests/scripts/create_seeded_db.sh first." >&2
