@@ -47,6 +47,8 @@ export async function upsertSessionRoom(
 
 /**
  * Returns a mapping of matrix user id to session room id for all known sessions.
+ * Includes users with explicit permissions as well as users who have access
+ * through a world-readable realm (username = '*' with read = true).
  */
 export async function fetchRealmSessionRooms(
   dbAdapter: DBAdapter,
@@ -55,12 +57,23 @@ export async function fetchRealmSessionRooms(
   let rows = await query(dbAdapter, [
     'SELECT u.matrix_user_id, u.session_room_id',
     'FROM users u',
-    'JOIN realm_user_permissions rup',
-    'ON rup.username = u.matrix_user_id',
-    'WHERE rup.realm_url =',
+    'WHERE u.session_room_id IS NOT NULL',
+    'AND (',
+    '  EXISTS (',
+    '    SELECT 1 FROM realm_user_permissions',
+    '    WHERE realm_url =',
     param(realmURL),
-    'AND (rup.read = true OR rup.write = true)',
-    'AND u.session_room_id IS NOT NULL',
+    '    AND username = u.matrix_user_id',
+    '    AND (read = true OR write = true)',
+    '  )',
+    '  OR EXISTS (',
+    '    SELECT 1 FROM realm_user_permissions',
+    '    WHERE realm_url =',
+    param(realmURL),
+    "    AND username = '*'",
+    '    AND read = true',
+    '  )',
+    ')',
   ]);
 
   let result: Record<string, string> = {};

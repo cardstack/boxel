@@ -41,6 +41,7 @@ export class SaveCardInput extends CardDef {
   @field card = linksTo(CardDef);
   @field realm = contains(StringField);
   @field localDir = contains(StringField);
+  @field doNotWaitForPersist = contains(BooleanField);
 }
 
 export class CopyCardToRealmInput extends CardDef {
