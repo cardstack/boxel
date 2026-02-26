@@ -21,8 +21,8 @@ import {
   cleanWhiteSpace,
   runTestRealmServer,
   closeServer,
-  setupPermissionedRealmsCached,
   cardInfo,
+  setupPermissionedRealms,
 } from './helpers';
 import {
   depsForIndexEntry,
@@ -3808,7 +3808,7 @@ module(basename(__filename), function () {
         provider: RealmPermissions;
       },
     ) {
-      setupPermissionedRealmsCached(hooks, {
+      setupPermissionedRealms(hooks, {
         // provider
         realms: [
           {
