@@ -1567,17 +1567,6 @@ export function setupPermissionedRealm(
   });
 }
 
-export function setupPermissionedRealmAtURL(
-  hooks: NestedHooks,
-  realmURL: URL,
-  options: Omit<Parameters<typeof setupPermissionedRealm>[1], 'realmURL'>,
-) {
-  return setupPermissionedRealm(hooks, {
-    ...options,
-    realmURL,
-  });
-}
-
 type SetupPermissionedRealmCachedOptions = Omit<
   Parameters<typeof setupPermissionedRealm>[1],
   'dbTemplateDatabase'
@@ -1771,20 +1760,6 @@ export function setupPermissionedRealmCached(
     }
   });
 }
-
-export function setupPermissionedRealmCachedAtURL(
-  hooks: NestedHooks,
-  realmURL: URL,
-  options: Omit<SetupPermissionedRealmCachedOptions, 'realmURL'>,
-) {
-  return setupPermissionedRealmCached(hooks, {
-    ...options,
-    realmURL,
-  });
-}
-
-// Spins up one RealmServer per realm. Use for cross-realm behavior that doesn't
-// require a shared server (authorization, permissions, etc.).
 
 export function createJWT(
   realm: Realm,
