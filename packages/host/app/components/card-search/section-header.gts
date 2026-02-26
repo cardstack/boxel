@@ -11,10 +11,11 @@ import type { ComponentLike } from '@glint/template';
 interface Signature {
   Element: HTMLElement;
   Args: {
+    hideCount?: boolean;
     icon?: ComponentLike<{ Element: Element }>;
     realmInfo?: RealmSectionInfo;
     title: string;
-    totalCount: number;
+    totalCount?: number;
     showOnlyLabel?: string;
     showOnlyChecked?: boolean;
     onShowOnlyChange?: (checked: boolean) => void;
@@ -44,18 +45,20 @@ export default class SearchSheetSectionHeader extends Component<Signature> {
         {{/if}}
       </div>
       <div class='title'>{{@title}}</div>
-      <div
-        class='count'
-        data-test-search-sheet-section-count
-        data-test-results-count
-      >
-        {{#if (eq @totalCount 0)}}
-          No results
-        {{else}}
-          {{@totalCount}}
-          {{if (eq @totalCount 1) 'result' 'results'}}
-        {{/if}}
-      </div>
+      {{#unless @hideCount}}
+        <div
+          class='count'
+          data-test-search-sheet-section-count
+          data-test-results-count
+        >
+          {{#if (eq @totalCount 0)}}
+            No results
+          {{else}}
+            {{@totalCount}}
+            {{if (eq @totalCount 1) 'result' 'results'}}
+          {{/if}}
+        </div>
+      {{/unless}}
       {{#if @showOnlyLabel}}
         <label class='show-only'>
           <input

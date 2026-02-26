@@ -294,7 +294,7 @@ export default class SearchResultSection extends Component<Signature> {
           <SearchSheetSectionHeader
             @icon={{this.recentsIcon}}
             @title='Recents'
-            @totalCount={{this.recentsSection.totalCount}}
+            @hideCount={{true}}
             @showOnlyLabel='Recents'
             @showOnlyChecked={{@isFocused}}
             @onShowOnlyChange={{this.handleShowOnlyChange}}
