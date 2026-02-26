@@ -1,6 +1,8 @@
 import type Koa from 'koa';
 import { createHmac, timingSafeEqual } from 'crypto';
 import { param, query } from '@cardstack/runtime-common';
+import { enqueueRunCommandJob } from '@cardstack/runtime-common/jobs/run-command';
+import { userInitiatedPriority } from '@cardstack/runtime-common/queue';
 import {
   fetchRequestFromContext,
   sendResponseForNotFound,
@@ -11,6 +13,7 @@ import type { CreateRoutesArgs } from '../routes';
 
 export default function handleWebhookReceiverRequest({
   dbAdapter,
+  queue,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
     let webhookPath = ctxt.params.webhookPath as string | undefined;
@@ -121,16 +124,47 @@ export default function handleWebhookReceiverRequest({
         // Additional filter checks can be added here as needed
       }
 
-      // TODO: Load and execute the command GTS module
-      // Command is a URL pointing to a GTS module (e.g., http://realm/commands/process-webhook)
-      // Future implementation will:
-      // 1. Load the GTS module from the command URL
-      // 2. Execute the exported command function with the webhook context
-      // 3. Track successful executions in executedCommands
       let commandURL = commandRow.command as string;
-      console.log(
-        `Webhook command registered but not yet executed: ${commandURL}`,
-      );
+      let submissionRealmUrl =
+        (commandFilter?.submissionRealmUrl as string | undefined) ??
+        new URL('/submissions/', commandURL).href;
+
+      // Run as the realm owner so they have write permissions in the submission realm
+      let realmOwnerRows = await query(dbAdapter, [
+        `SELECT username FROM realm_user_permissions WHERE realm_url = `,
+        param(submissionRealmUrl),
+        ` AND realm_owner = true LIMIT 1`,
+      ]);
+      let runAs =
+        (realmOwnerRows[0]?.username as string | undefined) ??
+        (webhook.username as string);
+
+      let commandInput = {
+        eventType: eventType ?? '',
+        submissionRealmUrl,
+        payload,
+      };
+
+      try {
+        await enqueueRunCommandJob(
+          {
+            realmURL: submissionRealmUrl,
+            realmUsername: runAs,
+            runAs,
+            command: commandURL,
+            commandInput,
+          },
+          queue,
+          dbAdapter,
+          userInitiatedPriority,
+        );
+        executedCommands++;
+      } catch (error) {
+        console.error(
+          `Failed to enqueue webhook command ${commandURL}:`,
+          error,
+        );
+      }
     }
 
     await setContextResponse(

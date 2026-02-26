@@ -628,8 +628,8 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       assert.strictEqual(response.status, 200, 'HTTP 200 status');
       assert.strictEqual(
         response.body.commandsExecuted,
-        0,
-        'command execution not yet implemented (pending headless chrome module loading)',
+        1,
+        'command was enqueued for execution',
       );
     });
   });
