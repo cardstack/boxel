@@ -1049,15 +1049,7 @@ export default class RealmServerService extends Service {
   }
 
   async listIncomingWebhooks(): Promise<
-    {
-      id: string;
-      webhookPath: string;
-      signingSecret: string;
-      username: string;
-      verificationType: string;
-      verificationConfig: Record<string, unknown>;
-      createdAt: string;
-    }[]
+    { id: string; webhookPath: string; verificationType: string }[]
   > {
     await this.login();
 
@@ -1081,25 +1073,14 @@ export default class RealmServerService extends Service {
     const { data } = (await response.json()) as {
       data: {
         id: string;
-        attributes: {
-          username: string;
-          webhookPath: string;
-          verificationType: string;
-          verificationConfig: Record<string, unknown>;
-          signingSecret: string;
-          createdAt: string;
-        };
+        attributes: { webhookPath: string; verificationType: string };
       }[];
     };
 
     return data.map((item) => ({
       id: item.id,
       webhookPath: item.attributes.webhookPath,
-      signingSecret: item.attributes.signingSecret,
-      username: item.attributes.username,
       verificationType: item.attributes.verificationType,
-      verificationConfig: item.attributes.verificationConfig,
-      createdAt: item.attributes.createdAt,
     }));
   }
 
