@@ -3,25 +3,12 @@ import { registerRealmUser } from './register-realm-user-using-api';
 
 // Usage: register-github-webhook.ts [publicURL] [roomId] [prNumber]
 //
-// Arguments:
-//   roomId     - Matrix room ID to send webhook events to (e.g. !abc123:localhost)
-//   prNumber   - (optional) filter to a specific PR number only
-//
 // Environment variables (override or replace positional args):
 //   REALM_SERVER_URL - realm server base URL (default: http://localhost:4201)
-//   ROOM_ID          - Matrix room ID (required for Matrix event dispatch)
-//   PR_NUMBER        - PR number filter (optional)
 //   COMMAND_URL      - override the command URL registered with the webhook
 
 const realmServerURL = process.env.REALM_SERVER_URL || 'http://localhost:4201';
 
-const args = process.argv.slice(2);
-const roomId = process.env.ROOM_ID || args[1];
-const prNumber = process.env.PR_NUMBER
-  ? parseInt(process.env.PR_NUMBER, 10)
-  : args[2]
-    ? parseInt(args[2], 10)
-    : undefined;
 const commandURL =
   process.env.COMMAND_URL ||
   `${realmServerURL}/catalog-realm/commands/process-github-event`;
@@ -203,22 +190,8 @@ async function ensureWebhookCommand(
 async function main() {
   console.log('Starting GitHub webhook registration...');
   console.log(`Realm Server:  ${realmServerURL}`);
-  console.log(
-    `Room ID:       ${roomId || '(not set - Matrix events will NOT be sent)'}`,
-  );
-  console.log(
-    `PR Number:     ${prNumber ?? '(none - all PRs will trigger events)'}`,
-  );
   console.log(`Command URL:   ${commandURL}`);
   console.log('');
-
-  if (!roomId) {
-    console.warn(
-      '⚠️  No ROOM_ID provided. Webhook commands will be registered but no Matrix\n' +
-        '   events will be dispatched when webhooks arrive. Pass a Matrix room ID\n' +
-        '   as the second argument or set ROOM_ID env var.\n',
-    );
-  }
 
   // Step 1: Authenticate
   console.log('Authenticating...');
@@ -247,12 +220,6 @@ async function main() {
   console.log('Setting up webhook commands...');
 
   const baseFilter: Record<string, unknown> = {};
-  if (prNumber !== undefined) {
-    baseFilter.prNumber = prNumber;
-  }
-  if (roomId) {
-    baseFilter.roomId = roomId;
-  }
 
   const eventTypes = [
     'pull_request',
@@ -268,11 +235,7 @@ async function main() {
       command: commandURL,
       filter: { eventType, ...baseFilter },
     });
-    console.log(
-      `  ✓ ${eventType.padEnd(22)} → command ${cmd.id}` +
-        (prNumber ? ` (PR #${prNumber} only)` : '') +
-        (roomId ? ` → room ${roomId}` : ''),
-    );
+    console.log(`  ✓ ${eventType.padEnd(22)} → command ${cmd.id}`);
   }
   console.log('');
 
