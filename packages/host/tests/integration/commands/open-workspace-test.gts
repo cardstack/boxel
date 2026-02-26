@@ -23,6 +23,7 @@ module('Integration | commands | open-workspace', function (hooks) {
     loggedInAs: '@testuser:localhost',
     activeRealms: [testRealmURL],
     autostart: true,
+    systemCardAccountData: { id: null },
   });
 
   setupRealmCacheTeardown(hooks);
