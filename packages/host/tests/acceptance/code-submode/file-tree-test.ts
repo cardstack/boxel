@@ -30,9 +30,11 @@ import {
   setupUserSubscription,
   withCachedRealmSetup,
 } from '../../helpers';
-import type { TestRealmAdapter } from '../../helpers/adapter';
+
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupApplicationTest } from '../../helpers/setup';
+
+import type { TestRealmAdapter } from '../../helpers/adapter';
 
 const indexCardSource = `
   import { CardDef, Component } from "https://cardstack.com/base/card-api";
@@ -1198,8 +1200,9 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
       .exists('friend.gts is still in the file tree after cancel');
 
     let fileContent = await adapter.openFile('friend.gts');
-    assert.ok(
-      fileContent !== undefined,
+    assert.notStrictEqual(
+      fileContent,
+      undefined,
       'friend.gts still exists in the realm',
     );
   });
@@ -1237,5 +1240,4 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
       .dom(`[data-test-delete-modal="${testRealmURL}friend.gts"]`)
       .exists('Delete confirmation modal appears');
   });
-
 });
