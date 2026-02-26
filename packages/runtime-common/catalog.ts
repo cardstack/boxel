@@ -5,7 +5,7 @@ import type { CardDef } from 'https://cardstack.com/base/card-api';
 import { RealmPaths, join } from './paths';
 import type { ResolvedCodeRef } from './code-ref';
 import { resolveAdoptedCodeRef } from './code-ref';
-import { realmURL } from './constants';
+import { realmURL, baseRealmPrefix } from './constants';
 import { logger } from './log';
 import type { LocalPath } from './paths';
 
@@ -13,6 +13,17 @@ import type { LocalPath } from './paths';
 import type { Listing } from '@cardstack/catalog/listing/listing';
 
 const baseRealmPath = new RealmPaths(new URL('https://cardstack.com/base/'));
+
+function isInBaseRealm(moduleOrId: string): boolean {
+  if (moduleOrId.startsWith(baseRealmPrefix)) {
+    return true;
+  }
+  try {
+    return baseRealmPath.inRealm(new URL(moduleOrId));
+  } catch {
+    return false;
+  }
+}
 
 // sourceCodeRef -- (installs module) --> targetCodeRef
 // sourceCodeRef: code ref of the code from the source realm
@@ -169,7 +180,7 @@ function resolveTargetCodeRef(
   codeRef: ResolvedCodeRef,
   resolver: ListingPathResolver,
 ): ResolvedCodeRef {
-  if (baseRealmPath.inRealm(new URL(codeRef.module))) {
+  if (isInBaseRealm(codeRef.module)) {
     return codeRef;
   } else {
     let targetModule = resolver.target(codeRef.module);
@@ -191,7 +202,7 @@ export function planModuleInstall(
     return { module: s.moduleHref, name: s.ref.name };
   });
   let modulesCopy = codeRefs.flatMap((sourceCodeRef: ResolvedCodeRef) => {
-    if (baseRealmPath.inRealm(new URL(sourceCodeRef.module))) {
+    if (isInBaseRealm(sourceCodeRef.module)) {
       return [];
     }
     let targetCodeRef = resolveTargetCodeRef(sourceCodeRef, resolver);
@@ -213,10 +224,10 @@ export function planInstanceInstall(
   for (let instance of instances) {
     let sourceCodeRef = resolveAdoptedCodeRef(instance);
     let lid = resolver.local(instance.id);
-    if (baseRealmPath.inRealm(new URL(instance.id))) {
+    if (isInBaseRealm(instance.id)) {
       throw new Error('Cannot install instance from base realm');
     }
-    if (!baseRealmPath.inRealm(new URL(sourceCodeRef.module))) {
+    if (!isInBaseRealm(sourceCodeRef.module)) {
       let targetCodeRef = resolveTargetCodeRef(sourceCodeRef, resolver);
       modulesCopy.push({
         sourceCodeRef,

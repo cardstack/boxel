@@ -26,7 +26,7 @@ NODE_ENV=test \
   \
   --fromUrl='http://localhost:4202/test/' \
   --toUrl='http://localhost:4202/test/' \
-  --fromUrl='https://cardstack.com/base/' \
+  --fromUrl='@cardstack/base/' \
   --toUrl='http://localhost:4201/base/' \
   --fromUrl='http://localhost:4201/skills/' \
   --toUrl='http://localhost:4201/skills/'

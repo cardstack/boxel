@@ -78,7 +78,7 @@ LOW_CREDIT_THRESHOLD="${LOW_CREDIT_THRESHOLD:-2000}" \
   \
   --path='../base' \
   --username='base_realm' \
-  --fromUrl='https://cardstack.com/base/' \
+  --fromUrl='@cardstack/base/' \
   --toUrl='http://localhost:4201/base/' \
   \
   ${START_CATALOG:+--path="${CATALOG_REALM_PATH}"} \

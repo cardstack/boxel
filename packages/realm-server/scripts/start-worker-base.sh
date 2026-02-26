@@ -21,5 +21,5 @@ NODE_ENV=development \
   --matrixURL='http://localhost:8008' \
   --prerendererUrl="${PRERENDER_URL}" \
   \
-  --fromUrl='https://cardstack.com/base/' \
+  --fromUrl='@cardstack/base/' \
   --toUrl='http://localhost:4201/base/'
