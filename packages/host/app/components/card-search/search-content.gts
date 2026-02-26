@@ -19,7 +19,7 @@ import {
   type getCardCollection,
   GetCardCollectionContextName,
   GetCardContextName,
-  getTypeRefFromFilter,
+  getTypeRefsFromFilter,
   identifyCard,
   isBaseDef,
   isResolvedCodeRef,
@@ -159,13 +159,14 @@ export default class SearchContent extends Component<Signature> {
     this.cardResource = this.getCard(this, () => this.searchKeyAsURL);
   };
 
-  private get filterTypeRef(): CodeRef | undefined {
+  private get filterTypeRef(): CodeRef[] | undefined {
     const filter = this.args.baseFilter;
     if (filter) {
-      return getTypeRefFromFilter(filter);
+      return getTypeRefsFromFilter(filter);
     }
     // Search-sheet mode: extract type from carddef: search key (searchForInstances)
-    return getCodeRefFromSearchKey(this.args.searchKey);
+    const ref = getCodeRefFromSearchKey(this.args.searchKey);
+    return ref ? [ref] : undefined;
   }
 
   private searchPrerenderedCards = getPrerenderedSearch(
@@ -357,9 +358,11 @@ export default class SearchContent extends Component<Signature> {
     );
 
     // Apply type filter when baseFilter specifies a type (modal/chooseCard mode)
-    const typeRef = this.filterTypeRef;
-    const typeFiltered = typeRef
-      ? realmFiltered.filter((c) => cardMatchesTypeRef(c, typeRef))
+    const typeRefs = this.filterTypeRef;
+    const typeFiltered = typeRefs
+      ? realmFiltered.filter((c) =>
+          typeRefs.some((ref) => cardMatchesTypeRef(c, ref)),
+        )
       : realmFiltered;
 
     if (this.args.isCompact) {

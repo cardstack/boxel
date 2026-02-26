@@ -8,9 +8,11 @@ import type {
 } from './resource-types';
 import {
   buildQueryParamValue,
+  isAnyFilter,
   isCardTypeFilter,
   isEveryFilter,
   normalizeQueryForSignature,
+  type CardTypeFilter,
   type Filter,
   type Query,
   type QueryWithInterpolations,
@@ -350,21 +352,28 @@ function injectOnIntoLeafFilters(
   }
 }
 
-export function getTypeRefFromFilter(filter: Filter): CodeRef | undefined {
+export function getTypeRefsFromFilter(filter: Filter): CodeRef[] | undefined {
   // EveryFilter with 'on' scoping (e.g. specRef in chooseCard)
   if ('on' in filter && filter.on) {
-    return filter.on;
+    return [filter.on];
   }
   // Top-level CardTypeFilter { type: CodeRef } (e.g. linksTo)
   if (isCardTypeFilter(filter)) {
-    return filter.type;
+    return [filter.type];
   }
   // EveryFilter containing a CardTypeFilter (e.g. linksToMany)
   if (isEveryFilter(filter)) {
     for (const sub of filter.every) {
       if (isCardTypeFilter(sub)) {
-        return sub.type;
+        return [sub.type];
       }
+    }
+  }
+  // AnyFilter containing CardTypeFilters (may have multiple types)
+  if (isAnyFilter(filter)) {
+    const typeFilters = filter.any.filter(isCardTypeFilter);
+    if (typeFilters.length > 0) {
+      return typeFilters.map((f: CardTypeFilter) => f.type);
     }
   }
   return undefined;
