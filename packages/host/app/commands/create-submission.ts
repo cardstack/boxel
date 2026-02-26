@@ -72,10 +72,6 @@ export default class CreateSubmissionCommand extends HostBaseCommand<
     if (!listing) {
       throw new Error(`Listing not found: ${listingId}`);
     }
-    if (!listing.name) {
-      throw new Error('Missing listing.name for CreateSubmission');
-    }
-    let branchName = toBranchName(roomId, listing.name);
 
     // Expand examples to include related instances
     let examplesToSnapshot = listing.examples;
@@ -110,12 +106,47 @@ export default class CreateSubmissionCommand extends HostBaseCommand<
 
     log.debug(`Prepared submission with ${filesWithContent.length} files`);
 
-    let submission = await this.createSubmissionCard({
-      listing,
-      branchName,
-      roomId,
-      realmURL: realmUrl,
-      filesWithContent,
+    if (!listing.id) {
+      throw new Error('Missing listing.id for submission card creation');
+    }
+    if (!listing.name) {
+      throw new Error('Missing listing.name for CreateSubmission');
+    }
+    if (!SUBMISSION_CARD_MODULE) {
+      throw new Error('Catalog realm URL is not configured');
+    }
+    let branchName = toBranchName(roomId, listing.name);
+
+    let doc: LooseSingleCardDocument = {
+      data: {
+        type: 'card',
+        relationships: {
+          listing: {
+            links: {
+              self: listing.id,
+            },
+          },
+        },
+        attributes: {
+          roomId,
+          branchName,
+          allFileContents: filesWithContent.map((file) => ({
+            filename: file.path,
+            contents: file.content,
+          })),
+        },
+        meta: {
+          adoptsFrom: {
+            module: SUBMISSION_CARD_MODULE,
+            name: 'SubmissionCard',
+          },
+        },
+      },
+    };
+
+    let submission = await this.store.add(doc, {
+      realm: realmUrl,
+      doNotWaitForPersist: true,
     });
 
     return submission;
@@ -195,59 +226,6 @@ export default class CreateSubmissionCommand extends HostBaseCommand<
 
     return filesWithContent;
   }
-
-  private async createSubmissionCard({
-    listing,
-    branchName,
-    roomId,
-    realmURL,
-    filesWithContent,
-  }: {
-    listing: Listing;
-    branchName: string;
-    roomId: string;
-    realmURL: string;
-    filesWithContent: FileWithContent[];
-  }): Promise<CardDef> {
-    if (!listing.id) {
-      throw new Error('Missing listing.id for submission card creation');
-    }
-    if (!SUBMISSION_CARD_MODULE) {
-      throw new Error('Catalog realm URL is not configured');
-    }
-    let doc: LooseSingleCardDocument = {
-      data: {
-        type: 'card',
-        relationships: {
-          listing: {
-            links: {
-              self: listing.id,
-            },
-          },
-        },
-        attributes: {
-          roomId,
-          branchName,
-          allFileContents: filesWithContent.map((file) => ({
-            filename: file.path,
-            contents: file.content,
-          })),
-        },
-        meta: {
-          adoptsFrom: {
-            module: SUBMISSION_CARD_MODULE,
-            name: 'SubmissionCard',
-          },
-        },
-      },
-    };
-
-    return await this.store.add(doc, {
-      realm: realmURL,
-      doNotWaitForPersist: true,
-    });
-  }
-
   // Walk relationships by fetching linked cards and enqueueing their ids.
   private async expandInstances(instances: any[]): Promise<any[]> {
     const instancesById = new Map<string, any>();
