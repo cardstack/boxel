@@ -76,11 +76,6 @@ export default class SearchResultSection extends Component<Signature> {
     return undefined;
   }
 
-  get recentsTitle(): string {
-    const count = this.recentsSection?.totalCount ?? 0;
-    return pluralize('Recent', count);
-  }
-
   @action
   handleShowOnlyChange(checked: boolean) {
     const sid = this.args.section.sid;
@@ -298,9 +293,9 @@ export default class SearchResultSection extends Component<Signature> {
         {{#unless @isCompact}}
           <SearchSheetSectionHeader
             @icon={{this.recentsIcon}}
-            @title={{this.recentsTitle}}
+            @title='Recents'
             @totalCount={{this.recentsSection.totalCount}}
-            @showOnlyLabel={{this.recentsTitle}}
+            @showOnlyLabel='Recents'
             @showOnlyChecked={{@isFocused}}
             @onShowOnlyChange={{this.handleShowOnlyChange}}
           />
