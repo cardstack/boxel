@@ -38,6 +38,7 @@ import {
   GetCardContextName,
   type ResolvedCodeRef,
   type getCard,
+  type LocalPath,
   CardContextName,
 } from '@cardstack/runtime-common';
 import { isEquivalentBodyPosition } from '@cardstack/runtime-common/schema-analysis-plugin';
@@ -243,6 +244,10 @@ export default class CodeSubmode extends Component<Signature> {
 
   private get realmURL() {
     return this.operatorModeStateService.realmURL;
+  }
+
+  private get canWriteToRealm() {
+    return this.realm.canWrite(this.realmURL);
   }
 
   private get isCard() {
@@ -455,6 +460,11 @@ export default class CodeSubmode extends Component<Signature> {
 
   @action private setItemToDelete(item: CardDef | URL | null | undefined) {
     this.itemToDelete = item;
+  }
+
+  @action private deleteFileInTree(entryPath: LocalPath) {
+    let url = new URL(entryPath, this.realmURL);
+    this.setItemToDelete(url);
   }
 
   @action private onCancelDelete() {
@@ -749,6 +759,10 @@ export default class CodeSubmode extends Component<Signature> {
                           @openDirs={{this.operatorModeStateService.currentRealmOpenDirs}}
                           @onFileSelected={{this.operatorModeStateService.onFileSelected}}
                           @onDirectorySelected={{this.operatorModeStateService.toggleOpenDir}}
+                          @onDeleteFile={{if
+                            this.canWriteToRealm
+                            this.deleteFileInTree
+                          }}
                           @scrollPositionKey={{this.operatorModeStateService.codePathString}}
                         />
                       </:browser>
