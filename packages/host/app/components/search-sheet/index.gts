@@ -126,8 +126,10 @@ export default class SearchSheet extends Component<Signature> {
 
   @action
   private onBlur() {
-    this.resetState();
     this.args.onBlur();
+    if (this.args.mode === SearchSheetModes.Closed) {
+      this.resetState();
+    }
   }
 
   @action private handleCardSelect(selection: string | { realmURL: string }) {
@@ -140,6 +142,7 @@ export default class SearchSheet extends Component<Signature> {
 
   @action
   private doExternallyTriggeredSearch(term: string) {
+    console.log('doExternallyTriggeredSearch', term);
     this.searchKey = term;
   }
 
