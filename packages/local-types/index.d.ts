@@ -1,20 +1,6 @@
 import 'ember-source/types';
 import * as ContentTag from 'content-tag';
 
-declare global {
-  // Make ContentTagGlobal a property of globalThis
-  interface Window {
-    ContentTagGlobal: typeof ContentTag;
-  }
-
-  interface globalThis {
-    ContentTagGlobal: typeof ContentTag;
-  }
-
-  // For Node.js environments
-  let ContentTagGlobal: typeof ContentTag;
-}
-
 import { TemplateFactory } from 'htmlbars-inline-precompile';
 import '@glint/ember-tsc/types';
 import { ComponentLike } from '@glint/template';
