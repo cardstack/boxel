@@ -6,8 +6,8 @@ import type {
   PowerSelectArgs,
   Select,
 } from 'ember-power-select/components/power-select';
-import BeforeOptions from 'ember-power-select/components/power-select/before-options';
 import PowerSelect from 'ember-power-select/components/power-select';
+import BeforeOptions from 'ember-power-select/components/power-select/before-options';
 
 import { cn } from '../../helpers.ts';
 import { BoxelAfterOptionsComponent } from './after-options.gts';
