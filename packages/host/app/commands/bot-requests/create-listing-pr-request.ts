@@ -43,7 +43,7 @@ export default class CreateListingPRRequestCommand extends HostBaseCommand<
     let { realm, listingId } = input;
     let roomId = input.roomId;
     let listingName: string | undefined;
-    let listing = await this.store.get<Listing>(listingId);
+    let listing = (await this.store.get(listingId)) as Listing | undefined;
     if (listing && isCardInstance(listing)) {
       listingName = listing.name ?? listing.id;
     }
@@ -87,7 +87,8 @@ export default class CreateListingPRRequestCommand extends HostBaseCommand<
       // command can fetch the GitHub webhook directly by ID.
       const webhooks = await this.realmServer.listIncomingWebhooks();
       const githubWebhook = webhooks.find(
-        (w) => w.verificationType === 'HMAC_SHA256_HEADER',
+        (w: { verificationType: string }) =>
+          w.verificationType === 'HMAC_SHA256_HEADER',
       );
 
       if (!githubWebhook) {
@@ -99,7 +100,9 @@ export default class CreateListingPRRequestCommand extends HostBaseCommand<
 
       let catalogRealmURL = this.realmServer.catalogRealmURLs[0];
       if (!catalogRealmURL) {
-        log.warn('No catalog realm URL found, skipping webhook command registration.');
+        log.warn(
+          'No catalog realm URL found, skipping webhook command registration.',
+        );
         return;
       }
 
