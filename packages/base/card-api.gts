@@ -1367,9 +1367,7 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
         <CardCrudFunctionsConsumer as |cardCrudFunctions|>
           <DefaultFormatsConsumer as |defaultFormats|>
             {{#if
-              (shouldRenderEditor
-                @format defaultFormats.cardDef isComputed
-              )
+              (shouldRenderEditor @format defaultFormats.cardDef isComputed)
             }}
               <LinksToEditor
                 @model={{(getInnerModel)}}
@@ -1726,7 +1724,7 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
       }
       relationships = values.data.map((entry) => ({
         links: {
-          self: entry && 'id' in entry ? entry.id ?? null : null,
+          self: entry && 'id' in entry ? (entry.id ?? null) : null,
         },
         data: entry,
       }));
@@ -1751,7 +1749,6 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
         // links.self is used to tell the consumer of this payload how to get the resource via HTTP.
         // data.id is used to tell the consumer how to find the resource in the included bucket.
         // Prefer data.id for resourceFrom(), and fall back to links.self when data.id is missing
-        // (the array-style linksToMany format omits data.id).
         let resourceId =
           value.data && 'id' in value.data ? value.data?.id : undefined;
         let reference = value.links?.self ?? resourceId;
@@ -2888,10 +2885,12 @@ function lazilyLoadLink(
           : `${reference}.json`;
       let payloadError: Pick<SerializedError, 'status' | 'message'> &
         Partial<Pick<SerializedError, 'title' | 'stack' | 'deps'>> & {
-        additionalErrors?: Array<
-          Partial<Pick<SerializedError, 'title' | 'status' | 'message' | 'stack'>>
-        >;
-      } = {
+          additionalErrors?: Array<
+            Partial<
+              Pick<SerializedError, 'title' | 'status' | 'message' | 'stack'>
+            >
+          >;
+        } = {
         title: isMissingFile
           ? 'Link Not Found'
           : (error?.message ?? 'Card Error'),
@@ -2956,7 +2955,10 @@ function trackRuntimeRelationshipDependency(
   }
   if (isFileDef(declaredCard)) {
     trackRuntimeFileDependency(id, dependencyTrackingContext);
-    trackRuntimeRelationshipModuleDependencies(value, dependencyTrackingContext);
+    trackRuntimeRelationshipModuleDependencies(
+      value,
+      dependencyTrackingContext,
+    );
     return;
   }
   trackRuntimeInstanceDependency(id, dependencyTrackingContext);
