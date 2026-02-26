@@ -23,30 +23,7 @@ cid=$(docker run -d \
   -c fsync=off \
   -c full_page_writes=off \
   -c synchronous_commit=off)
-
-attempts=0
-max_attempts=1200 # ~60s at 50ms
-until docker exec "$TEST_PG_SEED_CONTAINER" pg_isready -U postgres >/dev/null 2>&1; do
-  attempts=$((attempts + 1))
-  if [ "$attempts" -ge "$max_attempts" ]; then
-    echo "Timed out waiting for seed postgres container $TEST_PG_SEED_CONTAINER" >&2
-    docker logs "$cid" >&2 || true
-    exit 1
-  fi
-  sleep 0.05
-done
-
-# Official postgres image can briefly report ready during init before final restart.
-attempts=0
-until docker exec "$TEST_PG_SEED_CONTAINER" psql -U postgres -d postgres -Atqc "select 1" >/dev/null 2>&1; do
-  attempts=$((attempts + 1))
-  if [ "$attempts" -ge "$max_attempts" ]; then
-    echo "Timed out waiting for SQL round trip in seed container $TEST_PG_SEED_CONTAINER" >&2
-    docker logs "$cid" >&2 || true
-    exit 1
-  fi
-  sleep 0.05
-done
+"${SCRIPT_DIR}/wait-for-container-pg.sh" "$TEST_PG_SEED_CONTAINER" "$cid"
 
 docker exec "$TEST_PG_SEED_CONTAINER" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -c \
   "CREATE DATABASE ${TEST_PG_SEED_DB};"

@@ -21,34 +21,7 @@ cid=$(docker run -d \
   --entrypoint /bin/sh \
   postgres:16.3-alpine \
   -c /usr/local/bin/pg-seeded-tmpfs-entrypoint.sh)
-
-attempts=0
-max_attempts=1200 # ~60s at 50ms
-until docker exec "$TEST_PG_CONTAINER" pg_isready -h 127.0.0.1 -U postgres >/dev/null 2>&1; do
-  attempts=$((attempts + 1))
-  if [ "$attempts" -ge "$max_attempts" ]; then
-    echo "Timed out waiting for postgres in container $TEST_PG_CONTAINER" >&2
-    docker logs "$cid" >&2 || true
-    exit 1
-  fi
-  if [ "$(docker inspect -f '{{.State.Running}}' "$cid" 2>/dev/null || echo false)" != "true" ]; then
-    echo "Test postgres container exited before becoming ready" >&2
-    docker logs "$cid" >&2 || true
-    exit 1
-  fi
-  sleep 0.05
-done
-
-attempts=0
-until docker exec "$TEST_PG_CONTAINER" psql -U postgres -h 127.0.0.1 -d postgres -Atqc "select 1" >/dev/null 2>&1; do
-  attempts=$((attempts + 1))
-  if [ "$attempts" -ge "$max_attempts" ]; then
-    echo "Timed out waiting for SQL round trip in $TEST_PG_CONTAINER" >&2
-    docker logs "$cid" >&2 || true
-    exit 1
-  fi
-  sleep 0.05
-done
+"${SCRIPT_DIR}/wait-for-container-pg.sh" "$TEST_PG_CONTAINER" "$cid"
 
 # Sanity check the migrated DB exists in the seeded cluster.
 seed_db_present="$(docker exec "$TEST_PG_CONTAINER" psql -h 127.0.0.1 -U postgres -d postgres -Atqc \

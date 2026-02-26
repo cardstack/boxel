@@ -8,6 +8,7 @@ import type {
 import { logger, param, query } from '@cardstack/runtime-common';
 import { module, test } from 'qunit';
 import {
+  createTestPgAdapter,
   fetchSubscriptionsByUserId,
   insertPlan,
   insertUser,
@@ -105,7 +106,7 @@ module(basename(__filename), function () {
 
     hooks.beforeEach(async function () {
       prepareTestDB();
-      dbAdapter = new PgAdapter({ autoMigrate: true });
+      dbAdapter = await createTestPgAdapter();
     });
 
     hooks.afterEach(async function () {
