@@ -15,7 +15,7 @@ import {
 } from '@cardstack/boxel-ui/components';
 import { eq, menuItem } from '@cardstack/boxel-ui/helpers';
 
-import { DropdownArrowDown } from '@cardstack/boxel-ui/icons';
+import { DropdownArrowDown, IconTrash } from '@cardstack/boxel-ui/icons';
 
 import type { LocalPath } from '@cardstack/runtime-common/paths';
 
@@ -82,6 +82,7 @@ export default class Directory extends Component<Args> {
                         (menuItem
                           'Delete'
                           (fn this.deleteFileEntry entryPath)
+                          icon=IconTrash
                           dangerous=true
                         )
                       }}
