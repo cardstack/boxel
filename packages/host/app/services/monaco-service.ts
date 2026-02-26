@@ -75,6 +75,14 @@ export default class MonacoService extends Service {
 
   private loadMonacoSDK = task(async () => {
     const monaco = await import('monaco-editor');
+
+    // There are tests that rely on this. In older Ember versions, Monaco
+    // installed itself as a global automatically because it does that when it
+    // detects the presence of an AMD in the environment. Newer Ember versions
+    // (with Vite) don't use AMD anymore, so Monaco stopped putting itself on
+    // this global.
+    (globalThis as any).monaco = monaco;
+
     monaco.languages.typescript.javascriptDefaults.setCompilerOptions(
       this.defaultCompilerOptions(monaco),
     );
