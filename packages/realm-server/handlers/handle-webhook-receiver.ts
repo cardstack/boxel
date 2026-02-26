@@ -175,8 +175,8 @@ function verifyHmacSha256Header(
   body: string,
   headers: Record<string, string | string[] | undefined>,
 ): boolean {
-  let headerName = config.header.toLowerCase();
-  let providedSignature = headers[headerName];
+  let headerName = config.header; // e.g. 'X-Hub-Signature-256'
+  let providedSignature = headers[headerName.toLowerCase()]; // Node.js normalizes incoming header names to lowercase
   if (typeof providedSignature !== 'string') {
     return false;
   }

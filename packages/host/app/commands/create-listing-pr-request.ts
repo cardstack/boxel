@@ -44,7 +44,7 @@ export default class CreateListingPRRequestCommand extends HostBaseCommand<
     let listingName: string | undefined;
 
     if (!roomId) {
-      let listing = await this.store.get<Listing>(listingId);
+      let listing = (await this.store.get(listingId)) as Listing | undefined;
       if (listing && isCardInstance(listing)) {
         listingName = listing.name ?? listing.id;
       }
@@ -84,7 +84,8 @@ export default class CreateListingPRRequestCommand extends HostBaseCommand<
       // command can fetch the GitHub webhook directly by ID.
       const webhooks = await this.realmServer.listIncomingWebhooks();
       const githubWebhook = webhooks.find(
-        (w) => w.verificationType === 'HMAC_SHA256_HEADER',
+        (w: { verificationType: string }) =>
+          w.verificationType === 'HMAC_SHA256_HEADER',
       );
 
       if (!githubWebhook) {
