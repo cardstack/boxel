@@ -21,7 +21,7 @@ import {
   cleanWhiteSpace,
   runTestRealmServer,
   closeServer,
-  setupPermissionedRealms,
+  setupPermissionedRealmsCached,
   cardInfo,
 } from './helpers';
 import {
@@ -3808,7 +3808,7 @@ module(basename(__filename), function () {
         provider: RealmPermissions;
       },
     ) {
-      setupPermissionedRealms(hooks, {
+      setupPermissionedRealmsCached(hooks, {
         // provider
         realms: [
           {

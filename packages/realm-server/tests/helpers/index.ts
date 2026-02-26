@@ -1006,6 +1006,69 @@ export async function runTestRealmServerWithRealms({
 
 // Spins up one RealmServer per realm. Use for cross-realm behavior that doesn't
 // require a shared server (authorization, permissions, etc.).
+type PermissionedRealmsFixtureRealm = {
+  realm: Realm;
+  realmPath: string;
+  realmHttpServer: Server;
+  realmAdapter: RealmAdapter;
+};
+
+type InternalPermissionedRealmsSetupOptions = {
+  realms: {
+    realmURL: string;
+    permissions: RealmPermissions;
+    fileSystem?: Record<string, string | LooseSingleCardDocument>;
+  }[];
+  prerenderer?: Prerenderer;
+};
+
+async function startPermissionedRealmsFixture(
+  dbAdapter: PgAdapter,
+  publisher: QueuePublisher,
+  runner: QueueRunner,
+  { realms: realmConfigs, prerenderer }: InternalPermissionedRealmsSetupOptions,
+): Promise<{ realms: PermissionedRealmsFixtureRealm[] }> {
+  let realms: PermissionedRealmsFixtureRealm[] = [];
+
+  for (let realmArg of realmConfigs.values()) {
+    let {
+      testRealmDir: realmPath,
+      testRealm: realm,
+      testRealmHttpServer: realmHttpServer,
+      testRealmAdapter: realmAdapter,
+    } = await runTestRealmServer({
+      virtualNetwork: await createVirtualNetwork(),
+      testRealmDir: dirSync().name,
+      realmsRootPath: dirSync().name,
+      realmURL: new URL(realmArg.realmURL),
+      fileSystem: realmArg.fileSystem,
+      permissions: realmArg.permissions,
+      matrixURL,
+      dbAdapter,
+      publisher,
+      runner,
+      prerenderer,
+    });
+    realms.push({
+      realm,
+      realmPath,
+      realmHttpServer,
+      realmAdapter,
+    });
+  }
+
+  return { realms };
+}
+
+async function teardownPermissionedRealmsFixture(
+  realms: PermissionedRealmsFixtureRealm[],
+): Promise<void> {
+  for (let realm of realms) {
+    realm.realm.__testOnlyClearCaches();
+    await closeServer(realm.realmHttpServer);
+  }
+}
+
 export function setupPermissionedRealms(
   hooks: NestedHooks,
   {
@@ -1013,6 +1076,7 @@ export function setupPermissionedRealms(
     realms: realmsArg,
     onRealmSetup,
     prerenderer,
+    dbTemplateDatabase,
   }: {
     mode?: 'beforeEach' | 'before';
     realms: {
@@ -1021,60 +1085,31 @@ export function setupPermissionedRealms(
       fileSystem?: Record<string, string | LooseSingleCardDocument>;
     }[];
     prerenderer?: Prerenderer;
+    // Internal hook used by cached setup wrappers
+    dbTemplateDatabase?: TestDatabaseTemplateProvider;
     onRealmSetup?: (args: {
       dbAdapter: PgAdapter;
-      realms: {
-        realm: Realm;
-        realmPath: string;
-        realmHttpServer: Server;
-        realmAdapter: RealmAdapter;
-      }[];
+      realms: PermissionedRealmsFixtureRealm[];
     }) => void;
   },
 ) {
   // We want 2 different realm users to test authorization between them - these
   // names are selected because they are already available in the test
   // environment (via register-realm-users.ts)
-  let realms: {
-    realm: Realm;
-    realmPath: string;
-    realmHttpServer: Server;
-    realmAdapter: RealmAdapter;
-  }[] = [];
+  let realms: PermissionedRealmsFixtureRealm[] = [];
   let _dbAdapter: PgAdapter;
   setupDB(hooks, {
+    templateDatabase: dbTemplateDatabase,
     [mode]: async (
       dbAdapter: PgAdapter,
       publisher: QueuePublisher,
       runner: QueueRunner,
     ) => {
       _dbAdapter = dbAdapter;
-      for (let realmArg of realmsArg.values()) {
-        let {
-          testRealmDir: realmPath,
-          testRealm: realm,
-          testRealmHttpServer: realmHttpServer,
-          testRealmAdapter: realmAdapter,
-        } = await runTestRealmServer({
-          virtualNetwork: await createVirtualNetwork(),
-          testRealmDir: dirSync().name,
-          realmsRootPath: dirSync().name,
-          realmURL: new URL(realmArg.realmURL),
-          fileSystem: realmArg.fileSystem,
-          permissions: realmArg.permissions,
-          matrixURL,
-          dbAdapter,
-          publisher,
-          runner,
-          prerenderer,
-        });
-        realms.push({
-          realm,
-          realmPath,
-          realmHttpServer,
-          realmAdapter,
-        });
-      }
+      ({ realms } = await startPermissionedRealmsFixture(dbAdapter, publisher, runner, {
+        realms: realmsArg,
+        prerenderer,
+      }));
       onRealmSetup?.({
         dbAdapter: _dbAdapter!,
         realms,
@@ -1083,10 +1118,7 @@ export function setupPermissionedRealms(
   });
 
   hooks[mode === 'beforeEach' ? 'afterEach' : 'after'](async function () {
-    for (let realm of realms) {
-      realm.realm.__testOnlyClearCaches();
-      await closeServer(realm.realmHttpServer);
-    }
+    await teardownPermissionedRealmsFixture(realms);
     realms = [];
   });
 }
@@ -1747,6 +1779,170 @@ export function setupPermissionedRealmCached(
   });
 
   setupPermissionedRealm(hooks, {
+    ...setupOptions,
+    dbTemplateDatabase: () => acquiredTemplateDatabase,
+  });
+
+  hooks.after(async function () {
+    if (acquiredCacheKey) {
+      let cacheKey = acquiredCacheKey;
+      acquiredCacheKey = undefined;
+      acquiredTemplateDatabase = undefined;
+      await releasePermissionedRealmTemplate(cacheKey);
+    }
+  });
+}
+
+type SetupPermissionedRealmsCachedOptions = Omit<
+  Parameters<typeof setupPermissionedRealms>[1],
+  'dbTemplateDatabase'
+> & {
+  useTemplateCache?: boolean;
+};
+
+function permissionedRealmsTemplateCacheKey(
+  options: SetupPermissionedRealmsCachedOptions,
+): string {
+  return hashCacheKeyPayload({
+    version: 1,
+    type: 'permissioned-realms',
+    realms: options.realms,
+    prerenderer: prerendererCacheKeyPart(options.prerenderer),
+  });
+}
+
+async function buildPermissionedRealmsTemplate(
+  cacheKey: string,
+  options: SetupPermissionedRealmsCachedOptions,
+): Promise<void> {
+  let templateDatabaseName = templateDatabaseNameForCacheKey(cacheKey);
+  let builderDatabaseName = builderDatabaseNameForCacheKey(cacheKey);
+
+  let dbAdapter: PgAdapter | undefined;
+  let publisher: QueuePublisher | undefined;
+  let runner: QueueRunner | undefined;
+  let fixture: Awaited<ReturnType<typeof startPermissionedRealmsFixture>> | undefined;
+
+  await dropDatabase(templateDatabaseName);
+  await dropDatabase(builderDatabaseName);
+
+  try {
+    dbAdapter = await createTestPgAdapter({
+      databaseName: builderDatabaseName,
+      templateDatabase: migratedTestDatabaseTemplate,
+    });
+    publisher = new PgQueuePublisher(dbAdapter);
+    runner = new PgQueueRunner({
+      adapter: dbAdapter,
+      workerId: 'template-worker',
+    });
+
+    fixture = await startPermissionedRealmsFixture(dbAdapter, publisher, runner, {
+      realms: options.realms,
+      prerenderer: options.prerenderer,
+    });
+
+    await waitForQueueIdle(dbAdapter);
+    await teardownPermissionedRealmsFixture(fixture.realms);
+    fixture = undefined;
+
+    await publisher.destroy();
+    publisher = undefined;
+    await runner.destroy();
+    runner = undefined;
+    await dbAdapter.close();
+    dbAdapter = undefined;
+
+    await createTemplateSnapshot(builderDatabaseName, templateDatabaseName);
+  } finally {
+    if (fixture) {
+      try {
+        await teardownPermissionedRealmsFixture(fixture.realms);
+      } catch {
+        // best-effort cleanup
+      }
+    }
+    if (publisher) {
+      try {
+        await publisher.destroy();
+      } catch {
+        // best-effort cleanup
+      }
+    }
+    if (runner) {
+      try {
+        await runner.destroy();
+      } catch {
+        // best-effort cleanup
+      }
+    }
+    if (dbAdapter && !dbAdapter.isClosed) {
+      try {
+        await dbAdapter.close();
+      } catch {
+        // best-effort cleanup
+      }
+    }
+    try {
+      await dropDatabase(builderDatabaseName);
+    } catch {
+      // best-effort cleanup
+    }
+  }
+}
+
+async function acquirePermissionedRealmsTemplate(
+  options: SetupPermissionedRealmsCachedOptions,
+): Promise<{ cacheKey: string; templateDatabaseName: string }> {
+  let cacheKey = permissionedRealmsTemplateCacheKey(options);
+  let templateDatabaseName = templateDatabaseNameForCacheKey(cacheKey);
+  let existing = permissionedRealmTemplateCache.get(cacheKey);
+  if (existing) {
+    existing.refs++;
+    await existing.ready;
+    return { cacheKey, templateDatabaseName };
+  }
+
+  let entry: CachedPermissionedRealmTemplateEntry = {
+    refs: 1,
+    ready: Promise.resolve(),
+  };
+  entry.ready = buildPermissionedRealmsTemplate(cacheKey, options).catch(
+    async (error) => {
+      permissionedRealmTemplateCache.delete(cacheKey);
+      try {
+        await dropDatabase(templateDatabaseName);
+      } catch {
+        // best-effort cleanup
+      }
+      throw error;
+    },
+  );
+  permissionedRealmTemplateCache.set(cacheKey, entry);
+  await entry.ready;
+  return { cacheKey, templateDatabaseName };
+}
+
+export function setupPermissionedRealmsCached(
+  hooks: NestedHooks,
+  options: SetupPermissionedRealmsCachedOptions,
+) {
+  let { useTemplateCache = true, ...setupOptions } = options;
+  if (!useTemplateCache) {
+    return setupPermissionedRealms(hooks, setupOptions);
+  }
+
+  let acquiredTemplateDatabase: string | undefined;
+  let acquiredCacheKey: string | undefined;
+
+  hooks.before(async function () {
+    let { cacheKey, templateDatabaseName } =
+      await acquirePermissionedRealmsTemplate(setupOptions);
+    acquiredCacheKey = cacheKey;
+    acquiredTemplateDatabase = templateDatabaseName;
+  });
+
+  setupPermissionedRealms(hooks, {
     ...setupOptions,
     dbTemplateDatabase: () => acquiredTemplateDatabase,
   });

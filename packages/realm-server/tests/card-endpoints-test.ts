@@ -20,7 +20,7 @@ import { parse } from 'qs';
 import type { Query } from '@cardstack/runtime-common/query';
 import {
   setupPermissionedRealmCached,
-  setupPermissionedRealms,
+  setupPermissionedRealmsCached,
   setupMatrixRoom,
   closeServer,
   testRealmInfo,
@@ -3910,7 +3910,7 @@ module(basename(__filename), function () {
     const UNREACHABLE_REALM_URL = 'https://example.invalid/offline/';
     let consumerRequest: RealmRequest;
 
-    setupPermissionedRealms(hooks, {
+    setupPermissionedRealmsCached(hooks, {
       realms: [
         {
           realmURL: providerRealmURL,
