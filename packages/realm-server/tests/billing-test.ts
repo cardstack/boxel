@@ -14,7 +14,7 @@ import {
   insertUser,
   prepareTestDB,
 } from './helpers';
-import { PgAdapter } from '@cardstack/postgres';
+import type { PgAdapter } from '@cardstack/postgres';
 import { handlePaymentSucceeded } from '@cardstack/billing/stripe-webhook-handlers/payment-succeeded';
 import { handleSubscriptionDeleted } from '@cardstack/billing/stripe-webhook-handlers/subscription-deleted';
 import { handleCheckoutSessionCompleted } from '@cardstack/billing/stripe-webhook-handlers/checkout-session-completed';

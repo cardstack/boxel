@@ -3,7 +3,7 @@ import type { Test, SuperTest } from 'supertest';
 import { basename } from 'path';
 import { baseRealm, type Realm } from '@cardstack/runtime-common';
 import type { Query } from '@cardstack/runtime-common/query';
-import { setupPermissionedRealm, createJWT } from '../helpers';
+import { setupPermissionedRealmCached, createJWT } from '../helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
 module(`realm-endpoints/${basename(__filename)}`, function () {
@@ -54,7 +54,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
       let query = () => buildPersonQuery('Mango');
 
       module('public readable realm', function (hooks) {
-        setupPermissionedRealm(hooks, {
+        setupPermissionedRealmCached(hooks, {
           permissions: {
             '*': ['read'],
           },
@@ -517,7 +517,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
       });
 
       module('fields-based link loading', function (hooks) {
-        setupPermissionedRealm(hooks, {
+        setupPermissionedRealmCached(hooks, {
           permissions: {
             '*': ['read'],
           },
@@ -745,7 +745,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
       let query = () => buildPersonQuery('Mango');
 
       module('public readable realm', function (hooks) {
-        setupPermissionedRealm(hooks, {
+        setupPermissionedRealmCached(hooks, {
           permissions: {
             '*': ['read'],
           },
@@ -821,7 +821,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
       });
 
       module('permissioned realm', function (hooks) {
-        setupPermissionedRealm(hooks, {
+        setupPermissionedRealmCached(hooks, {
           permissions: {
             john: ['read'],
             '@node-test_realm:localhost': ['read', 'realm-owner'],
@@ -878,7 +878,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
       });
 
       module('search query validation', function (hooks) {
-        setupPermissionedRealm(hooks, {
+        setupPermissionedRealmCached(hooks, {
           permissions: {
             '*': ['read'],
             '@node-test_realm:localhost': ['read', 'realm-owner'],

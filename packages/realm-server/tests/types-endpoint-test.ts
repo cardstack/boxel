@@ -7,7 +7,7 @@ import { copySync, ensureDirSync } from 'fs-extra';
 import type { Realm } from '@cardstack/runtime-common';
 import type { QueuePublisher, QueueRunner } from '@cardstack/runtime-common';
 import {
-  setupPermissionedRealm,
+  setupPermissionedRealmCached,
   runTestRealmServer,
   setupDB,
   setupMatrixRoom,
@@ -70,7 +70,7 @@ module(basename(__filename), function () {
       resetCatalogRealms();
     });
 
-    setupPermissionedRealm(hooks, {
+    setupPermissionedRealmCached(hooks, {
       permissions: {
         '*': ['read', 'write'],
         '@node-test_realm:localhost': ['read', 'write', 'realm-owner'],

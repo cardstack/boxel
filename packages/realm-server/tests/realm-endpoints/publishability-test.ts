@@ -10,7 +10,7 @@ import {
 
 import {
   createJWT,
-  setupPermissionedRealm,
+  setupPermissionedRealmCached,
   setupPermissionedRealms,
   type RealmRequest,
   withRealmPath,
@@ -24,7 +24,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
     let request: RealmRequest;
     let testRealm: Realm;
 
-    setupPermissionedRealm(hooks, {
+    setupPermissionedRealmCached(hooks, {
       permissions: {
         [ownerUserId]: ['read', 'write', 'realm-owner'],
       },

@@ -23,7 +23,7 @@ import {
   type QueueRunner,
 } from '@cardstack/runtime-common';
 import {
-  setupPermissionedRealm,
+  setupPermissionedRealmCached,
   runTestRealmServer,
   setupDB,
   setupMatrixRoom,
@@ -108,7 +108,7 @@ module(basename(__filename), function () {
       };
     }
 
-    setupPermissionedRealm(hooks, {
+    setupPermissionedRealmCached(hooks, {
       permissions: {
         '*': ['read', 'write'],
         user: ['read', 'write', 'realm-owner'],

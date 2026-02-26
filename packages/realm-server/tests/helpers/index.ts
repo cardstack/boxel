@@ -283,7 +283,10 @@ async function createTemplateSnapshot(
   }
 }
 
-async function cloneTestDBFromTemplate(templateDatabaseName: string, databaseName?: string): Promise<void> {
+async function cloneTestDBFromTemplate(
+  templateDatabaseName: string,
+  databaseName?: string,
+): Promise<void> {
   let database = databaseName ?? process.env.PGDATABASE;
   if (!database) {
     throw new Error(
@@ -1531,17 +1534,20 @@ export function setupPermissionedRealm(
       publisher: QueuePublisher,
       runner: QueueRunner,
     ) => {
-      let { testRealmServer: server, request, dir } =
-        await startPermissionedRealmFixture(dbAdapter, publisher, runner, {
-          realmURL,
-          fileSystem,
-          permissions,
-          subscribeToRealmEvents,
-          prerenderer,
-          published,
-          cardSizeLimitBytes,
-          fileSizeLimitBytes,
-        });
+      let {
+        testRealmServer: server,
+        request,
+        dir,
+      } = await startPermissionedRealmFixture(dbAdapter, publisher, runner, {
+        realmURL,
+        fileSystem,
+        permissions,
+        subscribeToRealmEvents,
+        prerenderer,
+        published,
+        cardSizeLimitBytes,
+        fileSizeLimitBytes,
+      });
       testRealmServer = server;
 
       onRealmSetup?.({
@@ -1607,7 +1613,9 @@ async function buildPermissionedRealmTemplate(
   let dbAdapter: PgAdapter | undefined;
   let publisher: QueuePublisher | undefined;
   let runner: QueueRunner | undefined;
-  let fixture: Awaited<ReturnType<typeof startPermissionedRealmFixture>> | undefined;
+  let fixture:
+    | Awaited<ReturnType<typeof startPermissionedRealmFixture>>
+    | undefined;
 
   await dropDatabase(templateDatabaseName);
   await dropDatabase(builderDatabaseName);
@@ -1618,18 +1626,26 @@ async function buildPermissionedRealmTemplate(
       templateDatabase: migratedTestDatabaseTemplate,
     });
     publisher = new PgQueuePublisher(dbAdapter);
-    runner = new PgQueueRunner({ adapter: dbAdapter, workerId: 'template-worker' });
-
-    fixture = await startPermissionedRealmFixture(dbAdapter, publisher, runner, {
-      realmURL: options.realmURL,
-      fileSystem: options.fileSystem,
-      permissions: options.permissions,
-      subscribeToRealmEvents: options.subscribeToRealmEvents,
-      prerenderer: options.prerenderer,
-      published: options.published,
-      cardSizeLimitBytes: options.cardSizeLimitBytes,
-      fileSizeLimitBytes: options.fileSizeLimitBytes,
+    runner = new PgQueueRunner({
+      adapter: dbAdapter,
+      workerId: 'template-worker',
     });
+
+    fixture = await startPermissionedRealmFixture(
+      dbAdapter,
+      publisher,
+      runner,
+      {
+        realmURL: options.realmURL,
+        fileSystem: options.fileSystem,
+        permissions: options.permissions,
+        subscribeToRealmEvents: options.subscribeToRealmEvents,
+        prerenderer: options.prerenderer,
+        published: options.published,
+        cardSizeLimitBytes: options.cardSizeLimitBytes,
+        fileSizeLimitBytes: options.fileSizeLimitBytes,
+      },
+    );
 
     await waitForQueueIdle(dbAdapter);
     await teardownPermissionedRealmFixture(fixture.testRealmServer);
@@ -1712,7 +1728,9 @@ async function acquirePermissionedRealmTemplate(
   return { cacheKey, templateDatabaseName };
 }
 
-async function releasePermissionedRealmTemplate(cacheKey: string): Promise<void> {
+async function releasePermissionedRealmTemplate(
+  cacheKey: string,
+): Promise<void> {
   let entry = permissionedRealmTemplateCache.get(cacheKey);
   if (!entry) {
     return;

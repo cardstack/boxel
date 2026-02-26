@@ -28,7 +28,7 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
     await closeServer(testRealmHttpServer);
   });
 
-  setupPermissionedRealm(hooks, {
+  setupPermissionedRealmCached(hooks, {
     permissions: {
       '*': ['read'],
     },
