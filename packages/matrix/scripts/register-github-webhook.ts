@@ -11,7 +11,7 @@ const realmServerURL = process.env.REALM_SERVER_URL || 'http://localhost:4201';
 
 const commandURL =
   process.env.COMMAND_URL ||
-  `${realmServerURL}/catalog-realm/commands/process-github-event`;
+  `${realmServerURL}/catalog/commands/process-github-event/default`;
 
 // Default GitHub webhook config
 const webhookConfig = {
