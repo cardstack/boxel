@@ -43,6 +43,7 @@ module('Integration | commands | create-listing-pr-request', function (hooks) {
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
     activeRealms: [testRealmURL],
+    autostart: true,
   });
 
   let { createAndJoinRoom, getRoomEvents } = mockMatrixUtils;
@@ -66,7 +67,7 @@ module('Integration | commands | create-listing-pr-request', function (hooks) {
   });
 
   test('sends listingName in pr-listing-create trigger input', async function (assert) {
-    let roomId = createAndJoinRoom({
+    createAndJoinRoom({
       sender: '@testuser:localhost',
       name: 'room-test',
     });
@@ -77,25 +78,40 @@ module('Integration | commands | create-listing-pr-request', function (hooks) {
       commandService.commandContext,
     );
     await command.execute({
-      roomId,
       realm: testRealmURL,
       listingId: `${testRealmURL}Listing/test-listing`,
     });
 
-    let event = getRoomEvents(roomId).pop()!;
+    let eventsByRoom = mockMatrixUtils
+      .getRoomIds()
+      .flatMap((roomId) =>
+        getRoomEvents(roomId).map((event) => ({ roomId, event })),
+      )
+      .filter(
+        ({ event }) =>
+          isBotTriggerEvent(event) &&
+          event.content.type === 'pr-listing-create',
+      );
+    assert.strictEqual(
+      eventsByRoom.length,
+      1,
+      'exactly one pr-listing-create event is emitted',
+    );
+
+    let { roomId: eventRoomId, event } = eventsByRoom[0]!;
     assert.ok(isBotTriggerEvent(event));
     assert.strictEqual(event.content.type, 'pr-listing-create');
     assert.strictEqual(event.content.realm, testRealmURL);
     assert.strictEqual(event.content.userId, '@testuser:localhost');
     assert.deepEqual(event.content.input, {
-      roomId,
+      roomId: eventRoomId,
       realm: testRealmURL,
       listingId: `${testRealmURL}Listing/test-listing`,
       listingName: 'Some Listing',
     });
 
     let membershipEvent = mockMatrixUtils.getRoomState(
-      roomId,
+      eventRoomId,
       'm.room.member',
       matrixService.submissionBotUserId,
     );
@@ -106,15 +122,14 @@ module('Integration | commands | create-listing-pr-request', function (hooks) {
     );
   });
 
-  test('creates a room without opening it when roomId is omitted', async function (assert) {
-    let currentRoomId = createAndJoinRoom({
+  test('emits pr-listing-create event without opening current room when roomId is omitted', async function (assert) {
+    createAndJoinRoom({
       sender: '@testuser:localhost',
       name: 'current-room',
     });
-    let beforeRoomIds = new Set(mockMatrixUtils.getRoomIds());
     let commandService = getService('command-service');
     let matrixService = getService('matrix-service') as MatrixService;
-    matrixService.currentRoomId = currentRoomId;
+    let previousCurrentRoomId = matrixService.currentRoomId;
 
     let command = new CreateListingPRRequestCommand(
       commandService.commandContext,
@@ -124,36 +139,47 @@ module('Integration | commands | create-listing-pr-request', function (hooks) {
       listingId: `${testRealmURL}Listing/test-listing`,
     });
 
-    let createdRoomIds = mockMatrixUtils
+    let eventsByRoom = mockMatrixUtils
       .getRoomIds()
-      .filter((roomId) => !beforeRoomIds.has(roomId));
+      .flatMap((roomId) =>
+        getRoomEvents(roomId).map((event) => ({ roomId, event })),
+      )
+      .filter(
+        ({ event }) =>
+          isBotTriggerEvent(event) &&
+          event.content.type === 'pr-listing-create',
+      );
     assert.strictEqual(
-      createdRoomIds.length,
+      eventsByRoom.length,
       1,
-      'exactly one room is created for the request',
+      'exactly one pr-listing-create event is emitted',
     );
 
-    let createdRoomId = createdRoomIds[0]!;
+    let { roomId: eventRoomId, event } = eventsByRoom[0]!;
     assert.strictEqual(
       matrixService.currentRoomId,
-      currentRoomId,
+      previousCurrentRoomId,
       'current room does not switch to the created room',
     );
+    assert.notStrictEqual(
+      matrixService.currentRoomId,
+      eventRoomId,
+      'created request room is not opened in the current mode',
+    );
 
-    let event = getRoomEvents(createdRoomId).pop()!;
     assert.ok(isBotTriggerEvent(event));
     assert.strictEqual(event.content.type, 'pr-listing-create');
     assert.strictEqual(event.content.realm, testRealmURL);
     assert.strictEqual(event.content.userId, '@testuser:localhost');
     assert.deepEqual(event.content.input, {
-      roomId: createdRoomId,
+      roomId: eventRoomId,
       realm: testRealmURL,
       listingId: `${testRealmURL}Listing/test-listing`,
       listingName: 'Some Listing',
     });
 
     let membershipEvent = mockMatrixUtils.getRoomState(
-      createdRoomId,
+      eventRoomId,
       'm.room.member',
       matrixService.submissionBotUserId,
     );
