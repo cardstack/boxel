@@ -49,6 +49,7 @@ import type {
 import { detectStackItemTypeForTarget } from '../../lib/stack-item';
 
 import { removeFileExtension } from '../card-search/utils';
+import { knownFileMetaUrls } from '../prerendered-card-search';
 
 import Overlays from './overlays';
 
@@ -365,18 +366,10 @@ export default class OperatorModeOverlays extends Overlays {
   private isFileMetaTarget(
     renderedCard: StackItemRenderedCardForOverlayActions,
   ): boolean {
-    return (
-      this.getTypeForCardTarget(
-        renderedCard.cardDefOrId,
-        renderedCard.element,
-      ) === 'file'
-    );
+    return this.getTypeForCardTarget(renderedCard.cardDefOrId) === 'file';
   }
 
-  private getTypeForCardTarget(
-    cardDefOrId: CardDefOrId,
-    element?: HTMLElement,
-  ): 'card' | 'file' {
+  private getTypeForCardTarget(cardDefOrId: CardDefOrId): 'card' | 'file' {
     let type = detectStackItemTypeForTarget(
       cardDefOrId,
       this.getCardId(cardDefOrId),
@@ -385,9 +378,10 @@ export default class OperatorModeOverlays extends Overlays {
     if (type === 'file') {
       return type;
     }
-    // Fallback: check if the rendered element has a file type marker
-    // (set by prerendered search for FileDef results)
-    if (element?.getAttribute('data-card-type') === 'file') {
+    // Fallback: check the internal registry of file-meta URLs populated by
+    // prerendered search. Prerendered FileDef results are HTML-only and never
+    // loaded into the store, so the store-based detection above misses them.
+    if (typeof cardDefOrId === 'string' && knownFileMetaUrls.has(cardDefOrId)) {
       return 'file';
     }
     return type;
@@ -402,12 +396,8 @@ export default class OperatorModeOverlays extends Overlays {
     fieldType?: 'linksTo' | 'contains' | 'containsMany' | 'linksToMany';
     fieldName?: string;
   } {
-    let cardId = this.getCardId(cardDefOrId);
-    let renderedCard = this.renderedCardsForOverlayActionsWithEvents.find(
-      (rc) => this.getCardId(rc.cardDefOrId) === cardId,
-    );
     return {
-      type: this.getTypeForCardTarget(cardDefOrId, renderedCard?.element),
+      type: this.getTypeForCardTarget(cardDefOrId),
       fieldType,
       fieldName,
     };
