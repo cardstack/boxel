@@ -360,19 +360,19 @@ export default class SearchContent extends Component<Signature> {
 
     // Apply type filter when baseFilter specifies a type (modal/chooseCard mode)
     const typeRefs = this.filterTypeRef;
-    const positiveRefs = typeRefs
-      ?.filter((r) => !r.negated)
-      .map((r) => r.ref);
+    const positiveRefs = typeRefs?.filter((r) => !r.negated).map((r) => r.ref);
     const negatedRefs = typeRefs?.filter((r) => r.negated).map((r) => r.ref);
-    const typeFiltered = positiveRefs?.length
-      ? realmFiltered.filter((c) =>
-          positiveRefs.some((ref) => cardMatchesTypeRef(c, ref)),
-        )
-      : negatedRefs?.length
-        ? realmFiltered.filter(
-            (c) => !negatedRefs.some((ref) => cardMatchesTypeRef(c, ref)),
-          )
-        : realmFiltered;
+    let typeFiltered = realmFiltered;
+    if (positiveRefs?.length) {
+      typeFiltered = typeFiltered.filter((c) =>
+        positiveRefs.some((ref) => cardMatchesTypeRef(c, ref)),
+      );
+    }
+    if (negatedRefs?.length) {
+      typeFiltered = typeFiltered.filter(
+        (c) => !negatedRefs.some((ref) => cardMatchesTypeRef(c, ref)),
+      );
+    }
 
     if (this.args.isCompact) {
       return typeFiltered;
