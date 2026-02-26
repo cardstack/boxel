@@ -8,13 +8,13 @@ source "${SCRIPT_DIR}/test-pg-config.sh"
 compute_seed_fingerprint() {
   (
     cd "$ROOT_DIR"
-    find packages/postgres/migrations -type f -print0 \
-      | sort -z \
-      | xargs -0 md5sum
-    md5sum \
+    # Use POSIX cksum + line-based sort for portability across GNU/BSD userlands.
+    find packages/postgres/migrations -type f -exec cksum {} + \
+      | LC_ALL=C sort
+    cksum \
       packages/realm-server/tests/scripts/create_seeded_db.sh \
       packages/realm-server/tests/scripts/test-pg-config.sh
-  ) | md5sum | awk '{ print $1 }'
+  ) | cksum | awk '{ print $1 "-" $2 }'
 }
 
 mkdir -p "$TEST_PG_CACHE_DIR"
