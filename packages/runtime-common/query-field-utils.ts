@@ -1,4 +1,4 @@
-import { codeRefWithAbsoluteURL } from './code-ref';
+import { codeRefWithAbsoluteURL, type CodeRef } from './code-ref';
 import type { FieldDefinition } from './definitions';
 import type {
   FileMetaResource,
@@ -8,7 +8,10 @@ import type {
 } from './resource-types';
 import {
   buildQueryParamValue,
+  isCardTypeFilter,
+  isEveryFilter,
   normalizeQueryForSignature,
+  type Filter,
   type Query,
   type QueryWithInterpolations,
 } from './query';
@@ -345,6 +348,26 @@ function injectOnIntoLeafFilters(
   if (!filter.on) {
     filter.on = targetRef;
   }
+}
+
+export function getTypeRefFromFilter(filter: Filter): CodeRef | undefined {
+  // EveryFilter with 'on' scoping (e.g. specRef in chooseCard)
+  if ('on' in filter && filter.on) {
+    return filter.on;
+  }
+  // Top-level CardTypeFilter { type: CodeRef } (e.g. linksTo)
+  if (isCardTypeFilter(filter)) {
+    return filter.type;
+  }
+  // EveryFilter containing a CardTypeFilter (e.g. linksToMany)
+  if (isEveryFilter(filter)) {
+    for (const sub of filter.every) {
+      if (isCardTypeFilter(sub)) {
+        return sub.type;
+      }
+    }
+  }
+  return undefined;
 }
 
 export function cloneRelationship(

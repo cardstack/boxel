@@ -19,15 +19,12 @@ import {
   type getCardCollection,
   GetCardCollectionContextName,
   GetCardContextName,
+  getTypeRefFromFilter,
   identifyCard,
   isBaseDef,
   isResolvedCodeRef,
   specRef,
 } from '@cardstack/runtime-common';
-import {
-  isCardTypeFilter,
-  isEveryFilter,
-} from '@cardstack/runtime-common/query';
 
 import consumeContext from '@cardstack/host/helpers/consume-context';
 import { urlForRealmLookup } from '@cardstack/host/lib/utils';
@@ -165,23 +162,7 @@ export default class SearchContent extends Component<Signature> {
   private get filterTypeRef(): CodeRef | undefined {
     const filter = this.args.baseFilter;
     if (filter) {
-      // EveryFilter with 'on' scoping (e.g. specRef in chooseCard)
-      if ('on' in filter && filter.on) {
-        return filter.on;
-      }
-      // Top-level CardTypeFilter { type: CodeRef } (e.g. linksTo)
-      if (isCardTypeFilter(filter)) {
-        return filter.type;
-      }
-      // EveryFilter containing a CardTypeFilter (e.g. linksToMany)
-      if (isEveryFilter(filter)) {
-        for (const sub of filter.every) {
-          if (isCardTypeFilter(sub)) {
-            return sub.type;
-          }
-        }
-      }
-      return undefined;
+      return getTypeRefFromFilter(filter);
     }
     // Search-sheet mode: extract type from carddef: search key (searchForInstances)
     return getCodeRefFromSearchKey(this.args.searchKey);
