@@ -4,7 +4,7 @@ import { getTypeRefFromFilter } from '@cardstack/runtime-common';
 
 const typeRef = { module: 'https://example.com/card', name: 'MyCard' };
 
-module('getTypeRefFromFilter', function () {
+module('Unit | getTypeRefFromFilter', function () {
   test('returns CodeRef from top-level `on` (EveryFilter with scoping)', function (assert) {
     // This is the chooseCard/specRef case where on is set at the filter root
     let filter = { every: [], on: typeRef };
