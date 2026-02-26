@@ -35,6 +35,7 @@ export default class ProcessGithubEventCommand extends Command<
     await new SaveCardCommand(this.commandContext).execute({
       card,
       realm: submissionRealmUrl,
+      doNotWaitForPersist: true,
     });
   }
 }
