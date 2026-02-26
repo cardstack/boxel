@@ -65,7 +65,6 @@ export class CommandRunner {
       }
 
       if (eventContent.type === 'pr-listing-create') {
-        await this.createListingPRHandler.ensureCreateListingBranch(eventContent);
         let job = await enqueueRunCommandJob(
           {
             realmURL,
@@ -79,6 +78,21 @@ export class CommandRunner {
           userInitiatedPriority,
         );
         let result: RunCommandResponse = await job.done;
+        if (result.status !== 'ready') {
+          let errorMessage =
+            result.error && result.error.trim()
+              ? result.error
+              : `run-command returned status "${result.status}"`;
+          log.error('pr-listing-create run-command did not complete', {
+            runAs,
+            status: result.status,
+            error: result.error,
+            realmURL,
+            command,
+          });
+          throw new Error(errorMessage);
+        }
+        await this.createListingPRHandler.ensureCreateListingBranch(eventContent);
         await this.createListingPRHandler.addContentsToCommit(eventContent, result);
         await this.createListingPRHandler.openCreateListingPR(
           eventContent,
