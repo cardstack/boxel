@@ -1633,6 +1633,7 @@ module(basename(__filename), function () {
         ({ realm: base } = await createRealm({
           definitionLookup,
           withWorker: true,
+          prerenderer,
           dir: basePath,
           realmURL: baseRealm.url,
           virtualNetwork,
@@ -1646,6 +1647,7 @@ module(basename(__filename), function () {
         ({ realm: testRealm } = await createRealm({
           definitionLookup,
           withWorker: true,
+          prerenderer,
           dir: join(dir.name, 'demo'),
           virtualNetwork,
           realmURL: 'http://127.0.0.1:4446/demo/',

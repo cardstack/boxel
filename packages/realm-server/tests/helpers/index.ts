@@ -373,7 +373,7 @@ async function startTestPrerenderServer(): Promise<string> {
   return testPrerenderURL;
 }
 
-async function stopTestPrerenderServer() {
+export async function stopTestPrerenderServer() {
   if (prerenderServer && prerenderServer.listening) {
     if (hasStopPrerenderer(prerenderServer)) {
       await prerenderServer.__stopPrerenderer?.();
@@ -443,7 +443,6 @@ export function setupDB(
     if (dbAdapter) {
       trackedDbAdapters.delete(dbAdapter);
     }
-    await stopTestPrerenderServer();
   };
 
   // we need to pair before/after and beforeEach/afterEach. within this setup
@@ -502,6 +501,7 @@ export async function createRealm({
   publisher,
   dbAdapter,
   withWorker,
+  prerenderer: providedPrerenderer,
   enableFileWatcher = false,
   cardSizeLimitBytes,
   fileSizeLimitBytes,
@@ -517,6 +517,7 @@ export async function createRealm({
   runner?: QueueRunner;
   dbAdapter: PgAdapter;
   deferStartUp?: true;
+  prerenderer?: Prerenderer;
   enableFileWatcher?: boolean;
   cardSizeLimitBytes?: number;
   fileSizeLimitBytes?: number;
@@ -542,11 +543,11 @@ export async function createRealm({
 
   let adapter = new NodeAdapter(dir, enableFileWatcher);
   let worker: Worker | undefined;
-  let prerenderer = await getTestPrerenderer();
   if (withWorker) {
     if (!runner) {
       throw new Error(`must provider a QueueRunner when using withWorker`);
     }
+    let prerenderer = providedPrerenderer ?? (await getTestPrerenderer());
     worker = new Worker({
       indexWriter: new IndexWriter(dbAdapter),
       queue: runner,
@@ -612,6 +613,7 @@ export async function runTestRealmServer({
     boxelSpace: 'localhost',
     boxelSite: 'localhost',
   },
+  prerenderer: providedPrerenderer,
 }: {
   testRealmDir: string;
   realmsRootPath: string;
@@ -631,8 +633,9 @@ export async function runTestRealmServer({
     boxelSpace?: string;
     boxelSite?: string;
   };
+  prerenderer?: Prerenderer;
 }) {
-  let prerenderer = await getTestPrerenderer();
+  let prerenderer = providedPrerenderer ?? (await getTestPrerenderer());
   let definitionLookup = new CachingDefinitionLookup(
     dbAdapter,
     prerenderer,
@@ -723,6 +726,7 @@ export async function runTestRealmServerWithRealms({
     boxelSpace: 'localhost',
     boxelSite: 'localhost',
   },
+  prerenderer: providedPrerenderer,
 }: {
   realmsRootPath: string;
   realms: {
@@ -741,10 +745,11 @@ export async function runTestRealmServerWithRealms({
     boxelSpace?: string;
     boxelSite?: string;
   };
+  prerenderer?: Prerenderer;
 }) {
   ensureDirSync(realmsRootPath);
 
-  let prerenderer = await getTestPrerenderer();
+  let prerenderer = providedPrerenderer ?? (await getTestPrerenderer());
   let definitionLookup = new CachingDefinitionLookup(
     dbAdapter,
     prerenderer,
@@ -839,6 +844,7 @@ export function setupPermissionedRealms(
     mode = 'beforeEach',
     realms: realmsArg,
     onRealmSetup,
+    prerenderer,
   }: {
     mode?: 'beforeEach' | 'before';
     realms: {
@@ -846,6 +852,7 @@ export function setupPermissionedRealms(
       permissions: RealmPermissions;
       fileSystem?: Record<string, string | LooseSingleCardDocument>;
     }[];
+    prerenderer?: Prerenderer;
     onRealmSetup?: (args: {
       dbAdapter: PgAdapter;
       realms: {
@@ -891,6 +898,7 @@ export function setupPermissionedRealms(
           dbAdapter,
           publisher,
           runner,
+          prerenderer,
         });
         realms.push({
           realm,
@@ -1212,6 +1220,7 @@ export function setupPermissionedRealm(
     onRealmSetup,
     subscribeToRealmEvents = false,
     mode = 'beforeEach',
+    prerenderer,
     published = false,
     cardSizeLimitBytes,
     fileSizeLimitBytes,
@@ -1230,6 +1239,7 @@ export function setupPermissionedRealm(
     }) => void;
     subscribeToRealmEvents?: boolean;
     mode?: 'beforeEach' | 'before';
+    prerenderer?: Prerenderer;
     published?: boolean;
     cardSizeLimitBytes?: number;
     fileSizeLimitBytes?: number;
@@ -1299,6 +1309,7 @@ export function setupPermissionedRealm(
         enableFileWatcher: subscribeToRealmEvents,
         cardSizeLimitBytes,
         fileSizeLimitBytes,
+        prerenderer,
       });
 
       let request = supertest(testRealmServer.testRealmHttpServer);
