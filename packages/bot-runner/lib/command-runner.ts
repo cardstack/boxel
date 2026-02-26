@@ -65,19 +65,12 @@ export class CommandRunner {
       }
 
       if (eventContent.type === 'pr-listing-create') {
-        let job = await enqueueRunCommandJob(
-          {
-            realmURL,
-            realmUsername: runAs,
-            runAs,
-            command,
-            commandInput,
-          },
-          this.queuePublisher,
-          this.dbAdapter,
-          userInitiatedPriority,
-        );
-        let result: RunCommandResponse = await job.done;
+        let result = await this.enqueueRunCommand({
+          runAs,
+          realmURL,
+          command,
+          commandInput,
+        });
         if (result.status !== 'ready') {
           let errorMessage =
             result.error && result.error.trim()
@@ -102,19 +95,12 @@ export class CommandRunner {
         return result;
       }
 
-      let job = await enqueueRunCommandJob(
-        {
-          realmURL,
-          realmUsername: runAs,
-          runAs,
-          command,
-          commandInput,
-        },
-        this.queuePublisher,
-        this.dbAdapter,
-        userInitiatedPriority,
-      );
-      return await job.done;
+      return await this.enqueueRunCommand({
+        runAs,
+        realmURL,
+        command,
+        commandInput,
+      });
     } catch (error) {
       log.error('error in maybeEnqueueCommand', {
         runAs,
@@ -123,6 +109,32 @@ export class CommandRunner {
       });
       throw error;
     }
+  }
+
+  private async enqueueRunCommand({
+    runAs,
+    realmURL,
+    command,
+    commandInput,
+  }: {
+    runAs: string;
+    realmURL: string;
+    command: string;
+    commandInput: Record<string, any> | null;
+  }): Promise<RunCommandResponse> {
+    let job = await enqueueRunCommandJob(
+      {
+        realmURL,
+        realmUsername: runAs,
+        runAs,
+        command,
+        commandInput,
+      },
+      this.queuePublisher,
+      this.dbAdapter,
+      userInitiatedPriority,
+    );
+    return await job.done;
   }
 
   private async getCommandsForRegistration(

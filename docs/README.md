@@ -22,4 +22,4 @@ The following are important concepts:
 ## Operations
 
 - From-scratch indexing timeout: set `FROM_SCRATCH_JOB_TIMEOUT_SEC` (seconds) to control the from-scratch indexing job timeout and the queue worker cap; default is 2400.
-- [Submissions Flow](submissions.md): Short command-level flow for Matrix event -> PR creation -> submission card creation.
+- [Submissions Flow](catalog-submission-flow.md): Short command-level flow for Matrix event -> PR creation -> submission card creation.

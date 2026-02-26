@@ -262,8 +262,8 @@ module('timeline handler', () => {
           attributes: {
             allFileContents: [
               {
-                path: 'experiments/MyListing/listing.json',
-                content: '{\"data\":{\"type\":\"card\"}}',
+                filename: 'experiments/MyListing/listing.json',
+                contents: '{\"data\":{\"type\":\"card\"}}',
               },
               {
                 filename: 'experiments/MyListing/readme.md',
@@ -411,8 +411,8 @@ module('timeline handler', () => {
           attributes: {
             allFileContents: [
               {
-                path: 'catalog/Listing/listing.json',
-                content: '{}',
+                filename: 'catalog/Listing/listing.json',
+                contents: '{}',
               },
             ],
           },

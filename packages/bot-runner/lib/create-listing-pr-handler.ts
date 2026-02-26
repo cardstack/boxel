@@ -52,8 +52,7 @@ function getCreateListingPRContext(
   }
 
   if (!title) {
-    log.error('No title for the listing');
-    return null;
+    throw new Error('pr-listing-create trigger must include a valid title');
   }
 
   let repo = DEFAULT_REPO;

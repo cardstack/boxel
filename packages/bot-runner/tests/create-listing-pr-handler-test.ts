@@ -36,8 +36,8 @@ module('create-listing-pr handler', () => {
         data: {
           attributes: {
             allFileContents: [
-              { path: 'catalog/Listing/listing.json', content: '{}' },
-              { path: 'catalog/Listing/readme.md', content: '# readme' },
+              { filename: 'catalog/Listing/listing.json', contents: '{}' },
+              { filename: 'catalog/Listing/readme.md', contents: '# readme' },
             ],
           },
         },
