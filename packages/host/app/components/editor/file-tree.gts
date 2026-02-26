@@ -16,6 +16,7 @@ interface Signature {
     openDirs?: LocalPath[];
     onFileSelected?: (entryPath: LocalPath) => Promise<void>;
     onDirectorySelected?: (entryPath: LocalPath) => void;
+    onDeleteFile?: (entryPath: LocalPath) => void;
     scrollPositionKey?: LocalPath;
   };
 }
@@ -30,6 +31,7 @@ export default class FileTree extends Component<Signature> {
         @openDirs={{@openDirs}}
         @onFileSelected={{@onFileSelected}}
         @onDirectorySelected={{@onDirectorySelected}}
+        @onDeleteFile={{@onDeleteFile}}
         @scrollPositionKey={{@scrollPositionKey}}
       />
       {{#if this.showMask}}
