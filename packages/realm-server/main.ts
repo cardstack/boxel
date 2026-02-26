@@ -17,13 +17,9 @@ import * as Sentry from '@sentry/node';
 import { PgAdapter, PgQueuePublisher } from '@cardstack/postgres';
 import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 
-import * as ContentTagGlobal from 'content-tag';
-
 import 'decorator-transforms/globals';
 import { createRemotePrerenderer } from './prerender/remote-prerenderer';
 import { buildCreatePrerenderAuth } from './prerender/auth';
-
-(globalThis as any).ContentTagGlobal = ContentTagGlobal;
 
 let log = logger('main');
 if (process.env.NODE_ENV === 'test') {

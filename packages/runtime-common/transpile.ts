@@ -18,6 +18,8 @@ import decoratorTransforms from 'decorator-transforms';
 //@ts-ignore no upstream types
 import * as compiler from 'ember-source/ember-template-compiler/index.js';
 
+import * as ContentTag from 'content-tag';
+
 const scopedCSSTransform = generateScopedCSSPlugin({
   noGlobal: true,
 }) as ExtendedPluginBuilder;
@@ -32,7 +34,7 @@ export async function transpileJS(
     return '';
   }
 
-  const processor = new ContentTagGlobal.Preprocessor();
+  const processor = new ContentTag.Preprocessor();
   content = processor.process(content, {
     filename: debugFilename,
     inline_source_map: true,
