@@ -11,8 +11,6 @@ const log = logger('bot-runner:create-listing-pr');
 
 const DEFAULT_REPO = 'cardstack/boxel-catalog';
 const DEFAULT_BASE_BRANCH = 'main';
-const USER_LABEL_COLOR = '1d76db';
-const ROOM_LABEL_COLOR = '0e8a16';
 
 export type BotTriggerEventContent = BotTriggerContent;
 
@@ -133,8 +131,7 @@ export class CreateListingPRHandler {
     if (!context) {
       return;
     }
-    let { owner, repoName, repo, head, title, listingDisplayName, roomId } =
-      context;
+    let { owner, repoName, repo, head, title, listingDisplayName } = context;
 
     try {
       let body = await this.getSubmissionSummary(
@@ -150,13 +147,7 @@ export class CreateListingPRHandler {
         base: DEFAULT_BASE_BRANCH,
         body: body ?? undefined,
       };
-      let prOptions = {
-        labels: [
-          { name: runAs, color: USER_LABEL_COLOR },
-          { name: `room-id:${roomId}`, color: ROOM_LABEL_COLOR },
-        ],
-      };
-      let result = await this.githubClient.openPullRequest(prParams, prOptions);
+      let result = await this.githubClient.openPullRequest(prParams);
 
       log.info('opened PR from pr-listing-create trigger', {
         runAs,

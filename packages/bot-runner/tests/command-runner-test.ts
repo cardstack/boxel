@@ -126,7 +126,7 @@ module('command runner', () => {
 
     let createdBranches: unknown[] = [];
     let branchWrites: unknown[] = [];
-    let openedPRs: { params: unknown; options: unknown }[] = [];
+    let openedPRs: { params: unknown }[] = [];
     let githubClient: GitHubClient = {
       createBranch: async (params) => {
         createdBranches.push(params);
@@ -137,8 +137,8 @@ module('command runner', () => {
         branchWrites.push(params);
         return { commitSha: 'def456' };
       },
-      openPullRequest: async (params, options) => {
-        openedPRs.push({ params, options });
+      openPullRequest: async (params) => {
+        openedPRs.push({ params });
         return { number: 1, html_url: 'https://example/pr/1' };
       },
     };
@@ -217,7 +217,7 @@ module('command runner', () => {
 
     let createdBranches: unknown[] = [];
     let branchWrites: unknown[] = [];
-    let openedPRs: { params: unknown; options: unknown }[] = [];
+    let openedPRs: { params: unknown }[] = [];
     let githubClient: GitHubClient = {
       createBranch: async (params) => {
         createdBranches.push(params);
@@ -228,8 +228,8 @@ module('command runner', () => {
         branchWrites.push(params);
         return { commitSha: 'def456' };
       },
-      openPullRequest: async (params, options) => {
-        openedPRs.push({ params, options });
+      openPullRequest: async (params) => {
+        openedPRs.push({ params });
         return { number: 1, html_url: 'https://example/pr/1' };
       },
     };

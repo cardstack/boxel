@@ -6,11 +6,11 @@ import {
 } from '../lib/create-listing-pr-handler';
 
 module('create-listing-pr handler', () => {
-  test('opens PR with expected params, labels, and summary body', async (assert) => {
-    let opened: { params: unknown; options: unknown }[] = [];
+  test('opens PR with expected params and summary body', async (assert) => {
+    let opened: { params: unknown }[] = [];
     let githubClient: GitHubClient = {
-      openPullRequest: async (params, options) => {
-        opened.push({ params, options });
+      openPullRequest: async (params) => {
+        opened.push({ params });
         return { number: 1, html_url: 'https://example.com/pr/1' };
       },
       createBranch: async () => ({ ref: 'refs/heads/test', sha: 'abc123' }),
@@ -47,7 +47,6 @@ module('create-listing-pr handler', () => {
     assert.strictEqual(opened.length, 1, 'opens exactly one PR');
     let openedCall = opened[0] as {
       params: Record<string, unknown>;
-      options: Record<string, unknown>;
     };
 
     assert.propContains(
@@ -73,13 +72,5 @@ module('create-listing-pr handler', () => {
       'summary body includes file count',
     );
 
-    assert.deepEqual(
-      openedCall.options.labels,
-      [
-        { name: '@alice:localhost', color: '1d76db' },
-        { name: 'room-id:!abc123:localhost', color: '0e8a16' },
-      ],
-      'passes expected PR labels',
-    );
   });
 });
