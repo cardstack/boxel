@@ -65,7 +65,7 @@ module('create-listing-pr handler', () => {
       'head branch includes listing slug',
     );
     assert.true(
-      openedCall.params.body?.toString().includes('## Submission Summary'),
+      openedCall.params.body?.toString().includes('## Summary'),
       'includes summary markdown body',
     );
     assert.true(

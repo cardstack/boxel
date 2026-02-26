@@ -51,7 +51,7 @@ export default class CreateListingPRRequestCommand extends HostBaseCommand<
       let createRoomResult = await useAiAssistantCommand.execute({
         roomId: 'new',
         roomName: `PR: ${listingName ?? listingId ?? 'Listing'}`,
-        openRoom: true,
+        openRoom: false,
       });
       roomId = createRoomResult.roomId;
     }

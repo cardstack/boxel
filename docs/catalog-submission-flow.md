@@ -84,7 +84,7 @@ For `pr-listing-create` this means:
 
 Headless command execution details are documented here:
 
-- [commands-in-headless-chrome.md](/Users/tintinthong/github/boxel/docs/commands-in-headless-chrome.md)
+- [commands-in-headless-chrome.md](./commands-in-headless-chrome.md)
 
 ## 6) Open GitHub PR from Bot Runner
 

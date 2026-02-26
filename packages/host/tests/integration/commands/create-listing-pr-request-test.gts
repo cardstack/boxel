@@ -7,6 +7,7 @@ import { module, test } from 'qunit';
 import { isBotTriggerEvent } from '@cardstack/runtime-common';
 
 import CreateListingPRRequestCommand from '@cardstack/host/commands/bot-requests/create-listing-pr-request';
+import type MatrixService from '@cardstack/host/services/matrix-service';
 import RealmService from '@cardstack/host/services/realm';
 
 import {
@@ -87,6 +88,53 @@ module('Integration | commands | create-listing-pr-request', function (hooks) {
     assert.strictEqual(event.content.userId, '@testuser:localhost');
     assert.deepEqual(event.content.input, {
       roomId,
+      realm: testRealmURL,
+      listingId: `${testRealmURL}Listing/test-listing`,
+      listingName: 'Some Listing',
+    });
+  });
+
+  test('creates a room without opening it when roomId is omitted', async function (assert) {
+    let currentRoomId = createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'current-room',
+    });
+    let beforeRoomIds = new Set(mockMatrixUtils.getRoomIds());
+    let commandService = getService('command-service');
+    let matrixService = getService('matrix-service') as MatrixService;
+    matrixService.currentRoomId = currentRoomId;
+
+    let command = new CreateListingPRRequestCommand(
+      commandService.commandContext,
+    );
+    await command.execute({
+      realm: testRealmURL,
+      listingId: `${testRealmURL}Listing/test-listing`,
+    });
+
+    let createdRoomIds = mockMatrixUtils
+      .getRoomIds()
+      .filter((roomId) => !beforeRoomIds.has(roomId));
+    assert.strictEqual(
+      createdRoomIds.length,
+      1,
+      'exactly one room is created for the request',
+    );
+
+    let createdRoomId = createdRoomIds[0]!;
+    assert.strictEqual(
+      matrixService.currentRoomId,
+      currentRoomId,
+      'current room does not switch to the created room',
+    );
+
+    let event = getRoomEvents(createdRoomId).pop()!;
+    assert.ok(isBotTriggerEvent(event));
+    assert.strictEqual(event.content.type, 'pr-listing-create');
+    assert.strictEqual(event.content.realm, testRealmURL);
+    assert.strictEqual(event.content.userId, '@testuser:localhost');
+    assert.deepEqual(event.content.input, {
+      roomId: createdRoomId,
       realm: testRealmURL,
       listingId: `${testRealmURL}Listing/test-listing`,
       listingName: 'Some Listing',
