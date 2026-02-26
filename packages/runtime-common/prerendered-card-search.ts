@@ -8,6 +8,7 @@ export interface PrerenderedCardData {
   realmUrl: string;
   html: string;
   isError: boolean;
+  isFileMeta?: boolean;
 }
 
 export interface PrerenderedCardLike {

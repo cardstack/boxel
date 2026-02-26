@@ -501,6 +501,11 @@ module(`Integration | prerendered-card-search`, function (hooks) {
     assert
       .dom('[data-test-meta-page-total="1"]')
       .exists('meta.page.total is correct for file-meta prerendered search');
+    assert
+      .dom('[data-card-type="file"]')
+      .exists(
+        'prerendered FileDef element has data-card-type="file" attribute',
+      );
   });
 
   test('applies cardComponentModifier from card context to prerendered results', async function (this: RenderingTestContext, assert) {

@@ -44,6 +44,9 @@ export class PrerenderedCard implements PrerenderedCardLike {
       if (data.isError) {
         extraAttributes['data-is-error'] = 'true';
       }
+      if (data.isFileMeta) {
+        extraAttributes['data-card-type'] = 'file';
+      }
       this.component = wrapWithModifier(
         htmlComponent(data.html, extraAttributes),
         cardComponentModifier,

@@ -308,6 +308,9 @@ export function combinePrerenderedSearchResults(
   if (docs.length === 1 && docs[0]?.meta?.realmInfo) {
     combined.meta.realmInfo = docs[0].meta.realmInfo;
   }
+  if (docs.some((doc) => doc.meta?.isFileMeta)) {
+    combined.meta.isFileMeta = true;
+  }
 
   return combined;
 }

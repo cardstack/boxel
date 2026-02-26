@@ -365,15 +365,32 @@ export default class OperatorModeOverlays extends Overlays {
   private isFileMetaTarget(
     renderedCard: StackItemRenderedCardForOverlayActions,
   ): boolean {
-    return this.getTypeForCardTarget(renderedCard.cardDefOrId) === 'file';
+    return (
+      this.getTypeForCardTarget(
+        renderedCard.cardDefOrId,
+        renderedCard.element,
+      ) === 'file'
+    );
   }
 
-  private getTypeForCardTarget(cardDefOrId: CardDefOrId): 'card' | 'file' {
-    return detectStackItemTypeForTarget(
+  private getTypeForCardTarget(
+    cardDefOrId: CardDefOrId,
+    element?: HTMLElement,
+  ): 'card' | 'file' {
+    let type = detectStackItemTypeForTarget(
       cardDefOrId,
       this.getCardId(cardDefOrId),
       this.store,
     );
+    if (type === 'file') {
+      return type;
+    }
+    // Fallback: check if the rendered element has a file type marker
+    // (set by prerendered search for FileDef results)
+    if (element?.getAttribute('data-card-type') === 'file') {
+      return 'file';
+    }
+    return type;
   }
 
   protected override buildViewCardOpts(
@@ -385,8 +402,12 @@ export default class OperatorModeOverlays extends Overlays {
     fieldType?: 'linksTo' | 'contains' | 'containsMany' | 'linksToMany';
     fieldName?: string;
   } {
+    let cardId = this.getCardId(cardDefOrId);
+    let renderedCard = this.renderedCardsForOverlayActionsWithEvents.find(
+      (rc) => this.getCardId(rc.cardDefOrId) === cardId,
+    );
     return {
-      type: this.getTypeForCardTarget(cardDefOrId),
+      type: this.getTypeForCardTarget(cardDefOrId, renderedCard?.element),
       fieldType,
       fieldName,
     };
