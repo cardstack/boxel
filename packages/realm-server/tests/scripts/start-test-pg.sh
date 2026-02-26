@@ -11,16 +11,46 @@ fi
 
 docker rm -f "$TEST_PG_CONTAINER" >/dev/null 2>&1 || true
 
-cid=$(docker run -d \
-  --name "$TEST_PG_CONTAINER" \
-  -p "${TEST_PG_PORT}:5432" \
-  --tmpfs /var/lib/postgresql/data:rw \
-  -e POSTGRES_HOST_AUTH_METHOD=trust \
-  -v "${TEST_PG_SEED_TAR}:/seed/pgdata.tar:ro" \
-  -v "${SCRIPT_DIR}/boot_preseeded.sh:/usr/local/bin/pg-seeded-tmpfs-entrypoint.sh:ro" \
-  --entrypoint /bin/sh \
-  postgres:16.3-alpine \
-  -c /usr/local/bin/pg-seeded-tmpfs-entrypoint.sh)
+start_container() {
+  docker run -d \
+    --name "$TEST_PG_CONTAINER" \
+    -p "${TEST_PG_PORT}:5432" \
+    --tmpfs /var/lib/postgresql/data:rw \
+    -e POSTGRES_HOST_AUTH_METHOD=trust \
+    -v "${TEST_PG_SEED_TAR}:/seed/pgdata.tar:ro" \
+    -v "${SCRIPT_DIR}/boot_preseeded.sh:/usr/local/bin/pg-seeded-tmpfs-entrypoint.sh:ro" \
+    --entrypoint /bin/sh \
+    postgres:16.3-alpine \
+    -c /usr/local/bin/pg-seeded-tmpfs-entrypoint.sh
+}
+
+cid=""
+max_attempts=5
+attempt=1
+while [ "$attempt" -le "$max_attempts" ]; do
+  if cid="$(start_container 2>&1)"; then
+    break
+  fi
+
+  if printf '%s' "$cid" | grep -qi 'address already in use'; then
+    if [ "$attempt" -lt "$max_attempts" ]; then
+      echo "Port ${TEST_PG_PORT} still in use, retrying container start (${attempt}/${max_attempts})..." >&2
+      docker rm -f "$TEST_PG_CONTAINER" >/dev/null 2>&1 || true
+      sleep 1
+      attempt=$((attempt + 1))
+      continue
+    fi
+  fi
+
+  echo "$cid" >&2
+  exit 1
+done
+
+if [ -z "$cid" ]; then
+  echo "Failed to start $TEST_PG_CONTAINER after ${max_attempts} attempts" >&2
+  exit 1
+fi
+
 "${SCRIPT_DIR}/wait-for-container-pg.sh" "$TEST_PG_CONTAINER" "$cid"
 
 # Sanity check the migrated DB exists in the seeded cluster.
