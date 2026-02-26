@@ -83,6 +83,7 @@ import {
   runtimeNonQueryDependencyContext,
   runtimeQueryDependencyContext,
   type RuntimeDependencyTrackingContext,
+  resolveCardReference,
 } from '@cardstack/runtime-common';
 import {
   captureQueryFieldSeedData,
@@ -1230,7 +1231,7 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
     if (reference == null || reference === '') {
       return null;
     }
-    let href = new URL(reference, relativeTo).href;
+    let href = resolveCardReference(reference, relativeTo);
     let cachedInstance = isFileDef(this.card)
       ? store.getFileMeta(href)
       : store.getCard(href);
@@ -1757,7 +1758,7 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
         if (reference == null) {
           return null;
         }
-        let normalizedReference = new URL(reference, relativeTo).href;
+        let normalizedReference = resolveCardReference(reference, relativeTo);
         let cachedInstance = isFileDef(this.card)
           ? store.getFileMeta(normalizedReference)
           : store.getCard(normalizedReference);
@@ -2138,7 +2139,7 @@ export class BaseDef {
         if (!value[relativeTo]) {
           return maybeRelativeURL;
         }
-        return new URL(maybeRelativeURL, value[relativeTo]).href;
+        return resolveCardReference(maybeRelativeURL, value[relativeTo]);
       }
       return Object.fromEntries(
         Object.entries(
@@ -2161,7 +2162,7 @@ export class BaseDef {
           if (isNotLoadedValue(rawValue)) {
             let normalizedId = rawValue.reference;
             if (value[relativeTo]) {
-              normalizedId = new URL(normalizedId, value[relativeTo]).href;
+              normalizedId = resolveCardReference(normalizedId, value[relativeTo]);
             }
             return [fieldName, { id: makeAbsoluteURL(rawValue.reference) }];
           }
@@ -2788,7 +2789,7 @@ function lazilyLoadLink(
     inflightLoads = new Map();
     inflightLinkLoads.set(instance, inflightLoads);
   }
-  let reference = new URL(link, instance.id ?? instance[relativeTo]).href;
+  let reference = resolveCardReference(link, instance.id ?? instance[relativeTo]);
   let key = `${field.name}/${reference}`;
   let promise = inflightLoads.get(key);
   let store = getStore(instance);
@@ -2857,10 +2858,10 @@ function lazilyLoadLink(
           if (!isNotLoadedValue(item)) {
             continue;
           }
-          let notLoadedRef = new URL(
+          let notLoadedRef = resolveCardReference(
             item.reference,
             instance.id ?? instance[relativeTo],
-          ).href;
+          );
           if (reference === notLoadedRef) {
             indices.push(index);
           }

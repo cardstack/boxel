@@ -8,6 +8,7 @@ import {
   unixTime,
   maxLinkDepth,
   maybeURL,
+  resolveCardReference,
   IndexQueryEngine,
   codeRefWithAbsoluteURL,
   logger,
@@ -89,7 +90,7 @@ function absolutizeInstanceURL(
     setURL(url);
     return;
   }
-  setURL(new URL(url, resourceId).href);
+  setURL(resolveCardReference(url, resourceId));
 }
 
 export class RealmIndexQueryEngine {
@@ -750,8 +751,10 @@ export class RealmIndexQueryEngine {
         }
         processedRelationships.add(key);
         let linkURL = new URL(
-          relationship.links.self,
-          resource.id ? new URL(resource.id) : realmURL,
+          resolveCardReference(
+            relationship.links.self,
+            resource.id ? new URL(resource.id) : realmURL,
+          ),
         );
         let linkResource: CardResource<Saved> | FileMetaResource | undefined;
         if (realmPath.inRealm(linkURL)) {
@@ -847,7 +850,18 @@ export class RealmIndexQueryEngine {
             }
           }
         }
-        let relationshipId = maybeURL(relationship.links.self, resource.id);
+        let resolvedSelf: string;
+        try {
+          resolvedSelf = resolveCardReference(
+            relationship.links.self!,
+            resource.id,
+          );
+        } catch {
+          throw new Error(
+            `bug: unable to turn relative URL '${relationship.links.self}' into an absolute URL relative to ${resource.id}`,
+          );
+        }
+        let relationshipId = maybeURL(resolvedSelf);
         if (!relationshipId) {
           throw new Error(
             `bug: unable to turn relative URL '${relationship.links.self}' into an absolute URL relative to ${resource.id}`,
@@ -941,11 +955,13 @@ function relativizeResource(
   realmURL: URL,
 ) {
   visitInstanceURLs(resource, (url, setURL) => {
-    let urlObj = new URL(url, resource.id ?? primaryURL);
+    let urlObj = new URL(resolveCardReference(url, resource.id ?? primaryURL));
     setURL(maybeRelativeURL(urlObj, primaryURL, realmURL));
   });
   visitModuleDeps(resource, (moduleURL, setModuleURL) => {
-    let absoluteModuleURL = new URL(moduleURL, resource.id ?? primaryURL);
+    let absoluteModuleURL = new URL(
+      resolveCardReference(moduleURL, resource.id ?? primaryURL),
+    );
     setModuleURL(maybeRelativeURL(absoluteModuleURL, primaryURL, realmURL));
   });
 }

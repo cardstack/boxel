@@ -26,6 +26,7 @@ import {
   type Stats,
 } from './index';
 import type { CacheScope, DefinitionLookup } from './definition-lookup';
+import { resolveCardReference } from './card-reference-resolver';
 import { isCardError } from './error';
 import { IndexRunnerDependencyManager } from './index-runner/dependency-resolver';
 import { discoverInvalidations } from './index-runner/discover-invalidations';
@@ -400,8 +401,10 @@ export class IndexRunner {
         url,
         realm: this.#realmURL.href,
         deps: [
-          new URL((resource.meta.adoptsFrom as ResolvedCodeRef).module, url)
-            .href,
+          resolveCardReference(
+            (resource.meta.adoptsFrom as ResolvedCodeRef).module,
+            url,
+          ),
         ],
       },
       status,

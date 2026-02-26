@@ -18,7 +18,7 @@
     "relationships": {
       "cardInfo.theme": {
         "links": {
-          "self": "https://app.boxel.ai/catalog/Theme/cardstack"
+          "self": "@cardstack/catalog/Theme/cardstack"
         }
       }
     }
