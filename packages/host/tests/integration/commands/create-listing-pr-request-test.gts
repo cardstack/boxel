@@ -71,6 +71,7 @@ module('Integration | commands | create-listing-pr-request', function (hooks) {
       name: 'room-test',
     });
     let commandService = getService('command-service');
+    let matrixService = getService('matrix-service') as MatrixService;
 
     let command = new CreateListingPRRequestCommand(
       commandService.commandContext,
@@ -92,6 +93,17 @@ module('Integration | commands | create-listing-pr-request', function (hooks) {
       listingId: `${testRealmURL}Listing/test-listing`,
       listingName: 'Some Listing',
     });
+
+    let membershipEvent = mockMatrixUtils.getRoomState(
+      roomId,
+      'm.room.member',
+      matrixService.submissionBotUserId,
+    );
+    assert.strictEqual(
+      membershipEvent.membership,
+      'invite',
+      'submission bot is invited to the room',
+    );
   });
 
   test('creates a room without opening it when roomId is omitted', async function (assert) {
@@ -139,5 +151,16 @@ module('Integration | commands | create-listing-pr-request', function (hooks) {
       listingId: `${testRealmURL}Listing/test-listing`,
       listingName: 'Some Listing',
     });
+
+    let membershipEvent = mockMatrixUtils.getRoomState(
+      createdRoomId,
+      'm.room.member',
+      matrixService.submissionBotUserId,
+    );
+    assert.strictEqual(
+      membershipEvent.membership,
+      'invite',
+      'submission bot is invited to the created room',
+    );
   });
 });
