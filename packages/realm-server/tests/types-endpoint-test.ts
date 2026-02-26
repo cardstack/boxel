@@ -65,11 +65,6 @@ module(basename(__filename), function () {
       };
     }
 
-    hooks.afterEach(async function () {
-      await closeServer(testRealmHttpServer);
-      resetCatalogRealms();
-    });
-
     setupPermissionedRealmCached(hooks, {
       permissions: {
         '*': ['read', 'write'],
