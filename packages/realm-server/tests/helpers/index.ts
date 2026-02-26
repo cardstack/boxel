@@ -8,6 +8,7 @@ import {
 } from 'fs-extra';
 import { NodeAdapter } from '../../node-realm';
 import { join } from 'path';
+import { createHash } from 'crypto';
 import type {
   LooseSingleCardDocument,
   RealmPermissions,
@@ -218,17 +219,81 @@ function quotePgIdentifier(identifier: string): string {
   return `"${identifier}"`;
 }
 
-export async function cloneTestDBFromMigratedTemplate(): Promise<void> {
-  let database = process.env.PGDATABASE;
+async function withPgDatabaseEnv<T>(
+  databaseName: string,
+  fn: () => Promise<T> | T,
+): Promise<T> {
+  let previousDatabase = process.env.PGDATABASE;
+  process.env.PGDATABASE = databaseName;
+  try {
+    return await fn();
+  } finally {
+    if (previousDatabase == null) {
+      delete process.env.PGDATABASE;
+    } else {
+      process.env.PGDATABASE = previousDatabase;
+    }
+  }
+}
+
+async function dropDatabase(databaseName: string): Promise<void> {
+  let client = new PgClient(pgAdminConnectionConfig());
+  try {
+    await client.connect();
+    await client.query(
+      `SELECT pg_terminate_backend(pid)
+       FROM pg_stat_activity
+       WHERE datname = $1 AND pid <> pg_backend_pid()`,
+      [databaseName],
+    );
+    await client.query(
+      `DROP DATABASE IF EXISTS ${quotePgIdentifier(databaseName)}`,
+    );
+  } finally {
+    await client.end();
+  }
+}
+
+async function createTemplateSnapshot(
+  sourceDatabaseName: string,
+  templateDatabaseName: string,
+): Promise<void> {
+  let client = new PgClient(pgAdminConnectionConfig());
+  try {
+    await client.connect();
+    await client.query(
+      `SELECT pg_terminate_backend(pid)
+       FROM pg_stat_activity
+       WHERE datname = $1 AND pid <> pg_backend_pid()`,
+      [templateDatabaseName],
+    );
+    await client.query(
+      `DROP DATABASE IF EXISTS ${quotePgIdentifier(templateDatabaseName)}`,
+    );
+    await client.query(
+      `CREATE DATABASE ${quotePgIdentifier(templateDatabaseName)} TEMPLATE ${quotePgIdentifier(
+        sourceDatabaseName,
+      )}`,
+    );
+    await client.query(
+      `ALTER DATABASE ${quotePgIdentifier(templateDatabaseName)} WITH IS_TEMPLATE true`,
+    );
+  } finally {
+    await client.end();
+  }
+}
+
+async function cloneTestDBFromTemplate(templateDatabaseName: string, databaseName?: string): Promise<void> {
+  let database = databaseName ?? process.env.PGDATABASE;
   if (!database) {
     throw new Error(
       'PGDATABASE must be set before cloning a test database (call prepareTestDB())',
     );
   }
 
-  if (database === migratedTestDatabaseTemplate) {
+  if (database === templateDatabaseName) {
     throw new Error(
-      `refusing to create test DB using the same name as template database '${migratedTestDatabaseTemplate}'`,
+      `refusing to create test DB using the same name as template database '${templateDatabaseName}'`,
     );
   }
 
@@ -237,13 +302,13 @@ export async function cloneTestDBFromMigratedTemplate(): Promise<void> {
     await client.connect();
     await client.query(
       `CREATE DATABASE ${quotePgIdentifier(database)} TEMPLATE ${quotePgIdentifier(
-        migratedTestDatabaseTemplate,
+        templateDatabaseName,
       )}`,
     );
   } catch (e: any) {
     if (e?.message?.includes('does not exist')) {
       throw new Error(
-        `migrated template database '${migratedTestDatabaseTemplate}' is missing. Run packages/realm-server/tests/scripts/prepare-test-pg.sh first.`,
+        `template database '${templateDatabaseName}' is missing. Run packages/realm-server/tests/scripts/prepare-test-pg.sh first.`,
       );
     }
     throw e;
@@ -252,9 +317,25 @@ export async function cloneTestDBFromMigratedTemplate(): Promise<void> {
   }
 }
 
-export async function createTestPgAdapter(): Promise<PgAdapter> {
-  await cloneTestDBFromMigratedTemplate();
-  return new PgAdapter();
+export async function cloneTestDBFromMigratedTemplate(): Promise<void> {
+  await cloneTestDBFromTemplate(migratedTestDatabaseTemplate);
+}
+
+export async function createTestPgAdapter(options?: {
+  templateDatabase?: string;
+  databaseName?: string;
+}): Promise<PgAdapter> {
+  let databaseName = options?.databaseName ?? process.env.PGDATABASE;
+  if (!databaseName) {
+    throw new Error(
+      'PGDATABASE must be set before creating a test adapter (call prepareTestDB())',
+    );
+  }
+  await cloneTestDBFromTemplate(
+    options?.templateDatabase ?? migratedTestDatabaseTemplate,
+    databaseName,
+  );
+  return await withPgDatabaseEnv(databaseName, async () => new PgAdapter());
 }
 
 export async function closeServer(server: Server) {
@@ -337,6 +418,81 @@ export async function destroyTrackedQueueRunners(): Promise<void> {
   }
 }
 
+async function waitForQueueIdle(
+  dbAdapter: PgAdapter,
+  timeout = 30000,
+): Promise<void> {
+  await waitUntil(
+    async () => {
+      let [{ count: unfulfilledJobs }] = (await dbAdapter.execute(
+        `SELECT COUNT(*)::int AS count FROM jobs WHERE status = 'unfulfilled'`,
+      )) as { count: number }[];
+      let [{ count: activeReservations }] = (await dbAdapter.execute(
+        `SELECT COUNT(*)::int AS count FROM job_reservations WHERE completed_at IS NULL`,
+      )) as { count: number }[];
+      return unfulfilledJobs === 0 && activeReservations === 0;
+    },
+    {
+      timeout,
+      interval: 50,
+      timeoutMessage: 'waiting for queue to become idle',
+    },
+  );
+}
+
+interface CachedPermissionedRealmTemplateEntry {
+  refs: number;
+  ready: Promise<void>;
+}
+
+const permissionedRealmTemplateCache = new Map<
+  string,
+  CachedPermissionedRealmTemplateEntry
+>();
+const permissionedRealmTemplateNamePrefix = `rs_tpl_${process.pid}_`;
+const permissionedRealmBuilderDbNamePrefix = `rs_bld_${process.pid}_`;
+const prerendererCacheIds = new WeakMap<object, number>();
+let nextPrerendererCacheId = 1;
+
+function stableStringify(value: unknown): string {
+  if (value === null || typeof value !== 'object') {
+    return JSON.stringify(value);
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => stableStringify(item)).join(',')}]`;
+  }
+  let record = value as Record<string, unknown>;
+  let keys = Object.keys(record).sort();
+  return `{${keys
+    .map((key) => `${JSON.stringify(key)}:${stableStringify(record[key])}`)
+    .join(',')}}`;
+}
+
+function hashCacheKeyPayload(payload: unknown): string {
+  return createHash('sha256').update(stableStringify(payload)).digest('hex');
+}
+
+function templateDatabaseNameForCacheKey(cacheKey: string): string {
+  return `${permissionedRealmTemplateNamePrefix}${cacheKey.slice(0, 24)}`;
+}
+
+function builderDatabaseNameForCacheKey(cacheKey: string): string {
+  return `${permissionedRealmBuilderDbNamePrefix}${cacheKey.slice(0, 24)}`;
+}
+
+function prerendererCacheKeyPart(prerenderer?: Prerenderer): string | null {
+  if (!prerenderer) {
+    return null;
+  }
+  let key = prerenderer as unknown as object;
+  let id = prerendererCacheIds.get(key);
+  if (!id) {
+    id = nextPrerendererCacheId++;
+    prerendererCacheIds.set(key, id);
+  }
+  return `injected:${id}`;
+}
+
 async function startTestPrerenderServer(): Promise<string> {
   if (prerenderServer?.listening) {
     return testPrerenderURL;
@@ -407,6 +563,8 @@ type BeforeAfterCallback = (
   runner: QueueRunner,
 ) => Promise<void>;
 
+type TestDatabaseTemplateProvider = string | (() => string | undefined);
+
 export function setupDB(
   hooks: NestedHooks,
   args: {
@@ -414,6 +572,7 @@ export function setupDB(
     after?: BeforeAfterCallback;
     beforeEach?: BeforeAfterCallback;
     afterEach?: BeforeAfterCallback;
+    templateDatabase?: TestDatabaseTemplateProvider;
   } = {},
 ) {
   let dbAdapter: PgAdapter;
@@ -422,7 +581,13 @@ export function setupDB(
 
   const runBeforeHook = async () => {
     prepareTestDB();
-    dbAdapter = await createTestPgAdapter();
+    let templateDatabase =
+      typeof args.templateDatabase === 'function'
+        ? args.templateDatabase()
+        : args.templateDatabase;
+    dbAdapter = await createTestPgAdapter({
+      templateDatabase,
+    });
     trackedDbAdapters.add(dbAdapter);
     publisher = new PgQueuePublisher(dbAdapter);
     trackedQueuePublishers.add(publisher);
@@ -1211,6 +1376,113 @@ function realmEventIsIndex(
   return event.eventName === 'index';
 }
 
+type InternalPermissionedRealmSetupOptions = {
+  permissions: RealmPermissions;
+  realmURL?: URL;
+  fileSystem?: Record<string, string | LooseSingleCardDocument>;
+  subscribeToRealmEvents?: boolean;
+  prerenderer?: Prerenderer;
+  published?: boolean;
+  cardSizeLimitBytes?: number;
+  fileSizeLimitBytes?: number;
+};
+
+async function startPermissionedRealmFixture(
+  dbAdapter: PgAdapter,
+  publisher: QueuePublisher,
+  runner: QueueRunner,
+  {
+    permissions,
+    realmURL,
+    fileSystem,
+    subscribeToRealmEvents = false,
+    prerenderer,
+    published = false,
+    cardSizeLimitBytes,
+    fileSizeLimitBytes,
+  }: InternalPermissionedRealmSetupOptions,
+): Promise<{
+  testRealmServer: Awaited<ReturnType<typeof runTestRealmServer>>;
+  request: SuperTest<Test>;
+  dir: DirResult;
+}> {
+  let resolvedRealmURL = realmURL ?? testRealmURL;
+  let dir = dirSync();
+
+  let testRealmDir;
+
+  if (published) {
+    let publishedRealmId = uuidv4();
+
+    testRealmDir = join(
+      dir.name,
+      'realm_server_1',
+      PUBLISHED_DIRECTORY_NAME,
+      publishedRealmId,
+    );
+
+    await dbAdapter.execute(
+      `INSERT INTO
+        published_realms
+        (id, owner_username, source_realm_url, published_realm_url)
+        VALUES
+        (
+          '${publishedRealmId}',
+          '@user:localhost',
+          'http://example.localhost/source',
+          '${resolvedRealmURL.href}'
+        )`,
+    );
+  } else {
+    testRealmDir = join(dir.name, 'realm_server_1', 'test');
+  }
+
+  ensureDirSync(testRealmDir);
+
+  // If a fileSystem is provided, use it to populate the test realm, otherwise copy the default cards
+  if (!fileSystem) {
+    copySync(join(__dirname, '..', 'cards'), testRealmDir);
+  }
+
+  let virtualNetwork = createVirtualNetwork();
+
+  let testRealmServer = await runTestRealmServer({
+    virtualNetwork,
+    testRealmDir,
+    realmsRootPath: join(dir.name, 'realm_server_1'),
+    realmURL: resolvedRealmURL,
+    permissions,
+    dbAdapter,
+    runner,
+    publisher,
+    matrixURL,
+    fileSystem,
+    enableFileWatcher: subscribeToRealmEvents,
+    cardSizeLimitBytes,
+    fileSizeLimitBytes,
+    prerenderer,
+  });
+
+  let request = supertest(testRealmServer.testRealmHttpServer);
+
+  return {
+    testRealmServer,
+    request,
+    dir,
+  };
+}
+
+async function teardownPermissionedRealmFixture(
+  testRealmServer: Awaited<ReturnType<typeof runTestRealmServer>>,
+): Promise<void> {
+  testRealmServer.testRealm.unsubscribe();
+  if (!testRealmServer.matrixClient.isLoggedIn()) {
+    await testRealmServer.matrixClient.login();
+  }
+  await closeServer(testRealmServer.testRealmHttpServer);
+  resetCatalogRealms();
+}
+
 export function setupPermissionedRealm(
   hooks: NestedHooks,
   {
@@ -1221,6 +1493,7 @@ export function setupPermissionedRealm(
     subscribeToRealmEvents = false,
     mode = 'beforeEach',
     prerenderer,
+    dbTemplateDatabase,
     published = false,
     cardSizeLimitBytes,
     fileSizeLimitBytes,
@@ -1240,6 +1513,8 @@ export function setupPermissionedRealm(
     subscribeToRealmEvents?: boolean;
     mode?: 'beforeEach' | 'before';
     prerenderer?: Prerenderer;
+    // Internal hook used by cached setup wrappers
+    dbTemplateDatabase?: TestDatabaseTemplateProvider;
     published?: boolean;
     cardSizeLimitBytes?: number;
     fileSizeLimitBytes?: number;
@@ -1250,69 +1525,24 @@ export function setupPermissionedRealm(
   setGracefulCleanup();
 
   setupDB(hooks, {
+    templateDatabase: dbTemplateDatabase,
     [mode]: async (
       dbAdapter: PgAdapter,
       publisher: QueuePublisher,
       runner: QueueRunner,
     ) => {
-      let resolvedRealmURL = realmURL ?? testRealmURL;
-      let dir = dirSync();
-
-      let testRealmDir;
-
-      if (published) {
-        let publishedRealmId = uuidv4();
-
-        testRealmDir = join(
-          dir.name,
-          'realm_server_1',
-          PUBLISHED_DIRECTORY_NAME,
-          publishedRealmId,
-        );
-
-        await dbAdapter.execute(
-          `INSERT INTO
-            published_realms
-            (id, owner_username, source_realm_url, published_realm_url)
-            VALUES
-            (
-              '${publishedRealmId}',
-              '@user:localhost',
-              'http://example.localhost/source',
-              '${resolvedRealmURL.href}'
-            )`,
-        );
-      } else {
-        testRealmDir = join(dir.name, 'realm_server_1', 'test');
-      }
-
-      ensureDirSync(testRealmDir);
-
-      // If a fileSystem is provided, use it to populate the test realm, otherwise copy the default cards
-      if (!fileSystem) {
-        copySync(join(__dirname, '..', 'cards'), testRealmDir);
-      }
-
-      let virtualNetwork = createVirtualNetwork();
-
-      testRealmServer = await runTestRealmServer({
-        virtualNetwork,
-        testRealmDir,
-        realmsRootPath: join(dir.name, 'realm_server_1'),
-        realmURL: resolvedRealmURL,
-        permissions,
-        dbAdapter,
-        runner,
-        publisher,
-        matrixURL,
-        fileSystem,
-        enableFileWatcher: subscribeToRealmEvents,
-        cardSizeLimitBytes,
-        fileSizeLimitBytes,
-        prerenderer,
-      });
-
-      let request = supertest(testRealmServer.testRealmHttpServer);
+      let { testRealmServer: server, request, dir } =
+        await startPermissionedRealmFixture(dbAdapter, publisher, runner, {
+          realmURL,
+          fileSystem,
+          permissions,
+          subscribeToRealmEvents,
+          prerenderer,
+          published,
+          cardSizeLimitBytes,
+          fileSizeLimitBytes,
+        });
+      testRealmServer = server;
 
       onRealmSetup?.({
         dbAdapter,
@@ -1327,12 +1557,7 @@ export function setupPermissionedRealm(
   });
 
   hooks[mode === 'beforeEach' ? 'afterEach' : 'after'](async function () {
-    testRealmServer.testRealm.unsubscribe();
-    if (!testRealmServer.matrixClient.isLoggedIn()) {
-      await testRealmServer.matrixClient.login();
-    }
-    await closeServer(testRealmServer.testRealmHttpServer);
-    resetCatalogRealms();
+    await teardownPermissionedRealmFixture(testRealmServer);
   });
 }
 
@@ -1342,6 +1567,199 @@ export function setupPermissionedRealmAtURL(
   options: Omit<Parameters<typeof setupPermissionedRealm>[1], 'realmURL'>,
 ) {
   return setupPermissionedRealm(hooks, {
+    ...options,
+    realmURL,
+  });
+}
+
+type SetupPermissionedRealmCachedOptions = Omit<
+  Parameters<typeof setupPermissionedRealm>[1],
+  'dbTemplateDatabase'
+> & {
+  useTemplateCache?: boolean;
+};
+
+function permissionedRealmTemplateCacheKey(
+  options: SetupPermissionedRealmCachedOptions,
+): string {
+  let resolvedRealmURL = options.realmURL ?? testRealmURL;
+  return hashCacheKeyPayload({
+    version: 1,
+    type: 'permissioned-realm',
+    realmURL: resolvedRealmURL.href,
+    permissions: options.permissions,
+    fileSystem: options.fileSystem ?? null,
+    subscribeToRealmEvents: Boolean(options.subscribeToRealmEvents),
+    published: Boolean(options.published),
+    cardSizeLimitBytes: options.cardSizeLimitBytes ?? null,
+    fileSizeLimitBytes: options.fileSizeLimitBytes ?? null,
+    prerenderer: prerendererCacheKeyPart(options.prerenderer),
+  });
+}
+
+async function buildPermissionedRealmTemplate(
+  cacheKey: string,
+  options: SetupPermissionedRealmCachedOptions,
+): Promise<void> {
+  let templateDatabaseName = templateDatabaseNameForCacheKey(cacheKey);
+  let builderDatabaseName = builderDatabaseNameForCacheKey(cacheKey);
+
+  let dbAdapter: PgAdapter | undefined;
+  let publisher: QueuePublisher | undefined;
+  let runner: QueueRunner | undefined;
+  let fixture: Awaited<ReturnType<typeof startPermissionedRealmFixture>> | undefined;
+
+  await dropDatabase(templateDatabaseName);
+  await dropDatabase(builderDatabaseName);
+
+  try {
+    dbAdapter = await createTestPgAdapter({
+      databaseName: builderDatabaseName,
+      templateDatabase: migratedTestDatabaseTemplate,
+    });
+    publisher = new PgQueuePublisher(dbAdapter);
+    runner = new PgQueueRunner({ adapter: dbAdapter, workerId: 'template-worker' });
+
+    fixture = await startPermissionedRealmFixture(dbAdapter, publisher, runner, {
+      realmURL: options.realmURL,
+      fileSystem: options.fileSystem,
+      permissions: options.permissions,
+      subscribeToRealmEvents: options.subscribeToRealmEvents,
+      prerenderer: options.prerenderer,
+      published: options.published,
+      cardSizeLimitBytes: options.cardSizeLimitBytes,
+      fileSizeLimitBytes: options.fileSizeLimitBytes,
+    });
+
+    await waitForQueueIdle(dbAdapter);
+    await teardownPermissionedRealmFixture(fixture.testRealmServer);
+    fixture = undefined;
+
+    await publisher.destroy();
+    publisher = undefined;
+    await runner.destroy();
+    runner = undefined;
+    await dbAdapter.close();
+    dbAdapter = undefined;
+
+    await createTemplateSnapshot(builderDatabaseName, templateDatabaseName);
+  } finally {
+    if (fixture) {
+      try {
+        await teardownPermissionedRealmFixture(fixture.testRealmServer);
+      } catch {
+        // best-effort cleanup
+      }
+    }
+    if (publisher) {
+      try {
+        await publisher.destroy();
+      } catch {
+        // best-effort cleanup
+      }
+    }
+    if (runner) {
+      try {
+        await runner.destroy();
+      } catch {
+        // best-effort cleanup
+      }
+    }
+    if (dbAdapter && !dbAdapter.isClosed) {
+      try {
+        await dbAdapter.close();
+      } catch {
+        // best-effort cleanup
+      }
+    }
+    try {
+      await dropDatabase(builderDatabaseName);
+    } catch {
+      // best-effort cleanup
+    }
+  }
+}
+
+async function acquirePermissionedRealmTemplate(
+  options: SetupPermissionedRealmCachedOptions,
+): Promise<{ cacheKey: string; templateDatabaseName: string }> {
+  let cacheKey = permissionedRealmTemplateCacheKey(options);
+  let templateDatabaseName = templateDatabaseNameForCacheKey(cacheKey);
+  let existing = permissionedRealmTemplateCache.get(cacheKey);
+  if (existing) {
+    existing.refs++;
+    await existing.ready;
+    return { cacheKey, templateDatabaseName };
+  }
+
+  let entry: CachedPermissionedRealmTemplateEntry = {
+    refs: 1,
+    ready: Promise.resolve(),
+  };
+  entry.ready = buildPermissionedRealmTemplate(cacheKey, options).catch(
+    async (error) => {
+      permissionedRealmTemplateCache.delete(cacheKey);
+      try {
+        await dropDatabase(templateDatabaseName);
+      } catch {
+        // best-effort cleanup
+      }
+      throw error;
+    },
+  );
+  permissionedRealmTemplateCache.set(cacheKey, entry);
+  await entry.ready;
+  return { cacheKey, templateDatabaseName };
+}
+
+async function releasePermissionedRealmTemplate(cacheKey: string): Promise<void> {
+  let entry = permissionedRealmTemplateCache.get(cacheKey);
+  if (!entry) {
+    return;
+  }
+  entry.refs--;
+}
+
+export function setupPermissionedRealmCached(
+  hooks: NestedHooks,
+  options: SetupPermissionedRealmCachedOptions,
+) {
+  let { useTemplateCache = true, ...setupOptions } = options;
+  if (!useTemplateCache) {
+    return setupPermissionedRealm(hooks, setupOptions);
+  }
+
+  let acquiredTemplateDatabase: string | undefined;
+  let acquiredCacheKey: string | undefined;
+
+  hooks.before(async function () {
+    let { cacheKey, templateDatabaseName } =
+      await acquirePermissionedRealmTemplate(setupOptions);
+    acquiredCacheKey = cacheKey;
+    acquiredTemplateDatabase = templateDatabaseName;
+  });
+
+  setupPermissionedRealm(hooks, {
+    ...setupOptions,
+    dbTemplateDatabase: () => acquiredTemplateDatabase,
+  });
+
+  hooks.after(async function () {
+    if (acquiredCacheKey) {
+      let cacheKey = acquiredCacheKey;
+      acquiredCacheKey = undefined;
+      acquiredTemplateDatabase = undefined;
+      await releasePermissionedRealmTemplate(cacheKey);
+    }
+  });
+}
+
+export function setupPermissionedRealmCachedAtURL(
+  hooks: NestedHooks,
+  realmURL: URL,
+  options: Omit<SetupPermissionedRealmCachedOptions, 'realmURL'>,
+) {
+  return setupPermissionedRealmCached(hooks, {
     ...options,
     realmURL,
   });
