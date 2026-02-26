@@ -122,6 +122,7 @@ import {
   serialize,
   serializeCard,
   serializeCardResource,
+  serializeFileDef,
   resourceFrom,
   type DeserializeOpts,
   type JSONAPIResource,
@@ -184,6 +185,7 @@ export {
   relationshipMeta,
   serialize,
   serializeCard,
+  serializeFileDef,
   ensureQueryFieldSearchResource,
   getStore,
   type BoxComponent,
@@ -2074,6 +2076,7 @@ export class BaseDef {
   // So we need a [relativeTo] property that derives from the root document ID in order to
   // resolve relative links at the FieldDef level.
   [relativeTo]: URL | undefined = undefined;
+  [meta]: CardResourceMeta | undefined = undefined;
   declare ['constructor']: BaseDefConstructor;
   static baseDef: undefined;
   static data?: Record<string, any>; // TODO probably refactor this away all together
@@ -2455,7 +2458,6 @@ export class CardInfoField extends FieldDef {
 export class CardDef extends BaseDef {
   readonly [localId]: string = uuidv4();
   [isSavedInstance] = false;
-  [meta]: CardResourceMeta | undefined = undefined;
   get [fieldsUntracked](): Record<string, typeof BaseDef> | undefined {
     let overrides = getFieldOverrides(this);
     return overrides ? Object.fromEntries(getFieldOverrides(this)) : undefined;
