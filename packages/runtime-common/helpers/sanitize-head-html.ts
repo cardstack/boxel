@@ -173,16 +173,40 @@ export function findDisallowedHeadTags(
   let template = doc.createElement('template');
   template.innerHTML = headHTML;
 
-  let disallowed: string[] = [];
+  let disallowed = new Set<string>();
   for (let node of Array.from(template.content.childNodes)) {
-    if (node.nodeType === ELEMENT_NODE) {
-      let tagName = (node as Element).tagName.toLowerCase();
-      if (!ALLOWED_HEAD_TAGS.has(tagName) && !disallowed.includes(tagName)) {
-        disallowed.push(tagName);
-      }
-    }
+    collectDisallowedHeadTags(node, disallowed);
   }
-  return disallowed;
+  return Array.from(disallowed);
+}
+
+function collectDisallowedHeadTags(
+  node: Node,
+  disallowed: Set<string>,
+): boolean {
+  if (node.nodeType !== ELEMENT_NODE) {
+    return false;
+  }
+
+  let element = node as Element;
+  let tagName = element.tagName.toLowerCase();
+  if (ALLOWED_HEAD_TAGS.has(tagName)) {
+    return true;
+  }
+
+  let hasAllowlistedDescendant = false;
+  for (let child of Array.from(element.childNodes)) {
+    hasAllowlistedDescendant =
+      collectDisallowedHeadTags(child, disallowed) || hasAllowlistedDescendant;
+  }
+
+  // Wrapper-only nodes around allowlisted tags are expected from rendering
+  // infrastructure and are stripped by the sanitizer, so we don't warn for
+  // those wrappers.
+  if (!hasAllowlistedDescendant) {
+    disallowed.add(tagName);
+  }
+  return hasAllowlistedDescendant;
 }
 
 function copyAllowedAttributes(
