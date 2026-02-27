@@ -55,6 +55,15 @@ export function isResolvedCodeRef(ref?: CodeRef | {}): ref is ResolvedCodeRef {
   }
 }
 
+export function assertIsResolvedCodeRef(
+  ref: unknown,
+  message = 'Expected ResolvedCodeRef',
+): asserts ref is ResolvedCodeRef {
+  if (!isResolvedCodeRef(ref as CodeRef | {})) {
+    throw new Error(message);
+  }
+}
+
 export function isCodeRef(ref: any): ref is CodeRef {
   if (!ref || typeof ref !== 'object') {
     return false;

@@ -7,6 +7,7 @@ import {
   type FileRenderResponse,
   type FileRenderArgs,
   type RenderRouteOptions,
+  type RunCommandResponse,
   serializeRenderRouteOptions,
   logger,
 } from '@cardstack/runtime-common';
@@ -27,11 +28,14 @@ import {
   type FileExtractCapture,
   withTimeout,
   transitionTo,
+  buildCommandRunnerURL,
   buildInvalidModuleResponseError,
   buildInvalidFileExtractResponseError,
 } from './utils';
+import { randomUUID } from 'crypto';
 
 const log = logger('prerenderer');
+const commandRequestStorageKeyPrefix = 'boxel-command-request:';
 
 const CLEAR_CACHE_RETRY_SIGNATURES: readonly (readonly string[])[] = [
   // this is a side effect of glimmer scoped styles moving a DOM node that
@@ -147,7 +151,7 @@ export class RenderRunner {
       };
 
       log.debug(
-        `manually visit prerendered url ${url} at: ${this.#boxelHostURL}/render/${encodeURIComponent(url)}/${this.#nonce}/${optionsSegment}/html/isolated/0 with localStorage boxel-session=${auth}`,
+        `manually visit prerendered url ${url} at: ${this.#boxelHostURL}/render/${encodeURIComponent(url)}/${this.#nonce}/${optionsSegment}/html/isolated/0`,
       );
 
       // We need to render the isolated HTML view first, as the template will pull linked fields.
@@ -379,6 +383,191 @@ export class RenderRunner {
       return {
         response,
         timings: { launchMs, renderMs: Date.now() - renderStart },
+        pool: poolInfo,
+      };
+    } finally {
+      release();
+    }
+  }
+
+  async runCommandAttempt({
+    realm,
+    auth,
+    command,
+    commandInput,
+    opts,
+  }: {
+    realm: string;
+    auth: string;
+    command: string;
+    commandInput?: Record<string, unknown> | null;
+    opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
+  }): Promise<{
+    response: RunCommandResponse;
+    timings: { launchMs: number; renderMs: number };
+    pool: {
+      pageId: string;
+      realm: string;
+      reused: boolean;
+      evicted: boolean;
+      timedOut: boolean;
+    };
+  }> {
+    this.#nonce++;
+    log.info(
+      `running command ${command ?? '<unknown>'}, nonce=${this.#nonce} realm=${realm}`,
+    );
+
+    const { page, reused, launchMs, pageId, release } =
+      await this.#getPageForRealm(realm, auth);
+    const poolInfo = {
+      pageId: pageId ?? 'unknown',
+      realm,
+      reused,
+      evicted: false,
+      timedOut: false,
+    };
+    this.#pagePool.resetConsoleErrors(pageId);
+    const markTimeout = (status?: RunCommandResponse['status']) => {
+      if (!poolInfo.timedOut && status === 'unusable') {
+        poolInfo.timedOut = true;
+      }
+    };
+    try {
+      let renderStart = Date.now();
+      let requestId = randomUUID();
+      let nonce = String(this.#nonce);
+      let storageKey = `${commandRequestStorageKeyPrefix}${requestId}`;
+      await page.evaluate(
+        (sessionAuth, key, commandToRun, input, requestNonce, createdAt) => {
+          localStorage.setItem('boxel-session', sessionAuth);
+          localStorage.setItem(
+            key,
+            JSON.stringify({
+              command: commandToRun,
+              input,
+              nonce: requestNonce,
+              createdAt,
+            }),
+          );
+        },
+        auth,
+        storageKey,
+        command,
+        commandInput ?? null,
+        nonce,
+        Date.now(),
+      );
+      await transitionTo(page, 'command-runner', requestId, nonce);
+      log.info(
+        'command-runner url: %s',
+        buildCommandRunnerURL(page, nonce, requestId),
+      );
+
+      let waitResult = await withTimeout(
+        page,
+        async () => {
+          await page.waitForFunction(
+            (expectedNonce: string) => {
+              let containers = Array.from(
+                document.querySelectorAll(
+                  '[data-prerender][data-prerender-id="command-runner"]',
+                ),
+              ) as HTMLElement[];
+              let container =
+                containers.find(
+                  (candidate) =>
+                    candidate.dataset.prerenderNonce === expectedNonce,
+                ) ?? null;
+              if (!container) {
+                return false;
+              }
+              let status = container.dataset.prerenderStatus ?? '';
+              return ['ready', 'error', 'unusable'].includes(status);
+            },
+            {},
+            String(this.#nonce),
+          );
+
+          if (opts?.simulateTimeoutMs) {
+            await new Promise((resolve) =>
+              setTimeout(resolve, opts.simulateTimeoutMs),
+            );
+          }
+
+          return true;
+        },
+        opts?.timeoutMs,
+      );
+
+      if (isRenderError(waitResult)) {
+        let response: RunCommandResponse = {
+          status: 'unusable',
+          error: waitResult.error.message,
+        };
+        markTimeout(response.status);
+        return {
+          response,
+          timings: { launchMs, renderMs: Date.now() - renderStart },
+          pool: poolInfo,
+        };
+      }
+
+      let payload = await page.evaluate((expectedNonce: string) => {
+        let containers = Array.from(
+          document.querySelectorAll(
+            '[data-prerender][data-prerender-id="command-runner"]',
+          ),
+        ) as HTMLElement[];
+        let container =
+          containers.find(
+            (candidate) => candidate.dataset.prerenderNonce === expectedNonce,
+          ) ?? null;
+        let status =
+          (container?.dataset.prerenderStatus as
+            | 'ready'
+            | 'error'
+            | 'unusable'
+            | undefined) ?? 'error';
+        let errorElement = container?.querySelector(
+          '[data-prerender-error]',
+        ) as HTMLElement | null;
+        let cardResultStringElement = container?.querySelector(
+          '[data-command-result]',
+        ) as HTMLElement | null;
+        let error = (errorElement?.textContent ?? '').trim();
+        let cardResultString = (
+          cardResultStringElement?.textContent ?? ''
+        ).trim();
+        return {
+          status,
+          error: error.length > 0 ? error : null,
+          cardResultString:
+            cardResultString.length > 0 ? cardResultString : null,
+        };
+      }, String(this.#nonce));
+
+      let response: RunCommandResponse = {
+        status: payload.status,
+        cardResultString: payload.cardResultString ?? undefined,
+        error: payload.error ?? undefined,
+      };
+      markTimeout(response.status);
+
+      return {
+        response,
+        timings: { launchMs, renderMs: Date.now() - renderStart },
+        pool: poolInfo,
+      };
+    } catch (e) {
+      log.error('Error running command in headless chrome:', e);
+      let response: RunCommandResponse = {
+        status: 'error',
+        error: e instanceof Error ? `${e.name}: ${e.message}` : `${e}`,
+      };
+      return {
+        response,
+        timings: { launchMs, renderMs: 0 },
         pool: poolInfo,
       };
     } finally {

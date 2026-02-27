@@ -11,6 +11,7 @@ import {
   type ModuleRenderResponse,
   type FileExtractResponse,
   type FileRenderResponse,
+  type RunCommandResponse,
 } from '@cardstack/runtime-common';
 import {
   ecsMetadata,
@@ -78,11 +79,28 @@ export function buildPrerenderApp(options: {
     ctxt.status = 200;
   });
 
-  type PrerenderArgs = {
+  type RouteBaseArgs = {
     realm: string;
-    url: string;
     auth: string;
     renderOptions: RenderRouteOptions;
+  };
+
+  type PrerenderArgs = RouteBaseArgs & {
+    url: string;
+  };
+
+  type RunCommandRouteArgs = RouteBaseArgs & {
+    command: string;
+    commandInput?: unknown;
+  };
+
+  type RouteParseResult<A extends RouteBaseArgs> = {
+    args?: A;
+    missing: string[];
+    missingMessage: string;
+    logTarget: string;
+    responseId: string;
+    rejectionLogDetails: string;
   };
 
   type PrerenderExecResult<R> = {
@@ -97,16 +115,105 @@ export function buildPrerenderApp(options: {
     };
   };
 
-  function registerPrerenderRoute<R>(
+  let isNonEmptyString = (value: unknown): value is string =>
+    typeof value === 'string' && value.trim().length > 0;
+
+  let parseRenderOptions = (attrs: any): RenderRouteOptions =>
+    attrs.renderOptions &&
+    typeof attrs.renderOptions === 'object' &&
+    !Array.isArray(attrs.renderOptions)
+      ? (attrs.renderOptions as RenderRouteOptions)
+      : {};
+
+  let missingAttrs = (attrsToCheck: { value: unknown; name: string }[]) =>
+    attrsToCheck
+      .filter(({ value }) => !isNonEmptyString(value))
+      .map(({ name }) => name);
+
+  let parseDefaultPrerenderAttributes = (
+    attrs: any,
+  ): RouteParseResult<PrerenderArgs> => {
+    let rawUrl = attrs.url;
+    let rawAuth = attrs.auth;
+    let rawRealm = attrs.realm;
+    let renderOptions = parseRenderOptions(attrs);
+    let missing = missingAttrs([
+      { value: rawUrl, name: 'url' },
+      { value: rawRealm, name: 'realm' },
+      { value: rawAuth, name: 'auth' },
+    ]);
+    return {
+      args:
+        missing.length > 0
+          ? undefined
+          : {
+              realm: rawRealm as string,
+              url: rawUrl as string,
+              auth: rawAuth as string,
+              renderOptions,
+            },
+      missing,
+      missingMessage:
+        'Missing or invalid required attributes: url, auth, realm',
+      logTarget: (rawUrl as string | undefined) ?? '<missing>',
+      responseId: (rawUrl as string | undefined) ?? 'unknown',
+      rejectionLogDetails: `realm=${
+        (rawRealm as string | undefined) ?? '<missing>'
+      } url=${(rawUrl as string | undefined) ?? '<missing>'} authProvided=${
+        typeof rawAuth === 'string' && rawAuth.trim().length > 0
+      }`,
+    };
+  };
+
+  let parseRunCommandAttributes = (
+    attrs: any,
+  ): RouteParseResult<RunCommandRouteArgs> => {
+    let rawAuth = attrs.auth;
+    let rawRealm = attrs.realm;
+    let command = attrs.command;
+    let commandInput = attrs.commandInput;
+    let renderOptions = parseRenderOptions(attrs);
+    let missing: string[] = [];
+    if (!isNonEmptyString(rawRealm)) missing.push('realm');
+    if (!isNonEmptyString(rawAuth)) missing.push('auth');
+    if (!isNonEmptyString(command)) missing.push('command');
+    let commandValue = isNonEmptyString(command) ? command : undefined;
+    return {
+      args:
+        missing.length > 0
+          ? undefined
+          : {
+              realm: rawRealm as string,
+              auth: rawAuth as string,
+              command: command as string,
+              commandInput,
+              renderOptions,
+            },
+      missing,
+      missingMessage:
+        'Missing or invalid required attributes: realm, auth, command',
+      logTarget: commandValue ?? '<unknown>',
+      responseId: commandValue ?? 'command',
+      rejectionLogDetails: `realm=${
+        (rawRealm as string | undefined) ?? '<missing>'
+      } authProvided=${
+        typeof rawAuth === 'string' && rawAuth.trim().length > 0
+      } commandProvided=${Boolean(commandValue)}`,
+    };
+  };
+
+  function registerPrerenderRoute<R, A extends RouteBaseArgs = PrerenderArgs>(
     path: string,
     options: {
       requestDescription: string;
       responseType: string;
       infoLabel: string;
-      warnTimeoutMessage: (url: string) => string;
+      warnTimeoutMessage: (target: string) => string;
       errorContext: string;
-      execute: (args: PrerenderArgs) => Promise<PrerenderExecResult<R>>;
-      afterResponse?: (url: string, response: R) => void;
+      execute: (args: A) => Promise<PrerenderExecResult<R>>;
+      afterResponse?: (target: string, response: R) => void;
+      parseAttributes: (attrs: any) => RouteParseResult<A>;
+      errorMessage?: string | ((err: any) => string);
       drainingPromise?: Promise<void>;
     },
   ) {
@@ -131,67 +238,36 @@ export function buildPrerenderApp(options: {
         }
 
         let attrs = body?.data?.attributes ?? {};
-        let rawUrl = attrs.url;
-        let rawAuth = attrs.auth;
-        let rawRealm = attrs.realm;
-        let renderOptions: RenderRouteOptions =
-          attrs.renderOptions &&
-          typeof attrs.renderOptions === 'object' &&
-          !Array.isArray(attrs.renderOptions)
-            ? (attrs.renderOptions as RenderRouteOptions)
-            : {};
-
-        let isNonEmptyString = (value: unknown): value is string =>
-          typeof value === 'string' && value.trim().length > 0;
-
-        let missingAttrs = (attrsToCheck: { value: unknown; name: string }[]) =>
-          attrsToCheck
-            .filter(({ value }) => !isNonEmptyString(value))
-            .map(({ name }) => name);
-
-        let missing = missingAttrs([
-          { value: rawUrl, name: 'url' },
-          { value: rawRealm, name: 'realm' },
-          { value: rawAuth, name: 'auth' },
-        ]);
+        let parsed = options.parseAttributes(attrs);
+        let routeArgs = parsed.args;
+        let realmForLog = routeArgs?.realm ?? (attrs.realm as string);
+        let renderOptionsForLog = routeArgs?.renderOptions ?? {};
 
         log.debug(
-          `received ${options.requestDescription} ${rawUrl}: realm=${rawRealm} options=${JSON.stringify(renderOptions)}`,
+          `received ${options.requestDescription} ${parsed.logTarget}: realm=${realmForLog} options=${JSON.stringify(renderOptionsForLog)}`,
         );
-        if (missing.length > 0) {
+        if (parsed.missing.length > 0 || !routeArgs) {
           log.warn(
-            'Rejecting %s due to missing attributes (%s); realm=%s url=%s authProvided=%s',
+            'Rejecting %s due to missing attributes (%s); %s',
             options.requestDescription,
-            missing.join(', '),
-            (rawRealm as string | undefined) ?? '<missing>',
-            (rawUrl as string | undefined) ?? '<missing>',
-            typeof rawAuth === 'string' && rawAuth.trim().length > 0,
+            parsed.missing.join(', '),
+            parsed.rejectionLogDetails,
           );
           ctxt.status = 400;
           ctxt.body = {
             errors: [
               {
                 status: 400,
-                message:
-                  'Missing or invalid required attributes: url, auth, realm',
+                message: parsed.missingMessage,
               },
             ],
           };
           return;
         }
 
-        let realm = rawRealm as string;
-        let url = rawUrl as string;
-        let auth = rawAuth as string;
-
         let start = Date.now();
         let execPromise = options
-          .execute({
-            realm,
-            url,
-            auth,
-            renderOptions,
-          })
+          .execute(routeArgs)
           .then((result) => ({ result }));
         let drainPromise = options.drainingPromise
           ? options.drainingPromise.then(() => ({ draining: true as const }))
@@ -234,7 +310,7 @@ export function buildPrerenderApp(options: {
         log.info(
           '%s %s total=%dms launch=%dms render=%dms pageId=%s realm=%s%s',
           options.infoLabel,
-          url,
+          parsed.logTarget,
           totalMs,
           timings.launchMs,
           timings.renderMs,
@@ -247,7 +323,7 @@ export function buildPrerenderApp(options: {
         ctxt.body = {
           data: {
             type: options.responseType,
-            id: url,
+            id: parsed.responseId,
             attributes: response,
           },
           meta: {
@@ -260,18 +336,22 @@ export function buildPrerenderApp(options: {
           },
         };
         if (pool.timedOut) {
-          log.warn(options.warnTimeoutMessage(url));
+          log.warn(options.warnTimeoutMessage(parsed.logTarget));
         }
-        options.afterResponse?.(url, response);
+        options.afterResponse?.(parsed.logTarget, response);
       } catch (err: any) {
         Sentry.captureException(err);
         log.error(`Unhandled error in ${options.errorContext}:`, err);
         ctxt.status = 500;
+        let message =
+          typeof options.errorMessage === 'function'
+            ? options.errorMessage(err)
+            : (options.errorMessage ?? err?.message ?? 'Unknown error');
         ctxt.body = {
           errors: [
             {
               status: 500,
-              message: err?.message ?? 'Unknown error',
+              message,
             },
           ],
         };
@@ -285,6 +365,7 @@ export function buildPrerenderApp(options: {
     infoLabel: 'prerendered',
     warnTimeoutMessage: (url) => `render of ${url} timed out`,
     errorContext: '/prerender-card',
+    parseAttributes: parseDefaultPrerenderAttributes,
     execute: (args) => prerenderer.prerenderCard(args),
     drainingPromise: options.drainingPromise,
     afterResponse: (url, response) => {
@@ -307,6 +388,7 @@ export function buildPrerenderApp(options: {
     infoLabel: 'module prerendered',
     warnTimeoutMessage: (url) => `module render of ${url} timed out`,
     errorContext: '/prerender-module',
+    parseAttributes: parseDefaultPrerenderAttributes,
     execute: (args) => prerenderer.prerenderModule(args),
     drainingPromise: options.drainingPromise,
     afterResponse: (url, response) => {
@@ -325,6 +407,7 @@ export function buildPrerenderApp(options: {
     infoLabel: 'file extract prerendered',
     warnTimeoutMessage: (url) => `file extract render of ${url} timed out`,
     errorContext: '/prerender-file-extract',
+    parseAttributes: parseDefaultPrerenderAttributes,
     execute: (args) => prerenderer.prerenderFileExtract(args),
     drainingPromise: options.drainingPromise,
     afterResponse: (url, response) => {
@@ -336,6 +419,27 @@ export function buildPrerenderApp(options: {
       }
     },
   });
+
+  registerPrerenderRoute<RunCommandResponse, RunCommandRouteArgs>(
+    '/run-command',
+    {
+      requestDescription: 'command-runner',
+      responseType: 'command-result',
+      infoLabel: 'command-runner',
+      warnTimeoutMessage: (target) => `command run of ${target} timed out`,
+      errorContext: '/run-command',
+      errorMessage: 'Error running command',
+      parseAttributes: parseRunCommandAttributes,
+      execute: (args) =>
+        prerenderer.runCommand({
+          realm: args.realm,
+          auth: args.auth,
+          command: args.command,
+          commandInput: args.commandInput as Record<string, unknown> | null,
+        }),
+      drainingPromise: options.drainingPromise,
+    },
+  );
 
   // File render route needs additional attributes (fileData, types)
   // beyond what registerPrerenderRoute handles, so we register it directly.
