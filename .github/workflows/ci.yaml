@@ -552,9 +552,11 @@ jobs:
             "publish-unpublish-realm-test.ts",
             "boxel-domain-availability-test.ts",
             "claim-boxel-domain-test.ts",
+            "command-parsing-utils-test.ts",
             "delete-boxel-claimed-domain-test.ts",
             "get-boxel-claimed-domain-test.ts",
             "realm-auth-test.ts",
+            "run-command-task-test.ts",
             "queries-test.ts",
             "full-reindex-test.ts",
           ]

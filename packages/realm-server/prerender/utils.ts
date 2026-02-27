@@ -44,10 +44,16 @@ export interface FileExtractCapture {
   nonce?: string;
 }
 
+type TransitionParam =
+  | string
+  | {
+      queryParams?: Record<string, string>;
+    };
+
 export async function transitionTo(
   page: Page,
   routeName: string,
-  ...params: string[]
+  ...params: TransitionParam[]
 ): Promise<void> {
   await page.evaluate(
     (routeName, params) => {
@@ -56,6 +62,26 @@ export async function transitionTo(
     routeName,
     params,
   );
+}
+
+export function buildCommandRunnerURL(
+  page: Page,
+  nonce: string,
+  requestId: string,
+): string {
+  let origin = page.url();
+  try {
+    origin = new URL(origin).origin;
+  } catch (error) {
+    let detail =
+      error instanceof Error ? error.message : 'Unknown URL parsing error';
+    throw new Error(
+      `Could not build command-runner URL from page URL "${origin}": ${detail}`,
+    );
+  }
+  return `${origin}/command-runner/${encodeURIComponent(requestId)}/${encodeURIComponent(
+    nonce,
+  )}`;
 }
 
 export async function renderHTML(

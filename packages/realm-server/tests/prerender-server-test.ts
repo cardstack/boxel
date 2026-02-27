@@ -44,6 +44,46 @@ module(basename(__filename), function () {
             },
           },
         },
+        'command-runner-test.gts': `
+          import { Command } from '@cardstack/runtime-common';
+          import {
+            CardDef,
+            field,
+            contains,
+            StringField,
+          } from 'https://cardstack.com/base/card-api';
+
+          export class CommandResult extends CardDef {
+            static displayName = 'CommandResult';
+            @field message = contains(StringField);
+          }
+
+          export class SayHelloCommand extends Command<
+            undefined,
+            typeof CommandResult
+          > {
+            static displayName = 'SayHelloCommand';
+            async getInputType() {
+              return undefined;
+            }
+            protected async run(): Promise<CommandResult> {
+              return new CommandResult({ message: 'hello from command' });
+            }
+          }
+
+          export class ThrowErrorCommand extends Command<
+            undefined,
+            typeof CommandResult
+          > {
+            static displayName = 'ThrowErrorCommand';
+            async getInputType() {
+              return undefined;
+            }
+            protected async run(): Promise<CommandResult> {
+              throw new Error('command exploded');
+            }
+          }
+        `,
       },
     });
 
@@ -192,6 +232,111 @@ module(basename(__filename), function () {
       );
       assert.ok(res.body.meta?.timing?.totalMs >= 0, 'has timing meta');
       assert.ok(res.body.meta?.pool?.pageId, 'has pool.pageId');
+    });
+
+    module('run-command', function () {
+      test('it handles run-command request', async function (assert) {
+        let permissions = {
+          [realmURL.href]: ['read', 'write', 'realm-owner'] as (
+            | 'read'
+            | 'write'
+            | 'realm-owner'
+          )[],
+        };
+        let auth = testCreatePrerenderAuth(testUserId, permissions);
+        let command = `${realmURL.href}command-runner-test/SayHelloCommand`;
+        let res = await request
+          .post('/run-command')
+          .set('Accept', 'application/vnd.api+json')
+          .set('Content-Type', 'application/json')
+          .send({
+            data: {
+              type: 'command-request',
+              attributes: {
+                realm: realmURL.href,
+                auth,
+                command,
+              },
+            },
+          });
+
+        assert.strictEqual(res.status, 201, 'HTTP 201');
+        assert.strictEqual(res.body.data.type, 'command-result', 'type ok');
+        assert.strictEqual(res.body.data.id, command, 'id is command');
+        assert.strictEqual(
+          res.body.data.attributes.status,
+          'ready',
+          'command status ready',
+        );
+        assert.notOk(res.body.data.attributes.error, 'no command error');
+        let cardResultString = res.body.data.attributes.cardResultString;
+        assert.strictEqual(
+          typeof cardResultString,
+          'string',
+          'returns serialized command card',
+        );
+        assert.notOk(
+          res.body.data.attributes.cardResult,
+          'does not return raw card instance over HTTP',
+        );
+        assert.ok(cardResultString.length > 0, 'serialized card is non-empty');
+        assert.ok(
+          cardResultString.includes('hello from command'),
+          'serialized card includes command output',
+        );
+        assert.ok(res.body.meta?.timing?.totalMs >= 0, 'has timing');
+        assert.ok(res.body.meta?.pool?.pageId, 'has pool.pageId');
+      });
+
+      test('it captures run-command error state', async function (assert) {
+        let permissions = {
+          [realmURL.href]: ['read', 'write', 'realm-owner'] as (
+            | 'read'
+            | 'write'
+            | 'realm-owner'
+          )[],
+        };
+        let auth = testCreatePrerenderAuth(testUserId, permissions);
+        let command = `${realmURL.href}command-runner-test/ThrowErrorCommand`;
+        let res = await request
+          .post('/run-command')
+          .set('Accept', 'application/vnd.api+json')
+          .set('Content-Type', 'application/json')
+          .send({
+            data: {
+              type: 'command-request',
+              attributes: {
+                realm: realmURL.href,
+                auth,
+                command,
+              },
+            },
+          });
+
+        assert.strictEqual(res.status, 201, 'HTTP 201');
+        assert.strictEqual(res.body.data.type, 'command-result', 'type ok');
+        assert.strictEqual(
+          res.body.data.attributes.status,
+          'error',
+          'command status error',
+        );
+        assert.ok(
+          (res.body.data.attributes.error as string).includes(
+            'command exploded',
+          ),
+          'returns command error message',
+        );
+        assert.notOk(
+          res.body.data.attributes.cardResultString,
+          'no serialized card result on command error',
+        );
+        assert.notOk(
+          res.body.data.attributes.cardResult,
+          'no raw card instance on command error',
+        );
+        assert.ok(res.body.meta?.timing?.totalMs >= 0, 'has timing');
+        assert.ok(res.body.meta?.pool?.pageId, 'has pool.pageId');
+      });
     });
 
     test('reports draining status when shutting down', async function (assert) {

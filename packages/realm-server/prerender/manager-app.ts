@@ -777,8 +777,9 @@ export function buildPrerenderManagerApp(options?: {
         attempts.add(target);
 
         const targetURL = `${normalizeURL(target)}/${pathSuffix}`;
+        let logTarget = attrs.url ?? attrs.command ?? '<unknown>';
         log.info(
-          `proxying ${label} prerender request for ${attrs.url} to ${targetURL}`,
+          `proxying ${label} prerender request for ${logTarget} to ${targetURL}`,
         );
         let abortedDueToDrain = false;
         const ac = new AbortController();
@@ -910,6 +911,9 @@ export function buildPrerenderManagerApp(options?: {
   );
   router.post('/prerender-file-render', (ctxt) =>
     proxyPrerenderRequest(ctxt, 'prerender-file-render', 'file-render'),
+  );
+  router.post('/run-command', (ctxt) =>
+    proxyPrerenderRequest(ctxt, 'run-command', 'command'),
   );
 
   let verboseManagerLogs =

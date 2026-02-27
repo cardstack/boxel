@@ -68,8 +68,8 @@ class EmbeddedTemplate extends Component<typeof Listing> {
 
   get writableRealms(): { name: string; url: string; iconURL?: string }[] {
     const commandResource = this.allRealmsInfoResource;
-    if (commandResource?.isSuccess && commandResource.value) {
-      const result = commandResource.value as GetAllRealmMetasResult;
+    if (commandResource?.isSuccess && commandResource.cardResult) {
+      const result = commandResource.cardResult as GetAllRealmMetasResult;
       if (result.results) {
         return result.results
           .filter(

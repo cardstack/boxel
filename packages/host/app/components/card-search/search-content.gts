@@ -321,29 +321,9 @@ export default class SearchContent extends Component<Signature> {
       return this.resolvedCard ? '1 result from 1 realm' : '0 results';
     }
 
-    // Recents view (empty search or focused on recents)
-    if (this.focusedSection === 'recents' || this.isSearchKeyEmpty) {
-      const count = this.recentCardsSection?.totalCount ?? 0;
-      return `${count} in ${pluralize('Recent', count)}`;
-    }
-
     // Query search results
     const total = this.searchPrerenderedCards.meta.page?.total ?? 0;
     const realms = this.realms;
-
-    // Focused on a specific realm section
-    if (this.focusedSection?.startsWith('realm:')) {
-      const realmUrl = this.focusedSection.slice('realm:'.length);
-      const realmInfo = this.realm.info(realmUrl);
-      const realmName = realmInfo?.name ?? this.realmNameFromUrl(realmUrl);
-      const realmTotal = this.resultCountByRealm[realmUrl];
-
-      if (typeof realmTotal === 'number') {
-        return `${pluralize('result', total, true)} across ${pluralize('realm', realms.length, true)}, ${pluralize('result', realmTotal, true)} in ${realmName}`;
-      }
-
-      return `${pluralize('result', total, true)} in ${realmName}`;
-    }
 
     // Default: all results across all realms
     return `${pluralize('result', total, true)} across ${pluralize('realm', realms.length, true)}`;
@@ -565,17 +545,6 @@ export default class SearchContent extends Component<Signature> {
     }
 
     return sections;
-  }
-
-  private get resultCountByRealm(): Record<string, number> {
-    const sections = this.cardsByQuerySection ?? [];
-    const counts: Record<string, number> = {};
-    for (const section of sections) {
-      if (section.type === 'realm') {
-        counts[section.realmUrl] = section.totalCount;
-      }
-    }
-    return counts;
   }
 
   private get sections(): SearchSheetSection[] {

@@ -28,8 +28,8 @@ export class SimpleSearchCard extends CardDef {
 
     get searchResults() {
       const resource = this.searchResource;
-      if (resource?.isSuccess && resource.value?.cardIds) {
-        return resource.value.cardIds;
+      if (resource?.isSuccess && resource.cardResult?.cardIds) {
+        return resource.cardResult.cardIds;
       }
       return [];
     }

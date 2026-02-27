@@ -3,6 +3,7 @@ import type {
   DBAdapter,
   ExecuteOptions,
   PgPrimitive,
+  QueuePublisher,
 } from '@cardstack/runtime-common';
 import type {
   MatrixClient,
@@ -23,8 +24,9 @@ function makeBotTriggerEvent(
       origin_server_ts: originServerTs,
       type: BOT_TRIGGER_EVENT_TYPE,
       content: {
-        type: 'create-listing-pr',
+        type: 'pr-listing-create',
         input: {},
+        realm: 'http://localhost:4201/test/',
       },
     },
     getSender: () => sender,
@@ -94,6 +96,7 @@ module('timeline handler', () => {
     | ((sql: string, opts?: ExecuteOptions) => void)
     | undefined;
   let dbAdapter: DBAdapter;
+  let queuePublisher: QueuePublisher;
   let handleTimelineEvent: ReturnType<typeof onTimelineEvent>;
 
   dbAdapter = {
@@ -107,9 +110,15 @@ module('timeline handler', () => {
     getColumnNames: async () => [],
   } as DBAdapter;
 
+  queuePublisher = {
+    publish: async () => ({ id: 1, done: Promise.resolve(undefined) }) as any,
+    destroy: async () => {},
+  };
+
   handleTimelineEvent = onTimelineEvent({
     authUserId: '@submissionbot:localhost',
     dbAdapter,
+    queuePublisher,
   });
 
   function mockGetRegistrations(

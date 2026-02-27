@@ -1,0 +1,31 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "BotRequestDemo",
+        "module": "../bot-request-demo"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "notes": null,
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null
+      },
+      "cardId": "",
+      "format": "isolated",
+      "roomId": "",
+      "realm": "http://localhost:4201/experiments/",
+      "listingId": ""
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

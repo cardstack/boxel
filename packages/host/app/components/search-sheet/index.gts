@@ -124,6 +124,14 @@ export default class SearchSheet extends Component<Signature> {
     this.args.onCancel();
   }
 
+  @action
+  private onBlur() {
+    this.args.onBlur();
+    if (this.args.mode === SearchSheetModes.Closed) {
+      this.resetState();
+    }
+  }
+
   @action private handleCardSelect(selection: string | { realmURL: string }) {
     if (typeof selection !== 'string') {
       return;
@@ -239,7 +247,7 @@ export default class SearchSheet extends Component<Signature> {
       data-test-search-sheet={{@mode}}
       data-test-search-realms={{this.joinSelectedRealmURLs}}
       {{onClickOutside
-        @onBlur
+        this.onBlur
         exceptSelector='.add-card-to-neighbor-stack,.boxel-picker__dropdown,.picker-before-options-with-search,.picker-option-row,.search-sheet-header,.search-sheet-section-header,.variant-default'
       }}
     >

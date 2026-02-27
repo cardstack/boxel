@@ -6,6 +6,7 @@ import {
   type FileRenderResponse,
   type FileRenderArgs,
   logger,
+  type RunCommandResponse,
 } from '@cardstack/runtime-common';
 import { BrowserManager } from './browser-manager';
 import { PagePool } from './page-pool';
@@ -337,6 +338,46 @@ export class Prerenderer {
       return lastResult;
     }
     throw new Error(`module prerender attempts exhausted for ${url}`);
+  }
+
+  async runCommand({
+    realm,
+    auth,
+    command,
+    commandInput,
+    opts,
+  }: {
+    realm: string;
+    auth: string;
+    command: string;
+    commandInput?: Record<string, unknown> | null;
+    opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
+  }): Promise<{
+    response: RunCommandResponse;
+    timings: { launchMs: number; renderMs: number };
+    pool: {
+      pageId: string;
+      realm: string;
+      reused: boolean;
+      evicted: boolean;
+      timedOut: boolean;
+    };
+  }> {
+    if (this.#stopped) {
+      throw new Error('Prerenderer has been stopped and cannot be used');
+    }
+    try {
+      return await this.#renderRunner.runCommandAttempt({
+        realm,
+        auth,
+        command,
+        commandInput,
+        opts,
+      });
+    } catch (e) {
+      log.error(`command run attempt failed (realm ${realm})`, e);
+      throw e;
+    }
   }
 
   async prerenderFileExtract({
