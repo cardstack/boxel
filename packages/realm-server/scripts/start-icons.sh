@@ -21,7 +21,7 @@ if [ -n "$BOXEL_BRANCH" ]; then
       'http:',
       '  routers:',
       '    ' + routerKey + ':',
-      '      rule: \"Host(\`icons.${BRANCH_SLUG}.lvh.me\`)\"',
+      '      rule: \"Host(\`icons.${BRANCH_SLUG}.localhost\`)\"',
       '      service: ' + routerKey,
       '      entryPoints:',
       '        - web',
@@ -35,7 +35,7 @@ if [ -n "$BOXEL_BRANCH" ]; then
     const tmp = configPath + '.tmp';
     fs.writeFileSync(tmp, entry, 'utf-8');
     fs.renameSync(tmp, configPath);
-    console.log('Registered icons at icons.${BRANCH_SLUG}.lvh.me -> localhost:${ICONS_PORT}');
+    console.log('Registered icons at icons.${BRANCH_SLUG}.localhost -> localhost:${ICONS_PORT}');
   "
 
   wait $ICONS_PID

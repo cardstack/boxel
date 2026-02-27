@@ -10,10 +10,10 @@ wait_for_postgres
 # Branch-mode configuration
 if [ -n "$BOXEL_BRANCH" ]; then
   BRANCH_SLUG=$(echo "$BOXEL_BRANCH" | tr '[:upper:]' '[:lower:]' | sed 's|/|-|g; s|[^a-z0-9-]||g; s|-\+|-|g; s|^-\|-$||g')
-  REALM_BASE_URL="http://realm-server.${BRANCH_SLUG}.lvh.me"
+  REALM_BASE_URL="http://realm-server.${BRANCH_SLUG}.localhost"
   WORKER_PORT=0
   PGDATABASE_VAL="boxel_${BRANCH_SLUG}"
-  PRERENDER_URL="${PRERENDER_URL:-http://prerender-mgr.${BRANCH_SLUG}.lvh.me}"
+  PRERENDER_URL="${PRERENDER_URL:-http://prerender-mgr.${BRANCH_SLUG}.localhost}"
 else
   REALM_BASE_URL="http://localhost:4201"
   WORKER_PORT=4210

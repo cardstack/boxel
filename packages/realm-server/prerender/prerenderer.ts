@@ -76,7 +76,7 @@ export class Prerenderer {
     this.#startCleanupLoop();
     void this.#pagePool.warmStandbys().catch((e) => {
       log.warn(
-        'Failed to warm standby pages during prerenderer startup (host app may not be ready yet):',
+        'Failed to warm standby pages during prerenderer startup:',
         e,
       );
     });

@@ -3,7 +3,7 @@
 /**
  * Wrapper around `serve` that supports dynamic port allocation in branch mode.
  * When BOXEL_BRANCH is set, picks a free port, starts `serve`, then registers
- * with Traefik so that `host.<branch>.lvh.me` routes to this instance.
+ * with Traefik so that `host.<branch>.localhost` routes to this instance.
  * When BOXEL_BRANCH is not set, behaves identically to the old serve:dist command.
  */
 
@@ -84,7 +84,7 @@ if (!BOXEL_BRANCH) {
   }
 
   const slug = sanitizeSlug(BOXEL_BRANCH);
-  const hostname = `host.${slug}.lvh.me`;
+  const hostname = `host.${slug}.localhost`;
 
   // Find a free port
   const srv = net.createServer();

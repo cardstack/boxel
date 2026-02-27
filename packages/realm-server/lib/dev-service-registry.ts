@@ -13,7 +13,7 @@ import yaml from 'yaml';
 
 const log = logger('dev-service-registry');
 
-const DOMAIN = 'lvh.me';
+const DOMAIN = 'localhost';
 
 // Resolve traefik/dynamic dir relative to repo root
 function traefikDynamicDir(): string {
