@@ -400,12 +400,7 @@ export class IndexRunner {
         ...this.#jobInfo,
         url,
         realm: this.#realmURL.href,
-        deps: [
-          resolveCardReference(
-            moduleFrom(resource.meta.adoptsFrom),
-            url,
-          ),
-        ],
+        deps: [resolveCardReference(moduleFrom(resource.meta.adoptsFrom), url)],
       },
       status,
     );
