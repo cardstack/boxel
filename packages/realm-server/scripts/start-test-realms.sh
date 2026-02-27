@@ -30,6 +30,7 @@ if [ -n "$BOXEL_BRANCH" ]; then
   PRERENDER_URL="${PRERENDER_URL:-http://prerender.${BRANCH_SLUG}.localhost}"
   WORKER_MANAGER_ARG="--workerManagerUrl=http://worker-test.${BRANCH_SLUG}.localhost"
   SERVICE_NAME_ARG="--serviceName=realm-test"
+  MATRIX_URL_VAL="http://matrix.${BRANCH_SLUG}.localhost"
 
   # Ensure per-branch test database exists
   sh "$SCRIPTS_DIR/../../../scripts/ensure-branch-db.sh" "test_${BRANCH_SLUG}"
@@ -42,6 +43,7 @@ else
   PRERENDER_URL="${PRERENDER_URL:-http://localhost:4221}"
   WORKER_MANAGER_ARG="$1"
   SERVICE_NAME_ARG=""
+  MATRIX_URL_VAL="http://localhost:8008"
 fi
 
 pnpm --dir=../skills-realm skills:setup
@@ -58,12 +60,12 @@ NODE_ENV=test \
   REALM_SERVER_SECRET_SEED="mum's the word" \
   REALM_SECRET_SEED="shhh! it's a secret" \
   GRAFANA_SECRET="shhh! it's a secret" \
-  MATRIX_URL=http://localhost:8008 \
+  MATRIX_URL="${MATRIX_URL_VAL}" \
   REALM_SERVER_MATRIX_USERNAME=realm_server \
   ts-node \
   --transpileOnly main \
   --port="${TEST_PORT}" \
-  --matrixURL='http://localhost:8008' \
+  --matrixURL="${MATRIX_URL_VAL}" \
   --realmsRootPath="${REALMS_ROOT}" \
   --matrixRegistrationSecretFile='../matrix/registration_secret.txt' \
   --migrateDB \

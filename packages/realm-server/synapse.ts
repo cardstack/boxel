@@ -5,13 +5,30 @@ import { createHmac } from 'crypto';
 import yaml from 'yaml';
 import { existsSync } from 'fs';
 
-const homeserverFile = resolve(
-  join(__dirname, '..', 'matrix', 'synapse-data', 'homeserver.yaml'),
-);
+function homeserverFile(): string {
+  if (process.env.BOXEL_BRANCH) {
+    let slug = process.env.BOXEL_BRANCH
+      .toLowerCase()
+      .replace(/\//g, '-')
+      .replace(/[^a-z0-9-]/g, '')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '');
+    let branchFile = resolve(
+      join(__dirname, '..', 'matrix', `synapse-data-${slug}`, 'homeserver.yaml'),
+    );
+    if (existsSync(branchFile)) {
+      return branchFile;
+    }
+  }
+  return resolve(
+    join(__dirname, '..', 'matrix', 'synapse-data', 'homeserver.yaml'),
+  );
+}
 
 export function getLocalConfig() {
-  if (existsSync(homeserverFile)) {
-    let homeserverYml = readFileSync(homeserverFile, 'utf8');
+  let file = homeserverFile();
+  if (existsSync(file)) {
+    let homeserverYml = readFileSync(file, 'utf8');
     return yaml.parse(homeserverYml) as Record<string, any>;
   }
   return undefined;

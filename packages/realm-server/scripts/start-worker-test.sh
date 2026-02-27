@@ -20,6 +20,7 @@ if [ -n "$BOXEL_BRANCH" ]; then
   PRERENDER_URL="${PRERENDER_URL:-http://prerender-mgr.${BRANCH_SLUG}.localhost}"
   SERVICE_NAME_ARG="--serviceName=worker-test"
   MIGRATE_ARG="--migrateDB"
+  MATRIX_URL_VAL="http://matrix.${BRANCH_SLUG}.localhost"
 
   # Ensure per-branch test database exists
   sh "$SCRIPTS_DIR/../../../scripts/ensure-branch-db.sh" "test_${BRANCH_SLUG}"
@@ -31,6 +32,7 @@ else
   PRERENDER_URL="${PRERENDER_URL:-http://localhost:4222}"
   SERVICE_NAME_ARG=""
   MIGRATE_ARG=""
+  MATRIX_URL_VAL="http://localhost:8008"
 fi
 
 wait_for_prerender "$PRERENDER_URL"
@@ -46,7 +48,7 @@ NODE_ENV=test \
   ts-node \
   --transpileOnly worker-manager \
   --port="${WORKER_PORT}" \
-  --matrixURL='http://localhost:8008' \
+  --matrixURL="${MATRIX_URL_VAL}" \
   --prerendererUrl="${PRERENDER_URL}" \
   $SERVICE_NAME_ARG \
   $MIGRATE_ARG \

@@ -40,6 +40,7 @@ if [ -n "$BOXEL_BRANCH" ]; then
   REALM_PORT=0
   REALMS_ROOT="./realms/${BRANCH_SLUG}"
   PGDATABASE_VAL="boxel_${BRANCH_SLUG}"
+  MATRIX_URL_VAL="http://matrix.${BRANCH_SLUG}.localhost"
   # Ensure per-branch database exists
   sh "$SCRIPTS_DIR/../../../scripts/ensure-branch-db.sh" "$BRANCH_SLUG"
 else
@@ -47,6 +48,7 @@ else
   REALM_PORT=4201
   REALMS_ROOT="./realms/localhost_4201"
   PGDATABASE_VAL="boxel"
+  MATRIX_URL_VAL="http://localhost:8008"
 fi
 
 DEFAULT_CATALOG_REALM_URL="${REALM_BASE_URL}/catalog/"
@@ -91,13 +93,13 @@ LOW_CREDIT_THRESHOLD="${LOW_CREDIT_THRESHOLD:-2000}" \
   REALM_SERVER_SECRET_SEED="mum's the word" \
   REALM_SECRET_SEED="shhh! it's a secret" \
   GRAFANA_SECRET="shhh! it's a secret" \
-  MATRIX_URL=http://localhost:8008 \
+  MATRIX_URL="${MATRIX_URL_VAL}" \
   REALM_SERVER_MATRIX_USERNAME=realm_server \
   ENABLE_FILE_WATCHER=true \
   ts-node \
   --transpileOnly main \
   --port="${REALM_PORT}" \
-  --matrixURL='http://localhost:8008' \
+  --matrixURL="${MATRIX_URL_VAL}" \
   --realmsRootPath="${REALMS_ROOT}" \
   --prerendererUrl="${PRERENDER_URL}" \
   --migrateDB \

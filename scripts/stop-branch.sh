@@ -112,7 +112,20 @@ else
   echo "No running processes found for branch $SLUG."
 fi
 
-# --- 2. Clean up Traefik dynamic config files ---
+# --- 2. Stop per-branch Synapse container ---
+SYNAPSE_CONTAINER="boxel-synapse-${SLUG}"
+if docker ps -a --format '{{.Names}}' | grep -qx "$SYNAPSE_CONTAINER"; then
+  if [ "$DRY_RUN" = true ]; then
+    echo "Would stop Synapse container: $SYNAPSE_CONTAINER"
+  else
+    echo "Stopping Synapse container: $SYNAPSE_CONTAINER"
+    docker stop "$SYNAPSE_CONTAINER" 2>/dev/null || true
+  fi
+else
+  echo "No Synapse container found for branch $SLUG."
+fi
+
+# --- 3. Clean up Traefik dynamic config files ---
 if [ -d "$TRAEFIK_DIR" ]; then
   REMOVED=0
   for f in "$TRAEFIK_DIR/${SLUG}"-*.yml; do
@@ -132,7 +145,7 @@ if [ -d "$TRAEFIK_DIR" ]; then
   fi
 fi
 
-# --- 3. Optionally drop per-branch databases ---
+# --- 4. Optionally drop per-branch databases ---
 if [ "$DROP_DB" = true ]; then
   for DB_NAME in "boxel_${SLUG}" "boxel_test_${SLUG}"; do
     if docker exec boxel-pg psql -U postgres -lqt 2>/dev/null | cut -d \| -f 1 | grep -qw "$DB_NAME"; then

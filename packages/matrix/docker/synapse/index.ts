@@ -12,6 +12,12 @@ import {
 } from '../index';
 import { APP_BOXEL_REALMS_EVENT_TYPE } from '../../helpers/matrix-constants';
 import { appURL } from '../../helpers/isolated-realm-server';
+import {
+  isBranchMode,
+  getSynapseContainerName,
+  getSynapseURL,
+  registerSynapseWithTraefik,
+} from '../../helpers/branch-config';
 
 export const SYNAPSE_IP_ADDRESS = '172.20.0.5';
 export const SYNAPSE_PORT = 8008;
@@ -111,7 +117,8 @@ export async function synapseStart(
 ): Promise<SynapseInstance> {
   if (stopExisting) {
     // Stop the main server if it's running
-    let stopPromises = [dockerStop({ containerId: 'boxel-synapse' })];
+    let defaultContainerName = getSynapseContainerName();
+    let stopPromises = [dockerStop({ containerId: defaultContainerName })];
     for (const [id, _synapse] of synapses) {
       // Stop any other synapses that are running
       stopPromises.push(synapseStop(id));
@@ -122,28 +129,35 @@ export async function synapseStart(
     opts?.template ?? 'test',
     opts?.dataDir,
   );
-  let containerName = opts?.containerName || path.basename(synCfg.configDir);
+  let containerName = opts?.containerName || (isBranchMode() ? getSynapseContainerName() : path.basename(synCfg.configDir));
   console.log(
     `Starting synapse with config dir ${synCfg.configDir} in container ${containerName}...`,
   );
   await dockerCreateNetwork({ networkName: 'boxel' });
-  const synapseId = await dockerRun({
-    image: 'matrixdotorg/synapse:v1.126.0',
-    containerName: 'boxel-synapse',
-    dockerParams: [
-      '--rm',
-      '-v',
-      `${synCfg.configDir}:/data`,
-      '-v',
-      `${path.join(__dirname, 'templates')}:/custom/templates/`,
+
+  let dockerParams: string[] = [
+    '--rm',
+    '-v',
+    `${synCfg.configDir}:/data`,
+    '-v',
+    `${path.join(__dirname, 'templates')}:/custom/templates/`,
+  ];
+  if (isBranchMode() && !opts?.containerName) {
+    // Branch mode: dynamic host port, no fixed IP
+    dockerParams.push('-p', '0:8008/tcp', '--network=boxel');
+  } else {
+    dockerParams.push(
       `--ip=${synCfg.host}`,
-      /**
-       * When using -p flag with --ip, the docker internal port must be used to access from the host
-       */
       '-p',
       `${synCfg.port}:8008/tcp`,
       '--network=boxel',
-    ],
+    );
+  }
+
+  const synapseId = await dockerRun({
+    image: 'matrixdotorg/synapse:v1.126.0',
+    containerName,
+    dockerParams,
     applicationParams: ['run'],
     runAsUser: true,
   });
@@ -166,6 +180,18 @@ export async function synapseStart(
       `http://localhost:8008/health`,
     ],
   });
+
+  // In branch mode, read the dynamic host port and register with Traefik
+  if (isBranchMode() && !opts?.containerName) {
+    let { execSync } = await import('child_process');
+    let portOutput = execSync(`docker port ${synapseId} 8008/tcp`, {
+      encoding: 'utf-8',
+    }).trim();
+    let firstLine = portOutput.split('\n')[0];
+    let hostPort = parseInt(firstLine.split(':').pop()!, 10);
+    console.log(`Synapse dynamic host port: ${hostPort}`);
+    registerSynapseWithTraefik(hostPort);
+  }
 
   const synapse: SynapseInstance = { synapseId, ...synCfg };
   synapses.set(synapseId, synapse);
@@ -220,7 +246,7 @@ export async function registerUser(
   admin = false,
   displayName?: string,
 ): Promise<Credentials> {
-  const url = `http://localhost:${SYNAPSE_PORT}/_synapse/admin/v1/register`;
+  const url = `${getSynapseURL()}/_synapse/admin/v1/register`;
   const context = await request.newContext({ baseURL: url });
   const { nonce } = await (await context.get(url)).json();
   const mac = admin
@@ -273,7 +299,7 @@ export async function loginUser(
 ): Promise<Credentials> {
   let url = matrixURL
     ? `${matrixURL}/_matrix/client/r0/login`
-    : `http://localhost:${SYNAPSE_PORT}/_matrix/client/r0/login`;
+    : `${getSynapseURL()}/_matrix/client/r0/login`;
   let response = await (
     await fetch(url, {
       method: 'POST',
@@ -298,7 +324,7 @@ export async function updateDisplayName(
   newDisplayName: string,
 ): Promise<void> {
   let response = await fetch(
-    `http://localhost:${SYNAPSE_PORT}/_matrix/client/v3/profile/${userId}/displayname`,
+    `${getSynapseURL()}/_matrix/client/v3/profile/${userId}/displayname`,
     {
       method: 'PUT',
       headers: {
@@ -323,7 +349,7 @@ export async function createRegistrationToken(
   usesAllowed = 1000,
 ) {
   let res = await fetch(
-    `http://localhost:${SYNAPSE_PORT}/_synapse/admin/v1/registration_tokens/new`,
+    `${getSynapseURL()}/_synapse/admin/v1/registration_tokens/new`,
     {
       method: 'POST',
       headers: {
@@ -359,7 +385,7 @@ export async function updateUser(
 ) {
   let url = matrixURL
     ? `${matrixURL}/_synapse/admin/v2/users/${userId}`
-    : `http://localhost:${SYNAPSE_PORT}/_synapse/admin/v2/users/${userId}`;
+    : `${getSynapseURL()}/_synapse/admin/v2/users/${userId}`;
   let res = await fetch(url, {
     method: 'PUT',
     headers: {
@@ -393,7 +419,7 @@ export async function updateAccountData(
   data: string,
 ): Promise<void> {
   let response = await fetch(
-    `http://localhost:${SYNAPSE_PORT}/_matrix/client/v3/user/${userId}/account_data/${type}`,
+    `${getSynapseURL()}/_matrix/client/v3/user/${userId}/account_data/${type}`,
     {
       method: 'PUT',
       headers: {
@@ -416,7 +442,7 @@ export async function getAccountData<T>(
   type: string,
 ): Promise<T> {
   let response = await fetch(
-    `http://localhost:${SYNAPSE_PORT}/_matrix/client/v3/user/${userId}/account_data/${type}`,
+    `${getSynapseURL()}/_matrix/client/v3/user/${userId}/account_data/${type}`,
     {
       headers: {
         Authorization: `Bearer ${accessToken}`,
@@ -429,7 +455,7 @@ export async function getAccountData<T>(
 
 export async function getJoinedRooms(accessToken: string) {
   let response = await fetch(
-    `http://localhost:${SYNAPSE_PORT}/_matrix/client/v3/joined_rooms`,
+    `${getSynapseURL()}/_matrix/client/v3/joined_rooms`,
     {
       headers: {
         Authorization: `Bearer ${accessToken}`,
@@ -446,7 +472,7 @@ export async function getRoomStateEventType(
   eventType: string,
 ) {
   let response = await fetch(
-    `http://localhost:${SYNAPSE_PORT}/_matrix/client/v3/rooms/${roomId}/state/${eventType}`,
+    `${getSynapseURL()}/_matrix/client/v3/rooms/${roomId}/state/${eventType}`,
     {
       headers: {
         Authorization: `Bearer ${accessToken}`,
@@ -469,7 +495,7 @@ export async function getRoomRetentionPolicy(
 
 export async function getRoomMembers(roomId: string, accessToken: string) {
   let response = await fetch(
-    `http://localhost:${SYNAPSE_PORT}/_matrix/client/v3/rooms/${roomId}/joined_members`,
+    `${getSynapseURL()}/_matrix/client/v3/rooms/${roomId}/joined_members`,
     {
       headers: {
         Authorization: `Bearer ${accessToken}`,
@@ -481,7 +507,7 @@ export async function getRoomMembers(roomId: string, accessToken: string) {
 
 export async function sync(accessToken: string) {
   let response = await fetch(
-    `http://localhost:${SYNAPSE_PORT}/_matrix/client/v3/sync`,
+    `${getSynapseURL()}/_matrix/client/v3/sync`,
     {
       headers: {
         Authorization: `Bearer ${accessToken}`,
@@ -507,7 +533,7 @@ export async function getAllRoomEvents(
 
   do {
     let response = await fetch(
-      `http://localhost:${SYNAPSE_PORT}/_matrix/client/v3/rooms/${roomId}/messages?dir=${
+      `${getSynapseURL()}/_matrix/client/v3/rooms/${roomId}/messages?dir=${
         opts?.direction ? opts.direction.slice(0, 1) : 'f'
       }&limit=${opts?.pageSize ?? DEFAULT_PAGE_SIZE}${
         from ? '&from=' + from : ''
@@ -558,7 +584,7 @@ export async function putEvent(
   txnId: string,
   body: any,
 ) {
-  let url = `http://localhost:${SYNAPSE_PORT}/_matrix/client/v3/rooms/${roomId}/send/${eventType}/${txnId}`;
+  let url = `${getSynapseURL()}/_matrix/client/v3/rooms/${roomId}/send/${eventType}/${txnId}`;
   let res = await await fetch(url, {
     method: 'PUT',
     headers: {

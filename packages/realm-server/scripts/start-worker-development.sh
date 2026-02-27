@@ -14,11 +14,13 @@ if [ -n "$BOXEL_BRANCH" ]; then
   WORKER_PORT=0
   PGDATABASE_VAL="boxel_${BRANCH_SLUG}"
   PRERENDER_URL="${PRERENDER_URL:-http://prerender-mgr.${BRANCH_SLUG}.localhost}"
+  MATRIX_URL_VAL="http://matrix.${BRANCH_SLUG}.localhost"
 else
   REALM_BASE_URL="http://localhost:4201"
   WORKER_PORT=4210
   PGDATABASE_VAL="boxel"
   PRERENDER_URL="${PRERENDER_URL:-http://localhost:4222}"
+  MATRIX_URL_VAL="http://localhost:8008"
 fi
 
 wait_for_prerender "$PRERENDER_URL"
@@ -40,7 +42,7 @@ NODE_ENV=development \
   --allPriorityCount="${WORKER_ALL_PRIORITY_COUNT:-1}" \
   --highPriorityCount="${WORKER_HIGH_PRIORITY_COUNT:-0}" \
   --port="${WORKER_PORT}" \
-  --matrixURL='http://localhost:8008' \
+  --matrixURL="${MATRIX_URL_VAL}" \
   --prerendererUrl="${PRERENDER_URL}" \
   \
   --fromUrl='https://cardstack.com/base/' \
