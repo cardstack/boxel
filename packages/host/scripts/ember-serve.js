@@ -75,6 +75,11 @@ if (!BOXEL_BRANCH) {
   const slug = sanitizeSlug(BOXEL_BRANCH);
   const hostname = `host.${slug}.localhost`;
 
+  // Point the client at the per-branch Synapse via Traefik
+  if (!process.env.MATRIX_URL) {
+    process.env.MATRIX_URL = `http://matrix.${slug}.localhost`;
+  }
+
   // Find a free port
   const srv = net.createServer();
   srv.listen(0, () => {
