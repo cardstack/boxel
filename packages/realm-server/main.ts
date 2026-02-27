@@ -458,7 +458,8 @@ const getIndexHTML = async () => {
 
 async function waitForWorkerManager(url: string) {
   let isReady = false;
-  let timeout = Date.now() + 30_000;
+  let timeoutMs = isBranchMode() ? 120_000 : 30_000;
+  let timeout = Date.now() + timeoutMs;
   let normalizedUrl = url.replace(/\/$/, '') + '/';
   do {
     try {
