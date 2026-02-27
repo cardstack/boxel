@@ -3,7 +3,7 @@
 /**
  * Wrapper around `ember serve` that supports dynamic port allocation in branch mode.
  * When BOXEL_BRANCH is set, picks a free port, passes --port to ember serve,
- * then registers with Traefik so that `host.<branch>.localdev.boxel.ai` routes here.
+ * then registers with Traefik so that `host.<branch>.lvh.me` routes here.
  * When BOXEL_BRANCH is not set, behaves identically to the old start command.
  */
 
@@ -103,7 +103,7 @@ if (!BOXEL_BRANCH) {
   startEmber(4200);
 } else {
   const slug = sanitizeSlug(BOXEL_BRANCH);
-  const hostname = `host.${slug}.localdev.boxel.ai`;
+  const hostname = `host.${slug}.lvh.me`;
 
   // Find a free port
   const srv = net.createServer();

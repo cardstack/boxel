@@ -32,11 +32,11 @@ function branchDefaults() {
     };
   }
   let slug = branchSlug();
-  let realmHost = `realm.${slug}.localdev.boxel.ai`;
+  let realmHost = `realm.${slug}.lvh.me`;
   return {
     realmServerURL: `http://${realmHost}/`,
     realmHost,
-    iconsURL: `http://icons.${slug}.localdev.boxel.ai`,
+    iconsURL: `http://icons.${slug}.lvh.me`,
     baseRealmURL: `http://${realmHost}/base/`,
     catalogRealmURL: `http://${realmHost}/catalog/`,
     skillsRealmURL: `http://${realmHost}/skills/`,

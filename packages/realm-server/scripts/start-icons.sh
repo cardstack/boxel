@@ -22,12 +22,12 @@ if [ -n "$BOXEL_BRANCH" ]; then
     if (!config.http) config.http = {};
     if (!config.http.routers) config.http.routers = {};
     if (!config.http.services) config.http.services = {};
-    config.http.routers['icons-' + slug] = { rule: 'Host(\`icons.${BRANCH_SLUG}.localdev.boxel.ai\`)', service: 'icons-' + slug, entryPoints: ['web'] };
+    config.http.routers['icons-' + slug] = { rule: 'Host(\`icons.${BRANCH_SLUG}.lvh.me\`)', service: 'icons-' + slug, entryPoints: ['web'] };
     config.http.services['icons-' + slug] = { loadBalancer: { servers: [{ url: 'http://host.docker.internal:${ICONS_PORT}' }] } };
     const tmp = configPath + '.tmp';
     fs.writeFileSync(tmp, yaml.stringify(config), 'utf-8');
     fs.renameSync(tmp, configPath);
-    console.log('Registered icons at icons.${BRANCH_SLUG}.localdev.boxel.ai -> localhost:${ICONS_PORT}');
+    console.log('Registered icons at icons.${BRANCH_SLUG}.lvh.me -> localhost:${ICONS_PORT}');
   "
 
   wait $ICONS_PID

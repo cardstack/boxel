@@ -8,7 +8,7 @@ import yaml from 'yaml';
 
 const log = logger('dev-service-registry');
 
-const DOMAIN = 'localdev.boxel.ai';
+const DOMAIN = 'lvh.me';
 
 // Resolve traefik/dynamic dir relative to repo root
 function traefikDynamicDir(): string {

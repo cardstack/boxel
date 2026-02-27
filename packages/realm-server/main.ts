@@ -342,7 +342,7 @@ const getIndexHTML = async () => {
   // PUBLISHED_REALM_BOXEL_SPACE_DOMAIN is used to form urls like "mike.boxel.space/game-mechanics"
   // PUBLISHED_REALM_BOXEL_SITE_DOMAIN is used to form urls like "mike.boxel.site"
   let defaultPublishedDomain = isBranchMode()
-    ? `realm.${getBranchSlug()}.localdev.boxel.ai`
+    ? `realm.${getBranchSlug()}.lvh.me`
     : 'localhost:4201';
   let domainsForPublishedRealms = {
     boxelSpace:
