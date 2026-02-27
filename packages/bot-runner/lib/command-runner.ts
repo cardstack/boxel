@@ -17,6 +17,9 @@ import type { GitHubClient } from './github';
 
 const log = logger('bot-runner');
 
+const SAVE_SUBMISSION_JOB_TIMEOUT_SEC = 300;
+const SAVE_SUBMISSION_PUPPETEER_TIMEOUT_MS = 280_000;
+
 export class CommandRunner {
   private createListingPRHandler: CreateListingPRHandler;
 
@@ -92,6 +95,37 @@ export class CommandRunner {
           runAs,
           result,
         );
+
+        // Fire-and-forget: persist the SubmissionCard to the realm with a
+        // longer timeout so the large allFileContents payload does not hit the
+        // 30-second Puppeteer limit that applies to create-submission.
+        let roomId =
+          typeof input.roomId === 'string' ? input.roomId : undefined;
+        let listingId =
+          typeof input.listingId === 'string' ? input.listingId : undefined;
+        if (roomId && listingId) {
+          void this.enqueueRunCommand({
+            runAs,
+            realmURL,
+            command:
+              '@cardstack/boxel-host/commands/save-submission/default',
+            commandInput: { realm: realmURL, roomId, listingId },
+            jobTimeoutSec: SAVE_SUBMISSION_JOB_TIMEOUT_SEC,
+            puppeteerTimeoutMs: SAVE_SUBMISSION_PUPPETEER_TIMEOUT_MS,
+          }).catch((err) =>
+            log.error('save-submission job failed', {
+              runAs,
+              realmURL,
+              error: err,
+            }),
+          );
+        } else {
+          log.warn(
+            'skipping save-submission: missing roomId or listingId in event input',
+            { runAs, realmURL },
+          );
+        }
+
         return result;
       }
 
@@ -116,23 +150,30 @@ export class CommandRunner {
     realmURL,
     command,
     commandInput,
+    jobTimeoutSec,
+    puppeteerTimeoutMs,
   }: {
     runAs: string;
     realmURL: string;
     command: string;
     commandInput: Record<string, any> | null;
+    jobTimeoutSec?: number;
+    puppeteerTimeoutMs?: number;
   }): Promise<RunCommandResponse> {
+    let args: Parameters<typeof enqueueRunCommandJob>[0] = {
+      realmURL,
+      realmUsername: runAs,
+      runAs,
+      command,
+      commandInput,
+      puppeteerTimeoutMs: puppeteerTimeoutMs ?? null,
+    };
     let job = await enqueueRunCommandJob(
-      {
-        realmURL,
-        realmUsername: runAs,
-        runAs,
-        command,
-        commandInput,
-      },
+      args,
       this.queuePublisher,
       this.dbAdapter,
       userInitiatedPriority,
+      jobTimeoutSec,
     );
     return await job.done;
   }

@@ -16,6 +16,7 @@ export interface RunCommandArgs extends JSONTypes.Object {
   runAs: string;
   command: string;
   commandInput: JSONTypes.Object | null;
+  puppeteerTimeoutMs: number | null;
 }
 
 export { runCommand };
@@ -81,6 +82,9 @@ const runCommand: Task<RunCommandArgs, RunCommandResponse> = ({
       auth,
       command: normalizedCommand,
       commandInput: commandInput ?? undefined,
+      opts: args.puppeteerTimeoutMs
+        ? { timeoutMs: args.puppeteerTimeoutMs }
+        : undefined,
     });
 
     reportStatus(jobInfo, 'finish');

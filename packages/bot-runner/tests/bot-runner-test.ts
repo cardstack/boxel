@@ -222,6 +222,7 @@ module('timeline handler', () => {
           runAs: '@alice:localhost',
           command: '@cardstack/boxel-host/commands/show-card/default',
           commandInput: {},
+          puppeteerTimeoutMs: null,
         },
       },
       'enqueues expected command payload',

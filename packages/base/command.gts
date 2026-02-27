@@ -385,6 +385,12 @@ export class CreateSubmissionInput extends CardDef {
   @field listingId = contains(StringField);
 }
 
+export class SaveSubmissionInput extends CardDef {
+  @field roomId = contains(StringField);
+  @field realm = contains(RealmField);
+  @field listingId = contains(StringField);
+}
+
 export class CreateListingPRRequestInput extends CardDef {
   @field realm = contains(RealmField);
   @field listingId = contains(StringField);

@@ -55,6 +55,7 @@ export default class CreateListingPRRequestCommand extends HostBaseCommand<
     if (!(await this.matrixService.isUserInRoom(roomId, submissionBotId))) {
       await this.matrixService.inviteUserToRoom(roomId, submissionBotId);
     }
+    await this.waitForBotToJoin(roomId, submissionBotId);
 
     await new SendBotTriggerEventCommand(this.commandContext).execute({
       roomId,
@@ -67,5 +68,30 @@ export default class CreateListingPRRequestCommand extends HostBaseCommand<
         ...(listingName ? { listingName } : {}),
       },
     });
+  }
+
+  private async waitForBotToJoin(
+    roomId: string,
+    userId: string,
+    timeoutMs = 10_000,
+    intervalMs = 500,
+  ): Promise<void> {
+    let deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      try {
+        let state = await this.matrixService.getStateEvent(
+          roomId,
+          'm.room.member',
+          userId,
+        );
+        if ((state as any)?.membership === 'join') {
+          return;
+        }
+      } catch {
+        // state event not yet present, keep polling
+      }
+      await new Promise<void>((resolve) => setTimeout(resolve, intervalMs));
+    }
+    throw new Error(`Timed out waiting for ${userId} to join room ${roomId}`);
   }
 }

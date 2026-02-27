@@ -129,6 +129,7 @@ export type RunCommandArgs = {
   auth: string;
   command: string;
   commandInput?: Record<string, any> | null;
+  opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
 };
 
 export type RunCommandResponse = {

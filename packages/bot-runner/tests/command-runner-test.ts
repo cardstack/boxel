@@ -90,6 +90,7 @@ module('command runner', () => {
           runAs: '@alice:localhost',
           command: '@cardstack/boxel-host/commands/show-card/default',
           commandInput: { cardId: 'http://localhost:4201/test/Person/1' },
+          puppeteerTimeoutMs: null,
         },
       },
       'publishes expected run-command payload',
@@ -186,6 +187,7 @@ module('command runner', () => {
         userId: '@alice:localhost',
         input: {
           roomId: '!abc123:localhost',
+          listingId: 'http://localhost:4201/catalog/AppListing/some-id',
           listingName: 'My Listing',
           listingDescription: 'Example listing',
         },
@@ -193,7 +195,33 @@ module('command runner', () => {
       'bot-registration-2',
     );
 
-    assert.strictEqual(publishedJobs.length, 1, 'enqueues run-command job');
+    // Allow fire-and-forget save-submission microtasks to flush
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    assert.strictEqual(
+      publishedJobs.length,
+      2,
+      'enqueues create-submission job and save-submission job',
+    );
+    assert.deepEqual(
+      (publishedJobs[1] as any).args.command,
+      '@cardstack/boxel-host/commands/save-submission/default',
+      'second job is the save-submission command',
+    );
+    assert.strictEqual(
+      (publishedJobs[1] as any).timeout,
+      300,
+      'save-submission job uses a 300-second timeout',
+    );
+    assert.deepEqual(
+      (publishedJobs[1] as any).args.commandInput,
+      {
+        realm: 'http://localhost:4201/test/',
+        roomId: '!abc123:localhost',
+        listingId: 'http://localhost:4201/catalog/AppListing/some-id',
+      },
+      'save-submission job receives realm, roomId, and listingId',
+    );
     assert.strictEqual(createdBranches.length, 1, 'creates branch');
     assert.strictEqual(branchWrites.length, 1, 'writes files to branch');
     assert.strictEqual(openedPRs.length, 1, 'opens pull request');
