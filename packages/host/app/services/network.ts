@@ -52,6 +52,8 @@ export default class NetworkService extends Service {
     let virtualNetwork = new VirtualNetwork(globalThis.fetch);
     let baseRealmURL = withTrailingSlash(config.resolvedBaseRealmURL);
     registerCardReferencePrefix('@cardstack/base/', baseRealmURL);
+    // Legacy: resolve old base realm URLs found in Matrix messages and other historical data
+    registerCardReferencePrefix('https://cardstack.com/base/', baseRealmURL);
     virtualNetwork.addImportMap(
       '@cardstack/base/',
       (rest) => new URL(rest, baseRealmURL).href,
