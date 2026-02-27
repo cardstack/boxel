@@ -79,7 +79,7 @@ module.exports = function (defaults) {
               process: 'process',
             }),
             new webpack.IgnorePlugin({
-              resourceRegExp: /^https:\/\/cardstack\.com\/base/,
+              resourceRegExp: /^@cardstack\/base/,
             }),
             new MomentLocalesPlugin({
               // 'en' is built into moment and cannot be removed. This strips the others.
