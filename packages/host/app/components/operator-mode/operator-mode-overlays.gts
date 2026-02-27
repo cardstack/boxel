@@ -379,8 +379,8 @@ export default class OperatorModeOverlays extends Overlays {
       return type;
     }
     // Fallback: check the internal registry of file-meta URLs populated by
-    // prerendered search. Prerendered FileDef results are HTML-only and never
-    // loaded into the store, so the store-based detection above misses them.
+    // prerendered search. The prerendered search only fetches HTML, so the
+    // file-meta data may not yet be in the store when the user first clicks.
     if (typeof cardDefOrId === 'string' && knownFileMetaUrls.has(cardDefOrId)) {
       return 'file';
     }
