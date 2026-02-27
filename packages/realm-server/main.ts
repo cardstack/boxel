@@ -384,7 +384,8 @@ const getIndexHTML = async () => {
   });
   process.on('message', (message) => {
     if (message === 'stop') {
-      console.log(`stopping realm server on port ${port}...`);
+      let stopPort = (httpServer.address() as import('net').AddressInfo | null)?.port ?? port;
+      console.log(`stopping realm server on port ${stopPort}...`);
       if (isBranchMode()) {
         deregisterBranch();
       }
@@ -392,13 +393,13 @@ const getIndexHTML = async () => {
       httpServer.close(() => {
         queue.destroy(); // warning this is async
         dbAdapter.close(); // warning this is async
-        console.log(`realm server on port ${port} has stopped`);
+        console.log(`realm server on port ${stopPort} has stopped`);
         if (process.send) {
           process.send('stopped');
         }
       });
     } else if (message === 'kill') {
-      console.log(`Ending server process for ${port}...`);
+      console.log(`Ending server process...`);
       process.exit(0);
     } else if (
       typeof message === 'string' &&
@@ -431,7 +432,8 @@ const getIndexHTML = async () => {
 
   await server.start();
 
-  log.info(`Realm server listening on port ${port} is serving realms:`);
+  let actualPort = (httpServer.address() as import('net').AddressInfo | null)?.port ?? port;
+  log.info(`Realm server listening on port ${actualPort} is serving realms:`);
   let additionalMappings = hrefs.slice(paths.length);
   for (let [index, { url }] of realms.entries()) {
     log.info(`    ${url} => ${hrefs[index][1]}, serving path ${paths[index]}`);
