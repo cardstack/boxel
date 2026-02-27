@@ -1,5 +1,8 @@
 #! /bin/sh
 SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
+. "$SCRIPTS_DIR/ensure-traefik.sh"
+
+ensure_traefik
 
 # Start the prerender manager in development
 # Ports default to 4222 unless PRERENDER_MANAGER_PORT is provided

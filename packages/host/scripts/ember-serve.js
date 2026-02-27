@@ -102,6 +102,9 @@ if (!BOXEL_BRANCH) {
   // Legacy mode: default ember serve on port 4200
   startEmber(4200);
 } else {
+  const { ensureTraefik } = require('./ensure-traefik');
+  ensureTraefik();
+
   const slug = sanitizeSlug(BOXEL_BRANCH);
   const hostname = `host.${slug}.lvh.me`;
 

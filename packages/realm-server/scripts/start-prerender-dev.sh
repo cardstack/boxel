@@ -1,5 +1,8 @@
 #! /bin/sh
 SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
+. "$SCRIPTS_DIR/ensure-traefik.sh"
+
+ensure_traefik
 
 # Branch-mode configuration
 if [ -n "$BOXEL_BRANCH" ]; then

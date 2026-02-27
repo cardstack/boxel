@@ -36,6 +36,9 @@ if (!BOXEL_BRANCH) {
   runServe(4200);
 } else {
   // Branch mode: dynamic port + Traefik registration
+  const { ensureTraefik } = require('./ensure-traefik');
+  ensureTraefik();
+
   const net = require('net');
   const fs = require('fs');
 

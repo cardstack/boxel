@@ -1,6 +1,9 @@
 #! /bin/sh
 SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
 . "$SCRIPTS_DIR/wait-for-pg.sh"
+. "$SCRIPTS_DIR/ensure-traefik.sh"
+
+ensure_traefik
 
 sh "$SCRIPTS_DIR/start-icons.sh" &
 ICONS_PID=$!

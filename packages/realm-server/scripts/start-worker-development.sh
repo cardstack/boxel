@@ -2,7 +2,9 @@
 SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
 . "$SCRIPTS_DIR/wait-for-pg.sh"
 . "$SCRIPTS_DIR/wait-for-prerender.sh"
+. "$SCRIPTS_DIR/ensure-traefik.sh"
 
+ensure_traefik
 wait_for_postgres
 
 # Branch-mode configuration
