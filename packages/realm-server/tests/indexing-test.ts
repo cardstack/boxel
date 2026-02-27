@@ -404,8 +404,8 @@ function makeTestRealmFileSystem(): Record<
       },
     },
     'address.gts': `
-      import { contains, field, FieldDef } from "https://cardstack.com/base/card-api";
-      import StringField from "https://cardstack.com/base/string";
+      import { contains, field, FieldDef } from "@cardstack/base/card-api";
+      import StringField from "@cardstack/base/string";
 
       export class Address extends FieldDef {
         @field street = contains(StringField);
@@ -413,7 +413,7 @@ function makeTestRealmFileSystem(): Record<
       }
     `,
     'order-page.gts': `
-      import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
+      import { contains, field, CardDef } from "@cardstack/base/card-api";
       import { Address } from "./address";
 
       export class OrderPage extends CardDef {

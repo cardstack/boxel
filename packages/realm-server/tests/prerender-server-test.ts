@@ -51,7 +51,7 @@ module(basename(__filename), function () {
             field,
             contains,
             StringField,
-          } from 'https://cardstack.com/base/card-api';
+          } from '@cardstack/base/card-api';
 
           export class CommandResult extends CardDef {
             static displayName = 'CommandResult';
