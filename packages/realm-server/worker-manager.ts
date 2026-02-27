@@ -124,7 +124,7 @@ process.on('SIGTERM', () => (isExiting = true));
 let webServerInstance: Server | undefined;
 let autoMigrate = migrateDB || undefined;
 
-if (port) {
+if (port != null) {
   let webServer = new Koa<Koa.DefaultState, Koa.Context>();
   let router = new Router();
   router.head('/', livenessCheck);
