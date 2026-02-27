@@ -40,6 +40,8 @@ if [ -n "$BOXEL_BRANCH" ]; then
   REALM_PORT=0
   REALMS_ROOT="./realms/${BRANCH_SLUG}"
   PGDATABASE_VAL="boxel_${BRANCH_SLUG}"
+  # Ensure per-branch database exists
+  sh "$SCRIPTS_DIR/../../../scripts/ensure-branch-db.sh" "$BRANCH_SLUG"
 else
   REALM_BASE_URL="http://localhost:4201"
   REALM_PORT=4201

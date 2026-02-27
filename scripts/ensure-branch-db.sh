@@ -14,14 +14,13 @@ else
 fi
 
 DB_NAME="boxel_${SLUG}"
-PGPORT="${PGPORT:-5435}"
 
-echo "Ensuring database '${DB_NAME}' exists on port ${PGPORT}..."
+echo "Ensuring database '${DB_NAME}' exists..."
 
-# Check if DB exists; create if not
-if psql -p "$PGPORT" -lqt | cut -d \| -f 1 | grep -qw "$DB_NAME"; then
+# Use docker exec to talk to the boxel-pg container directly
+if docker exec boxel-pg psql -U postgres -lqt | cut -d \| -f 1 | grep -qw "$DB_NAME"; then
   echo "Database '${DB_NAME}' already exists."
 else
-  createdb -p "$PGPORT" "$DB_NAME"
+  docker exec boxel-pg createdb -U postgres "$DB_NAME"
   echo "Created database '${DB_NAME}'."
 fi
