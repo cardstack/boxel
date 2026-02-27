@@ -60,60 +60,26 @@ if (!BOXEL_BRANCH) {
     const dynamicDir = path.resolve(
       __dirname, '..', '..', '..', 'traefik', 'dynamic',
     );
-    const configPath = path.join(dynamicDir, `${slug}.yml`);
+    const configPath = path.join(dynamicDir, `${slug}-host.yml`);
     const routerKey = `host-${slug}`;
 
-    let yaml;
-    try {
-      // Try to resolve yaml from realm-server's dependencies
-      const realmServerDir = path.resolve(__dirname, '..', '..', 'realm-server');
-      yaml = require(require.resolve('yaml', { paths: [realmServerDir] }));
-    } catch {
-      // yaml not resolvable — write minimal YAML by hand
-      const entry = [
-        'http:',
-        '  routers:',
-        `    ${routerKey}:`,
-        '      rule: "Host(`' + hostname + '`)"',
-        `      service: ${routerKey}`,
-        '      entryPoints:',
-        '        - web',
-        '  services:',
-        `    ${routerKey}:`,
-        '      loadBalancer:',
-        '        servers:',
-        `          - url: "http://host.docker.internal:${port}"`,
-        '',
-      ].join('\n');
-      const tmpPath = configPath + '.tmp';
-      fs.writeFileSync(tmpPath, entry, 'utf-8');
-      fs.renameSync(tmpPath, configPath);
-      return;
-    }
-
-    let config = {};
-    try {
-      config = yaml.parse(fs.readFileSync(configPath, 'utf-8')) || {};
-    } catch {
-      // file may not exist yet
-    }
-    if (!config.http) config.http = {};
-    if (!config.http.routers) config.http.routers = {};
-    if (!config.http.services) config.http.services = {};
-
-    config.http.routers[routerKey] = {
-      rule: `Host(\`${hostname}\`)`,
-      service: routerKey,
-      entryPoints: ['web'],
-    };
-    config.http.services[routerKey] = {
-      loadBalancer: {
-        servers: [{ url: `http://host.docker.internal:${port}` }],
-      },
-    };
-
+    const entry = [
+      'http:',
+      '  routers:',
+      `    ${routerKey}:`,
+      '      rule: "Host(`' + hostname + '`)"',
+      `      service: ${routerKey}`,
+      '      entryPoints:',
+      '        - web',
+      '  services:',
+      `    ${routerKey}:`,
+      '      loadBalancer:',
+      '        servers:',
+      `          - url: "http://host.docker.internal:${port}"`,
+      '',
+    ].join('\n');
     const tmpPath = configPath + '.tmp';
-    fs.writeFileSync(tmpPath, yaml.stringify(config), 'utf-8');
+    fs.writeFileSync(tmpPath, entry, 'utf-8');
     fs.renameSync(tmpPath, configPath);
   }
 

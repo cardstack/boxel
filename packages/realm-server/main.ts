@@ -377,9 +377,11 @@ const getIndexHTML = async () => {
   });
 
   let httpServer = server.listen(port);
-  if (isBranchMode()) {
-    registerService(httpServer, 'realm');
-  }
+  httpServer.on('listening', () => {
+    if (isBranchMode()) {
+      registerService(httpServer, 'realm');
+    }
+  });
   process.on('message', (message) => {
     if (message === 'stop') {
       console.log(`stopping realm server on port ${port}...`);

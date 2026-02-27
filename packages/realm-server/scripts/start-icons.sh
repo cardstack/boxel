@@ -11,21 +11,29 @@ if [ -n "$BOXEL_BRANCH" ]; then
   # Register icons service with Traefik via a small node script
   BRANCH_SLUG=$(echo "$BOXEL_BRANCH" | tr '[:upper:]' '[:lower:]' | sed 's|/|-|g; s|[^a-z0-9-]||g; s|-\+|-|g; s|^-\|-$||g')
   node -e "
-    const yaml = require('yaml');
     const fs = require('fs');
     const path = require('path');
     const dir = path.resolve(__dirname, '..', '..', 'traefik', 'dynamic');
     const slug = '${BRANCH_SLUG}';
-    const configPath = path.join(dir, slug + '.yml');
-    let config = {};
-    try { config = yaml.parse(fs.readFileSync(configPath, 'utf-8')) || {}; } catch {}
-    if (!config.http) config.http = {};
-    if (!config.http.routers) config.http.routers = {};
-    if (!config.http.services) config.http.services = {};
-    config.http.routers['icons-' + slug] = { rule: 'Host(\`icons.${BRANCH_SLUG}.lvh.me\`)', service: 'icons-' + slug, entryPoints: ['web'] };
-    config.http.services['icons-' + slug] = { loadBalancer: { servers: [{ url: 'http://host.docker.internal:${ICONS_PORT}' }] } };
+    const routerKey = 'icons-' + slug;
+    const configPath = path.join(dir, slug + '-icons.yml');
+    const entry = [
+      'http:',
+      '  routers:',
+      '    ' + routerKey + ':',
+      '      rule: \"Host(\`icons.${BRANCH_SLUG}.lvh.me\`)\"',
+      '      service: ' + routerKey,
+      '      entryPoints:',
+      '        - web',
+      '  services:',
+      '    ' + routerKey + ':',
+      '      loadBalancer:',
+      '        servers:',
+      '          - url: \"http://host.docker.internal:${ICONS_PORT}\"',
+      '',
+    ].join('\\n');
     const tmp = configPath + '.tmp';
-    fs.writeFileSync(tmp, yaml.stringify(config), 'utf-8');
+    fs.writeFileSync(tmp, entry, 'utf-8');
     fs.renameSync(tmp, configPath);
     console.log('Registered icons at icons.${BRANCH_SLUG}.lvh.me -> localhost:${ICONS_PORT}');
   "

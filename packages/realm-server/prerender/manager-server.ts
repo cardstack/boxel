@@ -38,10 +38,14 @@ let { app } = buildPrerenderManagerApp({
 });
 let _webServerInstance: Server | undefined;
 _webServerInstance = createServer(app.callback()).listen(port);
-if (isBranchMode() && _webServerInstance) {
-  registerService(_webServerInstance, 'prerender-mgr');
-}
-log.info(`prerender manager HTTP listening on port ${port}`);
+_webServerInstance.on('listening', () => {
+  let actualPort =
+    (_webServerInstance!.address() as import('net').AddressInfo).port ?? port;
+  if (isBranchMode()) {
+    registerService(_webServerInstance!, 'prerender-mgr');
+  }
+  log.info(`prerender manager HTTP listening on port ${actualPort}`);
+});
 
 function shutdown(signal: NodeJS.Signals) {
   if (draining) return;

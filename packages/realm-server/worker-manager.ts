@@ -32,7 +32,7 @@ import {
 import {
   isBranchMode,
   registerService,
-  deregisterBranch,
+  deregisterService,
 } from './lib/dev-service-registry';
 
 /* About the Worker Manager
@@ -170,19 +170,20 @@ if (port) {
   });
 
   webServerInstance = webServer.listen(port);
-  if (isBranchMode() && webServerInstance) {
-    registerService(webServerInstance, 'worker');
-  }
-  log.info(`worker manager HTTP listening on port ${port}`);
+  webServerInstance.on('listening', () => {
+    let actualPort =
+      (webServerInstance!.address() as import('net').AddressInfo).port ?? port;
+    if (isBranchMode()) {
+      registerService(webServerInstance!, 'worker');
+    }
+    log.info(`worker manager HTTP listening on port ${actualPort}`);
+  });
 }
 
 const shutdown = (onShutdown?: () => void) => {
   log.info(`Shutting down server for worker manager...`);
   if (isBranchMode()) {
-    // deregisterBranch is idempotent; the realm server's shutdown also
-    // calls it, but calling here ensures cleanup if the worker manager exits
-    // independently.
-    deregisterBranch();
+    deregisterService('worker');
   }
 
   if (dailyCreditGrantJob) {

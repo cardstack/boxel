@@ -29,10 +29,15 @@ webServerInstance = createPrerenderHttpServer({
   silent,
   port,
 }).listen(port);
-if (isBranchMode() && webServerInstance) {
-  registerService(webServerInstance, 'prerender');
-}
-log.info(`prerender server HTTP listening on port ${port}`);
+let actualPort = port;
+webServerInstance.on('listening', () => {
+  actualPort =
+    (webServerInstance!.address() as import('net').AddressInfo).port ?? port;
+  if (isBranchMode()) {
+    registerService(webServerInstance!, 'prerender');
+  }
+  log.info(`prerender server HTTP listening on port ${actualPort}`);
+});
 
 function shutdown() {
   log.info(`Shutting down prerender server...`);
@@ -42,7 +47,7 @@ function shutdown() {
       log.error(`Error while closing prerender server:`, err);
       process.exit(1);
     }
-    log.info(`prerender server HTTP on port ${port} has stopped.`);
+    log.info(`prerender server HTTP on port ${actualPort} has stopped.`);
     process.exit(0);
   });
 }

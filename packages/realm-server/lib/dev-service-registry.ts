@@ -1,5 +1,10 @@
 import { execSync } from 'child_process';
-import { writeFileSync, renameSync, unlinkSync, readFileSync } from 'fs';
+import {
+  writeFileSync,
+  renameSync,
+  unlinkSync,
+  readdirSync,
+} from 'fs';
 import { join, resolve } from 'path';
 import { logger } from '@cardstack/runtime-common';
 import type { Server } from 'http';
@@ -56,9 +61,11 @@ export function isBranchMode(): boolean {
 }
 
 /**
- * Register a running HTTP server with Traefik by writing/merging a dynamic YAML config.
- * The config file is `traefik/dynamic/<branch>.yml` and contains routers + services
- * for all services in this branch.
+ * Register a running HTTP server with Traefik by writing a per-service
+ * dynamic YAML config file: `traefik/dynamic/<slug>-<service>.yml`.
+ *
+ * Each service gets its own file so services can register/deregister
+ * independently without interfering with each other.
  */
 export function registerService(
   server: Server,
@@ -78,32 +85,26 @@ export function registerService(
     `Registering service ${serviceName} (port ${actualPort}) for branch ${slug}`,
   );
 
-  let configPath = join(traefikDynamicDir(), `${slug}.yml`);
-  let config = loadExistingConfig(configPath);
-
+  let configPath = join(traefikDynamicDir(), `${slug}-${serviceName}.yml`);
   let routerKey = `${serviceName}-${slug}`;
-  let serviceKey = `${serviceName}-${slug}`;
   let hostname = serviceHostname(serviceName, slug);
 
-  if (!config.http) {
-    config.http = {};
-  }
-  if (!config.http.routers) {
-    config.http.routers = {};
-  }
-  if (!config.http.services) {
-    config.http.services = {};
-  }
-
-  config.http.routers[routerKey] = {
-    rule: `Host(\`${hostname}\`)`,
-    service: serviceKey,
-    entryPoints: ['web'],
-  };
-
-  config.http.services[serviceKey] = {
-    loadBalancer: {
-      servers: [{ url: `http://host.docker.internal:${actualPort}` }],
+  let config: any = {
+    http: {
+      routers: {
+        [routerKey]: {
+          rule: `Host(\`${hostname}\`)`,
+          service: routerKey,
+          entryPoints: ['web'],
+        },
+      },
+      services: {
+        [routerKey]: {
+          loadBalancer: {
+            servers: [{ url: `http://host.docker.internal:${actualPort}` }],
+          },
+        },
+      },
     },
   };
 
@@ -114,27 +115,55 @@ export function registerService(
 }
 
 /**
- * Remove the branch's Traefik dynamic config file on shutdown.
+ * Remove a single service's Traefik config file on shutdown.
  */
-export function deregisterBranch(branch?: string): void {
+export function deregisterService(
+  serviceName: string,
+  branch?: string,
+): void {
   let slug = branch ?? getBranchSlug();
-  let configPath = join(traefikDynamicDir(), `${slug}.yml`);
+  let configPath = join(traefikDynamicDir(), `${slug}-${serviceName}.yml`);
   try {
     unlinkSync(configPath);
-    log.info(`Deregistered branch ${slug} from Traefik`);
+    log.info(`Deregistered ${serviceName} for branch ${slug} from Traefik`);
   } catch (e: any) {
     if (e.code !== 'ENOENT') {
-      log.error(`Failed to deregister branch ${slug}: ${e.message}`);
+      log.error(
+        `Failed to deregister ${serviceName} for branch ${slug}: ${e.message}`,
+      );
     }
   }
 }
 
-function loadExistingConfig(configPath: string): any {
+/**
+ * Remove all Traefik dynamic config files for a branch on full shutdown.
+ */
+export function deregisterBranch(branch?: string): void {
+  let slug = branch ?? getBranchSlug();
+  let dir = traefikDynamicDir();
+  let prefix = `${slug}-`;
   try {
-    let content = readFileSync(configPath, 'utf-8');
-    return yaml.parse(content) || {};
-  } catch {
-    return {};
+    let files = readdirSync(dir);
+    let removed = 0;
+    for (let file of files) {
+      if (file.startsWith(prefix) && file.endsWith('.yml')) {
+        try {
+          unlinkSync(join(dir, file));
+          removed++;
+        } catch (e: any) {
+          if (e.code !== 'ENOENT') {
+            log.error(`Failed to remove ${file}: ${e.message}`);
+          }
+        }
+      }
+    }
+    if (removed > 0) {
+      log.info(
+        `Deregistered branch ${slug} from Traefik (${removed} service(s))`,
+      );
+    }
+  } catch (e: any) {
+    log.error(`Failed to deregister branch ${slug}: ${e.message}`);
   }
 }
 
