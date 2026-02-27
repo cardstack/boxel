@@ -51,6 +51,7 @@ ROOT_PIDS=$(ps ax -o pid,command 2>/dev/null \
   | grep -E "(${SLUG}\.localhost|realms/${SLUG}|boxel_${SLUG}|BOXEL_BRANCH=${BRANCH})" \
   | grep -v "grep" \
   | grep -v "stop-branch" \
+  | grep -v "shell-snapshots" `# exclude Claude Code shell wrappers` \
   | awk '{print $1}' \
   | sort -u)
 
