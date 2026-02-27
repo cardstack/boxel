@@ -142,7 +142,7 @@ export async function synapseStart(
     '-v',
     `${path.join(__dirname, 'templates')}:/custom/templates/`,
   ];
-  if (isBranchMode() && !opts?.containerName) {
+  if (isBranchMode()) {
     // Branch mode: dynamic host port, no fixed IP
     dockerParams.push('-p', '0:8008/tcp', '--network=boxel');
   } else {
@@ -182,7 +182,7 @@ export async function synapseStart(
   });
 
   // In branch mode, read the dynamic host port and register with Traefik
-  if (isBranchMode() && !opts?.containerName) {
+  if (isBranchMode()) {
     let { execSync } = await import('child_process');
     let portOutput = execSync(`docker port ${synapseId} 8008/tcp`, {
       encoding: 'utf-8',
