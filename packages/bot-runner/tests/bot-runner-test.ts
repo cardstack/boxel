@@ -24,7 +24,7 @@ function makeBotTriggerEvent(
       origin_server_ts: originServerTs,
       type: BOT_TRIGGER_EVENT_TYPE,
       content: {
-        type: 'create-listing-pr',
+        type: 'pr-listing-create',
         input: {},
         realm: 'http://localhost:4201/test/',
       },

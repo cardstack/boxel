@@ -64,7 +64,7 @@ export default class CreateListingPRRequestCommand extends HostBaseCommand<
     await new SendBotTriggerEventCommand(this.commandContext).execute({
       roomId,
       realm,
-      type: 'create-listing-pr',
+      type: 'pr-listing-create',
       input: {
         roomId,
         realm,

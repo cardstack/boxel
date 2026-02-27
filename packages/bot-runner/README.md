@@ -109,7 +109,7 @@ flowchart TD
     "filter": {
       "type": "matrix-event",
       "event_type": "app.boxel.bot-trigger",
-      "content_type": "create-listing-pr"
+      "content_type": "pr-listing-create"
     }
   },
   {

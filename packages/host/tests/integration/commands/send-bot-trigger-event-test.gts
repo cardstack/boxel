@@ -66,14 +66,14 @@ module('Integration | commands | send-bot-trigger-event', function (hooks) {
     let command = new SendBotTriggerEventCommand(commandService.commandContext);
     await command.execute({
       roomId,
-      type: 'create-listing-pr',
+      type: 'pr-listing-create',
       realm: testRealmURL,
       input: { listingId: 'catalog/listing-1' },
     });
 
     let event = getRoomEvents(roomId).pop()!;
     assert.ok(isBotTriggerEvent(event));
-    assert.strictEqual(event.content.type, 'create-listing-pr');
+    assert.strictEqual(event.content.type, 'pr-listing-create');
     assert.strictEqual(event.content.realm, testRealmURL);
     assert.deepEqual(event.content.input, { listingId: 'catalog/listing-1' });
   });
