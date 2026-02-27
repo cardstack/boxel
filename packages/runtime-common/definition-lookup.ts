@@ -25,6 +25,7 @@ import {
   hasExecutableExtension,
   trimExecutableExtension,
 } from './index';
+import { resolveCardReference } from './card-reference-resolver';
 import type { VirtualNetwork } from './virtual-network';
 
 const MODULES_TABLE = 'modules';
@@ -37,7 +38,9 @@ const modulesTableCoerceTypes: TypeCoercion = Object.freeze({
 
 function canonicalURL(url: string, relativeTo?: string): string {
   try {
-    let parsed = new URL(url, relativeTo);
+    // Resolve prefix-based references (e.g. @cardstack/base/spec) to URLs first
+    let resolved = resolveCardReference(url, relativeTo);
+    let parsed = new URL(resolved);
     parsed.search = '';
     parsed.hash = '';
     return parsed.href;
