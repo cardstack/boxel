@@ -23,8 +23,8 @@ import {
   type LocalPath,
   type Reader,
   type Stats,
+  type ResolvedCodeRef,
 } from './index';
-import { moduleFrom } from './code-ref';
 import type { CacheScope, DefinitionLookup } from './definition-lookup';
 import { resolveCardReference } from './card-reference-resolver';
 import { isCardError } from './error';
@@ -402,7 +402,7 @@ export class IndexRunner {
         realm: this.#realmURL.href,
         deps: [
           resolveCardReference(
-            moduleFrom(resource.meta.adoptsFrom),
+            (resource.meta.adoptsFrom as ResolvedCodeRef).module,
             url,
           ),
         ],
