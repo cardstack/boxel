@@ -144,6 +144,7 @@ export class RenderRunner {
         expectedId: url.replace(/\.json$/i, ''),
         expectedNonce: String(this.#nonce),
         simulateTimeoutMs: opts?.simulateTimeoutMs,
+        timeoutMs: opts?.timeoutMs,
       };
       let applyStepError = (stepError: RenderError, evicted: boolean) => {
         error = error ?? stepError;
@@ -443,6 +444,7 @@ export class RenderRunner {
         expectedId: url,
         expectedNonce: String(this.#nonce),
         simulateTimeoutMs: opts?.simulateTimeoutMs,
+        timeoutMs: opts?.timeoutMs,
       };
 
       let capture = await withTimeout(
@@ -598,6 +600,7 @@ export class RenderRunner {
         expectedId: url,
         expectedNonce: String(this.#nonce),
         simulateTimeoutMs: opts?.simulateTimeoutMs,
+        timeoutMs: opts?.timeoutMs,
       };
 
       let capture = await withTimeout(
@@ -765,6 +768,7 @@ export class RenderRunner {
         expectedId: url,
         expectedNonce: String(this.#nonce),
         simulateTimeoutMs: opts?.simulateTimeoutMs,
+        timeoutMs: opts?.timeoutMs,
       };
 
       log.debug(

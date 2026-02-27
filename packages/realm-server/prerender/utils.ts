@@ -28,6 +28,7 @@ export interface CaptureOptions {
   expectedId?: string;
   expectedNonce?: string;
   simulateTimeoutMs?: number;
+  timeoutMs?: number;
 }
 
 export interface ModuleCapture {
@@ -166,6 +167,7 @@ async function waitForRoutePathSuffix(
   suffix: string,
   opts?: CaptureOptions,
 ): Promise<void> {
+  let waitTimeoutMs = effectiveRouteWaitTimeoutMs(opts);
   log.debug(`waitForRoutePathSuffix start suffix=${suffix} url=${page.url()}`);
   await page.waitForFunction(
     (
@@ -225,7 +227,7 @@ async function waitForRoutePathSuffix(
       }
       return false;
     },
-    { timeout: cardRenderTimeout },
+    { timeout: waitTimeoutMs },
     suffix,
     opts?.expectedId ?? null,
     opts?.expectedNonce ?? null,
@@ -239,6 +241,18 @@ async function waitForRoutePathSuffix(
   log.debug(
     `waitForRoutePathSuffix done suffix=${suffix} url=${page.url()} matchedByPath=${matchedByPath}`,
   );
+}
+
+function effectiveRouteWaitTimeoutMs(opts?: CaptureOptions): number {
+  if (typeof opts?.timeoutMs !== 'number') {
+    return cardRenderTimeout;
+  }
+
+  // Keep the inner Puppeteer wait close to the caller timeout so it cannot
+  // linger for the full cardRenderTimeout after withTimeout resolves, while
+  // still allowing withTimeout to win the race and produce our canonical error.
+  let withGrace = Math.ceil(opts.timeoutMs + 250);
+  return Math.max(1, Math.min(cardRenderTimeout, withGrace));
 }
 
 async function waitForPrerenderSettle(page: Page): Promise<void> {
