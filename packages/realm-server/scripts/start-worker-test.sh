@@ -2,14 +2,42 @@
 SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
 . "$SCRIPTS_DIR/wait-for-pg.sh"
 . "$SCRIPTS_DIR/wait-for-prerender.sh"
+. "$SCRIPTS_DIR/ensure-traefik.sh"
+
+if [ -n "$BOXEL_BRANCH" ]; then
+  ensure_traefik
+fi
 
 wait_for_postgres
-PRERENDER_URL="${PRERENDER_URL:-http://localhost:4222}"
+
+# Branch-mode configuration
+if [ -n "$BOXEL_BRANCH" ]; then
+  BRANCH_SLUG=$(echo "$BOXEL_BRANCH" | tr '[:upper:]' '[:lower:]' | sed 's|/|-|g; s|[^a-z0-9-]||g; s|-\+|-|g; s|^-\|-$||g')
+  REALM_TEST_URL="http://realm-test.${BRANCH_SLUG}.localhost"
+  REALM_BASE_URL="http://realm-server.${BRANCH_SLUG}.localhost"
+  WORKER_PORT=0
+  PGDATABASE_VAL="boxel_test_${BRANCH_SLUG}"
+  PRERENDER_URL="${PRERENDER_URL:-http://prerender-mgr.${BRANCH_SLUG}.localhost}"
+  SERVICE_NAME_ARG="--serviceName=worker-test"
+  MIGRATE_ARG="--migrateDB"
+
+  # Ensure per-branch test database exists
+  sh "$SCRIPTS_DIR/../../../scripts/ensure-branch-db.sh" "test_${BRANCH_SLUG}"
+else
+  REALM_TEST_URL="http://localhost:4202"
+  REALM_BASE_URL="http://localhost:4201"
+  WORKER_PORT=4211
+  PGDATABASE_VAL="boxel_test"
+  PRERENDER_URL="${PRERENDER_URL:-http://localhost:4222}"
+  SERVICE_NAME_ARG=""
+  MIGRATE_ARG=""
+fi
+
 wait_for_prerender "$PRERENDER_URL"
 
 NODE_ENV=test \
   PGPORT=5435 \
-  PGDATABASE=boxel_test \
+  PGDATABASE="${PGDATABASE_VAL}" \
   NODE_NO_WARNINGS=1 \
   NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=4096}" \
   REALM_SECRET_SEED="shhh! it's a secret" \
@@ -17,16 +45,18 @@ NODE_ENV=test \
   LOW_CREDIT_THRESHOLD=2000 \
   ts-node \
   --transpileOnly worker-manager \
-  --port=4211 \
+  --port="${WORKER_PORT}" \
   --matrixURL='http://localhost:8008' \
   --prerendererUrl="${PRERENDER_URL}" \
+  $SERVICE_NAME_ARG \
+  $MIGRATE_ARG \
   \
-  --fromUrl='http://localhost:4202/node-test/' \
-  --toUrl='http://localhost:4202/node-test/' \
+  --fromUrl="${REALM_TEST_URL}/node-test/" \
+  --toUrl="${REALM_TEST_URL}/node-test/" \
   \
-  --fromUrl='http://localhost:4202/test/' \
-  --toUrl='http://localhost:4202/test/' \
+  --fromUrl="${REALM_TEST_URL}/test/" \
+  --toUrl="${REALM_TEST_URL}/test/" \
   --fromUrl='https://cardstack.com/base/' \
-  --toUrl='http://localhost:4201/base/' \
-  --fromUrl='http://localhost:4201/skills/' \
-  --toUrl='http://localhost:4201/skills/'
+  --toUrl="${REALM_BASE_URL}/base/" \
+  --fromUrl="${REALM_BASE_URL}/skills/" \
+  --toUrl="${REALM_BASE_URL}/skills/"

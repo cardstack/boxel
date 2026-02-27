@@ -94,8 +94,9 @@ let {
   port,
   matrixURL,
   realmsRootPath,
+  serviceName = 'realm-server',
   serverURL = isBranchMode()
-    ? serviceURL('realm-server')
+    ? serviceURL(serviceName)
     : `http://localhost:${port}`,
   distURL = isBranchMode()
     ? serviceURL('host')
@@ -179,6 +180,11 @@ let {
     prerendererUrl: {
       demandOption: true,
       description: 'URL of the prerender server to invoke',
+      type: 'string',
+    },
+    serviceName: {
+      description:
+        'Traefik service name for registration in branch mode (default: realm-server)',
       type: 'string',
     },
   })
@@ -379,7 +385,7 @@ const getIndexHTML = async () => {
   let httpServer = server.listen(port);
   httpServer.on('listening', () => {
     if (isBranchMode()) {
-      registerService(httpServer, 'realm-server');
+      registerService(httpServer, serviceName);
     }
   });
   process.on('message', (message) => {

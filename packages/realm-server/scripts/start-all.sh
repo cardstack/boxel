@@ -11,7 +11,8 @@ if [ -n "$BOXEL_BRANCH" ]; then
   SKILLS_REALM="http-get://${REALM_HOST}/skills/"
   BOXEL_HOMEPAGE_REALM="http-get://${REALM_HOST}/boxel-homepage/"
   EXPERIMENTS_REALM="http-get://${REALM_HOST}/experiments/"
-  NODE_TEST_REALM="http-get://localhost:4202/node-test/"
+  REALM_TEST_HOST="realm-test.${BRANCH_SLUG}.localhost"
+  NODE_TEST_REALM="http-get://${REALM_TEST_HOST}/node-test/"
   ICONS_URL="http://${ICONS_HOST}"
 else
   BASE_REALM="http-get://localhost:4201/base/"

@@ -67,6 +67,7 @@ let {
   toUrl: toUrls,
   migrateDB,
   prerendererUrl,
+  serviceName = 'worker',
 } = yargs(process.argv.slice(2))
   .usage('Start worker manager')
   .options({
@@ -108,6 +109,11 @@ let {
     prerendererUrl: {
       demandOption: true,
       description: 'URL of the prerender server to invoke',
+      type: 'string',
+    },
+    serviceName: {
+      description:
+        'Traefik service name for registration in branch mode (default: worker)',
       type: 'string',
     },
   })
@@ -174,7 +180,7 @@ if (port != null) {
     let actualPort =
       (webServerInstance!.address() as import('net').AddressInfo).port ?? port;
     if (isBranchMode()) {
-      registerService(webServerInstance!, 'worker');
+      registerService(webServerInstance!, serviceName);
     }
     log.info(`worker manager HTTP listening on port ${actualPort}`);
   });
@@ -183,7 +189,7 @@ if (port != null) {
 const shutdown = (onShutdown?: () => void) => {
   log.info(`Shutting down server for worker manager...`);
   if (isBranchMode()) {
-    deregisterService('worker');
+    deregisterService(serviceName);
   }
 
   if (dailyCreditGrantJob) {
