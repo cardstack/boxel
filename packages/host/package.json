@@ -22,7 +22,7 @@
     "lint:js:fix": "eslint . --report-unused-disable-directives --fix",
     "lint:glint": "glint",
     "ensure-boxel-ui": "../boxel-ui/addon/bin/conditional-build.sh",
-    "start": "pnpm ensure-boxel-ui && NODE_OPTIONS='--max-old-space-size=8192' ember serve",
+    "start": "pnpm ensure-boxel-ui && node scripts/ember-serve.js",
     "serve:dist": "node scripts/serve-dist.js",
     "serve:dist:legacy": "serve --config ../tests/serve.json --single --cors --no-request-logging --no-etag --listen 4200 dist",
     "start:build": "NODE_OPTIONS='--max-old-space-size=8192' ember build --watch",

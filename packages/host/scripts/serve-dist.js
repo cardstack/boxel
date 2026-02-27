@@ -71,7 +71,7 @@ if (!BOXEL_BRANCH) {
         'http:',
         '  routers:',
         `    ${routerKey}:`,
-        `      rule: "Host(\\`${hostname}\\`)"`,
+        '      rule: "Host(`' + hostname + '`)"',
         `      service: ${routerKey}`,
         '      entryPoints:',
         '        - web',
