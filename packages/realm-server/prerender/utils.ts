@@ -285,8 +285,18 @@ async function waitForPrerenderSettle(page: Page): Promise<void> {
 
     let settle = (globalThis as any).__waitForRenderLoadStability;
     if (typeof settle === 'function') {
+      let stopPolling = false;
+      let settleOutcome = settle()
+        .then(() => ({ type: 'settled' as const }))
+        .catch((error: unknown) => ({
+          type: 'settle-rejected' as const,
+          error,
+        }))
+        .finally(() => {
+          stopPolling = true;
+        });
       let waitForTerminal = async () => {
-        for (;;) {
+        while (!stopPolling) {
           if (hasTerminalPrerenderState()) {
             return 'terminal-during-settle';
           }
@@ -294,19 +304,28 @@ async function waitForPrerenderSettle(page: Page): Promise<void> {
             requestAnimationFrame(() => resolve()),
           );
         }
+        return 'polling-stopped';
       };
 
-      try {
-        return await Promise.race([
-          settle().then(() => 'settled'),
-          waitForTerminal(),
-        ]);
-      } catch (error) {
-        if (hasTerminalPrerenderState()) {
-          return 'settle-rejected-terminal';
-        }
-        throw error;
+      let winner = await Promise.race([settleOutcome, waitForTerminal()]);
+
+      if (winner === 'terminal-during-settle') {
+        return 'terminal-during-settle';
       }
+
+      let finalOutcome = winner;
+      if (winner === 'polling-stopped') {
+        finalOutcome = await settleOutcome;
+      }
+
+      if (finalOutcome.type === 'settled') {
+        return 'settled';
+      }
+
+      if (hasTerminalPrerenderState()) {
+        return 'settle-rejected-terminal';
+      }
+      throw finalOutcome.error;
     }
     return 'missing-settle-hook';
   });
