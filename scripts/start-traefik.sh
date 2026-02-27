@@ -13,4 +13,4 @@ fi
 
 echo "Starting Traefik..."
 docker compose -f "$REPO_ROOT/docker-compose.traefik.yml" up -d
-echo "Traefik started. Dashboard at http://localhost:8080"
+echo "Traefik started. Dashboard at http://localhost:4230"

@@ -4,7 +4,7 @@ services:
     container_name: boxel-traefik
     ports:
       - "80:80"
-      - "8080:8080"
+      - "4230:4230"
     volumes:
       - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
       - ./traefik/dynamic:/etc/traefik/dynamic:ro
