@@ -32,7 +32,7 @@ function branchDefaults() {
     };
   }
   let slug = branchSlug();
-  let realmHost = `realm.${slug}.lvh.me`;
+  let realmHost = `realm-server.${slug}.lvh.me`;
   return {
     realmServerURL: `http://${realmHost}/`,
     realmHost,

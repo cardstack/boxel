@@ -3,7 +3,7 @@
 # Branch-mode: when BOXEL_BRANCH is set, use Traefik hostnames for readiness checks
 if [ -n "$BOXEL_BRANCH" ]; then
   BRANCH_SLUG=$(echo "$BOXEL_BRANCH" | tr '[:upper:]' '[:lower:]' | sed 's|/|-|g; s|[^a-z0-9-]||g; s|-\+|-|g; s|^-\|-$||g')
-  REALM_HOST="realm.${BRANCH_SLUG}.lvh.me"
+  REALM_HOST="realm-server.${BRANCH_SLUG}.lvh.me"
   ICONS_HOST="icons.${BRANCH_SLUG}.lvh.me"
 
   BASE_REALM="http-get://${REALM_HOST}/base/"
