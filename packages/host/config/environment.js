@@ -8,7 +8,45 @@ const DEFAULT_FILE_SIZE_LIMIT_BYTES = 5 * 1024 * 1024; // 5MB
 
 let sqlSchema = fs.readFileSync(getLatestSchemaFile(), 'utf8');
 
+// Branch-mode: when BOXEL_BRANCH is set, derive default URLs from Traefik hostnames
+function branchSlug() {
+  let raw = process.env.BOXEL_BRANCH || '';
+  return raw
+    .toLowerCase()
+    .replace(/\//g, '-')
+    .replace(/[^a-z0-9-]/g, '')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
+}
+
+function branchDefaults() {
+  if (!process.env.BOXEL_BRANCH) {
+    return {
+      realmServerURL: 'http://localhost:4201/',
+      realmHost: 'localhost:4201',
+      iconsURL: 'http://localhost:4206',
+      baseRealmURL: 'http://localhost:4201/base/',
+      catalogRealmURL: 'http://localhost:4201/catalog/',
+      skillsRealmURL: 'http://localhost:4201/skills/',
+      defaultSystemCardBase: 'http://localhost:4201',
+    };
+  }
+  let slug = branchSlug();
+  let realmHost = `realm.${slug}.localdev.boxel.ai`;
+  return {
+    realmServerURL: `http://${realmHost}/`,
+    realmHost,
+    iconsURL: `http://icons.${slug}.localdev.boxel.ai`,
+    baseRealmURL: `http://${realmHost}/base/`,
+    catalogRealmURL: `http://${realmHost}/catalog/`,
+    skillsRealmURL: `http://${realmHost}/skills/`,
+    defaultSystemCardBase: `http://${realmHost}`,
+  };
+}
+
 module.exports = function (environment) {
+  let defaults = branchDefaults();
+
   const ENV = {
     modulePrefix: '@cardstack/host',
     environment,
@@ -48,23 +86,23 @@ module.exports = function (environment) {
     fileSizeLimitBytes: Number(
       process.env.FILE_SIZE_LIMIT_BYTES ?? DEFAULT_FILE_SIZE_LIMIT_BYTES,
     ),
-    iconsURL: process.env.ICONS_URL || 'http://localhost:4206',
+    iconsURL: process.env.ICONS_URL || defaults.iconsURL,
     publishedRealmBoxelSpaceDomain:
-      process.env.PUBLISHED_REALM_BOXEL_SPACE_DOMAIN || 'localhost:4201',
+      process.env.PUBLISHED_REALM_BOXEL_SPACE_DOMAIN || defaults.realmHost,
     publishedRealmBoxelSiteDomain:
-      process.env.PUBLISHED_REALM_BOXEL_SITE_DOMAIN || 'localhost:4201',
+      process.env.PUBLISHED_REALM_BOXEL_SITE_DOMAIN || defaults.realmHost,
 
     // the fields below may be rewritten by the realm server
     hostsOwnAssets: true,
-    realmServerURL: process.env.REALM_SERVER_DOMAIN || 'http://localhost:4201/',
+    realmServerURL:
+      process.env.REALM_SERVER_DOMAIN || defaults.realmServerURL,
     resolvedBaseRealmURL:
-      process.env.RESOLVED_BASE_REALM_URL || 'http://localhost:4201/base/',
+      process.env.RESOLVED_BASE_REALM_URL || defaults.baseRealmURL,
     resolvedCatalogRealmURL: process.env.SKIP_CATALOG
       ? undefined
-      : process.env.RESOLVED_CATALOG_REALM_URL ||
-        'http://localhost:4201/catalog/',
+      : process.env.RESOLVED_CATALOG_REALM_URL || defaults.catalogRealmURL,
     resolvedSkillsRealmURL:
-      process.env.RESOLVED_SKILLS_REALM_URL || 'http://localhost:4201/skills/',
+      process.env.RESOLVED_SKILLS_REALM_URL || defaults.skillsRealmURL,
     featureFlags: {
       SHOW_ASK_AI: process.env.SHOW_ASK_AI === 'true' || false,
     },
@@ -79,7 +117,7 @@ module.exports = function (environment) {
     ENV.defaultSystemCardId = process.env.DEFAULT_SYSTEM_CARD_ID;
     if (!ENV.defaultSystemCardId && !process.env.SKIP_CATALOG) {
       ENV.defaultSystemCardId =
-        'http://localhost:4201/catalog/SystemCard/default';
+        defaults.defaultSystemCardBase + '/catalog/SystemCard/default';
     }
   }
 

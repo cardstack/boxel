@@ -4,6 +4,7 @@ import { logger } from '@cardstack/runtime-common';
 import yargs from 'yargs';
 import type { Server } from 'http';
 import { createPrerenderHttpServer } from './prerender-app';
+import { isBranchMode, registerService } from '../lib/dev-service-registry';
 
 let log = logger('prerender-server');
 
@@ -28,6 +29,9 @@ webServerInstance = createPrerenderHttpServer({
   silent,
   port,
 }).listen(port);
+if (isBranchMode() && webServerInstance) {
+  registerService(webServerInstance, 'prerender');
+}
 log.info(`prerender server HTTP listening on port ${port}`);
 
 function shutdown() {

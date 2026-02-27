@@ -29,6 +29,11 @@ import {
   createDailyCreditGrantCronJob,
   parseLowCreditThreshold,
 } from './lib/daily-credit-grant-config';
+import {
+  isBranchMode,
+  registerService,
+  deregisterBranch,
+} from './lib/dev-service-registry';
 
 /* About the Worker Manager
  *
@@ -165,11 +170,20 @@ if (port) {
   });
 
   webServerInstance = webServer.listen(port);
+  if (isBranchMode() && webServerInstance) {
+    registerService(webServerInstance, 'worker');
+  }
   log.info(`worker manager HTTP listening on port ${port}`);
 }
 
 const shutdown = (onShutdown?: () => void) => {
   log.info(`Shutting down server for worker manager...`);
+  if (isBranchMode()) {
+    // deregisterBranch is idempotent; the realm server's shutdown also
+    // calls it, but calling here ensures cleanup if the worker manager exits
+    // independently.
+    deregisterBranch();
+  }
 
   if (dailyCreditGrantJob) {
     log.info('Stopping daily-credit-grant cron job...');

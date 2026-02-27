@@ -5,6 +5,7 @@ import type { Server } from 'http';
 import { createServer } from 'http';
 import yargs from 'yargs';
 import { buildPrerenderManagerApp } from './manager-app';
+import { isBranchMode, registerService } from '../lib/dev-service-registry';
 
 let log = logger('prerender-manager');
 
@@ -37,6 +38,9 @@ let { app } = buildPrerenderManagerApp({
 });
 let _webServerInstance: Server | undefined;
 _webServerInstance = createServer(app.callback()).listen(port);
+if (isBranchMode() && _webServerInstance) {
+  registerService(_webServerInstance, 'prerender-mgr');
+}
 log.info(`prerender manager HTTP listening on port ${port}`);
 
 function shutdown(signal: NodeJS.Signals) {

@@ -24,6 +24,13 @@ import * as ContentTagGlobal from 'content-tag';
 import 'decorator-transforms/globals';
 import { createRemotePrerenderer } from './prerender/remote-prerenderer';
 import { buildCreatePrerenderAuth } from './prerender/auth';
+import {
+  isBranchMode,
+  getBranchSlug,
+  serviceURL,
+  registerService,
+  deregisterBranch,
+} from './lib/dev-service-registry';
 
 (globalThis as any).ContentTagGlobal = ContentTagGlobal;
 
@@ -87,8 +94,12 @@ let {
   port,
   matrixURL,
   realmsRootPath,
-  serverURL = `http://localhost:${port}`,
-  distURL = process.env.HOST_URL ?? 'http://localhost:4200',
+  serverURL = isBranchMode()
+    ? serviceURL('realm')
+    : `http://localhost:${port}`,
+  distURL = isBranchMode()
+    ? serviceURL('host')
+    : process.env.HOST_URL ?? 'http://localhost:4200',
   path: paths,
   fromUrl: fromUrls,
   toUrl: toUrls,
@@ -96,6 +107,7 @@ let {
   useRegistrationSecretFunction,
   migrateDB,
   workerManagerPort,
+  workerManagerUrl,
   prerendererUrl,
 } = yargs(process.argv.slice(2))
   .usage('Start realm server')
@@ -158,6 +170,11 @@ let {
       description:
         'The port the worker manager is running on. used to wait for the workers to be ready',
       type: 'number',
+    },
+    workerManagerUrl: {
+      description:
+        'The full URL of the worker manager. Used in branch mode instead of workerManagerPort.',
+      type: 'string',
     },
     prerendererUrl: {
       demandOption: true,
@@ -243,8 +260,10 @@ const getIndexHTML = async () => {
   let dbAdapter = new PgAdapter({ autoMigrate });
   let queue = new PgQueuePublisher(dbAdapter);
 
-  if (workerManagerPort != null) {
-    await waitForWorkerManager(workerManagerPort);
+  if (workerManagerUrl) {
+    await waitForWorkerManager(workerManagerUrl);
+  } else if (workerManagerPort != null) {
+    await waitForWorkerManager(`http://localhost:${workerManagerPort}`);
   }
 
   let matrixClient = new MatrixClient({
@@ -322,11 +341,14 @@ const getIndexHTML = async () => {
   // Domains to use for when users publish their realms.
   // PUBLISHED_REALM_BOXEL_SPACE_DOMAIN is used to form urls like "mike.boxel.space/game-mechanics"
   // PUBLISHED_REALM_BOXEL_SITE_DOMAIN is used to form urls like "mike.boxel.site"
+  let defaultPublishedDomain = isBranchMode()
+    ? `realm.${getBranchSlug()}.localdev.boxel.ai`
+    : 'localhost:4201';
   let domainsForPublishedRealms = {
     boxelSpace:
-      process.env.PUBLISHED_REALM_BOXEL_SPACE_DOMAIN || 'localhost:4201',
+      process.env.PUBLISHED_REALM_BOXEL_SPACE_DOMAIN || defaultPublishedDomain,
     boxelSite:
-      process.env.PUBLISHED_REALM_BOXEL_SITE_DOMAIN || 'localhost:4201',
+      process.env.PUBLISHED_REALM_BOXEL_SITE_DOMAIN || defaultPublishedDomain,
   };
 
   let server = new RealmServer({
@@ -355,9 +377,15 @@ const getIndexHTML = async () => {
   });
 
   let httpServer = server.listen(port);
+  if (isBranchMode()) {
+    registerService(httpServer, 'realm');
+  }
   process.on('message', (message) => {
     if (message === 'stop') {
       console.log(`stopping realm server on port ${port}...`);
+      if (isBranchMode()) {
+        deregisterBranch();
+      }
       httpServer.closeAllConnections();
       httpServer.close(() => {
         queue.destroy(); // warning this is async
@@ -426,12 +454,13 @@ const getIndexHTML = async () => {
   process.exit(-3);
 });
 
-async function waitForWorkerManager(port: number) {
+async function waitForWorkerManager(url: string) {
   let isReady = false;
   let timeout = Date.now() + 30_000;
+  let normalizedUrl = url.replace(/\/$/, '') + '/';
   do {
     try {
-      let response = await fetch(`http://localhost:${port}/`);
+      let response = await fetch(normalizedUrl);
       if (response.ok) {
         let json = await response.json();
         isReady = json.ready;
@@ -446,7 +475,7 @@ async function waitForWorkerManager(port: number) {
   } while (!isReady && Date.now() < timeout);
   if (!isReady) {
     throw new Error(
-      `timed out waiting for worker manager to be ready on port ${port}`,
+      `timed out waiting for worker manager to be ready at ${url}`,
     );
   }
   log.info('workers are ready');

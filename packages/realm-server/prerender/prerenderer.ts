@@ -11,9 +11,13 @@ import {
 import { BrowserManager } from './browser-manager';
 import { PagePool } from './page-pool';
 import { RenderRunner } from './render-runner';
+import { isBranchMode, serviceURL } from '../lib/dev-service-registry';
 
 const log = logger('prerenderer');
-const boxelHostURL = process.env.BOXEL_HOST_URL ?? 'http://localhost:4200';
+const defaultHostURL = isBranchMode()
+  ? serviceURL('host')
+  : 'http://localhost:4200';
+const boxelHostURL = process.env.BOXEL_HOST_URL ?? defaultHostURL;
 const DEFAULT_REALM_IDLE_EVICT_MS = 12 * 60 * 60 * 1000;
 
 class AsyncSemaphore {
