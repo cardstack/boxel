@@ -36,7 +36,7 @@ import type RealmServerService from '@cardstack/host/services/realm-server';
 import type RecentCards from '@cardstack/host/services/recent-cards-service';
 import type StoreService from '@cardstack/host/services/store';
 
-import type { CardContext, CardDef } from 'https://cardstack.com/base/card-api';
+import type { CardContext, CardDef } from '@cardstack/base/card-api';
 
 import {
   SECTION_DISPLAY_LIMIT_FOCUSED,

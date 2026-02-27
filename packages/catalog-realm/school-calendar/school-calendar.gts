@@ -4,9 +4,9 @@ import {
   field,
   contains,
   linksToMany,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-import DateField from 'https://cardstack.com/base/date';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+import DateField from '@cardstack/base/date';
 import { CalendarEvent } from './components/calendar-event';
 import { ScheduleItem } from './components/schedule-item';
 import CalendarIcon from '@cardstack/boxel-icons/calendar';

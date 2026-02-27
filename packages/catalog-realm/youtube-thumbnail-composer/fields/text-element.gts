@@ -11,11 +11,11 @@ import {
   field,
   contains,
   Component,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-import ColorField from 'https://cardstack.com/base/color';
-import BooleanField from 'https://cardstack.com/base/boolean';
-import NumberField from 'https://cardstack.com/base/number';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+import ColorField from '@cardstack/base/color';
+import BooleanField from '@cardstack/base/boolean';
+import NumberField from '@cardstack/base/number';
 
 // Local imports
 import { createOptionSelectField } from '../../utils/create-option-select';

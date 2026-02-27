@@ -1,7 +1,7 @@
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { baseRealm } from '@cardstack/runtime-common';
+import { baseRealmPrefix } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
 import {
@@ -36,7 +36,7 @@ module('Integration | commands | search', function (hooks) {
   setupRealmCacheTeardown(hooks);
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await loader.import(`${baseRealmPrefix}card-api`),
   );
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
@@ -47,11 +47,11 @@ module('Integration | commands | search', function (hooks) {
 
   hooks.beforeEach(async function () {
     loader = getService('loader-service').loader;
-    let cardApi: typeof import('https://cardstack.com/base/card-api');
-    let string: typeof import('https://cardstack.com/base/string');
+    let cardApi: typeof import('@cardstack/base/card-api');
+    let string: typeof import('@cardstack/base/string');
 
-    cardApi = await loader.import(`${baseRealm.url}card-api`);
-    string = await loader.import(`${baseRealm.url}string`);
+    cardApi = await loader.import(`${baseRealmPrefix}card-api`);
+    string = await loader.import(`${baseRealmPrefix}string`);
 
     let { field, contains, CardDef } = cardApi;
     let { default: StringField } = string;

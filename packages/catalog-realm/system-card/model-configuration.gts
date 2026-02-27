@@ -1,12 +1,12 @@
 import { eq } from '@cardstack/boxel-ui/helpers';
-import { ModelConfiguration as BaseModelConfiguration } from 'https://cardstack.com/base/system-card'; // ¹ Import base ModelConfiguration
+import { ModelConfiguration as BaseModelConfiguration } from '@cardstack/base/system-card'; // ¹ Import base ModelConfiguration
 import {
   field,
   contains,
   Component,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-import NumberField from 'https://cardstack.com/base/number';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+import NumberField from '@cardstack/base/number';
 
 export class ModelConfiguration extends BaseModelConfiguration {
   static displayName = 'Model Configuration';

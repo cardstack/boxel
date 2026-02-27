@@ -5,13 +5,13 @@ import { getService } from '@universal-ember/test-support';
 
 import { module, test } from 'qunit';
 
-import { baseRealm } from '@cardstack/runtime-common';
+import { baseRealmPrefix } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 import type { Realm } from '@cardstack/runtime-common/realm';
 
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
+import type { CardDef } from '@cardstack/base/card-api';
 
 import {
   testRealmURL,
@@ -30,7 +30,7 @@ import { setupRenderingTest } from '../../helpers/setup';
 import type { TestRealmAdapter } from '../../helpers/adapter';
 
 let loader: Loader;
-let cardApi: typeof import('https://cardstack.com/base/card-api');
+let cardApi: typeof import('@cardstack/base/card-api');
 let setCardInOperatorModeState: (
   leftCards: string[],
   rightCards?: string[],
@@ -61,18 +61,18 @@ module('Integration | card-delete', function (hooks) {
   setupOperatorModeStateCleanup(hooks);
   hooks.beforeEach(async function () {
     loader = getService('loader-service').loader;
-    cardApi = await loader.import(`${baseRealm.url}card-api`);
+    cardApi = await loader.import(`${baseRealmPrefix}card-api`);
   });
   setupLocalIndexing(hooks);
   setupOnSave(hooks);
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await loader.import(`${baseRealmPrefix}card-api`),
   );
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
-    activeRealms: [baseRealm.url, testRealmURL, testModuleRealm],
+    activeRealms: [baseRealmPrefix, testRealmURL, testModuleRealm],
     realmPermissions: {
       [testRealmURL]: ['read', 'write'],
       [testModuleRealm]: ['read', 'write'],
@@ -101,10 +101,10 @@ module('Integration | card-delete', function (hooks) {
       ].filter((a) => a.length > 0);
       operatorModeStateService.restore({ stacks });
     };
-    let cardApi: typeof import('https://cardstack.com/base/card-api');
-    let string: typeof import('https://cardstack.com/base/string');
-    cardApi = await loader.import(`${baseRealm.url}card-api`);
-    string = await loader.import(`${baseRealm.url}string`);
+    let cardApi: typeof import('@cardstack/base/card-api');
+    let string: typeof import('@cardstack/base/string');
+    cardApi = await loader.import(`${baseRealmPrefix}card-api`);
+    string = await loader.import(`${baseRealmPrefix}string`);
 
     let { field, contains, CardDef, Component } = cardApi;
     let { default: StringField } = string;
@@ -137,7 +137,7 @@ module('Integration | card-delete', function (hooks) {
             type: 'card',
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/cards-grid',
+                module: '@cardstack/base/cards-grid',
                 name: 'CardsGrid',
               },
             },

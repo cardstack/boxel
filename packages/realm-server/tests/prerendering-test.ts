@@ -9,7 +9,7 @@ import type {
   RenderRouteOptions,
 } from '@cardstack/runtime-common';
 import {
-  baseRealm,
+  baseRealmPrefix,
   type Realm as RuntimeRealm,
 } from '@cardstack/runtime-common';
 import type { Prerenderer } from '../prerender/index';
@@ -180,7 +180,7 @@ module(basename(__filename), function () {
           },
           fileSystem: {
             'person.gts': `
-              import { CardDef, field, contains, StringField, Component } from 'https://cardstack.com/base/card-api';
+              import { CardDef, field, contains, StringField, Component } from '@cardstack/base/card-api';
               export class Person extends CardDef {
                 static displayName = "Person";
                 @field name = contains(StringField);
@@ -203,7 +203,7 @@ module(basename(__filename), function () {
               },
             },
             'dep-reset-consumer.gts': `
-              import { CardDef, field, linksTo, Component } from 'https://cardstack.com/base/card-api';
+              import { CardDef, field, linksTo, Component } from '@cardstack/base/card-api';
               import { Person } from './person';
               export class DepResetConsumer extends CardDef {
                 static displayName = 'Dep Reset Consumer';
@@ -274,7 +274,7 @@ module(basename(__filename), function () {
               },
             },
             'no-icon.gts': `
-              import { CardDef, field, contains, StringField, Component } from 'https://cardstack.com/base/card-api';
+              import { CardDef, field, contains, StringField, Component } from '@cardstack/base/card-api';
               export class NoIcon extends CardDef {
                 static displayName = "No Icon";
                 static icon = class extends Component<typeof this> {
@@ -311,7 +311,7 @@ module(basename(__filename), function () {
               },
             },
             'rejects.gts': `
-              import { CardDef, Component } from 'https://cardstack.com/base/card-api';
+              import { CardDef, Component } from '@cardstack/base/card-api';
               export class Rejects extends CardDef {
                 static isolated = class extends Component<typeof this> {
                   constructor(...args) {
@@ -333,7 +333,7 @@ module(basename(__filename), function () {
               },
             },
             'rsvp-rejects.gts': `
-              import { CardDef, Component } from 'https://cardstack.com/base/card-api';
+              import { CardDef, Component } from '@cardstack/base/card-api';
               import * as RSVP from 'rsvp';
               export class RsvpRejects extends CardDef {
                 static isolated = class extends Component<typeof this> {
@@ -356,7 +356,7 @@ module(basename(__filename), function () {
               },
             },
             'throws.gts': `
-              import { CardDef, Component } from 'https://cardstack.com/base/card-api';
+              import { CardDef, Component } from '@cardstack/base/card-api';
               export class Throws extends CardDef {
                 static isolated = class extends Component<typeof this> {
                   get explode() {
@@ -377,7 +377,7 @@ module(basename(__filename), function () {
               },
             },
             'console-error.gts': `
-              import { CardDef, Component } from 'https://cardstack.com/base/card-api';
+              import { CardDef, Component } from '@cardstack/base/card-api';
               export class ConsoleError extends CardDef {
                 static isolated = class extends Component<typeof this> {
                   get explode() {
@@ -399,7 +399,7 @@ module(basename(__filename), function () {
               },
             },
             'console-no-error.gts': `
-              import { CardDef, Component } from 'https://cardstack.com/base/card-api';
+              import { CardDef, Component } from '@cardstack/base/card-api';
               export class ConsoleNoError extends CardDef {
                 static isolated = class extends Component<typeof this> {
                   constructor(...args) {
@@ -421,7 +421,7 @@ module(basename(__filename), function () {
               },
             },
             'directory-query.gts': `
-              import { CardDef, field, contains, linksTo, linksToMany, StringField, Component, queryableValue } from 'https://cardstack.com/base/card-api';
+              import { CardDef, field, contains, linksTo, linksToMany, StringField, Component, queryableValue } from '@cardstack/base/card-api';
 
               export class Person extends CardDef {
                 static displayName = 'Person';
@@ -804,7 +804,7 @@ module(basename(__filename), function () {
       await realmAdapter.write(
         'person.gts',
         `
-          import { CardDef, field, contains, StringField, Component } from 'https://cardstack.com/base/card-api';
+          import { CardDef, field, contains, StringField, Component } from '@cardstack/base/card-api';
           export class Person extends CardDef {
             static displayName = "Updated Person";
             @field name = contains(StringField);
@@ -1347,7 +1347,7 @@ module(basename(__filename), function () {
         'search doc includes name',
       );
       assert.ok(
-        result.response.deps.includes(`${baseRealm.url}file-api`),
+        result.response.deps.includes(`${baseRealmPrefix}file-api`),
         'deps include base file-api module',
       );
       assert.notOk(
@@ -1360,7 +1360,7 @@ module(basename(__filename), function () {
       await realmAdapter.write(
         'filedef-mismatch.gts',
         `
-          import { FileDef as BaseFileDef } from "https://cardstack.com/base/file-api";
+          import { FileDef as BaseFileDef } from "@cardstack/base/file-api";
           import { MissingChild } from "./missing-child";
 
           export class FileDef extends BaseFileDef {
@@ -1455,8 +1455,8 @@ module(basename(__filename), function () {
           },
           fileSystem: {
             'article.gts': `
-              import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
-              import StringField from "https://cardstack.com/base/string";
+              import { contains, field, CardDef } from "@cardstack/base/card-api";
+              import StringField from "@cardstack/base/string";
               export class Article extends CardDef {
                 @field title = contains(StringField);
               }
@@ -1484,7 +1484,7 @@ module(basename(__filename), function () {
           },
           fileSystem: {
             'website.gts': `
-              import { contains, field, CardDef, linksTo } from "https://cardstack.com/base/card-api";
+              import { contains, field, CardDef, linksTo } from "@cardstack/base/card-api";
               import { Article } from "${providerRealmURL}article" // importing from another realm;
               export class Website extends CardDef {
                 @field linkedArticle = linksTo(Article);
@@ -1502,8 +1502,8 @@ module(basename(__filename), function () {
               },
             },
             'auth-proxy.gts': `
-              import { contains, field, CardDef, linksTo, Component } from "https://cardstack.com/base/card-api";
-              import StringField from "https://cardstack.com/base/string";
+              import { contains, field, CardDef, linksTo, Component } from "@cardstack/base/card-api";
+              import StringField from "@cardstack/base/string";
               // define a local stand-in type so the consumer realm doesn't need to import provider modules
               export class RemoteArticle extends CardDef {
                 @field title = contains(StringField);
@@ -1709,8 +1709,8 @@ module(basename(__filename), function () {
 
     let makeQueryDirectoryFileSystem = () => ({
       'person.gts': `
-        import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
-        import StringField from "https://cardstack.com/base/string";
+        import { contains, field, CardDef } from "@cardstack/base/card-api";
+        import StringField from "@cardstack/base/string";
 
         export class Person extends CardDef {
           @field name = contains(StringField);
@@ -1743,7 +1743,7 @@ module(basename(__filename), function () {
         },
       },
       'query-directory.gts': `
-        import { field, CardDef, Component, linksToMany } from "https://cardstack.com/base/card-api";
+        import { field, CardDef, Component, linksToMany } from "@cardstack/base/card-api";
         import { Person } from "./person";
 
         export class QueryDirectory extends CardDef {
@@ -1780,7 +1780,7 @@ module(basename(__filename), function () {
         },
       },
       'query-directory-proxy.gts': `
-        import { field, CardDef, Component, linksTo } from "https://cardstack.com/base/card-api";
+        import { field, CardDef, Component, linksTo } from "@cardstack/base/card-api";
         import { QueryDirectory } from "./query-directory";
 
         export class QueryDirectoryProxy extends CardDef {
@@ -1899,8 +1899,8 @@ module(basename(__filename), function () {
 
       let makeQueryDirectoryFileSystem = () => ({
         'person.gts': `
-          import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
-          import StringField from "https://cardstack.com/base/string";
+          import { contains, field, CardDef } from "@cardstack/base/card-api";
+          import StringField from "@cardstack/base/string";
 
           export class Person extends CardDef {
             @field name = contains(StringField);
@@ -1933,7 +1933,7 @@ module(basename(__filename), function () {
           },
         },
         'query-directory.gts': `
-          import { field, CardDef, Component, linksToMany } from "https://cardstack.com/base/card-api";
+          import { field, CardDef, Component, linksToMany } from "@cardstack/base/card-api";
           import { Person } from "./person";
 
           export class QueryDirectory extends CardDef {
@@ -1970,7 +1970,7 @@ module(basename(__filename), function () {
           },
         },
         'query-directory-proxy.gts': `
-          import { field, CardDef, Component, linksTo } from "https://cardstack.com/base/card-api";
+          import { field, CardDef, Component, linksTo } from "@cardstack/base/card-api";
           import { QueryDirectory } from "./query-directory";
 
           export class QueryDirectoryProxy extends CardDef {
@@ -2118,8 +2118,8 @@ module(basename(__filename), function () {
           },
           fileSystem: {
             'person.gts': `
-              import { CardDef, field, contains, StringField } from 'https://cardstack.com/base/card-api';
-              import { Component } from 'https://cardstack.com/base/card-api';
+              import { CardDef, field, contains, StringField } from '@cardstack/base/card-api';
+              import { Component } from '@cardstack/base/card-api';
               export class Person extends CardDef {
                 static displayName = "Person";
                 @field name = contains(StringField);
@@ -2177,8 +2177,8 @@ module(basename(__filename), function () {
               },
             },
             'cat.gts': `
-              import { CardDef, field, contains, linksTo, StringField } from 'https://cardstack.com/base/card-api';
-              import { Component } from 'https://cardstack.com/base/card-api';
+              import { CardDef, field, contains, linksTo, StringField } from '@cardstack/base/card-api';
+              import { Component } from '@cardstack/base/card-api';
               import { Person } from '${realmURL1}person';
               export class Cat extends CardDef {
                 @field name = contains(StringField);
@@ -2188,7 +2188,7 @@ module(basename(__filename), function () {
               }
             `,
             'dog.gts': `
-              import { CardDef, field, contains, linksTo, StringField, Component } from 'https://cardstack.com/base/card-api';
+              import { CardDef, field, contains, linksTo, StringField, Component } from '@cardstack/base/card-api';
               import { Person } from '${realmURL1}person';
               export class Dog extends CardDef {
                 static displayName = "Dog";
@@ -2201,7 +2201,7 @@ module(basename(__filename), function () {
               }
             `,
             'dog-many.gts': `
-              import { CardDef, field, contains, linksToMany, StringField, Component } from 'https://cardstack.com/base/card-api';
+              import { CardDef, field, contains, linksToMany, StringField, Component } from '@cardstack/base/card-api';
               import { Person } from '${realmURL1}person';
               export class DogMany extends CardDef {
                 static displayName = "Dog Many";
@@ -2214,7 +2214,7 @@ module(basename(__filename), function () {
               }
             `,
             'dog-profile.gts': `
-              import { CardDef, FieldDef, field, contains, linksTo, linksToMany, StringField, Component } from 'https://cardstack.com/base/card-api';
+              import { CardDef, FieldDef, field, contains, linksTo, linksToMany, StringField, Component } from '@cardstack/base/card-api';
               import { Person } from '${realmURL1}person';
 
               class DogProfileField extends FieldDef {
@@ -2353,8 +2353,8 @@ module(basename(__filename), function () {
               },
             },
             'intentional-error.gts': `
-              import { CardDef, field, contains, StringField } from 'https://cardstack.com/base/card-api';
-              import { Component } from 'https://cardstack.com/base/card-api';
+              import { CardDef, field, contains, StringField } from '@cardstack/base/card-api';
+              import { Component } from '@cardstack/base/card-api';
               export class IntentionalError extends CardDef {
                 @field name = contains(StringField);
                 static displayName = "Intentional Error";
@@ -2383,8 +2383,8 @@ module(basename(__filename), function () {
               },
             },
             'timer-error-card.gts': `
-              import { CardDef, field, contains, StringField } from 'https://cardstack.com/base/card-api';
-              import { Component } from 'https://cardstack.com/base/card-api';
+              import { CardDef, field, contains, StringField } from '@cardstack/base/card-api';
+              import { Component } from '@cardstack/base/card-api';
               export class TimerError extends CardDef {
                 @field name = contains(StringField);
                 static displayName = "Timer Error";
@@ -2412,8 +2412,8 @@ module(basename(__filename), function () {
               },
             },
             'timer-timeout-card.gts': `
-              import { CardDef, field, contains, StringField } from 'https://cardstack.com/base/card-api';
-              import { Component } from 'https://cardstack.com/base/card-api';
+              import { CardDef, field, contains, StringField } from '@cardstack/base/card-api';
+              import { Component } from '@cardstack/base/card-api';
               setTimeout(() => {}, 0);
               setInterval(() => {}, 5);
               export class TimerTimeout extends CardDef {
@@ -2447,8 +2447,8 @@ module(basename(__filename), function () {
             // causing data-prerender-status to be set to 'unusable' by the error handler without
             // transitioning to the render-error route (so nothing overwrites our dataset).
             'unusable-error.gts': `
-              import { CardDef, field, contains, StringField } from 'https://cardstack.com/base/card-api';
-              import { Component } from 'https://cardstack.com/base/card-api';
+              import { CardDef, field, contains, StringField } from '@cardstack/base/card-api';
+              import { Component } from '@cardstack/base/card-api';
               export class UnusableError extends CardDef {
                 @field name = contains(StringField);
                 static displayName = "Unusable Error";
@@ -2474,7 +2474,7 @@ module(basename(__filename), function () {
               },
             },
             'embedded-error.gts': `
-              import { CardDef, field, contains, StringField } from 'https://cardstack.com/base/card-api';
+              import { CardDef, field, contains, StringField } from '@cardstack/base/card-api';
               export class EmbeddedError extends CardDef {
                 @field name = contains(StringField);
                 static displayName = "Embedded Error";
@@ -2516,8 +2516,8 @@ module(basename(__filename), function () {
           },
           fileSystem: {
             'dog.gts': `
-              import { CardDef, field, contains, StringField } from 'https://cardstack.com/base/card-api';
-              import { Component } from 'https://cardstack.com/base/card-api';
+              import { CardDef, field, contains, StringField } from '@cardstack/base/card-api';
+              import { Component } from '@cardstack/base/card-api';
               export class Dog extends CardDef {
                 @field name = contains(StringField);
                 static displayName = "Dog";
@@ -2575,7 +2575,7 @@ module(basename(__filename), function () {
       test('parent embedded HTML', function (assert) {
         assert.ok(
           /data-test-card-thumbnail-placeholder/.test(
-            result.embeddedHTML!['https://cardstack.com/base/card-api/CardDef'],
+            result.embeddedHTML!['@cardstack/base/card-api/CardDef'],
           ),
           `failed to match embedded html:${JSON.stringify(result.embeddedHTML)}`,
         );
@@ -2661,7 +2661,7 @@ module(basename(__filename), function () {
       test('types', function (assert) {
         assert.deepEqual(result.types, [
           `${realmURL2}cat/Cat`,
-          'https://cardstack.com/base/card-api/CardDef',
+          '@cardstack/base/card-api/CardDef',
         ]);
       });
 

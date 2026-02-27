@@ -191,7 +191,7 @@ module(
         await fillIn('[data-test-search-field]', 'Skill');
         // Select a card from catalog entries
         await click(
-          `[data-test-card-catalog-item="https://cardstack.com/base/cards/skill"]`,
+          `[data-test-card-catalog-item="@cardstack/base/cards/skill"]`,
         );
 
         await click(`[data-test-card-catalog-go-button]`);
@@ -216,7 +216,7 @@ module(
         await click('[data-test-create-new-card-button]');
         await fillIn('[data-test-search-field]', 'Skill');
         await click(
-          `[data-test-card-catalog-item="https://cardstack.com/base/cards/skill"]`,
+          `[data-test-card-catalog-item="@cardstack/base/cards/skill"]`,
         );
 
         let id: string | undefined;
@@ -303,7 +303,7 @@ module(
         await click('[data-test-create-new-card-button]');
         await fillIn('[data-test-search-field]', 'Skill');
         await click(
-          `[data-test-card-catalog-item="https://cardstack.com/base/cards/skill"]`,
+          `[data-test-card-catalog-item="@cardstack/base/cards/skill"]`,
         );
 
         let id: string | undefined;
@@ -923,7 +923,7 @@ module(
           .exists();
         assert
           .dom(
-            '[data-test-card="https://cardstack.com/base/ai-app-generator"] textarea',
+            '[data-test-card="@cardstack/base/ai-app-generator"] textarea',
           )
           .hasValue(
             'Create a sprint-planning tool that lets users define backlogs, estimate stories, assign owners, and track burndown.',
@@ -931,7 +931,7 @@ module(
         await click('[data-test-boxel-button][title="About Me"]');
         assert
           .dom(
-            '[data-test-card="https://cardstack.com/base/ai-app-generator"] textarea',
+            '[data-test-card="@cardstack/base/ai-app-generator"] textarea',
           )
           .hasValue(
             'Build a personal portfolio page with your background, skills, and contact information',
@@ -1025,12 +1025,12 @@ module(
           'Design a travel planner dashboard that tracks itineraries, bookings, and budgets';
 
         await fillIn(
-          '[data-test-card="https://cardstack.com/base/ai-app-generator"] textarea',
+          '[data-test-card="@cardstack/base/ai-app-generator"] textarea',
           typedPrompt,
         );
         assert
           .dom(
-            '[data-test-card="https://cardstack.com/base/ai-app-generator"] textarea',
+            '[data-test-card="@cardstack/base/ai-app-generator"] textarea',
           )
           .hasValue(typedPrompt);
 

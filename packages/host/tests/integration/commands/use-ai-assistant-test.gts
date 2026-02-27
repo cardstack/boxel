@@ -17,9 +17,9 @@ import OpenAiAssistantRoomCommand from '@cardstack/host/commands/open-ai-assista
 import type CommandService from '@cardstack/host/services/command-service';
 import RealmService from '@cardstack/host/services/realm';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
+import type { CardDef } from '@cardstack/base/card-api';
 
-import type { Skill } from 'https://cardstack.com/base/skill';
+import type { Skill } from '@cardstack/base/skill';
 
 import {
   setupIntegrationTestRealm,
@@ -76,7 +76,7 @@ module('Integration | commands | ai-assistant', function (hooks) {
               },
               meta: {
                 adoptsFrom: {
-                  module: 'https://cardstack.com/base/card-api',
+                  module: '@cardstack/base/card-api',
                   name: 'CardDef',
                 },
               },
@@ -90,7 +90,7 @@ module('Integration | commands | ai-assistant', function (hooks) {
               },
               meta: {
                 adoptsFrom: {
-                  module: 'https://cardstack.com/base/card-api',
+                  module: '@cardstack/base/card-api',
                   name: 'CardDef',
                 },
               },

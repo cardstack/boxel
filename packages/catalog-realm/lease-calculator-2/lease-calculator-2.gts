@@ -3,12 +3,12 @@ import {
   field,
   contains,
   containsMany,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-import NumberField from 'https://cardstack.com/base/number';
-import BooleanField from 'https://cardstack.com/base/boolean';
-import TextAreaField from 'https://cardstack.com/base/text-area';
-import { Component } from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+import NumberField from '@cardstack/base/number';
+import BooleanField from '@cardstack/base/boolean';
+import TextAreaField from '@cardstack/base/text-area';
+import { Component } from '@cardstack/base/card-api';
 
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';

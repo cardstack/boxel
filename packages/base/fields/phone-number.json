@@ -6,13 +6,13 @@
       "cardDescription": "A field that validates phone numbers and provides a suitable editor.",
       "specType": "field",
       "ref": {
-        "module": "https://cardstack.com/base/phone-number",
+        "module": "@cardstack/base/phone-number",
         "name": "default"
       }
     },
     "meta": {
       "adoptsFrom": {
-        "module": "https://cardstack.com/base/spec",
+        "module": "@cardstack/base/spec",
         "name": "Spec"
       }
     }

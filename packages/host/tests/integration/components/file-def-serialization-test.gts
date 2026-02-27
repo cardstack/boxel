@@ -1,7 +1,7 @@
 import { module, test } from 'qunit';
 
 import type { LooseSingleFileMetaDocument } from '@cardstack/runtime-common';
-import { baseRealm, isSingleFileMetaDocument } from '@cardstack/runtime-common';
+import { baseRealmPrefix, isSingleFileMetaDocument } from '@cardstack/runtime-common';
 
 import {
   setupBaseRealm,
@@ -49,7 +49,7 @@ module('Integration | serializeFileDef', function (hooks) {
     let doc = serializeFileDef(fileDef);
 
     assert.deepEqual(doc.data.meta.adoptsFrom, {
-      module: `${baseRealm.url}file-api`,
+      module: `${baseRealmPrefix}file-api`,
       name: 'FileDef',
     });
   });

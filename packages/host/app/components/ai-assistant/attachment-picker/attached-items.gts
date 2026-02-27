@@ -21,8 +21,8 @@ import { urlForRealmLookup } from '@cardstack/host/lib/utils';
 
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-import type { FileDef } from 'https://cardstack.com/base/file-api';
+import type { CardDef } from '@cardstack/base/card-api';
+import type { FileDef } from '@cardstack/base/file-api';
 
 import type { TrackedSet } from 'tracked-built-ins';
 

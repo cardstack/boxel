@@ -1,8 +1,8 @@
 import { service } from '@ember/service';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
-import type { SpecType } from 'https://cardstack.com/base/spec';
+import type { CardDef } from '@cardstack/base/card-api';
+import type * as BaseCommandModule from '@cardstack/base/command';
+import type { SpecType } from '@cardstack/base/spec';
 
 import HostBaseCommand from '../lib/host-base-command';
 import { devSkillId } from '../lib/utils';

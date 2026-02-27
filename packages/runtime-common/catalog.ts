@@ -1,7 +1,7 @@
 import { isEqual, uniqWith, kebabCase } from 'lodash';
 import { v4 as uuidv4 } from 'uuid';
-import type { Spec } from 'https://cardstack.com/base/spec';
-import type { CardDef } from 'https://cardstack.com/base/card-api';
+import type { Spec } from '@cardstack/base/spec';
+import type { CardDef } from '@cardstack/base/card-api';
 import { RealmPaths, join } from './paths';
 import type { ResolvedCodeRef } from './code-ref';
 import { resolveAdoptedCodeRef } from './code-ref';
@@ -12,17 +12,8 @@ import type { LocalPath } from './paths';
 // @ts-ignore TODO: fix catalog types in runtime-common
 import type { Listing } from '@cardstack/catalog/listing/listing';
 
-const baseRealmPath = new RealmPaths(new URL('https://cardstack.com/base/'));
-
 function isInBaseRealm(moduleOrId: string): boolean {
-  if (moduleOrId.startsWith(baseRealmPrefix)) {
-    return true;
-  }
-  try {
-    return baseRealmPath.inRealm(new URL(moduleOrId));
-  } catch {
-    return false;
-  }
+  return moduleOrId.startsWith(baseRealmPrefix);
 }
 
 // sourceCodeRef -- (installs module) --> targetCodeRef

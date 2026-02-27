@@ -11,7 +11,7 @@ import { module, test } from 'qunit';
 
 import { TrackedObject } from 'tracked-built-ins';
 
-import { Deferred, baseRealm } from '@cardstack/runtime-common';
+import { Deferred, baseRealmPrefix } from '@cardstack/runtime-common';
 
 import {
   setupLocalIndexing,
@@ -30,8 +30,8 @@ import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
 
 const personCardSource = `
-  import { contains, containsMany, field, linksToMany, CardDef, Component } from "https://cardstack.com/base/card-api";
-  import StringField from "https://cardstack.com/base/string";
+  import { contains, containsMany, field, linksToMany, CardDef, Component } from "@cardstack/base/card-api";
+  import StringField from "@cardstack/base/string";
 
   export class Person extends CardDef {
     static displayName = 'Person';
@@ -79,7 +79,7 @@ module('Acceptance | host submode', function (hooks) {
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
-    activeRealms: [baseRealm.url, testRealmURL],
+    activeRealms: [baseRealmPrefix, testRealmURL],
   });
 
   setupBaseRealm(hooks);

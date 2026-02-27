@@ -7,12 +7,12 @@ import {
   linksTo,
   realmInfo,
   realmURL,
-} from 'https://cardstack.com/base/card-api';
-import RealmField from 'https://cardstack.com/base/realm';
-import MarkdownField from 'https://cardstack.com/base/markdown';
-import NumberField from 'https://cardstack.com/base/number';
-import { Skill } from 'https://cardstack.com/base/skill';
-import LLMModelField from 'https://cardstack.com/base/llm-model';
+} from '@cardstack/base/card-api';
+import RealmField from '@cardstack/base/realm';
+import MarkdownField from '@cardstack/base/markdown';
+import NumberField from '@cardstack/base/number';
+import { Skill } from '@cardstack/base/skill';
+import LLMModelField from '@cardstack/base/llm-model';
 import { Alert, Button, RealmIcon } from '@cardstack/boxel-ui/components';
 import { copyCardURLToClipboard } from '@cardstack/boxel-ui/helpers';
 import { Copy as CopyIcon } from '@cardstack/boxel-ui/icons';

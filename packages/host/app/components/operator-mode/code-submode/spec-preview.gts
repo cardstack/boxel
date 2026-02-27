@@ -47,8 +47,8 @@ import type RecentFilesService from '@cardstack/host/services/recent-files-servi
 import type SpecPanelService from '@cardstack/host/services/spec-panel-service';
 import type StoreService from '@cardstack/host/services/store';
 
-import type { CardContext } from 'https://cardstack.com/base/card-api';
-import type { Spec } from 'https://cardstack.com/base/spec';
+import type { CardContext } from '@cardstack/base/card-api';
+import type { Spec } from '@cardstack/base/spec';
 
 import ElementTracker, {
   type RenderedCardForOverlayActions,

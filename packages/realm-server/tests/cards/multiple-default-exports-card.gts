@@ -1,4 +1,4 @@
-import { CardDef, Component } from 'https://cardstack.com/base/card-api';
+import { CardDef, Component } from '@cardstack/base/card-api';
 import MultipleDefaultExports from './multiple-default-exports';
 
 export class MultipleDefaultExportsCard extends CardDef {

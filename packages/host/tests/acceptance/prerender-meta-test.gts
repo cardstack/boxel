@@ -5,7 +5,7 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import {
-  baseRealm,
+  baseRealmPrefix,
   type PrerenderMeta,
   type RenderRouteOptions,
 } from '@cardstack/runtime-common';
@@ -40,8 +40,8 @@ module('Acceptance | prerender | meta', function (hooks) {
 
   hooks.beforeEach(async function () {
     let loader = getService('loader-service').loader;
-    let cardApi: typeof import('https://cardstack.com/base/card-api');
-    cardApi = await loader.import(`${baseRealm.url}card-api`);
+    let cardApi: typeof import('@cardstack/base/card-api');
+    cardApi = await loader.import(`${baseRealmPrefix}card-api`);
 
     let {
       field,
@@ -335,7 +335,7 @@ module('Acceptance | prerender | meta', function (hooks) {
       [
         `${testRealmURL}cat/Cat`,
         `${testRealmURL}pet/Pet`,
-        `${baseRealm.url}card-api/CardDef`,
+        `${baseRealmPrefix}card-api/CardDef`,
       ],
       'types are correct',
     );

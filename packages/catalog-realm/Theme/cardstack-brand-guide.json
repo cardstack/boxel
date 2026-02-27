@@ -3,7 +3,7 @@
     "meta": {
       "adoptsFrom": {
         "name": "default",
-        "module": "https://cardstack.com/base/brand-guide"
+        "module": "@cardstack/base/brand-guide"
       }
     },
     "type": "card",

@@ -6,7 +6,7 @@ import { module, test } from 'qunit';
 import { md5 } from 'super-fast-md5';
 
 import {
-  baseRealm,
+  baseRealmPrefix,
   baseCardRef,
   internalKeyFor,
   skillCardRef,
@@ -103,7 +103,7 @@ module(`Integration | realm indexing`, function (hooks) {
 
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await loader.import(`${baseRealmPrefix}card-api`),
   );
 
   async function getInstance(
@@ -125,7 +125,7 @@ module(`Integration | realm indexing`, function (hooks) {
           data: {
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/card-api',
+                module: '@cardstack/base/card-api',
                 name: 'CardDef',
               },
             },
@@ -150,7 +150,7 @@ module(`Integration | realm indexing`, function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: 'https://cardstack.com/base/card-api',
+            module: '@cardstack/base/card-api',
             name: 'CardDef',
           },
           realmURL: 'http://test-realm/test/',
@@ -226,7 +226,7 @@ module(`Integration | realm indexing`, function (hooks) {
       'search doc includes contentHash',
     );
     assert.ok(
-      fileEntry?.deps?.includes(`${baseRealm.url}file-api`),
+      fileEntry?.deps?.includes(`${baseRealmPrefix}file-api`),
       'deps include base file-api module',
     );
     let includesSelfFileDependency = fileEntry?.deps?.includes(fileURL.href);
@@ -241,7 +241,7 @@ module(`Integration | realm indexing`, function (hooks) {
           data: {
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/card-api',
+                module: '@cardstack/base/card-api',
                 name: 'CardDef',
               },
             },
@@ -251,15 +251,15 @@ module(`Integration | realm indexing`, function (hooks) {
           data: {
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/card-api',
+                module: '@cardstack/base/card-api',
                 name: 'CardDef',
               },
             },
           },
         },
         'pet.gts': `
-          import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
-          import StringField from "https://cardstack.com/base/string";
+          import { contains, field, CardDef } from "@cardstack/base/card-api";
+          import StringField from "@cardstack/base/string";
 
           export class Pet extends CardDef {
             @field firstName = contains(StringField);
@@ -291,7 +291,7 @@ module(`Integration | realm indexing`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: 'https://cardstack.com/base/card-api',
+              module: '@cardstack/base/card-api',
               name: 'CardDef',
             },
           },
@@ -755,7 +755,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/spec',
+                module: '@cardstack/base/spec',
                 name: 'Spec',
               },
             },
@@ -797,7 +797,7 @@ module(`Integration | realm indexing`, function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: 'https://cardstack.com/base/spec',
+            module: '@cardstack/base/spec',
             name: 'Spec',
           },
           lastModified: adapter.lastModifiedMap.get(
@@ -856,7 +856,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/spec',
+                module: '@cardstack/base/spec',
                 name: 'Spec',
               },
             },
@@ -916,7 +916,7 @@ module(`Integration | realm indexing`, function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: 'https://cardstack.com/base/spec',
+            module: '@cardstack/base/spec',
             name: 'Spec',
           },
           lastModified: adapter.lastModifiedMap.get(
@@ -2548,7 +2548,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/spec',
+                module: '@cardstack/base/spec',
                 name: 'Spec',
               },
             },
@@ -2904,7 +2904,7 @@ module(`Integration | realm indexing`, function (hooks) {
             relationships: {},
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/spec',
+                module: '@cardstack/base/spec',
                 name: 'Spec',
               },
             },
@@ -2958,7 +2958,7 @@ module(`Integration | realm indexing`, function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: 'https://cardstack.com/base/spec',
+            module: '@cardstack/base/spec',
             name: 'Spec',
           },
           lastModified: adapter.lastModifiedMap.get(
@@ -4143,32 +4143,32 @@ module(`Integration | realm indexing`, function (hooks) {
         'http://localhost:4206/@cardstack/boxel-icons/v1/icons/rectangle-ellipsis',
         'http://localhost:4206/@cardstack/boxel-icons/v1/icons/trash-2',
         'http://localhost:4206/@cardstack/boxel-icons/v1/icons/wand',
-        'https://cardstack.com/base/-private',
-        'https://cardstack.com/base/card-api',
-        'https://cardstack.com/base/card-serialization',
-        'https://cardstack.com/base/contains-many-component',
-        'https://cardstack.com/base/default-templates/atom',
-        'https://cardstack.com/base/default-templates/card-info',
-        'https://cardstack.com/base/default-templates/embedded',
-        'https://cardstack.com/base/default-templates/field-edit',
-        'https://cardstack.com/base/default-templates/fitted',
-        'https://cardstack.com/base/default-templates/head',
-        'https://cardstack.com/base/default-templates/isolated-and-edit',
-        'https://cardstack.com/base/default-templates/markdown',
-        'https://cardstack.com/base/default-templates/missing-template',
-        'https://cardstack.com/base/field-component',
-        'https://cardstack.com/base/field-support',
-        'https://cardstack.com/base/helpers/sanitized-html',
-        'https://cardstack.com/base/helpers/set-background-image',
-        'https://cardstack.com/base/links-to-editor',
-        'https://cardstack.com/base/links-to-many-component',
-        'https://cardstack.com/base/menu-items',
-        'https://cardstack.com/base/number',
-        'https://cardstack.com/base/query-field-support',
-        'https://cardstack.com/base/shared-state',
-        'https://cardstack.com/base/string',
-        'https://cardstack.com/base/text-input-validator',
-        'https://cardstack.com/base/watched-array',
+        '@cardstack/base/-private',
+        '@cardstack/base/card-api',
+        '@cardstack/base/card-serialization',
+        '@cardstack/base/contains-many-component',
+        '@cardstack/base/default-templates/atom',
+        '@cardstack/base/default-templates/card-info',
+        '@cardstack/base/default-templates/embedded',
+        '@cardstack/base/default-templates/field-edit',
+        '@cardstack/base/default-templates/fitted',
+        '@cardstack/base/default-templates/head',
+        '@cardstack/base/default-templates/isolated-and-edit',
+        '@cardstack/base/default-templates/markdown',
+        '@cardstack/base/default-templates/missing-template',
+        '@cardstack/base/field-component',
+        '@cardstack/base/field-support',
+        '@cardstack/base/helpers/sanitized-html',
+        '@cardstack/base/helpers/set-background-image',
+        '@cardstack/base/links-to-editor',
+        '@cardstack/base/links-to-many-component',
+        '@cardstack/base/menu-items',
+        '@cardstack/base/number',
+        '@cardstack/base/query-field-support',
+        '@cardstack/base/shared-state',
+        '@cardstack/base/string',
+        '@cardstack/base/text-input-validator',
+        '@cardstack/base/watched-array',
         'https://packages/@cardstack/boxel-host/commands/copy-and-edit',
         'https://packages/@cardstack/boxel-host/commands/copy-card',
         'https://packages/@cardstack/boxel-host/commands/create-ai-assistant-room',
@@ -4223,7 +4223,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: `${baseRealm.url}spec`,
+                module: `${baseRealmPrefix}spec`,
                 name: 'Spec',
               },
               fields: {
@@ -4274,36 +4274,36 @@ module(`Integration | realm indexing`, function (hooks) {
         'http://localhost:4206/@cardstack/boxel-icons/v1/icons/toggle-left',
         'http://localhost:4206/@cardstack/boxel-icons/v1/icons/trash-2',
         'http://localhost:4206/@cardstack/boxel-icons/v1/icons/wand',
-        'https://cardstack.com/base/-private',
-        'https://cardstack.com/base/boolean',
-        'https://cardstack.com/base/card-api',
-        'https://cardstack.com/base/card-serialization',
-        'https://cardstack.com/base/code-ref',
-        'https://cardstack.com/base/contains-many-component',
-        'https://cardstack.com/base/default-templates/atom',
-        'https://cardstack.com/base/default-templates/card-info',
-        'https://cardstack.com/base/default-templates/embedded',
-        'https://cardstack.com/base/default-templates/field-edit',
-        'https://cardstack.com/base/default-templates/fitted',
-        'https://cardstack.com/base/default-templates/head',
-        'https://cardstack.com/base/default-templates/isolated-and-edit',
-        'https://cardstack.com/base/default-templates/markdown',
-        'https://cardstack.com/base/default-templates/missing-template',
-        'https://cardstack.com/base/field-component',
-        'https://cardstack.com/base/field-support',
-        'https://cardstack.com/base/helpers/sanitized-html',
-        'https://cardstack.com/base/helpers/set-background-image',
-        'https://cardstack.com/base/links-to-editor',
-        'https://cardstack.com/base/links-to-many-component',
-        'https://cardstack.com/base/markdown',
-        'https://cardstack.com/base/menu-items',
-        'https://cardstack.com/base/number',
-        'https://cardstack.com/base/query-field-support',
-        'https://cardstack.com/base/shared-state',
-        'https://cardstack.com/base/spec',
-        'https://cardstack.com/base/string',
-        'https://cardstack.com/base/text-input-validator',
-        'https://cardstack.com/base/watched-array',
+        '@cardstack/base/-private',
+        '@cardstack/base/boolean',
+        '@cardstack/base/card-api',
+        '@cardstack/base/card-serialization',
+        '@cardstack/base/code-ref',
+        '@cardstack/base/contains-many-component',
+        '@cardstack/base/default-templates/atom',
+        '@cardstack/base/default-templates/card-info',
+        '@cardstack/base/default-templates/embedded',
+        '@cardstack/base/default-templates/field-edit',
+        '@cardstack/base/default-templates/fitted',
+        '@cardstack/base/default-templates/head',
+        '@cardstack/base/default-templates/isolated-and-edit',
+        '@cardstack/base/default-templates/markdown',
+        '@cardstack/base/default-templates/missing-template',
+        '@cardstack/base/field-component',
+        '@cardstack/base/field-support',
+        '@cardstack/base/helpers/sanitized-html',
+        '@cardstack/base/helpers/set-background-image',
+        '@cardstack/base/links-to-editor',
+        '@cardstack/base/links-to-many-component',
+        '@cardstack/base/markdown',
+        '@cardstack/base/menu-items',
+        '@cardstack/base/number',
+        '@cardstack/base/query-field-support',
+        '@cardstack/base/shared-state',
+        '@cardstack/base/spec',
+        '@cardstack/base/string',
+        '@cardstack/base/text-input-validator',
+        '@cardstack/base/watched-array',
         'https://packages/@cardstack/boxel-host/commands/copy-and-edit',
         'https://packages/@cardstack/boxel-host/commands/copy-card',
         'https://packages/@cardstack/boxel-host/commands/create-ai-assistant-room',

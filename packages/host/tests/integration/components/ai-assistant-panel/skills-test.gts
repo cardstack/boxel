@@ -10,7 +10,7 @@ import {
   REPLACE_MARKER,
   SEARCH_MARKER,
   SEPARATOR_MARKER,
-  baseRealm,
+  baseRealmPrefix,
   skillCardRef,
 } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
@@ -25,7 +25,7 @@ import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
-import type { FileDef } from 'https://cardstack.com/base/file-api';
+import type { FileDef } from '@cardstack/base/file-api';
 
 import {
   envSkillId,
@@ -71,7 +71,7 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
   setupOnSave(hooks);
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await loader.import(`${baseRealmPrefix}card-api`),
   );
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
@@ -182,7 +182,7 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
             import { Command } from '@cardstack/runtime-common';
             import { SearchCardsByTypeAndTitleCommand } from '@cardstack/boxel-host/commands/search-cards';
             import ShowCardCommand from '@cardstack/boxel-host/commands/show-card';
-            import type { SearchCardsByTypeAndTitleInput } from 'https://cardstack.com/base/commands/search-card-result';
+            import type { SearchCardsByTypeAndTitleInput } from '@cardstack/base/commands/search-card-result';
 
             export default class SearchAndOpenCardCommand extends Command<
               typeof SearchCardsByTypeAndTitleInput,

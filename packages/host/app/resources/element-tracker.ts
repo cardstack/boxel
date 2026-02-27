@@ -9,7 +9,7 @@ import type {
   CardDef,
   Format,
   FieldType,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 
 interface Meta {
   cardId?: string;

@@ -3,7 +3,7 @@ import { settled, waitFor } from '@ember/test-helpers';
 import window from 'ember-window-mock';
 import { module, test } from 'qunit';
 
-import { baseRealm } from '@cardstack/runtime-common';
+import { baseRealmPrefix } from '@cardstack/runtime-common';
 
 import { RecentFiles } from '@cardstack/host/utils/local-storage-keys';
 
@@ -25,8 +25,8 @@ import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupApplicationTest } from '../../helpers/setup';
 
 const headPreviewWithDisallowedTagsSource = `
-  import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
-  import StringField from "https://cardstack.com/base/string";
+  import { contains, field, Component, CardDef } from "@cardstack/base/card-api";
+  import StringField from "@cardstack/base/string";
 
   export class HeadPreviewUnsafe extends CardDef {
     static displayName = 'Head Preview Unsafe';
@@ -46,8 +46,8 @@ const headPreviewWithDisallowedTagsSource = `
 `;
 
 const headPreviewCardSource = `
-  import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
-  import StringField from "https://cardstack.com/base/string";
+  import { contains, field, Component, CardDef } from "@cardstack/base/card-api";
+  import StringField from "@cardstack/base/string";
 
   export class HeadPreview extends CardDef {
     static displayName = 'Head Preview';
@@ -75,7 +75,7 @@ module('Acceptance | code submode | head format preview', function (hooks) {
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
-    activeRealms: [baseRealm.url, testRealmURL],
+    activeRealms: [baseRealmPrefix, testRealmURL],
   });
 
   let { setRealmPermissions, createAndJoinRoom } = mockMatrixUtils;

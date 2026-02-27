@@ -3,8 +3,8 @@ import {
   linksToMany,
   field,
   CardDef,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 
 export class Friends extends CardDef {
   @field firstName = contains(StringField);

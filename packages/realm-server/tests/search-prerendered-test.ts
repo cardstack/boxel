@@ -39,8 +39,8 @@ module(basename(__filename), function () {
             },
             fileSystem: {
               'person.gts': `
-              import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-              import StringField from "https://cardstack.com/base/string";
+              import { contains, field, CardDef, Component } from "@cardstack/base/card-api";
+              import StringField from "@cardstack/base/string";
 
               export class Person extends CardDef {
                 @field firstName = contains(StringField);
@@ -164,8 +164,8 @@ module(basename(__filename), function () {
           },
           fileSystem: {
             'person.gts': `
-          import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-          import StringField from "https://cardstack.com/base/string";
+          import { contains, field, CardDef, Component } from "@cardstack/base/card-api";
+          import StringField from "@cardstack/base/string";
 
           export class Person extends CardDef {
             @field firstName = contains(StringField);
@@ -189,8 +189,8 @@ module(basename(__filename), function () {
         `,
             'fancy-person.gts': `
           import { Person } from './person';
-          import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-          import StringField from "https://cardstack.com/base/string";
+          import { contains, field, CardDef, Component } from "@cardstack/base/card-api";
+          import StringField from "@cardstack/base/string";
 
           export class FancyPerson extends Person {
             @field favoriteColor = contains(StringField);
@@ -555,8 +555,8 @@ module(basename(__filename), function () {
             },
             fileSystem: {
               'person.gts': `
-              import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-              import StringField from "https://cardstack.com/base/string";
+              import { contains, field, CardDef, Component } from "@cardstack/base/card-api";
+              import StringField from "@cardstack/base/string";
 
               export class Person extends CardDef {
                 @field firstName = contains(StringField);
@@ -680,8 +680,8 @@ module(basename(__filename), function () {
           },
           fileSystem: {
             'person.gts': `
-          import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-          import StringField from "https://cardstack.com/base/string";
+          import { contains, field, CardDef, Component } from "@cardstack/base/card-api";
+          import StringField from "@cardstack/base/string";
 
           export class Person extends CardDef {
             @field firstName = contains(StringField);
@@ -705,8 +705,8 @@ module(basename(__filename), function () {
         `,
             'fancy-person.gts': `
           import { Person } from './person';
-          import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-          import StringField from "https://cardstack.com/base/string";
+          import { contains, field, CardDef, Component } from "@cardstack/base/card-api";
+          import StringField from "@cardstack/base/string";
 
           export class FancyPerson extends Person {
             @field favoriteColor = contains(StringField);
@@ -982,8 +982,8 @@ module(basename(__filename), function () {
           },
           fileSystem: {
             'person.gts': `
-          import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-          import StringField from "https://cardstack.com/base/string";
+          import { contains, field, CardDef, Component } from "@cardstack/base/card-api";
+          import StringField from "@cardstack/base/string";
 
           export class Person extends CardDef {
             @field firstName = contains(StringField);
@@ -1120,11 +1120,11 @@ function assertScopedCssUrlsContain(
 
 // These modules have CSS that CardDef consumes, so we expect to see them in all relationships of a prerendered card
 let cardDefModuleDependencies = [
-  'https://cardstack.com/base/default-templates/embedded.gts',
-  'https://cardstack.com/base/default-templates/isolated-and-edit.gts',
-  'https://cardstack.com/base/default-templates/field-edit.gts',
-  'https://cardstack.com/base/field-component.gts',
-  'https://cardstack.com/base/contains-many-component.gts',
-  'https://cardstack.com/base/links-to-editor.gts',
-  'https://cardstack.com/base/links-to-many-component.gts',
+  '@cardstack/base/default-templates/embedded.gts',
+  '@cardstack/base/default-templates/isolated-and-edit.gts',
+  '@cardstack/base/default-templates/field-edit.gts',
+  '@cardstack/base/field-component.gts',
+  '@cardstack/base/contains-many-component.gts',
+  '@cardstack/base/links-to-editor.gts',
+  '@cardstack/base/links-to-many-component.gts',
 ];

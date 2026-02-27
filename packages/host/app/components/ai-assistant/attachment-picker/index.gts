@@ -10,7 +10,7 @@ import {
 
 import consumeContext from '@cardstack/host/helpers/consume-context';
 
-import type { FileDef } from 'https://cardstack.com/base/file-api';
+import type { FileDef } from '@cardstack/base/file-api';
 
 import AttachButton from './attach-button';
 import AttachedItems from './attached-items';

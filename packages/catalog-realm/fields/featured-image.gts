@@ -6,10 +6,10 @@ import {
   contains,
   StringField,
   FieldDef,
-} from 'https://cardstack.com/base/card-api';
-import NumberField from 'https://cardstack.com/base/number';
-import { ImageSizeField } from 'https://cardstack.com/base/base64-image';
-import UrlField from 'https://cardstack.com/base/url';
+} from '@cardstack/base/card-api';
+import NumberField from '@cardstack/base/number';
+import { ImageSizeField } from '@cardstack/base/base64-image';
+import UrlField from '@cardstack/base/url';
 import { FieldContainer } from '@cardstack/boxel-ui/components';
 import { FailureBordered } from '@cardstack/boxel-ui/icons';
 import PhotoIcon from '@cardstack/boxel-icons/photo';

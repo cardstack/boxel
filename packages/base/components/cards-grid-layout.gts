@@ -14,7 +14,7 @@ import {
 } from '@cardstack/boxel-ui/icons';
 
 import {
-  baseRealm,
+  baseRealmPrefix,
   type Format,
   type Query,
   type Sort,
@@ -50,7 +50,7 @@ export const SORT_OPTIONS: SortOption[] = [
     sort: [
       {
         on: {
-          module: `${baseRealm.url}card-api`,
+          module: `${baseRealmPrefix}card-api`,
           name: 'CardDef',
         },
         by: 'cardTitle',

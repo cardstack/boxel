@@ -3,8 +3,8 @@ import { service } from '@ember/service';
 import type { ResolvedCodeRef } from '@cardstack/runtime-common';
 import { identifyCard, internalKeyFor } from '@cardstack/runtime-common';
 
-import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type { CardDef, Format } from '@cardstack/base/card-api';
+import type * as BaseCommandModule from '@cardstack/base/command';
 
 import HostBaseCommand from '../lib/host-base-command';
 

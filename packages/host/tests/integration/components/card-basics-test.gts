@@ -25,7 +25,7 @@ import { dayjsFormat } from '@cardstack/boxel-ui/helpers';
 
 import type { Loader } from '@cardstack/runtime-common';
 import {
-  baseRealm,
+  baseRealmPrefix,
   primitive,
   localId,
   getField,
@@ -38,7 +38,7 @@ import {
 import type {
   BaseDef,
   SignatureFor,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 
 import {
   cleanWhiteSpace,
@@ -103,7 +103,7 @@ module('Integration | card-basics', function (hooks) {
   });
 
   setupCardLogs(hooks, async () => {
-    return await loader.import(`${baseRealm.url}card-api`);
+    return await loader.import(`${baseRealmPrefix}card-api`);
   });
 
   module('cards are read-only', function (_hooks) {

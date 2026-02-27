@@ -9,11 +9,11 @@ import {
   Component,
   field,
   contains,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-import ColorField from 'https://cardstack.com/base/color';
-import TextAreaField from 'https://cardstack.com/base/text-area';
-import UrlField from 'https://cardstack.com/base/url';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+import ColorField from '@cardstack/base/color';
+import TextAreaField from '@cardstack/base/text-area';
+import UrlField from '@cardstack/base/url';
 
 import { eq } from '@cardstack/boxel-ui/helpers';
 

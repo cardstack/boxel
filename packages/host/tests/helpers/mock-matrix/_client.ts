@@ -7,7 +7,7 @@ import { MatrixEvent } from 'matrix-js-sdk';
 import * as MatrixSDK from 'matrix-js-sdk';
 
 import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
-import { baseRealm, unixTime } from '@cardstack/runtime-common';
+import { unixTime } from '@cardstack/runtime-common';
 
 import { ensureTrailingSlash } from '@cardstack/runtime-common';
 import { BOT_TRIGGER_EVENT_TYPE } from '@cardstack/runtime-common';
@@ -34,11 +34,11 @@ import type { ExtendedClient } from '@cardstack/host/services/matrix-sdk-loader'
 
 import { assertNever } from '@cardstack/host/utils/assert-never';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-import type { SerializedFile } from 'https://cardstack.com/base/file-api';
-import type { FileDef } from 'https://cardstack.com/base/file-api';
-import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
-import type { CommandField } from 'https://cardstack.com/base/skill';
+import type { CardDef } from '@cardstack/base/card-api';
+import type { SerializedFile } from '@cardstack/base/file-api';
+import type { FileDef } from '@cardstack/base/file-api';
+import type { MatrixEvent as DiscreteMatrixEvent } from '@cardstack/base/matrix-event';
+import type { CommandField } from '@cardstack/base/skill';
 
 import type { MockSDK } from './_sdk';
 
@@ -59,7 +59,7 @@ type Plural<T> = {
 };
 
 const publicRealmURLs = [
-  baseRealm.url,
+  ensureTrailingSlash(ENV.resolvedBaseRealmURL),
   ENV.resolvedCatalogRealmURL &&
     ensureTrailingSlash(ENV.resolvedCatalogRealmURL),
   ensureTrailingSlash(ENV.resolvedSkillsRealmURL),
@@ -155,7 +155,8 @@ export class MockClient implements ExtendedClient {
     }
     let sessionRoom = `test-session-room-realm-${realmURL.href}-user-${this.loggedInAs}`;
     let realmServerURL =
-      ensureTrailingSlash(realmURL.href) === baseRealm.url
+      ensureTrailingSlash(realmURL.href) ===
+      ensureTrailingSlash(ENV.resolvedBaseRealmURL)
         ? new URL(ENV.resolvedBaseRealmURL).origin
         : realmURL.origin;
     let payload = {

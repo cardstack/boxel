@@ -6,12 +6,12 @@ import {
   contains,
   linksTo,
   Component,
-} from 'https://cardstack.com/base/card-api';
-import enumField from 'https://cardstack.com/base/enum';
-import { Skill } from 'https://cardstack.com/base/skill';
-import StringField from 'https://cardstack.com/base/string';
-import MarkdownField from 'https://cardstack.com/base/markdown';
-import TextAreaField from 'https://cardstack.com/base/text-area';
+} from '@cardstack/base/card-api';
+import enumField from '@cardstack/base/enum';
+import { Skill } from '@cardstack/base/skill';
+import StringField from '@cardstack/base/string';
+import MarkdownField from '@cardstack/base/markdown';
+import TextAreaField from '@cardstack/base/text-area';
 
 import ExternalLink from '@cardstack/boxel-icons/external-link';
 

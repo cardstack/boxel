@@ -2,8 +2,8 @@ import { service } from '@ember/service';
 
 import { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 
-import type { FieldType } from 'https://cardstack.com/base/card-api';
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type { FieldType } from '@cardstack/base/card-api';
+import type * as BaseCommandModule from '@cardstack/base/command';
 
 import HostBaseCommand from '../lib/host-base-command';
 

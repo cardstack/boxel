@@ -1,8 +1,8 @@
 import { FeaturedImageField } from './fields/featured-image';
-import DatetimeField from 'https://cardstack.com/base/datetime';
-import StringField from 'https://cardstack.com/base/string';
-import MarkdownField from 'https://cardstack.com/base/markdown';
-import NumberField from 'https://cardstack.com/base/number';
+import DatetimeField from '@cardstack/base/datetime';
+import StringField from '@cardstack/base/string';
+import MarkdownField from '@cardstack/base/markdown';
+import NumberField from '@cardstack/base/number';
 import {
   CardDef,
   field,
@@ -11,7 +11,7 @@ import {
   Component,
   getCardMeta,
   linksToMany,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 
 import CalendarCog from '@cardstack/boxel-icons/calendar-cog';
 import BlogIcon from '@cardstack/boxel-icons/notebook';

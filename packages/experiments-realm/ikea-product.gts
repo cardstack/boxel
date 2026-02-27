@@ -3,10 +3,10 @@ import {
   Component,
   field,
   contains,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-import NumberField from 'https://cardstack.com/base/number';
-import MarkdownField from 'https://cardstack.com/base/markdown';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+import NumberField from '@cardstack/base/number';
+import MarkdownField from '@cardstack/base/markdown';
 import { formatCurrency } from '@cardstack/boxel-ui/helpers';
 
 export class IkeaProduct extends CardDef {

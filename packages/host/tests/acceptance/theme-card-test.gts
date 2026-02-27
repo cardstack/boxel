@@ -185,7 +185,7 @@ module('Acceptance | theme-card-test', function (hooks) {
               meta: {
                 adoptsFrom: {
                   name: 'default',
-                  module: 'https://cardstack.com/base/structured-theme',
+                  module: '@cardstack/base/structured-theme',
                 },
               },
               type: 'card',
@@ -211,7 +211,7 @@ module('Acceptance | theme-card-test', function (hooks) {
               meta: {
                 adoptsFrom: {
                   name: 'default',
-                  module: 'https://cardstack.com/base/style-reference',
+                  module: '@cardstack/base/style-reference',
                 },
               },
               type: 'card',
@@ -258,7 +258,7 @@ module('Acceptance | theme-card-test', function (hooks) {
               meta: {
                 adoptsFrom: {
                   name: 'default',
-                  module: 'https://cardstack.com/base/structured-theme',
+                  module: '@cardstack/base/structured-theme',
                 },
               },
               type: 'card',

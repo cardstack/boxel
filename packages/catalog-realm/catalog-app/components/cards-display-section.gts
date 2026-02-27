@@ -4,7 +4,7 @@ import {
   CardDef,
   type BaseDef,
   type CardContext,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 
 import { CardContainer } from '@cardstack/boxel-ui/components';
 

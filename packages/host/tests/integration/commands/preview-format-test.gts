@@ -6,7 +6,7 @@ import { setupWindowMock } from 'ember-window-mock/test-support';
 
 import { module, test } from 'qunit';
 
-import { baseRealm } from '@cardstack/runtime-common';
+import { baseRealmPrefix } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
 import PreviewFormatCommand from '@cardstack/host/commands/preview-format';
@@ -50,7 +50,7 @@ module('Integration | Command | preview-format', function (hooks) {
   setupOnSave(hooks);
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await loader.import(`${baseRealmPrefix}card-api`),
   );
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
@@ -69,9 +69,9 @@ module('Integration | Command | preview-format', function (hooks) {
         mockMatrixUtils,
         contents: {
           'rental-item.gts': `
-          import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
-          import StringField from 'https://cardstack.com/base/string';
-          import NumberField from 'https://cardstack.com/base/number';
+          import { CardDef, field, contains } from '@cardstack/base/card-api';
+          import StringField from '@cardstack/base/string';
+          import NumberField from '@cardstack/base/number';
 
           export class RentalItem extends CardDef {
             static displayName = 'RentalItem';

@@ -17,7 +17,7 @@ import type { PgAdapter } from '@cardstack/postgres';
 import type {
   RealmEvent,
   UpdateRealmEventContent,
-} from 'https://cardstack.com/base/matrix-event';
+} from '@cardstack/base/matrix-event';
 
 module(basename(__filename), function () {
   module('file watcher realm events', function (hooks) {
@@ -65,8 +65,8 @@ module(basename(__filename), function () {
       onRealmSetup,
       fileSystem: {
         'person.gts': `
-        import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-        import StringField from "https://cardstack.com/base/string";
+        import { contains, field, CardDef, Component } from "@cardstack/base/card-api";
+        import StringField from "@cardstack/base/string";
 
         export class Person extends CardDef {
           @field firstName = contains(StringField);
@@ -291,8 +291,8 @@ module(basename(__filename), function () {
       realmEventTimestampStart = Date.now();
 
       let updatedPersonSource = `
-import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-import StringField from "https://cardstack.com/base/string";
+import { contains, field, CardDef, Component } from "@cardstack/base/card-api";
+import StringField from "@cardstack/base/string";
 
 export class Person extends CardDef {
   @field firstName = contains(StringField);

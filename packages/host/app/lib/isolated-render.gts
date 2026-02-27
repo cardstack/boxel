@@ -8,7 +8,7 @@ import { renderMain, inTransaction } from '@glimmer/runtime';
 
 import { CardError } from '@cardstack/runtime-common/error';
 
-import type { Format } from 'https://cardstack.com/base/card-api';
+import type { Format } from '@cardstack/base/card-api';
 
 import type { ComponentLike } from '@glint/template';
 

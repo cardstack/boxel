@@ -4,7 +4,7 @@ import { getService } from '@universal-ember/test-support';
 
 import { module, test } from 'qunit';
 
-import { baseRealm, Loader } from '@cardstack/runtime-common';
+import { baseRealmPrefix, Loader } from '@cardstack/runtime-common';
 
 import {
   testRealmURL,
@@ -109,8 +109,8 @@ module('Unit | loader', function (hooks) {
           }
         `,
           'person.gts': `
-          import { contains, field, CardDef } from 'https://cardstack.com/base/card-api';
-          import StringField from 'https://cardstack.com/base/string';
+          import { contains, field, CardDef } from '@cardstack/base/card-api';
+          import StringField from '@cardstack/base/string';
           export class Person extends CardDef {
             static displayName = 'Person';
             @field firstName = contains(StringField);
@@ -131,7 +131,7 @@ module('Unit | loader', function (hooks) {
 
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await loader.import(`${baseRealmPrefix}card-api`),
   );
 
   test('can dynamically load modules with cycles', async function (assert) {
@@ -239,16 +239,16 @@ module('Unit | loader', function (hooks) {
 
     class StringField {}
 
-    throwIfFetch.shimModule(`${baseRealm.url}card-api.gts`, {
+    throwIfFetch.shimModule(`${baseRealmPrefix}card-api.gts`, {
       StringField,
     });
 
-    throwIfFetch.shimModule(`${baseRealm.url}string.ts`, {
+    throwIfFetch.shimModule(`${baseRealmPrefix}string.ts`, {
       default: StringField,
     });
 
     assert.deepEqual(Loader.identify(StringField), {
-      module: `${baseRealm.url}card-api`,
+      module: `${baseRealmPrefix}card-api`,
       name: 'StringField',
     });
   });

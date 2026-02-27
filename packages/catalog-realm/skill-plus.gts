@@ -12,11 +12,11 @@ import {
   linksTo,
   StringField,
   type BaseDefComponent,
-} from 'https://cardstack.com/base/card-api';
-import MarkdownField from 'https://cardstack.com/base/markdown';
-import { Skill, CommandField } from 'https://cardstack.com/base/skill';
+} from '@cardstack/base/card-api';
+import MarkdownField from '@cardstack/base/markdown';
+import { Skill, CommandField } from '@cardstack/base/skill';
 import FileIcon from '@cardstack/boxel-icons/file';
-import { MarkdownDef } from 'https://cardstack.com/base/markdown-file-def';
+import { MarkdownDef } from '@cardstack/base/markdown-file-def';
 
 // Shared slugify function - SINGLE SOURCE OF TRUTH for ID generation
 export function slugifyHeading(text: string): string {

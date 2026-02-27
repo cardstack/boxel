@@ -44,7 +44,7 @@ import type {
   CardCrudFunctions,
   CardDef,
   Format,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 
 import { detectStackItemTypeForTarget } from '../../lib/stack-item';
 

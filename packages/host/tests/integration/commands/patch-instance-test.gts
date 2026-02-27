@@ -10,7 +10,7 @@ import PatchCardInstanceCommand from '@cardstack/host/commands/patch-card-instan
 
 import type CommandService from '@cardstack/host/services/command-service';
 
-import type { CardDef as CardDefType } from 'https://cardstack.com/base/card-api';
+import type { CardDef as CardDefType } from '@cardstack/base/card-api';
 
 import {
   testRealmURL,

@@ -17,7 +17,7 @@ import { module, test } from 'qunit';
 import { GridContainer } from '@cardstack/boxel-ui/components';
 
 import {
-  baseRealm,
+  baseRealmPrefix,
   buildCommandFunctionName,
   Command,
   skillCardRef,
@@ -43,9 +43,9 @@ import {
   waitForRealmState,
 } from '@cardstack/host/commands/utils';
 
-import type { SearchCardsByTypeAndTitleInput } from 'https://cardstack.com/base/command';
+import type { SearchCardsByTypeAndTitleInput } from '@cardstack/base/command';
 
-import type { Skill } from 'https://cardstack.com/base/skill';
+import type { Skill } from '@cardstack/base/skill';
 
 import {
   setupLocalIndexing,
@@ -84,7 +84,7 @@ module('Acceptance | Commands tests', function (hooks) {
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
-    activeRealms: [baseRealm.url, testRealmURL],
+    activeRealms: [baseRealmPrefix, testRealmURL],
   });
 
   let {

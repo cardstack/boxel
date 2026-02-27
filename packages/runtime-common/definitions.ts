@@ -6,9 +6,9 @@ import {
 } from './index';
 import type { CodeRef } from './code-ref';
 import type { SerializerName } from './serializers';
-import type { FieldType } from 'https://cardstack.com/base/card-api';
-import type { BaseDef } from 'https://cardstack.com/base/card-api';
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
+import type { FieldType } from '@cardstack/base/card-api';
+import type { BaseDef } from '@cardstack/base/card-api';
+import type * as CardAPI from '@cardstack/base/card-api';
 import type { Query } from './query';
 
 export interface FieldDefinition {

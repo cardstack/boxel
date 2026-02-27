@@ -5,7 +5,7 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import {
-  baseRealm,
+  baseRealmPrefix,
   type FileExtractResponse,
   type RenderRouteOptions,
   type ResolvedCodeRef,
@@ -91,7 +91,7 @@ module('Acceptance | gif image def', function (hooks) {
   const makeFileURL = (path: string) => new URL(path, testRealmURL).href;
 
   const gifDefCodeRef = (): ResolvedCodeRef => ({
-    module: `${baseRealm.url}gif-image-def`,
+    module: `${baseRealmPrefix}gif-image-def`,
     name: 'GifDef',
   });
 

@@ -1,7 +1,7 @@
 import GeoSearchPointField from '../fields/geo-search-point';
 
-import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
-import { Component } from 'https://cardstack.com/base/card-api';
+import { CardDef, field, contains } from '@cardstack/base/card-api';
+import { Component } from '@cardstack/base/card-api';
 import { FieldContainer } from '@cardstack/boxel-ui/components';
 
 export class GeoSearchPointPreview extends CardDef {

@@ -1,6 +1,6 @@
 import {
   buildSearchErrorResponse,
-  baseRealm,
+  baseRealmPrefix,
   ensureTrailingSlash,
   parsePrerenderedSearchRequestFromPayload,
   parseRealmsFromPayload,
@@ -435,7 +435,7 @@ function applyRealmConfigOverrides(
 
 function resolveRemoteRealmURL(realmURL: string): string {
   let normalizedRealmURL = ensureTrailingSlash(realmURL);
-  if (normalizedRealmURL.startsWith(baseRealm.url)) {
+  if (normalizedRealmURL.startsWith(baseRealmPrefix)) {
     return ensureTrailingSlash(ENV.resolvedBaseRealmURL);
   }
   return normalizedRealmURL;

@@ -3,7 +3,7 @@ import {
   field,
   CardDef,
   StringField,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 
 export class Boat extends CardDef {
   @field name = contains(StringField);

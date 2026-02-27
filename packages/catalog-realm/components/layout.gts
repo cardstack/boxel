@@ -1,7 +1,7 @@
 import GlimmerComponent from '@glimmer/component';
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { htmlSafe } from '@ember/template';
-import { type CardOrFieldTypeIcon } from 'https://cardstack.com/base/card-api';
+import { type CardOrFieldTypeIcon } from '@cardstack/base/card-api';
 import ImageIcon from '@cardstack/boxel-icons/image';
 import { FilterList } from '@cardstack/boxel-ui/components';
 import { element } from '@cardstack/boxel-ui/helpers';

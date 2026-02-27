@@ -14,9 +14,9 @@ import {
   field,
   contains,
   containsMany,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-import MarkdownField from 'https://cardstack.com/base/markdown';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+import MarkdownField from '@cardstack/base/markdown';
 
 import { gt } from '@cardstack/boxel-ui/helpers';
 import { modifier } from 'ember-modifier'; // Replacing class-based modifiers with function modifiers

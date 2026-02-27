@@ -6,13 +6,13 @@
       "cardDescription": "A field that captures percentage values.",
       "specType": "field",
       "ref": {
-        "module": "https://cardstack.com/base/percentage",
+        "module": "@cardstack/base/percentage",
         "name": "default"
       }
     },
     "meta": {
       "adoptsFrom": {
-        "module": "https://cardstack.com/base/spec",
+        "module": "@cardstack/base/spec",
         "name": "Spec"
       }
     }

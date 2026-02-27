@@ -45,7 +45,7 @@ import type {
   CardContext,
   CardDef,
   ViewCardFn,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 
 import type HostModeService from '../services/host-mode-service';
 import type OperatorModeStateService from '../services/operator-mode-state-service';

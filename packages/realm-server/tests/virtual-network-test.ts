@@ -8,7 +8,7 @@ module(basename(__filename), function () {
     test('will respond with real (not virtual) url when handler makes a redirect', async function (assert) {
       let virtualNetwork = new VirtualNetwork();
       virtualNetwork.addURLMapping(
-        new URL('https://cardstack.com/base/'),
+        new URL('https://example.com/base/'),
         new URL('http://localhost:4201/base/'),
       );
       virtualNetwork.mount(async (_request: Request) => {
@@ -16,7 +16,7 @@ module(basename(__filename), function () {
         return new Response(null, {
           status: 302,
           headers: {
-            Location: 'https://cardstack.com/base/__boxel/assets/', // This virtual url should be converted to a real url so that the client can follow the redirect
+            Location: 'https://example.com/base/__boxel/assets/', // This virtual url should be converted to a real url so that the client can follow the redirect
           },
         }) as ResponseWithNodeStream;
       });

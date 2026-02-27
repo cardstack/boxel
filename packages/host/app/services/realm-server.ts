@@ -13,7 +13,6 @@ import window from 'ember-window-mock';
 import { TrackedArray } from 'tracked-built-ins';
 
 import {
-  baseRealm,
   ensureTrailingSlash,
   SupportedMimeType,
   Deferred,
@@ -86,7 +85,7 @@ export default class RealmServerService extends Service {
   private auth: AuthStatus = { type: 'anonymous' };
   private client: ExtendedClient | undefined;
   private availableRealms = new TrackedArray<AvailableRealm>([
-    { type: 'base', url: baseRealm.url },
+    { type: 'base', url: ensureTrailingSlash(resolvedBaseRealmURL) },
   ]);
   private _ready = new Deferred<void>();
   private eventSubscribers: Map<string, RealmServerEventSubscriber[]> =
@@ -203,7 +202,7 @@ export default class RealmServerService extends Service {
     this.auth = { type: 'anonymous' };
     this.availableRealms.splice(0, this.availableRealms.length, {
       type: 'base',
-      url: baseRealm.url,
+      url: ensureTrailingSlash(resolvedBaseRealmURL),
     });
     window.localStorage.removeItem(sessionLocalStorageKey);
   }

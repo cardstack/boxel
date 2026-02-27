@@ -11,7 +11,7 @@ import { module, test } from 'qunit';
 import {
   PermissionsContextName,
   type Permissions,
-  baseRealm,
+  baseRealmPrefix,
   getField,
 } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
@@ -59,7 +59,7 @@ module('Integration | enumField', function (hooks) {
 
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await loader.import(`${baseRealmPrefix}card-api`),
   );
 
   test('edit renders a dropdown with the enum options', async function (assert) {
@@ -655,7 +655,7 @@ module('Integration | enumField', function (hooks) {
     let app = new CrmApp({ globalPriorityOptions: ['High', 'Low'] });
     let t = new Task({ crmApp: app as any, priority: 'High' });
 
-    const enumModule = await loader.import(`${baseRealm.url}enum`);
+    const enumModule = await loader.import(`${baseRealmPrefix}enum`);
     const enumValues = (enumModule as any).enumValues;
 
     let values = enumValues(t, 'priority');
@@ -690,7 +690,7 @@ module('Integration | enumField', function (hooks) {
     let t = new Task({ priority: null });
 
     // Helpers include null only when provided explicitly
-    const enumModule = await loader.import(`${baseRealm.url}enum`);
+    const enumModule = await loader.import(`${baseRealmPrefix}enum`);
     const enumValues = (enumModule as any).enumValues;
     assert.deepEqual(
       enumValues(t, 'priority'),
@@ -956,7 +956,7 @@ module('Integration | enumField', function (hooks) {
     });
 
     // Helpers should reflect usage-level configuration
-    const enumModule = await loader.import(`${baseRealm.url}enum`);
+    const enumModule = await loader.import(`${baseRealmPrefix}enum`);
     const enumValues = (enumModule as any).enumValues;
     assert.deepEqual(
       enumValues(t, 'priority'),

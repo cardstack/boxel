@@ -3,14 +3,14 @@ import {
   field,
   contains,
   Component,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 import { type LooseSingleCardDocument } from '@cardstack/runtime-common';
-import StringField from 'https://cardstack.com/base/string';
-import UrlField from 'https://cardstack.com/base/url';
-import MarkdownField from 'https://cardstack.com/base/markdown';
-import TextAreaField from 'https://cardstack.com/base/text-area';
-import ColorField from 'https://cardstack.com/base/color';
-import EmailField from 'https://cardstack.com/base/email';
+import StringField from '@cardstack/base/string';
+import UrlField from '@cardstack/base/url';
+import MarkdownField from '@cardstack/base/markdown';
+import TextAreaField from '@cardstack/base/text-area';
+import ColorField from '@cardstack/base/color';
+import EmailField from '@cardstack/base/email';
 
 import { Button } from '@cardstack/boxel-ui/components';
 import { eq, gt, formatNumber } from '@cardstack/boxel-ui/helpers';

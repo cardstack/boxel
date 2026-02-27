@@ -20,7 +20,7 @@ import { type getCard, GetCardContextName } from '@cardstack/runtime-common';
 
 import consumeContext from '@cardstack/host/helpers/consume-context';
 
-import type { FileDef } from 'https://cardstack.com/base/file-api';
+import type { FileDef } from '@cardstack/base/file-api';
 
 import AttachedFileDropdownMenu from './ai-assistant/attached-file-dropdown-menu';
 

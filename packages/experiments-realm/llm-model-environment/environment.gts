@@ -19,10 +19,10 @@ import {
   containsMany,
   linksTo,
   linksToMany,
-} from 'https://cardstack.com/base/card-api';
-import { Component } from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-import { Skill } from 'https://cardstack.com/base/skill';
+} from '@cardstack/base/card-api';
+import { Component } from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+import { Skill } from '@cardstack/base/skill';
 import { includes, uniqBy } from 'lodash';
 
 import SettingsIcon from '@cardstack/boxel-icons/settings';

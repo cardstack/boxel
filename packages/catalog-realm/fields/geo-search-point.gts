@@ -3,12 +3,12 @@ import { task } from 'ember-concurrency';
 import { debounce } from 'lodash';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
 import MapIcon from '@cardstack/boxel-icons/map';
-import StringField from 'https://cardstack.com/base/string';
+import StringField from '@cardstack/base/string';
 import {
   Component,
   contains,
   field,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 import GeoPointField from './geo-point';
 import { MapRender, type Coordinate } from '../components/map-render';
 

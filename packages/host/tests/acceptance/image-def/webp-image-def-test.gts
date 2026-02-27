@@ -5,7 +5,7 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import {
-  baseRealm,
+  baseRealmPrefix,
   type FileExtractResponse,
   type RenderRouteOptions,
   type ResolvedCodeRef,
@@ -76,7 +76,7 @@ module('Acceptance | webp image def', function (hooks) {
   const makeFileURL = (path: string) => new URL(path, testRealmURL).href;
 
   const webpDefCodeRef = (): ResolvedCodeRef => ({
-    module: `${baseRealm.url}webp-image-def`,
+    module: `${baseRealmPrefix}webp-image-def`,
     name: 'WebpDef',
   });
 

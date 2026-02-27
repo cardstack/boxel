@@ -4,7 +4,7 @@ import type { Method } from 'matrix-js-sdk';
 import type {
   CardMessageEvent,
   MatrixEvent as DiscreteMatrixEvent,
-} from 'https://cardstack.com/base/matrix-event';
+} from '@cardstack/base/matrix-event';
 import { APP_BOXEL_MESSAGE_MSGTYPE } from '@cardstack/runtime-common';
 import { getRoomEvents, sendErrorEvent } from '@cardstack/runtime-common/ai';
 import { OpenAIError } from 'openai/error';

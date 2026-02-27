@@ -3,7 +3,7 @@ import {
   Component,
   CardDef,
   linksTo,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 import ViewIcon from '@cardstack/boxel-icons/view';
 
 export class EmbeddedViewDriver extends CardDef {

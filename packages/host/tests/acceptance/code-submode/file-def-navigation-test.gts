@@ -4,7 +4,7 @@ import { getService } from '@universal-ember/test-support';
 
 import { module, test } from 'qunit';
 
-import { baseRealm } from '@cardstack/runtime-common';
+import { baseRealmPrefix } from '@cardstack/runtime-common';
 
 import {
   setupAcceptanceTestRealm,
@@ -31,13 +31,13 @@ module('Acceptance | code submode | file def navigation', function (hooks) {
 
   hooks.beforeEach(async function () {
     let loader = getService('loader-service').loader;
-    let cardApi: typeof import('https://cardstack.com/base/card-api');
-    let string: typeof import('https://cardstack.com/base/string');
-    let fileApi: typeof import('https://cardstack.com/base/file-api');
+    let cardApi: typeof import('@cardstack/base/card-api');
+    let string: typeof import('@cardstack/base/string');
+    let fileApi: typeof import('@cardstack/base/file-api');
 
-    cardApi = await loader.import(`${baseRealm.url}card-api`);
-    string = await loader.import(`${baseRealm.url}string`);
-    fileApi = await loader.import(`${baseRealm.url}file-api`);
+    cardApi = await loader.import(`${baseRealmPrefix}card-api`);
+    string = await loader.import(`${baseRealmPrefix}string`);
+    fileApi = await loader.import(`${baseRealmPrefix}file-api`);
 
     let { field, contains, linksTo, CardDef, Component } = cardApi;
     let { default: StringField } = string;

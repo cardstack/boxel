@@ -6,7 +6,7 @@ import { getService } from '@universal-ember/test-support';
 
 import { module, skip, test } from 'qunit';
 
-import { baseRealm, skillCardRef } from '@cardstack/runtime-common';
+import { baseRealmPrefix, skillCardRef } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
 import {
@@ -66,7 +66,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
   setupOnSave(hooks);
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await loader.import(`${baseRealmPrefix}card-api`),
   );
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
@@ -240,16 +240,16 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
       realmURL: readOnlyRealmURL,
       contents: {
         'pet.gts': `
-          import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
-          import StringField from "https://cardstack.com/base/string";
+          import { contains, field, CardDef } from "@cardstack/base/card-api";
+          import StringField from "@cardstack/base/string";
           export class Pet extends CardDef {
             static displayName = 'Pet';
             @field name = contains(StringField);
           }
         `,
         'person.gts': `
-          import { contains, field, linksTo, CardDef } from "https://cardstack.com/base/card-api";
-          import StringField from "https://cardstack.com/base/string";
+          import { contains, field, linksTo, CardDef } from "@cardstack/base/card-api";
+          import StringField from "@cardstack/base/string";
           import { Pet } from "./pet";
           export class Person extends CardDef {
             static displayName = 'Person';

@@ -41,9 +41,9 @@ import { setupApplicationTest } from '../../helpers/setup';
 
 const { resolvedBaseRealmURL } = ENV;
 
-const authorCard = `import { contains, field, CardDef, Component, FieldDef } from "https://cardstack.com/base/card-api";
-  import MarkdownField from 'https://cardstack.com/base/markdown';
-  import StringField from "https://cardstack.com/base/string";
+const authorCard = `import { contains, field, CardDef, Component, FieldDef } from "@cardstack/base/card-api";
+  import MarkdownField from '@cardstack/base/markdown';
+  import StringField from "@cardstack/base/string";
   export class Author extends CardDef {
     static displayName = 'Author';
     @field firstName = contains(StringField);
@@ -100,10 +100,10 @@ const authorCard = `import { contains, field, CardDef, Component, FieldDef } fro
     }
 }`;
 
-const blogPostCard = `import { contains, containsMany, field, linksTo, CardDef, Component, FieldDef } from "https://cardstack.com/base/card-api";
-  import DatetimeField from 'https://cardstack.com/base/datetime';
-  import MarkdownField from 'https://cardstack.com/base/markdown';
-  import StringField from "https://cardstack.com/base/string";
+const blogPostCard = `import { contains, containsMany, field, linksTo, CardDef, Component, FieldDef } from "@cardstack/base/card-api";
+  import DatetimeField from '@cardstack/base/datetime';
+  import MarkdownField from '@cardstack/base/markdown';
+  import StringField from "@cardstack/base/string";
   import { Author } from './author';
 
   export class Status extends StringField {
@@ -193,7 +193,7 @@ const blogPostCard = `import { contains, containsMany, field, linksTo, CardDef, 
     }
 }`;
 
-const petCard = `import { contains, containsMany, field, CardDef, Component, FieldDef, StringField } from 'https://cardstack.com/base/card-api';
+const petCard = `import { contains, containsMany, field, CardDef, Component, FieldDef, StringField } from '@cardstack/base/card-api';
   export class ToyField extends FieldDef {
     static displayName = 'Toy';
     @field cardTitle = contains(StringField);
@@ -239,7 +239,7 @@ const commentSpec2 = {
         ],
       },
       adoptsFrom: {
-        module: 'https://cardstack.com/base/spec',
+        module: '@cardstack/base/spec',
         name: 'Spec',
       },
     },
@@ -287,7 +287,7 @@ const commentSpec1 = {
         ],
       },
       adoptsFrom: {
-        module: 'https://cardstack.com/base/spec',
+        module: '@cardstack/base/spec',
         name: 'Spec',
       },
     },
@@ -379,7 +379,7 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: 'https://cardstack.com/base/spec',
+                    module: '@cardstack/base/spec',
                     name: 'Spec',
                   },
                 },
@@ -425,7 +425,7 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
                     ],
                   },
                   adoptsFrom: {
-                    module: 'https://cardstack.com/base/spec',
+                    module: '@cardstack/base/spec',
                     name: 'Spec',
                   },
                 },
@@ -464,7 +464,7 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
                     ],
                   },
                   adoptsFrom: {
-                    module: 'https://cardstack.com/base/spec',
+                    module: '@cardstack/base/spec',
                     name: 'Spec',
                   },
                 },
@@ -1154,7 +1154,7 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
                     ],
                   },
                   adoptsFrom: {
-                    module: 'https://cardstack.com/base/spec',
+                    module: '@cardstack/base/spec',
                     name: 'Spec',
                   },
                 },
@@ -1174,7 +1174,7 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: 'https://cardstack.com/base/spec',
+                    module: '@cardstack/base/spec',
                     name: 'Spec',
                   },
                 },

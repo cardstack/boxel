@@ -1,7 +1,7 @@
 import { module, test } from 'qunit';
 import type { Test, SuperTest } from 'supertest';
 import { basename } from 'path';
-import { baseRealm, type Realm } from '@cardstack/runtime-common';
+import { baseRealmPrefix, type Realm } from '@cardstack/runtime-common';
 import type { Query } from '@cardstack/runtime-common/query';
 import { setupPermissionedRealm, createJWT } from '../helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
@@ -43,7 +43,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
       return {
         filter: {
           type: {
-            module: `${baseRealm.url}file-api`,
+            module: `${baseRealmPrefix}file-api`,
             name: 'FileDef',
           },
         },
@@ -219,7 +219,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
             .send({
               filter: {
                 on: {
-                  module: `${baseRealm.url}file-api`,
+                  module: `${baseRealmPrefix}file-api`,
                   name: 'FileDef',
                 },
                 eq: {
@@ -251,7 +251,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
             .send({
               filter: {
                 type: {
-                  module: `${baseRealm.url}markdown-file-def`,
+                  module: `${baseRealmPrefix}markdown-file-def`,
                   name: 'MarkdownDef',
                 },
               },
@@ -531,8 +531,8 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
                 field,
                 CardDef,
                 Component,
-              } from 'https://cardstack.com/base/card-api';
-              import StringField from 'https://cardstack.com/base/string';
+              } from '@cardstack/base/card-api';
+              import StringField from '@cardstack/base/string';
 
               export class Friend extends CardDef {
                 @field firstName = contains(StringField);

@@ -13,7 +13,7 @@ import {
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 
-import type { BaseDef } from 'https://cardstack.com/base/card-api';
+import type { BaseDef } from '@cardstack/base/card-api';
 
 import type { createAuthErrorGuard } from './auth-error-guard';
 

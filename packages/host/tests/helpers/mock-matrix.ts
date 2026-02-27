@@ -3,7 +3,7 @@ import type Owner from '@ember/owner';
 import { getService } from '@universal-ember/test-support';
 import window from 'ember-window-mock';
 
-import { baseRealm } from '@cardstack/runtime-common';
+import { baseRealmPrefix } from '@cardstack/runtime-common';
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
 
@@ -63,7 +63,7 @@ export function setupMockMatrix(
         ...(opts.activeRealms?.map((realmURL) =>
           getRoomIdForRealmAndUser(realmURL, opts.loggedInAs!),
         ) ?? []),
-        getRoomIdForRealmAndUser(baseRealm.url, opts.loggedInAs),
+        getRoomIdForRealmAndUser(baseRealmPrefix, opts.loggedInAs),
       ];
     }
 

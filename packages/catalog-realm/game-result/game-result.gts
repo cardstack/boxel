@@ -6,17 +6,17 @@ import {
   FieldDef,
   Component,
   getCardMeta,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 
-import StringField from 'https://cardstack.com/base/string';
-import DatetimeField from 'https://cardstack.com/base/datetime';
+import StringField from '@cardstack/base/string';
+import DatetimeField from '@cardstack/base/datetime';
 import GamepadIcon from '@cardstack/boxel-icons/gamepad-2';
 import { RadioInput, FieldContainer } from '@cardstack/boxel-ui/components';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import { fn } from '@ember/helper';
 import { htmlSafe } from '@ember/template';
-import { AbsoluteCodeRefField } from 'https://cardstack.com/base/code-ref';
+import { AbsoluteCodeRefField } from '@cardstack/base/code-ref';
 import GitBranch from '@cardstack/boxel-icons/git-branch';
 
 export type GameResultStatusType = 'Win' | 'Lose' | 'Draw';

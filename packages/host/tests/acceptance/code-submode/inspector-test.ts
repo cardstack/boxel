@@ -18,7 +18,7 @@ import { module, test } from 'qunit';
 import stringify from 'safe-stable-stringify';
 
 import {
-  baseRealm,
+  baseRealmPrefix,
   Deferred,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
@@ -69,7 +69,7 @@ const realmAFiles: Record<string, any> = {
       attributes: {},
       meta: {
         adoptsFrom: {
-          module: 'https://cardstack.com/base/cards-grid',
+          module: '@cardstack/base/cards-grid',
           name: 'CardsGrid',
         },
       },
@@ -78,7 +78,7 @@ const realmAFiles: Record<string, any> = {
 };
 
 const indexCardSource = `
-  import { CardDef, Component } from "https://cardstack.com/base/card-api";
+  import { CardDef, Component } from "@cardstack/base/card-api";
 
   export class Index extends CardDef {
     static isolated = class Isolated extends Component<typeof this> {
@@ -92,8 +92,8 @@ const indexCardSource = `
 `;
 
 const personCardSource = `
-  import { contains, containsMany, field, linksToMany, CardDef, Component } from "https://cardstack.com/base/card-api";
-  import StringField from "https://cardstack.com/base/string";
+  import { contains, containsMany, field, linksToMany, CardDef, Component } from "@cardstack/base/card-api";
+  import StringField from "@cardstack/base/string";
   import { Friend } from './friend';
 
   export class Person extends CardDef {
@@ -127,8 +127,8 @@ const personCardSource = `
   }
 `;
 const petCardSource = `
-  import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
-  import StringField from "https://cardstack.com/base/string";
+  import { contains, field, Component, CardDef } from "@cardstack/base/card-api";
+  import StringField from "@cardstack/base/string";
 
   export class Pet extends CardDef {
     static displayName = 'Pet';
@@ -153,8 +153,8 @@ const employeeCardSource = `
     contains,
     field,
     Component,
-  } from 'https://cardstack.com/base/card-api';
-  import StringField from 'https://cardstack.com/base/string';
+  } from '@cardstack/base/card-api';
+  import StringField from '@cardstack/base/string';
   import { Person } from './person';
 
   export class Employee extends Person {
@@ -179,8 +179,8 @@ const inThisFileSource = `
     field,
     CardDef,
     FieldDef,
-  } from 'https://cardstack.com/base/card-api';
-  import StringField from 'https://cardstack.com/base/string';
+  } from '@cardstack/base/card-api';
+  import StringField from '@cardstack/base/string';
 
   export const exportedVar = 'exported var';
 
@@ -243,8 +243,8 @@ const commandModuleSource = `
 `;
 
 const friendCardSource = `
-  import { contains, linksTo, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-  import StringField from "https://cardstack.com/base/string";
+  import { contains, linksTo, field, CardDef, Component } from "@cardstack/base/card-api";
+  import StringField from "@cardstack/base/string";
 
   export class Friend extends CardDef {
     static displayName = 'Friend';
@@ -279,8 +279,8 @@ const exportsSource = `
     field,
     CardDef,
     FieldDef
-  } from 'https://cardstack.com/base/card-api';
-  import StringField from 'https://cardstack.com/base/string';
+  } from '@cardstack/base/card-api';
+  import StringField from '@cardstack/base/string';
 
   export class AncestorCard1 extends CardDef {
     static displayName = 'AncestorCard1';
@@ -307,8 +307,8 @@ const specialExportsSource = `
     contains,
     field,
     CardDef
-  } from 'https://cardstack.com/base/card-api';
-  import StringField from 'https://cardstack.com/base/string';
+  } from '@cardstack/base/card-api';
+  import StringField from '@cardstack/base/string';
 
   class AncestorCard extends CardDef {
     static displayName = 'Ancestor';
@@ -333,7 +333,7 @@ const importsSource = `
     field,
     linksTo,
     linksToMany
-  } from 'https://cardstack.com/base/card-api';
+  } from '@cardstack/base/card-api';
 
   export class ChildCard1 extends AncestorCard2 {
     static displayName = 'ChildCard1';
@@ -370,9 +370,9 @@ const reExportSource = `
     FieldDef,
     BaseDef as BDef,
     contains,
-  } from 'https://cardstack.com/base/card-api';
-  import StringField from 'https://cardstack.com/base/string';
-  import NumberField from 'https://cardstack.com/base/number';
+  } from '@cardstack/base/card-api';
+  import StringField from '@cardstack/base/string';
+  import NumberField from '@cardstack/base/number';
 
   export const exportedVar = 'exported var';
 
@@ -385,16 +385,16 @@ const reExportSource = `
   export default NumberField;
   export { Person as Human } from './person';
 
-  export { default as Date } from 'https://cardstack.com/base/date';
+  export { default as Date } from '@cardstack/base/date';
 `;
 
 const fileDefSource = `
-  import { FileDef } from 'https://cardstack.com/base/file-api';
+  import { FileDef } from '@cardstack/base/file-api';
   import {
     contains,
     field,
-  } from 'https://cardstack.com/base/card-api';
-  import StringField from 'https://cardstack.com/base/string';
+  } from '@cardstack/base/card-api';
+  import StringField from '@cardstack/base/string';
 
   export class CustomFileDef extends FileDef {
     static displayName = 'custom file';
@@ -403,7 +403,7 @@ const fileDefSource = `
 `;
 
 const pngDefModuleSource = `
-  export { PngDef } from 'https://cardstack.com/base/png-image-def';
+  export { PngDef } from '@cardstack/base/png-image-def';
 `;
 
 const localInheritSource = `
@@ -412,7 +412,7 @@ const localInheritSource = `
     field,
     CardDef,
     FieldDef,
-  } from 'https://cardstack.com/base/card-api';
+  } from '@cardstack/base/card-api';
 
   class GrandParent extends CardDef {
     static displayName = 'local grandparent';
@@ -514,7 +514,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
               },
               meta: {
                 adoptsFrom: {
-                  module: `${baseRealm.url}spec`,
+                  module: `${baseRealmPrefix}spec`,
                   name: 'Spec',
                 },
               },
@@ -2020,7 +2020,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     assert.expect(11);
     let expectedSrc = `
 import { ExportedCard } from './in-this-file';
-import { Component } from 'https://cardstack.com/base/card-api';
+import { Component } from '@cardstack/base/card-api';
 export class TestCard extends ExportedCard {
   static displayName = "Test Card";
 }`.trim();
@@ -2129,7 +2129,7 @@ export class TestCard extends ExportedCard {
         content,
         `
 import { ExportedField } from './in-this-file';
-import { Component } from 'https://cardstack.com/base/card-api';
+import { Component } from '@cardstack/base/card-api';
 export class TestField extends ExportedField {
   static displayName = "Test Field";
 }`.trim(),
@@ -2234,7 +2234,7 @@ export class TestFileDef extends CustomFileDef {
     assert.expect(4);
     let expectedSrc = `
 import { ExportedCard as ExportedCardParent } from './in-this-file';
-import { Component } from 'https://cardstack.com/base/card-api';
+import { Component } from '@cardstack/base/card-api';
 export class ExportedCard extends ExportedCardParent {
   static displayName = "Exported Card";
 }`.trim();

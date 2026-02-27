@@ -8,7 +8,7 @@ import type CommandService from '@cardstack/host/services/command-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type StoreService from '@cardstack/host/services/store';
 
-import type { CodePatchStatus } from 'https://cardstack.com/base/matrix-event';
+import type { CodePatchStatus } from '@cardstack/base/matrix-event';
 
 import type { Message } from './message';
 

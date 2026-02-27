@@ -15,7 +15,8 @@ import {
 } from 'fs-extra';
 import type { Realm } from '@cardstack/runtime-common';
 import {
-  baseRealm,
+  baseRealmPrefix,
+  registerCardReferencePrefix,
   CachingDefinitionLookup,
   SupportedMimeType,
   type LooseSingleCardDocument,
@@ -60,7 +61,7 @@ import type {
   MatrixEvent,
   RealmEvent,
   RealmEventContent,
-} from 'https://cardstack.com/base/matrix-event';
+} from '@cardstack/base/matrix-event';
 
 const testRealm2URL = new URL('http://127.0.0.1:4445/test/');
 
@@ -227,7 +228,7 @@ module(basename(__filename), function () {
       assert.strictEqual(json.data.type, 'file-meta');
       assert.strictEqual(json.data.attributes?.name, 'person.gts');
       assert.deepEqual(json.data.meta?.adoptsFrom, {
-        module: `${baseRealm.url}gts-file-def`,
+        module: `${baseRealmPrefix}gts-file-def`,
         name: 'GtsFileDef',
       });
     });
@@ -257,7 +258,7 @@ module(basename(__filename), function () {
       assert.strictEqual(json.data.type, 'file-meta');
       assert.strictEqual(json.data.attributes?.name, 'guide.md');
       assert.deepEqual(json.data.meta?.adoptsFrom, {
-        module: `${baseRealm.url}markdown-file-def`,
+        module: `${baseRealmPrefix}markdown-file-def`,
         name: 'MarkdownDef',
       });
     });
@@ -729,7 +730,7 @@ module(basename(__filename), function () {
         field,
         Component,
         FieldDef,
-      } from 'https://cardstack.com/base/card-api';
+      } from '@cardstack/base/card-api';
       import { Country } from './country';
 
       export class TranspileTestField extends FieldDef {
@@ -1628,13 +1629,17 @@ module(basename(__filename), function () {
           virtualNetwork,
           testCreatePrerenderAuth,
         );
-        virtualNetwork.addURLMapping(new URL(baseRealm.url), localBaseRealmURL);
+        registerCardReferencePrefix(baseRealmPrefix, localBaseRealmURL.href);
+        virtualNetwork.addImportMap(
+          baseRealmPrefix,
+          (rest) => new URL(rest, localBaseRealmURL).href,
+        );
 
         ({ realm: base } = await createRealm({
           definitionLookup,
           withWorker: true,
           dir: basePath,
-          realmURL: baseRealm.url,
+          realmURL: localBaseRealmURL.href,
           virtualNetwork,
           publisher,
           runner,

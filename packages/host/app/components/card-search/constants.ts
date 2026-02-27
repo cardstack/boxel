@@ -3,7 +3,7 @@ import {
   Rows4 as StripViewIcon,
 } from '@cardstack/boxel-ui/icons';
 
-import { baseRealm, type Sort } from '@cardstack/runtime-common';
+import { baseRealmPrefix, type Sort } from '@cardstack/runtime-common';
 
 export interface ViewOption {
   id: string;
@@ -43,7 +43,7 @@ export const SORT_OPTIONS: SortOption[] = [
     sort: [
       {
         on: {
-          module: `${baseRealm.url}card-api`,
+          module: `${baseRealmPrefix}card-api`,
           name: 'CardDef',
         },
         by: 'cardTitle',

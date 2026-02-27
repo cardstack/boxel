@@ -2,7 +2,7 @@ import { Sha256 } from '@aws-crypto/sha256-js';
 import { uint8ArrayToHex } from './index';
 import { REALM_ROOM_RETENTION_POLICY_MAX_LIFETIME } from './realm';
 import { Deferred } from './deferred';
-import type { MatrixEvent } from 'https://cardstack.com/base/matrix-event';
+import type { MatrixEvent } from '@cardstack/base/matrix-event';
 
 type JoinedRoomsResponse = { joined_rooms: string[] };
 

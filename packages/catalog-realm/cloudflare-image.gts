@@ -1,7 +1,7 @@
-import ImageCard from 'https://cardstack.com/base/image';
-import { contains, field } from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-import UrlField from 'https://cardstack.com/base/url';
+import ImageCard from '@cardstack/base/image';
+import { contains, field } from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+import UrlField from '@cardstack/base/url';
 
 export const CLOUDFLARE_ACCOUNT_ID = '4a94a1eb2d21bbbe160234438a49f687';
 

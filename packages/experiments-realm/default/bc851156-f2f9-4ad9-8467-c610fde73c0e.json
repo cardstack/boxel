@@ -3,7 +3,7 @@
     "meta": {
       "adoptsFrom": {
         "name": "default",
-        "module": "https://cardstack.com/base/structured-theme"
+        "module": "@cardstack/base/structured-theme"
       }
     },
     "type": "card",

@@ -19,7 +19,7 @@ import {
   CardContextName,
 } from '@cardstack/runtime-common';
 
-import type { CardContext } from 'https://cardstack.com/base/card-api';
+import type { CardContext } from '@cardstack/base/card-api';
 
 import { type HTMLComponent, htmlComponent } from '../lib/html-component';
 import { getPrerenderedSearch } from '../resources/prerendered-search';

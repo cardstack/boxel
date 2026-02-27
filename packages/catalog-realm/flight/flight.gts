@@ -3,11 +3,11 @@ import {
   field,
   contains,
   Component,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-import NumberField from 'https://cardstack.com/base/number';
-import DatetimeField from 'https://cardstack.com/base/datetime';
-import UrlField from 'https://cardstack.com/base/url';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+import NumberField from '@cardstack/base/number';
+import DatetimeField from '@cardstack/base/datetime';
+import UrlField from '@cardstack/base/url';
 import { dayjsFormat } from '@cardstack/boxel-ui/helpers';
 import PlaneIcon from '@cardstack/boxel-icons/plane';
 import ClockIcon from '@cardstack/boxel-icons/clock';

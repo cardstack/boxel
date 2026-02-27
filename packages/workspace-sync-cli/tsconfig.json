@@ -28,7 +28,7 @@
     "skipLibCheck": true,
     "strict": true,
     "paths": {
-      "https://cardstack.com/base/*": ["../base/*"],
+      "@cardstack/base/*": ["../base/*"],
       "*": ["types/*"]
     },
     "types": ["@cardstack/local-types"]

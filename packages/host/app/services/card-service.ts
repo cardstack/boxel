@@ -22,8 +22,8 @@ import type {
   FieldDef,
   Field,
   SerializeOpts,
-} from 'https://cardstack.com/base/card-api';
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
+import type * as CardAPI from '@cardstack/base/card-api';
 
 import LimitedSet from '../lib/limited-set';
 
@@ -83,7 +83,7 @@ export default class CardService extends Service {
     let loader = this.loaderService.loader;
     if (!this.loaderToCardAPILoadingCache.has(loader)) {
       let apiPromise = loader.import<typeof CardAPI>(
-        'https://cardstack.com/base/card-api',
+        '@cardstack/base/card-api',
       );
       this.loaderToCardAPILoadingCache.set(loader, apiPromise);
       return apiPromise;

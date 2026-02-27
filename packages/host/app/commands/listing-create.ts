@@ -14,10 +14,10 @@ import {
 } from '@cardstack/runtime-common';
 import { loadCardDef } from '@cardstack/runtime-common/code-ref';
 
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as CardAPI from '@cardstack/base/card-api';
+import type * as BaseCommandModule from '@cardstack/base/command';
 
-import type { Spec } from 'https://cardstack.com/base/spec';
+import type { Spec } from '@cardstack/base/spec';
 
 import HostBaseCommand from '../lib/host-base-command';
 
@@ -61,7 +61,7 @@ export default class ListingCreateCommand extends HostBaseCommand<
   async loadCardAPI() {
     if (!this.#cardAPI) {
       this.#cardAPI = await this.loaderService.loader.import<typeof CardAPI>(
-        'https://cardstack.com/base/card-api',
+        '@cardstack/base/card-api',
       );
     }
     return this.#cardAPI;
@@ -212,9 +212,9 @@ export default class ListingCreateCommand extends HostBaseCommand<
     const codeRefModule = codeRef?.module?.toLowerCase();
     const codeRefName = codeRef?.name?.toLowerCase();
     const knownBaseModules = [
-      'https://cardstack.com/base/structured-theme',
-      'https://cardstack.com/base/style-reference',
-      'https://cardstack.com/base/brand-guide',
+      '@cardstack/base/structured-theme',
+      '@cardstack/base/style-reference',
+      '@cardstack/base/brand-guide',
     ];
     if (
       codeRefModule &&

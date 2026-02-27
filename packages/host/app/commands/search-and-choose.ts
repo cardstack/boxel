@@ -3,7 +3,7 @@ import { service } from '@ember/service';
 import { logger } from '@cardstack/runtime-common';
 import { isResolvedCodeRef } from '@cardstack/runtime-common/code-ref';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseCommandModule from '@cardstack/base/command';
 
 import HostBaseCommand from '../lib/host-base-command';
 

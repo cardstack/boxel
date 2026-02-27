@@ -6,8 +6,8 @@ import {
   field,
   Component,
   CardDef,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 
 export class Person extends CardDef {
   static displayName = 'Person';
@@ -32,8 +32,8 @@ export function increment() {
 
 export function compiledCard(id = 'null', moduleName = '/dir/person.gts') {
   return `
-import { contains, field, Component, CardDef } from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
+import { contains, field, Component, CardDef } from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 import { setComponentTemplate } from "@ember/component";
 import { createTemplateFactory } from "@ember/template-factory";
 export class Person extends CardDef {

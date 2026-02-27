@@ -24,7 +24,7 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 import type RealmService from '@cardstack/host/services/realm';
 import type StoreService from '@cardstack/host/services/store';
 
-import type { ViewCardFn } from 'https://cardstack.com/base/card-api';
+import type { ViewCardFn } from '@cardstack/base/card-api';
 
 import HostModeContent from '../host-mode/content';
 

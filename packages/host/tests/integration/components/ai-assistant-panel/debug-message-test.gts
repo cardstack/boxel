@@ -6,7 +6,7 @@ import { getService } from '@universal-ember/test-support';
 
 import { module, test } from 'qunit';
 
-import { baseRealm } from '@cardstack/runtime-common';
+import { baseRealmPrefix } from '@cardstack/runtime-common';
 
 import type { Loader } from '@cardstack/runtime-common/loader';
 
@@ -20,8 +20,8 @@ import OperatorMode from '@cardstack/host/components/operator-mode/container';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
-import type { SerializedFile } from 'https://cardstack.com/base/file-api';
-import type { CardMessageContent } from 'https://cardstack.com/base/matrix-event';
+import type { SerializedFile } from '@cardstack/base/file-api';
+import type { CardMessageContent } from '@cardstack/base/matrix-event';
 
 import {
   testRealmURL,
@@ -55,7 +55,7 @@ module('Integration | ai-assistant-panel | debug-message', function (hooks) {
   setupOnSave(hooks);
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await loader.import(`${baseRealmPrefix}card-api`),
   );
 
   let mockMatrixUtils = setupMockMatrix(hooks, {

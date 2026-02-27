@@ -5,11 +5,11 @@ import {
   field,
   contains,
   linksTo,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-import DatetimeField from 'https://cardstack.com/base/datetime';
-import MarkdownField from 'https://cardstack.com/base/markdown';
-import BooleanField from 'https://cardstack.com/base/boolean';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+import DatetimeField from '@cardstack/base/datetime';
+import MarkdownField from '@cardstack/base/markdown';
+import BooleanField from '@cardstack/base/boolean';
 import { EventRsvp } from './event-rsvp';
 import EventIcon from '@cardstack/boxel-icons/calendar-plus';
 import { dayjsFormat } from '@cardstack/boxel-ui/helpers';

@@ -4,7 +4,6 @@ import Service, { service } from '@ember/service';
 import {
   VirtualNetwork,
   authorizationMiddleware,
-  baseRealm,
   registerCardReferencePrefix,
   fetcher,
 } from '@cardstack/runtime-common';
@@ -52,8 +51,6 @@ export default class NetworkService extends Service {
   private makeVirtualNetwork() {
     let virtualNetwork = new VirtualNetwork(globalThis.fetch);
     let baseRealmURL = withTrailingSlash(config.resolvedBaseRealmURL);
-    let resolvedBaseRealmURL = new URL(baseRealmURL);
-    virtualNetwork.addURLMapping(new URL(baseRealm.url), resolvedBaseRealmURL);
     registerCardReferencePrefix('@cardstack/base/', baseRealmURL);
     virtualNetwork.addImportMap(
       '@cardstack/base/',

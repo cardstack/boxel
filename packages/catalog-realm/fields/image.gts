@@ -5,8 +5,8 @@ import {
   field,
   contains,
   linksTo,
-} from 'https://cardstack.com/base/card-api';
-import UrlField from 'https://cardstack.com/base/url';
+} from '@cardstack/base/card-api';
+import UrlField from '@cardstack/base/url';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
@@ -23,7 +23,7 @@ import { Button } from '@cardstack/boxel-ui/components';
 import NotificationBubble from '../components/notification-bubble';
 import UploadImageCommand from '../commands/upload-image';
 import { realmURL as realmURLSymbol } from '@cardstack/runtime-common';
-import ImageCard from 'https://cardstack.com/base/image';
+import ImageCard from '@cardstack/base/image';
 import SaveCardCommand from '@cardstack/boxel-host/commands/save-card';
 
 import ImagePresentation from './image/components/image-presentation';

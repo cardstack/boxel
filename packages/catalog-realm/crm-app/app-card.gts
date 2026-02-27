@@ -1,6 +1,6 @@
-import BooleanField from 'https://cardstack.com/base/boolean';
-import CodeRefField from 'https://cardstack.com/base/code-ref';
-import Base64ImageField from 'https://cardstack.com/base/base64-image';
+import BooleanField from '@cardstack/base/boolean';
+import CodeRefField from '@cardstack/base/code-ref';
+import Base64ImageField from '@cardstack/base/base64-image';
 import {
   CardDef,
   field,
@@ -13,11 +13,11 @@ import {
   type CardContext,
   FieldsTypeFor,
   CreateCardFn,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 import { CardContainer } from '@cardstack/boxel-ui/components';
 import { and, bool, cn } from '@cardstack/boxel-ui/helpers';
 import {
-  baseRealm,
+  baseRealmPrefix,
   type PrerenderedCardLike,
   type Query,
 } from '@cardstack/runtime-common';
@@ -313,7 +313,7 @@ class DefaultTabTemplate extends GlimmerComponent<DefaultTabSignature> {
       sort: [
         {
           on: {
-            module: `${baseRealm.url}card-api`,
+            module: `${baseRealmPrefix}card-api`,
             name: 'CardDef',
           },
           by: 'cardTitle',

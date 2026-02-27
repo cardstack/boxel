@@ -14,8 +14,8 @@ import {
   contains,
   linksTo,
   Component,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 import { not } from '@cardstack/boxel-ui/helpers';
 
 import { Post, EventPost, ReminderPost } from './post';

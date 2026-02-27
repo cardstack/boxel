@@ -5,7 +5,7 @@ import { getService } from '@universal-ember/test-support';
 
 import { module, test } from 'qunit';
 
-import { baseRealm, Loader, clearFetchCache } from '@cardstack/runtime-common';
+import { baseRealmPrefix, Loader, clearFetchCache } from '@cardstack/runtime-common';
 
 import {
   testRealmURL,
@@ -110,7 +110,7 @@ module('Unit | loader prefetch', function (hooks) {
 
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await loader.import(`${baseRealmPrefix}card-api`),
   );
 
   test('prefetch kicks off dependency fetch without waiting for completion', async function (assert) {

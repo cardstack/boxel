@@ -1,4 +1,4 @@
-import { field, contains } from 'https://cardstack.com/base/card-api';
+import { field, contains } from '@cardstack/base/card-api';
 import { Contact } from './contact';
 import PresentationAnalytics from '@cardstack/boxel-icons/presentation-analytics';
 import { StatusTagField } from './contact-status-tag';

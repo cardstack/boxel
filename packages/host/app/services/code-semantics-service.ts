@@ -16,7 +16,7 @@ import {
 
 import { isReady } from '@cardstack/host/resources/file';
 
-import type { BaseDef } from 'https://cardstack.com/base/card-api';
+import type { BaseDef } from '@cardstack/base/card-api';
 
 import {
   moduleContentsResource,

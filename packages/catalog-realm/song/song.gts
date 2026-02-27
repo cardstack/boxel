@@ -2,10 +2,10 @@ import {
   field,
   contains,
   Component,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-import UrlField from 'https://cardstack.com/base/url';
-import BooleanField from 'https://cardstack.com/base/boolean';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+import UrlField from '@cardstack/base/url';
+import BooleanField from '@cardstack/base/boolean';
 import { concat } from '@ember/helper';
 import { htmlSafe } from '@ember/template';
 import { tracked } from '@glimmer/tracking';

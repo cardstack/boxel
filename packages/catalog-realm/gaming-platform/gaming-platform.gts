@@ -3,13 +3,13 @@ import {
   field,
   contains,
   Component,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 
-import StringField from 'https://cardstack.com/base/string';
-import NumberField from 'https://cardstack.com/base/number';
-import BooleanField from 'https://cardstack.com/base/boolean';
-import DatetimeField from 'https://cardstack.com/base/datetime';
-import UrlField from 'https://cardstack.com/base/url';
+import StringField from '@cardstack/base/string';
+import NumberField from '@cardstack/base/number';
+import BooleanField from '@cardstack/base/boolean';
+import DatetimeField from '@cardstack/base/datetime';
+import UrlField from '@cardstack/base/url';
 
 import { formatDateTime } from '@cardstack/boxel-ui/helpers';
 import { concat } from '@ember/helper';

@@ -3,7 +3,7 @@ import { click, findAll, triggerEvent, waitFor } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { baseRealm } from '@cardstack/runtime-common';
+import { baseRealmPrefix } from '@cardstack/runtime-common';
 
 import {
   setupLocalIndexing,
@@ -45,11 +45,11 @@ module('Acceptance | workspace-delete-multiple', function (hooks) {
     let loaderService = getService('loader-service');
     let loader = loaderService.loader;
     let { field, contains, CardDef, Component } = await loader.import<
-      typeof import('https://cardstack.com/base/card-api')
-    >(`${baseRealm.url}card-api`);
+      typeof import('@cardstack/base/card-api')
+    >(`${baseRealmPrefix}card-api`);
     let { default: StringField } = await loader.import<
-      typeof import('https://cardstack.com/base/string')
-    >(`${baseRealm.url}string`);
+      typeof import('@cardstack/base/string')
+    >(`${baseRealmPrefix}string`);
 
     class Pet extends CardDef {
       static displayName = 'Pet';

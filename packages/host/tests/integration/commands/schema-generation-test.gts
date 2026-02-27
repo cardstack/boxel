@@ -3,7 +3,7 @@ import { setupWindowMock } from 'ember-window-mock/test-support';
 
 import { module, test } from 'qunit';
 
-import { baseRealm } from '@cardstack/runtime-common';
+import { baseRealmPrefix } from '@cardstack/runtime-common';
 import type { AttributesSchema } from '@cardstack/runtime-common/helpers/ai';
 import { basicMappings } from '@cardstack/runtime-common/helpers/ai';
 
@@ -11,7 +11,7 @@ import { HostCommandClasses } from '@cardstack/host/commands';
 
 import type HostBaseCommand from '@cardstack/host/lib/host-base-command';
 
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
+import type * as CardAPI from '@cardstack/base/card-api';
 
 import { setupRenderingTest } from '../../helpers/setup';
 
@@ -29,7 +29,7 @@ module(
         loader = getService('loader-service').loader;
         mappings = await basicMappings(loader);
         cardAPI = await loader.import<typeof CardAPI>(
-          `${baseRealm.url}card-api`,
+          `${baseRealmPrefix}card-api`,
         );
       });
       // for each host command, attempt to generate a JSON schema with strict: true

@@ -20,7 +20,7 @@ import camelCase from 'camelcase';
 import isEqual from 'lodash/isEqual';
 
 import {
-  baseRealm,
+  baseRealmPrefix,
   maybeRelativeURL,
   trimExecutableExtension,
   codeRefWithAbsoluteURL,
@@ -40,7 +40,7 @@ import { getBabelOptions } from './babel-options';
 
 import type { types as t } from '@babel/core';
 import type { NodePath } from '@babel/traverse';
-import type { FieldType } from 'https://cardstack.com/base/card-api';
+import type { FieldType } from '@cardstack/base/card-api';
 
 export type {
   PossibleCardOrFieldDeclaration,
@@ -405,13 +405,13 @@ function makeNewField({
     // there is some type of mismatch here--importUtil expects the
     // target.parentPath to be non-nullable, but unable to express that in types
     target as NodePath<any>,
-    `${baseRealm.url}card-api`,
+    `${baseRealmPrefix}card-api`,
     'field',
   );
 
   let fieldTypeIdentifier = importUtil.import(
     target as NodePath<any>,
-    `${baseRealm.url}card-api`,
+    `${baseRealmPrefix}card-api`,
     fieldType,
   );
 

@@ -1,5 +1,5 @@
-import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
+import { CardDef, field, contains } from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 
 import { Command } from '@cardstack/runtime-common';
 import SendRequestViaProxyCommand from '@cardstack/boxel-host/commands/send-request-via-proxy';

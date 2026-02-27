@@ -6,7 +6,7 @@ import { module, test } from 'qunit';
 import {
   PermissionsContextName,
   type Permissions,
-  baseRealm,
+  baseRealmPrefix,
 } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
@@ -64,7 +64,7 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
   setupBaseRealm(hooks);
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await loader.import(`${baseRealmPrefix}card-api`),
   );
 
   hooks.beforeEach(async function () {
