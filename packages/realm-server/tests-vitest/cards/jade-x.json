@@ -1,0 +1,14 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "firstName": "Jade X"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "http://localhost:4202/node-test/friend-with-used-link",
+        "name": "FriendWithUsedLink"
+      }
+    }
+  }
+}

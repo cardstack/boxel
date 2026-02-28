@@ -1,0 +1,16 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Paper",
+      "cardDescription": null,
+      "cardThumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../person-with-error",
+        "name": "PersonCard"
+      }
+    }
+  }
+}
