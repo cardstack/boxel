@@ -182,7 +182,7 @@ class IsolatedTemplate extends Component<typeof PrCard> {
           {{! ── Left: CI Checks ── }}
           <div class='status-col'>
             <div class='col-header'>
-              <span class='col-header-label'>CI Checks</span>
+              <label class='header-label'>CI Checks</label>
               {{#if (eq this.mockCi.status 'in_progress')}}
                 <span class='ci-overall-badge ci-overall-badge--pending'>In
                   Progress</span>
@@ -224,7 +224,7 @@ class IsolatedTemplate extends Component<typeof PrCard> {
           {{! ── Right: Reviews ── }}
           <div class='status-col'>
             <div class='col-header'>
-              <span class='col-header-label'>Reviews</span>
+              <label class='header-label'>Reviews</label>
               {{#if (eq this.overallReviewState 'changes_requested')}}
                 <span class='review-state-badge review-state-badge--changes'>
                   Changes Requested
@@ -270,7 +270,7 @@ class IsolatedTemplate extends Component<typeof PrCard> {
         {{#if @model.listing}}
           <section class='pr-listing-section'>
             <div class='listing-section-label'>
-              <span>View Listing</span>
+              <label class='header-label'>View Listing</label>
             </div>
             <div class='pr-listing-embedded'>
               <@fields.listing @format='embedded' />
@@ -378,7 +378,9 @@ class IsolatedTemplate extends Component<typeof PrCard> {
       /* ── Listing section ── */
       .pr-listing-section {
         padding: var(--boxel-sp) var(--boxel-sp-xl);
-        border-bottom: 1px solid var(--border, #d0d7de);
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-xs);
       }
       .listing-section-label {
         display: inline-flex;
@@ -438,7 +440,7 @@ class IsolatedTemplate extends Component<typeof PrCard> {
         justify-content: space-between;
         gap: var(--boxel-sp-xs);
       }
-      .col-header-label {
+      .header-label {
         font-size: 10px;
         font-weight: 700;
         text-transform: uppercase;
@@ -802,7 +804,7 @@ class FittedTemplate extends Component<typeof PrCard> {
         {{! CI column }}
         <div class='status-col'>
           <div class='col-header'>
-            <span class='col-header-label'>CI Checks</span>
+            <label class='header-label'>CI Checks</label>
             {{#if (eq this.mockCi.status 'in_progress')}}
               <span class='ci-overall-badge ci-overall-badge--pending'>In
                 Progress</span>
@@ -842,7 +844,7 @@ class FittedTemplate extends Component<typeof PrCard> {
         {{#if this.mockReviews.length}}
           <div class='status-col'>
             <div class='col-header'>
-              <span class='col-header-label'>Reviews</span>
+              <label class='header-label'>Reviews</label>
               {{#if (eq this.overallReviewState 'changes_requested')}}
                 <span class='review-state-badge review-state-badge--changes'>
                   Changes Requested
@@ -1244,7 +1246,7 @@ class FittedTemplate extends Component<typeof PrCard> {
         justify-content: space-between;
         gap: var(--boxel-sp-xs);
       }
-      .col-header-label {
+      .header-label {
         font-size: 12px;
         font-weight: 700;
         text-transform: uppercase;
