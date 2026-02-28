@@ -6,7 +6,7 @@ import {
   contains,
   linksTo,
 } from 'https://cardstack.com/base/card-api';
-import { Listing } from '@cardstack/catalog/catalog-app/listing/listing';
+import { Listing } from '../catalog-app/listing/listing';
 import NumberField from 'https://cardstack.com/base/number';
 import DatetimeField from 'https://cardstack.com/base/datetime';
 import GitPullRequestIcon from '@cardstack/boxel-icons/git-pull-request';
@@ -33,11 +33,17 @@ const MOCK_CI: { status: 'success' | 'failure' | 'in_progress' } = {
   status: 'in_progress',
 };
 
+type MockReview = {
+  reviewer: string;
+  state: 'approved' | 'changes_requested';
+  comment: string;
+};
+
 // Review: state, reviewer, comment only
-const MOCK_REVIEWS = [
+const MOCK_REVIEWS: MockReview[] = [
   {
     reviewer: 'tintinthong',
-    state: 'changes_requested' as const,
+    state: 'changes_requested',
     comment:
       "The token-refresh logic in `authenticate()` doesn't handle concurrent " +
       'requests – if two calls race, both may try to refresh and one will fail. ' +
@@ -91,15 +97,28 @@ class IsolatedTemplate extends Component<typeof PrCard> {
   }
 
   get changesRequestedCount() {
-    return MOCK_REVIEWS.filter((r) => r.state === 'changes_requested').length;
+    return this.mockReviews.filter((r) => r.state === 'changes_requested')
+      .length;
+  }
+
+  get latestChangesRequestedReview() {
+    let changesRequestedReviews = this.mockReviews.filter(
+      (r) => r.state === 'changes_requested',
+    );
+    return changesRequestedReviews[changesRequestedReviews.length - 1] ?? null;
+  }
+
+  get latestChangesRequestedComment() {
+    let comment = this.latestChangesRequestedReview?.comment?.trim();
+    return comment || '-';
   }
 
   get overallReviewState() {
-    if (MOCK_REVIEWS.some((r) => r.state === 'changes_requested'))
+    if (this.mockReviews.some((r) => r.state === 'changes_requested'))
       return 'changes_requested';
     if (
-      MOCK_REVIEWS.length &&
-      MOCK_REVIEWS.every((r) => r.state === 'approved')
+      this.mockReviews.length &&
+      this.mockReviews.every((r) => r.state === 'approved')
     )
       return 'approved';
     return null;
@@ -217,11 +236,13 @@ class IsolatedTemplate extends Component<typeof PrCard> {
               {{/if}}
             </div>
 
-            <ul class='review-list'>
-              {{#each this.mockReviews as |review|}}
+            {{#if this.latestChangesRequestedReview}}
+              <ul class='review-list'>
                 <li class='review-item'>
                   <div class='review-top-row'>
-                    <span class='reviewer-name'>{{review.reviewer}}</span>
+                    <span class='reviewer-name'>
+                      {{this.latestChangesRequestedReview.reviewer}}
+                    </span>
                     <a
                       href={{this.prUrl}}
                       target='_blank'
@@ -234,11 +255,13 @@ class IsolatedTemplate extends Component<typeof PrCard> {
                   </div>
 
                   <blockquote class='review-comment'>
-                    {{review.comment}}
+                    {{this.latestChangesRequestedComment}}
                   </blockquote>
                 </li>
-              {{/each}}
-            </ul>
+              </ul>
+            {{else}}
+              -
+            {{/if}}
           </div>
 
         </section>
@@ -391,8 +414,7 @@ class IsolatedTemplate extends Component<typeof PrCard> {
       /* ── 2-column status section ── */
       .pr-status-section {
         display: flex;
-        flex: 1;
-        min-height: 0;
+        flex-wrap: wrap;
       }
       .status-col {
         flex: 1;
@@ -682,15 +704,28 @@ class FittedTemplate extends Component<typeof PrCard> {
   }
 
   get changesRequestedCount() {
-    return MOCK_REVIEWS.filter((r) => r.state === 'changes_requested').length;
+    return this.mockReviews.filter((r) => r.state === 'changes_requested')
+      .length;
+  }
+
+  get latestChangesRequestedReview() {
+    let changesRequestedReviews = this.mockReviews.filter(
+      (r) => r.state === 'changes_requested',
+    );
+    return changesRequestedReviews[changesRequestedReviews.length - 1] ?? null;
+  }
+
+  get latestChangesRequestedComment() {
+    let comment = this.latestChangesRequestedReview?.comment?.trim();
+    return comment || '-';
   }
 
   get overallReviewState() {
-    if (MOCK_REVIEWS.some((r) => r.state === 'changes_requested'))
+    if (this.mockReviews.some((r) => r.state === 'changes_requested'))
       return 'changes_requested';
     if (
-      MOCK_REVIEWS.length &&
-      MOCK_REVIEWS.every((r) => r.state === 'approved')
+      this.mockReviews.length &&
+      this.mockReviews.every((r) => r.state === 'approved')
     )
       return 'approved';
     return null;
@@ -818,11 +853,13 @@ class FittedTemplate extends Component<typeof PrCard> {
                 </span>
               {{/if}}
             </div>
-            <ul class='review-list'>
-              {{#each this.mockReviews as |review|}}
+            {{#if this.latestChangesRequestedReview}}
+              <ul class='review-list'>
                 <li class='review-item'>
                   <div class='review-top-row'>
-                    <span class='reviewer-name'>{{review.reviewer}}</span>
+                    <span class='reviewer-name'>
+                      {{this.latestChangesRequestedReview.reviewer}}
+                    </span>
                     <a
                       href={{this.prUrl}}
                       target='_blank'
@@ -834,11 +871,13 @@ class FittedTemplate extends Component<typeof PrCard> {
                     </a>
                   </div>
                   <blockquote class='review-comment'>
-                    {{review.comment}}
+                    {{this.latestChangesRequestedComment}}
                   </blockquote>
                 </li>
-              {{/each}}
-            </ul>
+              </ul>
+            {{else}}
+              -
+            {{/if}}
           </div>
         {{/if}}
       </div>
