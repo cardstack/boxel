@@ -208,6 +208,7 @@ export class PgAdapter implements DBAdapter {
           ignorePattern: '.*\\.eslintrc\\.js',
           log: enableLogging ? (...args) => log.info(...args) : () => undefined,
         });
+        await this.fixupBranchModePermissions(config);
         return;
       } catch (err: any) {
         if (!err.message?.includes('Another migration is already running')) {
@@ -216,6 +217,53 @@ export class PgAdapter implements DBAdapter {
         log.info(`saw another migration running, will retry`);
         await new Promise<void>((resolve) => setTimeout(() => resolve(), 500));
       }
+    }
+  }
+
+  // In branch mode, migrations seed realm_user_permissions with hardcoded
+  // localhost:4201/4202 URLs. Rewrite them to the Traefik hostnames so realm
+  // ownership lookups work.
+  private async fixupBranchModePermissions(config: Config) {
+    let branch = process.env.BOXEL_BRANCH;
+    if (!branch) {
+      return;
+    }
+    let slug = branch
+      .toLowerCase()
+      .replace(/\//g, '-')
+      .replace(/[^a-z0-9-]/g, '')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '');
+
+    let client = new Client(config);
+    try {
+      await client.connect();
+      let realmServerUrl = `http://realm-server.${slug}.localhost`;
+      let realmTestUrl = `http://realm-test.${slug}.localhost`;
+      let result = await client.query(
+        `UPDATE realm_user_permissions
+         SET realm_url = regexp_replace(realm_url, '^http://localhost:4201/', $1)
+         WHERE realm_url LIKE 'http://localhost:4201/%'`,
+        [`${realmServerUrl}/`],
+      );
+      if (result.rowCount && result.rowCount > 0) {
+        log.info(
+          `Branch mode: rewrote ${result.rowCount} permission URL(s) from localhost:4201 to ${realmServerUrl}`,
+        );
+      }
+      let result2 = await client.query(
+        `UPDATE realm_user_permissions
+         SET realm_url = regexp_replace(realm_url, '^http://localhost:4202/', $1)
+         WHERE realm_url LIKE 'http://localhost:4202/%'`,
+        [`${realmTestUrl}/`],
+      );
+      if (result2.rowCount && result2.rowCount > 0) {
+        log.info(
+          `Branch mode: rewrote ${result2.rowCount} permission URL(s) from localhost:4202 to ${realmTestUrl}`,
+        );
+      }
+    } finally {
+      await client.end();
     }
   }
 
