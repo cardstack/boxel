@@ -7,7 +7,14 @@ export interface TokenSource {
 
 function shouldSkipReauthentication(): boolean {
   try {
-    return Boolean((globalThis as any).__boxelRenderContext);
+    let inRenderContext = Boolean((globalThis as any).__boxelRenderContext);
+    // Host tests also run the indexer and the app in the same js runtime which
+    // can be very confusing. We err on the side of host tests needing
+    // reauthentication retries enabled so browser-loaded assets can recover
+    // from transient 401s.
+    let isBrowserTestEnv =
+      typeof window !== 'undefined' && Boolean((globalThis as any).QUnit);
+    return inRenderContext && !isBrowserTestEnv;
   } catch {
     return false;
   }
