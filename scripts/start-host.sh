@@ -3,7 +3,7 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-ENV="${1:-staging}"
+ENV="${1:?Usage: $0 <staging|production>}"
 ENV_FILE="packages/host/config/${ENV}.env"
 
 if [ ! -f "$ENV_FILE" ]; then
