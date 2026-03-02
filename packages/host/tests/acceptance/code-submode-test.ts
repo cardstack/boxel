@@ -1325,6 +1325,9 @@ module('Acceptance | code submode tests', function (_hooks) {
       // Cards HAVE the edit format option (contrast with files)
       assert.dom('[data-test-format-chooser="edit"]').exists();
 
+      // Cards do NOT have the metadata format option (only files do)
+      assert.dom('[data-test-format-chooser="metadata"]').doesNotExist();
+
       // Cards HAVE the edit button in header
       assert
         .dom(
@@ -1370,6 +1373,109 @@ module('Acceptance | code submode tests', function (_hooks) {
 
       // Only preview is shown in the right column when viewing an instance, no schema editor
       assert.dom('[data-test-card-schema]').doesNotExist();
+    });
+
+    test('non-card file preview shows "metadata" format option and not "edit"', async function (assert) {
+      await visitOperatorMode({
+        stacks: [
+          [
+            {
+              id: `${testRealmURL}Person/1`,
+              format: 'isolated',
+            },
+          ],
+        ],
+        submode: 'code',
+        codePath: `${testRealmURL}z01.json`,
+      });
+
+      await waitFor('[data-test-code-mode-card-renderer-body]');
+
+      // Non-card files should have the metadata format option
+      assert.dom('[data-test-format-chooser="metadata"]').exists();
+
+      // Non-card files should NOT have the edit format option
+      assert.dom('[data-test-format-chooser="edit"]').doesNotExist();
+
+      // The standard view formats are all present
+      assert.dom('[data-test-format-chooser="isolated"]').exists();
+      assert.dom('[data-test-format-chooser="embedded"]').exists();
+      assert.dom('[data-test-format-chooser="fitted"]').exists();
+      assert.dom('[data-test-format-chooser="atom"]').exists();
+    });
+
+    test('clicking "metadata" format for a non-card file shows metadata panel with JSON-API content', async function (assert) {
+      await visitOperatorMode({
+        stacks: [
+          [
+            {
+              id: `${testRealmURL}Person/1`,
+              format: 'isolated',
+            },
+          ],
+        ],
+        submode: 'code',
+        codePath: `${testRealmURL}z01.json`,
+      });
+
+      await waitFor('[data-test-code-mode-card-renderer-body]');
+
+      await click('[data-test-format-chooser="metadata"]');
+
+      assert
+        .dom('[data-test-format-chooser="metadata"]')
+        .hasClass('active', 'metadata button is active after clicking');
+
+      await waitFor('[data-test-metadata-panel]');
+      assert.dom('[data-test-metadata-panel]').exists();
+
+      await waitFor('[data-test-metadata-content]');
+      assert.dom('[data-test-metadata-content]').exists();
+
+      // The content should be a JSON-API document with type "file-meta"
+      let content =
+        document.querySelector('[data-test-metadata-content]')?.textContent ??
+        '';
+      assert.true(
+        content.includes('"file-meta"'),
+        'metadata content includes "file-meta" type',
+      );
+      assert.true(
+        content.includes('adoptsFrom'),
+        'metadata content includes adoptsFrom',
+      );
+    });
+
+    test('switching away from "metadata" format hides the metadata panel', async function (assert) {
+      await visitOperatorMode({
+        stacks: [
+          [
+            {
+              id: `${testRealmURL}Person/1`,
+              format: 'isolated',
+            },
+          ],
+        ],
+        submode: 'code',
+        codePath: `${testRealmURL}z01.json`,
+      });
+
+      await waitFor('[data-test-code-mode-card-renderer-body]');
+
+      await click('[data-test-format-chooser="metadata"]');
+      await waitFor('[data-test-metadata-panel]');
+      assert.dom('[data-test-metadata-panel]').exists();
+
+      // Switch back to isolated — metadata panel should disappear
+      await click('[data-test-format-chooser="isolated"]');
+
+      assert
+        .dom('[data-test-metadata-panel]')
+        .doesNotExist('metadata panel is hidden after switching formats');
+
+      assert
+        .dom('[data-test-format-chooser="isolated"]')
+        .hasClass('active', 'isolated button is active after switching');
     });
 
     test('displays clear message when a schema-editor incompatible item is selected within a valid file type', async function (assert) {

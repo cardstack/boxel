@@ -24,7 +24,7 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
   get writableRealms(): { name: string; url: string; iconURL?: string }[] {
     const commandResource = this.allRealmsInfoResource;
     if (commandResource?.isSuccess && commandResource) {
-      const result = commandResource.value;
+      const result = commandResource.cardResult;
       if (result?.results) {
         return result.results
           .filter(

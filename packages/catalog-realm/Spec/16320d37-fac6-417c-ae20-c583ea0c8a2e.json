@@ -5,7 +5,7 @@
       "readMe": null,
       "ref": {
         "name": "default",
-        "module": "http://localhost:4201/catalog/fields/image"
+        "module": "@cardstack/catalog/fields/image"
       },
       "specType": "field",
       "containedExamples": [],

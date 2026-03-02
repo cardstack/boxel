@@ -541,6 +541,80 @@ module('Integration | operator-mode | ui', function (hooks) {
     );
   });
 
+  test('clicking outside search sheet resets search input and realm filter', async function (assert) {
+    ctx.setCardInOperatorModeState(`${testRealmURL}grid`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+    await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
+    await click(`[data-test-boxel-filter-list-button="All Cards"]`);
+    await waitFor(`[data-test-cards-grid-item]`);
+
+    // Helper to get selected realm URLs from data attribute
+    const getSelectedRealms = () => {
+      const attr = document
+        .querySelector('[data-test-search-realms]')
+        ?.getAttribute('data-test-search-realms');
+      return attr?.split(',').map((r) => r.trim()) ?? [];
+    };
+
+    // Open search sheet and type a search term
+    await click(`[data-test-open-search-field]`);
+    assert.dom(`[data-test-search-sheet="search-prompt"]`).exists();
+
+    await typeIn('[data-test-search-field]', 'Person');
+    await click('[data-test-search-sheet] .search-sheet-content');
+    await waitFor('[data-test-search-label]', { timeout: 8000 });
+    await waitFor('[data-test-search-realms]', { timeout: 3000 });
+
+    // Record initial realm state (all realms selected by default)
+    let initialRealms = getSelectedRealms();
+
+    // Select a specific realm in the picker
+    const trigger =
+      document.querySelector(
+        '[data-test-realm-picker] .ember-power-select-trigger',
+      ) ?? document.querySelector('[data-test-realm-picker]');
+    await click(trigger as HTMLElement);
+    await waitFor('.ember-power-select-option', { timeout: 3000 });
+
+    const options = document.querySelectorAll('.ember-power-select-option');
+    const testRealmOption = Array.from(options).find((el) =>
+      el.textContent?.includes(ctx.realmName),
+    );
+    assert.ok(testRealmOption, `option for "${ctx.realmName}" should exist`);
+    await click(testRealmOption as HTMLElement);
+
+    // Verify filter was applied (only selected realm)
+    await waitUntil(() => getSelectedRealms().includes(testRealmURL), {
+      timeout: 5000,
+    });
+
+    // Close by clicking outside
+    await click(`[data-test-operator-mode-stack]`);
+    assert.dom(`[data-test-search-sheet="closed"]`).exists();
+
+    // Reopen search sheet
+    await click(`[data-test-open-search-field]`);
+    assert.dom(`[data-test-search-sheet="search-prompt"]`).exists();
+
+    // Assert search input is cleared
+    assert
+      .dom('[data-test-search-field]')
+      .hasValue('', 'search input is cleared after clicking outside');
+
+    // Assert realm filter is reset to all realms
+    await waitFor('[data-test-search-realms]', { timeout: 3000 });
+    let reopenedRealms = getSelectedRealms();
+    assert.deepEqual(
+      reopenedRealms,
+      initialRealms,
+      'realm filter is reset to all realms after clicking outside',
+    );
+  });
+
   test('displays card in interact mode when clicking `Open in Interact Mode` menu in preview panel', async function (assert) {
     ctx.setCardInOperatorModeState(`${testRealmURL}grid`);
 

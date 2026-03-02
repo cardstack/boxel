@@ -41,6 +41,7 @@ import type { SimpleDocument, SimpleElement } from '@simple-dom/interface';
 import type { Tokenizer } from '@simple-dom/parser';
 
 const ELEMENT_NODE_TYPE = 1;
+const MAX_ASYNC_RENDER_PASSES = 3;
 const { environment } = config;
 
 export class CardStoreWithErrors implements CardStore {
@@ -170,9 +171,16 @@ export default class RenderService extends Service {
   ): Promise<string> {
     let element = getIsolatedRenderElement(this.document);
     try {
-      render(component, element, this.owner, format);
-      await waitForAsync?.();
-      // re-render after we have waited for the links to finish loading
+      if (waitForAsync) {
+        // Additional settle passes are needed because rendering can start new
+        // async work (for example nested query-backed relationships).
+        for (let i = 0; i < MAX_ASYNC_RENDER_PASSES; i++) {
+          render(component, element, this.owner, format);
+          await waitForAsync();
+        }
+      }
+      // Final render after waiting for async work so captured HTML reflects the
+      // latest loaded state.
       render(component, element, this.owner, format);
       let serializer = new Serializer(voidMap);
       let html = serializer.serialize(element);

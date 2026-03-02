@@ -29,121 +29,361 @@ module('Integration | operator-mode | card catalog', function (hooks) {
   let ctx = setupOperatorModeTests(hooks);
 
   let noop = () => {};
-  test(`displays recently accessed card`, async function (assert) {
-    ctx.setCardInOperatorModeState(`${testRealmURL}grid`);
-    await renderComponent(
-      class TestDriver extends GlimmerComponent {
-        <template><OperatorMode @onClose={{noop}} /></template>
-      },
-    );
-    await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
-    assert.dom(`[data-test-stack-card-header]`).containsText(ctx.realmName);
 
-    await click(`[data-test-boxel-filter-list-button="All Cards"]`);
-    await waitFor(`[data-test-cards-grid-item]`);
-    await click(
-      `[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"] .field-component-card`,
-    );
-    await waitFor(`[data-test-stack-card-index="1"]`);
+  module('recents section', function () {
+    test(`displays recently accessed card`, async function (assert) {
+      ctx.setCardInOperatorModeState(`${testRealmURL}grid`);
+      await renderComponent(
+        class TestDriver extends GlimmerComponent {
+          <template><OperatorMode @onClose={{noop}} /></template>
+        },
+      );
+      await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
+      assert.dom(`[data-test-stack-card-header]`).containsText(ctx.realmName);
 
-    assert
-      .dom(
-        `[data-test-stack-card="${testRealmURL}Person/fadhlan"] [data-test-boxel-card-header-title]`,
-      )
-      .containsText('Person');
-
-    assert.dom(`[data-test-cards-grid-cards]`).isNotVisible();
-    assert.dom(`[data-test-create-new-card-button]`).isNotVisible();
-
-    await click(`[data-test-open-search-field]`);
-    assert
-      .dom(`[data-test-search-result="${testRealmURL}Person/fadhlan"]`)
-      .exists();
-    await click(`[data-test-search-sheet-cancel-button]`);
-    await click(`[data-test-stack-card-index="1"] [data-test-close-button]`);
-
-    await waitUntil(
-      () => !document.querySelector('[data-test-stack-card-index="1"]'),
-    );
-
-    await waitFor(`[data-test-cards-grid-item]`);
-    await click(
-      `[data-test-cards-grid-item="${testRealmURL}Person/burcu"] .field-component-card`,
-    );
-    await waitFor(`[data-test-stack-card-index="1"]`);
-
-    await click(`[data-test-open-search-field]`);
-
-    await waitFor(`[data-test-grid-item-index="0"]`);
-    await waitFor(`[data-test-grid-item-index="1"]`);
-    assert.dom(`[data-test-search-result]`).exists({ count: 2 });
-    assert
-      .dom(
-        `[data-test-grid-item-index="0"] [data-test-search-result="${testRealmURL}Person/burcu"]`,
-      )
-      .exists();
-    assert
-      .dom(
-        `[data-test-grid-item-index="1"] [data-test-search-result="${testRealmURL}Person/fadhlan"]`,
-      )
-      .exists();
-  });
-
-  test(`displays recently accessed card, maximum 10 cards`, async function (assert) {
-    ctx.setCardInOperatorModeState(`${testRealmURL}grid`);
-    await renderComponent(
-      class TestDriver extends GlimmerComponent {
-        <template><OperatorMode @onClose={{noop}} /></template>
-      },
-    );
-    await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
-    assert.dom(`[data-test-stack-card-header]`).containsText(ctx.realmName);
-
-    await click(`[data-test-boxel-filter-list-button="All Cards"]`);
-    await waitFor(`[data-test-cards-grid-item]`);
-    for (let i = 1; i <= 11; i++) {
+      await click(`[data-test-boxel-filter-list-button="All Cards"]`);
+      await waitFor(`[data-test-cards-grid-item]`);
       await click(
-        `[data-test-cards-grid-item="${testRealmURL}Person/${i}"] .field-component-card`,
+        `[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"] .field-component-card`,
       );
-      await waitFor(
-        `[data-test-stack-card-index="1"][data-test-stack-card="${testRealmURL}Person/${i}"]`,
+      await waitFor(`[data-test-stack-card-index="1"]`);
+
+      assert
+        .dom(
+          `[data-test-stack-card="${testRealmURL}Person/fadhlan"] [data-test-boxel-card-header-title]`,
+        )
+        .containsText('Person');
+
+      assert.dom(`[data-test-cards-grid-cards]`).isNotVisible();
+      assert.dom(`[data-test-create-new-card-button]`).isNotVisible();
+
+      await click(`[data-test-open-search-field]`);
+      assert
+        .dom(`[data-test-search-result="${testRealmURL}Person/fadhlan"]`)
+        .exists();
+      await click(`[data-test-search-sheet-cancel-button]`);
+      await click(`[data-test-stack-card-index="1"] [data-test-close-button]`);
+
+      await waitUntil(
+        () => !document.querySelector('[data-test-stack-card-index="1"]'),
       );
+
+      await waitFor(`[data-test-cards-grid-item]`);
       await click(
-        `[data-test-stack-card-index="1"][data-test-stack-card="${testRealmURL}Person/${i}"] [data-test-close-button]`,
+        `[data-test-cards-grid-item="${testRealmURL}Person/burcu"] .field-component-card`,
       );
+      await waitFor(`[data-test-stack-card-index="1"]`);
+
+      await click(`[data-test-open-search-field]`);
+
+      await waitFor(`[data-test-grid-item-index="0"]`);
+      await waitFor(`[data-test-grid-item-index="1"]`);
+      assert.dom(`[data-test-search-result]`).exists({ count: 2 });
+      assert
+        .dom(
+          `[data-test-grid-item-index="0"] [data-test-search-result="${testRealmURL}Person/burcu"]`,
+        )
+        .exists();
+      assert
+        .dom(
+          `[data-test-grid-item-index="1"] [data-test-search-result="${testRealmURL}Person/fadhlan"]`,
+        )
+        .exists();
+    });
+
+    test(`displays recently accessed card, maximum 10 cards`, async function (assert) {
+      ctx.setCardInOperatorModeState(`${testRealmURL}grid`);
+      await renderComponent(
+        class TestDriver extends GlimmerComponent {
+          <template><OperatorMode @onClose={{noop}} /></template>
+        },
+      );
+      await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
+      assert.dom(`[data-test-stack-card-header]`).containsText(ctx.realmName);
+
+      await click(`[data-test-boxel-filter-list-button="All Cards"]`);
+      await waitFor(`[data-test-cards-grid-item]`);
+      for (let i = 1; i <= 11; i++) {
+        await click(
+          `[data-test-cards-grid-item="${testRealmURL}Person/${i}"] .field-component-card`,
+        );
+        await waitFor(
+          `[data-test-stack-card-index="1"][data-test-stack-card="${testRealmURL}Person/${i}"]`,
+        );
+        await click(
+          `[data-test-stack-card-index="1"][data-test-stack-card="${testRealmURL}Person/${i}"] [data-test-close-button]`,
+        );
+        await waitFor(
+          `[data-test-stack-card-index="1"][data-test-stack-card="${testRealmURL}Person/${i}"]`,
+          { count: 0 },
+        );
+      }
+
+      await click(`[data-test-open-search-field]`);
+      await waitFor(`[data-test-search-result]`);
+
+      assert
+        .dom(`[data-test-search-result]`)
+        .exists(
+          { count: 10 },
+          'recents capped at 10 total, search bar results are not capped',
+        );
+      assert
+        .dom('[data-test-search-sheet] [data-test-grid-item-index="0"]')
+        .containsText('11', 'search bar results are sorted by most recent');
+
+      // expand search sheet
+      await fillIn('[data-test-search-field]', ' ');
+
+      const recents = '[data-test-search-result-section="0"]';
+      assert
+        .dom(`${recents} [data-test-search-sheet-section-header]`)
+        .containsText('Recents');
+      assert
+        .dom(`${recents} [data-test-card-catalog-item]`)
+        .exists(
+          { count: 5 },
+          'when expanded, recents results are capped at 5 with show more button',
+        );
+      assert.dom(`${recents} [data-test-search-sheet-show-more]`).exists();
+    });
+
+    test(`is present when search sheet is open (expanded mode)`, async function (assert) {
+      // creates a recent item
+      let recentCardsService = getService('recent-cards-service');
+      [`${testRealmURL}Pet/mango`, `${testRealmURL}Pet/jackie`].map((url) =>
+        recentCardsService.add(url),
+      );
+
+      ctx.setCardInOperatorModeState(`${testRealmURL}grid`);
+      await renderComponent(
+        class TestDriver extends GlimmerComponent {
+          <template><OperatorMode @onClose={{noop}} /></template>
+        },
+      );
+      await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
+      await click(`[data-test-open-search-field]`);
+      // In compact (prompt) mode, section headers are not rendered; type a query to expand to results mode
+      await fillIn(`[data-test-search-field]`, 'ma');
+      assert.dom(`[data-test-search-sheet-section-header]`).exists();
+      assert.dom('.search-sheet-content').containsText('Recent');
+    });
+
+    test(`filters cards by search key`, async function (assert) {
+      let recentCardsService = getService('recent-cards-service');
+      [`${testRealmURL}Pet/mango`, `${testRealmURL}Person/fadhlan`].map((url) =>
+        recentCardsService.add(url),
+      );
+
+      ctx.setCardInOperatorModeState(`${testRealmURL}grid`);
+      await renderComponent(
+        class TestDriver extends GlimmerComponent {
+          <template><OperatorMode @onClose={{noop}} /></template>
+        },
+      );
+      await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
+      await click(`[data-test-open-search-field]`);
+
+      // Search for "man" — only Mango should appear in recents
+      await fillIn(`[data-test-search-field]`, 'man');
+      await waitFor(`[data-test-search-result="${testRealmURL}Pet/mango"]`);
+      assert
+        .dom(`[data-test-grid-item-index]`)
+        .exists({ count: 1 }, 'only 1 recent card matches "man"');
+      assert
+        .dom(`[data-test-search-result="${testRealmURL}Pet/mango"]`)
+        .exists('Mango appears in filtered recents');
+
+      // Search for "fadh" — only Fadhlan should appear in recents
+      await fillIn(`[data-test-search-field]`, 'fadh');
       await waitFor(
-        `[data-test-stack-card-index="1"][data-test-stack-card="${testRealmURL}Person/${i}"]`,
-        { count: 0 },
+        `[data-test-search-result="${testRealmURL}Person/fadhlan"]`,
       );
-    }
+      assert
+        .dom(`[data-test-grid-item-index]`)
+        .exists({ count: 1 }, 'only 1 recent card matches "fadh"');
+      assert
+        .dom(`[data-test-search-result="${testRealmURL}Person/fadhlan"]`)
+        .exists('Fadhlan appears in filtered recents');
 
-    await click(`[data-test-open-search-field]`);
-    await waitFor(`[data-test-search-result]`);
+      // Search for something that matches no recents
+      await fillIn(`[data-test-search-field]`, 'zzzzz');
 
-    assert
-      .dom(`[data-test-search-result]`)
-      .exists(
-        { count: 10 },
-        'recents capped at 10 total, search bar results are not capped',
+      assert
+        .dom(`[data-test-grid-item-index]`)
+        .doesNotExist('no recent cards match "zzzzz"');
+    });
+
+    test(`filters cards by realm`, async function (assert) {
+      let recentCardsService = getService('recent-cards-service');
+      [
+        `${baseRealm.url}index`,
+        `${testRealmURL}Pet/mango`,
+        `${baseRealm.url}cards/skill`,
+        `${testRealmURL}Person/fadhlan`,
+      ].map((url) => recentCardsService.add(url));
+
+      ctx.setCardInOperatorModeState(`${testRealmURL}grid`);
+      await renderComponent(
+        class TestDriver extends GlimmerComponent {
+          <template><OperatorMode @onClose={{noop}} /></template>
+        },
       );
-    assert
-      .dom('[data-test-search-sheet] [data-test-grid-item-index="0"]')
-      .containsText('11', 'search bar results are sorted by most recent');
+      await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
+      await click(`[data-test-open-search-field]`);
+      await waitFor(`[data-test-search-result="${testRealmURL}Pet/mango"]`);
+      await waitFor(`[data-test-search-result="${baseRealm.url}cards/skill"]`);
+      assert.dom('[data-test-search-result]').exists({ count: 4 });
 
-    // expand search sheet
-    await fillIn('[data-test-search-field]', ' ');
+      await click('[data-test-realm-picker]');
+      await click(`[data-test-boxel-picker-option-row="${baseRealm.url}"]`);
+      assert.dom('[data-test-search-result]').exists({ count: 2 });
+      assert
+        .dom(`[data-test-search-result="${baseRealm.url}cards/skill"]`)
+        .exists();
+      assert.dom(`[data-test-search-result="${baseRealm.url}index"]`).exists();
 
-    const recents = '[data-test-search-result-section="0"]';
-    assert
-      .dom(`${recents} [data-test-search-sheet-section-header]`)
-      .containsText('Recents');
-    assert
-      .dom(`${recents} [data-test-card-catalog-item]`)
-      .exists(
-        { count: 5 },
-        'when expanded, recents results are capped at 5 with show more button',
+      await click(`[data-test-boxel-picker-option-row="${testRealmURL}"]`);
+      assert.dom('[data-test-search-result]').exists({ count: 4 });
+
+      // expand search sheet
+      await fillIn(`[data-test-search-field]`, ' ');
+
+      // unselect Base Realm (only test realm selected)
+      await click(
+        '[data-test-realm-picker] [data-test-boxel-picker-remove-button]:nth-of-type(1)',
       );
-    assert.dom(`${recents} [data-test-search-sheet-show-more]`).exists();
+      assert.dom('[data-test-search-result]').exists({ count: 2 });
+      assert
+        .dom(`[data-test-search-result="${testRealmURL}Pet/mango"]`)
+        .exists();
+      assert
+        .dom(`[data-test-search-result="${testRealmURL}Person/fadhlan"]`)
+        .exists();
+    });
+
+    test(`hides cards from unselected realms`, async function (assert) {
+      let recentCardsService = getService('recent-cards-service');
+      recentCardsService.add(`${testRealmURL}Pet/mango`);
+
+      ctx.setCardInOperatorModeState(`${testRealmURL}grid`);
+      await renderComponent(
+        class TestDriver extends GlimmerComponent {
+          <template><OperatorMode @onClose={{noop}} /></template>
+        },
+      );
+      await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
+      await click(`[data-test-open-search-field]`);
+      await fillIn(`[data-test-search-field]`, ' ');
+      await waitFor(`[data-test-search-result="${testRealmURL}Pet/mango"]`);
+
+      // Select only the base realm — testRealmURL cards should be hidden
+      await click('[data-test-realm-picker] [data-test-boxel-picker-trigger]');
+      await click(`[data-test-boxel-picker-option-row="${baseRealm.url}"]`);
+
+      assert
+        .dom(`[data-test-search-result="${testRealmURL}Pet/mango"]`)
+        .doesNotExist('Pet/mango is hidden when its realm is not selected');
+    });
+
+    test(`filters cards by type for "Find Instances" search`, async function (assert) {
+      let recentCardsService = getService('recent-cards-service');
+      recentCardsService.add(`${testRealmURL}Pet/mango`);
+      recentCardsService.add(`${testRealmURL}BoomPet/paper`); // BoomPet extends Pet
+      recentCardsService.add(`${testRealmURL}Person/fadhlan`);
+
+      ctx.setCardInOperatorModeState(`${testRealmURL}grid`);
+      await renderComponent(
+        class TestDriver extends GlimmerComponent {
+          <template><OperatorMode @onClose={{noop}} /></template>
+        },
+      );
+      await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
+      await click(`[data-test-open-search-field]`);
+
+      // Simulate searchForInstances for Person — carddef: prefix + absolute module/name key
+      await fillIn(
+        `[data-test-search-field]`,
+        `carddef:${testRealmURL}pet/Pet`,
+      );
+      await waitFor(`[data-test-search-result="${testRealmURL}Pet/mango"]`);
+
+      assert
+        .dom(`[data-test-recent-card-result="${testRealmURL}Pet/mango"]`)
+        .exists('Pet appears when searching for Pet instances');
+      assert
+        .dom(`[data-test-recent-card-result="${testRealmURL}BoomPet/paper"]`)
+        .exists('BoomPet appears when searching for Pet instances');
+      assert
+        .dom(`[data-test-recent-card-result="${testRealmURL}Person/fadhlan"]`)
+        .doesNotExist('non-Pet recent cards are filtered out');
+    });
+
+    test(`filters cards by type for card-picker`, async function (assert) {
+      let recentCardsService = getService('recent-cards-service');
+      recentCardsService.add(`${testRealmURL}Pet/mango`);
+      recentCardsService.add(`${testRealmURL}Spec/pet-card`);
+      recentCardsService.add(`${testRealmURL}BoomPet/paper`); // BoomPet extends Pet
+      recentCardsService.add(`${testRealmURL}Person/fadhlan`);
+
+      ctx.setCardInOperatorModeState(`${testRealmURL}grid`);
+      await renderComponent(
+        class TestDriver extends GlimmerComponent {
+          <template><OperatorMode @onClose={{noop}} /></template>
+        },
+      );
+      await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
+      await click(`[data-test-boxel-filter-list-button="All Cards"]`);
+      await waitFor(`[data-test-cards-grid-item]`);
+      await click(`[data-test-create-new-card-button]`); // cards-grid add button
+      await waitFor('[data-test-card-catalog-modal]');
+      await settled();
+
+      assert
+        .dom(`[data-test-recent-card-result="${testRealmURL}Spec/pet-card"]`)
+        .exists('Spec recent card appears');
+      assert
+        .dom(`[data-test-recent-card-result]`)
+        .exists({ count: 1 }, 'non-Spec recent cards are filtered out');
+
+      ctx.setCardInOperatorModeState(`${testRealmURL}Person/hassan`, 'edit');
+      await waitFor(`[data-test-stack-card="${testRealmURL}Person/hassan"]`);
+      // Person/hassan has no pet set, so the linksTo add button is available
+      await waitFor(`[data-test-add-new="pet"]`);
+      await click(`[data-test-add-new="pet"]`);
+      await waitFor('[data-test-card-catalog-modal]');
+      await settled();
+
+      assert
+        .dom('[data-test-search-label]')
+        .hasText('5 results across 3 realms'); // 5 in test realm
+      assert
+        .dom(`[data-test-recent-card-result="${testRealmURL}Pet/mango"]`)
+        .exists('Pet recent card appears in the linksTo picker');
+      assert
+        .dom(`[data-test-recent-card-result="${testRealmURL}BoomPet/paper"]`)
+        .exists('BoomPet recent card appears');
+      assert
+        .dom(`[data-test-recent-card-result]`)
+        .exists({ count: 2 }, 'non-Pet recent cards are filtered out');
+
+      await click(`[data-test-add-new="friends"]`); // linksToMany add button
+      await waitFor('[data-test-card-catalog-modal]');
+      await settled();
+
+      assert
+        .dom('[data-test-search-label]')
+        .hasText('5 results across 3 realms'); // 5 in test realm
+      assert
+        .dom(`[data-test-recent-card-result="${testRealmURL}Pet/mango"]`)
+        .exists('Pet recent card appears in the linksTo picker');
+      assert
+        .dom(`[data-test-recent-card-result="${testRealmURL}BoomPet/paper"]`)
+        .exists('BoomPet recent card appears');
+      assert
+        .dom(`[data-test-recent-card-result]`)
+        .exists({ count: 2 }, 'non-Pet recent cards are filtered out');
+    });
   });
 
   test(`displays searching results`, async function (assert) {
@@ -689,140 +929,6 @@ module('Integration | operator-mode | card catalog', function (hooks) {
     assert
       .dom('[data-test-search-result-header]')
       .doesNotExist('header is not shown in compact prompt mode');
-  });
-
-  test(`Recents section is present when search sheet is open (expanded mode)`, async function (assert) {
-    // creates a recent item
-    let recentCardsService = getService('recent-cards-service');
-    [`${testRealmURL}Pet/mango`, `${testRealmURL}Pet/jackie`].map((url) =>
-      recentCardsService.add(url),
-    );
-
-    ctx.setCardInOperatorModeState(`${testRealmURL}grid`);
-    await renderComponent(
-      class TestDriver extends GlimmerComponent {
-        <template><OperatorMode @onClose={{noop}} /></template>
-      },
-    );
-    await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
-    await click(`[data-test-open-search-field]`);
-    // In compact (prompt) mode, section headers are not rendered; type a query to expand to results mode
-    await fillIn(`[data-test-search-field]`, 'ma');
-    assert.dom(`[data-test-search-sheet-section-header]`).exists();
-    assert.dom('.search-sheet-content').containsText('Recent');
-  });
-
-  test(`Recents section filters cards by search key`, async function (assert) {
-    let recentCardsService = getService('recent-cards-service');
-    [`${testRealmURL}Pet/mango`, `${testRealmURL}Person/fadhlan`].map((url) =>
-      recentCardsService.add(url),
-    );
-
-    ctx.setCardInOperatorModeState(`${testRealmURL}grid`);
-    await renderComponent(
-      class TestDriver extends GlimmerComponent {
-        <template><OperatorMode @onClose={{noop}} /></template>
-      },
-    );
-    await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
-    await click(`[data-test-open-search-field]`);
-
-    // Search for "man" — only Mango should appear in recents
-    await fillIn(`[data-test-search-field]`, 'man');
-    await waitFor(`[data-test-search-result="${testRealmURL}Pet/mango"]`);
-    assert
-      .dom(`[data-test-grid-item-index]`)
-      .exists({ count: 1 }, 'only 1 recent card matches "man"');
-    assert
-      .dom(`[data-test-search-result="${testRealmURL}Pet/mango"]`)
-      .exists('Mango appears in filtered recents');
-
-    // Search for "fadh" — only Fadhlan should appear in recents
-    await fillIn(`[data-test-search-field]`, 'fadh');
-    await waitFor(`[data-test-search-result="${testRealmURL}Person/fadhlan"]`);
-    assert
-      .dom(`[data-test-grid-item-index]`)
-      .exists({ count: 1 }, 'only 1 recent card matches "fadh"');
-    assert
-      .dom(`[data-test-search-result="${testRealmURL}Person/fadhlan"]`)
-      .exists('Fadhlan appears in filtered recents');
-
-    // Search for something that matches no recents
-    await fillIn(`[data-test-search-field]`, 'zzzzz');
-
-    assert
-      .dom(`[data-test-grid-item-index]`)
-      .doesNotExist('no recent cards match "zzzzz"');
-  });
-
-  test(`Recents section filters cards by realm`, async function (assert) {
-    let recentCardsService = getService('recent-cards-service');
-    [
-      `${baseRealm.url}index`,
-      `${testRealmURL}Pet/mango`,
-      `${baseRealm.url}cards/skill`,
-      `${testRealmURL}Person/fadhlan`,
-    ].map((url) => recentCardsService.add(url));
-
-    ctx.setCardInOperatorModeState(`${testRealmURL}grid`);
-    await renderComponent(
-      class TestDriver extends GlimmerComponent {
-        <template><OperatorMode @onClose={{noop}} /></template>
-      },
-    );
-    await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
-    await click(`[data-test-open-search-field]`);
-    await waitFor(`[data-test-search-result="${testRealmURL}Pet/mango"]`);
-    await waitFor(`[data-test-search-result="${baseRealm.url}cards/skill"]`);
-    assert.dom('[data-test-search-result]').exists({ count: 4 });
-
-    await click('[data-test-realm-picker]');
-    await click(`[data-test-boxel-picker-option-row="${baseRealm.url}"]`);
-    assert.dom('[data-test-search-result]').exists({ count: 2 });
-    assert
-      .dom(`[data-test-search-result="${baseRealm.url}cards/skill"]`)
-      .exists();
-    assert.dom(`[data-test-search-result="${baseRealm.url}index"]`).exists();
-
-    await click(`[data-test-boxel-picker-option-row="${testRealmURL}"]`);
-    assert.dom('[data-test-search-result]').exists({ count: 4 });
-
-    // expand search sheet
-    await fillIn(`[data-test-search-field]`, ' ');
-
-    // unselect Base Realm (only test realm selected)
-    await click(
-      '[data-test-realm-picker] [data-test-boxel-picker-remove-button]:nth-of-type(1)',
-    );
-    assert.dom('[data-test-search-result]').exists({ count: 2 });
-    assert.dom(`[data-test-search-result="${testRealmURL}Pet/mango"]`).exists();
-    assert
-      .dom(`[data-test-search-result="${testRealmURL}Person/fadhlan"]`)
-      .exists();
-  });
-
-  test(`Recents section hides cards from unselected realms`, async function (assert) {
-    let recentCardsService = getService('recent-cards-service');
-    recentCardsService.add(`${testRealmURL}Pet/mango`);
-
-    ctx.setCardInOperatorModeState(`${testRealmURL}grid`);
-    await renderComponent(
-      class TestDriver extends GlimmerComponent {
-        <template><OperatorMode @onClose={{noop}} /></template>
-      },
-    );
-    await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
-    await click(`[data-test-open-search-field]`);
-    await fillIn(`[data-test-search-field]`, ' ');
-    await waitFor(`[data-test-search-result="${testRealmURL}Pet/mango"]`);
-
-    // Select only the base realm — testRealmURL cards should be hidden
-    await click('[data-test-realm-picker] [data-test-boxel-picker-trigger]');
-    await click(`[data-test-boxel-picker-option-row="${baseRealm.url}"]`);
-
-    assert
-      .dom(`[data-test-search-result="${testRealmURL}Pet/mango"]`)
-      .doesNotExist('Pet/mango is hidden when its realm is not selected');
   });
 
   test(`compact mode shows no full header and recents remain clickable`, async function (assert) {

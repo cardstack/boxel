@@ -434,6 +434,7 @@ export class SendBotTriggerEventInput extends CardDef {
   @field roomId = contains(StringField);
   @field type = contains(StringField);
   @field input = contains(JsonField);
+  @field realm = contains(StringField);
 }
 
 export class PreviewFormatInput extends CardDef {

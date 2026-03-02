@@ -25,6 +25,8 @@ import {
   type FileRenderResponse,
   type FileRenderArgs,
   type Prerenderer,
+  type RunCommandArgs,
+  type RunCommandResponse,
   type Format,
   type PrerenderMeta,
   type RenderRouteOptions,
@@ -96,6 +98,7 @@ export default class CardPrerender extends Component {
       prerenderModule: this.prerenderModule.bind(this),
       prerenderFileExtract: this.prerenderFileExtract.bind(this),
       prerenderFileRender: this.prerenderFileRenderPublic.bind(this),
+      runCommand: this.runCommand.bind(this),
     };
     this.localIndexer.setup(this.#prerendererDelegate);
     window.addEventListener('boxel-render-error', this.#handleRenderErrorEvent);
@@ -222,6 +225,13 @@ export default class CardPrerender extends Component {
         `card-prerender component is missing or being destroyed before file render prerender of url ${args.url} was completed`,
       );
     });
+  }
+
+  private async runCommand(_args: RunCommandArgs): Promise<RunCommandResponse> {
+    return {
+      status: 'error',
+      error: 'runCommand is not supported by the card-prerender delegate',
+    };
   }
 
   // This emulates the job of the Prerenderer that runs in the server
@@ -429,6 +439,7 @@ export default class CardPrerender extends Component {
     async ({
       url,
       fileData,
+      types,
       renderOptions,
     }: FileRenderArgs): Promise<FileRenderResponse> => {
       this.#nonce++;
@@ -456,16 +467,47 @@ export default class CardPrerender extends Component {
 
       let error: RenderError | undefined;
       let isolatedHTML: string | null = null;
+      let headHTML: string | null = null;
+      let atomHTML: string | null = null;
+      let iconHTML: string | null = null;
+      let embeddedHTML: Record<string, string> | null = null;
+      let fittedHTML: Record<string, string> | null = null;
 
-      // Render isolated HTML only – additional formats (head, atom, icon,
-      // fitted, embedded) are deferred to keep boot-indexing fast.
       try {
+        let subsequentRenderOptions = omitOneTimeOptions(initialRenderOptions);
         isolatedHTML = await this.renderHTML.perform(
           url,
           'isolated',
           0,
           initialRenderOptions,
         );
+        headHTML = await this.renderHTML.perform(
+          url,
+          'head',
+          0,
+          subsequentRenderOptions,
+        );
+        atomHTML = await this.renderHTML.perform(
+          url,
+          'atom',
+          0,
+          subsequentRenderOptions,
+        );
+        iconHTML = await this.renderIcon.perform(url, subsequentRenderOptions);
+        if (types?.length) {
+          embeddedHTML = await this.renderAncestors.perform(
+            url,
+            'embedded',
+            types,
+            subsequentRenderOptions,
+          );
+          fittedHTML = await this.renderAncestors.perform(
+            url,
+            'fitted',
+            types,
+            subsequentRenderOptions,
+          );
+        }
       } catch (e: any) {
         try {
           error = { ...JSON.parse(e.message), type: 'file-error' };
@@ -488,11 +530,11 @@ export default class CardPrerender extends Component {
 
       return {
         isolatedHTML,
-        headHTML: null,
-        atomHTML: null,
-        embeddedHTML: null,
-        fittedHTML: null,
-        iconHTML: null,
+        headHTML,
+        atomHTML,
+        embeddedHTML,
+        fittedHTML,
+        iconHTML,
         ...(error ? { error } : {}),
       };
     },

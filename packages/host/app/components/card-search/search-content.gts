@@ -19,6 +19,11 @@ import {
   type getCardCollection,
   GetCardCollectionContextName,
   GetCardContextName,
+  getTypeRefsFromFilter,
+  type TypeRefResult,
+  identifyCard,
+  isBaseDef,
+  isResolvedCodeRef,
   specRef,
 } from '@cardstack/runtime-common';
 
@@ -50,6 +55,26 @@ import type { PrerenderedCard } from '../prerendered-card-search';
 import type { NewCardArgs } from './utils';
 
 const OWNER_DESTROYED_ERROR = 'OWNER_DESTROYED_ERROR';
+
+function cardMatchesTypeRef(card: CardDef, typeRef: CodeRef): boolean {
+  if (!isResolvedCodeRef(typeRef)) {
+    return false;
+  }
+  let cls: unknown = card.constructor;
+  while (cls && isBaseDef(cls)) {
+    const ref = identifyCard(cls);
+    if (
+      ref &&
+      isResolvedCodeRef(ref) &&
+      ref.module === typeRef.module &&
+      ref.name === typeRef.name
+    ) {
+      return true;
+    }
+    cls = Reflect.getPrototypeOf(cls as object);
+  }
+  return false;
+}
 
 export interface RealmSectionInfo {
   name: string;
@@ -134,6 +159,17 @@ export default class SearchContent extends Component<Signature> {
   private makeCardResource = () => {
     this.cardResource = this.getCard(this, () => this.searchKeyAsURL);
   };
+
+  private get filterTypeRef(): TypeRefResult[] | undefined {
+    const filter = this.args.baseFilter;
+    // baseFilter takes precedence; searchKey fallback is only used in search-sheet mode
+    if (filter) {
+      return getTypeRefsFromFilter(filter);
+    }
+    // Search-sheet mode: extract type from carddef: search key (searchForInstances)
+    const ref = getCodeRefFromSearchKey(this.args.searchKey);
+    return ref ? [{ ref, negated: false }] : undefined;
+  }
 
   private searchPrerenderedCards = getPrerenderedSearch(
     this,
@@ -285,29 +321,9 @@ export default class SearchContent extends Component<Signature> {
       return this.resolvedCard ? '1 result from 1 realm' : '0 results';
     }
 
-    // Recents view (empty search or focused on recents)
-    if (this.focusedSection === 'recents' || this.isSearchKeyEmpty) {
-      const count = this.recentCardsSection?.totalCount ?? 0;
-      return `${count} in ${pluralize('Recent', count)}`;
-    }
-
     // Query search results
     const total = this.searchPrerenderedCards.meta.page?.total ?? 0;
     const realms = this.realms;
-
-    // Focused on a specific realm section
-    if (this.focusedSection?.startsWith('realm:')) {
-      const realmUrl = this.focusedSection.slice('realm:'.length);
-      const realmInfo = this.realm.info(realmUrl);
-      const realmName = realmInfo?.name ?? this.realmNameFromUrl(realmUrl);
-      const realmTotal = this.resultCountByRealm[realmUrl];
-
-      if (typeof realmTotal === 'number') {
-        return `${pluralize('result', total, true)} across ${pluralize('realm', realms.length, true)}, ${pluralize('result', realmTotal, true)} in ${realmName}`;
-      }
-
-      return `${pluralize('result', total, true)} in ${realmName}`;
-    }
 
     // Default: all results across all realms
     return `${pluralize('result', total, true)} across ${pluralize('realm', realms.length, true)}`;
@@ -322,14 +338,31 @@ export default class SearchContent extends Component<Signature> {
     const realmFiltered = cards.filter(
       (c) => c.id && realms.some((realmUrl) => c.id.startsWith(realmUrl)),
     );
-    if (this.args.isCompact) {
-      return realmFiltered;
+
+    // Apply type filter when baseFilter specifies a type (modal/chooseCard mode)
+    const typeRefs = this.filterTypeRef;
+    const positiveRefs = typeRefs?.filter((r) => !r.negated).map((r) => r.ref);
+    const negatedRefs = typeRefs?.filter((r) => r.negated).map((r) => r.ref);
+    let typeFiltered = realmFiltered;
+    if (positiveRefs?.length) {
+      typeFiltered = typeFiltered.filter((c) =>
+        positiveRefs.some((ref) => cardMatchesTypeRef(c, ref)),
+      );
     }
-    let filtered = realmFiltered;
+    if (negatedRefs?.length) {
+      typeFiltered = typeFiltered.filter(
+        (c) => !negatedRefs.some((ref) => cardMatchesTypeRef(c, ref)),
+      );
+    }
+
+    if (this.args.isCompact) {
+      return typeFiltered;
+    }
+    let filtered = typeFiltered;
     const term = this.searchTerm;
     if (term) {
       const lowerTerm = term.toLowerCase();
-      filtered = cards.filter((c) =>
+      filtered = typeFiltered.filter((c) =>
         (c.cardTitle ?? '').toLowerCase().includes(lowerTerm),
       );
     }
@@ -512,17 +545,6 @@ export default class SearchContent extends Component<Signature> {
     }
 
     return sections;
-  }
-
-  private get resultCountByRealm(): Record<string, number> {
-    const sections = this.cardsByQuerySection ?? [];
-    const counts: Record<string, number> = {};
-    for (const section of sections) {
-      if (section.type === 'realm') {
-        counts[section.realmUrl] = section.totalCount;
-      }
-    }
-    return counts;
   }
 
   private get sections(): SearchSheetSection[] {

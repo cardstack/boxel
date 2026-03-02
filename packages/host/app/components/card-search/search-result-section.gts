@@ -76,11 +76,6 @@ export default class SearchResultSection extends Component<Signature> {
     return undefined;
   }
 
-  get recentsTitle(): string {
-    const count = this.recentsSection?.totalCount ?? 0;
-    return pluralize('Recent', count);
-  }
-
   @action
   handleShowOnlyChange(checked: boolean) {
     const sid = this.args.section.sid;
@@ -298,9 +293,9 @@ export default class SearchResultSection extends Component<Signature> {
         {{#unless @isCompact}}
           <SearchSheetSectionHeader
             @icon={{this.recentsIcon}}
-            @title={{this.recentsTitle}}
-            @totalCount={{this.recentsSection.totalCount}}
-            @showOnlyLabel={{this.recentsTitle}}
+            @title='Recents'
+            @hideCount={{true}}
+            @showOnlyLabel='Recents'
             @showOnlyChecked={{@isFocused}}
             @onShowOnlyChange={{this.handleShowOnlyChange}}
           />
@@ -322,6 +317,7 @@ export default class SearchResultSection extends Component<Signature> {
                 @isSelected={{eq this.selectedCardId card.id}}
                 @onSelect={{@handleSelect}}
                 @onSubmit={{@onSubmit}}
+                data-test-recent-card-result={{card.id}}
               />
             </:default>
             <:after>

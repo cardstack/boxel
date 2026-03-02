@@ -416,6 +416,44 @@ export async function capturePrerenderResult(
   return { status: 'ready', value: container.children[0][capture]! };
 }
 
+export interface WaitForLoadedImageOptions {
+  timeout?: number;
+  timeoutMessage?: string;
+}
+
+export async function waitForLoadedImage(
+  selector: string,
+  options: WaitForLoadedImageOptions = {},
+): Promise<HTMLImageElement> {
+  let {
+    timeout = 5000,
+    timeoutMessage = 'Image failed to load - naturalWidth remained 0. This likely indicates an authentication issue preventing the browser from fetching the image.',
+  } = options;
+
+  await waitUntil(
+    () => {
+      let currentImg = document.querySelector(
+        selector,
+      ) as HTMLImageElement | null;
+      return Boolean(
+        currentImg && currentImg.complete && currentImg.naturalWidth > 0,
+      );
+    },
+    {
+      timeout,
+      timeoutMessage,
+    },
+  );
+
+  let loadedImg = document.querySelector(selector) as HTMLImageElement | null;
+  if (!loadedImg) {
+    throw new Error(
+      `waitForLoadedImage: missing image element matching selector ${selector} after wait`,
+    );
+  }
+  return loadedImg;
+}
+
 function normalizeCapturedErrorText(errorText: string): string {
   let normalized = formatCapturedRenderError(errorText);
   return normalized ?? errorText;

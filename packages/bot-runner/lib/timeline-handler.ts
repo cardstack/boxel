@@ -1,23 +1,33 @@
-import { isBotTriggerEvent, logger, param, query } from '@cardstack/runtime-common';
+import {
+  isBotTriggerEvent,
+  isBotCommandFilter,
+  logger,
+  param,
+  query,
+  userInitiatedPriority,
+} from '@cardstack/runtime-common';
+import { enqueueRunCommandJob } from '@cardstack/runtime-common/jobs/run-command';
 import * as Sentry from '@sentry/node';
-import type { DBAdapter, PgPrimitive } from '@cardstack/runtime-common';
+import type { DBAdapter, QueuePublisher } from '@cardstack/runtime-common';
 import type { MatrixEvent, Room } from 'matrix-js-sdk';
 
 const log = logger('bot-runner');
 export interface BotRegistration {
   id: string;
-  created_at: string;
+  created_at_ms: number;
   username: string;
 }
 
 export interface TimelineHandlerOptions {
   authUserId: string;
   dbAdapter: DBAdapter;
+  queuePublisher: QueuePublisher;
 }
 
 export function onTimelineEvent({
   authUserId,
   dbAdapter,
+  queuePublisher,
 }: TimelineHandlerOptions) {
   return async function handleTimelineEvent(
     event: MatrixEvent,
@@ -34,11 +44,14 @@ export function onTimelineEvent({
       }
       let eventContent = rawEvent.content;
       log.debug('event content', eventContent);
-      let senderUsername = getRoomCreator(room);
+      let senderUsername =
+        event.getSender?.() ??
+        (typeof rawEvent.sender === 'string' ? rawEvent.sender : undefined) ??
+        getRoomCreator(room);
       if (!senderUsername) {
         return;
       }
-      let submissionBotUsername = authUserId;
+      let submissionBotUserId = authUserId;
 
       let registrations = await getRegistrationsForUser(
         dbAdapter,
@@ -46,7 +59,7 @@ export function onTimelineEvent({
       );
       let submissionBotRegistrations = await getRegistrationsForUser(
         dbAdapter,
-        submissionBotUsername,
+        submissionBotUserId,
       );
       if (!registrations.length && !submissionBotRegistrations.length) {
         return;
@@ -55,26 +68,35 @@ export function onTimelineEvent({
         `received event from ${senderUsername} in room ${room.roomId} with ${registrations.length} registrations`,
       );
       for (let registration of submissionBotRegistrations) {
-        let createdAt = Date.parse(registration.created_at);
-        if (Number.isNaN(createdAt)) {
-          continue;
-        }
         let eventTimestamp = event.event.origin_server_ts;
-        if (eventTimestamp == null || eventTimestamp < createdAt) {
+        if (
+          eventTimestamp == null ||
+          eventTimestamp < registration.created_at_ms
+        ) {
           continue;
         }
         log.debug(
           `handling event for bot runner registration ${registration.id} in room ${room.roomId}`,
           eventContent,
         );
+        let allowedCommands = await getCommandsForRegistration(
+          dbAdapter,
+          registration.id,
+        );
+        await maybeEnqueueCommand({
+          dbAdapter,
+          queuePublisher,
+          runAs: senderUsername,
+          eventContent,
+          allowedCommands,
+        });
       }
       for (let registration of registrations) {
-        let createdAt = Date.parse(registration.created_at);
-        if (Number.isNaN(createdAt)) {
-          continue;
-        }
         let eventTimestamp = event.event.origin_server_ts;
-        if (eventTimestamp == null || eventTimestamp < createdAt) {
+        if (
+          eventTimestamp == null ||
+          eventTimestamp < registration.created_at_ms
+        ) {
           continue;
         }
         // TODO: filter out events we want to handle based on the registration (e.g. command messages, system events)
@@ -82,6 +104,17 @@ export function onTimelineEvent({
           `handling event for registration ${registration.id} in room ${room.roomId}`,
           eventContent,
         );
+        let allowedCommands = await getCommandsForRegistration(
+          dbAdapter,
+          registration.id,
+        );
+        await maybeEnqueueCommand({
+          dbAdapter,
+          queuePublisher,
+          runAs: senderUsername,
+          eventContent,
+          allowedCommands,
+        });
       }
     } catch (error) {
       log.error('error handling timeline event', error);
@@ -90,8 +123,87 @@ export function onTimelineEvent({
   };
 }
 
+async function maybeEnqueueCommand({
+  dbAdapter,
+  queuePublisher,
+  runAs,
+  eventContent,
+  allowedCommands,
+}: {
+  dbAdapter: DBAdapter;
+  queuePublisher: QueuePublisher;
+  runAs: string;
+  eventContent: { type?: unknown; input?: unknown; realm?: unknown };
+  allowedCommands: { type: string; command: string }[];
+}) {
+  if (
+    !allowedCommands.length ||
+    typeof eventContent.type !== 'string' ||
+    !allowedCommands.some((entry) => entry.type === eventContent.type)
+  ) {
+    return;
+  }
+
+  if (!eventContent?.input || typeof eventContent.input !== 'object') {
+    return;
+  }
+
+  let input = eventContent.input as Record<string, unknown>;
+  let realmURL =
+    typeof eventContent.realm === 'string' ? eventContent.realm : undefined;
+  let commandRegistration = allowedCommands.find(
+    (entry) => entry.type === eventContent.type,
+  );
+  let command = commandRegistration?.command?.trim();
+  let commandInput: Record<string, any> | null = input;
+
+  if (!realmURL || !command) {
+    log.warn(
+      'bot trigger missing required input for command (need realmURL and command)',
+      { realmURL, command },
+    );
+    return;
+  }
+
+  await enqueueRunCommandJob(
+    {
+      realmURL,
+      realmUsername: runAs,
+      runAs,
+      command,
+      commandInput,
+    },
+    queuePublisher,
+    dbAdapter,
+    userInitiatedPriority,
+  );
+}
+
 function getRoomCreator(room: Room | undefined): string | undefined {
   return room?.getCreator?.() ?? undefined;
+}
+
+async function getCommandsForRegistration(
+  dbAdapter: DBAdapter,
+  registrationId: string,
+): Promise<{ type: string; command: string }[]> {
+  let rows = await query(dbAdapter, [
+    `SELECT command_filter, command FROM bot_commands WHERE bot_id = `,
+    param(registrationId),
+  ]);
+
+  let commands: { type: string; command: string }[] = [];
+  for (let row of rows) {
+    let filter = row.command_filter;
+    if (!isBotCommandFilter(filter)) {
+      continue;
+    }
+    if (typeof row.command !== 'string' || !row.command.trim()) {
+      continue;
+    }
+    commands.push({ type: filter.content_type, command: row.command });
+  }
+  return commands;
 }
 
 async function getRegistrationsForUser(
@@ -116,18 +228,33 @@ async function getRegistrationsForUser(
 }
 
 function toBotRegistration(
-  row: Record<string, PgPrimitive>,
+  row: Record<string, unknown>,
 ): BotRegistration | null {
-  if (
-    typeof row.id !== 'string' ||
-    typeof row.username !== 'string' ||
-    typeof row.created_at !== 'string'
-  ) {
+  if (typeof row.id !== 'string' || typeof row.username !== 'string') {
+    return null;
+  }
+  let createdAtMs = toEpochMs(row.created_at);
+  if (createdAtMs == null) {
     return null;
   }
   return {
     id: row.id,
     username: row.username,
-    created_at: row.created_at,
+    created_at_ms: createdAtMs,
   };
+}
+
+function toEpochMs(value: unknown): number | null {
+  if (value instanceof Date) {
+    let time = value.getTime();
+    return Number.isFinite(time) ? time : null;
+  }
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null;
+  }
+  if (typeof value === 'string') {
+    let parsed = Date.parse(value);
+    return Number.isNaN(parsed) ? null : parsed;
+  }
+  return null;
 }

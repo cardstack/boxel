@@ -10,7 +10,6 @@ import {
   Deferred,
   RealmPaths,
   type IndexWriter,
-  type ResolvedCodeRef,
   type Batch,
   type LooseCardResource,
   type InstanceEntry,
@@ -25,7 +24,9 @@ import {
   type Reader,
   type Stats,
 } from './index';
+import { moduleFrom } from './code-ref';
 import type { CacheScope, DefinitionLookup } from './definition-lookup';
+import { resolveCardReference } from './card-reference-resolver';
 import { isCardError } from './error';
 import { IndexRunnerDependencyManager } from './index-runner/dependency-resolver';
 import { discoverInvalidations } from './index-runner/discover-invalidations';
@@ -399,10 +400,7 @@ export class IndexRunner {
         ...this.#jobInfo,
         url,
         realm: this.#realmURL.href,
-        deps: [
-          new URL((resource.meta.adoptsFrom as ResolvedCodeRef).module, url)
-            .href,
-        ],
+        deps: [resolveCardReference(moduleFrom(resource.meta.adoptsFrom), url)],
       },
       status,
     );
