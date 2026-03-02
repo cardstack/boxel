@@ -11,6 +11,11 @@ if docker ps --format '{{.Names}}' | grep -q '^boxel-traefik$'; then
   exit 0
 fi
 
-echo "Starting Traefik..."
-docker compose -f "$REPO_ROOT/docker-compose.traefik.yml" up -d
+if docker ps -a --format '{{.Names}}' | grep -q '^boxel-traefik$'; then
+  echo "Restarting stopped Traefik container..."
+  docker start boxel-traefik
+else
+  echo "Starting Traefik..."
+  docker compose -f "$REPO_ROOT/docker-compose.traefik.yml" up -d
+fi
 echo "Traefik started. Dashboard at http://localhost:4230"
