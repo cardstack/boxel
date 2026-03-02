@@ -147,7 +147,7 @@ async function ensureIncomingWebhook(
     (w: any) =>
       w.attributes?.verificationType === config.verificationType &&
       JSON.stringify(w.attributes?.verificationConfig) ===
-        JSON.stringify(config.verificationConfig),
+      JSON.stringify(config.verificationConfig),
   );
 
   if (existing) {
@@ -175,7 +175,7 @@ async function ensureWebhookCommand(
     (cmd: any) =>
       cmd.attributes?.command === config.command &&
       JSON.stringify(cmd.attributes?.filter ?? null) ===
-        JSON.stringify(config.filter ?? null),
+      JSON.stringify(config.filter ?? null),
   );
 
   if (existing) {
@@ -219,7 +219,9 @@ async function main() {
   // for PR state changes vs. review submissions.
   console.log('Setting up webhook commands...');
 
-  const baseFilter: Record<string, unknown> = {};
+  const baseFilter: Record<string, unknown> = {
+    type: 'github-event',
+  };
 
   const eventTypes = [
     'pull_request',

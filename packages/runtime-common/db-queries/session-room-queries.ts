@@ -46,9 +46,15 @@ export async function upsertSessionRoom(
 }
 
 /**
- * Returns a mapping of matrix user id to session room id for all known sessions.
- * Includes users with explicit permissions as well as users who have access
- * through a world-readable realm (username = '*' with read = true).
+ * Returns a mapping of matrix user id to session room id for all known sessions
+ * that should be notified about changes to the given realm.
+ *
+ * Includes:
+ *  - Users with explicit read/write permissions for this realm.
+ *  - All registered users when the realm is world-readable (username = '*'
+ *    with read = true). This is intentional: world-readable realms are visible
+ *    to everyone, so all users need incremental-index notifications to keep
+ *    their UI up to date.
  */
 export async function fetchRealmSessionRooms(
   dbAdapter: DBAdapter,
