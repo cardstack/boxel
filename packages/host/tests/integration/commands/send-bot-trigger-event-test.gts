@@ -75,6 +75,7 @@ module('Integration | commands | send-bot-trigger-event', function (hooks) {
     assert.ok(isBotTriggerEvent(event));
     assert.strictEqual(event.content.type, 'pr-listing-create');
     assert.strictEqual(event.content.realm, testRealmURL);
+    assert.strictEqual(event.content.userId, '@testuser:localhost');
     assert.deepEqual(event.content.input, { listingId: 'catalog/listing-1' });
   });
 });

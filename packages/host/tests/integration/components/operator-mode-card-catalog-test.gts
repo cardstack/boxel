@@ -975,6 +975,68 @@ module('Integration | operator-mode | card catalog', function (hooks) {
     );
   });
 
+  test(`Show only preserves scroll position of the focused section`, async function (assert) {
+    ctx.setCardInOperatorModeState(`${testRealmURL}grid`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+    await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
+    await click(`[data-test-open-search-field]`);
+    await fillIn(`[data-test-search-field]`, 'ma');
+    await waitFor('[data-test-search-sheet-show-only]');
+
+    let sections = document.querySelectorAll(
+      '[data-test-search-result-section]',
+    );
+    assert.ok(sections.length >= 1, 'at least one section is rendered');
+
+    let showOnlyCheckbox = document.querySelector(
+      '[data-test-search-sheet-show-only]',
+    ) as HTMLInputElement;
+    let focusedSection = showOnlyCheckbox.closest(
+      '[data-section-sid]',
+    ) as HTMLElement;
+    assert.ok(
+      focusedSection,
+      'found the section containing the show-only checkbox',
+    );
+
+    let scrollContainer = document.querySelector(
+      '.search-sheet-content',
+    ) as HTMLElement;
+
+    // Force the scroll container to be short enough to require scrolling
+    scrollContainer.style.maxHeight = '200px';
+    scrollContainer.scrollTop = 50;
+    // Dispatch scroll event so the modifier's position map is populated
+    // (the listener runs synchronously during dispatchEvent)
+    scrollContainer.dispatchEvent(new Event('scroll'));
+
+    let positionBefore = focusedSection.getBoundingClientRect().top;
+
+    await click('[data-test-search-sheet-show-only]');
+
+    let positionAfter = focusedSection.getBoundingClientRect().top;
+    assert.ok(
+      Math.abs(positionAfter - positionBefore) <= 2,
+      `focused section position is preserved after checking Show only (before: ${positionBefore}, after: ${positionAfter})`,
+    );
+
+    // Uncheck: sections expand, position should still be preserved.
+    // The modifier's handleMutations already recaptured positions after
+    // the previous adjustment, so no manual scroll dispatch is needed.
+    positionBefore = focusedSection.getBoundingClientRect().top;
+    await click('[data-test-search-sheet-show-only]');
+
+    positionAfter = focusedSection.getBoundingClientRect().top;
+    assert.ok(
+      Math.abs(positionAfter - positionBefore) <= 2,
+      `focused section position is preserved after unchecking Show only (before: ${positionBefore}, after: ${positionAfter})`,
+    );
+  });
+
   test(`view toggle updates layout (grid vs strip)`, async function (assert) {
     ctx.setCardInOperatorModeState(`${testRealmURL}grid`);
     await renderComponent(

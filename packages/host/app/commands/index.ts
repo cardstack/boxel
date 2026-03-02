@@ -13,7 +13,6 @@ import * as CopyCardToRealmModule from './copy-card';
 import * as CopyCardToStackCommandModule from './copy-card-to-stack';
 import * as CopySourceCommandModule from './copy-source';
 import * as CreateAIAssistantRoomCommandModule from './create-ai-assistant-room';
-import * as CreateListingPRCommandModule from './create-listing-pr';
 import * as CreateSpecCommandModule from './create-specs';
 import * as GenerateExampleCardsCommandModule from './generate-example-cards';
 import * as GenerateReadmeSpecCommandModule from './generate-readme-spec';
@@ -52,6 +51,7 @@ import * as SearchCardsCommandModule from './search-cards';
 import * as SearchGoogleImagesCommandModule from './search-google-images';
 import * as SendAiAssistantMessageModule from './send-ai-assistant-message';
 import * as SendRequestViaProxyCommandModule from './send-request-via-proxy';
+import * as SerializeCardCommandModule from './serialize-card';
 import * as SetActiveLlmModule from './set-active-llm';
 import * as SetUserSystemCardCommandModule from './set-user-system-card';
 import * as ShowCardCommandModule from './show-card';
@@ -157,10 +157,6 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
     ListingUpdateSpecsCommandModule,
   );
   virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/create-listing-pr',
-    CreateListingPRCommandModule,
-  );
-  virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/create-listing-pr-request',
     CreateListingPRRequestCommandModule,
   );
@@ -215,6 +211,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/save-card',
     SaveCardCommandModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/serialize-card',
+    SerializeCardCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/search-cards',
@@ -355,7 +355,6 @@ export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
   ListingGenerateExampleCommandModule.default,
   ListingInstallCommandModule.default,
   ListingRemixCommandModule.default,
-  CreateListingPRCommandModule.default,
   CreateListingPRRequestCommandModule.default,
   ListingUpdateSpecsCommandModule.default,
   ListingUseCommandModule.default,
@@ -375,6 +374,7 @@ export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
   ReadTextFileCommandModule.default,
   RegisterBotCommandModule.default,
   SaveCardCommandModule.default,
+  SerializeCardCommandModule.default,
   SearchAndChooseCommandModule.default,
   SearchCardsCommandModule.SearchCardsByQueryCommand,
   SearchCardsCommandModule.SearchCardsByTypeAndTitleCommand,
