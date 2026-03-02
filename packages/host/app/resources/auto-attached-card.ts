@@ -88,11 +88,12 @@ export class AutoAttachment extends Resource<Args> {
             continue;
           }
           let card = await this.store.get(item.id);
-          if (card && isCardInstance(card)) {
-            let realmURL = card[realmURLSymbol];
-            if (realmURL && item.id === `${realmURL.href}index`) {
-              continue;
-            }
+          if (!card || !isCardInstance(card)) {
+            continue;
+          }
+          let realmURL = card[realmURLSymbol];
+          if (realmURL && item.id === `${realmURL.href}index`) {
+            continue;
           }
           this.cardIds.add(item.id);
         }
@@ -108,7 +109,10 @@ export class AutoAttachment extends Resource<Args> {
           !removedCardIds?.includes(cardId) &&
           !attachedCardIds?.includes(cardId)
         ) {
-          this.cardIds.add(cardId);
+          let card = await this.store.get(cardId);
+          if (card && isCardInstance(card)) {
+            this.cardIds.add(cardId);
+          }
         }
         if (
           moduleInspectorPanel === 'preview' &&
