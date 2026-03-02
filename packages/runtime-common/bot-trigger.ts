@@ -19,12 +19,17 @@ export function isBotTriggerEvent(value: unknown): value is BotTriggerEvent {
     type?: string;
     input?: Record<string, unknown>;
     realm?: string;
+    userId?: string;
   };
   if (typeof content.type !== 'string') {
     return false;
   }
 
   if (typeof content.realm !== 'string') {
+    return false;
+  }
+
+  if (typeof content.userId !== 'string') {
     return false;
   }
 
