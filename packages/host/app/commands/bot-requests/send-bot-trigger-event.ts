@@ -28,7 +28,6 @@ export default class SendBotTriggerEventCommand extends HostBaseCommand<
     input: BaseCommandModule.SendBotTriggerEventInput,
   ): Promise<undefined> {
     await this.matrixService.ready;
-
     let userId = this.matrixService.userId;
     if (!userId) {
       throw new Error('userId is required to send bot trigger events');
