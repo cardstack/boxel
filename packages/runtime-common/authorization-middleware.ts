@@ -5,6 +5,14 @@ export interface TokenSource {
   reauthenticate(realmURL: string): Promise<string | undefined>;
 }
 
+function shouldSkipReauthentication(): boolean {
+  try {
+    return Boolean((globalThis as any).__boxelRenderContext);
+  } catch {
+    return false;
+  }
+}
+
 export function authorizationMiddleware(
   tokenSource: TokenSource,
 ): FetcherMiddlewareHandler {
@@ -19,6 +27,7 @@ export function authorizationMiddleware(
     if (realmURL) {
       if (
         response.status === 401 &&
+        !shouldSkipReauthentication() &&
         !req.url.startsWith(`${realmURL}_session`)
       ) {
         token = await tokenSource.reauthenticate(realmURL);
