@@ -148,6 +148,41 @@ export class RenderRunner {
         expectedId: url.replace(/\.json$/i, ''),
         expectedNonce: String(this.#nonce),
         simulateTimeoutMs: opts?.simulateTimeoutMs,
+        timeoutMs: opts?.timeoutMs,
+      };
+      let applyStepError = (stepError: RenderError, evicted: boolean) => {
+        error = error ?? stepError;
+        markTimeout(stepError);
+        if (evicted) {
+          poolInfo.evicted = true;
+          shortCircuit = true;
+        }
+        if (this.#isAuthError(error)) {
+          shortCircuit = true;
+        }
+      };
+      let handleDirectStepError = async (
+        step: string,
+        stepError: RenderError,
+      ) => {
+        let evicted = await this.#maybeEvict(realm, step, stepError);
+        applyStepError(stepError, evicted);
+      };
+      let runTimedStep = async <T>(
+        step: string,
+        fn: () => Promise<T | RenderError>,
+      ): Promise<T | undefined> => {
+        if (shortCircuit) {
+          return;
+        }
+        let stepResult = await this.#step(realm, step, () =>
+          withTimeout(page, fn, opts?.timeoutMs),
+        );
+        if (stepResult.ok) {
+          return stepResult.value as T;
+        }
+        applyStepError(stepResult.error, stepResult.evicted);
+        return;
       };
 
       log.debug(
@@ -155,6 +190,7 @@ export class RenderRunner {
       );
 
       // We need to render the isolated HTML view first, as the template will pull linked fields.
+      log.debug(`isolated render start url=${url} realm=${realm}`);
       let result = await withTimeout(
         page,
         async () => {
@@ -167,49 +203,24 @@ export class RenderRunner {
             'isolated',
             '0',
           );
-          return await captureResult(page, 'innerHTML', captureOptions);
+          return await renderHTML(page, 'isolated', 0, captureOptions);
         },
         opts?.timeoutMs,
       );
+      log.debug(
+        `isolated render completed url=${url} realm=${realm} isError=${isRenderError(
+          result,
+        )}`,
+      );
       let isolatedHTML: string | null = null;
       if (isRenderError(result)) {
-        error = result;
-        markTimeout(error);
-        let evicted = await this.#maybeEvict(
-          realm,
-          'isolated render',
-          result as RenderError,
-        );
-        if (evicted) {
-          poolInfo.evicted = true;
-          shortCircuit = true;
-        }
-        if (this.#isAuthError(error)) {
-          shortCircuit = true;
-        }
+        // If isolated fails we cannot reliably render downstream formats for
+        // this card; continuing causes long timeout cascades (for example while
+        // indexing broken cards), so short-circuit immediately.
+        shortCircuit = true;
+        await handleDirectStepError('isolated render', result as RenderError);
       } else {
-        let capture = result as RenderCapture;
-        if (capture.status === 'ready') {
-          isolatedHTML = capture.value;
-        } else {
-          let capErr = this.#captureToError(capture);
-          if (!error && capErr) {
-            error = capErr;
-          }
-          markTimeout(capErr);
-          let evicted = await this.#maybeEvict(
-            realm,
-            'isolated render',
-            capErr,
-          );
-          if (evicted) {
-            poolInfo.evicted = true;
-            shortCircuit = true;
-          }
-          if (this.#isAuthError(error)) {
-            shortCircuit = true;
-          }
-        }
+        isolatedHTML = result as string;
       }
 
       if (shortCircuit) {
@@ -238,76 +249,71 @@ export class RenderRunner {
         };
       }
 
-      // TODO consider breaking out rendering search doc into its own route so
-      // that we can fully understand all the linked fields that are used in all
-      // the html formats and generate a search doc that is well populated. Right
-      // now we only consider linked fields used in the isolated template.
-      let metaMaybeError = await withTimeout(
-        page,
-        () => renderMeta(page, captureOptions),
-        opts?.timeoutMs,
-      );
-      // TODO also consider introducing a mechanism in the API to track and reset
-      // field usage for an instance recursively so that the depth that an
-      // instance is loaded from a different rendering context in the same realm
-      // doesn't elide fields that this rendering context cares about. in that
-      // manner we can get a complete picture of how to build the search doc's linked
-      // fields for each rendering context.
-      let meta: PrerenderMeta;
-      if (isRenderError(metaMaybeError)) {
-        markTimeout(metaMaybeError as RenderError);
-        if (
-          await this.#maybeEvict(
-            realm,
-            'render.meta',
-            metaMaybeError as RenderError,
-          )
-        ) {
-          poolInfo.evicted = true;
-          shortCircuit = true;
-        }
-        error = error ?? (metaMaybeError as RenderError);
-        markTimeout(error);
-        if (this.#isAuthError(error)) {
-          shortCircuit = true;
-        }
-        meta = {
-          serialized: null,
-          searchDoc: null,
-          displayNames: null,
-          deps: null,
-          types: null,
-        };
-      } else {
-        meta = metaMaybeError as PrerenderMeta;
-      }
+      let emptyMeta: PrerenderMeta = {
+        serialized: null,
+        searchDoc: null,
+        displayNames: null,
+        deps: null,
+        types: null,
+      };
+      let meta = emptyMeta;
+      let metaForTypes = emptyMeta;
       let headHTML: string | null = null,
         atomHTML: string | null = null,
         iconHTML: string | null = null,
         embeddedHTML: Record<string, string> | null = null,
         fittedHTML: Record<string, string> | null = null;
 
-      if (!shortCircuit) {
-        let headHTMLResult = await this.#step(realm, 'head render', () =>
-          withTimeout(
-            page,
-            () => renderHTML(page, 'head', 0, captureOptions),
-            opts?.timeoutMs,
-          ),
-        );
-        if (headHTMLResult.ok) {
-          headHTML = headHTMLResult.value as string;
-        } else {
-          error = error ?? headHTMLResult.error;
-          markTimeout(headHTMLResult.error);
-          if (headHTMLResult.evicted) {
-            poolInfo.evicted = true;
-            shortCircuit = true;
-          }
+      const formatSteps: Array<{
+        name: string;
+        cb: () => Promise<string | RenderError>;
+        assign: (value: string) => void;
+      }> = [
+        {
+          name: 'head render',
+          cb: () => renderHTML(page, 'head', 0, captureOptions),
+          assign: (value: string) => {
+            headHTML = value;
+          },
+        },
+        {
+          name: 'atom render',
+          cb: () => renderHTML(page, 'atom', 0, captureOptions),
+          assign: (value: string) => {
+            atomHTML = value;
+          },
+        },
+        {
+          name: 'icon render',
+          cb: () => renderIcon(page, captureOptions),
+          assign: (value: string) => {
+            iconHTML = value;
+          },
+        },
+      ];
+      for (let step of formatSteps) {
+        if (shortCircuit) {
+          break;
+        }
+        let stepValue = await runTimedStep<string>(step.name, step.cb);
+        if (stepValue !== undefined) {
+          step.assign(stepValue);
         }
       }
 
-      if (!shortCircuit && meta.types) {
+      if (!shortCircuit) {
+        // Obtain type hierarchy for ancestor rendering. We capture final meta
+        // again at the end so searchDoc/deps reflect every format's loads.
+        let metaForTypesResult = await runTimedStep<PrerenderMeta>(
+          'render.meta (types)',
+          () => renderMeta(page, captureOptions),
+        );
+        if (metaForTypesResult !== undefined) {
+          metaForTypes = metaForTypesResult;
+        }
+      }
+
+      if (!shortCircuit && metaForTypes.types) {
         // Render sequentially and short-circuit on unusable page/timeout
         const steps: Array<{
           name: string;
@@ -317,7 +323,12 @@ export class RenderRunner {
           {
             name: 'fitted render',
             cb: () =>
-              renderAncestors(page, 'fitted', meta.types!, captureOptions),
+              renderAncestors(
+                page,
+                'fitted',
+                metaForTypes.types!,
+                captureOptions,
+              ),
             assign: (v: string | Record<string, string>) => {
               fittedHTML = v as Record<string, string>;
             },
@@ -325,47 +336,39 @@ export class RenderRunner {
           {
             name: 'embedded render',
             cb: () =>
-              renderAncestors(page, 'embedded', meta.types!, captureOptions),
+              renderAncestors(
+                page,
+                'embedded',
+                metaForTypes.types!,
+                captureOptions,
+              ),
             assign: (v: string | Record<string, string>) => {
               embeddedHTML = v as Record<string, string>;
-            },
-          },
-          {
-            name: 'atom render',
-            cb: () => renderHTML(page, 'atom', 0, captureOptions),
-            assign: (v: string | Record<string, string>) => {
-              atomHTML = v as string;
-            },
-          },
-          {
-            name: 'icon render',
-            cb: () => renderIcon(page, captureOptions),
-            assign: (v: string | Record<string, string>) => {
-              iconHTML = v as string;
             },
           },
         ];
 
         for (let step of steps) {
-          if (shortCircuit) break;
-          let res = await this.#step(realm, step.name, () =>
-            withTimeout(page, step.cb, opts?.timeoutMs),
-          );
-          if (res.ok) {
-            step.assign(res.value);
-          } else {
-            error = error ?? res.error;
-            markTimeout(res.error);
-            if (res.evicted) {
-              poolInfo.evicted = true;
-              shortCircuit = true;
-              break;
-            }
-            if (this.#isAuthError(error)) {
-              shortCircuit = true;
-              break;
-            }
+          if (shortCircuit) {
+            break;
           }
+          let stepValue = await runTimedStep<string | Record<string, string>>(
+            step.name,
+            step.cb,
+          );
+          if (stepValue !== undefined) {
+            step.assign(stepValue);
+          }
+        }
+      }
+
+      if (!shortCircuit) {
+        let finalMetaResult = await runTimedStep<PrerenderMeta>(
+          'render.meta (final)',
+          () => renderMeta(page, captureOptions),
+        );
+        if (finalMetaResult !== undefined) {
+          meta = finalMetaResult;
         }
       }
 
@@ -630,6 +633,7 @@ export class RenderRunner {
         expectedId: url,
         expectedNonce: String(this.#nonce),
         simulateTimeoutMs: opts?.simulateTimeoutMs,
+        timeoutMs: opts?.timeoutMs,
       };
 
       let capture = await withTimeout(
@@ -785,6 +789,7 @@ export class RenderRunner {
         expectedId: url,
         expectedNonce: String(this.#nonce),
         simulateTimeoutMs: opts?.simulateTimeoutMs,
+        timeoutMs: opts?.timeoutMs,
       };
 
       let capture = await withTimeout(
@@ -953,6 +958,7 @@ export class RenderRunner {
         expectedId: url,
         expectedNonce: String(this.#nonce),
         simulateTimeoutMs: opts?.simulateTimeoutMs,
+        timeoutMs: opts?.timeoutMs,
       };
 
       log.debug(
@@ -1201,11 +1207,18 @@ export class RenderRunner {
   ): Promise<
     { ok: true; value: T } | { ok: false; error: RenderError; evicted: boolean }
   > {
+    log.debug(`prerender step start realm=${realm} step=${step}`);
     let r = await fn();
     if (isRenderError(r)) {
       let evicted = await this.#maybeEvict(realm, step, r as RenderError);
+      log.debug(
+        `prerender step error realm=${realm} step=${step} status=${
+          (r as RenderError).error?.status
+        } title=${(r as RenderError).error?.title} evicted=${evicted}`,
+      );
       return { ok: false, error: r as RenderError, evicted };
     }
+    log.debug(`prerender step done realm=${realm} step=${step}`);
     return { ok: true, value: r as T };
   }
 

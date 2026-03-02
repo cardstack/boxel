@@ -29,6 +29,7 @@ import {
 
 import consumeContext from '@cardstack/host/helpers/consume-context';
 import { urlForRealmLookup } from '@cardstack/host/lib/utils';
+import ScrollAnchor from '@cardstack/host/modifiers/scroll-anchor';
 import { getPrerenderedSearch } from '@cardstack/host/resources/prerendered-search';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type RealmService from '@cardstack/host/services/realm';
@@ -138,6 +139,14 @@ export default class SearchContent extends Component<Signature> {
   /** Section id when focused: 'realm:<url>' or 'recents'. Null = no focus */
   @tracked focusedSection: string | null = null;
   @tracked displayedCountBySection: Record<string, number> = {};
+  @tracked scrollAnchorSid: string | null = null;
+
+  private get scrollAnchorSelector(): string | null {
+    if (this.scrollAnchorSid) {
+      return `[data-section-sid="${this.scrollAnchorSid}"]`;
+    }
+    return null;
+  }
 
   @consume(GetCardCollectionContextName)
   declare private getCardCollection: getCardCollection;
@@ -423,6 +432,8 @@ export default class SearchContent extends Component<Signature> {
 
   @action
   onFocusSection(sectionId: string | null) {
+    this.scrollAnchorSid = sectionId ?? this.focusedSection;
+
     this.focusedSection = sectionId;
     if (sectionId) {
       const current = this.displayedCountBySection[sectionId] ?? 0;
@@ -615,7 +626,14 @@ export default class SearchContent extends Component<Signature> {
   <template>
     {{consumeContext this.getRecentCardCollection}}
     {{consumeContext this.makeCardResource}}
-    <div class='search-sheet-content {{if @isCompact "compact"}}' ...attributes>
+    <div
+      {{ScrollAnchor
+        trackSelector='[data-section-sid]'
+        anchorSelector=this.scrollAnchorSelector
+      }}
+      class='search-sheet-content {{if @isCompact "compact"}}'
+      ...attributes
+    >
       {{#if this.showHeader}}
         {{#unless @isCompact}}
           <SearchResultHeader
@@ -666,6 +684,7 @@ export default class SearchContent extends Component<Signature> {
             @selectedCard={{@selectedCard}}
             @offerToCreate={{@offerToCreate}}
             @onSubmit={{@onSubmit}}
+            data-section-sid={{section.sid}}
             data-test-search-result-section={{i}}
           />
         {{/each}}
