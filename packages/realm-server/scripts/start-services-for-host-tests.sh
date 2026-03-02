@@ -34,7 +34,7 @@ for item in $KEEP_FOLDERS; do
   fi
 done
 # Explicitly keep some files needed for the tests
-KEEP_FILES="cloudflare-image.gts index.json Spec/f869024a-cdec-4a73-afca-d8d32f258ead.json"
+KEEP_FILES="cloudflare-image.gts index.json Spec/f869024a-cdec-4a73-afca-d8d32f258ead.json commands/create-submission.ts"
 for item in $KEEP_FILES; do
   if [ -f "$CATALOG_SRC_PATH/$item" ]; then
     cp -a "$CATALOG_SRC_PATH/$item" "$CATALOG_TEMP_PATH/$item"

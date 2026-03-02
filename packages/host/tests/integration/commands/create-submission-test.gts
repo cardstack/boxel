@@ -1,6 +1,8 @@
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
+import { registerCardReferencePrefix } from '@cardstack/runtime-common';
+
 import ENV from '@cardstack/host/config/environment';
 
 import {
@@ -12,23 +14,16 @@ import { setupBaseRealm } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
-import type * as CreateSubmissionModule from '@cardstack/catalog/commands/create-submission';
-
 const realmServerOrigin = new URL(ENV.resolvedBaseRealmURL).origin;
 const submissionRealmURL = new URL('/submissions-test/', realmServerOrigin)
   .href;
-const catalogCreateSubmissionCommandURL = new URL(
-  '/catalog/commands/create-submission',
-  realmServerOrigin,
-).href;
-const catalogCreateSubmissionCommandTSURL = new URL(
-  '/catalog/commands/create-submission.ts',
-  realmServerOrigin,
-).href;
-const catalogListingModuleURL = new URL(
-  '/catalog/catalog-app/listing/listing',
-  realmServerOrigin,
-).href;
+const catalogRealmURL = new URL('/catalog/', realmServerOrigin).href;
+const catalogCreateSubmissionCommandURL =
+  '@cardstack/catalog/commands/create-submission';
+const catalogCreateSubmissionCommandTSURL =
+  '@cardstack/catalog/commands/create-submission.ts';
+const catalogListingModuleURL =
+  '@cardstack/catalog/catalog-app/listing/listing';
 
 module('Integration | commands | create-submission', function (hooks) {
   setupRenderingTest(hooks);
@@ -41,6 +36,13 @@ module('Integration | commands | create-submission', function (hooks) {
   });
 
   hooks.beforeEach(async function () {
+    let network = getService('network');
+    network.virtualNetwork.addImportMap(
+      '@cardstack/catalog/',
+      (rest: string) => new URL(rest, catalogRealmURL).href,
+    );
+    registerCardReferencePrefix('@cardstack/catalog/', catalogRealmURL);
+
     await setupIntegrationTestRealm({
       mockMatrixUtils,
       realmURL: testRealmURL,
@@ -72,14 +74,14 @@ module('Integration | commands | create-submission', function (hooks) {
   test('creates the submission card in the provided realm', async function (assert) {
     let commandService = getService('command-service');
     let loader = getService('loader-service').loader;
-    let createSubmissionModule: typeof CreateSubmissionModule;
+    let createSubmissionModule: typeof import('@cardstack/catalog/commands/create-submission');
     try {
       createSubmissionModule = await loader.import<
-        typeof CreateSubmissionModule
+        typeof import('@cardstack/catalog/commands/create-submission')
       >(catalogCreateSubmissionCommandURL);
     } catch {
       createSubmissionModule = await loader.import<
-        typeof CreateSubmissionModule
+        typeof import('@cardstack/catalog/commands/create-submission')
       >(catalogCreateSubmissionCommandTSURL);
     }
     let CreateSubmissionCommand = createSubmissionModule.default;
