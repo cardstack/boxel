@@ -9,7 +9,7 @@ import type * as CardAPIModule from 'https://cardstack.com/base/card-api';
 import type * as CardsGridModule from 'https://cardstack.com/base/cards-grid';
 import type * as CodeRefModule from 'https://cardstack.com/base/code-ref';
 import type * as DateFieldModule from 'https://cardstack.com/base/date';
-import type * as DatetimeFieldModule from 'https://cardstack.com/base/datetime';
+import type * as DateTimeFieldModule from 'https://cardstack.com/base/datetime';
 import type * as EmailFieldModule from 'https://cardstack.com/base/email';
 import type * as EnumModule from 'https://cardstack.com/base/enum';
 import type * as EthereumAddressModule from 'https://cardstack.com/base/ethereum-address';
@@ -32,8 +32,8 @@ let NumberField: NumberField;
 type DateField = (typeof DateFieldModule)['default'];
 let DateField: DateField;
 
-type DatetimeField = (typeof DatetimeFieldModule)['default'];
-let DatetimeField: DatetimeField;
+type DateTimeField = (typeof DateTimeFieldModule)['default'];
+let DateTimeField: DateTimeField;
 
 type EmailField = (typeof EmailFieldModule)['default'];
 let EmailField: EmailField;
@@ -130,8 +130,8 @@ async function initialize() {
     await loader.import<typeof DateFieldModule>(`${baseRealm.url}date`)
   ).default;
 
-  DatetimeField = (
-    await loader.import<typeof DatetimeFieldModule>(`${baseRealm.url}datetime`)
+  DateTimeField = (
+    await loader.import<typeof DateTimeFieldModule>(`${baseRealm.url}datetime`)
   ).default;
 
   EmailField = (
@@ -255,7 +255,7 @@ export {
   StringField,
   NumberField,
   DateField,
-  DatetimeField,
+  DateTimeField,
   EmailField,
   Base64ImageField,
   CodeRefField,

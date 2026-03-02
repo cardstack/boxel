@@ -101,7 +101,7 @@ const authorCard = `import { contains, field, CardDef, Component, FieldDef } fro
 }`;
 
 const blogPostCard = `import { contains, containsMany, field, linksTo, CardDef, Component, FieldDef } from "https://cardstack.com/base/card-api";
-  import DatetimeField from 'https://cardstack.com/base/datetime';
+  import DateTimeField from 'https://cardstack.com/base/datetime';
   import MarkdownField from 'https://cardstack.com/base/markdown';
   import StringField from "https://cardstack.com/base/string";
   import { Author } from './author';
@@ -157,7 +157,7 @@ const blogPostCard = `import { contains, containsMany, field, linksTo, CardDef, 
   export class BlogPost extends CardDef {
     static displayName = 'Blog Post';
     @field cardTitle = contains(StringField)
-    @field publishDate = contains(DatetimeField);
+    @field publishDate = contains(DateTimeField);
     @field author = linksTo(Author);
     @field comments = containsMany(Comment);
     @field localComments = containsMany(LocalCommentField);
