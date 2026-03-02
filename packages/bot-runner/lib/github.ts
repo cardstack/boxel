@@ -310,7 +310,13 @@ export class OctokitGitHubClient implements GitHubClient {
 }
 
 export function createGitHubClientFromEnv(): GitHubClient {
-  return new OctokitGitHubClient(process.env.SUBMISSION_BOT_GITHUB_TOKEN);
+  let token = process.env.SUBMISSION_BOT_GITHUB_TOKEN?.trim();
+  if (!token) {
+    throw new Error(
+      'SUBMISSION_BOT_GITHUB_TOKEN must be set before starting bot-runner',
+    );
+  }
+  return new OctokitGitHubClient(token);
 }
 
 function normalizeBranchName(branch: string): string {
