@@ -2,7 +2,7 @@ import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { concat } from '@ember/helper';
 import { hash } from '@ember/helper';
 
-import { cn, element, eq } from '../../helpers.ts';
+import { and, bool, cn, element, eq, not } from '../../helpers.ts';
 import { getContrastColor } from '../../helpers/contrast-color.ts';
 import cssVar from '../../helpers/css-var.ts';
 import type { BoxelButtonSize } from '../button/index.gts';
@@ -51,8 +51,12 @@ const Pill: TemplateOnlyComponent<PillSignature> = <template>
         'pill'
         (if (eq @kind 'button') 'button-pill')
         (if @variant (concat 'variant-' @variant) 'variant-default')
-        (if @size (concat 'pill-size--' @size))
+        (if
+          (and (bool @size) (not (eq @size 'auto')))
+          (concat 'pill-size--' @size)
+        )
       }}
+      type={{if (eq @kind 'button') 'button'}}
       style={{cssVar
         pill-background-color=@pillBackgroundColor
         pill-font-color=(if

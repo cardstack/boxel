@@ -79,6 +79,9 @@
 
   /* common icon sizes */
   --boxel-icon-2xs: 0.75rem; /* 12px */
+  --boxel-icon-xxs: var(
+    --boxel-icon-2xs
+  ); /* DEPRECATED: use --boxel-icon-2xs */
   --boxel-icon-xs: 1rem; /* 16px */
   --boxel-icon-sm: 1.25rem; /* 20px */
   --boxel-icon-med: 1.875rem; /* 30px */

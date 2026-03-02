@@ -139,7 +139,6 @@ export default class PickerLabeledTrigger extends Component<TriggerLabeledSignat
             {{#if this.hasMoreItems}}
               <Pill
                 class='picker__more-items'
-                type='button'
                 @kind='button'
                 @size='small'
                 data-test-boxel-picker-more-items

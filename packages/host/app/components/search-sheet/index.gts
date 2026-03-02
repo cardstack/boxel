@@ -264,6 +264,7 @@ export default class SearchSheet extends Component<Signature> {
         />
       {{else}}
         <SearchBar
+          class='search-sheet__search-input-group'
           @value={{this.searchKey}}
           @placeholder={{this.placeholderText}}
           @state={{this.inputValidationState}}
@@ -274,8 +275,7 @@ export default class SearchSheet extends Component<Signature> {
           @onInputInsertion={{@onInputInsertion}}
           @selectedRealms={{this.selectedRealms}}
           @onRealmChange={{this.onRealmChange}}
-          class='search-sheet__search-input-group'
-          autocomplete='off'
+          @autocomplete='off'
         />
         <SearchContent
           class='search-sheet__content'

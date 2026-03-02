@@ -27,6 +27,7 @@ interface Signature {
   Args: {
     value: string;
     placeholder?: string;
+    autocomplete?: string;
     onInput?: (value: string) => void;
     onFocus?: (ev: Event) => void;
     onBlur?: (ev: Event) => void;
@@ -81,6 +82,7 @@ export default class SearchBar extends Component<Signature> {
           @onFocus={{@onFocus}}
           @onInput={{@onInput}}
           @onBlur={{@onBlur}}
+          @autocomplete={{@autocomplete}}
           id={{@id}}
           {{elementCallback @onInputInsertion}}
           {{autoFocus}}
