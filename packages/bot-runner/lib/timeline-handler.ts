@@ -1,13 +1,12 @@
 import {
   isBotTriggerEvent,
-  isBotCommandFilter,
   logger,
   param,
   query,
-  userInitiatedPriority,
 } from '@cardstack/runtime-common';
-import { enqueueRunCommandJob } from '@cardstack/runtime-common/jobs/run-command';
 import * as Sentry from '@sentry/node';
+import { CommandRunner } from './command-runner';
+import type { GitHubClient } from './github';
 import type { DBAdapter, QueuePublisher } from '@cardstack/runtime-common';
 import type { MatrixEvent, Room } from 'matrix-js-sdk';
 
@@ -22,13 +21,18 @@ export interface TimelineHandlerOptions {
   authUserId: string;
   dbAdapter: DBAdapter;
   queuePublisher: QueuePublisher;
+  githubClient: GitHubClient;
+  startTime: number;
 }
 
 export function onTimelineEvent({
   authUserId,
   dbAdapter,
   queuePublisher,
+  githubClient,
+  startTime,
 }: TimelineHandlerOptions) {
+  let commandRunner = new CommandRunner(dbAdapter, queuePublisher, githubClient);
   return async function handleTimelineEvent(
     event: MatrixEvent,
     room: Room | undefined,
@@ -40,6 +44,10 @@ export function onTimelineEvent({
       }
       let rawEvent = event.event ?? event;
       if (!isBotTriggerEvent(rawEvent)) {
+        return;
+      }
+      let eventTimestamp = rawEvent.origin_server_ts;
+      if (eventTimestamp == null || eventTimestamp < startTime) {
         return;
       }
       let eventContent = rawEvent.content;
@@ -68,35 +76,21 @@ export function onTimelineEvent({
         `received event from ${senderUsername} in room ${room.roomId} with ${registrations.length} registrations`,
       );
       for (let registration of submissionBotRegistrations) {
-        let eventTimestamp = event.event.origin_server_ts;
-        if (
-          eventTimestamp == null ||
-          eventTimestamp < registration.created_at_ms
-        ) {
+        if (eventTimestamp < registration.created_at_ms) {
           continue;
         }
         log.debug(
           `handling event for bot runner registration ${registration.id} in room ${room.roomId}`,
           eventContent,
         );
-        let allowedCommands = await getCommandsForRegistration(
-          dbAdapter,
+        await commandRunner.maybeEnqueueCommand(
+          senderUsername,
+          eventContent,
           registration.id,
         );
-        await maybeEnqueueCommand({
-          dbAdapter,
-          queuePublisher,
-          runAs: senderUsername,
-          eventContent,
-          allowedCommands,
-        });
       }
       for (let registration of registrations) {
-        let eventTimestamp = event.event.origin_server_ts;
-        if (
-          eventTimestamp == null ||
-          eventTimestamp < registration.created_at_ms
-        ) {
+        if (eventTimestamp < registration.created_at_ms) {
           continue;
         }
         // TODO: filter out events we want to handle based on the registration (e.g. command messages, system events)
@@ -104,17 +98,11 @@ export function onTimelineEvent({
           `handling event for registration ${registration.id} in room ${room.roomId}`,
           eventContent,
         );
-        let allowedCommands = await getCommandsForRegistration(
-          dbAdapter,
+        await commandRunner.maybeEnqueueCommand(
+          senderUsername,
+          eventContent,
           registration.id,
         );
-        await maybeEnqueueCommand({
-          dbAdapter,
-          queuePublisher,
-          runAs: senderUsername,
-          eventContent,
-          allowedCommands,
-        });
       }
     } catch (error) {
       log.error('error handling timeline event', error);
@@ -123,87 +111,8 @@ export function onTimelineEvent({
   };
 }
 
-async function maybeEnqueueCommand({
-  dbAdapter,
-  queuePublisher,
-  runAs,
-  eventContent,
-  allowedCommands,
-}: {
-  dbAdapter: DBAdapter;
-  queuePublisher: QueuePublisher;
-  runAs: string;
-  eventContent: { type?: unknown; input?: unknown; realm?: unknown };
-  allowedCommands: { type: string; command: string }[];
-}) {
-  if (
-    !allowedCommands.length ||
-    typeof eventContent.type !== 'string' ||
-    !allowedCommands.some((entry) => entry.type === eventContent.type)
-  ) {
-    return;
-  }
-
-  if (!eventContent?.input || typeof eventContent.input !== 'object') {
-    return;
-  }
-
-  let input = eventContent.input as Record<string, unknown>;
-  let realmURL =
-    typeof eventContent.realm === 'string' ? eventContent.realm : undefined;
-  let commandRegistration = allowedCommands.find(
-    (entry) => entry.type === eventContent.type,
-  );
-  let command = commandRegistration?.command?.trim();
-  let commandInput: Record<string, any> | null = input;
-
-  if (!realmURL || !command) {
-    log.warn(
-      'bot trigger missing required input for command (need realmURL and command)',
-      { realmURL, command },
-    );
-    return;
-  }
-
-  await enqueueRunCommandJob(
-    {
-      realmURL,
-      realmUsername: runAs,
-      runAs,
-      command,
-      commandInput,
-    },
-    queuePublisher,
-    dbAdapter,
-    userInitiatedPriority,
-  );
-}
-
 function getRoomCreator(room: Room | undefined): string | undefined {
   return room?.getCreator?.() ?? undefined;
-}
-
-async function getCommandsForRegistration(
-  dbAdapter: DBAdapter,
-  registrationId: string,
-): Promise<{ type: string; command: string }[]> {
-  let rows = await query(dbAdapter, [
-    `SELECT command_filter, command FROM bot_commands WHERE bot_id = `,
-    param(registrationId),
-  ]);
-
-  let commands: { type: string; command: string }[] = [];
-  for (let row of rows) {
-    let filter = row.command_filter;
-    if (!isBotCommandFilter(filter)) {
-      continue;
-    }
-    if (typeof row.command !== 'string' || !row.command.trim()) {
-      continue;
-    }
-    commands.push({ type: filter.content_type, command: row.command });
-  }
-  return commands;
 }
 
 async function getRegistrationsForUser(
