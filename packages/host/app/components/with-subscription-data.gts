@@ -124,6 +124,10 @@ export default class WithSubscriptionData extends Component<WithSubscriptionData
     return this.billingService.subscriptionData?.nextDailyCreditGrantAt;
   }
 
+  private get dailyCreditGrantCount() {
+    return this.billingService.subscriptionData?.dailyCreditGrantCount ?? 0;
+  }
+
   private get monthlyCreditText() {
     return this.creditsAvailableInPlanAllowance != null &&
       this.creditsIncludedInPlanAllowance != null
@@ -191,8 +195,14 @@ export default class WithSubscriptionData extends Component<WithSubscriptionData
     let thresholdAmount = formatNumber(this.lowCreditThreshold, {
       size: 'short',
     });
+    // Only append "since you were getting low" when the daily cron has
+    // topped the user up after they actually spent credits (count > 1).
+    let toppedUpMessage =
+      this.dailyCreditGrantCount > 1
+        ? `We topped up your account to ${thresholdAmount} credits since you were getting low.`
+        : `We topped up your account to ${thresholdAmount} credits.`;
     return [
-      `We topped up your account to ${thresholdAmount} credits since you were getting low.`,
+      toppedUpMessage,
       `Last daily credits grant: ${distance} (${timestampLastDailyCreditGrant})`,
     ];
   }
