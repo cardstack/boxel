@@ -18,10 +18,13 @@ import type NetworkService from '@cardstack/host/services/network';
 import {
   setupLocalIndexing,
   setupOnSave,
+  setupRealmCacheTeardown,
   testRealmURL,
   setupAcceptanceTestRealm,
   SYSTEM_CARD_FIXTURE_CONTENTS,
   capturePrerenderResult,
+  waitForLoadedImage,
+  withCachedRealmSetup,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupApplicationTest } from '../../helpers/setup';
@@ -102,6 +105,7 @@ module('Acceptance | avif image def', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
   setupOnSave(hooks);
+  setupRealmCacheTeardown(hooks);
   setupTestRealmServiceWorker(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
@@ -176,15 +180,17 @@ module('Acceptance | avif image def', function (hooks) {
 
   hooks.beforeEach(async function () {
     let renderableAvif = await makeRenderableAvif(2, 3);
-    ({ realm } = await setupAcceptanceTestRealm({
-      mockMatrixUtils,
-      contents: {
-        ...SYSTEM_CARD_FIXTURE_CONTENTS,
-        'sample.avif': makeMinimalAvif(2, 3),
-        'renderable.avif': renderableAvif,
-        'not-an-avif.avif': 'This is plain text, not an AVIF file.',
-      },
-    }));
+    ({ realm } = await withCachedRealmSetup(async () =>
+      setupAcceptanceTestRealm({
+        mockMatrixUtils,
+        contents: {
+          ...SYSTEM_CARD_FIXTURE_CONTENTS,
+          'sample.avif': makeMinimalAvif(2, 3),
+          'renderable.avif': renderableAvif,
+          'not-an-avif.avif': 'This is plain text, not an AVIF file.',
+        },
+      }),
+    ));
   });
 
   hooks.afterEach(function () {
@@ -356,27 +362,22 @@ module('Acceptance | avif image def', function (hooks) {
     let { status } = await capturePrerenderResult('innerHTML');
     assert.strictEqual(status, 'ready', 'render completed');
 
-    let img = document.querySelector(
-      '[data-prerender] .image-isolated__img',
-    ) as HTMLImageElement | null;
+    let imgSelector = '[data-prerender] .image-isolated__img';
+    let img = document.querySelector(imgSelector) as HTMLImageElement | null;
     assert.ok(img, 'img element is rendered');
     assert.ok(
       img?.getAttribute('src')?.includes('renderable.avif'),
       'img src references the AVIF file',
     );
 
-    await waitUntil(() => img!.naturalWidth > 0, {
-      timeout: 5000,
-      timeoutMessage:
-        'Image failed to load - naturalWidth remained 0. This likely indicates an authentication issue preventing the browser from fetching the image.',
-    });
+    let loadedImg = await waitForLoadedImage(imgSelector);
 
     assert.ok(
-      img!.naturalWidth > 0,
+      loadedImg.naturalWidth > 0,
       'Image loaded successfully with non-zero width',
     );
     assert.ok(
-      img!.naturalHeight > 0,
+      loadedImg.naturalHeight > 0,
       'Image loaded successfully with non-zero height',
     );
   });

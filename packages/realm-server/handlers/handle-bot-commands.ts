@@ -3,7 +3,6 @@ import { validate as uuidValidate } from 'uuid';
 import {
   assertIsBotCommandFilter,
   dbExpression,
-  isUrlLike,
   param,
   query,
   SupportedMimeType,
@@ -96,11 +95,6 @@ export function handleBotCommandsRequest({
 
     if (!command) {
       await sendResponseForBadRequest(ctxt, 'command is required');
-      return;
-    }
-
-    if (!isUrlLike(command)) {
-      await sendResponseForBadRequest(ctxt, 'command must be a URL');
       return;
     }
 

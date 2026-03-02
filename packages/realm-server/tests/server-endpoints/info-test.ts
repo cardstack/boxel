@@ -14,7 +14,6 @@ import {
   closeServer,
   createVirtualNetwork,
   setupDB,
-  insertUser,
   matrixURL,
   realmSecretSeed,
   runTestRealmServerWithRealms,
@@ -23,7 +22,7 @@ import { createJWT as createRealmServerJWT } from '../../utils/jwt';
 import type { Server } from 'http';
 
 module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
-  module('Realm Server Endpoints | /_info', function (hooks) {
+  module('Realm Server Endpoints | /_federated-info', function (hooks) {
     let testRealm: Realm;
     let secondaryRealm: Realm;
     let request: SuperTest<Test>;
@@ -102,16 +101,14 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
       },
     });
 
-    test('QUERY /_info federates info across realms and includes public list header', async function (assert) {
-      await insertUser(dbAdapter, ownerUserId, 'stripe-test-user', null);
-
+    test('QUERY /_federated-info federates info across realms and includes public list header', async function (assert) {
       let realmServerToken = createRealmServerJWT(
         { user: ownerUserId, sessionRoom: 'session-room-test' },
         realmSecretSeed,
       );
 
       let response = await request
-        .post('/_info')
+        .post('/_federated-info')
         .set('X-HTTP-Method-Override', 'QUERY')
         .set('Accept', 'application/vnd.api+json')
         .set('Authorization', `Bearer ${realmServerToken}`)
@@ -147,14 +144,14 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
       );
     });
 
-    test('QUERY /_info returns 403 when user lacks read access', async function (assert) {
+    test('QUERY /_federated-info returns 403 when user lacks read access', async function (assert) {
       let realmServerToken = createRealmServerJWT(
         { user: '@rando:localhost', sessionRoom: 'session-room-test' },
         realmSecretSeed,
       );
 
       let response = await request
-        .post('/_info')
+        .post('/_federated-info')
         .set('X-HTTP-Method-Override', 'QUERY')
         .set('Accept', 'application/vnd.api+json')
         .set('Authorization', `Bearer ${realmServerToken}`)
@@ -167,9 +164,9 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
       );
     });
 
-    test('QUERY /_info returns 401 when unauthenticated user requests non-public realm', async function (assert) {
+    test('QUERY /_federated-info returns 401 when unauthenticated user requests non-public realm', async function (assert) {
       let response = await request
-        .post('/_info')
+        .post('/_federated-info')
         .set('X-HTTP-Method-Override', 'QUERY')
         .set('Accept', 'application/vnd.api+json')
         .send({ realms: [secondaryRealm.url] });
@@ -181,9 +178,9 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
       );
     });
 
-    test('QUERY /_info returns 400 when realms are missing', async function (assert) {
+    test('QUERY /_federated-info returns 400 when realms are missing', async function (assert) {
       let response = await request
-        .post('/_info')
+        .post('/_federated-info')
         .set('X-HTTP-Method-Override', 'QUERY')
         .set('Accept', 'application/vnd.api+json')
         .send({});
@@ -197,13 +194,13 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
       );
     });
 
-    test('QUERY /_info returns info for a public realm without auth when realms body is provided', async function (assert) {
+    test('QUERY /_federated-info returns info for a public realm without auth when realms body is provided', async function (assert) {
       // This tests the scenario where a subdomain-based realm at root path
-      // (e.g. http://hi.localhost:4201/) sends QUERY to /_info. The path /_info
+      // (e.g. http://hi.localhost:4201/) sends QUERY to /_federated-info. The path /_federated-info
       // matches the server-level route (not the realm's own handler), so the
       // request body with realms array is required.
       let response = await request
-        .post('/_info')
+        .post('/_federated-info')
         .set('X-HTTP-Method-Override', 'QUERY')
         .set('Accept', 'application/vnd.api+json')
         .send({ realms: [testRealm.url] });

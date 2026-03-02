@@ -138,6 +138,7 @@ export async function getUserById(
     stripeCustomerId: results[0].stripe_customer_id,
     stripeCustomerEmail: results[0].stripe_customer_email,
     matrixRegistrationToken: results[0].matrix_registration_token,
+    sessionRoomId: results[0].session_room_id ?? null,
   } as User;
 }
 
@@ -159,6 +160,7 @@ export async function getUserByStripeId(
     matrixUserId: results[0].matrix_user_id,
     stripeCustomerId: results[0].stripe_customer_id,
     matrixRegistrationToken: results[0].matrix_registration_token,
+    sessionRoomId: results[0].session_room_id ?? null,
   } as User;
 }
 
@@ -181,6 +183,7 @@ export async function getUserByMatrixUserId(
     stripeCustomerId: results[0].stripe_customer_id,
     stripeCustomerEmail: results[0].stripe_customer_email,
     matrixRegistrationToken: results[0].matrix_registration_token,
+    sessionRoomId: results[0].session_room_id ?? null,
   } as User;
 }
 

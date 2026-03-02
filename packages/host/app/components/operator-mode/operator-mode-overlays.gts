@@ -1,6 +1,7 @@
 import { array, fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
+import { service } from '@ember/service';
 
 import { consume } from 'ember-provide-consume-context';
 import { velcro } from 'ember-velcro';
@@ -32,6 +33,7 @@ import {
 } from '@cardstack/boxel-ui/icons';
 
 import type { CommandContext } from '@cardstack/runtime-common';
+
 import {
   CardCrudFunctionsContextName,
   CommandContextName,
@@ -44,6 +46,8 @@ import type {
   Format,
 } from 'https://cardstack.com/base/card-api';
 
+import { detectStackItemTypeForTarget } from '../../lib/stack-item';
+
 import { removeFileExtension } from '../card-search/utils';
 
 import Overlays from './overlays';
@@ -51,9 +55,11 @@ import Overlays from './overlays';
 import type { StackItemRenderedCardForOverlayActions } from './stack-item';
 
 import type { CardDefOrId } from './stack-item';
+import type StoreService from '../../services/store';
 
 export default class OperatorModeOverlays extends Overlays {
   overlayClassName = 'actions-overlay';
+  @service declare private store: StoreService;
 
   @consume(CardCrudFunctionsContextName)
   declare private cardCrudFunctions: CardCrudFunctions;
@@ -345,12 +351,45 @@ export default class OperatorModeOverlays extends Overlays {
       case 'select':
         return !this.isField(renderedCard) && !!this.args.toggleSelect;
       case 'edit':
+        if (this.isFileMetaTarget(renderedCard)) {
+          return false;
+        }
         return this.realm.canWrite(this.getCardId(renderedCard.cardDefOrId));
       case 'more-options':
         return true;
       default:
         return false;
     }
+  }
+
+  private isFileMetaTarget(
+    renderedCard: StackItemRenderedCardForOverlayActions,
+  ): boolean {
+    return this.getTypeForCardTarget(renderedCard.cardDefOrId) === 'file';
+  }
+
+  private getTypeForCardTarget(cardDefOrId: CardDefOrId): 'card' | 'file' {
+    return detectStackItemTypeForTarget(
+      cardDefOrId,
+      this.getCardId(cardDefOrId),
+      this.store,
+    );
+  }
+
+  protected override buildViewCardOpts(
+    cardDefOrId: CardDefOrId,
+    fieldType?: 'linksTo' | 'contains' | 'containsMany' | 'linksToMany',
+    fieldName?: string,
+  ): {
+    type?: 'card' | 'file';
+    fieldType?: 'linksTo' | 'contains' | 'containsMany' | 'linksToMany';
+    fieldName?: string;
+  } {
+    return {
+      type: this.getTypeForCardTarget(cardDefOrId),
+      fieldType,
+      fieldName,
+    };
   }
 
   @action
@@ -398,6 +437,9 @@ export default class OperatorModeOverlays extends Overlays {
   protected override getFormatForCard(
     renderedCard: StackItemRenderedCardForOverlayActions,
   ): Format {
+    if (this.isFileMetaTarget(renderedCard)) {
+      return 'isolated';
+    }
     return renderedCard.stackItem.format as Format;
   }
 

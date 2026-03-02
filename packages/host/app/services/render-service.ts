@@ -17,6 +17,7 @@ import {
   loadFileMetaDocument,
   type CardError,
   type CodeRef,
+  type RuntimeDependencyTrackingContext,
   type SingleCardDocument,
   type SingleFileMetaDocument,
 } from '@cardstack/runtime-common';
@@ -40,6 +41,7 @@ import type { SimpleDocument, SimpleElement } from '@simple-dom/interface';
 import type { Tokenizer } from '@simple-dom/parser';
 
 const ELEMENT_NODE_TYPE = 1;
+const MAX_ASYNC_RENDER_PASSES = 3;
 const { environment } = config;
 
 export class CardStoreWithErrors implements CardStore {
@@ -86,7 +88,10 @@ export class CardStoreWithErrors implements CardStore {
 
   readonly errors = new Set<string>();
 
-  async loadCardDocument(url: string) {
+  async loadCardDocument(
+    url: string,
+    _opts?: { dependencyTrackingContext?: RuntimeDependencyTrackingContext },
+  ) {
     let promise = this.#cardDocsInFlight.get(url);
     if (promise) {
       return await promise;
@@ -100,7 +105,10 @@ export class CardStoreWithErrors implements CardStore {
     }
   }
 
-  async loadFileMetaDocument(url: string) {
+  async loadFileMetaDocument(
+    url: string,
+    _opts?: { dependencyTrackingContext?: RuntimeDependencyTrackingContext },
+  ) {
     let promise = this.#fileMetaDocsInFlight.get(url);
     if (promise) {
       return await promise;
@@ -163,9 +171,16 @@ export default class RenderService extends Service {
   ): Promise<string> {
     let element = getIsolatedRenderElement(this.document);
     try {
-      render(component, element, this.owner, format);
-      await waitForAsync?.();
-      // re-render after we have waited for the links to finish loading
+      if (waitForAsync) {
+        // Additional settle passes are needed because rendering can start new
+        // async work (for example nested query-backed relationships).
+        for (let i = 0; i < MAX_ASYNC_RENDER_PASSES; i++) {
+          render(component, element, this.owner, format);
+          await waitForAsync();
+        }
+      }
+      // Final render after waiting for async work so captured HTML reflects the
+      // latest loaded state.
       render(component, element, this.owner, format);
       let serializer = new Serializer(voidMap);
       let html = serializer.serialize(element);

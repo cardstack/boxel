@@ -436,7 +436,7 @@ export default class RealmServerService extends Service {
 
     await this.login();
 
-    let infoURL = new URL('_info', realmServerURL);
+    let infoURL = new URL('_federated-info', realmServerURL);
 
     let response = await this.authedFetch(infoURL.href, {
       method: 'QUERY',
@@ -623,6 +623,28 @@ export default class RealmServerService extends Service {
     const headers = new Headers(options.headers);
     if (this.token) {
       headers.set('Authorization', `Bearer ${this.token}`);
+    }
+    return this.network.fetch(url, {
+      ...options,
+      headers,
+    });
+  }
+
+  maybeAuthedFetchForRealms(
+    url: string,
+    realms: string[],
+    options: RequestInit = {},
+  ) {
+    const headers = new Headers(options.headers);
+    if (!headers.has('Authorization')) {
+      if (this.token) {
+        headers.set('Authorization', `Bearer ${this.token}`);
+      } else {
+        let realmToken = this.getRealmTokenForRealms(realms);
+        if (realmToken) {
+          headers.set('Authorization', `Bearer ${realmToken}`);
+        }
+      }
     }
     return this.network.fetch(url, {
       ...options,
@@ -1032,6 +1054,27 @@ export default class RealmServerService extends Service {
     }
 
     return this.token;
+  }
+
+  private getRealmTokenForRealms(realms: string[]): string | undefined {
+    let sessionTokens: Record<string, string> = {};
+    let sessionStr = window.localStorage.getItem(SessionLocalStorageKey);
+    if (!sessionStr) {
+      return undefined;
+    }
+    try {
+      sessionTokens = JSON.parse(sessionStr) as Record<string, string>;
+    } catch {
+      return undefined;
+    }
+    for (let realmURL of realms) {
+      let normalizedRealmURL = ensureTrailingSlash(realmURL);
+      let token = sessionTokens[normalizedRealmURL] ?? sessionTokens[realmURL];
+      if (token) {
+        return token;
+      }
+    }
+    return undefined;
   }
 }
 

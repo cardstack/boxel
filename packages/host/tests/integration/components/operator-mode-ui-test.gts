@@ -86,6 +86,91 @@ module('Integration | operator-mode | ui', function (hooks) {
       .includesText('Author');
   });
 
+  test(`click on "links to" the embedded file will open it on the stack`, async function (assert) {
+    let linkedFileId = `${testRealmURL}FileLinkCard/notes.txt`;
+
+    await ctx.testRealm.write(
+      'file-link-card.gts',
+      `
+        import { CardDef, Component, field, contains, linksTo, StringField } from 'https://cardstack.com/base/card-api';
+        import { FileDef } from 'https://cardstack.com/base/file-api';
+
+        export class FileLinkCard extends CardDef {
+          static displayName = 'File Link Card';
+          @field title = contains(StringField);
+          @field attachment = linksTo(FileDef);
+
+          static isolated = class Isolated extends Component<typeof this> {
+            <template>
+              <h2 data-test-file-link-card-title><@fields.title /></h2>
+              <div data-test-file-link-attachment>
+                <@fields.attachment />
+              </div>
+            </template>
+          };
+        }
+      `,
+    );
+
+    await ctx.testRealm.write(
+      'FileLinkCard/notes.txt',
+      'Hello from a file link',
+    );
+    await ctx.testRealm.write(
+      'FileLinkCard/with-file.json',
+      JSON.stringify({
+        data: {
+          type: 'card',
+          attributes: {
+            title: 'Linked file example',
+          },
+          relationships: {
+            attachment: {
+              links: {
+                self: './notes.txt',
+              },
+              data: {
+                type: 'file-meta',
+                id: './notes.txt',
+              },
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: '../file-link-card',
+              name: 'FileLinkCard',
+            },
+          },
+        },
+      }),
+    );
+
+    ctx.setCardInOperatorModeState(`${testRealmURL}FileLinkCard/with-file`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+
+    await waitFor('[data-test-file-link-attachment] [data-test-card]');
+    await click('[data-test-file-link-attachment] [data-test-card]');
+    await waitFor('[data-test-stack-card-index="1"]');
+    assert.dom('[data-test-stack-card-index]').exists({ count: 2 });
+    assert
+      .dom(`[data-test-stack-card="${linkedFileId}"]`)
+      .exists('linked file opens as a second stack card');
+    assert.strictEqual(
+      ctx.operatorModeStateService.state?.stacks?.[0]?.[1]?.id,
+      linkedFileId,
+      'operator mode state targets the linked file',
+    );
+    assert.strictEqual(
+      ctx.operatorModeStateService.state?.stacks?.[0]?.[1]?.type,
+      'file',
+      'stack item type is file',
+    );
+  });
+
   test(`toggles mode switcher`, async function (assert) {
     ctx.setCardInOperatorModeState(`${testRealmURL}BlogPost/1`);
     await renderComponent(
@@ -453,6 +538,80 @@ module('Integration | operator-mode | ui', function (hooks) {
         (r) => r.includes('test-realm') && r.includes('/test'),
       ),
       'search should be filtered to the test realm after selection',
+    );
+  });
+
+  test('clicking outside search sheet resets search input and realm filter', async function (assert) {
+    ctx.setCardInOperatorModeState(`${testRealmURL}grid`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+    await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
+    await click(`[data-test-boxel-filter-list-button="All Cards"]`);
+    await waitFor(`[data-test-cards-grid-item]`);
+
+    // Helper to get selected realm URLs from data attribute
+    const getSelectedRealms = () => {
+      const attr = document
+        .querySelector('[data-test-search-realms]')
+        ?.getAttribute('data-test-search-realms');
+      return attr?.split(',').map((r) => r.trim()) ?? [];
+    };
+
+    // Open search sheet and type a search term
+    await click(`[data-test-open-search-field]`);
+    assert.dom(`[data-test-search-sheet="search-prompt"]`).exists();
+
+    await typeIn('[data-test-search-field]', 'Person');
+    await click('[data-test-search-sheet] .search-sheet-content');
+    await waitFor('[data-test-search-label]', { timeout: 8000 });
+    await waitFor('[data-test-search-realms]', { timeout: 3000 });
+
+    // Record initial realm state (all realms selected by default)
+    let initialRealms = getSelectedRealms();
+
+    // Select a specific realm in the picker
+    const trigger =
+      document.querySelector(
+        '[data-test-realm-picker] .ember-power-select-trigger',
+      ) ?? document.querySelector('[data-test-realm-picker]');
+    await click(trigger as HTMLElement);
+    await waitFor('.ember-power-select-option', { timeout: 3000 });
+
+    const options = document.querySelectorAll('.ember-power-select-option');
+    const testRealmOption = Array.from(options).find((el) =>
+      el.textContent?.includes(ctx.realmName),
+    );
+    assert.ok(testRealmOption, `option for "${ctx.realmName}" should exist`);
+    await click(testRealmOption as HTMLElement);
+
+    // Verify filter was applied (only selected realm)
+    await waitUntil(() => getSelectedRealms().includes(testRealmURL), {
+      timeout: 5000,
+    });
+
+    // Close by clicking outside
+    await click(`[data-test-operator-mode-stack]`);
+    assert.dom(`[data-test-search-sheet="closed"]`).exists();
+
+    // Reopen search sheet
+    await click(`[data-test-open-search-field]`);
+    assert.dom(`[data-test-search-sheet="search-prompt"]`).exists();
+
+    // Assert search input is cleared
+    assert
+      .dom('[data-test-search-field]')
+      .hasValue('', 'search input is cleared after clicking outside');
+
+    // Assert realm filter is reset to all realms
+    await waitFor('[data-test-search-realms]', { timeout: 3000 });
+    let reopenedRealms = getSelectedRealms();
+    assert.deepEqual(
+      reopenedRealms,
+      initialRealms,
+      'realm filter is reset to all realms after clicking outside',
     );
   });
 

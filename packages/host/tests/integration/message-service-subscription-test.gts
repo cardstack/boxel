@@ -10,7 +10,7 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
-import { testRealmURLToUsername } from '@cardstack/runtime-common/helpers/const';
+import { testRealmInfo } from '@cardstack/runtime-common/helpers/const';
 import type { Loader } from '@cardstack/runtime-common/loader';
 import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 
@@ -25,6 +25,8 @@ import {
   setupCardLogs,
   setupLocalIndexing,
   setupIntegrationTestRealm,
+  setupRealmCacheTeardown,
+  withCachedRealmSetup,
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupRenderingTest } from '../helpers/setup';
@@ -45,7 +47,7 @@ module('Integration | message service subscription', function (hooks) {
     autostart: true,
   });
 
-  let realmMatrixUsername = testRealmURLToUsername(testRealmURL);
+  let realmMatrixUsername = testRealmInfo.realmUserId!;
 
   let realmRoomId = mockMatrixUtils.getRoomIdForRealmAndUser(
     testRealmURL,
@@ -57,11 +59,15 @@ module('Integration | message service subscription', function (hooks) {
     async () => await loader.import(`${baseRealm.url}card-api`),
   );
 
+  setupRealmCacheTeardown(hooks);
+
   hooks.beforeEach(async function (this: RenderingTestContext) {
-    await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      contents: {},
-    });
+    await withCachedRealmSetup(async () =>
+      setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {},
+      }),
+    );
   });
 
   test('realm event subscriptions are released when the subscriber is destroyed', async function (assert) {
@@ -107,6 +113,7 @@ module('Integration | message service subscription', function (hooks) {
         eventName: 'index',
         indexType: 'incremental-index-initiation',
         updatedFile: 'index.json',
+        realmURL: testRealmURL,
       },
     });
 

@@ -8,6 +8,7 @@ import {
   unixTime,
   maxLinkDepth,
   maybeURL,
+  resolveCardReference,
   IndexQueryEngine,
   codeRefWithAbsoluteURL,
   logger,
@@ -19,6 +20,8 @@ import {
   type InstanceOrError,
   type IndexedFile,
   type DefinitionLookup,
+  type ResolvedCodeRef,
+  internalKeyFor,
   visitInstanceURLs,
   maybeRelativeURL,
   codeRefFromInternalKey,
@@ -89,7 +92,7 @@ function absolutizeInstanceURL(
     setURL(url);
     return;
   }
-  setURL(new URL(url, resourceId).href);
+  setURL(resolveCardReference(url, resourceId));
 }
 
 export class RealmIndexQueryEngine {
@@ -277,13 +280,90 @@ export class RealmIndexQueryEngine {
   }
 
   async searchPrerendered(query: Query, opts?: Options) {
-    let results = await this.#indexQueryEngine.searchPrerendered(
+    let isFileMetaQuery = await this.queryTargetsFileMeta(query.filter, opts);
+    if (isFileMetaQuery) {
+      // File-meta prerendered search currently returns non-error rows.
+      let { includeErrors: _includeErrors, ...fileSearchOpts } = opts ?? {};
+      let { files, meta } = await this.#indexQueryEngine.searchFiles(
+        new URL(this.#realm.url),
+        query,
+        fileSearchOpts,
+      );
+
+      let scopedCssUrls = new Set<string>();
+      let prerenderedCards = files.map((file) => {
+        (file.deps ?? []).forEach((dep) => {
+          if (isScopedCSSRequest(dep)) {
+            scopedCssUrls.add(dep);
+          }
+        });
+        return this.fileEntryToPrerenderedCard(file, opts);
+      });
+
+      return {
+        prerenderedCards,
+        scopedCssUrls: [...scopedCssUrls],
+        meta,
+      };
+    }
+    return await this.#indexQueryEngine.searchPrerendered(
       new URL(this.#realm.url),
       query,
       opts,
     );
+  }
 
-    return results;
+  private fileEntryToPrerenderedCard(file: IndexedFile, opts?: Options) {
+    let html: string | null = null;
+    let usedRenderTypeKey: string | undefined;
+    switch (opts?.htmlFormat) {
+      case 'head':
+        html = file.headHtml;
+        break;
+      case 'embedded':
+      case 'fitted': {
+        let htmlByType =
+          opts.htmlFormat === 'embedded' ? file.embeddedHtml : file.fittedHtml;
+        if (htmlByType) {
+          if (opts.renderType) {
+            let renderTypeKey = internalKeyFor(opts.renderType, undefined);
+            if (htmlByType[renderTypeKey] != null) {
+              html = htmlByType[renderTypeKey];
+              usedRenderTypeKey = renderTypeKey;
+            }
+          }
+          if (html == null) {
+            let defaultTypeKey = file.types?.[0];
+            if (defaultTypeKey && htmlByType[defaultTypeKey] != null) {
+              html = htmlByType[defaultTypeKey];
+              usedRenderTypeKey = defaultTypeKey;
+            }
+          }
+        }
+        break;
+      }
+      case 'atom':
+      default:
+        html = file.atomHtml;
+    }
+
+    if (!usedRenderTypeKey) {
+      usedRenderTypeKey = file.types?.[0];
+    }
+
+    let usedRenderType: ResolvedCodeRef | undefined;
+    if (usedRenderTypeKey) {
+      let codeRef = codeRefFromInternalKey(usedRenderTypeKey);
+      if (isResolvedCodeRef(codeRef)) {
+        usedRenderType = codeRef;
+      }
+    }
+
+    return {
+      url: file.canonicalURL,
+      html,
+      ...(usedRenderType ? { usedRenderType } : {}),
+    };
   }
 
   async getCardDependencies(url: URL): Promise<string[]> {
@@ -732,14 +812,32 @@ export class RealmIndexQueryEngine {
         let relationshipType = relationship.data?.type;
         let expectsFileMeta = relationshipType === FileMetaResourceType;
         let expectsCard = relationshipType === CardResourceType;
+        // Stale index payloads can incorrectly record file relationships as
+        // type "card" (or omit type entirely) when linked files were indexed
+        // after instances. In that case, trust the field declaration.
+        if (
+          !expectsFileMeta &&
+          (relationshipType === CardResourceType || !relationshipType)
+        ) {
+          expectsFileMeta = await this.fieldExpectsFileMeta(
+            resource,
+            key,
+            opts,
+          );
+          if (expectsFileMeta) {
+            expectsCard = false;
+          }
+        }
         processedRelationships.add(key);
         let linkURL = new URL(
-          relationship.links.self,
-          resource.id ? new URL(resource.id) : realmURL,
+          resolveCardReference(
+            relationship.links.self,
+            resource.id ? new URL(resource.id) : realmURL,
+          ),
         );
         let linkResource: CardResource<Saved> | FileMetaResource | undefined;
         if (realmPath.inRealm(linkURL)) {
-          if (expectsCard || !relationshipType) {
+          if (expectsCard || (!relationshipType && !expectsFileMeta)) {
             let maybeResult = await this.#indexQueryEngine.getInstance(
               linkURL,
               opts,
@@ -749,20 +847,7 @@ export class RealmIndexQueryEngine {
             }
           }
           if (!linkResource) {
-            // Determine whether to try the file index:
-            // - If data.type explicitly says file-meta, try it
-            // - If data.type is missing (stale index data), consult the
-            //   field definition to avoid incorrectly degrading a CardDef
-            //   relationship to file-meta
-            let shouldTryFile = expectsFileMeta;
-            if (!shouldTryFile && !relationshipType) {
-              shouldTryFile = await this.fieldExpectsFileMeta(
-                resource,
-                key,
-                opts,
-              );
-            }
-            if (shouldTryFile) {
+            if (expectsFileMeta) {
               let fileEntry = await this.#indexQueryEngine.getFile(
                 linkURL,
                 opts,
@@ -844,7 +929,18 @@ export class RealmIndexQueryEngine {
             }
           }
         }
-        let relationshipId = maybeURL(relationship.links.self, resource.id);
+        let resolvedSelf: string;
+        try {
+          resolvedSelf = resolveCardReference(
+            relationship.links.self!,
+            resource.id,
+          );
+        } catch {
+          throw new Error(
+            `bug: unable to turn relative URL '${relationship.links.self}' into an absolute URL relative to ${resource.id}`,
+          );
+        }
+        let relationshipId = maybeURL(resolvedSelf);
         if (!relationshipId) {
           throw new Error(
             `bug: unable to turn relative URL '${relationship.links.self}' into an absolute URL relative to ${resource.id}`,
@@ -938,11 +1034,13 @@ function relativizeResource(
   realmURL: URL,
 ) {
   visitInstanceURLs(resource, (url, setURL) => {
-    let urlObj = new URL(url, resource.id ?? primaryURL);
+    let urlObj = new URL(resolveCardReference(url, resource.id ?? primaryURL));
     setURL(maybeRelativeURL(urlObj, primaryURL, realmURL));
   });
   visitModuleDeps(resource, (moduleURL, setModuleURL) => {
-    let absoluteModuleURL = new URL(moduleURL, resource.id ?? primaryURL);
+    let absoluteModuleURL = new URL(
+      resolveCardReference(moduleURL, resource.id ?? primaryURL),
+    );
     setModuleURL(maybeRelativeURL(absoluteModuleURL, primaryURL, realmURL));
   });
 }

@@ -10,7 +10,6 @@ import {
   Deferred,
   RealmPaths,
   type IndexWriter,
-  type ResolvedCodeRef,
   type Batch,
   type LooseCardResource,
   type InstanceEntry,
@@ -25,9 +24,11 @@ import {
   type Reader,
   type Stats,
 } from './index';
+import { moduleFrom } from './code-ref';
 import type { CacheScope, DefinitionLookup } from './definition-lookup';
+import { resolveCardReference } from './card-reference-resolver';
 import { isCardError } from './error';
-import { IndexRunnerDependencyResolver } from './index-runner/dependency-resolver';
+import { IndexRunnerDependencyManager } from './index-runner/dependency-resolver';
 import { discoverInvalidations } from './index-runner/discover-invalidations';
 import { visitFileForIndexing } from './index-runner/visit-file';
 import { performCardIndexing } from './index-runner/card-indexer';
@@ -55,7 +56,7 @@ export class IndexRunner {
   #realmOwnerUserId: string;
   #definitionLookup: DefinitionLookup;
   #jobInfo: JobInfo;
-  #dependencyResolver: IndexRunnerDependencyResolver;
+  #dependencyResolver: IndexRunnerDependencyManager;
   #reportStatus?: (
     jobInfo: JobInfo | undefined,
     status: 'start' | 'finish',
@@ -109,7 +110,7 @@ export class IndexRunner {
     this.#fetch = fetch;
     this.#realmOwnerUserId = realmOwnerUserId;
     this.#definitionLookup = definitionLookup;
-    this.#dependencyResolver = new IndexRunnerDependencyResolver({
+    this.#dependencyResolver = new IndexRunnerDependencyManager({
       realmURL: this.#realmURL,
       readModuleCacheEntries: async (moduleIds) => {
         if (moduleIds.length === 0) {
@@ -399,10 +400,7 @@ export class IndexRunner {
         ...this.#jobInfo,
         url,
         realm: this.#realmURL.href,
-        deps: [
-          new URL((resource.meta.adoptsFrom as ResolvedCodeRef).module, url)
-            .href,
-        ],
+        deps: [resolveCardReference(moduleFrom(resource.meta.adoptsFrom), url)],
       },
       status,
     );

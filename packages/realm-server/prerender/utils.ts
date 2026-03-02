@@ -5,15 +5,12 @@ import {
   type PrerenderMeta,
   type RenderError,
 } from '@cardstack/runtime-common';
+import { prerenderRenderTimeoutMs } from './prerender-constants';
 
 import type { Page } from 'puppeteer';
 
 const log = logger('prerenderer');
-const DEFAULT_CARD_RENDER_TIMEOUT_MS = 30_000;
-
-export const cardRenderTimeout = Number(
-  process.env.RENDER_TIMEOUT_MS ?? DEFAULT_CARD_RENDER_TIMEOUT_MS,
-);
+export const cardRenderTimeout = prerenderRenderTimeoutMs;
 export const renderTimeoutMs = cardRenderTimeout;
 
 export type RenderStatus = 'ready' | 'error' | 'unusable';
@@ -47,10 +44,16 @@ export interface FileExtractCapture {
   nonce?: string;
 }
 
+type TransitionParam =
+  | string
+  | {
+      queryParams?: Record<string, string>;
+    };
+
 export async function transitionTo(
   page: Page,
   routeName: string,
-  ...params: string[]
+  ...params: TransitionParam[]
 ): Promise<void> {
   await page.evaluate(
     (routeName, params) => {
@@ -59,6 +62,26 @@ export async function transitionTo(
     routeName,
     params,
   );
+}
+
+export function buildCommandRunnerURL(
+  page: Page,
+  nonce: string,
+  requestId: string,
+): string {
+  let origin = page.url();
+  try {
+    origin = new URL(origin).origin;
+  } catch (error) {
+    let detail =
+      error instanceof Error ? error.message : 'Unknown URL parsing error';
+    throw new Error(
+      `Could not build command-runner URL from page URL "${origin}": ${detail}`,
+    );
+  }
+  return `${origin}/command-runner/${encodeURIComponent(requestId)}/${encodeURIComponent(
+    nonce,
+  )}`;
 }
 
 export async function renderHTML(
@@ -169,10 +192,11 @@ function buildInvalidRenderResponseError(
   try {
     let pathname = new URL(page.url()).pathname;
     let match = /\/render\/([^/]+)\//.exec(pathname);
-    id = match?.[1] ?? null;
+    id = match?.[1] ? decodeURIComponent(match[1]) : null;
   } catch {
     id = null;
   }
+  let deps = fallbackRenderDeps(id);
   return {
     type: 'instance-error',
     error: {
@@ -181,9 +205,23 @@ function buildInvalidRenderResponseError(
       title: options?.title ?? 'Invalid render response',
       message,
       additionalErrors: null,
+      deps,
     },
     ...(options?.evict ? { evict: true } : {}),
   };
+}
+
+function fallbackRenderDeps(id: string | null): string[] {
+  if (!id) {
+    return [];
+  }
+  let deps = new Set<string>([id]);
+  if (id.endsWith('.json')) {
+    deps.add(id.replace(/\.json$/, ''));
+  } else {
+    deps.add(`${id}.json`);
+  }
+  return [...deps];
 }
 
 export function buildInvalidModuleResponseError(
@@ -718,17 +756,28 @@ export async function captureResult(
             })
           | undefined;
         if (!firstChild) {
+          let cardId = resolvedElement.dataset.prerenderId ?? null;
+          let deps = cardId
+            ? Array.from(
+                new Set(
+                  cardId.endsWith('.json')
+                    ? [cardId, cardId.replace(/\.json$/, '')]
+                    : [cardId, `${cardId}.json`],
+                ),
+              )
+            : [];
           return {
             status: 'error',
             value: JSON.stringify({
               type: 'instance-error',
               error: {
-                id: resolvedElement.dataset.prerenderId ?? null,
+                id: cardId,
                 status: 500,
                 title: 'Invalid render response',
                 message:
                   '[data-prerender] has no child element to capture (render produced no root element)',
                 additionalErrors: null,
+                deps,
               },
             }),
             alive,

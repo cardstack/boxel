@@ -2,6 +2,15 @@
 SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
 . "$SCRIPTS_DIR/wait-for-pg.sh"
 
+sh "$SCRIPTS_DIR/start-icons.sh" &
+ICONS_PID=$!
+cleanup_icons_server() {
+  if [ -n "$ICONS_PID" ]; then
+    kill "$ICONS_PID" >/dev/null 2>&1 || true
+  fi
+}
+trap cleanup_icons_server EXIT INT TERM
+
 wait_for_postgres
 
 pnpm --dir=../skills-realm skills:setup
@@ -74,7 +83,7 @@ LOW_CREDIT_THRESHOLD="${LOW_CREDIT_THRESHOLD:-2000}" \
   \
   ${START_CATALOG:+--path="${CATALOG_REALM_PATH}"} \
   ${START_CATALOG:+--username='catalog_realm'} \
-  ${START_CATALOG:+--fromUrl="${CATALOG_REALM_URL}"} \
+  ${START_CATALOG:+--fromUrl='@cardstack/catalog/'} \
   ${START_CATALOG:+--toUrl="${CATALOG_REALM_URL}"} \
   \
   --path='../skills-realm/contents' \

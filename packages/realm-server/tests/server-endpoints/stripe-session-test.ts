@@ -1,20 +1,18 @@
 import { module, test } from 'qunit';
 import { basename } from 'path';
 import type { Test, SuperTest } from 'supertest';
-import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import sinon from 'sinon';
 import { getStripe } from '@cardstack/billing/stripe-webhook-handlers/stripe';
 import type { PgAdapter } from '@cardstack/postgres';
 import { getUserByMatrixUserId } from '@cardstack/billing/billing-queries';
 import {
+  createJWT,
   insertPlan,
   insertUser,
-  realmSecretSeed,
-  realmServerTestMatrix,
   setupPermissionedRealm,
 } from '../helpers';
-import { createRealmServerSession } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
+import type { Realm } from '@cardstack/runtime-common';
 
 module(`server-endpoints/${basename(__filename)}`, function () {
   module('Realm Server Endpoints (not specific to one realm)', function () {
@@ -24,7 +22,6 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       let listSubscriptionsStub: sinon.SinonStub;
       let retrieveProductStub: sinon.SinonStub;
       let createBillingPortalSessionStub: sinon.SinonStub;
-      let matrixClient: MatrixClient;
       let userId = '@test_realm:localhost';
       let jwtToken: string;
       let request: SuperTest<Test>;
@@ -33,9 +30,11 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       function onRealmSetup(args: {
         request: SuperTest<Test>;
         dbAdapter: PgAdapter;
+        testRealm: Realm;
       }) {
         request = args.request;
         dbAdapter = args.dbAdapter;
+        jwtToken = createJWT(args.testRealm, userId);
       }
 
       setupPermissionedRealm(hooks, {
@@ -58,25 +57,6 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           stripe.billingPortal.sessions,
           'create',
         );
-
-        matrixClient = new MatrixClient({
-          matrixURL: realmServerTestMatrix.url,
-          username: 'test_realm',
-          seed: realmSecretSeed,
-        });
-        await matrixClient.login();
-        let { sessionRoom, jwt } = await createRealmServerSession(
-          matrixClient,
-          request,
-        );
-
-        let { joined_rooms: rooms } = await matrixClient.getJoinedRooms();
-
-        if (!rooms.includes(sessionRoom)) {
-          await matrixClient.joinRoom(sessionRoom);
-        }
-
-        jwtToken = jwt;
       });
 
       hooks.afterEach(async function () {

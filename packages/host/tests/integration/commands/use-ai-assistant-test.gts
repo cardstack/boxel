@@ -26,6 +26,8 @@ import {
   setupLocalIndexing,
   testRealmURL,
   testRealmInfo,
+  setupRealmCacheTeardown,
+  withCachedRealmSetup,
 } from '../../helpers';
 
 import { setupMockMatrix } from '../../helpers/mock-matrix';
@@ -59,72 +61,76 @@ module('Integration | commands | ai-assistant', function (hooks) {
     getOwner(this)!.register('service:realm', StubRealmService);
   });
 
+  setupRealmCacheTeardown(hooks);
+
   hooks.beforeEach(async function () {
-    await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      contents: {
-        'empty1.json': {
-          data: {
-            attributes: {
-              cardTitle: 'Empty Card 1',
-              cardDescription: 'This is an empty card.',
+    await withCachedRealmSetup(async () =>
+      setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {
+          'empty1.json': {
+            data: {
+              attributes: {
+                cardTitle: 'Empty Card 1',
+                cardDescription: 'This is an empty card.',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: 'https://cardstack.com/base/card-api',
+                  name: 'CardDef',
+                },
+              },
             },
-            meta: {
-              adoptsFrom: {
-                module: 'https://cardstack.com/base/card-api',
-                name: 'CardDef',
+          },
+          'empty2.json': {
+            data: {
+              attributes: {
+                cardTitle: 'Empty Card 2',
+                cardDescription: 'This is an empty card.',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: 'https://cardstack.com/base/card-api',
+                  name: 'CardDef',
+                },
+              },
+            },
+          },
+          'file1.gts': 'This is file 1 content',
+          'file2.gts': 'This is file 2 content',
+          'skill1.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                instructions: 'Here is the one thing you need to know.',
+                commands: [],
+                cardTitle: 'Skill1',
+                cardDescription: null,
+                cardThumbnailURL: null,
+              },
+              meta: {
+                adoptsFrom: skillCardRef,
+              },
+            },
+          },
+          'skill2.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                instructions: 'Here is the two thing you need to know.',
+                commands: [],
+                cardTitle: 'Skill2',
+                cardDescription: null,
+                cardThumbnailURL: null,
+              },
+              meta: {
+                adoptsFrom: skillCardRef,
               },
             },
           },
         },
-        'empty2.json': {
-          data: {
-            attributes: {
-              cardTitle: 'Empty Card 2',
-              cardDescription: 'This is an empty card.',
-            },
-            meta: {
-              adoptsFrom: {
-                module: 'https://cardstack.com/base/card-api',
-                name: 'CardDef',
-              },
-            },
-          },
-        },
-        'file1.gts': 'This is file 1 content',
-        'file2.gts': 'This is file 2 content',
-        'skill1.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              instructions: 'Here is the one thing you need to know.',
-              commands: [],
-              cardTitle: 'Skill1',
-              cardDescription: null,
-              cardThumbnailURL: null,
-            },
-            meta: {
-              adoptsFrom: skillCardRef,
-            },
-          },
-        },
-        'skill2.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              instructions: 'Here is the two thing you need to know.',
-              commands: [],
-              cardTitle: 'Skill2',
-              cardDescription: null,
-              cardThumbnailURL: null,
-            },
-            meta: {
-              adoptsFrom: skillCardRef,
-            },
-          },
-        },
-      },
-    });
+      }),
+    );
     commandService = getService('command-service');
   });
 

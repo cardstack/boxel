@@ -13,6 +13,8 @@ import {
   setupLocalIndexing,
   testRealmURL,
   testRealmInfo,
+  setupRealmCacheTeardown,
+  withCachedRealmSetup,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
@@ -37,17 +39,21 @@ module('Integration | commands | read-text-file', function (hooks) {
   });
 
   let readTextFileCommand: ReadTextFileCommand;
+  setupRealmCacheTeardown(hooks);
+
   hooks.beforeEach(async function () {
-    await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      contents: {
-        'test.txt': 'Hello World!',
-        'subdir/nested.txt': 'I am nested.',
-        'empty.txt': '',
-        'data.json': JSON.stringify({ message: 'test data' }),
-        'component.gts': `import Component from '@glimmer/component';\nexport default class TestComponent extends Component {}`,
-      },
-    });
+    await withCachedRealmSetup(async () =>
+      setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {
+          'test.txt': 'Hello World!',
+          'subdir/nested.txt': 'I am nested.',
+          'empty.txt': '',
+          'data.json': JSON.stringify({ message: 'test data' }),
+          'component.gts': `import Component from '@glimmer/component';\nexport default class TestComponent extends Component {}`,
+        },
+      }),
+    );
     let commandService = getService('command-service');
     readTextFileCommand = new ReadTextFileCommand(
       commandService.commandContext,

@@ -24,6 +24,7 @@ jobs:
         env:
           INPUT_ENVIRONMENT: ${{ inputs.environment }}
         run: |
+          echo "ICONS_URL=https://boxel-icons.boxel.ai" >> $GITHUB_ENV
           if [ "$INPUT_ENVIRONMENT" = "production" ]; then
             echo "RESOLVED_BASE_REALM_URL=https://app.boxel.ai/base/" >> $GITHUB_ENV
             echo "RESOLVED_CATALOG_REALM_URL=https://app.boxel.ai/catalog/" >> $GITHUB_ENV

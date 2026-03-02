@@ -1,9 +1,9 @@
 import {
   fetchSessionRoom,
   logger,
-  REALM_SERVER_REALM,
   SupportedMimeType,
   upsertSessionRoom,
+  userExists,
 } from '@cardstack/runtime-common';
 import type { Utils } from '@cardstack/runtime-common/matrix-backend-authentication';
 import { MatrixBackendAuthentication } from '@cardstack/runtime-common/matrix-backend-authentication';
@@ -42,20 +42,16 @@ export default function handleCreateSessionRequest({
       createJWT: async (user: string, sessionRoom: string) =>
         createJWT({ user, sessionRoom }, realmSecretSeed),
       ensureSessionRoom: async (userId: string) => {
-        let sessionRoom = await fetchSessionRoom(
-          dbAdapter,
-          REALM_SERVER_REALM,
-          userId,
-        );
+        let sessionRoom = await fetchSessionRoom(dbAdapter, userId);
 
         if (!sessionRoom) {
+          let userExistsInDB = await userExists(dbAdapter, userId);
+          if (!userExistsInDB) {
+            // TODO: should we create it if it doesn't exist?
+            return undefined;
+          }
           sessionRoom = await matrixClient.createDM(userId);
-          await upsertSessionRoom(
-            dbAdapter,
-            REALM_SERVER_REALM,
-            userId,
-            sessionRoom,
-          );
+          await upsertSessionRoom(dbAdapter, userId, sessionRoom);
         }
         return sessionRoom;
       },

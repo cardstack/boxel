@@ -70,12 +70,20 @@ import {
   type Query,
   type QueryWithInterpolations,
   type QueryResultsMeta,
+  type SerializedError,
   FileMetaResourceType,
   CardResourceType,
   loadFileMetaDocument,
   CardResource,
   LooseLinkableResource,
   LooseSingleResourceDocument,
+  trackRuntimeFileDependency,
+  trackRuntimeInstanceDependency,
+  trackRuntimeModuleDependency,
+  runtimeNonQueryDependencyContext,
+  runtimeQueryDependencyContext,
+  type RuntimeDependencyTrackingContext,
+  resolveCardReference,
 } from '@cardstack/runtime-common';
 import {
   captureQueryFieldSeedData,
@@ -115,6 +123,7 @@ import {
   serialize,
   serializeCard,
   serializeCardResource,
+  serializeFileDef,
   resourceFrom,
   type DeserializeOpts,
   type JSONAPIResource,
@@ -165,6 +174,7 @@ export {
   getDataBucket,
   getFieldDescription,
   getFields,
+  peekAtField,
   isCard,
   isField,
   isFileDef,
@@ -176,6 +186,7 @@ export {
   relationshipMeta,
   serialize,
   serializeCard,
+  serializeFileDef,
   ensureQueryFieldSearchResource,
   getStore,
   type BoxComponent,
@@ -378,6 +389,7 @@ export interface StoreSearchResource<T extends CardDef | FileDef = CardDef> {
 export type GetSearchResourceFuncOpts = {
   isLive?: boolean;
   doWhileRefreshing?: (() => void) | undefined;
+  dependencyTracking?: RuntimeDependencyTrackingContext;
   seed?: {
     cards: CardDef[];
     searchURL?: string;
@@ -405,9 +417,13 @@ export interface CardStore {
   setCardNonTracked(id: string, instance: CardDef): void;
   setFileMetaNonTracked(id: string, instance: FileDef): void;
   makeTracked(id: string): void;
-  loadCardDocument(url: string): Promise<SingleCardDocument | CardError>;
+  loadCardDocument(
+    url: string,
+    opts?: { dependencyTrackingContext?: RuntimeDependencyTrackingContext },
+  ): Promise<SingleCardDocument | CardError>;
   loadFileMetaDocument(
     url: string,
+    opts?: { dependencyTrackingContext?: RuntimeDependencyTrackingContext },
   ): Promise<SingleFileMetaDocument | CardError>;
   trackLoad(load: Promise<unknown>): void;
   loaded(): Promise<void>;
@@ -1038,13 +1054,25 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
     entangleWithCardTracking(instance);
 
     if (this.queryDefinition) {
+      let dependencyTrackingContext = runtimeQueryDependencyContext({
+        queryField: this.name,
+        consumer: instance.id,
+        source: 'card-api:linksTo:getter',
+      });
       let searchResource = ensureQueryFieldSearchResource(
         getStore(instance),
         instance,
         this,
+        dependencyTrackingContext,
       );
       let records = (searchResource as any)?.instances ?? ([] as any[]);
-      return (records as any[])[0] as BaseInstanceType<CardT> | undefined;
+      let value = (records as any[])[0] as BaseInstanceType<CardT> | undefined;
+      trackRuntimeRelationshipDependency(
+        value,
+        this.card,
+        dependencyTrackingContext,
+      );
+      return value;
     }
 
     let maybeNotLoaded = deserialized.get(this.name);
@@ -1052,7 +1080,9 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
       lazilyLoadLink(instance, this, maybeNotLoaded.reference);
       return undefined;
     }
-    return getter(instance, this);
+    let value = getter(instance, this);
+    trackRuntimeRelationshipDependency(value, this.card);
+    return value;
   }
 
   queryableValue(instance: any, stack: CardDef[]): any {
@@ -1195,15 +1225,17 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
         `linksTo field '${this.name}' cannot deserialize a list of resource ids`,
       );
     }
-    let reference = value.links?.self;
+    let resourceId =
+      value.data && 'id' in value.data ? value.data?.id : undefined;
+    let reference = value.links?.self ?? resourceId;
     if (reference == null || reference === '') {
       return null;
     }
-    let href = new URL(reference, relativeTo).href;
+    let href = resolveCardReference(reference, relativeTo);
     let cachedInstance = isFileDef(this.card)
       ? store.getFileMeta(href)
       : store.getCard(href);
-    if (cachedInstance) {
+    if (cachedInstance && instanceOf(cachedInstance, this.card)) {
       cachedInstance[isSavedInstance] = true;
       return cachedInstance as BaseInstanceType<CardT>;
     }
@@ -1213,9 +1245,7 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
     //bucket). we should never used links.self as part of that consideration. If there is a missing data.id in the resource entity
     //that means that the serialization is incorrect and is not JSON-API compliant.
     let resource =
-      value.data && 'id' in value.data
-        ? resourceFrom(doc, value.data?.id)
-        : undefined;
+      resourceId != null ? resourceFrom(doc, resourceId) : undefined;
     if (!resource) {
       if (loadedValue !== undefined) {
         return loadedValue;
@@ -1340,9 +1370,7 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
         <CardCrudFunctionsConsumer as |cardCrudFunctions|>
           <DefaultFormatsConsumer as |defaultFormats|>
             {{#if
-              (shouldRenderEditor
-                @format defaultFormats.cardDef isComputed
-              )
+              (shouldRenderEditor @format defaultFormats.cardDef isComputed)
             }}
               <LinksToEditor
                 @model={{(getInnerModel)}}
@@ -1428,12 +1456,23 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
     let deserialized = getDataBucket(instance);
 
     if (this.queryDefinition) {
+      let dependencyTrackingContext = runtimeQueryDependencyContext({
+        queryField: this.name,
+        consumer: instance.id,
+        source: 'card-api:linksToMany:getter',
+      });
       let searchResource = ensureQueryFieldSearchResource(
         getStore(instance),
         instance,
         this,
+        dependencyTrackingContext,
       )!;
       let records = searchResource.instances ?? ([] as any[]);
+      trackRuntimeRelationshipDependencies(
+        records,
+        this.card,
+        dependencyTrackingContext,
+      );
       return records as BaseInstanceType<FieldT>;
     }
 
@@ -1500,6 +1539,7 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
       }
     }
 
+    trackRuntimeRelationshipDependencies(value, this.card);
     return value as BaseInstanceType<FieldT>;
   }
 
@@ -1669,12 +1709,32 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
     relativeTo: URL | undefined,
     opts: DeserializeOpts,
   ): Promise<(BaseInstanceType<FieldT> | NotLoadedValue)[]> {
-    if (!Array.isArray(values) && values.links.self === null) {
-      return [];
+    let relationships: Relationship[];
+    if (Array.isArray(values)) {
+      relationships = values;
+    } else {
+      if (!isRelationship(values)) {
+        throw new Error(
+          `linksToMany field '${
+            this.name
+          }' cannot deserialize non-relationship value ${JSON.stringify(
+            values,
+          )}`,
+        );
+      }
+      if (!Array.isArray(values.data)) {
+        return [];
+      }
+      relationships = values.data.map((entry) => ({
+        links: {
+          self: entry && 'id' in entry ? (entry.id ?? null) : null,
+        },
+        data: entry,
+      }));
     }
 
     let resources: Promise<BaseInstanceType<FieldT> | NotLoadedValue>[] =
-      values.map(async (value: Relationship) => {
+      relationships.map(async (value: Relationship) => {
         if (!isRelationship(value)) {
           throw new Error(
             `linksToMany field '${
@@ -1689,25 +1749,24 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
             `linksToMany field '${this.name}' cannot deserialize a list of resource ids`,
           );
         }
-        let reference = value.links?.self;
+        // links.self is used to tell the consumer of this payload how to get the resource via HTTP.
+        // data.id is used to tell the consumer how to find the resource in the included bucket.
+        // Prefer data.id for resourceFrom(), and fall back to links.self when data.id is missing
+        let resourceId =
+          value.data && 'id' in value.data ? value.data?.id : undefined;
+        let reference = value.links?.self ?? resourceId;
         if (reference == null) {
           return null;
         }
-        let normalizedReference = new URL(reference, relativeTo).href;
+        let normalizedReference = resolveCardReference(reference, relativeTo);
         let cachedInstance = isFileDef(this.card)
           ? store.getFileMeta(normalizedReference)
           : store.getCard(normalizedReference);
 
-        if (cachedInstance) {
+        if (cachedInstance && instanceOf(cachedInstance, this.card)) {
           cachedInstance[isSavedInstance] = true;
           return cachedInstance;
         }
-        // links.self is used to tell the consumer of this payload how to get the resource via HTTP.
-        // data.id is used to tell the consumer how to find the resource in the included bucket.
-        // Prefer data.id for resourceFrom(), but fall back to links.self when data.id is missing
-        // (the array-style linksToMany format omits data.id).
-        let resourceId =
-          value.data && 'id' in value.data ? value.data?.id : undefined;
         if (!resourceId) {
           resourceId = normalizedReference;
         }
@@ -2018,6 +2077,7 @@ export class BaseDef {
   // So we need a [relativeTo] property that derives from the root document ID in order to
   // resolve relative links at the FieldDef level.
   [relativeTo]: URL | undefined = undefined;
+  [meta]: CardResourceMeta | undefined = undefined;
   declare ['constructor']: BaseDefConstructor;
   static baseDef: undefined;
   static data?: Record<string, any>; // TODO probably refactor this away all together
@@ -2079,7 +2139,7 @@ export class BaseDef {
         if (!value[relativeTo]) {
           return maybeRelativeURL;
         }
-        return new URL(maybeRelativeURL, value[relativeTo]).href;
+        return resolveCardReference(maybeRelativeURL, value[relativeTo]);
       }
       return Object.fromEntries(
         Object.entries(
@@ -2102,7 +2162,7 @@ export class BaseDef {
           if (isNotLoadedValue(rawValue)) {
             let normalizedId = rawValue.reference;
             if (value[relativeTo]) {
-              normalizedId = new URL(normalizedId, value[relativeTo]).href;
+              normalizedId = resolveCardReference(normalizedId, value[relativeTo]);
             }
             return [fieldName, { id: makeAbsoluteURL(rawValue.reference) }];
           }
@@ -2173,6 +2233,7 @@ export type ViewCardFn = (
   cardOrURL: CardDef | URL,
   format?: Format,
   opts?: {
+    type?: 'card' | 'file';
     openCardInRightMostStack?: boolean;
     stackIndex?: number;
     fieldType?: 'linksTo' | 'contains' | 'containsMany' | 'linksToMany';
@@ -2391,14 +2452,13 @@ export class CardInfoField extends FieldDef {
   @field name = contains(StringField);
   @field summary = contains(StringField);
   @field cardThumbnailURL = contains(MaybeBase64Field);
-  @field theme = linksTo(() => Theme);
+  @field theme = linksTo(() => Theme, { isUsed: true });
   @field notes = contains(MarkdownField);
 }
 
 export class CardDef extends BaseDef {
   readonly [localId]: string = uuidv4();
   [isSavedInstance] = false;
-  [meta]: CardResourceMeta | undefined = undefined;
   get [fieldsUntracked](): Record<string, typeof BaseDef> | undefined {
     let overrides = getFieldOverrides(this);
     return overrides ? Object.fromEntries(getFieldOverrides(this)) : undefined;
@@ -2729,7 +2789,7 @@ function lazilyLoadLink(
     inflightLoads = new Map();
     inflightLinkLoads.set(instance, inflightLoads);
   }
-  let reference = new URL(link, instance.id ?? instance[relativeTo]).href;
+  let reference = resolveCardReference(link, instance.id ?? instance[relativeTo]);
   let key = `${field.name}/${reference}`;
   let promise = inflightLoads.get(key);
   let store = getStore(instance);
@@ -2750,12 +2810,18 @@ function lazilyLoadLink(
       () => {},
     ),
   );
-  (async () => {
+  let dependencyTrackingContext = runtimeNonQueryDependencyContext({
+    source: 'card-api:lazilyLoadLink',
+    consumer: instance.id,
+  });
+  void (async () => {
     let isFileLink = isFileDef(field.card);
     try {
       let fieldValue: CardDef | FileDef;
       if (isFileLink) {
-        let fileMetaDoc = await store.loadFileMetaDocument(reference);
+        let fileMetaDoc = await store.loadFileMetaDocument(reference, {
+          dependencyTrackingContext,
+        });
         if (isCardError(fileMetaDoc)) {
           let cardError = fileMetaDoc;
           let referenceForDeps = reference;
@@ -2766,10 +2832,12 @@ function lazilyLoadLink(
           fileMetaDoc.data,
           fileMetaDoc,
           new URL(fileMetaDoc.data.id!),
-          { store },
+          { store, dependencyTrackingContext },
         )) as FileDef;
       } else {
-        let cardDoc = await store.loadCardDocument(reference);
+        let cardDoc = await store.loadCardDocument(reference, {
+          dependencyTrackingContext,
+        });
         if (isCardError(cardDoc)) {
           let cardError = cardDoc;
           let referenceForDeps = reference;
@@ -2780,7 +2848,7 @@ function lazilyLoadLink(
           cardDoc.data,
           cardDoc,
           new URL(cardDoc.data.id!),
-          { store },
+          { store, dependencyTrackingContext },
         )) as CardDef;
       }
       if (pluralArgs) {
@@ -2790,10 +2858,10 @@ function lazilyLoadLink(
           if (!isNotLoadedValue(item)) {
             continue;
           }
-          let notLoadedRef = new URL(
+          let notLoadedRef = resolveCardReference(
             item.reference,
             instance.id ?? instance[relativeTo],
-          ).href;
+          );
           if (reference === notLoadedRef) {
             indices.push(index);
           }
@@ -2818,13 +2886,14 @@ function lazilyLoadLink(
         isFileLink || reference.endsWith('.json')
           ? reference
           : `${reference}.json`;
-      let payloadError: {
-        title: string;
-        status: number;
-        message: string;
-        stack?: string;
-        deps?: string[];
-      } = {
+      let payloadError: Pick<SerializedError, 'status' | 'message'> &
+        Partial<Pick<SerializedError, 'title' | 'stack' | 'deps'>> & {
+          additionalErrors?: Array<
+            Partial<
+              Pick<SerializedError, 'title' | 'status' | 'message' | 'stack'>
+            >
+          >;
+        } = {
         title: isMissingFile
           ? 'Link Not Found'
           : (error?.message ?? 'Card Error'),
@@ -2834,9 +2903,26 @@ function lazilyLoadLink(
           : (error?.message ?? String(e)),
         stack: error?.stack,
       };
-      if (isCardError(error) && error.deps?.length) {
-        payloadError.deps = [...new Set(error.deps)];
+      let deps = new Set<string>([referenceForMissingFile]);
+      if (isCardError(error)) {
+        for (let dep of error.deps ?? []) {
+          deps.add(dep);
+        }
+        if (error.additionalErrors?.length) {
+          payloadError.additionalErrors = error.additionalErrors.map(
+            (additionalError) => {
+              let normalized = additionalError as Partial<SerializedError>;
+              return {
+                title: normalized.title,
+                status: normalized.status,
+                message: normalized.message,
+                stack: normalized.stack,
+              };
+            },
+          );
+        }
       }
+      payloadError.deps = [...deps];
       let payload = JSON.stringify({
         type: 'error',
         error: payloadError,
@@ -2856,6 +2942,74 @@ function lazilyLoadLink(
       }
     }
   })();
+}
+
+function trackRuntimeRelationshipDependency(
+  value: unknown,
+  declaredCard: LinkableDefConstructor,
+  dependencyTrackingContext?: RuntimeDependencyTrackingContext,
+): void {
+  if (!value || isNotLoadedValue(value)) {
+    return;
+  }
+  let id = (value as { id?: unknown }).id;
+  if (typeof id !== 'string') {
+    return;
+  }
+  if (isFileDef(declaredCard)) {
+    trackRuntimeFileDependency(id, dependencyTrackingContext);
+    trackRuntimeRelationshipModuleDependencies(
+      value,
+      dependencyTrackingContext,
+    );
+    return;
+  }
+  trackRuntimeInstanceDependency(id, dependencyTrackingContext);
+  trackRuntimeRelationshipModuleDependencies(value, dependencyTrackingContext);
+}
+
+function trackRuntimeRelationshipDependencies(
+  values: unknown[],
+  declaredCard: LinkableDefConstructor,
+  dependencyTrackingContext?: RuntimeDependencyTrackingContext,
+): void {
+  for (let value of values) {
+    trackRuntimeRelationshipDependency(
+      value,
+      declaredCard,
+      dependencyTrackingContext,
+    );
+  }
+}
+
+function trackRuntimeRelationshipModuleDependencies(
+  value: unknown,
+  dependencyTrackingContext?: RuntimeDependencyTrackingContext,
+): void {
+  if (!value || typeof value !== 'object') {
+    return;
+  }
+
+  let ctor = Reflect.getPrototypeOf(value)?.constructor;
+  if (typeof ctor !== 'function') {
+    return;
+  }
+
+  let identity = Loader.identify(ctor);
+  if (!identity) {
+    return;
+  }
+
+  trackRuntimeModuleDependency(identity.module, dependencyTrackingContext);
+
+  let loader = Loader.getLoaderFor(ctor);
+  if (!loader) {
+    return;
+  }
+
+  for (let dep of loader.getKnownConsumedModules(identity.module)) {
+    trackRuntimeModuleDependency(dep, dependencyTrackingContext);
+  }
 }
 
 export function setId(instance: CardDef, id: string) {
@@ -2969,15 +3123,29 @@ export async function createFromSerialized<T extends BaseDefConstructor>(
     | LooseSingleResourceDocument<CardResource | FileMetaResource>
     | LinkableDocument,
   relativeTo: URL | undefined,
-  opts?: DeserializeOpts & { store?: CardStore },
+  opts?: DeserializeOpts & {
+    store?: CardStore;
+    dependencyTrackingContext?: RuntimeDependencyTrackingContext;
+  },
 ): Promise<BaseInstanceType<T>> {
   let store = opts?.store ?? new FallbackCardStore();
+  let localIdValue =
+    'lid' in resource && typeof resource.lid === 'string'
+      ? resource.lid
+      : undefined;
+  let defaultContext = runtimeNonQueryDependencyContext({
+    source: 'card-api:createFromSerialized',
+    consumer: resource.id ?? localIdValue,
+    consumerKind: isFileMetaResource(resource) ? 'file' : 'instance',
+  });
+  let context = opts?.dependencyTrackingContext ?? defaultContext;
   let {
     meta: { adoptsFrom },
   } = resource;
   let card: typeof BaseDef | undefined = await loadCardDef(adoptsFrom, {
     loader: myLoader(),
     relativeTo,
+    dependencyTrackingContext: context,
   });
   if (!card) {
     throw new Error(`could not find card: '${humanReadable(adoptsFrom)}'`);
@@ -3054,7 +3222,9 @@ async function _createFromSerialized<T extends BaseDefConstructor>(
       isFileMetaResource(resource) || isFileDef(card)
         ? store.getFileMeta(resourceId)
         : store.getCard(resourceId);
-    instance = cachedInstance as BaseInstanceType<T> | undefined;
+    if (cachedInstance && instanceOf(cachedInstance, card as any)) {
+      instance = cachedInstance as BaseInstanceType<T>;
+    }
   }
   if (!instance) {
     instance = new card({
@@ -3198,6 +3368,7 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
         (resource.id && typeof resource.id === 'string'
           ? new URL(resource.id)
           : undefined),
+      dependencyTrackingContext: opts?.dependencyTrackingContext,
     });
     if (!override) {
       return false;
@@ -3743,13 +3914,21 @@ class FallbackCardStore implements CardStore {
       observedGeneration = this.#loadGeneration;
     }
   }
-  async loadCardDocument(url: string) {
+  async loadCardDocument(
+    url: string,
+    opts?: { dependencyTrackingContext?: RuntimeDependencyTrackingContext },
+  ) {
+    trackRuntimeInstanceDependency(url, opts?.dependencyTrackingContext);
     let promise = loadCardDocument(fetch, url);
     this.trackLoad(promise);
     return await promise;
   }
 
-  async loadFileMetaDocument(url: string) {
+  async loadFileMetaDocument(
+    url: string,
+    opts?: { dependencyTrackingContext?: RuntimeDependencyTrackingContext },
+  ) {
+    trackRuntimeFileDependency(url, opts?.dependencyTrackingContext);
     let promise = loadFileMetaDocument(fetch, url);
     this.trackLoad(promise);
     return await promise;

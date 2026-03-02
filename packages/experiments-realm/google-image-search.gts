@@ -44,22 +44,22 @@ export class GoogleImageSearch extends CardDef {
 
     get searchResults() {
       const resource = this.searchResource;
-      if (resource?.isSuccess && resource.value?.images) {
-        return resource.value.images;
+      if (resource?.isSuccess && resource.cardResult?.images) {
+        return resource.cardResult.images;
       }
       return [];
     }
 
     get searchInfo() {
       const resource = this.searchResource;
-      if (resource?.isSuccess && resource.value) {
+      if (resource?.isSuccess && resource.cardResult) {
         return {
-          totalResults: resource.value.totalResults,
-          formattedTotalResults: resource.value.formattedTotalResults,
-          formattedSearchTime: resource.value.formattedSearchTime,
-          hasNextPage: resource.value.hasNextPage,
-          nextPageStartIndex: resource.value.nextPageStartIndex,
-          currentStartIndex: resource.value.currentStartIndex,
+          totalResults: resource.cardResult.totalResults,
+          formattedTotalResults: resource.cardResult.formattedTotalResults,
+          formattedSearchTime: resource.cardResult.formattedSearchTime,
+          hasNextPage: resource.cardResult.hasNextPage,
+          nextPageStartIndex: resource.cardResult.nextPageStartIndex,
+          currentStartIndex: resource.cardResult.currentStartIndex,
         };
       }
       return null;

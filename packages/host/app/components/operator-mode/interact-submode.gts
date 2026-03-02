@@ -53,7 +53,11 @@ import {
 
 import CopyCardToStackCommand from '@cardstack/host/commands/copy-card-to-stack';
 
-import { StackItem } from '@cardstack/host/lib/stack-item';
+import {
+  detectStackItemTypeForTarget,
+  StackItem,
+  type StackItemType,
+} from '@cardstack/host/lib/stack-item';
 
 import { stackBackgroundsResource } from '@cardstack/host/resources/stack-backgrounds';
 
@@ -186,6 +190,7 @@ export default class InteractSubmode extends Component {
       request: new Deferred(),
       closeAfterSaving: opts?.closeAfterCreating,
       stackIndex,
+      type: 'card',
     });
     this.addToStack(newItem);
     return localId;
@@ -196,6 +201,7 @@ export default class InteractSubmode extends Component {
     cardOrURL: CardDef | URL | string,
     format: Format | Event = 'isolated',
     opts?: {
+      type?: StackItemType;
       openCardInRightMostStack?: boolean;
       stackIndex?: number;
       fieldType?: 'linksTo' | 'linksToMany' | 'contains' | 'containsMany';
@@ -212,6 +218,9 @@ export default class InteractSubmode extends Component {
         : cardOrURL instanceof URL
           ? cardOrURL.href
           : cardOrURL.id;
+    if (!cardId) {
+      return;
+    }
     if (opts?.openCardInRightMostStack) {
       stackIndex = this.stacks.length;
     } else if (typeof opts?.stackIndex === 'number') {
@@ -229,10 +238,12 @@ export default class InteractSubmode extends Component {
       }
       stackIndex = opts.stackIndex;
     }
+    let stackItemType = opts?.type ?? this.getStackItemType(cardOrURL, cardId);
     let newItem = new StackItem({
       id: cardId,
       format,
       stackIndex,
+      type: stackItemType,
       relationshipContext: opts?.fieldName
         ? {
             fieldName: opts.fieldName,
@@ -250,6 +261,13 @@ export default class InteractSubmode extends Component {
   private editCard = (stackIndex: number, card: CardDef): void => {
     this.operatorModeStateService.editCardOnStack(stackIndex, card);
   };
+
+  private getStackItemType(
+    cardOrURL: CardDef | URL | string,
+    cardId: string,
+  ): StackItemType {
+    return detectStackItemTypeForTarget(cardOrURL, cardId, this.store);
+  }
 
   private saveCard = (id: string): void => {
     this.store.save(id);
@@ -500,6 +518,7 @@ export default class InteractSubmode extends Component {
             id: url.href,
             format: 'isolated',
             stackIndex: 0,
+            type: this.getStackItemType(url, url.href),
           });
           // it's important that we await the stack item readiness _before_
           // we mutate the stack, otherwise there are very odd visual artifacts
@@ -542,6 +561,7 @@ export default class InteractSubmode extends Component {
                   id: url.href,
                   format: 'isolated',
                   stackIndex,
+                  type: this.getStackItemType(url, url.href),
                 });
                 // await stackItem.ready();
                 this.operatorModeStateService.clearStackAndAdd(

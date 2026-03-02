@@ -113,6 +113,7 @@ module(basename(__filename), function () {
         '*': ['read', 'write'],
         user: ['read', 'write', 'realm-owner'],
         carol: ['read', 'write'],
+        '@node-test_realm:localhost': ['read', 'realm-owner'],
       },
       realmURL,
       onRealmSetup,
@@ -226,8 +227,38 @@ module(basename(__filename), function () {
       assert.strictEqual(json.data.type, 'file-meta');
       assert.strictEqual(json.data.attributes?.name, 'person.gts');
       assert.deepEqual(json.data.meta?.adoptsFrom, {
-        module: `${baseRealm.url}file-api`,
-        name: 'FileDef',
+        module: `${baseRealm.url}gts-file-def`,
+        name: 'GtsFileDef',
+      });
+    });
+
+    test('serves markdown file meta subclass for noCache requests', async function (assert) {
+      await testRealm.write(
+        'guide.md',
+        '# Guide\n\nThis markdown file should resolve to MarkdownDef.',
+      );
+
+      let response = await request
+        .get(`/guide.md?noCache=true`)
+        .set('Accept', SupportedMimeType.FileMeta)
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`,
+        );
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      assert.ok(
+        response.headers['content-type']?.startsWith(
+          SupportedMimeType.FileMeta,
+        ),
+        'content-type uses file meta mime type',
+      );
+      let json = response.body as LooseSingleCardDocument;
+      assert.strictEqual(json.data.type, 'file-meta');
+      assert.strictEqual(json.data.attributes?.name, 'guide.md');
+      assert.deepEqual(json.data.meta?.adoptsFrom, {
+        module: `${baseRealm.url}markdown-file-def`,
+        name: 'MarkdownDef',
       });
     });
 
@@ -337,7 +368,6 @@ module(basename(__filename), function () {
               type: 'realm-config',
               attributes: {
                 ...testRealmInfo,
-                realmUserId: '@node-test_realm:localhost',
                 backgroundURL: 'new-bg',
               },
             },
@@ -988,6 +1018,7 @@ module(basename(__filename), function () {
         eventName: 'index',
         indexType: 'incremental-index-initiation',
         updatedFile: `${newCardId}.json`,
+        realmURL: testRealmHref,
       });
 
       assert.deepEqual(incrementalEvent?.content, {
@@ -995,6 +1026,7 @@ module(basename(__filename), function () {
         indexType: 'incremental',
         invalidations: [newCardId],
         clientRequestId: null,
+        realmURL: testRealmHref,
       });
 
       {
@@ -1032,10 +1064,7 @@ module(basename(__filename), function () {
                 module: '../person',
                 name: 'Person',
               },
-              realmInfo: {
-                ...testRealmInfo,
-                realmUserId: '@node-test_realm:localhost',
-              },
+              realmInfo: testRealmInfo,
               realmURL: testRealmHref,
             },
             links: {
@@ -1152,12 +1181,14 @@ module(basename(__filename), function () {
         eventName: 'index',
         indexType: 'incremental-index-initiation',
         updatedFile: `${testRealmHref}person-1.json`,
+        realmURL: testRealmHref,
       });
 
       assert.deepEqual(incrementalEvent?.content, {
         eventName: 'index',
         indexType: 'incremental',
         invalidations: [`${testRealmHref}person-1`],
+        realmURL: testRealmHref,
       });
 
       {

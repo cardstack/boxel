@@ -8,7 +8,7 @@
         }
       },
       "ref": {
-        "module": "http://localhost:4201/catalog/blackjack/blackjack",
+        "module": "@cardstack/catalog/blackjack/blackjack",
         "name": "BlackjackGame"
       },
       "cardInfo": {

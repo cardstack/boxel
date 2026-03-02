@@ -12,6 +12,8 @@ import {
   setupLocalIndexing,
   testRealmInfo,
   testRealmURL,
+  setupRealmCacheTeardown,
+  withCachedRealmSetup,
 } from '../../helpers';
 
 import { setupMockMatrix } from '../../helpers/mock-matrix';
@@ -39,11 +41,15 @@ module('Integration | commands | set-user-system-card', function (hooks) {
     getOwner(this)!.register('service:realm', StubRealmService);
   });
 
+  setupRealmCacheTeardown(hooks);
+
   hooks.beforeEach(async function () {
-    await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      contents: {},
-    });
+    await withCachedRealmSetup(async () =>
+      setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {},
+      }),
+    );
   });
 
   test('sets the system card account data', async function (assert) {

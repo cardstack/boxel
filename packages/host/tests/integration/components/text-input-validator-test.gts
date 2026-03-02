@@ -17,6 +17,8 @@ import {
   setupOnSave,
   type TestContextWithSave,
   setupOperatorModeStateCleanup,
+  setupRealmCacheTeardown,
+  withCachedRealmSetup,
 } from '../../helpers';
 import {
   BigIntegerField,
@@ -44,6 +46,8 @@ module('Integration | text-input-validator', function (hooks) {
     autostart: true,
   });
 
+  setupRealmCacheTeardown(hooks);
+
   hooks.beforeEach(async function () {
     let operatorModeStateService = getService('operator-mode-state-service');
 
@@ -54,17 +58,19 @@ module('Integration | text-input-validator', function (hooks) {
       @field someNumber = contains(NumberField);
     }
 
-    ({ realm } = await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      contents: {
-        'sample.gts': { Sample },
-        'Sample/1.json': new Sample({
-          someBigInt: null,
-          anotherBigInt: '123',
-          someNumber: 0,
-        }),
-      },
-    }));
+    ({ realm } = await withCachedRealmSetup(async () =>
+      setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {
+          'sample.gts': { Sample },
+          'Sample/1.json': new Sample({
+            someBigInt: null,
+            anotherBigInt: '123',
+            someNumber: 0,
+          }),
+        },
+      }),
+    ));
 
     operatorModeStateService.restore({
       stacks: [[{ id: `${testRealmURL}Sample/1`, format: 'edit' }]],

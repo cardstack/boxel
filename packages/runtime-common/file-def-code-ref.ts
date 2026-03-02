@@ -1,4 +1,8 @@
-import { baseRealm, type ResolvedCodeRef } from '../index';
+import { baseRealm, baseFileRef } from './constants';
+import type { ResolvedCodeRef } from './code-ref';
+import { resolveCardReference } from './card-reference-resolver';
+
+export const BASE_FILE_DEF_CODE_REF = baseFileRef;
 
 const FILEDEF_CODE_REF_BY_EXTENSION: Record<string, ResolvedCodeRef> = {
   // TODO: Replace with realm metadata configuration.
@@ -38,12 +42,31 @@ const FILEDEF_CODE_REF_BY_EXTENSION: Record<string, ResolvedCodeRef> = {
     module: `${baseRealm.url}avif-image-def`,
     name: 'AvifDef',
   },
+  '.ts': {
+    module: `${baseRealm.url}ts-file-def`,
+    name: 'TsFileDef',
+  },
+  '.gts': {
+    module: `${baseRealm.url}gts-file-def`,
+    name: 'GtsFileDef',
+  },
+  '.txt': {
+    module: `${baseRealm.url}text-file-def`,
+    name: 'TextFileDef',
+  },
+  '.text': {
+    module: `${baseRealm.url}text-file-def`,
+    name: 'TextFileDef',
+  },
+  '.json': {
+    module: `${baseRealm.url}json-file-def`,
+    name: 'JsonFileDef',
+  },
+  '.csv': {
+    module: `${baseRealm.url}csv-file-def`,
+    name: 'CsvFileDef',
+  },
   '.mismatch': { module: './filedef-mismatch', name: 'FileDef' },
-};
-
-export const BASE_FILE_DEF_CODE_REF: ResolvedCodeRef = {
-  module: `${baseRealm.url}file-api`,
-  name: 'FileDef',
 };
 
 export function resolveFileDefCodeRef(fileURL: URL): ResolvedCodeRef {
@@ -54,13 +77,13 @@ export function resolveFileDefCodeRef(fileURL: URL): ResolvedCodeRef {
     ? FILEDEF_CODE_REF_BY_EXTENSION[extension]
     : undefined;
   if (!mapping) {
-    return BASE_FILE_DEF_CODE_REF;
+    return baseFileRef;
   }
   if (mapping.module.includes('://')) {
     return mapping;
   }
   return {
     ...mapping,
-    module: new URL(mapping.module, fileURL).href,
+    module: resolveCardReference(mapping.module, fileURL),
   };
 }

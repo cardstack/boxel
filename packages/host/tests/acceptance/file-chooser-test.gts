@@ -47,6 +47,7 @@ module('Acceptance | file chooser tests', function (hooks) {
           {
             id: fileId,
             format: 'isolated',
+            type: 'file',
           },
         ],
       ],
@@ -251,6 +252,67 @@ module('Acceptance | file chooser tests', function (hooks) {
         '[data-test-links-to-editor="attachment"] [data-test-card="http://test-realm/test/uploaded.txt"]',
       )
       .exists('attachment field now shows the uploaded file');
+  });
+
+  test('uploading a file without an extension shows an error', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}FileLinkCard/empty`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    await click(`[data-test-operator-mode-stack="0"] [data-test-edit-button]`);
+
+    await click(
+      '[data-test-links-to-editor="attachment"] [data-test-add-new="attachment"]',
+    );
+
+    assert
+      .dom('[data-test-choose-file-modal]')
+      .exists('file chooser modal is open');
+
+    await click('[data-test-choose-file-modal-upload-button]');
+
+    let fileUpload = getService('file-upload') as FileUploadService;
+    await waitUntil(() => fileUpload.activeUploads.length > 0, {
+      timeout: 2000,
+      timeoutMessage: 'upload task was not created',
+    });
+
+    let task = fileUpload.activeUploads[0];
+    task.__provideFileForTesting(
+      new File(['no extension'], 'Makefile', {
+        type: 'application/octet-stream',
+      }),
+    );
+
+    await waitUntil(
+      () =>
+        document.querySelector('[data-test-choose-file-modal-upload-error]') !==
+        null,
+      {
+        timeout: 10000,
+        timeoutMessage: 'upload error was not displayed',
+      },
+    );
+
+    assert
+      .dom('[data-test-choose-file-modal-upload-error]')
+      .includesText(
+        'has no extension',
+        'error message mentions missing extension',
+      );
+
+    assert
+      .dom('[data-test-choose-file-modal]')
+      .exists('modal remains open after upload error');
+
+    await click('[data-test-choose-file-modal-cancel-button]');
   });
 
   test('cancelling file upload does not close the modal', async function (assert) {

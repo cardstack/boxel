@@ -14,6 +14,7 @@ export * from './full-reindex';
 export * from './daily-credit-grant';
 export * from './copy';
 export * from './indexer';
+export * from './run-command';
 
 type LoggerInstance = ReturnType<typeof import('../index').logger>;
 

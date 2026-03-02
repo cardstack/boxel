@@ -11,6 +11,8 @@ import {
   setupCardLogs,
   setupLocalIndexing,
   setupIntegrationTestRealm,
+  setupRealmCacheTeardown,
+  withCachedRealmSetup,
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupRenderingTest } from '../helpers/setup';
@@ -22,58 +24,61 @@ module('Unit | loader', function (hooks) {
 
   let loader: Loader;
 
+  setupRealmCacheTeardown(hooks);
+
   hooks.beforeEach(async function (this: RenderingTestContext) {
     loader = getService('loader-service').loader;
 
-    await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      contents: {
-        'a.js': `
+    await withCachedRealmSetup(async () =>
+      setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {
+          'a.js': `
           import { b } from './b';
           export function a() {
             return 'a' + b();
           }
         `,
-        'b.js': `
+          'b.js': `
           import { c } from './c';
           export function b() {
             return 'b' + c();
           }
         `,
-        'c.js': `
+          'c.js': `
           export function c() {
             return 'c';
           }
         `,
-        'd.js': `
+          'd.js': `
           import { a } from './a';
           import { e } from './e';
           export function d() {
             return a() + e();
           }
         `,
-        'e.js': `
+          'e.js': `
           throw new Error('intentional error thrown');
         `,
-        'f.js': `
+          'f.js': `
           import { b } from './b';
           import { g } from './g';
           export function f() {
             return b() + g();
           }
         `,
-        'g.js': `
+          'g.js': `
           export function g() {
             return 'g';
           }
         `,
-        'cycle-one.js': `
+          'cycle-one.js': `
           import { two } from './cycle-two';
           export function one() {
             return two() - 1;
           }
         `,
-        'cycle-two.js': `
+          'cycle-two.js': `
           import { one } from './cycle-one';
           export function two() {
             return 2;
@@ -82,7 +87,7 @@ module('Unit | loader', function (hooks) {
             return one() * 3;
           }
         `,
-        'deadlock/a.js': `
+          'deadlock/a.js': `
           import { b } from './b';
           export function d() {
             return 'd';
@@ -91,19 +96,19 @@ module('Unit | loader', function (hooks) {
             return 'a' + b();
           }
         `,
-        'deadlock/b.js': `
+          'deadlock/b.js': `
           import { c } from './c';
           export function b() {
             return 'b' + c();
           }
         `,
-        'deadlock/c.js': `
+          'deadlock/c.js': `
           import { d } from './a';
           export function c() {
             return 'c' + d();
           }
         `,
-        'person.gts': `
+          'person.gts': `
           import { contains, field, CardDef } from 'https://cardstack.com/base/card-api';
           import StringField from 'https://cardstack.com/base/string';
           export class Person extends CardDef {
@@ -115,12 +120,13 @@ module('Unit | loader', function (hooks) {
             counter++;
           }
         `,
-        'foo.js': `
+          'foo.js': `
           export function checkImportMeta() { return import.meta.url; }
           export function myLoader() { return import.meta.loader; }
         `,
-      },
-    });
+        },
+      }),
+    );
   });
 
   setupCardLogs(

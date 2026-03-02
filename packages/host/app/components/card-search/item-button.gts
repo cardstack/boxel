@@ -9,7 +9,6 @@ import { IconPlus } from '@cardstack/boxel-ui/icons';
 
 import { isCardInstance } from '@cardstack/runtime-common';
 
-import { urlForRealmLookup } from '@cardstack/host/lib/utils';
 import type RealmService from '@cardstack/host/services/realm';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
@@ -29,8 +28,6 @@ interface Signature {
     item: ItemType;
     itemId?: string;
     isSelected: boolean;
-    isCompact: boolean;
-    displayRealmName?: boolean;
     onSelect: (selection: string | NewCardArgs) => void;
     onSubmit?: (selection: string | NewCardArgs) => void;
   };
@@ -96,13 +93,6 @@ export default class ItemButton extends Component<Signature> {
     return this.args.itemId ?? this.cardItem?.id;
   }
 
-  private get urlForRealmLookup(): string | undefined {
-    if (!this.args.displayRealmName) {
-      return undefined;
-    }
-    return this.cardItem ? urlForRealmLookup(this.cardItem) : this.args.itemId;
-  }
-
   @action handleClick() {
     this.args.onSelect(this.selectPayload);
   }
@@ -120,16 +110,22 @@ export default class ItemButton extends Component<Signature> {
   }
 
   <template>
-    {{#if this.isNewCard}}
-      <Button
-        class={{cn 'create-card' 'catalog-item' selected=@isSelected}}
-        {{on 'click' this.handleClick}}
-        {{on 'dblclick' this.handleDblClick}}
-        {{on 'keydown' this.handleKeydown}}
-        data-test-card-catalog-create-new-button={{this.newCardItem.realmURL}}
-        data-test-card-catalog-item-selected={{if @isSelected 'true'}}
-        ...attributes
-      >
+    <Button
+      @rectangular={{true}}
+      class={{cn
+        'catalog-item'
+        selected=@isSelected
+        create-new-button=this.isNewCard
+      }}
+      {{on 'click' this.handleClick}}
+      {{on 'dblclick' this.handleDblClick}}
+      {{on 'keydown' this.handleKeydown}}
+      data-test-card-catalog-create-new-button={{this.newCardItem.realmURL}}
+      data-test-card-catalog-item={{removeFileExtension this.resolvedItemId}}
+      data-test-card-catalog-item-selected={{if @isSelected 'true'}}
+      ...attributes
+    >
+      {{#if this.isNewCard}}
         <IconPlus
           class='plus-icon'
           width='16'
@@ -138,115 +134,61 @@ export default class ItemButton extends Component<Signature> {
         />
         Create New
         {{this.cardRefName}}
-      </Button>
-    {{else}}
-      <div class={{cn 'item-button-container' compact=@isCompact}}>
-        {{#if this.componentItem}}
-          <Button
-            class={{cn 'catalog-item' selected=@isSelected compact=@isCompact}}
-            {{on 'click' this.handleClick}}
-            {{on 'dblclick' this.handleDblClick}}
-            {{on 'keydown' this.handleKeydown}}
-            data-test-card-catalog-item={{removeFileExtension
-              this.resolvedItemId
-            }}
-            data-test-card-catalog-item-selected={{if @isSelected 'true'}}
-            ...attributes
-          >
-            {{#let this.componentItem as |CardComponent|}}
-              <CardComponent
-                class='hide-boundaries'
-                data-test-search-result={{removeFileExtension
-                  this.resolvedItemId
-                }}
-              />
-            {{/let}}
-          </Button>
-        {{else if this.cardItem}}
-          <Button
-            class={{cn 'catalog-item' selected=@isSelected compact=@isCompact}}
-            {{on 'click' this.handleClick}}
-            {{on 'dblclick' this.handleDblClick}}
-            {{on 'keydown' this.handleKeydown}}
-            data-test-card-catalog-item={{this.resolvedItemId}}
-            data-test-card-catalog-item-selected={{if @isSelected 'true'}}
-            ...attributes
-          >
-            <CardRenderer
-              @card={{this.cardItem}}
-              @format='fitted'
-              @codeRef={{resultsCardRef}}
-              data-test-search-result={{removeFileExtension
-                this.resolvedItemId
-              }}
-              class='hide-boundaries'
-            />
-          </Button>
-        {{/if}}
-        {{#if this.urlForRealmLookup}}
-          {{#let (this.realm.info this.urlForRealmLookup) as |realmInfo|}}
-            <div
-              class='realm-name'
-              data-test-realm-name
-            >{{realmInfo.name}}</div>
-          {{/let}}
-        {{/if}}
-      </div>
-    {{/if}}
+      {{else if this.componentItem}}
+        <this.componentItem
+          class='hide-boundaries'
+          data-test-search-result={{removeFileExtension this.resolvedItemId}}
+        />
+      {{else if this.cardItem}}
+        <CardRenderer
+          @card={{this.cardItem}}
+          @format='fitted'
+          @codeRef={{resultsCardRef}}
+          @displayContainer={{false}}
+          data-test-search-result={{removeFileExtension this.resolvedItemId}}
+        />
+      {{/if}}
+    </Button>
     <style scoped>
       .catalog-item {
-        --boxel-button-padding: 0;
-        --boxel-button-border-radius: var(--boxel-border-radius);
-        --boxel-button-border: 1px solid var(--boxel-200);
-        height: var(--item-height, 67px);
+        height: 100%;
         width: 100%;
         max-width: 100%;
-        overflow: hidden;
-        container-name: fitted-card;
-        container-type: size;
-        display: flex;
-        text-align: left;
+      }
+      .catalog-item:not(.create-new-button) {
+        --boxel-button-padding: 0;
+
+        box-sizing: content-box;
+        text-align: start;
+      }
+      .catalog-item :deep(*) {
+        box-sizing: border-box;
+      }
+      .catalog-item:focus {
+        --host-outline-offset: -1px;
       }
       .catalog-item.selected {
         border-color: var(--boxel-highlight);
         box-shadow: 0 0 0 1px var(--boxel-highlight);
       }
       .catalog-item:hover {
-        border-color: var(--boxel-darker-hover);
+        box-shadow: var(--boxel-box-shadow);
       }
       .catalog-item.selected:hover {
         border-color: var(--boxel-highlight);
+        box-shadow:
+          0 0 0 1px var(--boxel-highlight),
+          var(--boxel-box-shadow);
       }
-      .catalog-item.compact {
-        width: var(--item-width, 250px);
-        height: var(--item-height, 40px);
-      }
-      .create-card.catalog-item {
-        --boxel-button-padding: var(--boxel-sp-xs) var(--boxel-sp);
-        --boxel-button-letter-spacing: var(--boxel-lsp-xs);
+
+      .create-new-button {
         gap: var(--boxel-sp-xs);
         flex-wrap: nowrap;
         justify-content: flex-start;
-        height: var(--item-height, 67px);
-        width: 100%;
-        max-width: 100%;
+        letter-spacing: var(--boxel-lsp-xs);
       }
       .plus-icon > :deep(path) {
         stroke: none;
-      }
-      .item-button-container {
-        display: flex;
-        flex-direction: column;
-        align-items: self-end;
-        width: 100%;
-      }
-      .realm-name {
-        font: 400 var(--boxel-font);
-        color: var(--boxel-400);
-        padding-top: var(--boxel-sp-4xs);
-        padding-right: var(--boxel-sp-xxs);
-        height: 20px;
-        font-size: var(--boxel-font-size-xs);
       }
     </style>
   </template>

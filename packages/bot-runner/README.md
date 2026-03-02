@@ -13,6 +13,7 @@ In order to use it, a user must
 - register the bot via the realm-server bot-registration endpoint
 - register bot commands so the bot runner knows what matrix event to listen to and the corresponding command to fire
 
+
 ## How to Run Locally
 
 Environment variables:
@@ -80,3 +81,54 @@ Unregister:
       "id": "<botRegistrationId>"
     }
   }
+
+## User Issuing Task
+
+Example source is the experiments demo card, but the same flow is used for any `app.boxel.bot-trigger` event.
+
+```mermaid
+flowchart TD
+
+    B["Trigger 'Send Show Card Bot Request' from UI"]
+    B --> D["CreateShowCardRequestCommand.execute()"]
+    D --> E["SendBotTriggerEventCommand.execute()"]
+    E --> F["sendEvent('app.boxel.bot-trigger')"]
+    F --> G["bot-runner receives timeline event"]
+    G --> H["enqueueRunCommandJob() to jobs table"]
+```
+
+## Submission Bot Commands (DB)
+
+`setup-submission-bot` writes canonical scoped command specifiers into `bot_commands.command`.
+
+```json
+[
+  {
+    "name": "create-listing-pr",
+    "command": "@cardstack/boxel-host/commands/create-listing-pr/default",
+    "filter": {
+      "type": "matrix-event",
+      "event_type": "app.boxel.bot-trigger",
+      "content_type": "pr-listing-create"
+    }
+  },
+  {
+    "name": "show-card",
+    "command": "@cardstack/boxel-host/commands/show-card/default",
+    "filter": {
+      "type": "matrix-event",
+      "event_type": "app.boxel.bot-trigger",
+      "content_type": "show-card"
+    }
+  },
+  {
+    "name": "patch-card-instance",
+    "command": "@cardstack/boxel-host/commands/patch-card-instance/default",
+    "filter": {
+      "type": "matrix-event",
+      "event_type": "app.boxel.bot-trigger",
+      "content_type": "patch-card-instance"
+    }
+  }
+]
+```
