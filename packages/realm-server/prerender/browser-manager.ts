@@ -3,10 +3,13 @@ import { promises as fs } from 'fs';
 import { tmpdir } from 'os';
 import path from 'path';
 import puppeteer, { type Browser } from 'puppeteer';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
 
 const log = logger('prerenderer');
 const PUPPETEER_PROFILE_PREFIX = 'puppeteer_dev_chrome_profile-';
 const USER_DATA_MAX_AGE_MS = 60 * 60 * 1000;
+const execFileAsync = promisify(execFile);
 
 export class BrowserManager {
   #browser: Browser | null = null;
@@ -16,6 +19,7 @@ export class BrowserManager {
     if (this.#browser) {
       return this.#browser;
     }
+    await this.cleanupUserDataDirs();
 
     let launchArgs: string[] = [];
     let disableSandbox =
@@ -63,6 +67,8 @@ export class BrowserManager {
       return;
     }
 
+    await this.#terminateOrphanedChromeProcesses(activeDir);
+
     let tmpRoot: string;
     try {
       tmpRoot = tmpdir();
@@ -101,6 +107,212 @@ export class BrowserManager {
         log.debug('Unable to remove user data dir %s:', dirPath, e);
       }
     }
+  }
+
+  async #terminateOrphanedChromeProcesses(activeDir?: string): Promise<void> {
+    let orphaned = await this.#findOrphanedChromeProcesses(activeDir);
+    if (orphaned.length === 0) {
+      return;
+    }
+    log.warn(
+      'Terminating %s orphaned Chrome process(es) tied to stale Puppeteer profiles',
+      orphaned.length,
+    );
+    for (let { pid } of orphaned) {
+      try {
+        process.kill(pid, 'SIGTERM');
+      } catch (_e) {
+        // best-effort; process may have already exited
+      }
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    for (let { pid } of orphaned) {
+      if (this.#isProcessAlive(pid)) {
+        try {
+          process.kill(pid, 'SIGKILL');
+        } catch (_e) {
+          // best-effort; process may have already exited
+        }
+      }
+    }
+  }
+
+  async #findOrphanedChromeProcesses(
+    activeDir?: string,
+  ): Promise<Array<{ pid: number; userDataDir: string }>> {
+    let procEntries: string[];
+    try {
+      procEntries = await fs.readdir('/proc');
+    } catch (_e) {
+      // /proc traversal is Linux-only; use `ps` table parsing on macOS and
+      // other platforms that don't expose procfs.
+      return this.#findOrphanedChromeProcessesViaPs(activeDir);
+    }
+    let orphaned: Array<{ pid: number; userDataDir: string }> = [];
+    let tmpRoot = tmpdir();
+    for (let entry of procEntries) {
+      if (!/^\d+$/.test(entry)) continue;
+      let pid = Number(entry);
+      if (!Number.isInteger(pid) || pid <= 0) continue;
+      let cmdline = await this.#readProcessCmdline(pid);
+      if (!cmdline) continue;
+      let userDataDir = this.#extractUserDataDirFromCmdline(cmdline);
+      if (!userDataDir) continue;
+      if (!path.basename(userDataDir).startsWith(PUPPETEER_PROFILE_PREFIX)) {
+        continue;
+      }
+      if (!path.resolve(userDataDir).startsWith(path.resolve(tmpRoot))) {
+        continue;
+      }
+      if (activeDir && path.resolve(userDataDir) === path.resolve(activeDir)) {
+        continue;
+      }
+      let ppid = await this.#readParentPid(pid);
+      if (ppid === undefined) continue;
+      if (await this.#isOrphanedParent(ppid)) {
+        orphaned.push({ pid, userDataDir });
+      }
+    }
+    return orphaned;
+  }
+
+  async #findOrphanedChromeProcessesViaPs(
+    activeDir?: string,
+  ): Promise<Array<{ pid: number; userDataDir: string }>> {
+    let processTable = await this.#readProcessTableViaPs();
+    if (processTable.length === 0) {
+      return [];
+    }
+
+    let processByPid = new Map<number, { ppid: number; cmdline: string }>();
+    for (let processInfo of processTable) {
+      processByPid.set(processInfo.pid, {
+        ppid: processInfo.ppid,
+        cmdline: processInfo.cmdline,
+      });
+    }
+
+    let orphaned: Array<{ pid: number; userDataDir: string }> = [];
+    let tmpRoot = tmpdir();
+    for (let { pid, ppid, cmdline } of processTable) {
+      if (!cmdline) continue;
+      let userDataDir = this.#extractUserDataDirFromCmdline(cmdline);
+      if (!userDataDir) continue;
+      if (!path.basename(userDataDir).startsWith(PUPPETEER_PROFILE_PREFIX)) {
+        continue;
+      }
+      if (!path.resolve(userDataDir).startsWith(path.resolve(tmpRoot))) {
+        continue;
+      }
+      if (activeDir && path.resolve(userDataDir) === path.resolve(activeDir)) {
+        continue;
+      }
+      if (this.#isOrphanedParentFromProcessTable(ppid, processByPid)) {
+        orphaned.push({ pid, userDataDir });
+      }
+    }
+    return orphaned;
+  }
+
+  async #readProcessTableViaPs(): Promise<
+    Array<{ pid: number; ppid: number; cmdline: string }>
+  > {
+    let stdout: string;
+    try {
+      ({ stdout } = await execFileAsync('ps', ['-axo', 'pid=,ppid=,command=']));
+    } catch (_e) {
+      return [];
+    }
+    let rows = stdout.split('\n');
+    let processTable: Array<{ pid: number; ppid: number; cmdline: string }> =
+      [];
+    for (let row of rows) {
+      let trimmed = row.trim();
+      if (!trimmed) continue;
+      let match = trimmed.match(/^(\d+)\s+(\d+)\s+(.+)$/);
+      if (!match) continue;
+      let pid = Number(match[1]);
+      let ppid = Number(match[2]);
+      let cmdline = match[3];
+      if (!Number.isInteger(pid) || pid <= 0) continue;
+      if (!Number.isInteger(ppid) || ppid < 0) continue;
+      processTable.push({ pid, ppid, cmdline });
+    }
+    return processTable;
+  }
+
+  #isOrphanedParentFromProcessTable(
+    ppid: number,
+    processByPid: Map<number, { ppid: number; cmdline: string }>,
+  ): boolean {
+    if (ppid <= 1) {
+      return true;
+    }
+    let parent = processByPid.get(ppid);
+    if (!parent || !parent.cmdline) {
+      return true;
+    }
+    return parent.cmdline.includes('systemd --user');
+  }
+
+  async #readProcessCmdline(pid: number): Promise<string | undefined> {
+    try {
+      let raw = await fs.readFile(`/proc/${pid}/cmdline`, 'utf8');
+      if (!raw) {
+        return undefined;
+      }
+      return raw.split('\0').join(' ').trim();
+    } catch (_e) {
+      return undefined;
+    }
+  }
+
+  async #readParentPid(pid: number): Promise<number | undefined> {
+    try {
+      let status = await fs.readFile(`/proc/${pid}/status`, 'utf8');
+      let match = status.match(/^PPid:\s+(\d+)$/m);
+      if (!match) {
+        return undefined;
+      }
+      return Number(match[1]);
+    } catch (_e) {
+      return undefined;
+    }
+  }
+
+  async #isOrphanedParent(ppid: number): Promise<boolean> {
+    if (ppid <= 1) {
+      return true;
+    }
+    let parentCmdline = await this.#readProcessCmdline(ppid);
+    if (!parentCmdline) {
+      return true;
+    }
+    return parentCmdline.includes('systemd --user');
+  }
+
+  #isProcessAlive(pid: number): boolean {
+    try {
+      process.kill(pid, 0);
+      return true;
+    } catch (_e) {
+      return false;
+    }
+  }
+
+  #extractUserDataDirFromCmdline(cmdline: string): string | undefined {
+    let split = cmdline.split(/\s+/);
+    for (let i = 0; i < split.length; i++) {
+      let arg = split[i];
+      let match = arg.match(/^--user-data-dir=(.*)$/);
+      if (match?.[1]) {
+        return match[1];
+      }
+      if (arg === '--user-data-dir' && split[i + 1]) {
+        return split[i + 1];
+      }
+    }
+    return undefined;
   }
 
   #extractUserDataDir(browser: Browser | null): string | undefined {
