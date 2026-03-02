@@ -358,10 +358,8 @@ module('Integration | ai-assistant-panel | past sessions', function (hooks) {
     );
     assert.ok(lastActiveEl, 'last-active element is present');
     let rawValue = lastActiveEl?.getAttribute('data-test-last-active') ?? '';
-    assert.ok(
-      rawValue !== '' && !isNaN(Number(rawValue)),
-      `data-test-last-active is a valid finite number (got: ${rawValue})`,
-    );
+    assert.ok(rawValue !== '', `data-test-last-active should not be empty (got: ${rawValue})`);
+    assert.ok(!isNaN(Number(rawValue)), `data-test-last-active is a valid finite number (got: ${rawValue})`);
 
     // The formatted date text must be non-empty (date-fns rendered successfully)
     let dateText = document
@@ -398,11 +396,8 @@ module('Integration | ai-assistant-panel | past sessions', function (hooks) {
     let recentIdx = roomIds.indexOf(recentRoomId);
     let oldIdx = roomIds.indexOf(oldRoomId);
 
-    assert.ok(
-      recentIdx !== -1,
-      'recent session is present in the list',
-    );
-    assert.ok(oldIdx !== -1, 'old session is present in the list');
+    assert.notStrictEqual(recentIdx, -1, 'recent session is present in the list');
+    assert.notStrictEqual(oldIdx, -1, 'old session is present in the list');
     assert.ok(
       recentIdx < oldIdx,
       `most recently active session (index ${recentIdx}) appears before the oldest one (index ${oldIdx})`,
