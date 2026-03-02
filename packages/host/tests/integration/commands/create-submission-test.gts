@@ -6,11 +6,11 @@ import {
   setupLocalIndexing,
   testRealmURL,
 } from '../../helpers';
-import {
-  setupBaseRealm,
-} from '../../helpers/base-realm';
+import { setupBaseRealm } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
+
+import type * as CreateSubmissionModule from '@cardstack/catalog/commands/create-submission';
 
 const submissionRealmURL = 'http://localhost:4201/submissions-test/';
 const catalogCreateSubmissionCommandURL =
@@ -39,7 +39,8 @@ module('Integration | commands | create-submission', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'http://localhost:4201/catalog/catalog-app/listing/listing',
+                module:
+                  'http://localhost:4201/catalog/catalog-app/listing/listing',
                 name: 'Listing',
               },
             },
@@ -58,9 +59,9 @@ module('Integration | commands | create-submission', function (hooks) {
   test('creates the submission card in the provided realm', async function (assert) {
     let commandService = getService('command-service');
     let loader = getService('loader-service').loader;
-    let createSubmissionModule = await loader.import(
-      catalogCreateSubmissionCommandURL,
-    );
+    let createSubmissionModule = await loader.import<
+      typeof CreateSubmissionModule
+    >(catalogCreateSubmissionCommandURL);
     let CreateSubmissionCommand = createSubmissionModule.default;
     let command = new CreateSubmissionCommand(commandService.commandContext);
 
