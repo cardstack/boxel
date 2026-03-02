@@ -4,8 +4,9 @@ import { registerRealmUser } from './register-realm-user-using-api';
 // Usage: register-github-webhook.ts [publicURL] [roomId] [prNumber]
 //
 // Environment variables (override or replace positional args):
-//   REALM_SERVER_URL - realm server base URL (default: http://localhost:4201)
-//   COMMAND_URL      - override the command URL registered with the webhook
+//   REALM_SERVER_URL        - realm server base URL (default: http://localhost:4201)
+//   COMMAND_URL             - override the command URL registered with the webhook
+//   SUBMISSION_REALM_URL    - realm URL where GithubEventCards are saved
 
 const realmServerURL = process.env.REALM_SERVER_URL || 'http://localhost:4201';
 
@@ -13,11 +14,14 @@ const commandURL =
   process.env.COMMAND_URL ||
   `${realmServerURL}/catalog/commands/process-github-event/default`;
 
+const submissionRealmUrl =
+  process.env.SUBMISSION_REALM_URL || `${realmServerURL}/submissions/`;
+
 // Default GitHub webhook config
 const webhookConfig = {
   verificationType: 'HMAC_SHA256_HEADER' as const,
   verificationConfig: {
-    header: 'x-hub-signature-256',
+    header: 'X-Hub-Signature-256',
     encoding: 'hex' as const,
   },
 };
@@ -147,7 +151,7 @@ async function ensureIncomingWebhook(
     (w: any) =>
       w.attributes?.verificationType === config.verificationType &&
       JSON.stringify(w.attributes?.verificationConfig) ===
-      JSON.stringify(config.verificationConfig),
+        JSON.stringify(config.verificationConfig),
   );
 
   if (existing) {
@@ -175,7 +179,7 @@ async function ensureWebhookCommand(
     (cmd: any) =>
       cmd.attributes?.command === config.command &&
       JSON.stringify(cmd.attributes?.filter ?? null) ===
-      JSON.stringify(config.filter ?? null),
+        JSON.stringify(config.filter ?? null),
   );
 
   if (existing) {
@@ -221,6 +225,7 @@ async function main() {
 
   const baseFilter: Record<string, unknown> = {
     type: 'github-event',
+    submissionRealmUrl,
   };
 
   const eventTypes = [

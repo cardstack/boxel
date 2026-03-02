@@ -116,10 +116,22 @@ export default function handleWebhookReceiverRequest({
       }
 
       let commandURL = commandRow.command as string;
-      let realmURL = filterHandler.getRealmURL(
-        commandFilter ?? {},
-        commandURL,
-      );
+      let realmURL: string;
+      let commandInput: Record<string, any>;
+      try {
+        realmURL = filterHandler.getRealmURL(commandFilter ?? {}, commandURL);
+        commandInput = filterHandler.buildCommandInput(
+          payload,
+          ctxt.req.headers,
+          commandFilter ?? {},
+        );
+      } catch (error) {
+        console.error(
+          `Failed to build command context for command ${commandURL}, skipping:`,
+          error,
+        );
+        continue;
+      }
 
       // Run as the realm owner so they have write permissions in the target realm
       let runAs = webhook.username as string;
@@ -138,12 +150,6 @@ export default function handleWebhookReceiverRequest({
           error,
         );
       }
-
-      let commandInput = filterHandler.buildCommandInput(
-        payload,
-        ctxt.req.headers,
-        commandFilter ?? {},
-      );
 
       try {
         await enqueueRunCommandJob(

@@ -2611,7 +2611,7 @@ export class Realm {
       return createResponse({
         body: JSON.stringify({ data: { id: newURL } }),
         init: {
-          status: 202,
+          status: 201,
           headers: {
             'content-type': SupportedMimeType.CardJson,
             location: newURL,

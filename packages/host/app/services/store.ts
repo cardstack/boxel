@@ -1843,7 +1843,7 @@ export default class StoreService extends Service implements StoreInterface {
           isNew;
         if (useAsyncIndex) {
           // POST with X-Boxel-Async-Index: realm writes the file and returns
-          // 202 with the assigned card ID immediately (fire-and-forget index).
+          // 201 with the assigned card ID immediately (fire-and-forget index).
           // This avoids deadlocking when the run-command worker job can't pick
           // up the incremental-index job it enqueues. Also handles the case
           // where SaveCardCommand (which uses the regular store, not
@@ -1876,7 +1876,7 @@ export default class StoreService extends Service implements StoreInterface {
           this.setIdentityContext(instance);
           await this.startAutoSaving(instance);
           if (this.onSaveSubscriber) {
-            this.onSaveSubscriber(new URL(cardId), responseJson);
+            this.onSaveSubscriber(new URL(cardId), cardId);
           }
           return instance;
         }

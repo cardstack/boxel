@@ -515,7 +515,11 @@ module(`server-endpoints/${basename(__filename)}`, function () {
             attributes: {
               incomingWebhookId: webhookId,
               command: `http://test-realm/commands/process-github-event`,
-              filter: { type: 'github-event', eventType: 'pull_request', prNumber: 456 },
+              filter: {
+                type: 'github-event',
+                eventType: 'pull_request',
+                prNumber: 456,
+              },
             },
           },
         });

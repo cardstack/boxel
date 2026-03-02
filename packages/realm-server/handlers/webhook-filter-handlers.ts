@@ -1,28 +1,22 @@
 import type Koa from 'koa';
 
-/**
- * A webhook filter handler determines whether an incoming webhook payload
- * matches a registered command's filter, and how to build the command input
- * from the payload. This keeps the webhook receiver route handler generic
- * and decoupled from specific webhook providers (e.g., GitHub).
- */
 export interface WebhookFilterHandler {
-    /** Return true if this payload matches the filter configuration. */
-    matches(
-        payload: Record<string, any>,
-        headers: Koa.Context['req']['headers'],
-        filter: Record<string, any>,
-    ): boolean;
+  /** Return true if this payload matches the filter configuration. */
+  matches(
+    payload: Record<string, any>,
+    headers: Koa.Context['req']['headers'],
+    filter: Record<string, any>,
+  ): boolean;
 
-    /** Assemble the command input from the webhook payload and filter config. */
-    buildCommandInput(
-        payload: Record<string, any>,
-        headers: Koa.Context['req']['headers'],
-        filter: Record<string, any>,
-    ): Record<string, any>;
+  /** Assemble the command input from the webhook payload and filter config. */
+  buildCommandInput(
+    payload: Record<string, any>,
+    headers: Koa.Context['req']['headers'],
+    filter: Record<string, any>,
+  ): Record<string, any>;
 
-    /** Determine the realm URL where the command should run. */
-    getRealmURL(filter: Record<string, any>, commandURL: string): string;
+  /** Determine the realm URL where the command should run. */
+  getRealmURL(filter: Record<string, any>, commandURL: string): string;
 }
 
 /**
@@ -30,48 +24,46 @@ export interface WebhookFilterHandler {
  * (from X-GitHub-Event header) and PR number.
  */
 class GithubEventFilterHandler implements WebhookFilterHandler {
-    matches(
-        payload: Record<string, any>,
-        headers: Koa.Context['req']['headers'],
-        filter: Record<string, any>,
-    ): boolean {
-        let eventType = headers['x-github-event'] as string | undefined;
+  matches(
+    _payload: Record<string, any>,
+    headers: Koa.Context['req']['headers'],
+    filter: Record<string, any>,
+  ): boolean {
+    let eventType = headers['x-github-event'] as string | undefined;
 
-        if (filter.eventType && filter.eventType !== eventType) {
-            return false;
-        }
-
-        if (
-            filter.prNumber &&
-            payload.pull_request?.number !== filter.prNumber
-        ) {
-            return false;
-        }
-
-        return true;
+    if (filter.eventType && filter.eventType !== eventType) {
+      return false;
     }
 
-    buildCommandInput(
-        payload: Record<string, any>,
-        headers: Koa.Context['req']['headers'],
-        filter: Record<string, any>,
-    ): Record<string, any> {
-        let eventType = (headers['x-github-event'] as string) ?? '';
-        let submissionRealmUrl = this.getRealmURL(filter, '');
+    return true;
+  }
 
-        return {
-            eventType,
-            submissionRealmUrl,
-            payload,
-        };
+  buildCommandInput(
+    payload: Record<string, any>,
+    headers: Koa.Context['req']['headers'],
+    filter: Record<string, any>,
+  ): Record<string, any> {
+    let eventType = (headers['x-github-event'] as string) ?? '';
+    let submissionRealmUrl = filter.submissionRealmUrl as string | undefined;
+    if (!submissionRealmUrl) {
+      throw new Error(
+        'submissionRealmUrl must be provided in the filter for github-event webhook commands',
+      );
     }
 
-    getRealmURL(filter: Record<string, any>, commandURL: string): string {
-        return (
-            (filter.submissionRealmUrl as string | undefined) ??
-            new URL('/submissions/', commandURL).href
-        );
-    }
+    return {
+      eventType,
+      submissionRealmUrl,
+      payload,
+    };
+  }
+
+  getRealmURL(filter: Record<string, any>, commandURL: string): string {
+    return (
+      (filter.submissionRealmUrl as string | undefined) ??
+      new URL('/submissions/', commandURL).href
+    );
+  }
 }
 
 /**
@@ -80,27 +72,24 @@ class GithubEventFilterHandler implements WebhookFilterHandler {
  * command input.
  */
 class DefaultFilterHandler implements WebhookFilterHandler {
-    matches(): boolean {
-        return true;
-    }
+  matches(): boolean {
+    return true;
+  }
 
-    buildCommandInput(
-        payload: Record<string, any>,
-    ): Record<string, any> {
-        return { payload };
-    }
+  buildCommandInput(payload: Record<string, any>): Record<string, any> {
+    return { payload };
+  }
 
-    getRealmURL(filter: Record<string, any>, commandURL: string): string {
-        return (
-            (filter.realmUrl as string | undefined) ??
-            new URL('/', commandURL).href
-        );
-    }
+  getRealmURL(filter: Record<string, any>, commandURL: string): string {
+    return (
+      (filter.realmUrl as string | undefined) ?? new URL('/', commandURL).href
+    );
+  }
 }
 
 const filterHandlerRegistry: Record<string, WebhookFilterHandler> = {
-    'github-event': new GithubEventFilterHandler(),
-    default: new DefaultFilterHandler(),
+  'github-event': new GithubEventFilterHandler(),
+  default: new DefaultFilterHandler(),
 };
 
 /**
@@ -109,8 +98,10 @@ const filterHandlerRegistry: Record<string, WebhookFilterHandler> = {
  * present the default pass-through handler is returned.
  */
 export function getFilterHandler(
-    filter: Record<string, any> | null,
+  filter: Record<string, any> | null,
 ): WebhookFilterHandler {
-    let type = filter?.type as string | undefined;
-    return filterHandlerRegistry[type ?? 'default'] ?? filterHandlerRegistry.default;
+  let type = filter?.type as string | undefined;
+  return (
+    filterHandlerRegistry[type ?? 'default'] ?? filterHandlerRegistry.default
+  );
 }
