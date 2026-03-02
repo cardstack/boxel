@@ -116,6 +116,34 @@ export class LivePrerenderedSearchResource extends Resource<Args> {
     return this._meta;
   }
 
+  private async waitForPendingDocumentLoads(): Promise<void> {
+    // Do not call `renderStore.loaded()` here. This task is tracked by
+    // render-store, so waiting on `loaded()` would include ourselves.
+    const maxPasses = 10;
+    const requiredStablePasses = 2;
+    let stablePasses = 0;
+    for (let pass = 0; pass < maxPasses; pass++) {
+      let docsInFlight =
+        this.renderStore.cardDocsInFlight.length +
+        this.renderStore.fileMetaDocsInFlight.length;
+      if (docsInFlight === 0) {
+        stablePasses++;
+      } else {
+        stablePasses = 0;
+      }
+      if (stablePasses >= requiredStablePasses) {
+        return;
+      }
+      if (typeof requestAnimationFrame === 'function') {
+        await new Promise<void>((resolve) =>
+          requestAnimationFrame(() => resolve()),
+        );
+      } else {
+        await Promise.resolve();
+      }
+    }
+  }
+
   private isScopedCssModule(url: string): boolean {
     try {
       return isScopedCSSRequest(new URL(url).pathname);
@@ -174,6 +202,7 @@ export class LivePrerenderedSearchResource extends Resource<Args> {
                 component,
                 capture,
                 format,
+                () => this.waitForPendingDocumentLoads(),
               );
               return new PrerenderedCard(
                 {
