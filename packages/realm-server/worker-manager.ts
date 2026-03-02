@@ -8,6 +8,7 @@ import {
   param,
   separatedByCommas,
   IndexWriter,
+  isUrlLike,
   type Expression,
   type StatusArgs,
 } from '@cardstack/runtime-common';
@@ -248,10 +249,11 @@ let adapter: PgAdapter;
       allPriorityCount,
     )}`,
   );
-  let urlMappings = fromUrls.map((fromUrl, i) => [
-    new URL(String(fromUrl)),
-    new URL(String(toUrls[i])),
-  ]);
+  let urlMappings = fromUrls.map((fromUrl, i) => {
+    let from = String(fromUrl);
+    let to = new URL(String(toUrls[i]));
+    return [isUrlLike(from) ? new URL(from) : from, to] as [URL | string, URL];
+  });
   adapter = new PgAdapter({ autoMigrate });
 
   for (let i = 0; i < highPriorityCount; i++) {
@@ -401,7 +403,10 @@ async function markFailedJob({
   await query([`NOTIFY jobs_finished`]);
 }
 
-async function startWorker(priority: number, urlMappings: URL[][]) {
+async function startWorker(
+  priority: number,
+  urlMappings: [URL | string, URL][],
+) {
   let worker = spawn(
     'ts-node',
     [
@@ -412,7 +417,7 @@ async function startWorker(priority: number, urlMappings: URL[][]) {
       `--priority=${priority}`,
       ...flattenDeep(
         urlMappings.map(([from, to]) => [
-          `--fromUrl='${from.href}'`,
+          `--fromUrl='${from instanceof URL ? from.href : from}'`,
           `--toUrl='${to.href}'`,
         ]),
       ),

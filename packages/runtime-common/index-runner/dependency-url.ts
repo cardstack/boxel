@@ -1,6 +1,9 @@
+import { resolveCardReference } from '../card-reference-resolver';
+
 export function canonicalURL(url: string, relativeTo?: string): string {
   try {
-    let parsed = new URL(url, relativeTo);
+    let resolved = resolveCardReference(url, relativeTo);
+    let parsed = new URL(resolved);
     parsed.search = '';
     parsed.hash = '';
     return parsed.href;

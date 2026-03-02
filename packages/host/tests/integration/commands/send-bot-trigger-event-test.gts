@@ -6,7 +6,7 @@ import { module, test } from 'qunit';
 
 import { isBotTriggerEvent } from '@cardstack/runtime-common';
 
-import SendBotTriggerEventCommand from '@cardstack/host/commands/send-bot-trigger-event';
+import SendBotTriggerEventCommand from '@cardstack/host/commands/bot-requests/send-bot-trigger-event';
 
 import RealmService from '@cardstack/host/services/realm';
 
@@ -66,31 +66,16 @@ module('Integration | commands | send-bot-trigger-event', function (hooks) {
     let command = new SendBotTriggerEventCommand(commandService.commandContext);
     await command.execute({
       roomId,
-      type: 'create-listing-pr',
+      type: 'pr-listing-create',
+      realm: testRealmURL,
       input: { listingId: 'catalog/listing-1' },
     });
 
     let event = getRoomEvents(roomId).pop()!;
     assert.ok(isBotTriggerEvent(event));
-    assert.strictEqual(event.content.type, 'create-listing-pr');
+    assert.strictEqual(event.content.type, 'pr-listing-create');
+    assert.strictEqual(event.content.realm, testRealmURL);
+    assert.strictEqual(event.content.userId, '@testuser:localhost');
     assert.deepEqual(event.content.input, { listingId: 'catalog/listing-1' });
-  });
-
-  test('rejects unknown trigger types', async function (assert) {
-    let roomId = createAndJoinRoom({
-      sender: '@testuser:localhost',
-      name: 'room-test',
-    });
-    let commandService = getService('command-service');
-
-    let command = new SendBotTriggerEventCommand(commandService.commandContext);
-    await assert.rejects(
-      command.execute({
-        roomId,
-        type: 'not-a-real-command',
-        input: {},
-      }),
-      /Unsupported bot trigger event type/,
-    );
   });
 });

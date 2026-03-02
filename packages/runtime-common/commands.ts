@@ -22,7 +22,7 @@ export interface CommandContext {
 }
 
 export interface CommandInvocation<CardResultType extends CardDefConstructor> {
-  value: CardInstance<CardResultType> | null;
+  cardResult: CardInstance<CardResultType> | null;
   error: Error | null;
   status: 'pending' | 'success' | 'error';
   readonly isSuccess: boolean;

@@ -52,6 +52,7 @@ import type {
 import FormatChooser from '../code-submode/format-chooser';
 
 import FittedFormatGallery from './fitted-format-gallery';
+import MetadataPanel from './metadata-panel';
 
 interface Signature {
   Element: HTMLElement;
@@ -82,7 +83,11 @@ export default class PreviewPanel extends Component<Signature> {
   }
 
   private get format(): Format {
-    return this.args.format ?? 'isolated';
+    let format = this.args.format ?? 'isolated';
+    if (!this.availableFormats.includes(format)) {
+      return 'isolated';
+    }
+    return format;
   }
 
   private get cardId(): string | undefined {
@@ -150,11 +155,19 @@ export default class PreviewPanel extends Component<Signature> {
     return (this.args.card as any).name;
   }
 
+  private get isFileDef(): boolean {
+    return isFileDefInstance(this.args.card);
+  }
+
   private get availableFormats() {
     if (this.isCard) {
       return allFormats;
     }
-    return allFormats.filter((f) => f !== 'edit');
+    let formats = allFormats.filter((f) => f !== 'edit');
+    if (this.isFileDef) {
+      return [...formats, 'metadata' as Format];
+    }
+    return formats;
   }
 
   @provide(CardContextName)
@@ -233,7 +246,9 @@ export default class PreviewPanel extends Component<Signature> {
             data-test-code-mode-card-renderer-header={{this.cardId}}
             ...attributes
           />
-          {{#if (eq this.format 'fitted')}}
+          {{#if (eq this.format 'metadata')}}
+            <MetadataPanel @card={{@card}} />
+          {{else if (eq this.format 'fitted')}}
             <FittedFormatGallery @card={{@card}} />
           {{else}}
             {{#if this.renderedCardsForOverlayActions}}
@@ -311,7 +326,7 @@ export default class PreviewPanel extends Component<Signature> {
         transform: translateX(50%);
         position: absolute;
         bottom: var(--boxel-sp-sm);
-        width: 380px;
+        width: 460px;
         border-radius: var(--boxel-border-radius);
       }
       :deep(.fitted-format-gallery) {

@@ -7,6 +7,7 @@ on:
       - "packages/boxel-ui/**"
       - "packages/boxel-icons/**"
       - ".github/workflows/pr-boxel-host.yml"
+      - ".github/workflows/preview-host.yml"
       - "package.json"
       - "pnpm-lock.yaml"
 
@@ -34,6 +35,7 @@ jobs:
             .github/workflows/build-host.yml
             .github/workflows/deploy-host.yml
             .github/workflows/pr-boxel-host.yml
+            .github/workflows/preview-host.yml
             packages/host/**
             packages/boxel-ui/**
             packages/boxel-icons/**
@@ -68,6 +70,7 @@ jobs:
           AWS_CLOUDFRONT_DISTRIBUTION: EU4RGLH4EOCHJ
           PUBLISHED_REALM_BOXEL_SPACE_DOMAIN: staging.boxel.dev
           PUBLISHED_REALM_BOXEL_SITE_DOMAIN: staging.boxel.build
+          ICONS_URL: https://boxel-icons.boxel.ai
         # If you change these, change the equivalent line in preview-comment.yml
         with:
           package: boxel-host
@@ -103,6 +106,7 @@ jobs:
           AWS_CLOUDFRONT_DISTRIBUTION: E2PZR9CIAW093B
           PUBLISHED_REALM_BOXEL_SPACE_DOMAIN: boxel.space
           PUBLISHED_REALM_BOXEL_SITE_DOMAIN: boxel.site
+          ICONS_URL: https://boxel-icons.boxel.ai
         # If you change these, change the equivalent line in preview-comment.yml
         with:
           package: boxel-host

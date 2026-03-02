@@ -23,6 +23,9 @@ export default class FormatChooser extends Component<Signature> {
     <div class='format-chooser' ...attributes>
       <div class='format-chooser__buttons'>
         {{#each this.formats as |format|}}
+          {{#if (eq format 'metadata')}}
+            <span class='format-chooser__divider'></span>
+          {{/if}}
           <Button
             class={{cn 'format-chooser__button' active=(eq @format format)}}
             {{on 'click' (fn @setFormat format)}}
@@ -69,6 +72,13 @@ export default class FormatChooser extends Component<Signature> {
       .format-chooser__button.active {
         --boxel-button-color: var(--boxel-light);
         --boxel-button-text-color: var(--boxel-dark);
+      }
+
+      .format-chooser__divider {
+        width: 1px;
+        align-self: stretch;
+        margin: var(--boxel-sp-xxxs) var(--boxel-sp-xxxs);
+        background-color: var(--boxel-400);
       }
     </style>
   </template>

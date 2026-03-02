@@ -1,5 +1,6 @@
 import { baseRealm, baseFileRef } from './constants';
 import type { ResolvedCodeRef } from './code-ref';
+import { resolveCardReference } from './card-reference-resolver';
 
 export const BASE_FILE_DEF_CODE_REF = baseFileRef;
 
@@ -83,6 +84,6 @@ export function resolveFileDefCodeRef(fileURL: URL): ResolvedCodeRef {
   }
   return {
     ...mapping,
-    module: new URL(mapping.module, fileURL).href,
+    module: resolveCardReference(mapping.module, fileURL),
   };
 }

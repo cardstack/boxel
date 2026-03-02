@@ -4,13 +4,14 @@ import { isCardInstance } from '@cardstack/runtime-common';
 
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
-import HostBaseCommand from '../lib/host-base-command';
+import HostBaseCommand from '../../lib/host-base-command';
 
-import UseAiAssistantCommand from './ai-assistant';
+import UseAiAssistantCommand from '../ai-assistant';
+
 import SendBotTriggerEventCommand from './send-bot-trigger-event';
 
-import type MatrixService from '../services/matrix-service';
-import type StoreService from '../services/store';
+import type MatrixService from '../../services/matrix-service';
+import type StoreService from '../../services/store';
 import type { Listing } from '@cardstack/catalog/listing/listing';
 
 export default class CreateListingPRRequestCommand extends HostBaseCommand<
@@ -36,24 +37,19 @@ export default class CreateListingPRRequestCommand extends HostBaseCommand<
     await this.matrixService.ready;
 
     let { realm, listingId } = input;
-    let roomId = input.roomId;
     let listingName: string | undefined;
-
-    if (!roomId) {
-      let listing = await this.store.get<Listing>(listingId);
-      if (listing && isCardInstance(listing)) {
-        listingName = listing.name ?? listing.id;
-      }
-      let useAiAssistantCommand = new UseAiAssistantCommand(
-        this.commandContext,
-      );
-      let createRoomResult = await useAiAssistantCommand.execute({
-        roomId: 'new',
-        roomName: `PR: ${listingName ?? listingId ?? 'Listing'}`,
-        openRoom: true,
-      });
-      roomId = createRoomResult.roomId;
+    let listing = await this.store.get<Listing>(listingId);
+    if (listing && isCardInstance(listing)) {
+      listingName = listing.name ?? listing.id;
     }
+
+    let useAiAssistantCommand = new UseAiAssistantCommand(this.commandContext);
+    let createRoomResult = await useAiAssistantCommand.execute({
+      roomId: 'new',
+      roomName: `PR: ${listingName ?? listingId ?? 'Listing'}`,
+      openRoom: false,
+    });
+    let roomId = createRoomResult.roomId;
 
     let submissionBotId = this.matrixService.submissionBotUserId;
     if (!(await this.matrixService.isUserInRoom(roomId, submissionBotId))) {
@@ -62,11 +58,13 @@ export default class CreateListingPRRequestCommand extends HostBaseCommand<
 
     await new SendBotTriggerEventCommand(this.commandContext).execute({
       roomId,
-      type: 'create-listing-pr',
+      realm,
+      type: 'pr-listing-create',
       input: {
         roomId,
         realm,
         listingId,
+        ...(listingName ? { listingName } : {}),
       },
     });
   }

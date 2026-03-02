@@ -83,6 +83,7 @@ import {
   runtimeNonQueryDependencyContext,
   runtimeQueryDependencyContext,
   type RuntimeDependencyTrackingContext,
+  resolveCardReference,
 } from '@cardstack/runtime-common';
 import {
   captureQueryFieldSeedData,
@@ -122,6 +123,7 @@ import {
   serialize,
   serializeCard,
   serializeCardResource,
+  serializeFileDef,
   resourceFrom,
   type DeserializeOpts,
   type JSONAPIResource,
@@ -184,6 +186,7 @@ export {
   relationshipMeta,
   serialize,
   serializeCard,
+  serializeFileDef,
   ensureQueryFieldSearchResource,
   getStore,
   type BoxComponent,
@@ -1222,11 +1225,13 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
         `linksTo field '${this.name}' cannot deserialize a list of resource ids`,
       );
     }
-    let reference = value.links?.self;
+    let resourceId =
+      value.data && 'id' in value.data ? value.data?.id : undefined;
+    let reference = value.links?.self ?? resourceId;
     if (reference == null || reference === '') {
       return null;
     }
-    let href = new URL(reference, relativeTo).href;
+    let href = resolveCardReference(reference, relativeTo);
     let cachedInstance = isFileDef(this.card)
       ? store.getFileMeta(href)
       : store.getCard(href);
@@ -1240,9 +1245,7 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
     //bucket). we should never used links.self as part of that consideration. If there is a missing data.id in the resource entity
     //that means that the serialization is incorrect and is not JSON-API compliant.
     let resource =
-      value.data && 'id' in value.data
-        ? resourceFrom(doc, value.data?.id)
-        : undefined;
+      resourceId != null ? resourceFrom(doc, resourceId) : undefined;
     if (!resource) {
       if (loadedValue !== undefined) {
         return loadedValue;
@@ -1367,9 +1370,7 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
         <CardCrudFunctionsConsumer as |cardCrudFunctions|>
           <DefaultFormatsConsumer as |defaultFormats|>
             {{#if
-              (shouldRenderEditor
-                @format defaultFormats.cardDef isComputed
-              )
+              (shouldRenderEditor @format defaultFormats.cardDef isComputed)
             }}
               <LinksToEditor
                 @model={{(getInnerModel)}}
@@ -1708,12 +1709,32 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
     relativeTo: URL | undefined,
     opts: DeserializeOpts,
   ): Promise<(BaseInstanceType<FieldT> | NotLoadedValue)[]> {
-    if (!Array.isArray(values) && values.links.self === null) {
-      return [];
+    let relationships: Relationship[];
+    if (Array.isArray(values)) {
+      relationships = values;
+    } else {
+      if (!isRelationship(values)) {
+        throw new Error(
+          `linksToMany field '${
+            this.name
+          }' cannot deserialize non-relationship value ${JSON.stringify(
+            values,
+          )}`,
+        );
+      }
+      if (!Array.isArray(values.data)) {
+        return [];
+      }
+      relationships = values.data.map((entry) => ({
+        links: {
+          self: entry && 'id' in entry ? (entry.id ?? null) : null,
+        },
+        data: entry,
+      }));
     }
 
     let resources: Promise<BaseInstanceType<FieldT> | NotLoadedValue>[] =
-      values.map(async (value: Relationship) => {
+      relationships.map(async (value: Relationship) => {
         if (!isRelationship(value)) {
           throw new Error(
             `linksToMany field '${
@@ -1728,11 +1749,16 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
             `linksToMany field '${this.name}' cannot deserialize a list of resource ids`,
           );
         }
-        let reference = value.links?.self;
+        // links.self is used to tell the consumer of this payload how to get the resource via HTTP.
+        // data.id is used to tell the consumer how to find the resource in the included bucket.
+        // Prefer data.id for resourceFrom(), and fall back to links.self when data.id is missing
+        let resourceId =
+          value.data && 'id' in value.data ? value.data?.id : undefined;
+        let reference = value.links?.self ?? resourceId;
         if (reference == null) {
           return null;
         }
-        let normalizedReference = new URL(reference, relativeTo).href;
+        let normalizedReference = resolveCardReference(reference, relativeTo);
         let cachedInstance = isFileDef(this.card)
           ? store.getFileMeta(normalizedReference)
           : store.getCard(normalizedReference);
@@ -1741,12 +1767,6 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
           cachedInstance[isSavedInstance] = true;
           return cachedInstance;
         }
-        // links.self is used to tell the consumer of this payload how to get the resource via HTTP.
-        // data.id is used to tell the consumer how to find the resource in the included bucket.
-        // Prefer data.id for resourceFrom(), but fall back to links.self when data.id is missing
-        // (the array-style linksToMany format omits data.id).
-        let resourceId =
-          value.data && 'id' in value.data ? value.data?.id : undefined;
         if (!resourceId) {
           resourceId = normalizedReference;
         }
@@ -2057,6 +2077,7 @@ export class BaseDef {
   // So we need a [relativeTo] property that derives from the root document ID in order to
   // resolve relative links at the FieldDef level.
   [relativeTo]: URL | undefined = undefined;
+  [meta]: CardResourceMeta | undefined = undefined;
   declare ['constructor']: BaseDefConstructor;
   static baseDef: undefined;
   static data?: Record<string, any>; // TODO probably refactor this away all together
@@ -2118,7 +2139,7 @@ export class BaseDef {
         if (!value[relativeTo]) {
           return maybeRelativeURL;
         }
-        return new URL(maybeRelativeURL, value[relativeTo]).href;
+        return resolveCardReference(maybeRelativeURL, value[relativeTo]);
       }
       return Object.fromEntries(
         Object.entries(
@@ -2141,7 +2162,7 @@ export class BaseDef {
           if (isNotLoadedValue(rawValue)) {
             let normalizedId = rawValue.reference;
             if (value[relativeTo]) {
-              normalizedId = new URL(normalizedId, value[relativeTo]).href;
+              normalizedId = resolveCardReference(normalizedId, value[relativeTo]);
             }
             return [fieldName, { id: makeAbsoluteURL(rawValue.reference) }];
           }
@@ -2438,7 +2459,6 @@ export class CardInfoField extends FieldDef {
 export class CardDef extends BaseDef {
   readonly [localId]: string = uuidv4();
   [isSavedInstance] = false;
-  [meta]: CardResourceMeta | undefined = undefined;
   get [fieldsUntracked](): Record<string, typeof BaseDef> | undefined {
     let overrides = getFieldOverrides(this);
     return overrides ? Object.fromEntries(getFieldOverrides(this)) : undefined;
@@ -2769,7 +2789,7 @@ function lazilyLoadLink(
     inflightLoads = new Map();
     inflightLinkLoads.set(instance, inflightLoads);
   }
-  let reference = new URL(link, instance.id ?? instance[relativeTo]).href;
+  let reference = resolveCardReference(link, instance.id ?? instance[relativeTo]);
   let key = `${field.name}/${reference}`;
   let promise = inflightLoads.get(key);
   let store = getStore(instance);
@@ -2838,10 +2858,10 @@ function lazilyLoadLink(
           if (!isNotLoadedValue(item)) {
             continue;
           }
-          let notLoadedRef = new URL(
+          let notLoadedRef = resolveCardReference(
             item.reference,
             instance.id ?? instance[relativeTo],
-          ).href;
+          );
           if (reference === notLoadedRef) {
             indices.push(index);
           }
@@ -2868,10 +2888,12 @@ function lazilyLoadLink(
           : `${reference}.json`;
       let payloadError: Pick<SerializedError, 'status' | 'message'> &
         Partial<Pick<SerializedError, 'title' | 'stack' | 'deps'>> & {
-        additionalErrors?: Array<
-          Partial<Pick<SerializedError, 'title' | 'status' | 'message' | 'stack'>>
-        >;
-      } = {
+          additionalErrors?: Array<
+            Partial<
+              Pick<SerializedError, 'title' | 'status' | 'message' | 'stack'>
+            >
+          >;
+        } = {
         title: isMissingFile
           ? 'Link Not Found'
           : (error?.message ?? 'Card Error'),
@@ -2936,7 +2958,10 @@ function trackRuntimeRelationshipDependency(
   }
   if (isFileDef(declaredCard)) {
     trackRuntimeFileDependency(id, dependencyTrackingContext);
-    trackRuntimeRelationshipModuleDependencies(value, dependencyTrackingContext);
+    trackRuntimeRelationshipModuleDependencies(
+      value,
+      dependencyTrackingContext,
+    );
     return;
   }
   trackRuntimeInstanceDependency(id, dependencyTrackingContext);
