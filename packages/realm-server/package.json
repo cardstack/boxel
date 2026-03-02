@@ -64,6 +64,7 @@
     "loglevel": "catalog:",
     "mime-types": "catalog:",
     "npm-run-all": "catalog:",
+    "pg": "catalog:",
     "pluralize": "catalog:",
     "prettier": "catalog:",
     "prettier-plugin-ember-template-tag": "catalog:",

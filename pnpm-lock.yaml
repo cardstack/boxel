@@ -403,7 +403,7 @@ catalogs:
       specifier: ^8.0.1
       version: 8.2.5
     eslint-plugin-qunit-dom:
-      specifier: mainmatter/eslint-plugin-qunit-dom#d66c841
+      specifier: mainmatter/eslint-plugin-qunit-dom#d66c84190b018deb96c715c7f2bde3536a9c704b
       version: 0.2.0
     eslint-plugin-simple-import-sort:
       specifier: ^8.0.0
@@ -737,7 +737,7 @@ importers:
         version: 1.3.0(typescript@5.9.3)
       '@glint/environment-ember-loose':
         specifier: 'catalog:'
-        version: 1.5.2(@glimmer/component@2.0.0)(@glint/template@1.3.0)(ember-cli-htmlbars@6.3.0)(ember-modifier@4.1.0(ember-source@5.12.0(patch_hash=2586bd032e74105d65b7953ccaae1cd1d1175047a58ba89ec0057f1f8b7b7fe1)(@glimmer/component@2.0.0)(@glint/template@1.3.0)(rsvp@4.8.5)(webpack@5.104.1)))
+        version: 1.5.2(@glimmer/component@2.0.0)(@glint/template@1.3.0)(ember-cli-htmlbars@6.3.0)(ember-modifier@4.1.0(ember-source@5.12.0(patch_hash=2586bd032e74105d65b7953ccaae1cd1d1175047a58ba89ec0057f1f8b7b7fe1)(@glimmer/component@2.0.0)(@glint/template@1.3.0)(rsvp@4.8.5)))
       '@glint/environment-ember-template-imports':
         specifier: 1.3.0
         version: 1.3.0(@glint/environment-ember-loose@1.5.2(@glimmer/component@2.0.0)(@glint/template@1.3.0)(ember-cli-htmlbars@6.3.0)(ember-modifier@4.1.0(ember-source@5.12.0(patch_hash=2586bd032e74105d65b7953ccaae1cd1d1175047a58ba89ec0057f1f8b7b7fe1)(@glimmer/component@2.0.0)(@glint/template@1.3.0)(rsvp@4.8.5))))(@glint/template@1.3.0)
@@ -1013,7 +1013,7 @@ importers:
         version: 1.10.2
       '@glint/environment-ember-loose':
         specifier: 'catalog:'
-        version: 1.5.2(@glimmer/component@2.0.0)(@glint/template@1.3.0)(ember-cli-htmlbars@6.3.0)(ember-modifier@4.1.0(ember-source@5.12.0(patch_hash=2586bd032e74105d65b7953ccaae1cd1d1175047a58ba89ec0057f1f8b7b7fe1)(@glimmer/component@2.0.0)(@glint/template@1.3.0)(rsvp@4.8.5)(webpack@5.104.1)))
+        version: 1.5.2(@glimmer/component@2.0.0)(@glint/template@1.3.0)(ember-cli-htmlbars@6.3.0)(ember-modifier@4.1.0(ember-source@5.12.0(patch_hash=2586bd032e74105d65b7953ccaae1cd1d1175047a58ba89ec0057f1f8b7b7fe1)(@glimmer/component@2.0.0)(@glint/template@1.3.0)(rsvp@4.8.5)))
       '@glint/template':
         specifier: 1.3.0
         version: 1.3.0
@@ -1134,7 +1134,7 @@ importers:
         version: 2.0.0
       '@glint/environment-ember-loose':
         specifier: 'catalog:'
-        version: 1.5.2(@glimmer/component@2.0.0)(@glint/template@1.3.0)(ember-cli-htmlbars@6.3.0)(ember-modifier@4.1.0(ember-source@5.12.0(patch_hash=2586bd032e74105d65b7953ccaae1cd1d1175047a58ba89ec0057f1f8b7b7fe1)(@glimmer/component@2.0.0)(@glint/template@1.3.0)(rsvp@4.8.5)(webpack@5.104.1)))
+        version: 1.5.2(@glimmer/component@2.0.0)(@glint/template@1.3.0)(ember-cli-htmlbars@6.3.0)(ember-modifier@4.1.0(ember-source@5.12.0(patch_hash=2586bd032e74105d65b7953ccaae1cd1d1175047a58ba89ec0057f1f8b7b7fe1)(@glimmer/component@2.0.0)(@glint/template@1.3.0)(rsvp@4.8.5)))
       '@glint/template':
         specifier: 1.3.0
         version: 1.3.0
@@ -1327,7 +1327,7 @@ importers:
         version: 1.3.0(typescript@5.9.3)
       '@glint/environment-ember-loose':
         specifier: 'catalog:'
-        version: 1.5.2(@glimmer/component@2.0.0)(@glint/template@1.3.0)(ember-cli-htmlbars@6.3.0)(ember-modifier@4.1.0(ember-source@5.12.0(patch_hash=2586bd032e74105d65b7953ccaae1cd1d1175047a58ba89ec0057f1f8b7b7fe1)(@glimmer/component@2.0.0)(@glint/template@1.3.0)(rsvp@4.8.5)(webpack@5.104.1)))
+        version: 1.5.2(@glimmer/component@2.0.0)(@glint/template@1.3.0)(ember-cli-htmlbars@6.3.0)(ember-modifier@4.1.0(ember-source@5.12.0(patch_hash=2586bd032e74105d65b7953ccaae1cd1d1175047a58ba89ec0057f1f8b7b7fe1)(@glimmer/component@2.0.0)(@glint/template@1.3.0)(rsvp@4.8.5)))
       '@glint/environment-ember-template-imports':
         specifier: 1.3.0
         version: 1.3.0(@glint/environment-ember-loose@1.5.2(@glimmer/component@2.0.0)(@glint/template@1.3.0)(ember-cli-htmlbars@6.3.0)(ember-modifier@4.1.0(ember-source@5.12.0(patch_hash=2586bd032e74105d65b7953ccaae1cd1d1175047a58ba89ec0057f1f8b7b7fe1)(@glimmer/component@2.0.0)(@glint/template@1.3.0)(rsvp@4.8.5))))(@glint/template@1.3.0)
@@ -1519,7 +1519,7 @@ importers:
         version: 1.7.4
       '@glint/environment-ember-loose':
         specifier: 'catalog:'
-        version: 1.5.2(@glimmer/component@2.0.0)(@glint/template@1.3.0)(ember-cli-htmlbars@6.3.0)(ember-modifier@4.1.0(ember-source@5.12.0(patch_hash=2586bd032e74105d65b7953ccaae1cd1d1175047a58ba89ec0057f1f8b7b7fe1)(@glimmer/component@2.0.0)(@glint/template@1.3.0)(rsvp@4.8.5)(webpack@5.104.1)))
+        version: 1.5.2(@glimmer/component@2.0.0)(@glint/template@1.3.0)(ember-cli-htmlbars@6.3.0)(ember-modifier@4.1.0(ember-source@5.12.0(patch_hash=2586bd032e74105d65b7953ccaae1cd1d1175047a58ba89ec0057f1f8b7b7fe1)(@glimmer/component@2.0.0)(@glint/template@1.3.0)(rsvp@4.8.5)))
       '@glint/template':
         specifier: 1.3.0
         version: 1.3.0
@@ -1712,7 +1712,7 @@ importers:
     dependencies:
       '@glint/environment-ember-loose':
         specifier: 'catalog:'
-        version: 1.5.2(@glimmer/component@2.0.0)(@glint/template@1.3.0)(ember-cli-htmlbars@6.3.0)(ember-modifier@4.1.0(ember-source@5.12.0(patch_hash=2586bd032e74105d65b7953ccaae1cd1d1175047a58ba89ec0057f1f8b7b7fe1)(@glimmer/component@2.0.0)(@glint/template@1.3.0)(rsvp@4.8.5)(webpack@5.104.1)))
+        version: 1.5.2(@glimmer/component@2.0.0)(@glint/template@1.3.0)(ember-cli-htmlbars@6.3.0)(ember-modifier@4.1.0(ember-source@5.12.0(patch_hash=2586bd032e74105d65b7953ccaae1cd1d1175047a58ba89ec0057f1f8b7b7fe1)(@glimmer/component@2.0.0)(@glint/template@1.3.0)(rsvp@4.8.5)))
       ember-basic-dropdown:
         specifier: 8.0.4
         version: 8.0.4(patch_hash=19b0fc5d4bd8b9aa296c4065fa5e33bdbb965db0b277810b596eacd0b9e2f428)(@ember/string@4.0.1)(@ember/test-helpers@3.3.1(@babel/core@7.28.6)(@glint/template@1.3.0)(ember-source@5.12.0(patch_hash=2586bd032e74105d65b7953ccaae1cd1d1175047a58ba89ec0057f1f8b7b7fe1)(@glimmer/component@2.0.0)(@glint/template@1.3.0)(rsvp@4.8.5)(webpack@5.104.1))(webpack@5.104.1))(@glimmer/component@2.0.0)(@glimmer/tracking@1.1.2)(@glint/environment-ember-loose@1.5.2(@glimmer/component@2.0.0)(@glint/template@1.3.0)(ember-cli-htmlbars@6.3.0)(ember-modifier@4.1.0(ember-source@5.12.0(patch_hash=2586bd032e74105d65b7953ccaae1cd1d1175047a58ba89ec0057f1f8b7b7fe1)(@glimmer/component@2.0.0)(@glint/template@1.3.0)(rsvp@4.8.5)(webpack@5.104.1))))(@glint/template@1.3.0)(ember-source@5.12.0(patch_hash=2586bd032e74105d65b7953ccaae1cd1d1175047a58ba89ec0057f1f8b7b7fe1)(@glimmer/component@2.0.0)(@glint/template@1.3.0)(rsvp@4.8.5)(webpack@5.104.1))
@@ -2195,7 +2195,7 @@ importers:
         version: 1.3.0(typescript@5.9.3)
       '@glint/environment-ember-loose':
         specifier: 'catalog:'
-        version: 1.5.2(@glimmer/component@2.0.0)(@glint/template@1.3.0)(ember-cli-htmlbars@6.3.0)(ember-modifier@4.1.0(ember-source@5.12.0(patch_hash=2586bd032e74105d65b7953ccaae1cd1d1175047a58ba89ec0057f1f8b7b7fe1)(@glimmer/component@2.0.0)(@glint/template@1.3.0)(rsvp@4.8.5)(webpack@5.104.1)))
+        version: 1.5.2(@glimmer/component@2.0.0)(@glint/template@1.3.0)(ember-cli-htmlbars@6.3.0)(ember-modifier@4.1.0(ember-source@5.12.0(patch_hash=2586bd032e74105d65b7953ccaae1cd1d1175047a58ba89ec0057f1f8b7b7fe1)(@glimmer/component@2.0.0)(@glint/template@1.3.0)(rsvp@4.8.5)))
       '@glint/environment-ember-template-imports':
         specifier: 1.3.0
         version: 1.3.0(@glint/environment-ember-loose@1.5.2(@glimmer/component@2.0.0)(@glint/template@1.3.0)(ember-cli-htmlbars@6.3.0)(ember-modifier@4.1.0(ember-source@5.12.0(patch_hash=2586bd032e74105d65b7953ccaae1cd1d1175047a58ba89ec0057f1f8b7b7fe1)(@glimmer/component@2.0.0)(@glint/template@1.3.0)(rsvp@4.8.5))))(@glint/template@1.3.0)
@@ -2471,7 +2471,7 @@ importers:
         version: 8.2.5(eslint@8.57.1)
       eslint-plugin-qunit-dom:
         specifier: 'catalog:'
-        version: https://codeload.github.com/mainmatter/eslint-plugin-qunit-dom/tar.gz/d66c841(eslint@8.57.1)
+        version: https://codeload.github.com/mainmatter/eslint-plugin-qunit-dom/tar.gz/d66c84190b018deb96c715c7f2bde3536a9c704b(eslint@8.57.1)
       ethers:
         specifier: 'catalog:'
         version: 6.16.0
@@ -2879,6 +2879,9 @@ importers:
       npm-run-all:
         specifier: 'catalog:'
         version: 4.1.5
+      pg:
+        specifier: 'catalog:'
+        version: 8.16.3
       pluralize:
         specifier: 'catalog:'
         version: 8.0.0
@@ -3146,7 +3149,7 @@ importers:
         version: 1.3.0(typescript@5.9.3)
       '@glint/environment-ember-loose':
         specifier: 'catalog:'
-        version: 1.5.2(@glimmer/component@2.0.0)(@glint/template@1.3.0)(ember-cli-htmlbars@6.3.0)(ember-modifier@4.1.0(ember-source@5.12.0(patch_hash=2586bd032e74105d65b7953ccaae1cd1d1175047a58ba89ec0057f1f8b7b7fe1)(@glimmer/component@2.0.0)(@glint/template@1.3.0)(rsvp@4.8.5)(webpack@5.104.1)))
+        version: 1.5.2(@glimmer/component@2.0.0)(@glint/template@1.3.0)(ember-cli-htmlbars@6.3.0)(ember-modifier@4.1.0(ember-source@5.12.0(patch_hash=2586bd032e74105d65b7953ccaae1cd1d1175047a58ba89ec0057f1f8b7b7fe1)(@glimmer/component@2.0.0)(@glint/template@1.3.0)(rsvp@4.8.5)))
       '@glint/environment-ember-template-imports':
         specifier: 1.3.0
         version: 1.3.0(@glint/environment-ember-loose@1.5.2(@glimmer/component@2.0.0)(@glint/template@1.3.0)(ember-cli-htmlbars@6.3.0)(ember-modifier@4.1.0(ember-source@5.12.0(patch_hash=2586bd032e74105d65b7953ccaae1cd1d1175047a58ba89ec0057f1f8b7b7fe1)(@glimmer/component@2.0.0)(@glint/template@1.3.0)(rsvp@4.8.5))))(@glint/template@1.3.0)
@@ -3215,7 +3218,7 @@ importers:
         version: 1.3.0(typescript@5.9.3)
       '@glint/environment-ember-loose':
         specifier: 'catalog:'
-        version: 1.5.2(@glimmer/component@2.0.0)(@glint/template@1.3.0)(ember-cli-htmlbars@6.3.0)(ember-modifier@4.1.0(ember-source@5.12.0(patch_hash=2586bd032e74105d65b7953ccaae1cd1d1175047a58ba89ec0057f1f8b7b7fe1)(@glimmer/component@2.0.0)(@glint/template@1.3.0)(rsvp@4.8.5)(webpack@5.104.1)))
+        version: 1.5.2(@glimmer/component@2.0.0)(@glint/template@1.3.0)(ember-cli-htmlbars@6.3.0)(ember-modifier@4.1.0(ember-source@5.12.0(patch_hash=2586bd032e74105d65b7953ccaae1cd1d1175047a58ba89ec0057f1f8b7b7fe1)(@glimmer/component@2.0.0)(@glint/template@1.3.0)(rsvp@4.8.5)))
       '@glint/environment-ember-template-imports':
         specifier: ^1.3.0
         version: 1.3.0(@glint/environment-ember-loose@1.5.2(@glimmer/component@2.0.0)(@glint/template@1.3.0)(ember-cli-htmlbars@6.3.0)(ember-modifier@4.1.0(ember-source@5.12.0(patch_hash=2586bd032e74105d65b7953ccaae1cd1d1175047a58ba89ec0057f1f8b7b7fe1)(@glimmer/component@2.0.0)(@glint/template@1.3.0)(rsvp@4.8.5))))(@glint/template@1.3.0)
@@ -9305,8 +9308,8 @@ packages:
       eslint-config-prettier:
         optional: true
 
-  eslint-plugin-qunit-dom@https://codeload.github.com/mainmatter/eslint-plugin-qunit-dom/tar.gz/d66c841:
-    resolution: {tarball: https://codeload.github.com/mainmatter/eslint-plugin-qunit-dom/tar.gz/d66c841}
+  eslint-plugin-qunit-dom@https://codeload.github.com/mainmatter/eslint-plugin-qunit-dom/tar.gz/d66c84190b018deb96c715c7f2bde3536a9c704b:
+    resolution: {tarball: https://codeload.github.com/mainmatter/eslint-plugin-qunit-dom/tar.gz/d66c84190b018deb96c715c7f2bde3536a9c704b}
     version: 0.2.0
     engines: {node: 12.* || 14.* || >= 16.*}
     peerDependencies:
@@ -15577,7 +15580,7 @@ snapshots:
       ember-cli-babel: 7.26.11
       ember-source: 5.12.0(patch_hash=2586bd032e74105d65b7953ccaae1cd1d1175047a58ba89ec0057f1f8b7b7fe1)(@glimmer/component@2.0.0)(@glint/template@1.3.0)(rsvp@4.8.5)(webpack@5.104.1)
     optionalDependencies:
-      '@glint/environment-ember-loose': 1.5.2(@glimmer/component@2.0.0)(@glint/template@1.3.0)(ember-cli-htmlbars@6.3.0)(ember-modifier@4.1.0(ember-source@5.12.0(patch_hash=2586bd032e74105d65b7953ccaae1cd1d1175047a58ba89ec0057f1f8b7b7fe1)(@glimmer/component@2.0.0)(@glint/template@1.3.0)(rsvp@4.8.5)(webpack@5.104.1)))
+      '@glint/environment-ember-loose': 1.5.2(@glimmer/component@2.0.0)(@glint/template@1.3.0)(ember-cli-htmlbars@6.3.0)(ember-modifier@4.1.0(ember-source@5.12.0(patch_hash=2586bd032e74105d65b7953ccaae1cd1d1175047a58ba89ec0057f1f8b7b7fe1)(@glimmer/component@2.0.0)(@glint/template@1.3.0)(rsvp@4.8.5)))
       '@glint/template': 1.3.0
     transitivePeerDependencies:
       - supports-color
@@ -16240,7 +16243,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@glint/environment-ember-loose@1.5.2(@glimmer/component@2.0.0)(@glint/template@1.3.0)(ember-cli-htmlbars@6.3.0)(ember-modifier@4.1.0(ember-source@5.12.0(patch_hash=2586bd032e74105d65b7953ccaae1cd1d1175047a58ba89ec0057f1f8b7b7fe1)(@glimmer/component@2.0.0)(@glint/template@1.3.0)(rsvp@4.8.5)(webpack@5.104.1)))':
+  '@glint/environment-ember-loose@1.5.2(@glimmer/component@2.0.0)(@glint/template@1.3.0)(ember-cli-htmlbars@6.3.0)(ember-modifier@4.1.0(ember-source@5.12.0(patch_hash=2586bd032e74105d65b7953ccaae1cd1d1175047a58ba89ec0057f1f8b7b7fe1)(@glimmer/component@2.0.0)(@glint/template@1.3.0)(rsvp@4.8.5)))':
     dependencies:
       '@glimmer/component': 2.0.0
       '@glint/template': 1.3.0
@@ -16250,7 +16253,7 @@ snapshots:
 
   '@glint/environment-ember-template-imports@1.3.0(@glint/environment-ember-loose@1.5.2(@glimmer/component@2.0.0)(@glint/template@1.3.0)(ember-cli-htmlbars@6.3.0)(ember-modifier@4.1.0(ember-source@5.12.0(patch_hash=2586bd032e74105d65b7953ccaae1cd1d1175047a58ba89ec0057f1f8b7b7fe1)(@glimmer/component@2.0.0)(@glint/template@1.3.0)(rsvp@4.8.5))))(@glint/template@1.3.0)':
     dependencies:
-      '@glint/environment-ember-loose': 1.5.2(@glimmer/component@2.0.0)(@glint/template@1.3.0)(ember-cli-htmlbars@6.3.0)(ember-modifier@4.1.0(ember-source@5.12.0(patch_hash=2586bd032e74105d65b7953ccaae1cd1d1175047a58ba89ec0057f1f8b7b7fe1)(@glimmer/component@2.0.0)(@glint/template@1.3.0)(rsvp@4.8.5)(webpack@5.104.1)))
+      '@glint/environment-ember-loose': 1.5.2(@glimmer/component@2.0.0)(@glint/template@1.3.0)(ember-cli-htmlbars@6.3.0)(ember-modifier@4.1.0(ember-source@5.12.0(patch_hash=2586bd032e74105d65b7953ccaae1cd1d1175047a58ba89ec0057f1f8b7b7fe1)(@glimmer/component@2.0.0)(@glint/template@1.3.0)(rsvp@4.8.5)))
       '@glint/template': 1.3.0
       ember-template-imports: 3.4.2
     transitivePeerDependencies:
@@ -22215,7 +22218,7 @@ snapshots:
       '@types/eslint': 8.56.5
       eslint-config-prettier: 9.1.2(eslint@8.57.1)
 
-  eslint-plugin-qunit-dom@https://codeload.github.com/mainmatter/eslint-plugin-qunit-dom/tar.gz/d66c841(eslint@8.57.1):
+  eslint-plugin-qunit-dom@https://codeload.github.com/mainmatter/eslint-plugin-qunit-dom/tar.gz/d66c84190b018deb96c715c7f2bde3536a9c704b(eslint@8.57.1):
     dependencies:
       eslint: 8.57.1
 
