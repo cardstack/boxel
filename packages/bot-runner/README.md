@@ -20,6 +20,7 @@ Environment variables:
 - `MATRIX_URL` (default: `http://localhost:8008`)
 - `SUBMISSION_BOT_USERNAME` (default: `submissionbot`)
 - `SUBMISSION_BOT_PASSWORD` (default: `password`)
+- `SUBMISSION_BOT_GITHUB_TOKEN` (required for `pr-listing-create` workaround flow that opens PRs from bot-runner)
 - `LOG_LEVELS` (default: `*=info`)
 - `SENTRY_DSN` (optional)
 - `SENTRY_ENVIRONMENT` (optional, default: `development`)
@@ -105,7 +106,7 @@ flowchart TD
 [
   {
     "name": "create-listing-pr",
-    "command": "@cardstack/boxel-host/commands/create-listing-pr/default",
+    "command": "@cardstack/catalog/commands/create-submission/default",
     "filter": {
       "type": "matrix-event",
       "event_type": "app.boxel.bot-trigger",

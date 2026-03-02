@@ -4,6 +4,8 @@ import type { RenderingTestContext } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
+import { isBotTriggerEvent } from '@cardstack/runtime-common';
+
 import SendBotTriggerEventCommand from '@cardstack/host/commands/bot-requests/send-bot-trigger-event';
 
 import RealmService from '@cardstack/host/services/realm';
@@ -70,7 +72,7 @@ module('Integration | commands | send-bot-trigger-event', function (hooks) {
     });
 
     let event = getRoomEvents(roomId).pop()!;
-    assert.strictEqual(event.type, 'app.boxel.bot-trigger');
+    assert.ok(isBotTriggerEvent(event));
     assert.strictEqual(event.content.type, 'pr-listing-create');
     assert.strictEqual(event.content.realm, testRealmURL);
     assert.strictEqual(event.content.userId, '@testuser:localhost');

@@ -1,6 +1,9 @@
 import { service } from '@ember/service';
 
+import { isBotTriggerEvent } from '@cardstack/runtime-common';
+
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type { BotTriggerEvent } from 'https://cardstack.com/base/matrix-event';
 
 import HostBaseCommand from '../../lib/host-base-command';
 
@@ -25,7 +28,6 @@ export default class SendBotTriggerEventCommand extends HostBaseCommand<
     input: BaseCommandModule.SendBotTriggerEventInput,
   ): Promise<undefined> {
     await this.matrixService.ready;
-
     let userId = this.matrixService.userId;
     if (!userId) {
       throw new Error('userId is required to send bot trigger events');
@@ -40,7 +42,11 @@ export default class SendBotTriggerEventCommand extends HostBaseCommand<
         realm: input.realm,
         userId,
       },
-    };
+    } as BotTriggerEvent;
+
+    if (!isBotTriggerEvent(event)) {
+      throw new Error(`Invalid bot trigger event payload`);
+    }
 
     await this.matrixService.sendEvent(input.roomId, event.type, event.content);
   }
