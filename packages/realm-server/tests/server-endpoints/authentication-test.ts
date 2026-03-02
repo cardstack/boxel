@@ -76,7 +76,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       },
     });
 
-    test('authenticates user', async function (assert) {
+    test('authenticates user and lazy-creates them in DB', async function (assert) {
       let matrixClient = new MatrixClient({
         matrixURL: realmServerTestMatrix.url,
         // it's a little awkward that we are hijacking a realm user to pretend to
@@ -85,7 +85,11 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         seed: realmSecretSeed,
       });
       await matrixClient.login();
-      let userId = matrixClient.getUserId();
+      let userId = matrixClient.getUserId()!;
+
+      // User should not exist before session creation
+      let userBefore = await getUserByMatrixUserId(dbAdapter, userId);
+      assert.notOk(userBefore, 'User does not exist before session creation');
 
       let { jwt: token, status } = await createRealmServerSession(
         matrixClient,
@@ -100,25 +104,8 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         undefined,
         'sessionRoom should be defined',
       );
-    });
 
-    test('lazy-creates user in DB on first session', async function (assert) {
-      let matrixClient = new MatrixClient({
-        matrixURL: realmServerTestMatrix.url,
-        username: 'test_realm',
-        seed: realmSecretSeed,
-      });
-      await matrixClient.login();
-      let userId = matrixClient.getUserId()!;
-
-      // User should not exist before session creation
-      let userBefore = await getUserByMatrixUserId(dbAdapter, userId);
-      assert.notOk(userBefore, 'User does not exist before session creation');
-
-      let { status } = await createRealmServerSession(matrixClient, request);
-      assert.strictEqual(status, 201, 'HTTP 201 status');
-
-      // User should now exist in DB
+      // User should now exist in DB (lazy-created during session creation)
       let user = await getUserByMatrixUserId(dbAdapter, userId);
       assert.ok(user, 'User was lazy-created during session creation');
 
