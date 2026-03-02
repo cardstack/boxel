@@ -34,7 +34,8 @@ export class CommandRunner {
     registrationId: string,
   ): Promise<void | RunCommandResponse> {
     try {
-      let allowedCommands = await this.getCommandsForRegistration(registrationId);
+      let allowedCommands =
+        await this.getCommandsForRegistration(registrationId);
       if (
         !allowedCommands.length ||
         typeof eventContent.type !== 'string' ||
@@ -85,8 +86,13 @@ export class CommandRunner {
           });
           throw new Error(errorMessage);
         }
-        await this.createListingPRHandler.ensureCreateListingBranch(eventContent);
-        await this.createListingPRHandler.addContentsToCommit(eventContent, result);
+        await this.createListingPRHandler.ensureCreateListingBranch(
+          eventContent,
+        );
+        await this.createListingPRHandler.addContentsToCommit(
+          eventContent,
+          result,
+        );
         await this.createListingPRHandler.openCreateListingPR(
           eventContent,
           runAs,
