@@ -1202,7 +1202,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
                 data: {
                   type: 'card',
                   id: `${sourceRealmUrlString}themed-card`,
-                  attributes: {},
+                  attributes: { cardInfo: {} },
                   relationships: {
                     'cardInfo.theme': {
                       links: {
