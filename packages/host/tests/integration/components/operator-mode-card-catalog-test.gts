@@ -904,8 +904,9 @@ module('Integration | operator-mode | card catalog', function (hooks) {
     // Force the scroll container to be short enough to require scrolling
     scrollContainer.style.maxHeight = '200px';
     scrollContainer.scrollTop = 50;
+    // Dispatch scroll event so the modifier's position map is populated
+    // (the listener runs synchronously during dispatchEvent)
     scrollContainer.dispatchEvent(new Event('scroll'));
-    await settled();
 
     let positionBefore = focusedSection.getBoundingClientRect().top;
 
@@ -917,10 +918,9 @@ module('Integration | operator-mode | card catalog', function (hooks) {
       `focused section position is preserved after checking Show only (before: ${positionBefore}, after: ${positionAfter})`,
     );
 
-    // Uncheck: sections expand, position should still be preserved
-    scrollContainer.dispatchEvent(new Event('scroll'));
-    await settled();
-
+    // Uncheck: sections expand, position should still be preserved.
+    // The modifier's handleMutations already recaptured positions after
+    // the previous adjustment, so no manual scroll dispatch is needed.
     positionBefore = focusedSection.getBoundingClientRect().top;
     await click('[data-test-search-sheet-show-only]');
 

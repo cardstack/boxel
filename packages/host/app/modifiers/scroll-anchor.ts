@@ -71,29 +71,28 @@ export default class ScrollAnchor extends Modifier<ScrollAnchorModifierSignature
   }
 
   private handleMutations(): void {
-    if (isDestroying(this) || !this.#anchorSelector || this.#isAdjusting) {
+    if (isDestroying(this) || this.#isAdjusting) {
       return;
     }
 
-    let anchor = this.#element.querySelector(this.#anchorSelector);
-    if (!anchor) {
-      return;
+    if (this.#anchorSelector) {
+      let anchor = this.#element.querySelector(this.#anchorSelector);
+      let storedTop = anchor ? this.#positionMap.get(anchor) : undefined;
+
+      if (anchor && storedTop !== undefined) {
+        let currentTop = anchor.getBoundingClientRect().top;
+        let delta = currentTop - storedTop;
+
+        if (Math.abs(delta) > 1) {
+          this.#isAdjusting = true;
+          this.#element.scrollTop += delta;
+          this.#isAdjusting = false;
+        }
+      }
     }
 
-    let storedTop = this.#positionMap.get(anchor);
-    if (storedTop === undefined) {
-      return;
-    }
-
-    let currentTop = anchor.getBoundingClientRect().top;
-    let delta = currentTop - storedTop;
-
-    if (Math.abs(delta) > 1) {
-      this.#isAdjusting = true;
-      this.#element.scrollTop += delta;
-      this.#isAdjusting = false;
-    }
-
+    // Always recapture after any mutation so newly added elements
+    // are tracked for future adjustments.
     this.capturePositions();
   }
 }
