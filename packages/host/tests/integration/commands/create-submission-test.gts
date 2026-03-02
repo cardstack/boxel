@@ -15,6 +15,8 @@ import type * as CreateSubmissionModule from '@cardstack/catalog/commands/create
 const submissionRealmURL = 'http://localhost:4201/submissions-test/';
 const catalogCreateSubmissionCommandURL =
   'http://localhost:4201/catalog/commands/create-submission';
+const catalogCreateSubmissionCommandTSURL =
+  'http://localhost:4201/catalog/commands/create-submission.ts';
 
 module('Integration | commands | create-submission', function (hooks) {
   setupRenderingTest(hooks);
@@ -59,9 +61,16 @@ module('Integration | commands | create-submission', function (hooks) {
   test('creates the submission card in the provided realm', async function (assert) {
     let commandService = getService('command-service');
     let loader = getService('loader-service').loader;
-    let createSubmissionModule = await loader.import<
-      typeof CreateSubmissionModule
-    >(catalogCreateSubmissionCommandURL);
+    let createSubmissionModule: typeof CreateSubmissionModule;
+    try {
+      createSubmissionModule = await loader.import<
+        typeof CreateSubmissionModule
+      >(catalogCreateSubmissionCommandURL);
+    } catch {
+      createSubmissionModule = await loader.import<
+        typeof CreateSubmissionModule
+      >(catalogCreateSubmissionCommandTSURL);
+    }
     let CreateSubmissionCommand = createSubmissionModule.default;
     let command = new CreateSubmissionCommand(commandService.commandContext);
 
