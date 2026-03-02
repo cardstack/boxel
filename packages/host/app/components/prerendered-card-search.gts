@@ -191,7 +191,7 @@ export default class PrerenderedCardSearch extends Component<PrerenderedCardComp
   private renderContextSearchResource = getSearch<CardDef | FileDef>(
     this,
     getOwner(this)!,
-    () => this.args.query,
+    () => (this.shouldUseRenderContextSearch ? this.args.query : undefined),
     () => this.args.realms,
     {
       isLive: false,
