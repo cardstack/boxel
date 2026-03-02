@@ -514,6 +514,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
                 lastDailyCreditGrantAt: null,
                 nextDailyCreditGrantAt:
                   json.data.attributes.nextDailyCreditGrantAt,
+                dailyCreditGrantCount: 0,
               },
               relationships: {
                 subscription: null,
