@@ -630,7 +630,7 @@ module(basename(__filename), function () {
       );
       assert.ok(
         result.response.error?.error.message?.includes(
-          'static icon is undefined',
+          'static icon of BadIconImport is undefined',
         ),
         `error message describes the bad icon import, got: ${result.response.error?.error.message}`,
       );
