@@ -109,7 +109,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         seed: realmSecretSeed,
       });
       await matrixClient.login();
-      let userId = matrixClient.getUserId();
+      let userId = matrixClient.getUserId()!;
 
       // User should not exist before session creation
       let userBefore = await getUserByMatrixUserId(dbAdapter, userId);
