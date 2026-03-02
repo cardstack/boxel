@@ -19,6 +19,11 @@ import {
   testRealmURL,
 } from '../helpers';
 import { createRealmServerSession } from './helpers';
+import {
+  getUserByMatrixUserId,
+  sumUpCreditsLedger,
+} from '@cardstack/billing/billing-queries';
+import type { PgAdapter } from '@cardstack/postgres';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
 module(`server-endpoints/${basename(__filename)}`, function () {
@@ -26,13 +31,26 @@ module(`server-endpoints/${basename(__filename)}`, function () {
     let testRealmServer: Server;
     let request: SuperTest<Test>;
     let dir: DirResult;
+    let dbAdapter: PgAdapter;
+    let originalLowCreditThreshold: string | undefined;
 
     hooks.beforeEach(async function () {
+      originalLowCreditThreshold = process.env.LOW_CREDIT_THRESHOLD;
+      process.env.LOW_CREDIT_THRESHOLD = '2000';
       dir = dirSync();
     });
 
+    hooks.afterEach(async function () {
+      if (originalLowCreditThreshold == null) {
+        delete process.env.LOW_CREDIT_THRESHOLD;
+      } else {
+        process.env.LOW_CREDIT_THRESHOLD = originalLowCreditThreshold;
+      }
+    });
+
     setupDB(hooks, {
-      beforeEach: async (dbAdapter, publisher, runner) => {
+      beforeEach: async (_dbAdapter, publisher, runner) => {
+        dbAdapter = _dbAdapter;
         let testRealmDir = join(dir.name, 'realm_server_5', 'test');
         ensureDirSync(testRealmDir);
         copySync(join(__dirname, '..', 'cards'), testRealmDir);
@@ -81,6 +99,55 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         decoded.sessionRoom,
         undefined,
         'sessionRoom should be defined',
+      );
+    });
+
+    test('lazy-creates user in DB on first session', async function (assert) {
+      let matrixClient = new MatrixClient({
+        matrixURL: realmServerTestMatrix.url,
+        username: 'test_realm',
+        seed: realmSecretSeed,
+      });
+      await matrixClient.login();
+      let userId = matrixClient.getUserId();
+
+      // User should not exist before session creation
+      let userBefore = await getUserByMatrixUserId(dbAdapter, userId);
+      assert.notOk(userBefore, 'User does not exist before session creation');
+
+      let { status } = await createRealmServerSession(matrixClient, request);
+      assert.strictEqual(status, 201, 'HTTP 201 status');
+
+      // User should now exist in DB
+      let user = await getUserByMatrixUserId(dbAdapter, userId);
+      assert.ok(user, 'User was lazy-created during session creation');
+
+      // Initial daily credits should have been granted
+      let dailyCredits = await sumUpCreditsLedger(dbAdapter, {
+        userId: user!.id,
+        creditType: 'daily_credit',
+      });
+      assert.strictEqual(
+        dailyCredits,
+        2000,
+        'Daily credits were granted to lazy-created user',
+      );
+
+      // Creating another session should not duplicate the user or credits
+      let { status: status2 } = await createRealmServerSession(
+        matrixClient,
+        request,
+      );
+      assert.strictEqual(status2, 201, 'Second session creation succeeds');
+
+      let dailyCreditsAfter = await sumUpCreditsLedger(dbAdapter, {
+        userId: user!.id,
+        creditType: 'daily_credit',
+      });
+      assert.strictEqual(
+        dailyCreditsAfter,
+        2000,
+        'Daily credits were not doubled on second session',
       );
     });
   });
