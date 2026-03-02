@@ -28,6 +28,10 @@ export default class SendBotTriggerEventCommand extends HostBaseCommand<
     input: BaseCommandModule.SendBotTriggerEventInput,
   ): Promise<undefined> {
     await this.matrixService.ready;
+    let userId = this.matrixService.userId;
+    if (!userId) {
+      throw new Error('userId is required to send bot trigger events');
+    }
 
     const botTriggerEventType = 'app.boxel.bot-trigger';
     let event = {
@@ -36,6 +40,7 @@ export default class SendBotTriggerEventCommand extends HostBaseCommand<
         type: input.type,
         input: input.input,
         realm: input.realm,
+        userId,
       },
     } as BotTriggerEvent;
 

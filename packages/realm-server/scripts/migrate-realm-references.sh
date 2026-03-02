@@ -44,13 +44,14 @@
 # To roll back:
 #   patch -R -p0 < <name>.patch
 
-set -euo pipefail
+set -uo pipefail
 
 # --- Parse flags ---
 
 DRY_RUN=false
 ENV=""
 REALM=""
+ERRORS=()
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -164,13 +165,19 @@ for search_dir in "$@"; do
 
   # Find .json and .gts files containing the find string.
   # For URLs, also match path-only form preceded by " or ' to avoid relative paths.
-  if [ "$IS_URL" = true ]; then
-    matching_files=$(grep -rlE "${FIND_STR}|[\"']${REALM_PATH}" "$search_dir" --include='*.json' --include='*.gts' 2>/dev/null || true)
-  else
-    matching_files=$(grep -rl "${FIND_STR}" "$search_dir" --include='*.json' --include='*.gts' 2>/dev/null || true)
-  fi
+  # Read results into an array to correctly handle filenames with spaces.
+  matching_files=()
+  while IFS= read -r file; do
+    [ -n "$file" ] && matching_files+=("$file")
+  done < <(
+    if [ "$IS_URL" = true ]; then
+      grep -rlE "${FIND_STR}|[\"']${REALM_PATH}" "$search_dir" --include='*.json' --include='*.gts' 2>/dev/null || true
+    else
+      grep -rl "${FIND_STR}" "$search_dir" --include='*.json' --include='*.gts' 2>/dev/null || true
+    fi
+  )
 
-  if [ -z "$matching_files" ]; then
+  if [ ${#matching_files[@]} -eq 0 ]; then
     echo "  No matching references found"
     continue
   fi
@@ -185,8 +192,15 @@ for search_dir in "$@"; do
     SED_ARGS=(-e "s|${FIND_STR}|${REPLACEMENT}|g")
   fi
 
-  for file in $matching_files; do
-    sed "${SED_ARGS[@]}" "$file" > "$file.tmp"
+  for file in "${matching_files[@]}"; do
+    if ! sed "${SED_ARGS[@]}" "$file" > "$file.tmp" 2>/tmp/migrate-err.$$; then
+      err="Error processing $file: $(cat /tmp/migrate-err.$$)"
+      echo "  $err"
+      ERRORS+=("$err")
+      rm -f "$file.tmp" /tmp/migrate-err.$$
+      continue
+    fi
+    rm -f /tmp/migrate-err.$$
 
     # Append unified diff to the patch file (use --label so both sides show the real path)
     { diff -u --label "$file" --label "$file" "$file" "$file.tmp" || true; } >> "$PATCH_FILE"
@@ -197,9 +211,16 @@ for search_dir in "$@"; do
       { diff --unified=0 "$file" "$file.tmp" || true; } | tail -n +3 | grep '^[+-]' | while IFS= read -r line; do
         echo "    $line"
       done
-      rm "$file.tmp"
+      rm -f "$file.tmp"
     else
-      mv "$file.tmp" "$file"
+      if ! mv "$file.tmp" "$file" 2>/tmp/migrate-err.$$; then
+        err="Error replacing $file: $(cat /tmp/migrate-err.$$)"
+        echo "  $err"
+        ERRORS+=("$err")
+        rm -f "$file.tmp" /tmp/migrate-err.$$
+        continue
+      fi
+      rm -f /tmp/migrate-err.$$
       echo "  Updated: $file"
     fi
     total_files=$((total_files + 1))
@@ -215,4 +236,13 @@ else
   echo "Done. $total_files file(s) updated."
   echo "Rollback patch saved to: $PATCH_FILE"
   echo "  To undo: patch -R -p0 < $PATCH_FILE"
+fi
+
+if [ ${#ERRORS[@]} -gt 0 ]; then
+  echo ""
+  echo "WARNING: ${#ERRORS[@]} error(s) encountered during processing:"
+  for err in "${ERRORS[@]}"; do
+    echo "  - $err"
+  done
+  exit 1
 fi

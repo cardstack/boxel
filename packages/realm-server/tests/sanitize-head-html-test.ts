@@ -209,5 +209,24 @@ module(basename(__filename), function () {
       assert.ok(result.includes('div'), 'detects div');
       assert.ok(result.includes('h1'), 'detects h1');
     });
+
+    test('ignores wrapper elements when they only contain allowlisted descendants', function (assert) {
+      let doc = makeDoc();
+      let html =
+        '<div><title>Test</title><meta name="description" content="desc"></div>';
+      let result = findDisallowedHeadTags(html, doc);
+      assert.deepEqual(result, [], 'wrapper div is not reported');
+    });
+
+    test('detects disallowed nested tags even when wrapped', function (assert) {
+      let doc = makeDoc();
+      let html = '<div><script>alert(1)</script><title>Test</title></div>';
+      let result = findDisallowedHeadTags(html, doc);
+      assert.ok(result.includes('script'), 'detects nested script');
+      assert.notOk(
+        result.includes('div'),
+        'wrapper div is ignored when it contains allowlisted descendants',
+      );
+    });
   });
 });

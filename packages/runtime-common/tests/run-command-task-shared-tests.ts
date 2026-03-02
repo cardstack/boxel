@@ -252,14 +252,14 @@ const tests = Object.freeze({
       realmURL: 'http://localhost:4201/experiments/',
       realmUsername: '@alice:localhost',
       runAs: '@alice:localhost',
-      command: '@cardstack/boxel-host/commands/create-submission/default',
+      command: '@cardstack/catalog/commands/create-submission/default',
       commandInput: { listingId: 'http://localhost:4201/catalog/AppListing/1' },
       jobInfo: { id: 4 } as any,
     });
 
     assert.strictEqual(
       prerenderCall?.command,
-      '@cardstack/boxel-host/commands/create-submission/default',
+      '@cardstack/catalog/commands/create-submission/default',
     );
     assert.deepEqual(prerenderCall?.commandInput, {
       listingId: 'http://localhost:4201/catalog/AppListing/1',

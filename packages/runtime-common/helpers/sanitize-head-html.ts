@@ -36,38 +36,53 @@ export function sanitizeHeadHTML(
 
   let fragment = doc.createDocumentFragment();
   for (let node of Array.from(template.content.childNodes)) {
-    let sanitized = sanitizeHeadNode(node, doc);
-    if (sanitized) {
-      fragment.appendChild(sanitized);
-    }
+    appendSanitizedHeadNodes(node, doc, fragment);
   }
 
   return fragment.childNodes.length > 0 ? fragment : null;
 }
 
-// Reject any non-element nodes (text nodes, comments, document fragments, etc.)
-// so that only explicit, allowlisted <head> elements are inserted
-function sanitizeHeadNode(node: Node, doc: Document): Node | null {
+function appendSanitizedHeadNodes(
+  node: Node,
+  doc: Document,
+  destination: DocumentFragment,
+) {
+  // Reject text/comments and recurse only through element containers.
   if (node.nodeType !== ELEMENT_NODE) {
-    return null;
+    return;
   }
 
   let element = node as Element;
   let tagName = element.tagName.toLowerCase();
-  if (!ALLOWED_HEAD_TAGS.has(tagName)) {
-    return null;
+  if (ALLOWED_HEAD_TAGS.has(tagName)) {
+    let sanitized = sanitizeAllowedHeadElement(element, doc);
+    if (sanitized) {
+      destination.appendChild(sanitized);
+    }
+    return;
   }
 
-  switch (tagName) {
+  // Allowlisted tags may be nested inside wrapper elements produced by
+  // rendering infrastructure. We keep only the allowlisted descendants.
+  for (let child of Array.from(element.childNodes)) {
+    appendSanitizedHeadNodes(child, doc, destination);
+  }
+}
+
+function sanitizeAllowedHeadElement(
+  element: Element,
+  doc: Document,
+): Node | null {
+  switch (element.tagName.toLowerCase()) {
     case 'meta':
       return sanitizeMetaElement(element, doc);
     case 'title':
       return sanitizeTitleElement(element, doc);
     case 'link':
       return sanitizeLinkElement(element, doc);
+    default:
+      return null;
   }
-
-  return null;
 }
 
 function sanitizeMetaElement(element: Element, doc: Document): HTMLMetaElement {
@@ -158,16 +173,40 @@ export function findDisallowedHeadTags(
   let template = doc.createElement('template');
   template.innerHTML = headHTML;
 
-  let disallowed: string[] = [];
+  let disallowed = new Set<string>();
   for (let node of Array.from(template.content.childNodes)) {
-    if (node.nodeType === ELEMENT_NODE) {
-      let tagName = (node as Element).tagName.toLowerCase();
-      if (!ALLOWED_HEAD_TAGS.has(tagName) && !disallowed.includes(tagName)) {
-        disallowed.push(tagName);
-      }
-    }
+    collectDisallowedHeadTags(node, disallowed);
   }
-  return disallowed;
+  return Array.from(disallowed);
+}
+
+function collectDisallowedHeadTags(
+  node: Node,
+  disallowed: Set<string>,
+): boolean {
+  if (node.nodeType !== ELEMENT_NODE) {
+    return false;
+  }
+
+  let element = node as Element;
+  let tagName = element.tagName.toLowerCase();
+  if (ALLOWED_HEAD_TAGS.has(tagName)) {
+    return true;
+  }
+
+  let hasAllowlistedDescendant = false;
+  for (let child of Array.from(element.childNodes)) {
+    hasAllowlistedDescendant =
+      collectDisallowedHeadTags(child, disallowed) || hasAllowlistedDescendant;
+  }
+
+  // Wrapper-only nodes around allowlisted tags are expected from rendering
+  // infrastructure and are stripped by the sanitizer, so we don't warn for
+  // those wrappers.
+  if (!hasAllowlistedDescendant) {
+    disallowed.add(tagName);
+  }
+  return hasAllowlistedDescendant;
 }
 
 function copyAllowedAttributes(
