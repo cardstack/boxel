@@ -1,6 +1,8 @@
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
+import ENV from '@cardstack/host/config/environment';
+
 import {
   setupIntegrationTestRealm,
   setupLocalIndexing,
@@ -12,11 +14,21 @@ import { setupRenderingTest } from '../../helpers/setup';
 
 import type * as CreateSubmissionModule from '@cardstack/catalog/commands/create-submission';
 
-const submissionRealmURL = 'http://localhost:4201/submissions-test/';
-const catalogCreateSubmissionCommandURL =
-  'http://localhost:4201/catalog/commands/create-submission';
-const catalogCreateSubmissionCommandTSURL =
-  'http://localhost:4201/catalog/commands/create-submission.ts';
+const realmServerOrigin = new URL(ENV.resolvedBaseRealmURL).origin;
+const submissionRealmURL = new URL('/submissions-test/', realmServerOrigin)
+  .href;
+const catalogCreateSubmissionCommandURL = new URL(
+  '/catalog/commands/create-submission',
+  realmServerOrigin,
+).href;
+const catalogCreateSubmissionCommandTSURL = new URL(
+  '/catalog/commands/create-submission.ts',
+  realmServerOrigin,
+).href;
+const catalogListingModuleURL = new URL(
+  '/catalog/catalog-app/listing/listing',
+  realmServerOrigin,
+).href;
 
 module('Integration | commands | create-submission', function (hooks) {
   setupRenderingTest(hooks);
@@ -41,8 +53,7 @@ module('Integration | commands | create-submission', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module:
-                  'http://localhost:4201/catalog/catalog-app/listing/listing',
+                module: catalogListingModuleURL,
                 name: 'Listing',
               },
             },
