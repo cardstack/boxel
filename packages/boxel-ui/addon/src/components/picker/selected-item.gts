@@ -6,10 +6,9 @@ import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 import type { Select } from 'ember-power-select/components/power-select';
 
-import IconX from '../../icons/icon-x.gts';
 import SelectAll from '../../icons/select-all.gts';
 import type { Icon } from '../../icons/types.ts';
-import IconButton from '../icon-button/index.gts';
+import ContextButton from '../context-button/index.gts';
 import Pill from '../pill/index.gts';
 import type { PickerOption } from './index.gts';
 
@@ -52,10 +51,6 @@ export default class PickerSelectedItem extends Component<PickerSelectedItemSign
     return this.isIconString && (this.icon as string).startsWith('http');
   }
 
-  get isIconSVG() {
-    return this.isIconString && !this.isIconURL;
-  }
-
   get iconString() {
     return this.isIconString ? (this.icon as string) : undefined;
   }
@@ -84,108 +79,84 @@ export default class PickerSelectedItem extends Component<PickerSelectedItemSign
   }
 
   <template>
-    <div class='picker-selected-item' data-test-boxel-picker-selected-item>
-      <Pill class='picker-selected-item__pill'>
+    <Pill
+      class='picker-selected-item'
+      @size='small'
+      data-test-boxel-picker-selected-item
+    >
+      <:iconLeft>
         {{#if this.icon}}
           <div class='picker-selected-item__icon'>
             {{#if this.isIconURL}}
-              {{#let this.iconString as |iconUrl|}}
-                <img
-                  src={{iconUrl}}
-                  alt=''
-                  class='picker-selected-item__icon-image'
-                />
-              {{/let}}
-            {{else if this.isIconSVG}}
-              {{#let this.iconString as |iconSvg|}}
-                {{#if iconSvg}}
-                  {{htmlSafe
-                    (addClassToSVG iconSvg 'picker-selected-item__icon-image')
-                  }}
-                {{/if}}
-              {{/let}}
+              <img
+                src={{this.iconString}}
+                width='14'
+                height='14'
+                alt=''
+                class='picker-selected-item__icon-image'
+              />
+            {{else if this.iconString}}
+              {{htmlSafe
+                (addClassToSVG
+                  this.iconString 'picker-selected-item__icon-image'
+                )
+              }}
             {{else if this.iconComponent}}
-              {{#let this.iconComponent as |IconComponent|}}
-                <IconComponent
-                  class='picker-selected-item__icon-component'
-                  role='presentation'
-                />
-              {{/let}}
+              <this.iconComponent
+                width='14'
+                height='14'
+                class='picker-selected-item__icon-component'
+                role='presentation'
+              />
             {{/if}}
           </div>
         {{/if}}
+      </:iconLeft>
+      <:default>
         <span class='picker-selected-item__text'>{{this.text}}</span>
+      </:default>
+      <:iconRight>
         {{#if this.displayRemoveButton}}
-          <IconButton
-            @icon={{IconX}}
-            @width='10px'
-            @height='10px'
-            class='picker-selected-item__remove-button'
+          <ContextButton
+            @icon='close'
+            @size='extra-small'
+            @variant='highlight'
+            @label='Remove'
+            @width='14'
+            @height='14'
+            class='picker-selected-item__remove'
             {{on 'click' (fn this.remove @option)}}
-            aria-label='Remove item'
             data-test-boxel-picker-remove-button
           />
         {{/if}}
-
-      </Pill>
-    </div>
+      </:iconRight>
+    </Pill>
 
     <style scoped>
       .picker-selected-item {
-        all: unset;
+        --pill-background-color: var(--background, var(--boxel-300));
+        --pill-border-color: var(--border, var(--boxel-300));
+        --pill-gap: var(--boxel-sp-4xs);
+        padding-right: 0;
       }
-
-      .picker-selected-item__pill {
-        display: flex;
-        align-items: center;
-        gap: var(--boxel-sp-4xs);
-        padding: var(--boxel-sp-4xs);
-        border-radius: var(--boxel-border-radius-xs);
-        border: solid 1px var(--boxel-300);
-        background-color: var(--boxel-300);
-        min-height: 30px;
-      }
-
       .picker-selected-item__icon {
-        width: 18px;
-        height: 18px;
-        min-width: 18px;
+        width: 14px;
+        height: 14px;
         flex-shrink: 0;
         display: flex;
         align-items: center;
         justify-content: center;
       }
-
       .picker-selected-item__icon-image {
         width: 100%;
         height: 100%;
-        object-fit: cover;
+        object-fit: contain;
         border-radius: var(--boxel-border-radius-xs);
         display: block;
       }
-
-      .picker-selected-item__icon-component {
-        width: 18px;
-        height: 18px;
-        flex-shrink: 0;
-      }
-
-      .picker-selected-item__text {
-        font: 500 var(--boxel-font-xs);
-        letter-spacing: var(--boxel-lsp-sm);
-      }
-
-      .picker-selected-item__remove-button {
-        width: 18px;
-        height: 18px;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        border-radius: 50%;
-        --icon-color: var(--boxel-multi-select-pill-color);
-      }
-      .picker-selected-item__remove-button:hover {
-        --icon-color: var(--boxel-600);
+      .picker-selected-item__remove:hover {
+        background: none;
+        opacity: 0.7;
       }
     </style>
   </template>

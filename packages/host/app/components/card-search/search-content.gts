@@ -632,6 +632,7 @@ export default class SearchContent extends Component<Signature> {
         anchorSelector=this.scrollAnchorSelector
       }}
       class='search-sheet-content {{if @isCompact "compact"}}'
+      ...attributes
     >
       {{#if this.showHeader}}
         {{#unless @isCompact}}
@@ -701,20 +702,23 @@ export default class SearchContent extends Component<Signature> {
         flex-direction: column;
         flex: 1;
         overflow-y: auto;
-
+        overscroll-behavior: none;
         height: 100%;
         background-color: var(--boxel-light);
-        padding: 0 var(--boxel-sp-lg);
         transition: opacity calc(var(--boxel-transition) / 4);
       }
       .search-sheet-content.compact {
         flex-direction: row;
         flex-wrap: nowrap;
+        padding-inline: var(--boxel-sp-xs);
         overflow-y: hidden;
         overflow-x: auto;
       }
       .search-sheet-content.compact :deep(.search-result-block) {
         margin-bottom: 0;
+      }
+      .empty-state {
+        padding-block: var(--boxel-sp);
       }
     </style>
   </template>
