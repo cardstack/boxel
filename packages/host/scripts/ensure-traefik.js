@@ -1,29 +1,19 @@
 /**
- * Checks that the boxel-traefik Docker container is running.
+ * Ensures the boxel-traefik Docker container is running, starting it if needed.
  * Called from branch-mode host scripts before registering with Traefik.
  */
 
 const { execSync } = require('child_process');
+const path = require('path');
 
 function ensureTraefik() {
+  const scriptPath = path.resolve(__dirname, '../../../scripts/start-traefik.sh');
   try {
-    const output = execSync(
-      "docker ps --format '{{.Names}}' 2>/dev/null",
-      { encoding: 'utf-8' },
-    );
-    if (output.split('\n').some((name) => name.trim() === 'boxel-traefik')) {
-      return; // already running
-    }
+    execSync(`sh "${scriptPath}"`, { stdio: 'inherit' });
   } catch {
-    // docker not available or errored
+    console.error('\n[branch-mode] ERROR: Failed to start Traefik. Is Docker running?\n');
+    process.exit(1);
   }
-
-  console.error(
-    '\n[branch-mode] ERROR: Traefik is not running.\n' +
-    '  Branch mode requires Traefik for hostname-based routing.\n' +
-    '  Start it with:  sh scripts/start-traefik.sh\n',
-  );
-  process.exit(1);
 }
 
 module.exports = { ensureTraefik };
