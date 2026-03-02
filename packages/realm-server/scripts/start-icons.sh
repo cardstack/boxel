@@ -13,7 +13,16 @@ if [ -n "$BOXEL_BRANCH" ]; then
   node -e "
     const fs = require('fs');
     const path = require('path');
-    const dir = path.resolve(__dirname, '..', '..', 'traefik', 'dynamic');
+    const { execSync } = require('child_process');
+    let dir;
+    try {
+      const mounted = execSync(
+        \"docker inspect boxel-traefik --format '{{range .Mounts}}{{if eq .Destination \\\"/etc/traefik/dynamic\\\"}}{{.Source}}{{end}}{{end}}'\",
+        { encoding: 'utf-8' },
+      ).trim();
+      if (mounted) dir = mounted;
+    } catch {}
+    if (!dir) dir = path.resolve(__dirname, '..', '..', 'traefik', 'dynamic');
     const slug = '${BRANCH_SLUG}';
     const routerKey = 'icons-' + slug;
     const configPath = path.join(dir, slug + '-icons.yml');
