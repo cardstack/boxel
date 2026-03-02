@@ -51,6 +51,7 @@ import * as SearchCardsCommandModule from './search-cards';
 import * as SearchGoogleImagesCommandModule from './search-google-images';
 import * as SendAiAssistantMessageModule from './send-ai-assistant-message';
 import * as SendRequestViaProxyCommandModule from './send-request-via-proxy';
+import * as SerializeCardCommandModule from './serialize-card';
 import * as SetActiveLlmModule from './set-active-llm';
 import * as SetUserSystemCardCommandModule from './set-user-system-card';
 import * as ShowCardCommandModule from './show-card';
@@ -212,6 +213,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
     SaveCardCommandModule,
   );
   virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/serialize-card',
+    SerializeCardCommandModule,
+  );
+  virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/search-cards',
     SearchCardsCommandModule,
   );
@@ -369,6 +374,7 @@ export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
   ReadTextFileCommandModule.default,
   RegisterBotCommandModule.default,
   SaveCardCommandModule.default,
+  SerializeCardCommandModule.default,
   SearchAndChooseCommandModule.default,
   SearchCardsCommandModule.SearchCardsByQueryCommand,
   SearchCardsCommandModule.SearchCardsByTypeAndTitleCommand,
