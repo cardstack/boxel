@@ -30,6 +30,7 @@
     "@types/mime-types": "catalog:",
     "@types/ms": "catalog:",
     "@types/node": "catalog:",
+    "@types/pg": "catalog:",
     "@types/pluralize": "catalog:",
     "@types/qs": "catalog:",
     "@types/qunit": "catalog:",
