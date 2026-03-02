@@ -8,6 +8,7 @@ import {
   toBranchName,
   extractRelationshipIds,
   isCardInstance,
+  isCardError,
   logger,
   type LooseSingleCardDocument,
   type ListingPathResolver,
@@ -242,10 +243,15 @@ export default class CreateSubmissionCommand extends HostBaseCommand<
       },
     };
 
-    return await this.store.add(doc, {
+    let result = await this.store.add(doc, {
       realm: realmURL,
-      doNotWaitForPersist: true,
     });
+    if (isCardError(result)) {
+      throw new Error(
+        `Failed to create submission card: ${result.title ?? result.id}`,
+      );
+    }
+    return result;
   }
 
   // Walk relationships by fetching linked cards and enqueueing their ids.
