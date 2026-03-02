@@ -9,6 +9,7 @@ import {
   sendResponseForSystemError,
   setContextResponse,
 } from '../middleware';
+import { getFilterHandler } from './webhook-filter-handlers';
 import type { CreateRoutesArgs } from '../routes';
 
 export default function handleWebhookReceiverRequest({
@@ -97,8 +98,6 @@ export default function handleWebhookReceiverRequest({
       console.warn('Failed to parse webhook payload for filtering');
     }
 
-    let eventType = ctxt.req.headers['x-github-event'] as string | undefined;
-
     let executedCommands = 0;
     for (let commandRow of commandRows) {
       let commandFilter = commandRow.command_filter as Record<
@@ -106,49 +105,50 @@ export default function handleWebhookReceiverRequest({
         any
       > | null;
 
-      // Apply filter if specified
-      if (commandFilter) {
-        // Check if event type matches filter
-        if (commandFilter.eventType && commandFilter.eventType !== eventType) {
-          continue;
-        }
+      let filterHandler = getFilterHandler(commandFilter);
 
-        // Check if PR number matches filter (for pull_request events)
-        if (
-          commandFilter.prNumber &&
-          payload.pull_request?.number !== commandFilter.prNumber
-        ) {
-          continue;
-        }
-
-        // Additional filter checks can be added here as needed
+      // Delegate filter matching to the handler
+      if (
+        commandFilter &&
+        !filterHandler.matches(payload, ctxt.req.headers, commandFilter)
+      ) {
+        continue;
       }
 
       let commandURL = commandRow.command as string;
-      let submissionRealmUrl =
-        (commandFilter?.submissionRealmUrl as string | undefined) ??
-        new URL('/submissions/', commandURL).href;
+      let realmURL = filterHandler.getRealmURL(
+        commandFilter ?? {},
+        commandURL,
+      );
 
-      // Run as the realm owner so they have write permissions in the submission realm
-      let realmOwnerRows = await query(dbAdapter, [
-        `SELECT username FROM realm_user_permissions WHERE realm_url = `,
-        param(submissionRealmUrl),
-        ` AND realm_owner = true LIMIT 1`,
-      ]);
-      let runAs =
-        (realmOwnerRows[0]?.username as string | undefined) ??
-        (webhook.username as string);
+      // Run as the realm owner so they have write permissions in the target realm
+      let runAs = webhook.username as string;
+      try {
+        let realmOwnerRows = await query(dbAdapter, [
+          `SELECT username FROM realm_user_permissions WHERE realm_url = `,
+          param(realmURL),
+          ` AND realm_owner = true LIMIT 1`,
+        ]);
+        if (realmOwnerRows[0]?.username) {
+          runAs = realmOwnerRows[0].username as string;
+        }
+      } catch (error) {
+        console.error(
+          `Failed to fetch realm owner for ${realmURL}, falling back to webhook user:`,
+          error,
+        );
+      }
 
-      let commandInput = {
-        eventType: eventType ?? '',
-        submissionRealmUrl,
+      let commandInput = filterHandler.buildCommandInput(
         payload,
-      };
+        ctxt.req.headers,
+        commandFilter ?? {},
+      );
 
       try {
         await enqueueRunCommandJob(
           {
-            realmURL: submissionRealmUrl,
+            realmURL,
             realmUsername: runAs,
             runAs,
             command: commandURL,

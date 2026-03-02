@@ -427,7 +427,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
             attributes: {
               incomingWebhookId: webhookId,
               command: `http://test-realm/commands/process-github-event`,
-              filter: { eventType: 'push' },
+              filter: { type: 'github-event', eventType: 'push' },
             },
           },
         });
@@ -515,7 +515,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
             attributes: {
               incomingWebhookId: webhookId,
               command: `http://test-realm/commands/process-github-event`,
-              filter: { eventType: 'pull_request', prNumber: 456 },
+              filter: { type: 'github-event', eventType: 'pull_request', prNumber: 456 },
             },
           },
         });
@@ -596,6 +596,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
               incomingWebhookId: webhookId,
               command: `http://test-realm/commands/process-github-event`,
               filter: {
+                type: 'github-event',
                 eventType: 'pull_request',
                 roomId: '!room:localhost',
                 submissionRealmUrl: 'http://localhost:4201/submissions/',

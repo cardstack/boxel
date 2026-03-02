@@ -28,9 +28,6 @@ export default class ProcessGithubEventCommand extends Command<
 
     let card = new GithubEventCard({
       eventType,
-      action: payload?.action ?? null,
-      prNumber: payload?.pull_request?.number ?? null,
-      prUrl: payload?.pull_request?.html_url ?? null,
       payload,
     });
 
