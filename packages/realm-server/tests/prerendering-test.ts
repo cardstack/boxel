@@ -1500,8 +1500,421 @@ module(basename(__filename), function () {
     });
   }
 
+  function defineLivePrerenderedSearchFallbackTests() {
+    module('live prerendered search fallback', function (hooks) {
+      let realmURL = 'http://127.0.0.1:4456/test/';
+      let prerenderServerURL = new URL(realmURL).origin;
+      let testUserId = '@user1:localhost';
+      let permissions: RealmPermissions = {
+        [realmURL]: ['read', 'write', 'realm-owner'],
+      };
+      let prerenderer: Prerenderer;
+      let dbAdapter: any;
+      let auth = () => {
+        let sessions = JSON.parse(
+          testCreatePrerenderAuth(testUserId, permissions),
+        ) as Record<string, string>;
+        let token = sessions[realmURL];
+        if (token) {
+          sessions[new URL(realmURL).origin + '/'] = token;
+        }
+        return JSON.stringify(sessions);
+      };
+
+      hooks.before(async () => {
+        prerenderer = getPrerendererForTesting({
+          maxPages: 2,
+          serverURL: prerenderServerURL,
+        });
+      });
+
+      hooks.after(async () => {
+        await prerenderer.stop();
+      });
+
+      hooks.beforeEach(async () => {
+        await prerenderer.disposeRealm(realmURL);
+      });
+
+      async function overrideIndexedIsolatedHTML(url: string, html: string) {
+        let alternate = url.endsWith('.json')
+          ? url.replace(/\.json$/, '')
+          : `${url}.json`;
+        await dbAdapter.execute(
+          `UPDATE boxel_index SET isolated_html = $1 WHERE url = $2 OR url = $3`,
+          { bind: [html, url, alternate] },
+        );
+      }
+
+      setupPermissionedRealms(hooks, {
+        mode: 'before',
+        realms: [
+          {
+            realmURL,
+            permissions: {
+              '*': ['read'],
+              [testUserId]: ['read', 'write', 'realm-owner'],
+            },
+            fileSystem: {
+              'prerendered-search-live.gts': `
+              import { CardDef, Component, field, contains, StringField, realmURL, linksTo } from 'https://cardstack.com/base/card-api';
+
+              export class LiveSearchResult extends CardDef {
+                static displayName = 'Live Search Result';
+                @field cardTitle = contains(StringField);
+
+                static fitted = class extends Component<typeof this> {
+                  <template>
+                    <div class="live-search-css-sentinel" data-test-live-card-value>{{@model.cardTitle}}</div>
+                    <style scoped>
+                      .live-search-css-sentinel {
+                        border-top: 4px solid rgb(1, 2, 3);
+                      }
+                    </style>
+                  </template>
+                };
+
+                static embedded = this.fitted;
+                static isolated = this.fitted;
+              }
+
+              export class LiveSearchInner extends CardDef {
+                static displayName = 'Live Search Inner';
+                static isolated = class extends Component<typeof this> {
+                  get realmHref() {
+                    let id = this.args.model?.id;
+                    if (!id) {
+                      return '';
+                    }
+                    return new URL('.', id).href;
+                  }
+
+                  get query() {
+                    return {
+                      filter: {
+                        type: {
+                          module: new URL('./prerendered-search-live', import.meta.url).href,
+                          name: 'LiveSearchResult',
+                        },
+                      },
+                      page: {
+                        size: 10,
+                        number: 0,
+                      },
+                    };
+                  }
+
+                  get realms() {
+                    return [new URL('./', import.meta.url).href];
+                  }
+
+                  <template>
+                    <div data-test-live-search-host-ran>Host ran</div>
+                    <div data-test-live-search-realm>{{this.realmHref}}</div>
+                    {{#if @context.prerenderedCardSearchComponent}}
+                      <@context.prerenderedCardSearchComponent
+                        @query={{this.query}}
+                        @format='fitted'
+                        @realms={{this.realms}}
+                        @isLive={{true}}
+                      >
+                        <:loading>
+                          <div data-test-live-search-loading>Loading...</div>
+                        </:loading>
+                        <:response as |cards|>
+                          {{#each cards as |card|}}
+                            <div data-test-live-search-card={{card.url}}>
+                              <card.component />
+                            </div>
+                          {{/each}}
+                        </:response>
+                        <:meta as |meta|>
+                          <div data-test-live-search-total>{{meta.page.total}}</div>
+                        </:meta>
+                      </@context.prerenderedCardSearchComponent>
+                    {{else}}
+                      <div data-test-live-search-component-missing>missing</div>
+                    {{/if}}
+                  </template>
+                };
+              }
+
+              export class LiveSearchHost extends CardDef {
+                static displayName = 'Live Search Host';
+                @field child = linksTo(() => LiveSearchInner);
+
+                static isolated = class extends Component<typeof this> {
+                  <template>
+                    <@fields.child @format='isolated' />
+                  </template>
+                };
+
+                static embedded = this.isolated;
+              }
+            `,
+              'live-search-host.json': {
+                data: {
+                  relationships: {
+                    child: {
+                      links: {
+                        self: './live-search-inner',
+                      },
+                    },
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: './prerendered-search-live',
+                      name: 'LiveSearchHost',
+                    },
+                  },
+                },
+              },
+              'live-search-inner.json': {
+                data: {
+                  meta: {
+                    adoptsFrom: {
+                      module: './prerendered-search-live',
+                      name: 'LiveSearchInner',
+                    },
+                  },
+                },
+              },
+              'live-search-result-1.json': {
+                data: {
+                  attributes: {
+                    cardTitle: 'LIVE_RESULT_VALUE',
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: './prerendered-search-live',
+                      name: 'LiveSearchResult',
+                    },
+                  },
+                },
+              },
+              'live-file-search-card.gts': `
+              import { CardDef, Component, field, contains, StringField, realmURL, linksTo } from 'https://cardstack.com/base/card-api';
+
+              export class LiveFileSearchInner extends CardDef {
+                static displayName = 'Live File Search Inner';
+                static isolated = class extends Component<typeof this> {
+                  get realmHref() {
+                    let id = this.args.model?.id;
+                    if (!id) {
+                      return '';
+                    }
+                    return new URL('.', id).href;
+                  }
+
+                  get query() {
+                    return {
+                      filter: {
+                        on: {
+                          module: 'https://cardstack.com/base/file-api',
+                          name: 'FileDef',
+                        },
+                        eq: {
+                          url: \`\${this.realmHref}live-file.live\`,
+                        },
+                      },
+                      page: {
+                        size: 10,
+                        number: 0,
+                      },
+                    };
+                  }
+
+                  get realms() {
+                    return [new URL('./', import.meta.url).href];
+                  }
+
+                  <template>
+                    <div data-test-live-file-search-host-ran>File Host ran</div>
+                    {{#if @context.prerenderedCardSearchComponent}}
+                      <@context.prerenderedCardSearchComponent
+                        @query={{this.query}}
+                        @format='embedded'
+                        @realms={{this.realms}}
+                        @isLive={{true}}
+                      >
+                        <:response as |cards|>
+                          {{#each cards as |card|}}
+                            <div data-test-live-file-search-card={{card.url}}>
+                              <card.component />
+                            </div>
+                          {{/each}}
+                        </:response>
+                      </@context.prerenderedCardSearchComponent>
+                    {{else}}
+                      <div data-test-live-file-search-component-missing>missing</div>
+                    {{/if}}
+                  </template>
+                };
+              }
+
+              export class LiveFileSearchHost extends CardDef {
+                static displayName = 'Live File Search Host';
+                @field cardTitle = contains(StringField);
+                @field child = linksTo(() => LiveFileSearchInner);
+
+                static isolated = class extends Component<typeof this> {
+                  <template>
+                    <@fields.child @format='isolated' />
+                  </template>
+                };
+
+                static embedded = this.isolated;
+              }
+            `,
+              'live-file-search-host.json': {
+                data: {
+                  attributes: {
+                    cardTitle: 'Live File Search Host',
+                  },
+                  relationships: {
+                    child: {
+                      links: {
+                        self: './live-file-search-inner',
+                      },
+                    },
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: './live-file-search-card',
+                      name: 'LiveFileSearchHost',
+                    },
+                  },
+                },
+              },
+              'live-file-search-inner.json': {
+                data: {
+                  meta: {
+                    adoptsFrom: {
+                      module: './live-file-search-card',
+                      name: 'LiveFileSearchInner',
+                    },
+                  },
+                },
+              },
+              'live-file.live': 'LIVE_FILE_VALUE',
+            },
+          },
+        ],
+        onRealmSetup({ dbAdapter: setupDbAdapter }) {
+          dbAdapter = setupDbAdapter;
+          permissions = {
+            [realmURL]: ['read', 'write', 'realm-owner'],
+          };
+        },
+      });
+
+      test('card prerendered search uses live rendered CardDef HTML and keeps unique CSS', async function (assert) {
+        const cardURL = `${realmURL}live-search-host`;
+        const sentinel = 'SENTINEL_STALE_CARD_HTML';
+        let realmServerPatch =
+          installRealmServerAssertOwnRealmServerBypassPatch();
+        let searchRequestObserverPatch = installSearchRequestObserverPatch();
+
+        try {
+          let indexedRows = await dbAdapter.execute(
+            `SELECT url FROM boxel_index WHERE url LIKE $1 ORDER BY url`,
+            { bind: [`${realmURL}%live-search%`] },
+          );
+          assert.ok(
+            indexedRows.length > 0,
+            `expected indexed rows for live-search fixtures, got: ${JSON.stringify(indexedRows)}`,
+          );
+
+          await overrideIndexedIsolatedHTML(
+            `${realmURL}live-search-result-1`,
+            `<div data-test-stale-card-html>${sentinel}</div>`,
+          );
+
+          let result = await prerenderer.prerenderCard({
+            realm: realmURL,
+            url: cardURL,
+            auth: auth(),
+          });
+
+          assert.notOk(result.response.error, 'prerender succeeds');
+          let isolatedHTML = cleanWhiteSpace(
+            result.response.isolatedHTML ?? '',
+          );
+          let searchRequests = searchRequestObserverPatch.getRequests();
+          assert.ok(
+            searchRequests.length > 0,
+            `observed federated search requests: ${JSON.stringify(searchRequests)}`,
+          );
+
+          assert.ok(
+            isolatedHTML.includes('LIVE_RESULT_VALUE'),
+            `isolated html includes live card value: ${isolatedHTML}`,
+          );
+          assert.notOk(
+            isolatedHTML.includes(sentinel),
+            `isolated html does not include stale indexed sentinel: ${isolatedHTML}`,
+          );
+          assert.ok(
+            isolatedHTML.includes('live-search-css-sentinel'),
+            `isolated html includes unique live card css class: ${isolatedHTML}`,
+          );
+          assert.ok(
+            /live-search-css-sentinel[^>]*data-scopedcss-[a-f0-9]{10}-[a-f0-9]{10}/.test(
+              isolatedHTML,
+            ),
+            `isolated html keeps scoped css marker on live result: ${isolatedHTML}`,
+          );
+        } finally {
+          searchRequestObserverPatch.restore();
+          await realmServerPatch.restore();
+        }
+      });
+
+      test('card prerendered search uses live rendered FileDef HTML', async function (assert) {
+        const cardURL = `${realmURL}live-file-search-host`;
+        const sentinel = 'SENTINEL_STALE_FILE_HTML';
+        let realmServerPatch =
+          installRealmServerAssertOwnRealmServerBypassPatch();
+
+        try {
+          await overrideIndexedIsolatedHTML(
+            `${realmURL}live-file.live`,
+            `<article data-test-stale-file-html>${sentinel}</article>`,
+          );
+
+          let result = await prerenderer.prerenderCard({
+            realm: realmURL,
+            url: cardURL,
+            auth: auth(),
+          });
+
+          assert.notOk(result.response.error, 'prerender succeeds');
+          let isolatedHTML = cleanWhiteSpace(
+            result.response.isolatedHTML ?? '',
+          );
+
+          assert.ok(
+            isolatedHTML.includes('live-file.live'),
+            `isolated html includes live FileDef fallback value: ${isolatedHTML}`,
+          );
+          assert.notOk(
+            isolatedHTML.includes(sentinel),
+            `isolated html does not include stale file sentinel: ${isolatedHTML}`,
+          );
+          assert.ok(
+            isolatedHTML.includes('data-test-live-file-search-card'),
+            `isolated html includes live FileDef search result wrapper: ${isolatedHTML}`,
+          );
+        } finally {
+          await realmServerPatch.restore();
+        }
+      });
+    });
+  }
+
   module('prerender - non-mutating tests', function () {
     defineNonMutatingRunnerTests();
+    defineLivePrerenderedSearchFallbackTests();
     defineNonMutatingStaticTests();
   });
 
