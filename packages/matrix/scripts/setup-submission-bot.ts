@@ -4,6 +4,15 @@ const realmServerURL = process.env.REALM_SERVER_URL || 'http://localhost:4201';
 
 const botCommands = [
   {
+    name: 'create-listing-pr',
+    commandURL: '@cardstack/catalog/commands/create-submission/default',
+    filter: {
+      type: 'matrix-event',
+      event_type: 'app.boxel.bot-trigger',
+      content_type: 'pr-listing-create',
+    },
+  },
+  {
     name: 'show-card',
     commandURL: '@cardstack/boxel-host/commands/show-card/default',
     filter: {
