@@ -70,7 +70,11 @@ export function createAuthErrorGuard(
 
   async function race<T>(promiseFactory: () => Promise<T>): Promise<T> {
     if (latchedAuthError) {
-      throw latchedAuthError;
+      let error = latchedAuthError;
+      // Consume the latch on first observation so a past auth failure does not
+      // poison independent future prerender runs that reuse this guard.
+      latchedAuthError = undefined;
+      throw error;
     }
     let deferred = new Deferred<never>();
     inFlight.add(deferred);
