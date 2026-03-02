@@ -68,6 +68,15 @@ export class CopySourceResult extends CardDef {
   @field url = contains(StringField);
 }
 
+export class CopyFileToRealmInput extends CardDef {
+  @field sourceFileUrl = contains(StringField);
+  @field targetRealm = contains(StringField);
+}
+
+export class CopyFileToRealmResult extends CardDef {
+  @field newFileUrl = contains(StringField);
+}
+
 export class PatchCardInput extends CardDef {
   @field cardId = contains(StringField);
   @field patch = contains(JsonField);
