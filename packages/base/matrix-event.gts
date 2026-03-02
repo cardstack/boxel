@@ -290,6 +290,7 @@ export interface BotTriggerContent {
   type: string;
   realm: string;
   input: unknown;
+  userId: string;
 }
 
 export interface BotTriggerEvent extends BaseMatrixEvent {

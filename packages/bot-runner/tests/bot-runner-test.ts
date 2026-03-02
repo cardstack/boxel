@@ -15,7 +15,7 @@ import { onMembershipEvent } from '../lib/membership-handler';
 import { onTimelineEvent } from '../lib/timeline-handler';
 
 function makeBotTriggerEvent(
-  sender: string | null | undefined,
+  sender: string,
   originServerTs: number,
 ) {
   const BOT_TRIGGER_EVENT_TYPE = 'app.boxel.bot-trigger';
@@ -27,6 +27,7 @@ function makeBotTriggerEvent(
         type: 'pr-listing-create',
         input: {},
         realm: 'http://localhost:4201/test/',
+        userId: sender,
       },
     },
     getSender: () => sender,
