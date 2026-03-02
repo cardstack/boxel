@@ -9,8 +9,25 @@ import yaml from 'yaml';
 
 const DOMAIN = 'localhost';
 
+let _traefikDir: string | undefined;
 function traefikDynamicDir(): string {
-  return resolve(__dirname, '..', '..', '..', 'traefik', 'dynamic');
+  if (_traefikDir) {
+    return _traefikDir;
+  }
+  try {
+    let mounted = execSync(
+      `docker inspect boxel-traefik --format '{{range .Mounts}}{{if eq .Destination "/etc/traefik/dynamic"}}{{.Source}}{{end}}{{end}}'`,
+      { encoding: 'utf-8' },
+    ).trim();
+    if (mounted) {
+      _traefikDir = mounted;
+      return _traefikDir;
+    }
+  } catch {
+    // Traefik not running — fall back to repo-relative path
+  }
+  _traefikDir = resolve(__dirname, '..', '..', '..', 'traefik', 'dynamic');
+  return _traefikDir;
 }
 
 export function isBranchMode(): boolean {

@@ -23,10 +23,22 @@ function sanitizeSlug(raw) {
     .replace(/^-|-$/g, '');
 }
 
+function getTraefikDynamicDir() {
+  try {
+    const { execSync } = require('child_process');
+    const mounted = execSync(
+      `docker inspect boxel-traefik --format '{{range .Mounts}}{{if eq .Destination "/etc/traefik/dynamic"}}{{.Source}}{{end}}{{end}}'`,
+      { encoding: 'utf-8' },
+    ).trim();
+    if (mounted) return mounted;
+  } catch {
+    // fall through
+  }
+  return path.resolve(__dirname, '..', '..', '..', 'traefik', 'dynamic');
+}
+
 function registerWithTraefik(slug, hostname, port) {
-  const dynamicDir = path.resolve(
-    __dirname, '..', '..', '..', 'traefik', 'dynamic',
-  );
+  const dynamicDir = getTraefikDynamicDir();
   const configPath = path.join(dynamicDir, `${slug}-host.yml`);
   const routerKey = `host-${slug}`;
 

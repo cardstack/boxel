@@ -15,10 +15,28 @@ const log = logger('dev-service-registry');
 
 const DOMAIN = 'localhost';
 
-// Resolve traefik/dynamic dir relative to repo root
+// Resolve the traefik/dynamic dir that the running Traefik container watches.
+// In a worktree the repo-relative path differs from the mounted path, so we
+// ask Docker for the actual host mount when the container is running.
+let _traefikDir: string | undefined;
 function traefikDynamicDir(): string {
-  // Walk up from packages/realm-server to repo root
-  return resolve(__dirname, '..', '..', '..', 'traefik', 'dynamic');
+  if (_traefikDir) {
+    return _traefikDir;
+  }
+  try {
+    let mounted = execSync(
+      `docker inspect boxel-traefik --format '{{range .Mounts}}{{if eq .Destination "/etc/traefik/dynamic"}}{{.Source}}{{end}}{{end}}'`,
+      { encoding: 'utf-8' },
+    ).trim();
+    if (mounted) {
+      _traefikDir = mounted;
+      return _traefikDir;
+    }
+  } catch {
+    // Traefik not running — fall back to repo-relative path
+  }
+  _traefikDir = resolve(__dirname, '..', '..', '..', 'traefik', 'dynamic');
+  return _traefikDir;
 }
 
 export function getBranchSlug(): string {
