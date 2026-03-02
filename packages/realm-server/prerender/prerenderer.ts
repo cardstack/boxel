@@ -75,10 +75,7 @@ export class Prerenderer {
     this.#realmIdleEvictMs = this.#resolveRealmIdleEvictMs();
     this.#startCleanupLoop();
     void this.#pagePool.warmStandbys().catch((e) => {
-      log.warn(
-        'Failed to warm standby pages during prerenderer startup:',
-        e,
-      );
+      log.warn('Failed to warm standby pages during prerenderer startup:', e);
     });
   }
 

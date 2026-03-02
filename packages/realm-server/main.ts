@@ -100,7 +100,7 @@ let {
     : `http://localhost:${port}`,
   distURL = isBranchMode()
     ? serviceURL('host')
-    : process.env.HOST_URL ?? 'http://localhost:4200',
+    : (process.env.HOST_URL ?? 'http://localhost:4200'),
   path: paths,
   fromUrl: fromUrls,
   toUrl: toUrls,
@@ -390,7 +390,9 @@ const getIndexHTML = async () => {
   });
   process.on('message', (message) => {
     if (message === 'stop') {
-      let stopPort = (httpServer.address() as import('net').AddressInfo | null)?.port ?? port;
+      let stopPort =
+        (httpServer.address() as import('net').AddressInfo | null)?.port ??
+        port;
       console.log(`stopping realm server on port ${stopPort}...`);
       if (isBranchMode()) {
         deregisterBranch();
@@ -438,7 +440,8 @@ const getIndexHTML = async () => {
 
   await server.start();
 
-  let actualPort = (httpServer.address() as import('net').AddressInfo | null)?.port ?? port;
+  let actualPort =
+    (httpServer.address() as import('net').AddressInfo | null)?.port ?? port;
   log.info(`Realm server listening on port ${actualPort} is serving realms:`);
   let additionalMappings = hrefs.slice(paths.length);
   for (let [index, { url }] of realms.entries()) {

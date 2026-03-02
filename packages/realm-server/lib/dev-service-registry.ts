@@ -1,10 +1,5 @@
 import { execSync } from 'child_process';
-import {
-  writeFileSync,
-  renameSync,
-  unlinkSync,
-  readdirSync,
-} from 'fs';
+import { writeFileSync, renameSync, unlinkSync, readdirSync } from 'fs';
 import { join, resolve } from 'path';
 import { logger } from '@cardstack/runtime-common';
 import type { Server } from 'http';
@@ -62,10 +57,7 @@ function sanitizeSlug(raw: string): string {
     .replace(/^-|-$/g, '');
 }
 
-export function serviceHostname(
-  serviceName: string,
-  branch?: string,
-): string {
+export function serviceHostname(serviceName: string, branch?: string): string {
   let slug = branch ?? getBranchSlug();
   return `${serviceName}.${slug}.${DOMAIN}`;
 }
@@ -135,10 +127,7 @@ export function registerService(
 /**
  * Remove a single service's Traefik config file on shutdown.
  */
-export function deregisterService(
-  serviceName: string,
-  branch?: string,
-): void {
+export function deregisterService(serviceName: string, branch?: string): void {
   let slug = branch ?? getBranchSlug();
   let configPath = join(traefikDynamicDir(), `${slug}-${serviceName}.yml`);
   try {

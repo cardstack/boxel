@@ -7,14 +7,19 @@ import { existsSync } from 'fs';
 
 function homeserverFile(): string {
   if (process.env.BOXEL_BRANCH) {
-    let slug = process.env.BOXEL_BRANCH
-      .toLowerCase()
+    let slug = process.env.BOXEL_BRANCH.toLowerCase()
       .replace(/\//g, '-')
       .replace(/[^a-z0-9-]/g, '')
       .replace(/-+/g, '-')
       .replace(/^-|-$/g, '');
     let branchFile = resolve(
-      join(__dirname, '..', 'matrix', `synapse-data-${slug}`, 'homeserver.yaml'),
+      join(
+        __dirname,
+        '..',
+        'matrix',
+        `synapse-data-${slug}`,
+        'homeserver.yaml',
+      ),
     );
     if (existsSync(branchFile)) {
       return branchFile;
