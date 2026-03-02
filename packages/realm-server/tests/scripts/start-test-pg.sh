@@ -47,14 +47,24 @@ print_start_diagnostics() {
 }
 
 cid=""
+start_err=""
+container_ref="$TEST_PG_CONTAINER"
 max_attempts=5
 attempt=1
 while [ "$attempt" -le "$max_attempts" ]; do
-  if cid="$(start_container 2>&1)"; then
+  start_err_file="$(mktemp)"
+  if cid="$(start_container 2>"$start_err_file")"; then
+    start_err="$(cat "$start_err_file")"
+    rm -f "$start_err_file"
+    if printf '%s' "$cid" | grep -Eq '^[0-9a-f]{12,64}$'; then
+      container_ref="$cid"
+    fi
     break
   fi
+  start_err="$(cat "$start_err_file")"
+  rm -f "$start_err_file"
 
-  if printf '%s' "$cid" | grep -qi 'address already in use'; then
+  if printf '%s' "$start_err" | grep -qi 'address already in use'; then
     if [ "$attempt" -lt "$max_attempts" ]; then
       echo "Port ${TEST_PG_PORT} still in use, retrying container start (${attempt}/${max_attempts})..." >&2
       docker rm -f "$TEST_PG_CONTAINER" >/dev/null 2>&1 || true
@@ -65,7 +75,7 @@ while [ "$attempt" -le "$max_attempts" ]; do
   fi
 
   print_start_diagnostics
-  echo "$cid" >&2
+  echo "$start_err" >&2
   exit 1
 done
 
@@ -75,14 +85,14 @@ if [ -z "$cid" ]; then
   exit 1
 fi
 
-"${SCRIPT_DIR}/wait-for-container-pg.sh" "$TEST_PG_CONTAINER" "$cid"
+"${SCRIPT_DIR}/wait-for-container-pg.sh" "$TEST_PG_CONTAINER" "$container_ref"
 
 # Sanity check the migrated DB exists in the seeded cluster.
 seed_db_present="$(docker exec "$TEST_PG_CONTAINER" psql -h 127.0.0.1 -U postgres -d postgres -Atqc \
   "select datname from pg_database where datname = '${TEST_PG_SEED_DB}'")"
 if [ "$seed_db_present" != "$TEST_PG_SEED_DB" ]; then
   echo "Expected seeded DB '${TEST_PG_SEED_DB}' to exist in $TEST_PG_CONTAINER" >&2
-  docker logs "$cid" >&2 || true
+  docker logs "$container_ref" >&2 || true
   exit 1
 fi
 
