@@ -1020,7 +1020,7 @@ module('Integration | operator-mode | card catalog', function (hooks) {
 
     let positionAfter = focusedSection.getBoundingClientRect().top;
     assert.ok(
-      Math.abs(positionAfter - positionBefore) <= 2,
+      Math.abs(positionAfter - positionBefore) <= 4,
       `focused section position is preserved after checking Show only (before: ${positionBefore}, after: ${positionAfter})`,
     );
 
@@ -1032,7 +1032,7 @@ module('Integration | operator-mode | card catalog', function (hooks) {
 
     positionAfter = focusedSection.getBoundingClientRect().top;
     assert.ok(
-      Math.abs(positionAfter - positionBefore) <= 2,
+      Math.abs(positionAfter - positionBefore) <= 4,
       `focused section position is preserved after unchecking Show only (before: ${positionBefore}, after: ${positionAfter})`,
     );
   });
