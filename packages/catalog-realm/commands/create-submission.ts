@@ -4,6 +4,7 @@ import {
   PlanBuilder,
   extractRelationshipIds,
   isCardInstance,
+  isCardError,
   logger,
   planInstanceInstall,
   planModuleInstall,

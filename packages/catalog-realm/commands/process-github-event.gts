@@ -13,7 +13,7 @@ class ProcessGithubEventInput extends CardDef {
 
 export default class ProcessGithubEventCommand extends Command<
   typeof ProcessGithubEventInput,
-  undefined
+  GithubEventCard
 > {
   static actionVerb = 'Process GitHub Event';
 
@@ -21,7 +21,9 @@ export default class ProcessGithubEventCommand extends Command<
     return ProcessGithubEventInput;
   }
 
-  protected async run(input: ProcessGithubEventInput): Promise<undefined> {
+  protected async run(
+    input: ProcessGithubEventInput,
+  ): Promise<GithubEventCard> {
     const { eventType, submissionRealmUrl, payload } = input;
 
     let card = new GithubEventCard({
@@ -32,10 +34,15 @@ export default class ProcessGithubEventCommand extends Command<
       payload,
     });
 
-    await new SaveCardCommand(this.commandContext).execute({
+    let savedCard = await new SaveCardCommand(this.commandContext).execute({
       card,
       realm: submissionRealmUrl,
-      doNotWaitForPersist: true,
     });
+
+    console.log(
+      `[ProcessGithubEvent] created card id=${savedCard.id} eventType=${eventType} action=${payload?.action}`,
+    );
+
+    return savedCard;
   }
 }

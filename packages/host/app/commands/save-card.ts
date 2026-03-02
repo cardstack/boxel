@@ -28,17 +28,9 @@ export default class SaveCardCommand extends HostBaseCommand<
   protected async run(
     input: BaseCommandModule.SaveCardInput,
   ): Promise<undefined> {
-    if (input.doNotWaitForPersist) {
-      this.store.add(input.card, {
-        realm: input.realm,
-        localDir: input.localDir,
-        doNotWaitForPersist: true,
-      });
-    } else {
-      await this.store.add(input.card, {
-        realm: input.realm,
-        localDir: input.localDir,
-      });
-    }
+    await this.store.add(input.card, {
+      realm: input.realm,
+      localDir: input.localDir,
+    });
   }
 }
