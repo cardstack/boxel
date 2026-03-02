@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 
 ENV="${1:-staging}"
 ENV_FILE="packages/host/config/${ENV}.env"
