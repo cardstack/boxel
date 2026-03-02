@@ -24,23 +24,21 @@ export function createAuthErrorGuard(
   let inFlight = new Set<Deferred<never>>();
   let listening = false;
   let latchedAuthError: CardError | undefined;
-
-  let handler = (event: Event) => {
-    if (inFlight.size === 0) {
-      let detail =
-        'detail' in event
-          ? (event as CustomEvent).detail
-          : (event as any).detail;
-      let error = coerceAuthError(detail);
-      (error as any)[FLAG] = true;
-      latchedAuthError = error;
-      return;
-    }
+  let latch = (event: Event): CardError => {
     let detail =
       'detail' in event ? (event as CustomEvent).detail : (event as any).detail;
     let error = coerceAuthError(detail);
     (error as any)[FLAG] = true;
     latchedAuthError = error;
+    return error;
+  };
+
+  let handler = (event: Event) => {
+    if (inFlight.size === 0) {
+      latch(event);
+      return;
+    }
+    let error = latch(event);
     for (let deferred of inFlight) {
       deferred.reject(error);
     }

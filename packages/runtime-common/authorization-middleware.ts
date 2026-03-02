@@ -26,6 +26,9 @@ export function authorizationMiddleware(
     let realmURL = response.headers.get('x-boxel-realm-url');
     if (realmURL) {
       if (
+        // Only 401 should attempt reauthentication. A 403 typically means the
+        // caller is authenticated but not permitted, so reauth would be noisy
+        // and not expected to succeed.
         response.status === 401 &&
         !shouldSkipReauthentication() &&
         !req.url.startsWith(`${realmURL}_session`)
