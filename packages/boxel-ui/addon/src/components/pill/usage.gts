@@ -10,6 +10,7 @@ import {
 
 import { cssVar } from '../../helpers.ts';
 import { IconPlus } from '../../icons.gts';
+import { type BoxelButtonSize, buttonSizeOptions } from '../button/index.gts';
 import Pill, {
   type BoxelPillKind,
   type BoxelPillVariant,
@@ -20,9 +21,11 @@ export default class PillUsage extends Component {
   pillKinds = ['button', 'default'];
   pillKindDefault: BoxelPillKind = 'default';
   pillVariants = boxelPillVariants;
+  pillSizes = buttonSizeOptions;
 
   @tracked kind: BoxelPillKind = this.pillKindDefault;
   @tracked variant?: BoxelPillVariant;
+  @tracked size?: BoxelButtonSize = 'auto';
   @tracked pillBackgroundColor?: string;
   @tracked borderColor?: string;
   @tracked fontColor?: string;
@@ -71,6 +74,7 @@ export default class PillUsage extends Component {
           <Pill
             @kind={{this.kind}}
             @variant={{this.variant}}
+            @size={{this.size}}
             @pillBackgroundColor={{this.pillBackgroundColor}}
             @pillBorderColor={{this.borderColor}}
             @pillFontColor={{this.fontColor}}
@@ -101,6 +105,14 @@ export default class PillUsage extends Component {
             @options={{this.pillVariants}}
             @onInput={{fn (mut this.variant)}}
             @value={{this.variant}}
+          />
+          <Args.String
+            @name='size'
+            @optional={{true}}
+            @description='Standard pill sizes'
+            @options={{this.pillSizes}}
+            @onInput={{fn (mut this.size)}}
+            @value={{this.size}}
           />
           <Args.String
             @name='pillBackgroundColor'
