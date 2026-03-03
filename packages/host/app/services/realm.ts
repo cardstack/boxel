@@ -273,6 +273,7 @@ class RealmResource {
     this.fetchingInfo = undefined;
     this.fetchRealmPermissionsTask.cancelAll();
     window.localStorage.removeItem(SessionLocalStorageKey);
+    window.sessionStorage.removeItem(SessionLocalStorageKey);
     syncTokenToServiceWorker(this.realmURL, undefined);
   }
 
@@ -949,7 +950,7 @@ export default class RealmService extends Service {
   token = (url: string): string | undefined => {
     let resource = this.knownRealm(url, { tracked: false });
     if (!resource && (globalThis as any).__boxelRenderContext && !isTesting()) {
-      // prerender contexts should always reflect localStorage session state
+      // prerender contexts should always reflect persisted session state
       this.restoreSessionsFromStorage();
       resource = this.knownRealm(url, { tracked: false });
     }
@@ -1122,18 +1123,19 @@ export function claimsFromRawToken(rawToken: string): JWTPayload {
 
 let SessionStorage = {
   getAll(): Record<string, string> | undefined {
-    let sessionsString = window.localStorage.getItem(SessionLocalStorageKey);
-    if (sessionsString) {
-      return JSON.parse(sessionsString);
-    }
-    return undefined;
+    return getSessionTokensFromStorage();
   },
   persist(realmURL: string, token: string | undefined) {
-    let sessionStr =
-      window.localStorage.getItem(SessionLocalStorageKey) ?? '{}';
-    let session = JSON.parse(sessionStr);
+    // Intentionally persist to localStorage only for normal host sessions.
+    // Reads use localStorage first with sessionStorage fallback so prerender
+    // contexts (which write sessionStorage-only) are still supported.
+    let session = getSessionTokensFromStorage() ?? {};
     if (session[realmURL] !== token) {
-      session[realmURL] = token;
+      if (token === undefined) {
+        delete session[realmURL];
+      } else {
+        session[realmURL] = token;
+      }
       window.localStorage.setItem(
         SessionLocalStorageKey,
         JSON.stringify(session),
@@ -1142,6 +1144,31 @@ let SessionStorage = {
     syncTokenToServiceWorker(realmURL, token);
   },
 };
+
+function getSessionTokensFromStorage(): Record<string, string> | undefined {
+  let localTokens = parseSessionTokens(
+    window.localStorage.getItem(SessionLocalStorageKey),
+  );
+  if (localTokens) {
+    return localTokens;
+  }
+  return parseSessionTokens(
+    window.sessionStorage.getItem(SessionLocalStorageKey),
+  );
+}
+
+function parseSessionTokens(
+  tokens: string | null,
+): Record<string, string> | undefined {
+  if (!tokens) {
+    return undefined;
+  }
+  try {
+    return JSON.parse(tokens) as Record<string, string>;
+  } catch {
+    return undefined;
+  }
+}
 
 declare module '@ember/service' {
   interface Registry {
