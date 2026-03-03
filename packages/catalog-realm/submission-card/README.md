@@ -42,14 +42,16 @@ The portal hides all GitHub technical details. Users care about *"Did my submiss
 
 ## Realm Location
 
-Both files belong in the `/submissions/` realm, not the catalog realm:
+Both files live in the catalog realm (which is editable):
 
 ```
 submission-card/
 ├── README.md                         ← this file
-├── submission-card-portal.gts        ← portal app card  →  /submissions/
-└── submission-card.gts               ← submission card  →  /submissions/
+├── submission-card-portal.gts        ← portal app card  →  catalog realm
+└── submission-card.gts               ← submission card  →  catalog realm
 ```
+
+> **Future:** `SubmissionCard` instances will eventually be created in the **user's own realm** (the realm from which they submitted the listing PR), not the catalog realm. The catalog realm is used as a starting point while the per-user realm flow is not yet implemented.
 
 ---
 
@@ -72,9 +74,7 @@ Show only user-facing status. **Hide all GitHub technical details.**
 | Field | Show | Notes |
 |-------|------|-------|
 | Listing name | Yes | `listing.name` — primary title |
-| Status pill | Yes | `pending` / `open` / `merged` / `closed` / `changes_requested` |
-| Submitted date | Yes | `createdAt` timestamp |
-| Pass / Reject indicator | Yes | Derived from `status` |
+| Submitted date | Yes | Card generation date (`_createdAt` from card metadata) |
 | Branch name | Optional | Secondary, small label |
 | GitHub PR link | Optional | Icon link only |
 | Reviewer comments | No | Too technical |
@@ -104,14 +104,11 @@ Show only user-facing status. **Hide all GitHub technical details.**
 | `githubURL` | `StringField` (computed) | Built from `branchName` using `GITHUB_BRANCH_URL_PREFIX` + URL-encoded segments |
 | `listing` | `linksTo(Listing)` | The catalog listing being submitted |
 | `allFileContents` | `containsMany(FileContentField)` | All files included in the PR submission |
-| `status` | `StringField` | `pending` \| `open` \| `merged` \| `closed` \| `changes_requested` — updated by webhook |
-| `createdAt` | `DatetimeField` | When the submission was created |
 
 ### Computed Field Notes
 
 - **`cardTitle`** — read-only, auto-derived from the linked listing.
 - **`githubURL`** — read-only, auto-derived from `branchName`. Each `/`-separated segment is individually `encodeURIComponent`-encoded.
-- **`status`** — written by the webhook/bot, not by the user directly.
 
 ### Edge Cases
 
@@ -122,8 +119,6 @@ Show only user-facing status. **Hide all GitHub technical details.**
 | `branchName` empty | `githubURL` returns `undefined` — hide link in fitted card |
 | `allFileContents` empty | Hide file count badge |
 | Submission deleted | PR still exists on GitHub — only the reference is removed |
-| `status` is `merged` | Show green "Approved" pill |
-| `status` is `closed` / `changes_requested` | Show red "Rejected" pill |
 
 ---
 
