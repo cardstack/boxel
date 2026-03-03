@@ -1557,7 +1557,7 @@ module(basename(__filename), function () {
             },
             fileSystem: {
               'prerendered-search-live.gts': `
-              import { CardDef, Component, field, contains, StringField, realmURL, linksTo } from 'https://cardstack.com/base/card-api';
+              import { CardDef, Component, field, contains, StringField, linksTo } from 'https://cardstack.com/base/card-api';
 
               export class LiveSearchResult extends CardDef {
                 static displayName = 'Live Search Result';
@@ -1693,7 +1693,7 @@ module(basename(__filename), function () {
                 },
               },
               'live-file-search-card.gts': `
-              import { CardDef, Component, field, contains, StringField, realmURL, linksTo } from 'https://cardstack.com/base/card-api';
+              import { CardDef, Component, field, contains, StringField, linksTo } from 'https://cardstack.com/base/card-api';
 
               export class LiveFileSearchInner extends CardDef {
                 static displayName = 'Live File Search Inner';

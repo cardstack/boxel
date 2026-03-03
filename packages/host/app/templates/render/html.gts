@@ -46,7 +46,8 @@ class RenderHtmlTemplate extends Component<Signature> {
   }
 
   @provide(CardContextName)
-  get context(): CardContext {
+  // @ts-ignore "context" is declared but not used
+  private get context(): CardContext {
     return {
       getCard: this.getCard,
       getCards: this.getCards,

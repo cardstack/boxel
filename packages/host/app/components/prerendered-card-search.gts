@@ -206,7 +206,7 @@ export default class PrerenderedCardSearch extends Component<PrerenderedCardComp
       instances: this.renderContextSearchResource.instances,
       isLoading: this.renderContextSearchResource.isLoading,
       meta: this.renderContextSearchResource.meta,
-      format: this.args.format,
+      format: this.shouldUseRenderContextSearch ? this.args.format : undefined,
       realms: this.args.realms,
       cardComponentModifier: this.cardComponentModifier,
     }),
