@@ -49,6 +49,7 @@ import type {
 import { detectStackItemTypeForTarget } from '../../lib/stack-item';
 
 import { removeFileExtension } from '../card-search/utils';
+import { knownFileMetaUrls } from '../prerendered-card-search';
 
 import Overlays from './overlays';
 
@@ -369,11 +370,21 @@ export default class OperatorModeOverlays extends Overlays {
   }
 
   private getTypeForCardTarget(cardDefOrId: CardDefOrId): 'card' | 'file' {
-    return detectStackItemTypeForTarget(
+    let type = detectStackItemTypeForTarget(
       cardDefOrId,
       this.getCardId(cardDefOrId),
       this.store,
     );
+    if (type === 'file') {
+      return type;
+    }
+    // Fallback: check the internal registry of file-meta URLs populated by
+    // prerendered search. The prerendered search only fetches HTML, so the
+    // file-meta data may not yet be in the store when the user first clicks.
+    if (typeof cardDefOrId === 'string' && knownFileMetaUrls.has(cardDefOrId)) {
+      return 'file';
+    }
+    return type;
   }
 
   protected override buildViewCardOpts(

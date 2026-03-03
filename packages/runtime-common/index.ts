@@ -6,7 +6,7 @@ import type {
   Meta,
   Saved,
 } from './resource-types';
-import type { ResolvedCodeRef } from './code-ref';
+import type { CodeRef, ResolvedCodeRef } from './code-ref';
 import type { RenderRouteOptions } from './render-route-options';
 import type { Definition } from './definitions';
 import type { SerializedError } from './error';
@@ -21,6 +21,11 @@ export interface LooseSingleResourceDocument<T extends LinkableResource> {
 
 export interface LooseSingleCardDocument {
   data: LooseLinkableResource<CardResource>;
+  included?: LinkableResource[];
+}
+
+export interface LooseSingleFileMetaDocument {
+  data: LooseLinkableResource<FileMetaResource>;
   included?: LinkableResource[];
 }
 
@@ -124,11 +129,25 @@ export type ModulePrerenderArgs = {
 
 export type PrerenderCardArgs = ModulePrerenderArgs;
 
+export type RunCommandArgs = {
+  realm: string;
+  auth: string;
+  command: string;
+  commandInput?: Record<string, any> | null;
+};
+
+export type RunCommandResponse = {
+  status: 'ready' | 'error' | 'unusable';
+  cardResultString?: string | null;
+  error?: string | null;
+};
+
 export interface Prerenderer {
   prerenderCard(args: PrerenderCardArgs): Promise<RenderResponse>;
   prerenderModule(args: ModulePrerenderArgs): Promise<ModuleRenderResponse>;
   prerenderFileExtract(args: ModulePrerenderArgs): Promise<FileExtractResponse>;
   prerenderFileRender(args: FileRenderArgs): Promise<FileRenderResponse>;
+  runCommand(args: RunCommandArgs): Promise<RunCommandResponse>;
 }
 
 export type RealmAction = 'read' | 'write' | 'realm-owner' | 'assume-user';
@@ -194,12 +213,14 @@ export { v4 as uuidv4 } from '@lukeed/uuid'; // isomorphic UUID's using Math.ran
 import type { LocalPath } from './paths';
 import type { CardTypeFilter, Query, DataQuery, EveryFilter } from './query';
 import { Loader } from './loader';
+import { resolveCardReference } from './card-reference-resolver';
 export * from './paths';
 export * from './cached-fetch';
 export * from './definition-lookup';
 export * from './definitions';
 export * from './catalog';
 export * from './commands';
+export * from './card-reference-resolver';
 export * from './constants';
 export * from './helpers/const';
 export * from './document';
@@ -231,6 +252,7 @@ export * from './query-field-utils';
 export * from './relationship-utils';
 export * from './formats';
 export * from './dependency-tracker';
+export * from './github-submissions';
 export { getCreatedTime } from './file-meta';
 export { mergeRelationships } from './merge-relationships';
 export { makeLogDefinitions, logger } from './log';
@@ -282,10 +304,8 @@ export type {
   RealmSession,
 } from './realm';
 
-import type { CodeRef } from './code-ref';
-export type { CodeRef };
-
 export * from './code-ref';
+export * from './command-parsing-utils';
 export * from './serializers';
 
 export type {
@@ -626,7 +646,9 @@ export function internalKeyFor(
   relativeTo: URL | undefined,
 ): string {
   if (!('type' in ref)) {
-    let module = trimExecutableExtension(new URL(ref.module, relativeTo)).href;
+    let module = trimExecutableExtension(
+      new URL(resolveCardReference(ref.module, relativeTo)),
+    ).href;
     return `${module}/${ref.name}`;
   }
   switch (ref.type) {

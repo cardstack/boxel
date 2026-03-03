@@ -23,7 +23,7 @@ const Format = new Intl.DateTimeFormat('en-US', {
 
 const { datetimeFormat } = DatetimeSerializer;
 
-class View extends Component<typeof DatetimeField> {
+class View extends Component<typeof DateTimeField> {
   <template>
     {{this.formatted}}
   </template>
@@ -38,7 +38,7 @@ class View extends Component<typeof DatetimeField> {
   }
 }
 
-export default class DatetimeField extends FieldDef {
+export default class DateTimeField extends FieldDef {
   static displayName = 'DateTime';
   static icon = CalendarClockIcon;
   static [primitive]: Date;

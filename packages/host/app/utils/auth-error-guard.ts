@@ -23,15 +23,22 @@ export function createAuthErrorGuard(
   const FLAG = Symbol(AUTH_ERROR_EVENT_NAME);
   let inFlight = new Set<Deferred<never>>();
   let listening = false;
-
-  let handler = (event: Event) => {
-    if (inFlight.size === 0) {
-      return;
-    }
+  let latchedAuthError: CardError | undefined;
+  let latch = (event: Event): CardError => {
     let detail =
       'detail' in event ? (event as CustomEvent).detail : (event as any).detail;
     let error = coerceAuthError(detail);
     (error as any)[FLAG] = true;
+    latchedAuthError = error;
+    return error;
+  };
+
+  let handler = (event: Event) => {
+    if (inFlight.size === 0) {
+      latch(event);
+      return;
+    }
+    let error = latch(event);
     for (let deferred of inFlight) {
       deferred.reject(error);
     }
@@ -50,14 +57,23 @@ export function createAuthErrorGuard(
     if (!listening || !target?.removeEventListener) {
       inFlight.clear();
       listening = false;
+      latchedAuthError = undefined;
       return;
     }
     target.removeEventListener(AUTH_ERROR_EVENT_NAME, handler);
     inFlight.clear();
     listening = false;
+    latchedAuthError = undefined;
   }
 
   async function race<T>(promiseFactory: () => Promise<T>): Promise<T> {
+    if (latchedAuthError) {
+      let error = latchedAuthError;
+      // Consume the latch on first observation so a past auth failure does not
+      // poison independent future prerender runs that reuse this guard.
+      latchedAuthError = undefined;
+      throw error;
+    }
     let deferred = new Deferred<never>();
     inFlight.add(deferred);
     try {
@@ -73,6 +89,7 @@ export function createAuthErrorGuard(
           );
         }
         (error as any)[FLAG] = true;
+        latchedAuthError = error;
         throw error;
       }
       return result;

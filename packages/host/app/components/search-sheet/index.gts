@@ -124,6 +124,14 @@ export default class SearchSheet extends Component<Signature> {
     this.args.onCancel();
   }
 
+  @action
+  private onBlur() {
+    this.args.onBlur();
+    if (this.args.mode === SearchSheetModes.Closed) {
+      this.resetState();
+    }
+  }
+
   @action private handleCardSelect(selection: string | { realmURL: string }) {
     if (typeof selection !== 'string') {
       return;
@@ -239,7 +247,7 @@ export default class SearchSheet extends Component<Signature> {
       data-test-search-sheet={{@mode}}
       data-test-search-realms={{this.joinSelectedRealmURLs}}
       {{onClickOutside
-        @onBlur
+        this.onBlur
         exceptSelector='.add-card-to-neighbor-stack,.boxel-picker__dropdown,.picker-before-options-with-search,.picker-option-row,.search-sheet-header,.search-sheet-section-header,.variant-default'
       }}
     >
@@ -256,6 +264,7 @@ export default class SearchSheet extends Component<Signature> {
         />
       {{else}}
         <SearchBar
+          class='search-sheet__search-input-group'
           @value={{this.searchKey}}
           @placeholder={{this.placeholderText}}
           @state={{this.inputValidationState}}
@@ -266,10 +275,10 @@ export default class SearchSheet extends Component<Signature> {
           @onInputInsertion={{@onInputInsertion}}
           @selectedRealms={{this.selectedRealms}}
           @onRealmChange={{this.onRealmChange}}
-          class='search-sheet__search-input-group'
-          autocomplete='off'
+          @autocomplete='off'
         />
         <SearchContent
+          class='search-sheet__content'
           @searchKey={{this.searchKey}}
           @selectedRealmURLs={{this.selectedRealmURLs}}
           @isCompact={{this.isCompact}}
@@ -292,7 +301,7 @@ export default class SearchSheet extends Component<Signature> {
             var(--operator-mode-spacing)
         );
         --search-sheet-closed-width: var(--container-button-size);
-        --search-sheet-prompt-height: 9.375rem;
+        --search-sheet-prompt-height: 8.75rem;
       }
 
       .search-sheet {
@@ -317,23 +326,31 @@ export default class SearchSheet extends Component<Signature> {
           width var(--boxel-transition);
       }
       .search-sheet:not(.closed) {
+        overflow: hidden;
+        background-color: var(--boxel-light);
         border-top-right-radius: var(--boxel-border-radius-xxl);
         border-top-left-radius: var(--boxel-border-radius-xxl);
         border-bottom-right-radius: 0;
         border-bottom-left-radius: 0;
-        overflow: hidden;
       }
-      .search-sheet:not(.closed):deep(.input-container),
-      .search-sheet:not(.closed):deep(.search-sheet__search-input-group),
-      .search-sheet:not(.closed):deep(.search-sheet__search-bar) {
-        border-radius: inherit;
+      .search-sheet__search-input-group {
+        width: calc(100% - 2 * var(--boxel-sp-xs));
+        margin: var(--boxel-sp-xs);
+        flex-wrap: nowrap;
+        overflow: hidden;
+        animation: fade-in var(--boxel-transition);
+      }
+      @keyframes fade-in {
+        from {
+          opacity: 0;
+        }
+        to {
+          opacity: 1;
+        }
       }
 
-      .search-sheet__search-input-group,
-      .search-sheet__search-bar {
-        transition:
-          height var(--boxel-transition),
-          width var(--boxel-transition);
+      .results .search-sheet__search-input-group {
+        margin-bottom: 3px;
       }
 
       .closed {
@@ -349,6 +366,10 @@ export default class SearchSheet extends Component<Signature> {
       .results {
         height: calc(100% - var(--stack-padding-top));
         box-shadow: var(--boxel-deep-box-shadow);
+      }
+
+      .search-sheet__content {
+        padding-inline: var(--boxel-sp);
       }
 
       .footer {
@@ -386,6 +407,13 @@ export default class SearchSheet extends Component<Signature> {
         margin-left: var(--boxel-sp-xs);
       }
 
+      .open-search-field {
+        position: absolute;
+        top: 0;
+        left: 0;
+        z-index: 1;
+        transform-origin: top left;
+      }
       .open-search-field:focus:focus-visible {
         outline-offset: 0;
         outline-width: 2px;

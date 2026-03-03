@@ -39,7 +39,7 @@
       },
       "specs.0": {
         "links": {
-          "self": "../Spec/geo-point"
+          "self": "../field-spec/GeoPointFieldSpec/d1f2c3b4-a5e6-4f7a-8b9c-0d1e2f3a4b5c"
         }
       },
       "specs.1": {
@@ -54,7 +54,7 @@
       },
       "examples.0": {
         "links": {
-          "self": "../fields-preview/GeoPointPreview/ef3d6b85-cc8b-46fb-9447-a329d2ab270c"
+          "self": "../field-spec/GeoPointFieldSpec/d1f2c3b4-a5e6-4f7a-8b9c-0d1e2f3a4b5c"
         }
       },
       "categories.0": {

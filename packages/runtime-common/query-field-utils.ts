@@ -1,4 +1,4 @@
-import { codeRefWithAbsoluteURL } from './code-ref';
+import { codeRefWithAbsoluteURL, type CodeRef } from './code-ref';
 import type { FieldDefinition } from './definitions';
 import type {
   FileMetaResource,
@@ -8,7 +8,12 @@ import type {
 } from './resource-types';
 import {
   buildQueryParamValue,
+  isAnyFilter,
+  isCardTypeFilter,
+  isEveryFilter,
+  isNotFilter,
   normalizeQueryForSignature,
+  type Filter,
   type Query,
   type QueryWithInterpolations,
 } from './query';
@@ -345,6 +350,46 @@ function injectOnIntoLeafFilters(
   if (!filter.on) {
     filter.on = targetRef;
   }
+}
+
+export interface TypeRefResult {
+  ref: CodeRef;
+  negated: boolean;
+}
+
+export function getTypeRefsFromFilter(
+  filter: Filter,
+): TypeRefResult[] | undefined {
+  // Any filter with an explicit 'on' scoping (e.g. specRef in chooseCard)
+  if ('on' in filter && filter.on) {
+    return [{ ref: filter.on, negated: false }];
+  }
+  // Top-level CardTypeFilter { type: CodeRef } (e.g. linksTo)
+  if (isCardTypeFilter(filter)) {
+    return [{ ref: filter.type, negated: false }];
+  }
+  // NotFilter: recurse and flip negated flag on all results
+  if (isNotFilter(filter)) {
+    const inner = getTypeRefsFromFilter(filter.not);
+    return inner
+      ? inner.map((r) => ({ ref: r.ref, negated: !r.negated }))
+      : undefined;
+  }
+  // EveryFilter: recurse into all children and collect
+  if (isEveryFilter(filter)) {
+    const results = filter.every.flatMap(
+      (sub: Filter) => getTypeRefsFromFilter(sub) ?? [],
+    );
+    return results.length > 0 ? results : undefined;
+  }
+  // AnyFilter: recurse into all children and collect
+  if (isAnyFilter(filter)) {
+    const results = filter.any.flatMap(
+      (sub: Filter) => getTypeRefsFromFilter(sub) ?? [],
+    );
+    return results.length > 0 ? results : undefined;
+  }
+  return undefined;
 }
 
 export function cloneRelationship(
