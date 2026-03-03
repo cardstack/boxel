@@ -538,10 +538,9 @@ export default class MatrixService extends Service {
       );
     }
 
-    await this.start({ auth });
+    await this.start({ auth, registrationToken });
     this.setDisplayName(displayName);
 
-    await this.realmServer.loginWithRegistrationToken(registrationToken);
     await this.realmServer.authenticateToAllAccessibleRealms();
 
     await Promise.all([
@@ -653,11 +652,12 @@ export default class MatrixService extends Service {
     opts: {
       auth?: MatrixSDK.LoginResponse;
       refreshRoutes?: true;
+      registrationToken?: string;
     } = {},
   ) {
     await this.ready;
 
-    let { auth, refreshRoutes } = opts;
+    let { auth, refreshRoutes, registrationToken } = opts;
     if (!auth) {
       auth = this.getAuth();
       if (!auth) {
@@ -669,7 +669,7 @@ export default class MatrixService extends Service {
 
     if (this.client.isLoggedIn()) {
       this.realmServer.setClient(this.client);
-      await this.realmServer.login();
+      await this.realmServer.login(registrationToken);
       this.saveAuth(auth);
       this.bindEventListeners();
 

@@ -544,19 +544,16 @@ export default class RealmServerService extends Service {
   private loggingIn: Promise<void> | undefined;
   private pendingRegistrationToken: string | undefined;
 
-  async login(): Promise<void> {
+  async login(registrationToken?: string): Promise<void> {
+    if (registrationToken) {
+      this.pendingRegistrationToken = registrationToken;
+    }
     if (this.auth.type === 'logged-in') {
       return;
     }
     if (!this.loggingIn) {
       this.loggingIn = this.loginTask.perform();
     }
-    await this.loggingIn;
-  }
-
-  async loginWithRegistrationToken(registrationToken?: string): Promise<void> {
-    this.pendingRegistrationToken = registrationToken;
-    this.loggingIn = this.loginTask.perform();
     await this.loggingIn;
   }
 
