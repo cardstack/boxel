@@ -10,22 +10,22 @@ import {
   contains,
   Component,
 } from 'https://cardstack.com/base/card-api';
-import DatetimeField from '../fields/date-time';
+import DateTimeField from '../fields/date-time';
 import CodeSnippet from '../components/code-snippet';
 
-const standardFieldCode = `@field standard = contains(DatetimeField);`;
-const shortFieldCode = `@field short = contains(DatetimeField, {
+const standardFieldCode = `@field standard = contains(DateTimeField);`;
+const shortFieldCode = `@field short = contains(DateTimeField, {
     configuration: {
       preset: 'short',
     },
   });`;
-const customFormatFieldCode = `@field customFormat = contains(DatetimeField, {
+const customFormatFieldCode = `@field customFormat = contains(DateTimeField, {
     configuration: {
       format: 'ddd, MMM D [at] h:mm A',
     },
   });`;
 
-class DatetimeFieldSpecIsolated extends Component<typeof DatetimeFieldSpec> {
+class DateTimeFieldSpecIsolated extends Component<typeof DateTimeFieldSpec> {
   <template>
     <article class='container'>
       <SpecHeader @model={{@model}}>
@@ -78,7 +78,7 @@ class DatetimeFieldSpecIsolated extends Component<typeof DatetimeFieldSpec> {
   </template>
 }
 
-class DatetimeFieldSpecEdit extends Component<typeof DatetimeFieldSpec> {
+class DateTimeFieldSpecEdit extends Component<typeof DateTimeFieldSpec> {
   <template>
     <article class='container'>
       <SpecHeader @model={{@model}} @isEditMode={{true}}>
@@ -135,27 +135,27 @@ class DatetimeFieldSpecEdit extends Component<typeof DatetimeFieldSpec> {
   </template>
 }
 
-export class DatetimeFieldSpec extends Spec {
+export class DateTimeFieldSpec extends Spec {
   static displayName = 'Datetime Field Spec';
 
-  // Standard DatetimeField - default configuration
-  @field standard = contains(DatetimeField);
+  // Standard DateTimeField - default configuration
+  @field standard = contains(DateTimeField);
 
   // Short format - compact datetime display
-  @field short = contains(DatetimeField, {
+  @field short = contains(DateTimeField, {
     configuration: {
       preset: 'short',
     },
   });
 
   // Custom format - custom datetime formatting
-  @field customFormat = contains(DatetimeField, {
+  @field customFormat = contains(DateTimeField, {
     configuration: {
       format: 'ddd, MMM D [at] h:mm A',
     },
   });
 
   static isolated =
-    DatetimeFieldSpecIsolated as unknown as typeof Spec.isolated;
-  static edit = DatetimeFieldSpecEdit as unknown as typeof Spec.edit;
+    DateTimeFieldSpecIsolated as unknown as typeof Spec.isolated;
+  static edit = DateTimeFieldSpecEdit as unknown as typeof Spec.edit;
 }

@@ -10,7 +10,7 @@ import WithKnownRealmsLoaded from '../with-known-realms-loaded';
 
 const SELECT_ALL_OPTION: PickerOption = {
   id: 'select-all',
-  name: 'All Realms',
+  name: 'All',
   type: 'select-all',
 };
 

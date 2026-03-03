@@ -7,7 +7,7 @@ import {
   linksTo,
 } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
-import DatetimeField from 'https://cardstack.com/base/datetime';
+import DateTimeField from 'https://cardstack.com/base/datetime';
 import MarkdownField from 'https://cardstack.com/base/markdown';
 import BooleanField from 'https://cardstack.com/base/boolean';
 import { EventRsvp } from './event-rsvp';
@@ -20,8 +20,8 @@ export class CalendarEvent extends CardDef {
   static icon = EventIcon;
 
   @field cardTitle = contains(StringField);
-  @field startDateTime = contains(DatetimeField);
-  @field endDateTime = contains(DatetimeField);
+  @field startDateTime = contains(DateTimeField);
+  @field endDateTime = contains(DateTimeField);
   @field cardDescription = contains(MarkdownField);
   @field location = contains(StringField);
   @field isAllDay = contains(BooleanField);
