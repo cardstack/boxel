@@ -103,6 +103,7 @@ class Isolated extends Component<typeof SubmissionCardPortal> {
           @format='fitted'
           @viewOption={{this.selectedView}}
           @context={{@context}}
+          @isLive={{true}}
         />
       </div>
     </div>
