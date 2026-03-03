@@ -301,12 +301,14 @@ export default class PastSessionItem extends Component<Signature> {
   }
 
   private get lastActive() {
-    return (
+    let timestamp =
       this.matrixService.getLastActiveTimestamp(
         this.args.session.roomId,
         this.args.session.lastActiveTimestamp,
-      ) ?? this.createDate.getTime()
-    );
+      ) ?? this.createDate.getTime();
+    // Guard against NaN timestamps (e.g. from sessions with corrupt/missing
+    // origin_server_ts) to prevent RangeError in date-fns format()
+    return isNaN(timestamp) ? Date.now() : timestamp;
   }
 
   private get formattedDate() {
