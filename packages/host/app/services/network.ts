@@ -54,6 +54,10 @@ export default class NetworkService extends Service {
     registerCardReferencePrefix('@cardstack/base/', baseRealmURL);
     // Legacy: resolve old base realm URLs found in Matrix messages and other historical data
     registerCardReferencePrefix('https://cardstack.com/base/', baseRealmURL);
+    virtualNetwork.addURLMapping(
+      new URL('https://cardstack.com/base/'),
+      new URL(baseRealmURL),
+    );
     virtualNetwork.addImportMap(
       '@cardstack/base/',
       (rest) => new URL(rest, baseRealmURL).href,
