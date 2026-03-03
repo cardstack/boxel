@@ -644,6 +644,10 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           1,
           'exactly one apple-touch-icon link is present in the HTML response',
         );
+        assert.ok(
+          response.text.includes('<title>Boxel</title>'),
+          'title element is present in the HTML response',
+        );
       });
 
       test('default icon links are injected when card has no theme', async function (assert) {
@@ -658,6 +662,10 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         );
         let headContent = headMatch?.[1] ?? '';
 
+        assert.ok(
+          headContent.includes('<title>Boxel</title>'),
+          'title element is preserved in head when no theme is present',
+        );
         assert.ok(
           headContent.includes('rel="icon"'),
           'default favicon link is injected into head when no theme is present',
@@ -701,6 +709,10 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           appleTouchIconCount,
           1,
           'exactly one apple-touch-icon link is present even without head injection',
+        );
+        assert.ok(
+          response.text.includes('<title>Boxel</title>'),
+          'title element is present even for non-public realm',
         );
       });
 

@@ -389,7 +389,10 @@ export class RealmServer {
     let hasPublicPermissions = await this.hasPublicPermissions(cardURL);
 
     if (!hasPublicPermissions) {
-      ctxt.body = injectHeadHTML(indexHTML, this.defaultIconLinks().join('\n'));
+      ctxt.body = injectHeadHTML(
+        indexHTML,
+        `<title>Boxel</title>\n${this.defaultIconLinks().join('\n')}`,
+      );
       return;
     }
 
@@ -452,6 +455,8 @@ export class RealmServer {
 
     if (headHTML != null) {
       headFragments.push(ensureSingleTitle(headHTML));
+    } else {
+      headFragments.push('<title>Boxel</title>');
     }
 
     if (scopedCSS != null) {
