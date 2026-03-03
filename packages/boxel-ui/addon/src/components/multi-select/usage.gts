@@ -226,7 +226,7 @@ export default class BoxelMultiSelectUsage extends Component {
           <p>
             Boxel Multi Select is a component that enables the selection of
             multiple items from a customizable dropdown list. It is a wrapper
-            around the PowerSelectMultiple component from the ember-power-select
+            around the PowerSelect component from the ember-power-select
             library, offering off-the-shelf functionality and design.
           </p>
           <p>Key features include:</p>

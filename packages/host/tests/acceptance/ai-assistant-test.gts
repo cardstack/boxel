@@ -367,6 +367,29 @@ module('Acceptance | AI Assistant tests', function (hooks) {
         ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'person.gts': { Person },
         'pet.gts': { Pet },
+        'broken-card.gts': `
+          import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
+          import StringField from 'https://cardstack.com/base/string';
+          import { BrokenField } from './does-not-exist';
+          export class BrokenCard extends CardDef {
+            static displayName = 'Broken Card';
+            @field name = contains(StringField);
+            @field broken = contains(BrokenField);
+          }
+        `,
+        'BrokenCard/errored.json': {
+          data: {
+            attributes: {
+              name: 'Errored Instance',
+            },
+            meta: {
+              adoptsFrom: {
+                module: '../broken-card',
+                name: 'BrokenCard',
+              },
+            },
+          },
+        },
         'country.gts': countryDefinition,
         'Country/indonesia.json': {
           data: {
@@ -884,6 +907,28 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     assert.dom('[data-test-autoattached-card]').doesNotExist();
   });
 
+  test('errored card instance is not auto-attached in code mode', async function (assert) {
+    // Start directly in code mode with the errored card's JSON file
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}BrokenCard/errored.json`,
+      stacks: [[]],
+    });
+    await click('[data-test-open-ai-assistant]');
+    await waitFor(`[data-room-settled]`);
+
+    // The JSON file itself should still be auto-attached as a file
+    assert
+      .dom('[data-test-autoattached-file]')
+      .exists('errored card JSON file should still be auto-attached as a file');
+    // But the card instance should NOT be auto-attached (it has errors)
+    assert
+      .dom('[data-test-autoattached-card]')
+      .doesNotExist(
+        'errored card instance should not be auto-attached as a card',
+      );
+  });
+
   test<TestContextWithSave>('can send a newly created auto-attached card', async function (assert) {
     await visitOperatorMode({
       submode: 'interact',
@@ -1024,7 +1069,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await click('[data-test-file="person.gts"]');
     await click('[data-test-choose-file-modal-add-button]');
     assert.dom('[data-test-attached-file]').exists({ count: 1 });
-    assert.dom('[data-test-attached-file]').hasText('person.gts');
+    assert.dom('[data-test-attached-file]').hasText('person');
     // Add attachment item
     await click('[data-test-attach-button]');
     await click('[data-test-attach-file-btn]');
@@ -1033,16 +1078,16 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     assert.dom('[data-test-attached-file]').exists({ count: 2 });
     assert
       .dom(`[data-test-attached-file="${testRealmURL}person.gts"]`)
-      .hasText('person.gts');
+      .hasText('person');
     assert
       .dom(`[data-test-attached-file="${testRealmURL}pet.gts"]`)
-      .hasText('pet.gts');
+      .hasText('pet');
 
     // Add remove attachment item
     await click(
       `[data-test-attached-file="${testRealmURL}person.gts"] [data-test-remove-file-btn]`,
     );
-    assert.dom('[data-test-attached-file]').hasText('pet.gts');
+    assert.dom('[data-test-attached-file]').hasText('pet');
 
     await fillIn('[data-test-message-field]', `Message With File`);
     await click('[data-test-send-message-btn]');

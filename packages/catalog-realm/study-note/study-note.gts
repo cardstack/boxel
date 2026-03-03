@@ -7,7 +7,7 @@ import {
   containsMany,
 } from 'https://cardstack.com/base/card-api'; // ¹ Core imports
 import StringField from 'https://cardstack.com/base/string';
-import DatetimeField from 'https://cardstack.com/base/datetime';
+import DateTimeField from 'https://cardstack.com/base/datetime';
 import MarkdownField from 'https://cardstack.com/base/markdown';
 import { formatDateTime, gt, lt, subtract } from '@cardstack/boxel-ui/helpers'; // ³ Formatters
 import { action } from '@ember/object';
@@ -334,8 +334,8 @@ export class StudyNoteCard extends CardDef {
   @field content = contains(MarkdownField);
   @field subject = contains(StringField);
   @field tags = containsMany(StringField); // ⁷ Individual tag fields for easy editing
-  @field createdAt = contains(DatetimeField);
-  @field lastModified = contains(DatetimeField);
+  @field createdAt = contains(DateTimeField);
+  @field lastModified = contains(DateTimeField);
 
   // ⁸ Computed title from noteTitle
   @field cardTitle = contains(StringField, {

@@ -6,7 +6,7 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
 import NumberField from 'https://cardstack.com/base/number';
-import DatetimeField from 'https://cardstack.com/base/datetime';
+import DateTimeField from 'https://cardstack.com/base/datetime';
 import UrlField from 'https://cardstack.com/base/url';
 import { dayjsFormat } from '@cardstack/boxel-ui/helpers';
 import PlaneIcon from '@cardstack/boxel-icons/plane';
@@ -22,8 +22,8 @@ export class Flight extends CardDef {
   @field arrivalCity = contains(StringField);
   @field departureAirport = contains(StringField);
   @field arrivalAirport = contains(StringField);
-  @field departureTime = contains(DatetimeField);
-  @field arrivalTime = contains(DatetimeField);
+  @field departureTime = contains(DateTimeField);
+  @field arrivalTime = contains(DateTimeField);
   @field duration = contains(StringField);
   @field aircraftType = contains(StringField);
   @field price = contains(NumberField);

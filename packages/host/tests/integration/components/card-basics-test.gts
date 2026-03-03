@@ -62,7 +62,7 @@ import {
   contains,
   containsMany,
   DateField,
-  DatetimeField,
+  DateTimeField,
   EmailField,
   EthereumAddressField,
   field,
@@ -115,7 +115,7 @@ module('Integration | card-basics', function (hooks) {
         @field boolean = contains(BooleanField);
         @field base64 = contains(Base64ImageField);
         @field date = contains(DateField);
-        @field datetime = contains(DatetimeField);
+        @field datetime = contains(DateTimeField);
         @field ethereumAddress = contains(EthereumAddressField);
         @field markdown = contains(MarkdownField);
         @field textArea = contains(TextAreaField);
@@ -746,17 +746,19 @@ module('Integration | card-basics', function (hooks) {
         await store.loaded();
 
         await renderCard(loader, gallery as BaseDef, 'fitted');
-        await waitUntil(() =>
-          document
-            .querySelector('[data-test-gallery-fitted]')
-            ?.textContent?.includes('hero.txt'),
+        await waitUntil(
+          () =>
+            document
+              .querySelector('[data-test-gallery-fitted]')
+              ?.textContent?.includes('hero'),
+          { timeout: 5000 },
         );
 
         assert
           .dom('[data-test-gallery-fitted]')
           .includesText(
-            'hero.txt',
-            'FileDef renders delegated view from file meta',
+            'hero',
+            'TextFileDef renders delegated view with title from file meta',
           );
       });
 
@@ -822,13 +824,16 @@ module('Integration | card-basics', function (hooks) {
         await store.loaded();
 
         await renderCard(loader, gallery as BaseDef, 'fitted');
-        await waitUntil(() => {
-          let text =
-            document.querySelector(
-              '[data-test-plural-view-field="attachments"]',
-            )?.textContent ?? '';
-          return text.includes('first.txt') && text.includes('second.txt');
-        });
+        await waitUntil(
+          () => {
+            let text =
+              document.querySelector(
+                '[data-test-plural-view-field="attachments"]',
+              )?.textContent ?? '';
+            return text.includes('first') && text.includes('second');
+          },
+          { timeout: 5000 },
+        );
 
         assert
           .dom('[data-test-plural-view-field="attachments"]')
@@ -836,14 +841,14 @@ module('Integration | card-basics', function (hooks) {
         assert
           .dom('[data-test-plural-view-field="attachments"]')
           .includesText(
-            'first.txt',
-            'FileDef renders delegated view from file meta',
+            'first',
+            'TextFileDef renders delegated view with title from file meta',
           );
         assert
           .dom('[data-test-plural-view-field="attachments"]')
           .includesText(
-            'second.txt',
-            'FileDef renders delegated view from file meta',
+            'second',
+            'TextFileDef renders delegated view with title from file meta',
           );
       });
     });
@@ -2556,7 +2561,7 @@ module('Integration | card-basics', function (hooks) {
         static icon = Plane;
         @field origin = contains(StringField);
         @field destination = contains(StringField);
-        @field date = contains(DatetimeField);
+        @field date = contains(DateTimeField);
         @field flightNumber = contains(StringField);
 
         @field cardTitle = contains(StringField, {
@@ -4045,7 +4050,7 @@ module('Integration | card-basics', function (hooks) {
     test('can edit and reset date and datetime fields', async function (assert) {
       class Person extends CardDef {
         @field date = contains(DateField);
-        @field appointment = contains(DatetimeField);
+        @field appointment = contains(DateTimeField);
         static edit = class Edit extends Component<typeof this> {
           <template>
             <@fields.date />
@@ -4086,7 +4091,7 @@ module('Integration | card-basics', function (hooks) {
 
       class DatesCard extends CardDef {
         @field date = contains(DateField);
-        @field datetime = contains(DatetimeField);
+        @field datetime = contains(DateTimeField);
       }
 
       let personWithBrokenDates = new DatesCard({
@@ -4107,7 +4112,7 @@ module('Integration | card-basics', function (hooks) {
 
       class Person extends CardDef {
         @field dates = containsMany(DateField);
-        @field appointments = containsMany(DatetimeField);
+        @field appointments = containsMany(DateTimeField);
         static edit = class Edit extends Component<typeof this> {
           <template>
             <@fields.dates />

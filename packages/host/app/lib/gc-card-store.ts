@@ -13,6 +13,7 @@ import {
   loadFileMetaDocument,
   trackRuntimeFileDependency,
   trackRuntimeInstanceDependency,
+  logger,
   type Query,
   type QueryResultsMeta,
   type RuntimeDependencyTrackingContext,
@@ -34,6 +35,8 @@ import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type { FileDef } from 'https://cardstack.com/base/file-api';
 
 export type ReferenceCount = Map<string, number>;
+
+const loadTrackingLogger = logger('store-load-tracking');
 
 type LocalId = string;
 type InstanceGraph = Map<LocalId, Set<LocalId>>;
@@ -154,6 +157,8 @@ export default class CardStoreWithGarbageCollection implements CardStore {
   #fetch: typeof globalThis.fetch;
   #inFlight: Set<Promise<unknown>> = new Set();
   #loadGeneration = 0; // increments whenever a new load is tracked
+  #nextLoadId = 1;
+  #loadIds: WeakMap<Promise<unknown>, number> = new WeakMap();
   #cardDocsInFlight: Map<string, Promise<SingleCardDocument | CardError>> =
     new Map();
   #fileMetaDocsInFlight: Map<
@@ -251,33 +256,70 @@ export default class CardStoreWithGarbageCollection implements CardStore {
 
   trackLoad(load: Promise<unknown>) {
     if (this.#inFlight.has(load)) {
+      loadTrackingLogger.debug('trackLoad skipped duplicate promise');
       return;
     }
+    let loadId = this.#nextLoadId++;
+    this.#loadIds.set(load, loadId);
     this.#inFlight.add(load);
     this.#loadGeneration++;
-    load.finally(() => {
-      this.#inFlight.delete(load);
-    });
+    loadTrackingLogger.debug(
+      `trackLoad start id=${loadId} generation=${this.#loadGeneration} pending=${this.#inFlight.size}`,
+    );
+    void load
+      .finally(() => {
+        this.#inFlight.delete(load);
+        loadTrackingLogger.debug(
+          `trackLoad settled id=${loadId} pending=${this.#inFlight.size}`,
+        );
+      })
+      .catch((error) => {
+        loadTrackingLogger.debug(
+          `trackLoad rejected id=${loadId} error=${String(error)}`,
+        );
+      });
   }
 
   async loaded() {
+    loadTrackingLogger.debug(
+      `loaded() begin generation=${this.#loadGeneration} pending=${this.#inFlight.size}`,
+    );
     let observedGeneration = this.#loadGeneration;
     for (;;) {
       if (this.#inFlight.size === 0) {
         // allow microtasks (like settled promise continuations) to enqueue more loads
+        loadTrackingLogger.debug(
+          'loaded() no pending loads, waiting one microtask',
+        );
         await Promise.resolve();
       } else {
         let pendingLoads = Array.from(this.#inFlight);
+        let pendingIds = pendingLoads
+          .map((pendingLoad) => this.#loadIds.get(pendingLoad))
+          .filter((id): id is number => id != null);
+        loadTrackingLogger.debug(
+          `loaded() waiting for pending loads ids=[${pendingIds.join(',')}] count=${pendingLoads.length}`,
+        );
         await Promise.allSettled(pendingLoads);
       }
       if (
         this.#inFlight.size === 0 &&
         this.#loadGeneration === observedGeneration
       ) {
+        loadTrackingLogger.debug(
+          `loaded() complete generation=${this.#loadGeneration}`,
+        );
         return;
       }
+      loadTrackingLogger.debug(
+        `loaded() continuing; generation moved ${observedGeneration} -> ${this.#loadGeneration}, pending=${this.#inFlight.size}`,
+      );
       observedGeneration = this.#loadGeneration;
     }
+  }
+
+  get loadGeneration() {
+    return this.#loadGeneration;
   }
 
   addCardInstanceOrError(

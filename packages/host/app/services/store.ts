@@ -63,6 +63,7 @@ import {
   type StoreReadType,
   type CardResource,
   type Saved,
+  resolveCardReference,
 } from '@cardstack/runtime-common';
 
 import type { CardDef, BaseDef } from 'https://cardstack.com/base/card-api';
@@ -107,6 +108,9 @@ let waiter = buildWaiter('store-service');
 
 const realmEventsLogger = logger('realm:events');
 const storeLogger = logger('store');
+const queryFieldSeedFromSearchSymbol = Symbol.for(
+  'cardstack-query-field-seed-from-search',
+);
 
 type PersistOptions = CreateOptions & { clientRequestId?: string };
 type DependencyTrackingOptions = {
@@ -279,6 +283,14 @@ export default class StoreService extends Service implements StoreInterface {
 
   loaded(): Promise<void> {
     return this.store.loaded();
+  }
+
+  get loadGeneration(): number {
+    return this.store.loadGeneration;
+  }
+
+  trackLoad(load: Promise<unknown>): void {
+    this.store.trackLoad(load);
   }
 
   get cardDocsInFlight() {
@@ -499,6 +511,13 @@ export default class StoreService extends Service implements StoreInterface {
     });
   }
 
+  async serializeFileDefAsDocument(
+    fileDef: FileDef,
+  ): Promise<SingleFileMetaDocument> {
+    let api = await this.cardService.getAPI();
+    return api.serializeFileDef(fileDef) as SingleFileMetaDocument;
+  }
+
   async delete(id: string): Promise<void> {
     if (!id) {
       // the card isn't actually saved yet, so do nothing
@@ -696,14 +715,18 @@ export default class StoreService extends Service implements StoreInterface {
     this.realmServer.assertOwnRealmServer(realmServerURLs);
     let [realmServerURL] = realmServerURLs;
     let searchURL = new URL('_federated-search', realmServerURL);
-    let response = await this.realmServer.maybeAuthedFetch(searchURL.href, {
-      method: 'QUERY',
-      headers: {
-        Accept: SupportedMimeType.CardJson,
-        'Content-Type': 'application/json',
+    let response = await this.realmServer.maybeAuthedFetchForRealms(
+      searchURL.href,
+      realms,
+      {
+        method: 'QUERY',
+        headers: {
+          Accept: SupportedMimeType.CardJson,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ ...query, realms }),
       },
-      body: JSON.stringify({ ...query, realms }),
-    });
+    );
     if (!response.ok) {
       let responseText = await response.text();
       let err = new Error(
@@ -758,14 +781,18 @@ export default class StoreService extends Service implements StoreInterface {
     this.realmServer.assertOwnRealmServer(realmServerURLs);
     let [realmServerURL] = realmServerURLs;
     let searchURL = new URL('_federated-search', realmServerURL);
-    let response = await this.realmServer.maybeAuthedFetch(searchURL.href, {
-      method: 'QUERY',
-      headers: {
-        Accept: SupportedMimeType.CardJson,
-        'Content-Type': 'application/json',
+    let response = await this.realmServer.maybeAuthedFetchForRealms(
+      searchURL.href,
+      realms,
+      {
+        method: 'QUERY',
+        headers: {
+          Accept: SupportedMimeType.CardJson,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ ...query, realms }),
       },
-      body: JSON.stringify({ ...query, realms }),
-    });
+    );
     if (!response.ok) {
       let responseText = await response.text();
       let err = new Error(
@@ -811,13 +838,10 @@ export default class StoreService extends Service implements StoreInterface {
     if (this.isRenderStore && opts) {
       opts.isLive = false;
     }
-    return getSearch<T>(
-      parent,
-      getOwner(this)!,
-      getQuery,
-      getRealms,
-      opts,
-    ) as unknown as SearchResource<T>;
+    return getSearch<T>(parent, getOwner(this)!, getQuery, getRealms, {
+      ...opts,
+      storeService: this,
+    }) as unknown as SearchResource<T>;
   }
 
   getSearchDataResource(
@@ -1275,6 +1299,9 @@ export default class StoreService extends Service implements StoreInterface {
     if (existingInstance && isCardInstance(existingInstance)) {
       return existingInstance as T;
     }
+    // Mark resources that came from `_search` so query-field seed handling can
+    // distinguish unresolved empty seeds from explicit empty card-GET results.
+    (resource as any)[queryFieldSeedFromSearchSymbol] = true;
     return this.add({ data: resource } as SingleCardDocument, {
       doNotPersist: true,
       relativeTo: new URL(resource.id),
@@ -1403,6 +1430,18 @@ export default class StoreService extends Service implements StoreInterface {
         if (!json.data.id) {
           // card source format is not serialized with the ID, so we add that back in.
           json.data.id = url;
+        }
+        if (!json.data.meta?.realmURL) {
+          // Source-mode loads in render context don't include realm metadata.
+          // Query-backed relationship fields require realmURL to build their
+          // fallback search query.
+          let realmURL = this.realm.realmOfURL(new URL(url))?.href;
+          if (realmURL) {
+            json.data.meta = {
+              ...(json.data.meta ?? {}),
+              realmURL,
+            };
+          }
         }
         doc = json;
       }
@@ -1948,7 +1987,7 @@ export default class StoreService extends Service implements StoreInterface {
     }
     let id = rel.links.self;
     let instance = await this.getCardInstance({
-      idOrDoc: new URL(id, relativeTo).href,
+      idOrDoc: resolveCardReference(id, relativeTo),
     });
     return isCardInstance(instance) ? instance : undefined;
   }

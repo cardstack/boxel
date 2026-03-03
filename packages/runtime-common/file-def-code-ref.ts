@@ -1,5 +1,6 @@
 import { baseRealm, baseFileRef } from './constants';
 import type { ResolvedCodeRef } from './code-ref';
+import { resolveCardReference } from './card-reference-resolver';
 
 export const BASE_FILE_DEF_CODE_REF = baseFileRef;
 
@@ -41,6 +42,26 @@ const FILEDEF_CODE_REF_BY_EXTENSION: Record<string, ResolvedCodeRef> = {
     module: `${baseRealm.url}avif-image-def`,
     name: 'AvifDef',
   },
+  '.ts': {
+    module: `${baseRealm.url}ts-file-def`,
+    name: 'TsFileDef',
+  },
+  '.gts': {
+    module: `${baseRealm.url}gts-file-def`,
+    name: 'GtsFileDef',
+  },
+  '.txt': {
+    module: `${baseRealm.url}text-file-def`,
+    name: 'TextFileDef',
+  },
+  '.text': {
+    module: `${baseRealm.url}text-file-def`,
+    name: 'TextFileDef',
+  },
+  '.json': {
+    module: `${baseRealm.url}json-file-def`,
+    name: 'JsonFileDef',
+  },
   '.csv': {
     module: `${baseRealm.url}csv-file-def`,
     name: 'CsvFileDef',
@@ -63,6 +84,6 @@ export function resolveFileDefCodeRef(fileURL: URL): ResolvedCodeRef {
   }
   return {
     ...mapping,
-    module: new URL(mapping.module, fileURL).href,
+    module: resolveCardReference(mapping.module, fileURL),
   };
 }

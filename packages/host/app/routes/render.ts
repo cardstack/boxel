@@ -26,6 +26,7 @@ import {
   type RenderError,
   parseRenderRouteOptions,
   serializeRenderRouteOptions,
+  logger as runtimeLogger,
 } from '@cardstack/runtime-common';
 import { Deferred } from '@cardstack/runtime-common/deferred';
 import { serializableError } from '@cardstack/runtime-common/error';
@@ -78,6 +79,11 @@ type ModelState = {
   isReady: boolean;
   readyWatchdogStarted?: boolean;
 };
+
+const renderReadyLogger = runtimeLogger('render-ready');
+const READY_SETTLE_MAX_PASSES = 20;
+const READY_SETTLE_REQUIRED_STABLE_PASSES = 2;
+const SETTLE_LOG_PRECISION = 1;
 
 export default class RenderRoute extends Route<Model> {
   @service('render-store') declare store: RenderStoreService;
@@ -144,6 +150,8 @@ export default class RenderRoute extends Route<Model> {
       (globalThis as any).__boxelRenderContext = undefined;
     }
     (globalThis as any).__renderModel = undefined;
+    (globalThis as any).__docsInFlight = undefined;
+    (globalThis as any).__waitForRenderLoadStability = undefined;
     window.removeEventListener('boxel-render-error', this.handleRenderError);
     this.#detachWindowErrorListeners();
     this.lastStoreResetKey = undefined;
@@ -196,6 +204,19 @@ export default class RenderRoute extends Route<Model> {
     (globalThis as any).__docsInFlight = () =>
       this.store.cardDocsInFlight.length +
       this.store.fileMetaDocsInFlight.length;
+    (globalThis as any).__waitForRenderLoadStability = async () => {
+      try {
+        await this.#authGuard.race(() =>
+          this.#waitForRenderLoadStability(this.#normalizeCardId(id)),
+        );
+      } catch (error) {
+        if (this.#authGuard.isAuthError(error)) {
+          this.#processRenderError(error);
+          return;
+        }
+        throw error;
+      }
+    };
     let key = `${id}|${nonce}|${canonicalOptions}`;
     let existing = this.#modelPromises.get(key);
     if (existing) {
@@ -370,38 +391,48 @@ export default class RenderRoute extends Route<Model> {
         this.#cardTypeTracker.set({ cardId: canonicalId, nonce }, undefined);
         throw new Error(JSON.stringify(doc.errors[0], null, 2));
       }
-      let derivedCardType = await this.#authGuard.race(() =>
-        deriveCardTypeFromDoc(doc, id, this.loaderService.loader),
+      let { derivedCardType, hydratedInstance } = await this.#authGuard.race(
+        async () => {
+          let derivedCardType = await deriveCardTypeFromDoc(
+            doc,
+            id,
+            this.loaderService.loader,
+          );
+
+          await this.realm.ensureRealmMeta(realmURL);
+
+          let enhancedDoc: LooseSingleCardDocument = {
+            ...doc,
+            data: {
+              ...doc.data,
+              id: canonicalId,
+              type: 'card',
+              meta: {
+                ...doc.data.meta,
+                lastModified: lastModified.getTime(),
+                realmURL,
+                realmInfo: { ...this.realm.info(id) },
+              },
+            },
+          };
+
+          let hydratedInstance = await this.store.add(enhancedDoc, {
+            relativeTo: new URL(id),
+            realm: realmURL,
+            doNotPersist: true,
+          });
+          if (hydratedInstance) {
+            await this.#touchIsUsedFields(hydratedInstance);
+          }
+          await this.store.loaded();
+          return { derivedCardType, hydratedInstance };
+        },
       );
       this.#cardTypeTracker.set(
         { cardId: canonicalId, nonce },
         derivedCardType,
       );
-
-      await this.realm.ensureRealmMeta(realmURL);
-
-      let enhancedDoc: LooseSingleCardDocument = {
-        ...doc,
-        data: {
-          ...doc.data,
-          id: canonicalId,
-          type: 'card',
-          meta: {
-            ...doc.data.meta,
-            lastModified: lastModified.getTime(),
-            realmURL,
-            realmInfo: { ...this.realm.info(id) },
-          },
-        },
-      };
-
-      instance = await this.#authGuard.race(() =>
-        this.store.add(enhancedDoc, {
-          relativeTo: new URL(id),
-          realm: realmURL,
-          doNotPersist: true,
-        }),
-      );
+      instance = hydratedInstance;
       model.instance = instance;
     } catch (e: any) {
       console.warn(
@@ -411,10 +442,6 @@ export default class RenderRoute extends Route<Model> {
       this.#dispositionModel(model, 'error');
       throw e;
     }
-    if (instance) {
-      await this.#authGuard.race(() => this.#touchIsUsedFields(instance));
-    }
-    await this.#authGuard.race(() => this.store.loaded());
     if (instance) {
       model.instance = instance;
     }
@@ -568,6 +595,9 @@ export default class RenderRoute extends Route<Model> {
     if (!modelState || modelState.isReady) {
       return;
     }
+    renderReadyLogger.debug(
+      `scheduling ready settlement for cardId=${model.cardId}`,
+    );
     this.#pendingReadyModels.add(model);
     scheduleOnce('afterRender', this, this.#processPendingReadyModels);
     this.#startReadyWatchdog(model);
@@ -623,7 +653,15 @@ export default class RenderRoute extends Route<Model> {
     if (!modelState || modelState.isReady) {
       return;
     }
-    await this.#authGuard.race(() => this.store.loaded());
+    renderReadyLogger.debug(
+      `settleModelAfterRender start cardId=${model.cardId} status=${model.status}`,
+    );
+    await this.#authGuard.race(() =>
+      this.#waitForRenderLoadStability(model.cardId),
+    );
+    renderReadyLogger.debug(
+      `settleModelAfterRender store.loaded resolved cardId=${model.cardId}`,
+    );
     modelState.state.set('status', 'ready');
     modelState.isReady = true;
     modelState.readyDeferred.fulfill();
@@ -631,6 +669,70 @@ export default class RenderRoute extends Route<Model> {
     model.capturedDeps = snapshotRuntimeDependencies({
       excludeQueryOnly: true,
     }).deps;
+    renderReadyLogger.debug(
+      `settleModelAfterRender done cardId=${model.cardId} deps=${model.capturedDeps?.length ?? 0}`,
+    );
+  }
+
+  async #waitForRenderLoadStability(cardId: string): Promise<void> {
+    let settleStartMs = nowMs();
+    let stablePasses = 0;
+    let passesCompleted = 0;
+    let generationChanges = 0;
+    let storeLoadWaitMs = 0;
+    let frameWaitMs = 0;
+    let observedGeneration = this.store.loadGeneration;
+    for (let pass = 0; pass < READY_SETTLE_MAX_PASSES; pass++) {
+      let storeLoadStartMs = nowMs();
+      await this.store.loaded();
+      storeLoadWaitMs += nowMs() - storeLoadStartMs;
+      let frameWaitStartMs = nowMs();
+      await this.#waitForNextRenderFrame();
+      frameWaitMs += nowMs() - frameWaitStartMs;
+      passesCompleted = pass + 1;
+      let nextGeneration = this.store.loadGeneration;
+      let generationChanged = nextGeneration !== observedGeneration;
+      if (generationChanged) {
+        observedGeneration = nextGeneration;
+        stablePasses = 0;
+        generationChanges++;
+      } else {
+        stablePasses++;
+      }
+      renderReadyLogger.debug(
+        `waitForRenderLoadStability pass=${pass + 1}/${READY_SETTLE_MAX_PASSES} cardId=${cardId} generation=${nextGeneration} stablePasses=${stablePasses}`,
+      );
+      if (stablePasses >= READY_SETTLE_REQUIRED_STABLE_PASSES) {
+        break;
+      }
+    }
+    let finalStoreLoadStartMs = nowMs();
+    await this.store.loaded();
+    storeLoadWaitMs += nowMs() - finalStoreLoadStartMs;
+    let totalSettleMs = nowMs() - settleStartMs;
+    let reachedMaxPasses = passesCompleted >= READY_SETTLE_MAX_PASSES;
+
+    renderReadyLogger.debug(
+      `waitForRenderLoadStability settled cardId=${cardId} passes=${passesCompleted}/${READY_SETTLE_MAX_PASSES} stablePasses=${stablePasses} generationChanges=${generationChanges} totalMs=${formatMs(totalSettleMs)} storeLoadMs=${formatMs(storeLoadWaitMs)} frameWaitMs=${formatMs(frameWaitMs)} reachedMaxPasses=${reachedMaxPasses}`,
+    );
+    if (
+      reachedMaxPasses &&
+      stablePasses < READY_SETTLE_REQUIRED_STABLE_PASSES
+    ) {
+      renderReadyLogger.warn(
+        `waitForRenderLoadStability hit max passes cardId=${cardId} stablePasses=${stablePasses} requiredStablePasses=${READY_SETTLE_REQUIRED_STABLE_PASSES} totalMs=${formatMs(totalSettleMs)}`,
+      );
+    }
+  }
+
+  async #waitForNextRenderFrame(): Promise<void> {
+    if (typeof requestAnimationFrame !== 'function') {
+      await Promise.resolve();
+      return;
+    }
+    await new Promise<void>((resolve) =>
+      requestAnimationFrame(() => resolve()),
+    );
   }
 
   #settleModelAfterRenderSafely(model: Model) {
@@ -1227,4 +1329,18 @@ export default class RenderRoute extends Route<Model> {
     }
     return [...deps];
   }
+}
+
+function nowMs(): number {
+  if (
+    typeof performance !== 'undefined' &&
+    typeof performance.now === 'function'
+  ) {
+    return performance.now();
+  }
+  return Date.now();
+}
+
+function formatMs(value: number): string {
+  return value.toFixed(SETTLE_LOG_PRECISION);
 }

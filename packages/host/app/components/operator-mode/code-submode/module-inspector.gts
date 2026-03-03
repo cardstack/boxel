@@ -43,6 +43,7 @@ import {
   localId,
   meta,
   hasExtension,
+  resolveCardReference,
 } from '@cardstack/runtime-common';
 
 import CreateSpecCommand from '@cardstack/host/commands/create-specs';
@@ -301,11 +302,11 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
       return undefined;
     }
 
+    let moduleRef = adoptsFrom.module.endsWith('.gts')
+      ? adoptsFrom.module
+      : `${adoptsFrom.module}.gts`;
     let moduleURLWithExtension = new URL(
-      adoptsFrom.module.endsWith('.gts')
-        ? adoptsFrom.module
-        : `${adoptsFrom.module}.gts`,
-      this.args.currentOpenFile.url,
+      resolveCardReference(moduleRef, this.args.currentOpenFile.url),
     );
     return this.matrixService.fileAPI.createFileDef({
       sourceUrl: moduleURLWithExtension.href,

@@ -44,6 +44,27 @@ async function loadDocumentWithRequest(
     return cardError;
   }
   let json = await response.json();
+  let realmURL = response.headers.get('x-boxel-realm-url');
+  let lastModified = response.headers.get('last-modified');
+  if (
+    json &&
+    typeof json === 'object' &&
+    'data' in json &&
+    json.data &&
+    typeof json.data === 'object' &&
+    !Array.isArray(json.data) &&
+    (realmURL || lastModified)
+  ) {
+    let lastModifiedMS =
+      lastModified != null ? new Date(lastModified).getTime() : undefined;
+    (json.data as { meta?: Record<string, unknown> }).meta = {
+      ...((json.data as { meta?: Record<string, unknown> }).meta ?? {}),
+      ...(realmURL ? { realmURL } : {}),
+      ...(lastModifiedMS != null && !Number.isNaN(lastModifiedMS)
+        ? { lastModified: lastModifiedMS }
+        : {}),
+    };
+  }
   return json;
 }
 

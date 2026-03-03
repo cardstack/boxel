@@ -7,7 +7,7 @@ import {
   Component,
 } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
-import DatetimeField from 'https://cardstack.com/base/datetime';
+import DateTimeField from 'https://cardstack.com/base/datetime';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
 import { eq, or, bool } from '@cardstack/boxel-ui/helpers';
@@ -658,7 +658,7 @@ export class MultipleChoice extends CardDef {
   @field roomId = contains(StringField);
   @field selectedOption = contains(StringField); // What user chose
   @field turnNumber = contains(NumberField); // Context
-  @field timestamp = contains(DatetimeField); // When offered
+  @field timestamp = contains(DateTimeField); // When offered
 
   static embedded = MultipleChoiceEmbedded;
 }
@@ -684,7 +684,7 @@ export class SuggestAction extends Command<
     multipleChoice.options = input.options;
     multipleChoice.roomId = input.roomId;
 
-    // Create a proper Date object and convert to ISO string for DatetimeField
+    // Create a proper Date object and convert to ISO string for DateTimeField
     const now = new Date();
     multipleChoice.timestamp = now;
 

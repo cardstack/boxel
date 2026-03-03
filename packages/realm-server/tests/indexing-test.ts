@@ -403,6 +403,41 @@ function makeTestRealmFileSystem(): Record<
         },
       },
     },
+    'address.gts': `
+      import { contains, field, FieldDef } from "https://cardstack.com/base/card-api";
+      import StringField from "https://cardstack.com/base/string";
+
+      export class Address extends FieldDef {
+        @field street = contains(StringField);
+        @field city = contains(StringField);
+      }
+    `,
+    'order-page.gts': `
+      import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
+      import { Address } from "./address";
+
+      export class OrderPage extends CardDef {
+        @field shippingAddress = contains(Address);
+      }
+    `,
+    'fieldof-address.json': {
+      data: {
+        attributes: {
+          street: '123 Main St',
+          city: 'Anytown',
+        },
+        meta: {
+          adoptsFrom: {
+            type: 'fieldOf',
+            field: 'shippingAddress',
+            card: {
+              module: './order-page',
+              name: 'OrderPage',
+            },
+          },
+        },
+      },
+    },
     'filedef-mismatch.gts': `
       import {
         FileDef as BaseFileDef,
@@ -790,6 +825,17 @@ module(basename(__filename), function () {
       }
     });
 
+    test('it can index a card whose adoptsFrom is a fieldOf CodeRef', async function (assert) {
+      const cardId = `${testRealm}fieldof-address`;
+      let entry = await getInstance(realm, new URL(cardId));
+      if (entry) {
+        assert.strictEqual(entry.searchDoc?.street, '123 Main St');
+        assert.strictEqual(entry.searchDoc?.city, 'Anytown');
+      } else {
+        assert.ok(false, `could not find ${cardId} in the index`);
+      }
+    });
+
     test('sets resource_created_at for files and instances', async function (assert) {
       let entry = await realm.realmIndexQueryEngine.file(
         new URL(`${testRealm}fancy-person.gts`),
@@ -1100,8 +1146,8 @@ module(basename(__filename), function () {
       assert.deepEqual(
         doc.data.meta?.adoptsFrom,
         {
-          module: 'https://cardstack.com/base/file-api',
-          name: 'FileDef',
+          module: 'https://cardstack.com/base/text-file-def',
+          name: 'TextFileDef',
         },
         'adoptsFrom sourced from pristine file resource',
       );

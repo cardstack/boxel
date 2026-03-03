@@ -332,12 +332,12 @@ module(`Integration | search resource`, function (hooks) {
   test(`search is not re-run when query and realms are unchanged`, async function (assert) {
     let realmServer = getService('realm-server') as RealmServerService;
     let fetchCalls = 0;
-    let originalMaybeAuthedFetch =
-      realmServer.maybeAuthedFetch.bind(realmServer);
-    realmServer.maybeAuthedFetch = (async (...args) => {
+    let originalMaybeAuthedFetchForRealms =
+      realmServer.maybeAuthedFetchForRealms.bind(realmServer);
+    realmServer.maybeAuthedFetchForRealms = (async (...args) => {
       fetchCalls++;
-      return await originalMaybeAuthedFetch(...args);
-    }) as RealmServerService['maybeAuthedFetch'];
+      return await originalMaybeAuthedFetchForRealms(...args);
+    }) as RealmServerService['maybeAuthedFetchForRealms'];
 
     try {
       let query: Query = {
@@ -377,7 +377,7 @@ module(`Integration | search resource`, function (hooks) {
         'search is not invoked again when query/realms are unchanged',
       );
     } finally {
-      realmServer.maybeAuthedFetch = originalMaybeAuthedFetch;
+      realmServer.maybeAuthedFetchForRealms = originalMaybeAuthedFetchForRealms;
     }
   });
 

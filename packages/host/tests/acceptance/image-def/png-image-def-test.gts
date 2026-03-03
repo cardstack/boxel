@@ -23,6 +23,7 @@ import {
   setupAcceptanceTestRealm,
   SYSTEM_CARD_FIXTURE_CONTENTS,
   capturePrerenderResult,
+  waitForLoadedImage,
   withCachedRealmSetup,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
@@ -387,9 +388,8 @@ module('Acceptance | png image def', function (hooks) {
     let { status } = await capturePrerenderResult('innerHTML');
     assert.strictEqual(status, 'ready', 'render completed');
 
-    let img = document.querySelector(
-      '[data-prerender] .image-isolated__img',
-    ) as HTMLImageElement | null;
+    let imgSelector = '[data-prerender] .image-isolated__img';
+    let img = document.querySelector(imgSelector) as HTMLImageElement | null;
     assert.ok(img, 'img element is rendered');
     assert.ok(
       img?.getAttribute('src')?.includes('sample.png'),
@@ -400,18 +400,13 @@ module('Acceptance | png image def', function (hooks) {
     // This assertion will fail if the browser cannot fetch the image (e.g., 401 errors
     // due to missing authentication cookies). Once cookie-based auth is implemented,
     // this test should pass.
-    await waitUntil(() => img!.naturalWidth > 0, {
-      timeout: 5000,
-      timeoutMessage:
-        'Image failed to load - naturalWidth remained 0. This likely indicates an authentication issue preventing the browser from fetching the image.',
-    });
-
+    let loadedImg = await waitForLoadedImage(imgSelector);
     assert.ok(
-      img!.naturalWidth > 0,
+      loadedImg.naturalWidth > 0,
       'Image loaded successfully with non-zero width',
     );
     assert.ok(
-      img!.naturalHeight > 0,
+      loadedImg.naturalHeight > 0,
       'Image loaded successfully with non-zero height',
     );
   });
