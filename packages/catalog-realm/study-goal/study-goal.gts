@@ -9,7 +9,7 @@ import StringField from 'https://cardstack.com/base/string';
 import NumberField from 'https://cardstack.com/base/number'; // ⁽¹⁾ Added for progress tracking
 import BooleanField from 'https://cardstack.com/base/boolean';
 import DateField from 'https://cardstack.com/base/date';
-import DatetimeField from 'https://cardstack.com/base/datetime';
+import DateTimeField from 'https://cardstack.com/base/datetime';
 import TextAreaField from 'https://cardstack.com/base/text-area';
 import { Button, Pill } from '@cardstack/boxel-ui/components'; // ² UI components
 import {
@@ -2113,8 +2113,8 @@ export class StudyGoal extends CardDef {
   @field progress = contains(NumberField); // ⁽³⁾ 0-100 percentage completion
   @field studyTimeEstimate = contains(NumberField); // ⁽⁴⁾ Estimated hours to complete
   @field actualTimeSpent = contains(NumberField); // ⁽⁵⁾ Actual hours spent
-  @field createdAt = contains(DatetimeField);
-  @field completedAt = contains(DatetimeField); // ⁽⁶⁾ When goal was completed
+  @field createdAt = contains(DateTimeField);
+  @field completedAt = contains(DateTimeField); // ⁽⁶⁾ When goal was completed
 
   // ⁷ Computed title
   @field cardTitle = contains(StringField, {
