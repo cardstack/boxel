@@ -111,7 +111,7 @@ const authorCard = `import { contains, field, CardDef, Component } from "https:/
 }`;
 
 const blogPostCard = `import { contains, field, linksTo, linksToMany, CardDef, Component, StringField } from "https://cardstack.com/base/card-api";
-  import DatetimeField from 'https://cardstack.com/base/datetime';
+  import DateTimeField from 'https://cardstack.com/base/datetime';
   import MarkdownField from 'https://cardstack.com/base/markdown';
   import { Author } from './author';
 
@@ -132,7 +132,7 @@ const blogPostCard = `import { contains, field, linksTo, linksToMany, CardDef, C
 
   export class BlogPost extends CardDef {
     static displayName = 'Blog Post';
-    @field publishDate = contains(DatetimeField);
+    @field publishDate = contains(DateTimeField);
     @field author = linksTo(Author);
     @field categories = linksToMany(Category);
     @field localCategories = linksToMany(LocalCategoryCard);
@@ -1047,7 +1047,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
     test('playground preview for card with linked fields can live update when module changes', async function (assert) {
       // change: added "Hello" before rendering title on the template
       const blogPostCard = `import { contains, field, linksTo, linksToMany, CardDef, Component } from "https://cardstack.com/base/card-api";
-        import DatetimeField from 'https://cardstack.com/base/datetime';
+        import DateTimeField from 'https://cardstack.com/base/datetime';
         import MarkdownField from 'https://cardstack.com/base/markdown';
         import StringField from "https://cardstack.com/base/string";
         import { Author } from './author';
@@ -1067,7 +1067,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
 
         export class BlogPost extends CardDef {
           static displayName = 'Blog Post';
-          @field publishDate = contains(DatetimeField);
+          @field publishDate = contains(DateTimeField);
           @field author = linksTo(Author);
           @field categories = linksToMany(Category);
           @field body = contains(MarkdownField);

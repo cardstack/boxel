@@ -2,9 +2,10 @@ import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { concat } from '@ember/helper';
 import { hash } from '@ember/helper';
 
-import { cn, element, eq } from '../../helpers.ts';
+import { and, bool, cn, element, eq, not } from '../../helpers.ts';
 import { getContrastColor } from '../../helpers/contrast-color.ts';
 import cssVar from '../../helpers/css-var.ts';
+import type { BoxelButtonSize } from '../button/index.gts';
 
 export type BoxelPillKind = 'button' | 'default';
 
@@ -31,6 +32,7 @@ export interface PillSignature {
     pillBackgroundColor?: string;
     pillBorderColor?: string;
     pillFontColor?: string;
+    size?: BoxelButtonSize;
     tag?: keyof HTMLElementTagNameMap;
     variant?: BoxelPillVariant;
   };
@@ -49,7 +51,12 @@ const Pill: TemplateOnlyComponent<PillSignature> = <template>
         'pill'
         (if (eq @kind 'button') 'button-pill')
         (if @variant (concat 'variant-' @variant) 'variant-default')
+        (if
+          (and (bool @size) (not (eq @size 'auto')))
+          (concat 'pill-size--' @size)
+        )
       }}
+      type={{if (eq @kind 'button') 'button'}}
       style={{cssVar
         pill-background-color=@pillBackgroundColor
         pill-font-color=(if
@@ -115,6 +122,28 @@ const Pill: TemplateOnlyComponent<PillSignature> = <template>
           --boxel-pill-transition,
           var(--boxel-transition-properties)
         );
+      }
+      .pill-size--extra-small {
+        height: var(--boxel-button-mini);
+        font-weight: 500;
+        border-radius: var(--boxel-border-radius-xs);
+      }
+      .pill-size--small {
+        height: var(--boxel-button-xs);
+        font-weight: 500;
+        border-radius: var(--boxel-border-radius-xs);
+      }
+      .pill-size--base {
+        height: var(--boxel-button-sm);
+        font-weight: 500;
+      }
+      .pill-size--tall {
+        height: var(--boxel-button-tall);
+        font-weight: 500;
+      }
+      .pill-size--touch {
+        height: var(--boxel-button-touch);
+        font-weight: 500;
       }
 
       .variant-default {
@@ -191,7 +220,7 @@ const Pill: TemplateOnlyComponent<PillSignature> = <template>
         --icon-color: var(--pill-font-color, currentColor);
         flex-shrink: 0;
         display: inline-flex;
-        min-width: var(--pill-icon-size);
+        min-width: var(--boxel-pill-icon-size, var(--pill-icon-size, 10px));
         margin-block: 0;
         margin-inline: 0;
       }

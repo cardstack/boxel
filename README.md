@@ -38,7 +38,20 @@ To learn more about Boxel and Cards, see our [documentation](./docs/README.md)
 
 ## Running the Host App
 
-There exists a "dev" mode in which we can use ember-cli to host the card runtime host application which includes live reloads. Additionally, you can also use the realm server to host the app, which is how it will be served in production.
+There exists a "dev" mode in which we can use ember-cli to host the card runtime host application which includes live reloads. Additionally, you can also use the realm server to host the app, which is how it will be served in production, or have staging or production as the backing infrastructure.
+
+### With staging or production
+
+You can develop the host application locally backed by the staging or production infrastructure by running `scripts/start-host [environment]`.
+
+```
+scripts/start-host production
+…
+Build successful (27238ms) – Serving on http://localhost:4200/
+…
+```
+
+Visit `http://localhost:4200` and log in with your staging or production credentials.
 
 ### ember-cli Hosted App
 

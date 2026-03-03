@@ -399,7 +399,6 @@ export default class SearchResultSection extends Component<Signature> {
         display: flex;
         flex-flow: row nowrap;
         gap: var(--boxel-sp-xs);
-        padding: var(--boxel-sp-xs) 0;
       }
       .recent-card-item--compact {
         display: flex;

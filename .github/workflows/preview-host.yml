@@ -55,23 +55,16 @@ jobs:
         with:
           role-to-assume: arn:aws:iam::680542703984:role/boxel-host
           aws-region: us-east-1
+      - name: Load app environment variables
+        shell: bash
+        run: cat packages/host/config/staging.env >> $GITHUB_ENV
       - name: Deploy boxel-host preview
         uses: ./.github/actions/deploy-ember-preview
         env:
-          REALM_SERVER_ROOT: https://realms-staging.stack.cards/
-          RESOLVED_BASE_REALM_URL: https://realms-staging.stack.cards/base/
-          RESOLVED_CATALOG_REALM_URL: https://realms-staging.stack.cards/catalog/
-          RESOLVED_SKILLS_REALM_URL: https://realms-staging.stack.cards/skills/
-          MATRIX_URL: https://matrix-staging.stack.cards
-          MATRIX_SERVER_NAME: stack.cards
           S3_PREVIEW_BUCKET_NAME: boxel-host-preview.stack.cards
           AWS_S3_BUCKET: boxel-host-preview.stack.cards
           AWS_REGION: us-east-1
           AWS_CLOUDFRONT_DISTRIBUTION: EU4RGLH4EOCHJ
-          PUBLISHED_REALM_BOXEL_SPACE_DOMAIN: staging.boxel.dev
-          PUBLISHED_REALM_BOXEL_SITE_DOMAIN: staging.boxel.build
-          ICONS_URL: https://boxel-icons.boxel.ai
-        # If you change these, change the equivalent line in preview-comment.yml
         with:
           package: boxel-host
           environment: staging
@@ -91,23 +84,16 @@ jobs:
         with:
           role-to-assume: arn:aws:iam::120317779495:role/boxel-host
           aws-region: us-east-1
+      - name: Load app environment variables
+        shell: bash
+        run: cat packages/host/config/production.env >> $GITHUB_ENV
       - name: Deploy boxel-host preview
         uses: ./.github/actions/deploy-ember-preview
         env:
-          REALM_SERVER_ROOT: https://app.boxel.ai/
-          RESOLVED_BASE_REALM_URL: https://app.boxel.ai/base/
-          RESOLVED_CATALOG_REALM_URL: https://app.boxel.ai/catalog/
-          RESOLVED_SKILLS_REALM_URL: https://app.boxel.ai/skills/
-          MATRIX_URL: https://matrix.boxel.ai
-          MATRIX_SERVER_NAME: boxel.ai
           S3_PREVIEW_BUCKET_NAME: boxel-host-preview.boxel.ai
           AWS_S3_BUCKET: boxel-host-preview.boxel.ai
           AWS_REGION: us-east-1
           AWS_CLOUDFRONT_DISTRIBUTION: E2PZR9CIAW093B
-          PUBLISHED_REALM_BOXEL_SPACE_DOMAIN: boxel.space
-          PUBLISHED_REALM_BOXEL_SITE_DOMAIN: boxel.site
-          ICONS_URL: https://boxel-icons.boxel.ai
-        # If you change these, change the equivalent line in preview-comment.yml
         with:
           package: boxel-host
           environment: production

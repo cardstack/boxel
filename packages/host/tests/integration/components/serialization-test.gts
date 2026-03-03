@@ -48,7 +48,7 @@ import {
   CardDef,
   Component,
   DateField,
-  DatetimeField,
+  DateTimeField,
   createFromSerialized,
   serializeCard,
   StringField,
@@ -115,7 +115,7 @@ module('Integration | serialization', function (hooks) {
     class Post extends CardDef {
       @field cardTitle = contains(StringField);
       @field created = contains(DateField);
-      @field published = contains(DatetimeField);
+      @field published = contains(DateTimeField);
       static isolated = class Isolated extends Component<typeof this> {
         <template>
           <@fields.cardTitle />
@@ -934,7 +934,7 @@ module('Integration | serialization', function (hooks) {
   test('can serialize field', async function (assert) {
     class Post extends CardDef {
       @field created = contains(DateField);
-      @field published = contains(DatetimeField);
+      @field published = contains(DateTimeField);
     }
 
     await setupIntegrationTestRealm({
@@ -963,7 +963,7 @@ module('Integration | serialization', function (hooks) {
     class Post extends CardDef {
       @field cardTitle = contains(StringField);
       @field created = contains(DateField);
-      @field published = contains(DatetimeField);
+      @field published = contains(DateTimeField);
       static isolated = class Isolated extends Component<typeof this> {
         <template>
           <@fields.cardTitle />
@@ -2474,7 +2474,7 @@ module('Integration | serialization', function (hooks) {
   test('can serialize a date field with null value', async function (assert) {
     class Post extends CardDef {
       @field created = contains(DateField);
-      @field published = contains(DatetimeField);
+      @field published = contains(DateTimeField);
     }
 
     await setupIntegrationTestRealm({
@@ -2496,7 +2496,7 @@ module('Integration | serialization', function (hooks) {
     class Person extends FieldDef {
       @field firstName = contains(StringField);
       @field birthdate = contains(DateField);
-      @field lastLogin = contains(DatetimeField);
+      @field lastLogin = contains(DateTimeField);
     }
 
     class Post extends CardDef {
@@ -2553,7 +2553,7 @@ module('Integration | serialization', function (hooks) {
     class Person extends FieldDef {
       @field firstName = contains(StringField);
       @field birthdate = contains(DateField);
-      @field lastLogin = contains(DatetimeField);
+      @field lastLogin = contains(DateTimeField);
       static embedded = class Embedded extends Component<typeof this> {
         <template>
           <div data-test><@fields.firstName />
@@ -2614,7 +2614,7 @@ module('Integration | serialization', function (hooks) {
     class Person extends FieldDef {
       @field firstName = contains(StringField);
       @field birthdate = contains(DateField);
-      @field lastLogin = contains(DatetimeField);
+      @field lastLogin = contains(DateTimeField);
       @field cardTitle = contains(StringField, {
         computeVia: function (this: Person) {
           return this.firstName;
@@ -2671,7 +2671,7 @@ module('Integration | serialization', function (hooks) {
     class Person extends FieldDef {
       @field firstName = contains(StringField);
       @field birthdate = contains(DateField);
-      @field lastLogin = contains(DatetimeField);
+      @field lastLogin = contains(DateTimeField);
     }
 
     class Employee extends Person {
@@ -3739,7 +3739,7 @@ module('Integration | serialization', function (hooks) {
       @field cardDescription = contains(StringField);
       @field cardThumbnailURL = contains(StringField);
       @field created = contains(DateField);
-      @field published = contains(DatetimeField);
+      @field published = contains(DateTimeField);
     }
     await setupIntegrationTestRealm({
       mockMatrixUtils,
