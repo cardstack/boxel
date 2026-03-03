@@ -8,15 +8,17 @@
     },
     "type": "card",
     "attributes": {
-      "name": "Cardstack Theme",
+      "name": "Cardstack Brand Guide",
       "images": [
+        "https://boxel-assets-store.s3.us-east-1.amazonaws.com/cardstack-brand-guide/cardstack-logo-primary-mark-1.svg",
+        "https://boxel-assets-store.s3.us-east-1.amazonaws.com/cardstack-brand-guide/cardstack-logo-secondary-mark-1.svg",
         "https://boxel-assets-store.s3.us-east-1.amazonaws.com/cardstack-brand-guide/cardstack-profile-icon.png"
       ],
-      "summary": "Cardstack\u2019s house style theme with IBM Plex typography, vibrant purple accents, and paired light/dark tokens for backgrounds, borders, charts, and sidebars\u2014ready to brand your cards with the official Cardstack look.",
+      "summary": "Cardstack\u2019s official brand guide with IBM Plex typography, vibrant green/cyan brand colors, and complete light/dark design tokens\u2014covering logo usage, mark clearances, color palette, and CSS variables for a consistent Cardstack visual identity.",
       "cardInfo": {
         "notes": null,
-        "name": "Cardstack Theme",
-        "summary": "IBM Plex-driven Cardstack brand theme with balanced light/dark palettes, chart colors, and sidebar tokens.",
+        "name": "Cardstack Brand Guide",
+        "summary": "Official Cardstack brand guide with IBM Plex typography, logo usage rules, and light/dark color tokens.",
         "cardThumbnailURL": "https://boxel-assets-store.s3.us-east-1.amazonaws.com/cardstack-brand-guide/cardstack-profile-icon.png"
       }
     },
@@ -53,7 +55,7 @@
       },
       "examples.0": {
         "links": {
-          "self": "../Theme/cardstack"
+          "self": "../Theme/cardstack-brand-guide"
         }
       },
       "categories.0": {
@@ -63,7 +65,7 @@
       },
       "cardInfo.theme": {
         "links": {
-          "self": "../Theme/cardstack"
+          "self": "../Theme/cardstack-brand-guide"
         }
       }
     }
