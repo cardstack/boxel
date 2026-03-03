@@ -19,7 +19,6 @@ import {
 } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import type { PgAdapter } from '@cardstack/postgres';
-import { resetCatalogRealms } from '../handlers/handle-fetch-catalog-realms';
 
 const testRealm2URL = new URL('http://127.0.0.1:4445/test/');
 
