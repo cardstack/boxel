@@ -6,14 +6,15 @@ import {
   type FileRenderResponse,
   type FileRenderArgs,
   type RenderRouteOptions,
+  type RunCommandResponse,
   logger,
 } from '@cardstack/runtime-common';
 import {
   PRERENDER_SERVER_DRAINING_STATUS_CODE,
   PRERENDER_SERVER_STATUS_DRAINING,
   PRERENDER_SERVER_STATUS_HEADER,
+  resolvePrerenderManagerRequestTimeoutMs,
 } from './prerender-constants';
-import { renderTimeoutMs } from './utils';
 
 const log = logger('remote-prerenderer');
 const jsonApiHeaders = {
@@ -49,17 +50,14 @@ export function createRemotePrerenderer(
     1000,
     Number(process.env.PRERENDER_MANAGER_MAX_DELAY_MS ?? 180_000),
   );
-  const requestTimeoutMs = Math.max(
-    1000,
-    Number(process.env.PRERENDER_MANAGER_REQUEST_TIMEOUT_MS ?? renderTimeoutMs),
-  );
+  const requestTimeoutMs = resolvePrerenderManagerRequestTimeoutMs();
 
   async function requestWithRetry<T>(
     path: string,
     type: string,
     attributes: {
       realm: string;
-      url: string;
+      url?: string;
       auth: string;
       renderOptions?: RenderRouteOptions;
       [key: string]: any;
@@ -220,6 +218,18 @@ export function createRemotePrerenderer(
         },
       );
     },
+    async runCommand({ realm, auth, command, commandInput }) {
+      return await requestWithRetry<RunCommandResponse>(
+        'run-command',
+        'run-command-request',
+        {
+          realm,
+          auth,
+          command,
+          commandInput,
+        },
+      );
+    },
   };
 }
 
@@ -229,6 +239,7 @@ function validatePrerenderAttributes(
     realm?: string;
     url?: string;
     auth?: string;
+    command?: unknown;
   },
 ) {
   let missing: string[] = [];
@@ -236,11 +247,20 @@ function validatePrerenderAttributes(
   if (typeof attrs.realm !== 'string' || attrs.realm.trim().length === 0) {
     missing.push('realm');
   }
-  if (typeof attrs.url !== 'string' || attrs.url.trim().length === 0) {
+  if (
+    requestType !== 'run-command-request' &&
+    (typeof attrs.url !== 'string' || attrs.url.trim().length === 0)
+  ) {
     missing.push('url');
   }
   if (typeof attrs.auth !== 'string' || attrs.auth.trim().length === 0) {
     missing.push('auth');
+  }
+  if (
+    requestType === 'run-command-request' &&
+    (typeof attrs.command !== 'string' || attrs.command.trim().length === 0)
+  ) {
+    missing.push('command');
   }
 
   if (missing.length > 0) {

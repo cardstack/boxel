@@ -3,7 +3,7 @@ import type { Test, SuperTest } from 'supertest';
 import { basename } from 'path';
 import type { Realm } from '@cardstack/runtime-common';
 import { setupPermissionedRealm, createJWT } from './helpers';
-import { PRERENDERED_HTML_FORMATS } from '@cardstack/runtime-common';
+import { PRERENDERED_HTML_FORMATS, baseRealm } from '@cardstack/runtime-common';
 import type { Query } from '@cardstack/runtime-common/query';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
@@ -74,6 +74,7 @@ module(basename(__filename), function () {
                   },
                 },
               },
+              'hello.md': '# Hello from FileDef content',
             },
             onRealmSetup,
           });
@@ -152,6 +153,86 @@ module(basename(__filename), function () {
               1,
               'total count is correct',
             );
+          });
+
+          test('returns prerendered file-meta results for FileDef queries', async function (assert) {
+            let queryBase: Query = {
+              filter: {
+                on: {
+                  module: `${baseRealm.url}file-api`,
+                  name: 'FileDef',
+                },
+                eq: {
+                  url: `${realmHref}hello.md`,
+                },
+              },
+            };
+            let formatsAndExpected: Array<{
+              format: 'embedded' | 'fitted' | 'atom' | 'head';
+              expectedSnippet: string;
+            }> = [
+              {
+                format: 'embedded',
+                expectedSnippet: 'data-test-markdown-embedded',
+              },
+              {
+                format: 'fitted',
+                expectedSnippet: 'data-test-markdown-fitted',
+              },
+              {
+                format: 'atom',
+                expectedSnippet: 'data-test-markdown-atom',
+              },
+              {
+                format: 'head',
+                expectedSnippet: 'data-test-card-head-title',
+              },
+            ];
+
+            for (let { format, expectedSnippet } of formatsAndExpected) {
+              let response = await request
+                .post(searchPath)
+                .set('Accept', 'application/vnd.card+json')
+                .set('X-HTTP-Method-Override', 'QUERY')
+                .send({
+                  ...queryBase,
+                  prerenderedHtmlFormat: format,
+                } as Query & { prerenderedHtmlFormat: string });
+
+              assert.strictEqual(
+                response.status,
+                200,
+                `HTTP 200 status for ${format}`,
+              );
+              let json = response.body;
+
+              assert.strictEqual(
+                json.data.length,
+                1,
+                `one file-meta entry is returned in ${format} results`,
+              );
+              assert.strictEqual(json.data[0].type, 'prerendered-card');
+              assert.strictEqual(json.data[0].id, `${realmHref}hello.md`);
+              assert.true(
+                json.data[0].attributes.html.includes(expectedSnippet),
+                `${format} html includes expected snippet: ${json.data[0].attributes.html}`,
+              );
+              assert.true(
+                json.data[0].attributes.html.includes(
+                  'Hello from FileDef content',
+                ),
+                `${format} html includes file content/title`,
+              );
+              assert.strictEqual(
+                json.meta.page.total,
+                1,
+                `total count is correct for ${format}`,
+              );
+              assert.true(
+                json.meta.isFileMeta,
+                `isFileMeta flag is set for ${format} file-meta query`,
+              );
+            }
           });
         },
       );

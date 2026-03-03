@@ -330,6 +330,91 @@ module('Integration | ai-assistant-panel | past sessions', function (hooks) {
       .doesNotHaveAttribute('data-is-current-room');
   });
 
+  test('does not crash when a session has a missing or corrupt origin_server_ts (CS-10288 regression)', async function (assert) {
+    // Simulate a room whose create event has no valid origin_server_ts.
+    // Passing NaN as the timestamp exercises the full bug path:
+    //   new Date(NaN) → Invalid Date → getTime() → NaN → propagates to
+    //   formatDate(NaN) → RangeError: Invalid time value
+    let corruptRoomId = createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'Corrupt Session',
+      timestamp: NaN,
+    });
+
+    await renderAiAssistantPanel();
+
+    await click('[data-test-past-sessions-button]');
+    await waitFor('[data-test-past-sessions]');
+
+    // The session must appear in the list without throwing an error
+    assert
+      .dom(`[data-test-joined-room="${corruptRoomId}"]`)
+      .exists('corrupt session is displayed in the past-sessions list');
+
+    // The rendered last-active timestamp must be a finite number — not NaN —
+    // which would have caused date-fns to throw before the fix
+    let lastActiveEl = document.querySelector(
+      `[data-test-joined-room="${corruptRoomId}"] [data-test-last-active]`,
+    );
+    assert.ok(lastActiveEl, 'last-active element is present');
+    let rawValue = lastActiveEl?.getAttribute('data-test-last-active') ?? '';
+    assert.notStrictEqual(
+      rawValue,
+      '',
+      `data-test-last-active should not be empty (got: ${rawValue})`,
+    );
+    assert.notOk(
+      isNaN(Number(rawValue)),
+      `data-test-last-active is a valid finite number (got: ${rawValue})`,
+    );
+
+    // The formatted date text must be non-empty (date-fns rendered successfully)
+    let dateText = document
+      .querySelector(`[data-test-joined-room="${corruptRoomId}"] .date`)
+      ?.textContent?.trim();
+    assert.ok(dateText, 'formatted date is non-empty for corrupt session');
+  });
+
+  test('sessions are sorted by most recently active first (CS-10288 sort fix regression)', async function (assert) {
+    // Create two sessions with known timestamps so we can assert DOM order.
+    // timestamp: 1 → epoch + 1 ms (ancient), well before any real session.
+    // timestamp: 2_000_000_000_000 → year 2033, well after any real session.
+    let oldRoomId = createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'Old Session',
+      timestamp: 1,
+    });
+    let recentRoomId = createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'Recent Session',
+      timestamp: 2_000_000_000_000,
+    });
+
+    await renderAiAssistantPanel();
+
+    await click('[data-test-past-sessions-button]');
+    await waitFor('[data-test-past-sessions]');
+
+    let sessionItems = document.querySelectorAll('[data-test-joined-room]');
+    let roomIds = [...sessionItems].map(
+      (el) => el.getAttribute('data-test-joined-room') ?? '',
+    );
+
+    let recentIdx = roomIds.indexOf(recentRoomId);
+    let oldIdx = roomIds.indexOf(oldRoomId);
+
+    assert.notStrictEqual(
+      recentIdx,
+      -1,
+      'recent session is present in the list',
+    );
+    assert.notStrictEqual(oldIdx, -1, 'old session is present in the list');
+    assert.ok(
+      recentIdx < oldIdx,
+      `most recently active session (index ${recentIdx}) appears before the oldest one (index ${oldIdx})`,
+    );
+  });
+
   test('can copy room id to clipboard', async function (assert) {
     let roomId = await renderAiAssistantPanel();
 

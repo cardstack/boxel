@@ -14,12 +14,7 @@ self.addEventListener('fetch', (event) => {
 });
 
 async function relayToClient(event) {
-  // event.clientId may be empty for cross-origin subresource requests
-  let client = await self.clients.get(event.clientId);
-  if (!client) {
-    let allClients = await self.clients.matchAll({ type: 'window' });
-    client = allClients[0];
-  }
+  let client = await resolveClient(event);
   if (!client) {
     return new Response('No client available', { status: 503 });
   }
@@ -34,4 +29,49 @@ async function relayToClient(event) {
       channel.port2,
     ]);
   });
+}
+
+async function resolveClient(event) {
+  // event.clientId may be empty for cross-origin subresource requests.
+  if (event.clientId) {
+    let directClient = await self.clients.get(event.clientId);
+    if (directClient) {
+      return directClient;
+    }
+  }
+
+  // This is usually set for navigations but can occasionally help when
+  // clientId is missing.
+  if (event.resultingClientId) {
+    let resultingClient = await self.clients.get(event.resultingClientId);
+    if (resultingClient) {
+      return resultingClient;
+    }
+  }
+
+  let allClients = await self.clients.matchAll({
+    type: 'window',
+    includeUncontrolled: true,
+  });
+  if (!allClients.length) {
+    return undefined;
+  }
+
+  // Prefer the visible/focused test runner tab over arbitrary ordering.
+  allClients.sort((a, b) => scoreClient(b) - scoreClient(a));
+  return allClients[0];
+}
+
+function scoreClient(client) {
+  let score = 0;
+  if (client.url && client.url.includes('/tests')) {
+    score += 4;
+  }
+  if (client.visibilityState === 'visible') {
+    score += 2;
+  }
+  if (client.focused) {
+    score += 1;
+  }
+  return score;
 }

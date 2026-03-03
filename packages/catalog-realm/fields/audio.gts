@@ -7,7 +7,7 @@ import {
 import StringField from 'https://cardstack.com/base/string';
 import NumberField from 'https://cardstack.com/base/number';
 import BooleanField from 'https://cardstack.com/base/boolean';
-import DatetimeField from 'https://cardstack.com/base/datetime';
+import DateTimeField from 'https://cardstack.com/base/datetime';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
@@ -602,7 +602,7 @@ export default class AudioField extends FieldDef {
   // User interaction data (optional)
   @field liked = contains(BooleanField);
   @field playCount = contains(NumberField);
-  @field lastPlayed = contains(DatetimeField);
+  @field lastPlayed = contains(DateTimeField);
 
   // Trimming data (optional)
   @field trimStart = contains(NumberField);

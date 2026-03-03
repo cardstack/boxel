@@ -6,6 +6,7 @@ import {
   findAll,
   waitUntil,
   settled,
+  visit,
 } from '@ember/test-helpers';
 
 import { fillIn } from '@ember/test-helpers';
@@ -28,6 +29,7 @@ import {
   APP_BOXEL_MESSAGE_MSGTYPE,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
   APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+  APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
   APP_BOXEL_LLM_MODE,
 } from '@cardstack/runtime-common/matrix-constants';
@@ -251,6 +253,26 @@ module('Acceptance | Commands tests', function (hooks) {
       }
     }
 
+    class GreetingCard extends CardDef {
+      static displayName = 'GreetingCard';
+      @field message = contains(StringField);
+      static isolated = class Isolated extends Component<typeof this> {
+        <template>
+          <h2 data-test-command-runner-greeting><@fields.message /></h2>
+        </template>
+      };
+    }
+
+    class HelloCommand extends Command<undefined, typeof GreetingCard> {
+      static displayName = 'HelloCommand';
+      async getInputType() {
+        return undefined;
+      }
+      protected async run(): Promise<GreetingCard> {
+        return new GreetingCard({ message: 'Hello from command runner' });
+      }
+    }
+
     class Person extends CardDef {
       static displayName = 'Person';
       @field firstName = contains(StringField);
@@ -390,6 +412,10 @@ module('Acceptance | Commands tests', function (hooks) {
           friends: [mangoPet],
         }),
         'maybe-boom-command.ts': { default: MaybeBoomCommand },
+        'command-runner-hello-command.ts': {
+          GreetingCard,
+          default: HelloCommand,
+        },
         'search-and-open-card-command.ts': {
           default: SearchAndOpenCardCommand,
         },
@@ -464,6 +490,59 @@ module('Acceptance | Commands tests', function (hooks) {
     assert
       .dom('[data-test-ai-message-content]')
       .includesText('Change the topic of the meeting to "Meeting with Hassan"');
+  });
+
+  module('command-runner', function () {
+    function setCommandRunnerRequest(
+      requestId: string,
+      nonce: string,
+      command: string,
+      input: Record<string, unknown> | null,
+    ) {
+      window.localStorage.setItem(
+        `boxel-command-request:${requestId}`,
+        JSON.stringify({
+          command,
+          input,
+          nonce,
+          createdAt: Date.now(),
+        }),
+      );
+    }
+
+    test('route renders command result card', async function (assert) {
+      let requestId = 'command-runner-test-success';
+      let nonce = '1';
+      setCommandRunnerRequest(
+        requestId,
+        nonce,
+        `${testRealmURL}command-runner-hello-command/default`,
+        null,
+      );
+      await visit(`/command-runner/${requestId}/${nonce}`);
+
+      await waitFor('[data-prerender][data-prerender-status="ready"]');
+      assert
+        .dom('[data-test-command-runner-greeting]')
+        .includesText('Hello from command runner');
+    });
+
+    test('route captures command runtime error', async function (assert) {
+      maybeBoomShouldBoom = true;
+      let requestId = 'command-runner-test-error';
+      let nonce = '2';
+      setCommandRunnerRequest(
+        requestId,
+        nonce,
+        `${testRealmURL}maybe-boom-command/default`,
+        null,
+      );
+      await visit(`/command-runner/${requestId}/${nonce}`);
+
+      await waitFor('[data-prerender][data-prerender-status="error"]');
+      assert.dom('[data-prerender-error]').includesText('Boom!');
+      assert.dom('[data-test-command-runner-greeting]').doesNotExist();
+    });
   });
 
   test('a scripted command can create a card, update it and show it', async function (assert) {
@@ -878,7 +957,7 @@ module('Acceptance | Commands tests', function (hooks) {
     let message = getRoomEvents(roomId).pop()!;
     assert.strictEqual(
       message.content.msgtype,
-      APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+      APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
     );
     assert.strictEqual(
       message.content['m.relates_to']?.rel_type,

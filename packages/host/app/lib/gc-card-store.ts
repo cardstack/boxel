@@ -318,6 +318,10 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     }
   }
 
+  get loadGeneration() {
+    return this.#loadGeneration;
+  }
+
   addCardInstanceOrError(
     id: string,
     instanceOrError: CardDef | CardErrorJSONAPI,

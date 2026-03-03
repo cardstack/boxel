@@ -1,12 +1,9 @@
-import {
-  BOT_TRIGGER_COMMAND_TYPES,
-  BOT_TRIGGER_EVENT_TYPE,
-} from './matrix-constants';
+import { BOT_TRIGGER_EVENT_TYPE } from './matrix-constants';
 
 export interface BotCommandMatrixFilter {
   type: 'matrix-event';
   event_type: typeof BOT_TRIGGER_EVENT_TYPE;
-  content_type: (typeof BOT_TRIGGER_COMMAND_TYPES)[number];
+  content_type: string;
 }
 
 export type BotCommandFilter = BotCommandMatrixFilter;
@@ -34,9 +31,7 @@ export function isBotCommandFilter(value: unknown): value is BotCommandFilter {
     return false;
   }
 
-  return BOT_TRIGGER_COMMAND_TYPES.includes(
-    filter.content_type as (typeof BOT_TRIGGER_COMMAND_TYPES)[number],
-  );
+  return true;
 }
 
 export function assertIsBotCommandFilter(
@@ -64,11 +59,5 @@ export function assertIsBotCommandFilter(
     throw new Error('filter.content_type must be a string');
   }
 
-  if (
-    !BOT_TRIGGER_COMMAND_TYPES.includes(
-      filter.content_type as (typeof BOT_TRIGGER_COMMAND_TYPES)[number],
-    )
-  ) {
-    throw new Error('filter.content_type is not supported');
-  }
+  // Any string content_type is allowed. Matching is handled by registration data.
 }

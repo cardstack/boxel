@@ -35,6 +35,7 @@ import {
   loadCardDef,
   Loader,
   realmURL,
+  resolveCardReference,
   type CommandContext,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
@@ -922,7 +923,7 @@ export class Spec extends CardDef {
       if (!this.ref || !this.ref.module) {
         return undefined;
       }
-      return new URL(this.ref.module, this.id ?? this[relativeTo]).href;
+      return resolveCardReference(this.ref.module, this.id ?? this[relativeTo]);
     },
   });
   @field linkedExamples = linksToMany(CardDef);

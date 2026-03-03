@@ -63,6 +63,7 @@ import {
   type StoreReadType,
   type CardResource,
   type Saved,
+  resolveCardReference,
 } from '@cardstack/runtime-common';
 
 import type { CardDef, BaseDef } from 'https://cardstack.com/base/card-api';
@@ -282,6 +283,10 @@ export default class StoreService extends Service implements StoreInterface {
 
   loaded(): Promise<void> {
     return this.store.loaded();
+  }
+
+  get loadGeneration(): number {
+    return this.store.loadGeneration;
   }
 
   trackLoad(load: Promise<unknown>): void {
@@ -506,6 +511,13 @@ export default class StoreService extends Service implements StoreInterface {
     });
   }
 
+  async serializeFileDefAsDocument(
+    fileDef: FileDef,
+  ): Promise<SingleFileMetaDocument> {
+    let api = await this.cardService.getAPI();
+    return api.serializeFileDef(fileDef) as SingleFileMetaDocument;
+  }
+
   async delete(id: string): Promise<void> {
     if (!id) {
       // the card isn't actually saved yet, so do nothing
@@ -703,14 +715,18 @@ export default class StoreService extends Service implements StoreInterface {
     this.realmServer.assertOwnRealmServer(realmServerURLs);
     let [realmServerURL] = realmServerURLs;
     let searchURL = new URL('_federated-search', realmServerURL);
-    let response = await this.realmServer.maybeAuthedFetch(searchURL.href, {
-      method: 'QUERY',
-      headers: {
-        Accept: SupportedMimeType.CardJson,
-        'Content-Type': 'application/json',
+    let response = await this.realmServer.maybeAuthedFetchForRealms(
+      searchURL.href,
+      realms,
+      {
+        method: 'QUERY',
+        headers: {
+          Accept: SupportedMimeType.CardJson,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ ...query, realms }),
       },
-      body: JSON.stringify({ ...query, realms }),
-    });
+    );
     if (!response.ok) {
       let responseText = await response.text();
       let err = new Error(
@@ -765,14 +781,18 @@ export default class StoreService extends Service implements StoreInterface {
     this.realmServer.assertOwnRealmServer(realmServerURLs);
     let [realmServerURL] = realmServerURLs;
     let searchURL = new URL('_federated-search', realmServerURL);
-    let response = await this.realmServer.maybeAuthedFetch(searchURL.href, {
-      method: 'QUERY',
-      headers: {
-        Accept: SupportedMimeType.CardJson,
-        'Content-Type': 'application/json',
+    let response = await this.realmServer.maybeAuthedFetchForRealms(
+      searchURL.href,
+      realms,
+      {
+        method: 'QUERY',
+        headers: {
+          Accept: SupportedMimeType.CardJson,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ ...query, realms }),
       },
-      body: JSON.stringify({ ...query, realms }),
-    });
+    );
     if (!response.ok) {
       let responseText = await response.text();
       let err = new Error(
@@ -1411,6 +1431,18 @@ export default class StoreService extends Service implements StoreInterface {
           // card source format is not serialized with the ID, so we add that back in.
           json.data.id = url;
         }
+        if (!json.data.meta?.realmURL) {
+          // Source-mode loads in render context don't include realm metadata.
+          // Query-backed relationship fields require realmURL to build their
+          // fallback search query.
+          let realmURL = this.realm.realmOfURL(new URL(url))?.href;
+          if (realmURL) {
+            json.data.meta = {
+              ...(json.data.meta ?? {}),
+              realmURL,
+            };
+          }
+        }
         doc = json;
       }
       let instance = await this.createFromSerialized(
@@ -1955,7 +1987,7 @@ export default class StoreService extends Service implements StoreInterface {
     }
     let id = rel.links.self;
     let instance = await this.getCardInstance({
-      idOrDoc: new URL(id, relativeTo).href,
+      idOrDoc: resolveCardReference(id, relativeTo),
     });
     return isCardInstance(instance) ? instance : undefined;
   }

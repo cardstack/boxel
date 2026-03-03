@@ -3,7 +3,7 @@
     "meta": {
       "adoptsFrom": {
         "name": "SkillPlus",
-        "module": "http://localhost:4201/catalog/skill-plus"
+        "module": "@cardstack/catalog/skill-plus"
       }
     },
     "type": "card",
@@ -20,7 +20,7 @@
     "relationships": {
       "cardInfo.theme": {
         "links": {
-          "self": "http://localhost:4201/catalog/Theme/boxel-brand-guide"
+          "self": "@cardstack/catalog/Theme/boxel-brand-guide"
         }
       }
     }
