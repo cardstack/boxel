@@ -1,0 +1,48 @@
+name: CI Status Notification
+
+on:
+  workflow_run:
+    workflows: ["CI", "ci", "CI Host", "ci-host"]
+    types: [completed]
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    if: github.event.workflow_run.event == 'pull_request'
+    steps:
+      - name: Get PR info
+        id: pr
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prs = await github.rest.pulls.list({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              head: `${context.payload.workflow_run.head_repository.owner.login}:${context.payload.workflow_run.head_branch}`,
+              state: 'open'
+            });
+            if (prs.data.length > 0) {
+              core.setOutput('number', prs.data[0].number);
+              core.setOutput('title', prs.data[0].title);
+              core.setOutput('branch', context.payload.workflow_run.head_branch);
+            }
+
+      - name: Send Telegram Notification
+        if: steps.pr.outputs.number != ''
+        uses: appleboy/telegram-action@master
+        with:
+          to: ${{ secrets.TELEGRAM_CHAT_ID }}
+          token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          message: |
+            🐻‍❄️ <b>PR CI Status Update</b>
+            
+            📦 Repo: <b>${{ github.repository }}</b>
+            🔗 PR #${{ steps.pr.outputs.number }}: ${{ steps.pr.outputs.title }}
+            🌿 Branch: ${{ steps.pr.outputs.branch }}
+            
+            ${{ github.event.workflow_run.conclusion == 'success' && '✅ <b>CI PASSED</b>' || '❌ <b>CI FAILED</b>' }}
+            
+            👀 <a href="${{ github.event.workflow_run.html_url }}">View Run Details</a>
+            🔗 <a href="https://github.com/${{ github.repository }}/pull/${{ steps.pr.outputs.number }}">View PR</a>
+          format: html
+          disable_web_page_preview: true
