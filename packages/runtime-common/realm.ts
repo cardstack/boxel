@@ -340,7 +340,6 @@ export interface FileWriteResult extends AdapterWriteResult {
 export interface WriteOptions {
   clientRequestId?: string | null;
   serializeFile?: boolean | null;
-  asyncIndex?: boolean;
 }
 
 export interface RealmAdapter {
@@ -808,9 +807,7 @@ export class Realm {
     files: Map<LocalPath, string | Uint8Array>,
     options?: WriteOptions,
   ): Promise<FileWriteResult[]> {
-    if (!options?.asyncIndex) {
-      await this.indexing();
-    }
+    await this.indexing();
     let urls: URL[] = [];
     // Collect write results for all files we wrote
     let results: { path: LocalPath; lastModified: number }[] = [];
@@ -909,28 +906,16 @@ export class Realm {
 
     // persist file meta (created_at) to DB independent of index and retrieve created
     let createdMap = await this.persistFileMeta(fileMetaRows);
-    let doIndex = async () => {
-      if (urls.length > 0) {
-        await performIndex();
-      }
-      this.broadcastRealmEvent({
-        eventName: 'index',
-        indexType: 'incremental',
-        invalidations: [...invalidations],
-        clientRequestId,
-        realmURL: this.url,
-      });
-    };
-    if (options?.asyncIndex) {
-      // Fire-and-forget: return the card ID to the caller immediately without
-      // waiting for indexing. The worker that triggered this write will pick up
-      // the incremental-index job once its current job finishes.
-      doIndex().catch((e: any) =>
-        console.error('async index error after write', e),
-      );
-    } else {
-      await doIndex();
+    if (urls.length > 0) {
+      await performIndex();
     }
+    this.broadcastRealmEvent({
+      eventName: 'index',
+      indexType: 'incremental',
+      invalidations: [...invalidations],
+      clientRequestId,
+      realmURL: this.url,
+    });
     return results.map(({ path, lastModified }) => ({
       path,
       lastModified,
@@ -2596,31 +2581,11 @@ export class Realm {
         lid: primaryResource.lid,
       });
     }
-    let asyncIndex = request.headers.get('X-Boxel-Async-Index') === 'true';
     let [{ lastModified, created }] = await this.writeMany(files, {
       clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
-      asyncIndex,
     });
 
     let newURL = primaryResourceURL.href.replace(/\.json$/, '');
-
-    if (asyncIndex) {
-      // Indexing is running in the background. Return the assigned card ID
-      // immediately so the caller (e.g. a command in headless Chrome) can
-      // proceed without blocking on the incremental-index job.
-      return createResponse({
-        body: JSON.stringify({ data: { id: newURL } }),
-        init: {
-          status: 201,
-          headers: {
-            'content-type': SupportedMimeType.CardJson,
-            location: newURL,
-          },
-        },
-        requestContext,
-      });
-    }
-
     let entry = await this.#realmIndexQueryEngine.cardDocument(
       new URL(newURL),
       {

@@ -114,7 +114,6 @@ const queryFieldSeedFromSearchSymbol = Symbol.for(
 
 type PersistOptions = CreateOptions & {
   clientRequestId?: string;
-  asyncIndex?: boolean;
 };
 type DependencyTrackingOptions = {
   dependencyTrackingContext?: RuntimeDependencyTrackingContext;
@@ -393,17 +392,6 @@ export default class StoreService extends Service implements StoreInterface {
     await this.startAutoSaving(instance);
 
     if (this.renderContextBlocksPersistence()) {
-      // New cards still need a server-assigned ID in render context so that
-      // downstream commands can reference them. Use async-index so the realm
-      // returns the ID immediately without waiting for indexing to complete.
-      if (!instance.id && !opts?.doNotPersist) {
-        return (await this.persistAndUpdate(instance, {
-          realm: opts?.realm,
-          localDir: opts?.localDir,
-          asyncIndex: true,
-        })) as T | CardErrorJSONAPI;
-      }
-      // Existing cards: skip saves in render context (no auto-save).
       return instance;
     }
 
@@ -1837,50 +1825,6 @@ export default class StoreService extends Service implements StoreInterface {
           }
           realmURL = new URL(defaultRealmHref);
         }
-        let useAsyncIndex =
-          (opts?.asyncIndex ||
-            Boolean((globalThis as any).__boxelRenderContext)) &&
-          isNew;
-        if (useAsyncIndex) {
-          // POST with X-Boxel-Async-Index: realm writes the file and returns
-          // 201 with the assigned card ID immediately (fire-and-forget index).
-          // This avoids deadlocking when the run-command worker job can't pick
-          // up the incremental-index job it enqueues. Also handles the case
-          // where SaveCardCommand (which uses the regular store, not
-          // render-store) runs in headless Chrome's command-runner context.
-          let response = await this.network.authedFetch(realmURL, {
-            method: 'POST',
-            body: JSON.stringify(doc, null, 2),
-            headers: {
-              'Content-Type': SupportedMimeType.CardJson,
-              'X-Boxel-Async-Index': 'true',
-            },
-          });
-          if (!response.ok) {
-            throw new Error(
-              `Failed to async-persist card: ${response.status} ${response.statusText}`,
-            );
-          }
-          let responseJson = await response.json();
-          let cardId = responseJson?.data?.id;
-          if (typeof cardId !== 'string') {
-            throw new Error('Async-persist response missing card ID');
-          }
-          let asyncApi = await this.cardService.getAPI();
-          asyncApi.setId(instance, cardId);
-          this.subscribeToRealm(new URL(instance.id));
-          this.operatorModeStateService.handleCardIdAssignment(
-            instance[localIdSymbol],
-          );
-          await this.updateForeignConsumersOf(instance);
-          this.setIdentityContext(instance);
-          await this.startAutoSaving(instance);
-          if (this.onSaveSubscriber) {
-            this.onSaveSubscriber(new URL(cardId), cardId);
-          }
-          return instance;
-        }
-
         let json = await this.saveCardDocument(doc, {
           realm: realmURL.href,
           localDir: opts?.localDir,
