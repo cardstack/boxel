@@ -31,6 +31,48 @@ function runServe(port) {
   return child;
 }
 
+function sanitizeSlug(raw) {
+  return raw
+    .toLowerCase()
+    .replace(/\//g, '-')
+    .replace(/[^a-z0-9-]/g, '')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
+}
+
+function registerWithTraefik(slug, hostname, port) {
+  const fs = require('fs');
+  const dynamicDir = path.resolve(
+    __dirname,
+    '..',
+    '..',
+    '..',
+    'traefik',
+    'dynamic',
+  );
+  const configPath = path.join(dynamicDir, `${slug}-host.yml`);
+  const routerKey = `host-${slug}`;
+
+  const entry = [
+    'http:',
+    '  routers:',
+    `    ${routerKey}:`,
+    '      rule: "Host(`' + hostname + '`)"',
+    `      service: ${routerKey}`,
+    '      entryPoints:',
+    '        - web',
+    '  services:',
+    `    ${routerKey}:`,
+    '      loadBalancer:',
+    '        servers:',
+    `          - url: "http://host.docker.internal:${port}"`,
+    '',
+  ].join('\n');
+  const tmpPath = configPath + '.tmp';
+  fs.writeFileSync(tmpPath, entry, 'utf-8');
+  fs.renameSync(tmpPath, configPath);
+}
+
 if (!BOXEL_BRANCH) {
   // Legacy mode: hardcoded port 4200
   runServe(4200);
@@ -40,48 +82,6 @@ if (!BOXEL_BRANCH) {
   ensureTraefik();
 
   const net = require('net');
-  const fs = require('fs');
-
-  function sanitizeSlug(raw) {
-    return raw
-      .toLowerCase()
-      .replace(/\//g, '-')
-      .replace(/[^a-z0-9-]/g, '')
-      .replace(/-+/g, '-')
-      .replace(/^-|-$/g, '');
-  }
-
-  /**
-   * Merge a router+service entry into the branch's Traefik YAML config.
-   * Uses the realm-server's yaml dependency (resolved via pnpm workspace).
-   * Falls back to writing a standalone YAML file if yaml isn't available.
-   */
-  function registerWithTraefik(slug, hostname, port) {
-    const dynamicDir = path.resolve(
-      __dirname, '..', '..', '..', 'traefik', 'dynamic',
-    );
-    const configPath = path.join(dynamicDir, `${slug}-host.yml`);
-    const routerKey = `host-${slug}`;
-
-    const entry = [
-      'http:',
-      '  routers:',
-      `    ${routerKey}:`,
-      '      rule: "Host(`' + hostname + '`)"',
-      `      service: ${routerKey}`,
-      '      entryPoints:',
-      '        - web',
-      '  services:',
-      `    ${routerKey}:`,
-      '      loadBalancer:',
-      '        servers:',
-      `          - url: "http://host.docker.internal:${port}"`,
-      '',
-    ].join('\n');
-    const tmpPath = configPath + '.tmp';
-    fs.writeFileSync(tmpPath, entry, 'utf-8');
-    fs.renameSync(tmpPath, configPath);
-  }
 
   const slug = sanitizeSlug(BOXEL_BRANCH);
   const hostname = `host.${slug}.localhost`;
@@ -102,7 +102,10 @@ if (!BOXEL_BRANCH) {
           `[branch-mode] Registered host at ${hostname} -> localhost:${port}`,
         );
       } catch (e) {
-        console.error('[branch-mode] Failed to register with Traefik:', e.message);
+        console.error(
+          '[branch-mode] Failed to register with Traefik:',
+          e.message,
+        );
       }
     });
   });

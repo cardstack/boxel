@@ -108,7 +108,10 @@ if (!BOXEL_BRANCH) {
           `[branch-mode] Registered host at ${hostname} -> localhost:${port}`,
         );
       } catch (e) {
-        console.error('[branch-mode] Failed to register with Traefik:', e.message);
+        console.error(
+          '[branch-mode] Failed to register with Traefik:',
+          e.message,
+        );
       }
     });
   });
