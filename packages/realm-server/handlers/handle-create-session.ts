@@ -43,11 +43,15 @@ export default function handleCreateSessionRequest({
       },
       createJWT: async (user: string, sessionRoom: string) =>
         createJWT({ user, sessionRoom }, realmSecretSeed),
-      ensureSessionRoom: async (userId: string) => {
+      ensureSessionRoom: async (userId: string, registrationToken?: string) => {
         let sessionRoom = await fetchSessionRoom(dbAdapter, userId);
 
         if (!sessionRoom) {
-          let { user, created } = await getOrCreateUser(dbAdapter, userId);
+          let { user, created } = await getOrCreateUser(
+            dbAdapter,
+            userId,
+            registrationToken,
+          );
           if (created) {
             let lowCreditThreshold = getLowCreditThreshold();
             if (lowCreditThreshold != null) {

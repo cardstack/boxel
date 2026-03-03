@@ -538,11 +538,10 @@ export default class MatrixService extends Service {
       );
     }
 
-    await this.realmServer.createUser(userId, registrationToken);
-
     await this.start({ auth });
     this.setDisplayName(displayName);
 
+    await this.realmServer.loginWithRegistrationToken(registrationToken);
     await this.realmServer.authenticateToAllAccessibleRealms();
 
     await Promise.all([

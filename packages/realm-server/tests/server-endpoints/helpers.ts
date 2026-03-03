@@ -136,14 +136,19 @@ export function setupServerEndpointsTest(
 export async function createRealmServerSession(
   matrixClient: MatrixClient,
   request: SuperTest<Test>,
+  options?: { registrationToken?: string },
 ) {
   let openIdToken = await matrixClient.getOpenIdToken();
   if (!openIdToken) {
     throw new Error('matrixClient did not return an OpenID token');
   }
+  let body: Record<string, unknown> = { ...openIdToken };
+  if (options?.registrationToken) {
+    body.registration_token = options.registrationToken;
+  }
   let response = await request
     .post('/_server-session')
-    .send(JSON.stringify(openIdToken))
+    .send(JSON.stringify(body))
     .set('Accept', 'application/json')
     .set('Content-Type', 'application/json');
 
