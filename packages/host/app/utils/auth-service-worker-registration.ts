@@ -114,7 +114,7 @@ function readTokensFromStorage(): Record<string, string> | undefined {
   let localTokens = parseTokenMap(
     window.localStorage.getItem(SessionLocalStorageKey),
   );
-  if (localTokens) {
+  if (localTokens && hasTokenEntries(localTokens)) {
     return localTokens;
   }
   return parseTokenMap(window.sessionStorage.getItem(SessionLocalStorageKey));
@@ -132,4 +132,8 @@ function parseTokenMap(
     // ignore parse errors
     return undefined;
   }
+}
+
+function hasTokenEntries(tokens: Record<string, string>): boolean {
+  return Object.keys(tokens).length > 0;
 }

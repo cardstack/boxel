@@ -70,11 +70,11 @@ function realmSessionCacheKey(realmURL: URL, sessionEndpoint: string) {
 }
 
 function getBoxelSessionWithFallback(): string | null {
-  let localSession = globalThis.localStorage?.getItem('boxel-session');
-  if (localSession !== null && localSession !== undefined) {
-    return localSession;
+  let sessionStorageValue = globalThis.sessionStorage?.getItem('boxel-session');
+  if (sessionStorageValue !== null && sessionStorageValue !== undefined) {
+    return sessionStorageValue;
   }
-  return globalThis.sessionStorage?.getItem('boxel-session') ?? null;
+  return globalThis.localStorage?.getItem('boxel-session') ?? null;
 }
 
 export class RealmAuthClient {
@@ -98,7 +98,8 @@ export class RealmAuthClient {
     let tokenRefreshLeadTimeSeconds = 60;
     let jwt: string;
 
-    // the prerenderer reads JWTs from localStorage with sessionStorage fallback
+    // Prerender contexts prefer sessionStorage (tab-isolated), then fall back
+    // to localStorage for compatibility with older contexts.
     if ((globalThis as any).__boxelRenderContext) {
       let sessionStr = getBoxelSessionWithFallback() ?? '{}';
       let session: { [realmURL: string]: string } = JSON.parse(sessionStr);

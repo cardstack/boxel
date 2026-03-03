@@ -1073,15 +1073,20 @@ const sessionLocalStorageKey = 'boxel-realm-server-session';
 
 function getStorageValueWithFallback(key: string): string | null {
   // Host writes are localStorage-first, but prerender/isolated contexts may use
-  // sessionStorage, so reads intentionally fall back.
-  return window.localStorage.getItem(key) ?? window.sessionStorage.getItem(key);
+  // sessionStorage, so reads intentionally fall back. We treat empty string as
+  // missing because this file stores `''` when clearing auth.
+  let localValue = window.localStorage.getItem(key);
+  if (localValue) {
+    return localValue;
+  }
+  return window.sessionStorage.getItem(key);
 }
 
 function getSessionTokenMapWithFallback(
   key: string,
 ): Record<string, string> | undefined {
   let localTokens = parseSessionTokenMap(window.localStorage.getItem(key));
-  if (localTokens) {
+  if (localTokens && hasTokenEntries(localTokens)) {
     return localTokens;
   }
   return parseSessionTokenMap(window.sessionStorage.getItem(key));
@@ -1098,6 +1103,10 @@ function parseSessionTokenMap(
   } catch {
     return undefined;
   }
+}
+
+function hasTokenEntries(tokens: Record<string, string>): boolean {
+  return Object.keys(tokens).length > 0;
 }
 
 function claimsFromRawToken(rawToken: string): RealmServerJWTPayload {

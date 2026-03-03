@@ -1126,34 +1126,47 @@ let SessionStorage = {
     return getSessionTokensFromStorage();
   },
   persist(realmURL: string, token: string | undefined) {
-    // Intentionally persist to localStorage only for normal host sessions.
-    // Reads use localStorage first with sessionStorage fallback so prerender
-    // contexts (which write sessionStorage-only) are still supported.
-    let session = getSessionTokensFromStorage() ?? {};
+    let inRenderContext = Boolean((globalThis as any).__boxelRenderContext);
+    // Keep prerender auth tab-scoped: never copy sessionStorage tokens into
+    // origin-wide localStorage from render contexts.
+    let session = inRenderContext
+      ? (getSessionTokensFromStorage() ?? {})
+      : (getLocalSessionTokens() ?? {});
     if (session[realmURL] !== token) {
       if (token === undefined) {
         delete session[realmURL];
       } else {
         session[realmURL] = token;
       }
-      window.localStorage.setItem(
-        SessionLocalStorageKey,
-        JSON.stringify(session),
-      );
+      if (inRenderContext) {
+        window.sessionStorage.setItem(
+          SessionLocalStorageKey,
+          JSON.stringify(session),
+        );
+      } else {
+        window.localStorage.setItem(
+          SessionLocalStorageKey,
+          JSON.stringify(session),
+        );
+      }
     }
     syncTokenToServiceWorker(realmURL, token);
   },
 };
 
 function getSessionTokensFromStorage(): Record<string, string> | undefined {
-  let localTokens = parseSessionTokens(
-    window.localStorage.getItem(SessionLocalStorageKey),
-  );
-  if (localTokens) {
+  let localTokens = getLocalSessionTokens();
+  if (localTokens && hasTokenEntries(localTokens)) {
     return localTokens;
   }
   return parseSessionTokens(
     window.sessionStorage.getItem(SessionLocalStorageKey),
+  );
+}
+
+function getLocalSessionTokens(): Record<string, string> | undefined {
+  return parseSessionTokens(
+    window.localStorage.getItem(SessionLocalStorageKey),
   );
 }
 
@@ -1168,6 +1181,10 @@ function parseSessionTokens(
   } catch {
     return undefined;
   }
+}
+
+function hasTokenEntries(tokens: Record<string, string>): boolean {
+  return Object.keys(tokens).length > 0;
 }
 
 declare module '@ember/service' {
