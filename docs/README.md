@@ -18,6 +18,7 @@ The following are important concepts:
 - [Indexing](indexing.md): Indexing powers the re-rendering of cards when it's dependencies get updated.
 - [Realm](realm.md): Realms are storage for cards that have their own underlying permissions and indexer.
 - [Search](search.md): Every Card is searchable within and across realms.
+- [Submission Flow](submission-flow.md): Local setup and verification steps for submission behavior, including external catalog mode.
 
 ## Operations
 
