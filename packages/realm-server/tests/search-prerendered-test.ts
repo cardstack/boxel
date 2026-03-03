@@ -228,6 +228,10 @@ module(basename(__filename), function () {
                 1,
                 `total count is correct for ${format}`,
               );
+              assert.true(
+                json.meta.isFileMeta,
+                `isFileMeta flag is set for ${format} file-meta query`,
+              );
             }
           });
         },
