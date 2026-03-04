@@ -8,16 +8,18 @@
     },
     "type": "card",
     "attributes": {
-      "name": "Cardstack Theme",
+      "name": "Boxel Brand Guide",
       "images": [
-        "https://boxel-assets-store.s3.us-east-1.amazonaws.com/cardstack-brand-guide/cardstack-profile-icon.png"
+        "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/47b743a2-3a61-4c85-5277-39d764fea100/public",
+        "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/5de76ce4-d7f6-4203-1b22-009031a0bc00/public",
+        "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/96e9cc96-484c-4dd4-ea9f-5a6d1fad6a00/public"
       ],
-      "summary": "Cardstack\u2019s house style theme with IBM Plex typography, vibrant purple accents, and paired light/dark tokens for backgrounds, borders, charts, and sidebars\u2014ready to brand your cards with the official Cardstack look.",
+      "summary": "Boxel\u2019s official brand guide featuring IBM Plex typography, a high-density Box Element design system, vibrant Teal/Lime/Purple accents, and complete light/dark CSS tokens\u2014covering logo usage, spacing rules, motion principles, and component patterns for a consistent Boxel visual identity.",
       "cardInfo": {
         "notes": null,
-        "name": "Cardstack Theme",
-        "summary": "IBM Plex-driven Cardstack brand theme with balanced light/dark palettes, chart colors, and sidebar tokens.",
-        "cardThumbnailURL": "https://boxel-assets-store.s3.us-east-1.amazonaws.com/cardstack-brand-guide/cardstack-profile-icon.png"
+        "name": "Boxel Brand Guide",
+        "summary": "Official Boxel brand guide with IBM Plex typography, Box Element design system, and light/dark color tokens.",
+        "cardThumbnailURL": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/96e9cc96-484c-4dd4-ea9f-5a6d1fad6a00/public"
       }
     },
     "relationships": {
@@ -53,7 +55,7 @@
       },
       "examples.0": {
         "links": {
-          "self": "../Theme/cardstack"
+          "self": "../Theme/boxel-brand-guide"
         }
       },
       "categories.0": {
@@ -63,7 +65,7 @@
       },
       "cardInfo.theme": {
         "links": {
-          "self": "../Theme/cardstack"
+          "self": "../Theme/boxel-brand-guide"
         }
       }
     }
