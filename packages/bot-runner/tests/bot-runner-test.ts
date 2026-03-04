@@ -140,9 +140,6 @@ module('timeline handler', () => {
       publishedJobs.push(job);
       return { id: 1, done: Promise.resolve(queueJobDoneResult) } as any;
     },
-    coalesce: async () => {
-      throw new Error('coalesce not implemented in this test');
-    },
     destroy: async () => {},
   };
   githubClient = {

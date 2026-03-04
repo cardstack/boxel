@@ -21,9 +21,6 @@ module('command runner', () => {
         publishedJobs.push(job);
         return { id: 1, done: Promise.resolve(queueJobDoneResult) } as any;
       },
-      coalesce: async () => {
-        throw new Error('coalesce not implemented in this test');
-      },
       destroy: async () => {},
     };
     let githubClient: GitHubClient = {
@@ -124,9 +121,6 @@ module('command runner', () => {
           }),
         } as any;
       },
-      coalesce: async () => {
-        throw new Error('coalesce not implemented in this test');
-      },
       destroy: async () => {},
     };
 
@@ -217,9 +211,6 @@ module('command runner', () => {
             error: 'permission denied',
           }),
         } as any;
-      },
-      coalesce: async () => {
-        throw new Error('coalesce not implemented in this test');
       },
       destroy: async () => {},
     };
