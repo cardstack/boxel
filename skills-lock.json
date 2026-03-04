@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "skills": {
+    "ember-best-practices": {
+      "source": "NullVoxPopuli/agent-skills",
+      "sourceType": "github",
+      "computedHash": "c4e325d68da4e33f5c2e0796f641ac3320ebf0994cbc9df0a501779b85412faa"
+    }
+  }
+}
