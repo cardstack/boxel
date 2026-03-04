@@ -90,6 +90,7 @@
   "scripts": {
     "test": "./tests/scripts/run-qunit-with-test-pg.sh",
     "test-module": "./tests/scripts/run-qunit-with-test-pg.sh --module ${TEST_MODULE}",
+    "migrate": "NODE_NO_WARNINGS=1 ts-node --transpileOnly scripts/run-migrations.ts",
     "start:matrix": "./scripts/start-matrix.sh",
     "start:smtp": "cd ../matrix && pnpm assert-smtp-running",
     "start:icons": "sh ./scripts/start-icons.sh",

@@ -40,9 +40,19 @@ fi
 SMTP_4_DEV_URL="http://localhost:5001"
 
 if [ -n "$BOXEL_ENVIRONMENT" ]; then
-  # Environment mode: ensure Postgres, Synapse, and user registration complete
-  # BEFORE starting the realm server, so users exist when it becomes ready.
+  # Environment mode: ensure Postgres, database, migrations, Synapse, and user
+  # registration all complete BEFORE starting the realm server, so users exist
+  # when it becomes ready.
+  REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
+  export PGPORT="${PGPORT:-5435}"
+  export PGDATABASE="${PGDATABASE:-boxel_${ENV_SLUG}}"
+
   ./scripts/start-pg.sh
+  echo "Waiting for Postgres to accept connections..."
+  until docker exec boxel-pg pg_isready -U postgres >/dev/null 2>&1; do sleep 1; done
+  "$REPO_ROOT/scripts/ensure-branch-db.sh"
+  echo "Running database migrations..."
+  pnpm migrate
   ./scripts/start-matrix.sh
 fi
 
