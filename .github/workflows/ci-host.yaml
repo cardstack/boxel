@@ -28,6 +28,8 @@ jobs:
   test-web-assets:
     name: Build test web assets
     uses: ./.github/workflows/test-web-assets.yaml
+    with:
+      skip_catalog: true
 
   host-test:
     name: Host Tests
