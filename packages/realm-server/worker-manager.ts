@@ -30,7 +30,7 @@ import {
   parseLowCreditThreshold,
 } from './lib/daily-credit-grant-config';
 import {
-  isBranchMode,
+  isEnvironmentMode,
   registerService,
   deregisterService,
 } from './lib/dev-service-registry';
@@ -179,7 +179,7 @@ if (port != null) {
   webServerInstance.on('listening', () => {
     let actualPort =
       (webServerInstance!.address() as import('net').AddressInfo).port ?? port;
-    if (isBranchMode()) {
+    if (isEnvironmentMode()) {
       registerService(webServerInstance!, serviceName);
     }
     log.info(`worker manager HTTP listening on port ${actualPort}`);
@@ -188,7 +188,7 @@ if (port != null) {
 
 const shutdown = (onShutdown?: () => void) => {
   log.info(`Shutting down server for worker manager...`);
-  if (isBranchMode()) {
+  if (isEnvironmentMode()) {
     deregisterService(serviceName);
   }
 

@@ -7,8 +7,8 @@ ensure_traefik
 # Start the prerender manager in development
 # Ports default to 4222 unless PRERENDER_MANAGER_PORT is provided
 
-# Branch-mode configuration
-if [ -n "$BOXEL_BRANCH" ]; then
+# Environment-mode configuration
+if [ -n "$BOXEL_ENVIRONMENT" ]; then
   DEFAULT_PRERENDER_MGR_PORT=0
 else
   DEFAULT_PRERENDER_MGR_PORT=4222

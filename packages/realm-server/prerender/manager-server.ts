@@ -5,7 +5,7 @@ import type { Server } from 'http';
 import { createServer } from 'http';
 import yargs from 'yargs';
 import { buildPrerenderManagerApp } from './manager-app';
-import { isBranchMode, registerService } from '../lib/dev-service-registry';
+import { isEnvironmentMode, registerService } from '../lib/dev-service-registry';
 
 let log = logger('prerender-manager');
 
@@ -41,7 +41,7 @@ _webServerInstance = createServer(app.callback()).listen(port);
 _webServerInstance.on('listening', () => {
   let actualPort =
     (_webServerInstance!.address() as import('net').AddressInfo).port ?? port;
-  if (isBranchMode()) {
+  if (isEnvironmentMode()) {
     registerService(_webServerInstance!, 'prerender-mgr');
   }
   log.info(`prerender manager HTTP listening on port ${actualPort}`);

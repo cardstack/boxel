@@ -3,8 +3,8 @@ SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
 . "$SCRIPTS_DIR/wait-for-pg.sh"
 . "$SCRIPTS_DIR/ensure-traefik.sh"
 
-# In branch mode, share the dev icons server; otherwise start our own
-if [ -z "$BOXEL_BRANCH" ]; then
+# In environment mode, share the dev icons server; otherwise start our own
+if [ -z "$BOXEL_ENVIRONMENT" ]; then
   sh "$SCRIPTS_DIR/start-icons.sh" &
   ICONS_PID=$!
   cleanup_icons_server() {
@@ -19,21 +19,21 @@ fi
 
 wait_for_postgres
 
-# Branch-mode configuration
-if [ -n "$BOXEL_BRANCH" ]; then
-  BRANCH_SLUG=$(echo "$BOXEL_BRANCH" | tr '[:upper:]' '[:lower:]' | sed 's|/|-|g; s|[^a-z0-9-]||g; s|-\+|-|g; s|^-\|-$||g')
-  REALM_TEST_URL="http://realm-test.${BRANCH_SLUG}.localhost"
-  REALM_BASE_URL="http://realm-server.${BRANCH_SLUG}.localhost"
+# Environment-mode configuration
+if [ -n "$BOXEL_ENVIRONMENT" ]; then
+  ENV_SLUG=$(echo "$BOXEL_ENVIRONMENT" | tr '[:upper:]' '[:lower:]' | sed 's|/|-|g; s|[^a-z0-9-]||g; s|-\+|-|g; s|^-\|-$||g')
+  REALM_TEST_URL="http://realm-test.${ENV_SLUG}.localhost"
+  REALM_BASE_URL="http://realm-server.${ENV_SLUG}.localhost"
   TEST_PORT=0
-  PGDATABASE_VAL="boxel_test_${BRANCH_SLUG}"
-  REALMS_ROOT="./realms/${BRANCH_SLUG}_test"
-  PRERENDER_URL="${PRERENDER_URL:-http://prerender.${BRANCH_SLUG}.localhost}"
-  WORKER_MANAGER_ARG="--workerManagerUrl=http://worker-test.${BRANCH_SLUG}.localhost"
+  PGDATABASE_VAL="boxel_test_${ENV_SLUG}"
+  REALMS_ROOT="./realms/${ENV_SLUG}_test"
+  PRERENDER_URL="${PRERENDER_URL:-http://prerender.${ENV_SLUG}.localhost}"
+  WORKER_MANAGER_ARG="--workerManagerUrl=http://worker-test.${ENV_SLUG}.localhost"
   SERVICE_NAME_ARG="--serviceName=realm-test"
-  MATRIX_URL_VAL="http://matrix.${BRANCH_SLUG}.localhost"
+  MATRIX_URL_VAL="http://matrix.${ENV_SLUG}.localhost"
 
-  # Ensure per-branch test database exists
-  sh "$SCRIPTS_DIR/../../../scripts/ensure-branch-db.sh" "test_${BRANCH_SLUG}"
+  # Ensure per-environment test database exists
+  sh "$SCRIPTS_DIR/../../../scripts/ensure-branch-db.sh" "test_${ENV_SLUG}"
 else
   REALM_TEST_URL="http://localhost:4202"
   REALM_BASE_URL="http://localhost:4201"

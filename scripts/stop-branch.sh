@@ -1,11 +1,11 @@
 #!/bin/sh
-# Stop all processes for a given branch and clean up Traefik configs.
+# Stop all processes for a given environment and clean up Traefik configs.
 #
 # Usage:
-#   ./scripts/stop-branch.sh [branch-name]
+#   ./scripts/stop-branch.sh [environment-name]
 #
-# If no branch is given, uses $BOXEL_BRANCH or the current git branch.
-# Pass --drop-db to also drop the per-branch databases.
+# If no environment is given, uses $BOXEL_ENVIRONMENT or the current git branch.
+# Pass --drop-db to also drop the per-environment databases.
 # Pass --dry-run to preview what would be killed without taking action.
 
 set -e
@@ -28,27 +28,27 @@ for arg in "$@"; do
 done
 
 if [ -z "$BRANCH" ]; then
-  BRANCH="${BOXEL_BRANCH:-$(git -C "$REPO_ROOT" branch --show-current 2>/dev/null || echo '')}"
+  BRANCH="${BOXEL_ENVIRONMENT:-$(git -C "$REPO_ROOT" branch --show-current 2>/dev/null || echo '')}"
 fi
 
 if [ -z "$BRANCH" ]; then
-  echo "Error: no branch specified and could not detect current branch." >&2
-  echo "Usage: $0 [branch-name]" >&2
+  echo "Error: no environment specified and could not detect current environment." >&2
+  echo "Usage: $0 [environment-name]" >&2
   exit 1
 fi
 
 SLUG=$(echo "$BRANCH" | tr '[:upper:]' '[:lower:]' | sed 's|/|-|g; s|[^a-z0-9-]||g; s|-\+|-|g; s|^-\|-$||g')
 
-echo "Stopping all services for branch: $BRANCH (slug: $SLUG)"
+echo "Stopping all services for environment: $BRANCH (slug: $SLUG)"
 
-# --- 1. Find and kill processes by branch slug in their arguments ---
-# Match any process whose command line contains the branch slug followed by
+# --- 1. Find and kill processes by environment slug in their arguments ---
+# Match any process whose command line contains the environment slug followed by
 # .localhost (Traefik hostnames) or as a path segment (realm paths).
 # Then walk the process tree to also find child processes (prerender, icons,
 # host app, etc.) that don't have the slug in their own arguments.
 # Exclude this script itself and grep.
 ROOT_PIDS=$(ps ax -o pid,command 2>/dev/null \
-  | grep -E "(${SLUG}\.localhost|realms/${SLUG}|boxel_${SLUG}|BOXEL_BRANCH=${BRANCH})" \
+  | grep -E "(${SLUG}\.localhost|realms/${SLUG}|boxel_${SLUG}|BOXEL_ENVIRONMENT=${BRANCH})" \
   | grep -v "grep" \
   | grep -v "stop-branch" \
   | grep -v "shell-snapshots" `# exclude Claude Code shell wrappers` \
@@ -109,10 +109,10 @@ if [ -n "$PIDS" ]; then
     echo "All processes stopped."
   fi
 else
-  echo "No running processes found for branch $SLUG."
+  echo "No running processes found for environment $SLUG."
 fi
 
-# --- 2. Stop per-branch Synapse container ---
+# --- 2. Stop per-environment Synapse container ---
 SYNAPSE_CONTAINER="boxel-synapse-${SLUG}"
 if docker ps -a --format '{{.Names}}' | grep -qx "$SYNAPSE_CONTAINER"; then
   if [ "$DRY_RUN" = true ]; then
@@ -122,7 +122,7 @@ if docker ps -a --format '{{.Names}}' | grep -qx "$SYNAPSE_CONTAINER"; then
     docker stop "$SYNAPSE_CONTAINER" 2>/dev/null || true
   fi
 else
-  echo "No Synapse container found for branch $SLUG."
+  echo "No Synapse container found for environment $SLUG."
 fi
 
 # --- 3. Clean up Traefik dynamic config files ---
@@ -141,11 +141,11 @@ if [ -d "$TRAEFIK_DIR" ]; then
   if [ "$REMOVED" -gt 0 ]; then
     [ "$DRY_RUN" = true ] && echo "Would remove $REMOVED Traefik config file(s)." || echo "Removed $REMOVED Traefik config file(s)."
   else
-    echo "No Traefik configs found for branch $SLUG."
+    echo "No Traefik configs found for environment $SLUG."
   fi
 fi
 
-# --- 4. Optionally drop per-branch databases ---
+# --- 4. Optionally drop per-environment databases ---
 if [ "$DROP_DB" = true ]; then
   for DB_NAME in "boxel_${SLUG}" "boxel_test_${SLUG}"; do
     if docker exec boxel-pg psql -U postgres -lqt 2>/dev/null | cut -d \| -f 1 | grep -qw "$DB_NAME"; then

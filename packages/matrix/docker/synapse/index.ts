@@ -13,11 +13,11 @@ import {
 import { APP_BOXEL_REALMS_EVENT_TYPE } from '../../helpers/matrix-constants';
 import { appURL } from '../../helpers/isolated-realm-server';
 import {
-  isBranchMode,
+  isEnvironmentMode,
   getSynapseContainerName,
   getSynapseURL,
   registerSynapseWithTraefik,
-} from '../../helpers/branch-config';
+} from '../../helpers/environment-config';
 
 export const SYNAPSE_IP_ADDRESS = '172.20.0.5';
 export const SYNAPSE_PORT = 8008;
@@ -129,7 +129,7 @@ export async function synapseStart(
     opts?.template ?? 'test',
     opts?.dataDir,
   );
-  let containerName = opts?.containerName || (isBranchMode() ? getSynapseContainerName() : path.basename(synCfg.configDir));
+  let containerName = opts?.containerName || (isEnvironmentMode() ? getSynapseContainerName() : path.basename(synCfg.configDir));
   console.log(
     `Starting synapse with config dir ${synCfg.configDir} in container ${containerName}...`,
   );
@@ -142,7 +142,7 @@ export async function synapseStart(
     '-v',
     `${path.join(__dirname, 'templates')}:/custom/templates/`,
   ];
-  if (isBranchMode()) {
+  if (isEnvironmentMode()) {
     // Branch mode: dynamic host port, no fixed IP
     dockerParams.push('-p', '0:8008/tcp', '--network=boxel');
   } else {
@@ -182,7 +182,7 @@ export async function synapseStart(
   });
 
   // In branch mode, read the dynamic host port and register with Traefik
-  if (isBranchMode()) {
+  if (isEnvironmentMode()) {
     let { execSync } = await import('child_process');
     let portOutput = execSync(`docker port ${synapseId} 8008/tcp`, {
       encoding: 'utf-8',

@@ -7,14 +7,14 @@ SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
 ensure_traefik
 wait_for_postgres
 
-# Branch-mode configuration
-if [ -n "$BOXEL_BRANCH" ]; then
-  BRANCH_SLUG=$(echo "$BOXEL_BRANCH" | tr '[:upper:]' '[:lower:]' | sed 's|/|-|g; s|[^a-z0-9-]||g; s|-\+|-|g; s|^-\|-$||g')
-  REALM_BASE_URL="http://realm-server.${BRANCH_SLUG}.localhost"
+# Environment-mode configuration
+if [ -n "$BOXEL_ENVIRONMENT" ]; then
+  ENV_SLUG=$(echo "$BOXEL_ENVIRONMENT" | tr '[:upper:]' '[:lower:]' | sed 's|/|-|g; s|[^a-z0-9-]||g; s|-\+|-|g; s|^-\|-$||g')
+  REALM_BASE_URL="http://realm-server.${ENV_SLUG}.localhost"
   WORKER_PORT=0
-  PGDATABASE_VAL="boxel_${BRANCH_SLUG}"
-  PRERENDER_URL="${PRERENDER_URL:-http://prerender-mgr.${BRANCH_SLUG}.localhost}"
-  MATRIX_URL_VAL="http://matrix.${BRANCH_SLUG}.localhost"
+  PGDATABASE_VAL="boxel_${ENV_SLUG}"
+  PRERENDER_URL="${PRERENDER_URL:-http://prerender-mgr.${ENV_SLUG}.localhost}"
+  MATRIX_URL_VAL="http://matrix.${ENV_SLUG}.localhost"
 else
   REALM_BASE_URL="http://localhost:4201"
   WORKER_PORT=4210

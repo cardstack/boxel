@@ -25,11 +25,11 @@ import 'decorator-transforms/globals';
 import { createRemotePrerenderer } from './prerender/remote-prerenderer';
 import { buildCreatePrerenderAuth } from './prerender/auth';
 import {
-  isBranchMode,
-  getBranchSlug,
+  isEnvironmentMode,
+  getEnvironmentSlug,
   serviceURL,
   registerService,
-  deregisterBranch,
+  deregisterEnvironment,
 } from './lib/dev-service-registry';
 
 (globalThis as any).ContentTagGlobal = ContentTagGlobal;
@@ -95,10 +95,10 @@ let {
   matrixURL,
   realmsRootPath,
   serviceName = 'realm-server',
-  serverURL = isBranchMode()
+  serverURL = isEnvironmentMode()
     ? serviceURL(serviceName)
     : `http://localhost:${port}`,
-  distURL = isBranchMode()
+  distURL = isEnvironmentMode()
     ? serviceURL('host')
     : (process.env.HOST_URL ?? 'http://localhost:4200'),
   path: paths,
@@ -347,8 +347,8 @@ const getIndexHTML = async () => {
   // Domains to use for when users publish their realms.
   // PUBLISHED_REALM_BOXEL_SPACE_DOMAIN is used to form urls like "mike.boxel.space/game-mechanics"
   // PUBLISHED_REALM_BOXEL_SITE_DOMAIN is used to form urls like "mike.boxel.site"
-  let defaultPublishedDomain = isBranchMode()
-    ? `realm-server.${getBranchSlug()}.localhost`
+  let defaultPublishedDomain = isEnvironmentMode()
+    ? `realm-server.${getEnvironmentSlug()}.localhost`
     : 'localhost:4201';
   let domainsForPublishedRealms = {
     boxelSpace:
@@ -384,7 +384,7 @@ const getIndexHTML = async () => {
 
   let httpServer = server.listen(port);
   httpServer.on('listening', () => {
-    if (isBranchMode()) {
+    if (isEnvironmentMode()) {
       registerService(httpServer, serviceName);
     }
   });
@@ -394,8 +394,8 @@ const getIndexHTML = async () => {
         (httpServer.address() as import('net').AddressInfo | null)?.port ??
         port;
       console.log(`stopping realm server on port ${stopPort}...`);
-      if (isBranchMode()) {
-        deregisterBranch();
+      if (isEnvironmentMode()) {
+        deregisterEnvironment();
       }
       httpServer.closeAllConnections();
       httpServer.close(() => {
@@ -469,7 +469,7 @@ const getIndexHTML = async () => {
 
 async function waitForWorkerManager(url: string) {
   let isReady = false;
-  let timeoutMs = isBranchMode() ? 120_000 : 30_000;
+  let timeoutMs = isEnvironmentMode() ? 120_000 : 30_000;
   let timeout = Date.now() + timeoutMs;
   let normalizedUrl = url.replace(/\/$/, '') + '/';
   do {

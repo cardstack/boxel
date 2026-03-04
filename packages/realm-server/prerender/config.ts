@@ -1,6 +1,6 @@
-import { isBranchMode, serviceURL } from '../lib/dev-service-registry';
+import { isEnvironmentMode, serviceURL } from '../lib/dev-service-registry';
 
-export const defaultPrerenderManagerURL = isBranchMode()
+export const defaultPrerenderManagerURL = isEnvironmentMode()
   ? serviceURL('prerender-mgr')
   : 'http://localhost:4222';
 

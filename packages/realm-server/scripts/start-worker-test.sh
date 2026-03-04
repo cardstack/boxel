@@ -4,26 +4,26 @@ SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
 . "$SCRIPTS_DIR/wait-for-prerender.sh"
 . "$SCRIPTS_DIR/ensure-traefik.sh"
 
-if [ -n "$BOXEL_BRANCH" ]; then
+if [ -n "$BOXEL_ENVIRONMENT" ]; then
   ensure_traefik
 fi
 
 wait_for_postgres
 
-# Branch-mode configuration
-if [ -n "$BOXEL_BRANCH" ]; then
-  BRANCH_SLUG=$(echo "$BOXEL_BRANCH" | tr '[:upper:]' '[:lower:]' | sed 's|/|-|g; s|[^a-z0-9-]||g; s|-\+|-|g; s|^-\|-$||g')
-  REALM_TEST_URL="http://realm-test.${BRANCH_SLUG}.localhost"
-  REALM_BASE_URL="http://realm-server.${BRANCH_SLUG}.localhost"
+# Environment-mode configuration
+if [ -n "$BOXEL_ENVIRONMENT" ]; then
+  ENV_SLUG=$(echo "$BOXEL_ENVIRONMENT" | tr '[:upper:]' '[:lower:]' | sed 's|/|-|g; s|[^a-z0-9-]||g; s|-\+|-|g; s|^-\|-$||g')
+  REALM_TEST_URL="http://realm-test.${ENV_SLUG}.localhost"
+  REALM_BASE_URL="http://realm-server.${ENV_SLUG}.localhost"
   WORKER_PORT=0
-  PGDATABASE_VAL="boxel_test_${BRANCH_SLUG}"
-  PRERENDER_URL="${PRERENDER_URL:-http://prerender-mgr.${BRANCH_SLUG}.localhost}"
+  PGDATABASE_VAL="boxel_test_${ENV_SLUG}"
+  PRERENDER_URL="${PRERENDER_URL:-http://prerender-mgr.${ENV_SLUG}.localhost}"
   SERVICE_NAME_ARG="--serviceName=worker-test"
   MIGRATE_ARG="--migrateDB"
-  MATRIX_URL_VAL="http://matrix.${BRANCH_SLUG}.localhost"
+  MATRIX_URL_VAL="http://matrix.${ENV_SLUG}.localhost"
 
-  # Ensure per-branch test database exists
-  sh "$SCRIPTS_DIR/../../../scripts/ensure-branch-db.sh" "test_${BRANCH_SLUG}"
+  # Ensure per-environment test database exists
+  sh "$SCRIPTS_DIR/../../../scripts/ensure-branch-db.sh" "test_${ENV_SLUG}"
 else
   REALM_TEST_URL="http://localhost:4202"
   REALM_BASE_URL="http://localhost:4201"

@@ -4,7 +4,7 @@ import { resolve } from 'path';
 import {
   getSynapseContainerName,
   deregisterSynapseFromTraefik,
-} from '../helpers/branch-config';
+} from '../helpers/environment-config';
 
 const [command] = process.argv.slice(2);
 let dataDir = process.env.SYNAPSE_DATA_DIR

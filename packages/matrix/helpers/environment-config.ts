@@ -30,13 +30,13 @@ function traefikDynamicDir(): string {
   return _traefikDir;
 }
 
-export function isBranchMode(): boolean {
-  return !!process.env.BOXEL_BRANCH;
+export function isEnvironmentMode(): boolean {
+  return !!process.env.BOXEL_ENVIRONMENT;
 }
 
-export function getBranchSlug(): string {
-  if (process.env.BOXEL_BRANCH) {
-    return sanitizeSlug(process.env.BOXEL_BRANCH);
+export function getEnvironmentSlug(): string {
+  if (process.env.BOXEL_ENVIRONMENT) {
+    return sanitizeSlug(process.env.BOXEL_ENVIRONMENT);
   }
   try {
     let branch = execSync('git branch --show-current', {
@@ -58,14 +58,14 @@ function sanitizeSlug(raw: string): string {
 }
 
 export function getSynapseContainerName(): string {
-  if (isBranchMode()) {
-    return `boxel-synapse-${getBranchSlug()}`;
+  if (isEnvironmentMode()) {
+    return `boxel-synapse-${getEnvironmentSlug()}`;
   }
   return 'boxel-synapse';
 }
 
 export function getSynapseURL(): string {
-  if (!isBranchMode()) {
+  if (!isEnvironmentMode()) {
     return 'http://localhost:8008';
   }
   let containerName = getSynapseContainerName();
@@ -84,7 +84,7 @@ export function getSynapseURL(): string {
 }
 
 export function registerSynapseWithTraefik(hostPort: number): void {
-  let slug = getBranchSlug();
+  let slug = getEnvironmentSlug();
   let serviceName = 'matrix';
   let configPath = join(traefikDynamicDir(), `${slug}-${serviceName}.yml`);
   let routerKey = `${serviceName}-${slug}`;
@@ -116,18 +116,18 @@ export function registerSynapseWithTraefik(hostPort: number): void {
 }
 
 export function deregisterSynapseFromTraefik(): void {
-  if (!isBranchMode()) {
+  if (!isEnvironmentMode()) {
     return;
   }
-  let slug = getBranchSlug();
+  let slug = getEnvironmentSlug();
   let configPath = join(traefikDynamicDir(), `${slug}-matrix.yml`);
   try {
     unlinkSync(configPath);
-    console.log(`Deregistered Synapse for branch ${slug} from Traefik`);
+    console.log(`Deregistered Synapse for environment ${slug} from Traefik`);
   } catch (e: any) {
     if (e.code !== 'ENOENT') {
       console.error(
-        `Failed to deregister Synapse for branch ${slug}: ${e.message}`,
+        `Failed to deregister Synapse for environment ${slug}: ${e.message}`,
       );
     }
   }

@@ -1,25 +1,18 @@
 #! /bin/sh
 
-# Branch-mode: when BOXEL_BRANCH is set, use Traefik hostnames for readiness checks
-if [ -n "$BOXEL_BRANCH" ]; then
-  BRANCH_SLUG=$(echo "$BOXEL_BRANCH" | tr '[:upper:]' '[:lower:]' | sed 's|/|-|g; s|[^a-z0-9-]||g; s|-\+|-|g; s|^-\|-$||g')
-  REALM_HOST="realm-server.${BRANCH_SLUG}.localhost"
+# Environment-mode: when BOXEL_ENVIRONMENT is set, use Traefik hostnames for readiness checks
+if [ -n "$BOXEL_ENVIRONMENT" ]; then
+  ENV_SLUG=$(echo "$BOXEL_ENVIRONMENT" | tr '[:upper:]' '[:lower:]' | sed 's|/|-|g; s|[^a-z0-9-]||g; s|-\+|-|g; s|^-\|-$||g')
+  REALM_HOST="realm-server.${ENV_SLUG}.localhost"
   BASE_REALM="http-get://${REALM_HOST}/base/"
   CATALOG_REALM="http-get://${REALM_HOST}/catalog/"
   SKILLS_REALM="http-get://${REALM_HOST}/skills/"
   BOXEL_HOMEPAGE_REALM="http-get://${REALM_HOST}/boxel-homepage/"
   EXPERIMENTS_REALM="http-get://${REALM_HOST}/experiments/"
-  REALM_TEST_HOST="realm-test.${BRANCH_SLUG}.localhost"
+  REALM_TEST_HOST="realm-test.${ENV_SLUG}.localhost"
   NODE_TEST_REALM="http-get://${REALM_TEST_HOST}/node-test/"
 
-  # Use local icons server if built, otherwise fall back to production CDN
-  ICONS_DIST="$(cd "$(dirname "$0")/../../boxel-icons" && pwd)/dist"
-  if [ -d "$ICONS_DIST" ]; then
-    ICONS_URL="http://icons.${BRANCH_SLUG}.localhost"
-  else
-    ICONS_URL="https://boxel-icons.boxel.ai"
-  fi
-  export ICONS_URL
+  ICONS_URL="http://icons.${ENV_SLUG}.localhost"
 else
   BASE_REALM="http-get://localhost:4201/base/"
   CATALOG_REALM="http-get://localhost:4201/catalog/"
@@ -39,8 +32,8 @@ BOXEL_HOMEPAGE_REALM_READY="$BOXEL_HOMEPAGE_REALM$READY_PATH"
 EXPERIMENTS_REALM_READY="$EXPERIMENTS_REALM$READY_PATH"
 NODE_TEST_REALM_READY="$NODE_TEST_REALM$READY_PATH"
 
-if [ -n "$BOXEL_BRANCH" ]; then
-  SYNAPSE_URL="http://matrix.${BRANCH_SLUG}.localhost"
+if [ -n "$BOXEL_ENVIRONMENT" ]; then
+  SYNAPSE_URL="http://matrix.${ENV_SLUG}.localhost"
 else
   SYNAPSE_URL="http://localhost:8008"
 fi

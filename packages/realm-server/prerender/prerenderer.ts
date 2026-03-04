@@ -11,10 +11,10 @@ import {
 import { BrowserManager } from './browser-manager';
 import { PagePool } from './page-pool';
 import { RenderRunner } from './render-runner';
-import { isBranchMode, serviceURL } from '../lib/dev-service-registry';
+import { isEnvironmentMode, serviceURL } from '../lib/dev-service-registry';
 
 const log = logger('prerenderer');
-const defaultHostURL = isBranchMode()
+const defaultHostURL = isEnvironmentMode()
   ? serviceURL('host')
   : 'http://localhost:4200';
 const boxelHostURL = process.env.BOXEL_HOST_URL ?? defaultHostURL;

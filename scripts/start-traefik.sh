@@ -1,6 +1,6 @@
 #!/bin/sh
 # Starts the Traefik reverse proxy if not already running.
-# Also cleans up stale per-branch Synapse containers.
+# Also cleans up stale per-environment Synapse containers.
 # Idempotent — safe to call multiple times.
 
 set -e
@@ -21,10 +21,10 @@ else
 fi
 
 # --- Clean up stale Synapse containers ---
-# Stop any boxel-synapse-* containers whose branch has no running processes.
+# Stop any boxel-synapse-* containers whose environment has no running processes.
 for CONTAINER in $(docker ps --format '{{.Names}}' | grep '^boxel-synapse-'); do
   SLUG="${CONTAINER#boxel-synapse-}"
-  # Check if any process is using this branch's slug (realm server, host, etc.)
+  # Check if any process is using this environment's slug (realm server, host, etc.)
   if ! ps ax -o command 2>/dev/null | grep -q "${SLUG}\.localhost"; then
     echo "Removing stale Synapse container: $CONTAINER (no running services for $SLUG)"
     docker rm -f "$CONTAINER" >/dev/null 2>&1 || true

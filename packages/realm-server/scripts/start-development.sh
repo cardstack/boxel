@@ -32,17 +32,17 @@ START_CATALOG=$(if [ -z "$SKIP_CATALOG" ]; then echo "true"; else echo ""; fi)
 START_BOXEL_HOMEPAGE=$(if [ -z "$SKIP_BOXEL_HOMEPAGE" ]; then echo "true"; else echo ""; fi)
 START_SUBMISSION=$(if [ -z "$SKIP_SUBMISSION" ]; then echo "true"; else echo ""; fi)
 
-# Branch-mode configuration: when BOXEL_BRANCH is set, use dynamic ports and
+# Environment-mode configuration: when BOXEL_ENVIRONMENT is set, use dynamic ports and
 # Traefik routing instead of hardcoded ports.
-if [ -n "$BOXEL_BRANCH" ]; then
-  BRANCH_SLUG=$(echo "$BOXEL_BRANCH" | tr '[:upper:]' '[:lower:]' | sed 's|/|-|g; s|[^a-z0-9-]||g; s|-\+|-|g; s|^-\|-$||g')
-  REALM_BASE_URL="http://realm-server.${BRANCH_SLUG}.localhost"
+if [ -n "$BOXEL_ENVIRONMENT" ]; then
+  ENV_SLUG=$(echo "$BOXEL_ENVIRONMENT" | tr '[:upper:]' '[:lower:]' | sed 's|/|-|g; s|[^a-z0-9-]||g; s|-\+|-|g; s|^-\|-$||g')
+  REALM_BASE_URL="http://realm-server.${ENV_SLUG}.localhost"
   REALM_PORT=0
-  REALMS_ROOT="./realms/${BRANCH_SLUG}"
-  PGDATABASE_VAL="boxel_${BRANCH_SLUG}"
-  MATRIX_URL_VAL="http://matrix.${BRANCH_SLUG}.localhost"
-  # Ensure per-branch database exists
-  sh "$SCRIPTS_DIR/../../../scripts/ensure-branch-db.sh" "$BRANCH_SLUG"
+  REALMS_ROOT="./realms/${ENV_SLUG}"
+  PGDATABASE_VAL="boxel_${ENV_SLUG}"
+  MATRIX_URL_VAL="http://matrix.${ENV_SLUG}.localhost"
+  # Ensure per-environment database exists
+  sh "$SCRIPTS_DIR/../../../scripts/ensure-branch-db.sh" "$ENV_SLUG"
 else
   REALM_BASE_URL="http://localhost:4201"
   REALM_PORT=4201
@@ -75,10 +75,10 @@ if [ -n "$START_SUBMISSION" ]; then
 fi
 
 
-# In branch mode, override prerender URL and worker manager arg to use Traefik hostnames
-if [ -n "$BOXEL_BRANCH" ]; then
-  PRERENDER_URL="${PRERENDER_URL:-http://prerender.${BRANCH_SLUG}.localhost}"
-  WORKER_MANAGER_ARG="--workerManagerUrl=http://worker.${BRANCH_SLUG}.localhost"
+# In environment mode, override prerender URL and worker manager arg to use Traefik hostnames
+if [ -n "$BOXEL_ENVIRONMENT" ]; then
+  PRERENDER_URL="${PRERENDER_URL:-http://prerender.${ENV_SLUG}.localhost}"
+  WORKER_MANAGER_ARG="--workerManagerUrl=http://worker.${ENV_SLUG}.localhost"
 else
   PRERENDER_URL="${PRERENDER_URL:-http://localhost:4221}"
   WORKER_MANAGER_ARG="$1"

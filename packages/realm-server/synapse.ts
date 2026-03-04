@@ -6,8 +6,8 @@ import yaml from 'yaml';
 import { existsSync } from 'fs';
 
 function homeserverFile(): string {
-  if (process.env.BOXEL_BRANCH) {
-    let slug = process.env.BOXEL_BRANCH.toLowerCase()
+  if (process.env.BOXEL_ENVIRONMENT) {
+    let slug = process.env.BOXEL_ENVIRONMENT.toLowerCase()
       .replace(/\//g, '-')
       .replace(/[^a-z0-9-]/g, '')
       .replace(/-+/g, '-')

@@ -1,8 +1,8 @@
 /**
- * Wrapper around `ember serve` that supports dynamic port allocation in branch mode.
- * When BOXEL_BRANCH is set, picks a free port, passes --port to ember serve,
+ * Wrapper around `ember serve` that supports dynamic port allocation in environment mode.
+ * When BOXEL_ENVIRONMENT is set, picks a free port, passes --port to ember serve,
  * then registers with Traefik so that `host.<branch>.localhost` routes here.
- * When BOXEL_BRANCH is not set, behaves identically to the old start command.
+ * When BOXEL_ENVIRONMENT is not set, behaves identically to the old start command.
  */
 
 const { spawn } = require('child_process');
@@ -10,7 +10,7 @@ const path = require('path');
 const net = require('net');
 const fs = require('fs');
 
-const BOXEL_BRANCH = process.env.BOXEL_BRANCH;
+const BOXEL_ENVIRONMENT = process.env.BOXEL_ENVIRONMENT;
 
 function sanitizeSlug(raw) {
   return raw
@@ -75,17 +75,17 @@ function startEmber(port) {
   return child;
 }
 
-if (!BOXEL_BRANCH) {
+if (!BOXEL_ENVIRONMENT) {
   // Legacy mode: default ember serve on port 4200
   startEmber(4200);
 } else {
   const { ensureTraefik } = require('./ensure-traefik');
   ensureTraefik();
 
-  const slug = sanitizeSlug(BOXEL_BRANCH);
+  const slug = sanitizeSlug(BOXEL_ENVIRONMENT);
   const hostname = `host.${slug}.localhost`;
 
-  // Point the client at the per-branch Synapse via Traefik
+  // Point the client at the per-environment Synapse via Traefik
   if (!process.env.MATRIX_URL) {
     process.env.MATRIX_URL = `http://matrix.${slug}.localhost`;
   }
@@ -95,19 +95,19 @@ if (!BOXEL_BRANCH) {
   srv.listen(0, () => {
     const port = srv.address().port;
     srv.close(() => {
-      console.log(`[branch-mode] Starting ember serve on dynamic port ${port}`);
-      console.log(`[branch-mode] Will be accessible at http://${hostname}`);
+      console.log(`[environment-mode] Starting ember serve on dynamic port ${port}`);
+      console.log(`[environment-mode] Will be accessible at http://${hostname}`);
 
       startEmber(port);
 
       try {
         registerWithTraefik(slug, hostname, port);
         console.log(
-          `[branch-mode] Registered host at ${hostname} -> localhost:${port}`,
+          `[environment-mode] Registered host at ${hostname} -> localhost:${port}`,
         );
       } catch (e) {
         console.error(
-          '[branch-mode] Failed to register with Traefik:',
+          '[environment-mode] Failed to register with Traefik:',
           e.message,
         );
       }

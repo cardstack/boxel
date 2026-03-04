@@ -34,9 +34,9 @@ function traefikDynamicDir(): string {
   return _traefikDir;
 }
 
-export function getBranchSlug(): string {
-  if (process.env.BOXEL_BRANCH) {
-    return sanitizeSlug(process.env.BOXEL_BRANCH);
+export function getEnvironmentSlug(): string {
+  if (process.env.BOXEL_ENVIRONMENT) {
+    return sanitizeSlug(process.env.BOXEL_ENVIRONMENT);
   }
   try {
     let branch = execSync('git branch --show-current', {
@@ -57,17 +57,17 @@ function sanitizeSlug(raw: string): string {
     .replace(/^-|-$/g, '');
 }
 
-export function serviceHostname(serviceName: string, branch?: string): string {
-  let slug = branch ?? getBranchSlug();
+export function serviceHostname(serviceName: string, env?: string): string {
+  let slug = env ?? getEnvironmentSlug();
   return `${serviceName}.${slug}.${DOMAIN}`;
 }
 
-export function serviceURL(serviceName: string, branch?: string): string {
-  return `http://${serviceHostname(serviceName, branch)}`;
+export function serviceURL(serviceName: string, env?: string): string {
+  return `http://${serviceHostname(serviceName, env)}`;
 }
 
-export function isBranchMode(): boolean {
-  return !!process.env.BOXEL_BRANCH;
+export function isEnvironmentMode(): boolean {
+  return !!process.env.BOXEL_ENVIRONMENT;
 }
 
 /**
@@ -80,9 +80,9 @@ export function isBranchMode(): boolean {
 export function registerService(
   server: Server,
   serviceName: string,
-  branch?: string,
+  env?: string,
 ): void {
-  let slug = branch ?? getBranchSlug();
+  let slug = env ?? getEnvironmentSlug();
   let addr = server.address() as AddressInfo;
   if (!addr || typeof addr === 'string') {
     log.error(
@@ -92,7 +92,7 @@ export function registerService(
   }
   let actualPort = addr.port;
   log.info(
-    `Registering service ${serviceName} (port ${actualPort}) for branch ${slug}`,
+    `Registering service ${serviceName} (port ${actualPort}) for environment ${slug}`,
   );
 
   let configPath = join(traefikDynamicDir(), `${slug}-${serviceName}.yml`);
@@ -127,26 +127,26 @@ export function registerService(
 /**
  * Remove a single service's Traefik config file on shutdown.
  */
-export function deregisterService(serviceName: string, branch?: string): void {
-  let slug = branch ?? getBranchSlug();
+export function deregisterService(serviceName: string, env?: string): void {
+  let slug = env ?? getEnvironmentSlug();
   let configPath = join(traefikDynamicDir(), `${slug}-${serviceName}.yml`);
   try {
     unlinkSync(configPath);
-    log.info(`Deregistered ${serviceName} for branch ${slug} from Traefik`);
+    log.info(`Deregistered ${serviceName} for environment ${slug} from Traefik`);
   } catch (e: any) {
     if (e.code !== 'ENOENT') {
       log.error(
-        `Failed to deregister ${serviceName} for branch ${slug}: ${e.message}`,
+        `Failed to deregister ${serviceName} for environment ${slug}: ${e.message}`,
       );
     }
   }
 }
 
 /**
- * Remove all Traefik dynamic config files for a branch on full shutdown.
+ * Remove all Traefik dynamic config files for an environment on full shutdown.
  */
-export function deregisterBranch(branch?: string): void {
-  let slug = branch ?? getBranchSlug();
+export function deregisterEnvironment(env?: string): void {
+  let slug = env ?? getEnvironmentSlug();
   let dir = traefikDynamicDir();
   let prefix = `${slug}-`;
   try {
@@ -166,11 +166,11 @@ export function deregisterBranch(branch?: string): void {
     }
     if (removed > 0) {
       log.info(
-        `Deregistered branch ${slug} from Traefik (${removed} service(s))`,
+        `Deregistered environment ${slug} from Traefik (${removed} service(s))`,
       );
     }
   } catch (e: any) {
-    log.error(`Failed to deregister branch ${slug}: ${e.message}`);
+    log.error(`Failed to deregister environment ${slug}: ${e.message}`);
   }
 }
 

@@ -208,7 +208,7 @@ export class PgAdapter implements DBAdapter {
           ignorePattern: '.*\\.eslintrc\\.js',
           log: enableLogging ? (...args) => log.info(...args) : () => undefined,
         });
-        await this.fixupBranchModePermissions(config);
+        await this.fixupEnvironmentModePermissions(config);
         return;
       } catch (err: any) {
         if (!err.message?.includes('Another migration is already running')) {
@@ -220,11 +220,11 @@ export class PgAdapter implements DBAdapter {
     }
   }
 
-  // In branch mode, migrations seed realm_user_permissions with hardcoded
+  // In environment mode, migrations seed realm_user_permissions with hardcoded
   // localhost:4201/4202 URLs. Rewrite them to the Traefik hostnames so realm
   // ownership lookups work.
-  private async fixupBranchModePermissions(config: Config) {
-    let branch = process.env.BOXEL_BRANCH;
+  private async fixupEnvironmentModePermissions(config: Config) {
+    let branch = process.env.BOXEL_ENVIRONMENT;
     if (!branch) {
       return;
     }
@@ -248,7 +248,7 @@ export class PgAdapter implements DBAdapter {
       );
       if (result.rowCount && result.rowCount > 0) {
         log.info(
-          `Branch mode: rewrote ${result.rowCount} permission URL(s) from localhost:4201 to ${realmServerUrl}`,
+          `Environment mode: rewrote ${result.rowCount} permission URL(s) from localhost:4201 to ${realmServerUrl}`,
         );
       }
       let result2 = await client.query(
@@ -259,7 +259,7 @@ export class PgAdapter implements DBAdapter {
       );
       if (result2.rowCount && result2.rowCount > 0) {
         log.info(
-          `Branch mode: rewrote ${result2.rowCount} permission URL(s) from localhost:4202 to ${realmTestUrl}`,
+          `Environment mode: rewrote ${result2.rowCount} permission URL(s) from localhost:4202 to ${realmTestUrl}`,
         );
       }
     } finally {

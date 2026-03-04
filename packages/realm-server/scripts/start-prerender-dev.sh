@@ -4,11 +4,11 @@ SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 ensure_traefik
 
-# Branch-mode configuration
-if [ -n "$BOXEL_BRANCH" ]; then
-  BRANCH_SLUG=$(echo "$BOXEL_BRANCH" | tr '[:upper:]' '[:lower:]' | sed 's|/|-|g; s|[^a-z0-9-]||g; s|-\+|-|g; s|^-\|-$||g')
+# Environment-mode configuration
+if [ -n "$BOXEL_ENVIRONMENT" ]; then
+  ENV_SLUG=$(echo "$BOXEL_ENVIRONMENT" | tr '[:upper:]' '[:lower:]' | sed 's|/|-|g; s|[^a-z0-9-]||g; s|-\+|-|g; s|^-\|-$||g')
   PRERENDER_PORT=0
-  DEFAULT_HOST_URL="http://host.${BRANCH_SLUG}.localhost"
+  DEFAULT_HOST_URL="http://host.${ENV_SLUG}.localhost"
 else
   PRERENDER_PORT=4221
   DEFAULT_HOST_URL="http://localhost:4200"

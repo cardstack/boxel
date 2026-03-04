@@ -1,11 +1,11 @@
 #! /bin/sh
 
-# Ensures Traefik is running when in branch mode (BOXEL_BRANCH is set).
+# Ensures Traefik is running when in environment mode (BOXEL_ENVIRONMENT is set).
 # Sources like wait-for-pg.sh: `. "$SCRIPTS_DIR/ensure-traefik.sh"`
 # Call ensure_traefik after sourcing.
 
 ensure_traefik() {
-  if [ -z "$BOXEL_BRANCH" ]; then
+  if [ -z "$BOXEL_ENVIRONMENT" ]; then
     return 0
   fi
 

@@ -8,9 +8,9 @@ const DEFAULT_FILE_SIZE_LIMIT_BYTES = 5 * 1024 * 1024; // 5MB
 
 let sqlSchema = fs.readFileSync(getLatestSchemaFile(), 'utf8');
 
-// Branch-mode: when BOXEL_BRANCH is set, derive default URLs from Traefik hostnames
-function branchSlug() {
-  let raw = process.env.BOXEL_BRANCH || '';
+// Environment-mode: when BOXEL_ENVIRONMENT is set, derive default URLs from Traefik hostnames
+function environmentSlug() {
+  let raw = process.env.BOXEL_ENVIRONMENT || '';
   return raw
     .toLowerCase()
     .replace(/\//g, '-')
@@ -19,8 +19,8 @@ function branchSlug() {
     .replace(/^-|-$/g, '');
 }
 
-function branchDefaults() {
-  if (!process.env.BOXEL_BRANCH) {
+function environmentDefaults() {
+  if (!process.env.BOXEL_ENVIRONMENT) {
     return {
       realmServerURL: 'http://localhost:4201/',
       realmHost: 'localhost:4201',
@@ -31,7 +31,7 @@ function branchDefaults() {
       defaultSystemCardBase: 'http://localhost:4201',
     };
   }
-  let slug = branchSlug();
+  let slug = environmentSlug();
   let realmHost = `realm-server.${slug}.localhost`;
   return {
     realmServerURL: `http://${realmHost}/`,
@@ -45,7 +45,7 @@ function branchDefaults() {
 }
 
 module.exports = function (environment) {
-  let defaults = branchDefaults();
+  let defaults = environmentDefaults();
 
   const ENV = {
     modulePrefix: '@cardstack/host',

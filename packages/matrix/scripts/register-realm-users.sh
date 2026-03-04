@@ -1,8 +1,8 @@
 #! /bin/sh
 
-# Determine the Synapse health check URL (branch-aware)
-if [ -n "$BOXEL_BRANCH" ]; then
-  SLUG=$(echo "$BOXEL_BRANCH" | tr '[:upper:]' '[:lower:]' | sed 's|/|-|g; s|[^a-z0-9-]||g; s|-\+|-|g; s|^-\|-$||g')
+# Determine the Synapse health check URL (environment-aware)
+if [ -n "$BOXEL_ENVIRONMENT" ]; then
+  SLUG=$(echo "$BOXEL_ENVIRONMENT" | tr '[:upper:]' '[:lower:]' | sed 's|/|-|g; s|[^a-z0-9-]||g; s|-\+|-|g; s|^-\|-$||g')
   CONTAINER_NAME="boxel-synapse-${SLUG}"
   # Read the dynamic host port from the running container
   SYNAPSE_HOST_PORT=$(docker port "$CONTAINER_NAME" 8008/tcp 2>/dev/null | head -1 | awk -F: '{print $NF}')

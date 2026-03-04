@@ -21,7 +21,7 @@ import {
 } from '../middleware';
 import { Prerenderer } from './index';
 import { resolvePrerenderManagerURL } from './config';
-import { isBranchMode, serviceURL } from '../lib/dev-service-registry';
+import { isEnvironmentMode, serviceURL } from '../lib/dev-service-registry';
 import {
   PRERENDER_SERVER_DRAINING_STATUS_CODE,
   PRERENDER_SERVER_STATUS_DRAINING,
@@ -658,7 +658,7 @@ export function buildPrerenderApp(options: {
 }
 
 function resolvePrerenderServerURL(port?: number): string {
-  if (isBranchMode()) {
+  if (isEnvironmentMode()) {
     return serviceURL('prerender');
   }
   let hostname = process.env.HOSTNAME ?? 'localhost';

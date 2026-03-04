@@ -1,9 +1,9 @@
 #!/bin/sh
-# Check if the correct Synapse container is running (branch-aware).
+# Check if the correct Synapse container is running (environment-aware).
 # If not running, start it.
 
-if [ -n "$BOXEL_BRANCH" ]; then
-  SLUG=$(echo "$BOXEL_BRANCH" | tr '[:upper:]' '[:lower:]' | sed 's|/|-|g; s|[^a-z0-9-]||g; s|-\+|-|g; s|^-\|-$||g')
+if [ -n "$BOXEL_ENVIRONMENT" ]; then
+  SLUG=$(echo "$BOXEL_ENVIRONMENT" | tr '[:upper:]' '[:lower:]' | sed 's|/|-|g; s|[^a-z0-9-]||g; s|-\+|-|g; s|^-\|-$||g')
   CONTAINER_NAME="boxel-synapse-${SLUG}"
 else
   CONTAINER_NAME="boxel-synapse"
