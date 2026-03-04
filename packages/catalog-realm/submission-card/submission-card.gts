@@ -7,9 +7,13 @@ import {
   field,
   linksTo,
 } from 'https://cardstack.com/base/card-api';
+import { or } from '@cardstack/boxel-ui/helpers';
+import { on } from '@ember/modifier';
+import { BoxelButton } from '@cardstack/boxel-ui/components';
 import StringField from 'https://cardstack.com/base/string';
 import BotIcon from '@cardstack/boxel-icons/bot';
 import BrandGithubIcon from '@cardstack/boxel-icons/brand-github';
+import FileCodeIcon from '@cardstack/boxel-icons/file-code';
 import GitBranchIcon from '@cardstack/boxel-icons/git-branch';
 import MessageIcon from '@cardstack/boxel-icons/message';
 import { Listing } from '../catalog-app/listing/listing';
@@ -27,6 +31,144 @@ function encodeBranchName(branchName: string): string {
 export class FileContentField extends FieldDef {
   @field filename = contains(StringField);
   @field contents = contains(StringField);
+
+  static atom = class Atom extends Component<typeof FileContentField> {
+    get filename() {
+      return this.args.model.filename ?? 'Untitled';
+    }
+
+    <template>
+      <span class='file-atom'>
+        <FileCodeIcon class='file-atom-icon' width='12' height='12' />
+        <span class='file-atom-name'>{{this.filename}}</span>
+      </span>
+      <style scoped>
+        .file-atom {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          padding: 2px 6px;
+          background: var(--boxel-200);
+          border-radius: var(--boxel-border-radius-sm);
+          max-width: 100%;
+          overflow: hidden;
+        }
+
+        .file-atom-icon {
+          flex-shrink: 0;
+          color: var(--boxel-450);
+        }
+
+        .file-atom-name {
+          font-size: var(--boxel-font-size-2xs);
+          font-weight: 500;
+          font-family: var(--boxel-monospace-font-family);
+          color: var(--boxel-600);
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          min-width: 0;
+        }
+      </style>
+    </template>
+  };
+
+  static embedded = class Embedded extends Component<typeof FileContentField> {
+    get filename() {
+      return this.args.model.filename ?? 'Untitled';
+    }
+
+    get preview() {
+      const contents = this.args.model.contents ?? '';
+      return contents.split('\n').slice(0, 6).join('\n');
+    }
+
+    get lineCount() {
+      const contents = this.args.model.contents ?? '';
+      return contents ? contents.split('\n').length : 0;
+    }
+
+    <template>
+      <div class='file-embedded'>
+        <div class='file-header'>
+          <FileCodeIcon class='file-header-icon' width='14' height='14' />
+          <span class='file-name'>{{this.filename}}</span>
+          {{#if this.lineCount}}
+            <span class='line-badge'>{{this.lineCount}}
+              line{{#if (isPlural this.lineCount)}}s{{/if}}</span>
+          {{/if}}
+        </div>
+        {{#if this.preview}}
+          <pre class='file-preview'>{{this.preview}}</pre>
+        {{/if}}
+      </div>
+      <style scoped>
+        .file-embedded {
+          display: flex;
+          flex-direction: column;
+          border: 1px solid var(--boxel-border-color);
+          border-radius: var(--boxel-border-radius);
+          overflow: hidden;
+          background: var(--boxel-light);
+        }
+
+        .file-header {
+          display: flex;
+          align-items: center;
+          gap: var(--boxel-sp-4xs);
+          padding: var(--boxel-sp-4xs) var(--boxel-sp-xs);
+          background: var(--boxel-200);
+          border-bottom: 1px solid var(--boxel-border-color);
+          min-width: 0;
+        }
+
+        .file-header-icon {
+          flex-shrink: 0;
+          color: var(--boxel-450);
+        }
+
+        .file-name {
+          flex: 1;
+          font-size: var(--boxel-font-size-xs);
+          font-weight: 500;
+          font-family: var(--boxel-monospace-font-family);
+          color: var(--boxel-dark);
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          min-width: 0;
+        }
+
+        .line-badge {
+          flex-shrink: 0;
+          font-size: var(--boxel-font-size-2xs);
+          font-weight: 600;
+          font-family: var(--boxel-font-family);
+          letter-spacing: var(--boxel-lsp-sm);
+          padding: 1px 5px;
+          background: var(--boxel-300);
+          color: var(--boxel-600);
+          border-radius: var(--boxel-border-radius-sm);
+          white-space: nowrap;
+        }
+
+        .file-preview {
+          margin: 0;
+          padding: var(--boxel-sp-xs);
+          font-size: var(--boxel-font-size-2xs);
+          font-weight: 400;
+          font-family: var(--boxel-monospace-font-family);
+          line-height: 1.6;
+          color: var(--boxel-600);
+          white-space: pre;
+          overflow: hidden;
+          display: -webkit-box;
+          -webkit-box-orient: vertical;
+          -webkit-line-clamp: 6;
+        }
+      </style>
+    </template>
+  };
 }
 
 export class SubmissionCard extends CardDef {
@@ -479,6 +621,385 @@ export class SubmissionCard extends CardDef {
           .footer {
             display: none;
           }
+        }
+      </style>
+    </template>
+  };
+
+  static isolated = class Isolated extends Component<typeof SubmissionCard> {
+    get fileCount() {
+      return this.args.model.allFileContents?.length ?? 0;
+    }
+
+    get listingName() {
+      return (
+        this.args.model.listing?.name ?? this.args.model.listing?.cardTitle
+      );
+    }
+
+    get title() {
+      return this.args.model.cardTitle;
+    }
+
+    get githubURL() {
+      return this.args.model.githubURL;
+    }
+
+    get branchName() {
+      return this.args.model.branchName;
+    }
+
+    get roomId() {
+      return this.args.model.roomId;
+    }
+
+    get listingImage() {
+      return this.args.model.listing?.images?.[0];
+    }
+
+    openListing = () => {
+      const listing = this.args.model.listing;
+      if (listing) {
+        this.args.viewCard?.(listing, 'isolated');
+      }
+    };
+
+    <template>
+      <div class='submission-isolated'>
+
+        {{! ── Dark hero: info left, image right ── }}
+        <div class='submission-hero'>
+          <div class='hero-info'>
+            {{#if this.listingName}}
+              <p class='submitted-to-label'>Submitted to</p>
+              <h1 class='listing-name'>{{this.listingName}}</h1>
+            {{else}}
+              <h1 class='listing-name'>{{this.title}}</h1>
+            {{/if}}
+
+            {{#if (or this.branchName this.roomId)}}
+              <div class='meta-rows'>
+                {{#if this.branchName}}
+                  <div class='meta-item'>
+                    <span class='meta-item-label'>
+                      <GitBranchIcon
+                        class='meta-item-icon'
+                        width='11'
+                        height='11'
+                      />Branch
+                    </span>
+                    <span class='meta-item-value'>{{this.branchName}}</span>
+                  </div>
+                {{/if}}
+                {{#if this.roomId}}
+                  <div class='meta-item'>
+                    <span class='meta-item-label'>
+                      <MessageIcon
+                        class='meta-item-icon'
+                        width='11'
+                        height='11'
+                      />Room
+                    </span>
+                    <span class='meta-item-value'>{{this.roomId}}</span>
+                  </div>
+                {{/if}}
+              </div>
+            {{/if}}
+
+            <div class='meta-actions'>
+              {{#if this.fileCount}}
+                <span class='file-count-badge'>
+                  <FileCodeIcon width='12' height='12' />
+                  {{this.fileCount}}
+                  file{{#if (isPlural this.fileCount)}}s{{/if}}
+                </span>
+              {{/if}}
+              {{#if this.githubURL}}
+                <a
+                  class='github-link'
+                  href={{this.githubURL}}
+                  target='_blank'
+                  rel='noopener noreferrer'
+                >
+                  <BrandGithubIcon width='14' height='14' />View on GitHub
+                </a>
+              {{/if}}
+            </div>
+          </div>
+
+          <div class='hero-image'>
+            {{#if this.listingImage}}
+              <img
+                class='listing-image'
+                src={{this.listingImage}}
+                alt={{this.listingName}}
+              />
+            {{else}}
+              <@model.constructor.icon class='listing-icon' />
+            {{/if}}
+            {{#if @model.listing}}
+              <BoxelButton
+                @kind='secondary-dark'
+                class='view-listing-btn'
+                aria-label='View listing details'
+                {{on 'click' this.openListing}}
+              >
+                View Listing
+              </BoxelButton>
+            {{/if}}
+          </div>
+        </div>
+
+        {{! ── Files grid ── }}
+        {{#if this.fileCount}}
+          <section class='files-section'>
+            <h2 class='section-heading'>
+              <FileCodeIcon class='section-icon' width='13' height='13' />Files
+              <span class='section-count'>{{this.fileCount}}</span>
+            </h2>
+            <div class='files-grid'>
+              {{#each @fields.allFileContents as |FileContent|}}
+                <FileContent />
+              {{/each}}
+            </div>
+          </section>
+        {{/if}}
+      </div>
+
+      <style scoped>
+        /* ── Root ───────────────────────────────────────────────── */
+        .submission-isolated {
+          container-type: inline-size;
+          display: flex;
+          flex-direction: column;
+          height: 100%;
+          overflow-y: auto;
+          background: var(--boxel-light);
+        }
+
+        /* ── Dark hero: two-column grid ─────────────────────────── */
+        .submission-hero {
+          display: grid;
+          grid-template-columns: 1fr 320px;
+          min-height: 260px;
+          background: #1e293b;
+          flex-shrink: 0;
+        }
+
+        /* Left column */
+        .hero-info {
+          display: flex;
+          flex-direction: column;
+          justify-content: center;
+          gap: var(--boxel-sp-sm);
+          padding: var(--boxel-sp-xl);
+          min-width: 0;
+        }
+
+        .submitted-to-label {
+          margin: 0;
+          font-size: var(--boxel-font-size-2xs);
+          font-weight: 600;
+          font-family: var(--boxel-font-family);
+          letter-spacing: var(--boxel-lsp-xl);
+          text-transform: uppercase;
+          color: rgba(255, 255, 255, 0.45);
+        }
+
+        .listing-name {
+          margin: 0;
+          font: 700 var(--boxel-font-xl);
+          color: #fff;
+          line-height: 1.2;
+        }
+
+        /* Meta rows (branch / room) */
+        .meta-rows {
+          display: flex;
+          flex-direction: column;
+          gap: 0;
+          border-top: 1px solid rgba(255, 255, 255, 0.1);
+          padding-top: var(--boxel-sp-sm);
+          margin-top: var(--boxel-sp-xs);
+        }
+
+        .meta-item {
+          display: flex;
+          flex-direction: column;
+          gap: var(--boxel-sp-4xs);
+          padding: var(--boxel-sp-xs) 0;
+          min-width: 0;
+        }
+
+        .meta-item + .meta-item {
+          border-top: 1px solid rgba(255, 255, 255, 0.07);
+        }
+
+        .meta-item-label {
+          display: inline-flex;
+          align-items: center;
+          gap: 3px;
+          font-size: var(--boxel-font-size-2xs);
+          font-weight: 600;
+          font-family: var(--boxel-font-family);
+          letter-spacing: var(--boxel-lsp-xl);
+          text-transform: uppercase;
+          color: rgba(255, 255, 255, 0.4);
+        }
+
+        .meta-item-value {
+          font-size: var(--boxel-font-size-sm);
+          font-weight: 500;
+          font-family: var(--boxel-monospace-font-family);
+          color: rgba(255, 255, 255, 0.85);
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          min-width: 0;
+        }
+
+        /* Actions (file count + GitHub link) */
+        .meta-actions {
+          display: flex;
+          align-items: center;
+          gap: var(--boxel-sp-xs);
+          flex-wrap: wrap;
+          padding-top: var(--boxel-sp-sm);
+          margin-top: var(--boxel-sp-xs);
+          border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .file-count-badge {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          font-size: var(--boxel-font-size-xs);
+          font-weight: 600;
+          font-family: var(--boxel-font-family);
+          letter-spacing: var(--boxel-lsp-sm);
+          padding: 4px 10px;
+          background: rgba(255, 255, 255, 0.12);
+          color: rgba(255, 255, 255, 0.85);
+          border-radius: var(--boxel-border-radius-sm);
+          white-space: nowrap;
+        }
+
+        .github-link {
+          display: inline-flex;
+          align-items: center;
+          gap: var(--boxel-sp-4xs);
+          font-size: var(--boxel-font-size-xs);
+          font-weight: 600;
+          font-family: var(--boxel-font-family);
+          letter-spacing: var(--boxel-lsp-sm);
+          padding: 4px 10px;
+          color: rgba(255, 255, 255, 0.7);
+          text-decoration: none;
+          border: 1px solid rgba(255, 255, 255, 0.25);
+          border-radius: var(--boxel-border-radius-sm);
+          transition:
+            color 0.15s,
+            border-color 0.15s;
+          white-space: nowrap;
+        }
+
+        .github-link:hover {
+          color: #fff;
+          border-color: rgba(255, 255, 255, 0.6);
+        }
+
+        /* Right column — listing image or icon */
+        .hero-image {
+          position: relative;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          overflow: hidden;
+          background: rgba(0, 0, 0, 0.25);
+        }
+
+        .listing-image {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+        }
+
+        .listing-icon {
+          width: 80px;
+          height: 80px;
+          color: rgba(255, 255, 255, 0.2);
+        }
+
+        /* Always-visible "View Listing" button, centered in image panel */
+        .view-listing-btn {
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%);
+          --boxel-button-font: 600 var(--boxel-font-sm);
+          --boxel-button-padding: var(--boxel-sp-xs) var(--boxel-sp-lg);
+          --boxel-button-color: var(--boxel-purple);
+          --boxel-button-border: 1px solid var(--boxel-light);
+          --boxel-button-text-color: var(--boxel-light);
+          white-space: nowrap;
+        }
+
+        /* ── Narrow container: stack image above info ────────────── */
+        @container (max-width: 560px) {
+          .submission-hero {
+            grid-template-columns: 1fr;
+          }
+
+          .hero-image {
+            height: 180px;
+            order: -1;
+          }
+
+          .hero-info {
+            padding: var(--boxel-sp-lg);
+          }
+        }
+
+        /* ── Files section ──────────────────────────────────────── */
+        .files-section {
+          display: flex;
+          flex-direction: column;
+          gap: var(--boxel-sp-sm);
+          padding: var(--boxel-sp-lg);
+        }
+
+        .section-heading {
+          display: flex;
+          align-items: center;
+          gap: var(--boxel-sp-4xs);
+          margin: 0;
+          font-size: var(--boxel-font-size-xs);
+          font-weight: 600;
+          font-family: var(--boxel-font-family);
+          letter-spacing: var(--boxel-lsp-xl);
+          text-transform: uppercase;
+          color: var(--boxel-400);
+        }
+
+        .section-icon {
+          color: var(--boxel-400);
+        }
+
+        .section-count {
+          margin-left: var(--boxel-sp-4xs);
+          padding: 1px 6px;
+          background: var(--boxel-300);
+          color: var(--boxel-600);
+          border-radius: var(--boxel-border-radius-sm);
+          font-size: var(--boxel-font-size-2xs);
+          font-weight: 600;
+          font-family: var(--boxel-font-family);
+        }
+
+        .files-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+          gap: var(--boxel-sp-sm);
         }
       </style>
     </template>
