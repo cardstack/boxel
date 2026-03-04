@@ -1,5 +1,5 @@
 import { module, test } from 'qunit';
-import { prepareTestDB } from './helpers';
+import { createTestPgAdapter, prepareTestDB } from './helpers';
 
 import {
   PgAdapter,
@@ -20,7 +20,7 @@ module(basename(__filename), function () {
 
     hooks.beforeEach(async function () {
       prepareTestDB();
-      adapter = new PgAdapter({ autoMigrate: true });
+      adapter = await createTestPgAdapter();
       publisher = new PgQueuePublisher(adapter);
       runner = new PgQueueRunner({ adapter, workerId: 'q1', maxTimeoutSec: 2 });
       await runner.start();
@@ -83,13 +83,12 @@ module(basename(__filename), function () {
       let runner2: QueueRunner;
       let adapter2: PgAdapter;
       nestedHooks.beforeEach(async function () {
-        adapter2 = new PgAdapter({ autoMigrate: true });
+        adapter2 = new PgAdapter();
         runner2 = new PgQueueRunner({ adapter: adapter2, workerId: 'q2' });
         await runner2.start();
 
-        // Because we need tight timing control for this test, we don't want any
-        // concurrent migrations and their retries altering the timing. This
-        // ensures both adapters have gotten fully past that and are quiescent.
+        // Because we need tight timing control for this test, ensure both
+        // adapters have active DB connections before measuring behavior.
         await adapter.execute('select 1');
         await adapter2.execute('select 1');
       });
@@ -220,7 +219,7 @@ module(basename(__filename), function () {
 
     hooks.beforeEach(async function () {
       prepareTestDB();
-      adapter = new PgAdapter({ autoMigrate: true });
+      adapter = await createTestPgAdapter();
       publisher = new PgQueuePublisher(adapter);
       runner = new PgQueueRunner({
         adapter,
@@ -293,8 +292,8 @@ module(basename(__filename), function () {
 
       hooks.beforeEach(async function () {
         prepareTestDB();
-        adapter = new PgAdapter({ autoMigrate: true });
-        adapter2 = new PgAdapter({ autoMigrate: true });
+        adapter = await createTestPgAdapter();
+        adapter2 = new PgAdapter();
         publisher = new PgQueuePublisher(adapter);
         allPriorityRunner = new PgQueueRunner({
           adapter,
@@ -310,9 +309,8 @@ module(basename(__filename), function () {
         await allPriorityRunner.start();
         await highPriorityRunner.start();
 
-        // Because we need tight timing control for this test, we don't want any
-        // concurrent migrations and their retries altering the timing. This
-        // ensures both adapters have gotten fully past that and are quiescent.
+        // Because we need tight timing control for this test, ensure both
+        // adapters have active DB connections before measuring behavior.
         await adapter.execute('select 1');
         await adapter2.execute('select 1');
       });

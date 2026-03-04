@@ -27,12 +27,20 @@ import { getPrerenderedSearch } from '../resources/prerendered-search';
 const OWNER_DESTROYED_ERROR =
   "Cannot call `.lookup('renderer:-dom')` after the owner has been destroyed";
 
+// Internal registry of URLs known to be file-meta from prerendered search.
+// Used by the overlay system to correctly identify FileDef cards when they
+// haven't been loaded into the store yet (prerendered results are HTML-only).
+export const knownFileMetaUrls = new Set<string>();
+
 export class PrerenderedCard implements PrerenderedCardLike {
   component: HTMLComponent;
   constructor(
     public data: PrerenderedCardData,
     cardComponentModifier?: CardContext['cardComponentModifier'],
   ) {
+    if (data.isFileMeta) {
+      knownFileMetaUrls.add(data.url);
+    }
     if (data.isError && !data.html) {
       this.component = wrapWithModifier(
         getErrorComponent(data.realmUrl, data.url),

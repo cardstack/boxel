@@ -556,18 +556,18 @@ module(basename(__filename), function () {
                 },
               },
               'no-icon.gts': `
-              import { CardDef, field, contains, StringField, Component } from 'https://cardstack.com/base/card-api';
-              export class NoIcon extends CardDef {
-                static displayName = "No Icon";
-                static icon = class extends Component<typeof this> {
-                  <template></template>
+                import { CardDef, field, contains, StringField, Component } from 'https://cardstack.com/base/card-api';
+                export class NoIcon extends CardDef {
+                  static displayName = "No Icon";
+                  static icon = class extends Component<typeof this> {
+                    <template></template>
+                  }
+                  @field name = contains(StringField);
+                  static isolated = class extends Component<typeof this> {
+                    <template>{{@model.name}}</template>
+                  }
                 }
-                @field name = contains(StringField);
-                static isolated = class extends Component<typeof this> {
-                  <template>{{@model.name}}</template>
-                }
-              }
-            `,
+              `,
               'no-icon.json': {
                 data: {
                   attributes: {
@@ -577,6 +577,30 @@ module(basename(__filename), function () {
                     adoptsFrom: {
                       module: './no-icon',
                       name: 'NoIcon',
+                    },
+                  },
+                },
+              },
+              'bad-icon-import.gts': `
+                import { CardDef, field, contains, StringField, Component } from 'https://cardstack.com/base/card-api';
+                export class BadIconImport extends CardDef {
+                  static displayName = "Bad Icon Import";
+                  static icon = undefined as any;
+                  @field name = contains(StringField);
+                  static isolated = class extends Component<typeof this> {
+                    <template>{{@model.name}}</template>
+                  }
+                }
+              `,
+              'bad-icon-import.json': {
+                data: {
+                  attributes: {
+                    name: 'Bad Icon',
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: './bad-icon-import',
+                      name: 'BadIconImport',
                     },
                   },
                 },
@@ -1053,6 +1077,29 @@ module(basename(__filename), function () {
         assert.ok(
           deps.some((dep) => dep.includes(`${realmURL}broken`)),
           'deps include failing module',
+        );
+      });
+
+      test('card prerender surfaces actionable error for bad icon import', async function (assert) {
+        let cardURL = `${realmURL}bad-icon-import.json`;
+
+        let result = await prerenderer.prerenderCard({
+          realm: realmURL,
+          url: cardURL,
+          auth: auth(),
+        });
+
+        assert.ok(result.response.error, 'prerender reports error');
+        assert.strictEqual(
+          result.response.error?.error.status,
+          500,
+          'bad icon import error surfaces as 500',
+        );
+        assert.ok(
+          result.response.error?.error.message?.includes(
+            'static icon of BadIconImport is undefined',
+          ),
+          `error message describes the bad icon import, got: ${result.response.error?.error.message}`,
         );
       });
 

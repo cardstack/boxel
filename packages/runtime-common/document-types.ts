@@ -27,6 +27,7 @@ export interface PrerenderedCardCollectionDocument {
   meta: QueryResultsMeta & {
     scopedCssUrls?: string[];
     realmInfo?: RealmInfo;
+    isFileMeta?: boolean;
   };
 }
 
@@ -154,7 +155,11 @@ export function isPrerenderedCardCollectionDocument(
 export function transformResultsToPrerenderedCardsDoc(results: {
   prerenderedCards: PrerenderedCard[];
   scopedCssUrls: string[];
-  meta: QueryResultsMeta & { scopedCssUrls?: string[]; realmInfo?: RealmInfo };
+  meta: QueryResultsMeta & {
+    scopedCssUrls?: string[];
+    realmInfo?: RealmInfo;
+    isFileMeta?: boolean;
+  };
 }): PrerenderedCardCollectionDocument {
   let { prerenderedCards, scopedCssUrls, meta } = results;
 

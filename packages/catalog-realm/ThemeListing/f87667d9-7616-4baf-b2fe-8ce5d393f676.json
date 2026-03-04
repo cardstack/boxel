@@ -1,0 +1,73 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "ThemeListing",
+        "module": "../catalog-app/listing/listing"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "name": "Cardstack Brand Guide",
+      "images": [
+        "https://boxel-assets-store.s3.us-east-1.amazonaws.com/cardstack-brand-guide/cardstack-logo-primary-mark-1.svg",
+        "https://boxel-assets-store.s3.us-east-1.amazonaws.com/cardstack-brand-guide/cardstack-logo-secondary-mark-1.svg",
+        "https://boxel-assets-store.s3.us-east-1.amazonaws.com/cardstack-brand-guide/cardstack-profile-icon.png"
+      ],
+      "summary": "Cardstack\u2019s official brand guide with IBM Plex typography, vibrant green/cyan brand colors, and complete light/dark design tokens\u2014covering logo usage, mark clearances, color palette, and CSS variables for a consistent Cardstack visual identity.",
+      "cardInfo": {
+        "notes": null,
+        "name": "Cardstack Brand Guide",
+        "summary": "Official Cardstack brand guide with IBM Plex typography, logo usage rules, and light/dark color tokens.",
+        "cardThumbnailURL": "https://boxel-assets-store.s3.us-east-1.amazonaws.com/cardstack-brand-guide/cardstack-profile-icon.png"
+      }
+    },
+    "relationships": {
+      "specs": {
+        "links": {
+          "self": null
+        }
+      },
+      "skills": {
+        "links": {
+          "self": null
+        }
+      },
+      "tags.0": {
+        "links": {
+          "self": "../Tag/ed5a1a3f-0dbf-47b5-b2a6-d88b0d2a7642"
+        }
+      },
+      "tags.1": {
+        "links": {
+          "self": "../Tag/b793225c-32f9-404c-b2a9-b4041b93090c"
+        }
+      },
+      "license": {
+        "links": {
+          "self": "../License/4c5a023b-a72c-4f90-930b-da60a1de5b2d"
+        }
+      },
+      "publisher": {
+        "links": {
+          "self": "../Publisher/9d3ca05b-684b-408f-8d8c-dd353d9956e0"
+        }
+      },
+      "examples.0": {
+        "links": {
+          "self": "../Theme/cardstack-brand-guide"
+        }
+      },
+      "categories.0": {
+        "links": {
+          "self": "../Category/ui-components-design"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/cardstack-brand-guide"
+        }
+      }
+    }
+  }
+}

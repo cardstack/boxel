@@ -70,9 +70,11 @@ import type {
 import { createRemotePrerenderer } from '../../prerender/remote-prerenderer';
 import { createPrerenderHttpServer } from '../../prerender/prerender-app';
 import { buildCreatePrerenderAuth } from '../../prerender/auth';
+import { Client as PgClient } from 'pg';
 
 const testRealmURL = new URL('http://127.0.0.1:4444/');
 const testRealmHref = testRealmURL.href;
+const migratedTestDatabaseTemplate = 'boxel_migrated_template';
 
 export const testRealmServerMatrixUsername = 'node-test_realm-server';
 export const testRealmServerMatrixUserId = `@${testRealmServerMatrixUsername}:localhost`;
@@ -197,6 +199,62 @@ export function createVirtualNetwork() {
 
 export function prepareTestDB(): void {
   process.env.PGDATABASE = `test_db_${Math.floor(10000000 * Math.random())}`;
+}
+
+function pgAdminConnectionConfig() {
+  return {
+    host: process.env.PGHOST || 'localhost',
+    port: Number(process.env.PGPORT || '5432'),
+    user: process.env.PGUSER || 'postgres',
+    password: process.env.PGPASSWORD || undefined,
+    database: 'postgres',
+  };
+}
+
+function quotePgIdentifier(identifier: string): string {
+  if (!/^[a-zA-Z0-9_]+$/.test(identifier)) {
+    throw new Error(`unsafe postgres identifier: ${identifier}`);
+  }
+  return `"${identifier}"`;
+}
+
+export async function cloneTestDBFromMigratedTemplate(): Promise<void> {
+  let database = process.env.PGDATABASE;
+  if (!database) {
+    throw new Error(
+      'PGDATABASE must be set before cloning a test database (call prepareTestDB())',
+    );
+  }
+
+  if (database === migratedTestDatabaseTemplate) {
+    throw new Error(
+      `refusing to create test DB using the same name as template database '${migratedTestDatabaseTemplate}'`,
+    );
+  }
+
+  let client = new PgClient(pgAdminConnectionConfig());
+  try {
+    await client.connect();
+    await client.query(
+      `CREATE DATABASE ${quotePgIdentifier(database)} TEMPLATE ${quotePgIdentifier(
+        migratedTestDatabaseTemplate,
+      )}`,
+    );
+  } catch (e: any) {
+    if (e?.message?.includes('does not exist')) {
+      throw new Error(
+        `migrated template database '${migratedTestDatabaseTemplate}' is missing. Run packages/realm-server/tests/scripts/prepare-test-pg.sh first.`,
+      );
+    }
+    throw e;
+  } finally {
+    await client.end();
+  }
+}
+
+export async function createTestPgAdapter(): Promise<PgAdapter> {
+  await cloneTestDBFromMigratedTemplate();
+  return new PgAdapter();
 }
 
 export async function closeServer(server: Server) {
@@ -364,7 +422,7 @@ export function setupDB(
 
   const runBeforeHook = async () => {
     prepareTestDB();
-    dbAdapter = new PgAdapter({ autoMigrate: true });
+    dbAdapter = await createTestPgAdapter();
     trackedDbAdapters.add(dbAdapter);
     publisher = new PgQueuePublisher(dbAdapter);
     trackedQueuePublishers.add(publisher);
