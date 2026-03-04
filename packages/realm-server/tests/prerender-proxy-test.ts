@@ -178,6 +178,8 @@ module(basename(__filename), function () {
       assert.deepEqual(
         renderCalls[0]?.args,
         {
+          affinityType: 'realm',
+          affinityValue: realm,
           realm,
           url: cardURL,
           auth: renderCalls[0]?.args.auth,
