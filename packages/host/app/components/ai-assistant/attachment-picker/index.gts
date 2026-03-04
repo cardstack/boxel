@@ -9,6 +9,7 @@ import {
 } from '@cardstack/runtime-common';
 
 import consumeContext from '@cardstack/host/helpers/consume-context';
+import type { FileUploadState } from '@cardstack/host/lib/file-upload-state';
 
 import type { FileDef } from 'https://cardstack.com/base/file-api';
 
@@ -30,7 +31,7 @@ interface Signature {
     chooseFile: (file: FileDef) => void;
     removeFile: (file: FileDef) => void;
     autoAttachedCardTooltipMessage?: string;
-    getFileUploadStatus?: (sourceUrl: string | undefined) => string | undefined;
+    fileUploadStates?: ReadonlyMap<string, FileUploadState>;
     retryFileUpload?: (file: FileDef) => void;
   };
   Blocks: {
@@ -46,7 +47,7 @@ interface Signature {
         | 'chooseFile'
         | 'autoAttachedCardTooltipMessage'
         | 'isLoaded'
-        | 'getFileUploadStatus'
+        | 'fileUploadStates'
         | 'retryFileUpload'
       >,
       WithBoundArgs<typeof AttachButton, 'chooseCard' | 'chooseFile'>,
@@ -69,7 +70,7 @@ export default class AiAssistantAttachmentPicker extends Component<Signature> {
         chooseCard=@chooseCard
         chooseFile=@chooseFile
         autoAttachedCardTooltipMessage=@autoAttachedCardTooltipMessage
-        getFileUploadStatus=@getFileUploadStatus
+        fileUploadStates=@fileUploadStates
         retryFileUpload=@retryFileUpload
       )
       (component AttachButton chooseCard=@chooseCard chooseFile=@chooseFile)

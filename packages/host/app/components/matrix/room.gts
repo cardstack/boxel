@@ -44,6 +44,7 @@ import {
 } from '@cardstack/runtime-common/matrix-constants';
 
 import UpdateRoomSkillsCommand from '@cardstack/host/commands/update-room-skills';
+import type { FileUploadState } from '@cardstack/host/lib/file-upload-state';
 import type { Message } from '@cardstack/host/lib/matrix-classes/message';
 import type { StackItem } from '@cardstack/host/lib/stack-item';
 import { getAutoAttachment } from '@cardstack/host/resources/auto-attached-card';
@@ -197,7 +198,7 @@ export default class Room extends Component<Signature> {
             @removeFile={{this.removeFile}}
             @autoAttachedFiles={{this.autoAttachedFiles}}
             @filesToAttach={{this.filesToAttach}}
-            @getFileUploadStatus={{this.getFileUploadStatus}}
+            @fileUploadStates={{this.fileUploadStates}}
             @retryFileUpload={{this.retryFileUpload}}
             @autoAttachedCardTooltipMessage={{if
               (eq this.operatorModeStateService.state.submode Submodes.Code)
@@ -478,10 +479,11 @@ export default class Room extends Component<Signature> {
   > = new WeakMap();
 
   @tracked private unknownMessageSendError: string | undefined = undefined;
-  private fileUploadStates = new TrackedMap<
-    string,
-    { status: 'uploading' | 'complete' | 'error'; error?: string }
-  >();
+  private _fileUploadStates = new TrackedMap<string, FileUploadState>();
+
+  get fileUploadStates(): ReadonlyMap<string, FileUploadState> {
+    return this._fileUploadStates;
+  }
   private get shouldShowUnknownMessageSendError() {
     // Since unknownMessageSendError error is coming from the catch-all block in doSendMessage,
     // we need to check if there already exists an error message in the last message, which is
@@ -1083,19 +1085,19 @@ export default class Room extends Component<Signature> {
 
     this.markAttachedFileRemoved(file.sourceUrl);
     if (file.sourceUrl) {
-      this.fileUploadStates.delete(file.sourceUrl);
+      this._fileUploadStates.delete(file.sourceUrl);
     }
   }
 
   private async startFileUpload(file: FileDef) {
     let sourceUrl = file.sourceUrl;
     if (!sourceUrl) return;
-    this.fileUploadStates.set(sourceUrl, { status: 'uploading' });
+    this._fileUploadStates.set(sourceUrl, { status: 'uploading' });
     try {
       await this.matrixService.uploadFiles([file]);
-      this.fileUploadStates.set(sourceUrl, { status: 'complete' });
+      this._fileUploadStates.set(sourceUrl, { status: 'complete' });
     } catch (e: any) {
-      this.fileUploadStates.set(sourceUrl, {
+      this._fileUploadStates.set(sourceUrl, {
         status: 'error',
         error: e?.message,
       });
@@ -1103,7 +1105,7 @@ export default class Room extends Component<Signature> {
   }
 
   private get hasFileUploadIssues() {
-    for (let [, state] of this.fileUploadStates) {
+    for (let [, state] of this._fileUploadStates) {
       if (state.status === 'uploading' || state.status === 'error') {
         return true;
       }
@@ -1114,14 +1116,6 @@ export default class Room extends Component<Signature> {
   @action
   private retryFileUpload(file: FileDef) {
     this.startFileUpload(file);
-  }
-
-  @action
-  private getFileUploadStatus(
-    sourceUrl: string | undefined,
-  ): string | undefined {
-    if (!sourceUrl) return undefined;
-    return this.fileUploadStates.get(sourceUrl)?.status;
   }
 
   private doSendMessage = enqueueTask(

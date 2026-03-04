@@ -17,6 +17,10 @@ import {
 
 import CardPill from '@cardstack/host/components/card-pill';
 import FilePill from '@cardstack/host/components/file-pill';
+import type {
+  FileUploadState,
+  FileUploadStatus,
+} from '@cardstack/host/lib/file-upload-state';
 import { urlForRealmLookup } from '@cardstack/host/lib/utils';
 
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
@@ -40,7 +44,7 @@ interface Signature {
     chooseFile?: (file: FileDef) => void;
     isLoaded: boolean;
     autoAttachedCardTooltipMessage?: string;
-    getFileUploadStatus?: (sourceUrl: string | undefined) => string | undefined;
+    fileUploadStates?: ReadonlyMap<string, FileUploadState>;
     retryFileUpload?: (file: FileDef) => void;
   };
 }
@@ -109,15 +113,9 @@ export default class AttachedItems extends Component<Signature> {
     this.args.removeFile(file);
   }
 
-  private getUploadStatusFor = (file: FileDef): string | undefined => {
-    return this.args.getFileUploadStatus?.(file.sourceUrl);
-  };
-
-  private getRetryActionFor = (file: FileDef): (() => void) | undefined => {
-    if (!this.args.retryFileUpload) return undefined;
-    let retryFn = this.args.retryFileUpload;
-    return () => retryFn(file);
-  };
+  private getUploadStatus(file: FileDef): FileUploadStatus | undefined {
+    return this.args.fileUploadStates?.get(file.sourceUrl ?? '')?.status;
+  }
 
   <template>
     <div class='attached-items' ...attributes>
@@ -203,8 +201,8 @@ export default class AttachedItems extends Component<Signature> {
                     @borderType='dashed'
                     @onClick={{fn this.handleChooseFile item}}
                     @onRemove={{fn this.handleRemoveFile item}}
-                    @uploadStatus={{this.getUploadStatusFor item}}
-                    @onRetry={{this.getRetryActionFor item}}
+                    @uploadStatus={{this.getUploadStatus item}}
+                    @onRetry={{if @retryFileUpload (fn @retryFileUpload item)}}
                     data-test-autoattached-file={{item.sourceUrl}}
                   />
                 </:trigger>
@@ -217,8 +215,8 @@ export default class AttachedItems extends Component<Signature> {
                 @file={{item}}
                 @borderType='solid'
                 @onRemove={{fn this.handleRemoveFile item}}
-                @uploadStatus={{this.getUploadStatusFor item}}
-                @onRetry={{this.getRetryActionFor item}}
+                @uploadStatus={{this.getUploadStatus item}}
+                @onRetry={{if @retryFileUpload (fn @retryFileUpload item)}}
               />
             {{/if}}
           {{/if}}

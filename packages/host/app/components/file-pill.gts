@@ -11,6 +11,8 @@ import { IconButton, Pill } from '@cardstack/boxel-ui/components';
 import { cn, cssVar, eq } from '@cardstack/boxel-ui/helpers';
 import { IconX, Download } from '@cardstack/boxel-ui/icons';
 
+import type { FileUploadStatus } from '@cardstack/host/lib/file-upload-state';
+
 import type { FileDef } from 'https://cardstack.com/base/file-api';
 
 import AttachedFileDropdownMenu from './ai-assistant/attached-file-dropdown-menu';
@@ -23,7 +25,7 @@ interface FilePillSignature {
     file: FileDef;
     borderType?: 'dashed' | 'solid';
     fileActionsEnabled?: boolean;
-    uploadStatus?: string;
+    uploadStatus?: FileUploadStatus;
     onClick?: () => void;
     onRemove?: () => void;
     onDownload?: () => void;
