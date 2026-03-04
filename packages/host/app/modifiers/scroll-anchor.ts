@@ -64,9 +64,10 @@ export default class ScrollAnchor extends Modifier<ScrollAnchorModifierSignature
       return;
     }
     this.#positionMap.clear();
+    let containerTop = this.#element.getBoundingClientRect().top;
     let elements = this.#element.querySelectorAll(this.#trackSelector);
     elements.forEach((el) => {
-      this.#positionMap.set(el, el.getBoundingClientRect().top);
+      this.#positionMap.set(el, el.getBoundingClientRect().top - containerTop);
     });
   }
 
@@ -80,7 +81,9 @@ export default class ScrollAnchor extends Modifier<ScrollAnchorModifierSignature
       let storedTop = anchor ? this.#positionMap.get(anchor) : undefined;
 
       if (anchor && storedTop !== undefined) {
-        let currentTop = anchor.getBoundingClientRect().top;
+        let currentTop =
+          anchor.getBoundingClientRect().top -
+          this.#element.getBoundingClientRect().top;
         let delta = currentTop - storedTop;
 
         if (Math.abs(delta) > 1) {
