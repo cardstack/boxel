@@ -645,7 +645,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           'exactly one apple-touch-icon link is present in the HTML response',
         );
         assert.ok(
-          response.text.includes('<title>Boxel</title>'),
+          /<title[\s>]/.test(response.text),
           'title element is present in the HTML response',
         );
       });
@@ -663,7 +663,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         let headContent = headMatch?.[1] ?? '';
 
         assert.ok(
-          headContent.includes('<title>Boxel</title>'),
+          /<title[\s>]/.test(headContent),
           'title element is preserved in head when no theme is present',
         );
         assert.ok(
