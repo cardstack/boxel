@@ -273,6 +273,7 @@ class RealmResource {
     this.fetchingInfo = undefined;
     this.fetchRealmPermissionsTask.cancelAll();
     window.localStorage.removeItem(SessionLocalStorageKey);
+    window.sessionStorage.removeItem(SessionLocalStorageKey);
     syncTokenToServiceWorker(this.realmURL, undefined);
   }
 
@@ -949,7 +950,7 @@ export default class RealmService extends Service {
   token = (url: string): string | undefined => {
     let resource = this.knownRealm(url, { tracked: false });
     if (!resource && (globalThis as any).__boxelRenderContext && !isTesting()) {
-      // prerender contexts should always reflect localStorage session state
+      // prerender contexts should always reflect persisted session state
       this.restoreSessionsFromStorage();
       resource = this.knownRealm(url, { tracked: false });
     }
@@ -1122,26 +1123,69 @@ export function claimsFromRawToken(rawToken: string): JWTPayload {
 
 let SessionStorage = {
   getAll(): Record<string, string> | undefined {
-    let sessionsString = window.localStorage.getItem(SessionLocalStorageKey);
-    if (sessionsString) {
-      return JSON.parse(sessionsString);
-    }
-    return undefined;
+    return getSessionTokensFromStorage();
   },
   persist(realmURL: string, token: string | undefined) {
-    let sessionStr =
-      window.localStorage.getItem(SessionLocalStorageKey) ?? '{}';
-    let session = JSON.parse(sessionStr);
+    let inRenderContext = Boolean((globalThis as any).__boxelRenderContext);
+    // Keep prerender auth tab-scoped: never copy sessionStorage tokens into
+    // origin-wide localStorage from render contexts.
+    let session = inRenderContext
+      ? (getSessionTokensFromStorage() ?? {})
+      : (getLocalSessionTokens() ?? {});
     if (session[realmURL] !== token) {
-      session[realmURL] = token;
-      window.localStorage.setItem(
-        SessionLocalStorageKey,
-        JSON.stringify(session),
-      );
+      if (token === undefined) {
+        delete session[realmURL];
+      } else {
+        session[realmURL] = token;
+      }
+      if (inRenderContext) {
+        window.sessionStorage.setItem(
+          SessionLocalStorageKey,
+          JSON.stringify(session),
+        );
+      } else {
+        window.localStorage.setItem(
+          SessionLocalStorageKey,
+          JSON.stringify(session),
+        );
+      }
     }
     syncTokenToServiceWorker(realmURL, token);
   },
 };
+
+function getSessionTokensFromStorage(): Record<string, string> | undefined {
+  let localTokens = getLocalSessionTokens();
+  if (localTokens && hasTokenEntries(localTokens)) {
+    return localTokens;
+  }
+  return parseSessionTokens(
+    window.sessionStorage.getItem(SessionLocalStorageKey),
+  );
+}
+
+function getLocalSessionTokens(): Record<string, string> | undefined {
+  return parseSessionTokens(
+    window.localStorage.getItem(SessionLocalStorageKey),
+  );
+}
+
+function parseSessionTokens(
+  tokens: string | null,
+): Record<string, string> | undefined {
+  if (!tokens) {
+    return undefined;
+  }
+  try {
+    return JSON.parse(tokens) as Record<string, string>;
+  } catch {
+    return undefined;
+  }
+}
+
+function hasTokenEntries(tokens: Record<string, string>): boolean {
+  return Object.keys(tokens).length > 0;
+}
 
 declare module '@ember/service' {
   interface Registry {
