@@ -5,6 +5,8 @@ import type Owner from '@ember/owner';
 import { createConstRef } from '@glimmer/reference';
 // @ts-expect-error
 import { renderMain, inTransaction } from '@glimmer/runtime';
+// @ts-expect-error
+import { resetTracking } from '@glimmer/validator';
 
 import { CardError } from '@cardstack/runtime-common/error';
 
@@ -26,52 +28,57 @@ export function render(
   owner: Owner,
   format?: Format,
 ): void {
-  // this needs to be a template-only component because the way we're invoking it
-  // just grabs the template and would drop any associated class.
-  const root = <template><C @format={{format}} /></template>;
-
-  // clear any previous render work
-  removeChildren(element);
-
-  let {
-    state: { owner: _owner, builder: _builder, context: _context },
-  } = owner.lookup('renderer:-dom') as any;
-  let self = createConstRef({}, 'this');
-  let layout = (getComponentTemplate as any)(root)(_owner).asLayout();
-
-  let iterator = renderMain(
-    _context,
-    _owner,
-    self,
-    _builder(_context.env, { element }),
-    layout,
-  );
-  let vm = (iterator as any).vm;
-
   try {
-    inTransaction(_context.env, () => vm._execute());
-  } catch (err: any) {
-    // This is to compensate for the commitCacheGroup op code that is not called because
-    // of the error being thrown here. we do this so we can keep the TRANSACTION_STACK
-    // balanced (which would otherwise cause consumed tags to leak into subsequent frames).
-    // I'm not adding this to a "finally" because when there is no error, the VM will
-    // process an op code that will do this organically. It's only when there is an error
-    // that we need to step in and do this by hand. Within the vm[STACKS] is a the stack
-    // for the cache group. We need to call a commit for each item in this stack.
-    let vmSymbols = Object.fromEntries(
-      Object.getOwnPropertySymbols(vm).map((s) => [s.toString(), s]),
-    );
-    let stacks = vm[vmSymbols['Symbol(STACKS)']];
-    let stackSize = stacks.cache.stack.length;
-    for (let i = 0; i < stackSize; i++) {
-      vm.commitCacheGroup();
-    }
+    // this needs to be a template-only component because the way we're invoking it
+    // just grabs the template and would drop any associated class.
+    const root = <template><C @format={{format}} /></template>;
 
-    let error = new CardError(
-      `Encountered error rendering HTML for card: ${err.message}`,
+    // clear any previous render work
+    removeChildren(element);
+
+    let {
+      state: { owner: _owner, builder: _builder, context: _context },
+    } = owner.lookup('renderer:-dom') as any;
+    let self = createConstRef({}, 'this');
+    let layout = (getComponentTemplate as any)(root)(_owner).asLayout();
+
+    let iterator = renderMain(
+      _context,
+      _owner,
+      self,
+      _builder(_context.env, { element }),
+      layout,
     );
-    error.additionalErrors = [err];
-    throw error;
+    let vm = (iterator as any).vm;
+
+    try {
+      inTransaction(_context.env, () => vm._execute());
+    } catch (err: any) {
+      // This is to compensate for the commitCacheGroup op code that is not called because
+      // of the error being thrown here. we do this so we can keep the TRANSACTION_STACK
+      // balanced (which would otherwise cause consumed tags to leak into subsequent frames).
+      // I'm not adding this to a "finally" because when there is no error, the VM will
+      // process an op code that will do this organically. It's only when there is an error
+      // that we need to step in and do this by hand. Within the vm[STACKS] is a the stack
+      // for the cache group. We need to call a commit for each item in this stack.
+      let vmSymbols = Object.fromEntries(
+        Object.getOwnPropertySymbols(vm).map((s) => [s.toString(), s]),
+      );
+      let stacks = vm[vmSymbols['Symbol(STACKS)']];
+      let stackSize = stacks.cache.stack.length;
+      for (let i = 0; i < stackSize; i++) {
+        vm.commitCacheGroup();
+      }
+
+      let error = new CardError(
+        `Encountered error rendering HTML for card: ${err.message}`,
+      );
+      error.additionalErrors = [err];
+
+      throw error;
+    }
+  } finally {
+    resetTracking();
   }
 }
 
