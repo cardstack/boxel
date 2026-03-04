@@ -113,9 +113,9 @@ export default class AttachedItems extends Component<Signature> {
     this.args.removeFile(file);
   }
 
-  private getUploadStatus(file: FileDef): FileUploadStatus | undefined {
+  private getUploadStatus = (file: FileDef): FileUploadStatus | undefined => {
     return this.args.fileUploadStates?.get(file.sourceUrl ?? '')?.status;
-  }
+  };
 
   <template>
     <div class='attached-items' ...attributes>
