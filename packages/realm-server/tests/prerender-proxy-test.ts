@@ -35,6 +35,8 @@ module(basename(__filename), function () {
       let renderCalls: Array<{
         kind: 'card' | 'module' | 'file-extract' | 'file-render' | 'command';
         args: {
+          affinityType?: 'realm' | 'user';
+          affinityValue?: string;
           realm?: string;
           userId?: string;
           url?: string;
