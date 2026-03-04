@@ -8,12 +8,13 @@ import type {
 import { logger, param, query } from '@cardstack/runtime-common';
 import { module, test } from 'qunit';
 import {
+  createTestPgAdapter,
   fetchSubscriptionsByUserId,
   insertPlan,
   insertUser,
   prepareTestDB,
 } from './helpers';
-import { PgAdapter } from '@cardstack/postgres';
+import type { PgAdapter } from '@cardstack/postgres';
 import { handlePaymentSucceeded } from '@cardstack/billing/stripe-webhook-handlers/payment-succeeded';
 import { handleSubscriptionDeleted } from '@cardstack/billing/stripe-webhook-handlers/subscription-deleted';
 import { handleCheckoutSessionCompleted } from '@cardstack/billing/stripe-webhook-handlers/checkout-session-completed';
@@ -105,7 +106,7 @@ module(basename(__filename), function () {
 
     hooks.beforeEach(async function () {
       prepareTestDB();
-      dbAdapter = new PgAdapter({ autoMigrate: true });
+      dbAdapter = await createTestPgAdapter();
     });
 
     hooks.afterEach(async function () {

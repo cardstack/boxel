@@ -558,6 +558,7 @@ jobs:
             "realm-auth-test.ts",
             "run-command-task-test.ts",
             "queries-test.ts",
+            "session-room-queries-test.ts",
             "full-reindex-test.ts",
           ]
     steps:

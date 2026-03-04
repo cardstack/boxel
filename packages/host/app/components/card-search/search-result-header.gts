@@ -42,8 +42,7 @@ const SearchResultHeader: TemplateOnlyComponent<Signature> = <template>
       flex-wrap: wrap;
       justify-content: space-between;
       gap: var(--boxel-sp);
-      padding: var(--boxel-sp-lg) 0;
-      margin-bottom: var(--boxel-sp);
+      padding-block: var(--boxel-sp-lg);
       border-bottom: 1px solid var(--boxel-200);
     }
     .summary {

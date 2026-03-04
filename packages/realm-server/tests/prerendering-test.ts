@@ -134,7 +134,7 @@ function makeStubPagePool(
 }
 
 module(basename(__filename), function () {
-  module('prerender - dynamic tests', function (hooks) {
+  module('prerender - mutating tests', function (hooks) {
     let realmURL = 'http://127.0.0.1:4450/test/';
     let prerenderServerURL = new URL(realmURL).origin;
     let testUserId = '@user1:localhost';
@@ -171,6 +171,7 @@ module(basename(__filename), function () {
     });
 
     setupPermissionedRealms(hooks, {
+      mode: 'beforeEach',
       realms: [
         {
           realmURL,
@@ -202,7 +203,288 @@ module(basename(__filename), function () {
                 },
               },
             },
-            'dep-reset-consumer.gts': `
+          },
+        },
+      ],
+      onRealmSetup({ realms: setupRealms }) {
+        ({ realm, realmAdapter } = setupRealms[0]);
+        permissions = {
+          [realmURL]: ['read', 'write', 'realm-owner'],
+        };
+      },
+    });
+
+    test('reuses pooled page and picks up updated instance', async function (assert) {
+      const cardURL = `${realmURL}1`;
+
+      let first = await prerenderer.prerenderCard({
+        realm: realmURL,
+        url: cardURL,
+        auth: auth(),
+      });
+
+      assert.false(first.pool.reused, 'first call not reused');
+      assert.false(first.pool.evicted, 'first call not evicted');
+      assert.strictEqual(
+        first.response.serialized?.data.attributes?.name,
+        'Maple',
+        'first render sees original value',
+      );
+
+      await realmAdapter.write(
+        '1.json',
+        JSON.stringify(
+          {
+            data: {
+              attributes: {
+                name: 'Juniper',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: './person',
+                  name: 'Person',
+                },
+              },
+            },
+          },
+          null,
+          2,
+        ),
+      );
+
+      await realm.realmIndexUpdater.fullIndex();
+      realm.__testOnlyClearCaches();
+
+      let second = await prerenderer.prerenderCard({
+        realm: realmURL,
+        url: cardURL,
+        auth: auth(),
+      });
+
+      assert.true(second.pool.reused, 'second call reused pooled page');
+      assert.false(second.pool.evicted, 'second call not evicted');
+      assert.strictEqual(
+        second.pool.pageId,
+        first.pool.pageId,
+        'same page reused',
+      );
+      assert.strictEqual(
+        second.response.serialized?.data.attributes?.name,
+        'Juniper',
+        'second render picks up updated value',
+      );
+    });
+
+    test('module prerender reuses pooled page after updates', async function (assert) {
+      const moduleURL = `${realmURL}person.gts`;
+
+      let first = await prerenderer.prerenderModule({
+        realm: realmURL,
+        url: moduleURL,
+        auth: auth(),
+      });
+
+      assert.false(first.pool.reused, 'first module render not reused');
+
+      await realmAdapter.write(
+        'person.gts',
+        `
+          import { CardDef, field, contains, StringField, Component } from 'https://cardstack.com/base/card-api';
+          export class Person extends CardDef {
+            static displayName = "Updated Person";
+            @field name = contains(StringField);
+            static isolated = class extends Component<typeof this> {
+              <template>{{@model.name}}</template>
+            }
+          }
+        `,
+      );
+      realm.__testOnlyClearCaches(); // out write bypasses the index so we need to manually flush the realm cache
+
+      let second = await prerenderer.prerenderModule({
+        realm: realmURL,
+        url: moduleURL,
+        auth: auth(),
+        renderOptions: { clearCache: true },
+      });
+
+      assert.true(
+        second.pool.reused,
+        'second module render reused pooled page',
+      );
+      assert.strictEqual(
+        first.pool.pageId,
+        second.pool.pageId,
+        'same page reused',
+      );
+      let key = `${trimExecutableExtension(new URL(moduleURL)).href}/Person`;
+      let entry = second.response.definitions[key];
+      assert.ok(entry, 'updated module definition entry present');
+      assert.strictEqual(
+        entry?.type,
+        'definition',
+        'updated module definition entry correct',
+      );
+      if (entry?.type === 'definition') {
+        assert.strictEqual(
+          entry.definition.displayName,
+          'Updated Person',
+          'updated module definition observed',
+        );
+      } else {
+        assert.ok(false, 'updated module definition entry should be present');
+      }
+    });
+
+    test('module prerender surfaces syntax errors', async function (assert) {
+      const modulePath = 'person.gts';
+      const moduleURL = `${realmURL}${modulePath}`;
+
+      await realmAdapter.write(modulePath, 'export const Broken = ;');
+      realm.__testOnlyClearCaches();
+
+      let result = await prerenderer.prerenderModule({
+        realm: realmURL,
+        url: moduleURL,
+        auth: auth(),
+      });
+
+      assert.strictEqual(
+        result.response.status,
+        'error',
+        'module render errored',
+      );
+      assert.strictEqual(
+        result.response.error?.error.status,
+        406,
+        'syntax error surfaces as 406',
+      );
+      assert.false(result.pool.evicted, 'page not evicted for syntax error');
+    });
+
+    test('file extract surfaces broken FileDef module error without remote prerender timeout', async function (assert) {
+      await realmAdapter.write(
+        'filedef-mismatch.gts',
+        `
+          import { FileDef as BaseFileDef } from "https://cardstack.com/base/file-api";
+          import { MissingChild } from "./missing-child";
+
+          export class FileDef extends BaseFileDef {
+            static missingChild = MissingChild;
+          }
+        `,
+      );
+      await realmAdapter.write('broken-file.mismatch', 'broken mismatch file');
+      realm.__testOnlyClearCaches();
+
+      let result = await prerenderer.prerenderFileExtract({
+        realm: realmURL,
+        url: `${realmURL}broken-file.mismatch`,
+        auth: auth(),
+        renderOptions: {
+          fileExtract: true,
+          fileDefCodeRef: {
+            module: `${realmURL}filedef-mismatch`,
+            name: 'FileDef',
+          },
+        },
+      });
+
+      assert.strictEqual(
+        result.response.status,
+        'error',
+        'file extract reports error for broken FileDef module',
+      );
+      assert.ok(result.response.error, 'error payload is present');
+      assert.ok(
+        result.response.error?.error.message?.includes(
+          'Received HTTP 404 from server',
+        ),
+        `error message should mention module 404, got: ${result.response.error?.error.message}`,
+      );
+      let messageIncludesTimeoutMarker = Boolean(
+        result.response.error?.error.message?.includes('Prerender request to'),
+      );
+      assert.false(
+        messageIncludesTimeoutMarker,
+        'error should not be reported as a remote prerender request timeout',
+      );
+      assert.false(
+        result.pool.timedOut,
+        'pool should not mark this as a prerender timeout',
+      );
+    });
+  });
+
+  function defineNonMutatingRunnerTests() {
+    module('runner behavior', function (hooks) {
+      let realmURL = 'http://127.0.0.1:4455/test/';
+      let prerenderServerURL = new URL(realmURL).origin;
+      let testUserId = '@user1:localhost';
+      let permissions: RealmPermissions = {
+        [realmURL]: ['read', 'write', 'realm-owner'],
+      };
+      let prerenderer: Prerenderer;
+      let auth = () => {
+        let sessions = JSON.parse(
+          testCreatePrerenderAuth(testUserId, permissions),
+        ) as Record<string, string>;
+        let token = sessions[realmURL];
+        if (token) {
+          sessions[new URL(realmURL).origin + '/'] = token;
+        }
+        return JSON.stringify(sessions);
+      };
+
+      hooks.before(async () => {
+        prerenderer = getPrerendererForTesting({
+          maxPages: 2,
+          serverURL: prerenderServerURL,
+        });
+      });
+
+      hooks.after(async () => {
+        await prerenderer.stop();
+      });
+
+      hooks.beforeEach(async () => {
+        await prerenderer.disposeRealm(realmURL);
+      });
+
+      setupPermissionedRealms(hooks, {
+        mode: 'before',
+        realms: [
+          {
+            realmURL,
+            permissions: {
+              '*': ['read'],
+              [testUserId]: ['read', 'write', 'realm-owner'],
+            },
+            fileSystem: {
+              'person.gts': `
+              import { CardDef, field, contains, StringField, Component } from 'https://cardstack.com/base/card-api';
+              export class Person extends CardDef {
+                static displayName = "Person";
+                @field name = contains(StringField);
+                static isolated = class extends Component<typeof this> {
+                  <template>{{@model.name}}</template>
+                }
+              }
+            `,
+              '1.json': {
+                data: {
+                  attributes: {
+                    name: 'Maple',
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: './person',
+                      name: 'Person',
+                    },
+                  },
+                },
+              },
+              'dep-reset-consumer.gts': `
               import { CardDef, field, linksTo, Component } from 'https://cardstack.com/base/card-api';
               import { Person } from './person';
               export class DepResetConsumer extends CardDef {
@@ -213,104 +495,128 @@ module(basename(__filename), function () {
                 }
               }
             `,
-            'dep-reset-consumer-a.json': {
-              data: {
-                relationships: {
-                  friend: {
-                    links: {
-                      self: './dep-reset-friend-a',
+              'dep-reset-consumer-a.json': {
+                data: {
+                  relationships: {
+                    friend: {
+                      links: {
+                        self: './dep-reset-friend-a',
+                      },
+                    },
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: './dep-reset-consumer',
+                      name: 'DepResetConsumer',
                     },
                   },
                 },
-                meta: {
-                  adoptsFrom: {
-                    module: './dep-reset-consumer',
-                    name: 'DepResetConsumer',
-                  },
-                },
               },
-            },
-            'dep-reset-consumer-b.json': {
-              data: {
-                relationships: {
-                  friend: {
-                    links: {
-                      self: './dep-reset-friend-b',
+              'dep-reset-consumer-b.json': {
+                data: {
+                  relationships: {
+                    friend: {
+                      links: {
+                        self: './dep-reset-friend-b',
+                      },
+                    },
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: './dep-reset-consumer',
+                      name: 'DepResetConsumer',
                     },
                   },
                 },
-                meta: {
-                  adoptsFrom: {
-                    module: './dep-reset-consumer',
-                    name: 'DepResetConsumer',
+              },
+              'dep-reset-friend-a.json': {
+                data: {
+                  attributes: {
+                    name: 'Friend A',
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: './person',
+                      name: 'Person',
+                    },
                   },
                 },
               },
-            },
-            'dep-reset-friend-a.json': {
-              data: {
-                attributes: {
-                  name: 'Friend A',
-                },
-                meta: {
-                  adoptsFrom: {
-                    module: './person',
-                    name: 'Person',
+              'dep-reset-friend-b.json': {
+                data: {
+                  attributes: {
+                    name: 'Friend B',
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: './person',
+                      name: 'Person',
+                    },
                   },
                 },
               },
-            },
-            'dep-reset-friend-b.json': {
-              data: {
-                attributes: {
-                  name: 'Friend B',
-                },
-                meta: {
-                  adoptsFrom: {
-                    module: './person',
-                    name: 'Person',
-                  },
-                },
-              },
-            },
-            'no-icon.gts': `
-              import { CardDef, field, contains, StringField, Component } from 'https://cardstack.com/base/card-api';
-              export class NoIcon extends CardDef {
-                static displayName = "No Icon";
-                static icon = class extends Component<typeof this> {
-                  <template></template>
+              'no-icon.gts': `
+                import { CardDef, field, contains, StringField, Component } from 'https://cardstack.com/base/card-api';
+                export class NoIcon extends CardDef {
+                  static displayName = "No Icon";
+                  static icon = class extends Component<typeof this> {
+                    <template></template>
+                  }
+                  @field name = contains(StringField);
+                  static isolated = class extends Component<typeof this> {
+                    <template>{{@model.name}}</template>
+                  }
                 }
-                @field name = contains(StringField);
-                static isolated = class extends Component<typeof this> {
-                  <template>{{@model.name}}</template>
+              `,
+              'no-icon.json': {
+                data: {
+                  attributes: {
+                    name: 'Missing Icon',
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: './no-icon',
+                      name: 'NoIcon',
+                    },
+                  },
+                },
+              },
+              'bad-icon-import.gts': `
+                import { CardDef, field, contains, StringField, Component } from 'https://cardstack.com/base/card-api';
+                export class BadIconImport extends CardDef {
+                  static displayName = "Bad Icon Import";
+                  static icon = undefined as any;
+                  @field name = contains(StringField);
+                  static isolated = class extends Component<typeof this> {
+                    <template>{{@model.name}}</template>
+                  }
                 }
-              }
-            `,
-            'no-icon.json': {
-              data: {
-                attributes: {
-                  name: 'Missing Icon',
-                },
-                meta: {
-                  adoptsFrom: {
-                    module: './no-icon',
-                    name: 'NoIcon',
+              `,
+              'bad-icon-import.json': {
+                data: {
+                  attributes: {
+                    name: 'Bad Icon',
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: './bad-icon-import',
+                      name: 'BadIconImport',
+                    },
                   },
                 },
               },
-            },
-            'broken.gts': 'export const Broken = ;',
-            'broken.json': {
-              data: {
-                meta: {
-                  adoptsFrom: {
-                    module: './broken',
-                    name: 'Broken',
+              'broken.gts': 'export const Broken = ;',
+              'broken.json': {
+                data: {
+                  meta: {
+                    adoptsFrom: {
+                      module: './broken',
+                      name: 'Broken',
+                    },
                   },
                 },
               },
-            },
-            'rejects.gts': `
+              'rejects.gts': `
               import { CardDef, Component } from 'https://cardstack.com/base/card-api';
               export class Rejects extends CardDef {
                 static isolated = class extends Component<typeof this> {
@@ -322,17 +628,17 @@ module(basename(__filename), function () {
                 }
               }
             `,
-            'rejects.json': {
-              data: {
-                meta: {
-                  adoptsFrom: {
-                    module: './rejects',
-                    name: 'Rejects',
+              'rejects.json': {
+                data: {
+                  meta: {
+                    adoptsFrom: {
+                      module: './rejects',
+                      name: 'Rejects',
+                    },
                   },
                 },
               },
-            },
-            'rsvp-rejects.gts': `
+              'rsvp-rejects.gts': `
               import { CardDef, Component } from 'https://cardstack.com/base/card-api';
               import * as RSVP from 'rsvp';
               export class RsvpRejects extends CardDef {
@@ -345,17 +651,17 @@ module(basename(__filename), function () {
                 }
               }
             `,
-            'rsvp-rejects.json': {
-              data: {
-                meta: {
-                  adoptsFrom: {
-                    module: './rsvp-rejects',
-                    name: 'RsvpRejects',
+              'rsvp-rejects.json': {
+                data: {
+                  meta: {
+                    adoptsFrom: {
+                      module: './rsvp-rejects',
+                      name: 'RsvpRejects',
+                    },
                   },
                 },
               },
-            },
-            'throws.gts': `
+              'throws.gts': `
               import { CardDef, Component } from 'https://cardstack.com/base/card-api';
               export class Throws extends CardDef {
                 static isolated = class extends Component<typeof this> {
@@ -366,17 +672,17 @@ module(basename(__filename), function () {
                 }
               }
             `,
-            'throws.json': {
-              data: {
-                meta: {
-                  adoptsFrom: {
-                    module: './throws',
-                    name: 'Throws',
+              'throws.json': {
+                data: {
+                  meta: {
+                    adoptsFrom: {
+                      module: './throws',
+                      name: 'Throws',
+                    },
                   },
                 },
               },
-            },
-            'console-error.gts': `
+              'console-error.gts': `
               import { CardDef, Component } from 'https://cardstack.com/base/card-api';
               export class ConsoleError extends CardDef {
                 static isolated = class extends Component<typeof this> {
@@ -388,17 +694,17 @@ module(basename(__filename), function () {
                 }
               }
             `,
-            'console-error.json': {
-              data: {
-                meta: {
-                  adoptsFrom: {
-                    module: './console-error',
-                    name: 'ConsoleError',
+              'console-error.json': {
+                data: {
+                  meta: {
+                    adoptsFrom: {
+                      module: './console-error',
+                      name: 'ConsoleError',
+                    },
                   },
                 },
               },
-            },
-            'console-no-error.gts': `
+              'console-no-error.gts': `
               import { CardDef, Component } from 'https://cardstack.com/base/card-api';
               export class ConsoleNoError extends CardDef {
                 static isolated = class extends Component<typeof this> {
@@ -410,17 +716,17 @@ module(basename(__filename), function () {
                 }
               }
             `,
-            'console-no-error.json': {
-              data: {
-                meta: {
-                  adoptsFrom: {
-                    module: './console-no-error',
-                    name: 'ConsoleNoError',
+              'console-no-error.json': {
+                data: {
+                  meta: {
+                    adoptsFrom: {
+                      module: './console-no-error',
+                      name: 'ConsoleNoError',
+                    },
                   },
                 },
               },
-            },
-            'directory-query.gts': `
+              'directory-query.gts': `
               import { CardDef, field, contains, linksTo, linksToMany, StringField, Component, queryableValue } from 'https://cardstack.com/base/card-api';
 
               export class Person extends CardDef {
@@ -527,673 +833,373 @@ module(basename(__filename), function () {
                 };
               }
             `,
-            'directory-ops.json': {
-              data: {
-                attributes: {
-                  teamFilter: 'Ops',
-                },
-                relationships: {
-                  staff: {
-                    links: { self: null },
-                    data: [],
-                    meta: {
-                      errors: [
-                        {
-                          realm: 'https://unreachable-realm.example.com/',
-                          type: 'fetch-error',
-                          message: 'Could not reach remote realm',
-                          status: 502,
-                        },
-                      ],
+              'directory-ops.json': {
+                data: {
+                  attributes: {
+                    teamFilter: 'Ops',
+                  },
+                  relationships: {
+                    staff: {
+                      links: { self: null },
+                      data: [],
+                      meta: {
+                        errors: [
+                          {
+                            realm: 'https://unreachable-realm.example.com/',
+                            type: 'fetch-error',
+                            message: 'Could not reach remote realm',
+                            status: 502,
+                          },
+                        ],
+                      },
+                    },
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: './directory-query',
+                      name: 'Directory',
                     },
                   },
                 },
-                meta: {
-                  adoptsFrom: {
-                    module: './directory-query',
-                    name: 'Directory',
-                  },
-                },
               },
-            },
-            'person-alice.json': {
-              data: {
-                attributes: {
-                  name: 'Alice',
-                  team: 'Leadership',
-                  managerName: '',
-                },
-                meta: {
-                  adoptsFrom: {
-                    module: './directory-query',
-                    name: 'Person',
+              'person-alice.json': {
+                data: {
+                  attributes: {
+                    name: 'Alice',
+                    team: 'Leadership',
+                    managerName: '',
                   },
-                },
-              },
-            },
-            'person-bob.json': {
-              data: {
-                attributes: {
-                  name: 'Bob',
-                  team: 'Ops',
-                  managerName: 'Alice',
-                },
-                relationships: {
-                  manager: {
-                    links: {
-                      self: './person-alice',
+                  meta: {
+                    adoptsFrom: {
+                      module: './directory-query',
+                      name: 'Person',
                     },
                   },
                 },
-                meta: {
-                  adoptsFrom: {
-                    module: './directory-query',
-                    name: 'Person',
-                  },
-                },
               },
-            },
-            'person-carol.json': {
-              data: {
-                attributes: {
-                  name: 'Carol',
-                  team: 'Ops',
-                  managerName: 'Alice',
-                },
-                relationships: {
-                  manager: {
-                    links: {
-                      self: './person-alice',
+              'person-bob.json': {
+                data: {
+                  attributes: {
+                    name: 'Bob',
+                    team: 'Ops',
+                    managerName: 'Alice',
+                  },
+                  relationships: {
+                    manager: {
+                      links: {
+                        self: './person-alice',
+                      },
+                    },
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: './directory-query',
+                      name: 'Person',
                     },
                   },
                 },
-                meta: {
-                  adoptsFrom: {
-                    module: './directory-query',
-                    name: 'Person',
-                  },
-                },
               },
-            },
-            'person-dave.json': {
-              data: {
-                attributes: {
-                  name: 'Dave',
-                  team: 'Ops',
-                  managerName: 'Bob',
-                },
-                relationships: {
-                  manager: {
-                    links: {
-                      self: './person-bob',
+              'person-carol.json': {
+                data: {
+                  attributes: {
+                    name: 'Carol',
+                    team: 'Ops',
+                    managerName: 'Alice',
+                  },
+                  relationships: {
+                    manager: {
+                      links: {
+                        self: './person-alice',
+                      },
+                    },
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: './directory-query',
+                      name: 'Person',
                     },
                   },
                 },
-                meta: {
-                  adoptsFrom: {
-                    module: './directory-query',
-                    name: 'Person',
-                  },
-                },
               },
-            },
-            'person-eve.json': {
-              data: {
-                attributes: {
-                  name: 'Eve',
-                  team: 'Sales',
-                  managerName: 'Bob',
-                },
-                relationships: {
-                  manager: {
-                    links: {
-                      self: './person-bob',
+              'person-dave.json': {
+                data: {
+                  attributes: {
+                    name: 'Dave',
+                    team: 'Ops',
+                    managerName: 'Bob',
+                  },
+                  relationships: {
+                    manager: {
+                      links: {
+                        self: './person-bob',
+                      },
+                    },
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: './directory-query',
+                      name: 'Person',
                     },
                   },
                 },
-                meta: {
-                  adoptsFrom: {
-                    module: './directory-query',
-                    name: 'Person',
+              },
+              'person-eve.json': {
+                data: {
+                  attributes: {
+                    name: 'Eve',
+                    team: 'Sales',
+                    managerName: 'Bob',
+                  },
+                  relationships: {
+                    manager: {
+                      links: {
+                        self: './person-bob',
+                      },
+                    },
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: './directory-query',
+                      name: 'Person',
+                    },
                   },
                 },
               },
+              'notes.txt': 'Hello from file extract',
             },
-            'notes.txt': 'Hello from file extract',
           },
+        ],
+        onRealmSetup() {
+          permissions = {
+            [realmURL]: ['read', 'write', 'realm-owner'],
+          };
         },
-      ],
-      onRealmSetup({ realms: setupRealms }) {
-        ({ realm, realmAdapter } = setupRealms[0]);
-        permissions = {
-          [realmURL]: ['read', 'write', 'realm-owner'],
-        };
-      },
-    });
-
-    test('reuses pooled page and picks up updated instance', async function (assert) {
-      const cardURL = `${realmURL}1`;
-
-      let first = await prerenderer.prerenderCard({
-        realm: realmURL,
-        url: cardURL,
-        auth: auth(),
       });
 
-      assert.false(first.pool.reused, 'first call not reused');
-      assert.false(first.pool.evicted, 'first call not evicted');
-      assert.strictEqual(
-        first.response.serialized?.data.attributes?.name,
-        'Maple',
-        'first render sees original value',
-      );
+      test('resets runtime deps between consecutive prerenders', async function (assert) {
+        let first = await prerenderer.prerenderCard({
+          realm: realmURL,
+          url: `${realmURL}dep-reset-consumer-a`,
+          auth: auth(),
+        });
+        let firstDeps = first.response.deps ?? [];
+        assert.true(
+          firstDeps.includes(`${realmURL}dep-reset-friend-a.json`),
+          'first prerender includes first relationship target',
+        );
 
-      await realmAdapter.write(
-        '1.json',
-        JSON.stringify(
-          {
-            data: {
-              attributes: {
-                name: 'Juniper',
-              },
-              meta: {
-                adoptsFrom: {
-                  module: './person',
-                  name: 'Person',
-                },
-              },
-            },
-          },
-          null,
-          2,
-        ),
-      );
-
-      await realm.realmIndexUpdater.fullIndex();
-      realm.__testOnlyClearCaches();
-
-      let second = await prerenderer.prerenderCard({
-        realm: realmURL,
-        url: cardURL,
-        auth: auth(),
+        let second = await prerenderer.prerenderCard({
+          realm: realmURL,
+          url: `${realmURL}dep-reset-consumer-b`,
+          auth: auth(),
+        });
+        let secondDeps = second.response.deps ?? [];
+        assert.true(
+          secondDeps.includes(`${realmURL}dep-reset-friend-b.json`),
+          'second prerender includes second relationship target',
+        );
+        assert.false(
+          secondDeps.includes(`${realmURL}dep-reset-friend-a.json`),
+          'second prerender deps do not leak first prerender relationship target',
+        );
       });
 
-      assert.true(second.pool.reused, 'second call reused pooled page');
-      assert.false(second.pool.evicted, 'second call not evicted');
-      assert.strictEqual(
-        second.pool.pageId,
-        first.pool.pageId,
-        'same page reused',
-      );
-      assert.strictEqual(
-        second.response.serialized?.data.attributes?.name,
-        'Juniper',
-        'second render picks up updated value',
-      );
-    });
+      test('prerenderModule returns module metadata', async function (assert) {
+        const moduleURL = `${realmURL}person.gts`;
 
-    test('resets runtime deps between consecutive prerenders', async function (assert) {
-      let first = await prerenderer.prerenderCard({
-        realm: realmURL,
-        url: `${realmURL}dep-reset-consumer-a`,
-        auth: auth(),
-      });
-      let firstDeps = first.response.deps ?? [];
-      assert.true(
-        firstDeps.includes(`${realmURL}dep-reset-friend-a.json`),
-        'first prerender includes first relationship target',
-      );
+        let result = await prerenderer.prerenderModule({
+          realm: realmURL,
+          url: moduleURL,
+          auth: auth(),
+        });
 
-      let second = await prerenderer.prerenderCard({
-        realm: realmURL,
-        url: `${realmURL}dep-reset-consumer-b`,
-        auth: auth(),
-      });
-      let secondDeps = second.response.deps ?? [];
-      assert.true(
-        secondDeps.includes(`${realmURL}dep-reset-friend-b.json`),
-        'second prerender includes second relationship target',
-      );
-      assert.false(
-        secondDeps.includes(`${realmURL}dep-reset-friend-a.json`),
-        'second prerender deps do not leak first prerender relationship target',
-      );
-    });
-
-    test('prerenderModule returns module metadata', async function (assert) {
-      const moduleURL = `${realmURL}person.gts`;
-
-      let result = await prerenderer.prerenderModule({
-        realm: realmURL,
-        url: moduleURL,
-        auth: auth(),
-      });
-
-      assert.false(result.pool.reused, 'first module render not reused');
-      assert.strictEqual(
-        result.response.status,
-        'ready',
-        'module marked ready',
-      );
-      let key = `${trimExecutableExtension(new URL(moduleURL)).href}/Person`;
-      let entry = result.response.definitions[key];
-      assert.ok(entry, 'definition captured');
-      assert.strictEqual(
-        entry?.type,
-        'definition',
-        'definition entry type correct',
-      );
-      if (entry?.type === 'definition') {
-        assert.ok(entry.definition.displayName, 'display name present');
-      } else {
-        assert.ok(false, 'module definition should be present');
-      }
-    });
-
-    test('module prerender reuses pooled page after updates', async function (assert) {
-      const moduleURL = `${realmURL}person.gts`;
-
-      let first = await prerenderer.prerenderModule({
-        realm: realmURL,
-        url: moduleURL,
-        auth: auth(),
-      });
-
-      assert.false(first.pool.reused, 'first module render not reused');
-
-      await realmAdapter.write(
-        'person.gts',
-        `
-          import { CardDef, field, contains, StringField, Component } from 'https://cardstack.com/base/card-api';
-          export class Person extends CardDef {
-            static displayName = "Updated Person";
-            @field name = contains(StringField);
-            static isolated = class extends Component<typeof this> {
-              <template>{{@model.name}}</template>
-            }
-          }
-        `,
-      );
-      realm.__testOnlyClearCaches(); // out write bypasses the index so we need to manually flush the realm cache
-
-      let second = await prerenderer.prerenderModule({
-        realm: realmURL,
-        url: moduleURL,
-        auth: auth(),
-        renderOptions: { clearCache: true },
-      });
-
-      assert.true(
-        second.pool.reused,
-        'second module render reused pooled page',
-      );
-      assert.strictEqual(
-        first.pool.pageId,
-        second.pool.pageId,
-        'same page reused',
-      );
-      let key = `${trimExecutableExtension(new URL(moduleURL)).href}/Person`;
-      let entry = second.response.definitions[key];
-      assert.ok(entry, 'updated module definition entry present');
-      assert.strictEqual(
-        entry?.type,
-        'definition',
-        'updated module definition entry correct',
-      );
-      if (entry?.type === 'definition') {
+        assert.false(result.pool.reused, 'first module render not reused');
         assert.strictEqual(
-          entry.definition.displayName,
-          'Updated Person',
-          'updated module definition observed',
+          result.response.status,
+          'ready',
+          'module marked ready',
         );
-      } else {
-        assert.ok(false, 'updated module definition entry should be present');
-      }
-    });
-
-    test('module prerender surfaces syntax errors', async function (assert) {
-      const modulePath = 'person.gts';
-      const moduleURL = `${realmURL}${modulePath}`;
-
-      await realmAdapter.write(modulePath, 'export const Broken = ;');
-      realm.__testOnlyClearCaches();
-
-      let result = await prerenderer.prerenderModule({
-        realm: realmURL,
-        url: moduleURL,
-        auth: auth(),
-      });
-
-      assert.strictEqual(
-        result.response.status,
-        'error',
-        'module render errored',
-      );
-      assert.strictEqual(
-        result.response.error?.error.status,
-        406,
-        'syntax error surfaces as 406',
-      );
-      assert.false(result.pool.evicted, 'page not evicted for syntax error');
-    });
-
-    test('card prerender hoists module transpile errors', async function (assert) {
-      let brokenCard = `${realmURL}broken.json`;
-
-      let result = await prerenderer.prerenderCard({
-        realm: realmURL,
-        url: brokenCard,
-        auth: auth(),
-      });
-
-      assert.ok(result.response.error, 'prerender reports error');
-      assert.strictEqual(
-        result.response.error?.error.status,
-        406,
-        'status is 406',
-      );
-      assert.strictEqual(
-        result.response.error?.error.message,
-        `Parse Error at broken.gts:1:23: 1:24 (${realmURL}broken)`,
-        'message includes enough information for AI to fix the problem',
-      );
-      assert.ok(
-        result.response.error?.error.stack?.includes('at transpileJS'),
-        `stack should include "at transpileJS" but was ${result.response.error?.error.stack}`,
-      );
-      let additionalErrors = result.response.error?.error.additionalErrors;
-      if (additionalErrors !== null) {
-        assert.ok(
-          Array.isArray(additionalErrors),
-          'additionalErrors is an array when present',
+        let key = `${trimExecutableExtension(new URL(moduleURL)).href}/Person`;
+        let entry = result.response.definitions[key];
+        assert.ok(entry, 'definition captured');
+        assert.strictEqual(
+          entry?.type,
+          'definition',
+          'definition entry type correct',
         );
-        assert.ok(
-          additionalErrors?.every(
-            (entry) =>
-              entry?.title === 'Console error' ||
-              entry?.title === 'Console assert',
-          ),
-          'additionalErrors only include console entries',
-        );
-      }
-      let deps = result.response.error?.error.deps ?? [];
-      assert.ok(
-        deps.some((dep) => dep.includes(`${realmURL}broken`)),
-        'deps include failing module',
-      );
-    });
-
-    test('card prerender surfaces empty render container', async function (assert) {
-      let cardURL = `${realmURL}no-icon.json`;
-
-      let result = await prerenderer.prerenderCard({
-        realm: realmURL,
-        url: cardURL,
-        auth: auth(),
+        if (entry?.type === 'definition') {
+          assert.ok(entry.definition.displayName, 'display name present');
+        } else {
+          assert.ok(false, 'module definition should be present');
+        }
       });
 
-      assert.ok(result.response.error, 'prerender reports error');
-      assert.strictEqual(
-        result.response.error?.error.title,
-        'Invalid render response',
-        'error title indicates invalid render payload',
-      );
-      assert.ok(
-        result.response.error?.error.message?.includes(
-          '[data-prerender] has no child element to capture',
-        ),
-        `error message mentions empty prerender container, got: ${result.response.error?.error.message}`,
-      );
-      let errorDeps = result.response.error?.error.deps;
-      assert.notStrictEqual(
-        errorDeps,
-        null,
-        'short-circuit invalid render response includes non-null deps',
-      );
-      let deps = errorDeps ?? [];
-      assert.true(
-        Array.isArray(deps),
-        'short-circuit invalid render response deps are an array',
-      );
-      assert.true(
-        [`${realmURL}no-icon`, `${realmURL}no-icon.json`].some((dep) =>
-          deps.includes(dep),
-        ),
-        `synthesized invalid render error includes fallback dep context (deps: ${JSON.stringify(deps)})`,
-      );
-    });
-
-    test('card prerender surfaces runtime render errors without timing out', async function (assert) {
-      let cardURL = `${realmURL}throws.json`;
-
-      let result = await prerenderer.prerenderCard({
-        realm: realmURL,
-        url: cardURL,
-        auth: auth(),
-      });
-
-      assert.ok(result.response.error, 'prerender reports error');
-      assert.strictEqual(
-        result.response.error?.error.status,
-        500,
-        'runtime error surfaces as 500',
-      );
-      assert.ok(
-        result.response.error?.error.message?.includes('boom'),
-        `runtime error message includes thrown message, got: ${result.response.error?.error.message}`,
-      );
-      assert.false(
-        result.pool.timedOut,
-        'runtime error should not be mistaken for timeout',
-      );
-      assert.true(
-        result.pool.evicted,
-        'runtime error evicts prerender page to recover clean state',
-      );
-    });
-
-    test('card prerender includes console errors when render fails', async function (assert) {
-      let cardURL = `${realmURL}console-error.json`;
-
-      let result = await prerenderer.prerenderCard({
-        realm: realmURL,
-        url: cardURL,
-        auth: auth(),
-      });
-
-      assert.ok(result.response.error, 'prerender reports error');
-      let additionalErrors = result.response.error?.error.additionalErrors;
-      assert.ok(
-        Array.isArray(additionalErrors),
-        'additionalErrors includes console errors',
-      );
-      assert.ok(
-        additionalErrors?.some(
-          (error) =>
-            typeof error?.message === 'string' &&
-            error.message.includes('console boom'),
-        ),
-        'console error message is captured',
-      );
-    });
-
-    test('card prerender ignores console errors on success', async function (assert) {
-      let cardURL = `${realmURL}console-no-error.json`;
-
-      let result = await prerenderer.prerenderCard({
-        realm: realmURL,
-        url: cardURL,
-        auth: auth(),
-      });
-
-      assert.notOk(result.response.error, 'prerender succeeds');
-    });
-
-    test('card prerender surfaces unhandled promise rejection without timing out', async function (assert) {
-      let cardURL = `${realmURL}rejects.json`;
-
-      let result = await prerenderer.prerenderCard({
-        realm: realmURL,
-        url: cardURL,
-        auth: auth(),
-      });
-
-      assert.ok(result.response.error, 'prerender reports error');
-      assert.strictEqual(
-        result.response.error?.error.status,
-        500,
-        'unhandled rejection surfaces as 500',
-      );
-      assert.ok(
-        result.response.error?.error.message?.includes('reject boom'),
-        `unhandled rejection message includes thrown message, got: ${result.response.error?.error.message}`,
-      );
-      assert.false(
-        result.pool.timedOut,
-        'unhandled rejection should not be mistaken for timeout',
-      );
-      assert.true(
-        result.pool.evicted,
-        'unhandled rejection evicts prerender page to recover clean state',
-      );
-    });
-
-    test('card prerender surfaces RSVP rejection without timing out', async function (assert) {
-      let cardURL = `${realmURL}rsvp-rejects.json`;
-
-      let result = await prerenderer.prerenderCard({
-        realm: realmURL,
-        url: cardURL,
-        auth: auth(),
-      });
-
-      assert.ok(result.response.error, 'prerender reports RSVP rejection');
-      assert.strictEqual(
-        result.response.error?.error.status,
-        500,
-        'RSVP rejection surfaces as 500',
-      );
-      assert.ok(
-        result.response.error?.error.message?.includes('rsvp boom'),
-        `RSVP rejection message includes thrown message, got: ${result.response.error?.error.message}`,
-      );
-      assert.false(
-        result.pool.timedOut,
-        'RSVP rejection should not be mistaken for timeout',
-      );
-      assert.true(
-        result.pool.evicted,
-        'RSVP rejection evicts prerender page to recover clean state',
-      );
-    });
-
-    test('card prerender surfaces errors thrown before the render model hook', async function (assert) {
-      let originalGetPage = PagePool.prototype.getPage;
-      try {
-        PagePool.prototype.getPage = async function (
-          this: PagePool,
-          realm: string,
-        ) {
-          let pageInfo = await originalGetPage.call(this, realm);
-          let page = pageInfo.page as any;
-          let originalEvaluate = page?.evaluate?.bind(page);
-          if (originalEvaluate) {
-            let injected = false;
-            page.evaluate = async (...args: any[]) => {
-              if (!injected) {
-                injected = true;
-                await originalEvaluate(() => {
-                  let entries =
-                    (window as any).requirejs?.entries ??
-                    (window as any).require?.entries ??
-                    (window as any)._eak_seen;
-                  let renderModuleName =
-                    entries &&
-                    Object.keys(entries).find((name) =>
-                      name.endsWith('/routes/render'),
-                    );
-                  if (!renderModuleName) {
-                    throw new Error(
-                      'render route module not found for injection',
-                    );
-                  }
-                  let renderRouteModule = (window as any).require(
-                    renderModuleName,
-                  );
-                  let RenderRouteClass = renderRouteModule?.default;
-                  if (!RenderRouteClass?.prototype) {
-                    throw new Error(
-                      'render route class not found for injection',
-                    );
-                  }
-                  let originalBeforeModel =
-                    RenderRouteClass.prototype.beforeModel;
-                  RenderRouteClass.prototype.beforeModel = async function (
-                    ...bmArgs: any[]
-                  ) {
-                    if (originalBeforeModel) {
-                      await originalBeforeModel.apply(this, bmArgs as any);
-                    }
-                    RenderRouteClass.prototype.beforeModel =
-                      originalBeforeModel;
-                    throw new Error('boom before model');
-                  };
-                });
-              }
-              return originalEvaluate(...args);
-            };
-          }
-          return { ...pageInfo, page };
-        };
+      test('card prerender hoists module transpile errors', async function (assert) {
+        let brokenCard = `${realmURL}broken.json`;
 
         let result = await prerenderer.prerenderCard({
           realm: realmURL,
-          url: `${realmURL}1.json`,
+          url: brokenCard,
           auth: auth(),
         });
 
         assert.ok(result.response.error, 'prerender reports error');
+        assert.strictEqual(
+          result.response.error?.error.status,
+          406,
+          'status is 406',
+        );
+        assert.strictEqual(
+          result.response.error?.error.message,
+          `Parse Error at broken.gts:1:23: 1:24 (${realmURL}broken)`,
+          'message includes enough information for AI to fix the problem',
+        );
         assert.ok(
-          result.response.error?.error.message?.includes('boom before model'),
-          'captures error thrown before model hook',
+          result.response.error?.error.stack?.includes('at transpileJS'),
+          `stack should include "at transpileJS" but was ${result.response.error?.error.stack}`,
         );
-        assert.true(
-          result.pool.evicted,
-          'pre-model error evicts prerender page for clean state',
+        let additionalErrors = result.response.error?.error.additionalErrors;
+        if (additionalErrors !== null) {
+          assert.ok(
+            Array.isArray(additionalErrors),
+            'additionalErrors is an array when present',
+          );
+          assert.ok(
+            additionalErrors?.every(
+              (entry) =>
+                entry?.title === 'Console error' ||
+                entry?.title === 'Console assert',
+            ),
+            'additionalErrors only include console entries',
+          );
+        }
+        let deps = result.response.error?.error.deps ?? [];
+        assert.ok(
+          deps.some((dep) => dep.includes(`${realmURL}broken`)),
+          'deps include failing module',
         );
-        assert.true(
-          (result.response.error as any)?.evict,
-          'error payload flags eviction',
+      });
+
+      test('card prerender surfaces actionable error for bad icon import', async function (assert) {
+        let cardURL = `${realmURL}bad-icon-import.json`;
+
+        let result = await prerenderer.prerenderCard({
+          realm: realmURL,
+          url: cardURL,
+          auth: auth(),
+        });
+
+        assert.ok(result.response.error, 'prerender reports error');
+        assert.strictEqual(
+          result.response.error?.error.status,
+          500,
+          'bad icon import error surfaces as 500',
         );
-        assert.false(result.pool.timedOut, 'error is not treated as timeout');
+        assert.ok(
+          result.response.error?.error.message?.includes(
+            'static icon of BadIconImport is undefined',
+          ),
+          `error message describes the bad icon import, got: ${result.response.error?.error.message}`,
+        );
+      });
+
+      test('card prerender surfaces empty render container', async function (assert) {
+        let cardURL = `${realmURL}no-icon.json`;
+
+        let result = await prerenderer.prerenderCard({
+          realm: realmURL,
+          url: cardURL,
+          auth: auth(),
+        });
+
+        assert.ok(result.response.error, 'prerender reports error');
+        assert.strictEqual(
+          result.response.error?.error.title,
+          'Invalid render response',
+          'error title indicates invalid render payload',
+        );
+        assert.ok(
+          result.response.error?.error.message?.includes(
+            '[data-prerender] has no child element to capture',
+          ),
+          `error message mentions empty prerender container, got: ${result.response.error?.error.message}`,
+        );
         let errorDeps = result.response.error?.error.deps;
         assert.notStrictEqual(
           errorDeps,
           null,
-          'pre-model short-circuit error includes non-null deps',
+          'short-circuit invalid render response includes non-null deps',
         );
         let deps = errorDeps ?? [];
         assert.true(
           Array.isArray(deps),
-          'pre-model short-circuit deps are an array',
+          'short-circuit invalid render response deps are an array',
         );
         assert.true(
-          [`${realmURL}1.json`, `${realmURL}1`].some((dep) =>
+          [`${realmURL}no-icon`, `${realmURL}no-icon.json`].some((dep) =>
             deps.includes(dep),
           ),
-          `pre-model fallback error includes dep context from transition params (deps: ${JSON.stringify(deps)})`,
+          `synthesized invalid render error includes fallback dep context (deps: ${JSON.stringify(deps)})`,
         );
-      } finally {
-        PagePool.prototype.getPage = originalGetPage;
-      }
-    });
+      });
 
-    test('card prerender waits for query fallback search and nested relationship loads', async function (assert) {
-      const cardURL = `${realmURL}directory-ops`;
-      let realmServerPatch =
-        installRealmServerAssertOwnRealmServerBypassPatch();
-      let delayedSearchPatch = installDelayedRuntimeRealmSearchPatch(150);
-      try {
+      test('card prerender surfaces runtime render errors without timing out', async function (assert) {
+        let cardURL = `${realmURL}throws.json`;
+
+        let result = await prerenderer.prerenderCard({
+          realm: realmURL,
+          url: cardURL,
+          auth: auth(),
+        });
+
+        assert.ok(result.response.error, 'prerender reports error');
+        assert.strictEqual(
+          result.response.error?.error.status,
+          500,
+          'runtime error surfaces as 500',
+        );
+        assert.ok(
+          result.response.error?.error.message?.includes('boom'),
+          `runtime error message includes thrown message, got: ${result.response.error?.error.message}`,
+        );
+        assert.false(
+          result.pool.timedOut,
+          'runtime error should not be mistaken for timeout',
+        );
+        assert.true(
+          result.pool.evicted,
+          'runtime error evicts prerender page to recover clean state',
+        );
+      });
+
+      test('card prerender includes console errors when render fails', async function (assert) {
+        let cardURL = `${realmURL}console-error.json`;
+
+        let result = await prerenderer.prerenderCard({
+          realm: realmURL,
+          url: cardURL,
+          auth: auth(),
+        });
+
+        assert.ok(result.response.error, 'prerender reports error');
+        let additionalErrors = result.response.error?.error.additionalErrors;
+        assert.ok(
+          Array.isArray(additionalErrors),
+          'additionalErrors includes console errors',
+        );
+        assert.ok(
+          additionalErrors?.some(
+            (error) =>
+              typeof error?.message === 'string' &&
+              error.message.includes('console boom'),
+          ),
+          'console error message is captured',
+        );
+      });
+
+      test('card prerender ignores console errors on success', async function (assert) {
+        let cardURL = `${realmURL}console-no-error.json`;
+
         let result = await prerenderer.prerenderCard({
           realm: realmURL,
           url: cardURL,
@@ -1201,213 +1207,762 @@ module(basename(__filename), function () {
         });
 
         assert.notOk(result.response.error, 'prerender succeeds');
-        assert.true(
-          delayedSearchPatch.getRequestCount() > 0,
-          'fallback _search requests occurred and were delayed',
-        );
+      });
 
-        let isolatedHTML = cleanWhiteSpace(result.response.isolatedHTML ?? '');
-        assert.ok(
-          /data-test-staff-name[^>]*>\s*Bob\s*</.test(isolatedHTML),
-          `isolated html includes query results: ${isolatedHTML}`,
-        );
-        assert.ok(
-          /data-test-staff-manager[^>]*>\s*Alice\s*</.test(isolatedHTML),
-          `isolated html includes lazy relationship from query result: ${isolatedHTML}`,
-        );
-        assert.ok(
-          /data-test-staff-report[^>]*>\s*Eve/.test(isolatedHTML),
-          `isolated html includes nested query results: ${isolatedHTML}`,
-        );
-        assert.ok(
-          /data-test-staff-report-manager[^>]*>\s*Bob\s*</.test(isolatedHTML),
-          `isolated html includes nested relationship loads: ${isolatedHTML}`,
-        );
-        assert.ok(
-          /id="heroGridPlane"/.test(isolatedHTML),
-          `isolated html includes hero grid container: ${isolatedHTML}`,
-        );
-        let heroMiniCards = isolatedHTML.match(/class="hero-mini-card"/g) ?? [];
-        assert.ok(
-          heroMiniCards.length >= 3,
-          `isolated html includes hero mini cards from query and nested query loads: ${isolatedHTML}`,
-        );
+      test('card prerender surfaces unhandled promise rejection without timing out', async function (assert) {
+        let cardURL = `${realmURL}rejects.json`;
 
-        let staff = result.response.searchDoc?.staff as
-          | Array<Record<string, any>>
-          | undefined;
-        assert.ok(
-          Array.isArray(staff),
-          'searchDoc includes query field results',
-        );
+        let result = await prerenderer.prerenderCard({
+          realm: realmURL,
+          url: cardURL,
+          auth: auth(),
+        });
 
-        let bob = staff?.find((entry) => entry?.name === 'Bob');
-        assert.ok(bob, 'searchDoc includes Bob from query results');
+        assert.ok(result.response.error, 'prerender reports error');
         assert.strictEqual(
-          bob?.manager?.name,
-          'Alice',
-          'searchDoc includes loaded manager relationship',
+          result.response.error?.error.status,
+          500,
+          'unhandled rejection surfaces as 500',
         );
-
-        let bobReports = bob?.reports as Array<Record<string, any>> | undefined;
         assert.ok(
-          Array.isArray(bobReports),
-          'searchDoc includes nested query results',
+          result.response.error?.error.message?.includes('reject boom'),
+          `unhandled rejection message includes thrown message, got: ${result.response.error?.error.message}`,
         );
-        let hasEveWithManager = bobReports?.some(
-          (report) => report?.name === 'Eve' && report?.manager?.name === 'Bob',
+        assert.false(
+          result.pool.timedOut,
+          'unhandled rejection should not be mistaken for timeout',
         );
         assert.true(
-          Boolean(hasEveWithManager),
-          'searchDoc includes nested loaded relationships',
+          result.pool.evicted,
+          'unhandled rejection evicts prerender page to recover clean state',
         );
-      } finally {
-        await realmServerPatch.restore();
-        delayedSearchPatch.restore();
+      });
+
+      test('card prerender surfaces RSVP rejection without timing out', async function (assert) {
+        let cardURL = `${realmURL}rsvp-rejects.json`;
+
+        let result = await prerenderer.prerenderCard({
+          realm: realmURL,
+          url: cardURL,
+          auth: auth(),
+        });
+
+        assert.ok(result.response.error, 'prerender reports RSVP rejection');
+        assert.strictEqual(
+          result.response.error?.error.status,
+          500,
+          'RSVP rejection surfaces as 500',
+        );
+        assert.ok(
+          result.response.error?.error.message?.includes('rsvp boom'),
+          `RSVP rejection message includes thrown message, got: ${result.response.error?.error.message}`,
+        );
+        assert.false(
+          result.pool.timedOut,
+          'RSVP rejection should not be mistaken for timeout',
+        );
+        assert.true(
+          result.pool.evicted,
+          'RSVP rejection evicts prerender page to recover clean state',
+        );
+      });
+
+      test('card prerender surfaces errors thrown before the render model hook', async function (assert) {
+        let originalGetPage = PagePool.prototype.getPage;
+        try {
+          PagePool.prototype.getPage = async function (
+            this: PagePool,
+            realm: string,
+          ) {
+            let pageInfo = await originalGetPage.call(this, realm);
+            let page = pageInfo.page as any;
+            let originalEvaluate = page?.evaluate?.bind(page);
+            if (originalEvaluate) {
+              let injected = false;
+              page.evaluate = async (...args: any[]) => {
+                if (!injected) {
+                  injected = true;
+                  await originalEvaluate(() => {
+                    let entries =
+                      (window as any).requirejs?.entries ??
+                      (window as any).require?.entries ??
+                      (window as any)._eak_seen;
+                    let renderModuleName =
+                      entries &&
+                      Object.keys(entries).find((name) =>
+                        name.endsWith('/routes/render'),
+                      );
+                    if (!renderModuleName) {
+                      throw new Error(
+                        'render route module not found for injection',
+                      );
+                    }
+                    let renderRouteModule = (window as any).require(
+                      renderModuleName,
+                    );
+                    let RenderRouteClass = renderRouteModule?.default;
+                    if (!RenderRouteClass?.prototype) {
+                      throw new Error(
+                        'render route class not found for injection',
+                      );
+                    }
+                    let originalBeforeModel =
+                      RenderRouteClass.prototype.beforeModel;
+                    RenderRouteClass.prototype.beforeModel = async function (
+                      ...bmArgs: any[]
+                    ) {
+                      if (originalBeforeModel) {
+                        await originalBeforeModel.apply(this, bmArgs as any);
+                      }
+                      RenderRouteClass.prototype.beforeModel =
+                        originalBeforeModel;
+                      throw new Error('boom before model');
+                    };
+                  });
+                }
+                return originalEvaluate(...args);
+              };
+            }
+            return { ...pageInfo, page };
+          };
+
+          let result = await prerenderer.prerenderCard({
+            realm: realmURL,
+            url: `${realmURL}1.json`,
+            auth: auth(),
+          });
+
+          assert.ok(result.response.error, 'prerender reports error');
+          assert.ok(
+            result.response.error?.error.message?.includes('boom before model'),
+            'captures error thrown before model hook',
+          );
+          assert.true(
+            result.pool.evicted,
+            'pre-model error evicts prerender page for clean state',
+          );
+          assert.true(
+            (result.response.error as any)?.evict,
+            'error payload flags eviction',
+          );
+          assert.false(result.pool.timedOut, 'error is not treated as timeout');
+          let errorDeps = result.response.error?.error.deps;
+          assert.notStrictEqual(
+            errorDeps,
+            null,
+            'pre-model short-circuit error includes non-null deps',
+          );
+          let deps = errorDeps ?? [];
+          assert.true(
+            Array.isArray(deps),
+            'pre-model short-circuit deps are an array',
+          );
+          assert.true(
+            [`${realmURL}1.json`, `${realmURL}1`].some((dep) =>
+              deps.includes(dep),
+            ),
+            `pre-model fallback error includes dep context from transition params (deps: ${JSON.stringify(deps)})`,
+          );
+        } finally {
+          PagePool.prototype.getPage = originalGetPage;
+        }
+      });
+
+      test('card prerender waits for query fallback search and nested relationship loads', async function (assert) {
+        const cardURL = `${realmURL}directory-ops`;
+        let realmServerPatch =
+          installRealmServerAssertOwnRealmServerBypassPatch();
+        let delayedSearchPatch = installDelayedRuntimeRealmSearchPatch(150);
+        try {
+          let result = await prerenderer.prerenderCard({
+            realm: realmURL,
+            url: cardURL,
+            auth: auth(),
+          });
+
+          assert.notOk(result.response.error, 'prerender succeeds');
+          assert.true(
+            delayedSearchPatch.getRequestCount() > 0,
+            'fallback _search requests occurred and were delayed',
+          );
+
+          let isolatedHTML = cleanWhiteSpace(
+            result.response.isolatedHTML ?? '',
+          );
+          assert.ok(
+            /data-test-staff-name[^>]*>\s*Bob\s*</.test(isolatedHTML),
+            `isolated html includes query results: ${isolatedHTML}`,
+          );
+          assert.ok(
+            /data-test-staff-manager[^>]*>\s*Alice\s*</.test(isolatedHTML),
+            `isolated html includes lazy relationship from query result: ${isolatedHTML}`,
+          );
+          assert.ok(
+            /data-test-staff-report[^>]*>\s*Eve/.test(isolatedHTML),
+            `isolated html includes nested query results: ${isolatedHTML}`,
+          );
+          assert.ok(
+            /data-test-staff-report-manager[^>]*>\s*Bob\s*</.test(isolatedHTML),
+            `isolated html includes nested relationship loads: ${isolatedHTML}`,
+          );
+          assert.ok(
+            /id="heroGridPlane"/.test(isolatedHTML),
+            `isolated html includes hero grid container: ${isolatedHTML}`,
+          );
+          let heroMiniCards =
+            isolatedHTML.match(/class="hero-mini-card"/g) ?? [];
+          assert.ok(
+            heroMiniCards.length >= 3,
+            `isolated html includes hero mini cards from query and nested query loads: ${isolatedHTML}`,
+          );
+
+          let staff = result.response.searchDoc?.staff as
+            | Array<Record<string, any>>
+            | undefined;
+          assert.ok(
+            Array.isArray(staff),
+            'searchDoc includes query field results',
+          );
+
+          let bob = staff?.find((entry) => entry?.name === 'Bob');
+          assert.ok(bob, 'searchDoc includes Bob from query results');
+          assert.strictEqual(
+            bob?.manager?.name,
+            'Alice',
+            'searchDoc includes loaded manager relationship',
+          );
+
+          let bobReports = bob?.reports as
+            | Array<Record<string, any>>
+            | undefined;
+          assert.ok(
+            Array.isArray(bobReports),
+            'searchDoc includes nested query results',
+          );
+          let hasEveWithManager = bobReports?.some(
+            (report) =>
+              report?.name === 'Eve' && report?.manager?.name === 'Bob',
+          );
+          assert.true(
+            Boolean(hasEveWithManager),
+            'searchDoc includes nested loaded relationships',
+          );
+        } finally {
+          await realmServerPatch.restore();
+          delayedSearchPatch.restore();
+        }
+      });
+
+      test('module prerender evicts pooled page on timeout', async function (assert) {
+        const moduleURL = `${realmURL}person.gts`;
+
+        let first = await prerenderer.prerenderModule({
+          realm: realmURL,
+          url: moduleURL,
+          auth: auth(),
+        });
+        assert.false(first.pool.reused, 'initial module render not reused');
+        assert.false(first.pool.evicted, 'initial module render not evicted');
+
+        let timedOut = await prerenderer.prerenderModule({
+          realm: realmURL,
+          url: moduleURL,
+          auth: auth(),
+          opts: { timeoutMs: 1, simulateTimeoutMs: 25 },
+        });
+
+        assert.strictEqual(
+          timedOut.response.status,
+          'error',
+          'timeout returns error response',
+        );
+        assert.strictEqual(
+          timedOut.response.error?.error.title,
+          'Render timeout',
+          'timeout surfaces render timeout title',
+        );
+        assert.strictEqual(
+          timedOut.response.error?.error.status,
+          504,
+          'timeout surfaces 504 status',
+        );
+        assert.true(timedOut.pool.timedOut, 'timeout flagged on pool');
+        assert.true(timedOut.pool.evicted, 'pool evicted after timeout');
+        assert.notStrictEqual(
+          timedOut.pool.pageId,
+          'unknown',
+          'timeout retains page identifier',
+        );
+
+        let afterTimeout = await prerenderer.prerenderModule({
+          realm: realmURL,
+          url: moduleURL,
+          auth: auth(),
+        });
+        assert.false(
+          afterTimeout.pool.reused,
+          'timeout eviction prevents reuse on next render',
+        );
+        assert.false(
+          afterTimeout.pool.evicted,
+          'no eviction on recovery render',
+        );
+        assert.false(afterTimeout.pool.timedOut, 'no timeout after recovery');
+        assert.strictEqual(
+          afterTimeout.response.status,
+          'ready',
+          'subsequent render succeeds',
+        );
+      });
+
+      test('file prerender returns extracted metadata', async function (assert) {
+        const fileURL = `${realmURL}notes.txt`;
+
+        let result = await prerenderer.prerenderFileExtract({
+          realm: realmURL,
+          url: fileURL,
+          auth: auth(),
+          renderOptions: { fileExtract: true },
+        });
+
+        assert.strictEqual(
+          result.response.status,
+          'ready',
+          'file extract reports ready',
+        );
+        assert.strictEqual(
+          result.response.searchDoc?.name,
+          'notes.txt',
+          'search doc includes name',
+        );
+        assert.ok(
+          result.response.deps.includes(`${baseRealm.url}file-api`),
+          'deps include base file-api module',
+        );
+        assert.notOk(
+          result.response.deps.includes(fileURL),
+          'deps exclude the file url itself',
+        );
+      });
+    });
+  }
+
+  function defineLivePrerenderedSearchFallbackTests() {
+    module('live prerendered search fallback', function (hooks) {
+      let realmURL = 'http://127.0.0.1:4456/test/';
+      let prerenderServerURL = new URL(realmURL).origin;
+      let testUserId = '@user1:localhost';
+      let permissions: RealmPermissions = {
+        [realmURL]: ['read', 'write', 'realm-owner'],
+      };
+      let prerenderer: Prerenderer;
+      let dbAdapter: any;
+      let auth = () => {
+        let sessions = JSON.parse(
+          testCreatePrerenderAuth(testUserId, permissions),
+        ) as Record<string, string>;
+        let token = sessions[realmURL];
+        if (token) {
+          sessions[new URL(realmURL).origin + '/'] = token;
+        }
+        return JSON.stringify(sessions);
+      };
+
+      hooks.before(async () => {
+        prerenderer = getPrerendererForTesting({
+          maxPages: 2,
+          serverURL: prerenderServerURL,
+        });
+      });
+
+      hooks.after(async () => {
+        await prerenderer.stop();
+      });
+
+      hooks.beforeEach(async () => {
+        await prerenderer.disposeRealm(realmURL);
+      });
+
+      async function overrideIndexedIsolatedHTML(url: string, html: string) {
+        let alternate = url.endsWith('.json')
+          ? url.replace(/\.json$/, '')
+          : `${url}.json`;
+        await dbAdapter.execute(
+          `UPDATE boxel_index SET isolated_html = $1 WHERE url = $2 OR url = $3`,
+          { bind: [html, url, alternate] },
+        );
       }
-    });
 
-    test('module prerender evicts pooled page on timeout', async function (assert) {
-      const moduleURL = `${realmURL}person.gts`;
+      setupPermissionedRealms(hooks, {
+        mode: 'before',
+        realms: [
+          {
+            realmURL,
+            permissions: {
+              '*': ['read'],
+              [testUserId]: ['read', 'write', 'realm-owner'],
+            },
+            fileSystem: {
+              'prerendered-search-live.gts': `
+              import { CardDef, Component, field, contains, StringField, linksTo } from 'https://cardstack.com/base/card-api';
 
-      let first = await prerenderer.prerenderModule({
-        realm: realmURL,
-        url: moduleURL,
-        auth: auth(),
-      });
-      assert.false(first.pool.reused, 'initial module render not reused');
-      assert.false(first.pool.evicted, 'initial module render not evicted');
+              export class LiveSearchResult extends CardDef {
+                static displayName = 'Live Search Result';
+                @field cardTitle = contains(StringField);
 
-      let timedOut = await prerenderer.prerenderModule({
-        realm: realmURL,
-        url: moduleURL,
-        auth: auth(),
-        opts: { timeoutMs: 1, simulateTimeoutMs: 25 },
-      });
+                static fitted = class extends Component<typeof this> {
+                  <template>
+                    <div class="live-search-css-sentinel" data-test-live-card-value>{{@model.cardTitle}}</div>
+                    <style scoped>
+                      .live-search-css-sentinel {
+                        border-top: 4px solid rgb(1, 2, 3);
+                      }
+                    </style>
+                  </template>
+                };
 
-      assert.strictEqual(
-        timedOut.response.status,
-        'error',
-        'timeout returns error response',
-      );
-      assert.strictEqual(
-        timedOut.response.error?.error.title,
-        'Render timeout',
-        'timeout surfaces render timeout title',
-      );
-      assert.strictEqual(
-        timedOut.response.error?.error.status,
-        504,
-        'timeout surfaces 504 status',
-      );
-      assert.true(timedOut.pool.timedOut, 'timeout flagged on pool');
-      assert.true(timedOut.pool.evicted, 'pool evicted after timeout');
-      assert.notStrictEqual(
-        timedOut.pool.pageId,
-        'unknown',
-        'timeout retains page identifier',
-      );
+                static embedded = this.fitted;
+                static isolated = this.fitted;
+              }
 
-      let afterTimeout = await prerenderer.prerenderModule({
-        realm: realmURL,
-        url: moduleURL,
-        auth: auth(),
-      });
-      assert.false(
-        afterTimeout.pool.reused,
-        'timeout eviction prevents reuse on next render',
-      );
-      assert.false(afterTimeout.pool.evicted, 'no eviction on recovery render');
-      assert.false(afterTimeout.pool.timedOut, 'no timeout after recovery');
-      assert.strictEqual(
-        afterTimeout.response.status,
-        'ready',
-        'subsequent render succeeds',
-      );
-    });
+              export class LiveSearchInner extends CardDef {
+                static displayName = 'Live Search Inner';
+                static isolated = class extends Component<typeof this> {
+                  get realmHref() {
+                    let id = this.args.model?.id;
+                    if (!id) {
+                      return '';
+                    }
+                    return new URL('.', id).href;
+                  }
 
-    test('file prerender returns extracted metadata', async function (assert) {
-      const fileURL = `${realmURL}notes.txt`;
+                  get query() {
+                    return {
+                      filter: {
+                        type: {
+                          module: new URL('./prerendered-search-live', import.meta.url).href,
+                          name: 'LiveSearchResult',
+                        },
+                      },
+                      page: {
+                        size: 10,
+                        number: 0,
+                      },
+                    };
+                  }
 
-      let result = await prerenderer.prerenderFileExtract({
-        realm: realmURL,
-        url: fileURL,
-        auth: auth(),
-        renderOptions: { fileExtract: true },
-      });
+                  get realms() {
+                    return [new URL('./', import.meta.url).href];
+                  }
 
-      assert.strictEqual(
-        result.response.status,
-        'ready',
-        'file extract reports ready',
-      );
-      assert.strictEqual(
-        result.response.searchDoc?.name,
-        'notes.txt',
-        'search doc includes name',
-      );
-      assert.ok(
-        result.response.deps.includes(`${baseRealm.url}file-api`),
-        'deps include base file-api module',
-      );
-      assert.notOk(
-        result.response.deps.includes(fileURL),
-        'deps exclude the file url itself',
-      );
-    });
+                  <template>
+                    <div data-test-live-search-host-ran>Host ran</div>
+                    <div data-test-live-search-realm>{{this.realmHref}}</div>
+                    {{#if @context.prerenderedCardSearchComponent}}
+                      <@context.prerenderedCardSearchComponent
+                        @query={{this.query}}
+                        @format='fitted'
+                        @realms={{this.realms}}
+                        @isLive={{true}}
+                      >
+                        <:loading>
+                          <div data-test-live-search-loading>Loading...</div>
+                        </:loading>
+                        <:response as |cards|>
+                          {{#each cards as |card|}}
+                            <div data-test-live-search-card={{card.url}}>
+                              <card.component />
+                            </div>
+                          {{/each}}
+                        </:response>
+                        <:meta as |meta|>
+                          <div data-test-live-search-total>{{meta.page.total}}</div>
+                        </:meta>
+                      </@context.prerenderedCardSearchComponent>
+                    {{else}}
+                      <div data-test-live-search-component-missing>missing</div>
+                    {{/if}}
+                  </template>
+                };
+              }
 
-    test('file extract surfaces broken FileDef module error without remote prerender timeout', async function (assert) {
-      await realmAdapter.write(
-        'filedef-mismatch.gts',
-        `
-          import { FileDef as BaseFileDef } from "https://cardstack.com/base/file-api";
-          import { MissingChild } from "./missing-child";
+              export class LiveSearchHost extends CardDef {
+                static displayName = 'Live Search Host';
+                @field child = linksTo(() => LiveSearchInner);
 
-          export class FileDef extends BaseFileDef {
-            static missingChild = MissingChild;
-          }
-        `,
-      );
-      await realmAdapter.write('broken-file.mismatch', 'broken mismatch file');
-      realm.__testOnlyClearCaches();
+                static isolated = class extends Component<typeof this> {
+                  <template>
+                    <@fields.child @format='isolated' />
+                  </template>
+                };
 
-      let result = await prerenderer.prerenderFileExtract({
-        realm: realmURL,
-        url: `${realmURL}broken-file.mismatch`,
-        auth: auth(),
-        renderOptions: {
-          fileExtract: true,
-          fileDefCodeRef: {
-            module: `${realmURL}filedef-mismatch`,
-            name: 'FileDef',
+                static embedded = this.isolated;
+              }
+            `,
+              'live-search-host.json': {
+                data: {
+                  relationships: {
+                    child: {
+                      links: {
+                        self: './live-search-inner',
+                      },
+                    },
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: './prerendered-search-live',
+                      name: 'LiveSearchHost',
+                    },
+                  },
+                },
+              },
+              'live-search-inner.json': {
+                data: {
+                  meta: {
+                    adoptsFrom: {
+                      module: './prerendered-search-live',
+                      name: 'LiveSearchInner',
+                    },
+                  },
+                },
+              },
+              'live-search-result-1.json': {
+                data: {
+                  attributes: {
+                    cardTitle: 'LIVE_RESULT_VALUE',
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: './prerendered-search-live',
+                      name: 'LiveSearchResult',
+                    },
+                  },
+                },
+              },
+              'live-file-search-card.gts': `
+              import { CardDef, Component, field, contains, StringField, linksTo } from 'https://cardstack.com/base/card-api';
+
+              export class LiveFileSearchInner extends CardDef {
+                static displayName = 'Live File Search Inner';
+                static isolated = class extends Component<typeof this> {
+                  get realmHref() {
+                    let id = this.args.model?.id;
+                    if (!id) {
+                      return '';
+                    }
+                    return new URL('.', id).href;
+                  }
+
+                  get query() {
+                    return {
+                      filter: {
+                        on: {
+                          module: 'https://cardstack.com/base/file-api',
+                          name: 'FileDef',
+                        },
+                        eq: {
+                          url: \`\${this.realmHref}live-file.live\`,
+                        },
+                      },
+                      page: {
+                        size: 10,
+                        number: 0,
+                      },
+                    };
+                  }
+
+                  get realms() {
+                    return [new URL('./', import.meta.url).href];
+                  }
+
+                  <template>
+                    <div data-test-live-file-search-host-ran>File Host ran</div>
+                    {{#if @context.prerenderedCardSearchComponent}}
+                      <@context.prerenderedCardSearchComponent
+                        @query={{this.query}}
+                        @format='embedded'
+                        @realms={{this.realms}}
+                        @isLive={{true}}
+                      >
+                        <:response as |cards|>
+                          {{#each cards as |card|}}
+                            <div data-test-live-file-search-card={{card.url}}>
+                              <card.component />
+                            </div>
+                          {{/each}}
+                        </:response>
+                      </@context.prerenderedCardSearchComponent>
+                    {{else}}
+                      <div data-test-live-file-search-component-missing>missing</div>
+                    {{/if}}
+                  </template>
+                };
+              }
+
+              export class LiveFileSearchHost extends CardDef {
+                static displayName = 'Live File Search Host';
+                @field cardTitle = contains(StringField);
+                @field child = linksTo(() => LiveFileSearchInner);
+
+                static isolated = class extends Component<typeof this> {
+                  <template>
+                    <@fields.child @format='isolated' />
+                  </template>
+                };
+
+                static embedded = this.isolated;
+              }
+            `,
+              'live-file-search-host.json': {
+                data: {
+                  attributes: {
+                    cardTitle: 'Live File Search Host',
+                  },
+                  relationships: {
+                    child: {
+                      links: {
+                        self: './live-file-search-inner',
+                      },
+                    },
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: './live-file-search-card',
+                      name: 'LiveFileSearchHost',
+                    },
+                  },
+                },
+              },
+              'live-file-search-inner.json': {
+                data: {
+                  meta: {
+                    adoptsFrom: {
+                      module: './live-file-search-card',
+                      name: 'LiveFileSearchInner',
+                    },
+                  },
+                },
+              },
+              'live-file.live': 'LIVE_FILE_VALUE',
+            },
           },
+        ],
+        onRealmSetup({ dbAdapter: setupDbAdapter }) {
+          dbAdapter = setupDbAdapter;
+          permissions = {
+            [realmURL]: ['read', 'write', 'realm-owner'],
+          };
         },
       });
 
-      assert.strictEqual(
-        result.response.status,
-        'error',
-        'file extract reports error for broken FileDef module',
-      );
-      assert.ok(result.response.error, 'error payload is present');
-      assert.ok(
-        result.response.error?.error.message?.includes(
-          'Received HTTP 404 from server',
-        ),
-        `error message should mention module 404, got: ${result.response.error?.error.message}`,
-      );
-      let messageIncludesTimeoutMarker = Boolean(
-        result.response.error?.error.message?.includes('Prerender request to'),
-      );
-      assert.false(
-        messageIncludesTimeoutMarker,
-        'error should not be reported as a remote prerender request timeout',
-      );
-      assert.false(
-        result.pool.timedOut,
-        'pool should not mark this as a prerender timeout',
-      );
+      test('card prerendered search uses live rendered CardDef HTML and keeps unique CSS', async function (assert) {
+        const cardURL = `${realmURL}live-search-host`;
+        const sentinel = 'SENTINEL_STALE_CARD_HTML';
+        let realmServerPatch =
+          installRealmServerAssertOwnRealmServerBypassPatch();
+        let searchRequestObserverPatch = installSearchRequestObserverPatch();
+
+        try {
+          let indexedRows = await dbAdapter.execute(
+            `SELECT url FROM boxel_index WHERE url LIKE $1 ORDER BY url`,
+            { bind: [`${realmURL}%live-search%`] },
+          );
+          assert.ok(
+            indexedRows.length > 0,
+            `expected indexed rows for live-search fixtures, got: ${JSON.stringify(indexedRows)}`,
+          );
+
+          await overrideIndexedIsolatedHTML(
+            `${realmURL}live-search-result-1`,
+            `<div data-test-stale-card-html>${sentinel}</div>`,
+          );
+
+          let result = await prerenderer.prerenderCard({
+            realm: realmURL,
+            url: cardURL,
+            auth: auth(),
+          });
+
+          assert.notOk(result.response.error, 'prerender succeeds');
+          let isolatedHTML = cleanWhiteSpace(
+            result.response.isolatedHTML ?? '',
+          );
+          let searchRequests = searchRequestObserverPatch.getRequests();
+          assert.ok(
+            searchRequests.length > 0,
+            `observed federated search requests: ${JSON.stringify(searchRequests)}`,
+          );
+
+          assert.ok(
+            isolatedHTML.includes('LIVE_RESULT_VALUE'),
+            `isolated html includes live card value: ${isolatedHTML}`,
+          );
+          assert.notOk(
+            isolatedHTML.includes(sentinel),
+            `isolated html does not include stale indexed sentinel: ${isolatedHTML}`,
+          );
+          assert.ok(
+            isolatedHTML.includes('live-search-css-sentinel'),
+            `isolated html includes unique live card css class: ${isolatedHTML}`,
+          );
+          assert.ok(
+            /live-search-css-sentinel[^>]*data-scopedcss-[a-f0-9]{10}-[a-f0-9]{10}/.test(
+              isolatedHTML,
+            ),
+            `isolated html keeps scoped css marker on live result: ${isolatedHTML}`,
+          );
+        } finally {
+          searchRequestObserverPatch.restore();
+          await realmServerPatch.restore();
+        }
+      });
+
+      test('card prerendered search uses live rendered FileDef HTML', async function (assert) {
+        const cardURL = `${realmURL}live-file-search-host`;
+        const sentinel = 'SENTINEL_STALE_FILE_HTML';
+        let realmServerPatch =
+          installRealmServerAssertOwnRealmServerBypassPatch();
+
+        try {
+          await overrideIndexedIsolatedHTML(
+            `${realmURL}live-file.live`,
+            `<article data-test-stale-file-html>${sentinel}</article>`,
+          );
+
+          let result = await prerenderer.prerenderCard({
+            realm: realmURL,
+            url: cardURL,
+            auth: auth(),
+          });
+
+          assert.notOk(result.response.error, 'prerender succeeds');
+          let isolatedHTML = cleanWhiteSpace(
+            result.response.isolatedHTML ?? '',
+          );
+
+          assert.ok(
+            isolatedHTML.includes('live-file.live'),
+            `isolated html includes live FileDef fallback value: ${isolatedHTML}`,
+          );
+          assert.notOk(
+            isolatedHTML.includes(sentinel),
+            `isolated html does not include stale file sentinel: ${isolatedHTML}`,
+          );
+          assert.ok(
+            isolatedHTML.includes('data-test-live-file-search-card'),
+            `isolated html includes live FileDef search result wrapper: ${isolatedHTML}`,
+          );
+        } finally {
+          await realmServerPatch.restore();
+        }
+      });
     });
+  }
+
+  module('prerender - non-mutating tests', function () {
+    defineNonMutatingRunnerTests();
+    defineLivePrerenderedSearchFallbackTests();
+    defineNonMutatingStaticTests();
   });
 
   module('prerender - permissioned auth failures', function (hooks) {
@@ -1416,7 +1971,7 @@ module(basename(__filename), function () {
     let prerenderServerURL = new URL(consumerRealmURL).origin;
     let testUserId = '@user1:localhost';
     let permissions: RealmPermissions = {};
-    let permissionedRealms: RuntimeRealm[] = [];
+    let indexingReady: Promise<void> = Promise.resolve();
     let prerenderer: Prerenderer;
     let auth = () => testCreatePrerenderAuth(testUserId, permissions);
 
@@ -1431,7 +1986,8 @@ module(basename(__filename), function () {
       await prerenderer.stop();
     });
 
-    hooks.beforeEach(function () {
+    hooks.beforeEach(async function () {
+      await indexingReady;
       permissions = {
         [consumerRealmURL]: ['read', 'write', 'realm-owner'],
       };
@@ -1544,23 +2100,13 @@ module(basename(__filename), function () {
         },
       ],
       onRealmSetup({ realms }) {
-        permissionedRealms = realms.map(({ realm }) => realm);
+        indexingReady = Promise.all(
+          realms.map(({ realm }) => realm.indexing()),
+        ).then(() => undefined);
         permissions = {
           [consumerRealmURL]: ['read', 'write', 'realm-owner'],
         };
       },
-    });
-
-    hooks.before(async function () {
-      // setupPermissionedRealms(..., { mode: 'before' }) registers its own
-      // hooks.before that runs first and populates permissionedRealms via
-      // onRealmSetup(). This guard makes that ordering contract explicit.
-      if (permissionedRealms.length === 0) {
-        throw new Error(
-          'expected permissionedRealms to be populated before indexing wait',
-        );
-      }
-      await Promise.all(permissionedRealms.map((realm) => realm.indexing()));
     });
 
     test('module prerender surfaces auth error without timing out', async function (assert) {
@@ -1814,7 +2360,7 @@ module(basename(__filename), function () {
     });
 
     setupPermissionedRealms(hooks, {
-      mode: 'beforeEach',
+      mode: 'before',
       realms: [
         {
           realmURL: publicRealmURL,
@@ -2004,7 +2550,7 @@ module(basename(__filename), function () {
       });
 
       setupPermissionedRealms(hooks, {
-        mode: 'beforeEach',
+        mode: 'before',
         realms: [
           {
             realmURL: privateRealmURL,
@@ -2080,44 +2626,45 @@ module(basename(__filename), function () {
     },
   );
 
-  module('prerender - static tests', function (hooks) {
-    let realmURL1 = 'http://127.0.0.1:4447/test/';
-    let realmURL2 = 'http://127.0.0.1:4448/test/';
-    let realmURL3 = 'http://127.0.0.1:4449/test/';
-    let prerenderServerURL = new URL(realmURL1).origin;
-    let testUserId = '@user1:localhost';
-    let permissions: RealmPermissions = {};
-    let prerenderer: Prerenderer;
-    let auth = () => testCreatePrerenderAuth(testUserId, permissions);
-    const disposeAllRealms = async () => {
-      await Promise.all([
-        prerenderer.disposeRealm(realmURL1),
-        prerenderer.disposeRealm(realmURL2),
-        prerenderer.disposeRealm(realmURL3),
-      ]);
-    };
+  function defineNonMutatingStaticTests() {
+    module('formats and pooling', function (hooks) {
+      let realmURL1 = 'http://127.0.0.1:4447/test/';
+      let realmURL2 = 'http://127.0.0.1:4448/test/';
+      let realmURL3 = 'http://127.0.0.1:4449/test/';
+      let prerenderServerURL = new URL(realmURL1).origin;
+      let testUserId = '@user1:localhost';
+      let permissions: RealmPermissions = {};
+      let prerenderer: Prerenderer;
+      let auth = () => testCreatePrerenderAuth(testUserId, permissions);
+      const disposeAllRealms = async () => {
+        await Promise.all([
+          prerenderer.disposeRealm(realmURL1),
+          prerenderer.disposeRealm(realmURL2),
+          prerenderer.disposeRealm(realmURL3),
+        ]);
+      };
 
-    hooks.before(async function () {
-      prerenderer = getPrerendererForTesting({
-        maxPages: 2,
-        serverURL: prerenderServerURL,
+      hooks.before(async function () {
+        prerenderer = getPrerendererForTesting({
+          maxPages: 2,
+          serverURL: prerenderServerURL,
+        });
       });
-    });
 
-    hooks.after(async function () {
-      await prerenderer.stop();
-    });
+      hooks.after(async function () {
+        await prerenderer.stop();
+      });
 
-    setupPermissionedRealms(hooks, {
-      mode: 'before',
-      realms: [
-        {
-          realmURL: realmURL1,
-          permissions: {
-            [testUserId]: ['read', 'write', 'realm-owner'],
-          },
-          fileSystem: {
-            'person.gts': `
+      setupPermissionedRealms(hooks, {
+        mode: 'before',
+        realms: [
+          {
+            realmURL: realmURL1,
+            permissions: {
+              [testUserId]: ['read', 'write', 'realm-owner'],
+            },
+            fileSystem: {
+              'person.gts': `
               import { CardDef, field, contains, StringField } from 'https://cardstack.com/base/card-api';
               import { Component } from 'https://cardstack.com/base/card-api';
               export class Person extends CardDef {
@@ -2126,57 +2673,57 @@ module(basename(__filename), function () {
                 static fitted = <template><@fields.name/></template>
               }
             `,
-            '1.json': {
-              data: {
-                attributes: {
-                  name: 'Hassan',
-                },
-                meta: {
-                  adoptsFrom: {
-                    module: './person',
-                    name: 'Person',
+              '1.json': {
+                data: {
+                  attributes: {
+                    name: 'Hassan',
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: './person',
+                      name: 'Person',
+                    },
                   },
                 },
               },
-            },
-            '2.json': {
-              data: {
-                attributes: {
-                  name: 'Mango',
-                },
-                meta: {
-                  adoptsFrom: {
-                    module: './person',
-                    name: 'Person',
+              '2.json': {
+                data: {
+                  attributes: {
+                    name: 'Mango',
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: './person',
+                      name: 'Person',
+                    },
                   },
                 },
               },
             },
           },
-        },
-        {
-          realmURL: realmURL2,
-          permissions: {
-            [testUserId]: ['read', 'write', 'realm-owner'],
-          },
-          fileSystem: {
-            'broken-card.gts': `
+          {
+            realmURL: realmURL2,
+            permissions: {
+              [testUserId]: ['read', 'write', 'realm-owner'],
+            },
+            fileSystem: {
+              'broken-card.gts': `
               import {
             `,
-            'broken.json': {
-              data: {
-                attributes: {
-                  name: 'Broken',
-                },
-                meta: {
-                  adoptsFrom: {
-                    module: './broken-card',
+              'broken.json': {
+                data: {
+                  attributes: {
                     name: 'Broken',
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: './broken-card',
+                      name: 'Broken',
+                    },
                   },
                 },
               },
-            },
-            'cat.gts': `
+              'cat.gts': `
               import { CardDef, field, contains, linksTo, StringField } from 'https://cardstack.com/base/card-api';
               import { Component } from 'https://cardstack.com/base/card-api';
               import { Person } from '${realmURL1}person';
@@ -2187,7 +2734,7 @@ module(basename(__filename), function () {
                 static embedded = <template>{{@fields.name}} says Meow. owned by <@fields.owner /></template>
               }
             `,
-            'dog.gts': `
+              'dog.gts': `
               import { CardDef, field, contains, linksTo, StringField, Component } from 'https://cardstack.com/base/card-api';
               import { Person } from '${realmURL1}person';
               export class Dog extends CardDef {
@@ -2200,7 +2747,7 @@ module(basename(__filename), function () {
                 }
               }
             `,
-            'dog-many.gts': `
+              'dog-many.gts': `
               import { CardDef, field, contains, linksToMany, StringField, Component } from 'https://cardstack.com/base/card-api';
               import { Person } from '${realmURL1}person';
               export class DogMany extends CardDef {
@@ -2213,7 +2760,7 @@ module(basename(__filename), function () {
                 }
               }
             `,
-            'dog-profile.gts': `
+              'dog-profile.gts': `
               import { CardDef, FieldDef, field, contains, linksTo, linksToMany, StringField, Component } from 'https://cardstack.com/base/card-api';
               import { Person } from '${realmURL1}person';
 
@@ -2232,127 +2779,229 @@ module(basename(__filename), function () {
                 }
               }
             `,
-            '1.json': {
-              data: {
-                attributes: {
-                  name: 'Maple',
-                },
-                relationships: {
-                  owner: {
-                    links: { self: `${realmURL1}1` },
+              'non-isolated-links-card.gts': `
+              import { CardDef, FieldDef, field, contains, linksTo, linksToMany, StringField, Component } from 'https://cardstack.com/base/card-api';
+              import { Person } from '${realmURL1}person';
+
+              class RelationshipField extends FieldDef {
+                @field lead = linksTo(Person);
+                @field members = linksToMany(Person);
+              }
+
+              export class NonIsolatedLinks extends CardDef {
+                static displayName = 'Non Isolated Links';
+                @field name = contains(StringField);
+                @field owner = linksTo(Person);
+                @field owners = linksToMany(Person);
+                @field profile = contains(RelationshipField);
+
+                static isolated = class extends Component<typeof this> {
+                  <template><div data-test-isolated-name>{{@model.name}}</div></template>
+                };
+
+                static embedded = class extends Component<typeof this> {
+                  <template>
+                    <div data-test-embedded-owner>
+                      <span data-test-embedded-owner>{{@model.owner.name}}</span>
+                    </div>
+                    <div data-test-embedded-owners>
+                      {{#each @model.owners as |owner|}}
+                        <span data-test-embedded-owner-name>{{owner.name}}</span>
+                      {{/each}}
+                    </div>
+                    <div data-test-embedded-profile-lead>
+                      <span data-test-embedded-profile-lead-name>{{@model.profile.lead.name}}</span>
+                    </div>
+                    <div data-test-embedded-profile-members>
+                      {{#each @model.profile.members as |member|}}
+                        <span data-test-embedded-profile-member-name>{{member.name}}</span>
+                      {{/each}}
+                    </div>
+                  </template>
+                };
+              }
+            `,
+              '1.json': {
+                data: {
+                  attributes: {
+                    name: 'Maple',
                   },
-                },
-                meta: {
-                  adoptsFrom: {
-                    module: './cat',
-                    name: 'Cat',
+                  relationships: {
+                    owner: {
+                      links: { self: `${realmURL1}1` },
+                    },
                   },
-                },
-              },
-            },
-            'is-used.json': {
-              data: {
-                attributes: {
-                  name: 'Mango',
-                },
-                relationships: {
-                  owner: {
-                    links: { self: `${realmURL1}1` },
-                  },
-                },
-                meta: {
-                  adoptsFrom: {
-                    module: './dog',
-                    name: 'Dog',
-                  },
-                },
-              },
-            },
-            'is-used-many.json': {
-              data: {
-                attributes: {
-                  name: 'Mango Many',
-                },
-                relationships: {
-                  'owners.0': {
-                    links: { self: `${realmURL1}1` },
-                  },
-                  'owners.1': {
-                    links: { self: `${realmURL1}2` },
-                  },
-                },
-                meta: {
-                  adoptsFrom: {
-                    module: './dog-many',
-                    name: 'DogMany',
-                  },
-                },
-              },
-            },
-            'is-used-field-def.json': {
-              data: {
-                attributes: {
-                  name: 'Mango Profile',
-                  profile: {},
-                },
-                relationships: {
-                  'profile.primaryOwner': {
-                    links: { self: `${realmURL1}1` },
-                  },
-                  'profile.caretakers.0': {
-                    links: { self: `${realmURL1}1` },
-                  },
-                  'profile.caretakers.1': {
-                    links: { self: `${realmURL1}2` },
-                  },
-                },
-                meta: {
-                  adoptsFrom: {
-                    module: './dog-profile',
-                    name: 'DogProfile',
-                  },
-                },
-              },
-            },
-            'missing-link.json': {
-              data: {
-                attributes: {
-                  name: 'Missing Owner',
-                },
-                relationships: {
-                  owner: {
-                    links: { self: `${realmURL1}missing-owner` },
-                  },
-                },
-                meta: {
-                  adoptsFrom: {
-                    module: './cat',
-                    name: 'Cat',
-                  },
-                },
-              },
-            },
-            'fetch-failed.json': {
-              data: {
-                attributes: {
-                  name: 'Missing Owner',
-                },
-                relationships: {
-                  owner: {
-                    links: {
-                      self: 'http://localhost:9000/this-is-a-link-to-nowhere',
+                  meta: {
+                    adoptsFrom: {
+                      module: './cat',
+                      name: 'Cat',
                     },
                   },
                 },
-                meta: {
-                  adoptsFrom: {
-                    module: './cat',
-                    name: 'Cat',
+              },
+              'is-used.json': {
+                data: {
+                  attributes: {
+                    name: 'Mango',
+                  },
+                  relationships: {
+                    owner: {
+                      links: { self: `${realmURL1}1` },
+                    },
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: './dog',
+                      name: 'Dog',
+                    },
                   },
                 },
               },
-            },
-            'intentional-error.gts': `
+              'is-used-many.json': {
+                data: {
+                  attributes: {
+                    name: 'Mango Many',
+                  },
+                  relationships: {
+                    'owners.0': {
+                      links: { self: `${realmURL1}1` },
+                    },
+                    'owners.1': {
+                      links: { self: `${realmURL1}2` },
+                    },
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: './dog-many',
+                      name: 'DogMany',
+                    },
+                  },
+                },
+              },
+              'is-used-field-def.json': {
+                data: {
+                  attributes: {
+                    name: 'Mango Profile',
+                    profile: {},
+                  },
+                  relationships: {
+                    'profile.primaryOwner': {
+                      links: { self: `${realmURL1}1` },
+                    },
+                    'profile.caretakers.0': {
+                      links: { self: `${realmURL1}1` },
+                    },
+                    'profile.caretakers.1': {
+                      links: { self: `${realmURL1}2` },
+                    },
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: './dog-profile',
+                      name: 'DogProfile',
+                    },
+                  },
+                },
+              },
+              'non-isolated-links.json': {
+                data: {
+                  attributes: {
+                    name: 'Mango Non Isolated',
+                    profile: {},
+                    cardInfo: {
+                      name: null,
+                      summary: null,
+                      cardThumbnailURL: null,
+                      notes: null,
+                    },
+                  },
+                  relationships: {
+                    'cardInfo.theme': {
+                      links: { self: `${realmURL2}non-isolated-theme` },
+                    },
+                    owner: {
+                      links: { self: `${realmURL1}1` },
+                    },
+                    'owners.0': {
+                      links: { self: `${realmURL1}1` },
+                    },
+                    'owners.1': {
+                      links: { self: `${realmURL1}2` },
+                    },
+                    'profile.lead': {
+                      links: { self: `${realmURL1}1` },
+                    },
+                    'profile.members.0': {
+                      links: { self: `${realmURL1}1` },
+                    },
+                    'profile.members.1': {
+                      links: { self: `${realmURL1}2` },
+                    },
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: './non-isolated-links-card',
+                      name: 'NonIsolatedLinks',
+                    },
+                  },
+                },
+              },
+              'non-isolated-theme.json': {
+                data: {
+                  type: 'card',
+                  attributes: {
+                    markUsage: {
+                      socialMediaProfileIcon:
+                        'https://example.com/non-isolated-social-icon.png',
+                    },
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: 'https://cardstack.com/base/brand-guide',
+                      name: 'default',
+                    },
+                  },
+                },
+              },
+              'missing-link.json': {
+                data: {
+                  attributes: {
+                    name: 'Missing Owner',
+                  },
+                  relationships: {
+                    owner: {
+                      links: { self: `${realmURL1}missing-owner` },
+                    },
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: './cat',
+                      name: 'Cat',
+                    },
+                  },
+                },
+              },
+              'fetch-failed.json': {
+                data: {
+                  attributes: {
+                    name: 'Missing Owner',
+                  },
+                  relationships: {
+                    owner: {
+                      links: {
+                        self: 'http://localhost:9000/this-is-a-link-to-nowhere',
+                      },
+                    },
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: './cat',
+                      name: 'Cat',
+                    },
+                  },
+                },
+              },
+              'intentional-error.gts': `
               import { CardDef, field, contains, StringField } from 'https://cardstack.com/base/card-api';
               import { Component } from 'https://cardstack.com/base/card-api';
               export class IntentionalError extends CardDef {
@@ -2369,20 +3018,20 @@ module(basename(__filename), function () {
                 }
               }
             `,
-            '2.json': {
-              data: {
-                attributes: {
-                  name: 'Intentional Error',
-                },
-                meta: {
-                  adoptsFrom: {
-                    module: './intentional-error',
-                    name: 'IntentionalError',
+              '2.json': {
+                data: {
+                  attributes: {
+                    name: 'Intentional Error',
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: './intentional-error',
+                      name: 'IntentionalError',
+                    },
                   },
                 },
               },
-            },
-            'timer-error-card.gts': `
+              'timer-error-card.gts': `
               import { CardDef, field, contains, StringField } from 'https://cardstack.com/base/card-api';
               import { Component } from 'https://cardstack.com/base/card-api';
               export class TimerError extends CardDef {
@@ -2398,20 +3047,20 @@ module(basename(__filename), function () {
                 }
               }
             `,
-            'timer-error.json': {
-              data: {
-                attributes: {
-                  name: 'Timer Error',
-                },
-                meta: {
-                  adoptsFrom: {
-                    module: './timer-error-card',
-                    name: 'TimerError',
+              'timer-error.json': {
+                data: {
+                  attributes: {
+                    name: 'Timer Error',
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: './timer-error-card',
+                      name: 'TimerError',
+                    },
                   },
                 },
               },
-            },
-            'timer-timeout-card.gts': `
+              'timer-timeout-card.gts': `
               import { CardDef, field, contains, StringField } from 'https://cardstack.com/base/card-api';
               import { Component } from 'https://cardstack.com/base/card-api';
               setTimeout(() => {}, 0);
@@ -2429,24 +3078,24 @@ module(basename(__filename), function () {
                 }
               }
             `,
-            'timer-timeout.json': {
-              data: {
-                attributes: {
-                  name: 'Timer Timeout',
-                },
-                meta: {
-                  adoptsFrom: {
-                    module: './timer-timeout-card',
-                    name: 'TimerTimeout',
+              'timer-timeout.json': {
+                data: {
+                  attributes: {
+                    name: 'Timer Timeout',
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: './timer-timeout-card',
+                      name: 'TimerTimeout',
+                    },
                   },
                 },
               },
-            },
-            // A card that fires the boxel-render-error event (handled by the prerender route)
-            // and then blocks the event loop long enough that Ember health probe times out,
-            // causing data-prerender-status to be set to 'unusable' by the error handler without
-            // transitioning to the render-error route (so nothing overwrites our dataset).
-            'unusable-error.gts': `
+              // A card that fires the boxel-render-error event (handled by the prerender route)
+              // and then blocks the event loop long enough that Ember health probe times out,
+              // causing data-prerender-status to be set to 'unusable' by the error handler without
+              // transitioning to the render-error route (so nothing overwrites our dataset).
+              'unusable-error.gts': `
               import { CardDef, field, contains, StringField } from 'https://cardstack.com/base/card-api';
               import { Component } from 'https://cardstack.com/base/card-api';
               export class UnusableError extends CardDef {
@@ -2460,20 +3109,20 @@ module(basename(__filename), function () {
                 }
               }
             `,
-            '3.json': {
-              data: {
-                attributes: {
-                  name: 'Force Unusable',
-                },
-                meta: {
-                  adoptsFrom: {
-                    module: './unusable-error',
-                    name: 'UnusableError',
+              '3.json': {
+                data: {
+                  attributes: {
+                    name: 'Force Unusable',
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: './unusable-error',
+                      name: 'UnusableError',
+                    },
                   },
                 },
               },
-            },
-            'embedded-error.gts': `
+              'embedded-error.gts': `
               import { CardDef, field, contains, StringField } from 'https://cardstack.com/base/card-api';
               export class EmbeddedError extends CardDef {
                 @field name = contains(StringField);
@@ -2494,28 +3143,28 @@ module(basename(__filename), function () {
 </template>
               }
             `,
-            '4.json': {
-              data: {
-                attributes: {
-                  name: 'Embedded Error',
-                },
-                meta: {
-                  adoptsFrom: {
-                    module: './embedded-error',
-                    name: 'EmbeddedError',
+              '4.json': {
+                data: {
+                  attributes: {
+                    name: 'Embedded Error',
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: './embedded-error',
+                      name: 'EmbeddedError',
+                    },
                   },
                 },
               },
             },
           },
-        },
-        {
-          realmURL: realmURL3,
-          permissions: {
-            [testUserId]: ['read', 'write', 'realm-owner'],
-          },
-          fileSystem: {
-            'dog.gts': `
+          {
+            realmURL: realmURL3,
+            permissions: {
+              [testUserId]: ['read', 'write', 'realm-owner'],
+            },
+            fileSystem: {
+              'dog.gts': `
               import { CardDef, field, contains, StringField } from 'https://cardstack.com/base/card-api';
               import { Component } from 'https://cardstack.com/base/card-api';
               export class Dog extends CardDef {
@@ -2524,1249 +3173,1359 @@ module(basename(__filename), function () {
                 static embedded = <template>{{@fields.name}} wags tail</template>
               }
             `,
-            '1.json': {
-              data: {
-                attributes: {
-                  name: 'Taro',
-                },
-                meta: {
-                  adoptsFrom: {
-                    module: './dog',
-                    name: 'Dog',
+              '1.json': {
+                data: {
+                  attributes: {
+                    name: 'Taro',
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: './dog',
+                      name: 'Dog',
+                    },
                   },
                 },
               },
             },
           },
+        ],
+        onRealmSetup: () => {
+          permissions = {
+            [realmURL1]: ['read', 'write', 'realm-owner'],
+            [realmURL2]: ['read', 'write', 'realm-owner'],
+            [realmURL3]: ['read', 'write', 'realm-owner'],
+          };
         },
-      ],
-      onRealmSetup: () => {
-        permissions = {
-          [realmURL1]: ['read', 'write', 'realm-owner'],
-          [realmURL2]: ['read', 'write', 'realm-owner'],
-          [realmURL3]: ['read', 'write', 'realm-owner'],
-        };
-      },
-    });
+      });
 
-    module('basics', function (hooks) {
-      hooks.beforeEach(disposeAllRealms);
-      let result: RenderResponse;
+      module('basics', function (hooks) {
+        hooks.beforeEach(disposeAllRealms);
+        let result: RenderResponse;
 
-      hooks.before(async () => {
-        const testCardURL = `${realmURL2}1`;
-        let { response } = await prerenderer.prerenderCard({
-          realm: realmURL2,
-          url: testCardURL,
-          auth: auth(),
+        hooks.before(async () => {
+          const testCardURL = `${realmURL2}1`;
+          let { response } = await prerenderer.prerenderCard({
+            realm: realmURL2,
+            url: testCardURL,
+            auth: auth(),
+          });
+          result = response;
         });
-        result = response;
-      });
 
-      test('embedded HTML', function (assert) {
-        assert.ok(
-          /Maple\s+says\s+Meow/.test(
-            cleanWhiteSpace(result.embeddedHTML![`${realmURL2}cat/Cat`]),
-          ),
-          `failed to match embedded html:${JSON.stringify(result.embeddedHTML)}`,
-        );
-      });
-
-      test('parent embedded HTML', function (assert) {
-        assert.ok(
-          /data-test-card-thumbnail-placeholder/.test(
-            result.embeddedHTML!['https://cardstack.com/base/card-api/CardDef'],
-          ),
-          `failed to match embedded html:${JSON.stringify(result.embeddedHTML)}`,
-        );
-      });
-
-      test('isolated HTML', function (assert) {
-        assert.ok(
-          /data-test-field="cardInfo-summary"/.test(result.isolatedHTML!),
-          `failed to match isolated html:${result.isolatedHTML}`,
-        );
-      });
-
-      test('atom HTML', function (assert) {
-        assert.ok(
-          /Untitled Cat/.test(result.atomHTML!),
-          `failed to match atom html:${result.atomHTML}`,
-        );
-      });
-
-      test('icon HTML', function (assert) {
-        assert.ok(
-          result.iconHTML?.startsWith('<svg'),
-          `iconHTML: ${result.iconHTML}`,
-        );
-      });
-
-      test('head HTML', function (assert) {
-        assert.ok(result.headHTML, 'headHTML should be present');
-        let cleanedHead = cleanWhiteSpace(result.headHTML!);
-
-        assert.ok(
-          cleanedHead.includes(
-            '<title data-test-card-head-title>Untitled Cat</title>',
-          ),
-          `failed to find title in head html:${cleanedHead}`,
-        );
-        assert.ok(
-          cleanedHead.includes('property="og:title" content="Untitled Cat"'),
-          `failed to find og:title in head html:${cleanedHead}`,
-        );
-        assert.ok(
-          cleanedHead.includes(`property="og:url" content="${realmURL2}1"`),
-          `failed to find og:url in head html:${cleanedHead}`,
-        );
-        assert.ok(
-          cleanedHead.includes('name="twitter:card" content="summary"'),
-          `failed to find twitter:card in head html:${cleanedHead}`,
-        );
-      });
-
-      test('serialized', function (assert) {
-        assert.strictEqual(result.serialized?.data.attributes?.name, 'Maple');
-      });
-
-      test('displayNames', function (assert) {
-        assert.deepEqual(result.displayNames, ['Cat', 'Card']);
-      });
-
-      test('deps', function (assert) {
-        // spot check a few deps, as the whole list is overwhelming...
-        assert.ok(
-          result.deps?.includes(baseCardRef.module),
-          `${baseCardRef.module} is a dep`,
-        );
-        assert.ok(
-          result.deps?.includes(`${realmURL1}person`),
-          `${realmURL1}person is a dep`,
-        );
-        assert.ok(
-          result.deps?.includes(`${realmURL2}cat`),
-          `${realmURL2}cat is a dep`,
-        );
-        assert.ok(
-          result.deps?.find((d) =>
-            d.match(
-              /^https:\/\/cardstack.com\/base\/card-api\.gts\..*glimmer-scoped\.css$/,
+        test('embedded HTML', function (assert) {
+          assert.ok(
+            /Maple\s+says\s+Meow/.test(
+              cleanWhiteSpace(result.embeddedHTML![`${realmURL2}cat/Cat`]),
             ),
-          ),
-          `glimmer scoped css from ${baseCardRef.module} is a dep`,
-        );
-      });
-
-      test('types', function (assert) {
-        assert.deepEqual(result.types, [
-          `${realmURL2}cat/Cat`,
-          'https://cardstack.com/base/card-api/CardDef',
-        ]);
-      });
-
-      test('searchDoc', function (assert) {
-        assert.strictEqual(result.searchDoc?.name, 'Maple');
-        assert.strictEqual(result.searchDoc?._cardType, 'Cat');
-        assert.strictEqual(result.searchDoc?.owner.name, 'Hassan');
-      });
-
-      test('isUsed field includes a field in search doc that is not rendered in template', async function (assert) {
-        const testCardURL = `${realmURL2}is-used`;
-        let { response } = await prerenderer.prerenderCard({
-          realm: realmURL2,
-          url: testCardURL,
-          auth: auth(),
-        });
-
-        assert.ok(
-          /Mango/.test(response.isolatedHTML!),
-          `failed to match isolated html:${response.isolatedHTML}`,
-        );
-        assert.false(
-          /data-test-field="owner"/.test(response.isolatedHTML!),
-          `owner field is not rendered in isolated html`,
-        );
-        assert.strictEqual(
-          response.searchDoc?.owner.name,
-          'Hassan',
-          'linked field is included in search doc via isUsed=true',
-        );
-      });
-
-      test('isUsed linksToMany field includes links in search doc that are not rendered in template', async function (assert) {
-        const testCardURL = `${realmURL2}is-used-many`;
-        let { response } = await prerenderer.prerenderCard({
-          realm: realmURL2,
-          url: testCardURL,
-          auth: auth(),
-        });
-
-        assert.ok(
-          /Mango Many/.test(response.isolatedHTML!),
-          `failed to match isolated html:${response.isolatedHTML}`,
-        );
-        assert.false(
-          /data-test-field="owners"/.test(response.isolatedHTML!),
-          `owners field is not rendered in isolated html`,
-        );
-        assert.strictEqual(
-          response.searchDoc?.owners?.[0]?.name,
-          'Hassan',
-          'first linked record is included in search doc via isUsed=true',
-        );
-        assert.strictEqual(
-          response.searchDoc?.owners?.[1]?.name,
-          'Mango',
-          'second linked record is included in search doc via isUsed=true',
-        );
-      });
-
-      test('isUsed compound field includes nested linksTo relationship in search doc', async function (assert) {
-        const testCardURL = `${realmURL2}is-used-field-def`;
-        let { response } = await prerenderer.prerenderCard({
-          realm: realmURL2,
-          url: testCardURL,
-          auth: auth(),
-        });
-
-        assert.ok(
-          /Mango Profile/.test(response.isolatedHTML!),
-          `failed to match isolated html:${response.isolatedHTML}`,
-        );
-        assert.false(
-          /data-test-field="profile"/.test(response.isolatedHTML!),
-          `profile field is not rendered in isolated html`,
-        );
-        assert.strictEqual(
-          response.searchDoc?.profile?.primaryOwner?.name,
-          'Hassan',
-          'nested linksTo relationship is included in search doc via isUsed=true on the relationship field',
-        );
-      });
-
-      test('isUsed compound field includes nested linksToMany relationships in search doc', async function (assert) {
-        const testCardURL = `${realmURL2}is-used-field-def`;
-        let { response } = await prerenderer.prerenderCard({
-          realm: realmURL2,
-          url: testCardURL,
-          auth: auth(),
-        });
-
-        assert.ok(
-          /Mango Profile/.test(response.isolatedHTML!),
-          `failed to match isolated html:${response.isolatedHTML}`,
-        );
-        assert.false(
-          /data-test-field="profile"/.test(response.isolatedHTML!),
-          `profile field is not rendered in isolated html`,
-        );
-        assert.strictEqual(
-          response.searchDoc?.profile?.caretakers?.[0]?.name,
-          'Hassan',
-          'first nested linksToMany relationship is included in search doc via isUsed=true on the relationship field',
-        );
-        assert.strictEqual(
-          response.searchDoc?.profile?.caretakers?.[1]?.name,
-          'Mango',
-          'second nested linksToMany relationship is included in search doc via isUsed=true on the relationship field',
-        );
-      });
-    });
-
-    module('errors', function (hooks) {
-      hooks.beforeEach(disposeAllRealms);
-      test('error during render', async function (assert) {
-        const testCardURL = `${realmURL2}2`;
-        let { response } = await prerenderer.prerenderCard({
-          realm: realmURL2,
-          url: testCardURL,
-          auth: auth(),
-        });
-        let { error, ...restOfResult } = response;
-
-        assert.strictEqual(error?.error.id, testCardURL);
-        assert.strictEqual(
-          error?.error.message,
-          'intentional failure during render',
-        );
-        assert.strictEqual(error?.error.status, 500);
-        assert.ok(error?.error.stack, 'stack trace exists in error');
-
-        // TODO Perhaps if we add error handlers for the /render/html subroute
-        // these all wont be empty, as this is triggering in the /render route
-        // error handler and hence stomping over all the subroutes.
-        assert.deepEqual(restOfResult, {
-          displayNames: null,
-          deps: null,
-          searchDoc: null,
-          serialized: null,
-          types: null,
-          atomHTML: null,
-          embeddedHTML: null,
-          fittedHTML: null,
-          headHTML: null,
-          iconHTML: null,
-          isolatedHTML: null,
-        });
-      });
-
-      test('error includes blocked timer summary when timers fire', async function (assert) {
-        const testCardURL = `${realmURL2}timer-error`;
-        let { response } = await prerenderer.prerenderCard({
-          realm: realmURL2,
-          url: testCardURL,
-          auth: auth(),
-        });
-
-        assert.ok(response.error, 'error present for timer error');
-        let message = response.error?.error.message ?? '';
-        assert.ok(
-          message.includes('timer error during render'),
-          `error message includes original error text, got: ${message}`,
-        );
-        let stack = response.error?.error.stack ?? '';
-        assert.ok(
-          stack.includes('Timers blocked during prerender'),
-          'timer summary appended to stack',
-        );
-        let timeoutMatch = stack.match(/setTimeout:\s+(\d+)/);
-        assert.ok(timeoutMatch, 'setTimeout count included');
-        assert.ok(
-          Number(timeoutMatch?.[1]) >= 1,
-          `expected at least one setTimeout, got: ${timeoutMatch?.[1]}`,
-        );
-        let intervalMatch = stack.match(/setInterval:\s+(\d+)/);
-        assert.ok(intervalMatch, 'setInterval count included');
-        assert.ok(
-          Number(intervalMatch?.[1]) >= 1,
-          `expected at least one setInterval, got: ${intervalMatch?.[1]}`,
-        );
-        assert.ok(
-          stack.includes('at get message'),
-          'timer summary includes a call stack',
-        );
-      });
-
-      test('timeout includes blocked timer summary in stack', async function (assert) {
-        const testCardURL = `${realmURL2}timer-timeout`;
-        await prerenderer.prerenderCard({
-          realm: realmURL2,
-          url: testCardURL,
-          auth: auth(),
-        });
-        let { response } = await prerenderer.prerenderCard({
-          realm: realmURL2,
-          url: testCardURL,
-          auth: auth(),
-          opts: { timeoutMs: 1000, simulateTimeoutMs: 2000 },
-        });
-
-        assert.strictEqual(
-          response.error?.error.title,
-          'Render timeout',
-          'timeout surfaced',
-        );
-        let stack = response.error?.error.stack ?? '';
-        assert.ok(
-          stack.includes('Timers blocked during prerender'),
-          'timer summary appended to timeout stack',
-        );
-        assert.ok(
-          /setTimeout:\s+\d+/.test(stack),
-          'timeout stack includes setTimeout count',
-        );
-        assert.ok(
-          /setInterval:\s+\d+/.test(stack),
-          'timeout stack includes setInterval count',
-        );
-      });
-
-      test('missing link surfaces 404 without eviction', async function (assert) {
-        const testCardURL = `${realmURL2}missing-link`;
-        let result = await prerenderer.prerenderCard({
-          realm: realmURL2,
-          url: testCardURL,
-          auth: auth(),
-        });
-        let { response } = result;
-
-        assert.ok(response.error, 'error present for missing link');
-        assert.strictEqual(
-          response.error?.error.message,
-          `missing file ${realmURL1}missing-owner.json`,
-        );
-        assert.strictEqual(response.error?.error.status, 404);
-        assert.false(
-          result.pool.evicted,
-          'missing link does not evict prerender page',
-        );
-        assert.false(
-          result.pool.timedOut,
-          'missing link does not mark prerender timeout',
-        );
-      });
-
-      test('fetch failed surfaces error without eviction', async function (assert) {
-        const testCardURL = `${realmURL2}fetch-failed`;
-        let result = await prerenderer.prerenderCard({
-          realm: realmURL2,
-          url: testCardURL,
-          auth: auth(),
-        });
-        let { response } = result;
-
-        assert.ok(response.error, 'error present for fetch failed');
-        assert.strictEqual(
-          response.error?.error.message,
-          `unable to fetch http://localhost:9000/this-is-a-link-to-nowhere: fetch failed`,
-        );
-        assert.strictEqual(response.error?.error.status, 500);
-        assert.false(
-          result.pool.evicted,
-          'fetch failed does not evict prerender page',
-        );
-        assert.false(
-          result.pool.timedOut,
-          'fetch failed does not mark prerender timeout',
-        );
-      });
-
-      test('embedded error markup triggers render error', async function (assert) {
-        const testCardURL = `${realmURL2}4`;
-        let { response } = await prerenderer.prerenderCard({
-          realm: realmURL2,
-          url: testCardURL,
-          auth: auth(),
-        });
-        assert.ok(response.error, 'error captured');
-        assert.strictEqual(response.error?.error.id, 'embedded-error');
-        assert.strictEqual(
-          response.error?.error.message,
-          'error flagged from DOM',
-        );
-        assert.strictEqual(response.error?.error.title, 'Embedded error');
-        assert.strictEqual(response.error?.error.status, 500);
-      });
-
-      test('unusable triggers eviction and short-circuit', async function (assert) {
-        // Render the card that forces unusable
-        const unusableURL = `${realmURL2}3`;
-        let unusable = await prerenderer.prerenderCard({
-          realm: realmURL2,
-          url: unusableURL,
-          auth: auth(),
-        });
-
-        // We should see an error with evict semantics and short-circuited payloads
-        assert.ok(unusable.response.error, 'error present for unusable');
-        assert.strictEqual(unusable.response.error?.error.id, unusableURL);
-        assert.strictEqual(
-          unusable.response.error?.error.message,
-          'forced unusable for test',
-        );
-        assert.strictEqual(unusable.response.error?.error.status, 500);
-        assert.strictEqual(
-          unusable.response.isolatedHTML,
-          null,
-          'isolatedHTML null when short-circuited',
-        );
-        assert.strictEqual(
-          unusable.response.embeddedHTML,
-          null,
-          'embeddedHTML null when short-circuited',
-        );
-        assert.strictEqual(
-          unusable.response.atomHTML,
-          null,
-          'atomHTML null when short-circuited',
-        );
-        assert.strictEqual(
-          unusable.response.iconHTML,
-          null,
-          'iconHTML null when short-circuited',
-        );
-        assert.deepEqual(
-          {
-            serialized: unusable.response.serialized,
-            searchDoc: unusable.response.searchDoc,
-            displayNames: unusable.response.displayNames,
-            types: unusable.response.types,
-            deps: unusable.response.deps,
-          },
-          {
-            serialized: null,
-            searchDoc: null,
-            displayNames: null,
-            types: null,
-            deps: null,
-          },
-          'meta fields are null when short-circuited',
-        );
-        assert.true(unusable.pool.evicted, 'pool notes eviction for unusable');
-        assert.false(
-          unusable.pool.timedOut,
-          'unusable eviction does not mark timeout',
-        );
-        assert.notStrictEqual(
-          unusable.pool.pageId,
-          'unknown',
-          'evicted unusable run retains page identifier',
-        );
-
-        // After unusable, the realm should be evicted; a subsequent render should not reuse
-        const healthyURL = `${realmURL2}1`;
-        let next = await prerenderer.prerenderCard({
-          realm: realmURL2,
-          url: healthyURL,
-          auth: auth(),
-        });
-        assert.false(next.pool.reused, 'did not reuse after unusable eviction');
-        assert.false(next.pool.evicted, 'subsequent render not evicted');
-      });
-
-      test('prerender surfaces module syntax errors without timing out', async function (assert) {
-        const cardURL = `${realmURL2}broken`;
-        let broken = await prerenderer.prerenderCard({
-          realm: realmURL2,
-          url: cardURL,
-          auth: auth(),
-        });
-        assert.ok(broken.response.error, 'syntax error captured');
-        assert.strictEqual(
-          broken.response.error?.error.status,
-          406,
-          'syntax error reported as 406',
-        );
-        assert.false(broken.pool.timedOut, 'syntax error does not hit timeout');
-      });
-    });
-
-    module('realm pooling', function (hooks) {
-      hooks.beforeEach(disposeAllRealms);
-      test('evicts on timeout and does not reuse', async function (assert) {
-        const testCardURL = `${realmURL2}1`;
-        // First render to initialize pool
-        let first = await prerenderer.prerenderCard({
-          realm: realmURL2,
-          url: testCardURL,
-          auth: auth(),
-        });
-        assert.false(first.pool.reused, 'first call not reused');
-
-        // Now trigger a timeout; this should evict the realm
-        let timeoutRun = await prerenderer.prerenderCard({
-          realm: realmURL2,
-          url: testCardURL,
-          auth: auth(),
-          opts: { timeoutMs: 1, simulateTimeoutMs: 5 },
-        });
-        assert.strictEqual(
-          timeoutRun.response.error?.error.title,
-          'Render timeout',
-          'got timeout error',
-        );
-        assert.true(timeoutRun.pool.evicted, 'timeout eviction reflected');
-        assert.true(timeoutRun.pool.timedOut, 'timeout flagged on pool');
-        assert.notStrictEqual(
-          timeoutRun.pool.pageId,
-          'unknown',
-          'timeout eviction retains page identifier',
-        );
-
-        // A subsequent render should not reuse the previously pooled page
-        let afterTimeout = await prerenderer.prerenderCard({
-          realm: realmURL2,
-          url: testCardURL,
-          auth: auth(),
-        });
-        assert.false(
-          afterTimeout.pool.reused,
-          'did not reuse after timeout eviction',
-        );
-        assert.false(afterTimeout.pool.evicted, 'no eviction on new render');
-        assert.false(afterTimeout.pool.timedOut, 'no timeout on new render');
-      });
-
-      test('reuses the same page within a realm', async function (assert) {
-        const testCardURL = `${realmURL2}1`;
-        let first = await prerenderer.prerenderCard({
-          realm: realmURL2,
-          url: testCardURL,
-          auth: auth(),
-        });
-        let second = await prerenderer.prerenderCard({
-          realm: realmURL2,
-          url: testCardURL,
-          auth: auth(),
-        });
-        assert.strictEqual(first.pool.realm, realmURL2, 'first realm matches');
-        assert.strictEqual(
-          second.pool.realm,
-          realmURL2,
-          'second realm matches',
-        );
-        assert.strictEqual(
-          first.pool.pageId,
-          second.pool.pageId,
-          'pageId reused',
-        );
-        assert.false(first.pool.reused, 'first call not reused');
-        assert.true(second.pool.reused, 'second call reused');
-        assert.false(first.pool.timedOut, 'first call not timed out');
-        assert.false(second.pool.timedOut, 'second call not timed out');
-      });
-
-      test('refreshes prerender session when auth changes for the same realm', async function (assert) {
-        const testCardURL = `${realmURL2}1`;
-        let authA = testCreatePrerenderAuth(testUserId, {
-          [realmURL2]: ['read', 'write', 'realm-owner'],
-        });
-        let authB = testCreatePrerenderAuth(testUserId, {
-          [realmURL2]: ['read', 'write', 'realm-owner'],
-          [realmURL1]: ['read', 'write', 'realm-owner'], // introduce a different token set
-        });
-
-        let first = await prerenderer.prerenderCard({
-          realm: realmURL2,
-          url: testCardURL,
-          auth: authA,
-        });
-        let second = await prerenderer.prerenderCard({
-          realm: realmURL2,
-          url: testCardURL,
-          auth: authB,
-        });
-
-        assert.false(first.pool.reused, 'first call not reused');
-        assert.false(
-          second.pool.reused,
-          'auth change forces a fresh prerender page',
-        );
-        assert.notStrictEqual(
-          first.pool.pageId,
-          second.pool.pageId,
-          'new page allocated when auth differs',
-        );
-        assert.strictEqual(
-          second.response.serialized?.data.attributes?.name,
-          'Maple',
-          'second render still succeeds with new session',
-        );
-      });
-
-      test('does not reuse across different realms', async function (assert) {
-        const testCardURL1 = `${realmURL1}1`;
-        const testCardURL2 = `${realmURL2}1`;
-        let r1 = await prerenderer.prerenderCard({
-          realm: realmURL1,
-          url: testCardURL1,
-          auth: auth(),
-        });
-        let r2 = await prerenderer.prerenderCard({
-          realm: realmURL2,
-          url: testCardURL2,
-          auth: auth(),
-        });
-        assert.notStrictEqual(
-          r1.pool.pageId,
-          r2.pool.pageId,
-          'distinct pages per realm',
-        );
-        assert.false(r1.pool.reused, 'first realm first call not reused');
-        assert.false(r2.pool.reused, 'second realm first call not reused');
-      });
-
-      test('evicts LRU when capacity reached', async function (assert) {
-        const cardA = `${realmURL1}1`;
-        const cardB = `${realmURL2}1`;
-        const cardC = `${realmURL3}1`;
-
-        let firstA = await prerenderer.prerenderCard({
-          realm: realmURL1,
-          url: cardA,
-          auth: auth(),
-        });
-        assert.false(firstA.pool.reused, 'first A not reused');
-
-        let firstB = await prerenderer.prerenderCard({
-          realm: realmURL2,
-          url: cardB,
-          auth: auth(),
-        });
-        assert.false(firstB.pool.reused, 'first B not reused');
-
-        // Now adding C should evict the LRU (A), since maxPages=2
-        let firstC = await prerenderer.prerenderCard({
-          realm: realmURL3,
-          url: cardC,
-          auth: auth(),
-        });
-        assert.false(firstC.pool.reused, 'first C not reused');
-
-        // Returning to A should not reuse because it was evicted
-        let secondA = await prerenderer.prerenderCard({
-          realm: realmURL1,
-          url: cardA,
-          auth: auth(),
-        });
-        assert.false(secondA.pool.reused, 'A was evicted, so not reused');
-        assert.notStrictEqual(
-          firstA.pool.pageId,
-          secondA.pool.pageId,
-          'A got a new page after eviction',
-        );
-      });
-
-      test('serializes prerenders when only one tab is available', async function (assert) {
-        let prevTabMax = process.env.PRERENDER_REALM_TAB_MAX;
-        let semaphore = new TestSemaphore(1);
-        let active = 0;
-        let maxActive = 0;
-        let pool: PagePool | undefined;
-
-        try {
-          process.env.PRERENDER_REALM_TAB_MAX = '1';
-          ({ pool } = makeStubPagePool(1, semaphore));
-          await pool.warmStandbys();
-
-          let run = async (realm: string) => {
-            let lease = await pool!.getPage(realm);
-            active++;
-            maxActive = Math.max(maxActive, active);
-            await new Promise((resolve) => setTimeout(resolve, 25));
-            active--;
-            lease.release();
-          };
-
-          await Promise.all([run('realm-a'), run('realm-b')]);
-
-          assert.strictEqual(
-            maxActive,
-            1,
-            'renders serialize when only one tab is allowed',
+            `failed to match embedded html:${JSON.stringify(result.embeddedHTML)}`,
           );
-        } finally {
-          await pool?.closeAll();
-          if (prevTabMax === undefined) {
-            delete process.env.PRERENDER_REALM_TAB_MAX;
-          } else {
-            process.env.PRERENDER_REALM_TAB_MAX = prevTabMax;
-          }
-        }
-      });
-
-      test('runs prerenders in parallel when multiple tabs are available', async function (assert) {
-        let prevTabMax = process.env.PRERENDER_REALM_TAB_MAX;
-        let semaphore = new TestSemaphore(2);
-        let active = 0;
-        let maxActive = 0;
-        let pool: PagePool | undefined;
-
-        try {
-          process.env.PRERENDER_REALM_TAB_MAX = '2';
-          ({ pool } = makeStubPagePool(2, semaphore));
-          await pool.warmStandbys();
-
-          let run = async (realm: string) => {
-            let lease = await pool!.getPage(realm);
-            active++;
-            maxActive = Math.max(maxActive, active);
-            await new Promise((resolve) => setTimeout(resolve, 25));
-            active--;
-            lease.release();
-          };
-
-          await Promise.all([run('realm-a'), run('realm-a')]);
-
-          assert.strictEqual(
-            maxActive,
-            2,
-            'renders run in parallel on separate tabs',
-          );
-        } finally {
-          await pool?.closeAll();
-          if (prevTabMax === undefined) {
-            delete process.env.PRERENDER_REALM_TAB_MAX;
-          } else {
-            process.env.PRERENDER_REALM_TAB_MAX = prevTabMax;
-          }
-        }
-      });
-
-      test('prefers idle tab aligned to realm over standby tabs', async function (assert) {
-        let { pool } = makeStubPagePool(2);
-        await pool.warmStandbys();
-
-        let first = await pool.getPage('realm-a');
-        first.release();
-        await pool.warmStandbys();
-
-        let second = await pool.getPage('realm-a');
-        assert.strictEqual(
-          second.pageId,
-          first.pageId,
-          'idle aligned tab reused when available',
-        );
-        assert.true(second.reused, 'reuse flagged for aligned idle tab');
-
-        second.release();
-        await pool.closeAll();
-      });
-
-      test('prefers standby over idle tabs from other realms', async function (assert) {
-        let originalNow = Date.now;
-        let now = 1000;
-        (Date as any).now = () => now;
-        let { pool } = makeStubPagePool(1);
-
-        try {
-          await pool.warmStandbys(); // standby at t=1000
-          now = 1100;
-          let realmALease = await pool.getPage('realm-a');
-          realmALease.release();
-
-          now = 2000;
-          await pool.warmStandbys(); // standby created after idle realm tab
-          let realmBLease = await pool.getPage('realm-b');
-          assert.notStrictEqual(
-            realmBLease.pageId,
-            realmALease.pageId,
-            'standby chosen instead of commandeering an idle realm tab',
-          );
-          assert.false(
-            realmBLease.reused,
-            'standby assignment marked as not reused',
-          );
-          realmBLease.release();
-        } finally {
-          await pool.closeAll();
-          (Date as any).now = originalNow;
-        }
-      });
-
-      test('enforces per-realm tab cap by queueing on an existing tab', async function (assert) {
-        let prevTabMax = process.env.PRERENDER_REALM_TAB_MAX;
-        let pool: PagePool | undefined;
-        let resolved = false;
-
-        try {
-          process.env.PRERENDER_REALM_TAB_MAX = '1';
-          ({ pool } = makeStubPagePool(2));
-          await pool.warmStandbys();
-
-          let first = await pool.getPage('realm-a');
-          let secondPromise = pool.getPage('realm-a').then((lease) => {
-            resolved = true;
-            return lease;
-          });
-
-          await new Promise((resolve) => setTimeout(resolve, 5));
-          assert.false(resolved, 'second request waits when tab cap reached');
-
-          first.release();
-          let second = await secondPromise;
-          assert.strictEqual(
-            second.pageId,
-            first.pageId,
-            'queued request reuses the existing tab',
-          );
-          assert.true(second.reused, 'reuse flagged for queued request');
-          second.release();
-        } finally {
-          await pool?.closeAll();
-          if (prevTabMax === undefined) {
-            delete process.env.PRERENDER_REALM_TAB_MAX;
-          } else {
-            process.env.PRERENDER_REALM_TAB_MAX = prevTabMax;
-          }
-        }
-      });
-
-      test('queues on the least-pending tab when the realm cap is met', async function (assert) {
-        let prevTabMax = process.env.PRERENDER_REALM_TAB_MAX;
-        let pool: PagePool | undefined;
-        let originalNow = Date.now;
-        let now = 1000;
-        (Date as any).now = () => now;
-        let thirdResolved = false;
-        let fourthResolved = false;
-
-        try {
-          process.env.PRERENDER_REALM_TAB_MAX = '2';
-          ({ pool } = makeStubPagePool(2));
-          await pool.warmStandbys();
-
-          let first = await pool.getPage('realm-a');
-          now = 1100;
-          let second = await pool.getPage('realm-a');
-
-          let thirdPromise = pool.getPage('realm-a').then((lease) => {
-            thirdResolved = true;
-            return lease;
-          });
-          await new Promise((resolve) => setTimeout(resolve, 0));
-          let fourthPromise = pool.getPage('realm-a').then((lease) => {
-            fourthResolved = true;
-            return lease;
-          });
-
-          second.release();
-          await new Promise((resolve) => setTimeout(resolve, 5));
-          assert.true(
-            fourthResolved,
-            'request queued on least-pending tab unblocks first',
-          );
-          assert.false(
-            thirdResolved,
-            'request queued on busier tab still waits',
-          );
-
-          let fourth = await fourthPromise;
-          assert.strictEqual(
-            fourth.pageId,
-            second.pageId,
-            'fourth request queued on least-pending tab',
-          );
-
-          first.release();
-          let third = await thirdPromise;
-          assert.strictEqual(
-            third.pageId,
-            first.pageId,
-            'third request queued on the LRU tab when pending counts tied',
-          );
-          fourth.release();
-          third.release();
-        } finally {
-          (Date as any).now = originalNow;
-          await pool?.closeAll();
-          if (prevTabMax === undefined) {
-            delete process.env.PRERENDER_REALM_TAB_MAX;
-          } else {
-            process.env.PRERENDER_REALM_TAB_MAX = prevTabMax;
-          }
-        }
-      });
-
-      test('queued cross-realm requests realign the tab per request', async function (assert) {
-        let { pool } = makeStubPagePool(1);
-        await pool.warmStandbys();
-
-        let first = await pool.getPage('realm-a');
-        await pool.warmStandbys();
-        let blocker = await pool.getPage('realm-c');
-
-        let order: string[] = [];
-        let secondPromise = pool.getPage('realm-a').then((lease) => {
-          order.push('a');
-          return lease;
-        });
-        let thirdPromise = pool.getPage('realm-b').then((lease) => {
-          order.push('b');
-          return lease;
         });
 
-        first.release();
-
-        let second = await secondPromise;
-        assert.deepEqual(order, ['a'], 'queued realm-a request runs first');
-        assert.true(
-          pool.getWarmRealms().includes('realm-a'),
-          'tab aligned to realm-a while queued work runs',
-        );
-        second.release();
-        blocker.release();
-
-        let third = await thirdPromise;
-        assert.deepEqual(
-          order,
-          ['a', 'b'],
-          'queued realm-b request runs after',
-        );
-        assert.true(
-          pool.getWarmRealms().includes('realm-b'),
-          'tab realigned to realm-b when queued request starts',
-        );
-        third.release();
-
-        await pool.closeAll();
-      });
-
-      test('does not reassign a busy tab with queued work across realms', async function (assert) {
-        let { pool } = makeStubPagePool(1, undefined, undefined, {
-          disableStandbyRefill: true,
+        test('parent embedded HTML', function (assert) {
+          assert.ok(
+            /data-test-card-thumbnail-placeholder/.test(
+              result.embeddedHTML![
+                'https://cardstack.com/base/card-api/CardDef'
+              ],
+            ),
+            `failed to match embedded html:${JSON.stringify(result.embeddedHTML)}`,
+          );
         });
 
-        try {
-          await pool.warmStandbys();
-
-          let first = await pool.getPage('realm-a');
-
-          let secondPromise = pool.getPage('realm-a');
-          let thirdPromise = pool.getPage('realm-b');
-
-          await assert.rejects(
-            thirdPromise,
-            /No standby page available for prerender/,
-            'cross-realm request rejects when only busy tab has queued work',
+        test('isolated HTML', function (assert) {
+          assert.ok(
+            /data-test-field="cardInfo-summary"/.test(result.isolatedHTML!),
+            `failed to match isolated html:${result.isolatedHTML}`,
           );
-
-          first.release();
-          let second = await secondPromise;
-          assert.strictEqual(
-            second.pageId,
-            first.pageId,
-            'queued same-realm request keeps the original tab',
-          );
-          second.release();
-
-          assert.false(
-            pool.getWarmRealms().includes('realm-b'),
-            'cross-realm request does not reassign the tab',
-          );
-        } finally {
-          await pool.closeAll();
-        }
-      });
-
-      test('queues same-realm request when tab is transitioning', async function (assert) {
-        let { pool } = makeStubPagePool(1, undefined, undefined, {
-          disableStandbyRefill: true,
         });
 
-        try {
-          await pool.warmStandbys();
-
-          let first = await pool.getPage('realm-a');
-
-          let crossResolved = false;
-          let sameResolved = false;
-          let crossPromise = pool.getPage('realm-b').then((lease) => {
-            crossResolved = true;
-            return lease;
-          });
-          let samePromise = pool.getPage('realm-a').then((lease) => {
-            sameResolved = true;
-            return lease;
-          });
-
-          await new Promise((resolve) => setTimeout(resolve, 5));
-          assert.false(
-            crossResolved,
-            'cross-realm request waits for the busy tab',
+        test('atom HTML', function (assert) {
+          assert.ok(
+            /Untitled Cat/.test(result.atomHTML!),
+            `failed to match atom html:${result.atomHTML}`,
           );
-          assert.false(
-            sameResolved,
-            'same-realm request queues even while transitioning',
-          );
-
-          first.release();
-
-          let cross = await crossPromise;
-          assert.strictEqual(
-            cross.pageId,
-            first.pageId,
-            'cross-realm request uses the existing tab',
-          );
-          cross.release();
-
-          let same = await samePromise;
-          assert.strictEqual(
-            same.pageId,
-            first.pageId,
-            'same-realm request uses the same tab',
-          );
-          assert.false(
-            pool.getWarmRealms().includes('realm-b'),
-            'tab realigned back to realm-a after same-realm request',
-          );
-          same.release();
-        } finally {
-          await pool.closeAll();
-        }
-      });
-
-      test('does not oversubscribe contexts during async eviction', async function (assert) {
-        let prevTabMax = process.env.PRERENDER_REALM_TAB_MAX;
-        let pool: PagePool | undefined;
-        let active = 0;
-        let peak = 0;
-        let resolveClose!: () => void;
-        let closeGate = new Promise<void>((resolve) => {
-          resolveClose = resolve;
         });
 
-        try {
-          process.env.PRERENDER_REALM_TAB_MAX = '2';
-          ({ pool } = makeStubPagePool(2, undefined, undefined, {
-            closeContextDelay: async () => closeGate,
-            onContextCreated() {
-              active++;
-              peak = Math.max(peak, active);
-            },
-            onContextClosed() {
-              active--;
-            },
-          }));
+        test('icon HTML', function (assert) {
+          assert.ok(
+            result.iconHTML?.startsWith('<svg'),
+            `iconHTML: ${result.iconHTML}`,
+          );
+        });
 
-          await pool.warmStandbys();
-
-          let first = await pool.getPage('realm-a');
-          let second = await pool.getPage('realm-a');
-
-          await pool.disposeRealm('realm-a', { awaitIdle: false });
-          await pool.warmStandbys();
+        test('head HTML', function (assert) {
+          assert.ok(result.headHTML, 'headHTML should be present');
+          let cleanedHead = cleanWhiteSpace(result.headHTML!);
 
           assert.ok(
-            peak <= 3,
-            'context count stays within maxPages+1 during async eviction',
+            cleanedHead.includes(
+              '<title data-test-card-head-title>Untitled Cat</title>',
+            ),
+            `failed to find title in head html:${cleanedHead}`,
+          );
+          assert.ok(
+            cleanedHead.includes('property="og:title" content="Untitled Cat"'),
+            `failed to find og:title in head html:${cleanedHead}`,
+          );
+          assert.ok(
+            cleanedHead.includes(`property="og:url" content="${realmURL2}1"`),
+            `failed to find og:url in head html:${cleanedHead}`,
+          );
+          assert.ok(
+            cleanedHead.includes('name="twitter:card" content="summary"'),
+            `failed to find twitter:card in head html:${cleanedHead}`,
+          );
+        });
+
+        test('serialized', function (assert) {
+          assert.strictEqual(result.serialized?.data.attributes?.name, 'Maple');
+        });
+
+        test('displayNames', function (assert) {
+          assert.deepEqual(result.displayNames, ['Cat', 'Card']);
+        });
+
+        test('deps', function (assert) {
+          // spot check a few deps, as the whole list is overwhelming...
+          assert.ok(
+            result.deps?.includes(baseCardRef.module),
+            `${baseCardRef.module} is a dep`,
+          );
+          assert.ok(
+            result.deps?.includes(`${realmURL1}person`),
+            `${realmURL1}person is a dep`,
+          );
+          assert.ok(
+            result.deps?.includes(`${realmURL2}cat`),
+            `${realmURL2}cat is a dep`,
+          );
+          assert.ok(
+            result.deps?.find((d) =>
+              d.match(
+                /^https:\/\/cardstack.com\/base\/card-api\.gts\..*glimmer-scoped\.css$/,
+              ),
+            ),
+            `glimmer scoped css from ${baseCardRef.module} is a dep`,
+          );
+        });
+
+        test('types', function (assert) {
+          assert.deepEqual(result.types, [
+            `${realmURL2}cat/Cat`,
+            'https://cardstack.com/base/card-api/CardDef',
+          ]);
+        });
+
+        test('searchDoc', function (assert) {
+          assert.strictEqual(result.searchDoc?.name, 'Maple');
+          assert.strictEqual(result.searchDoc?._cardType, 'Cat');
+          assert.strictEqual(result.searchDoc?.owner.name, 'Hassan');
+        });
+
+        test('isUsed field includes a field in search doc that is not rendered in template', async function (assert) {
+          const testCardURL = `${realmURL2}is-used`;
+          let { response } = await prerenderer.prerenderCard({
+            realm: realmURL2,
+            url: testCardURL,
+            auth: auth(),
+          });
+
+          assert.ok(
+            /Mango/.test(response.isolatedHTML!),
+            `failed to match isolated html:${response.isolatedHTML}`,
+          );
+          assert.false(
+            /data-test-field="owner"/.test(response.isolatedHTML!),
+            `owner field is not rendered in isolated html`,
+          );
+          assert.strictEqual(
+            response.searchDoc?.owner.name,
+            'Hassan',
+            'linked field is included in search doc via isUsed=true',
+          );
+        });
+
+        test('isUsed linksToMany field includes links in search doc that are not rendered in template', async function (assert) {
+          const testCardURL = `${realmURL2}is-used-many`;
+          let { response } = await prerenderer.prerenderCard({
+            realm: realmURL2,
+            url: testCardURL,
+            auth: auth(),
+          });
+
+          assert.ok(
+            /Mango Many/.test(response.isolatedHTML!),
+            `failed to match isolated html:${response.isolatedHTML}`,
+          );
+          assert.false(
+            /data-test-field="owners"/.test(response.isolatedHTML!),
+            `owners field is not rendered in isolated html`,
+          );
+          assert.strictEqual(
+            response.searchDoc?.owners?.[0]?.name,
+            'Hassan',
+            'first linked record is included in search doc via isUsed=true',
+          );
+          assert.strictEqual(
+            response.searchDoc?.owners?.[1]?.name,
+            'Mango',
+            'second linked record is included in search doc via isUsed=true',
+          );
+        });
+
+        test('isUsed compound field includes nested linksTo relationship in search doc', async function (assert) {
+          const testCardURL = `${realmURL2}is-used-field-def`;
+          let { response } = await prerenderer.prerenderCard({
+            realm: realmURL2,
+            url: testCardURL,
+            auth: auth(),
+          });
+
+          assert.ok(
+            /Mango Profile/.test(response.isolatedHTML!),
+            `failed to match isolated html:${response.isolatedHTML}`,
+          );
+          assert.false(
+            /data-test-field="profile"/.test(response.isolatedHTML!),
+            `profile field is not rendered in isolated html`,
+          );
+          assert.strictEqual(
+            response.searchDoc?.profile?.primaryOwner?.name,
+            'Hassan',
+            'nested linksTo relationship is included in search doc via isUsed=true on the relationship field',
+          );
+        });
+
+        test('isUsed compound field includes nested linksToMany relationships in search doc', async function (assert) {
+          const testCardURL = `${realmURL2}is-used-field-def`;
+          let { response } = await prerenderer.prerenderCard({
+            realm: realmURL2,
+            url: testCardURL,
+            auth: auth(),
+          });
+
+          assert.ok(
+            /Mango Profile/.test(response.isolatedHTML!),
+            `failed to match isolated html:${response.isolatedHTML}`,
+          );
+          assert.false(
+            /data-test-field="profile"/.test(response.isolatedHTML!),
+            `profile field is not rendered in isolated html`,
+          );
+          assert.strictEqual(
+            response.searchDoc?.profile?.caretakers?.[0]?.name,
+            'Hassan',
+            'first nested linksToMany relationship is included in search doc via isUsed=true on the relationship field',
+          );
+          assert.strictEqual(
+            response.searchDoc?.profile?.caretakers?.[1]?.name,
+            'Mango',
+            'second nested linksToMany relationship is included in search doc via isUsed=true on the relationship field',
+          );
+        });
+
+        test('non-isolated formats render linked fields and those links appear in search doc', async function (assert) {
+          const testCardURL = `${realmURL2}non-isolated-links`;
+          let { response } = await prerenderer.prerenderCard({
+            realm: realmURL2,
+            url: testCardURL,
+            auth: auth(),
+          });
+
+          let headHTML = cleanWhiteSpace(response.headHTML ?? '');
+          assert.ok(
+            /<link rel="icon" href="https:\/\/example\.com\/non-isolated-social-icon\.png"/.test(
+              headHTML,
+            ),
+            `head html includes favicon from cardInfo.theme: ${headHTML}`,
+          );
+          assert.ok(
+            /<link rel="apple-touch-icon" href="https:\/\/example\.com\/non-isolated-social-icon\.png"/.test(
+              headHTML,
+            ),
+            `head html includes apple-touch-icon from cardInfo.theme: ${headHTML}`,
           );
 
-          first.release();
-          second.release();
-          resolveClose();
-        } finally {
-          if (resolveClose) {
-            resolveClose();
-          }
-          await pool?.closeAll();
-          if (prevTabMax === undefined) {
-            delete process.env.PRERENDER_REALM_TAB_MAX;
-          } else {
-            process.env.PRERENDER_REALM_TAB_MAX = prevTabMax;
-          }
-        }
-      });
-
-      test('creates spare standby when pool is at capacity', async function (assert) {
-        let { pool, contextsCreated } = makeStubPagePool(1);
-        await pool.warmStandbys();
-        assert.strictEqual(
-          contextsCreated.length,
-          1,
-          'initial standby created up to maxPages',
-        );
-
-        let first = await pool.getPage('realm-standby');
-        assert.false(first.reused, 'first checkout uses standby page');
-
-        await pool.warmStandbys();
-        assert.strictEqual(
-          contextsCreated.length,
-          2,
-          'spare standby created once the only slot is occupied',
-        );
-        first.release();
-        await pool.closeAll();
-      });
-
-      test('standby pages bind to the first realm they serve', async function (assert) {
-        let { pool } = makeStubPagePool(2);
-        await pool.warmStandbys(); // fill initial standbys
-
-        let realmAFirst = await pool.getPage('realm-a');
-        let realmAFirstId = realmAFirst.pageId;
-        realmAFirst.release();
-        await pool.warmStandbys(); // replenish after consuming standby
-        let realmBFirst = await pool.getPage('realm-b');
-        let realmBFirstId = realmBFirst.pageId;
-        realmBFirst.release();
-        await pool.warmStandbys(); // replenish again to keep standbys warm
-
-        let realmASecond = await pool.getPage('realm-a');
-        let realmBSecond = await pool.getPage('realm-b');
-
-        assert.false(realmAFirst.reused, 'first realm A call not reused');
-        assert.false(realmBFirst.reused, 'first realm B call not reused');
-        assert.true(realmASecond.reused, 'realm A reuses its page');
-        assert.true(realmBSecond.reused, 'realm B reuses its page');
-        assert.strictEqual(
-          realmASecond.pageId,
-          realmAFirstId,
-          'realm A keeps the same page',
-        );
-        assert.strictEqual(
-          realmBSecond.pageId,
-          realmBFirstId,
-          'realm B keeps the same page',
-        );
-        assert.notStrictEqual(
-          realmAFirstId,
-          realmBFirstId,
-          'distinct pages per realm from standbys',
-        );
-        realmASecond.release();
-        realmBSecond.release();
-        await pool.closeAll();
-      });
-
-      test('evicts idle realms without touching standbys', async function (assert) {
-        let { pool, contextsCreated, contextsClosed } = makeStubPagePool(2);
-        await pool.warmStandbys();
-
-        assert.strictEqual(
-          contextsCreated.length,
-          2,
-          'initial standbys created up to maxPages',
-        );
-
-        let realmLease = await pool.getPage('realm-a');
-        await pool.warmStandbys(); // ensure standby pool replenishment settles before idle sweep
-        realmLease.release();
-
-        let originalNow = Date.now;
-        try {
-          let now = Date.now();
-          (Date as any).now = () => now + 13 * 60 * 60 * 1000; // 13 hours later
-
-          let evicted = await pool.evictIdleRealms(12 * 60 * 60 * 1000);
-
-          assert.deepEqual(evicted, ['realm-a'], 'idle realm evicted');
-          assert.deepEqual(
-            pool.getWarmRealms(),
-            [],
-            'realm entry removed from warm set',
+          let embedded =
+            response.embeddedHTML?.[
+              `${realmURL2}non-isolated-links-card/NonIsolatedLinks`
+            ] ?? '';
+          let cleanedEmbedded = cleanWhiteSpace(embedded);
+          assert.ok(
+            /data-test-embedded-owner[^>]*>\s*Hassan\s*</.test(cleanedEmbedded),
+            `embedded html includes direct linksTo value Hassan: ${cleanedEmbedded}`,
           );
-          let closedAtEviction = [...contextsClosed];
+          assert.ok(
+            /data-test-embedded-owner-name[^>]*>\s*Hassan\s*</.test(
+              cleanedEmbedded,
+            ),
+            `embedded html includes direct linksToMany value Hassan: ${cleanedEmbedded}`,
+          );
+          assert.ok(
+            /data-test-embedded-owner-name[^>]*>\s*Mango\s*</.test(
+              cleanedEmbedded,
+            ),
+            `embedded html includes direct linksToMany value Mango: ${cleanedEmbedded}`,
+          );
+          assert.ok(
+            /data-test-embedded-profile-lead-name[^>]*>\s*Hassan\s*</.test(
+              cleanedEmbedded,
+            ),
+            `embedded html includes nested FieldDef linksTo value Hassan: ${cleanedEmbedded}`,
+          );
+          assert.ok(
+            /data-test-embedded-profile-member-name[^>]*>\s*Hassan\s*</.test(
+              cleanedEmbedded,
+            ),
+            `embedded html includes nested FieldDef linksToMany value Hassan: ${cleanedEmbedded}`,
+          );
+          assert.ok(
+            /data-test-embedded-profile-member-name[^>]*>\s*Mango\s*</.test(
+              cleanedEmbedded,
+            ),
+            `embedded html includes nested FieldDef linksToMany value Mango: ${cleanedEmbedded}`,
+          );
+
+          assert.strictEqual(
+            response.searchDoc?.owner?.name,
+            'Hassan',
+            'searchDoc includes direct linksTo data from non-isolated render',
+          );
+          assert.strictEqual(
+            response.searchDoc?.owners?.[0]?.name,
+            'Hassan',
+            'searchDoc includes direct linksToMany first value from non-isolated render',
+          );
+          assert.strictEqual(
+            response.searchDoc?.owners?.[1]?.name,
+            'Mango',
+            'searchDoc includes direct linksToMany second value from non-isolated render',
+          );
+          assert.strictEqual(
+            response.searchDoc?.profile?.lead?.name,
+            'Hassan',
+            'searchDoc includes nested FieldDef linksTo data from non-isolated render',
+          );
+          assert.strictEqual(
+            response.searchDoc?.profile?.members?.[0]?.name,
+            'Hassan',
+            'searchDoc includes nested FieldDef linksToMany first value from non-isolated render',
+          );
+          assert.strictEqual(
+            response.searchDoc?.profile?.members?.[1]?.name,
+            'Mango',
+            'searchDoc includes nested FieldDef linksToMany second value from non-isolated render',
+          );
+        });
+      });
+
+      module('errors', function (hooks) {
+        hooks.beforeEach(disposeAllRealms);
+        test('error during render', async function (assert) {
+          const testCardURL = `${realmURL2}2`;
+          let { response } = await prerenderer.prerenderCard({
+            realm: realmURL2,
+            url: testCardURL,
+            auth: auth(),
+          });
+          let { error, ...restOfResult } = response;
+
+          assert.strictEqual(error?.error.id, testCardURL);
+          assert.strictEqual(
+            error?.error.message,
+            'intentional failure during render',
+          );
+          assert.strictEqual(error?.error.status, 500);
+          assert.ok(error?.error.stack, 'stack trace exists in error');
+
+          // TODO Perhaps if we add error handlers for the /render/html subroute
+          // these all wont be empty, as this is triggering in the /render route
+          // error handler and hence stomping over all the subroutes.
+          assert.deepEqual(restOfResult, {
+            displayNames: null,
+            deps: null,
+            searchDoc: null,
+            serialized: null,
+            types: null,
+            atomHTML: null,
+            embeddedHTML: null,
+            fittedHTML: null,
+            headHTML: null,
+            iconHTML: null,
+            isolatedHTML: null,
+          });
+        });
+
+        test('error includes blocked timer summary when timers fire', async function (assert) {
+          const testCardURL = `${realmURL2}timer-error`;
+          let { response } = await prerenderer.prerenderCard({
+            realm: realmURL2,
+            url: testCardURL,
+            auth: auth(),
+          });
+
+          assert.ok(response.error, 'error present for timer error');
+          let message = response.error?.error.message ?? '';
+          assert.ok(
+            message.includes('timer error during render'),
+            `error message includes original error text, got: ${message}`,
+          );
+          let stack = response.error?.error.stack ?? '';
+          assert.ok(
+            stack.includes('Timers blocked during prerender'),
+            'timer summary appended to stack',
+          );
+          let timeoutMatch = stack.match(/setTimeout:\s+(\d+)/);
+          assert.ok(timeoutMatch, 'setTimeout count included');
+          assert.ok(
+            Number(timeoutMatch?.[1]) >= 1,
+            `expected at least one setTimeout, got: ${timeoutMatch?.[1]}`,
+          );
+          let intervalMatch = stack.match(/setInterval:\s+(\d+)/);
+          assert.ok(intervalMatch, 'setInterval count included');
+          assert.ok(
+            Number(intervalMatch?.[1]) >= 1,
+            `expected at least one setInterval, got: ${intervalMatch?.[1]}`,
+          );
+          assert.ok(
+            stack.includes('at get message'),
+            'timer summary includes a call stack',
+          );
+        });
+
+        test('timeout includes blocked timer summary in stack', async function (assert) {
+          const testCardURL = `${realmURL2}timer-timeout`;
+          await prerenderer.prerenderCard({
+            realm: realmURL2,
+            url: testCardURL,
+            auth: auth(),
+          });
+          let { response } = await prerenderer.prerenderCard({
+            realm: realmURL2,
+            url: testCardURL,
+            auth: auth(),
+            opts: { timeoutMs: 1000, simulateTimeoutMs: 2000 },
+          });
+
+          assert.strictEqual(
+            response.error?.error.title,
+            'Render timeout',
+            'timeout surfaced',
+          );
+          let stack = response.error?.error.stack ?? '';
+          assert.ok(
+            stack.includes('Timers blocked during prerender'),
+            'timer summary appended to timeout stack',
+          );
+          assert.ok(
+            /setTimeout:\s+\d+/.test(stack),
+            'timeout stack includes setTimeout count',
+          );
+          assert.ok(
+            /setInterval:\s+\d+/.test(stack),
+            'timeout stack includes setInterval count',
+          );
+        });
+
+        test('missing link surfaces 404 without eviction', async function (assert) {
+          const testCardURL = `${realmURL2}missing-link`;
+          let result = await prerenderer.prerenderCard({
+            realm: realmURL2,
+            url: testCardURL,
+            auth: auth(),
+          });
+          let { response } = result;
+
+          assert.ok(response.error, 'error present for missing link');
+          assert.strictEqual(
+            response.error?.error.message,
+            `missing file ${realmURL1}missing-owner.json`,
+          );
+          assert.strictEqual(response.error?.error.status, 404);
+          assert.false(
+            result.pool.evicted,
+            'missing link does not evict prerender page',
+          );
+          assert.false(
+            result.pool.timedOut,
+            'missing link does not mark prerender timeout',
+          );
+        });
+
+        test('fetch failed surfaces error without eviction', async function (assert) {
+          const testCardURL = `${realmURL2}fetch-failed`;
+          let result = await prerenderer.prerenderCard({
+            realm: realmURL2,
+            url: testCardURL,
+            auth: auth(),
+          });
+          let { response } = result;
+
+          assert.ok(response.error, 'error present for fetch failed');
+          assert.strictEqual(
+            response.error?.error.message,
+            `unable to fetch http://localhost:9000/this-is-a-link-to-nowhere: fetch failed`,
+          );
+          assert.strictEqual(response.error?.error.status, 500);
+          assert.false(
+            result.pool.evicted,
+            'fetch failed does not evict prerender page',
+          );
+          assert.false(
+            result.pool.timedOut,
+            'fetch failed does not mark prerender timeout',
+          );
+        });
+
+        test('embedded error markup triggers render error', async function (assert) {
+          const testCardURL = `${realmURL2}4`;
+          let { response } = await prerenderer.prerenderCard({
+            realm: realmURL2,
+            url: testCardURL,
+            auth: auth(),
+          });
+          assert.ok(response.error, 'error captured');
+          assert.strictEqual(response.error?.error.id, 'embedded-error');
+          assert.strictEqual(
+            response.error?.error.message,
+            'error flagged from DOM',
+          );
+          assert.strictEqual(response.error?.error.title, 'Embedded error');
+          assert.strictEqual(response.error?.error.status, 500);
+        });
+
+        test('unusable triggers eviction and short-circuit', async function (assert) {
+          // Render the card that forces unusable
+          const unusableURL = `${realmURL2}3`;
+          let unusable = await prerenderer.prerenderCard({
+            realm: realmURL2,
+            url: unusableURL,
+            auth: auth(),
+          });
+
+          // We should see an error with evict semantics and short-circuited payloads
+          assert.ok(unusable.response.error, 'error present for unusable');
+          assert.strictEqual(unusable.response.error?.error.id, unusableURL);
+          assert.strictEqual(
+            unusable.response.error?.error.message,
+            'forced unusable for test',
+          );
+          assert.strictEqual(unusable.response.error?.error.status, 500);
+          assert.strictEqual(
+            unusable.response.isolatedHTML,
+            null,
+            'isolatedHTML null when short-circuited',
+          );
+          assert.strictEqual(
+            unusable.response.embeddedHTML,
+            null,
+            'embeddedHTML null when short-circuited',
+          );
+          assert.strictEqual(
+            unusable.response.atomHTML,
+            null,
+            'atomHTML null when short-circuited',
+          );
+          assert.strictEqual(
+            unusable.response.iconHTML,
+            null,
+            'iconHTML null when short-circuited',
+          );
           assert.deepEqual(
-            closedAtEviction,
-            [contextsCreated[0]],
-            'only the realm-bound page closed during idle eviction',
+            {
+              serialized: unusable.response.serialized,
+              searchDoc: unusable.response.searchDoc,
+              displayNames: unusable.response.displayNames,
+              types: unusable.response.types,
+              deps: unusable.response.deps,
+            },
+            {
+              serialized: null,
+              searchDoc: null,
+              displayNames: null,
+              types: null,
+              deps: null,
+            },
+            'meta fields are null when short-circuited',
           );
           assert.true(
-            contextsCreated.length > closedAtEviction.length,
-            'standby pages remain available after idle eviction',
+            unusable.pool.evicted,
+            'pool notes eviction for unusable',
           );
-        } finally {
-          (Date as any).now = originalNow;
-          await pool.closeAll();
-        }
+          assert.false(
+            unusable.pool.timedOut,
+            'unusable eviction does not mark timeout',
+          );
+          assert.notStrictEqual(
+            unusable.pool.pageId,
+            'unknown',
+            'evicted unusable run retains page identifier',
+          );
+
+          // After unusable, the realm should be evicted; a subsequent render should not reuse
+          const healthyURL = `${realmURL2}1`;
+          let next = await prerenderer.prerenderCard({
+            realm: realmURL2,
+            url: healthyURL,
+            auth: auth(),
+          });
+          assert.false(
+            next.pool.reused,
+            'did not reuse after unusable eviction',
+          );
+          assert.false(next.pool.evicted, 'subsequent render not evicted');
+        });
+
+        test('prerender surfaces module syntax errors without timing out', async function (assert) {
+          const cardURL = `${realmURL2}broken`;
+          let broken = await prerenderer.prerenderCard({
+            realm: realmURL2,
+            url: cardURL,
+            auth: auth(),
+          });
+          assert.ok(broken.response.error, 'syntax error captured');
+          assert.strictEqual(
+            broken.response.error?.error.status,
+            406,
+            'syntax error reported as 406',
+          );
+          assert.false(
+            broken.pool.timedOut,
+            'syntax error does not hit timeout',
+          );
+        });
       });
 
-      test('idle eviction skips unassigned standbys', async function (assert) {
-        let { pool, contextsCreated, contextsClosed } = makeStubPagePool(1);
-        await pool.warmStandbys();
+      module('realm pooling', function (hooks) {
+        hooks.beforeEach(disposeAllRealms);
+        test('evicts on timeout and does not reuse', async function (assert) {
+          const testCardURL = `${realmURL2}1`;
+          // First render to initialize pool
+          let first = await prerenderer.prerenderCard({
+            realm: realmURL2,
+            url: testCardURL,
+            auth: auth(),
+          });
+          assert.false(first.pool.reused, 'first call not reused');
 
-        let createdBeforeSweep = contextsCreated.length;
-        let evicted = await pool.evictIdleRealms(1);
-        let closedAfterSweep = contextsClosed.length;
+          // Now trigger a timeout; this should evict the realm
+          let timeoutRun = await prerenderer.prerenderCard({
+            realm: realmURL2,
+            url: testCardURL,
+            auth: auth(),
+            opts: { timeoutMs: 1, simulateTimeoutMs: 5 },
+          });
+          assert.strictEqual(
+            timeoutRun.response.error?.error.title,
+            'Render timeout',
+            'got timeout error',
+          );
+          assert.true(timeoutRun.pool.evicted, 'timeout eviction reflected');
+          assert.true(timeoutRun.pool.timedOut, 'timeout flagged on pool');
+          assert.notStrictEqual(
+            timeoutRun.pool.pageId,
+            'unknown',
+            'timeout eviction retains page identifier',
+          );
 
-        assert.deepEqual(evicted, [], 'no idle realms to evict');
-        assert.strictEqual(
-          contextsCreated.length,
-          createdBeforeSweep,
-          'standby pool untouched by idle eviction',
-        );
-        assert.strictEqual(
-          closedAfterSweep,
-          0,
-          'no contexts closed when only standbys are present',
-        );
-        await pool.closeAll();
+          // A subsequent render should not reuse the previously pooled page
+          let afterTimeout = await prerenderer.prerenderCard({
+            realm: realmURL2,
+            url: testCardURL,
+            auth: auth(),
+          });
+          assert.false(
+            afterTimeout.pool.reused,
+            'did not reuse after timeout eviction',
+          );
+          assert.false(afterTimeout.pool.evicted, 'no eviction on new render');
+          assert.false(afterTimeout.pool.timedOut, 'no timeout on new render');
+        });
+
+        test('reuses the same page within a realm', async function (assert) {
+          const testCardURL = `${realmURL2}1`;
+          let first = await prerenderer.prerenderCard({
+            realm: realmURL2,
+            url: testCardURL,
+            auth: auth(),
+          });
+          let second = await prerenderer.prerenderCard({
+            realm: realmURL2,
+            url: testCardURL,
+            auth: auth(),
+          });
+          assert.strictEqual(
+            first.pool.realm,
+            realmURL2,
+            'first realm matches',
+          );
+          assert.strictEqual(
+            second.pool.realm,
+            realmURL2,
+            'second realm matches',
+          );
+          assert.strictEqual(
+            first.pool.pageId,
+            second.pool.pageId,
+            'pageId reused',
+          );
+          assert.false(first.pool.reused, 'first call not reused');
+          assert.true(second.pool.reused, 'second call reused');
+          assert.false(first.pool.timedOut, 'first call not timed out');
+          assert.false(second.pool.timedOut, 'second call not timed out');
+        });
+
+        test('refreshes prerender session when auth changes for the same realm', async function (assert) {
+          const testCardURL = `${realmURL2}1`;
+          let authA = testCreatePrerenderAuth(testUserId, {
+            [realmURL2]: ['read', 'write', 'realm-owner'],
+          });
+          let authB = testCreatePrerenderAuth(testUserId, {
+            [realmURL2]: ['read', 'write', 'realm-owner'],
+            [realmURL1]: ['read', 'write', 'realm-owner'], // introduce a different token set
+          });
+
+          let first = await prerenderer.prerenderCard({
+            realm: realmURL2,
+            url: testCardURL,
+            auth: authA,
+          });
+          let second = await prerenderer.prerenderCard({
+            realm: realmURL2,
+            url: testCardURL,
+            auth: authB,
+          });
+
+          assert.false(first.pool.reused, 'first call not reused');
+          assert.false(
+            second.pool.reused,
+            'auth change forces a fresh prerender page',
+          );
+          assert.notStrictEqual(
+            first.pool.pageId,
+            second.pool.pageId,
+            'new page allocated when auth differs',
+          );
+          assert.strictEqual(
+            second.response.serialized?.data.attributes?.name,
+            'Maple',
+            'second render still succeeds with new session',
+          );
+        });
+
+        test('does not reuse across different realms', async function (assert) {
+          const testCardURL1 = `${realmURL1}1`;
+          const testCardURL2 = `${realmURL2}1`;
+          let r1 = await prerenderer.prerenderCard({
+            realm: realmURL1,
+            url: testCardURL1,
+            auth: auth(),
+          });
+          let r2 = await prerenderer.prerenderCard({
+            realm: realmURL2,
+            url: testCardURL2,
+            auth: auth(),
+          });
+          assert.notStrictEqual(
+            r1.pool.pageId,
+            r2.pool.pageId,
+            'distinct pages per realm',
+          );
+          assert.false(r1.pool.reused, 'first realm first call not reused');
+          assert.false(r2.pool.reused, 'second realm first call not reused');
+        });
+
+        test('evicts LRU when capacity reached', async function (assert) {
+          const cardA = `${realmURL1}1`;
+          const cardB = `${realmURL2}1`;
+          const cardC = `${realmURL3}1`;
+
+          let firstA = await prerenderer.prerenderCard({
+            realm: realmURL1,
+            url: cardA,
+            auth: auth(),
+          });
+          assert.false(firstA.pool.reused, 'first A not reused');
+
+          let firstB = await prerenderer.prerenderCard({
+            realm: realmURL2,
+            url: cardB,
+            auth: auth(),
+          });
+          assert.false(firstB.pool.reused, 'first B not reused');
+
+          // Now adding C should evict the LRU (A), since maxPages=2
+          let firstC = await prerenderer.prerenderCard({
+            realm: realmURL3,
+            url: cardC,
+            auth: auth(),
+          });
+          assert.false(firstC.pool.reused, 'first C not reused');
+
+          // Returning to A should not reuse because it was evicted
+          let secondA = await prerenderer.prerenderCard({
+            realm: realmURL1,
+            url: cardA,
+            auth: auth(),
+          });
+          assert.false(secondA.pool.reused, 'A was evicted, so not reused');
+          assert.notStrictEqual(
+            firstA.pool.pageId,
+            secondA.pool.pageId,
+            'A got a new page after eviction',
+          );
+        });
+
+        test('serializes prerenders when only one tab is available', async function (assert) {
+          let prevTabMax = process.env.PRERENDER_REALM_TAB_MAX;
+          let semaphore = new TestSemaphore(1);
+          let active = 0;
+          let maxActive = 0;
+          let pool: PagePool | undefined;
+
+          try {
+            process.env.PRERENDER_REALM_TAB_MAX = '1';
+            ({ pool } = makeStubPagePool(1, semaphore));
+            await pool.warmStandbys();
+
+            let run = async (realm: string) => {
+              let lease = await pool!.getPage(realm);
+              active++;
+              maxActive = Math.max(maxActive, active);
+              await new Promise((resolve) => setTimeout(resolve, 25));
+              active--;
+              lease.release();
+            };
+
+            await Promise.all([run('realm-a'), run('realm-b')]);
+
+            assert.strictEqual(
+              maxActive,
+              1,
+              'renders serialize when only one tab is allowed',
+            );
+          } finally {
+            await pool?.closeAll();
+            if (prevTabMax === undefined) {
+              delete process.env.PRERENDER_REALM_TAB_MAX;
+            } else {
+              process.env.PRERENDER_REALM_TAB_MAX = prevTabMax;
+            }
+          }
+        });
+
+        test('runs prerenders in parallel when multiple tabs are available', async function (assert) {
+          let prevTabMax = process.env.PRERENDER_REALM_TAB_MAX;
+          let semaphore = new TestSemaphore(2);
+          let active = 0;
+          let maxActive = 0;
+          let pool: PagePool | undefined;
+
+          try {
+            process.env.PRERENDER_REALM_TAB_MAX = '2';
+            ({ pool } = makeStubPagePool(2, semaphore));
+            await pool.warmStandbys();
+
+            let run = async (realm: string) => {
+              let lease = await pool!.getPage(realm);
+              active++;
+              maxActive = Math.max(maxActive, active);
+              await new Promise((resolve) => setTimeout(resolve, 25));
+              active--;
+              lease.release();
+            };
+
+            await Promise.all([run('realm-a'), run('realm-a')]);
+
+            assert.strictEqual(
+              maxActive,
+              2,
+              'renders run in parallel on separate tabs',
+            );
+          } finally {
+            await pool?.closeAll();
+            if (prevTabMax === undefined) {
+              delete process.env.PRERENDER_REALM_TAB_MAX;
+            } else {
+              process.env.PRERENDER_REALM_TAB_MAX = prevTabMax;
+            }
+          }
+        });
+
+        test('prefers idle tab aligned to realm over standby tabs', async function (assert) {
+          let { pool } = makeStubPagePool(2);
+          await pool.warmStandbys();
+
+          let first = await pool.getPage('realm-a');
+          first.release();
+          await pool.warmStandbys();
+
+          let second = await pool.getPage('realm-a');
+          assert.strictEqual(
+            second.pageId,
+            first.pageId,
+            'idle aligned tab reused when available',
+          );
+          assert.true(second.reused, 'reuse flagged for aligned idle tab');
+
+          second.release();
+          await pool.closeAll();
+        });
+
+        test('prefers standby over idle tabs from other realms', async function (assert) {
+          let originalNow = Date.now;
+          let now = 1000;
+          (Date as any).now = () => now;
+          let { pool } = makeStubPagePool(1);
+
+          try {
+            await pool.warmStandbys(); // standby at t=1000
+            now = 1100;
+            let realmALease = await pool.getPage('realm-a');
+            realmALease.release();
+
+            now = 2000;
+            await pool.warmStandbys(); // standby created after idle realm tab
+            let realmBLease = await pool.getPage('realm-b');
+            assert.notStrictEqual(
+              realmBLease.pageId,
+              realmALease.pageId,
+              'standby chosen instead of commandeering an idle realm tab',
+            );
+            assert.false(
+              realmBLease.reused,
+              'standby assignment marked as not reused',
+            );
+            realmBLease.release();
+          } finally {
+            await pool.closeAll();
+            (Date as any).now = originalNow;
+          }
+        });
+
+        test('enforces per-realm tab cap by queueing on an existing tab', async function (assert) {
+          let prevTabMax = process.env.PRERENDER_REALM_TAB_MAX;
+          let pool: PagePool | undefined;
+          let resolved = false;
+
+          try {
+            process.env.PRERENDER_REALM_TAB_MAX = '1';
+            ({ pool } = makeStubPagePool(2));
+            await pool.warmStandbys();
+
+            let first = await pool.getPage('realm-a');
+            let secondPromise = pool.getPage('realm-a').then((lease) => {
+              resolved = true;
+              return lease;
+            });
+
+            await new Promise((resolve) => setTimeout(resolve, 5));
+            assert.false(resolved, 'second request waits when tab cap reached');
+
+            first.release();
+            let second = await secondPromise;
+            assert.strictEqual(
+              second.pageId,
+              first.pageId,
+              'queued request reuses the existing tab',
+            );
+            assert.true(second.reused, 'reuse flagged for queued request');
+            second.release();
+          } finally {
+            await pool?.closeAll();
+            if (prevTabMax === undefined) {
+              delete process.env.PRERENDER_REALM_TAB_MAX;
+            } else {
+              process.env.PRERENDER_REALM_TAB_MAX = prevTabMax;
+            }
+          }
+        });
+
+        test('queues on the least-pending tab when the realm cap is met', async function (assert) {
+          let prevTabMax = process.env.PRERENDER_REALM_TAB_MAX;
+          let pool: PagePool | undefined;
+          let originalNow = Date.now;
+          let now = 1000;
+          (Date as any).now = () => now;
+          let thirdResolved = false;
+          let fourthResolved = false;
+
+          try {
+            process.env.PRERENDER_REALM_TAB_MAX = '2';
+            ({ pool } = makeStubPagePool(2));
+            await pool.warmStandbys();
+
+            let first = await pool.getPage('realm-a');
+            now = 1100;
+            let second = await pool.getPage('realm-a');
+
+            let thirdPromise = pool.getPage('realm-a').then((lease) => {
+              thirdResolved = true;
+              return lease;
+            });
+            await new Promise((resolve) => setTimeout(resolve, 0));
+            let fourthPromise = pool.getPage('realm-a').then((lease) => {
+              fourthResolved = true;
+              return lease;
+            });
+
+            second.release();
+            await new Promise((resolve) => setTimeout(resolve, 5));
+            assert.true(
+              fourthResolved,
+              'request queued on least-pending tab unblocks first',
+            );
+            assert.false(
+              thirdResolved,
+              'request queued on busier tab still waits',
+            );
+
+            let fourth = await fourthPromise;
+            assert.strictEqual(
+              fourth.pageId,
+              second.pageId,
+              'fourth request queued on least-pending tab',
+            );
+
+            first.release();
+            let third = await thirdPromise;
+            assert.strictEqual(
+              third.pageId,
+              first.pageId,
+              'third request queued on the LRU tab when pending counts tied',
+            );
+            fourth.release();
+            third.release();
+          } finally {
+            (Date as any).now = originalNow;
+            await pool?.closeAll();
+            if (prevTabMax === undefined) {
+              delete process.env.PRERENDER_REALM_TAB_MAX;
+            } else {
+              process.env.PRERENDER_REALM_TAB_MAX = prevTabMax;
+            }
+          }
+        });
+
+        test('queued cross-realm requests realign the tab per request', async function (assert) {
+          let { pool } = makeStubPagePool(1);
+          await pool.warmStandbys();
+
+          let first = await pool.getPage('realm-a');
+          await pool.warmStandbys();
+          let blocker = await pool.getPage('realm-c');
+
+          let order: string[] = [];
+          let secondPromise = pool.getPage('realm-a').then((lease) => {
+            order.push('a');
+            return lease;
+          });
+          let thirdPromise = pool.getPage('realm-b').then((lease) => {
+            order.push('b');
+            return lease;
+          });
+
+          first.release();
+
+          let second = await secondPromise;
+          assert.deepEqual(order, ['a'], 'queued realm-a request runs first');
+          assert.true(
+            pool.getWarmRealms().includes('realm-a'),
+            'tab aligned to realm-a while queued work runs',
+          );
+          second.release();
+          blocker.release();
+
+          let third = await thirdPromise;
+          assert.deepEqual(
+            order,
+            ['a', 'b'],
+            'queued realm-b request runs after',
+          );
+          assert.true(
+            pool.getWarmRealms().includes('realm-b'),
+            'tab realigned to realm-b when queued request starts',
+          );
+          third.release();
+
+          await pool.closeAll();
+        });
+
+        test('does not reassign a busy tab with queued work across realms', async function (assert) {
+          let { pool } = makeStubPagePool(1, undefined, undefined, {
+            disableStandbyRefill: true,
+          });
+
+          try {
+            await pool.warmStandbys();
+
+            let first = await pool.getPage('realm-a');
+
+            let secondPromise = pool.getPage('realm-a');
+            let thirdPromise = pool.getPage('realm-b');
+
+            await assert.rejects(
+              thirdPromise,
+              /No standby page available for prerender/,
+              'cross-realm request rejects when only busy tab has queued work',
+            );
+
+            first.release();
+            let second = await secondPromise;
+            assert.strictEqual(
+              second.pageId,
+              first.pageId,
+              'queued same-realm request keeps the original tab',
+            );
+            second.release();
+
+            assert.false(
+              pool.getWarmRealms().includes('realm-b'),
+              'cross-realm request does not reassign the tab',
+            );
+          } finally {
+            await pool.closeAll();
+          }
+        });
+
+        test('queues same-realm request when tab is transitioning', async function (assert) {
+          let { pool } = makeStubPagePool(1, undefined, undefined, {
+            disableStandbyRefill: true,
+          });
+
+          try {
+            await pool.warmStandbys();
+
+            let first = await pool.getPage('realm-a');
+
+            let crossResolved = false;
+            let sameResolved = false;
+            let crossPromise = pool.getPage('realm-b').then((lease) => {
+              crossResolved = true;
+              return lease;
+            });
+            let samePromise = pool.getPage('realm-a').then((lease) => {
+              sameResolved = true;
+              return lease;
+            });
+
+            await new Promise((resolve) => setTimeout(resolve, 5));
+            assert.false(
+              crossResolved,
+              'cross-realm request waits for the busy tab',
+            );
+            assert.false(
+              sameResolved,
+              'same-realm request queues even while transitioning',
+            );
+
+            first.release();
+
+            let cross = await crossPromise;
+            assert.strictEqual(
+              cross.pageId,
+              first.pageId,
+              'cross-realm request uses the existing tab',
+            );
+            cross.release();
+
+            let same = await samePromise;
+            assert.strictEqual(
+              same.pageId,
+              first.pageId,
+              'same-realm request uses the same tab',
+            );
+            assert.false(
+              pool.getWarmRealms().includes('realm-b'),
+              'tab realigned back to realm-a after same-realm request',
+            );
+            same.release();
+          } finally {
+            await pool.closeAll();
+          }
+        });
+
+        test('does not oversubscribe contexts during async eviction', async function (assert) {
+          let prevTabMax = process.env.PRERENDER_REALM_TAB_MAX;
+          let pool: PagePool | undefined;
+          let active = 0;
+          let peak = 0;
+          let resolveClose!: () => void;
+          let closeGate = new Promise<void>((resolve) => {
+            resolveClose = resolve;
+          });
+
+          try {
+            process.env.PRERENDER_REALM_TAB_MAX = '2';
+            ({ pool } = makeStubPagePool(2, undefined, undefined, {
+              closeContextDelay: async () => closeGate,
+              onContextCreated() {
+                active++;
+                peak = Math.max(peak, active);
+              },
+              onContextClosed() {
+                active--;
+              },
+            }));
+
+            await pool.warmStandbys();
+
+            let first = await pool.getPage('realm-a');
+            let second = await pool.getPage('realm-a');
+
+            await pool.disposeRealm('realm-a', { awaitIdle: false });
+            await pool.warmStandbys();
+
+            assert.ok(
+              peak <= 3,
+              'context count stays within maxPages+1 during async eviction',
+            );
+
+            first.release();
+            second.release();
+            resolveClose();
+          } finally {
+            if (resolveClose) {
+              resolveClose();
+            }
+            await pool?.closeAll();
+            if (prevTabMax === undefined) {
+              delete process.env.PRERENDER_REALM_TAB_MAX;
+            } else {
+              process.env.PRERENDER_REALM_TAB_MAX = prevTabMax;
+            }
+          }
+        });
+
+        test('creates spare standby when pool is at capacity', async function (assert) {
+          let { pool, contextsCreated } = makeStubPagePool(1);
+          await pool.warmStandbys();
+          assert.strictEqual(
+            contextsCreated.length,
+            1,
+            'initial standby created up to maxPages',
+          );
+
+          let first = await pool.getPage('realm-standby');
+          assert.false(first.reused, 'first checkout uses standby page');
+
+          await pool.warmStandbys();
+          assert.strictEqual(
+            contextsCreated.length,
+            2,
+            'spare standby created once the only slot is occupied',
+          );
+          first.release();
+          await pool.closeAll();
+        });
+
+        test('standby pages bind to the first realm they serve', async function (assert) {
+          let { pool } = makeStubPagePool(2);
+          await pool.warmStandbys(); // fill initial standbys
+
+          let realmAFirst = await pool.getPage('realm-a');
+          let realmAFirstId = realmAFirst.pageId;
+          realmAFirst.release();
+          await pool.warmStandbys(); // replenish after consuming standby
+          let realmBFirst = await pool.getPage('realm-b');
+          let realmBFirstId = realmBFirst.pageId;
+          realmBFirst.release();
+          await pool.warmStandbys(); // replenish again to keep standbys warm
+
+          let realmASecond = await pool.getPage('realm-a');
+          let realmBSecond = await pool.getPage('realm-b');
+
+          assert.false(realmAFirst.reused, 'first realm A call not reused');
+          assert.false(realmBFirst.reused, 'first realm B call not reused');
+          assert.true(realmASecond.reused, 'realm A reuses its page');
+          assert.true(realmBSecond.reused, 'realm B reuses its page');
+          assert.strictEqual(
+            realmASecond.pageId,
+            realmAFirstId,
+            'realm A keeps the same page',
+          );
+          assert.strictEqual(
+            realmBSecond.pageId,
+            realmBFirstId,
+            'realm B keeps the same page',
+          );
+          assert.notStrictEqual(
+            realmAFirstId,
+            realmBFirstId,
+            'distinct pages per realm from standbys',
+          );
+          realmASecond.release();
+          realmBSecond.release();
+          await pool.closeAll();
+        });
+
+        test('evicts idle realms without touching standbys', async function (assert) {
+          let { pool, contextsCreated, contextsClosed } = makeStubPagePool(2);
+          await pool.warmStandbys();
+
+          assert.strictEqual(
+            contextsCreated.length,
+            2,
+            'initial standbys created up to maxPages',
+          );
+
+          let realmLease = await pool.getPage('realm-a');
+          await pool.warmStandbys(); // ensure standby pool replenishment settles before idle sweep
+          realmLease.release();
+
+          let originalNow = Date.now;
+          try {
+            let now = Date.now();
+            (Date as any).now = () => now + 13 * 60 * 60 * 1000; // 13 hours later
+
+            let evicted = await pool.evictIdleRealms(12 * 60 * 60 * 1000);
+
+            assert.deepEqual(evicted, ['realm-a'], 'idle realm evicted');
+            assert.deepEqual(
+              pool.getWarmRealms(),
+              [],
+              'realm entry removed from warm set',
+            );
+            let closedAtEviction = [...contextsClosed];
+            assert.deepEqual(
+              closedAtEviction,
+              [contextsCreated[0]],
+              'only the realm-bound page closed during idle eviction',
+            );
+            assert.true(
+              contextsCreated.length > closedAtEviction.length,
+              'standby pages remain available after idle eviction',
+            );
+          } finally {
+            (Date as any).now = originalNow;
+            await pool.closeAll();
+          }
+        });
+
+        test('idle eviction skips unassigned standbys', async function (assert) {
+          let { pool, contextsCreated, contextsClosed } = makeStubPagePool(1);
+          await pool.warmStandbys();
+
+          let createdBeforeSweep = contextsCreated.length;
+          let evicted = await pool.evictIdleRealms(1);
+          let closedAfterSweep = contextsClosed.length;
+
+          assert.deepEqual(evicted, [], 'no idle realms to evict');
+          assert.strictEqual(
+            contextsCreated.length,
+            createdBeforeSweep,
+            'standby pool untouched by idle eviction',
+          );
+          assert.strictEqual(
+            closedAfterSweep,
+            0,
+            'no contexts closed when only standbys are present',
+          );
+          await pool.closeAll();
+        });
       });
     });
-  });
+  }
 
   module('prerender - module retries', function () {
     test('module prerender retries with clear cache on retry signature', async function (assert) {

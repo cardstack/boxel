@@ -9,13 +9,15 @@
     "type": "card",
     "attributes": {
       "name": "Cardstack Theme",
-      "images": [],
+      "images": [
+        "https://boxel-assets-store.s3.us-east-1.amazonaws.com/cardstack-brand-guide/cardstack-profile-icon.png"
+      ],
       "summary": "Cardstack\u2019s house style theme with IBM Plex typography, vibrant purple accents, and paired light/dark tokens for backgrounds, borders, charts, and sidebars\u2014ready to brand your cards with the official Cardstack look.",
       "cardInfo": {
         "notes": null,
         "name": "Cardstack Theme",
         "summary": "IBM Plex-driven Cardstack brand theme with balanced light/dark palettes, chart colors, and sidebar tokens.",
-        "cardThumbnailURL": null
+        "cardThumbnailURL": "https://boxel-assets-store.s3.us-east-1.amazonaws.com/cardstack-brand-guide/cardstack-profile-icon.png"
       }
     },
     "relationships": {

@@ -25,6 +25,7 @@ interface SubscriptionData {
   lowCreditThreshold: number | null;
   lastDailyCreditGrantAt: number | null;
   nextDailyCreditGrantAt: number | null;
+  dailyCreditGrantCount: number;
 }
 
 export default class BillingService extends Service {
@@ -155,6 +156,8 @@ export default class BillingService extends Service {
         json.data?.attributes?.lastDailyCreditGrantAt ?? null;
       let nextDailyCreditGrantAt =
         json.data?.attributes?.nextDailyCreditGrantAt ?? null;
+      let dailyCreditGrantCount =
+        json.data?.attributes?.dailyCreditGrantCount ?? 0;
 
       this._subscriptionData = {
         plan,
@@ -166,6 +169,7 @@ export default class BillingService extends Service {
         lowCreditThreshold,
         lastDailyCreditGrantAt,
         nextDailyCreditGrantAt,
+        dailyCreditGrantCount,
       };
     } finally {
       this._loadingSubscriptionData = false;

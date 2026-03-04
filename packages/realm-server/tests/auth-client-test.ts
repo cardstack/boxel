@@ -17,6 +17,30 @@ function createJWT(
   return jwt.sign(payload, 'secret', { expiresIn });
 }
 
+function createStorage(initial: Record<string, string> = {}): Storage {
+  let values = { ...initial };
+  return {
+    getItem(key: string) {
+      return values[key] ?? null;
+    },
+    setItem(key: string, value: string) {
+      values[key] = value;
+    },
+    removeItem(key: string) {
+      delete values[key];
+    },
+    clear() {
+      values = {};
+    },
+    key(index: number) {
+      return Object.keys(values)[index] ?? null;
+    },
+    get length() {
+      return Object.keys(values).length;
+    },
+  } as Storage;
+}
+
 module(basename(__filename), function () {
   module('realm-auth-client', function (assert) {
     let client: RealmAuthClient;
@@ -179,6 +203,58 @@ module(basename(__filename), function () {
         /expected 'Authorization' header/,
         'missing Authorization header indicates verification failure',
       );
+    });
+
+    test('it reads render-context JWT from localStorage', async function (assert) {
+      let token = createJWT('1h', {
+        sessionRoom: 'room',
+        realmServerURL: 'http://testrealm.com/',
+      });
+      let originalLocalStorage = (globalThis as any).localStorage;
+      let originalSessionStorage = (globalThis as any).sessionStorage;
+      let originalRenderContext = (globalThis as any).__boxelRenderContext;
+
+      (globalThis as any).localStorage = createStorage({
+        'boxel-session': JSON.stringify({
+          'http://testrealm.com/': token,
+        }),
+      });
+      (globalThis as any).sessionStorage = createStorage();
+      (globalThis as any).__boxelRenderContext = true;
+
+      try {
+        assert.strictEqual(await client.getJWT(), token);
+      } finally {
+        (globalThis as any).localStorage = originalLocalStorage;
+        (globalThis as any).sessionStorage = originalSessionStorage;
+        (globalThis as any).__boxelRenderContext = originalRenderContext;
+      }
+    });
+
+    test('it falls back to sessionStorage in render context when localStorage is empty', async function (assert) {
+      let token = createJWT('1h', {
+        sessionRoom: 'room',
+        realmServerURL: 'http://testrealm.com/',
+      });
+      let originalLocalStorage = (globalThis as any).localStorage;
+      let originalSessionStorage = (globalThis as any).sessionStorage;
+      let originalRenderContext = (globalThis as any).__boxelRenderContext;
+
+      (globalThis as any).localStorage = createStorage();
+      (globalThis as any).sessionStorage = createStorage({
+        'boxel-session': JSON.stringify({
+          'http://testrealm.com/': token,
+        }),
+      });
+      (globalThis as any).__boxelRenderContext = true;
+
+      try {
+        assert.strictEqual(await client.getJWT(), token);
+      } finally {
+        (globalThis as any).localStorage = originalLocalStorage;
+        (globalThis as any).sessionStorage = originalSessionStorage;
+        (globalThis as any).__boxelRenderContext = originalRenderContext;
+      }
     });
   });
 });

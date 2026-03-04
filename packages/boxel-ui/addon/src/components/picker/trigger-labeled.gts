@@ -7,6 +7,7 @@ import type { Select } from 'ember-power-select/components/power-select';
 import { cn } from '../../helpers.ts';
 import { not } from '../../helpers/truth-helpers.ts';
 import CaretDown from '../../icons/caret-down.gts';
+import Pill from '../pill/index.gts';
 import type { PickerOption } from './index.gts';
 import PickerSelectedItem, {
   type PickerSelectedItemSignature,
@@ -136,16 +137,16 @@ export default class PickerLabeledTrigger extends Component<TriggerLabeledSignat
               </SelectedComponent>
             {{/each}}
             {{#if this.hasMoreItems}}
-              <div
-                class='picker-more-items'
-                role='button'
-                tabindex='0'
+              <Pill
+                class='picker__more-items'
+                @kind='button'
+                @size='small'
                 data-test-boxel-picker-more-items
                 {{on 'click' this.openDropdown}}
               >
                 +{{this.remainingCount}}
                 more
-              </div>
+              </Pill>
             {{/if}}
           {{/let}}
         {{/if}}
@@ -201,24 +202,9 @@ export default class PickerLabeledTrigger extends Component<TriggerLabeledSignat
         transform: rotate(180deg);
       }
 
-      .picker-more-items {
-        display: flex;
-        align-items: center;
-        gap: var(--boxel-sp-4xs);
-        padding: var(--boxel-sp-4xs);
-        border-radius: var(--boxel-border-radius-xs);
-        border: solid 1px var(--boxel-300);
-        background-color: var(--boxel-300);
-        min-height: 30px;
-        font: 500 var(--boxel-font-xs);
-        letter-spacing: var(--boxel-lsp-sm);
-        cursor: pointer;
-        user-select: none;
-      }
-
-      .picker-more-items:hover {
-        background-color: var(--boxel-400);
-        border-color: var(--boxel-400);
+      .picker__more-items {
+        --pill-background-color: var(--background, var(--boxel-300));
+        --pill-border-color: var(--border, var(--boxel-300));
       }
 
       /*Ember power select has a right padding to the trigger element*/

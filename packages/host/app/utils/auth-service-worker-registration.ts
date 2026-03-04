@@ -111,13 +111,29 @@ export function clearServiceWorkerTokens(): void {
 }
 
 function readTokensFromStorage(): Record<string, string> | undefined {
+  let localTokens = parseTokenMap(
+    window.localStorage.getItem(SessionLocalStorageKey),
+  );
+  if (localTokens && hasTokenEntries(localTokens)) {
+    return localTokens;
+  }
+  return parseTokenMap(window.sessionStorage.getItem(SessionLocalStorageKey));
+}
+
+function parseTokenMap(
+  value: string | null,
+): Record<string, string> | undefined {
+  if (!value) {
+    return undefined;
+  }
   try {
-    let sessionsString = window.localStorage.getItem(SessionLocalStorageKey);
-    if (sessionsString) {
-      return JSON.parse(sessionsString);
-    }
+    return JSON.parse(value) as Record<string, string>;
   } catch {
     // ignore parse errors
+    return undefined;
   }
-  return undefined;
+}
+
+function hasTokenEntries(tokens: Record<string, string>): boolean {
+  return Object.keys(tokens).length > 0;
 }

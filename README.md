@@ -38,7 +38,20 @@ To learn more about Boxel and Cards, see our [documentation](./docs/README.md)
 
 ## Running the Host App
 
-There exists a "dev" mode in which we can use ember-cli to host the card runtime host application which includes live reloads. Additionally, you can also use the realm server to host the app, which is how it will be served in production.
+There exists a "dev" mode in which we can use ember-cli to host the card runtime host application which includes live reloads. Additionally, you can also use the realm server to host the app, which is how it will be served in production, or have staging or production as the backing infrastructure.
+
+### With staging or production
+
+You can develop the host application locally backed by the staging or production infrastructure by running `scripts/start-host [environment]`.
+
+```
+scripts/start-host production
+…
+Build successful (27238ms) – Serving on http://localhost:4200/
+…
+```
+
+Visit `http://localhost:4200` and log in with your staging or production credentials.
 
 ### ember-cli Hosted App
 
@@ -99,7 +112,7 @@ You can also use `start:development` if you want the functionality of `start:all
 
 Optional environment variables for `start:development`:
 
-- `USE_EXTERNAL_CATALOG=1` to load `/catalog` from `packages/catalog/contents` (cloned from the `boxel-catalog` repo). 
+- `USE_EXTERNAL_CATALOG=1` to load `/catalog` from `packages/catalog/contents` (cloned from the `boxel-catalog` repo).
 
 ### Card Pre-rendering
 
@@ -171,7 +184,7 @@ The realm server uses the request accept header to determine the type of request
 
 Boxel uses a Postgres database. In development, the Postgres database runs within a docker container, `boxel-pg`, that is started as part of `pnpm start:all`. You can manually start and stop the `boxel-pg` docker container using `pnpm start:pg` and `pnpm stop:pg`. The postgres database runs on port 5435 so that it doesn't conflict with a natively installed postgres that may be running on your system.
 
-When running tests we isolate the database between each test run by actually creating a new database for each test with a random database name (e.g. `test_db_1234567`). The test databases are dropped before the beginning of each test run.
+When running tests for matrix tests we isolate the database between each test run by actually creating a new database for each test with a random database name (e.g. `test_db_1234567`). The test databases can be dropped by running `pnpm test:cleanup` from the `packages/matrix` workspace, this will drop all databases that match the pattern `test_db_%`.
 
 If you wish to drop the development databases you can execute:
 

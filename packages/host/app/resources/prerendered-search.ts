@@ -263,6 +263,7 @@ export class PrerenderedSearchResource extends Resource<Args> {
     );
 
     let resolvedRealms = normalizeRealms(realms);
+    let isFileMeta = !!json.meta.isFileMeta;
     return {
       instances: json.data.filter(Boolean).map((r) => {
         let realmUrl = resolveCardRealmUrl(r.id, resolvedRealms);
@@ -272,6 +273,7 @@ export class PrerenderedSearchResource extends Resource<Args> {
             realmUrl,
             html: r.attributes?.html,
             isError: !!r.attributes?.isError,
+            ...(isFileMeta ? { isFileMeta } : {}),
           },
           this.#cardComponentModifier,
         );
