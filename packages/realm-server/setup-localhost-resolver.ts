@@ -3,10 +3,11 @@
 // RFC 6761.  This module installs a global undici dispatcher that short-circuits
 // DNS for *.localhost → 127.0.0.1 so that inter-service fetch() calls through
 // Traefik work reliably.
+//
+// NOTE: This runs before logger setup, so we check the env var directly instead
+// of importing isEnvironmentMode() (which would trigger a logger import).
 
-import { isEnvironmentMode } from './lib/dev-service-registry';
-
-if (isEnvironmentMode()) {
+if (process.env.BOXEL_ENVIRONMENT) {
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const undici = require('undici') as typeof import('undici');
