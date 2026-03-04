@@ -33,7 +33,7 @@ interface Signature {
   Element: HTMLDivElement;
   Args: {
     chooseCard: (cardId: string) => void;
-    chooseFile: (file: FileDef) => void;
+    chooseFile: (file: FileDef) => void | Promise<void>;
   };
 }
 
@@ -144,7 +144,7 @@ export default class AttachButton extends Component<Signature> {
   private doChooseFile = restartableTask(async () => {
     let chosenFile: FileDef | undefined = await chooseFile();
     if (chosenFile) {
-      this.args.chooseFile(chosenFile);
+      await this.args.chooseFile(chosenFile);
     }
     return chosenFile;
   });

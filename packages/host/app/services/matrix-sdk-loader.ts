@@ -300,6 +300,8 @@ function extendedClient({
           return fileDefManager.uploadCommandDefinitions.bind(fileDefManager);
         case 'uploadFiles':
           return fileDefManager.uploadFiles.bind(fileDefManager);
+        case 'prefetchFileContent':
+          return fileDefManager.prefetchFileContent.bind(fileDefManager);
         case 'downloadAsFileInBrowser':
           return fileDefManager.downloadAsFileInBrowser.bind(fileDefManager);
         case 'downloadCardFileDef':

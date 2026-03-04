@@ -71,6 +71,13 @@ export interface FileDefManager {
   uploadFiles(files: FileDef[]): Promise<FileDef[]>;
 
   /**
+   * Pre-fetches file content at attach time so the bytes are captured
+   * before the user sends the message (guards against file modifications
+   * between attach and send).
+   */
+  prefetchFileContent(file: FileDef): Promise<void>;
+
+  /**
    * Downloads content from a file definition
    * @param fileDef File definition to download from
    * @returns Promise resolving to the downloaded content
@@ -93,7 +100,7 @@ export interface FileDefManager {
 export interface PrivilegedFileDefManager extends FileDefManager {
   contentHashCache: Map<string, string>;
   invalidUrlCache: Set<string>;
-  getContentHash(content: string): Promise<string>;
+  getContentHash(content: string | Uint8Array): Promise<string>;
 }
 
 export default class FileDefManagerImpl
@@ -105,6 +112,10 @@ export default class FileDefManagerImpl
   private inFlightBlobFetches: Map<string, Promise<Blob>> = new Map();
   contentHashCache: Map<string, string> = new Map(); // Maps content hash to URL
   invalidUrlCache: Set<string> = new Set(); // Cache for URLs where content hash validation failed
+  private prefetchedContent: Map<
+    string,
+    { bytes: Uint8Array; contentType: string }
+  > = new Map();
   private client: ExtendedClient;
   private getCardAPI: () => typeof CardAPI;
   private getFileAPI: () => typeof FileAPI;
@@ -139,19 +150,19 @@ export default class FileDefManagerImpl
     return this.getCardAPI();
   }
 
-  async getContentHash(content: string): Promise<string> {
+  async getContentHash(content: string | Uint8Array): Promise<string> {
     return md5(content);
   }
 
   private async getCachedUrlForContent(
-    content: string,
+    content: string | Uint8Array,
   ): Promise<string | null> {
     const hash = await this.getContentHash(content);
     return this.contentHashCache.get(hash) || null;
   }
 
   async uploadContentWithCaching(
-    content: string,
+    content: string | Uint8Array,
     contentType: string,
   ): Promise<string> {
     // Check if we already have this content cached
@@ -347,6 +358,20 @@ export default class FileDefManagerImpl
     return fileDefs;
   }
 
+  async prefetchFileContent(file: FileDef): Promise<void> {
+    if (!file.sourceUrl) {
+      throw new Error('File needs a realm server source URL to prefetch');
+    }
+    let response = await this.network.authedFetch(file.sourceUrl, {
+      headers: {
+        Accept: 'application/vnd.card+source',
+      },
+    });
+    let bytes = new Uint8Array(await response.arrayBuffer());
+    let contentType = response.headers.get('content-type') ?? '';
+    this.prefetchedContent.set(file.sourceUrl, { bytes, contentType });
+  }
+
   async uploadFiles(files: FileDef[]) {
     let uploadedFiles = await Promise.all(
       files.map(async (file) => {
@@ -354,24 +379,29 @@ export default class FileDefManagerImpl
           throw new Error('File needs a realm server source URL to upload');
         }
 
-        let response = await this.network.authedFetch(file.sourceUrl, {
-          headers: {
-            Accept: 'application/vnd.card+source',
-          },
-        });
-
-        // We only support uploading text files (code) for now.
-        // When we start supporting other file types (pdfs, images, etc)
-        // we will need to update this to support those file types.
-        let text = await response.text();
-        let contentType = response.headers.get('content-type');
+        let bytes: Uint8Array;
+        let contentType: string;
+        let cached = this.prefetchedContent.get(file.sourceUrl);
+        if (cached) {
+          bytes = cached.bytes;
+          contentType = cached.contentType;
+          this.prefetchedContent.delete(file.sourceUrl);
+        } else {
+          let response = await this.network.authedFetch(file.sourceUrl, {
+            headers: {
+              Accept: 'application/vnd.card+source',
+            },
+          });
+          bytes = new Uint8Array(await response.arrayBuffer());
+          contentType = response.headers.get('content-type') ?? '';
+        }
 
         if (!contentType) {
           throw new Error(`File has no content type: ${file.sourceUrl}`);
         }
-        file.url = await this.uploadContentWithCaching(text, contentType);
+        file.url = await this.uploadContentWithCaching(bytes, contentType);
         file.contentType = contentType;
-        file.contentHash = await this.getContentHash(text);
+        file.contentHash = await this.getContentHash(bytes);
 
         return file;
       }),
