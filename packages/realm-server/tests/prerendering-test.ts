@@ -994,38 +994,6 @@ module(basename(__filename), function () {
         },
       });
 
-      test('resets runtime deps between consecutive prerenders', async function (assert) {
-        let first = await prerenderer.prerenderCard({
-          affinityType: 'realm',
-          affinityValue: realmURL,
-          realm: realmURL,
-          url: `${realmURL}dep-reset-consumer-a`,
-          auth: auth(),
-        });
-        let firstDeps = first.response.deps ?? [];
-        assert.true(
-          firstDeps.includes(`${realmURL}dep-reset-friend-a.json`),
-          'first prerender includes first relationship target',
-        );
-
-        let second = await prerenderer.prerenderCard({
-          affinityType: 'realm',
-          affinityValue: realmURL,
-          realm: realmURL,
-          url: `${realmURL}dep-reset-consumer-b`,
-          auth: auth(),
-        });
-        let secondDeps = second.response.deps ?? [];
-        assert.true(
-          secondDeps.includes(`${realmURL}dep-reset-friend-b.json`),
-          'second prerender includes second relationship target',
-        );
-        assert.false(
-          secondDeps.includes(`${realmURL}dep-reset-friend-a.json`),
-          'second prerender deps do not leak first prerender relationship target',
-        );
-      });
-
       test('prerenderModule returns module metadata', async function (assert) {
         const moduleURL = `${realmURL}person.gts`;
 
@@ -1599,6 +1567,179 @@ module(basename(__filename), function () {
     });
   }
 
+  function defineRuntimeDepsResetTests() {
+    module('runtime deps reset', function (hooks) {
+      let realmURL = 'http://127.0.0.1:4457/test/';
+      let prerenderServerURL = new URL(realmURL).origin;
+      let testUserId = '@user1:localhost';
+      let permissions: RealmPermissions = {
+        [realmURL]: ['read', 'write', 'realm-owner'],
+      };
+      let prerenderer: Prerenderer;
+      let auth = () => {
+        let sessions = JSON.parse(
+          testCreatePrerenderAuth(testUserId, permissions),
+        ) as Record<string, string>;
+        let token = sessions[realmURL];
+        if (token) {
+          sessions[new URL(realmURL).origin + '/'] = token;
+        }
+        return JSON.stringify(sessions);
+      };
+
+      hooks.before(async () => {
+        prerenderer = getPrerendererForTesting({
+          maxPages: 2,
+          serverURL: prerenderServerURL,
+        });
+      });
+
+      hooks.after(async () => {
+        await prerenderer.stop();
+      });
+
+      hooks.beforeEach(async () => {
+        await prerenderer.disposeAffinity({
+          affinityType: 'realm',
+          affinityValue: realmURL,
+        });
+      });
+
+      setupPermissionedRealms(hooks, {
+        mode: 'before',
+        realms: [
+          {
+            realmURL,
+            permissions: {
+              '*': ['read'],
+              [testUserId]: ['read', 'write', 'realm-owner'],
+            },
+            fileSystem: {
+              'person.gts': `
+                import { CardDef, field, contains, StringField, Component } from 'https://cardstack.com/base/card-api';
+                export class Person extends CardDef {
+                  static displayName = "Person";
+                  @field name = contains(StringField);
+                  static isolated = class extends Component<typeof this> {
+                    <template>{{@model.name}}</template>
+                  }
+                }
+              `,
+              'dep-reset-consumer.gts': `
+                import { CardDef, field, linksTo, Component } from 'https://cardstack.com/base/card-api';
+                import { Person } from './person';
+                export class DepResetConsumer extends CardDef {
+                  static displayName = 'Dep Reset Consumer';
+                  @field friend = linksTo(() => Person);
+                  static isolated = class extends Component<typeof this> {
+                    <template><@fields.friend/></template>
+                  }
+                }
+              `,
+              'dep-reset-consumer-a.json': {
+                data: {
+                  relationships: {
+                    friend: {
+                      links: {
+                        self: './dep-reset-friend-a',
+                      },
+                    },
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: './dep-reset-consumer',
+                      name: 'DepResetConsumer',
+                    },
+                  },
+                },
+              },
+              'dep-reset-consumer-b.json': {
+                data: {
+                  relationships: {
+                    friend: {
+                      links: {
+                        self: './dep-reset-friend-b',
+                      },
+                    },
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: './dep-reset-consumer',
+                      name: 'DepResetConsumer',
+                    },
+                  },
+                },
+              },
+              'dep-reset-friend-a.json': {
+                data: {
+                  attributes: {
+                    name: 'Friend A',
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: './person',
+                      name: 'Person',
+                    },
+                  },
+                },
+              },
+              'dep-reset-friend-b.json': {
+                data: {
+                  attributes: {
+                    name: 'Friend B',
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: './person',
+                      name: 'Person',
+                    },
+                  },
+                },
+              },
+            },
+          },
+        ],
+        onRealmSetup() {
+          permissions = {
+            [realmURL]: ['read', 'write', 'realm-owner'],
+          };
+        },
+      });
+
+      test('resets runtime deps between consecutive prerenders', async function (assert) {
+        let first = await prerenderer.prerenderCard({
+          affinityType: 'realm',
+          affinityValue: realmURL,
+          realm: realmURL,
+          url: `${realmURL}dep-reset-consumer-a`,
+          auth: auth(),
+        });
+        let firstDeps = first.response.deps ?? [];
+        assert.true(
+          firstDeps.includes(`${realmURL}dep-reset-friend-a.json`),
+          'first prerender includes first relationship target',
+        );
+
+        let second = await prerenderer.prerenderCard({
+          affinityType: 'realm',
+          affinityValue: realmURL,
+          realm: realmURL,
+          url: `${realmURL}dep-reset-consumer-b`,
+          auth: auth(),
+        });
+        let secondDeps = second.response.deps ?? [];
+        assert.true(
+          secondDeps.includes(`${realmURL}dep-reset-friend-b.json`),
+          'second prerender includes second relationship target',
+        );
+        assert.false(
+          secondDeps.includes(`${realmURL}dep-reset-friend-a.json`),
+          'second prerender deps do not leak first prerender relationship target',
+        );
+      });
+    });
+  }
+
   function defineLivePrerenderedSearchFallbackTests() {
     module('live prerendered search fallback', function (hooks) {
       let realmURL = 'http://127.0.0.1:4456/test/';
@@ -1632,7 +1773,10 @@ module(basename(__filename), function () {
       });
 
       hooks.beforeEach(async () => {
-        await prerenderer.disposeRealm(realmURL);
+        await prerenderer.disposeAffinity({
+          affinityType: 'realm',
+          affinityValue: realmURL,
+        });
       });
 
       async function overrideIndexedIsolatedHTML(url: string, html: string) {
@@ -1930,6 +2074,8 @@ module(basename(__filename), function () {
           );
 
           let result = await prerenderer.prerenderCard({
+            affinityType: 'realm',
+            affinityValue: realmURL,
             realm: realmURL,
             url: cardURL,
             auth: auth(),
@@ -1982,6 +2128,8 @@ module(basename(__filename), function () {
           );
 
           let result = await prerenderer.prerenderCard({
+            affinityType: 'realm',
+            affinityValue: realmURL,
             realm: realmURL,
             url: cardURL,
             auth: auth(),
@@ -2013,6 +2161,7 @@ module(basename(__filename), function () {
 
   module('prerender - non-mutating tests', function () {
     defineNonMutatingRunnerTests();
+    defineRuntimeDepsResetTests();
     defineLivePrerenderedSearchFallbackTests();
     defineNonMutatingStaticTests();
   });
