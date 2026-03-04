@@ -25,7 +25,10 @@ if [ -z "$MATRIX_REGISTRATION_SHARED_SECRET" ]; then
 fi
 
 START_EXPERIMENTS=$(if [ -z "$SKIP_EXPERIMENTS" ]; then echo "true"; else echo ""; fi)
-START_CATALOG=$(if [ "${SKIP_CATALOG:-}" = "true" ]; then echo ""; else echo "true"; fi)
+START_CATALOG=true
+if [ "${SKIP_CATALOG:-}" = "true" ]; then
+  START_CATALOG=""
+fi
 START_BOXEL_HOMEPAGE=$(if [ -z "$SKIP_BOXEL_HOMEPAGE" ]; then echo "true"; else echo ""; fi)
 START_SUBMISSION=$(if [ -z "$SKIP_SUBMISSION" ]; then echo "true"; else echo ""; fi)
 
