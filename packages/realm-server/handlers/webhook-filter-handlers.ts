@@ -21,7 +21,7 @@ export interface WebhookFilterHandler {
 
 /**
  * Handler for GitHub webhook events. Supports filtering by event type
- * (from X-GitHub-Event header) and PR number.
+ * (from X-GitHub-Event header).
  */
 class GithubEventFilterHandler implements WebhookFilterHandler {
   matches(
@@ -44,23 +44,23 @@ class GithubEventFilterHandler implements WebhookFilterHandler {
     filter: Record<string, any>,
   ): Record<string, any> {
     let eventType = (headers['x-github-event'] as string) ?? '';
-    let submissionRealmUrl = filter.submissionRealmUrl as string | undefined;
-    if (!submissionRealmUrl) {
+    let realm = filter.realm as string | undefined;
+    if (!realm) {
       throw new Error(
-        'submissionRealmUrl must be provided in the filter for github-event webhook commands',
+        'realm must be provided in the filter for github-event webhook commands',
       );
     }
 
     return {
       eventType,
-      submissionRealmUrl,
+      realm,
       payload,
     };
   }
 
   getRealmURL(filter: Record<string, any>, commandURL: string): string {
     return (
-      (filter.submissionRealmUrl as string | undefined) ??
+      (filter.realm as string | undefined) ??
       new URL('/submissions/', commandURL).href
     );
   }

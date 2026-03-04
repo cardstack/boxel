@@ -7,7 +7,7 @@ import { GithubEventCard } from '../github-event/github-event';
 
 class ProcessGithubEventInput extends CardDef {
   @field eventType = contains(StringField); // from command_filter
-  @field submissionRealmUrl = contains(StringField); // from command_filter
+  @field realm = contains(StringField); // from command_filter
   @field payload = contains(JsonField); // full GitHub webhook payload
 }
 
@@ -24,7 +24,7 @@ export default class ProcessGithubEventCommand extends Command<
   protected async run(
     input: ProcessGithubEventInput,
   ): Promise<GithubEventCard | undefined> {
-    const { eventType, submissionRealmUrl, payload } = input;
+    const { eventType, realm, payload } = input;
 
     let card = new GithubEventCard({
       eventType,
@@ -33,7 +33,7 @@ export default class ProcessGithubEventCommand extends Command<
 
     let savedCard = await new SaveCardCommand(this.commandContext).execute({
       card,
-      realm: submissionRealmUrl,
+      realm,
     });
 
     return savedCard;

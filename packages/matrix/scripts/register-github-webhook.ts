@@ -14,7 +14,7 @@ const commandURL =
   process.env.COMMAND_URL ||
   `${realmServerURL}/catalog/commands/process-github-event/default`;
 
-const submissionRealmUrl =
+const realm =
   process.env.SUBMISSION_REALM_URL || `${realmServerURL}/submissions/`;
 
 // Default GitHub webhook config
@@ -174,12 +174,11 @@ async function ensureWebhookCommand(
 ) {
   const commands = await fetchWebhookCommands(jwt, config.incomingWebhookId);
 
-  // Find existing command with same URL and filter
+  // Find existing command with same URL and eventType filter.
   const existing = commands.find(
     (cmd: any) =>
       cmd.attributes?.command === config.command &&
-      JSON.stringify(cmd.attributes?.filter ?? null) ===
-        JSON.stringify(config.filter ?? null),
+      cmd.attributes?.filter?.eventType === config.filter?.eventType,
   );
 
   if (existing) {
@@ -225,7 +224,7 @@ async function main() {
 
   const baseFilter: Record<string, unknown> = {
     type: 'github-event',
-    submissionRealmUrl,
+    realm,
   };
 
   const eventTypes = [

@@ -112,9 +112,7 @@ const queryFieldSeedFromSearchSymbol = Symbol.for(
   'cardstack-query-field-seed-from-search',
 );
 
-type PersistOptions = CreateOptions & {
-  clientRequestId?: string;
-};
+type PersistOptions = CreateOptions & { clientRequestId?: string };
 type DependencyTrackingOptions = {
   dependencyTrackingContext?: RuntimeDependencyTrackingContext;
 };
