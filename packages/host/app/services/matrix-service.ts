@@ -1090,6 +1090,10 @@ export default class MatrixService extends Service {
     return await this.client.uploadFiles(files);
   }
 
+  async prefetchFileContent(file: FileDef) {
+    return await this.client.prefetchFileContent(file);
+  }
+
   async fetchMatrixHostedFile(matrixFileUrl: string) {
     let response = await fetch(matrixFileUrl, {
       headers: {

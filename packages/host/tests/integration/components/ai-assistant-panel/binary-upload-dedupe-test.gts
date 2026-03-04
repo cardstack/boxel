@@ -171,8 +171,15 @@ module(
       await sendMessage('Upload binary file');
 
       let uploadedContents = mockMatrixUtils.getUploadedContents();
-      let uploadedBytes = [...uploadedContents.values()][0];
-      let uploadedArray = new Uint8Array(uploadedBytes);
+      let expectedHash = md5(MINIMAL_PNG);
+      let uploadedArray = [...uploadedContents.values()]
+        .map((content) => new Uint8Array(content))
+        .find((content) => md5(content) === expectedHash);
+
+      assert.ok(uploadedArray, 'Found uploaded content matching test-image.png');
+      if (!uploadedArray) {
+        return;
+      }
 
       assert.strictEqual(
         uploadedArray.length,

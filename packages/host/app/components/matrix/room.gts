@@ -1041,7 +1041,7 @@ export default class Room extends Component<Signature> {
   }
 
   @action
-  private chooseFile(file: FileDef) {
+  private async chooseFile(file: FileDef) {
     // handle the case where auto-attached file pill is clicked
     if (this.isAutoAttachedFile(file)) {
       this.removeAutoAttachedFile(file.sourceUrl ?? undefined);
@@ -1049,6 +1049,7 @@ export default class Room extends Component<Signature> {
 
     let files = this.filesToAttach;
     if (!files?.find((f) => f.sourceUrl === file.sourceUrl)) {
+      await this.matrixService.prefetchFileContent(file);
       this.matrixService.setFilesToSend(this.args.roomId, [...files, file]);
       this.startFileUpload(file);
     }
