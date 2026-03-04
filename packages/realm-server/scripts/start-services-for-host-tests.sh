@@ -48,6 +48,13 @@ export CATALOG_REALM_PATH="$CATALOG_TEMP_PATH"
 
 # Make host-test startup logs focus on indexing progress rather than per-request noise.
 HOST_TEST_LOG_LEVELS="${HOST_TEST_LOG_LEVELS:-*=info,realm:requests=warn,realm-index-updater=debug,index-runner=debug,index-perf=debug,index-writer=debug,worker=debug,worker-manager=debug}"
+# Default to skipping catalog for host tests, but allow `SKIP_CATALOG=false`
+# to opt back into starting catalog in start-development.sh.
+if [ "${SKIP_CATALOG:-true}" = "false" ]; then
+  SKIP_CATALOG=""
+else
+  SKIP_CATALOG="${SKIP_CATALOG:-true}"
+fi
 
 # There is a race condition starting up the servers that setting up the
 # submission realm triggers which triggers the start-development.sh script to
@@ -55,7 +62,7 @@ HOST_TEST_LOG_LEVELS="${HOST_TEST_LOG_LEVELS:-*=info,realm:requests=warn,realm-i
 # skipping that. but this issue needs to be fixed.
 WAIT_ON_TIMEOUT=900000 \
   SKIP_EXPERIMENTS=true \
-  SKIP_CATALOG=true \
+  SKIP_CATALOG="$SKIP_CATALOG" \
   SKIP_BOXEL_HOMEPAGE=true \
   SKIP_SUBMISSION=true \
   CATALOG_REALM_PATH="$CATALOG_TEMP_PATH" \

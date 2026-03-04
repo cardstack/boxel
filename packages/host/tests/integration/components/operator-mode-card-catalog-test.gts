@@ -1002,6 +1002,21 @@ module('Integration | operator-mode | card catalog', function (hooks) {
       focusedSection,
       'found the section containing the show-only checkbox',
     );
+    const focusedSectionSid = focusedSection.getAttribute('data-section-sid');
+    assert.ok(focusedSectionSid, 'focused section has a section sid');
+    const getFocusedSection = () =>
+      document.querySelector(
+        `[data-section-sid="${focusedSectionSid}"]`,
+      ) as HTMLElement;
+    const waitForPreservedPosition = async (positionBefore: number) => {
+      await waitUntil(
+        () =>
+          Math.abs(
+            getFocusedSection().getBoundingClientRect().top - positionBefore,
+          ) <= 5,
+        { timeout: 2000 },
+      );
+    };
 
     let scrollContainer = document.querySelector(
       '.search-sheet-content',
@@ -1022,11 +1037,12 @@ module('Integration | operator-mode | card catalog', function (hooks) {
     // Sync the modifier's position map and read positionBefore in the same
     // synchronous tick so they are guaranteed to reflect the same layout state.
     scrollContainer.dispatchEvent(new Event('scroll'));
-    let positionBefore = focusedSection.getBoundingClientRect().top;
+    let positionBefore = getFocusedSection().getBoundingClientRect().top;
 
     await click('[data-test-search-sheet-show-only]');
+    await waitForPreservedPosition(positionBefore);
 
-    let positionAfter = focusedSection.getBoundingClientRect().top;
+    let positionAfter = getFocusedSection().getBoundingClientRect().top;
     // Use a 5px tolerance instead of 2px: the scroll-anchor adjustment is
     // sub-pixel-accurate in local environments but CI Chromium instances can
     // render element positions with slight differences depending on DPI/font
@@ -1044,10 +1060,11 @@ module('Integration | operator-mode | card catalog', function (hooks) {
     // record positionBefore for this second assertion.
     await settled();
     scrollContainer.dispatchEvent(new Event('scroll'));
-    positionBefore = focusedSection.getBoundingClientRect().top;
+    positionBefore = getFocusedSection().getBoundingClientRect().top;
     await click('[data-test-search-sheet-show-only]');
+    await waitForPreservedPosition(positionBefore);
 
-    positionAfter = focusedSection.getBoundingClientRect().top;
+    positionAfter = getFocusedSection().getBoundingClientRect().top;
     assert.ok(
       Math.abs(positionAfter - positionBefore) <= 5,
       `focused section position is preserved after unchecking Show only (before: ${positionBefore}, after: ${positionAfter})`,
