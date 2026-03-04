@@ -48,9 +48,7 @@ export CATALOG_REALM_PATH="$CATALOG_TEMP_PATH"
 
 # Make host-test startup logs focus on indexing progress rather than per-request noise.
 HOST_TEST_LOG_LEVELS="${HOST_TEST_LOG_LEVELS:-*=info,realm:requests=warn,realm-index-updater=debug,index-runner=debug,index-perf=debug,index-writer=debug,worker=debug,worker-manager=debug}"
-# Only explicit `SKIP_CATALOG=true` skips catalog. Unset/empty starts catalog.
 SKIP_CATALOG="${SKIP_CATALOG:-}"
-
 # There is a race condition starting up the servers that setting up the
 # submission realm triggers which triggers the start-development.sh script to
 # SIGTERM. currently we don't need the submission realm for host tests to
