@@ -314,20 +314,29 @@ export function captureQueryFieldSeedData(
   let seedComesFromSearch = Boolean(
     (resource as any)[queryFieldSeedFromSearchSymbol],
   );
+  let relationshipHasUnhydratedTargets =
+    fieldState.seedRecords.length === 0 &&
+    (Array.isArray(relationship?.data)
+      ? relationship.data.length > 0
+      : Boolean(relationship?.data));
   // Empty query-backed relationships arriving on search result resources are
   // not guaranteed to be fully resolved (for example nested query fields on
   // each result). In that case we should still run the client-side query
   // fallback instead of treating the empty seed as authoritative.
+  //
+  // Likewise, when relationship data advertises one-or-more targets but none
+  // of those targets are hydrated instances in this document, we should not
+  // suppress fallback search based on links.search alone.
   let shouldTreatEmptySeedAsUnresolved =
-    seedComesFromSearch && fieldState.seedRecords.length === 0;
+    fieldState.seedRecords.length === 0 &&
+    (seedComesFromSearch || relationshipHasUnhydratedTargets);
   fieldState.seedSearchURL = shouldTreatEmptySeedAsUnresolved
     ? null
-    : relationship?.links?.search ?? null;
+    : (relationship?.links?.search ?? null);
   fieldState.seedRealms = fieldState.seedSearchURL
     ? [parseSearchURL(new URL(fieldState.seedSearchURL)).realm.href]
     : [];
-  fieldState.seedErrors =
-    (relationship?.meta as any)?.errors ?? undefined;
+  fieldState.seedErrors = (relationship?.meta as any)?.errors ?? undefined;
 }
 
 function resolveQueryAndRealm(

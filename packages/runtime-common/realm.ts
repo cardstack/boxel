@@ -1,4 +1,5 @@
 import { Deferred } from './deferred';
+import { resolveCardReference } from './card-reference-resolver';
 import {
   collectDependentModuleCacheInvalidations,
   extractModuleDependencyKeys,
@@ -2792,7 +2793,7 @@ export class Realm {
           realmURL: new URL(this.url),
         });
         visitModuleDeps(resource, (moduleURL, setModuleURL) => {
-          setModuleURL(new URL(moduleURL, instanceURL).href);
+          setModuleURL(resolveCardReference(moduleURL, instanceURL));
         });
       }
       let fileSerialization: LooseSingleCardDocument | undefined;

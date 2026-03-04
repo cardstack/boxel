@@ -32,10 +32,10 @@ class EditComponent extends Component<typeof RealmField> {
 
   get writableRealms(): RealmMeta[] {
     let resource = this.allRealmsInfoResource;
-    if (!resource || !resource.isSuccess || !resource.value) {
+    if (!resource || !resource.isSuccess || !resource.cardResult) {
       return [];
     }
-    let results = (resource.value.results ?? []) as RealmMeta[];
+    let results = (resource.cardResult.results ?? []) as RealmMeta[];
     return results.filter((realm) => realm.canWrite);
   }
 

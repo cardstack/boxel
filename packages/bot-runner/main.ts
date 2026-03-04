@@ -6,6 +6,7 @@ import { logger } from '@cardstack/runtime-common';
 import * as Sentry from '@sentry/node';
 import { onMembershipEvent } from './lib/membership-handler';
 import { onTimelineEvent } from './lib/timeline-handler';
+import { createGitHubClientFromEnv } from './lib/github';
 
 const log = logger('bot-runner');
 const startTime = Date.now();
@@ -34,6 +35,7 @@ const botPassword = process.env.SUBMISSION_BOT_PASSWORD || 'password';
 
   let dbAdapter = new PgAdapter();
   let queuePublisher = new PgQueuePublisher(dbAdapter);
+  let githubClient = createGitHubClientFromEnv();
 
   const shutdown = async () => {
     log.info('shutting down bot runner...');
@@ -62,6 +64,9 @@ const botPassword = process.env.SUBMISSION_BOT_PASSWORD || 'password';
   let handleTimelineEvent = onTimelineEvent({
     authUserId: auth.user_id,
     dbAdapter,
+    queuePublisher,
+    githubClient,
+    startTime,
   });
   client.on(RoomEvent.Timeline, async (event, room, toStartOfTimeline) => {
     await handleTimelineEvent(event, room, toStartOfTimeline);

@@ -150,6 +150,9 @@ module(basename(__filename), function () {
         async prerenderFileRender() {
           throw new Error('Not implemented in mock');
         },
+        async runCommand() {
+          throw new Error('Not implemented in mock');
+        },
       };
       definitionLookup = new CachingDefinitionLookup(
         dbAdapter,
@@ -329,6 +332,9 @@ module(basename(__filename), function () {
         async prerenderFileRender() {
           throw new Error('Not implemented in mock');
         },
+        async runCommand() {
+          throw new Error('Not implemented in mock');
+        },
         async prerenderModule(args: ModulePrerenderArgs) {
           calls++;
           let moduleAlias = trimExecutableExtension(new URL(args.url)).href;
@@ -419,6 +425,9 @@ module(basename(__filename), function () {
         async prerenderFileRender() {
           throw new Error('Not implemented in mock');
         },
+        async runCommand() {
+          throw new Error('Not implemented in mock');
+        },
         async prerenderModule(args: ModulePrerenderArgs) {
           calls++;
           if (!modulePresent) {
@@ -494,6 +503,9 @@ module(basename(__filename), function () {
           throw new Error('Not implemented in mock');
         },
         async prerenderFileRender() {
+          throw new Error('Not implemented in mock');
+        },
+        async runCommand() {
           throw new Error('Not implemented in mock');
         },
         async prerenderModule(args: ModulePrerenderArgs) {
@@ -640,6 +652,9 @@ module(basename(__filename), function () {
           throw new Error('Not implemented in mock');
         },
         async prerenderFileRender() {
+          throw new Error('Not implemented in mock');
+        },
+        async runCommand() {
           throw new Error('Not implemented in mock');
         },
         async prerenderModule(args: ModulePrerenderArgs) {
@@ -795,6 +810,9 @@ module(basename(__filename), function () {
           throw new Error('Not implemented in mock');
         },
         async prerenderFileRender() {
+          throw new Error('Not implemented in mock');
+        },
+        async runCommand() {
           throw new Error('Not implemented in mock');
         },
         async prerenderModule(args: ModulePrerenderArgs) {

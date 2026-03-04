@@ -397,7 +397,7 @@ catalogs:
       specifier: ^8.0.1
       version: 8.2.5
     eslint-plugin-qunit-dom:
-      specifier: mainmatter/eslint-plugin-qunit-dom#d66c841
+      specifier: mainmatter/eslint-plugin-qunit-dom#d66c84190b018deb96c715c7f2bde3536a9c704b
       version: 0.2.0
     eslint-plugin-simple-import-sort:
       specifier: ^8.0.0
@@ -2450,7 +2450,7 @@ importers:
         version: 8.2.5(eslint@8.57.1)
       eslint-plugin-qunit-dom:
         specifier: 'catalog:'
-        version: https://codeload.github.com/mainmatter/eslint-plugin-qunit-dom/tar.gz/d66c841(eslint@8.57.1)
+        version: https://codeload.github.com/mainmatter/eslint-plugin-qunit-dom/tar.gz/d66c84190b018deb96c715c7f2bde3536a9c704b(eslint@8.57.1)
       ethers:
         specifier: 'catalog:'
         version: 6.16.0
@@ -2747,6 +2747,9 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 24.10.8
+      '@types/pg':
+        specifier: 'catalog:'
+        version: 8.16.0
       '@types/pluralize':
         specifier: 'catalog:'
         version: 0.0.30
@@ -2849,6 +2852,9 @@ importers:
       npm-run-all:
         specifier: 'catalog:'
         version: 4.1.5
+      pg:
+        specifier: 'catalog:'
+        version: 8.16.3
       pluralize:
         specifier: 'catalog:'
         version: 8.0.0
@@ -9550,8 +9556,8 @@ packages:
       eslint-config-prettier:
         optional: true
 
-  eslint-plugin-qunit-dom@https://codeload.github.com/mainmatter/eslint-plugin-qunit-dom/tar.gz/d66c841:
-    resolution: {tarball: https://codeload.github.com/mainmatter/eslint-plugin-qunit-dom/tar.gz/d66c841}
+  eslint-plugin-qunit-dom@https://codeload.github.com/mainmatter/eslint-plugin-qunit-dom/tar.gz/d66c84190b018deb96c715c7f2bde3536a9c704b:
+    resolution: {tarball: https://codeload.github.com/mainmatter/eslint-plugin-qunit-dom/tar.gz/d66c84190b018deb96c715c7f2bde3536a9c704b}
     version: 0.2.0
     engines: {node: 12.* || 14.* || >= 16.*}
     peerDependencies:
@@ -23194,7 +23200,7 @@ snapshots:
       '@types/eslint': 8.56.5
       eslint-config-prettier: 9.1.2(eslint@8.57.1)
 
-  eslint-plugin-qunit-dom@https://codeload.github.com/mainmatter/eslint-plugin-qunit-dom/tar.gz/d66c841(eslint@8.57.1):
+  eslint-plugin-qunit-dom@https://codeload.github.com/mainmatter/eslint-plugin-qunit-dom/tar.gz/d66c84190b018deb96c715c7f2bde3536a9c704b(eslint@8.57.1):
     dependencies:
       eslint: 8.57.1
 

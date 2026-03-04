@@ -416,6 +416,110 @@ export async function capturePrerenderResult(
   return { status: 'ready', value: container.children[0][capture]! };
 }
 
+export interface WaitForLoadedImageOptions {
+  timeout?: number;
+  timeoutMessage?: string;
+}
+
+export async function waitForLoadedImage(
+  selector: string,
+  options: WaitForLoadedImageOptions = {},
+): Promise<HTMLImageElement> {
+  let {
+    timeout = 5000,
+    timeoutMessage = 'Image failed to load - naturalWidth remained 0. This likely indicates an authentication issue preventing the browser from fetching the image.',
+  } = options;
+
+  try {
+    await waitUntil(
+      () => {
+        let currentImg = document.querySelector(
+          selector,
+        ) as HTMLImageElement | null;
+        return Boolean(currentImg && currentImg.complete);
+      },
+      {
+        timeout,
+        timeoutMessage,
+      },
+    );
+  } catch (originalError) {
+    let currentImg = document.querySelector(
+      selector,
+    ) as HTMLImageElement | null;
+    if (currentImg) {
+      throw new Error(
+        await buildImageLoadErrorMessage(
+          selector,
+          currentImg,
+          timeoutMessage,
+          originalError,
+        ),
+      );
+    }
+    throw originalError;
+  }
+
+  let loadedImg = document.querySelector(selector) as HTMLImageElement | null;
+  if (!loadedImg) {
+    throw new Error(
+      `waitForLoadedImage: missing image element matching selector ${selector} after wait`,
+    );
+  }
+  if (loadedImg.naturalWidth === 0) {
+    throw new Error(
+      await buildImageLoadErrorMessage(selector, loadedImg, timeoutMessage),
+    );
+  }
+  return loadedImg;
+}
+
+async function buildImageLoadErrorMessage(
+  selector: string,
+  img: HTMLImageElement,
+  baseMessage: string,
+  originalError?: unknown,
+): Promise<string> {
+  let srcAttr = img.getAttribute('src') ?? '';
+  let currentSrc = img.currentSrc ?? '';
+  let targetURL = currentSrc || img.src || srcAttr;
+  let probe = await probeImageURL(targetURL);
+  let extra =
+    originalError instanceof Error && originalError.message
+      ? `waitUntil=${originalError.message}`
+      : originalError
+        ? `waitUntil=${String(originalError)}`
+        : 'waitUntil=none';
+
+  return [
+    baseMessage,
+    `selector=${selector}`,
+    `srcAttr=${srcAttr || '<empty>'}`,
+    `currentSrc=${currentSrc || '<empty>'}`,
+    `complete=${String(img.complete)}`,
+    `naturalWidth=${String(img.naturalWidth)}`,
+    `naturalHeight=${String(img.naturalHeight)}`,
+    probe,
+    extra,
+  ].join(' | ');
+}
+
+async function probeImageURL(url: string): Promise<string> {
+  if (!url) {
+    return 'fetchProbe=skipped (missing URL)';
+  }
+  try {
+    let response = await fetch(url, { cache: 'no-store' });
+    return `fetchProbe=${response.status} ${response.statusText || ''}`.trim();
+  } catch (error) {
+    let reason =
+      error instanceof Error && error.message
+        ? error.message
+        : String(error ?? 'unknown');
+    return `fetchProbe=error (${reason})`;
+  }
+}
+
 function normalizeCapturedErrorText(errorText: string): string {
   let normalized = formatCapturedRenderError(errorText);
   return normalized ?? errorText;

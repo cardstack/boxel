@@ -29,6 +29,7 @@ import {
   baseFieldRef,
   type CodeRef,
 } from './index';
+import { resolveCardReference } from './card-reference-resolver';
 //@ts-ignore unsure where these types live
 import decoratorsPlugin from '@babel/plugin-syntax-decorators';
 //@ts-ignore unsure where these types live
@@ -314,7 +315,9 @@ export class ModuleSyntax {
   ): PossibleCardOrFieldDeclaration | undefined {
     if (classRef.type === 'external') {
       if (
-        trimExecutableExtension(new URL(classRef.module, this.url)) === this.url
+        trimExecutableExtension(
+          new URL(resolveCardReference(classRef.module, this.url)),
+        ) === this.url
       ) {
         return this.possibleCardsOrFields.find(
           (c) => c.exportName === classRef.name,
@@ -431,7 +434,7 @@ function makeNewField({
   let relativeFieldModuleRef;
   if (incomingRelativeTo && outgoingRelativeTo) {
     relativeFieldModuleRef = maybeRelativeURL(
-      new URL(fieldRef.module, incomingRelativeTo),
+      new URL(resolveCardReference(fieldRef.module, incomingRelativeTo)),
       outgoingRelativeTo,
       outgoingRealmURL,
     );

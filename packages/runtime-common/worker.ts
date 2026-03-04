@@ -161,6 +161,7 @@ export class Worker {
         `daily-credit-grant`,
         Tasks['dailyCreditGrant'](taskArgs),
       ),
+      this.#queue.register(`run-command`, Tasks['runCommand'](taskArgs)),
     ]);
     await this.#queue.start();
   }

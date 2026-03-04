@@ -101,7 +101,7 @@ export class PagePool {
     disableStandbyRefill?: boolean;
   }) {
     this.#maxPages = options.maxPages;
-    let envTabMax = Number(process.env.PRERENDER_REALM_TAB_MAX ?? 1);
+    let envTabMax = Number(process.env.PRERENDER_REALM_TAB_MAX ?? 4);
     if (!Number.isFinite(envTabMax) || envTabMax <= 0) {
       envTabMax = 1;
     }

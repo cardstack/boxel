@@ -200,9 +200,8 @@ export async function performFileIndexing({
       });
       if (renderResult?.error) {
         logWarn(
-          `${jobIdentity(jobInfo)} file render produced error for ${path}, continuing without HTML: ${renderResult.error.error?.message}`,
+          `${jobIdentity(jobInfo)} file render produced error for ${path}, retaining partial HTML: ${renderResult.error.error?.message}`,
         );
-        renderResult = undefined;
       }
     } catch (err: unknown) {
       logWarn(

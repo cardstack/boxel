@@ -8,7 +8,7 @@ import {
 import StringField from 'https://cardstack.com/base/string';
 import NumberField from 'https://cardstack.com/base/number';
 import BooleanField from 'https://cardstack.com/base/boolean';
-import DatetimeField from 'https://cardstack.com/base/datetime';
+import DateTimeField from 'https://cardstack.com/base/datetime';
 import MarkdownField from 'https://cardstack.com/base/markdown';
 import { Button, Pill } from '@cardstack/boxel-ui/components'; // ² Enhanced UI components
 import {
@@ -1169,8 +1169,8 @@ export class StudySession extends CardDef {
   // ⁷ Core session fields
   @field sessionTitle = contains(StringField);
   @field subject = contains(StringField);
-  @field startTime = contains(DatetimeField);
-  @field endTime = contains(DatetimeField);
+  @field startTime = contains(DateTimeField);
+  @field endTime = contains(DateTimeField);
   @field plannedDuration = contains(NumberField); // minutes
   @field actualDuration = contains(NumberField); // minutes
   @field notes = contains(MarkdownField);

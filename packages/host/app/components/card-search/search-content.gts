@@ -19,11 +19,17 @@ import {
   type getCardCollection,
   GetCardCollectionContextName,
   GetCardContextName,
+  getTypeRefsFromFilter,
+  type TypeRefResult,
+  identifyCard,
+  isBaseDef,
+  isResolvedCodeRef,
   specRef,
 } from '@cardstack/runtime-common';
 
 import consumeContext from '@cardstack/host/helpers/consume-context';
 import { urlForRealmLookup } from '@cardstack/host/lib/utils';
+import ScrollAnchor from '@cardstack/host/modifiers/scroll-anchor';
 import { getPrerenderedSearch } from '@cardstack/host/resources/prerendered-search';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type RealmService from '@cardstack/host/services/realm';
@@ -50,6 +56,26 @@ import type { PrerenderedCard } from '../prerendered-card-search';
 import type { NewCardArgs } from './utils';
 
 const OWNER_DESTROYED_ERROR = 'OWNER_DESTROYED_ERROR';
+
+function cardMatchesTypeRef(card: CardDef, typeRef: CodeRef): boolean {
+  if (!isResolvedCodeRef(typeRef)) {
+    return false;
+  }
+  let cls: unknown = card.constructor;
+  while (cls && isBaseDef(cls)) {
+    const ref = identifyCard(cls);
+    if (
+      ref &&
+      isResolvedCodeRef(ref) &&
+      ref.module === typeRef.module &&
+      ref.name === typeRef.name
+    ) {
+      return true;
+    }
+    cls = Reflect.getPrototypeOf(cls as object);
+  }
+  return false;
+}
 
 export interface RealmSectionInfo {
   name: string;
@@ -113,6 +139,14 @@ export default class SearchContent extends Component<Signature> {
   /** Section id when focused: 'realm:<url>' or 'recents'. Null = no focus */
   @tracked focusedSection: string | null = null;
   @tracked displayedCountBySection: Record<string, number> = {};
+  @tracked scrollAnchorSid: string | null = null;
+
+  private get scrollAnchorSelector(): string | null {
+    if (this.scrollAnchorSid) {
+      return `[data-section-sid="${this.scrollAnchorSid}"]`;
+    }
+    return null;
+  }
 
   @consume(GetCardCollectionContextName)
   declare private getCardCollection: getCardCollection;
@@ -134,6 +168,17 @@ export default class SearchContent extends Component<Signature> {
   private makeCardResource = () => {
     this.cardResource = this.getCard(this, () => this.searchKeyAsURL);
   };
+
+  private get filterTypeRef(): TypeRefResult[] | undefined {
+    const filter = this.args.baseFilter;
+    // baseFilter takes precedence; searchKey fallback is only used in search-sheet mode
+    if (filter) {
+      return getTypeRefsFromFilter(filter);
+    }
+    // Search-sheet mode: extract type from carddef: search key (searchForInstances)
+    const ref = getCodeRefFromSearchKey(this.args.searchKey);
+    return ref ? [{ ref, negated: false }] : undefined;
+  }
 
   private searchPrerenderedCards = getPrerenderedSearch(
     this,
@@ -285,29 +330,9 @@ export default class SearchContent extends Component<Signature> {
       return this.resolvedCard ? '1 result from 1 realm' : '0 results';
     }
 
-    // Recents view (empty search or focused on recents)
-    if (this.focusedSection === 'recents' || this.isSearchKeyEmpty) {
-      const count = this.recentCardsSection?.totalCount ?? 0;
-      return `${count} in ${pluralize('Recent', count)}`;
-    }
-
     // Query search results
     const total = this.searchPrerenderedCards.meta.page?.total ?? 0;
     const realms = this.realms;
-
-    // Focused on a specific realm section
-    if (this.focusedSection?.startsWith('realm:')) {
-      const realmUrl = this.focusedSection.slice('realm:'.length);
-      const realmInfo = this.realm.info(realmUrl);
-      const realmName = realmInfo?.name ?? this.realmNameFromUrl(realmUrl);
-      const realmTotal = this.resultCountByRealm[realmUrl];
-
-      if (typeof realmTotal === 'number') {
-        return `${pluralize('result', total, true)} across ${pluralize('realm', realms.length, true)}, ${pluralize('result', realmTotal, true)} in ${realmName}`;
-      }
-
-      return `${pluralize('result', total, true)} in ${realmName}`;
-    }
 
     // Default: all results across all realms
     return `${pluralize('result', total, true)} across ${pluralize('realm', realms.length, true)}`;
@@ -322,14 +347,31 @@ export default class SearchContent extends Component<Signature> {
     const realmFiltered = cards.filter(
       (c) => c.id && realms.some((realmUrl) => c.id.startsWith(realmUrl)),
     );
-    if (this.args.isCompact) {
-      return realmFiltered;
+
+    // Apply type filter when baseFilter specifies a type (modal/chooseCard mode)
+    const typeRefs = this.filterTypeRef;
+    const positiveRefs = typeRefs?.filter((r) => !r.negated).map((r) => r.ref);
+    const negatedRefs = typeRefs?.filter((r) => r.negated).map((r) => r.ref);
+    let typeFiltered = realmFiltered;
+    if (positiveRefs?.length) {
+      typeFiltered = typeFiltered.filter((c) =>
+        positiveRefs.some((ref) => cardMatchesTypeRef(c, ref)),
+      );
     }
-    let filtered = realmFiltered;
+    if (negatedRefs?.length) {
+      typeFiltered = typeFiltered.filter(
+        (c) => !negatedRefs.some((ref) => cardMatchesTypeRef(c, ref)),
+      );
+    }
+
+    if (this.args.isCompact) {
+      return typeFiltered;
+    }
+    let filtered = typeFiltered;
     const term = this.searchTerm;
     if (term) {
       const lowerTerm = term.toLowerCase();
-      filtered = cards.filter((c) =>
+      filtered = typeFiltered.filter((c) =>
         (c.cardTitle ?? '').toLowerCase().includes(lowerTerm),
       );
     }
@@ -390,6 +432,8 @@ export default class SearchContent extends Component<Signature> {
 
   @action
   onFocusSection(sectionId: string | null) {
+    this.scrollAnchorSid = sectionId ?? this.focusedSection;
+
     this.focusedSection = sectionId;
     if (sectionId) {
       const current = this.displayedCountBySection[sectionId] ?? 0;
@@ -514,17 +558,6 @@ export default class SearchContent extends Component<Signature> {
     return sections;
   }
 
-  private get resultCountByRealm(): Record<string, number> {
-    const sections = this.cardsByQuerySection ?? [];
-    const counts: Record<string, number> = {};
-    for (const section of sections) {
-      if (section.type === 'realm') {
-        counts[section.realmUrl] = section.totalCount;
-      }
-    }
-    return counts;
-  }
-
   private get sections(): SearchSheetSection[] {
     const sections: SearchSheetSection[] = [];
 
@@ -593,7 +626,14 @@ export default class SearchContent extends Component<Signature> {
   <template>
     {{consumeContext this.getRecentCardCollection}}
     {{consumeContext this.makeCardResource}}
-    <div class='search-sheet-content {{if @isCompact "compact"}}'>
+    <div
+      {{ScrollAnchor
+        trackSelector='[data-section-sid]'
+        anchorSelector=this.scrollAnchorSelector
+      }}
+      class='search-sheet-content {{if @isCompact "compact"}}'
+      ...attributes
+    >
       {{#if this.showHeader}}
         {{#unless @isCompact}}
           <SearchResultHeader
@@ -631,7 +671,7 @@ export default class SearchContent extends Component<Signature> {
         {{/if}}
       {{else}}
         {{! Render all sections }}
-        {{#each this.sections as |section i|}}
+        {{#each this.sections key='sid' as |section i|}}
           <SearchResultSection
             @section={{section}}
             @viewOption={{this.activeViewId}}
@@ -644,6 +684,7 @@ export default class SearchContent extends Component<Signature> {
             @selectedCard={{@selectedCard}}
             @offerToCreate={{@offerToCreate}}
             @onSubmit={{@onSubmit}}
+            data-section-sid={{section.sid}}
             data-test-search-result-section={{i}}
           />
         {{/each}}
@@ -661,20 +702,23 @@ export default class SearchContent extends Component<Signature> {
         flex-direction: column;
         flex: 1;
         overflow-y: auto;
-
+        overscroll-behavior: none;
         height: 100%;
         background-color: var(--boxel-light);
-        padding: 0 var(--boxel-sp-lg);
         transition: opacity calc(var(--boxel-transition) / 4);
       }
       .search-sheet-content.compact {
         flex-direction: row;
         flex-wrap: nowrap;
+        padding-inline: var(--boxel-sp-xs);
         overflow-y: hidden;
         overflow-x: auto;
       }
       .search-sheet-content.compact :deep(.search-result-block) {
         margin-bottom: 0;
+      }
+      .empty-state {
+        padding-block: var(--boxel-sp);
       }
     </style>
   </template>

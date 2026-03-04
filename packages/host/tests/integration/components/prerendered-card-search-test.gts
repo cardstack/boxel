@@ -18,7 +18,9 @@ import {
   CardContextName,
 } from '@cardstack/runtime-common';
 
-import PrerenderedCardSearch from '@cardstack/host/components/prerendered-card-search';
+import PrerenderedCardSearch, {
+  knownFileMetaUrls,
+} from '@cardstack/host/components/prerendered-card-search';
 
 import {
   setupIntegrationTestRealm,
@@ -137,6 +139,65 @@ module(`Integration | prerendered-card-search`, function (hooks) {
           </style>
         </template>
       };
+    }
+    `;
+
+    const FileDefMismatchGtsImpl = `
+    import { byteStreamToUint8Array } from '@cardstack/runtime-common';
+    import { Component, BaseDefComponent, field, contains, StringField } from 'https://cardstack.com/base/card-api';
+    import { FileDef as BaseFileDef, type ByteStream } from 'https://cardstack.com/base/file-api';
+
+    class Isolated extends Component<typeof FileDef> {
+      <template>
+        <article data-test-prerendered-filedef-isolated>{{@model.content}}</article>
+      </template>
+    }
+
+    class Embedded extends Component<typeof FileDef> {
+      <template>
+        <article data-test-prerendered-filedef-embedded>{{@model.content}}</article>
+      </template>
+    }
+
+    class Fitted extends Component<typeof FileDef> {
+      <template>
+        <article data-test-prerendered-filedef-fitted>{{@model.content}}</article>
+      </template>
+    }
+
+    class Atom extends Component<typeof FileDef> {
+      <template>
+        <span data-test-prerendered-filedef-atom>{{@model.content}}</span>
+      </template>
+    }
+
+    class Head extends Component<typeof FileDef> {
+      <template>
+        <title>{{@model.content}}</title>
+      </template>
+    }
+
+    export class FileDef extends BaseFileDef {
+      @field content = contains(StringField);
+
+      static isolated: BaseDefComponent = Isolated;
+      static embedded: BaseDefComponent = Embedded;
+      static fitted: BaseDefComponent = Fitted;
+      static atom: BaseDefComponent = Atom;
+      static head: BaseDefComponent = Head;
+
+      static async extractAttributes(
+        url: string,
+        getStream: () => Promise<ByteStream>,
+        options: { contentHash?: string; contentSize?: number } = {},
+      ) {
+        let base = await super.extractAttributes(url, getStream, options);
+        let bytes = await byteStreamToUint8Array(await getStream());
+        return {
+          ...base,
+          content: new TextDecoder().decode(bytes).trim(),
+        };
+      }
     }
     `;
 
@@ -325,9 +386,11 @@ module(`Integration | prerendered-card-search`, function (hooks) {
         'article.gts': { Article },
         'blog-post.gts': { BlogPost },
         'book.gts': BookGtsImpl,
+        'files/filedef-mismatch.gts': FileDefMismatchGtsImpl,
         'person.gts': { PersonField },
         'post.gts': { Post },
         'publisher.gts': { Publisher },
+        'files/prerendered-file.mismatch': 'Hello prerendered FileDef content',
         ...sampleCards,
       },
     }));
@@ -393,6 +456,57 @@ module(`Integration | prerendered-card-search`, function (hooks) {
     assert
       .dom('[data-test-meta-page-total="2"]')
       .exists('meta.page.total is correct');
+  });
+
+  test(`can search for file-meta and render prerendered FileDef html`, async function (assert) {
+    let query: Query = {
+      filter: {
+        on: {
+          module: `${baseRealm.url}file-api`,
+          name: 'FileDef',
+        },
+        eq: {
+          url: `${testRealmURL}files/prerendered-file.mismatch`,
+        },
+      },
+    };
+    let realms = [testRealmURL];
+
+    await render(
+      <template>
+        <PrerenderedCardSearch
+          @query={{query}}
+          @format='embedded'
+          @realms={{realms}}
+        >
+          <:loading>
+            Loading...
+          </:loading>
+          <:response as |cards|>
+            {{#each cards as |card|}}
+              <card.component />
+            {{/each}}
+          </:response>
+          <:meta as |meta|>
+            <div data-test-meta-page-total={{meta.page.total}}></div>
+          </:meta>
+        </PrerenderedCardSearch>
+      </template>,
+    );
+
+    await waitFor('[data-test-meta-page-total="1"]');
+    let hasPrerenderedFileText =
+      document.body.textContent?.includes(
+        'Hello prerendered FileDef content',
+      ) === true;
+    assert.true(hasPrerenderedFileText, 'renders prerendered FileDef content');
+    assert
+      .dom('[data-test-meta-page-total="1"]')
+      .exists('meta.page.total is correct for file-meta prerendered search');
+    assert.true(
+      knownFileMetaUrls.has(`${testRealmURL}files/prerendered-file.mismatch`),
+      'file-meta URL is registered in knownFileMetaUrls',
+    );
   });
 
   test('applies cardComponentModifier from card context to prerendered results', async function (this: RenderingTestContext, assert) {

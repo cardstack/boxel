@@ -285,11 +285,12 @@ export interface CommandResultEvent extends BaseMatrixEvent {
 }
 
 export const BOT_TRIGGER_EVENT_TYPE = 'app.boxel.bot-trigger';
-export const BOT_TRIGGER_COMMAND_TYPES = ['create-listing-pr'] as const;
 
 export interface BotTriggerContent {
-  type: (typeof BOT_TRIGGER_COMMAND_TYPES)[number];
+  type: string;
+  realm: string;
   input: unknown;
+  userId: string;
 }
 
 export interface BotTriggerEvent extends BaseMatrixEvent {

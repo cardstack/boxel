@@ -7,10 +7,10 @@ import type {
   PowerSelectArgs,
   Select,
 } from 'ember-power-select/components/power-select';
+import PowerSelect from 'ember-power-select/components/power-select';
 import BeforeOptions from 'ember-power-select/components/power-select/before-options';
-import PowerSelectMultiple from 'ember-power-select/components/power-select-multiple';
 
-import { cn } from '../../helpers.ts';
+import { cn, not } from '../../helpers.ts';
 import { BoxelAfterOptionsComponent } from './after-options.gts';
 import BoxelSelectedItem, {
   type SelectedItemSignature,
@@ -61,8 +61,12 @@ export interface Signature<ItemT> {
 
 export class BoxelMultiSelectBasic<ItemT> extends Component<Signature<ItemT>> {
   <template>
-    <PowerSelectMultiple
-      class='boxel-multi-select'
+    <PowerSelect
+      class={{cn
+        'boxel-multi-select'
+        boxel-multi-select--rounded=(not @matchTriggerWidth)
+      }}
+      @multiple={{true}}
       {{! required args }}
       @options={{@options}}
       @selected={{@selected}}
@@ -80,7 +84,11 @@ export class BoxelMultiSelectBasic<ItemT> extends Component<Signature<ItemT>> {
       @registerAPI={{@registerAPI}}
       @initiallyOpened={{@initiallyOpened}}
       @extra={{@extra}}
-      @dropdownClass={{cn @dropdownClass 'boxel-multi-select__dropdown'}}
+      @dropdownClass={{cn
+        @dropdownClass
+        'boxel-multi-select__dropdown'
+        boxel-multi-select__dropdown--rounded=(not @matchTriggerWidth)
+      }}
       {{! actions  }}
       @onOpen={{@onOpen}}
       @onClose={{@onClose}}
@@ -98,7 +106,7 @@ export class BoxelMultiSelectBasic<ItemT> extends Component<Signature<ItemT>> {
       as |option|
     >
       {{yield option}}
-    </PowerSelectMultiple>
+    </PowerSelect>
     {{! template-lint-disable require-scoped-style }}
     <style>
       .boxel-multi-select__dropdown {
@@ -141,6 +149,10 @@ export class BoxelMultiSelectBasic<ItemT> extends Component<Signature<ItemT>> {
         .ember-power-select-option--no-matches-message {
         padding: var(--boxel-sp-xxs) var(--boxel-sp-sm);
       }
+      .boxel-multi-select__dropdown--rounded.ember-power-select-dropdown {
+        border: 1px solid var(--boxel-border-color);
+        border-radius: var(--boxel-border-radius-sm);
+      }
     </style>
     <style scoped>
       .boxel-multi-select {
@@ -160,6 +172,9 @@ export class BoxelMultiSelectBasic<ItemT> extends Component<Signature<ItemT>> {
       }
       .ember-power-select-trigger {
         padding: 0;
+      }
+      .boxel-multi-select--rounded.ember-power-select-trigger[aria-expanded='true'] {
+        border-radius: var(--boxel-border-radius-sm);
       }
     </style>
   </template>

@@ -3,11 +3,13 @@ import './setup-logger'; // This should be first
 import {
   Realm,
   VirtualNetwork,
+  isUrlLike,
   logger,
   Deferred,
   CachingDefinitionLookup,
   DEFAULT_CARD_SIZE_LIMIT_BYTES,
   DEFAULT_FILE_SIZE_LIMIT_BYTES,
+  registerCardReferencePrefix,
 } from '@cardstack/runtime-common';
 import { NodeAdapter } from './node-realm';
 import yargs from 'yargs';
@@ -189,12 +191,20 @@ if (!useRegistrationSecretFunction && !MATRIX_REGISTRATION_SHARED_SECRET) {
 }
 
 let virtualNetwork = new VirtualNetwork();
-let urlMappings = fromUrls.map((fromUrl, i) => [
-  new URL(String(fromUrl)),
-  new URL(String(toUrls[i])),
-]);
-for (let [from, to] of urlMappings) {
-  virtualNetwork.addURLMapping(from, to);
+let urlMappings: [URL, URL][] = [];
+for (let i = 0; i < fromUrls.length; i++) {
+  let from = String(fromUrls[i]);
+  let to = new URL(String(toUrls[i]));
+  if (isUrlLike(from)) {
+    let fromURL = new URL(from);
+    virtualNetwork.addURLMapping(fromURL, to);
+    urlMappings.push([fromURL, to]);
+  } else {
+    // Non-URL prefix like @cardstack/catalog/
+    registerCardReferencePrefix(from, to.href);
+    virtualNetwork.addImportMap(from, (rest) => new URL(rest, to).href);
+    urlMappings.push([to, to]); // use toUrl for both in hrefs
+  }
 }
 let hrefs = urlMappings.map(([from, to]) => [from.href, to.href]);
 let dist: URL = new URL(distURL);

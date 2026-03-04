@@ -9,7 +9,7 @@ import {
 import StringField from 'https://cardstack.com/base/string';
 import NumberField from 'https://cardstack.com/base/number';
 import BooleanField from 'https://cardstack.com/base/boolean';
-import DatetimeField from 'https://cardstack.com/base/datetime';
+import DateTimeField from 'https://cardstack.com/base/datetime';
 
 // Boxel UI components and helpers
 import {
@@ -3055,7 +3055,7 @@ export class GameQuizCard extends CardDef {
   @field timeLimit = contains(NumberField);
   @field difficulty = contains(QuizDifficultyField);
   @field isCompleted = contains(BooleanField);
-  @field completedAt = contains(DatetimeField);
+  @field completedAt = contains(DateTimeField);
   @field correctAnswers = contains(NumberField);
 
   // High score tracking fields

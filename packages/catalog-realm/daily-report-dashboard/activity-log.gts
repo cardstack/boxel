@@ -6,7 +6,7 @@ import {
   Component,
 } from 'https://cardstack.com/base/card-api'; // ¹ Core imports
 import StringField from 'https://cardstack.com/base/string';
-import DatetimeField from 'https://cardstack.com/base/datetime';
+import DateTimeField from 'https://cardstack.com/base/datetime';
 import TextAreaField from 'https://cardstack.com/base/text-area';
 import ClockIcon from '@cardstack/boxel-icons/clock'; // ² Activity icon
 import { formatDateTime } from '@cardstack/boxel-ui/helpers'; // ³ Formatting helpers
@@ -16,7 +16,7 @@ export class ActivityLog extends CardDef {
   static displayName = 'Activity Log';
   static icon = ClockIcon;
 
-  @field timestamp = contains(DatetimeField); // ⁵ Auto-timestamp when logging
+  @field timestamp = contains(DateTimeField); // ⁵ Auto-timestamp when logging
   @field activity = contains(TextAreaField); // ⁶ Freeform activity description
 
   // ⁷ Compute title from timestamp for easy identification
