@@ -1,6 +1,10 @@
 import { module, test } from 'qunit';
 import { dirSync } from 'tmp';
-import { internalKeyFor, SupportedMimeType } from '@cardstack/runtime-common';
+import {
+  internalKeyFor,
+  SupportedMimeType,
+  Deferred,
+} from '@cardstack/runtime-common';
 import type {
   DBAdapter,
   DefinitionLookup,
@@ -19,6 +23,7 @@ import {
   createVirtualNetwork,
   matrixURL,
   cleanWhiteSpace,
+  waitUntil,
   runTestRealmServer,
   closeServer,
   setupPermissionedRealms,
@@ -1193,6 +1198,8 @@ module(basename(__filename), function () {
   module('indexing (mutating)', function (hooks) {
     let realm: Realm;
     let adapter: RealmAdapter;
+    let queuePublisher: QueuePublisher;
+    let queueRunner: QueueRunner;
     let testRealmServer: TestRealmServerResult | undefined;
 
     async function depsFor(
@@ -1230,6 +1237,8 @@ module(basename(__filename), function () {
     setupDB(hooks, {
       beforeEach: async (dbAdapter, publisher, runner) => {
         testDbAdapter = dbAdapter;
+        queuePublisher = publisher;
+        queueRunner = runner;
         testRealmServer = await startTestRealm({
           dbAdapter,
           publisher,
@@ -1243,6 +1252,24 @@ module(basename(__filename), function () {
         testRealmServer = undefined;
       },
     });
+
+    async function startIndexingGroupBlocker() {
+      let started = new Deferred<void>();
+      let release = new Deferred<void>();
+      queueRunner.register('blocking-indexing-group', async () => {
+        started.fulfill();
+        await release.promise;
+        return null;
+      });
+      let blocker = await queuePublisher.publish<void>({
+        jobType: 'blocking-indexing-group',
+        concurrencyGroup: `indexing:${realm.url}`,
+        timeout: 30,
+        args: null,
+      });
+      await started.promise;
+      return { blocker, release };
+    }
 
     test('can incrementally index updated instance', async function (assert) {
       await realm.write(
@@ -1274,6 +1301,204 @@ module(basename(__filename), function () {
         1,
         'indexed updated instance',
       );
+    });
+
+    test('burst incremental updates coalesce into one pending canonical job payload', async function (assert) {
+      let { blocker, release } = await startIndexingGroupBlocker();
+      try {
+        let update1 = realm.realmIndexUpdater.update(
+          [new URL(`${testRealm}mango`)],
+          {
+            clientRequestId: 'burst-1',
+          },
+        );
+        let update2 = realm.realmIndexUpdater.update(
+          [new URL(`${testRealm}vangogh`), new URL(`${testRealm}post-1`)],
+          { clientRequestId: 'burst-2' },
+        );
+
+        let row = (await waitUntil(
+          async () => {
+            let rows = (await testDbAdapter.execute(
+              `SELECT id, args
+             FROM jobs
+             WHERE job_type = 'incremental-index'
+               AND concurrency_group = $1
+               AND status = 'unfulfilled'`,
+              { bind: [`indexing:${realm.url}`] },
+            )) as {
+              id: number;
+              args: {
+                changes: { url: string; operation: 'update' | 'delete' }[];
+              };
+            }[];
+            return rows.length === 1 ? rows[0] : undefined;
+          },
+          {
+            timeout: 3000,
+            interval: 50,
+            timeoutMessage:
+              'expected exactly one pending incremental canonical job',
+          },
+        )) as {
+          id: number;
+          args: { changes: { url: string; operation: 'update' | 'delete' }[] };
+        };
+
+        let urls = row.args.changes.map((change) => change.url).sort();
+        assert.deepEqual(
+          urls,
+          [`${testRealm}mango`, `${testRealm}post-1`, `${testRealm}vangogh`],
+          'pending canonical incremental args include union of burst invalidations',
+        );
+
+        release.fulfill();
+        await Promise.all([blocker.done, update1, update2]);
+      } finally {
+        release.fulfill();
+      }
+    });
+
+    test('mixed incremental operations coalesce with delete dominance in pending canonical payload', async function (assert) {
+      let { blocker, release } = await startIndexingGroupBlocker();
+      try {
+        let update = realm.realmIndexUpdater.update(
+          [new URL(`${testRealm}mango`)],
+          {
+            clientRequestId: 'mixed-update',
+          },
+        );
+        let remove = realm.realmIndexUpdater.update(
+          [new URL(`${testRealm}mango`)],
+          {
+            delete: true,
+            clientRequestId: 'mixed-delete',
+          },
+        );
+
+        let row = (await waitUntil(
+          async () => {
+            let rows = (await testDbAdapter.execute(
+              `SELECT args
+             FROM jobs
+             WHERE job_type = 'incremental-index'
+               AND concurrency_group = $1
+               AND status = 'unfulfilled'`,
+              { bind: [`indexing:${realm.url}`] },
+            )) as {
+              args: {
+                changes: { url: string; operation: 'update' | 'delete' }[];
+              };
+            }[];
+            return rows.length === 1 ? rows[0] : undefined;
+          },
+          {
+            timeout: 3000,
+            interval: 50,
+            timeoutMessage:
+              'expected one pending incremental job during mixed-op burst',
+          },
+        )) as {
+          args: { changes: { url: string; operation: 'update' | 'delete' }[] };
+        };
+
+        let operationByUrl = new Map(
+          row.args.changes.map((change) => [change.url, change.operation]),
+        );
+        assert.strictEqual(
+          operationByUrl.get(`${testRealm}mango`),
+          'delete',
+          'delete dominates update for same URL in canonical pending payload',
+        );
+
+        release.fulfill();
+        await Promise.all([blocker.done, update, remove]);
+      } finally {
+        release.fulfill();
+      }
+    });
+
+    test('pending incremental followed by full index keeps separate pending jobs by type', async function (assert) {
+      let { blocker, release } = await startIndexingGroupBlocker();
+      try {
+        let incremental = realm.realmIndexUpdater.update(
+          [new URL(`${testRealm}mango`)],
+          { clientRequestId: 'mixed-types-incremental' },
+        );
+        let full = realm.realmIndexUpdater.fullIndex();
+
+        let rows = (await waitUntil(
+          async () => {
+            let rows = (await testDbAdapter.execute(
+              `SELECT job_type
+             FROM jobs
+             WHERE concurrency_group = $1
+               AND status = 'unfulfilled'
+               AND job_type IN ('incremental-index', 'from-scratch-index')`,
+              { bind: [`indexing:${realm.url}`] },
+            )) as { job_type: string }[];
+            return rows.length === 2 ? rows : undefined;
+          },
+          {
+            timeout: 3000,
+            interval: 50,
+            timeoutMessage:
+              'expected separate pending incremental/from-scratch jobs',
+          },
+        )) as { job_type: string }[];
+
+        assert.deepEqual(
+          rows.map((row) => row.job_type).sort(),
+          ['from-scratch-index', 'incremental-index'],
+          'mixed indexing job types remain separate pending jobs',
+        );
+
+        release.fulfill();
+        await Promise.all([blocker.done, incremental, full]);
+      } finally {
+        release.fulfill();
+      }
+    });
+
+    test('burst full-index requests dedupe to one pending canonical from-scratch job', async function (assert) {
+      let { blocker, release } = await startIndexingGroupBlocker();
+      try {
+        let full1 = realm.realmIndexUpdater.fullIndex();
+        let full2 = realm.realmIndexUpdater.fullIndex();
+
+        let row = (await waitUntil(
+          async () => {
+            let rows = (await testDbAdapter.execute(
+              `SELECT id, job_type
+               FROM jobs
+               WHERE concurrency_group = $1
+                 AND status = 'unfulfilled'
+                 AND job_type = 'from-scratch-index'`,
+              { bind: [`indexing:${realm.url}`] },
+            )) as { id: number; job_type: string }[];
+            return rows.length === 1 ? rows[0] : undefined;
+          },
+          {
+            timeout: 3000,
+            interval: 50,
+            timeoutMessage:
+              'expected one pending canonical from-scratch job during full-index burst',
+          },
+        )) as {
+          id: number;
+          job_type: string;
+        };
+        assert.strictEqual(
+          row.job_type,
+          'from-scratch-index',
+          'canonical pending full-index job remains from-scratch',
+        );
+
+        release.fulfill();
+        await Promise.all([blocker.done, full1, full2]);
+      } finally {
+        release.fulfill();
+      }
     });
 
     test('can recover from a card error after error is removed from card source', async function (assert) {
