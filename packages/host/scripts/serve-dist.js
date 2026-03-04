@@ -91,8 +91,12 @@ if (!BOXEL_ENVIRONMENT) {
   srv.listen(0, () => {
     const port = srv.address().port;
     srv.close(() => {
-      console.log(`[environment-mode] Starting host app on dynamic port ${port}`);
-      console.log(`[environment-mode] Will be accessible at http://${hostname}`);
+      console.log(
+        `[environment-mode] Starting host app on dynamic port ${port}`,
+      );
+      console.log(
+        `[environment-mode] Will be accessible at http://${hostname}`,
+      );
 
       runServe(port);
 
