@@ -1,5 +1,3 @@
-#!/usr/bin/env node
-
 /**
  * Wrapper around `ember serve` that supports dynamic port allocation in branch mode.
  * When BOXEL_BRANCH is set, picks a free port, passes --port to ember serve,

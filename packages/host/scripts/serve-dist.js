@@ -1,5 +1,3 @@
-#!/usr/bin/env node
-
 /**
  * Wrapper around `serve` that supports dynamic port allocation in branch mode.
  * When BOXEL_BRANCH is set, picks a free port, starts `serve`, then registers
@@ -17,12 +15,14 @@ function runServe(port) {
     'npx',
     [
       'serve',
-      '--config', '../tests/serve.json',
+      '--config',
+      '../tests/serve.json',
       '--single',
       '--cors',
       '--no-request-logging',
       '--no-etag',
-      '--listen', String(port),
+      '--listen',
+      String(port),
       'dist',
     ],
     { stdio: 'inherit', cwd: path.join(__dirname, '..'), shell: true },

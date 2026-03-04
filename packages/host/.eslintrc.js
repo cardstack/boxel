@@ -124,6 +124,8 @@ module.exports = {
       extends: ['plugin:n/recommended'],
       rules: {
         '@typescript-eslint/no-var-requires': 'off',
+        'n/no-process-exit': 'off',
+        'n/hashbang': 'off',
       },
     },
     {

@@ -7,11 +7,16 @@ const { execSync } = require('child_process');
 const path = require('path');
 
 function ensureTraefik() {
-  const scriptPath = path.resolve(__dirname, '../../../scripts/start-traefik.sh');
+  const scriptPath = path.resolve(
+    __dirname,
+    '../../../scripts/start-traefik.sh',
+  );
   try {
     execSync(`sh "${scriptPath}"`, { stdio: 'inherit' });
   } catch {
-    console.error('\n[branch-mode] ERROR: Failed to start Traefik. Is Docker running?\n');
+    console.error(
+      '\n[branch-mode] ERROR: Failed to start Traefik. Is Docker running?\n',
+    );
     process.exit(1);
   }
 }

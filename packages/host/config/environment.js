@@ -94,8 +94,7 @@ module.exports = function (environment) {
 
     // the fields below may be rewritten by the realm server
     hostsOwnAssets: true,
-    realmServerURL:
-      process.env.REALM_SERVER_DOMAIN || defaults.realmServerURL,
+    realmServerURL: process.env.REALM_SERVER_DOMAIN || defaults.realmServerURL,
     resolvedBaseRealmURL:
       process.env.RESOLVED_BASE_REALM_URL || defaults.baseRealmURL,
     resolvedCatalogRealmURL: process.env.SKIP_CATALOG
