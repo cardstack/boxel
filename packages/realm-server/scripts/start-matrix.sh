@@ -15,8 +15,7 @@ if [ -n "$BOXEL_ENVIRONMENT" ]; then
   MARKER="./synapse-data-${SLUG}/.users-registered"
   if [ ! -f "$MARKER" ]; then
     echo "First start for environment — registering users..."
-    pnpm register-all
-    touch "$MARKER"
+    pnpm register-all && touch "$MARKER"
   else
     echo "Users already registered for this environment, skipping."
   fi
