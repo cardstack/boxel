@@ -40,6 +40,8 @@ interface Signature {
     chooseFile?: (file: FileDef) => void;
     isLoaded: boolean;
     autoAttachedCardTooltipMessage?: string;
+    getFileUploadStatus?: (sourceUrl: string | undefined) => string | undefined;
+    retryFileUpload?: (file: FileDef) => void;
   };
 }
 
@@ -106,6 +108,16 @@ export default class AttachedItems extends Component<Signature> {
   private handleRemoveFile(file: FileDef) {
     this.args.removeFile(file);
   }
+
+  private getUploadStatusFor = (file: FileDef): string | undefined => {
+    return this.args.getFileUploadStatus?.(file.sourceUrl);
+  };
+
+  private getRetryActionFor = (file: FileDef): (() => void) | undefined => {
+    if (!this.args.retryFileUpload) return undefined;
+    let retryFn = this.args.retryFileUpload;
+    return () => retryFn(file);
+  };
 
   <template>
     <div class='attached-items' ...attributes>
@@ -191,6 +203,8 @@ export default class AttachedItems extends Component<Signature> {
                     @borderType='dashed'
                     @onClick={{fn this.handleChooseFile item}}
                     @onRemove={{fn this.handleRemoveFile item}}
+                    @uploadStatus={{this.getUploadStatusFor item}}
+                    @onRetry={{this.getRetryActionFor item}}
                     data-test-autoattached-file={{item.sourceUrl}}
                   />
                 </:trigger>
@@ -203,6 +217,8 @@ export default class AttachedItems extends Component<Signature> {
                 @file={{item}}
                 @borderType='solid'
                 @onRemove={{fn this.handleRemoveFile item}}
+                @uploadStatus={{this.getUploadStatusFor item}}
+                @onRetry={{this.getRetryActionFor item}}
               />
             {{/if}}
           {{/if}}

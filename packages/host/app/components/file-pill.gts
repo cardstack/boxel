@@ -5,9 +5,10 @@ import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
 import FileCode from '@cardstack/boxel-icons/file-code';
+import RefreshCw from '@cardstack/boxel-icons/refresh-cw';
 
 import { IconButton, Pill } from '@cardstack/boxel-ui/components';
-import { cn, cssVar } from '@cardstack/boxel-ui/helpers';
+import { cn, cssVar, eq } from '@cardstack/boxel-ui/helpers';
 import { IconX, Download } from '@cardstack/boxel-ui/icons';
 
 import type { FileDef } from 'https://cardstack.com/base/file-api';
@@ -22,9 +23,11 @@ interface FilePillSignature {
     file: FileDef;
     borderType?: 'dashed' | 'solid';
     fileActionsEnabled?: boolean;
+    uploadStatus?: string;
     onClick?: () => void;
     onRemove?: () => void;
     onDownload?: () => void;
+    onRetry?: () => void;
   };
 }
 
@@ -60,6 +63,12 @@ export default class FilePill extends Component<FilePillSignature> {
     }
   }
 
+  @action
+  private handleRetryClick(event: Event) {
+    event.stopPropagation();
+    this.args.onRetry?.();
+  }
+
   private get pillKind() {
     return this.args.onClick ? 'button' : 'default';
   }
@@ -77,6 +86,7 @@ export default class FilePill extends Component<FilePillSignature> {
       @kind={{this.pillKind}}
       class={{cn 'file-pill' this.borderClass}}
       data-test-attached-file={{@file.sourceUrl}}
+      data-test-file-upload-status={{@uploadStatus}}
       {{on 'click' this.handleFileClick}}
       ...attributes
     >
@@ -93,6 +103,18 @@ export default class FilePill extends Component<FilePillSignature> {
         </div>
       </:default>
       <:iconRight>
+        {{#if (eq @uploadStatus 'error')}}
+          {{#if @onRetry}}
+            <IconButton
+              class='retry-button'
+              @icon={{RefreshCw}}
+              @height='10'
+              @width='10'
+              {{on 'click' this.handleRetryClick}}
+              data-test-file-retry-btn
+            />
+          {{/if}}
+        {{/if}}
         {{#if @onRemove}}
           <IconButton
             class='remove-button'

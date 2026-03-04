@@ -30,6 +30,8 @@ interface Signature {
     chooseFile: (file: FileDef) => void;
     removeFile: (file: FileDef) => void;
     autoAttachedCardTooltipMessage?: string;
+    getFileUploadStatus?: (sourceUrl: string | undefined) => string | undefined;
+    retryFileUpload?: (file: FileDef) => void;
   };
   Blocks: {
     default: [
@@ -44,6 +46,8 @@ interface Signature {
         | 'chooseFile'
         | 'autoAttachedCardTooltipMessage'
         | 'isLoaded'
+        | 'getFileUploadStatus'
+        | 'retryFileUpload'
       >,
       WithBoundArgs<typeof AttachButton, 'chooseCard' | 'chooseFile'>,
     ];
@@ -65,6 +69,8 @@ export default class AiAssistantAttachmentPicker extends Component<Signature> {
         chooseCard=@chooseCard
         chooseFile=@chooseFile
         autoAttachedCardTooltipMessage=@autoAttachedCardTooltipMessage
+        getFileUploadStatus=@getFileUploadStatus
+        retryFileUpload=@retryFileUpload
       )
       (component AttachButton chooseCard=@chooseCard chooseFile=@chooseFile)
     }}
