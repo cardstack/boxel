@@ -841,10 +841,10 @@ export class MockClient implements ExtendedClient {
     fileDefManager.contentHashCache.set(contentHash, url);
 
     let contentArrayBuffer = this.serverState.getContent(url);
-    let content = contentArrayBuffer?.toString();
-    if (!content) {
+    if (!contentArrayBuffer) {
       throw new Error('No content found for URL: ' + url);
     }
+    let content = new Uint8Array(contentArrayBuffer);
     const fetchedContentHash = await fileDefManager.getContentHash(content);
     if (fetchedContentHash !== contentHash) {
       console.warn(
@@ -858,18 +858,28 @@ export class MockClient implements ExtendedClient {
     fileDefManager.contentHashCache.set(contentHash, url);
   }
 
+  async prefetchFileContent(file: FileDef): Promise<void> {
+    return await this.fileDefManager.prefetchFileContent(file);
+  }
+
   async uploadContent(
-    _content: string,
+    _content: string | Uint8Array,
     _opts?: { type?: string; name?: string },
   ): Promise<any> {
     if (this.sdkOpts.uploadContentInterceptor) {
       await this.sdkOpts.uploadContentInterceptor();
     }
     let contentUri = `mxc://mock-server/${Math.random()}`;
-    this.serverState.addContent(
-      this.mxcUrlToHttp(contentUri),
-      _content as unknown as ArrayBuffer,
-    );
+    let buffer: ArrayBuffer;
+    if (_content instanceof Uint8Array) {
+      buffer = _content.buffer.slice(
+        _content.byteOffset,
+        _content.byteOffset + _content.byteLength,
+      );
+    } else {
+      buffer = new TextEncoder().encode(_content).buffer;
+    }
+    this.serverState.addContent(this.mxcUrlToHttp(contentUri), buffer);
     return { content_uri: contentUri };
   }
 
@@ -880,7 +890,8 @@ export class MockClient implements ExtendedClient {
     if (!content) {
       throw new Error(`content not found for ${serializedFile.url}`);
     }
-    return JSON.parse(content.toString()) as LooseSingleCardDocument;
+    let text = new TextDecoder().decode(content);
+    return JSON.parse(text) as LooseSingleCardDocument;
   }
 
   async downloadAsFileInBrowser(
