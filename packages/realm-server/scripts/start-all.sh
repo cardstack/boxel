@@ -4,8 +4,6 @@
 if [ -n "$BOXEL_BRANCH" ]; then
   BRANCH_SLUG=$(echo "$BOXEL_BRANCH" | tr '[:upper:]' '[:lower:]' | sed 's|/|-|g; s|[^a-z0-9-]||g; s|-\+|-|g; s|^-\|-$||g')
   REALM_HOST="realm-server.${BRANCH_SLUG}.localhost"
-  ICONS_HOST="icons.${BRANCH_SLUG}.localhost"
-
   BASE_REALM="http-get://${REALM_HOST}/base/"
   CATALOG_REALM="http-get://${REALM_HOST}/catalog/"
   SKILLS_REALM="http-get://${REALM_HOST}/skills/"
@@ -13,7 +11,15 @@ if [ -n "$BOXEL_BRANCH" ]; then
   EXPERIMENTS_REALM="http-get://${REALM_HOST}/experiments/"
   REALM_TEST_HOST="realm-test.${BRANCH_SLUG}.localhost"
   NODE_TEST_REALM="http-get://${REALM_TEST_HOST}/node-test/"
-  ICONS_URL="http://${ICONS_HOST}"
+
+  # Use local icons server if built, otherwise fall back to production CDN
+  ICONS_DIST="$(cd "$(dirname "$0")/../../boxel-icons" && pwd)/dist"
+  if [ -d "$ICONS_DIST" ]; then
+    ICONS_URL="http://icons.${BRANCH_SLUG}.localhost"
+  else
+    ICONS_URL="https://boxel-icons.boxel.ai"
+  fi
+  export ICONS_URL
 else
   BASE_REALM="http-get://localhost:4201/base/"
   CATALOG_REALM="http-get://localhost:4201/catalog/"

@@ -1,6 +1,16 @@
 #! /bin/sh
 
 if [ -n "$BOXEL_BRANCH" ]; then
+  ICONS_DIST="$(dirname "$0")/../../boxel-icons/dist"
+
+  # If icons aren't built locally, fall back to the production CDN.
+  # This avoids requiring `pnpm --filter @cardstack/boxel-icons build` for branch setup.
+  if [ ! -d "$ICONS_DIST" ]; then
+    export ICONS_URL="https://boxel-icons.boxel.ai"
+    echo "Icons not built locally — using production CDN: $ICONS_URL"
+    exit 0
+  fi
+
   # In branch mode, use port 0 (dynamic) and register with Traefik.
   # http-server doesn't support port 0, so we pick a free port ourselves.
   ICONS_PORT=$(python3 -c 'import socket; s=socket.socket(); s.bind(("",0)); print(s.getsockname()[1]); s.close()' 2>/dev/null || node -e 'const s=require("net").createServer();s.listen(0,()=>{console.log(s.address().port);s.close();})')
