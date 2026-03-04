@@ -1,8 +1,20 @@
 {
   "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "SubmissionCard",
+        "module": "../submission-card/submission-card"
+      }
+    },
     "type": "card",
     "attributes": {
       "roomId": "!KOzaXPpicPKuawRZQs:localhost",
+      "cardInfo": {
+        "name": null,
+        "notes": null,
+        "summary": null,
+        "cardThumbnailURL": null
+      },
       "branchName": null,
       "allFileContents": [
         {
@@ -37,13 +49,7 @@
           "filename": "online-customer/OnlineCustomer/zara-ahmed.json",
           "contents": "{\n  \"data\": {\n    \"meta\": {\n      \"adoptsFrom\": {\n        \"name\": \"OnlineCustomer\",\n        \"module\": \"../online-customer\"\n      }\n    },\n    \"type\": \"card\",\n    \"attributes\": {\n      \"email\": {\n        \"label\": \"Email\",\n        \"value\": \"zara.ahmed@healthtechstartup.com\"\n      },\n      \"phone\": {\n        \"label\": \"Phone\",\n        \"value\": \"+1-647-555-1286\"\n      },\n      \"cardInfo\": {},\n      \"totalSpent\": 2847.33,\n      \"cardDescription\": null,\n      \"loyaltyTier\": {\n        \"name\": \"Bronze\"\n      },\n      \"totalOrders\": 12,\n      \"customerName\": \"Zara Ahmed\",\n      \"cardThumbnailURL\": null,\n      \"customerSince\": \"2024-02-28T13:10:00.000Z\"\n    },\n    \"relationships\": {\n      \"cardInfo.theme\": {\n        \"links\": {\n          \"self\": null\n        }\n      }\n    }\n  }\n}"
         }
-      ],
-      "cardInfo": {
-        "name": null,
-        "summary": null,
-        "cardThumbnailURL": null,
-        "notes": null
-      }
+      ]
     },
     "relationships": {
       "listing": {
@@ -55,12 +61,6 @@
         "links": {
           "self": null
         }
-      }
-    },
-    "meta": {
-      "adoptsFrom": {
-        "module": "../submission-card/submission-card",
-        "name": "SubmissionCard"
       }
     }
   }

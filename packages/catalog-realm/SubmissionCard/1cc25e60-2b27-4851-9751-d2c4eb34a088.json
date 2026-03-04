@@ -1,8 +1,20 @@
 {
   "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "SubmissionCard",
+        "module": "../submission-card/submission-card"
+      }
+    },
     "type": "card",
     "attributes": {
       "roomId": "!nVBWtfyqdxXQknrIuR:localhost",
+      "cardInfo": {
+        "name": null,
+        "notes": null,
+        "summary": null,
+        "cardThumbnailURL": null
+      },
       "branchName": null,
       "allFileContents": [
         {
@@ -25,13 +37,7 @@
           "filename": "music-coder/MusicCoder/f21c5c75-a9be-4db9-8a76-7cec46498236.json",
           "contents": "{\n  \"data\": {\n    \"meta\": {\n      \"adoptsFrom\": {\n        \"name\": \"MusicCoder\",\n        \"module\": \"../music-coder\"\n      }\n    },\n    \"type\": \"card\",\n    \"attributes\": {\n      \"bpm\": 124,\n      \"cardTitle\": \"House Groove\",\n      \"pattern\": \"stack(note('<[c3 ~ c3 ~] [c3 ~ eb3 ~] [f3 ~ f3 ~] [g3 ~ g3 ab3]>').sound('sawtooth').lpf(800).gain(0.6), note('<[c5 ~ eb5 g5] [~ g5 f5 ~] [c5 ~ eb5 g5] [~ bb5 ab5 ~]>').sound('square').gain(0.4), s('bd ~ ~ ~, ~ ~ sd ~, [~ hh]*4, ~ ~ ~ cp').gain(0.7))\",\n      \"cardInfo\": {\n        \"notes\": null,\n        \"name\": null,\n        \"summary\": null,\n        \"cardThumbnailURL\": null\n      },\n      \"cardDescription\": \"Classic house music beat with funky bassline and driving rhythm\"\n    },\n    \"relationships\": {\n      \"cardInfo.theme\": {\n        \"links\": {\n          \"self\": null\n        }\n      }\n    }\n  }\n}\n"
         }
-      ],
-      "cardInfo": {
-        "name": null,
-        "summary": null,
-        "cardThumbnailURL": null,
-        "notes": null
-      }
+      ]
     },
     "relationships": {
       "listing": {
@@ -43,12 +49,6 @@
         "links": {
           "self": null
         }
-      }
-    },
-    "meta": {
-      "adoptsFrom": {
-        "module": "../submission-card/submission-card",
-        "name": "SubmissionCard"
       }
     }
   }

@@ -2,7 +2,9 @@
 
 ## Overview
 
-The `SubmissionCardPortal` is an app-level card that displays a prerendered grid of `SubmissionCard` instances. It lives in the **User Realm** (`/submissions/`) and serves as the user's personal submission tracker — showing the status of all their submitted catalog listings.
+A `SubmissionCard` is an index card that records a single listing submission. It lives in the **same workspace realm where the user was working on that listing** — wherever that listing PR originated from.
+
+The `SubmissionCardPortal` is an app-level card that aggregates all submission cards across the user's realms into a single view. It can live anywhere; it is currently placed in the catalog realm as a temporary home.
 
 The portal hides all GitHub technical details. Users care about *"Did my submission pass?"*, not *"What is the PR number?"*.
 
@@ -15,9 +17,9 @@ The portal hides all GitHub technical details. Users care about *"Did my submiss
       ↓  (webhook)
 [ PR Card ]  ──────────── Data Source Realm  (read-only, auto-generated, no user access)
       ↓  (referenced by)
-[ Submission Card ] ───── User Realm /submissions/  (user can create, delete, archive)
-      ↓
-[ Submission Portal ] ─── User Realm /submissions/  (lists all submission cards)
+[ Submission Card ] ───── Same realm the user submitted the listing PR from
+      ↓  (aggregated by)
+[ Submission Portal ] ─── Anywhere (currently: catalog realm, temporary)
 ```
 
 ### Data Source Realm — PR Card
@@ -29,29 +31,35 @@ The portal hides all GitHub technical details. Users care about *"Did my submiss
 | User access | Read-only — cannot be edited, deleted, or mutated |
 | Purpose | Reflects the raw GitHub PR state |
 
-### User Realm — Submission Card + Portal
+### User Realm — Submission Card
 
 | Property | Value |
 |----------|-------|
-| Location | `/submissions/` realm |
+| Location | The realm the user submitted the listing PR from |
 | User access | Create, delete, archive |
-| Purpose | User-facing status view of their submission |
+| Purpose | Index card recording the user's submission and its status |
 | Note | Deleting a Submission Card does **not** delete the PR — it only removes the reference |
+
+### Submission Portal
+
+| Property | Value |
+|----------|-------|
+| Location | Anywhere — currently catalog realm (temporary) |
+| Queries | Only the user's own submissions, across their realms |
+| Realm scope | User-selectable — can toggle which of their realms to include |
 
 ---
 
-## Realm Location
+## Code Location
 
-Both files live in the catalog realm (which is editable):
+Both card definitions live in the catalog realm:
 
 ```
 submission-card/
 ├── README.md                         ← this file
-├── submission-card-portal.gts        ← portal app card  →  catalog realm
-└── submission-card.gts               ← submission card  →  catalog realm
+├── submission-card-portal.gts        ← portal app card  (currently: catalog realm)
+└── submission-card.gts               ← submission card  (instances: user's own realm)
 ```
-
-> **Future:** `SubmissionCard` instances will eventually be created in the **user's own realm** (the realm from which they submitted the listing PR), not the catalog realm. The catalog realm is used as a starting point while the per-user realm flow is not yet implemented.
 
 ---
 
@@ -131,7 +139,18 @@ Show only user-facing status. **Hide all GitHub technical details.**
 | `title` | `StringField` | Portal display name |
 | `description` | `StringField` | Short description shown in the header |
 
-> The portal queries all `SubmissionCard` instances dynamically — it does **not** use `linksTo` or `containsMany`.
+> The portal queries `SubmissionCard` instances dynamically across the user's realms — it does **not** use `linksTo` or `containsMany`.
+
+---
+
+## Portal — Realm Scope
+
+Because `SubmissionCard` instances can live in any of the user's workspaces, the portal must query across multiple realms. The intended design is:
+
+- Default: query **all of the user's realms**
+- UI: a realm toggle/filter so the user can narrow to a specific workspace
+
+**Implementation:** The portal uses `commandData` + `GetAllRealmMetasCommand` to load all writable user realms. It queries all of them by default. When the user selects specific realms via the toggle pills, only those realms are queried. While realm data is loading, the portal falls back to its own realm URL (`this.args.model[realmURL]`).
 
 ---
 
@@ -142,7 +161,8 @@ Show only user-facing status. **Hide all GitHub technical details.**
 │  Header                                                  │
 │  Title: "Submissions"                                    │
 │                                                          │
-│  [ Search by listing name or title...  ]  [Grid][Strip]  │
+│  [ Search by card title...  ]                [Grid][Strip] │
+│  [■ Realm A] [□ Realm B] [□ Realm C]  ← shown when 2+   │
 ├──────────────────────────────────────────────────────────┤
 │  Grid (default)                                          │
 │  ┌──────────┐ ┌──────────┐ ┌──────────┐                 │
@@ -165,12 +185,15 @@ Show only user-facing status. **Hide all GitHub technical details.**
 
 ## Portal — Search Functionality
 
-Filters by `listing.name` or `listing.cardTitle` using a text input in the portal header.
+Filters by `cardTitle` (the computed title on `SubmissionCard`) using a text input in the portal header. Input is debounced 300ms.
 
 ```ts
 get query() {
   const baseFilter = {
-    type: { module: `${this.realmHref}submission-card`, name: 'SubmissionCard' },
+    type: {
+      module: new URL('./submission-card', import.meta.url).href,
+      name: 'SubmissionCard',
+    },
   };
 
   if (!this.searchText) {
@@ -182,10 +205,7 @@ get query() {
       every: [
         baseFilter,
         {
-          any: [
-            { contains: { 'listing.name': this.searchText } },
-            { contains: { 'listing.cardTitle': this.searchText } },
-          ],
+          any: [{ contains: { cardTitle: this.searchText } }],
         },
       ],
     },
@@ -199,29 +219,40 @@ get query() {
 
 | View | Layout | Fitted card size |
 |------|--------|-----------------|
-| `grid` | `repeat(auto-fill, ~164px)` columns | Small square tile |
-| `strip` | Full-width single column | Wide horizontal strip |
+| `grid` | `repeat(auto-fill, 300px)` columns | `300×380px` tile |
+| `strip` | Full-width single column (`1fr`) | `120px` tall strip |
 
 ---
 
 ## Portal — Grid Rendering Pattern
 
+Uses the `CardList` base component which handles live querying, loading state, and grid/strip layout via `@viewOption`.
+
 ```hbs
-<@context.prerenderedCardSearchComponent
+<CardList
   @query={{this.query}}
-  @format='fitted'
   @realms={{this.realmHrefs}}
+  @format='fitted'
+  @viewOption={{this.selectedView}}
+  @context={{@context}}
   @isLive={{true}}
->
-  <:loading>Loading submissions...</:loading>
-  <:response as |cards|>
-    {{#if (eq this.selectedView 'strip')}}
-      <CardsGrid @cards={{cards}} @context={{@context}} class='strip-view' />
-    {{else}}
-      <CardsGrid @cards={{cards}} @context={{@context}} />
-    {{/if}}
-  </:response>
-</@context.prerenderedCardSearchComponent>
+/>
+```
+
+CSS overrides size the list items so fitted container queries resolve correctly:
+
+```css
+/* grid view */
+.portal-content :deep(.grid-view) {
+  --item-width: 300px;
+  --item-height: 380px;
+}
+
+/* strip view */
+.portal-content :deep(.strip-view) {
+  --item-height: 120px;
+  grid-template-columns: 1fr;
+}
 ```
 
 ---
@@ -238,7 +269,7 @@ Fitted cards define multiple layouts using `@container fitted-card` queries.
 ```
 Show: icon + `cardTitle` only.
 
-### Size 2 — Square tile (default grid, ~164×224px)
+### Size 2 — Square tile (default grid, `300×380px`)
 ```
 ┌──────────────┐
 │ [icon]       │
@@ -265,5 +296,5 @@ Show: icon, `cardTitle`, `listing.name`, status pill, GitHub link icon.
 static displayName = 'Submission Card Portal';
 static prefersWideFormat = true;
 static headerColor = '#e5f0ff';
-static icon = SubmissionIcon;
+static icon = BotIcon; // from @cardstack/boxel-icons/bot
 ```
