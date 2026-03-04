@@ -258,9 +258,6 @@ function validatePrerenderAttributes(
 ) {
   let missing = new Set<string>();
 
-  if (attrs.affinityType !== 'realm' && attrs.affinityType !== 'user') {
-    missing.add('affinityType');
-  }
   if (
     typeof attrs.affinityValue !== 'string' ||
     attrs.affinityValue.trim().length === 0
