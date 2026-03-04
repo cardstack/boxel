@@ -73,6 +73,30 @@ function makeStubPagePool(
     onContextClosed?: (id: string) => void;
   },
 ) {
+  function makeStorage(): Storage {
+    let values: Record<string, string> = {};
+    return {
+      getItem(key: string) {
+        return values[key] ?? null;
+      },
+      setItem(key: string, value: string) {
+        values[key] = value;
+      },
+      removeItem(key: string) {
+        delete values[key];
+      },
+      clear() {
+        values = {};
+      },
+      key(index: number) {
+        return Object.keys(values)[index] ?? null;
+      },
+      get length() {
+        return Object.keys(values).length;
+      },
+    } as Storage;
+  }
+
   let contextCounter = 0;
   let contextsCreated: string[] = [];
   let contextsClosed: string[] = [];
@@ -85,7 +109,8 @@ function makeStubPagePool(
       let id = `ctx-${counter}`;
       contextsCreated.push(id);
       options?.onContextCreated?.(id);
-      return {
+      let localStorage = makeStorage();
+      let context = {
         async newPage() {
           return {
             async goto(_url: string, _opts?: any) {
@@ -93,6 +118,18 @@ function makeStubPagePool(
             },
             async waitForFunction(_fn: any) {
               return true;
+            },
+            async evaluate(fn: (...args: any[]) => any, ...args: any[]) {
+              let originalLocalStorage = (globalThis as any).localStorage;
+              (globalThis as any).localStorage = localStorage;
+              try {
+                return await fn(...args);
+              } finally {
+                (globalThis as any).localStorage = originalLocalStorage;
+              }
+            },
+            browserContext() {
+              return context;
             },
             removeAllListeners() {
               return;
@@ -111,6 +148,7 @@ function makeStubPagePool(
           return;
         },
       } as any;
+      return context;
     },
   };
   let browserManager = {
@@ -4456,6 +4494,47 @@ module(basename(__filename), function () {
           );
           realmASecond.release();
           realmBSecond.release();
+          await pool.closeAll();
+        });
+
+        test('each tab uses a separate browser context', async function (assert) {
+          let { pool } = makeStubPagePool(2);
+          await pool.warmStandbys();
+
+          let first = await pool.getPage('realm-a');
+          let second = await pool.getPage('realm-b');
+
+          assert.notStrictEqual(
+            first.page.browserContext(),
+            second.page.browserContext(),
+            'pages from different tabs are isolated by browser context',
+          );
+          await first.page.evaluate(
+            (key: string, value: string) => localStorage.setItem(key, value),
+            'boxel-test-local-storage-key',
+            'realm-a-value',
+          );
+          let firstValue = await first.page.evaluate(
+            (key: string) => localStorage.getItem(key),
+            'boxel-test-local-storage-key',
+          );
+          let secondValue = await second.page.evaluate(
+            (key: string) => localStorage.getItem(key),
+            'boxel-test-local-storage-key',
+          );
+          assert.strictEqual(
+            firstValue,
+            'realm-a-value',
+            'localStorage value is readable in the context that set it',
+          );
+          assert.strictEqual(
+            secondValue,
+            null,
+            'localStorage value is not visible across browser contexts',
+          );
+
+          first.release();
+          second.release();
           await pool.closeAll();
         });
 
