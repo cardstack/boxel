@@ -92,20 +92,6 @@ export class RenderRunner {
     }
   }
 
-  async #setPrerenderSessionAuth(
-    page: {
-      evaluate: (fn: (...args: any[]) => any, ...args: any[]) => Promise<any>;
-    },
-    auth: string,
-  ) {
-    await page.evaluate((sessionAuth) => {
-      // Use sessionStorage (not localStorage) for prerender auth so each tab's
-      // JWT remains isolated and one prerender task cannot poison another tab.
-      localStorage.removeItem('boxel-session');
-      sessionStorage.setItem('boxel-session', sessionAuth);
-    }, auth);
-  }
-
   async prerenderCardAttempt({
     realm,
     url,
@@ -148,7 +134,9 @@ export class RenderRunner {
       }
     };
     try {
-      await this.#setPrerenderSessionAuth(page, auth);
+      await page.evaluate((sessionAuth) => {
+        localStorage.setItem('boxel-session', sessionAuth);
+      }, auth);
 
       let renderStart = Date.now();
       let error: RenderError | undefined;
@@ -453,9 +441,9 @@ export class RenderRunner {
       let requestId = randomUUID();
       let nonce = String(this.#nonce);
       let storageKey = `${commandRequestStorageKeyPrefix}${requestId}`;
-      await this.#setPrerenderSessionAuth(page, auth);
       await page.evaluate(
-        (key, commandToRun, input, requestNonce, createdAt) => {
+        (sessionAuth, key, commandToRun, input, requestNonce, createdAt) => {
+          localStorage.setItem('boxel-session', sessionAuth);
           localStorage.setItem(
             key,
             JSON.stringify({
@@ -466,6 +454,7 @@ export class RenderRunner {
             }),
           );
         },
+        auth,
         storageKey,
         command,
         commandInput ?? null,
@@ -633,7 +622,9 @@ export class RenderRunner {
       }
     };
     try {
-      await this.#setPrerenderSessionAuth(page, auth);
+      await page.evaluate((sessionAuth) => {
+        localStorage.setItem('boxel-session', sessionAuth);
+      }, auth);
 
       let renderStart = Date.now();
       let options = renderOptions ?? {};
@@ -787,7 +778,9 @@ export class RenderRunner {
       }
     };
     try {
-      await this.#setPrerenderSessionAuth(page, auth);
+      await page.evaluate((sessionAuth) => {
+        localStorage.setItem('boxel-session', sessionAuth);
+      }, auth);
 
       let renderStart = Date.now();
       let options = renderOptions ?? {};
@@ -939,7 +932,9 @@ export class RenderRunner {
       }
     };
     try {
-      await this.#setPrerenderSessionAuth(page, auth);
+      await page.evaluate((sessionAuth) => {
+        localStorage.setItem('boxel-session', sessionAuth);
+      }, auth);
 
       // Stash file data on globalThis for the render route to consume
       await page.evaluate((data) => {
