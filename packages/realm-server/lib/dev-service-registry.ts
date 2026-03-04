@@ -132,7 +132,9 @@ export function deregisterService(serviceName: string, env?: string): void {
   let configPath = join(traefikDynamicDir(), `${slug}-${serviceName}.yml`);
   try {
     unlinkSync(configPath);
-    log.info(`Deregistered ${serviceName} for environment ${slug} from Traefik`);
+    log.info(
+      `Deregistered ${serviceName} for environment ${slug} from Traefik`,
+    );
   } catch (e: any) {
     if (e.code !== 'ENOENT') {
       log.error(

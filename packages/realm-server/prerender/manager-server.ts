@@ -5,7 +5,10 @@ import type { Server } from 'http';
 import { createServer } from 'http';
 import yargs from 'yargs';
 import { buildPrerenderManagerApp } from './manager-app';
-import { isEnvironmentMode, registerService } from '../lib/dev-service-registry';
+import {
+  isEnvironmentMode,
+  registerService,
+} from '../lib/dev-service-registry';
 
 let log = logger('prerender-manager');
 

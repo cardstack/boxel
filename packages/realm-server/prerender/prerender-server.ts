@@ -4,7 +4,10 @@ import { logger } from '@cardstack/runtime-common';
 import yargs from 'yargs';
 import type { Server } from 'http';
 import { createPrerenderHttpServer } from './prerender-app';
-import { isEnvironmentMode, registerService } from '../lib/dev-service-registry';
+import {
+  isEnvironmentMode,
+  registerService,
+} from '../lib/dev-service-registry';
 
 let log = logger('prerender-server');
 
