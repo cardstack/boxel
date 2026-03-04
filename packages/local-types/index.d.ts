@@ -1,5 +1,4 @@
 import 'ember-source/types';
-import 'ember-source/types/preview';
 import * as ContentTag from 'content-tag';
 
 declare global {
