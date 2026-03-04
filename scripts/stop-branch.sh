@@ -44,11 +44,27 @@ echo "Stopping all services for environment: $BRANCH (slug: $SLUG)"
 # --- 1. Find and kill processes by environment slug in their arguments ---
 # Match any process whose command line contains the environment slug followed by
 # .localhost (Traefik hostnames) or as a path segment (realm paths).
-# Then walk the process tree to also find child processes (prerender, icons,
-# host app, etc.) that don't have the slug in their own arguments.
+# Also look up dynamic ports from Traefik configs to find processes (like the
+# host app) that don't have the slug in their own arguments.
+# Then walk the process tree to find child processes.
 # Exclude this script itself and grep.
+
+# Build a pattern that matches the slug in various contexts
+MATCH_PATTERN="${SLUG}\.localhost|realms/${SLUG}|boxel_${SLUG}|BOXEL_ENVIRONMENT=${BRANCH}"
+
+# Extract dynamic ports from Traefik configs so we can match processes by port
+if [ -d "$TRAEFIK_DIR" ]; then
+  for f in "$TRAEFIK_DIR/${SLUG}"-*.yml; do
+    [ -f "$f" ] || continue
+    PORT=$(grep -oE 'host\.docker\.internal:[0-9]+' "$f" 2>/dev/null | head -1 | sed 's/.*://')
+    if [ -n "$PORT" ]; then
+      MATCH_PATTERN="${MATCH_PATTERN}|--port ${PORT}([^0-9]|$)"
+    fi
+  done
+fi
+
 ROOT_PIDS=$(ps ax -o pid,command 2>/dev/null \
-  | grep -E "(${SLUG}\.localhost|realms/${SLUG}|boxel_${SLUG}|BOXEL_ENVIRONMENT=${BRANCH})" \
+  | grep -E "($MATCH_PATTERN)" \
   | grep -v "grep" \
   | grep -v "stop-branch" \
   | grep -v "shell-snapshots" `# exclude Claude Code shell wrappers` \
