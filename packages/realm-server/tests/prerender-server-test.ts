@@ -12,6 +12,7 @@ import {
   PRERENDER_SERVER_STATUS_DRAINING,
   PRERENDER_SERVER_STATUS_HEADER,
 } from '../prerender/prerender-constants';
+import { toAffinityKey } from '../prerender/affinity';
 import { Deferred } from '@cardstack/runtime-common';
 
 module(basename(__filename), function () {
@@ -128,6 +129,8 @@ module(basename(__filename), function () {
               url,
               auth,
               realm: realmURL.href,
+              affinityType: 'realm',
+              affinityValue: realmURL.href,
             },
           },
         });
@@ -179,9 +182,14 @@ module(basename(__filename), function () {
         'pool.timedOut defaults false',
       );
       assert.strictEqual(
-        res.body.meta?.pool?.realm,
+        res.body.meta?.pool?.affinityType,
+        'realm',
+        'pool affinity type ok',
+      );
+      assert.strictEqual(
+        res.body.meta?.pool?.affinityValue,
         realmURL.href,
-        'pool realm ok',
+        'pool affinity value ok',
       );
     });
 
@@ -206,6 +214,8 @@ module(basename(__filename), function () {
               url,
               auth,
               realm: realmURL.href,
+              affinityType: 'realm',
+              affinityValue: realmURL.href,
             },
           },
         });
@@ -256,6 +266,8 @@ module(basename(__filename), function () {
                 realm: realmURL.href,
                 auth,
                 command,
+                affinityType: 'user',
+                affinityValue: testUserId,
               },
             },
           });
@@ -309,6 +321,8 @@ module(basename(__filename), function () {
                 realm: realmURL.href,
                 auth,
                 command,
+                affinityType: 'user',
+                affinityValue: testUserId,
               },
             },
           });
@@ -355,6 +369,8 @@ module(basename(__filename), function () {
               url: `${realmURL.href}drain`,
               auth,
               realm: realmURL.href,
+              affinityType: 'realm',
+              affinityValue: realmURL.href,
             },
           },
         });
@@ -388,8 +404,8 @@ module(basename(__filename), function () {
       draining = false;
     });
 
-    test('tracks warmed realms for heartbeat', async function (assert) {
-      let beforeWarm = prerenderer.getWarmRealms();
+    test('tracks warmed affinities for heartbeat', async function (assert) {
+      let beforeWarm = prerenderer.getWarmAffinities();
       let url = `${realmURL.href}2`;
       const permissions: Record<string, ('read' | 'write' | 'realm-owner')[]> =
         { [realmURL.href]: ['read', 'write', 'realm-owner'] };
@@ -405,17 +421,24 @@ module(basename(__filename), function () {
               url,
               auth,
               realm: realmURL.href,
+              affinityType: 'realm',
+              affinityValue: realmURL.href,
             },
           },
         });
 
       assert.true(
-        prerenderer.getWarmRealms().includes(realmURL.href),
-        'warm realms include prerendered realm',
+        prerenderer.getWarmAffinities().includes(
+          toAffinityKey({
+            affinityType: 'realm',
+            affinityValue: realmURL.href,
+          }),
+        ),
+        'warm affinities include prerendered realm affinity',
       );
       assert.true(
-        prerenderer.getWarmRealms().length >= beforeWarm.length,
-        'warm realm list does not shrink',
+        prerenderer.getWarmAffinities().length >= beforeWarm.length,
+        'warm affinity list does not shrink',
       );
     });
 
@@ -435,7 +458,8 @@ module(basename(__filename), function () {
         timings: { launchMs: 0, renderMs: 0 },
         pool: {
           pageId: 'p',
-          realm: realmURL.href,
+          affinityType: 'realm',
+          affinityValue: realmURL.href,
           reused: false,
           evicted: false,
           timedOut: false,
@@ -462,6 +486,8 @@ module(basename(__filename), function () {
               url: `${realmURL.href}drain-midflight`,
               auth,
               realm: realmURL.href,
+              affinityType: 'realm',
+              affinityValue: realmURL.href,
             },
           },
         });
@@ -520,6 +546,8 @@ module(basename(__filename), function () {
                 url: `${realmURL.href}drain-unhandled`,
                 auth,
                 realm: realmURL.href,
+                affinityType: 'realm',
+                affinityValue: realmURL.href,
               },
             },
           });

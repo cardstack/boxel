@@ -35,9 +35,12 @@ module(basename(__filename), function () {
       let renderCalls: Array<{
         kind: 'card' | 'module' | 'file-extract' | 'file-render' | 'command';
         args: {
-          realm: string;
+          realm?: string;
+          userId?: string;
           url?: string;
           auth: string;
+          command?: string;
+          commandInput?: Record<string, unknown> | null;
           renderOptions?: RenderRouteOptions;
         };
       }> = [];

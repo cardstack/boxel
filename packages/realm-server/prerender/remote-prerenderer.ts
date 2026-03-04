@@ -1,5 +1,6 @@
 import {
   type Prerenderer,
+  type AffinityType,
   type RenderResponse,
   type ModuleRenderResponse,
   type FileExtractResponse,
@@ -56,7 +57,9 @@ export function createRemotePrerenderer(
     path: string,
     type: string,
     attributes: {
-      realm: string;
+      affinityType: AffinityType;
+      affinityValue: string;
+      realm?: string;
       url?: string;
       auth: string;
       renderOptions?: RenderRouteOptions;
@@ -166,6 +169,8 @@ export function createRemotePrerenderer(
         'prerender-card',
         'prerender-request',
         {
+          affinityType: 'realm',
+          affinityValue: realm,
           realm,
           url,
           auth,
@@ -178,6 +183,8 @@ export function createRemotePrerenderer(
         'prerender-module',
         'prerender-module-request',
         {
+          affinityType: 'realm',
+          affinityValue: realm,
           realm,
           url,
           auth,
@@ -190,6 +197,8 @@ export function createRemotePrerenderer(
         'prerender-file-extract',
         'prerender-file-extract-request',
         {
+          affinityType: 'realm',
+          affinityValue: realm,
           realm,
           url,
           auth,
@@ -209,6 +218,8 @@ export function createRemotePrerenderer(
         'prerender-file-render',
         'prerender-file-render-request',
         {
+          affinityType: 'realm',
+          affinityValue: realm,
           realm,
           url,
           auth,
@@ -218,12 +229,13 @@ export function createRemotePrerenderer(
         },
       );
     },
-    async runCommand({ realm, auth, command, commandInput }) {
+    async runCommand({ userId, auth, command, commandInput }) {
       return await requestWithRetry<RunCommandResponse>(
         'run-command',
         'run-command-request',
         {
-          realm,
+          affinityType: 'user',
+          affinityValue: userId,
           auth,
           command,
           commandInput,
@@ -236,36 +248,56 @@ export function createRemotePrerenderer(
 function validatePrerenderAttributes(
   requestType: string,
   attrs: {
+    affinityType?: unknown;
+    affinityValue?: string;
     realm?: string;
     url?: string;
     auth?: string;
     command?: unknown;
   },
 ) {
-  let missing: string[] = [];
+  let missing = new Set<string>();
 
-  if (typeof attrs.realm !== 'string' || attrs.realm.trim().length === 0) {
-    missing.push('realm');
+  if (attrs.affinityType !== 'realm' && attrs.affinityType !== 'user') {
+    missing.add('affinityType');
+  }
+  if (
+    typeof attrs.affinityValue !== 'string' ||
+    attrs.affinityValue.trim().length === 0
+  ) {
+    missing.add('affinityValue');
+  }
+  if (
+    requestType !== 'run-command-request' &&
+    (typeof attrs.realm !== 'string' || attrs.realm.trim().length === 0)
+  ) {
+    missing.add('realm');
   }
   if (
     requestType !== 'run-command-request' &&
     (typeof attrs.url !== 'string' || attrs.url.trim().length === 0)
   ) {
-    missing.push('url');
+    missing.add('url');
   }
   if (typeof attrs.auth !== 'string' || attrs.auth.trim().length === 0) {
-    missing.push('auth');
+    missing.add('auth');
+  }
+  if (requestType === 'run-command-request' && attrs.affinityType !== 'user') {
+    missing.add('affinityType');
+  }
+  if (requestType !== 'run-command-request' && attrs.affinityType !== 'realm') {
+    missing.add('affinityType');
   }
   if (
     requestType === 'run-command-request' &&
     (typeof attrs.command !== 'string' || attrs.command.trim().length === 0)
   ) {
-    missing.push('command');
+    missing.add('command');
   }
 
-  if (missing.length > 0) {
+  if (missing.size > 0) {
     throw new Error(
-      `Missing prerender ${requestType} attributes: ${missing.join(', ')}`,
+      `Missing prerender ${requestType} attributes: ${[...missing].join(', ')}`,
     );
   }
 }
