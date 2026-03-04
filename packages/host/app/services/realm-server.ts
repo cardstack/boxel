@@ -109,7 +109,7 @@ export default class RealmServerService extends Service {
   setClient(client: ExtendedClient) {
     this.client = client;
     this.token =
-      getStorageValueWithFallback(sessionLocalStorageKey) ?? undefined;
+      window.localStorage.getItem(sessionLocalStorageKey) ?? undefined;
   }
 
   async createStripeSession(email: string) {
@@ -206,7 +206,6 @@ export default class RealmServerService extends Service {
       url: baseRealm.url,
     });
     window.localStorage.removeItem(sessionLocalStorageKey);
-    window.sessionStorage.removeItem(sessionLocalStorageKey);
   }
 
   async fetchTokensForAccessibleRealms() {
@@ -271,8 +270,15 @@ export default class RealmServerService extends Service {
     let testRealmOrigin = isTesting()
       ? new URL(testRealmURL).origin
       : undefined;
-    let sessionTokens =
-      getSessionTokenMapWithFallback(SessionLocalStorageKey) ?? {};
+    let sessionTokens: Record<string, string> = {};
+    let sessionStr =
+      window.localStorage.getItem(SessionLocalStorageKey) ?? '{}';
+
+    try {
+      sessionTokens = JSON.parse(sessionStr) as Record<string, string>;
+    } catch {
+      sessionTokens = {};
+    }
 
     let realmServerURLs = new Set<string>();
 
@@ -539,8 +545,6 @@ export default class RealmServerService extends Service {
     } else {
       this.auth = { type: 'anonymous' };
     }
-    // Keep localStorage as the canonical persistence for host realm-server auth.
-    // Read paths use local->session fallback to interoperate with prerender flows.
     window.localStorage.setItem(sessionLocalStorageKey, value ?? '');
     this.tokenRefresher.perform();
   }
@@ -1053,8 +1057,14 @@ export default class RealmServerService extends Service {
   }
 
   private getRealmTokenForRealms(realms: string[]): string | undefined {
-    let sessionTokens = getSessionTokenMapWithFallback(SessionLocalStorageKey);
-    if (!sessionTokens) {
+    let sessionTokens: Record<string, string> = {};
+    let sessionStr = window.localStorage.getItem(SessionLocalStorageKey);
+    if (!sessionStr) {
+      return undefined;
+    }
+    try {
+      sessionTokens = JSON.parse(sessionStr) as Record<string, string>;
+    } catch {
       return undefined;
     }
     for (let realmURL of realms) {
@@ -1070,44 +1080,6 @@ export default class RealmServerService extends Service {
 
 const tokenRefreshPeriodSec = 5 * 60; // 5 minutes
 const sessionLocalStorageKey = 'boxel-realm-server-session';
-
-function getStorageValueWithFallback(key: string): string | null {
-  // Host writes are localStorage-first, but prerender/isolated contexts may use
-  // sessionStorage, so reads intentionally fall back. We treat empty string as
-  // missing because this file stores `''` when clearing auth.
-  let localValue = window.localStorage.getItem(key);
-  if (localValue) {
-    return localValue;
-  }
-  return window.sessionStorage.getItem(key);
-}
-
-function getSessionTokenMapWithFallback(
-  key: string,
-): Record<string, string> | undefined {
-  let localTokens = parseSessionTokenMap(window.localStorage.getItem(key));
-  if (localTokens && hasTokenEntries(localTokens)) {
-    return localTokens;
-  }
-  return parseSessionTokenMap(window.sessionStorage.getItem(key));
-}
-
-function parseSessionTokenMap(
-  value: string | null,
-): Record<string, string> | undefined {
-  if (!value) {
-    return undefined;
-  }
-  try {
-    return JSON.parse(value) as Record<string, string>;
-  } catch {
-    return undefined;
-  }
-}
-
-function hasTokenEntries(tokens: Record<string, string>): boolean {
-  return Object.keys(tokens).length > 0;
-}
 
 function claimsFromRawToken(rawToken: string): RealmServerJWTPayload {
   let [_header, payload] = rawToken.split('.');
