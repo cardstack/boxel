@@ -422,18 +422,31 @@ export async function destroyTrackedQueueRunners(): Promise<void> {
 }
 
 async function waitForQueueIdle(
-  dbAdapter: PgAdapter,
+  databaseName: string,
   timeout = 30000,
 ): Promise<void> {
   await waitUntil(
     async () => {
-      let [{ count: unfulfilledJobs }] = (await dbAdapter.execute(
-        `SELECT COUNT(*)::int AS count FROM jobs WHERE status = 'unfulfilled'`,
-      )) as { count: number }[];
-      let [{ count: activeReservations }] = (await dbAdapter.execute(
-        `SELECT COUNT(*)::int AS count FROM job_reservations WHERE completed_at IS NULL`,
-      )) as { count: number }[];
-      return unfulfilledJobs === 0 && activeReservations === 0;
+      let client = new PgClient({
+        ...pgAdminConnectionConfig(),
+        database: databaseName,
+      });
+      try {
+        await client.connect();
+        let {
+          rows: [{ count: unfulfilledJobs }],
+        } = await client.query<{ count: number }>(
+          `SELECT COUNT(*)::int AS count FROM jobs WHERE status = 'unfulfilled'`,
+        );
+        let {
+          rows: [{ count: activeReservations }],
+        } = await client.query<{ count: number }>(
+          `SELECT COUNT(*)::int AS count FROM job_reservations WHERE completed_at IS NULL`,
+        );
+        return unfulfilledJobs === 0 && activeReservations === 0;
+      } finally {
+        await client.end();
+      }
     },
     {
       timeout,
@@ -444,7 +457,6 @@ async function waitForQueueIdle(
 }
 
 interface CachedPermissionedRealmTemplateEntry {
-  refs: number;
   ready: Promise<void>;
 }
 
@@ -1106,10 +1118,15 @@ export function setupPermissionedRealms(
       runner: QueueRunner,
     ) => {
       _dbAdapter = dbAdapter;
-      ({ realms } = await startPermissionedRealmsFixture(dbAdapter, publisher, runner, {
-        realms: realmsArg,
-        prerenderer,
-      }));
+      ({ realms } = await startPermissionedRealmsFixture(
+        dbAdapter,
+        publisher,
+        runner,
+        {
+          realms: realmsArg,
+          prerenderer,
+        },
+      ));
       onRealmSetup?.({
         dbAdapter: _dbAdapter!,
         realms,
@@ -1508,14 +1525,43 @@ async function startPermissionedRealmFixture(
 }
 
 async function teardownPermissionedRealmFixture(
-  testRealmServer: Awaited<ReturnType<typeof runTestRealmServer>>,
+  testRealmServer?: Awaited<ReturnType<typeof runTestRealmServer>>,
 ): Promise<void> {
-  testRealmServer.testRealm.unsubscribe();
-  if (!testRealmServer.matrixClient.isLoggedIn()) {
-    await testRealmServer.matrixClient.login();
+  if (!testRealmServer) {
+    return;
   }
-  await closeServer(testRealmServer.testRealmHttpServer);
-  resetCatalogRealms();
+
+  let cleanupError: unknown;
+
+  try {
+    testRealmServer.testRealm.unsubscribe();
+  } catch (error) {
+    cleanupError ??= error;
+  }
+
+  try {
+    if (!testRealmServer.matrixClient.isLoggedIn()) {
+      await testRealmServer.matrixClient.login();
+    }
+  } catch (error) {
+    cleanupError ??= error;
+  }
+
+  try {
+    await closeServer(testRealmServer.testRealmHttpServer);
+  } catch (error) {
+    cleanupError ??= error;
+  }
+
+  try {
+    resetCatalogRealms();
+  } catch (error) {
+    cleanupError ??= error;
+  }
+
+  if (cleanupError) {
+    throw cleanupError;
+  }
 }
 
 export function setupPermissionedRealm(
@@ -1602,9 +1648,7 @@ export function setupPermissionedRealm(
 type SetupPermissionedRealmCachedOptions = Omit<
   Parameters<typeof setupPermissionedRealm>[1],
   'dbTemplateDatabase'
-> & {
-  useTemplateCache?: boolean;
-};
+>;
 
 function permissionedRealmTemplateCacheKey(
   options: SetupPermissionedRealmCachedOptions,
@@ -1668,7 +1712,7 @@ async function buildPermissionedRealmTemplate(
       },
     );
 
-    await waitForQueueIdle(dbAdapter);
+    await waitForQueueIdle(builderDatabaseName);
     await teardownPermissionedRealmFixture(fixture.testRealmServer);
     fixture = undefined;
 
@@ -1724,13 +1768,11 @@ async function acquirePermissionedRealmTemplate(
   let templateDatabaseName = templateDatabaseNameForCacheKey(cacheKey);
   let existing = permissionedRealmTemplateCache.get(cacheKey);
   if (existing) {
-    existing.refs++;
     await existing.ready;
     return { cacheKey, templateDatabaseName };
   }
 
   let entry: CachedPermissionedRealmTemplateEntry = {
-    refs: 1,
     ready: Promise.resolve(),
   };
   entry.ready = buildPermissionedRealmTemplate(cacheKey, options).catch(
@@ -1749,56 +1791,28 @@ async function acquirePermissionedRealmTemplate(
   return { cacheKey, templateDatabaseName };
 }
 
-async function releasePermissionedRealmTemplate(
-  cacheKey: string,
-): Promise<void> {
-  let entry = permissionedRealmTemplateCache.get(cacheKey);
-  if (!entry) {
-    return;
-  }
-  entry.refs--;
-}
-
 export function setupPermissionedRealmCached(
   hooks: NestedHooks,
   options: SetupPermissionedRealmCachedOptions,
 ) {
-  let { useTemplateCache = true, ...setupOptions } = options;
-  if (!useTemplateCache) {
-    return setupPermissionedRealm(hooks, setupOptions);
-  }
-
   let acquiredTemplateDatabase: string | undefined;
-  let acquiredCacheKey: string | undefined;
 
   hooks.before(async function () {
-    let { cacheKey, templateDatabaseName } =
-      await acquirePermissionedRealmTemplate(setupOptions);
-    acquiredCacheKey = cacheKey;
+    let { templateDatabaseName } =
+      await acquirePermissionedRealmTemplate(options);
     acquiredTemplateDatabase = templateDatabaseName;
   });
 
   setupPermissionedRealm(hooks, {
-    ...setupOptions,
+    ...options,
     dbTemplateDatabase: () => acquiredTemplateDatabase,
-  });
-
-  hooks.after(async function () {
-    if (acquiredCacheKey) {
-      let cacheKey = acquiredCacheKey;
-      acquiredCacheKey = undefined;
-      acquiredTemplateDatabase = undefined;
-      await releasePermissionedRealmTemplate(cacheKey);
-    }
   });
 }
 
 type SetupPermissionedRealmsCachedOptions = Omit<
   Parameters<typeof setupPermissionedRealms>[1],
   'dbTemplateDatabase'
-> & {
-  useTemplateCache?: boolean;
-};
+>;
 
 function permissionedRealmsTemplateCacheKey(
   options: SetupPermissionedRealmsCachedOptions,
@@ -1821,7 +1835,9 @@ async function buildPermissionedRealmsTemplate(
   let dbAdapter: PgAdapter | undefined;
   let publisher: QueuePublisher | undefined;
   let runner: QueueRunner | undefined;
-  let fixture: Awaited<ReturnType<typeof startPermissionedRealmsFixture>> | undefined;
+  let fixture:
+    | Awaited<ReturnType<typeof startPermissionedRealmsFixture>>
+    | undefined;
 
   await dropDatabase(templateDatabaseName);
   await dropDatabase(builderDatabaseName);
@@ -1837,12 +1853,17 @@ async function buildPermissionedRealmsTemplate(
       workerId: 'template-worker',
     });
 
-    fixture = await startPermissionedRealmsFixture(dbAdapter, publisher, runner, {
-      realms: options.realms,
-      prerenderer: options.prerenderer,
-    });
+    fixture = await startPermissionedRealmsFixture(
+      dbAdapter,
+      publisher,
+      runner,
+      {
+        realms: options.realms,
+        prerenderer: options.prerenderer,
+      },
+    );
 
-    await waitForQueueIdle(dbAdapter);
+    await waitForQueueIdle(builderDatabaseName);
     await teardownPermissionedRealmsFixture(fixture.realms);
     fixture = undefined;
 
@@ -1898,13 +1919,11 @@ async function acquirePermissionedRealmsTemplate(
   let templateDatabaseName = templateDatabaseNameForCacheKey(cacheKey);
   let existing = permissionedRealmTemplateCache.get(cacheKey);
   if (existing) {
-    existing.refs++;
     await existing.ready;
     return { cacheKey, templateDatabaseName };
   }
 
   let entry: CachedPermissionedRealmTemplateEntry = {
-    refs: 1,
     ready: Promise.resolve(),
   };
   entry.ready = buildPermissionedRealmsTemplate(cacheKey, options).catch(
@@ -1927,33 +1946,17 @@ export function setupPermissionedRealmsCached(
   hooks: NestedHooks,
   options: SetupPermissionedRealmsCachedOptions,
 ) {
-  let { useTemplateCache = true, ...setupOptions } = options;
-  if (!useTemplateCache) {
-    return setupPermissionedRealms(hooks, setupOptions);
-  }
-
   let acquiredTemplateDatabase: string | undefined;
-  let acquiredCacheKey: string | undefined;
 
   hooks.before(async function () {
-    let { cacheKey, templateDatabaseName } =
-      await acquirePermissionedRealmsTemplate(setupOptions);
-    acquiredCacheKey = cacheKey;
+    let { templateDatabaseName } =
+      await acquirePermissionedRealmsTemplate(options);
     acquiredTemplateDatabase = templateDatabaseName;
   });
 
   setupPermissionedRealms(hooks, {
-    ...setupOptions,
+    ...options,
     dbTemplateDatabase: () => acquiredTemplateDatabase,
-  });
-
-  hooks.after(async function () {
-    if (acquiredCacheKey) {
-      let cacheKey = acquiredCacheKey;
-      acquiredCacheKey = undefined;
-      acquiredTemplateDatabase = undefined;
-      await releasePermissionedRealmTemplate(cacheKey);
-    }
   });
 }
 
