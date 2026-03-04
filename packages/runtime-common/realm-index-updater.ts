@@ -151,6 +151,7 @@ export class RealmIndexUpdater {
         jobType: 'incremental-index',
         concurrencyGroup: `indexing:${this.#realm.url}`,
         timeout: INCREMENTAL_INDEX_JOB_TIMEOUT_SEC,
+        priority: userInitiatedPriority,
         args: makeIncrementalArgsWithCallerMetadata(args, clientRequestId),
         mapResult: mapIncrementalDoneResult(clientRequestId),
       });

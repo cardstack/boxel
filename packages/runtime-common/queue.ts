@@ -59,6 +59,12 @@ export type QueueCoalesceDecision =
       update?: QueueCoalesceJoinUpdate;
     };
 
+export interface QueueWaiter {
+  fulfillFromResult: (result: PgPrimitive) => void;
+  rejectFromResult: (result: PgPrimitive) => void;
+  reject: (error: unknown) => void;
+}
+
 export interface QueueJobDefinition {
   jobType: string;
   coalesce?: (context: QueueCoalesceContext) => QueueCoalesceDecision;
@@ -78,6 +84,47 @@ export function registerQueueJobDefinition(definition: QueueJobDefinition) {
 
 export function getQueueJobCoalesceHandler(jobType: string) {
   return coalesceHandlersByJobType.get(jobType);
+}
+
+export function normalizeQueueJobSpec(args: QueuePublishRequest): QueueJobSpec {
+  return {
+    ...args,
+    priority: args.priority ?? 0,
+  };
+}
+
+export const identityResultMapper: QueueResultMapper<PgPrimitive> = (result) =>
+  result;
+
+export function makeQueueWaiter<TResult>(
+  deferred: Deferred<TResult>,
+  mapResult: QueueResultMapper<TResult>,
+): QueueWaiter {
+  let mapAndFulfill = (result: PgPrimitive) => {
+    try {
+      deferred.fulfill(mapResult(result));
+    } catch (error: unknown) {
+      deferred.reject(error);
+    }
+  };
+  let mapAndReject = (result: PgPrimitive) => {
+    try {
+      deferred.reject(mapResult(result));
+    } catch (error: unknown) {
+      deferred.reject(error);
+    }
+  };
+  return {
+    fulfillFromResult(result: PgPrimitive) {
+      mapAndFulfill(result);
+    },
+    rejectFromResult(result: PgPrimitive) {
+      mapAndReject(result);
+    },
+    reject(error: unknown) {
+      deferred.reject(error);
+    },
+  };
 }
 
 export class Job<T> {

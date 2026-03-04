@@ -6,6 +6,7 @@ import {
   type QueuePublishRequest,
   type QueueCoalesceJoinUpdate,
   type QueueResultMapper,
+  type QueueWaiter,
   type QueueJobSpec,
   type QueueCoalesceCandidate,
   type QueueCoalesceContext,
@@ -14,6 +15,9 @@ import {
   type Expression,
   type JobInfo,
   getQueueJobCoalesceHandler,
+  normalizeQueueJobSpec,
+  identityResultMapper,
+  makeQueueWaiter,
   param,
   separatedByCommas,
   addExplicitParens,
@@ -53,16 +57,21 @@ interface JobReservationsTable {
   worker_id: string;
 }
 
-interface Waiter {
-  fulfillFromResult: (result: PgPrimitive) => void;
-  rejectFromResult: (result: PgPrimitive) => void;
-  reject: (error: unknown) => void;
-}
-
 interface CoalesceCandidateRow extends Pick<
   JobsTable,
   'id' | 'job_type' | 'concurrency_group' | 'timeout' | 'priority' | 'args'
 > {}
+
+async function acquireConcurrencyGroupLock(
+  queryFn: (expression: Expression) => Promise<unknown>,
+  concurrencyGroup: string | null,
+) {
+  await queryFn([
+    'SELECT pg_advisory_xact_lock(hashtext(',
+    param(concurrencyGroup ?? '__queue_no_concurrency_group__'),
+    '))',
+  ]);
+}
 
 // Tracks a task that should loop with a timeout and an interruptible sleep.
 class WorkLoop {
@@ -128,51 +137,11 @@ class WorkLoop {
   }
 }
 
-function normalizeQueueJobSpec(args: QueuePublishRequest): QueueJobSpec {
-  return {
-    ...args,
-    priority: args.priority ?? 0,
-  };
-}
-
-const identityResultMapper: QueueResultMapper<PgPrimitive> = (result) => result;
-
-function makeWaiter<TResult>(
-  deferred: Deferred<TResult>,
-  mapResult: QueueResultMapper<TResult>,
-): Waiter {
-  let mapAndFulfill = (result: PgPrimitive) => {
-    try {
-      deferred.fulfill(mapResult(result));
-    } catch (error: unknown) {
-      deferred.reject(error);
-    }
-  };
-  let mapAndReject = (result: PgPrimitive) => {
-    try {
-      deferred.reject(mapResult(result));
-    } catch (error: unknown) {
-      deferred.reject(error);
-    }
-  };
-  return {
-    fulfillFromResult(result: PgPrimitive) {
-      mapAndFulfill(result);
-    },
-    rejectFromResult(result: PgPrimitive) {
-      mapAndReject(result);
-    },
-    reject(error: unknown) {
-      deferred.reject(error);
-    },
-  };
-}
-
 export class PgQueuePublisher implements QueuePublisher {
   #isDestroyed = false;
   #pgClient: PgAdapter;
   #pollInterval = 10000;
-  #notifiers: Map<number, Set<Waiter>> = new Map();
+  #notifiers: Map<number, Set<QueueWaiter>> = new Map();
   #notificationRunner: WorkLoop | undefined;
 
   constructor(pgClient: PgAdapter) {
@@ -183,7 +152,7 @@ export class PgQueuePublisher implements QueuePublisher {
     return await query(this.#pgClient, expression);
   }
 
-  private addWaiter(id: number, waiter: Waiter) {
+  private addWaiter(id: number, waiter: QueueWaiter) {
     if (!this.#notificationRunner && !this.#isDestroyed) {
       this.#notificationRunner = new WorkLoop(
         'notificationRunner',
@@ -243,17 +212,6 @@ export class PgQueuePublisher implements QueuePublisher {
         }
       }
     }
-  }
-
-  private async acquireConcurrencyGroupLock(
-    queryFn: (expression: Expression) => Promise<unknown>,
-    concurrencyGroup: string | null,
-  ) {
-    await queryFn([
-      'SELECT pg_advisory_xact_lock(hashtext(',
-      param(concurrencyGroup ?? '__queue_no_concurrency_group__'),
-      '))',
-    ]);
   }
 
   private async findPendingCandidates(
@@ -388,10 +346,7 @@ export class PgQueuePublisher implements QueuePublisher {
         try {
           await queryFn(['BEGIN']);
           await queryFn(['SET TRANSACTION ISOLATION LEVEL SERIALIZABLE']);
-          await this.acquireConcurrencyGroupLock(
-            queryFn,
-            incoming.concurrencyGroup,
-          );
+          await acquireConcurrencyGroupLock(queryFn, incoming.concurrencyGroup);
 
           let candidates = await this.findPendingCandidates(
             queryFn,
@@ -461,7 +416,7 @@ export class PgQueuePublisher implements QueuePublisher {
       mapResult == null
         ? (identityResultMapper as QueueResultMapper<TResult>)
         : mapResult;
-    this.addWaiter(jobId, makeWaiter(deferred, mapper));
+    this.addWaiter(jobId, makeQueueWaiter(deferred, mapper));
     return job;
   }
 
@@ -544,17 +499,6 @@ export class PgQueueRunner implements QueueRunner {
     return await handler(args);
   }
 
-  private async acquireConcurrencyGroupLock(
-    queryFn: (expression: Expression) => Promise<unknown>,
-    concurrencyGroup: string | null,
-  ) {
-    await queryFn([
-      'SELECT pg_advisory_xact_lock(hashtext(',
-      param(concurrencyGroup ?? '__queue_no_concurrency_group__'),
-      '))',
-    ]);
-  }
-
   private async processJobs(workLoop: WorkLoop) {
     await this.#pgClient.withConnection(async (query) => {
       try {
@@ -599,10 +543,7 @@ export class PgQueueRunner implements QueueRunner {
             jobToRun.id,
           );
 
-          await this.acquireConcurrencyGroupLock(
-            query,
-            jobToRun.concurrency_group,
-          );
+          await acquireConcurrencyGroupLock(query, jobToRun.concurrency_group);
 
           let jobIsStillEligible = (await query([
             `SELECT j.id

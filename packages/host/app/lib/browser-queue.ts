@@ -4,67 +4,28 @@ import {
   type QueueRunner,
   type QueuePublisher,
   type QueuePublishArgs,
-  type QueuePublishRequest,
   type QueueResultMapper,
-  type QueueJobSpec,
+  type QueueWaiter,
   type QueueCoalesceCandidate,
   type PgPrimitive,
   getQueueJobCoalesceHandler,
+  normalizeQueueJobSpec,
+  identityResultMapper,
+  makeQueueWaiter,
   Job,
   Deferred,
 } from '@cardstack/runtime-common';
 
 let id = 0;
 
-interface Waiter {
-  fulfillFromResult: (result: PgPrimitive) => void;
-  rejectFromResult: (result: PgPrimitive) => void;
-  reject: (error: unknown) => void;
-}
-
-interface QueueWorkItem extends QueueJobSpec {
+interface QueueWorkItem {
+  jobType: string;
+  concurrencyGroup: string | null;
+  timeout: number;
+  priority: number;
+  args: PgPrimitive;
   id: number;
-  waiters: Set<Waiter>;
-}
-
-function normalizeQueueJobSpec(args: QueuePublishRequest): QueueJobSpec {
-  return {
-    ...args,
-    priority: args.priority ?? 0,
-  };
-}
-
-const identityResultMapper: QueueResultMapper<PgPrimitive> = (result) => result;
-
-function makeWaiter<TResult>(
-  deferred: Deferred<TResult>,
-  mapResult: QueueResultMapper<TResult>,
-): Waiter {
-  let mapAndFulfill = (result: PgPrimitive) => {
-    try {
-      deferred.fulfill(mapResult(result));
-    } catch (error: unknown) {
-      deferred.reject(error);
-    }
-  };
-  let mapAndReject = (result: PgPrimitive) => {
-    try {
-      deferred.reject(mapResult(result));
-    } catch (error: unknown) {
-      deferred.reject(error);
-    }
-  };
-  return {
-    fulfillFromResult(result: PgPrimitive) {
-      mapAndFulfill(result);
-    },
-    rejectFromResult(result: PgPrimitive) {
-      mapAndReject(result);
-    },
-    reject(error: unknown) {
-      deferred.reject(error);
-    },
-  };
+  waiters: Set<QueueWaiter>;
 }
 
 export class BrowserQueue implements QueuePublisher, QueueRunner {
@@ -109,7 +70,7 @@ export class BrowserQueue implements QueuePublisher, QueueRunner {
     if (this.isDestroyed) {
       throw new Error(`Cannot publish job on a destroyed Queue`);
     }
-    let incoming = normalizeQueueJobSpec(request as QueuePublishRequest);
+    let incoming = normalizeQueueJobSpec(request);
     let coalesce = getQueueJobCoalesceHandler(incoming.jobType);
 
     let workItem: QueueWorkItem;
@@ -174,7 +135,7 @@ export class BrowserQueue implements QueuePublisher, QueueRunner {
 
     let deferred = new Deferred<TResult>();
     workItem.waiters.add(
-      makeWaiter(
+      makeQueueWaiter(
         deferred,
         mapResult == null
           ? (identityResultMapper as QueueResultMapper<TResult>)

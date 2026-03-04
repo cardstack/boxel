@@ -4,6 +4,7 @@ import {
   internalKeyFor,
   SupportedMimeType,
   Deferred,
+  userInitiatedPriority,
 } from '@cardstack/runtime-common';
 import type {
   DBAdapter,
@@ -1320,7 +1321,7 @@ module(basename(__filename), function () {
         let row = (await waitUntil(
           async () => {
             let rows = (await testDbAdapter.execute(
-              `SELECT id, args
+              `SELECT id, priority, args
              FROM jobs
              WHERE job_type = 'incremental-index'
                AND concurrency_group = $1
@@ -1328,6 +1329,7 @@ module(basename(__filename), function () {
               { bind: [`indexing:${realm.url}`] },
             )) as {
               id: number;
+              priority: number;
               args: {
                 changes: { url: string; operation: 'update' | 'delete' }[];
               };
@@ -1342,6 +1344,7 @@ module(basename(__filename), function () {
           },
         )) as {
           id: number;
+          priority: number;
           args: { changes: { url: string; operation: 'update' | 'delete' }[] };
         };
 
@@ -1350,6 +1353,11 @@ module(basename(__filename), function () {
           urls,
           [`${testRealm}mango`, `${testRealm}post-1`, `${testRealm}vangogh`],
           'pending canonical incremental args include union of burst invalidations',
+        );
+        assert.strictEqual(
+          row.priority,
+          userInitiatedPriority,
+          'incremental indexing enqueues canonical pending job at user-initiated priority',
         );
 
         release.fulfill();
