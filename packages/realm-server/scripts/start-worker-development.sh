@@ -28,6 +28,9 @@ wait_for_prerender "$PRERENDER_URL"
 DEFAULT_CATALOG_REALM_URL="${REALM_BASE_URL}/catalog/"
 CATALOG_REALM_URL="${RESOLVED_CATALOG_REALM_URL:-$DEFAULT_CATALOG_REALM_URL}"
 
+START_EXPERIMENTS=$(if [ -z "${SKIP_EXPERIMENTS:-}" ]; then echo "true"; else echo ""; fi)
+START_CATALOG=$(if [ -z "${SKIP_CATALOG:-}" ]; then echo "true"; else echo ""; fi)
+
 NODE_ENV=development \
   NODE_NO_WARNINGS=1 \
   NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=4096}" \
@@ -48,11 +51,11 @@ NODE_ENV=development \
   --fromUrl='https://cardstack.com/base/' \
   --toUrl="${REALM_BASE_URL}/base/" \
   \
-  --fromUrl="${REALM_BASE_URL}/experiments/" \
-  --toUrl="${REALM_BASE_URL}/experiments/" \
+  ${START_EXPERIMENTS:+--fromUrl="${REALM_BASE_URL}/experiments/"} \
+  ${START_EXPERIMENTS:+--toUrl="${REALM_BASE_URL}/experiments/"} \
   \
-  --fromUrl='@cardstack/catalog/' \
-  --toUrl="${CATALOG_REALM_URL}" \
+  ${START_CATALOG:+--fromUrl='@cardstack/catalog/'} \
+  ${START_CATALOG:+--toUrl="${CATALOG_REALM_URL}"} \
   \
   --fromUrl="${REALM_BASE_URL}/skills/" \
   --toUrl="${REALM_BASE_URL}/skills/"
