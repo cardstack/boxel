@@ -1,0 +1,42 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Recipe",
+        "module": "../recipe"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "title": "Classic Pasta Carbonara",
+      "author": "Elena Marchetti",
+      "rating": 4.8,
+      "cuisine": "Italian",
+      "reviews": 2847,
+      "calories": 587,
+      "cardInfo": {
+        "name": "Classic Pasta Carbonara",
+        "notes": null,
+        "summary": "Recipe card with prep and cook time, servings, and difficulty.",
+        "cardThumbnailURL": null
+      },
+      "cookTime": 20,
+      "imageUrl": "https://images.pexels.com/photos/1527603/pexels-photo-1527603.jpeg?auto=compress&cs=tinysrgb&w=800",
+      "prepTime": 10,
+      "servings": 4,
+      "subtitle": "Roman comfort food at its finest",
+      "difficulty": "Medium",
+      "description": "This authentic Roman carbonara is a celebration of simplicity and technique. Unlike Americanized versions with cream, true carbonara relies on the magic of eggs, cheese, and pasta water to create its signature silky sauce. The key is using quality guanciale (cured pork jowl) and aged Pecorino Romano cheese. When done right, each strand of spaghetti is coated in a glossy, rich sauce that clings perfectly without being heavy. This is comfort food elevated to an art form.",
+      "ingredients": "- 400g spaghetti\n- 200g guanciale, cut into 1/4-inch strips\n- 4 large egg yolks\n- 1 whole egg\n- 100g Pecorino Romano cheese, finely grated\n- 50g Parmigiano-Reggiano cheese, finely grated\n- Freshly ground black pepper\n- Salt for pasta water",
+      "instructions": "1. Bring a large pot of salted water to boil. Cook spaghetti until al dente (about 1 minute less than package directions).\n\n2. While pasta cooks, cut guanciale into strips and cook in a large skillet over medium heat until crispy and fat is rendered, about 8-10 minutes. Remove from heat.\n\n3. In a bowl, whisk together egg yolks, whole egg, both cheeses, and a generous amount of black pepper until smooth.\n\n4. Reserve 1 cup pasta water, then drain pasta. Add hot pasta to the skillet with guanciale (off heat).\n\n5. Working quickly, add the egg mixture and toss vigorously, adding pasta water a little at a time until sauce is creamy and coats the pasta perfectly.\n\n6. Serve immediately with extra Pecorino and black pepper. The sauce should be creamy, never scrambled.",
+      "keyIngredient": "Guanciale"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../DetailedStyleReference/kitchen-editorial"
+        }
+      }
+    }
+  }
+}

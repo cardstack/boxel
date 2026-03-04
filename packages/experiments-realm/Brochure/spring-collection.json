@@ -1,0 +1,37 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Brochure",
+        "module": "../brochure"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "metric": "Years of Excellence",
+      "ctaText": "Explore the Collection",
+      "cardInfo": {
+        "name": "Spring/Summer 2026 Collection",
+        "notes": null,
+        "summary": "Lifestyle brochure highlighting the Art of Living collection and key features.",
+        "cardThumbnailURL": "https://images.pexels.com/photos/1571460/pexels-photo-1571460.jpeg?auto=compress&cs=tinysrgb&w=800"
+      },
+      "feature1": "Sustainable Materials",
+      "feature2": "Artisan Craftsmanship",
+      "feature3": "Timeless Design",
+      "headline": "The Art of Living",
+      "brandName": "Maison Lumière",
+      "metricValue": "47",
+      "socialProof": "Featured in Architectural Digest",
+      "subheadline": "Spring/Summer Collection 2026",
+      "heroImageUrl": "https://images.pexels.com/photos/1571460/pexels-photo-1571460.jpeg?auto=compress&cs=tinysrgb&w=800"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../DetailedStyleReference/modern-blue"
+        }
+      }
+    }
+  }
+}

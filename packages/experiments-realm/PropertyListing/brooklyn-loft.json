@@ -1,0 +1,39 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "PropertyListing",
+        "module": "../property-listing"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "beds": 2,
+      "sqft": 1847,
+      "baths": "2.5",
+      "price": 2850000,
+      "status": "Active",
+      "address": "247 Water Street, Unit 8A",
+      "cardInfo": {
+        "name": "DUMBO Brooklyn Loft",
+        "notes": null,
+        "summary": "Luxury loft listing with price, beds, baths, and square footage.",
+        "cardThumbnailURL": null
+      },
+      "imageUrl": "https://images.pexels.com/photos/1918291/pexels-photo-1918291.jpeg?auto=compress&cs=tinysrgb&w=800",
+      "openHouse": "Sun 12-2 PM",
+      "yearBuilt": 1905,
+      "daysOnMarket": 12,
+      "neighborhood": "DUMBO",
+      "pricePerSqft": 1543,
+      "propertyType": "Condo"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../DetailedStyleReference/luxury-auction"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "EventTicket",
+        "module": "../event-ticket"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "row": "A",
+      "date": "2026-06-15T00:00:00.000Z",
+      "seat": "12",
+      "price": 275,
+      "venue": {
+        "city": "New York, NY",
+        "name": "Riverside Amphitheater"
+      },
+      "section": "Floor",
+      "cardInfo": {
+        "name": "Blue Note Jazz Festival",
+        "notes": null,
+        "summary": "VIP ticket details for the New York jazz festival.",
+        "cardThumbnailURL": null
+      },
+      "currency": "$",
+      "imageUrl": "https://images.pexels.com/photos/1763075/pexels-photo-1763075.jpeg?auto=compress&cs=tinysrgb&w=800",
+      "ticketId": "TKT-2026-84729",
+      "ticketType": "VIP Access",
+      "eventDetails": "## About the Festival\n\nThe Blue Note Jazz Festival returns to New York for its 15th anniversary celebration! Experience world-class jazz performances under the stars at the iconic Riverside Amphitheater.\n\n## What's Included\n\n- VIP Floor seating with optimal stage views\n- Access to exclusive VIP lounge\n- Complimentary premium drinks and gourmet appetizers\n- Meet & greet opportunity with select artists\n- Limited edition festival merchandise\n\n## Featured Artists\n\n- **Headliner:** The Marcus Johnson Quartet\n- **Special Guest:** Sarah Chen Trio\n- **Opening Act:** Brooklyn Jazz Collective\n\n## Schedule\n\n- **6:00 PM** - Doors open, VIP lounge access\n- **7:00 PM** - Brooklyn Jazz Collective\n- **8:15 PM** - Sarah Chen Trio\n- **9:45 PM** - The Marcus Johnson Quartet\n\n## Important Information\n\n- Gates open at 6:00 PM\n- Show starts at 7:00 PM sharp\n- All ages welcome\n- Food and beverage available for purchase\n- Rain or shine event (covered seating available)"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../DetailedStyleReference/funkadelic-fever"
+        }
+      }
+    }
+  }
+}
