@@ -55,7 +55,7 @@ HOST_TEST_LOG_LEVELS="${HOST_TEST_LOG_LEVELS:-*=info,realm:requests=warn,realm-i
 # skipping that. but this issue needs to be fixed.
 WAIT_ON_TIMEOUT=900000 \
   SKIP_EXPERIMENTS=true \
-  SKIP_CATALOG=true \
+  SKIP_CATALOG="${SKIP_CATALOG:-true}" \
   SKIP_BOXEL_HOMEPAGE=true \
   SKIP_SUBMISSION=true \
   CATALOG_REALM_PATH="$CATALOG_TEMP_PATH" \
