@@ -59,14 +59,19 @@ export default class ScrollAnchor extends Modifier<ScrollAnchorModifierSignature
     };
   }
 
-  private capturePositions(): void {
+  private capturePositions(containerTop?: number): void {
     if (this.#isAdjusting || !this.#trackSelector) {
       return;
     }
     this.#positionMap.clear();
+    let relativeContainerTop =
+      containerTop ?? this.#element.getBoundingClientRect().top;
     let elements = this.#element.querySelectorAll(this.#trackSelector);
     elements.forEach((el) => {
-      this.#positionMap.set(el, el.getBoundingClientRect().top);
+      this.#positionMap.set(
+        el,
+        el.getBoundingClientRect().top - relativeContainerTop,
+      );
     });
   }
 
@@ -74,13 +79,14 @@ export default class ScrollAnchor extends Modifier<ScrollAnchorModifierSignature
     if (isDestroying(this) || this.#isAdjusting) {
       return;
     }
+    let containerTop = this.#element.getBoundingClientRect().top;
 
     if (this.#anchorSelector) {
       let anchor = this.#element.querySelector(this.#anchorSelector);
       let storedTop = anchor ? this.#positionMap.get(anchor) : undefined;
 
       if (anchor && storedTop !== undefined) {
-        let currentTop = anchor.getBoundingClientRect().top;
+        let currentTop = anchor.getBoundingClientRect().top - containerTop;
         let delta = currentTop - storedTop;
 
         if (Math.abs(delta) > 1) {
@@ -93,6 +99,6 @@ export default class ScrollAnchor extends Modifier<ScrollAnchorModifierSignature
 
     // Always recapture after any mutation so newly added elements
     // are tracked for future adjustments.
-    this.capturePositions();
+    this.capturePositions(containerTop);
   }
 }
