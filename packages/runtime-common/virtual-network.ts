@@ -60,16 +60,13 @@ export class VirtualNetwork {
     // 3. Relative import from realm-prefixed parent
     if (
       parentIdentifier &&
-      (moduleIdentifier.startsWith('./') ||
-        moduleIdentifier.startsWith('../'))
+      (moduleIdentifier.startsWith('./') || moduleIdentifier.startsWith('../'))
     ) {
       for (let [prefix, baseURL] of this.realmPrefixes) {
         if (parentIdentifier.startsWith(prefix)) {
           let parentRest = parentIdentifier.slice(prefix.length);
-          let resolved = new URL(
-            moduleIdentifier,
-            new URL(parentRest, baseURL),
-          ).href;
+          let resolved = new URL(moduleIdentifier, new URL(parentRest, baseURL))
+            .href;
           if (resolved.startsWith(baseURL)) {
             return prefix + resolved.slice(baseURL.length);
           }
@@ -81,8 +78,7 @@ export class VirtualNetwork {
     // 4. Relative import from URL parent
     if (
       parentIdentifier &&
-      (moduleIdentifier.startsWith('./') ||
-        moduleIdentifier.startsWith('../'))
+      (moduleIdentifier.startsWith('./') || moduleIdentifier.startsWith('../'))
     ) {
       return new URL(moduleIdentifier, parentIdentifier).href;
     }

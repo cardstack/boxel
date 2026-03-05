@@ -237,10 +237,7 @@ export class Loader {
   ): Promise<T> {
     moduleIdentifier = this.resolveImport(moduleIdentifier);
     if (!this.moduleShims.has(moduleIdentifier)) {
-      trackRuntimeModuleDependency(
-        moduleIdentifier,
-        dependencyTrackingContext,
-      );
+      trackRuntimeModuleDependency(moduleIdentifier, dependencyTrackingContext);
     }
 
     await this.advanceToState(moduleIdentifier, 'evaluated');
@@ -443,9 +440,7 @@ export class Loader {
                   `expected ${entry.moduleId} to be 'registered-completing-deps' but was '${depModule?.state}'`,
                 );
               case 'registered-completing-deps': {
-                if (
-                  !stack['registered-with-deps'].includes(entry.moduleId)
-                ) {
+                if (!stack['registered-with-deps'].includes(entry.moduleId)) {
                   await this.advanceToState(
                     entry.moduleId,
                     'registered-with-deps',
@@ -624,9 +619,7 @@ export class Loader {
     }
 
     let canonicalURL =
-      loaded.url ||
-      this.getCanonicalModuleURL(moduleId) ||
-      moduleId;
+      loaded.url || this.getCanonicalModuleURL(moduleId) || moduleId;
     this.setCanonicalModuleURL(moduleId, canonicalURL);
 
     if (loaded.type === 'shimmed') {
@@ -646,10 +639,7 @@ export class Loader {
     try {
       const transformed = await transformAsync(src, {
         plugins: [
-          [
-            TransformModulesAmdPlugin,
-            { noInterop: true, moduleId: moduleId },
-          ],
+          [TransformModulesAmdPlugin, { noInterop: true, moduleId: moduleId }],
         ],
         sourceMaps: 'inline',
         filename: moduleId,
