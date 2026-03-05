@@ -21,13 +21,11 @@ To build the entire repository and run the application, follow these steps:
    pnpm install
    ```
 
-4. Build the boxel-ui and boxel-motion addons:
+4. Build the boxel-ui addon:
 
    ```zsh
    cd ./packages/boxel-ui/addon
    pnpm rebuild:icons
-   pnpm build
-   cd ../../boxel-motion/addon
    pnpm build
    ```
 
