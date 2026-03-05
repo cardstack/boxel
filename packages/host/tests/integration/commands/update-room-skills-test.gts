@@ -219,7 +219,7 @@ export class DoThing extends Command {
       );
       assert.strictEqual(
         [...uploadedContents.values()]
-          .map((s) => JSON.parse(s as any))
+          .map((s) => JSON.parse(new TextDecoder().decode(s)))
           .filter((json) => json.data?.type === 'card').length,
         1,
         'one skill card uploaded',
@@ -344,7 +344,7 @@ export class DoThing extends Command {
         'skill plus one command definitions were uploaded',
       );
       let commandDefJson = JSON.parse(
-        [...uploadedContents.values()][1] as unknown as string,
+        new TextDecoder().decode([...uploadedContents.values()][1]),
       );
       assert.deepEqual(
         commandDefJson.codeRef.name,
