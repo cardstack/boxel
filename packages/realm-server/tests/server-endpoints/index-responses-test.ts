@@ -1196,14 +1196,12 @@ module(`server-endpoints/${basename(__filename)}`, function () {
     });
   });
 
-  // This module exercises from-scratch indexing of a published realm where a
-  // card's cardInfo.theme linksTo a BrandGuide that lives in the same realm.
-  // During from-scratch indexing, entries are batched in boxel_index_working and
-  // only committed to boxel_index at the end. The prerenderer fetches linked
-  // cards from boxel_index (the production table), so linksTo targets indexed
-  // in the same batch are invisible. This means isUsed-triggered lazy loads
-  // fail silently, the theme resolves to null, and the head template renders
-  // without icon links.
+  // This module exercises publishing a realm where a card's cardInfo.theme
+  // linksTo a BrandGuide that lives in the same realm. The themed-card's
+  // attributes must include a cardInfo key (even if empty) so that the
+  // cardInfo.theme relationship has a container field to attach to;
+  // without it the theme resolves to null and the head template
+  // (packages/base/default-templates/head.gts) renders without icon links.
   module(
     'Published realm: theme icon links after _publish-realm',
     function (hooks) {
@@ -1377,11 +1375,9 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         },
       });
 
-      // BUG (CS-10228): During from-scratch indexing the batched-write strategy
-      // (boxel_index_working → boxel_index) means linked cards in the same realm
-      // are not yet visible in the production table when the prerenderer runs.
-      // The isUsed lazy load for cardInfo.theme silently fails and the head
-      // template renders without icon links. The server then falls back to
+      // CS-10228: The themed-card's attributes must include a cardInfo key so
+      // that the cardInfo.theme linksTo relationship resolves. Without it the
+      // head template renders without icon links and the server falls back to
       // default boxel icons instead of the theme's socialMediaProfileIcon.
       test('themed card in published realm includes theme icon links in head HTML', async function (assert) {
         let response = await request
