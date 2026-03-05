@@ -1,6 +1,7 @@
 import type { MatrixClient, MatrixEvent } from 'matrix-js-sdk';
 import type {
   ChatCompletionMessageToolCall,
+  ImageContentPart,
   OpenAIPromptMessage,
   PendingCodePatchCorrectnessCheck,
   CodePatchCorrectnessCard,
@@ -65,6 +66,47 @@ const CHECK_CORRECTNESS_COMMAND_NAME = 'checkCorrectness';
 
 function getLog() {
   return logger('ai-bot:prompt');
+}
+
+function isTextBasedContentType(contentType?: string): boolean {
+  return (
+    !!contentType &&
+    (contentType.includes('text/') ||
+      contentType.includes('application/vnd.card+json'))
+  );
+}
+
+function isImageContentType(contentType?: string): boolean {
+  return !!contentType && contentType.startsWith('image/');
+}
+
+function isReadFileCommand(request?: CommandRequest): boolean {
+  return !!request?.name?.startsWith('read-file-for-ai-assistant');
+}
+
+function getReadFileUrl(request?: CommandRequest): string | undefined {
+  try {
+    let args =
+      typeof request?.arguments === 'string'
+        ? JSON.parse(request.arguments)
+        : request?.arguments;
+    return args?.attributes?.fileUrl;
+  } catch {
+    return undefined;
+  }
+}
+
+function isFileAttachedInRoom(
+  fileUrl: string,
+  history: DiscreteMatrixEvent[],
+): boolean {
+  return history.some((event) => {
+    let attachedFiles = (event as MatrixEventWithBoxelContext).content?.data
+      ?.attachedFiles;
+    return attachedFiles?.some(
+      (f: SerializedFileDef) => f.sourceUrl === fileUrl,
+    );
+  });
 }
 
 export async function getPromptParts(
@@ -466,15 +508,16 @@ export async function getAttachedFiles(
   client: MatrixClient,
   matrixEvent: MatrixEventWithBoxelContext,
   history: DiscreteMatrixEvent[],
+  isCurrentMessage: boolean = false,
 ): Promise<SerializedFileDef[]> {
   let attachedFiles = matrixEvent.content?.data?.attachedFiles ?? [];
   return Promise.all(
     attachedFiles.map(async (attachedFile: SerializedFileDef) => {
-      // If the file is attached later in the history, we should not include the content here
-      let shouldIncludeContent = !history
+      // Only download content for the most recent user message's files,
+      // and only if the file isn't superseded by a later attachment
+      let isSuperseded = history
         .slice(history.indexOf(matrixEvent) + 1)
         .some((event) => {
-          // event is not always MatrixEventWithBoxelContext but casting lets us safely check attachedFiles
           return (
             event as MatrixEventWithBoxelContext
           ).content?.data?.attachedFiles?.some(
@@ -482,12 +525,17 @@ export async function getAttachedFiles(
               file.sourceUrl === attachedFile.sourceUrl,
           );
         });
+      let shouldIncludeContent =
+        isCurrentMessage &&
+        !isSuperseded &&
+        isTextBasedContentType(attachedFile.contentType);
 
       let result: SerializedFileDef = {
         url: attachedFile.url,
         sourceUrl: attachedFile.sourceUrl ?? '',
         name: attachedFile.name,
         contentType: attachedFile.contentType,
+        contentSize: attachedFile.contentSize,
       };
       if (shouldIncludeContent) {
         try {
@@ -540,6 +588,15 @@ export async function loadCurrentlySerializedFileDefs(
 
   return Promise.all(
     attachedFiles.map(async (attachedFile: SerializedFileDef) => {
+      if (!isTextBasedContentType(attachedFile.contentType)) {
+        return {
+          url: attachedFile.url,
+          sourceUrl: attachedFile.sourceUrl ?? '',
+          name: attachedFile.name,
+          contentType: attachedFile.contentType,
+          contentSize: attachedFile.contentSize,
+        };
+      }
       try {
         let content = await downloadFile(client, attachedFile);
 
@@ -572,6 +629,7 @@ export function attachedFilesToMessage(
     return 'No attached files';
   }
   return attachedFiles
+    .filter((f) => !isImageContentType(f.contentType))
     .map((f) => {
       let hyperlink = f.sourceUrl ? `[${f.name}](${f.sourceUrl})` : f.name;
       if (f.error) {
@@ -588,6 +646,11 @@ export function attachedFilesToMessage(
           )
           .join('\n');
         return `${hyperlink}:\n${numberedContent}`;
+      } else if (!isTextBasedContentType(f.contentType) && f.contentType) {
+        let meta = [f.contentType, f.contentSize ? `${f.contentSize} bytes` : '']
+          .filter(Boolean)
+          .join(', ');
+        return `${hyperlink}: [${meta}]`;
       } else {
         return `${hyperlink}`;
       }
@@ -797,6 +860,13 @@ async function toResultMessages(
           );
           content = checkCorrectnessContent.toolMessage;
           followUpUserMessage = checkCorrectnessContent.followUpUserMessage;
+        } else if (isReadFileCommand(decodedCommandRequest)) {
+          let fileUrl = getReadFileUrl(decodedCommandRequest);
+          if (fileUrl && !isFileAttachedInRoom(fileUrl, history)) {
+            content = `Tool call rejected: the file "${fileUrl}" was not previously attached in the room. Only files attached by the user can be read.\n`;
+          } else {
+            content = `Tool call ${status == 'applied' ? 'executed' : status}.\n`;
+          }
         } else if (
           commandResult.content.msgtype ===
             APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE &&
@@ -809,12 +879,15 @@ async function toResultMessages(
         } else {
           content = `Tool call ${status == 'applied' ? 'executed' : status}.\n`;
         }
-        let attachments = await buildAttachmentsMessagePart(
+        let attachmentResult = await buildAttachmentsMessagePart(
           client,
           commandResult,
           history,
+          true,
         );
-        content = [content, attachments].filter(Boolean).join('\n\n');
+        content = [content, attachmentResult.text]
+          .filter(Boolean)
+          .join('\n\n');
         let toolMessage: OpenAIPromptMessage = {
           role: 'tool',
           tool_call_id: commandRequest.id,
@@ -1188,6 +1261,13 @@ export async function buildPromptForModel(
     throw new Error("Username must be a full id, e.g. '@aibot:localhost'");
   }
   let historicalMessages: OpenAIPromptMessage[] = [];
+  let lastUserMessageEvent = findLast(
+    history,
+    (event) =>
+      event.sender !== aiBotUserId &&
+      event.type === 'm.room.message' &&
+      !isCommandOrCodePatchResult(event),
+  );
   for (let event of history) {
     if (event.type !== 'm.room.message') {
       continue;
@@ -1231,17 +1311,40 @@ export async function buildPromptForModel(
       ).forEach((message) => historicalMessages.push(message));
     }
     if (event.sender !== aiBotUserId) {
-      let attachments = await buildAttachmentsMessagePart(
+      let isCurrentMessage = event === lastUserMessageEvent;
+      let attachmentResult = await buildAttachmentsMessagePart(
         client,
         event as CardMessageEvent,
         history,
+        isCurrentMessage,
       );
-      let content = [body, attachments].filter(Boolean).join('\n\n');
-      if (content) {
-        historicalMessages.push({
-          role: 'user',
-          content,
-        });
+      if (attachmentResult.imageUrls.length > 0) {
+        let textContent = [body, attachmentResult.text]
+          .filter(Boolean)
+          .join('\n\n');
+        let contentParts: (TextContent | ImageContentPart)[] = [];
+        if (textContent) {
+          contentParts.push({ type: 'text', text: textContent });
+        }
+        for (let imageUrl of attachmentResult.imageUrls) {
+          contentParts.push({
+            type: 'image_url',
+            image_url: { url: imageUrl },
+          });
+        }
+        if (contentParts.length) {
+          historicalMessages.push({ role: 'user', content: contentParts });
+        }
+      } else {
+        let content = [body, attachmentResult.text]
+          .filter(Boolean)
+          .join('\n\n');
+        if (content) {
+          historicalMessages.push({
+            role: 'user',
+            content,
+          });
+        }
       }
     }
   }
@@ -1762,17 +1865,29 @@ export const buildAttachmentsMessagePart = async (
   client: MatrixClient,
   matrixEvent: MatrixEventWithBoxelContext,
   history: DiscreteMatrixEvent[],
-) => {
+  isCurrentMessage: boolean = false,
+): Promise<{ text: string; imageUrls: string[] }> => {
   let attachedCards = await getAttachedCards(client, matrixEvent, history);
-  let result = '';
+  let text = '';
   if (attachedCards.length > 0) {
-    result += `Attached Cards (cards with newer versions don't show their content):\n${JSON.stringify(attachedCards, null, 2)}\n`;
+    text += `Attached Cards (cards with newer versions don't show their content):\n${JSON.stringify(attachedCards, null, 2)}\n`;
   }
-  let attachedFiles = await getAttachedFiles(client, matrixEvent, history);
+  let attachedFiles = await getAttachedFiles(
+    client,
+    matrixEvent,
+    history,
+    isCurrentMessage,
+  );
   if (attachedFiles.length > 0) {
-    result += `Attached Files (files with newer versions don't show their content):\n${attachedFilesToMessage(attachedFiles)}\n`;
+    text += `Attached Files (files with newer versions don't show their content):\n${attachedFilesToMessage(attachedFiles)}\n`;
   }
-  return result;
+  let imageUrls: string[] = [];
+  if (isCurrentMessage) {
+    imageUrls = attachedFiles
+      .filter((f) => isImageContentType(f.contentType) && f.url)
+      .map((f) => f.url!);
+  }
+  return { text, imageUrls };
 };
 
 export const buildContextMessage = async (
