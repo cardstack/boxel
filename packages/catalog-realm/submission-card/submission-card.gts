@@ -370,6 +370,7 @@ export class SubmissionCard extends CardDef {
 
         .meta-value {
           flex: 1;
+          text-align: left;
           font: 500 var(--boxel-font-size-xs) var(--boxel-monospace-font-family);
           color: var(--boxel-600);
           white-space: nowrap;
