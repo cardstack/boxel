@@ -655,7 +655,10 @@ export function attachedFilesToMessage(
           .join('\n');
         return `${hyperlink}:\n${numberedContent}`;
       } else if (!isTextBasedContentType(f.contentType) && f.contentType) {
-        let meta = [f.contentType, f.contentSize ? `${f.contentSize} bytes` : '']
+        let meta = [
+          f.contentType,
+          f.contentSize ? `${f.contentSize} bytes` : '',
+        ]
           .filter(Boolean)
           .join(', ');
         return `${hyperlink}: [${meta}]`;
@@ -893,9 +896,7 @@ async function toResultMessages(
           history,
           true,
         );
-        content = [content, attachmentResult.text]
-          .filter(Boolean)
-          .join('\n\n');
+        content = [content, attachmentResult.text].filter(Boolean).join('\n\n');
         let toolMessage: OpenAIPromptMessage = {
           role: 'tool',
           tool_call_id: commandRequest.id,
