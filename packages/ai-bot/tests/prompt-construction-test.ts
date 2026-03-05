@@ -5336,10 +5336,7 @@ new
     }
 
     // Should show metadata, not error messages
-    assert.ok(
-      content.includes('report.pdf'),
-      'Should mention the PDF file',
-    );
+    assert.ok(content.includes('report.pdf'), 'Should mention the PDF file');
     assert.ok(
       content.includes('application/pdf'),
       'Should show the content type for unsupported files',
@@ -5473,9 +5470,10 @@ new
         sender: '@aibot:localhost',
         content: {
           body: '',
-          msgtype: 'm.text',
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           isStreamingFinished: true,
+          data: {},
           [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
             {
               id: 'call_1',
