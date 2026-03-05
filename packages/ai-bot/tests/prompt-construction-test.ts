@@ -1029,8 +1029,8 @@ Attached Files (files with newer versions don't show their content):
 Attached Files (files with newer versions don't show their content):
 [spaghetti-recipe.gts](http://test-realm-server/my-realm/spaghetti-recipe.gts)
 [best-friends.txt](http://test-realm-server/my-realm/best-friends.txt)
-[file-that-does-not-exist.txt](http://test.com/my-realm/file-that-does-not-exist.txt): Error loading attached file: HTTP error. Status: 404
-[example.pdf](http://test.com/my-realm/example.pdf): Error loading attached file: Unsupported file type: application/pdf. For now, only text files are supported.
+[file-that-does-not-exist.txt](http://test.com/my-realm/file-that-does-not-exist.txt)
+[example.pdf](http://test.com/my-realm/example.pdf): [application/pdf]
       `.trim(),
       ),
     );
@@ -5323,7 +5323,17 @@ new
     );
 
     let userMessages = prompt.filter((m) => m.role === 'user');
-    let content = userMessages[0]?.content as string;
+    let messageContent = userMessages[0]?.content;
+    // Content may be ContentPart[] when images are attached
+    let content: string;
+    if (Array.isArray(messageContent)) {
+      content = messageContent
+        .filter((p: any) => p.type === 'text')
+        .map((p: any) => p.text)
+        .join('\n');
+    } else {
+      content = messageContent as string;
+    }
 
     // Should show metadata, not error messages
     assert.ok(
@@ -5491,25 +5501,13 @@ new
         origin_server_ts: 3,
         content: {
           msgtype: APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
+          commandRequestId: 'call_1',
           'm.relates_to': {
             rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
             event_id: '2',
-            key: 'call_1',
+            key: 'applied',
           },
-          result: JSON.stringify({
-            data: {
-              type: 'card',
-              attributes: {
-                fileForAttachment: {
-                  sourceUrl:
-                    'http://test.com/my-realm/not-attached-file.ts',
-                  url: 'http://test.com/not-attached-uploaded.ts',
-                  name: 'not-attached-file.ts',
-                  contentType: 'text/plain',
-                },
-              },
-            },
-          }),
+          data: {},
         },
         sender: '@user:localhost',
         room_id: 'room1',
