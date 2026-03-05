@@ -75,7 +75,7 @@ export interface Signature {
     size?: 'large' | 'default';
     state?: InputValidationState;
     type?: InputType;
-    value: string | number | null | undefined;
+    value: string | number | boolean | null | undefined;
   };
   Element: HTMLInputElement | HTMLTextAreaElement | HTMLDivElement;
 }
@@ -93,6 +93,10 @@ export default class BoxelInput extends Component<Signature> {
 
   get isSearch() {
     return this.args.type === 'search';
+  }
+
+  private get isCheckbox() {
+    return this.args.type === 'checkbox';
   }
 
   private get type() {
@@ -141,6 +145,7 @@ export default class BoxelInput extends Component<Signature> {
         'input-container'
         has-validation=this.hasValidation
         is-multiline=this.isMultiline
+        is-checkbox=this.isCheckbox
       }}
     >
       {{#if (and (not @required) @optional)}}
@@ -431,6 +436,90 @@ export default class BoxelInput extends Component<Signature> {
           .validation-icon-loading {
             animation: var(--boxel-infinite-spin-animation);
           }
+        }
+
+        /* Checkbox type */
+        .input-container.is-checkbox {
+          display: inline-flex;
+          align-items: center;
+          width: auto;
+        }
+
+        .boxel-input[type='checkbox'] {
+          --checkbox-size: var(--boxel-checkbox-size, 18px);
+          --checkbox-border-radius: var(--boxel-checkbox-border-radius, 3px);
+          --checkbox-border-color: var(
+            --boxel-checkbox-border-color,
+            var(--border, var(--boxel-400))
+          );
+          --checkbox-background: var(
+            --boxel-checkbox-background-color,
+            var(--background, transparent)
+          );
+          --checkbox-checked-background: var(
+            --boxel-checkbox-checked-background-color,
+            var(--primary, var(--boxel-highlight))
+          );
+          --checkbox-checked-border-color: var(
+            --boxel-checkbox-checked-border-color,
+            var(--primary, var(--boxel-dark))
+          );
+          --checkbox-checkmark-color: var(
+            --boxel-checkbox-checkmark-color,
+            #333
+          );
+
+          appearance: none;
+          /* stylelint-disable-next-line property-no-vendor-prefix */
+          -webkit-appearance: none;
+          position: relative;
+          box-sizing: border-box;
+          width: var(--checkbox-size);
+          height: var(--checkbox-size);
+          min-height: unset;
+          padding: 0;
+          margin: 0;
+          border: 1px solid var(--checkbox-border-color);
+          border-radius: var(--checkbox-border-radius);
+          background-color: var(--checkbox-background);
+          box-shadow: none;
+          cursor: pointer;
+          transition:
+            background-color var(--boxel-transition),
+            border-color var(--boxel-transition);
+          flex-shrink: 0;
+        }
+
+        .boxel-input[type='checkbox']:checked {
+          background-color: var(--checkbox-checked-background);
+          border-color: var(--checkbox-checked-border-color);
+        }
+
+        .boxel-input[type='checkbox']:checked::after {
+          content: '';
+          position: absolute;
+          left: 5px;
+          top: 1px;
+          width: 5px;
+          height: 9px;
+          border: solid var(--checkbox-checkmark-color);
+          border-width: 0 2px 2px 0;
+          transform: rotate(45deg);
+        }
+
+        .boxel-input[type='checkbox']:focus-visible {
+          outline: 2px solid var(--ring, var(--boxel-highlight));
+          outline-offset: 2px;
+          border-color: var(--checkbox-border-color);
+        }
+
+        .boxel-input[type='checkbox']:hover:not(:disabled):not(:checked) {
+          border-color: var(--boxel-dark);
+        }
+
+        .boxel-input[type='checkbox']:disabled {
+          opacity: 0.5;
+          cursor: default;
         }
       }
     </style>
