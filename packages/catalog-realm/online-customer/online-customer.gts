@@ -7,7 +7,7 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
 import NumberField from 'https://cardstack.com/base/number';
-import DatetimeField from 'https://cardstack.com/base/datetime';
+import DateTimeField from 'https://cardstack.com/base/datetime';
 import ContactLinkField from '../fields/contact-link';
 
 import {
@@ -1389,7 +1389,7 @@ export class OnlineCustomer extends CardDef {
   @field phone = contains(ContactLinkField);
   @field totalOrders = contains(NumberField);
   @field totalSpent = contains(NumberField);
-  @field customerSince = contains(DatetimeField);
+  @field customerSince = contains(DateTimeField);
   @field loyaltyTier = contains(LoyaltyTierField);
 
   @field cardTitle = contains(StringField, {

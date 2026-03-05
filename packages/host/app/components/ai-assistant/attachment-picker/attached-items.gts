@@ -17,6 +17,10 @@ import {
 
 import CardPill from '@cardstack/host/components/card-pill';
 import FilePill from '@cardstack/host/components/file-pill';
+import type {
+  FileUploadState,
+  FileUploadStatus,
+} from '@cardstack/host/lib/file-upload-state';
 import { urlForRealmLookup } from '@cardstack/host/lib/utils';
 
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
@@ -40,6 +44,8 @@ interface Signature {
     chooseFile?: (file: FileDef) => void;
     isLoaded: boolean;
     autoAttachedCardTooltipMessage?: string;
+    fileUploadStates?: ReadonlyMap<string, FileUploadState>;
+    retryFileUpload?: (file: FileDef) => void;
   };
 }
 
@@ -106,6 +112,14 @@ export default class AttachedItems extends Component<Signature> {
   private handleRemoveFile(file: FileDef) {
     this.args.removeFile(file);
   }
+
+  private getUploadStatus = (file: FileDef): FileUploadStatus | undefined => {
+    let sourceUrl = file.sourceUrl;
+    if (!sourceUrl) {
+      return undefined;
+    }
+    return this.args.fileUploadStates?.get(sourceUrl)?.status;
+  };
 
   <template>
     <div class='attached-items' ...attributes>
@@ -191,6 +205,8 @@ export default class AttachedItems extends Component<Signature> {
                     @borderType='dashed'
                     @onClick={{fn this.handleChooseFile item}}
                     @onRemove={{fn this.handleRemoveFile item}}
+                    @uploadStatus={{this.getUploadStatus item}}
+                    @onRetry={{if @retryFileUpload (fn @retryFileUpload item)}}
                     data-test-autoattached-file={{item.sourceUrl}}
                   />
                 </:trigger>
@@ -203,6 +219,8 @@ export default class AttachedItems extends Component<Signature> {
                 @file={{item}}
                 @borderType='solid'
                 @onRemove={{fn this.handleRemoveFile item}}
+                @uploadStatus={{this.getUploadStatus item}}
+                @onRetry={{if @retryFileUpload (fn @retryFileUpload item)}}
               />
             {{/if}}
           {{/if}}

@@ -10,7 +10,7 @@ import GlimmerComponent from '@glimmer/component';
 import StringField from 'https://cardstack.com/base/string';
 import NumberField from 'https://cardstack.com/base/number';
 import UrlField from 'https://cardstack.com/base/url';
-import DatetimeField from 'https://cardstack.com/base/datetime';
+import DateTimeField from 'https://cardstack.com/base/datetime';
 import MarkdownField from 'https://cardstack.com/base/markdown';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
@@ -809,7 +809,7 @@ export class Story extends CardDef {
   @field downvotes = contains(NumberField);
   @field commentUrl = contains(UrlField);
   @field commentCount = contains(NumberField);
-  @field submittedAt = contains(DatetimeField);
+  @field submittedAt = contains(DateTimeField);
 
   @field points = contains(NumberField, {
     computeVia: function (this: Story) {

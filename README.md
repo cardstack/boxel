@@ -22,10 +22,6 @@ For a quickstart, see [here](./QUICKSTART.md)
 
 `packages/boxel-ui/test-app` is the test suite and component explorer for boxel-ui, deployed at [boxel-ui.stack.cards](https://boxel-ui.stack.cards)
 
-`packages/boxel-motion/addon` is the animation primitives ember addon.
-
-`packages/boxel-motion/test-app` is the demo app for boxel-motion, deployed at [boxel-motion.stack.cards](https://boxel-motion.stack.cards)
-
 `packages/matrix` is the docker container for running the matrix server: synapse, as well as tests that involve running a matrix client.
 
 `packages/ai-bot` is a node app that runs a matrix client session and an OpenAI session. Matrix message queries sent to the AI bot are packaged with an OpenAI system prompt and operator mode context and sent to OpenAI. The ai bot enriches the OpenAI response and posts the response back into the matrix room.
@@ -61,8 +57,7 @@ Make sure that you have created a matrix user for the base and experiments realm
 In order to run the ember-cli hosted app:
 
 1. `pnpm build` in the boxel-ui/addon workspace to build the boxel-ui addon.
-2. `pnpm build` in the boxel-motion/addon workspace to build the boxel-motion addon.
-3. `pnpm start` in the host/ workspace to serve the ember app.
+2. `pnpm start` in the host/ workspace to serve the ember app.
 4. `pnpm start:all` in the realm-server/ to serve the base and experiments realms -- this will also allow you to switch between the app and the tests without having to restart servers). This expects the Ember application to be running at `http://localhost:4200`, if you’re running it elsewhere you can specify it with `HOST_URL=http://localhost:5200 pnpm start:all`.
 
 The app is available at http://localhost:4200. You will be prompted to register an account. To make it easier, you can execute `pnpm register-test-user` in `packages/matrix/`. Now you can sign in with the test user using the credentials `username: user`, `password: password`.
@@ -112,7 +107,7 @@ You can also use `start:development` if you want the functionality of `start:all
 
 Optional environment variables for `start:development`:
 
-- `USE_EXTERNAL_CATALOG=1` to load `/catalog` from `packages/catalog/contents` (cloned from the `boxel-catalog` repo). 
+- `USE_EXTERNAL_CATALOG=1` to load `/catalog` from `packages/catalog/contents` (cloned from the `boxel-catalog` repo).
 
 ### Card Pre-rendering
 
@@ -184,7 +179,7 @@ The realm server uses the request accept header to determine the type of request
 
 Boxel uses a Postgres database. In development, the Postgres database runs within a docker container, `boxel-pg`, that is started as part of `pnpm start:all`. You can manually start and stop the `boxel-pg` docker container using `pnpm start:pg` and `pnpm stop:pg`. The postgres database runs on port 5435 so that it doesn't conflict with a natively installed postgres that may be running on your system.
 
-When running tests we isolate the database between each test run by actually creating a new database for each test with a random database name (e.g. `test_db_1234567`). The test databases are dropped before the beginning of each test run.
+When running tests for matrix tests we isolate the database between each test run by actually creating a new database for each test with a random database name (e.g. `test_db_1234567`). The test databases can be dropped by running `pnpm test:cleanup` from the `packages/matrix` workspace, this will drop all databases that match the pattern `test_db_%`.
 
 If you wish to drop the development databases you can execute:
 
@@ -290,14 +285,6 @@ There is a ember-freestyle component explorer available to assist with developme
 1. `cd packages/boxel-ui/test-app`
 2. `pnpm start`
 3. Visit http://localhost:4220/ in your browser
-
-## Boxel Motion Demo App
-
-In order to run the boxel-motion demo app:
-
-1. `cd packages/boxel-motion/test-app`
-2. `pnpm start`
-3. Visit http://localhost:4200 in your browser
 
 ## Payment Setup
 
@@ -420,11 +407,6 @@ To run the `packages/realm-server/` workspace tests start:
 
 1. `cd packages/boxel-ui/test-app`
 2. `pnpm test` (or `pnpm start` and visit http://localhost:4220/tests to run tests in the browser)
-
-### Boxel Motion
-
-1. `cd packages/boxel-motion-test-app`
-2. `pnpm test` (or `pnpm start` and visit http://localhost:4200/tests to run tests in the browser)
 
 ### Matrix tests
 

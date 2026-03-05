@@ -336,25 +336,35 @@ export async function sumUpCreditsLedger(
   return results[0].sum === null ? 0 : parseInt(results[0].sum as string);
 }
 
-export async function getLastDailyCreditGrantAt(
+export async function getDailyCreditGrantInfo(
   dbAdapter: DBAdapter,
   userId: string,
-): Promise<number | null> {
+): Promise<{
+  lastDailyCreditGrantAt: number | null;
+  dailyCreditGrantCount: number;
+}> {
   let results = await query(dbAdapter, [
-    `SELECT MAX(created_at) AS last_grant_at FROM credits_ledger WHERE user_id = `,
+    `SELECT MAX(created_at) AS last_grant_at, COUNT(*) AS grant_count FROM credits_ledger WHERE user_id = `,
     param(userId),
     ` AND credit_type = 'daily_credit'`,
   ]);
 
   let lastGrantAt = results[0]?.last_grant_at;
-  if (lastGrantAt == null) {
-    return null;
+  let parsed: number | null = null;
+  if (lastGrantAt != null) {
+    parsed =
+      typeof lastGrantAt === 'number'
+        ? lastGrantAt
+        : parseInt(lastGrantAt as string);
+    if (Number.isNaN(parsed)) {
+      parsed = null;
+    }
   }
-  let parsed =
-    typeof lastGrantAt === 'number'
-      ? lastGrantAt
-      : parseInt(lastGrantAt as string);
-  return Number.isNaN(parsed) ? null : parsed;
+
+  return {
+    lastDailyCreditGrantAt: parsed,
+    dailyCreditGrantCount: parseInt(results[0]?.grant_count as string) || 0,
+  };
 }
 
 export async function getCurrentActiveSubscription(

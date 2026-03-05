@@ -117,6 +117,10 @@ export class MockUtils {
   getUploadedContents = () => {
     return this.testState.sdk!.serverState.getUploadedContents();
   };
+  setUploadContentInterceptor = (fn: (() => Promise<void>) | undefined) => {
+    this.testState.opts!.uploadContentInterceptor = fn;
+  };
+
   setRoomState = (
     roomId: string,
     eventType: string,

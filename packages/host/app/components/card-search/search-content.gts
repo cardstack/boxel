@@ -671,7 +671,7 @@ export default class SearchContent extends Component<Signature> {
         {{/if}}
       {{else}}
         {{! Render all sections }}
-        {{#each this.sections as |section i|}}
+        {{#each this.sections key='sid' as |section i|}}
           <SearchResultSection
             @section={{section}}
             @viewOption={{this.activeViewId}}

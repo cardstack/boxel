@@ -5,7 +5,11 @@ import type { Server } from 'http';
 import type { DirResult } from 'tmp';
 
 import type { Realm } from '@cardstack/runtime-common';
-import { setupPermissionedRealm, testRealmHref, createJWT } from './helpers';
+import {
+  setupPermissionedRealmCached,
+  testRealmHref,
+  createJWT,
+} from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
 module(basename(__filename), function () {
@@ -25,7 +29,7 @@ module(basename(__filename), function () {
 
     module('card dependencies GET request', function (_hooks) {
       module('public readable realm', function (hooks) {
-        setupPermissionedRealm(hooks, {
+        setupPermissionedRealmCached(hooks, {
           permissions: {
             '*': ['read'],
           },
@@ -95,7 +99,7 @@ module(basename(__filename), function () {
       });
 
       module('permissioned realm', function (hooks) {
-        setupPermissionedRealm(hooks, {
+        setupPermissionedRealmCached(hooks, {
           permissions: {
             john: ['read'],
             '@node-test_realm:localhost': ['read', 'realm-owner'],

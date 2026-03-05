@@ -18,7 +18,7 @@ import {
   realmSecretSeed,
   runTestRealmServer,
   setupDB,
-  setupPermissionedRealmAtURL,
+  setupPermissionedRealmCached,
   waitUntil,
 } from '../helpers';
 import { createJWT as createRealmServerJWT } from '../../utils/jwt';
@@ -1047,7 +1047,8 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       testRealm = args.testRealm;
     }
 
-    setupPermissionedRealmAtURL(hooks, realmURL, {
+    setupPermissionedRealmCached(hooks, {
+      realmURL,
       permissions: {
         '*': ['read'],
       },
