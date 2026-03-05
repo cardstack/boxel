@@ -6,7 +6,7 @@ import { dirSync, type DirResult } from 'tmp';
 import { copySync } from 'fs-extra';
 import type { Realm } from '@cardstack/runtime-common';
 import {
-  setupPermissionedRealm,
+  setupPermissionedRealmCached,
   closeServer,
   insertUser,
   insertPlan,
@@ -63,7 +63,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
       }
     });
 
-    setupPermissionedRealm(hooks, {
+    setupPermissionedRealmCached(hooks, {
       permissions: {
         john: ['read', 'write'],
         '@node-test_realm:localhost': ['read', 'realm-owner'],
@@ -485,7 +485,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
       }
     });
 
-    setupPermissionedRealm(hooks, {
+    setupPermissionedRealmCached(hooks, {
       permissions: {
         john: ['read', 'write'],
         '@node-test_realm:localhost': ['read', 'realm-owner'],

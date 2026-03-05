@@ -6,7 +6,7 @@ import { copySync } from 'fs-extra';
 import type { Realm } from '@cardstack/runtime-common';
 import { fetchRealmPermissions } from '@cardstack/runtime-common';
 import {
-  setupPermissionedRealm,
+  setupPermissionedRealmCached,
   testRealmHref,
   testRealmURL,
   createJWT,
@@ -39,7 +39,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
     });
 
     module('permissions requests', function (hooks) {
-      setupPermissionedRealm(hooks, {
+      setupPermissionedRealmCached(hooks, {
         fileSystem: {},
         permissions: {
           mary: ['read', 'write', 'realm-owner'],
