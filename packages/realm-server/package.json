@@ -83,12 +83,14 @@
     "typescript": "catalog:",
     "typescript-memoize": "catalog:",
     "uuid": "catalog:",
+    "vitest": "catalog:",
     "wait-for-localhost-cli": "catalog:",
     "yaml": "catalog:",
     "yargs": "catalog:"
   },
   "scripts": {
     "test": "./tests/scripts/run-qunit-with-test-pg.sh",
+    "test:vite": "./tests/scripts/run-vite-with-test-pg.sh",
     "test-module": "./tests/scripts/run-qunit-with-test-pg.sh --module ${TEST_MODULE}",
     "start:matrix": "cd ../matrix && pnpm assert-synapse-running",
     "start:smtp": "cd ../matrix && pnpm assert-smtp-running",
@@ -129,6 +131,7 @@
     "lint:js:fix": "eslint . --report-unused-disable-directives --fix",
     "lint:glint": "glint",
     "lint:test-shards": "ts-node --transpileOnly scripts/lint-test-shards.ts",
+    "codemod:qunit-to-vitest": "ts-node --transpileOnly scripts/codemods/qunit-to-vitest.ts",
     "full-reset": "./scripts/full-reset.sh",
     "full-reindex": "./scripts/full-reindex.sh",
     "check-user-pg-connections": "./scripts/check-user-pg-connections.sh",

@@ -239,7 +239,7 @@ function ensureVitestImport(
       s.moduleSpecifier.text === 'vitest',
   );
 
-  const needed = [...new Set(['describe', 'it', 'expect', ...additionalImports])];
+  const needed = [...new Set(['describe', 'test', 'expect', ...additionalImports])];
   if (!vitestImport) {
     let importDecl = ts.factory.createImportDeclaration(
       undefined,
@@ -716,7 +716,7 @@ function transformQUnitToVitest(
         }
 
         if (ts.isIdentifier(visitedNode.expression) && (visitedNode.expression.text === 'module' || visitedNode.expression.text === 'test')) {
-          let replacementName = visitedNode.expression.text === 'module' ? 'describe' : 'it';
+          let replacementName = visitedNode.expression.text === 'module' ? 'describe' : 'test';
           let updatedArgs = [...visitedNode.arguments];
 
           if (visitedNode.expression.text === 'module' && updatedArgs.length >= 1) {
