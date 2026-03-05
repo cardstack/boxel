@@ -1571,7 +1571,7 @@ module(basename(__filename), function () {
         });
       });
 
-      setupPermissionedRealms(hooks, {
+      setupPermissionedRealmsCached(hooks, {
         mode: 'before',
         realms: [
           {
