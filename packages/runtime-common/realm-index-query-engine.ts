@@ -303,7 +303,7 @@ export class RealmIndexQueryEngine {
       return {
         prerenderedCards,
         scopedCssUrls: [...scopedCssUrls],
-        meta,
+        meta: { ...meta, isFileMeta: true as const },
       };
     }
     return await this.#indexQueryEngine.searchPrerendered(

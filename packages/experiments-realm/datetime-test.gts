@@ -4,14 +4,14 @@ import {
   field,
   contains,
 } from 'https://cardstack.com/base/card-api';
-import DatetimeField from 'https://cardstack.com/base/datetime';
+import DateTimeField from 'https://cardstack.com/base/datetime';
 import StringField from 'https://cardstack.com/base/string';
 import { formatDateTime } from '@cardstack/boxel-ui/helpers';
 
 export class DateTimeTest extends CardDef {
   static displayName = 'DateTime Format Test';
 
-  @field testDate = contains(DatetimeField);
+  @field testDate = contains(DateTimeField);
   @field testDescription = contains(StringField);
 
   @field cardTitle = contains(StringField, {

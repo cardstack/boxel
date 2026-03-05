@@ -68,6 +68,15 @@ export class CopySourceResult extends CardDef {
   @field url = contains(StringField);
 }
 
+export class CopyFileToRealmInput extends CardDef {
+  @field sourceFileUrl = contains(StringField);
+  @field targetRealm = contains(StringField);
+}
+
+export class CopyFileToRealmResult extends CardDef {
+  @field newFileUrl = contains(StringField);
+}
+
 export class PatchCardInput extends CardDef {
   @field cardId = contains(StringField);
   @field patch = contains(JsonField);
@@ -365,22 +374,7 @@ export class ListingInstallResult extends CardDef {
   @field selectedCodeRef = contains(CodeRefField);
 }
 
-export class CreateListingPRInput extends CardDef {
-  @field roomId = contains(StringField);
-  @field realm = contains(RealmField);
-  @field listingId = contains(StringField);
-}
-
-export class CreateListingPRResult extends CardDef {
-  @field snapshotId = contains(StringField);
-  @field branch = contains(StringField);
-  @field fileCount = contains(NumberField);
-  @field prUrl = contains(StringField);
-  @field prNumber = contains(NumberField);
-}
-
 export class CreateListingPRRequestInput extends CardDef {
-  @field roomId = contains(StringField);
   @field realm = contains(RealmField);
   @field listingId = contains(StringField);
 }

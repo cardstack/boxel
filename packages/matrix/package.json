@@ -42,6 +42,7 @@
     "register-test-admin-and-token": "pnpm register-test-admin && ts-node --transpileOnly ./scripts/register-test-token.ts",
     "register-all": "pnpm register-test-admin-and-token && pnpm register-realm-users && pnpm register-bot-user && pnpm register-submission-bot && pnpm register-test-user && pnpm register-skills-writer && pnpm register-homepage-writer",
     "test": "./scripts/test.sh",
+    "test:cleanup": "./scripts/remove-test-dbs.sh",
     "test:group": "./scripts/test.sh",
     "wait": "sleep 10000000",
     "lint": "glint",

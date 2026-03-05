@@ -88,7 +88,6 @@ export class MapRender extends GlimmerComponent<MapRenderSignature> {
         margin: 0;
         width: 100%;
         height: 100%;
-        min-height: 300px;
         position: relative;
         display: flex;
         align-items: center;
@@ -198,7 +197,10 @@ class LeafletLayerState implements LeafletLayerStateInterface {
       const color =
         i === 0 ? '#22c55e' : i === coords.length - 1 ? '#ef4444' : '#3b82f6';
       const marker = createMarker(c, color);
-      if (c.address) marker.bindPopup(c.address);
+      const trimmedAddress = c.address?.trim() || undefined;
+      const popupContent =
+        trimmedAddress ?? `${c.lat.toFixed(6)}, ${c.lng.toFixed(6)}`;
+      marker.bindPopup(popupContent);
       return marker;
     });
   }
@@ -247,7 +249,7 @@ class LeafletLayerState implements LeafletLayerStateInterface {
 
     if (coords.length === 1) {
       // single point → just flyTo
-      this.map.flyTo([coords[0].lat, coords[0].lng], 15, {
+      this.map.flyTo([coords[0].lat, coords[0].lng], 13, {
         animate: true,
         duration: 1.2,
       });
@@ -348,7 +350,9 @@ export default class LeafletModifier extends Modifier<LeafletModifierSignature> 
   ) {
     if (!this.element) return;
 
-    this.map = L.map(this.element).setView([0, 0], 13);
+    const center = [20, 0];
+    const zoom = 2;
+    this.map = L.map(this.element).setView(center, zoom);
 
     L.tileLayer(
       mapConfig?.tileserverUrl ||

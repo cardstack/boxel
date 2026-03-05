@@ -9,7 +9,7 @@ import {
 import type { RealmServerTokenClaim } from '../utils/jwt';
 import {
   getCurrentActiveSubscription,
-  getLastDailyCreditGrantAt,
+  getDailyCreditGrantInfo,
   getMostRecentSubscriptionCycle,
   getPlanById,
   getUserByMatrixUserId,
@@ -35,6 +35,7 @@ type FetchUserResponse = {
       lowCreditThreshold: number | null;
       lastDailyCreditGrantAt: number | null;
       nextDailyCreditGrantAt: number | null;
+      dailyCreditGrantCount: number;
     };
     relationships: {
       subscription: {
@@ -110,10 +111,12 @@ export default function handleFetchUserRequest({
     let creditsAvailableInPlanAllowance: number | null = null;
     let creditsIncludedInPlanAllowance: number | null = null;
     let extraCreditsAvailableInBalance: number | null = null;
-    let [lastDailyCreditGrantAt, lowCreditThreshold] = await Promise.all([
-      getLastDailyCreditGrantAt(dbAdapter, user.id),
+    let [dailyCreditGrantInfo, lowCreditThreshold] = await Promise.all([
+      getDailyCreditGrantInfo(dbAdapter, user.id),
       Promise.resolve(getLowCreditThreshold()),
     ]);
+    let { lastDailyCreditGrantAt, dailyCreditGrantCount } =
+      dailyCreditGrantInfo;
 
     if (currentSubscriptionCycle) {
       [
@@ -168,6 +171,7 @@ export default function handleFetchUserRequest({
           lowCreditThreshold,
           lastDailyCreditGrantAt,
           nextDailyCreditGrantAt,
+          dailyCreditGrantCount,
         },
         relationships: {
           subscription: currentActiveSubscription

@@ -15,7 +15,7 @@ import {
   insertUser,
   realmSecretSeed,
   realmServerTestMatrix,
-  setupPermissionedRealm,
+  setupPermissionedRealmCached,
 } from '../helpers';
 import { createRealmServerSession } from './helpers';
 import { APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE } from '@cardstack/runtime-common/matrix-constants';
@@ -66,7 +66,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         dbAdapter = args.dbAdapter;
       }
 
-      setupPermissionedRealm(hooks, {
+      setupPermissionedRealmCached(hooks, {
         permissions: {
           '*': ['read', 'write'],
         },
@@ -514,6 +514,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
                 lastDailyCreditGrantAt: null,
                 nextDailyCreditGrantAt:
                   json.data.attributes.nextDailyCreditGrantAt,
+                dailyCreditGrantCount: 0,
               },
               relationships: {
                 subscription: null,
