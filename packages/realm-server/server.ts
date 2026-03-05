@@ -477,9 +477,7 @@ export class RealmServer {
     let faviconURL = new URL('boxel-favicon.png', this.assetsURL).href;
     let webclipURL = new URL('boxel-webclip.png', this.assetsURL).href;
     if (!hasFavicon) {
-      headFragments.push(
-        `<link href="${faviconURL}" rel="icon" type="image/x-icon" />`,
-      );
+      headFragments.push(`<link href="${faviconURL}" rel="icon" />`);
     }
     if (!hasAppleTouchIcon) {
       headFragments.push(
@@ -699,7 +697,7 @@ export class RealmServer {
     let faviconURL = new URL('boxel-favicon.png', this.assetsURL).href;
     let webclipURL = new URL('boxel-webclip.png', this.assetsURL).href;
     return [
-      `<link href="${faviconURL}" rel="icon" type="image/x-icon" />`,
+      `<link href="${faviconURL}" rel="icon" />`,
       `<link href="${webclipURL}" rel="apple-touch-icon" />`,
     ];
   }
