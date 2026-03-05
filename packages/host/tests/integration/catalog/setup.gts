@@ -21,6 +21,7 @@ import { setupRenderingTest } from '../../helpers/setup';
 
 type SetupOptions = {
   beforeEach?: (this: any) => Promise<void> | void;
+  setupRealm?: 'auto' | 'manual';
 };
 
 export function setupCatalogIsolatedCardTest(
@@ -49,6 +50,14 @@ export function setupCatalogIsolatedCardTest(
     this.catalogRealm = catalogRealm as any;
     this.testRealmURL = testRealmURL;
     this.catalogTestRealmContents = {};
+    this.setupCatalogRealm = async (contents: any, cacheKey?: string) =>
+      withCachedRealmSetup(cacheKey ?? 'catalog-isolated', async () =>
+        setupIntegrationTestRealm({
+          mockMatrixUtils,
+          realmURL: testRealmURL,
+          contents,
+        }),
+      );
 
     provideConsumeContext(CardContextName, {
       commandContext: this.commandContext,
@@ -65,12 +74,8 @@ export function setupCatalogIsolatedCardTest(
       await options.beforeEach.call(this);
     }
 
-    await withCachedRealmSetup('catalog-isolated', async () =>
-      setupIntegrationTestRealm({
-        mockMatrixUtils,
-        realmURL: testRealmURL,
-        contents: this.catalogTestRealmContents,
-      }),
-    );
+    if (options?.setupRealm !== 'manual') {
+      await this.setupCatalogRealm(this.catalogTestRealmContents);
+    }
   });
 }
