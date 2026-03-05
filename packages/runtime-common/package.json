@@ -2,6 +2,16 @@
   "name": "@cardstack/runtime-common",
   "version": "1.0.0",
   "license": "MIT",
+  "imports": {
+    "#lint-task": {
+      "node": "./tasks/lint.ts",
+      "browser": "./tasks/lint-browser.ts"
+    },
+    "#fetch": {
+      "node": "./fetch-node.ts",
+      "browser": "./fetch-browser.ts"
+    }
+  },
   "dependencies": {
     "@aws-crypto/sha256-js": "catalog:",
     "@babel/generator": "catalog:",
@@ -25,7 +35,6 @@
     "@types/diff": "catalog:",
     "@types/eslint": "catalog:",
     "@types/flat": "catalog:",
-    "@types/jsonwebtoken": "catalog:",
     "@types/lodash": "catalog:",
     "@types/pluralize": "catalog:",
     "@types/qs": "catalog:",
@@ -49,7 +58,6 @@
     "ignore": "catalog:",
     "js-string-escape": "catalog:",
     "json-typescript": "catalog:",
-    "jsonwebtoken": "catalog:",
     "lodash": "catalog:",
     "loglevel": "catalog:",
     "marked": "catalog:",

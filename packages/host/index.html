@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Boxel</title>
+    <meta name="description" content="" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    {{content-for "head"}}
+
+    <link integrity="" rel="stylesheet" href="/@embroider/virtual/vendor.css" />
+    <link integrity="" rel="stylesheet" href="/@embroider/virtual/app.css" />
+    <link href="/boxel-favicon.png" rel="icon" type="image/x-icon" />
+    <link href="/boxel-webclip.png" rel="apple-touch-icon" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600;1,700&family=IBM+Plex+Sans:ital,wght@0,100..700;1,100..700&family=IBM+Plex+Serif:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600;1,700&display=swap"
+      rel="stylesheet"
+    />
+
+    {{content-for "head-footer"}}
+
+    <meta data-boxel-head-start />
+    <meta data-boxel-head-end />
+  </head>
+  <body>
+    <script type="x/boundary" id="boxel-isolated-start"></script>
+    <script type="x/boundary" id="boxel-isolated-end"></script>
+
+    <!-- in case embercli's hooks insn't run,
+         we embed the following div manually -->
+    <div id="ember-basic-dropdown-wormhole"></div>
+    {{content-for "body"}}
+
+    <script>
+      globalThis.process = {
+        env: {},
+        cwd() {
+          return '';
+        },
+      };
+      globalThis.global = globalThis;
+    </script>
+
+    <script src="/@embroider/virtual/vendor.js"></script>
+    <script type="module">
+      import Application from './app/app';
+      import environment from './app/config/environment';
+
+      Application.create(environment.APP);
+    </script>
+
+    {{content-for "body-footer"}}
+  </body>
+</html>

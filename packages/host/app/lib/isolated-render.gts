@@ -33,23 +33,23 @@ export function render(
   // clear any previous render work
   removeChildren(element);
 
-  let { _runtime, _context, _owner, _builder } = owner.lookup(
-    'renderer:-dom',
-  ) as any;
+  let {
+    state: { owner: _owner, builder: _builder, context: _context },
+  } = owner.lookup('renderer:-dom') as any;
   let self = createConstRef({}, 'this');
   let layout = (getComponentTemplate as any)(root)(_owner).asLayout();
+
   let iterator = renderMain(
-    _runtime,
     _context,
     _owner,
     self,
-    _builder(_runtime.env, { element }),
+    _builder(_context.env, { element }),
     layout,
   );
   let vm = (iterator as any).vm;
 
   try {
-    inTransaction(_runtime.env, () => vm._execute());
+    inTransaction(_context.env, () => vm._execute());
   } catch (err: any) {
     // This is to compensate for the commitCacheGroup op code that is not called because
     // of the error being thrown here. we do this so we can keep the TRANSACTION_STACK
