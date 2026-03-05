@@ -68,6 +68,38 @@ function getLog() {
   return logger('ai-bot:prompt');
 }
 
+/*
+ * ── Attachment Context Policy ────────────────────────────────────────
+ *
+ * When building prompts for the model, file attachments are handled
+ * according to the following rules:
+ *
+ * 1. **Content inclusion**: Only the most recent user message's attached
+ *    files have their content downloaded and included in the prompt.
+ *    Older messages show file metadata (name, type) only. This keeps
+ *    the prompt focused on fresh data and avoids redundant downloads.
+ *
+ * 2. **Supersession**: Within the current message, if a file (by
+ *    sourceUrl) is re-attached in a later event, the earlier version
+ *    is shown as metadata only (the later version wins).
+ *
+ * 3. **MIME type handling**:
+ *    - Text-based types (text/*, application/vnd.card+json) → content
+ *      downloaded and displayed with line numbers.
+ *    - Image types (image/*) → presented as native image_url content
+ *      parts for vision-capable models.
+ *    - Other types (PDF, binary, etc.) → metadata shown inline
+ *      ([contentType, contentSize bytes]) without an error prefix.
+ *
+ * 4. **Read-file command scoping**: When the AI requests to read a file
+ *    via a tool call, the file URL must match a sourceUrl previously
+ *    attached by the user in the same room. Unrecognised URLs produce
+ *    a rejection message in the tool result.
+ * ─────────────────────────────────────────────────────────────────────
+ */
+
+// ── MIME / category helpers ──────────────────────────────────────────
+
 function isTextBasedContentType(contentType?: string): boolean {
   return (
     !!contentType &&
@@ -79,6 +111,8 @@ function isTextBasedContentType(contentType?: string): boolean {
 function isImageContentType(contentType?: string): boolean {
   return !!contentType && contentType.startsWith('image/');
 }
+
+// ── Read-file command scope helpers ──────────────────────────────────
 
 function isReadFileCommand(request?: CommandRequest): boolean {
   return !!request?.name?.startsWith('read-file-for-ai-assistant');
@@ -107,6 +141,32 @@ function isFileAttachedInRoom(
       (f: SerializedFileDef) => f.sourceUrl === fileUrl,
     );
   });
+}
+
+// ── Shared attachment helpers ────────────────────────────────────────
+
+function toFileDefMetadata(file: SerializedFileDef): SerializedFileDef {
+  return {
+    url: file.url,
+    sourceUrl: file.sourceUrl ?? '',
+    name: file.name,
+    contentType: file.contentType,
+    contentSize: file.contentSize,
+  };
+}
+
+async function downloadTextContent(
+  client: MatrixClient,
+  file: SerializedFileDef,
+): Promise<SerializedFileDef> {
+  let result = toFileDefMetadata(file);
+  try {
+    result.content = await downloadFile(client, file);
+  } catch (error) {
+    getLog().error(`Failed to fetch file ${file.url}:`, error);
+    result.error = `Error loading attached file: ${(error as Error).message}`;
+  }
+  return result;
 }
 
 export async function getPromptParts(
@@ -512,41 +572,25 @@ export async function getAttachedFiles(
 ): Promise<SerializedFileDef[]> {
   let attachedFiles = matrixEvent.content?.data?.attachedFiles ?? [];
   return Promise.all(
-    attachedFiles.map(async (attachedFile: SerializedFileDef) => {
-      // Only download content for the most recent user message's files,
-      // and only if the file isn't superseded by a later attachment
+    attachedFiles.map(async (file: SerializedFileDef) => {
       let isSuperseded = history
         .slice(history.indexOf(matrixEvent) + 1)
-        .some((event) => {
-          return (
+        .some((event) =>
+          (
             event as MatrixEventWithBoxelContext
           ).content?.data?.attachedFiles?.some(
-            (file: SerializedFileDef) =>
-              file.sourceUrl === attachedFile.sourceUrl,
-          );
-        });
-      let shouldIncludeContent =
+            (f: SerializedFileDef) => f.sourceUrl === file.sourceUrl,
+          ),
+        );
+
+      if (
         isCurrentMessage &&
         !isSuperseded &&
-        isTextBasedContentType(attachedFile.contentType);
-
-      let result: SerializedFileDef = {
-        url: attachedFile.url,
-        sourceUrl: attachedFile.sourceUrl ?? '',
-        name: attachedFile.name,
-        contentType: attachedFile.contentType,
-        contentSize: attachedFile.contentSize,
-      };
-      if (shouldIncludeContent) {
-        try {
-          result.content = await downloadFile(client, attachedFile);
-        } catch (error) {
-          getLog().error(`Failed to fetch file ${attachedFile.url}:`, error);
-          result.error = `Error loading attached file: ${(error as Error).message}`;
-          result.content = undefined;
-        }
+        isTextBasedContentType(file.contentType)
+      ) {
+        return downloadTextContent(client, file);
       }
-      return result;
+      return toFileDefMetadata(file);
     }),
   );
 }
@@ -566,59 +610,23 @@ export async function loadCurrentlySerializedFileDefs(
         event.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE),
   );
 
-  let mostRecentUserMessageContent = lastMessageEventByUser?.content as {
-    msgtype?: string;
-    data?: {
-      attachedFiles?: SerializedFileDef[];
-    };
-  };
-
-  if (!mostRecentUserMessageContent) {
+  if (!lastMessageEventByUser) {
     return [];
   }
 
-  // We are only interested in downloading the most recently attached files -
-  // downloading older ones is not needed since the prompt that is being constructed
-  // should operate on fresh data
-  if (!mostRecentUserMessageContent.data?.attachedFiles?.length) {
+  let attachedFiles = (lastMessageEventByUser as MatrixEventWithBoxelContext)
+    .content?.data?.attachedFiles;
+  if (!attachedFiles?.length) {
     return [];
   }
 
-  let attachedFiles = mostRecentUserMessageContent.data.attachedFiles;
-
-  return Promise.all(
-    attachedFiles.map(async (attachedFile: SerializedFileDef) => {
-      if (!isTextBasedContentType(attachedFile.contentType)) {
-        return {
-          url: attachedFile.url,
-          sourceUrl: attachedFile.sourceUrl ?? '',
-          name: attachedFile.name,
-          contentType: attachedFile.contentType,
-          contentSize: attachedFile.contentSize,
-        };
-      }
-      try {
-        let content = await downloadFile(client, attachedFile);
-
-        return {
-          url: attachedFile.url,
-          sourceUrl: attachedFile.sourceUrl ?? '',
-          name: attachedFile.name,
-          contentType: attachedFile.contentType,
-          content,
-        };
-      } catch (error) {
-        getLog().error(`Failed to fetch file ${attachedFile.url}:`, error);
-        return {
-          sourceUrl: attachedFile.sourceUrl ?? '',
-          url: attachedFile.url,
-          name: attachedFile.name,
-          contentType: attachedFile.contentType,
-          content: undefined,
-          error: `Error loading attached file: ${(error as Error).message}`,
-        };
-      }
-    }),
+  // Reuse getAttachedFiles with isCurrentMessage=true — this is always the
+  // most recent user event, so supersession can't apply (no later events).
+  return getAttachedFiles(
+    client,
+    lastMessageEventByUser as MatrixEventWithBoxelContext,
+    history,
+    true,
   );
 }
 
