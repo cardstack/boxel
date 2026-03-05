@@ -26,7 +26,7 @@ describe("remote-prerenderer-test.ts", function () {
             };
             try {
                 let prerenderer = createRemotePrerenderer('http://127.0.0.1:0');
-                await expect(prerenderer.prerenderModule(attrs as any)).rejects.toThrow(message);
+                await assert.rejects(prerenderer.prerenderModule(attrs as any), message);
                 expect(fetchCalled).toBe(false);
             }
             finally {
@@ -190,11 +190,11 @@ describe("remote-prerenderer-test.ts", function () {
             try {
                 let url = `http://127.0.0.1:${(server.address() as any).port}`;
                 let prerenderer = createRemotePrerenderer(url);
-                await expect(prerenderer.prerenderCard({
+                await assert.rejects(prerenderer.prerenderCard({
                     realm: 'realm',
                     url: 'https://example.com/card',
                     auth: '{}',
-                })).rejects.toThrow(/aborted/);
+                }), /aborted/, 'throws after client-side abort');
                 expect(attempts).toBe(1);
             }
             finally {

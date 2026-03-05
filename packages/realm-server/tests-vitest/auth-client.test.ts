@@ -126,7 +126,7 @@ describe("auth-client-test.ts", function () {
                     headers: { 'Content-Type': 'application/json' },
                 });
             };
-            await expect(client.getJWT()).rejects.toThrow(/expected 'Authorization' header/);
+            await assert.rejects(client.getJWT(), /expected 'Authorization' header/, 'missing Authorization header indicates verification failure');
         });
     });
 });

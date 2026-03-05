@@ -141,14 +141,13 @@ function convertAssertCall(
       return undefined;
     case 'rejects': {
       if (args.length >= 1) {
-        let rejectsExpr = ts.factory.createPropertyAccessExpression(
-          ts.factory.createPropertyAccessExpression(expectCall(args[0]), 'rejects'),
-          'toThrow',
-        );
         return ts.factory.createCallExpression(
-          rejectsExpr,
+          ts.factory.createPropertyAccessExpression(
+            ts.factory.createIdentifier('assert'),
+            'rejects',
+          ),
           undefined,
-          args.length >= 2 ? [args[1]] : [],
+          args,
         );
       }
       return undefined;
@@ -156,9 +155,12 @@ function convertAssertCall(
     case 'codeEqual': {
       if (args.length >= 2) {
         return ts.factory.createCallExpression(
-          ts.factory.createPropertyAccessExpression(expectCall(args[0]), 'toEqual'),
+          ts.factory.createPropertyAccessExpression(
+            ts.factory.createIdentifier('assert'),
+            'codeEqual',
+          ),
           undefined,
-          [args[1]],
+          args,
         );
       }
       return undefined;

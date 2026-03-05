@@ -9,7 +9,7 @@ describe("transpile-test.ts", function () {
         async function test() {
           return await fetch('http://test.com');
         }`, 'test-module.ts');
-            expect(transpiled).toEqual(`
+            assert.codeEqual(transpiled, `
         async function test() {
           return await import.meta.loader.fetch('http://test.com');
         }`);
@@ -20,7 +20,7 @@ describe("transpile-test.ts", function () {
       async function test() {
         return await import('./x'); 
       }`, 'test-module.ts');
-        expect(transpiled).toEqual(`
+        assert.codeEqual(transpiled, `
       async function test() {
         return await import.meta.loader.import(new URL('./x', import.meta.url).href); 
       }`);
@@ -30,7 +30,7 @@ describe("transpile-test.ts", function () {
       async function test() {
         return await import('lodash'); 
       }`, 'test-module.ts');
-        expect(transpiled).toEqual(`
+        assert.codeEqual(transpiled, `
       async function test() {
         return await import.meta.loader.import('lodash'); 
       }`);

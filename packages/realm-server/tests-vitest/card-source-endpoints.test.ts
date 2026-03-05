@@ -184,7 +184,7 @@ describe("card-source-endpoints-test.ts", function () {
                     let moduleAbsolutePath = resolve(join(__dirname, '..', 'person.gts'));
                     // Remove platform-dependent id, from https://github.com/emberjs/babel-plugin-ember-template-compilation/blob/d67cca121cfb3bbf5327682b17ed3f2d5a5af528/__tests__/tests.ts#LL1430C1-L1431C1
                     body = stripScopedCSSGlimmerAttributes(body.replace(/"id":\s"[^"]+"/, '"id": "<id>"'));
-                    expect(body).toEqual(compiledCard('"<id>"', moduleAbsolutePath));
+                    assert.codeEqual(body, compiledCard('"<id>"', moduleAbsolutePath), 'module JS is correct');
                 });
             });
             describe('permissioned realm', function () {
@@ -414,7 +414,7 @@ describe("card-source-endpoints-test.ts", function () {
                     let srcFile = join(dir.name, 'realm_server_1', 'test', entry);
                     expect(existsSync(srcFile)).toBeTruthy();
                     let src = readFileSync(srcFile, { encoding: 'utf8' });
-                    expect(src).toEqual(`//TEST UPDATE
+                    assert.codeEqual(src, `//TEST UPDATE
           ${cardSrc}`);
                 });
                 test('broadcasts realm events', async function () {

@@ -878,7 +878,8 @@ export async function runTestRealmServer({
     definitionLookup,
     prerenderer,
   });
-  let testRealmHttpServer = testRealmServer.listen(parseInt(realmURL.port));
+  let testRealmHttpServer = testRealmServer.listen(0);
+  let request = withRealmPath(supertest(testRealmHttpServer), realmURL);
   trackServer(testRealmHttpServer);
   await testRealmServer.start();
   return {
@@ -888,6 +889,7 @@ export async function runTestRealmServer({
     testRealmHttpServer,
     testRealmAdapter,
     matrixClient,
+    request,
   };
 }
 
@@ -1515,11 +1517,9 @@ async function startPermissionedRealmFixture(
     prerenderer,
   });
 
-  let request = supertest(testRealmServer.testRealmHttpServer);
-
   return {
     testRealmServer,
-    request,
+    request: testRealmServer.request,
     dir,
   };
 }

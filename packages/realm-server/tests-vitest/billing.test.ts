@@ -141,7 +141,7 @@ describe("billing-test.ts", function () {
                     expect(creditLedgerEntry.creditType).toBe('plan_allowance');
                     expect(creditLedgerEntry.subscriptionCycleId).toBe(subscriptionCycle.id);
                     // Error if stripe event is attempted to be processed again when it's already been processed
-                    await expect(handlePaymentSucceeded(dbAdapter, stripeInvoicePaymentSucceededEvent)).rejects.toThrow('error: duplicate key value violates unique constraint "stripe_events_pkey"');
+                    await assert.rejects(handlePaymentSucceeded(dbAdapter, stripeInvoicePaymentSucceededEvent), 'error: duplicate key value violates unique constraint "stripe_events_pkey"');
                 });
             });
             describe('subscription update', function () {

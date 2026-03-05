@@ -356,10 +356,10 @@ describe("definition-lookup-test.ts", function () {
             expect(calls).toBe(1);
             modulePresent = false;
             await lookup.invalidate(moduleURL);
-            await expect(lookup.lookupDefinition({
+            await assert.rejects(lookup.lookupDefinition({
                 module: moduleURL,
                 name: 'DeletedCard',
-            })).rejects.toThrow('lookup fails after module deletion invalidation');
+            }), 'lookup fails after module deletion invalidation');
             expect(calls).toBe(2);
         });
         test('invalidates module cache entries using dependency graph', async function () {
@@ -681,20 +681,20 @@ describe("definition-lookup-test.ts", function () {
                     return 'private';
                 },
             });
-            await expect(lookup.lookupDefinition({
+            await assert.rejects(lookup.lookupDefinition({
                 module: deepModule,
                 name: 'DeepCard',
-            })).rejects.toThrow('deep-card errors when missing');
+            }), 'deep-card errors when missing');
             state.deep = true;
             await lookup.invalidate(deepModule);
-            await expect(lookup.lookupDefinition({
+            await assert.rejects(lookup.lookupDefinition({
                 module: middleModule,
                 name: 'MiddleField',
-            })).rejects.toThrow('middle-field errors when missing');
-            await expect(lookup.lookupDefinition({
+            }), 'middle-field errors when missing');
+            await assert.rejects(lookup.lookupDefinition({
                 module: deepModule,
                 name: 'DeepCard',
-            })).rejects.toThrow('deep-card errors when middle-field is missing');
+            }), 'deep-card errors when middle-field is missing');
             let rows = (await dbAdapter.execute(`SELECT error_doc FROM modules WHERE url = $1`, {
                 bind: [deepModule],
                 coerceTypes: { error_doc: 'JSON' },
@@ -711,18 +711,18 @@ describe("definition-lookup-test.ts", function () {
             }
             state.middle = true;
             await lookup.invalidate(middleModule);
-            await expect(lookup.lookupDefinition({
+            await assert.rejects(lookup.lookupDefinition({
                 module: leafModule,
                 name: 'LeafField',
-            })).rejects.toThrow('leaf-field errors when missing');
-            await expect(lookup.lookupDefinition({
+            }), 'leaf-field errors when missing');
+            await assert.rejects(lookup.lookupDefinition({
                 module: middleModule,
                 name: 'MiddleField',
-            })).rejects.toThrow('middle-field errors when leaf-field is missing');
-            await expect(lookup.lookupDefinition({
+            }), 'middle-field errors when leaf-field is missing');
+            await assert.rejects(lookup.lookupDefinition({
                 module: deepModule,
                 name: 'DeepCard',
-            })).rejects.toThrow('deep-card errors when leaf-field is missing');
+            }), 'deep-card errors when leaf-field is missing');
             rows = (await dbAdapter.execute(`SELECT error_doc FROM modules WHERE url = $1`, {
                 bind: [deepModule],
                 coerceTypes: { error_doc: 'JSON' },

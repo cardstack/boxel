@@ -41,7 +41,7 @@ describe("module-syntax-test.ts", function () {
       }
     `;
             let mod = new ModuleSyntax(src, new URL(testRealm));
-            expect(mod.code()).toEqual(src);
+            assert.codeEqual(mod.code(), src);
         });
         test('can add a field to a card', async function () {
             let mod = addField(`
@@ -54,7 +54,7 @@ describe("module-syntax-test.ts", function () {
         }
       }
       `);
-            expect(mod.code()).toEqual(`
+            assert.codeEqual(mod.code(), `
       import NumberField from "https://cardstack.com/base/number";
       import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
       import StringField from "https://cardstack.com/base/string";
@@ -114,7 +114,7 @@ describe("module-syntax-test.ts", function () {
                 outgoingRelativeTo: undefined,
                 outgoingRealmURL: undefined,
             });
-            expect(mod.code()).toEqual(`
+            assert.codeEqual(mod.code(), `
         import NumberField from "https://cardstack.com/base/number";
         import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
         import StringField from "https://cardstack.com/base/string";
@@ -263,7 +263,7 @@ describe("module-syntax-test.ts", function () {
                 outgoingRelativeTo: new URL('http://localhost:4202/node-test/pet'), // outgoing card
                 outgoingRealmURL: undefined,
             });
-            expect(mod.code()).toEqual(`
+            assert.codeEqual(mod.code(), `
         import { contains, field, CardDef, linksTo } from "https://cardstack.com/base/card-api";
         import StringField from "https://cardstack.com/base/string";
         export class Pet extends CardDef {
@@ -291,7 +291,7 @@ describe("module-syntax-test.ts", function () {
                 outgoingRelativeTo: new URL('http://localhost:4202/node-test/pet'), // outgoing card
                 outgoingRealmURL: undefined,
             });
-            expect(mod.code()).toEqual(`
+            assert.codeEqual(mod.code(), `
         import { contains, field, CardDef, FieldDef } from "https://cardstack.com/base/card-api";
         import StringField from "https://cardstack.com/base/string";
         export class Pet extends CardDef {
@@ -322,7 +322,7 @@ describe("module-syntax-test.ts", function () {
                 outgoingRelativeTo: new URL('http://localhost:4202/node-test/pet'), // outgoing card
                 outgoingRealmURL: new URL('http://localhost:4202/node-test/'), // the realm that the spec lives in
             });
-            expect(mod.code()).toEqual(`
+            assert.codeEqual(mod.code(), `
         import { Person as PersonCard } from "./person";
         import { contains, field, CardDef, linksTo } from "https://cardstack.com/base/card-api";
         import StringField from "https://cardstack.com/base/string";
@@ -354,7 +354,7 @@ describe("module-syntax-test.ts", function () {
                 outgoingRelativeTo: new URL('http://localhost:4202/node-test/pet'), // outgoing card
                 outgoingRealmURL: new URL('http://localhost:4202/node-test/'), // the realm that thel spec lives in
             });
-            expect(mod.code()).toEqual(`
+            assert.codeEqual(mod.code(), `
         import { Person as PersonCard } from "http://localhost:4202/test/person";
         import { contains, field, CardDef, linksTo } from "https://cardstack.com/base/card-api";
         import StringField from "https://cardstack.com/base/string";
@@ -384,7 +384,7 @@ describe("module-syntax-test.ts", function () {
                 outgoingRelativeTo: undefined,
                 outgoingRealmURL: undefined,
             });
-            expect(mod.code()).toEqual(`
+            assert.codeEqual(mod.code(), `
           import StringField from "https://cardstack.com/base/string";
           import { CardDef, field, contains } from "https://cardstack.com/base/card-api";
 
@@ -428,7 +428,7 @@ describe("module-syntax-test.ts", function () {
                 outgoingRelativeTo: undefined,
                 outgoingRealmURL: undefined,
             });
-            expect(mod.code()).toEqual(`
+            assert.codeEqual(mod.code(), `
         import NumberField from "https://cardstack.com/base/number";
         import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
         import StringField from "https://cardstack.com/base/string";
@@ -480,7 +480,7 @@ describe("module-syntax-test.ts", function () {
                 outgoingRelativeTo: undefined,
                 outgoingRealmURL: undefined,
             });
-            expect(mod.code()).toEqual(`
+            assert.codeEqual(mod.code(), `
         import NumberField from "https://cardstack.com/base/number";
         import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
         import StringField from "https://cardstack.com/base/string";
@@ -535,7 +535,7 @@ describe("module-syntax-test.ts", function () {
                 outgoingRelativeTo: undefined,
                 outgoingRealmURL: undefined,
             });
-            expect(mod.code()).toEqual(`
+            assert.codeEqual(mod.code(), `
         import NumberField from "https://cardstack.com/base/number";
         import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
         import StringField from "https://cardstack.com/base/string";
@@ -582,7 +582,7 @@ describe("module-syntax-test.ts", function () {
                 outgoingRelativeTo: undefined,
                 outgoingRealmURL: undefined,
             });
-            expect(mod.code()).toEqual(`
+            assert.codeEqual(mod.code(), `
         import { contains, field, Component, CardDef, containsMany } from "https://cardstack.com/base/card-api";
         import StringField from "https://cardstack.com/base/string";
 
@@ -625,7 +625,7 @@ describe("module-syntax-test.ts", function () {
                 outgoingRelativeTo: undefined,
                 outgoingRealmURL: undefined,
             });
-            expect(mod.code()).toEqual(`
+            assert.codeEqual(mod.code(), `
         import { Pet as PetCard } from "${testRealm}dir/pet";
         import { contains, field, CardDef, linksTo } from "https://cardstack.com/base/card-api";
         import StringField from "https://cardstack.com/base/string";
@@ -666,7 +666,7 @@ describe("module-syntax-test.ts", function () {
                 outgoingRelativeTo: undefined,
                 outgoingRealmURL: undefined,
             });
-            expect(mod.code()).toEqual(`
+            assert.codeEqual(mod.code(), `
         import { contains, field, CardDef, linksTo } from "https://cardstack.com/base/card-api";
         import StringField from "https://cardstack.com/base/string";
 
@@ -712,7 +712,7 @@ describe("module-syntax-test.ts", function () {
             return [this.firstName, this.lastName].filter(Boolean).join(' ');
           }`,
             });
-            expect(mod.code()).toEqual(`
+            assert.codeEqual(mod.code(), `
         import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
         import StringField from "https://cardstack.com/base/string";
 
@@ -752,7 +752,7 @@ describe("module-syntax-test.ts", function () {
                 outgoingRelativeTo: undefined,
                 outgoingRealmURL: undefined,
             });
-            expect(mod.code()).toEqual(`
+            assert.codeEqual(mod.code(), `
         import NumberField0 from "https://cardstack.com/base/number";
         import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
         import StringField from "https://cardstack.com/base/string";
@@ -813,7 +813,7 @@ describe("module-syntax-test.ts", function () {
     `;
             let mod = new ModuleSyntax(src, new URL(`${testRealm}dir/person`));
             mod.removeField({ module: `${testRealm}dir/person`, name: 'Person' }, 'firstName');
-            expect(mod.code()).toEqual(`
+            assert.codeEqual(mod.code(), `
         import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
         import StringField from "https://cardstack.com/base/string";
 
@@ -861,7 +861,7 @@ describe("module-syntax-test.ts", function () {
                 outgoingRelativeTo: undefined,
                 outgoingRealmURL: undefined,
             });
-            expect(mod.code()).toEqual(`
+            assert.codeEqual(mod.code(), `
         import { contains, field, CardDef, containsMany } from "https://cardstack.com/base/card-api";
         import StringField from "https://cardstack.com/base/string";
 
@@ -901,7 +901,7 @@ describe("module-syntax-test.ts", function () {
                 outgoingRelativeTo: undefined,
                 outgoingRealmURL: undefined,
             });
-            expect(mod.code()).toEqual(`
+            assert.codeEqual(mod.code(), `
         import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
         import StringField from "https://cardstack.com/base/string";
 
@@ -941,7 +941,7 @@ describe("module-syntax-test.ts", function () {
                 outgoingRelativeTo: undefined,
                 outgoingRealmURL: undefined,
             });
-            expect(mod.code()).toEqual(`
+            assert.codeEqual(mod.code(), `
         import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
         import StringField from "https://cardstack.com/base/string";
 
@@ -964,7 +964,7 @@ describe("module-syntax-test.ts", function () {
     `;
             let mod = new ModuleSyntax(src, new URL(`${testRealm}dir/person`));
             mod.removeField({ module: `${testRealm}dir/person`, name: 'Person' }, 'firstName');
-            expect(mod.code()).toEqual(`
+            assert.codeEqual(mod.code(), `
         import { CardDef } from "https://cardstack.com/base/card-api";
         export class Person extends CardDef { }
       `);
@@ -981,7 +981,7 @@ describe("module-syntax-test.ts", function () {
     `;
             let mod = new ModuleSyntax(src, new URL(`${testRealm}dir/person`));
             mod.removeField({ module: `${testRealm}dir/person`, name: 'Friend' }, 'friend');
-            expect(mod.code()).toEqual(`
+            assert.codeEqual(mod.code(), `
         import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
         import StringField from "https://cardstack.com/base/string";
 
@@ -1012,7 +1012,7 @@ describe("module-syntax-test.ts", function () {
                 type: 'ancestorOf',
                 card: { module: `${testRealm}dir/person`, name: 'FancyPerson' },
             }, 'firstName');
-            expect(mod.code()).toEqual(`
+            assert.codeEqual(mod.code(), `
         import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
         import StringField from "https://cardstack.com/base/string";
 
@@ -1047,7 +1047,7 @@ describe("module-syntax-test.ts", function () {
                 field: 'details',
                 card: { module: `${testRealm}dir/person`, name: 'Person' },
             }, 'nickName');
-            expect(mod.code()).toEqual(`
+            assert.codeEqual(mod.code(), `
         import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
         import StringField from "https://cardstack.com/base/string";
 

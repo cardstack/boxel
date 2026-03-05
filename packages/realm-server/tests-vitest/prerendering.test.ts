@@ -3320,7 +3320,7 @@ describe("prerendering-test.ts", function () {
                         let first = await pool.getPage('realm-a');
                         let secondPromise = pool.getPage('realm-a');
                         let thirdPromise = pool.getPage('realm-b');
-                        await expect(thirdPromise).rejects.toThrow(/No standby page available for prerender/);
+                        await assert.rejects(thirdPromise, /No standby page available for prerender/, 'cross-realm request rejects when only busy tab has queued work');
                         first.release();
                         let second = await secondPromise;
                         expect(second.pageId).toBe(first.pageId);
