@@ -16,11 +16,7 @@ if (process.env.BOXEL_ENVIRONMENT) {
 
     const agent = new undici.Agent({
       connect: {
-        lookup(
-          hostname: string,
-          options: any,
-          cb: (...args: any[]) => void,
-        ) {
+        lookup(hostname: string, options: any, cb: (...args: any[]) => void) {
           if (hostname?.endsWith('.localhost')) {
             if (options.all) {
               return cb(null, [{ address: '127.0.0.1', family: 4 }]);
