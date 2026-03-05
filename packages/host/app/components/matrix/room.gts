@@ -1095,12 +1095,20 @@ export default class Room extends Component<Signature> {
     this._fileUploadStates.set(sourceUrl, { status: 'uploading' });
     try {
       await this.matrixService.uploadFiles([file]);
-      this._fileUploadStates.set(sourceUrl, { status: 'complete' });
+      // Only update state if the file is still attached (guards against
+      // race where file is removed while upload was in-flight).
+      if (this.filesToAttach?.find((f) => f.sourceUrl === sourceUrl)) {
+        this._fileUploadStates.set(sourceUrl, { status: 'complete' });
+      }
     } catch (e: any) {
-      this._fileUploadStates.set(sourceUrl, {
-        status: 'error',
-        error: e?.message,
-      });
+      // Only set error state if the file is still attached, to avoid
+      // blocking canSend for a file the user already removed.
+      if (this.filesToAttach?.find((f) => f.sourceUrl === sourceUrl)) {
+        this._fileUploadStates.set(sourceUrl, {
+          status: 'error',
+          error: e?.message,
+        });
+      }
     }
   }
 
@@ -1144,6 +1152,7 @@ export default class Room extends Component<Signature> {
         this.matrixService.setMessageToSend(this.args.roomId, undefined);
         this.matrixService.setCardsToSend(this.args.roomId, undefined);
         this.matrixService.setFilesToSend(this.args.roomId, undefined);
+        this._fileUploadStates.clear();
       }
 
       let openCardIds = new Set([

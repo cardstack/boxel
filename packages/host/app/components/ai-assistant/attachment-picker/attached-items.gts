@@ -114,7 +114,11 @@ export default class AttachedItems extends Component<Signature> {
   }
 
   private getUploadStatus = (file: FileDef): FileUploadStatus | undefined => {
-    return this.args.fileUploadStates?.get(file.sourceUrl ?? '')?.status;
+    let sourceUrl = file.sourceUrl;
+    if (!sourceUrl) {
+      return undefined;
+    }
+    return this.args.fileUploadStates?.get(sourceUrl)?.status;
   };
 
   <template>
