@@ -24,7 +24,7 @@ import {
   type QueueRunner,
 } from '@cardstack/runtime-common';
 import {
-  setupPermissionedRealm,
+  setupPermissionedRealmCached,
   runTestRealmServer,
   setupDB,
   setupMatrixRoom,
@@ -109,7 +109,7 @@ module(basename(__filename), function () {
       };
     }
 
-    setupPermissionedRealm(hooks, {
+    setupPermissionedRealmCached(hooks, {
       permissions: {
         '*': ['read', 'write'],
         user: ['read', 'write', 'realm-owner'],
@@ -1638,6 +1638,7 @@ module(basename(__filename), function () {
         ({ realm: base } = await createRealm({
           definitionLookup,
           withWorker: true,
+          prerenderer,
           dir: basePath,
           realmURL: localBaseRealmURL.href,
           virtualNetwork,
@@ -1651,6 +1652,7 @@ module(basename(__filename), function () {
         ({ realm: testRealm } = await createRealm({
           definitionLookup,
           withWorker: true,
+          prerenderer,
           dir: join(dir.name, 'demo'),
           virtualNetwork,
           realmURL: 'http://127.0.0.1:4446/demo/',

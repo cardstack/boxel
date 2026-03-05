@@ -10,7 +10,7 @@ import {
 import StringField from '@cardstack/base/string';
 import NumberField from '@cardstack/base/number';
 import DateField from '@cardstack/base/date';
-import DatetimeField from '@cardstack/base/datetime';
+import DateTimeField from '@cardstack/base/datetime';
 import TextAreaField from '@cardstack/base/text-area';
 import { Button } from '@cardstack/boxel-ui/components'; // ² UI components
 import { fn, concat } from '@ember/helper';
@@ -97,8 +97,8 @@ export class CalendarEvent extends CardDef {
 
   @field cardTitle = contains(StringField); // ⁴ Event details
   @field cardDescription = contains(TextAreaField);
-  @field startTime = contains(DatetimeField);
-  @field endTime = contains(DatetimeField);
+  @field startTime = contains(DateTimeField);
+  @field endTime = contains(DateTimeField);
   @field location = contains(StringField);
   @field isAllDay = contains(StringField); // "true" or "false"
   @field eventType = contains(StringField); // meeting, appointment, reminder, etc.

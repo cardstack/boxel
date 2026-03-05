@@ -66,6 +66,50 @@ module('Unit | FileDef menu items', function (hooks) {
     );
   });
 
+  test('ai-assistant context with edit permission includes Copy to Workspace', function (assert: Assert) {
+    let file = new DummyFile(
+      'https://example.com/realm/file-5.txt',
+    ) as unknown as FileDef;
+    let items = getDefaultFileMenuItems(file, {
+      canEdit: true,
+      cardCrudFunctions: {},
+      menuContext: 'ai-assistant',
+      commandContext: {} as any,
+      menuContextParams: {
+        canEditActiveRealm: true,
+        activeRealmURL: 'https://example.com/my-realm/',
+      },
+    });
+
+    let texts = items.map((i: MenuItemOptions) => i.label);
+    assert.ok(
+      texts.includes('Copy to Workspace'),
+      'contains Copy to Workspace',
+    );
+  });
+
+  test('ai-assistant context without edit permission does not include Copy to Workspace', function (assert: Assert) {
+    let file = new DummyFile(
+      'https://example.com/realm/file-6.txt',
+    ) as unknown as FileDef;
+    let items = getDefaultFileMenuItems(file, {
+      canEdit: false,
+      cardCrudFunctions: {},
+      menuContext: 'ai-assistant',
+      commandContext: {} as any,
+      menuContextParams: {
+        canEditActiveRealm: false,
+        activeRealmURL: 'https://example.com/my-realm/',
+      },
+    });
+
+    let texts = items.map((i: MenuItemOptions) => i.label);
+    assert.notOk(
+      texts.includes('Copy to Workspace'),
+      'does not contain Copy to Workspace',
+    );
+  });
+
   test('code-mode-playground includes Open in Code Mode', function (assert: Assert) {
     let file = new DummyFile(
       'https://example.com/realm/file-4.txt',

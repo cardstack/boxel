@@ -150,6 +150,8 @@ export default class RenderRoute extends Route<Model> {
       (globalThis as any).__boxelRenderContext = undefined;
     }
     (globalThis as any).__renderModel = undefined;
+    (globalThis as any).__docsInFlight = undefined;
+    (globalThis as any).__waitForRenderLoadStability = undefined;
     window.removeEventListener('boxel-render-error', this.handleRenderError);
     this.#detachWindowErrorListeners();
     this.lastStoreResetKey = undefined;
@@ -202,6 +204,19 @@ export default class RenderRoute extends Route<Model> {
     (globalThis as any).__docsInFlight = () =>
       this.store.cardDocsInFlight.length +
       this.store.fileMetaDocsInFlight.length;
+    (globalThis as any).__waitForRenderLoadStability = async () => {
+      try {
+        await this.#authGuard.race(() =>
+          this.#waitForRenderLoadStability(this.#normalizeCardId(id)),
+        );
+      } catch (error) {
+        if (this.#authGuard.isAuthError(error)) {
+          this.#processRenderError(error);
+          return;
+        }
+        throw error;
+      }
+    };
     let key = `${id}|${nonce}|${canonicalOptions}`;
     let existing = this.#modelPromises.get(key);
     if (existing) {

@@ -27,14 +27,14 @@ module('Integration | commands | apply-search-replace-block', function (hooks) {
   Component,
 } from '@cardstack/base/card-api';
 import StringField from '@cardstack/base/string';
-import DatetimeField from '@cardstack/base/datetime';
+import DateTimeField from '@cardstack/base/datetime';
 import NumberField from '@cardstack/base/number';
 
 export class Task extends CardDef {
   static displayName = 'Task';
   @field cardTitle = contains(StringField);
   @field cardDescription = contains(StringField);
-  @field dueDate = contains(DatetimeField);
+  @field dueDate = contains(DateTimeField);
   @field priority = contains(NumberField);
 }`;
     const codeBlock = `${SEARCH_MARKER}
@@ -56,7 +56,7 @@ ${REPLACE_MARKER}`;
   Component,
 } from '@cardstack/base/card-api';
 import StringField from '@cardstack/base/string';
-import DatetimeField from '@cardstack/base/datetime';
+import DateTimeField from '@cardstack/base/datetime';
 import NumberField from '@cardstack/base/number';
 import BooleanField from '@cardstack/base/boolean';
 
@@ -64,7 +64,7 @@ export class Task extends CardDef {
   static displayName = 'Task';
   @field cardTitle = contains(StringField);
   @field cardDescription = contains(StringField);
-  @field dueDate = contains(DatetimeField);
+  @field dueDate = contains(DateTimeField);
   @field priority = contains(NumberField);
 }`;
     assert.strictEqual(result.resultContent, expectedResult);
@@ -80,7 +80,7 @@ export class Task extends CardDef {
   @field cardTitle = contains(StringField);
   @field content = contains(MarkdownField);
   @field author = linksTo(Author);
-  @field publishedAt = contains(DatetimeField);
+  @field publishedAt = contains(DateTimeField);
   @field tags = linksToMany(Tag);
 }
 
@@ -113,7 +113,7 @@ ${REPLACE_MARKER}`;
   @field cardTitle = contains(StringField);
   @field content = contains(MarkdownField);
   @field author = linksTo(Author);
-  @field publishedAt = contains(DatetimeField);
+  @field publishedAt = contains(DateTimeField);
   @field tags = linksToMany(Tag);
 }
 
@@ -185,7 +185,7 @@ ${REPLACE_MARKER}`;
   @field rating = contains(NumberField, { min: 1, max: 5 });
   @field product = linksTo(Product);
   @field reviewer = linksTo(User);
-  @field createdAt = contains(DatetimeField, {
+  @field createdAt = contains(DateTimeField, {
     computeVia: function () {
       return new Date();
     },
@@ -426,7 +426,7 @@ class CardTemplate extends Component<typeof ContactCard> {
   @field cardTitle = contains(StringField);
   @field cardDescription = contains(StringField);
   @field assignee = linksTo(User);
-  @field dueDate = contains(DatetimeField);
+  @field dueDate = contains(DateTimeField);
   @field status = contains(StringField, {
     computeVia: function() {
       return 'Todo';
@@ -459,7 +459,7 @@ ${REPLACE_MARKER}`;
   @field cardTitle = contains(StringField);
   @field cardDescription = contains(StringField);
   @field assignee = linksTo(User);
-  @field dueDate = contains(DatetimeField);
+  @field dueDate = contains(DateTimeField);
   @field status = contains(StringField, {
     computeVia: function() {
       return 'In Progress';
@@ -481,7 +481,7 @@ ${REPLACE_MARKER}`;
   @field email = contains(StringField);
   @field bio = contains(StringField);
   @field avatar = linksTo(ImageAsset);
-  @field joinDate = contains(DatetimeField, {
+  @field joinDate = contains(DateTimeField, {
     computeVia: function() {
       return new Date();
     }
@@ -520,7 +520,7 @@ ${REPLACE_MARKER}`;
       return '';
     }
   });
-  @field joinDate = contains(DatetimeField, {
+  @field joinDate = contains(DateTimeField, {
     computeVia: function() {
       return new Date();
     }
@@ -541,7 +541,7 @@ ${REPLACE_MARKER}`;
   @field email = contains(StringField);
   @field bio = contains(StringField);
   @field avatar = linksTo(ImageAsset);
-  @field joinDate = contains(DatetimeField, {
+  @field joinDate = contains(DateTimeField, {
     computeVia: function() {
       return new Date();
     }
@@ -579,7 +579,7 @@ ${REPLACE_MARKER}`;
       return '';
     }
   });
-  @field joinDate = contains(DatetimeField, {
+  @field joinDate = contains(DateTimeField, {
     computeVia: function() {
       return new Date();
     }

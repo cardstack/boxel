@@ -2,6 +2,12 @@ name: Build Test Web Assets
 
 on:
   workflow_call:
+    inputs:
+      skip_catalog:
+        description: Build host test assets with catalog skipped
+        required: false
+        type: boolean
+        default: false
     outputs:
       artifact_name:
         description: Artifact name containing built test web assets
@@ -35,8 +41,9 @@ jobs:
         shell: bash
         run: |
           ref_slug="$(echo "${GITHUB_REF}" | tr '/' '_')"
-          cache_key="test-web-assets-v1-${RUNNER_OS}-${ref_slug}-${GITHUB_SHA}"
-          artifact_name="test-web-assets-${GITHUB_SHA}"
+          skip_catalog="${{ inputs.skip_catalog }}"
+          cache_key="test-web-assets-v2-${RUNNER_OS}-${ref_slug}-${GITHUB_SHA}-skip-catalog-${skip_catalog}"
+          artifact_name="test-web-assets-${GITHUB_SHA}-skip-catalog-${skip_catalog}"
           echo "cache_key=$cache_key" >> "$GITHUB_OUTPUT"
           echo "artifact_name=$artifact_name" >> "$GITHUB_OUTPUT"
 
@@ -65,6 +72,8 @@ jobs:
         if: steps.restore.outputs.cache-hit != 'true'
         run: NODE_OPTIONS="--max_old_space_size=4096" pnpm build
         working-directory: packages/host
+        env:
+          SKIP_CATALOG: ${{ inputs.skip_catalog }}
 
       - name: Write assets manifest
         shell: bash
@@ -80,6 +89,7 @@ jobs:
             pnpm: require("child_process").execSync("pnpm -v").toString().trim(),
             cacheKey: process.env.CACHE_KEY,
             cacheHit: process.env.CACHE_HIT === "true",
+            skipCatalog: process.env.SKIP_CATALOG === "true",
             builtAt: new Date().toISOString(),
           };
           fs.writeFileSync(".ci/test-web-assets/manifest.json", JSON.stringify(manifest, null, 2));
@@ -87,6 +97,7 @@ jobs:
         env:
           CACHE_KEY: ${{ steps.keys.outputs.cache_key }}
           CACHE_HIT: ${{ steps.restore.outputs.cache-hit }}
+          SKIP_CATALOG: ${{ inputs.skip_catalog }}
 
       - name: Save cached assets
         if: steps.restore.outputs.cache-hit != 'true'

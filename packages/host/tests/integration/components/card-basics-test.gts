@@ -62,7 +62,7 @@ import {
   contains,
   containsMany,
   DateField,
-  DatetimeField,
+  DateTimeField,
   EmailField,
   EthereumAddressField,
   field,
@@ -115,7 +115,7 @@ module('Integration | card-basics', function (hooks) {
         @field boolean = contains(BooleanField);
         @field base64 = contains(Base64ImageField);
         @field date = contains(DateField);
-        @field datetime = contains(DatetimeField);
+        @field datetime = contains(DateTimeField);
         @field ethereumAddress = contains(EthereumAddressField);
         @field markdown = contains(MarkdownField);
         @field textArea = contains(TextAreaField);
@@ -2561,7 +2561,7 @@ module('Integration | card-basics', function (hooks) {
         static icon = Plane;
         @field origin = contains(StringField);
         @field destination = contains(StringField);
-        @field date = contains(DatetimeField);
+        @field date = contains(DateTimeField);
         @field flightNumber = contains(StringField);
 
         @field cardTitle = contains(StringField, {
@@ -4050,7 +4050,7 @@ module('Integration | card-basics', function (hooks) {
     test('can edit and reset date and datetime fields', async function (assert) {
       class Person extends CardDef {
         @field date = contains(DateField);
-        @field appointment = contains(DatetimeField);
+        @field appointment = contains(DateTimeField);
         static edit = class Edit extends Component<typeof this> {
           <template>
             <@fields.date />
@@ -4091,7 +4091,7 @@ module('Integration | card-basics', function (hooks) {
 
       class DatesCard extends CardDef {
         @field date = contains(DateField);
-        @field datetime = contains(DatetimeField);
+        @field datetime = contains(DateTimeField);
       }
 
       let personWithBrokenDates = new DatesCard({
@@ -4112,7 +4112,7 @@ module('Integration | card-basics', function (hooks) {
 
       class Person extends CardDef {
         @field dates = containsMany(DateField);
-        @field appointments = containsMany(DatetimeField);
+        @field appointments = containsMany(DateTimeField);
         static edit = class Edit extends Component<typeof this> {
           <template>
             <@fields.dates />

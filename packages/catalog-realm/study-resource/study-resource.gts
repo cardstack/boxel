@@ -8,7 +8,7 @@ import {
 } from '@cardstack/base/card-api'; // ¹ Core imports
 import StringField from '@cardstack/base/string';
 import NumberField from '@cardstack/base/number';
-import DatetimeField from '@cardstack/base/datetime';
+import DateTimeField from '@cardstack/base/datetime';
 import MarkdownField from '@cardstack/base/markdown';
 import UrlField from '@cardstack/base/url';
 import {
@@ -558,7 +558,7 @@ export class StudyResource extends CardDef {
   @field completionStatus = contains(StringField); // not_started, in_progress, completed
   @field tags = containsMany(StringField); // ²²² Individual tag fields
   @field notes = contains(MarkdownField);
-  @field lastAccessed = contains(DatetimeField);
+  @field lastAccessed = contains(DateTimeField);
   @field progressPercentage = contains(NumberField); // ²²³ 0-100 completion percentage
 
   // ⁷ Computed title

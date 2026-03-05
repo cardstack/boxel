@@ -8,7 +8,7 @@ import {
 import StringField from '@cardstack/base/string';
 import NumberField from '@cardstack/base/number';
 import BooleanField from '@cardstack/base/boolean';
-import DatetimeField from '@cardstack/base/datetime';
+import DateTimeField from '@cardstack/base/datetime';
 import UrlField from '@cardstack/base/url';
 
 import { formatDateTime } from '@cardstack/boxel-ui/helpers';
@@ -23,7 +23,7 @@ export class GamingPlatform extends CardDef {
   @field name = contains(StringField);
   @field accountId = contains(StringField);
   @field isConnected = contains(BooleanField);
-  @field lastSynced = contains(DatetimeField);
+  @field lastSynced = contains(DateTimeField);
   @field gamesCount = contains(NumberField);
   @field logoImageUrl = contains(UrlField);
   @field connectionToken = contains(StringField);

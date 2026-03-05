@@ -2,7 +2,7 @@ import { module, test } from 'qunit';
 import type { Test, SuperTest } from 'supertest';
 import { basename } from 'path';
 import type { Realm } from '@cardstack/runtime-common';
-import { setupPermissionedRealm, createJWT } from './helpers';
+import { setupPermissionedRealmCached, createJWT } from './helpers';
 import { PRERENDERED_HTML_FORMATS, baseRealm } from '@cardstack/runtime-common';
 import type { Query } from '@cardstack/runtime-common/query';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
@@ -32,7 +32,7 @@ module(basename(__filename), function () {
       module(
         'instances with no embedded template css of its own',
         function (hooks) {
-          setupPermissionedRealm(hooks, {
+          setupPermissionedRealmCached(hooks, {
             realmURL,
             permissions: {
               '*': ['read'],
@@ -228,13 +228,17 @@ module(basename(__filename), function () {
                 1,
                 `total count is correct for ${format}`,
               );
+              assert.true(
+                json.meta.isFileMeta,
+                `isFileMeta flag is set for ${format} file-meta query`,
+              );
             }
           });
         },
       );
 
       module('instances whose embedded template has css', function (hooks) {
-        setupPermissionedRealm(hooks, {
+        setupPermissionedRealmCached(hooks, {
           realmURL,
           permissions: {
             '*': ['read'],
@@ -625,7 +629,7 @@ module(basename(__filename), function () {
       module(
         'instances with no embedded template css of its own',
         function (hooks) {
-          setupPermissionedRealm(hooks, {
+          setupPermissionedRealmCached(hooks, {
             realmURL,
             permissions: {
               '*': ['read'],
@@ -750,7 +754,7 @@ module(basename(__filename), function () {
       );
 
       module('instances whose embedded template has css', function (hooks) {
-        setupPermissionedRealm(hooks, {
+        setupPermissionedRealmCached(hooks, {
           realmURL,
           permissions: {
             '*': ['read'],
@@ -1051,7 +1055,7 @@ module(basename(__filename), function () {
       });
 
       module('permissioned realm', function (hooks) {
-        setupPermissionedRealm(hooks, {
+        setupPermissionedRealmCached(hooks, {
           realmURL,
           permissions: {
             john: ['read'],
@@ -1136,7 +1140,7 @@ module(basename(__filename), function () {
       });
 
       module('search query validation', function (hooks) {
-        setupPermissionedRealm(hooks, {
+        setupPermissionedRealmCached(hooks, {
           realmURL,
           permissions: {
             '*': ['read'],

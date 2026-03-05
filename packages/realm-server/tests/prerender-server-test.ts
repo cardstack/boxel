@@ -3,7 +3,10 @@ import type { SuperTest, Test } from 'supertest';
 import supertest from 'supertest';
 import { basename } from 'path';
 
-import { setupPermissionedRealm, testCreatePrerenderAuth } from './helpers';
+import {
+  setupPermissionedRealmCached,
+  testCreatePrerenderAuth,
+} from './helpers';
 import { buildPrerenderApp } from '../prerender/prerender-app';
 import type { Prerenderer } from '../prerender';
 import { baseCardRef } from '@cardstack/runtime-common';
@@ -22,7 +25,7 @@ module(basename(__filename), function () {
     let draining = false;
     let realmURL = new URL('http://127.0.0.1:4444/test/');
 
-    setupPermissionedRealm(hooks, {
+    setupPermissionedRealmCached(hooks, {
       mode: 'before',
       permissions: { [testUserId]: ['read', 'write', 'realm-owner'] },
       realmURL,

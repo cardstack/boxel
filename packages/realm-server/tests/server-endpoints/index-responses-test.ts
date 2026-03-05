@@ -3,7 +3,7 @@ import { join, basename } from 'path';
 import type { Test, SuperTest } from 'supertest';
 import { systemInitiatedPriority, type Realm } from '@cardstack/runtime-common';
 import { setupServerEndpointsTest, testRealm2URL } from './helpers';
-import { setupPermissionedRealmAtURL, waitUntil } from '../helpers';
+import { setupPermissionedRealmCached, waitUntil } from '../helpers';
 import { ensureDirSync, writeFileSync, writeJSONSync } from 'fs-extra';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
@@ -963,7 +963,8 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       testRealm = args.testRealm;
     }
 
-    setupPermissionedRealmAtURL(hooks, realmURL, {
+    setupPermissionedRealmCached(hooks, {
+      realmURL,
       permissions: {
         '*': ['read'],
       },

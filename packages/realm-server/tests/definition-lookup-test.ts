@@ -12,7 +12,7 @@ import {
   type VirtualNetwork,
 } from '@cardstack/runtime-common';
 import {
-  setupPermissionedRealms,
+  setupPermissionedRealmsCached,
   createVirtualNetwork,
   testCreatePrerenderAuth,
 } from './helpers';
@@ -171,7 +171,7 @@ module(basename(__filename), function () {
       });
     });
 
-    setupPermissionedRealms(hooks, {
+    setupPermissionedRealmsCached(hooks, {
       realms: [
         {
           realmURL,

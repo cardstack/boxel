@@ -18,6 +18,7 @@ import {
   contains,
   containsMany,
   field,
+  queryableValue,
   type CardContext,
   type Format,
   FieldDef,
@@ -37,6 +38,9 @@ interface CardListSignature {
 
 export class JsonField extends FieldDef {
   static [primitive]: Record<string, any>;
+  static [queryableValue](_value: any, _stack: BaseDef[]): null {
+    return null;
+  }
 }
 
 export class QueryField extends FieldDef {

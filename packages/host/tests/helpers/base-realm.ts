@@ -1,6 +1,6 @@
 import { getService } from '@universal-ember/test-support';
 
-import { baseRealmPrefix } from '@cardstack/runtime-common';
+import { baseRealm } from '@cardstack/runtime-common';
 
 import type * as Base64ImageFieldModule from '@cardstack/base/base64-image';
 import type * as BigIntegerModule from '@cardstack/base/big-integer';
@@ -9,7 +9,7 @@ import type * as CardAPIModule from '@cardstack/base/card-api';
 import type * as CardsGridModule from '@cardstack/base/cards-grid';
 import type * as CodeRefModule from '@cardstack/base/code-ref';
 import type * as DateFieldModule from '@cardstack/base/date';
-import type * as DatetimeFieldModule from '@cardstack/base/datetime';
+import type * as DateTimeFieldModule from '@cardstack/base/datetime';
 import type * as EmailFieldModule from '@cardstack/base/email';
 import type * as EnumModule from '@cardstack/base/enum';
 import type * as EthereumAddressModule from '@cardstack/base/ethereum-address';
@@ -32,8 +32,8 @@ let NumberField: NumberField;
 type DateField = (typeof DateFieldModule)['default'];
 let DateField: DateField;
 
-type DatetimeField = (typeof DatetimeFieldModule)['default'];
-let DatetimeField: DatetimeField;
+type DateTimeField = (typeof DateTimeFieldModule)['default'];
+let DateTimeField: DateTimeField;
 
 type EmailField = (typeof EmailFieldModule)['default'];
 let EmailField: EmailField;
@@ -130,8 +130,8 @@ async function initialize() {
     await loader.import<typeof DateFieldModule>(`${baseRealmPrefix}date`)
   ).default;
 
-  DatetimeField = (
-    await loader.import<typeof DatetimeFieldModule>(`${baseRealmPrefix}datetime`)
+  DateTimeField = (
+    await loader.import<typeof DateTimeFieldModule>(`${baseRealmPrefix}datetime`)
   ).default;
 
   EmailField = (
@@ -255,7 +255,7 @@ export {
   StringField,
   NumberField,
   DateField,
-  DatetimeField,
+  DateTimeField,
   EmailField,
   Base64ImageField,
   CodeRefField,

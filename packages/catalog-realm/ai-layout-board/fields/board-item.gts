@@ -8,7 +8,7 @@ import {
 } from '@cardstack/base/card-api';
 import StringField from '@cardstack/base/string';
 import UrlField from '@cardstack/base/url';
-import DatetimeField from '@cardstack/base/datetime';
+import DateTimeField from '@cardstack/base/datetime';
 import { BoardPosition } from './board-position';
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
@@ -2736,7 +2736,7 @@ export class IsolatedCountdownTimer extends Component<typeof CountdownTimer> {
 export class CountdownTimer extends BoardItem {
   static displayName = 'Countdown Timer';
 
-  @field targetDate = contains(DatetimeField);
+  @field targetDate = contains(DateTimeField);
   @field cardTitle = contains(StringField);
 
   static isolated = IsolatedCountdownTimer;

@@ -598,7 +598,7 @@ export default class AiAssistantPanelService extends Service {
         ) -
         this.matrixService.getLastActiveTimestamp(
           a.roomId,
-          b.lastActiveTimestamp,
+          a.lastActiveTimestamp,
         ),
     );
   }

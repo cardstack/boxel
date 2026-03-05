@@ -37,24 +37,19 @@ export default class CreateListingPRRequestCommand extends HostBaseCommand<
     await this.matrixService.ready;
 
     let { realm, listingId } = input;
-    let roomId = input.roomId;
     let listingName: string | undefined;
-
-    if (!roomId) {
-      let listing = await this.store.get<Listing>(listingId);
-      if (listing && isCardInstance(listing)) {
-        listingName = listing.name ?? listing.id;
-      }
-      let useAiAssistantCommand = new UseAiAssistantCommand(
-        this.commandContext,
-      );
-      let createRoomResult = await useAiAssistantCommand.execute({
-        roomId: 'new',
-        roomName: `PR: ${listingName ?? listingId ?? 'Listing'}`,
-        openRoom: true,
-      });
-      roomId = createRoomResult.roomId;
+    let listing = await this.store.get<Listing>(listingId);
+    if (listing && isCardInstance(listing)) {
+      listingName = listing.name ?? listing.id;
     }
+
+    let useAiAssistantCommand = new UseAiAssistantCommand(this.commandContext);
+    let createRoomResult = await useAiAssistantCommand.execute({
+      roomId: 'new',
+      roomName: `PR: ${listingName ?? listingId ?? 'Listing'}`,
+      openRoom: false,
+    });
+    let roomId = createRoomResult.roomId;
 
     let submissionBotId = this.matrixService.submissionBotUserId;
     if (!(await this.matrixService.isUserInRoom(roomId, submissionBotId))) {
@@ -69,6 +64,7 @@ export default class CreateListingPRRequestCommand extends HostBaseCommand<
         roomId,
         realm,
         listingId,
+        ...(listingName ? { listingName } : {}),
       },
     });
   }

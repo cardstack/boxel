@@ -37,7 +37,7 @@ import {
   contains,
   linksTo,
   containsMany,
-  DatetimeField,
+  DateTimeField,
   field,
   FieldDef,
   NumberField,
@@ -2510,13 +2510,13 @@ module(`Integration | realm indexing`, function (hooks) {
       @field cardDescription = contains(StringField);
       @field author = contains(Person);
       @field views = contains(NumberField);
-      @field createdAt = contains(DatetimeField);
+      @field createdAt = contains(DateTimeField);
     }
     class Booking extends FieldDef {
       @field cardTitle = contains(StringField);
       @field venue = contains(StringField);
-      @field startTime = contains(DatetimeField);
-      @field endTime = contains(DatetimeField);
+      @field startTime = contains(DateTimeField);
+      @field endTime = contains(DateTimeField);
       @field hosts = containsMany(Person);
       @field sponsors = containsMany(StringField);
       @field posts = containsMany(Post);

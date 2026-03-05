@@ -13,7 +13,7 @@ import {
 import StringField from '@cardstack/base/string';
 
 import MarkdownField from '@cardstack/base/markdown';
-import DatetimeField from '@cardstack/base/datetime';
+import DateTimeField from '@cardstack/base/datetime';
 import BooleanField from '@cardstack/base/boolean';
 import NumberField from '@cardstack/base/number';
 import { Button } from '@cardstack/boxel-ui/components';
@@ -1812,14 +1812,14 @@ export class Adventure extends CardDef {
 
   @field gameStatus = contains(StringField); // 'setup' | 'playing' | 'completed'
   @field currentTurn = contains(NumberField);
-  @field startedAt = contains(DatetimeField);
-  @field completedAt = contains(DatetimeField);
+  @field startedAt = contains(DateTimeField);
+  @field completedAt = contains(DateTimeField);
   @field chatRoomId = contains(StringField);
 
   @field lastTurnNumber = contains(NumberField);
   @field lastNarration = contains(MarkdownField);
   @field lastPlayerChoice = contains(StringField);
-  @field lastTimestamp = contains(DatetimeField);
+  @field lastTimestamp = contains(DateTimeField);
   @field lastIsPlayerTurn = contains(BooleanField);
   @field lastImagePrompt = contains(StringField);
   @field lastCloudflareImage = linksTo(CloudflareImage);

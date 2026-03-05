@@ -9,7 +9,7 @@ import {
   SupportedMimeType,
 } from '@cardstack/runtime-common';
 import {
-  setupPermissionedRealm,
+  setupPermissionedRealmCached,
   createJWT,
   type RealmRequest,
   withRealmPath,
@@ -39,7 +39,7 @@ module(basename(__filename), function () {
       }
 
       module('writes', function (hooks) {
-        setupPermissionedRealm(hooks, {
+        setupPermissionedRealmCached(hooks, {
           permissions: {
             '*': ['read', 'write'],
           },
@@ -728,7 +728,7 @@ module(basename(__filename), function () {
         });
       });
       module('error handling', function (hooks) {
-        setupPermissionedRealm(hooks, {
+        setupPermissionedRealmCached(hooks, {
           permissions: {
             '*': ['read', 'write'],
           },
@@ -890,7 +890,7 @@ module(basename(__filename), function () {
         });
       });
       module('validation', function (hooks) {
-        setupPermissionedRealm(hooks, {
+        setupPermissionedRealmCached(hooks, {
           permissions: {
             '*': ['read', 'write'],
           },

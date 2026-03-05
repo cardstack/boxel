@@ -9,6 +9,7 @@ const DEFAULT_FILE_SIZE_LIMIT_BYTES = 5 * 1024 * 1024; // 5MB
 let sqlSchema = fs.readFileSync(getLatestSchemaFile(), 'utf8');
 
 module.exports = function (environment) {
+  const skipCatalog = process.env.SKIP_CATALOG === 'true';
   const ENV = {
     modulePrefix: '@cardstack/host',
     environment,
@@ -59,7 +60,7 @@ module.exports = function (environment) {
     realmServerURL: process.env.REALM_SERVER_DOMAIN || 'http://localhost:4201/',
     resolvedBaseRealmURL:
       process.env.RESOLVED_BASE_REALM_URL || 'http://localhost:4201/base/',
-    resolvedCatalogRealmURL: process.env.SKIP_CATALOG
+    resolvedCatalogRealmURL: skipCatalog
       ? undefined
       : process.env.RESOLVED_CATALOG_REALM_URL ||
         'http://localhost:4201/catalog/',
@@ -77,7 +78,7 @@ module.exports = function (environment) {
     // ENV.APP.LOG_TRANSITIONS_INTERNAL = true;
     // ENV.APP.LOG_VIEW_LOOKUPS = true;
     ENV.defaultSystemCardId = process.env.DEFAULT_SYSTEM_CARD_ID;
-    if (!ENV.defaultSystemCardId && !process.env.SKIP_CATALOG) {
+    if (!ENV.defaultSystemCardId && !skipCatalog) {
       ENV.defaultSystemCardId =
         'http://localhost:4201/catalog/SystemCard/default';
     }
@@ -104,9 +105,6 @@ module.exports = function (environment) {
     ENV.featureFlags = {
       SHOW_ASK_AI: true,
     };
-
-    // Catalog realm is not available in test environment
-    ENV.resolvedCatalogRealmURL = undefined;
 
     ENV.defaultSystemCardId =
       process.env.DEFAULT_SYSTEM_CARD_ID ??

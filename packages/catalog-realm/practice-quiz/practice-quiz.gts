@@ -10,7 +10,7 @@ import {
 import StringField from '@cardstack/base/string';
 import NumberField from '@cardstack/base/number';
 import BooleanField from '@cardstack/base/boolean';
-import DatetimeField from '@cardstack/base/datetime';
+import DateTimeField from '@cardstack/base/datetime';
 import { Button, Pill } from '@cardstack/boxel-ui/components'; // ⁽²⁾ UI components
 import {
   formatDateTime,
@@ -144,7 +144,7 @@ class PracticeQuizIsolated extends Component<typeof PracticeQuizCard> {
         this.args.model.correctAnswers = correctCount;
         this.args.model.isCompleted = true;
 
-        // Fix: DatetimeField expects a Date object, not a string
+        // Fix: DateTimeField expects a Date object, not a string
         try {
           this.args.model.completedAt = new Date();
           console.log(
@@ -1778,7 +1778,7 @@ export class PracticeQuizCard extends CardDef {
   @field difficulty = contains(StringField); // ⁽¹⁹⁾ Beginner, Intermediate, Advanced
   @field studyTopic = contains(StringField); // ⁽²⁰⁾ Specific learning topic
   @field isCompleted = contains(BooleanField); // ⁽²¹⁾ Completion status
-  @field completedAt = contains(DatetimeField); // ⁽²²⁾ Completion timestamp
+  @field completedAt = contains(DateTimeField); // ⁽²²⁾ Completion timestamp
   @field correctAnswers = contains(NumberField); // ⁽²³⁾ Number of correct answers
 
   // ⁽²⁴⁾ Computed percentage score with grade level

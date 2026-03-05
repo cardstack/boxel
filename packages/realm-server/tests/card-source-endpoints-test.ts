@@ -14,7 +14,7 @@ import {
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
 import {
-  setupPermissionedRealmAtURL,
+  setupPermissionedRealmCached,
   setupMatrixRoom,
   createJWT,
   cardInfo,
@@ -70,7 +70,8 @@ module(basename(__filename), function () {
 
     module('card source GET request', function (_hooks) {
       module('public readable realm', function (hooks) {
-        setupPermissionedRealmAtURL(hooks, realmURL, {
+        setupPermissionedRealmCached(hooks, {
+          realmURL,
           permissions: {
             '*': ['read'],
             '@node-test_realm:localhost': ['read', 'realm-owner'],
@@ -351,7 +352,8 @@ module(basename(__filename), function () {
       });
 
       module('permissioned realm', function (hooks) {
-        setupPermissionedRealmAtURL(hooks, realmURL, {
+        setupPermissionedRealmCached(hooks, {
+          realmURL,
           permissions: {
             john: ['read'],
             '@node-test_realm:localhost': ['read', 'realm-owner'],
@@ -401,7 +403,8 @@ module(basename(__filename), function () {
 
     module('card source HEAD request', function (_hooks) {
       module('public readable realm', function (hooks) {
-        setupPermissionedRealmAtURL(hooks, realmURL, {
+        setupPermissionedRealmCached(hooks, {
+          realmURL,
           permissions: {
             '*': ['read'],
             '@node-test_realm:localhost': ['read', 'realm-owner'],
@@ -475,7 +478,8 @@ module(basename(__filename), function () {
 
     module('card-source DELETE request', function (_hooks) {
       module('public writable realm', function (hooks) {
-        setupPermissionedRealmAtURL(hooks, realmURL, {
+        setupPermissionedRealmCached(hooks, {
+          realmURL,
           permissions: {
             '*': ['read', 'write'],
             '@node-test_realm:localhost': ['read', 'realm-owner'],
@@ -548,7 +552,8 @@ module(basename(__filename), function () {
       });
 
       module('permissioned realm', function (hooks) {
-        setupPermissionedRealmAtURL(hooks, realmURL, {
+        setupPermissionedRealmCached(hooks, {
+          realmURL,
           permissions: {
             john: ['read', 'write'],
             '@node-test_realm:localhost': ['read', 'realm-owner'],
@@ -590,7 +595,8 @@ module(basename(__filename), function () {
 
     module('card-source POST request', function (_hooks) {
       module('public writable realm', function (hooks) {
-        setupPermissionedRealmAtURL(hooks, realmURL, {
+        setupPermissionedRealmCached(hooks, {
+          realmURL,
           permissions: {
             '*': ['read', 'write'],
             '@node-test_realm:localhost': ['read', 'realm-owner'],
@@ -991,7 +997,8 @@ module(basename(__filename), function () {
       });
 
       module('public writable realm with size limit', function (hooks) {
-        setupPermissionedRealmAtURL(hooks, realmURL, {
+        setupPermissionedRealmCached(hooks, {
+          realmURL,
           permissions: {
             '*': ['read', 'write'],
             '@node-test_realm:localhost': ['read', 'realm-owner'],
@@ -1026,7 +1033,8 @@ module(basename(__filename), function () {
       });
 
       module('permissioned realm', function (hooks) {
-        setupPermissionedRealmAtURL(hooks, realmURL, {
+        setupPermissionedRealmCached(hooks, {
+          realmURL,
           permissions: {
             john: ['read', 'write'],
             '@node-test_realm:localhost': ['read', 'realm-owner'],
@@ -1080,7 +1088,8 @@ module(basename(__filename), function () {
 
     module('binary file POST request', function (_hooks) {
       module('public writable realm', function (hooks) {
-        setupPermissionedRealmAtURL(hooks, realmURL, {
+        setupPermissionedRealmCached(hooks, {
+          realmURL,
           permissions: {
             '*': ['read', 'write'],
             '@node-test_realm:localhost': ['read', 'realm-owner'],
@@ -1194,7 +1203,8 @@ module(basename(__filename), function () {
       module(
         'public writable realm with size limit for binary',
         function (hooks) {
-          setupPermissionedRealmAtURL(hooks, realmURL, {
+          setupPermissionedRealmCached(hooks, {
+            realmURL,
             permissions: {
               '*': ['read', 'write'],
               '@node-test_realm:localhost': ['read', 'realm-owner'],
@@ -1221,7 +1231,8 @@ module(basename(__filename), function () {
       );
 
       module('permissioned realm for binary', function (hooks) {
-        setupPermissionedRealmAtURL(hooks, realmURL, {
+        setupPermissionedRealmCached(hooks, {
+          realmURL,
           permissions: {
             john: ['read', 'write'],
             '@node-test_realm:localhost': ['read', 'realm-owner'],

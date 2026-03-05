@@ -367,6 +367,29 @@ module('Acceptance | AI Assistant tests', function (hooks) {
         ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'person.gts': { Person },
         'pet.gts': { Pet },
+        'broken-card.gts': `
+          import { CardDef, field, contains } from '@cardstack/base/card-api';
+          import StringField from '@cardstack/base/string';
+          import { BrokenField } from './does-not-exist';
+          export class BrokenCard extends CardDef {
+            static displayName = 'Broken Card';
+            @field name = contains(StringField);
+            @field broken = contains(BrokenField);
+          }
+        `,
+        'BrokenCard/errored.json': {
+          data: {
+            attributes: {
+              name: 'Errored Instance',
+            },
+            meta: {
+              adoptsFrom: {
+                module: '../broken-card',
+                name: 'BrokenCard',
+              },
+            },
+          },
+        },
         'country.gts': countryDefinition,
         'Country/indonesia.json': {
           data: {
@@ -882,6 +905,28 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     assert.dom('[data-test-autoattached-card]').exists();
     await click(`[data-test-autoattached-card] [data-test-remove-card-btn]`);
     assert.dom('[data-test-autoattached-card]').doesNotExist();
+  });
+
+  test('errored card instance is not auto-attached in code mode', async function (assert) {
+    // Start directly in code mode with the errored card's JSON file
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}BrokenCard/errored.json`,
+      stacks: [[]],
+    });
+    await click('[data-test-open-ai-assistant]');
+    await waitFor(`[data-room-settled]`);
+
+    // The JSON file itself should still be auto-attached as a file
+    assert
+      .dom('[data-test-autoattached-file]')
+      .exists('errored card JSON file should still be auto-attached as a file');
+    // But the card instance should NOT be auto-attached (it has errors)
+    assert
+      .dom('[data-test-autoattached-card]')
+      .doesNotExist(
+        'errored card instance should not be auto-attached as a card',
+      );
   });
 
   test<TestContextWithSave>('can send a newly created auto-attached card', async function (assert) {

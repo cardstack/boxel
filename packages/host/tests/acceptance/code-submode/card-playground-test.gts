@@ -12,7 +12,7 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import {
-  baseRealmPrefix,
+  baseRealm,
   hasExecutableExtension,
   trimJsonExtension,
   type Realm,
@@ -111,7 +111,7 @@ const authorCard = `import { contains, field, CardDef, Component } from "@cardst
 }`;
 
 const blogPostCard = `import { contains, field, linksTo, linksToMany, CardDef, Component, StringField } from "@cardstack/base/card-api";
-  import DatetimeField from '@cardstack/base/datetime';
+  import DateTimeField from '@cardstack/base/datetime';
   import MarkdownField from '@cardstack/base/markdown';
   import { Author } from './author';
 
@@ -132,7 +132,7 @@ const blogPostCard = `import { contains, field, linksTo, linksToMany, CardDef, C
 
   export class BlogPost extends CardDef {
     static displayName = 'Blog Post';
-    @field publishDate = contains(DatetimeField);
+    @field publishDate = contains(DateTimeField);
     @field author = linksTo(Author);
     @field categories = linksToMany(Category);
     @field localCategories = linksToMany(LocalCategoryCard);
@@ -231,7 +231,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
     hooks.beforeEach(async function () {
       let loader = getService('loader-service').loader;
       let cardsGrid: typeof import('@cardstack/base/cards-grid');
-      cardsGrid = await loader.import(`${baseRealmPrefix}cards-grid`);
+      cardsGrid = await loader.import(`${baseRealm.url}cards-grid`);
       let { CardsGrid } = cardsGrid;
 
       createAndJoinRoom({
@@ -1047,7 +1047,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
     test('playground preview for card with linked fields can live update when module changes', async function (assert) {
       // change: added "Hello" before rendering title on the template
       const blogPostCard = `import { contains, field, linksTo, linksToMany, CardDef, Component } from "@cardstack/base/card-api";
-        import DatetimeField from '@cardstack/base/datetime';
+        import DateTimeField from '@cardstack/base/datetime';
         import MarkdownField from '@cardstack/base/markdown';
         import StringField from "@cardstack/base/string";
         import { Author } from './author';
@@ -1067,7 +1067,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
 
         export class BlogPost extends CardDef {
           static displayName = 'Blog Post';
-          @field publishDate = contains(DatetimeField);
+          @field publishDate = contains(DateTimeField);
           @field author = linksTo(Author);
           @field categories = linksToMany(Category);
           @field body = contains(MarkdownField);
@@ -1623,7 +1623,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       try {
         setRecentFiles([[personalRealmURL, 'StyleReference/local-style.json']]);
 
-        await openFileInPlayground('style-reference.gts', baseRealmPrefix);
+        await openFileInPlayground('style-reference.gts', baseRealm.url);
 
         await waitFor('[data-test-instance-chooser]');
         assert

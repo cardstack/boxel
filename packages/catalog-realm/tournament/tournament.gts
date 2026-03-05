@@ -8,7 +8,7 @@ import {
 
 import StringField from '@cardstack/base/string';
 import NumberField from '@cardstack/base/number';
-import DatetimeField from '@cardstack/base/datetime';
+import DateTimeField from '@cardstack/base/datetime';
 import UrlField from '@cardstack/base/url';
 import MarkdownField from '@cardstack/base/markdown';
 
@@ -24,12 +24,12 @@ export class Tournament extends CardDef {
 
   @field name = contains(StringField);
   @field game = linksTo(() => VideoGame);
-  @field startDate = contains(DatetimeField);
-  @field endDate = contains(DatetimeField);
+  @field startDate = contains(DateTimeField);
+  @field endDate = contains(DateTimeField);
   @field participants = contains(NumberField);
   @field prizePool = contains(NumberField);
   @field status = contains(StringField);
-  @field registrationDeadline = contains(DatetimeField);
+  @field registrationDeadline = contains(DateTimeField);
   @field format = contains(StringField);
   @field organizer = contains(StringField);
   @field rules = contains(MarkdownField);

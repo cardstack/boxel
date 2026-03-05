@@ -160,9 +160,12 @@ export default class CardCatalogModal extends Component<Signature> {
       .card-catalog-modal.large {
         --boxel-modal-offset-top: var(--boxel-sp-xxxl);
       }
-      .card-catalog-search {
-        margin-top: var(--boxel-sp-sm);
-        margin-bottom: var(--boxel-sp-sm);
+      :deep(.dialog-box__header) {
+        gap: var(--boxel-sp);
+      }
+      :deep(.dialog-box__header),
+      :deep(.dialog-box__content) {
+        padding-bottom: 0;
       }
       .footer {
         display: flex;

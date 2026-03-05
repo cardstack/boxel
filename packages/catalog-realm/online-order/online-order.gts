@@ -6,7 +6,7 @@ import {
 } from '@cardstack/base/card-api';
 import StringField from '@cardstack/base/string';
 import NumberField from '@cardstack/base/number';
-import DatetimeField from '@cardstack/base/datetime';
+import DateTimeField from '@cardstack/base/datetime';
 import EmailField from '@cardstack/base/email';
 import AddressField from '@cardstack/base/address';
 
@@ -1356,7 +1356,7 @@ export class OnlineOrder extends CardDef {
   @field customerEmail = contains(EmailField);
   @field orderStatus = contains(StringField);
   @field orderTotal = contains(NumberField);
-  @field orderDate = contains(DatetimeField);
+  @field orderDate = contains(DateTimeField);
   @field shippingAddress = contains(AddressField);
   @field paymentMethod = contains(StringField);
   @field trackingNumber = contains(StringField);

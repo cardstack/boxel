@@ -6,7 +6,7 @@ import type { DirResult } from 'tmp';
 import { removeSync, writeJSONSync, writeFileSync } from 'fs-extra';
 import type { Realm } from '@cardstack/runtime-common';
 import {
-  setupPermissionedRealmAtURL,
+  setupPermissionedRealmCached,
   setupMatrixRoom,
   waitForRealmEvent,
   type RealmRequest,
@@ -56,7 +56,8 @@ module(basename(__filename), function () {
       };
     }
 
-    setupPermissionedRealmAtURL(hooks, realmURL, {
+    setupPermissionedRealmCached(hooks, {
+      realmURL,
       permissions: {
         '*': ['read'],
         '@node-test_realm:localhost': ['read', 'realm-owner'],

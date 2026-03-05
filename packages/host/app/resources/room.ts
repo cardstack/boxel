@@ -327,7 +327,10 @@ export class RoomResource extends Resource<Args> {
   @cached
   get created() {
     if (this._createEvent) {
-      return new Date(this._createEvent.origin_server_ts);
+      let d = new Date(this._createEvent.origin_server_ts);
+      if (!isNaN(d.getTime())) {
+        return d;
+      }
     }
     // there is a race condition in the matrix SDK where newly created
     // rooms don't immediately have a created date

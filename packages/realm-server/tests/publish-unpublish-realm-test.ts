@@ -22,7 +22,7 @@ import {
 import type { PgAdapter } from '@cardstack/postgres';
 import {
   setupDB,
-  setupPermissionedRealm,
+  setupPermissionedRealmCached,
   runTestRealmServer,
   closeServer,
   createVirtualNetwork,
@@ -48,7 +48,7 @@ module(basename(__filename), function () {
 
     let dir: DirResult;
 
-    setupPermissionedRealm(hooks, {
+    setupPermissionedRealmCached(hooks, {
       permissions: {
         '*': ['read', 'write'],
       },

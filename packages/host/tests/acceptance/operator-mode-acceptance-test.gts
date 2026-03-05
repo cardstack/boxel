@@ -962,6 +962,7 @@ module('Acceptance | operator mode tests', function (hooks) {
       nextDailyCreditGrantAt?: number | null;
       lastDailyCreditGrantAt?: number | null;
       stripeCustomerEmail?: string | null;
+      dailyCreditGrantCount?: number;
     };
 
     type UserResponseBody = {
@@ -1414,6 +1415,7 @@ module('Acceptance | operator mode tests', function (hooks) {
         lowCreditThreshold: 2000,
         nextDailyCreditGrantAt: null,
         lastDailyCreditGrantAt: nowSeconds - 3600,
+        dailyCreditGrantCount: 2,
       };
       try {
         await visitOperatorMode({
@@ -1430,6 +1432,43 @@ module('Acceptance | operator mode tests', function (hooks) {
           .includesText(
             'We topped up your account to 2,000 credits since you were getting low.',
           );
+        assert
+          .dom('[data-test-daily-grant-note]')
+          .includesText('Last daily credits grant:');
+      } finally {
+        userResponseBody.data.attributes = originalAttributes;
+      }
+    });
+
+    test('does not show "getting low" for fresh users with only initial grant', async function (assert) {
+      let originalAttributes = { ...userResponseBody.data.attributes };
+      let nowSeconds = Math.floor(Date.now() / 1000);
+      userResponseBody.data.attributes = {
+        ...originalAttributes,
+        creditsAvailableInPlanAllowance: 2000,
+        creditsIncludedInPlanAllowance: 2000,
+        extraCreditsAvailableInBalance: 2000,
+        lowCreditThreshold: 2000,
+        nextDailyCreditGrantAt: null,
+        lastDailyCreditGrantAt: nowSeconds - 60,
+        dailyCreditGrantCount: 1,
+      };
+      try {
+        await visitOperatorMode({
+          submode: 'interact',
+          codePath: `${testRealmURL}employee.gts`,
+        });
+
+        await waitFor('[data-test-profile-icon-button]');
+        await click('[data-test-profile-icon-button]');
+
+        assert.dom('[data-test-daily-grant-note]').exists();
+        assert
+          .dom('[data-test-daily-grant-note]')
+          .includesText('We topped up your account to 2,000 credits.');
+        assert
+          .dom('[data-test-daily-grant-note]')
+          .doesNotIncludeText('getting low');
         assert
           .dom('[data-test-daily-grant-note]')
           .includesText('Last daily credits grant:');

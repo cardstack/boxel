@@ -18,7 +18,9 @@ import {
   CardContextName,
 } from '@cardstack/runtime-common';
 
-import PrerenderedCardSearch from '@cardstack/host/components/prerendered-card-search';
+import PrerenderedCardSearch, {
+  knownFileMetaUrls,
+} from '@cardstack/host/components/prerendered-card-search';
 
 import {
   setupIntegrationTestRealm,
@@ -501,6 +503,10 @@ module(`Integration | prerendered-card-search`, function (hooks) {
     assert
       .dom('[data-test-meta-page-total="1"]')
       .exists('meta.page.total is correct for file-meta prerendered search');
+    assert.true(
+      knownFileMetaUrls.has(`${testRealmURL}files/prerendered-file.mismatch`),
+      'file-meta URL is registered in knownFileMetaUrls',
+    );
   });
 
   test('applies cardComponentModifier from card context to prerendered results', async function (this: RenderingTestContext, assert) {

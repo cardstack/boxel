@@ -1,5 +1,5 @@
 import { FeaturedImageField } from './fields/featured-image';
-import DatetimeField from '@cardstack/base/datetime';
+import DateTimeField from '@cardstack/base/datetime';
 import StringField from '@cardstack/base/string';
 import MarkdownField from '@cardstack/base/markdown';
 import NumberField from '@cardstack/base/number';
@@ -617,7 +617,7 @@ export class BlogPost extends CardDef {
   @field slug = contains(StringField);
   @field body = contains(MarkdownField);
   @field authors = linksToMany(Author);
-  @field publishDate = contains(DatetimeField);
+  @field publishDate = contains(DateTimeField);
   @field status = contains(Status, {
     computeVia: function (this: BlogPost) {
       if (!this.publishDate) {
@@ -632,7 +632,7 @@ export class BlogPost extends CardDef {
   @field blog = linksTo(BlogAppCard, { isUsed: true });
   @field featuredImage = contains(FeaturedImageField);
   @field categories = linksToMany(BlogCategory);
-  @field lastUpdated = contains(DatetimeField, {
+  @field lastUpdated = contains(DateTimeField, {
     computeVia: function (this: BlogPost) {
       let lastModified = getCardMeta(this, 'lastModified');
       return lastModified ? new Date(lastModified * 1000) : undefined;

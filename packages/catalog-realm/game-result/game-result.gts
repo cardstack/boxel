@@ -9,7 +9,7 @@ import {
 } from '@cardstack/base/card-api';
 
 import StringField from '@cardstack/base/string';
-import DatetimeField from '@cardstack/base/datetime';
+import DateTimeField from '@cardstack/base/datetime';
 import GamepadIcon from '@cardstack/boxel-icons/gamepad-2';
 import { RadioInput, FieldContainer } from '@cardstack/boxel-ui/components';
 import { tracked } from '@glimmer/tracking';
@@ -202,7 +202,7 @@ export class GameResult extends CardDef {
   @field game = linksTo(() => CardDef);
   @field outcome = contains(PlayerOutcomeField);
   @field ref = contains(AbsoluteCodeRefField);
-  @field createdAt = contains(DatetimeField, {
+  @field createdAt = contains(DateTimeField, {
     computeVia: function (this: GameResult) {
       let lastModified = getCardMeta(this, 'lastModified');
       return lastModified ? new Date(lastModified * 1000) : undefined;

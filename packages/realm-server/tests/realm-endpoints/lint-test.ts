@@ -2,7 +2,7 @@ import { module, test } from 'qunit';
 import type { Test, SuperTest } from 'supertest';
 import { basename } from 'path';
 import type { Realm } from '@cardstack/runtime-common';
-import { setupPermissionedRealm, createJWT } from '../helpers';
+import { setupPermissionedRealmCached, createJWT } from '../helpers';
 import {
   benchmarkOperation,
   createConcurrentTestData,
@@ -25,7 +25,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
       request = args.request;
     }
 
-    setupPermissionedRealm(hooks, {
+    setupPermissionedRealmCached(hooks, {
       permissions: {
         john: ['read', 'write'],
         '@node-test_realm:localhost': ['read', 'realm-owner'],
