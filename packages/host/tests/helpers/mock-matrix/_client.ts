@@ -25,10 +25,6 @@ import {
 
 import ENV from '@cardstack/host/config/environment';
 
-import type {
-  FileDefManager,
-  PrivilegedFileDefManager,
-} from '@cardstack/host/lib/file-def-manager';
 import FileDefManagerImpl from '@cardstack/host/lib/file-def-manager';
 import type { ExtendedClient } from '@cardstack/host/services/matrix-sdk-loader';
 
@@ -69,7 +65,7 @@ export class MockClient implements ExtendedClient {
   private listeners: Partial<Plural<MatrixSDK.ClientEventHandlerMap>> = {};
 
   private txnCtr = 0;
-  private fileDefManager: FileDefManager;
+  private fileDefManager: FileDefManagerImpl;
   slidingSyncInstance: any;
 
   constructor(
@@ -827,35 +823,32 @@ export class MockClient implements ExtendedClient {
   }
 
   async cacheContentHashIfNeeded(event: DiscreteMatrixEvent): Promise<void> {
-    this.fileDefManager.cacheContentHashIfNeeded(event);
+    await this.fileDefManager.cacheContentHashIfNeeded(event);
   }
 
   async recacheContentHash(contentHash: string, url: string): Promise<void> {
-    const fileDefManager = this.fileDefManager as PrivilegedFileDefManager;
-    if (fileDefManager.invalidUrlCache.has(url)) {
+    if (this.fileDefManager.invalidUrlCache.has(url)) {
       // Skipping re-caching for this url as it was previously checked and is invalid
       return;
     }
-
-    // Update the cache with the new URL for the content hash
-    fileDefManager.contentHashCache.set(contentHash, url);
 
     let contentArrayBuffer = this.serverState.getContent(url);
     if (!contentArrayBuffer) {
       throw new Error('No content found for URL: ' + url);
     }
     let content = new Uint8Array(contentArrayBuffer);
-    const fetchedContentHash = await fileDefManager.getContentHash(content);
+    const fetchedContentHash =
+      await this.fileDefManager.getContentHash(content);
     if (fetchedContentHash !== contentHash) {
       console.warn(
         `Content hash mismatch for URL: ${url}, skipping re-caching step`,
       );
-      fileDefManager.invalidUrlCache.add(url);
+      this.fileDefManager.invalidUrlCache.add(url);
       return;
     }
 
     // Update the cache with the new URL for the content hash
-    fileDefManager.contentHashCache.set(contentHash, url);
+    this.fileDefManager.contentHashCache.set(contentHash, url);
   }
 
   async prefetchFileContent(file: FileDef): Promise<void> {
@@ -863,23 +856,25 @@ export class MockClient implements ExtendedClient {
   }
 
   async uploadContent(
-    _content: XMLHttpRequestBodyInit,
-    _opts?: { type?: string; name?: string },
-  ): Promise<any> {
+    file: XMLHttpRequestBodyInit,
+    _opts?: MatrixSDK.UploadOpts,
+  ): Promise<MatrixSDK.UploadResponse> {
     if (this.sdkOpts.uploadContentInterceptor) {
       await this.sdkOpts.uploadContentInterceptor();
     }
     let contentUri = `mxc://mock-server/${Math.random()}`;
     let buffer: ArrayBuffer;
-    if (_content instanceof Uint8Array) {
-      buffer = (_content.buffer as ArrayBuffer).slice(
-        _content.byteOffset,
-        _content.byteOffset + _content.byteLength,
+    if (file instanceof Uint8Array) {
+      buffer = (file.buffer as ArrayBuffer).slice(
+        file.byteOffset,
+        file.byteOffset + file.byteLength,
       );
-    } else if (typeof _content === 'string') {
-      buffer = new TextEncoder().encode(_content).buffer as ArrayBuffer;
+    } else if (typeof file === 'string') {
+      buffer = new TextEncoder().encode(file).buffer as ArrayBuffer;
     } else {
-      throw new Error('Unsupported content type in mock uploadContent');
+      throw new Error(
+        `MockClient.uploadContent: unsupported file type ${typeof file}`,
+      );
     }
     this.serverState.addContent(this.mxcUrlToHttp(contentUri), buffer);
     return { content_uri: contentUri };
