@@ -82,6 +82,7 @@
     "ts-node": "^10.9.1",
     "typescript": "catalog:",
     "typescript-memoize": "catalog:",
+    "undici": "catalog:",
     "uuid": "catalog:",
     "wait-for-localhost-cli": "catalog:",
     "yaml": "catalog:",
