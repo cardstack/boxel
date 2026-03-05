@@ -3,8 +3,8 @@ import {
   field,
   CardDef,
   FieldDef,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 
 export const exportedVar = 'exported var';
 

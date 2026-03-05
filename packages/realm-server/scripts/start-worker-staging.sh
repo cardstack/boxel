@@ -14,7 +14,7 @@ NODE_NO_WARNINGS=1 \
   --prerendererUrl='http://boxel-prerender-manager.boxel-staging-internal:4222' \
   --matrixURL='https://matrix-staging.stack.cards' \
   \
-  --fromUrl='https://cardstack.com/base/' \
+  --fromUrl='@cardstack/base/' \
   --toUrl='https://realms-staging.stack.cards/base/' \
   \
   --fromUrl='https://realms-staging.stack.cards/experiments/' \

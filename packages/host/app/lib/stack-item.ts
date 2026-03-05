@@ -2,7 +2,7 @@ import { isFileDefInstance } from '@cardstack/runtime-common';
 import type { Deferred } from '@cardstack/runtime-common';
 import type { Store, StoreReadType } from '@cardstack/runtime-common';
 
-import type { Format } from 'https://cardstack.com/base/card-api';
+import type { Format } from '@cardstack/base/card-api';
 
 interface Args {
   format: Format;

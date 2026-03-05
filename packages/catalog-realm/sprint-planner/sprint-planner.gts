@@ -14,7 +14,7 @@ import {
   Component,
   linksTo,
   realmURL,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 import { SprintTaskStatusField, Project } from './sprint-task';
 import { TaskPlanner, TaskCard } from './components/base-task-planner';
 

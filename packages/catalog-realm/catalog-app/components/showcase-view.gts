@@ -1,4 +1,4 @@
-import { CardDef, CardContext } from 'https://cardstack.com/base/card-api';
+import { CardDef, CardContext } from '@cardstack/base/card-api';
 import GlimmerComponent from '@glimmer/component';
 
 import CardsDisplaySection, {

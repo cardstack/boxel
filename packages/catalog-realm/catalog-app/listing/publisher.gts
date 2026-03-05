@@ -1,5 +1,5 @@
-import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
-import { StringField } from 'https://cardstack.com/base/card-api';
+import { CardDef, field, contains } from '@cardstack/base/card-api';
+import { StringField } from '@cardstack/base/card-api';
 
 export class Publisher extends CardDef {
   static displayName = 'Publisher';

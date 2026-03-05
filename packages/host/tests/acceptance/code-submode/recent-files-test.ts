@@ -13,7 +13,7 @@ import { getService } from '@universal-ember/test-support';
 import * as MonacoSDK from 'monaco-editor';
 import { module, test } from 'qunit';
 
-import { baseRealm } from '@cardstack/runtime-common';
+import { baseRealmPrefix } from '@cardstack/runtime-common';
 
 import type MonacoService from '@cardstack/host/services/monaco-service';
 
@@ -37,7 +37,7 @@ import {
 import { setupApplicationTest } from '../../helpers/setup';
 
 const indexCardSource = `
-  import { CardDef, Component } from "https://cardstack.com/base/card-api";
+  import { CardDef, Component } from "@cardstack/base/card-api";
 
   export class Index extends CardDef {
     static isolated = class Isolated extends Component<typeof this> {
@@ -51,8 +51,8 @@ const indexCardSource = `
 `;
 
 const personCardSource = `
-  import { contains, containsMany, field, linksToMany, CardDef, Component } from "https://cardstack.com/base/card-api";
-  import StringField from "https://cardstack.com/base/string";
+  import { contains, containsMany, field, linksToMany, CardDef, Component } from "@cardstack/base/card-api";
+  import StringField from "@cardstack/base/string";
   import { Friend } from './friend';
 
   export class Person extends CardDef {
@@ -91,8 +91,8 @@ const employeeCardSource = `
     contains,
     field,
     Component,
-  } from 'https://cardstack.com/base/card-api';
-  import StringField from 'https://cardstack.com/base/string';
+  } from '@cardstack/base/card-api';
+  import StringField from '@cardstack/base/string';
   import { Person } from './person';
 
   export class Employee extends Person {
@@ -115,8 +115,8 @@ const inThisFileSource = `
     field,
     CardDef,
     FieldDef,
-  } from 'https://cardstack.com/base/card-api';
-  import StringField from 'https://cardstack.com/base/string';
+  } from '@cardstack/base/card-api';
+  import StringField from '@cardstack/base/string';
 
   export const exportedVar = 'exported var';
 
@@ -161,8 +161,8 @@ const inThisFileSource = `
 `;
 
 const friendCardSource = `
-  import { contains, linksTo, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-  import StringField from "https://cardstack.com/base/string";
+  import { contains, linksTo, field, CardDef, Component } from "@cardstack/base/card-api";
+  import StringField from "@cardstack/base/string";
 
   export class Friend extends CardDef {
     static displayName = 'Friend';
@@ -199,7 +199,7 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
-    activeRealms: [baseRealm.url, testRealmURL],
+    activeRealms: [baseRealmPrefix, testRealmURL],
   });
 
   let { createAndJoinRoom } = mockMatrixUtils;
@@ -241,7 +241,7 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
               },
               meta: {
                 adoptsFrom: {
-                  module: `${baseRealm.url}spec`,
+                  module: `${baseRealmPrefix}spec`,
                   name: 'Spec',
                 },
               },
@@ -512,8 +512,8 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
 
   test('displays recent files in base realm', async function (assert) {
     setRecentFiles([
-      ['https://cardstack.com/base/', 'code-ref.gts'],
-      ['https://cardstack.com/base/', 'spec.gts'],
+      ['@cardstack/base/', 'code-ref.gts'],
+      ['@cardstack/base/', 'spec.gts'],
       // @ts-ignore error on purpose
       'a-non-url-to-ignore',
     ]);
@@ -528,7 +528,7 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
         ],
       ],
       submode: 'code',
-      codePath: `https://cardstack.com/base/date.gts`,
+      codePath: `@cardstack/base/date.gts`,
       fileView: 'browser',
       openDirs: {},
     });
@@ -580,10 +580,10 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
     );
 
     assert.deepEqual(removedCursorPositions, [
-      ['https://cardstack.com/base/', 'field-component.gts'],
-      ['https://cardstack.com/base/', 'date.gts'],
-      ['https://cardstack.com/base/', 'code-ref.gts'],
-      ['https://cardstack.com/base/', 'spec.gts'],
+      ['@cardstack/base/', 'field-component.gts'],
+      ['@cardstack/base/', 'date.gts'],
+      ['@cardstack/base/', 'code-ref.gts'],
+      ['@cardstack/base/', 'spec.gts'],
     ]);
   });
 

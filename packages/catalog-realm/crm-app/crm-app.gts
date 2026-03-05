@@ -22,7 +22,7 @@ import {
   Component,
   realmURL,
   CardDef,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 
 import { not, eq } from '@cardstack/boxel-ui/helpers';
 import {

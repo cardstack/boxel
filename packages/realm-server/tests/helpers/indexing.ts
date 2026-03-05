@@ -1,4 +1,4 @@
-import type { MatrixEvent } from 'https://cardstack.com/base/matrix-event';
+import type { MatrixEvent } from '@cardstack/base/matrix-event';
 import { findRealmEvent, waitUntil } from './index';
 import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 import { trimJsonExtension } from '@cardstack/runtime-common';
@@ -7,7 +7,7 @@ import { every, param, query } from '@cardstack/runtime-common';
 import type {
   IncrementalIndexEventContent,
   IncrementalIndexInitiationContent,
-} from 'https://cardstack.com/base/matrix-event';
+} from '@cardstack/base/matrix-event';
 import { validate as uuidValidate } from 'uuid';
 
 interface IncrementalIndexEventTestContext {

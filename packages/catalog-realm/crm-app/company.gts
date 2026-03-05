@@ -1,14 +1,14 @@
-import StringField from 'https://cardstack.com/base/string';
-import NumberField from 'https://cardstack.com/base/number';
-import WebsiteField from 'https://cardstack.com/base/website';
-import AddressField from 'https://cardstack.com/base/address';
+import StringField from '@cardstack/base/string';
+import NumberField from '@cardstack/base/number';
+import WebsiteField from '@cardstack/base/website';
+import AddressField from '@cardstack/base/address';
 import {
   Component,
   CardDef,
   field,
   contains,
   linksTo,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 
 import { CrmApp } from './crm-app';
 import {

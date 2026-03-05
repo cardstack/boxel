@@ -8,7 +8,7 @@ import {
 
 import ENV from '@cardstack/host/config/environment';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseCommandModule from '@cardstack/base/command';
 
 import HostBaseCommand from '../lib/host-base-command';
 

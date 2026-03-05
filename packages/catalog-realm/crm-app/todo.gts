@@ -3,8 +3,8 @@ import {
   field,
   contains,
   StringField,
-} from 'https://cardstack.com/base/card-api';
-import MarkdownField from 'https://cardstack.com/base/markdown';
+} from '@cardstack/base/card-api';
+import MarkdownField from '@cardstack/base/markdown';
 
 export class Todo extends CardDef {
   static displayName = 'Todo';

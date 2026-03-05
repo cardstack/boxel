@@ -3,11 +3,11 @@ import {
   field,
   contains,
   Component,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-import NumberField from 'https://cardstack.com/base/number';
-import MarkdownField from 'https://cardstack.com/base/markdown';
-import UrlField from 'https://cardstack.com/base/url';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+import NumberField from '@cardstack/base/number';
+import MarkdownField from '@cardstack/base/markdown';
+import UrlField from '@cardstack/base/url';
 import { currencyFormat } from '@cardstack/boxel-ui/helpers';
 import HomeIcon from '@cardstack/boxel-icons/home';
 

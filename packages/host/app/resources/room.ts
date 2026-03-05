@@ -29,7 +29,7 @@ import {
   type LLMMode,
 } from '@cardstack/runtime-common/matrix-constants';
 
-import type { SerializedFile } from 'https://cardstack.com/base/file-api';
+import type { SerializedFile } from '@cardstack/base/file-api';
 import type {
   MatrixEvent as DiscreteMatrixEvent,
   RoomCreateEvent,
@@ -44,9 +44,9 @@ import type {
   RealmServerEvent,
   CodePatchResultEvent,
   ActiveLLMEvent,
-} from 'https://cardstack.com/base/matrix-event';
+} from '@cardstack/base/matrix-event';
 
-import type { Skill } from 'https://cardstack.com/base/skill';
+import type { Skill } from '@cardstack/base/skill';
 
 import {
   RoomMember,

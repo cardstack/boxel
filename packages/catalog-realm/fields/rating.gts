@@ -1,4 +1,4 @@
-import { Component } from 'https://cardstack.com/base/card-api';
+import { Component } from '@cardstack/base/card-api';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
 import { lte, not } from '@cardstack/boxel-ui/helpers';
@@ -6,8 +6,8 @@ import { lte, not } from '@cardstack/boxel-ui/helpers';
 import NumberField, {
   deserializeForUI,
   serializeForUI,
-} from 'https://cardstack.com/base/number';
-import { TextInputValidator } from 'https://cardstack.com/base/text-input-validator';
+} from '@cardstack/base/number';
+import { TextInputValidator } from '@cardstack/base/text-input-validator';
 import { NumberSerializer } from '@cardstack/runtime-common';
 
 import { getNumericValue, hasValue } from './number/util/index';

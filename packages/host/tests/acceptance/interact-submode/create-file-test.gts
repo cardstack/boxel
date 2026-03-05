@@ -3,7 +3,7 @@ import { click, waitUntil } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { baseRealm, specRef } from '@cardstack/runtime-common';
+import { baseRealmPrefix, specRef } from '@cardstack/runtime-common';
 
 import {
   setupLocalIndexing,
@@ -33,7 +33,7 @@ const testRealmFiles: Record<string, any> = {
     iconURL: 'https://boxel-images.boxel.ai/icons/Letter-t.png',
   },
   'pet.gts': `
-    import { CardDef, Component } from "https://cardstack.com/base/card-api";
+    import { CardDef, Component } from "@cardstack/base/card-api";
     export default class Pet extends CardDef {
       static displayName = 'Pet';
       static embedded = class Embedded extends Component<typeof this> {
@@ -44,7 +44,7 @@ const testRealmFiles: Record<string, any> = {
     }
   `,
   'person.gts': `
-    import { linksTo, field, CardDef } from "https://cardstack.com/base/card-api";
+    import { linksTo, field, CardDef } from "@cardstack/base/card-api";
     import Pet from "./pet";
     export class Person extends CardDef {
       static displayName = 'Person';
@@ -52,7 +52,7 @@ const testRealmFiles: Record<string, any> = {
     }
   `,
   'author.gts': `
-    import { Component, field, contains, StringField } from 'https://cardstack.com/base/card-api';
+    import { Component, field, contains, StringField } from '@cardstack/base/card-api';
     import { Person } from './person';
     export class Author extends Person {
       static displayName = "Author";
@@ -155,14 +155,14 @@ const userRealmFiles: Record<string, any> = {
     iconURL: 'https://boxel-images.boxel.ai/icons/Letter-a.png',
   },
   'plant.gts': `
-    import { CardDef, field, contains, StringField } from 'https://cardstack.com/base/card-api';
+    import { CardDef, field, contains, StringField } from '@cardstack/base/card-api';
     export class Plant extends CardDef {
       static displayName = "Plant";
       @field commonName = contains(StringField);
     }
   `,
   'garden.gts': `
-    import { CardDef, field, linksToMany } from 'https://cardstack.com/base/card-api';
+    import { CardDef, field, linksToMany } from '@cardstack/base/card-api';
     import { Plant } from './plant';
     export class Garden extends CardDef {
       static displayName = "Garden";
@@ -213,14 +213,14 @@ module('Acceptance | interact submode | create-file tests', function (hooks) {
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
-    activeRealms: [baseRealm.url, testRealmURL, userRealm],
+    activeRealms: [baseRealmPrefix, testRealmURL, userRealm],
   });
   let { setRealmPermissions, createAndJoinRoom } = mockMatrixUtils;
 
   hooks.beforeEach(async function () {
     let loader = getService('loader-service').loader;
-    let cardsGrid: typeof import('https://cardstack.com/base/cards-grid');
-    cardsGrid = await loader.import(`${baseRealm.url}cards-grid`);
+    let cardsGrid: typeof import('@cardstack/base/cards-grid');
+    cardsGrid = await loader.import(`${baseRealmPrefix}cards-grid`);
     let { CardsGrid } = cardsGrid;
 
     await withCachedRealmSetup(async () => {
@@ -267,7 +267,7 @@ module('Acceptance | interact submode | create-file tests', function (hooks) {
 
   hooks.beforeEach(async function () {
     setRealmPermissions({
-      [baseRealm.url]: ['read'],
+      [baseRealmPrefix]: ['read'],
       [testRealmURL]: ['read', 'write'],
       [userRealm]: ['read', 'write'],
     });
@@ -379,7 +379,7 @@ module('Acceptance | interact submode | create-file tests', function (hooks) {
       [`${testRealmURL}Author/tom`],
       [`${testRealmURL}Author/hassan`],
       [`${testRealmURL}index`],
-      [`${baseRealm.url}index`],
+      [`${baseRealmPrefix}index`],
       [`${userRealm}index`],
     ]);
     await visitOperatorMode({
@@ -484,13 +484,13 @@ module('Acceptance | interact submode | create-file tests', function (hooks) {
   test('can create local instance in stack (in readonly remote realm, card-def from readonly realm)', async function (assert) {
     removeRecentCards();
     setRecentCards([
-      [`${baseRealm.url}Skill/catalog-listing`],
-      [`${baseRealm.url}cards/skill`], // spec instance
-      [`${baseRealm.url}index`],
+      [`${baseRealmPrefix}Skill/catalog-listing`],
+      [`${baseRealmPrefix}cards/skill`], // spec instance
+      [`${baseRealmPrefix}index`],
     ]);
     await visitOperatorMode({
       submode: 'interact',
-      stacks: [[{ id: `${baseRealm.url}index`, format: 'isolated' }]],
+      stacks: [[{ id: `${baseRealmPrefix}index`, format: 'isolated' }]],
     });
     await click('[data-test-new-file-button]');
     assert.dom('[data-test-boxel-menu-item]').exists({ count: 4 });
@@ -530,7 +530,7 @@ module('Acceptance | interact submode | create-file tests', function (hooks) {
           { id: `${userRealm}Garden/edible-garden`, format: 'isolated' },
         ],
         [
-          { id: `${baseRealm.url}index`, format: 'isolated' },
+          { id: `${baseRealmPrefix}index`, format: 'isolated' },
           { id: `${testRealmURL}Author/tom`, format: 'isolated' },
         ],
       ],

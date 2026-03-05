@@ -1,7 +1,7 @@
 import { get } from '@ember/object';
 import GlimmerComponent from '@glimmer/component';
 
-import { type Sort, baseRealm } from '@cardstack/runtime-common';
+import { type Sort, baseRealmPrefix } from '@cardstack/runtime-common';
 
 import {
   BoxelButton,
@@ -16,7 +16,7 @@ import ArrowUp from '@cardstack/boxel-icons/arrow-up';
 export const sortByCardTitleAsc: Sort = [
   {
     on: {
-      module: `${baseRealm.url}card-api`,
+      module: `${baseRealmPrefix}card-api`,
       name: 'CardDef',
     },
     by: 'cardTitle',

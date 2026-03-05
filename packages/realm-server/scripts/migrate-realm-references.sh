@@ -20,10 +20,12 @@
 #   -e, --environment   development | staging | production
 #   -r, --realm         catalog | base | skills
 #
-#   Environment URL mappings:
-#     development  -> http://localhost:4201/
-#     staging      -> https://realms-staging.stack.cards/
-#     production   -> https://app.boxel.ai/
+#   Environment URL mappings (catalog, skills):
+#     development  -> http://localhost:4201/<realm>/
+#     staging      -> https://realms-staging.stack.cards/<realm>/
+#     production   -> https://app.boxel.ai/<realm>/
+#
+#   Base realm always uses https://cardstack.com/base/ (same across all environments).
 #
 #   The replacement is auto-derived as @cardstack/<realm>/
 #
@@ -34,9 +36,11 @@
 #   # Equivalent explicit form
 #   ./migrate-realm-references.sh --dry-run https://realms-staging.stack.cards/catalog/ @cardstack/catalog/ /persistent/catalog /persistent/experiments
 #
-#   # More shortcut examples
-#   ./migrate-realm-references.sh -e production -r base /persistent/base /persistent/catalog /persistent/experiments
-#   ./migrate-realm-references.sh -e development -r skills ./realms/
+#   # Base realm (always https://cardstack.com/base/ regardless of environment)
+#   ./migrate-realm-references.sh -r base /persistent/base /persistent/catalog /persistent/experiments
+#
+#   # Other shortcut examples
+#   ./migrate-realm-references.sh -e production -r skills /persistent/skills
 #
 #   # Reverse (prefix -> URL, explicit form only)
 #   ./migrate-realm-references.sh @cardstack/base/ https://cardstack.com/base/ ./realms/
@@ -76,20 +80,10 @@ done
 # --- Resolve environment/realm shortcuts ---
 
 if [ -n "$ENV" ] || [ -n "$REALM" ]; then
-  if [ -z "$ENV" ] || [ -z "$REALM" ]; then
-    echo "Error: -e/--environment and -r/--realm must both be specified" >&2
+  if [ -z "$REALM" ]; then
+    echo "Error: -r/--realm is required when using shortcut flags" >&2
     exit 1
   fi
-
-  case "$ENV" in
-    development) BASE_URL="http://localhost:4201/" ;;
-    staging)     BASE_URL="https://realms-staging.stack.cards/" ;;
-    production)  BASE_URL="https://app.boxel.ai/" ;;
-    *)
-      echo "Error: unknown environment '$ENV' (expected: development, staging, production)"
-      exit 1
-      ;;
-  esac
 
   case "$REALM" in
     catalog|base|skills) ;;
@@ -99,7 +93,28 @@ if [ -n "$ENV" ] || [ -n "$REALM" ]; then
       ;;
   esac
 
-  FIND_STR="${BASE_URL}${REALM}/"
+  # Base realm uses https://cardstack.com/base/ across all environments
+  if [ "$REALM" = "base" ]; then
+    if [ -n "$ENV" ]; then
+      echo "Note: -e/--environment is ignored for base realm (always https://cardstack.com/base/)"
+    fi
+    FIND_STR="https://cardstack.com/base/"
+  else
+    if [ -z "$ENV" ]; then
+      echo "Error: -e/--environment is required for realm '$REALM'" >&2
+      exit 1
+    fi
+    case "$ENV" in
+      development) BASE_URL="http://localhost:4201/" ;;
+      staging)     BASE_URL="https://realms-staging.stack.cards/" ;;
+      production)  BASE_URL="https://app.boxel.ai/" ;;
+      *)
+        echo "Error: unknown environment '$ENV' (expected: development, staging, production)"
+        exit 1
+        ;;
+    esac
+    FIND_STR="${BASE_URL}${REALM}/"
+  fi
   REPLACEMENT="@cardstack/${REALM}/"
 
   echo "Resolved: $FIND_STR -> $REPLACEMENT"

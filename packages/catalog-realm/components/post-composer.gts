@@ -1,5 +1,5 @@
 import GlimmerComponent from '@glimmer/component';
-import { type BaseDef } from 'https://cardstack.com/base/card-api';
+import { type BaseDef } from '@cardstack/base/card-api';
 import { on } from '@ember/modifier';
 import { BoxelSelect, BoxelButton } from '@cardstack/boxel-ui/components';
 

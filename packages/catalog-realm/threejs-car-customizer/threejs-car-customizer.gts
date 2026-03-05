@@ -1,4 +1,4 @@
-import StringField from 'https://cardstack.com/base/string';
+import StringField from '@cardstack/base/string';
 import { eq } from '@cardstack/boxel-ui/helpers';
 // ═══ [EDIT TRACKING: ON] Mark all changes with ⁿ ═══
 import {
@@ -6,7 +6,7 @@ import {
   field,
   contains,
   Component,
-} from 'https://cardstack.com/base/card-api'; // ¹ Core imports
+} from '@cardstack/base/card-api'; // ¹ Core imports
 import ColorField from '../fields/color';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';

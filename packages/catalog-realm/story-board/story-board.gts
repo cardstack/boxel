@@ -5,13 +5,13 @@ import {
   Component,
   type CardContext,
   ViewCardFn,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 import GlimmerComponent from '@glimmer/component';
-import StringField from 'https://cardstack.com/base/string';
-import NumberField from 'https://cardstack.com/base/number';
-import UrlField from 'https://cardstack.com/base/url';
-import DateTimeField from 'https://cardstack.com/base/datetime';
-import MarkdownField from 'https://cardstack.com/base/markdown';
+import StringField from '@cardstack/base/string';
+import NumberField from '@cardstack/base/number';
+import UrlField from '@cardstack/base/url';
+import DateTimeField from '@cardstack/base/datetime';
+import MarkdownField from '@cardstack/base/markdown';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';

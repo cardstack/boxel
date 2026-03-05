@@ -6,9 +6,9 @@ import {
   linksToMany,
   Component,
   linksTo,
-} from 'https://cardstack.com/base/card-api'; // ¹ Core imports
-import StringField from 'https://cardstack.com/base/string';
-import NumberField from 'https://cardstack.com/base/number';
+} from '@cardstack/base/card-api'; // ¹ Core imports
+import StringField from '@cardstack/base/string';
+import NumberField from '@cardstack/base/number';
 
 import { StudyResource } from '../study-resource/study-resource';
 import { StudyGoal } from '../study-goal/study-goal';

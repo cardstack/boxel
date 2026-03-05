@@ -60,8 +60,8 @@ import type PlaygroundPanelService from '@cardstack/host/services/playground-pan
 import type SpecPanelService from '@cardstack/host/services/spec-panel-service';
 import type StoreService from '@cardstack/host/services/store';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-import type { FileDef } from 'https://cardstack.com/base/file-api';
+import type { CardDef } from '@cardstack/base/card-api';
+import type { FileDef } from '@cardstack/base/file-api';
 
 import AiAssistantActionBar from '../ai-assistant/action-bar';
 import AiAssistantAttachmentPicker from '../ai-assistant/attachment-picker';

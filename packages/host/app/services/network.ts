@@ -4,7 +4,6 @@ import Service, { service } from '@ember/service';
 import {
   VirtualNetwork,
   authorizationMiddleware,
-  baseRealm,
   registerCardReferencePrefix,
   fetcher,
 } from '@cardstack/runtime-common';
@@ -51,10 +50,18 @@ export default class NetworkService extends Service {
 
   private makeVirtualNetwork() {
     let virtualNetwork = new VirtualNetwork(globalThis.fetch);
-    let resolvedBaseRealmURL = new URL(
-      withTrailingSlash(config.resolvedBaseRealmURL),
+    let baseRealmURL = withTrailingSlash(config.resolvedBaseRealmURL);
+    registerCardReferencePrefix('@cardstack/base/', baseRealmURL);
+    // Legacy: resolve old base realm URLs found in Matrix messages and other historical data
+    registerCardReferencePrefix('https://cardstack.com/base/', baseRealmURL);
+    virtualNetwork.addURLMapping(
+      new URL('https://cardstack.com/base/'),
+      new URL(baseRealmURL),
     );
-    virtualNetwork.addURLMapping(new URL(baseRealm.url), resolvedBaseRealmURL);
+    virtualNetwork.addImportMap(
+      '@cardstack/base/',
+      (rest) => new URL(rest, baseRealmURL).href,
+    );
     shimExternals(virtualNetwork);
     virtualNetwork.addImportMap('@cardstack/boxel-icons/', (rest) => {
       return `${config.iconsURL}/@cardstack/boxel-icons/v1/icons/${rest}.js`;

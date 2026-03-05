@@ -362,7 +362,7 @@ module(basename(__filename), function () {
         let linkedCardModuleResponse = await request
           .post(`${sourceRealmPath}linked-card.gts`)
           .set('Accept', 'application/vnd.card+source').send(`
-            import { CardDef } from "https://cardstack.com/base/card-api";
+            import { CardDef } from "@cardstack/base/card-api";
             import { linkedCardTitle } from "./linked-card-title";
 
             export const _linkedCardTitle = linkedCardTitle;

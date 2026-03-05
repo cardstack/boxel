@@ -3,10 +3,10 @@ import {
   field,
   contains,
   Component,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-import NumberField from 'https://cardstack.com/base/number';
-import BooleanField from 'https://cardstack.com/base/boolean';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+import NumberField from '@cardstack/base/number';
+import BooleanField from '@cardstack/base/boolean';
 import MotorcycleIcon from '@cardstack/boxel-icons/bike';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';

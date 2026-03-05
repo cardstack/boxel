@@ -11,7 +11,7 @@ import { getService } from '@universal-ember/test-support';
 
 import { module, test } from 'qunit';
 
-import { baseRealm } from '@cardstack/runtime-common';
+import { baseRealmPrefix } from '@cardstack/runtime-common';
 
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
@@ -34,7 +34,7 @@ module('Integration | card-catalog', function (hooks) {
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
-    activeRealms: [baseRealm.url, testRealmURL],
+    activeRealms: [baseRealmPrefix, testRealmURL],
     autostart: true,
   });
 
@@ -42,16 +42,16 @@ module('Integration | card-catalog', function (hooks) {
 
   hooks.beforeEach(async function () {
     let loader = getService('loader-service').loader;
-    let cardApi: typeof import('https://cardstack.com/base/card-api');
-    let string: typeof import('https://cardstack.com/base/string');
-    let textArea: typeof import('https://cardstack.com/base/text-area');
-    let cardsGrid: typeof import('https://cardstack.com/base/cards-grid');
-    let spec: typeof import('https://cardstack.com/base/spec');
-    cardApi = await loader.import(`${baseRealm.url}card-api`);
-    string = await loader.import(`${baseRealm.url}string`);
-    textArea = await loader.import(`${baseRealm.url}text-area`);
-    cardsGrid = await loader.import(`${baseRealm.url}cards-grid`);
-    spec = await loader.import(`${baseRealm.url}spec`);
+    let cardApi: typeof import('@cardstack/base/card-api');
+    let string: typeof import('@cardstack/base/string');
+    let textArea: typeof import('@cardstack/base/text-area');
+    let cardsGrid: typeof import('@cardstack/base/cards-grid');
+    let spec: typeof import('@cardstack/base/spec');
+    cardApi = await loader.import(`${baseRealmPrefix}card-api`);
+    string = await loader.import(`${baseRealmPrefix}string`);
+    textArea = await loader.import(`${baseRealmPrefix}text-area`);
+    cardsGrid = await loader.import(`${baseRealmPrefix}cards-grid`);
+    spec = await loader.import(`${baseRealmPrefix}spec`);
 
     let { field, contains, linksTo, CardDef, FieldDef } = cardApi;
     let { default: StringField } = string;
@@ -241,7 +241,7 @@ module('Integration | card-catalog', function (hooks) {
     test('can filter cards by selecting a realm', async function (assert) {
       // Open the realm picker and select only Base Workspace
       await click('[data-test-realm-picker] [data-test-boxel-picker-trigger]');
-      await click(`[data-test-boxel-picker-option-row="${baseRealm.url}"]`);
+      await click(`[data-test-boxel-picker-option-row="${baseRealmPrefix}"]`);
 
       // Only Base Workspace results should be shown
       assert

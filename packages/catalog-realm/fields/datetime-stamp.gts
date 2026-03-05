@@ -1,5 +1,5 @@
-import { Component } from 'https://cardstack.com/base/card-api';
-import BaseDateTimeField from 'https://cardstack.com/base/datetime';
+import { Component } from '@cardstack/base/card-api';
+import BaseDateTimeField from '@cardstack/base/datetime';
 import ClockAlertIcon from '@cardstack/boxel-icons/clock-alert';
 import { formatDateTime } from '@cardstack/boxel-ui/helpers';
 

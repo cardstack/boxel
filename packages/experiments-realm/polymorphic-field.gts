@@ -6,7 +6,7 @@ import {
   StringField,
   FieldDef,
   linksToMany,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 import { on } from '@ember/modifier';
 
 export class TestField extends FieldDef {

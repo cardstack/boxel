@@ -3,7 +3,7 @@ import { isScopedCSSRequest } from 'glimmer-scoped-css';
 import cloneDeep from 'lodash/cloneDeep';
 import {
   SupportedMimeType,
-  baseRealm,
+  baseRealmPrefix,
   inferContentType,
   unixTime,
   maxLinkDepth,
@@ -1081,7 +1081,7 @@ function fileResourceFromIndex(
     (isCodeRef(fileEntry.resource?.meta?.adoptsFrom)
       ? fileEntry.resource?.meta?.adoptsFrom
       : {
-          module: `${baseRealm.url}file-api`,
+          module: `${baseRealmPrefix}file-api`,
           name: 'FileDef',
         });
   let resourceAttributes = fileEntry.resource?.attributes ?? {};

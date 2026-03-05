@@ -5,8 +5,8 @@ import {
   containsMany,
   field,
   linksTo,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 import BotIcon from '@cardstack/boxel-icons/bot';
 import { Listing } from '../catalog-app/listing/listing';
 

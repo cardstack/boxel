@@ -13,7 +13,7 @@ import {
   contains,
   StringField,
   type CardContext,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 
 import {
   type LooseSingleCardDocument,

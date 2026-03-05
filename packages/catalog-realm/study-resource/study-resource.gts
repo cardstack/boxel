@@ -5,12 +5,12 @@ import {
   contains,
   Component,
   containsMany,
-} from 'https://cardstack.com/base/card-api'; // ¹ Core imports
-import StringField from 'https://cardstack.com/base/string';
-import NumberField from 'https://cardstack.com/base/number';
-import DateTimeField from 'https://cardstack.com/base/datetime';
-import MarkdownField from 'https://cardstack.com/base/markdown';
-import UrlField from 'https://cardstack.com/base/url';
+} from '@cardstack/base/card-api'; // ¹ Core imports
+import StringField from '@cardstack/base/string';
+import NumberField from '@cardstack/base/number';
+import DateTimeField from '@cardstack/base/datetime';
+import MarkdownField from '@cardstack/base/markdown';
+import UrlField from '@cardstack/base/url';
 import {
   formatDateTime,
   formatDuration,

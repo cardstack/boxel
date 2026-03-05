@@ -16,7 +16,7 @@ import {
   beginRuntimeDependencyTrackingSession,
   endRuntimeDependencyTrackingSession,
   formattedError,
-  baseRealm,
+  baseRealmPrefix,
   snapshotRuntimeDependencies,
   SupportedMimeType,
   isCardError,
@@ -31,8 +31,8 @@ import {
 import { Deferred } from '@cardstack/runtime-common/deferred';
 import { serializableError } from '@cardstack/runtime-common/error';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
+import type { CardDef } from '@cardstack/base/card-api';
+import type * as CardAPI from '@cardstack/base/card-api';
 
 import {
   windowErrorHandler,
@@ -456,7 +456,7 @@ export default class RenderRoute extends Route<Model> {
 
   async #touchIsUsedFields(instance: CardDef): Promise<void> {
     let cardApi = await this.loaderService.loader.import<typeof CardAPI>(
-      `${baseRealm.url}card-api`,
+      `${baseRealmPrefix}card-api`,
     );
     this.#touchIsUsedRelationships(
       cardApi,

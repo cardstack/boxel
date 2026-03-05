@@ -1,34 +1,33 @@
-import { RealmPaths } from './paths';
 import type { ResolvedCodeRef } from './code-ref';
 import type { RealmPermissions } from './index';
 
-export const baseRealm = new RealmPaths(new URL('https://cardstack.com/base/'));
+export const baseRealmPrefix = '@cardstack/base/';
 
 export const devSkillLocalPath = 'Skill/boxel-development';
 export const envSkillLocalPath = 'Skill/boxel-environment';
 
 export const baseRef: ResolvedCodeRef = {
-  module: `${baseRealm.url}card-api`,
+  module: `${baseRealmPrefix}card-api`,
   name: 'BaseDef',
 };
 export const specRef: ResolvedCodeRef = {
-  module: `${baseRealm.url}spec`,
+  module: `${baseRealmPrefix}spec`,
   name: 'Spec',
 };
 export const baseCardRef: ResolvedCodeRef = {
-  module: `${baseRealm.url}card-api`,
+  module: `${baseRealmPrefix}card-api`,
   name: 'CardDef',
 };
 export const baseFieldRef: ResolvedCodeRef = {
-  module: `${baseRealm.url}card-api`,
+  module: `${baseRealmPrefix}card-api`,
   name: 'FieldDef',
 };
 export const skillCardRef: ResolvedCodeRef = {
-  module: `${baseRealm.url}skill`,
+  module: `${baseRealmPrefix}skill`,
   name: 'Skill',
 };
 export const baseFileRef: ResolvedCodeRef = {
-  module: `${baseRealm.url}file-api`,
+  module: `${baseRealmPrefix}file-api`,
   name: 'FileDef',
 };
 

@@ -8,6 +8,7 @@ import {
   jobIdentity,
   trimExecutableExtension,
   hasExecutableExtension,
+  isUrlLike,
   RealmPaths,
   unixTime,
   logger,
@@ -220,18 +221,24 @@ export class Batch {
         new URL(entry.file_alias),
       ).href;
       entry.types = entry.types
-        ? entry.types.map(
-            (type) => this.copiedRealmURL(sourceRealmURL, new URL(type)).href,
+        ? entry.types.map((type) =>
+            isUrlLike(type)
+              ? this.copiedRealmURL(sourceRealmURL, new URL(type)).href
+              : type,
           )
         : entry.types;
       entry.deps = entry.deps
-        ? entry.deps.map(
-            (dep) => this.copiedRealmURL(sourceRealmURL, new URL(dep)).href,
+        ? entry.deps.map((dep) =>
+            isUrlLike(dep)
+              ? this.copiedRealmURL(sourceRealmURL, new URL(dep)).href
+              : dep,
           )
         : entry.deps;
       entry.last_known_good_deps = entry.last_known_good_deps
-        ? entry.last_known_good_deps.map(
-            (dep) => this.copiedRealmURL(sourceRealmURL, new URL(dep)).href,
+        ? entry.last_known_good_deps.map((dep) =>
+            isUrlLike(dep)
+              ? this.copiedRealmURL(sourceRealmURL, new URL(dep)).href
+              : dep,
           )
         : entry.last_known_good_deps;
       entry.pristine_doc = entry.pristine_doc

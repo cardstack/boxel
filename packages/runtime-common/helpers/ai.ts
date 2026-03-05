@@ -1,8 +1,8 @@
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
+import type * as CardAPI from '@cardstack/base/card-api';
 import { primitive } from '../constants';
 import type { Loader } from '../loader';
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-import type { Tool } from 'https://cardstack.com/base/matrix-event';
+import type { CardDef } from '@cardstack/base/card-api';
+import type { Tool } from '@cardstack/base/matrix-event';
 
 type ArraySchema = {
   type: 'array';
@@ -112,23 +112,23 @@ export interface CardSchema {
 export async function basicMappings(loader: Loader) {
   let mappings = new Map<typeof CardAPI.FieldDef, AttributesSchema>();
 
-  let string: typeof import('https://cardstack.com/base/string') =
-    await loader.import('https://cardstack.com/base/string');
-  let number: typeof import('https://cardstack.com/base/number') =
-    await loader.import('https://cardstack.com/base/number');
-  let biginteger: typeof import('https://cardstack.com/base/big-integer') =
-    await loader.import('https://cardstack.com/base/big-integer');
-  let date: typeof import('https://cardstack.com/base/date') =
-    await loader.import('https://cardstack.com/base/date');
-  let datetime: typeof import('https://cardstack.com/base/datetime') =
-    await loader.import('https://cardstack.com/base/datetime');
-  let boolean: typeof import('https://cardstack.com/base/boolean') =
-    await loader.import('https://cardstack.com/base/boolean');
-  let codeRef: typeof import('https://cardstack.com/base/code-ref') =
-    await loader.import('https://cardstack.com/base/code-ref');
-  let query: typeof import('https://cardstack.com/base/commands/search-card-result') =
+  let string: typeof import('@cardstack/base/string') =
+    await loader.import('@cardstack/base/string');
+  let number: typeof import('@cardstack/base/number') =
+    await loader.import('@cardstack/base/number');
+  let biginteger: typeof import('@cardstack/base/big-integer') =
+    await loader.import('@cardstack/base/big-integer');
+  let date: typeof import('@cardstack/base/date') =
+    await loader.import('@cardstack/base/date');
+  let datetime: typeof import('@cardstack/base/datetime') =
+    await loader.import('@cardstack/base/datetime');
+  let boolean: typeof import('@cardstack/base/boolean') =
+    await loader.import('@cardstack/base/boolean');
+  let codeRef: typeof import('@cardstack/base/code-ref') =
+    await loader.import('@cardstack/base/code-ref');
+  let query: typeof import('@cardstack/base/commands/search-card-result') =
     await loader.import(
-      'https://cardstack.com/base/commands/search-card-result',
+      '@cardstack/base/commands/search-card-result',
     );
 
   const { default: StringField } = string;

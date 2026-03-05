@@ -9,11 +9,11 @@ import {
   type LLMMode,
 } from '@cardstack/runtime-common/matrix-constants';
 
-import type { SerializedFile } from 'https://cardstack.com/base/file-api';
+import type { SerializedFile } from '@cardstack/base/file-api';
 import type {
   ActiveLLMEvent,
   MatrixEvent as DiscreteMatrixEvent,
-} from 'https://cardstack.com/base/matrix-event';
+} from '@cardstack/base/matrix-event';
 
 import Mutex from '../mutex';
 

@@ -10,7 +10,7 @@ import SwitchSubmodeCommand from '@cardstack/host/commands/switch-submode';
 import RealmService from '@cardstack/host/services/realm';
 import type StoreService from '@cardstack/host/services/store';
 
-import type { CardDef as CardDefType } from 'https://cardstack.com/base/card-api';
+import type { CardDef as CardDefType } from '@cardstack/base/card-api';
 
 import {
   setupIntegrationTestRealm,

@@ -13,7 +13,7 @@ import {
   REPLACE_MARKER,
   SEARCH_MARKER,
   SEPARATOR_MARKER,
-  baseRealm,
+  baseRealmPrefix,
 } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
@@ -61,7 +61,7 @@ module('Integration | ai-assistant-panel | codeblocks', function (hooks) {
   setupOnSave(hooks);
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await loader.import(`${baseRealmPrefix}card-api`),
   );
 
   let mockMatrixUtils = setupMockMatrix(hooks, {

@@ -1,6 +1,6 @@
 import Service from '@ember/service';
 
-import type { BoxelErrorForContext } from 'https://cardstack.com/base/matrix-event';
+import type { BoxelErrorForContext } from '@cardstack/base/matrix-event';
 
 export interface DisplayedErrorProvider {
   getError: () => BoxelErrorForContext;

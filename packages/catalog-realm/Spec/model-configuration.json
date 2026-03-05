@@ -5,7 +5,7 @@
       "readMe": null,
       "ref": {
         "name": "ModelConfiguration",
-        "module": "https://cardstack.com/base/system-card"
+        "module": "@cardstack/base/system-card"
       },
       "specType": "card",
       "containedExamples": [],
@@ -32,7 +32,7 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "https://cardstack.com/base/spec",
+        "module": "@cardstack/base/spec",
         "name": "Spec"
       }
     }

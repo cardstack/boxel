@@ -6,13 +6,13 @@
       "cardDescription": "Tag card",
       "specType": "card",
       "ref": {
-        "module": "https://cardstack.com/base/tag",
+        "module": "@cardstack/base/tag",
         "name": "default"
       }
     },
     "meta": {
       "adoptsFrom": {
-        "module": "https://cardstack.com/base/spec",
+        "module": "@cardstack/base/spec",
         "name": "Spec"
       }
     }

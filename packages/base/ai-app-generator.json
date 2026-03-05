@@ -42,7 +42,7 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "https://cardstack.com/base/ai-app-generator",
+        "module": "@cardstack/base/ai-app-generator",
         "name": "AiAppGenerator"
       }
     }

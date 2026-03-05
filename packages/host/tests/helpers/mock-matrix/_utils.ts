@@ -5,7 +5,7 @@ import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-con
 
 import type RealmService from '@cardstack/host/services/realm';
 
-import type { RealmEvent } from 'https://cardstack.com/base/matrix-event';
+import type { RealmEvent } from '@cardstack/base/matrix-event';
 
 import { setupAuthEndpoints } from '../';
 

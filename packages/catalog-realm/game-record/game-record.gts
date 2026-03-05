@@ -5,15 +5,15 @@ import {
   containsMany,
   linksTo,
   Component,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 
-import StringField from 'https://cardstack.com/base/string';
-import NumberField from 'https://cardstack.com/base/number';
-import DateField from 'https://cardstack.com/base/date';
-import DateTimeField from 'https://cardstack.com/base/datetime';
-import UrlField from 'https://cardstack.com/base/url';
-import MarkdownField from 'https://cardstack.com/base/markdown';
-import enumField from 'https://cardstack.com/base/enum';
+import StringField from '@cardstack/base/string';
+import NumberField from '@cardstack/base/number';
+import DateField from '@cardstack/base/date';
+import DateTimeField from '@cardstack/base/datetime';
+import UrlField from '@cardstack/base/url';
+import MarkdownField from '@cardstack/base/markdown';
+import enumField from '@cardstack/base/enum';
 import {
   formatDateTime,
   or,

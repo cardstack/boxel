@@ -1,6 +1,6 @@
 import Component from '@glimmer/component';
 
-import type { FileDef } from 'https://cardstack.com/base/file-api';
+import type { FileDef } from '@cardstack/base/file-api';
 
 import ErrorDisplay from './error-display';
 

@@ -6,13 +6,13 @@
       "cardDescription": "A general card that can contain any card type.",
       "specType": "card",
       "ref": {
-        "module": "https://cardstack.com/base/card-api",
+        "module": "@cardstack/base/card-api",
         "name": "CardDef"
       }
     },
     "meta": {
       "adoptsFrom": {
-        "module": "https://cardstack.com/base/spec",
+        "module": "@cardstack/base/spec",
         "name": "Spec"
       }
     }

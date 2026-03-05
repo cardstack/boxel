@@ -14,7 +14,7 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import {
-  baseRealm,
+  baseRealmPrefix,
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
 
@@ -217,9 +217,9 @@ module('Integration | operator-mode | card catalog', function (hooks) {
     test(`filters cards by realm`, async function (assert) {
       let recentCardsService = getService('recent-cards-service');
       [
-        `${baseRealm.url}index`,
+        `${baseRealmPrefix}index`,
         `${testRealmURL}Pet/mango`,
-        `${baseRealm.url}cards/skill`,
+        `${baseRealmPrefix}cards/skill`,
         `${testRealmURL}Person/fadhlan`,
       ].map((url) => recentCardsService.add(url));
 
@@ -232,16 +232,16 @@ module('Integration | operator-mode | card catalog', function (hooks) {
       await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
       await click(`[data-test-open-search-field]`);
       await waitFor(`[data-test-search-result="${testRealmURL}Pet/mango"]`);
-      await waitFor(`[data-test-search-result="${baseRealm.url}cards/skill"]`);
+      await waitFor(`[data-test-search-result="${baseRealmPrefix}cards/skill"]`);
       assert.dom('[data-test-search-result]').exists({ count: 4 });
 
       await click('[data-test-realm-picker]');
-      await click(`[data-test-boxel-picker-option-row="${baseRealm.url}"]`);
+      await click(`[data-test-boxel-picker-option-row="${baseRealmPrefix}"]`);
       assert.dom('[data-test-search-result]').exists({ count: 2 });
       assert
-        .dom(`[data-test-search-result="${baseRealm.url}cards/skill"]`)
+        .dom(`[data-test-search-result="${baseRealmPrefix}cards/skill"]`)
         .exists();
-      assert.dom(`[data-test-search-result="${baseRealm.url}index"]`).exists();
+      assert.dom(`[data-test-search-result="${baseRealmPrefix}index"]`).exists();
 
       await click(`[data-test-boxel-picker-option-row="${testRealmURL}"]`);
       assert.dom('[data-test-search-result]').exists({ count: 4 });
@@ -279,7 +279,7 @@ module('Integration | operator-mode | card catalog', function (hooks) {
 
       // Select only the base realm — testRealmURL cards should be hidden
       await click('[data-test-realm-picker] [data-test-boxel-picker-trigger]');
-      await click(`[data-test-boxel-picker-option-row="${baseRealm.url}"]`);
+      await click(`[data-test-boxel-picker-option-row="${baseRealmPrefix}"]`);
 
       assert
         .dom(`[data-test-search-result="${testRealmURL}Pet/mango"]`)
@@ -457,7 +457,7 @@ module('Integration | operator-mode | card catalog', function (hooks) {
     await waitFor(`[data-test-card-catalog-item]`);
     await fillIn(
       `[data-test-search-field]`,
-      `https://cardstack.com/base/types/card`,
+      `@cardstack/base/types/card`,
     );
 
     await waitFor('[data-test-card-catalog-item]', {
@@ -655,7 +655,7 @@ module('Integration | operator-mode | card catalog', function (hooks) {
 
     assert
       .dom(
-        `[data-test-realm="Base Workspace"] [data-test-card-catalog-item="${baseRealm.url}types/card"]`,
+        `[data-test-realm="Base Workspace"] [data-test-card-catalog-item="${baseRealmPrefix}types/card"]`,
       )
       .exists();
 
@@ -1248,7 +1248,7 @@ module('Integration | operator-mode | card catalog', function (hooks) {
     await waitFor(`[data-test-card-catalog-item]`);
     await fillIn(`[data-test-search-field]`, `Skill`);
     await click(
-      '[data-test-card-catalog-item="https://cardstack.com/base/cards/skill"]',
+      '[data-test-card-catalog-item="@cardstack/base/cards/skill"]',
     );
     await click('[data-test-card-catalog-go-button]');
 

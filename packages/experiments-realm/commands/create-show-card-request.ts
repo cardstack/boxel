@@ -1,6 +1,6 @@
 import { Command } from '@cardstack/runtime-common';
 
-import { CardDef, StringField, contains, field } from 'https://cardstack.com/base/card-api';
+import { CardDef, StringField, contains, field } from '@cardstack/base/card-api';
 
 import UseAiAssistantCommand from '@cardstack/boxel-host/commands/ai-assistant';
 import SendBotTriggerEventCommand from '@cardstack/boxel-host/commands/send-bot-trigger-event';

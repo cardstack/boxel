@@ -5,7 +5,7 @@ import { getService } from '@universal-ember/test-support';
 
 import { module, test } from 'qunit';
 
-import { baseRealm } from '@cardstack/runtime-common';
+import { baseRealmPrefix } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
@@ -46,7 +46,7 @@ module('Integration | ask-ai', function (hooks) {
   setupRealmCacheTeardown(hooks);
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await loader.import(`${baseRealmPrefix}card-api`),
   );
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
@@ -60,7 +60,7 @@ module('Integration | ask-ai', function (hooks) {
   hooks.beforeEach(async function () {
     operatorModeStateService = getService('operator-mode-state-service');
 
-    const petCard = `import { CardDef, Component, contains, field, StringField } from "https://cardstack.com/base/card-api";
+    const petCard = `import { CardDef, Component, contains, field, StringField } from "@cardstack/base/card-api";
       export class Pet extends CardDef {
         static displayName = 'Pet';
         @field cardTitle = contains(StringField);

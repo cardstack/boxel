@@ -6,13 +6,13 @@
       "cardDescription": "A field that captures a reference to a card or field type",
       "specType": "field",
       "ref": {
-        "module": "https://cardstack.com/base/code-ref",
+        "module": "@cardstack/base/code-ref",
         "name": "default"
       }
     },
     "meta": {
       "adoptsFrom": {
-        "module": "https://cardstack.com/base/spec",
+        "module": "@cardstack/base/spec",
         "name": "Spec"
       }
     }

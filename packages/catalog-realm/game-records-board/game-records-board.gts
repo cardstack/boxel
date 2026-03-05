@@ -4,8 +4,8 @@ import {
   field,
   contains,
   getCardMeta,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 import GamepadIcon from '@cardstack/boxel-icons/gamepad-2';
 import { CardList } from '../components/card-list';
 import { realmURL } from '@cardstack/runtime-common';

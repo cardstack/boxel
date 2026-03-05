@@ -1,4 +1,4 @@
-import { CardDef, Component } from 'https://cardstack.com/base/card-api';
+import { CardDef, Component } from '@cardstack/base/card-api';
 
 // Success is the worker being able to process this module and not die/thrash
 export class TimersCard extends CardDef {

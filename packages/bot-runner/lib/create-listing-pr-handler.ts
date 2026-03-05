@@ -3,7 +3,7 @@ import {
   toBranchName,
   type RunCommandResponse,
 } from '@cardstack/runtime-common';
-import type { BotTriggerContent } from 'https://cardstack.com/base/matrix-event';
+import type { BotTriggerContent } from '@cardstack/base/matrix-event';
 import { createHash } from 'node:crypto';
 import type { GitHubClient } from './github';
 

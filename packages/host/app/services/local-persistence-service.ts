@@ -3,7 +3,7 @@ import Service from '@ember/service';
 import window from 'ember-window-mock';
 import { v4 as uuidv4 } from 'uuid';
 
-import type { SerializedFileDef } from 'https://cardstack.com/base/file-api';
+import type { SerializedFileDef } from '@cardstack/base/file-api';
 
 import {
   AiAssistantMessageDrafts,

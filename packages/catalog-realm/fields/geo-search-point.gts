@@ -2,8 +2,8 @@ import {
   Component,
   contains,
   field,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 import MapPinIcon from '@cardstack/boxel-icons/map-pin';
 import GeoPointField from './geo-point';
 import GeoSearchPointEditField from './geo-search-point/components/geo-search-point-edit-field';

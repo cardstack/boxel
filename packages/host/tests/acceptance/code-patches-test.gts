@@ -7,7 +7,7 @@ import {
   REPLACE_MARKER,
   SEARCH_MARKER,
   SEPARATOR_MARKER,
-  baseRealm,
+  baseRealmPrefix,
   skillCardRef,
 } from '@cardstack/runtime-common';
 
@@ -44,8 +44,8 @@ import type { TestContextWithSave } from '../helpers';
 let mockedFileContent = 'Hello, world!';
 
 const testCardContent = `
-import { CardDef, Component, field, contains } from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
+import { CardDef, Component, field, contains } from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 
 export class TestCard extends CardDef {
   static displayName = 'Test Card';
@@ -72,7 +72,7 @@ module('Acceptance | Code patches tests', function (hooks) {
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
-    activeRealms: [baseRealm.url, testRealmURL],
+    activeRealms: [baseRealmPrefix, testRealmURL],
   });
 
   let { simulateRemoteMessage, getRoomIds, getRoomEvents, createAndJoinRoom } =

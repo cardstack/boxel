@@ -6,9 +6,9 @@ import {
   field,
   linksTo,
   linksToMany,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 import { gt } from '@cardstack/boxel-ui/helpers';
-import { ImageDef } from 'https://cardstack.com/base/image-file-def';
+import { ImageDef } from '@cardstack/base/image-file-def';
 
 /**
  * Playground card for demonstrating ImageDef capabilities.

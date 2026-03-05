@@ -5,8 +5,8 @@ import {
   contains,
   containsMany,
   Component,
-} from 'https://cardstack.com/base/card-api'; // ¹ Core imports
-import StringField from 'https://cardstack.com/base/string';
+} from '@cardstack/base/card-api'; // ¹ Core imports
+import StringField from '@cardstack/base/string';
 import NumberField from '../fields/number'; // ² Import catalog number field
 import RatingField from '../fields/rating'; // ³ Import catalog rating field
 import MultipleImageField from '../fields/multiple-image'; // ⁴ Import catalog multiple image field

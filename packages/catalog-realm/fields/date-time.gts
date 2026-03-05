@@ -4,7 +4,7 @@ import {
   primitive,
   serialize,
   queryableValue,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 import { fn } from '@ember/helper';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
 import { not, eq } from '@cardstack/boxel-ui/helpers';

@@ -7,12 +7,12 @@ import { module, test } from 'qunit';
 
 import type { MenuItemOptions } from '@cardstack/boxel-ui/helpers';
 
-import { baseRealm, getMenuItems } from '@cardstack/runtime-common';
+import { baseRealmPrefix, getMenuItems } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
-import type { GetMenuItemParams } from 'https://cardstack.com/base/card-api';
+import type { GetMenuItemParams } from '@cardstack/base/card-api';
 
 import {
   testRealmURL,
@@ -42,12 +42,12 @@ module('Integration | overlay-menu-items', function (hooks) {
   setupOnSave(hooks);
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await loader.import(`${baseRealmPrefix}card-api`),
   );
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
-    activeRealms: [baseRealm.url, testRealmURL, testModuleRealm],
+    activeRealms: [baseRealmPrefix, testRealmURL, testModuleRealm],
     realmPermissions: {
       [testRealmURL]: ['read', 'write'],
       [testModuleRealm]: ['read', 'write'],
@@ -69,10 +69,10 @@ module('Integration | overlay-menu-items', function (hooks) {
       });
     };
 
-    let cardApi: typeof import('https://cardstack.com/base/card-api');
-    let string: typeof import('https://cardstack.com/base/string');
-    cardApi = await loader.import(`${baseRealm.url}card-api`);
-    string = await loader.import(`${baseRealm.url}string`);
+    let cardApi: typeof import('@cardstack/base/card-api');
+    let string: typeof import('@cardstack/base/string');
+    cardApi = await loader.import(`${baseRealmPrefix}card-api`);
+    string = await loader.import(`${baseRealmPrefix}string`);
 
     let { field, contains, linksTo, CardDef, Component } = cardApi;
     let { default: StringField } = string;
@@ -127,7 +127,7 @@ module('Integration | overlay-menu-items', function (hooks) {
             type: 'card',
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/cards-grid',
+                module: '@cardstack/base/cards-grid',
                 name: 'CardsGrid',
               },
             },

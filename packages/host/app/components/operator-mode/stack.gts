@@ -18,7 +18,7 @@ import type {
   EditCardFn,
   SaveCardFn,
   ViewCardFn,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 
 import OperatorModeStackItem, {
   type StackItemComponentAPI,

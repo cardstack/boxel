@@ -80,14 +80,14 @@ import Room from '@cardstack/host/lib/matrix-classes/room';
 import { getRandomBackgroundURL, iconURLFor } from '@cardstack/host/lib/utils';
 import { getMatrixProfile } from '@cardstack/host/resources/matrix-profile';
 
-import type { BaseDef, CardDef } from 'https://cardstack.com/base/card-api';
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
+import type { BaseDef, CardDef } from '@cardstack/base/card-api';
+import type * as CardAPI from '@cardstack/base/card-api';
 import type {
   CardForAttachmentCard,
   FileForAttachmentCard,
-} from 'https://cardstack.com/base/command';
-import type * as FileAPI from 'https://cardstack.com/base/file-api';
-import type { FileDef } from 'https://cardstack.com/base/file-api';
+} from '@cardstack/base/command';
+import type * as FileAPI from '@cardstack/base/file-api';
+import type { FileDef } from '@cardstack/base/file-api';
 import type {
   BoxelContext,
   BotTriggerContent,
@@ -100,10 +100,10 @@ import type {
   RealmEventContent,
   Tool,
   CommandResultStatus,
-} from 'https://cardstack.com/base/matrix-event';
+} from '@cardstack/base/matrix-event';
 
-import type * as SkillModule from 'https://cardstack.com/base/skill';
-import type { SystemCard } from 'https://cardstack.com/base/system-card';
+import type * as SkillModule from '@cardstack/base/skill';
+import type { SystemCard } from '@cardstack/base/system-card';
 
 import UpdateRoomSkillsCommand from '../commands/update-room-skills';
 import { addPatchTools } from '../commands/utils';
@@ -300,12 +300,12 @@ export default class MatrixService extends Service {
 
   private cardAPIModule = importResource(
     this,
-    () => 'https://cardstack.com/base/card-api',
+    () => '@cardstack/base/card-api',
   );
 
   private fileAPIModule = importResource(
     this,
-    () => 'https://cardstack.com/base/file-api',
+    () => '@cardstack/base/file-api',
   );
 
   private loadState = task(async () => {

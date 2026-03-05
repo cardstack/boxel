@@ -4,10 +4,10 @@ import {
   field,
   contains,
   linksTo,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-import NumberField from 'https://cardstack.com/base/number';
-import DateField from 'https://cardstack.com/base/date';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+import NumberField from '@cardstack/base/number';
+import DateField from '@cardstack/base/date';
 
 import { dayjsFormat } from '@cardstack/boxel-ui/helpers';
 import { CardContainer } from '@cardstack/boxel-ui/components';

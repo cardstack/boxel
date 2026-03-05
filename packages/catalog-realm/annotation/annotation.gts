@@ -5,10 +5,10 @@ import {
   contains,
   containsMany,
   Component,
-} from 'https://cardstack.com/base/card-api'; // ¹ Core imports
-import StringField from 'https://cardstack.com/base/string';
-import NumberField from 'https://cardstack.com/base/number';
-import UrlField from 'https://cardstack.com/base/url';
+} from '@cardstack/base/card-api'; // ¹ Core imports
+import StringField from '@cardstack/base/string';
+import NumberField from '@cardstack/base/number';
+import UrlField from '@cardstack/base/url';
 import { Button } from '@cardstack/boxel-ui/components'; // ² UI components
 import { fn, concat, array } from '@ember/helper';
 import { on } from '@ember/modifier';

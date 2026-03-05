@@ -25,7 +25,7 @@ import type MatrixService from '@cardstack/host/services/matrix-service';
 import type { MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
-import type { FileDef } from 'https://cardstack.com/base/file-api';
+import type { FileDef } from '@cardstack/base/file-api';
 
 import AiBotMessage from './aibot-message';
 import Attachments from './attachments';

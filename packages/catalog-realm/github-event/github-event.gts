@@ -1,7 +1,7 @@
-import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-import NumberField from 'https://cardstack.com/base/number';
-import { JsonField } from 'https://cardstack.com/base/commands/search-card-result';
+import { CardDef, field, contains } from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+import NumberField from '@cardstack/base/number';
+import { JsonField } from '@cardstack/base/commands/search-card-result';
 
 export class GithubEventCard extends CardDef {
   static displayName = 'GitHub Event';

@@ -5,7 +5,7 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import {
-  baseRealm,
+  baseRealmPrefix,
   type FileExtractResponse,
   type RenderRouteOptions,
   type ResolvedCodeRef,
@@ -50,7 +50,7 @@ module('Acceptance | text file def', function (hooks) {
   const makeFileURL = (path: string) => new URL(path, testRealmURL).href;
 
   const textFileDefCodeRef = (): ResolvedCodeRef => ({
-    module: `${baseRealm.url}text-file-def`,
+    module: `${baseRealmPrefix}text-file-def`,
     name: 'TextFileDef',
   });
 

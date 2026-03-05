@@ -4,10 +4,10 @@ import {
   FieldDef,
   field,
   contains,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-import BooleanField from 'https://cardstack.com/base/boolean';
-import NumberField from 'https://cardstack.com/base/number';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+import BooleanField from '@cardstack/base/boolean';
+import NumberField from '@cardstack/base/number';
 import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';

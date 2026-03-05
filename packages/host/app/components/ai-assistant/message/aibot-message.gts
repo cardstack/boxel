@@ -36,7 +36,7 @@ import {
 import type CommandService from '@cardstack/host/services/command-service';
 import type { MonacoSDK } from '@cardstack/host/services/monaco-service';
 
-import type { CodePatchStatus } from 'https://cardstack.com/base/matrix-event';
+import type { CodePatchStatus } from '@cardstack/base/matrix-event';
 
 import Message from './text-content';
 

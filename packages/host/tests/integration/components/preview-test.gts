@@ -5,19 +5,19 @@ import GlimmerComponent from '@glimmer/component';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { baseRealm } from '@cardstack/runtime-common';
+import { baseRealmPrefix } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
 import CardRenderer from '@cardstack/host/components/card-renderer';
 
-import type { Format } from 'https://cardstack.com/base/card-api';
+import type { Format } from '@cardstack/base/card-api';
 
 import { percySnapshot, testRealmURL } from '../../helpers';
 import { renderComponent } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
 
-let cardApi: typeof import('https://cardstack.com/base/card-api');
-let string: typeof import('https://cardstack.com/base/string');
+let cardApi: typeof import('@cardstack/base/card-api');
+let string: typeof import('@cardstack/base/string');
 
 class MockLocalIndexer extends Service {
   url = new URL(testRealmURL);
@@ -29,8 +29,8 @@ module('Integration | preview', function (hooks) {
 
   hooks.beforeEach(async function () {
     loader = getService('loader-service').loader;
-    cardApi = await loader.import(`${baseRealm.url}card-api`);
-    string = await loader.import(`${baseRealm.url}string`);
+    cardApi = await loader.import(`${baseRealmPrefix}card-api`);
+    string = await loader.import(`${baseRealmPrefix}string`);
     this.owner.register('service:local-indexer', MockLocalIndexer);
   });
 

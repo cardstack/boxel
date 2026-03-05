@@ -31,8 +31,8 @@ module(basename(__filename), function () {
       realmURL,
       fileSystem: {
         'pet.gts': `
-          import { CardDef, field, contains, StringField } from 'https://cardstack.com/base/card-api';
-          import { Component } from 'https://cardstack.com/base/card-api';
+          import { CardDef, field, contains, StringField } from '@cardstack/base/card-api';
+          import { Component } from '@cardstack/base/card-api';
           export class Pet extends CardDef {
             static displayName = 'Pet';
             @field name = contains(StringField);
@@ -54,7 +54,7 @@ module(basename(__filename), function () {
             field,
             contains,
             StringField,
-          } from 'https://cardstack.com/base/card-api';
+          } from '@cardstack/base/card-api';
 
           export class CommandResult extends CardDef {
             static displayName = 'CommandResult';

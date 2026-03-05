@@ -19,8 +19,8 @@ import {
   field,
   contains,
   type CardDefConstructor,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 import GetCardCommand from '@cardstack/boxel-host/commands/get-card';
 import ReadSourceCommand from '@cardstack/boxel-host/commands/read-source';
 import SaveCardCommand from '@cardstack/boxel-host/commands/save-card';

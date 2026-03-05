@@ -6,13 +6,13 @@
       "cardDescription": "A field that validates physical addresses and provides a suitable editor.",
       "specType": "field",
       "ref": {
-        "module": "https://cardstack.com/base/address",
+        "module": "@cardstack/base/address",
         "name": "default"
       }
     },
     "meta": {
       "adoptsFrom": {
-        "module": "https://cardstack.com/base/spec",
+        "module": "@cardstack/base/spec",
         "name": "Spec"
       }
     }

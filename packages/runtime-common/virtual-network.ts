@@ -1,5 +1,5 @@
 import { RealmPaths } from './paths';
-import { baseRealm, isNode } from './index';
+import { isNode } from './index';
 import type { ModuleDescriptor } from './package-shim-handler';
 import {
   PackageShimHandler,
@@ -300,10 +300,6 @@ const retryableLocalHosts = new Set(['localhost', '127.0.0.1']);
 function shouldRetryFetch(url: URL) {
   if ((globalThis as any).__environment !== 'test') {
     return false;
-  }
-
-  if (baseRealm.inRealm(url)) {
-    return true;
   }
 
   if (retryableLocalHosts.has(url.hostname)) {

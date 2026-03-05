@@ -7,7 +7,7 @@ import { module, test } from 'qunit';
 
 import type { DataQuery, Loader, Realm } from '@cardstack/runtime-common';
 import {
-  baseRealm,
+  baseRealmPrefix,
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
 
@@ -50,8 +50,8 @@ module(`Integration | search data resource`, function (hooks) {
   let loader: Loader;
   let loaderService: LoaderService;
   let realm: Realm;
-  let cardApi: typeof import('https://cardstack.com/base/card-api');
-  let string: typeof import('https://cardstack.com/base/string');
+  let cardApi: typeof import('@cardstack/base/card-api');
+  let string: typeof import('@cardstack/base/string');
 
   setupRenderingTest(hooks);
   hooks.beforeEach(function () {
@@ -64,13 +64,13 @@ module(`Integration | search data resource`, function (hooks) {
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
-    activeRealms: [baseRealm.url, testRealmURL],
+    activeRealms: [baseRealmPrefix, testRealmURL],
     autostart: true,
   });
   setupBaseRealm(hooks);
   hooks.beforeEach(async function (this: RenderingTestContext) {
-    cardApi = await loader.import(`${baseRealm.url}card-api`);
-    string = await loader.import(`${baseRealm.url}string`);
+    cardApi = await loader.import(`${baseRealmPrefix}card-api`);
+    string = await loader.import(`${baseRealmPrefix}string`);
 
     let { contains, field, CardDef, FieldDef } = cardApi;
     let { default: StringField } = string;
@@ -207,7 +207,7 @@ module(`Integration | search data resource`, function (hooks) {
     let query: DataQuery = {
       filter: {
         type: {
-          module: `${baseRealm.url}file-api`,
+          module: `${baseRealmPrefix}file-api`,
           name: 'FileDef',
         },
       },

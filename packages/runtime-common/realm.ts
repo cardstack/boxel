@@ -49,7 +49,7 @@ import {
   isNode,
   logger,
   fetchRealmPermissions,
-  baseRealm,
+  baseRealmPrefix,
   maybeURL,
   insertPermissions,
   maybeHandleScopedCSSRequest,
@@ -145,7 +145,7 @@ import type {
   FileWatcherEventContent,
   RealmEventContent,
   UpdateRealmEventContent,
-} from 'https://cardstack.com/base/matrix-event';
+} from '@cardstack/base/matrix-event';
 import type {
   AtomicOperation,
   AtomicOperationResult,
@@ -4581,6 +4581,7 @@ function isGloballyPublicDependency(resourceUrl: string): boolean {
     resourceUrl.startsWith('@cardstack/boxel-icons') ||
     resourceUrl.startsWith('@cardstack/boxel-ui') ||
     resourceUrl.startsWith('@cardstack/boxel-host/commands') ||
+    resourceUrl.startsWith(baseRealmPrefix) ||
     resourceUrl.startsWith(PACKAGES_FAKE_ORIGIN)
   ) {
     return true;
@@ -4599,7 +4600,7 @@ function isGloballyPublicDependency(resourceUrl: string): boolean {
   ) {
     return true;
   }
-  return baseRealm.inRealm(parsed);
+  return false;
 }
 
 function lastModifiedHeader(

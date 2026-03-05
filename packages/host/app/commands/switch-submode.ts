@@ -1,6 +1,6 @@
 import { service } from '@ember/service';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseCommandModule from '@cardstack/base/command';
 
 import { Submodes } from '../components/submode-switcher';
 

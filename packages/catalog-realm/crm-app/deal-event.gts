@@ -3,13 +3,13 @@ import {
   field,
   CardDef,
   linksTo,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 import { Representative } from './representative';
-import { Component } from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-import NumberField from 'https://cardstack.com/base/number';
-import DateTimeField from 'https://cardstack.com/base/datetime';
-import TextAreaField from 'https://cardstack.com/base/text-area';
+import { Component } from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+import NumberField from '@cardstack/base/number';
+import DateTimeField from '@cardstack/base/datetime';
+import TextAreaField from '@cardstack/base/text-area';
 import {
   FieldContainer,
   BoxelSelect,

@@ -5,7 +5,7 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import {
-  baseRealm,
+  baseRealmPrefix,
   type FileExtractResponse,
   type RenderRouteOptions,
   type ResolvedCodeRef,
@@ -136,7 +136,7 @@ module('Acceptance | avif image def', function (hooks) {
   const makeFileURL = (path: string) => new URL(path, testRealmURL).href;
 
   const avifDefCodeRef = (): ResolvedCodeRef => ({
-    module: `${baseRealm.url}avif-image-def`,
+    module: `${baseRealmPrefix}avif-image-def`,
     name: 'AvifDef',
   });
 

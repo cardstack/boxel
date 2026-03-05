@@ -5,7 +5,7 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import {
-  baseRealm,
+  baseRealmPrefix,
   type FileExtractResponse,
   type RenderRouteOptions,
   type ResolvedCodeRef,
@@ -69,7 +69,7 @@ module('Acceptance | svg image def', function (hooks) {
   const makeFileURL = (path: string) => new URL(path, testRealmURL).href;
 
   const svgDefCodeRef = (): ResolvedCodeRef => ({
-    module: `${baseRealm.url}svg-image-def`,
+    module: `${baseRealmPrefix}svg-image-def`,
     name: 'SvgDef',
   });
 

@@ -1,22 +1,22 @@
-import NumberField from 'https://cardstack.com/base/number';
-import StringField from 'https://cardstack.com/base/string';
+import NumberField from '@cardstack/base/number';
+import StringField from '@cardstack/base/string';
 import {
   CardDef,
   field,
   contains,
   realmURL,
   containsMany,
-} from 'https://cardstack.com/base/card-api';
-import { Component } from 'https://cardstack.com/base/card-api';
-import CoordinateField from 'https://cardstack.com/base/coordinate';
-import PositionedCardField from 'https://cardstack.com/base/positioned-card';
+} from '@cardstack/base/card-api';
+import { Component } from '@cardstack/base/card-api';
+import CoordinateField from '@cardstack/base/coordinate';
+import PositionedCardField from '@cardstack/base/positioned-card';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { htmlSafe } from '@ember/template';
 import { tracked } from '@glimmer/tracking';
 import { TrackedMap } from 'tracked-built-ins';
-import { baseRealm, type getCards } from '@cardstack/runtime-common';
+import { baseRealmPrefix, type getCards } from '@cardstack/runtime-common';
 import LayoutBoardSplitIcon from '@cardstack/boxel-icons/layout-board-split';
 import PlantIcon from '@cardstack/boxel-icons/plant';
 
@@ -221,7 +221,7 @@ class Isolated extends Component<typeof GardenDesign> {
           sort: [
             {
               on: {
-                module: `${baseRealm.url}card-api`,
+                module: `${baseRealmPrefix}card-api`,
                 name: 'CardDef',
               },
               by: 'cardTitle',

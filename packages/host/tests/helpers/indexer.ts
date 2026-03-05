@@ -1,5 +1,3 @@
-import isEqual from 'lodash/isEqual';
-
 import type { LooseCardResource, DBAdapter } from '@cardstack/runtime-common';
 import {
   asExpressions,
@@ -22,7 +20,7 @@ import {
   coerceTypes,
 } from '@cardstack/runtime-common';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
+import type { CardDef } from '@cardstack/base/card-api';
 
 import { testRealmURL } from './index';
 
@@ -59,7 +57,10 @@ export async function getTypes(instance: CardDef): Promise<string[]> {
       throw new Error(`could not identify card ${loadedCard.name}`);
     }
     types.push(internalKeyFor(loadedCardRef, undefined));
-    if (!isEqual(loadedCardRef, baseCardRef)) {
+    if (
+      internalKeyFor(loadedCardRef, undefined) !==
+      internalKeyFor(baseCardRef, undefined)
+    ) {
       fullRef = {
         type: 'ancestorOf',
         card: loadedCardRef,

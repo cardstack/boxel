@@ -4,15 +4,15 @@ import {
   field,
   contains,
   linksTo,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 import { eq } from '@cardstack/boxel-ui/helpers';
 import { on } from '@ember/modifier';
-import { Component } from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
+import { Component } from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 
 import { action } from '@ember/object';
 
-import BooleanField from 'https://cardstack.com/base/boolean';
+import BooleanField from '@cardstack/base/boolean';
 
 import BrainIcon from '@cardstack/boxel-icons/brain';
 

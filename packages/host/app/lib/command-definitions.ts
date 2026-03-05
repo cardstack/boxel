@@ -1,4 +1,4 @@
-import type * as SkillModule from 'https://cardstack.com/base/skill';
+import type * as SkillModule from '@cardstack/base/skill';
 
 export function isValidCommandDefinition(
   commandDefinition?: SkillModule.CommandField,

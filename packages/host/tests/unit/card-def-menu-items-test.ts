@@ -4,7 +4,7 @@ import { module, test } from 'qunit';
 import type { MenuItemOptions } from '@cardstack/boxel-ui/helpers';
 
 import {
-  baseRealm,
+  baseRealmPrefix,
   testRealmURL,
   type Loader,
 } from '@cardstack/runtime-common';
@@ -12,7 +12,7 @@ import {
 import type {
   CardDef,
   GetMenuItemParams,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 
 import { setupRenderingTest } from '../helpers/setup';
 
@@ -36,7 +36,7 @@ module('Unit | CardDef menu items', function (hooks) {
     loader = getService('loader-service').loader;
   });
   hooks.beforeEach(async function () {
-    let mod: any = await loader.import(`${baseRealm.url}menu-items`);
+    let mod: any = await loader.import(`${baseRealmPrefix}menu-items`);
     getDefaultCardMenuItems = mod.getDefaultCardMenuItems;
   });
 

@@ -10,9 +10,9 @@ import {
   Component,
   CardDef,
   FieldDef,
-} from 'https://cardstack.com/base/card-api';
-import NumberField from 'https://cardstack.com/base/number';
-import StringField from 'https://cardstack.com/base/string';
+} from '@cardstack/base/card-api';
+import NumberField from '@cardstack/base/number';
+import StringField from '@cardstack/base/string';
 
 export class Person extends CardDef {
   @field firstName = contains(StringField);

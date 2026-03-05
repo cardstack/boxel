@@ -18,8 +18,8 @@ import { fadeOut } from 'ember-animated/motions/opacity';
 import fade from 'ember-animated/transitions/fade';
 import { toLeft, toRight } from 'ember-animated/transitions/move-over';
 
-import { CardDef } from 'https://cardstack.com/base/card-api';
-import { Component } from 'https://cardstack.com/base/card-api';
+import { CardDef } from '@cardstack/base/card-api';
+import { Component } from '@cardstack/base/card-api';
 
 import { BoxelContainer, IconButton } from '@cardstack/boxel-ui/components';
 import { gte, lte } from '@cardstack/boxel-ui/helpers';

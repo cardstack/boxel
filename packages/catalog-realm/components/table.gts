@@ -6,7 +6,7 @@ import {
   type CardDef,
   type CreateCardFn,
   type Field,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 import { type CodeRef } from '@cardstack/runtime-common';
 import { LoadingIndicator, Pill, Button } from '@cardstack/boxel-ui/components';
 import { eq, not } from '@cardstack/boxel-ui/helpers';

@@ -3,9 +3,10 @@
   "version": "1.0.0",
   "license": "MIT",
   "scripts": {
-    "skills:setup": "[ -d contents ] || (git clone git@github.com:cardstack/boxel-skills.git contents || git clone https://github.com/cardstack/boxel-skills.git contents)",
-    "skills:update": "pnpm skills:setup && cd contents && git pull",
-    "skills:reset": "rm -rf contents && pnpm skills:setup"
+    "skills:setup": "[ -d contents ] || (git clone git@github.com:cardstack/boxel-skills.git contents || git clone https://github.com/cardstack/boxel-skills.git contents) && pnpm skills:migrate-refs",
+    "skills:update": "pnpm skills:setup && cd contents && git pull && cd .. && pnpm skills:migrate-refs",
+    "skills:reset": "rm -rf contents && pnpm skills:setup",
+    "skills:migrate-refs": "find contents -name '*.json' -exec sed -i '' 's|https://cardstack.com/base/|@cardstack/base/|g' {} + && find contents -name '*.json' -exec sed -i '' 's|https://app.boxel.ai/catalog/|@cardstack/catalog/|g' {} +"
   },
   "volta": {
     "extends": "../../package.json"

@@ -6,13 +6,13 @@
       "cardDescription": "A field that captures big int values",
       "specType": "field",
       "ref": {
-        "module": "https://cardstack.com/base/big-integer",
+        "module": "@cardstack/base/big-integer",
         "name": "default"
       }
     },
     "meta": {
       "adoptsFrom": {
-        "module": "https://cardstack.com/base/spec",
+        "module": "@cardstack/base/spec",
         "name": "Spec"
       }
     }

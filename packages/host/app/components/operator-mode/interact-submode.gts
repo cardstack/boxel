@@ -65,8 +65,8 @@ import type {
   CardContext,
   CardDef,
   Format,
-} from 'https://cardstack.com/base/card-api';
-import type { Spec } from 'https://cardstack.com/base/spec';
+} from '@cardstack/base/card-api';
+import type { Spec } from '@cardstack/base/spec';
 
 import consumeContext from '../../helpers/consume-context';
 

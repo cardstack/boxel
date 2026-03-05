@@ -5,7 +5,7 @@ import {
   contains,
   realmURL,
   StringField,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 
 function removeFileExtension(cardUrl: string) {
   return cardUrl?.replace(/\.[^/.]+$/, '');

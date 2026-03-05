@@ -4,9 +4,9 @@ import {
   contains,
   containsMany,
   Component,
-} from 'https://cardstack.com/base/card-api'; // ¹ Core imports
-import StringField from 'https://cardstack.com/base/string';
-import NumberField from 'https://cardstack.com/base/number';
+} from '@cardstack/base/card-api'; // ¹ Core imports
+import StringField from '@cardstack/base/string';
+import NumberField from '@cardstack/base/number';
 import {
   eq,
   and,

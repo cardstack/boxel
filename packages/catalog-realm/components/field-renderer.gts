@@ -3,12 +3,12 @@ import {
   type CardDef,
   Box,
   type Field,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 import {
   getBoxComponent,
   type BoxComponent,
-} from 'https://cardstack.com/base/field-component';
-import { initSharedState } from 'https://cardstack.com/base/shared-state';
+} from '@cardstack/base/field-component';
+import { initSharedState } from '@cardstack/base/shared-state';
 
 const fieldRendererCache = initSharedState(
   'fieldRendererCache',

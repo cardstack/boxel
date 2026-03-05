@@ -9,7 +9,7 @@ import {
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { baseRealm, Deferred } from '@cardstack/runtime-common';
+import { baseRealmPrefix, Deferred } from '@cardstack/runtime-common';
 
 import type FileUploadService from '@cardstack/host/services/file-upload';
 
@@ -50,14 +50,14 @@ const files: Record<string, any> = {
       attributes: {},
       meta: {
         adoptsFrom: {
-          module: 'https://cardstack.com/base/cards-grid',
+          module: '@cardstack/base/cards-grid',
           name: 'CardsGrid',
         },
       },
     },
   },
   'error.gts': `
-    import { CardDef } from 'https://cardstack.com/base/card-api';
+    import { CardDef } from '@cardstack/base/card-api';
 
     export default class ErrorCard extends CardDef {
       static displayName = 'error';
@@ -69,8 +69,8 @@ const files: Record<string, any> = {
     }
   `,
   'pet.gts': `
-    import { contains, linksTo, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-    import StringField from "https://cardstack.com/base/string";
+    import { contains, linksTo, field, CardDef, Component } from "@cardstack/base/card-api";
+    import StringField from "@cardstack/base/string";
 
     export default class Pet extends CardDef {
       static displayName = 'Pet';
@@ -84,8 +84,8 @@ const files: Record<string, any> = {
     }
   `,
   'person.gts': `
-    import { contains, linksTo, field, CardDef } from "https://cardstack.com/base/card-api";
-    import StringField from "https://cardstack.com/base/string";
+    import { contains, linksTo, field, CardDef } from "@cardstack/base/card-api";
+    import StringField from "@cardstack/base/string";
     import Pet from "./pet";
 
     export class Person extends CardDef {
@@ -109,7 +109,7 @@ const files: Record<string, any> = {
       },
       meta: {
         adoptsFrom: {
-          module: 'https://cardstack.com/base/spec',
+          module: '@cardstack/base/spec',
           name: 'Spec',
         },
       },
@@ -126,7 +126,7 @@ const files: Record<string, any> = {
       },
       meta: {
         adoptsFrom: {
-          module: 'https://cardstack.com/base/spec',
+          module: '@cardstack/base/spec',
           name: 'Spec',
         },
       },
@@ -143,7 +143,7 @@ const files: Record<string, any> = {
       },
       meta: {
         adoptsFrom: {
-          module: 'https://cardstack.com/base/spec',
+          module: '@cardstack/base/spec',
           name: 'Spec',
         },
       },
@@ -177,7 +177,7 @@ const filesB: Record<string, any> = {
       attributes: {},
       meta: {
         adoptsFrom: {
-          module: 'https://cardstack.com/base/cards-grid',
+          module: '@cardstack/base/cards-grid',
           name: 'CardsGrid',
         },
       },
@@ -214,7 +214,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
-    activeRealms: [baseRealm.url, testRealmURL, testRealmURL2],
+    activeRealms: [baseRealmPrefix, testRealmURL, testRealmURL2],
   });
 
   let { setRealmPermissions, createAndJoinRoom } = mockMatrixUtils;
@@ -254,7 +254,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
   module('when user has permissions to both test realms', function (hooks) {
     hooks.beforeEach(async function () {
       setRealmPermissions({
-        [baseRealm.url]: ['read'],
+        [baseRealmPrefix]: ['read'],
         [testRealmURL]: ['read', 'write'],
         [testRealmURL2]: ['read', 'write'],
       });
@@ -562,7 +562,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
         assert.deepEqual(
           json.data.meta.adoptsFrom,
           {
-            module: `${baseRealm.url}card-api`,
+            module: `${baseRealmPrefix}card-api`,
             name: 'CardDef',
           },
           'adoptsFrom is correct',
@@ -624,7 +624,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
         assert.deepEqual(
           json.data.meta.adoptsFrom,
           {
-            module: `${baseRealm.url}card-api`,
+            module: `${baseRealmPrefix}card-api`,
             name: 'CardDef',
           },
           'adoptsFrom is correct',
@@ -718,8 +718,8 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
     test<TestContextWithSave>('can create a new card definition in different realm than inherited definition', async function (assert) {
       assert.expect(12);
       let expectedSrc = `
-import { CardDef } from 'https://cardstack.com/base/card-api';
-import { Component } from 'https://cardstack.com/base/card-api';
+import { CardDef } from '@cardstack/base/card-api';
+import { Component } from '@cardstack/base/card-api';
 export class TrèsTestCard extends CardDef {
   static displayName = "Très test card 😀";
 }`.trim();
@@ -800,7 +800,7 @@ export class TrèsTestCard extends CardDef {
           content,
           `
 import { Person } from './person';
-import { Component } from 'https://cardstack.com/base/card-api';
+import { Component } from '@cardstack/base/card-api';
 export class TestCard extends Person {
   static displayName = "Test Card";
 }`.trim(),
@@ -816,7 +816,7 @@ export class TestCard extends Person {
 
     test<TestContextWithSave>('can create new card definition in different realm than realm of current file opened in code mode', async function (assert) {
       let done = assert.async();
-      await visitOperatorMode(`${baseRealm.url}card-api.gts`);
+      await visitOperatorMode(`${baseRealmPrefix}card-api.gts`);
       await openNewFileModal('Card Definition');
 
       await click('[data-test-select-card-type]');
@@ -887,10 +887,10 @@ export class TestCard extends Person {
       await waitFor('[data-test-card-catalog-modal]');
 
       await waitFor(
-        `[data-test-card-catalog-item="https://cardstack.com/base/fields/biginteger-field"]`,
+        `[data-test-card-catalog-item="@cardstack/base/fields/biginteger-field"]`,
       );
       await click(
-        `[data-test-card-catalog-item="https://cardstack.com/base/fields/biginteger-field"]`,
+        `[data-test-card-catalog-item="@cardstack/base/fields/biginteger-field"]`,
       );
       await click('[data-test-card-catalog-go-button]');
 
@@ -908,8 +908,8 @@ export class TestCard extends Person {
         assert.strictEqual(
           content,
           `
-import BigInteger from 'https://cardstack.com/base/big-integer';
-import { Component } from 'https://cardstack.com/base/card-api';
+import BigInteger from '@cardstack/base/big-integer';
+import { Component } from '@cardstack/base/card-api';
 export class FieldThatExtendsFromBigInt extends BigInteger {
   static displayName = "Field that extends from big int";
 }`.trim(),
@@ -929,10 +929,10 @@ export class FieldThatExtendsFromBigInt extends BigInteger {
       await waitFor('[data-test-card-catalog-modal]');
 
       await waitFor(
-        `[data-test-card-catalog-item="https://cardstack.com/base/fields/biginteger-field"]`,
+        `[data-test-card-catalog-item="@cardstack/base/fields/biginteger-field"]`,
       );
       await click(
-        `[data-test-card-catalog-item="https://cardstack.com/base/fields/biginteger-field"]`,
+        `[data-test-card-catalog-item="@cardstack/base/fields/biginteger-field"]`,
       );
       await click('[data-test-card-catalog-go-button]');
       await fillIn(
@@ -977,7 +977,7 @@ export class FieldThatExtendsFromBigInt extends BigInteger {
           content,
           `
 import Pet from './pet';
-import { Component } from 'https://cardstack.com/base/card-api';
+import { Component } from '@cardstack/base/card-api';
 export class TestCard extends Pet {
   static displayName = "Test Card";
 }`.trim(),
@@ -1016,7 +1016,7 @@ export class TestCard extends Pet {
           content,
           `
 import PetParent from './pet';
-import { Component } from 'https://cardstack.com/base/card-api';
+import { Component } from '@cardstack/base/card-api';
 export class Pet extends PetParent {
   static displayName = "Pet";
 }`.trim(),
@@ -1054,7 +1054,7 @@ export class Pet extends PetParent {
           content,
           `
 import Pet from './pet';
-import { Component } from 'https://cardstack.com/base/card-api';
+import { Component } from '@cardstack/base/card-api';
 export class Map0 extends Pet {
   static displayName = "Map";
 }`.trim(),
@@ -1071,8 +1071,8 @@ export class Map0 extends Pet {
     test<TestContextWithSave>('can specify new directory as part of filename when creating a new definition', async function (assert) {
       assert.expect(2);
       let expectedSrc = `
-import { CardDef } from 'https://cardstack.com/base/card-api';
-import { Component } from 'https://cardstack.com/base/card-api';
+import { CardDef } from '@cardstack/base/card-api';
+import { Component } from '@cardstack/base/card-api';
 export class TestCard extends CardDef {
   static displayName = "Test Card";
 }`.trim();
@@ -1106,8 +1106,8 @@ export class TestCard extends CardDef {
     test<TestContextWithSave>('can handle filename with .gts extension in filename when creating a new definition', async function (assert) {
       assert.expect(2);
       let expectedSrc = `
-import { CardDef } from 'https://cardstack.com/base/card-api';
-import { Component } from 'https://cardstack.com/base/card-api';
+import { CardDef } from '@cardstack/base/card-api';
+import { Component } from '@cardstack/base/card-api';
 export class TestCard extends CardDef {
   static displayName = "Test Card";
 }`.trim();
@@ -1141,8 +1141,8 @@ export class TestCard extends CardDef {
     test<TestContextWithSave>('can handle leading "/" in filename when creating a new definition', async function (assert) {
       assert.expect(2);
       let expectedSrc = `
-import { CardDef } from 'https://cardstack.com/base/card-api';
-import { Component } from 'https://cardstack.com/base/card-api';
+import { CardDef } from '@cardstack/base/card-api';
+import { Component } from '@cardstack/base/card-api';
 export class TestCard extends CardDef {
   static displayName = "Test Card";
 }`.trim();
@@ -1199,7 +1199,7 @@ export class TestCard extends CardDef {
 
       hooks.beforeEach(async function () {
         setRealmPermissions({
-          [baseRealm.url]: ['read'],
+          [baseRealmPrefix]: ['read'],
           [testRealmURL2]: ['read'],
           [testRealmURL]: ['read', 'write'],
         });
@@ -1267,7 +1267,7 @@ export class TestCard extends CardDef {
 
       hooks.beforeEach(async function () {
         setRealmPermissions({
-          [baseRealm.url]: ['read'],
+          [baseRealmPrefix]: ['read'],
           [testRealmURL2]: ['read', 'write'],
           [testRealmURL]: ['read'],
         });

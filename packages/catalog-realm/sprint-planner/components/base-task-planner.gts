@@ -9,7 +9,7 @@ import {
   CardContext,
   CardDef,
   BaseDef,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 import { type getCards } from '@cardstack/runtime-common';
 import type { Query } from '@cardstack/runtime-common/query';
 import { IconPlus } from '@cardstack/boxel-ui/icons';

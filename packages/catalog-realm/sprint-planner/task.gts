@@ -11,10 +11,10 @@ import ChevronsDown from '@cardstack/boxel-icons/chevrons-down';
 import ChevronsUp from '@cardstack/boxel-icons/chevrons-up';
 import CircleEqual from '@cardstack/boxel-icons/circle-equal';
 import { addWeeks, isThisWeek, isToday } from 'date-fns';
-import BooleanField from 'https://cardstack.com/base/boolean';
-import ColorField from 'https://cardstack.com/base/color';
-import DateRangeField from 'https://cardstack.com/base/date-range-field';
-import NumberField from 'https://cardstack.com/base/number';
+import BooleanField from '@cardstack/base/boolean';
+import ColorField from '@cardstack/base/color';
+import DateRangeField from '@cardstack/base/date-range-field';
+import NumberField from '@cardstack/base/number';
 import {
   Component,
   FieldDef,
@@ -23,7 +23,7 @@ import {
   field,
   linksTo,
   linksToMany,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 import { Tag } from './tag';
 import { Todo } from './todo';
 import { User } from './user';

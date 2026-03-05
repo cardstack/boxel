@@ -7,8 +7,6 @@ import { isTesting } from '@embroider/macros';
 
 import { parse } from 'date-fns';
 
-import isEqual from 'lodash/isEqual';
-
 import {
   type Definition,
   type CodeRef,
@@ -17,7 +15,7 @@ import {
   type ModuleDefinitionResult,
   isBaseDef,
   baseCardRef,
-  baseRealm,
+  baseRealmPrefix,
   Deferred,
   loadCardDef,
   internalKeyFor,
@@ -38,9 +36,6 @@ import {
   type SerializedError,
 } from '@cardstack/runtime-common/error';
 
-import type { CardDef, BaseDef } from 'https://cardstack.com/base/card-api';
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
-
 import { createAuthErrorGuard } from '../utils/auth-error-guard';
 import { registerBoxelTransitionTo } from '../utils/register-boxel-transition';
 import { ensureMessageIncludesUrl, stripSelfDeps } from '../utils/render-error';
@@ -53,6 +48,8 @@ import type LoaderService from '../services/loader-service';
 import type NetworkService from '../services/network';
 import type RealmService from '../services/realm';
 import type RenderStoreService from '../services/render-store';
+import type * as CardAPI from '@cardstack/base/card-api';
+import type { CardDef, BaseDef } from '@cardstack/base/card-api';
 
 export type Model = {
   id: string;
@@ -356,7 +353,7 @@ async function makeDefinition(
 ): Promise<ModuleDefinitionResult | ErrorEntry> {
   try {
     let api = await context.loaderService.loader.import<typeof CardAPI>(
-      `${baseRealm.url}card-api`,
+      `${baseRealmPrefix}card-api`,
     );
     let fields = getFieldDefinitions(api, cardOrFieldDef);
     let codeRef = identifyCard(cardOrFieldDef) as ResolvedCodeRef;
@@ -469,7 +466,11 @@ async function getTypes(
         codeRef: loadedCardRef,
         displayName: getDisplayName(loadedCard),
       });
-      if (!isEqual(loadedCardRef, baseCardRef)) {
+      // This was isEqual but it was comparing @cardstack/base/ and localhost:4201/base/ … was that valid? is this?
+      if (
+        internalKeyFor(loadedCardRef, undefined) !==
+        internalKeyFor(baseCardRef, undefined)
+      ) {
         fullRef = {
           type: 'ancestorOf',
           card: loadedCardRef,

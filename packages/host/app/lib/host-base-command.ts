@@ -3,10 +3,10 @@ import { service } from '@ember/service';
 
 import { Command, type CommandContext } from '@cardstack/runtime-common';
 
-import { baseRealm } from '@cardstack/runtime-common';
+import { baseRealmPrefix } from '@cardstack/runtime-common';
 
-import type { CardDefConstructor } from 'https://cardstack.com/base/card-api';
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type { CardDefConstructor } from '@cardstack/base/card-api';
+import type * as BaseCommandModule from '@cardstack/base/command';
 
 import type LoaderService from '../services/loader-service';
 
@@ -23,7 +23,7 @@ export default abstract class HostBaseCommand<
 
   protected loadCommandModule(): Promise<typeof BaseCommandModule> {
     return this.loaderService.loader.import<typeof BaseCommandModule>(
-      `${baseRealm.url}command`,
+      `${baseRealmPrefix}command`,
     );
   }
 }

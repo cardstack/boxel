@@ -4,8 +4,8 @@ import {
   contains,
   StringField,
   FieldDef,
-} from 'https://cardstack.com/base/card-api';
-import UrlField from 'https://cardstack.com/base/url';
+} from '@cardstack/base/card-api';
+import UrlField from '@cardstack/base/url';
 
 import {
   BoxelSelect,

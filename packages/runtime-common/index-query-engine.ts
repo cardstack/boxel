@@ -8,7 +8,7 @@ import {
   baseCardRef,
   internalKeyFor,
   isResolvedCodeRef,
-  baseRealm,
+  baseRealmPrefix,
   getSerializer,
 } from './index';
 import {
@@ -1279,7 +1279,7 @@ function getField(
         isPrimitive: true,
         isComputed: false,
         fieldOrCard: {
-          module: `${baseRealm.url}card-api`,
+          module: `${baseRealmPrefix}card-api`,
           name: 'StringField',
         },
       } as FieldDefinition;

@@ -1,6 +1,6 @@
 import config from '@cardstack/host/config/environment';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
+import type { CardDef } from '@cardstack/base/card-api';
 
 export async function copyCardURLToClipboard(
   card: CardDef | URL | string,

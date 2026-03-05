@@ -12,7 +12,7 @@ import {
   SpecSelection,
 } from '@cardstack/host/utils/local-storage-keys';
 
-import type { Format } from 'https://cardstack.com/base/card-api';
+import type { Format } from '@cardstack/base/card-api';
 
 import { testRealmURL, visitOperatorMode } from './index';
 

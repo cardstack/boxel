@@ -10,15 +10,15 @@ import {
   instanceOf,
   realmURL,
   type GetMenuItemParams,
-} from 'https://cardstack.com/base/card-api';
-import { commandData } from 'https://cardstack.com/base/resources/command-data';
-import MarkdownField from 'https://cardstack.com/base/markdown';
-import { Spec } from 'https://cardstack.com/base/spec';
-import { Skill } from 'https://cardstack.com/base/skill';
+} from '@cardstack/base/card-api';
+import { commandData } from '@cardstack/base/resources/command-data';
+import MarkdownField from '@cardstack/base/markdown';
+import { Spec } from '@cardstack/base/spec';
+import { Skill } from '@cardstack/base/skill';
 import type {
   GetAllRealmMetasResult,
   RealmMetaField,
-} from 'https://cardstack.com/base/command';
+} from '@cardstack/base/command';
 
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';

@@ -3,8 +3,8 @@ import {
   field,
   contains,
   Component,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 import LemonIcon from '@cardstack/boxel-icons/cherry';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';

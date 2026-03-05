@@ -6,7 +6,7 @@ import GlimmerComponent from '@glimmer/component';
 import type {
   BoxComponent,
   CardDef,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 import type Owner from '@ember/owner';
 
 // Focuses the overlay and wires up keyboard navigation when it renders

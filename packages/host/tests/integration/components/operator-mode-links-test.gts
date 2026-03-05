@@ -152,10 +152,10 @@ module('Integration | operator-mode | links', function (hooks) {
 
     await click('[data-test-add-new="spec"]');
     await waitFor(
-      `[data-test-card-catalog-item="https://cardstack.com/base/fields/biginteger-field"]`,
+      `[data-test-card-catalog-item="@cardstack/base/fields/biginteger-field"]`,
     );
     await click(
-      `[data-test-card-catalog-item="https://cardstack.com/base/fields/biginteger-field"]`,
+      `[data-test-card-catalog-item="@cardstack/base/fields/biginteger-field"]`,
     );
     await click('[data-test-card-catalog-go-button]');
 

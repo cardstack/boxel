@@ -5,10 +5,10 @@ import {
   Component,
   FieldDef,
   linksTo,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-import UrlField from 'https://cardstack.com/base/url';
-import DateTimeField from 'https://cardstack.com/base/datetime';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+import UrlField from '@cardstack/base/url';
+import DateTimeField from '@cardstack/base/datetime';
 import { BoardPosition } from './board-position';
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';

@@ -16,7 +16,7 @@ import stringify from 'safe-stable-stringify';
 import { GridContainer } from '@cardstack/boxel-ui/components';
 
 import type { ResolvedCodeRef } from '@cardstack/runtime-common';
-import { Deferred, baseRealm, skillCardRef } from '@cardstack/runtime-common';
+import { Deferred, baseRealmPrefix, skillCardRef } from '@cardstack/runtime-common';
 
 import {
   APP_BOXEL_ACTIVE_LLM,
@@ -31,7 +31,7 @@ import type AiAssistantPanelService from '@cardstack/host/services/ai-assistant-
 import type MonacoService from '@cardstack/host/services/monaco-service';
 import { AiAssistantMessageDrafts } from '@cardstack/host/utils/local-storage-keys';
 
-import type { BoxelContext } from 'https://cardstack.com/base/matrix-event';
+import type { BoxelContext } from '@cardstack/base/matrix-event';
 
 import {
   setupLocalIndexing,
@@ -91,8 +91,8 @@ async function waitForSessionPreparationToFinish(
   });
 }
 
-let countryDefinition = `import { field, contains, CardDef } from 'https://cardstack.com/base/card-api';
-  import StringField from 'https://cardstack.com/base/string';
+let countryDefinition = `import { field, contains, CardDef } from '@cardstack/base/card-api';
+  import StringField from '@cardstack/base/string';
   export class Country extends CardDef {
     static displayName = 'Country';
     @field name = contains(StringField);
@@ -120,10 +120,10 @@ module('Acceptance | AI Assistant tests', function (hooks) {
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
-    activeRealms: [baseRealm.url, testRealmURL],
+    activeRealms: [baseRealmPrefix, testRealmURL],
     directRooms: [
       getRoomIdForRealmAndUser(testRealmURL, '@testuser:localhost'),
-      getRoomIdForRealmAndUser(baseRealm.url, '@testuser:localhost'),
+      getRoomIdForRealmAndUser(baseRealmPrefix, '@testuser:localhost'),
       'test-auth-realm-server-session-room',
     ],
   });
@@ -368,8 +368,8 @@ module('Acceptance | AI Assistant tests', function (hooks) {
         'person.gts': { Person },
         'pet.gts': { Pet },
         'broken-card.gts': `
-          import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
-          import StringField from 'https://cardstack.com/base/string';
+          import { CardDef, field, contains } from '@cardstack/base/card-api';
+          import StringField from '@cardstack/base/string';
           import { BrokenField } from './does-not-exist';
           export class BrokenCard extends CardDef {
             static displayName = 'Broken Card';
@@ -419,7 +419,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
           friends: [mangoPet],
         }),
         'plant.gts': `
-          import { CardDef, field, contains, StringField } from 'https://cardstack.com/base/card-api';
+          import { CardDef, field, contains, StringField } from '@cardstack/base/card-api';
           export class Plant extends CardDef {
             static displayName = "Plant";
             @field commonName = contains(StringField);
@@ -451,7 +451,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/spec',
+                module: '@cardstack/base/spec',
                 name: 'Spec',
               },
             },
@@ -952,7 +952,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await click('[data-test-boxel-filter-list-button="All Cards"]');
     await click('[data-test-create-new-card-button]');
     await click(
-      `[data-test-card-catalog-item="https://cardstack.com/base/types/card"]`,
+      `[data-test-card-catalog-item="@cardstack/base/types/card"]`,
     );
 
     await click(`[data-test-card-catalog-go-button]`);

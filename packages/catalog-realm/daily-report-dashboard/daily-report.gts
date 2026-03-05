@@ -4,10 +4,10 @@ import {
   contains,
   linksTo,
   Component,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-import DateField from 'https://cardstack.com/base/date';
-import MarkdownField from 'https://cardstack.com/base/markdown';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+import DateField from '@cardstack/base/date';
+import MarkdownField from '@cardstack/base/markdown';
 import CalendarIcon from '@cardstack/boxel-icons/calendar';
 import { formatDateTime } from '@cardstack/boxel-ui/helpers';
 import { PolicyManual } from './policy-manual';

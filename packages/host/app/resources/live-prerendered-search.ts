@@ -13,8 +13,8 @@ import { TrackedArray } from 'tracked-built-ins';
 import type { QueryResultsMeta, Format } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-import type { FileDef } from 'https://cardstack.com/base/file-api';
+import type { CardDef } from '@cardstack/base/card-api';
+import type { FileDef } from '@cardstack/base/file-api';
 
 import { PrerenderedCard } from '../components/prerendered-card-search';
 import { normalizeRealms, resolveCardRealmUrl } from '../lib/realm-utils';

@@ -52,9 +52,9 @@ module('Integration | commands | read-card-for-ai-assistant', function (hooks) {
         mockMatrixUtils,
         contents: {
           'person.gts': `
-            import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-            import StringField from "https://cardstack.com/base/string";
-            import NumberField from "https://cardstack.com/base/number";
+            import { contains, field, CardDef, Component } from "@cardstack/base/card-api";
+            import StringField from "@cardstack/base/string";
+            import NumberField from "@cardstack/base/number";
 
             export class Person extends CardDef {
               @field firstName = contains(StringField);

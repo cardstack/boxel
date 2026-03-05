@@ -1,11 +1,11 @@
-import NumberField from 'https://cardstack.com/base/number';
+import NumberField from '@cardstack/base/number';
 import {
   FieldDef,
   field,
   contains,
   linksTo,
-} from 'https://cardstack.com/base/card-api';
-import { Component } from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
+import { Component } from '@cardstack/base/card-api';
 import { Currency } from './asset';
 import { action } from '@ember/object';
 import { BoxelInputGroup } from '@cardstack/boxel-ui/components';

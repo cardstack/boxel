@@ -21,14 +21,14 @@ import {
   type CodeRef,
   type CreateNewCard,
   type Filter,
-  baseRealm,
+  baseRealmPrefix,
   Deferred,
   isCardInstance,
 } from '@cardstack/runtime-common';
 
 import type { Query } from '@cardstack/runtime-common/query';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
+import type { CardDef } from '@cardstack/base/card-api';
 
 import {
   suggestCardChooserTitle,
@@ -256,7 +256,7 @@ export default class CardCatalogModal extends Component<Signature> {
         sort: [
           {
             on: {
-              module: `${baseRealm.url}card-api`,
+              module: `${baseRealmPrefix}card-api`,
               name: 'CardDef',
             },
             by: 'cardTitle',

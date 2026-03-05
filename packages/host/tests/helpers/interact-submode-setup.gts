@@ -4,7 +4,7 @@ import { getService } from '@universal-ember/test-support';
 
 import { FieldContainer, GridContainer } from '@cardstack/boxel-ui/components';
 
-import { baseRealm } from '@cardstack/runtime-common';
+import { baseRealmPrefix } from '@cardstack/runtime-common';
 import type { Realm } from '@cardstack/runtime-common/realm';
 
 import {
@@ -54,18 +54,18 @@ export function setupInteractSubmodeTests(
     setupAuthEndpoints();
 
     let loader = getService('loader-service').loader;
-    let cardApi: typeof import('https://cardstack.com/base/card-api');
-    let string: typeof import('https://cardstack.com/base/string');
-    let spec: typeof import('https://cardstack.com/base/spec');
-    let cardsGrid: typeof import('https://cardstack.com/base/cards-grid');
-    let fileApi: typeof import('https://cardstack.com/base/file-api');
-    let imageFileApi: typeof import('https://cardstack.com/base/image-file-def');
-    cardApi = await loader.import(`${baseRealm.url}card-api`);
-    string = await loader.import(`${baseRealm.url}string`);
-    spec = await loader.import(`${baseRealm.url}spec`);
-    cardsGrid = await loader.import(`${baseRealm.url}cards-grid`);
-    fileApi = await loader.import(`${baseRealm.url}file-api`);
-    imageFileApi = await loader.import(`${baseRealm.url}image-file-def`);
+    let cardApi: typeof import('@cardstack/base/card-api');
+    let string: typeof import('@cardstack/base/string');
+    let spec: typeof import('@cardstack/base/spec');
+    let cardsGrid: typeof import('@cardstack/base/cards-grid');
+    let fileApi: typeof import('@cardstack/base/file-api');
+    let imageFileApi: typeof import('@cardstack/base/image-file-def');
+    cardApi = await loader.import(`${baseRealmPrefix}card-api`);
+    string = await loader.import(`${baseRealmPrefix}string`);
+    spec = await loader.import(`${baseRealmPrefix}spec`);
+    cardsGrid = await loader.import(`${baseRealmPrefix}cards-grid`);
+    fileApi = await loader.import(`${baseRealmPrefix}file-api`);
+    imageFileApi = await loader.import(`${baseRealmPrefix}image-file-def`);
 
     let {
       field,

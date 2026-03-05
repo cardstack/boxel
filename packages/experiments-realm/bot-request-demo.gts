@@ -1,4 +1,4 @@
-import { CardDef, Component } from 'https://cardstack.com/base/card-api';
+import { CardDef, Component } from '@cardstack/base/card-api';
 import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
