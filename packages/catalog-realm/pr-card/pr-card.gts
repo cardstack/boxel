@@ -93,7 +93,7 @@ class IsolatedTemplate extends Component<typeof PrCard> {
   }
 
   get prUrl() {
-    return this.args.model.prUrl ?? '#';
+    return this.args.model.prUrl ?? null;
   }
 
   get changesRequestedCount() {
@@ -169,6 +169,7 @@ class IsolatedTemplate extends Component<typeof PrCard> {
             rel='noopener noreferrer'
             class='pr-external-link'
             title='Open PR on GitHub'
+            aria-label='Open PR on GitHub'
           >
             <ExternalLinkIcon class='pr-external-icon' />
           </a>
@@ -248,7 +249,7 @@ class IsolatedTemplate extends Component<typeof PrCard> {
                       target='_blank'
                       rel='noopener noreferrer'
                       class='review-external-link'
-                      title='View review on GitHub'
+                      title='View pull request on GitHub'
                     >
                       <ExternalLinkIcon class='review-external-icon' />
                     </a>
@@ -1390,14 +1391,6 @@ class FittedTemplate extends Component<typeof PrCard> {
         color: var(--card-foreground, #24292f);
       }
 
-      /* Horizontal divider between CI and reviews */
-      .status-divider {
-        height: 1px;
-        background: var(--border, #d0d7de);
-        flex-shrink: 0;
-        margin: 0 var(--boxel-sp-lg);
-      }
-
       /* ── Review list ── */
       .review-list {
         list-style: none;
@@ -1519,9 +1512,6 @@ class FittedTemplate extends Component<typeof PrCard> {
         .status-col {
           padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
         }
-        .status-divider {
-          margin: 0 var(--boxel-sp-sm);
-        }
         /* Clamp review comment to 2 lines so it doesn't overflow */
         .review-comment {
           display: -webkit-box;
@@ -1564,9 +1554,6 @@ class FittedTemplate extends Component<typeof PrCard> {
         .fit-detail .status-col {
           padding: var(--boxel-sp) var(--boxel-sp-xl);
         }
-        .status-divider {
-          margin: 0 var(--boxel-sp-xl);
-        }
         .review-item {
           padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
         }
@@ -1598,7 +1585,15 @@ export class PrCard extends CardDef {
   // === Computed ===
   @field cardTitle = contains(StringField, {
     computeVia(this: PrCard) {
-      return this.prTitle ?? `PR #${this.prNumber}`;
+      if (this.prTitle) {
+        return this.prTitle;
+      }
+
+      if (this.prNumber !== null && this.prNumber !== undefined) {
+        return `PR #${this.prNumber}`;
+      }
+
+      return 'Pull request';
     },
   });
 
