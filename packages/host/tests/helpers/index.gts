@@ -494,6 +494,7 @@ async function buildImageLoadErrorMessage(
   let currentSrc = img.currentSrc ?? '';
   let targetURL = currentSrc || img.src || srcAttr;
   let probe = await probeImageURL(targetURL);
+  let imgDecodeProbe = await probeImgDecode(img);
   let extra =
     originalError instanceof Error && originalError.message
       ? `waitUntil=${originalError.message}`
@@ -509,6 +510,7 @@ async function buildImageLoadErrorMessage(
     `complete=${String(img.complete)}`,
     `naturalWidth=${String(img.naturalWidth)}`,
     `naturalHeight=${String(img.naturalHeight)}`,
+    imgDecodeProbe,
     probe,
     extra,
   ].join(' | ');
@@ -520,14 +522,180 @@ async function probeImageURL(url: string): Promise<string> {
   }
   try {
     let response = await fetch(url, { cache: 'no-store' });
-    return `fetchProbe=${response.status} ${response.statusText || ''}`.trim();
+    let contentType = response.headers.get('content-type') ?? '<missing>';
+    let contentLength = response.headers.get('content-length') ?? '<missing>';
+    let swClientId =
+      response.headers.get('x-test-realm-sw-client-id') ?? '<missing>';
+    let swClientURL =
+      response.headers.get('x-test-realm-sw-client-url') ?? '<missing>';
+    let swClientFocused =
+      response.headers.get('x-test-realm-sw-client-focused') ?? '<missing>';
+    let swClientVisibility =
+      response.headers.get('x-test-realm-sw-client-visibility') ?? '<missing>';
+    let responseBuffer = await response.clone().arrayBuffer();
+    let bytes = new Uint8Array(responseBuffer);
+    let magic = bytesToHexPrefix(bytes, 16);
+    let inferredKind = inferImageKind(bytes, contentType);
+    let bitmapProbe = await probeCreateImageBitmap(responseBuffer, contentType);
+
+    return [
+      `fetchProbe=${response.status} ${response.statusText || ''}`.trim(),
+      `contentType=${contentType}`,
+      `contentLength=${contentLength}`,
+      `swClientId=${swClientId}`,
+      `swClientFocused=${swClientFocused}`,
+      `swClientVisibility=${swClientVisibility}`,
+      `swClientURL=${swClientURL}`,
+      `bodyBytes=${String(bytes.byteLength)}`,
+      `magic=${magic}`,
+      `inferredKind=${inferredKind}`,
+      bitmapProbe,
+    ].join(' | ');
   } catch (error) {
-    let reason =
-      error instanceof Error && error.message
-        ? error.message
-        : String(error ?? 'unknown');
+    let reason = normalizeErrorMessage(error);
     return `fetchProbe=error (${reason})`;
   }
+}
+
+async function probeImgDecode(img: HTMLImageElement): Promise<string> {
+  if (typeof img.decode !== 'function') {
+    return 'imgDecode=unsupported';
+  }
+  try {
+    await img.decode();
+    return 'imgDecode=ok';
+  } catch (error) {
+    return `imgDecode=error (${normalizeErrorMessage(error)})`;
+  }
+}
+
+async function probeCreateImageBitmap(
+  bytes: ArrayBuffer,
+  contentType: string,
+): Promise<string> {
+  if (typeof createImageBitmap !== 'function') {
+    return 'bitmapDecode=unsupported';
+  }
+  try {
+    let blob = new Blob([bytes], {
+      type:
+        contentType === '<missing>' ? 'application/octet-stream' : contentType,
+    });
+    let bitmap = await createImageBitmap(blob);
+    let dimensions = `${bitmap.width}x${bitmap.height}`;
+    bitmap.close();
+    return `bitmapDecode=ok(${dimensions})`;
+  } catch (error) {
+    return `bitmapDecode=error (${normalizeErrorMessage(error)})`;
+  }
+}
+
+function bytesToHexPrefix(bytes: Uint8Array, count: number): string {
+  let prefix = bytes.slice(0, count);
+  if (!prefix.length) {
+    return '<empty>';
+  }
+  return Array.from(prefix)
+    .map((value) => value.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+function inferImageKind(bytes: Uint8Array, contentType: string): string {
+  let loweredContentType = contentType.toLowerCase();
+  if (loweredContentType.includes('svg')) {
+    return 'svg';
+  }
+  if (isJpegBytes(bytes)) {
+    return 'jpeg';
+  }
+  if (isPngBytes(bytes)) {
+    return 'png';
+  }
+  if (isGifBytes(bytes)) {
+    return 'gif';
+  }
+  if (isWebpBytes(bytes)) {
+    return 'webp';
+  }
+  if (isAvifBytes(bytes)) {
+    return 'avif';
+  }
+  if (looksLikeSvgText(bytes)) {
+    return 'svg-text';
+  }
+  return 'unknown';
+}
+
+function isJpegBytes(bytes: Uint8Array): boolean {
+  return (
+    bytes.length >= 3 &&
+    bytes[0] === 0xff &&
+    bytes[1] === 0xd8 &&
+    bytes[2] === 0xff
+  );
+}
+
+function isPngBytes(bytes: Uint8Array): boolean {
+  let signature = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+  return signature.every((byte, index) => bytes[index] === byte);
+}
+
+function isGifBytes(bytes: Uint8Array): boolean {
+  return (
+    bytes.length >= 6 &&
+    bytes[0] === 0x47 &&
+    bytes[1] === 0x49 &&
+    bytes[2] === 0x46 &&
+    bytes[3] === 0x38 &&
+    (bytes[4] === 0x39 || bytes[4] === 0x37) &&
+    bytes[5] === 0x61
+  );
+}
+
+function isWebpBytes(bytes: Uint8Array): boolean {
+  return (
+    bytes.length >= 12 &&
+    bytes[0] === 0x52 &&
+    bytes[1] === 0x49 &&
+    bytes[2] === 0x46 &&
+    bytes[3] === 0x46 &&
+    bytes[8] === 0x57 &&
+    bytes[9] === 0x45 &&
+    bytes[10] === 0x42 &&
+    bytes[11] === 0x50
+  );
+}
+
+function isAvifBytes(bytes: Uint8Array): boolean {
+  if (bytes.length < 12) {
+    return false;
+  }
+  let hasFtyp =
+    bytes[4] === 0x66 &&
+    bytes[5] === 0x74 &&
+    bytes[6] === 0x79 &&
+    bytes[7] === 0x70;
+  if (!hasFtyp) {
+    return false;
+  }
+  let brand = String.fromCharCode(
+    bytes[8] ?? 0,
+    bytes[9] ?? 0,
+    bytes[10] ?? 0,
+    bytes[11] ?? 0,
+  ).toLowerCase();
+  return brand.startsWith('avi');
+}
+
+function looksLikeSvgText(bytes: Uint8Array): boolean {
+  let sample = new TextDecoder().decode(bytes.slice(0, 256)).toLowerCase();
+  return sample.includes('<svg');
+}
+
+function normalizeErrorMessage(error: unknown): string {
+  return error instanceof Error && error.message
+    ? error.message
+    : String(error ?? 'unknown');
 }
 
 function normalizeCapturedErrorText(errorText: string): string {

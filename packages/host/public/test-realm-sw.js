@@ -110,7 +110,21 @@ async function relayViaClient(client, url) {
         finish(undefined);
         return;
       }
-      finish(new Response(body, { status, headers }));
+      let responseHeaders = new Headers(headers ?? {});
+      responseHeaders.set('x-test-realm-sw-client-id', client.id ?? 'unknown');
+      responseHeaders.set(
+        'x-test-realm-sw-client-url',
+        client.url ?? 'unknown',
+      );
+      responseHeaders.set(
+        'x-test-realm-sw-client-focused',
+        String(Boolean(client.focused)),
+      );
+      responseHeaders.set(
+        'x-test-realm-sw-client-visibility',
+        client.visibilityState ?? 'unknown',
+      );
+      finish(new Response(body, { status, headers: responseHeaders }));
     };
 
     try {
