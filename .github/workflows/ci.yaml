@@ -516,6 +516,7 @@ jobs:
             "prerender-proxy-test.ts",
             "remote-prerenderer-test.ts",
             "queue-test.ts",
+            "realm-endpoints/cancel-indexing-job-test.ts",
             "realm-endpoints/dependencies-test.ts",
             "realm-endpoints/directory-test.ts",
             "realm-endpoints/info-test.ts",

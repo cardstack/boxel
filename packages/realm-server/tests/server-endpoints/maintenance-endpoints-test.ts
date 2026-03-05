@@ -48,6 +48,89 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         assert.ok(job.finished_at, 'job was marked with finish time');
       });
 
+      test('grafana endpoint can target both pending and running jobs by job_id', async function (assert) {
+        let [{ id: pendingJobId }] = (await context.dbAdapter
+          .execute(`INSERT INTO jobs
+        (args, job_type, concurrency_group, timeout, priority)
+        VALUES
+        (
+          '{"realmURL": "${testRealm2URL.href}", "realmUsername":"node-test_realm"}',
+          'from-scratch-index',
+          'indexing:${testRealm2URL.href}',
+          180,
+          0
+        ) RETURNING id`)) as { id: string }[];
+        let [{ id: runningJobId }] = (await context.dbAdapter
+          .execute(`INSERT INTO jobs
+        (args, job_type, concurrency_group, timeout, priority)
+        VALUES
+        (
+          '{"realmURL": "${testRealm2URL.href}", "realmUsername":"node-test_realm"}',
+          'incremental-index',
+          'indexing:${testRealm2URL.href}',
+          180,
+          0
+        ) RETURNING id`)) as { id: string }[];
+        await context.dbAdapter.execute(`INSERT INTO job_reservations
+        (job_id, locked_until ) VALUES (${runningJobId}, NOW() + INTERVAL '3 minutes')`);
+
+        let pendingResponse = await context.request2
+          .get(
+            `/_grafana-complete-job?authHeader=${grafanaSecret}&job_id=${pendingJobId}`,
+          )
+          .set('Content-Type', 'application/json');
+        assert.strictEqual(
+          pendingResponse.status,
+          204,
+          'pending job cancel returns 204',
+        );
+
+        let runningResponse = await context.request2
+          .get(
+            `/_grafana-complete-job?authHeader=${grafanaSecret}&job_id=${runningJobId}`,
+          )
+          .set('Content-Type', 'application/json');
+        assert.strictEqual(
+          runningResponse.status,
+          204,
+          'running job cancel returns 204',
+        );
+
+        let [pendingJob] = await context.dbAdapter.execute(
+          `SELECT status, result FROM jobs WHERE id = ${pendingJobId}`,
+        );
+        assert.strictEqual(
+          pendingJob.status,
+          'rejected',
+          'pending job canceled',
+        );
+        assert.deepEqual(
+          pendingJob.result,
+          {
+            status: 418,
+            message: 'User initiated job cancellation',
+          },
+          'pending job has cancellation payload',
+        );
+
+        let [runningJob] = await context.dbAdapter.execute(
+          `SELECT status, result FROM jobs WHERE id = ${runningJobId}`,
+        );
+        assert.strictEqual(
+          runningJob.status,
+          'rejected',
+          'running job canceled',
+        );
+        assert.deepEqual(
+          runningJob.result,
+          {
+            status: 418,
+            message: 'User initiated job cancellation',
+          },
+          'running job has cancellation payload',
+        );
+      });
+
       test('can force job completion by reservation_id via grafana endpoint', async function (assert) {
         let [{ id: jobId }] = (await context.dbAdapter.execute(`INSERT INTO jobs
         (args, job_type, concurrency_group, timeout, priority)

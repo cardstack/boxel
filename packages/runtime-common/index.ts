@@ -227,6 +227,7 @@ export * from './document';
 export * from './matrix-constants';
 export * from './matrix-client';
 export * from './queue';
+export * from './job-utils';
 export * from './expression';
 export * from './infer-content-type';
 export * from './index-query-engine';

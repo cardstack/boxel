@@ -685,6 +685,30 @@ export default class RealmServerService extends Service {
     return response;
   }
 
+  async cancelIndexingJob(realmURL: string): Promise<void> {
+    await this.login();
+
+    let normalizedRealmURL = ensureTrailingSlash(realmURL);
+    let response = await this.authedFetch(
+      `${normalizedRealmURL}_cancel-indexing-job`,
+      {
+        method: 'POST',
+        headers: {
+          Accept: SupportedMimeType.JSON,
+        },
+      },
+    );
+
+    if (response.status === 204) {
+      return;
+    }
+
+    let errorText = await response.text();
+    throw new Error(
+      `Cancel indexing job failed: ${response.status} - ${errorText}`,
+    );
+  }
+
   async registerBot(username: string) {
     await this.login();
 
@@ -931,7 +955,7 @@ export default class RealmServerService extends Service {
         type: 'claimed-domain',
         attributes: {
           source_realm_url: sourceRealmURL,
-          hostname: hostname,
+          hostname,
         },
       },
     };
