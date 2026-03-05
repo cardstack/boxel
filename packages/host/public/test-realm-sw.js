@@ -83,6 +83,22 @@ async function relayViaClient(client, url) {
       }
       settled = true;
       clearTimeout(timeout);
+      // Release MessageChannel resources promptly.
+      if (channel.port1) {
+        channel.port1.onmessage = null;
+        try {
+          channel.port1.close();
+        } catch {
+          // Ignore errors when closing an already-closed port.
+        }
+      }
+      if (channel.port2) {
+        try {
+          channel.port2.close();
+        } catch {
+          // Ignore errors when closing an already-closed port.
+        }
+      }
       resolve(response);
     };
 
