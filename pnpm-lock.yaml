@@ -405,6 +405,9 @@ catalogs:
     eslint-plugin-qunit-dom:
       specifier: mainmatter/eslint-plugin-qunit-dom#d66c84190b018deb96c715c7f2bde3536a9c704b
       version: 0.2.0
+    eslint-plugin-simple-import-sort:
+      specifier: ^8.0.0
+      version: 8.0.0
     eslint-plugin-typescript-sort-keys:
       specifier: ^3.2.0
       version: 3.3.0
@@ -1298,6 +1301,9 @@ importers:
       eslint-plugin-prettier:
         specifier: 'catalog:'
         version: 5.5.4(@types/eslint@8.56.5)(eslint-config-prettier@9.1.2(eslint@8.57.1))(eslint@8.57.1)(prettier@3.7.4)
+      eslint-plugin-simple-import-sort:
+        specifier: 'catalog:'
+        version: 8.0.0(eslint@8.57.1)
       eslint-plugin-typescript-sort-keys:
         specifier: 'catalog:'
         version: 3.3.0(@typescript-eslint/parser@7.18.0(eslint@8.57.1)(typescript@5.9.3))(eslint@8.57.1)(typescript@5.9.3)
@@ -8930,6 +8936,11 @@ packages:
   eslint-plugin-qunit@8.2.5:
     resolution: {integrity: sha512-qr7RJCYImKQjB+39q4q46i1l7p1V3joHzBE5CAYfxn5tfVFjrnjn/tw7q/kDyweU9kAIcLul0Dx/KWVUCb3BgA==}
     engines: {node: ^16.0.0 || ^18.0.0 || >=20.0.0}
+
+  eslint-plugin-simple-import-sort@8.0.0:
+    resolution: {integrity: sha512-bXgJQ+lqhtQBCuWY/FUWdB27j4+lqcvXv5rUARkzbeWLwea+S5eBZEQrhnO+WgX3ZoJHVj0cn943iyXwByHHQw==}
+    peerDependencies:
+      eslint: '>=5.0.0'
 
   eslint-plugin-typescript-sort-keys@3.3.0:
     resolution: {integrity: sha512-bRW3Rc/VNdrSP9OoY5wgjjaXCOOkZKpzvl/Mk6l8Sg8CMehVIcg9K4y33l+ZcZiknpl0aR6rKusxuCJNGZWmVw==}
@@ -21814,6 +21825,10 @@ snapshots:
       requireindex: 1.2.0
     transitivePeerDependencies:
       - eslint
+
+  eslint-plugin-simple-import-sort@8.0.0(eslint@8.57.1):
+    dependencies:
+      eslint: 8.57.1
 
   eslint-plugin-typescript-sort-keys@3.3.0(@typescript-eslint/parser@7.18.0(eslint@8.57.1)(typescript@5.9.3))(eslint@8.57.1)(typescript@5.9.3):
     dependencies:
