@@ -491,6 +491,13 @@ module('Integration | operator-mode | ui', function (hooks) {
     assert.dom(`[data-test-search-sheet="search-prompt"]`).exists();
     assert.dom('[data-test-search-sheet-search-bar]').exists();
     assert.dom('[data-test-realm-picker]').exists();
+    // Realm picker trigger should show shortLabel "All" for select-all
+    assert
+      .dom('[data-test-realm-picker] [data-test-boxel-picker-selected-item]')
+      .hasText(
+        'All',
+        'realm picker shows shortLabel "All" when select-all is active',
+      );
 
     // Type a search term to trigger search results
     await typeIn('[data-test-search-field]', 'Person');
@@ -522,6 +529,11 @@ module('Integration | operator-mode | ui', function (hooks) {
       ) ?? document.querySelector('[data-test-realm-picker]');
     await click(trigger as HTMLElement);
     await waitFor('.ember-power-select-option', { timeout: 3000 });
+
+    // Realm select-all option should show count
+    assert
+      .dom('[data-test-boxel-picker-option-row="select-all"]')
+      .containsText('Select All (', 'realm select-all shows count');
 
     const options = document.querySelectorAll('.ember-power-select-option');
     const testRealmOption = Array.from(options).find((el) =>
@@ -787,6 +799,12 @@ module('Integration | operator-mode | ui', function (hooks) {
     assert
       .dom('[data-test-type-picker] [data-test-boxel-picker-trigger-label]')
       .hasText('Type', 'type picker label is "Type"');
+    assert
+      .dom('[data-test-type-picker] [data-test-boxel-picker-selected-item]')
+      .hasText(
+        'Any',
+        'type picker shows shortLabel "Any" when select-all is active',
+      );
   });
 
   test('type picker options reflect card types in search results', async function (assert) {
@@ -815,6 +833,9 @@ module('Integration | operator-mode | ui', function (hooks) {
     assert
       .dom('[data-test-boxel-picker-option-row="select-all"]')
       .exists('"Any" option is present');
+    assert
+      .dom('[data-test-boxel-picker-option-row="select-all"]')
+      .containsText('Any Type (', 'select-all option shows count');
 
     // Verify at least one non-select-all type option is shown
     const typeOptions = document.querySelectorAll(
@@ -878,6 +899,12 @@ module('Integration | operator-mode | ui', function (hooks) {
       .doesNotExist(
         'specific type filter is cleared after closing the search sheet',
       );
+    assert
+      .dom('[data-test-type-picker] [data-test-boxel-picker-selected-item]')
+      .hasText(
+        'Any',
+        'type picker shows shortLabel "Any" after reset to select-all',
+      );
   });
 
   test('type options derived from recent cards when no search term, sorted alphabetically', async function (assert) {
@@ -905,10 +932,16 @@ module('Integration | operator-mode | ui', function (hooks) {
     await click('[data-test-type-picker] [data-test-boxel-picker-trigger]');
     await waitFor('[data-test-boxel-picker-option-row]');
 
-    // "Any Type" (select-all) should be present
+    // "Any Type" (select-all) should be present with count
     assert
       .dom('[data-test-boxel-picker-option-row="select-all"]')
       .exists('"Any Type" option is present');
+    assert
+      .dom('[data-test-boxel-picker-option-row="select-all"]')
+      .containsText(
+        'Any Type (3)',
+        'select-all shows count of 3 types (Blog Post, Person, Pet)',
+      );
 
     // Type options should include types from recent cards
     assert
@@ -962,6 +995,12 @@ module('Integration | operator-mode | ui', function (hooks) {
     assert
       .dom('[data-test-boxel-picker-option-row="select-all"]')
       .exists('"Any Type" option is present');
+    assert
+      .dom('[data-test-boxel-picker-option-row="select-all"]')
+      .containsText(
+        'Any Type (0)',
+        'select-all shows count of 0 when no types available',
+      );
 
     const nonSelectAllOptions = document.querySelectorAll(
       '[data-test-boxel-picker-option-row]:not([data-test-boxel-picker-option-row="select-all"])',
@@ -1112,6 +1151,10 @@ module('Integration | operator-mode | ui', function (hooks) {
     assert
       .dom('[data-test-boxel-picker-option-row="Pet"]')
       .exists('Pet type option present');
+    // select-all should show count matching number of type options
+    assert
+      .dom('[data-test-boxel-picker-option-row="select-all"]')
+      .containsText('Any Type (', 'select-all shows type count');
     // 'Person' should not appear since no Person cards match 'Mango'
     assert
       .dom('[data-test-boxel-picker-option-row="Person"]')

@@ -1,9 +1,8 @@
 import { on } from '@ember/modifier';
-import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 import type { Select } from 'ember-power-select/components/power-select';
 
-import { cn } from '../../helpers.ts';
+import { cn, sanitizeHtmlSafe } from '../../helpers.ts';
 import CheckMark from '../../icons/check-mark.gts';
 import SelectAll from '../../icons/select-all.gts';
 import type { Icon } from '../../icons/types.ts';
@@ -13,7 +12,8 @@ export interface OptionRowSignature {
   Args: {
     currentSelected?: PickerOption[];
     isSelected: boolean;
-    onHover?: (option: PickerOption | null) => void;
+    onFocus?: (option: PickerOption | null) => void;
+    onLeave?: (option: PickerOption | null) => void;
     option: PickerOption;
     select?: Select;
   };
@@ -22,11 +22,11 @@ export interface OptionRowSignature {
 
 export default class PickerOptionRow extends Component<OptionRowSignature> {
   handleMouseEnter = () => {
-    this.args.onHover?.(this.args.option);
+    this.args.onFocus?.(this.args.option);
   };
 
   handleMouseLeave = () => {
-    this.args.onHover?.(null);
+    this.args.onLeave?.(null);
   };
 
   get icon() {
@@ -34,10 +34,6 @@ export default class PickerOptionRow extends Component<OptionRowSignature> {
       this.args.option.icon ??
       (this.args.option.type === 'select-all' ? SelectAll : undefined)
     );
-  }
-
-  get label() {
-    return this.args.option.name;
   }
 
   get isIconString() {
@@ -96,7 +92,7 @@ export default class PickerOptionRow extends Component<OptionRowSignature> {
           {{else if this.isIconSVG}}
             {{#let this.iconString as |iconSvg|}}
               {{#if iconSvg}}
-                {{htmlSafe
+                {{sanitizeHtmlSafe
                   (addClassToSVG iconSvg 'picker-option-row__icon-image')
                 }}
               {{/if}}
@@ -111,7 +107,7 @@ export default class PickerOptionRow extends Component<OptionRowSignature> {
           {{/if}}
         </div>
       {{/if}}
-      <div class='picker-option-row__label'>{{this.label}}</div>
+      <div class='picker-option-row__label'>{{@option.label}}</div>
     </div>
 
     <style scoped>

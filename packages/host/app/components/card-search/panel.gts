@@ -185,7 +185,7 @@ export default class SearchPanel extends Component<Signature> {
       if (!seen.has(name)) {
         seen.set(name, {
           id: name,
-          name,
+          label: name,
           icon: card.iconHtml ?? undefined,
           type: 'option',
         });
@@ -201,14 +201,14 @@ export default class SearchPanel extends Component<Signature> {
       }
       seen.set(name, {
         id: name,
-        name,
+        label: name,
         icon: cardTypeIcon(card),
         type: 'option',
       });
     }
 
     value.options = [
-      ...[...seen.values()].sort((a, b) => a.name.localeCompare(b.name)),
+      ...[...seen.values()].sort((a, b) => a.label.localeCompare(b.label)),
     ];
 
     // Recalculate selected based on previous user selection.
@@ -222,14 +222,15 @@ export default class SearchPanel extends Component<Signature> {
       value.selected = [];
     } else if (
       this.searchResource.instances.length === 0 &&
-      this.args.searchKey?.trim()
+      this.args.searchKey?.trim() &&
+      !this.searchResource.hasSearchRun
     ) {
-      // Active search but no results yet — keep previous selections to
-      // avoid jarring UI changes. We check `seen.size` instead of
-      // `searchResource.isLoading` to avoid reading the search task's
-      // `isRunning`, which would cause a backtracking assertion.
-      // When searchKey is blank, we fall through to the else branch
-      // which naturally resets to [] (no valid options to intersect).
+      // Active search but results haven't arrived yet — keep previous
+      // selections to avoid jarring UI changes while loading.
+      // `hasSearchRun` is false while the search task is in-flight and
+      // becomes true once it completes (success or error), so a completed
+      // search with zero results falls through to the else branch below
+      // which correctly reverts to "Any Type".
       value.selected = prev;
     } else {
       // Keep previous selections that still exist in the new options,

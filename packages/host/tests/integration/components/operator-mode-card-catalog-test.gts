@@ -413,10 +413,13 @@ module('Integration | operator-mode | card catalog', function (hooks) {
       await click('[data-test-type-picker] [data-test-boxel-picker-trigger]');
       await waitFor('[data-test-boxel-picker-option-row]');
 
-      // "Any Type" should be present
+      // "Any Type" should be present with count
       assert
         .dom('[data-test-boxel-picker-option-row="select-all"]')
         .exists('"Any Type" option is present in modal');
+      assert
+        .dom('[data-test-boxel-picker-option-row="select-all"]')
+        .containsText('Any Type (', 'select-all shows type count in modal');
 
       // Options should be constrained by baseFilter (Pet types only)
       // Person should NOT appear as a type option since baseFilter constrains to Pet
@@ -1078,10 +1081,10 @@ module('Integration | operator-mode | card catalog', function (hooks) {
     await click('[data-test-search-sheet-show-only]');
 
     let positionAfter = getFocusedSectionTopInContainer();
-    // Use a 5px tolerance instead of 2px: the scroll-anchor adjustment is
+    // Use a 10px tolerance instead of 2px: the scroll-anchor adjustment is
     // sub-pixel-accurate in local environments but CI Chromium instances can
     // render element positions with slight differences depending on DPI/font
-    // rendering, causing the delta to land just above 2px.  5px is still tight
+    // rendering, causing the delta to land just above 2px.  10px is still tight
     // enough to catch any real regression (section drifting by tens of pixels).
     assert.ok(
       Math.abs(positionAfter - positionBefore) <= 10,

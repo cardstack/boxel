@@ -16,12 +16,12 @@ import Picker, { type PickerOption } from './index.gts';
 export default class PickerUsage extends Component {
   selectAllOption: PickerOption = {
     id: 'select-all',
-    name: 'Select All',
+    label: 'Select All',
     type: 'select-all',
   };
   anyTypeOption: PickerOption = {
     id: 'any-type',
-    name: 'Any Type',
+    label: 'Any Type',
     type: 'select-all',
   };
   @tracked selectedRealms: PickerOption[] = [];
@@ -29,21 +29,21 @@ export default class PickerUsage extends Component {
 
   @tracked realmOptions: PickerOption[] = [
     this.selectAllOption,
-    { id: '1', name: 'Boxel Catalog', icon: IconGlobe },
-    { id: '2', name: 'Buffalo Exchange', icon: IconHexagon },
-    { id: '3', name: 'Burritos Inc.', icon: IconCircle },
-    { id: '4', name: 'Buzzsaw Club', icon: File },
-    { id: '5', name: 'Canole Bros.', icon: IconGlobe },
-    { id: '6', name: 'Capybara Mania', icon: IconHexagon },
-    { id: '7', name: 'Cat Fancy Blog', icon: IconCircle },
+    { id: '1', label: 'Boxel Catalog', icon: IconGlobe },
+    { id: '2', label: 'Buffalo Exchange', icon: IconHexagon },
+    { id: '3', label: 'Burritos Inc.', icon: IconCircle },
+    { id: '4', label: 'Buzzsaw Club', icon: File },
+    { id: '5', label: 'Canole Bros.', icon: IconGlobe },
+    { id: '6', label: 'Capybara Mania', icon: IconHexagon },
+    { id: '7', label: 'Cat Fancy Blog', icon: IconCircle },
   ];
 
   @tracked typeOptions: PickerOption[] = [
     this.anyTypeOption,
-    { id: '1', name: 'Card', icon: Card },
-    { id: '2', name: 'Field', icon: Field },
-    { id: '3', name: 'Component', icon: File },
-    { id: '4', name: 'Template', icon: File },
+    { id: '1', label: 'Card', icon: Card },
+    { id: '2', label: 'Field', icon: Field },
+    { id: '3', label: 'Component', icon: File },
+    { id: '4', label: 'Template', icon: File },
   ];
 
   @action
@@ -66,7 +66,7 @@ export default class PickerUsage extends Component {
         </p>
         <p>
           A picker option is a plain object with the shape:
-          <code>{ id: string; name: string; icon?: Icon | string; type?:
+          <code>{ id: string; label: string; icon?: Icon | string; type?:
             'select-all' | 'option'; }</code>. To create a search-all /
           select-all row, set
           <code>type: 'select-all'</code>

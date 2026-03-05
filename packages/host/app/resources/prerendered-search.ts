@@ -52,6 +52,7 @@ export class PrerenderedSearchResource extends Resource<Args> {
   private subscriptions: { url: string; unsubscribe: () => void }[] = [];
   private _instances = new TrackedArray<PrerenderedCard>();
   @tracked private _meta: QueryResultsMeta = { page: { total: 0 } };
+  @tracked private _hasSearchRun = false;
 
   // Plain Set for storage + a tracked signal counter for reactivity.
   // Using TrackedSet would cause a Glimmer backtracking assertion because
@@ -208,6 +209,19 @@ export class PrerenderedSearchResource extends Resource<Args> {
     return this.search.isRunning;
   }
 
+  // Whether the search task has completed at least once for the current
+  // query. Unlike `isLoading` (which reads `search.isRunning`), this
+  // property is safe to consume during render alongside `instances`.
+  // Reading `isRunning` in a render pass where the task also toggles it
+  // would trigger Glimmer's backtracking assertion. This flag avoids
+  // that because it is only written inside the async task body (reset
+  // before the await, set in finally after the await), so its mutations
+  // occur across async boundaries — never in the same synchronous
+  // render cycle that reads it.
+  get hasSearchRun() {
+    return this._hasSearchRun;
+  }
+
   get isLive() {
     return this.#isLive;
   }
@@ -326,6 +340,7 @@ export class PrerenderedSearchResource extends Resource<Args> {
           // Fetch all realms (query or format changed)
           realmsToFetch = this.realmsToSearch;
           this._instances = new TrackedArray();
+          this._hasSearchRun = false;
         }
 
         // Fetch fresh results
@@ -364,6 +379,7 @@ export class PrerenderedSearchResource extends Resource<Args> {
         this._instances.splice(0, this._instances.length);
         this._meta = { page: { total: 0 } };
       } finally {
+        this._hasSearchRun = true;
         waiter.endAsync(token);
       }
     },

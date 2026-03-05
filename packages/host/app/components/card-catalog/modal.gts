@@ -1,5 +1,5 @@
 import { registerDestructor } from '@ember/destroyable';
-import { fn, hash } from '@ember/helper';
+import { array, fn, hash } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
@@ -83,73 +83,72 @@ export default class CardCatalogModal extends Component<Signature> {
     {{#if this.state}}
       {{! when we "and" these two conditions, the type checks don't seem to work as you'd expect }}
       {{#if (not this.state.dismissModal)}}
-        <SearchPanel
-          @searchKey={{this.state.searchKey}}
-          @baseFilter={{this.state.baseFilter}}
-          @availableRealmUrls={{this.state.availableRealmUrls}}
-          as |Bar Content|
-        >
-          <ModalContainer
-            class='card-catalog-modal'
-            @title={{this.state.chooseCardTitle}}
-            @onClose={{this.cancelPick}}
-            @layer='urgent'
-            {{focusTrap
-              isActive=(not this.state.dismissModal)
-              focusTrapOptions=(hash
-                initialFocus='[data-test-search-field]' allowOutsideClick=true
-              )
-            }}
-            {{on 'keydown' this.handleKeydown}}
-            data-test-card-catalog-modal
+        {{#each (array this.state) key='id' as |state|}}
+          <SearchPanel
+            @searchKey={{state.searchKey}}
+            @baseFilter={{state.baseFilter}}
+            @availableRealmUrls={{state.availableRealmUrls}}
+            as |Bar Content|
           >
-            <:header>
-              <Bar
-                class='card-catalog-search'
-                @value={{this.state.searchKey}}
-                @onInput={{this.setSearchKey}}
-                @placeholder='Search for a card or enter card URL'
-              />
-            </:header>
-            <:content>
-              <Content
-                @isCompact={{false}}
-                @handleSelect={{this.selectFromSearch}}
-                @onSubmit={{this.submitFromSearch}}
-                @selectedCard={{this.state.selectedCard}}
-                @offerToCreate={{this.offerToCreateArg}}
-              />
-            </:content>
-            <:footer>
-              <div class='footer'>
-                <div>
-                  <Button
-                    @kind='secondary-light'
-                    @size='tall'
-                    class='footer-button'
-                    {{on 'click' this.cancelPick}}
-                    data-test-card-catalog-cancel-button
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    @kind='primary'
-                    @size='tall'
-                    @disabled={{eq this.state.selectedCard undefined}}
-                    class='footer-button'
-                    {{on
-                      'click'
-                      (fn this.pick this.state.selectedCard undefined)
-                    }}
-                    data-test-card-catalog-go-button
-                  >
-                    Go
-                  </Button>
+            <ModalContainer
+              class='card-catalog-modal'
+              @title={{state.chooseCardTitle}}
+              @onClose={{this.cancelPick}}
+              @layer='urgent'
+              {{focusTrap
+                isActive=(not state.dismissModal)
+                focusTrapOptions=(hash
+                  initialFocus='[data-test-search-field]' allowOutsideClick=true
+                )
+              }}
+              {{on 'keydown' this.handleKeydown}}
+              data-test-card-catalog-modal
+            >
+              <:header>
+                <Bar
+                  class='card-catalog-search'
+                  @value={{state.searchKey}}
+                  @onInput={{this.setSearchKey}}
+                  @placeholder='Search for a card or enter card URL'
+                />
+              </:header>
+              <:content>
+                <Content
+                  @isCompact={{false}}
+                  @handleSelect={{this.selectFromSearch}}
+                  @onSubmit={{this.submitFromSearch}}
+                  @selectedCard={{state.selectedCard}}
+                  @offerToCreate={{this.offerToCreateArg}}
+                />
+              </:content>
+              <:footer>
+                <div class='footer'>
+                  <div>
+                    <Button
+                      @kind='secondary-light'
+                      @size='tall'
+                      class='footer-button'
+                      {{on 'click' this.cancelPick}}
+                      data-test-card-catalog-cancel-button
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      @kind='primary'
+                      @size='tall'
+                      @disabled={{eq state.selectedCard undefined}}
+                      class='footer-button'
+                      {{on 'click' (fn this.pick state.selectedCard undefined)}}
+                      data-test-card-catalog-go-button
+                    >
+                      Go
+                    </Button>
+                  </div>
                 </div>
-              </div>
-            </:footer>
-          </ModalContainer>
-        </SearchPanel>
+              </:footer>
+            </ModalContainer>
+          </SearchPanel>
+        {{/each}}
       {{/if}}
     {{/if}}
     <style scoped>

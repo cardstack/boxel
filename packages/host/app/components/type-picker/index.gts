@@ -1,12 +1,7 @@
 import Component from '@glimmer/component';
+import { cached } from '@glimmer/tracking';
 
 import { Picker, type PickerOption } from '@cardstack/boxel-ui/components';
-
-const SELECT_ALL_OPTION: PickerOption = {
-  id: 'select-all',
-  name: 'Any Type',
-  type: 'select-all',
-};
 
 interface Signature {
   Args: {
@@ -19,14 +14,24 @@ interface Signature {
 }
 
 export default class TypePicker extends Component<Signature> {
+  @cached
+  get selectAllOption() {
+    return {
+      id: 'select-all',
+      label: `Any Type (${this.args.options.length})`,
+      shortLabel: `Any`,
+      type: 'select-all',
+    };
+  }
+
   get allOptions(): PickerOption[] {
-    return [SELECT_ALL_OPTION, ...this.args.options];
+    return [this.selectAllOption, ...this.args.options];
   }
 
   get selected(): PickerOption[] {
     return this.args.selected.length > 0
       ? this.args.selected
-      : [SELECT_ALL_OPTION];
+      : [this.selectAllOption];
   }
 
   <template>
