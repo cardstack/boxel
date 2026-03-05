@@ -120,7 +120,16 @@ export interface ModulePrerenderModel {
 
 export interface ModuleRenderResponse extends ModulePrerenderModel {}
 
+export type AffinityType = 'realm' | 'user';
+
+export type AffinityArgs = {
+  affinityType: AffinityType;
+  affinityValue: string;
+};
+
 export type ModulePrerenderArgs = {
+  affinityType: AffinityType;
+  affinityValue: string;
   realm: string;
   url: string;
   auth: string;
@@ -130,7 +139,7 @@ export type ModulePrerenderArgs = {
 export type PrerenderCardArgs = ModulePrerenderArgs;
 
 export type RunCommandArgs = {
-  realm: string;
+  userId: string;
   auth: string;
   command: string;
   commandInput?: Record<string, any> | null;

@@ -35,7 +35,7 @@ function makeTaskArgs({
   dbRows: Record<string, unknown>[];
   prerenderResult?: RunCommandResponse;
   onRunCommand?: (args: {
-    realm: string;
+    userId: string;
     auth: string;
     command: string;
     commandInput?: Record<string, any> | null;
@@ -165,7 +165,7 @@ const tests = Object.freeze({
     assert.expect(4);
     let prerenderCall:
       | {
-          realm: string;
+          userId: string;
           auth: string;
           command: string;
           commandInput?: Record<string, any> | null;
@@ -225,7 +225,7 @@ const tests = Object.freeze({
     assert.expect(2);
     let prerenderCall:
       | {
-          realm: string;
+          userId: string;
           auth: string;
           command: string;
           commandInput?: Record<string, any> | null;

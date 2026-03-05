@@ -512,6 +512,8 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     let permissions = await fetchUserPermissions(this.#dbAdapter, { userId });
     let auth = this.#createPrerenderAuth(userId, permissions);
     return await this.#prerenderer.prerenderModule({
+      affinityType: 'realm',
+      affinityValue: realmURL,
       realm: realmURL,
       url: moduleUrl,
       auth,
