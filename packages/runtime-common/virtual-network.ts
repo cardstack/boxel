@@ -19,18 +19,75 @@ export class VirtualNetwork {
   private handlers: Handler[] = [];
   private urlMappings: [string, string][] = [];
   private importMap: Map<string, (rest: string) => string> = new Map();
+  private realmPrefixes = new Map<string, string>(); // prefix → baseURL
 
   constructor(nativeFetch = createEnvironmentAwareFetch()) {
     this.nativeFetch = nativeFetch;
     this.mount(this.packageShimHandler.handle);
   }
 
-  resolveImport = (moduleIdentifier: string) => {
+  addRealmPrefix(prefix: string, baseURL: string): void {
+    this.realmPrefixes.set(prefix, baseURL);
+  }
+
+  resolveForFetch = (moduleId: string): string => {
+    for (let [prefix, baseURL] of this.realmPrefixes) {
+      if (moduleId.startsWith(prefix)) {
+        return new URL(moduleId.slice(prefix.length), baseURL).href;
+      }
+    }
+    return moduleId;
+  };
+
+  resolveImport = (
+    moduleIdentifier: string,
+    parentIdentifier?: string,
+  ): string => {
+    // 1. Realm prefix match → preserve as-is
+    for (let [prefix] of this.realmPrefixes) {
+      if (moduleIdentifier.startsWith(prefix)) {
+        return moduleIdentifier;
+      }
+    }
+
+    // 2. Import map match (existing behavior for @cardstack/base/, etc.)
     for (let [prefix, handler] of this.importMap) {
       if (moduleIdentifier.startsWith(prefix)) {
         return handler(moduleIdentifier.slice(prefix.length));
       }
     }
+
+    // 3. Relative import from realm-prefixed parent
+    if (
+      parentIdentifier &&
+      (moduleIdentifier.startsWith('./') ||
+        moduleIdentifier.startsWith('../'))
+    ) {
+      for (let [prefix, baseURL] of this.realmPrefixes) {
+        if (parentIdentifier.startsWith(prefix)) {
+          let parentRest = parentIdentifier.slice(prefix.length);
+          let resolved = new URL(
+            moduleIdentifier,
+            new URL(parentRest, baseURL),
+          ).href;
+          if (resolved.startsWith(baseURL)) {
+            return prefix + resolved.slice(baseURL.length);
+          }
+          return resolved; // went outside prefix scope → real URL
+        }
+      }
+    }
+
+    // 4. Relative import from URL parent
+    if (
+      parentIdentifier &&
+      (moduleIdentifier.startsWith('./') ||
+        moduleIdentifier.startsWith('../'))
+    ) {
+      return new URL(moduleIdentifier, parentIdentifier).href;
+    }
+
+    // 5. Non-URL-like → PACKAGES_FAKE_ORIGIN
     if (!isUrlLike(moduleIdentifier)) {
       moduleIdentifier = new URL(moduleIdentifier, PACKAGES_FAKE_ORIGIN).href;
     }

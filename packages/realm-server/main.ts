@@ -206,7 +206,7 @@ for (let i = 0; i < fromUrls.length; i++) {
   } else {
     // Non-URL prefix like @cardstack/catalog/
     registerCardReferencePrefix(from, to.href);
-    virtualNetwork.addImportMap(from, (rest) => new URL(rest, to).href);
+    virtualNetwork.addRealmPrefix(from, to.href);
     urlMappings.push([to, to]); // use toUrl for both in hrefs
   }
 }

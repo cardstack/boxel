@@ -107,7 +107,7 @@ for (let i = 0; i < fromUrls.length; i++) {
     virtualNetwork.addURLMapping(new URL(from), to);
   } else {
     registerCardReferencePrefix(from, to.href);
-    virtualNetwork.addImportMap(from, (rest) => new URL(rest, to).href);
+    virtualNetwork.addRealmPrefix(from, to.href);
   }
 }
 let autoMigrate = migrateDB || undefined;
