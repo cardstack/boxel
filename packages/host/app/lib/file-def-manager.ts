@@ -170,9 +170,12 @@ export default class FileDefManagerImpl
     if (cachedUrl) {
       return cachedUrl;
     }
-    let response = await this.client.uploadContent(content, {
-      type: contentType,
-    });
+    let response = await this.client.uploadContent(
+      content as XMLHttpRequestBodyInit,
+      {
+        type: contentType,
+      },
+    );
     let url = this.client.mxcUrlToHttp(
       response.content_uri,
       undefined,
