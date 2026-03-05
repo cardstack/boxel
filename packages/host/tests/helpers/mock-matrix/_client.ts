@@ -855,6 +855,10 @@ export class MockClient implements ExtendedClient {
     return await this.fileDefManager.prefetchFileContent(file);
   }
 
+  clearPrefetchedContent(): void {
+    this.fileDefManager.clearPrefetchedContent();
+  }
+
   async uploadContent(
     file: XMLHttpRequestBodyInit,
     _opts?: MatrixSDK.UploadOpts,
@@ -869,6 +873,8 @@ export class MockClient implements ExtendedClient {
         file.byteOffset,
         file.byteOffset + file.byteLength,
       );
+    } else if (file instanceof ArrayBuffer) {
+      buffer = file;
     } else if (typeof file === 'string') {
       buffer = new TextEncoder().encode(file).buffer as ArrayBuffer;
     } else {
