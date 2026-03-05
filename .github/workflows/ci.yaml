@@ -26,7 +26,6 @@ jobs:
       eslint-plugin-boxel: ${{ steps.filter.outputs.eslint-plugin-boxel }}
       postgres-migrations: ${{ steps.filter.outputs.postgres-migrations }}
       boxel-icons: ${{ steps.filter.outputs.boxel-icons }}
-      boxel-motion: ${{ steps.filter.outputs.boxel-motion }}
       boxel-ui: ${{ steps.filter.outputs.boxel-ui }}
       matrix: ${{ steps.filter.outputs.matrix }}
       realm-server: ${{ steps.filter.outputs.realm-server }}
@@ -76,9 +75,6 @@ jobs:
             boxel-icons:
               - *shared
               - 'packages/boxel-icons/**'
-            boxel-motion:
-              - *shared
-              - 'packages/boxel-motion/**'
             boxel-ui:
               - *shared
               - 'packages/boxel-icons/**'
@@ -225,24 +221,6 @@ jobs:
         working-directory: packages/postgres
         run: pnpm migrate up
 
-  boxel-motion-test:
-    name: Boxel Motion Tests
-    needs: change-check
-    if: needs.change-check.outputs.boxel-motion == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
-    runs-on: ubuntu-latest
-    concurrency:
-      group: boxel-motion-test-${{ github.head_ref || github.run_id }}
-      cancel-in-progress: true
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
-      - uses: ./.github/actions/init
-      - name: Build boxel-motion
-        run: pnpm build
-        working-directory: packages/boxel-motion/addon
-      - name: Run test suite
-        run: pnpm test
-        working-directory: packages/boxel-motion/test-app
-
   boxel-ui-test:
     name: Boxel UI Tests
     needs: [change-check]
@@ -330,9 +308,6 @@ jobs:
       - name: Serve boxel-icons
         run: pnpm serve &
         working-directory: packages/boxel-icons
-      - name: Build boxel-motion
-        run: pnpm build
-        working-directory: packages/boxel-motion/addon
       - name: Serve host dist (test assets) for realm server
         uses: JarvusInnovations/background-action@2428e7b970a846423095c79d43f759abf979a635 # 1.0.7
         with:
