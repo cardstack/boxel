@@ -821,6 +821,72 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         );
       });
 
+      test('full reindex does not clear modules cache for bot-owned realms', async function (assert) {
+        let endpoint = `test-realm-${uuidv4()}`;
+        let owner = 'realm/bot';
+        let ownerUserId = `@${owner}:localhost`;
+        let botRealmURL: string;
+        {
+          let response = await context.request2
+            .post('/_create-realm')
+            .set('Accept', 'application/vnd.api+json')
+            .set('Content-Type', 'application/json')
+            .set(
+              'Authorization',
+              `Bearer ${createRealmServerJWT(
+                { user: ownerUserId, sessionRoom: 'session-room-test' },
+                realmSecretSeed,
+              )}`,
+            )
+            .send(
+              JSON.stringify({
+                data: {
+                  type: 'realm',
+                  attributes: {
+                    name: 'Bot Realm',
+                    endpoint,
+                  },
+                },
+              }),
+            );
+          assert.strictEqual(response.status, 201, 'HTTP 201 status');
+          botRealmURL = response.body.data.id;
+        }
+
+        let staleModuleForNonBotRealmURL = `${testRealm2URL.href}stale-module-${uuidv4()}.gts`;
+        let staleModuleForBotRealmURL = `${botRealmURL}stale-module-${uuidv4()}.gts`;
+        await context.dbAdapter.execute(
+          `INSERT INTO modules (url, file_alias, definitions, deps, created_at, resolved_realm_url, cache_scope, auth_user_id)
+           VALUES ('${staleModuleForNonBotRealmURL}', '${staleModuleForNonBotRealmURL}', '{}', '[]', ${Date.now()}, '${testRealm2URL.href}', 'public', '')`,
+        );
+        await context.dbAdapter.execute(
+          `INSERT INTO modules (url, file_alias, definitions, deps, created_at, resolved_realm_url, cache_scope, auth_user_id)
+           VALUES ('${staleModuleForBotRealmURL}', '${staleModuleForBotRealmURL}', '{}', '[]', ${Date.now()}, '${botRealmURL}', 'public', '')`,
+        );
+
+        let response = await context.request2
+          .get(`/_grafana-full-reindex?authHeader=${grafanaSecret}`)
+          .set('Content-Type', 'application/json');
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+
+        let staleRowsForNonBotRealm = await context.dbAdapter.execute(
+          `SELECT * FROM modules WHERE url = '${staleModuleForNonBotRealmURL}'`,
+        );
+        let staleRowsForBotRealm = await context.dbAdapter.execute(
+          `SELECT * FROM modules WHERE url = '${staleModuleForBotRealmURL}'`,
+        );
+        assert.strictEqual(
+          staleRowsForNonBotRealm.length,
+          0,
+          'full reindex clears stale module rows for non-bot realms',
+        );
+        assert.strictEqual(
+          staleRowsForBotRealm.length,
+          1,
+          'full reindex preserves module rows for bot realms that are skipped',
+        );
+      });
+
       test('returns 401 when calling grafana full reindex endpoint without a grafana secret', async function (assert) {
         let initialJobs = await context.dbAdapter.execute('select * from jobs');
         {
