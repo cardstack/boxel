@@ -82,6 +82,7 @@ export interface FileDefManager {
    * between attach and send).
    */
   prefetchFileContent(file: FileDef): Promise<void>;
+  clearPrefetchedContent(): void;
 
   /**
    * Downloads content from a file definition
@@ -373,6 +374,10 @@ export default class FileDefManagerImpl
     let bytes = new Uint8Array(await response.arrayBuffer());
     let contentType = response.headers.get('content-type') ?? '';
     this.prefetchedContent.set(file.sourceUrl, { bytes, contentType });
+  }
+
+  clearPrefetchedContent(): void {
+    this.prefetchedContent.clear();
   }
 
   async uploadFiles(files: FileDef[]) {
