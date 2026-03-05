@@ -185,6 +185,7 @@ export class IndexRunner {
       } in ${Date.now() - start} ms`,
     );
     return {
+      invalidations: [...invalidations].map((url) => url.href),
       ignoreData: current.#ignoreData,
       stats: current.stats,
     };
@@ -193,15 +194,22 @@ export class IndexRunner {
   static async incremental(
     current: IndexRunner,
     {
-      urls,
-      operation,
+      changes,
     }: {
-      urls: URL[];
-      operation: 'update' | 'delete';
+      changes: { url: URL; operation: 'update' | 'delete' }[];
     },
   ): Promise<IncrementalResult> {
     current.#dependencyResolver.reset();
     let start = Date.now();
+    let operations = new Map<string, 'update' | 'delete'>();
+    for (let { url, operation } of changes) {
+      if (operation === 'delete') {
+        operations.set(url.href, 'delete');
+      } else if (!operations.has(url.href)) {
+        operations.set(url.href, 'update');
+      }
+    }
+    let urls = [...operations.keys()].map((href) => new URL(href));
     current.#log.debug(
       `${jobIdentity(current.#jobInfo)} starting from incremental indexing for ${urls.map((u) => u.href).join()}`,
     );
@@ -235,7 +243,10 @@ export class IndexRunner {
 
     let hrefs = urls.map((u) => u.href);
     for (let invalidation of invalidations) {
-      if (operation === 'delete' && hrefs.includes(invalidation.href)) {
+      if (
+        operations.get(invalidation.href) === 'delete' &&
+        hrefs.includes(invalidation.href)
+      ) {
         // file is deleted, there is nothing to visit
       } else {
         await current.tryToVisit(invalidation);
