@@ -2,6 +2,7 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import CopyFileToRealmCommand from '@cardstack/host/commands/copy-file-to-realm';
+import ShowFileCommand from '@cardstack/host/commands/show-file';
 
 import {
   setupIntegrationTestRealm,
@@ -107,6 +108,43 @@ module('Integration | commands | copy-file-to-realm', function (hooks) {
     let copied = await cardService.getSource(new URL(result.newFileUrl));
     assert.strictEqual(copied.status, 200, 'copied file exists');
     assert.strictEqual(copied.content, 'Hello World!', 'content matches');
+  });
+
+  test('after copying, show file command switches to code submode with correct file URL', async function (assert) {
+    let commandService = getService('command-service');
+    let operatorModeStateService = getService('operator-mode-state-service');
+
+    operatorModeStateService.restore({
+      stacks: [[]],
+      submode: 'interact',
+    });
+
+    let copyFileCommand = new CopyFileToRealmCommand(
+      commandService.commandContext,
+    );
+
+    let result = await copyFileCommand.execute({
+      sourceFileUrl: `${testRealmURL}hello.txt`,
+      targetRealm: testRealm2URL,
+    });
+
+    assert.ok(result.newFileUrl, 'new file URL is returned');
+
+    let showFileCommand = new ShowFileCommand(commandService.commandContext);
+    await showFileCommand.execute({
+      fileUrl: result.newFileUrl,
+    });
+
+    assert.strictEqual(
+      operatorModeStateService.state?.submode,
+      'code',
+      'submode is switched to code',
+    );
+    assert.strictEqual(
+      operatorModeStateService.state?.codePath?.href,
+      result.newFileUrl,
+      'code path is set to the copied file URL',
+    );
   });
 
   test('errors when user does not have write permissions to target realm', async function (assert) {

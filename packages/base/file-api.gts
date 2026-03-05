@@ -24,7 +24,7 @@ import ArrowLeft from '@cardstack/boxel-icons/arrow-left';
 import LinkIcon from '@cardstack/boxel-icons/link';
 import CopyFileToRealmCommand from '@cardstack/boxel-host/commands/copy-file-to-realm';
 import OpenInInteractModeCommand from '@cardstack/boxel-host/commands/open-in-interact-mode';
-import ShowCardCommand from '@cardstack/boxel-host/commands/show-card';
+import ShowFileCommand from '@cardstack/boxel-host/commands/show-file';
 import Eye from '@cardstack/boxel-icons/eye';
 import SwitchSubmodeCommand from '@cardstack/boxel-host/commands/switch-submode';
 import CodeIcon from '@cardstack/boxel-icons/code';
@@ -219,9 +219,8 @@ export function getDefaultFileMenuItems(
           targetRealm: params.menuContextParams.activeRealmURL,
         });
 
-        let showCardCommand = new ShowCardCommand(params.commandContext);
-        await showCardCommand.execute({
-          cardId: newFileUrl,
+        await new ShowFileCommand(params.commandContext).execute({
+          fileUrl: newFileUrl,
         });
       },
       icon: ArrowLeft,
