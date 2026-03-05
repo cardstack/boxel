@@ -1,0 +1,72 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "GeoPointFieldSpec",
+        "module": "../geo-point-spec"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "default",
+        "module": "../../fields/geo-point"
+      },
+      "basic": {
+        "lat": 40.7127281,
+        "lon": -74.0060152
+      },
+      "readMe": null,
+      "cardInfo": {
+        "name": null,
+        "notes": null,
+        "summary": null,
+        "cardThumbnailURL": null
+      },
+      "combined": {
+        "lat": 51.5074456,
+        "lon": -0.1277653
+      },
+      "specType": "field",
+      "cardTitle": "Geo Point Field",
+      "mapPicker": {
+        "lat": 54.51384095408507,
+        "lon": 30.44159057801324
+      },
+      "cardDescription": "Spec card that renders GeoPointField examples.",
+      "containedExamples": [],
+      "withQuickLocations": {
+        "lat": 40.7127281,
+        "lon": -74.0060152
+      },
+      "mapPickerWithAddons": {
+        "lat": 44.83685807826857,
+        "lon": 11.61730322820671
+      },
+      "withCurrentLocation": {
+        "lat": 3.1685246346835263,
+        "lon": 101.53336335143155
+      },
+      "mapPickerWithQuickLocations": {
+        "lat": 51.5074456,
+        "lon": -0.1277653
+      },
+      "mapPickerWithCurrentLocation": {
+        "lat": 3.1685528122228006,
+        "lon": 101.53336585084402
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "linkedExamples": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

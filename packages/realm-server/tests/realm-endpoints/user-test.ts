@@ -119,6 +119,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
               lastDailyCreditGrantAt: null,
               nextDailyCreditGrantAt:
                 json.data.attributes.nextDailyCreditGrantAt,
+              dailyCreditGrantCount: 0,
             },
             relationships: {
               subscription: null,
@@ -245,6 +246,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
               lastDailyCreditGrantAt: null,
               nextDailyCreditGrantAt:
                 json.data.attributes.nextDailyCreditGrantAt,
+              dailyCreditGrantCount: 0,
             },
             relationships: {
               subscription: {
@@ -353,6 +355,11 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
         json.data.attributes.lastDailyCreditGrantAt,
         'lastDailyCreditGrantAt is set',
       );
+      assert.strictEqual(
+        json.data.attributes.dailyCreditGrantCount,
+        1,
+        'dailyCreditGrantCount reflects one daily grant entry',
+      );
     });
 
     test('responds without daily grant timestamps when low credit threshold is unset', async function (assert) {
@@ -430,6 +437,11 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
         json.data.attributes.lastDailyCreditGrantAt,
         2000,
         'lastDailyCreditGrantAt reflects the most recent daily grant',
+      );
+      assert.strictEqual(
+        json.data.attributes.dailyCreditGrantCount,
+        2,
+        'dailyCreditGrantCount reflects two daily grant entries',
       );
     });
   });

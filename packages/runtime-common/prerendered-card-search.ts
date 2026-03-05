@@ -12,6 +12,7 @@ export interface PrerenderedCardData {
   cardType?: string;
   iconHtml?: string;
   usedRenderType?: ResolvedCodeRef;
+  isFileMeta?: boolean;
 }
 
 export interface PrerenderedCardLike {
