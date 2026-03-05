@@ -433,9 +433,7 @@ export async function waitForLoadedImage(
   try {
     await waitUntil(
       () => {
-        let currentImg = document.querySelector(
-          selector,
-        ) as HTMLImageElement | null;
+        let currentImg = findLatestMatchingImage(selector);
         return Boolean(currentImg && currentImg.complete);
       },
       {
@@ -444,9 +442,7 @@ export async function waitForLoadedImage(
       },
     );
   } catch (originalError) {
-    let currentImg = document.querySelector(
-      selector,
-    ) as HTMLImageElement | null;
+    let currentImg = findLatestMatchingImage(selector);
     if (currentImg) {
       throw new Error(
         await buildImageLoadErrorMessage(
@@ -460,7 +456,7 @@ export async function waitForLoadedImage(
     throw originalError;
   }
 
-  let loadedImg = document.querySelector(selector) as HTMLImageElement | null;
+  let loadedImg = findLatestMatchingImage(selector);
   if (!loadedImg) {
     throw new Error(
       `waitForLoadedImage: missing image element matching selector ${selector} after wait`,
@@ -472,6 +468,20 @@ export async function waitForLoadedImage(
     );
   }
   return loadedImg;
+}
+
+function findLatestMatchingImage(selector: string): HTMLImageElement | null {
+  let candidates = Array.from(document.querySelectorAll(selector)).filter(
+    (element): element is HTMLImageElement =>
+      element instanceof HTMLImageElement,
+  );
+  for (let i = candidates.length - 1; i >= 0; i--) {
+    let candidate = candidates[i];
+    if (candidate.isConnected) {
+      return candidate;
+    }
+  }
+  return null;
 }
 
 async function buildImageLoadErrorMessage(
