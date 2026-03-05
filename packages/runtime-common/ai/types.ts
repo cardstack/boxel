@@ -35,7 +35,7 @@ export type TextContent = {
     type: 'ephemeral';
   };
 };
-type ImageContentPart = {
+export type ImageContentPart = {
   type: 'image_url';
   image_url: {
     url: string; // URL or base64 encoded image data
