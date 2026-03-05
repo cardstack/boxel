@@ -1265,6 +1265,16 @@ module(`server-endpoints/${basename(__filename)}`, function () {
               }),
             );
 
+          if (createResponse.status !== 201) {
+            throw new Error(
+              `/_create-realm failed with status ${createResponse.status}: ` +
+                (createResponse.text ||
+                  (createResponse.body
+                    ? JSON.stringify(createResponse.body)
+                    : '')),
+            );
+          }
+
           sourceRealmUrlString = createResponse.body.data.id;
           let sourceRealmPath = new URL(sourceRealmUrlString).pathname;
 
