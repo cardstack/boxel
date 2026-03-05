@@ -1,16 +1,20 @@
 import type Koa from 'koa';
 import { createHmac, timingSafeEqual } from 'crypto';
 import { param, query } from '@cardstack/runtime-common';
+import { enqueueRunCommandJob } from '@cardstack/runtime-common/jobs/run-command';
+import { userInitiatedPriority } from '@cardstack/runtime-common/queue';
 import {
   fetchRequestFromContext,
   sendResponseForNotFound,
   sendResponseForSystemError,
   setContextResponse,
 } from '../middleware';
+import { getFilterHandler } from './webhook-filter-handlers';
 import type { CreateRoutesArgs } from '../routes';
 
 export default function handleWebhookReceiverRequest({
   dbAdapter,
+  queue,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
     let webhookPath = ctxt.params.webhookPath as string | undefined;
@@ -70,13 +74,117 @@ export default function handleWebhookReceiverRequest({
       return;
     }
 
-    // Signature verified. Command execution will be added in a future ticket.
+    let webhookId = webhook.id as string;
+    let commandRows;
+    try {
+      commandRows = await query(dbAdapter, [
+        `SELECT id, incoming_webhook_id, command, command_filter`,
+        `FROM webhook_commands WHERE incoming_webhook_id = `,
+        param(webhookId),
+      ]);
+    } catch (_error) {
+      await sendResponseForSystemError(
+        ctxt,
+        'failed to lookup webhook commands',
+      );
+      return;
+    }
+
+    // Parse the webhook payload to extract event information for filtering
+    let payload: Record<string, any> = {};
+    try {
+      payload = JSON.parse(rawBody);
+    } catch (_error) {
+      console.warn('Failed to parse webhook payload for filtering');
+    }
+
+    let executedCommands = 0;
+    for (let commandRow of commandRows) {
+      let commandFilter = commandRow.command_filter as Record<
+        string,
+        any
+      > | null;
+
+      let filterHandler = getFilterHandler(commandFilter);
+
+      // Delegate filter matching to the handler
+      if (
+        commandFilter &&
+        !filterHandler.matches(payload, ctxt.req.headers, commandFilter)
+      ) {
+        continue;
+      }
+
+      let commandURL = commandRow.command as string;
+      let realmURL: string;
+      let commandInput: Record<string, any>;
+      try {
+        realmURL = filterHandler.getRealmURL(commandFilter ?? {}, commandURL);
+        commandInput = filterHandler.buildCommandInput(
+          payload,
+          ctxt.req.headers,
+          commandFilter ?? {},
+        );
+      } catch (error) {
+        console.error(
+          `Failed to build command context for command ${commandURL}, skipping:`,
+          error,
+        );
+        continue;
+      }
+
+      // Run as the realm owner so they have write permissions in the target realm
+      let runAs = webhook.username as string;
+      try {
+        let realmOwnerRows = await query(dbAdapter, [
+          `SELECT username FROM realm_user_permissions WHERE realm_url = `,
+          param(realmURL),
+          ` AND realm_owner = true LIMIT 1`,
+        ]);
+        if (realmOwnerRows[0]?.username) {
+          runAs = realmOwnerRows[0].username as string;
+        }
+      } catch (error) {
+        console.error(
+          `Failed to fetch realm owner for ${realmURL}, falling back to webhook user:`,
+          error,
+        );
+      }
+
+      try {
+        await enqueueRunCommandJob(
+          {
+            realmURL,
+            realmUsername: runAs,
+            runAs,
+            command: commandURL,
+            commandInput,
+          },
+          queue,
+          dbAdapter,
+          userInitiatedPriority,
+        );
+        executedCommands++;
+      } catch (error) {
+        console.error(
+          `Failed to enqueue webhook command ${commandURL}:`,
+          error,
+        );
+      }
+    }
+
     await setContextResponse(
       ctxt,
-      new Response(JSON.stringify({ status: 'received' }), {
-        status: 200,
-        headers: { 'content-type': 'application/json' },
-      }),
+      new Response(
+        JSON.stringify({
+          status: 'received',
+          commandsExecuted: executedCommands,
+        }),
+        {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        },
+      ),
     );
   };
 }
@@ -107,8 +215,8 @@ function verifyHmacSha256Header(
   body: string,
   headers: Record<string, string | string[] | undefined>,
 ): boolean {
-  let headerName = config.header.toLowerCase();
-  let providedSignature = headers[headerName];
+  let headerName = config.header; // e.g. 'X-Hub-Signature-256'
+  let providedSignature = headers[headerName.toLowerCase()]; // Node.js normalizes incoming header names to lowercase
   if (typeof providedSignature !== 'string') {
     return false;
   }

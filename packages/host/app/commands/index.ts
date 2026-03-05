@@ -11,6 +11,7 @@ import * as CheckCorrectnessCommandModule from './check-correctness';
 import * as CopyAndEditCommandModule from './copy-and-edit';
 import * as CopyCardToRealmModule from './copy-card';
 import * as CopyCardToStackCommandModule from './copy-card-to-stack';
+import * as CopyFileToRealmCommandModule from './copy-file-to-realm';
 import * as CopySourceCommandModule from './copy-source';
 import * as CreateAIAssistantRoomCommandModule from './create-ai-assistant-room';
 import * as CreateSpecCommandModule from './create-specs';
@@ -55,6 +56,7 @@ import * as SerializeCardCommandModule from './serialize-card';
 import * as SetActiveLlmModule from './set-active-llm';
 import * as SetUserSystemCardCommandModule from './set-user-system-card';
 import * as ShowCardCommandModule from './show-card';
+import * as ShowFileCommandModule from './show-file';
 import * as SummarizeSessionCommandModule from './summarize-session';
 import * as SwitchSubmodeCommandModule from './switch-submode';
 import * as TransformCardsCommandModule from './transform-cards';
@@ -91,6 +93,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/copy-card-to-stack',
     CopyCardToStackCommandModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/copy-file-to-realm',
+    CopyFileToRealmCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/copy-source',
@@ -249,6 +255,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
     ShowCardCommandModule,
   );
   virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/show-file',
+    ShowFileCommandModule,
+  );
+  virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/switch-submode',
     SwitchSubmodeCommandModule,
   );
@@ -338,6 +348,7 @@ export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
   AskAiCommandModule.default,
   CopyCardToRealmModule.default,
   CopyCardToStackCommandModule.default,
+  CopyFileToRealmCommandModule.default,
   CopySourceCommandModule.default,
   CreateAIAssistantRoomCommandModule.default,
   CopyAndEditCommandModule.default,
@@ -385,6 +396,7 @@ export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
   SetActiveLlmModule.default,
   SetUserSystemCardCommandModule.default,
   ShowCardCommandModule.default,
+  ShowFileCommandModule.default,
   SummarizeSessionCommandModule.default,
   SwitchSubmodeCommandModule.default,
   TransformCardsCommandModule.default,

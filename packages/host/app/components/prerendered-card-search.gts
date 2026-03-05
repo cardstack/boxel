@@ -3,6 +3,7 @@ import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { isDestroyed, isDestroying } from '@ember/destroyable';
 import { getOwner } from '@ember/owner';
 import { precompileTemplate } from '@ember/template-compilation';
+import { isTesting } from '@embroider/macros';
 import Component from '@glimmer/component';
 
 import TriangleAlert from '@cardstack/boxel-icons/triangle-alert';
@@ -13,16 +14,19 @@ import { CardContainer } from '@cardstack/boxel-ui/components';
 
 import {
   RealmPaths,
+  CardContextName,
   type PrerenderedCardLike,
   type PrerenderedCardData,
   type PrerenderedCardComponentSignature,
-  CardContextName,
 } from '@cardstack/runtime-common';
 
-import type { CardContext } from 'https://cardstack.com/base/card-api';
+import type { CardContext, CardDef } from 'https://cardstack.com/base/card-api';
+import type { FileDef } from 'https://cardstack.com/base/file-api';
 
 import { type HTMLComponent, htmlComponent } from '../lib/html-component';
+import { getLivePrerenderedSearch } from '../resources/live-prerendered-search';
 import { getPrerenderedSearch } from '../resources/prerendered-search';
+import { getSearch } from '../resources/search';
 
 const OWNER_DESTROYED_ERROR =
   "Cannot call `.lookup('renderer:-dom')` after the owner has been destroyed";
@@ -179,14 +183,52 @@ export default class PrerenderedCardSearch extends Component<PrerenderedCardComp
     }
   }
 
-  private searchResource = getPrerenderedSearch(this, getOwner(this)!, () => ({
-    query: this.args.query,
-    format: this.args.format,
-    realms: this.args.realms,
-    cardUrls: this.args.cardUrls,
-    isLive: this.args.isLive ?? false,
-    cardComponentModifier: this.cardComponentModifier,
-  }));
+  private prerenderedSearchResource = getPrerenderedSearch(
+    this,
+    getOwner(this)!,
+    () => ({
+      query: this.shouldUseRenderContextSearch ? undefined : this.args.query,
+      format: this.shouldUseRenderContextSearch ? undefined : this.args.format,
+      realms: this.args.realms,
+      cardUrls: this.args.cardUrls,
+      isLive: this.args.isLive ?? false,
+      cardComponentModifier: this.cardComponentModifier,
+    }),
+  );
+
+  private renderContextSearchResource = getSearch<CardDef | FileDef>(
+    this,
+    getOwner(this)!,
+    () => (this.shouldUseRenderContextSearch ? this.args.query : undefined),
+    () => this.args.realms,
+    {
+      isLive: false,
+      storeService: getOwner(this)!.lookup('service:render-store') as any,
+    },
+  );
+
+  private renderContextPrerenderedSearchResource = getLivePrerenderedSearch(
+    this,
+    getOwner(this)!,
+    () => ({
+      instances: this.renderContextSearchResource.instances,
+      isLoading: this.renderContextSearchResource.isLoading,
+      meta: this.renderContextSearchResource.meta,
+      format: this.shouldUseRenderContextSearch ? this.args.format : undefined,
+      realms: this.args.realms,
+      cardComponentModifier: this.cardComponentModifier,
+    }),
+  );
+
+  private get shouldUseRenderContextSearch() {
+    return Boolean((globalThis as any).__boxelRenderContext) && !isTesting();
+  }
+
+  private get searchResource() {
+    return this.shouldUseRenderContextSearch
+      ? this.renderContextPrerenderedSearchResource
+      : this.prerenderedSearchResource;
+  }
 
   private get searchResults() {
     return {
