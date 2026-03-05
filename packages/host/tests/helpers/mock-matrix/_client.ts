@@ -863,7 +863,7 @@ export class MockClient implements ExtendedClient {
   }
 
   async uploadContent(
-    _content: string | Uint8Array,
+    _content: XMLHttpRequestBodyInit,
     _opts?: { type?: string; name?: string },
   ): Promise<any> {
     if (this.sdkOpts.uploadContentInterceptor) {
@@ -872,12 +872,14 @@ export class MockClient implements ExtendedClient {
     let contentUri = `mxc://mock-server/${Math.random()}`;
     let buffer: ArrayBuffer;
     if (_content instanceof Uint8Array) {
-      buffer = _content.buffer.slice(
+      buffer = (_content.buffer as ArrayBuffer).slice(
         _content.byteOffset,
         _content.byteOffset + _content.byteLength,
       );
+    } else if (typeof _content === 'string') {
+      buffer = new TextEncoder().encode(_content).buffer as ArrayBuffer;
     } else {
-      buffer = new TextEncoder().encode(_content).buffer;
+      throw new Error('Unsupported content type in mock uploadContent');
     }
     this.serverState.addContent(this.mxcUrlToHttp(contentUri), buffer);
     return { content_uri: contentUri };
