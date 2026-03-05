@@ -68,6 +68,12 @@ export interface FileDefManager {
     commandDefinitions: SkillModule.CommandField[],
   ): Promise<FileDef[]>;
 
+  /**
+   * Uploads files (text or binary) and returns their file definitions with
+   * content-hash-based deduplication.
+   * @param files Array of file definitions to upload
+   * @returns Promise resolving to array of uploaded file definitions
+   */
   uploadFiles(files: FileDef[]): Promise<FileDef[]>;
 
   /**
@@ -150,6 +156,18 @@ export default class FileDefManagerImpl
     return this.getCardAPI();
   }
 
+  private mxcToHttpUrl(mxcUrl: string): string | null {
+    return this.client.mxcUrlToHttp(
+      mxcUrl,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      true,
+    );
+  }
+
   async getContentHash(content: string | Uint8Array): Promise<string> {
     return md5(content);
   }
@@ -172,19 +190,9 @@ export default class FileDefManagerImpl
     }
     let response = await this.client.uploadContent(
       content as XMLHttpRequestBodyInit,
-      {
-        type: contentType,
-      },
+      { type: contentType },
     );
-    let url = this.client.mxcUrlToHttp(
-      response.content_uri,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      true,
-    );
+    let url = this.mxcToHttpUrl(response.content_uri);
     if (!url) {
       throw new Error('Failed to convert mxcUrl to http');
     }
@@ -204,7 +212,7 @@ export default class FileDefManagerImpl
       return;
     }
 
-    let content = await this.downloadContentAsText(url);
+    let content = await this.downloadContentAsBytes(url);
     const fetchedContentHash = await this.getContentHash(content);
     if (fetchedContentHash !== contentHash) {
       console.warn(
@@ -222,15 +230,7 @@ export default class FileDefManagerImpl
     let storedUrl = url;
     if (canonicalKey.startsWith('mxc://')) {
       try {
-        const maybeHttp = this.client.mxcUrlToHttp(
-          canonicalKey,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          true,
-        );
+        const maybeHttp = this.mxcToHttpUrl(canonicalKey);
         if (maybeHttp) {
           storedUrl = maybeHttp;
         }
@@ -498,6 +498,18 @@ export default class FileDefManagerImpl
     } finally {
       this.inFlightTextFetches.delete(canonicalKey);
     }
+  }
+
+  async downloadContentAsBytes(url: string): Promise<Uint8Array> {
+    const response = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${this.client.getAccessToken()}`,
+      },
+    });
+    if (!response.ok) {
+      throw new Error(`HTTP error. Status: ${response.status}`);
+    }
+    return new Uint8Array(await response.arrayBuffer());
   }
 
   async downloadAsFileInBrowser(serializedFile: SerializedFile) {
