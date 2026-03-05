@@ -1217,7 +1217,6 @@ module(`server-endpoints/${basename(__filename)}`, function () {
 
       hooks.beforeEach(function () {
         dir = dirSync();
-        copySync(join(__dirname, '..', 'cards'), dir.name);
       });
 
       setupDB(hooks, {
