@@ -8,7 +8,7 @@ import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import { fetchSessionRoom } from '@cardstack/runtime-common/db-queries/session-room-queries';
 
 import {
-  setupPermissionedRealm,
+  setupPermissionedRealmCached,
   realmSecretSeed,
   testRealmHref,
 } from './helpers';
@@ -20,7 +20,7 @@ module(basename(__filename), function () {
     let request: SuperTest<SupertestTest>;
     const matrixUserId = '@firsttimer:localhost';
 
-    setupPermissionedRealm(hooks, {
+    setupPermissionedRealmCached(hooks, {
       permissions: {
         '*': ['read'],
         [matrixUserId]: ['read', 'write'],

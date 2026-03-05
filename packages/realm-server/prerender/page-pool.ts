@@ -349,6 +349,11 @@ export class PagePool {
       let browser = await this.#browserManager.getBrowser();
       context = await browser.createBrowserContext();
       let page = await context.newPage();
+      if (page.browserContext() !== context) {
+        throw new Error(
+          'Expected each prerender page to use its own browser context for localStorage isolation',
+        );
+      }
       let pageId = uuidv4();
       this.#attachPageConsole(page, 'standby', pageId);
       await this.#loadStandbyPage(page, pageId);
