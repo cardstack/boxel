@@ -176,13 +176,13 @@ module(
         .map((content) => new Uint8Array(content))
         .find((content) => md5(content) === expectedHash);
 
-      assert.ok(uploadedArray, 'Found uploaded content matching test-image.png');
-      if (!uploadedArray) {
-        return;
-      }
+      assert.ok(
+        uploadedArray,
+        'Found uploaded content matching test-image.png',
+      );
 
       assert.strictEqual(
-        uploadedArray.length,
+        uploadedArray!.length,
         MINIMAL_PNG.length,
         'Uploaded content has same length as original PNG',
       );
