@@ -8,9 +8,12 @@ import type { CreateRoutesArgs } from '../routes';
 
 export default function handleFullReindex({
   queue,
+  definitionLookup,
   realms,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
+    await definitionLookup.clearAllModules();
+
     await queue.publish<void>({
       jobType: `full-reindex`,
       concurrencyGroup: `full-reindex-group`,
