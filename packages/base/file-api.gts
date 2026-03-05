@@ -20,8 +20,11 @@ import {
   getDataBucket,
 } from './card-api';
 import NumberField from './number';
+import ArrowLeft from '@cardstack/boxel-icons/arrow-left';
 import LinkIcon from '@cardstack/boxel-icons/link';
+import CopyFileToRealmCommand from '@cardstack/boxel-host/commands/copy-file-to-realm';
 import OpenInInteractModeCommand from '@cardstack/boxel-host/commands/open-in-interact-mode';
+import ShowFileCommand from '@cardstack/boxel-host/commands/show-file';
 import Eye from '@cardstack/boxel-icons/eye';
 import SwitchSubmodeCommand from '@cardstack/boxel-host/commands/switch-submode';
 import CodeIcon from '@cardstack/boxel-icons/code';
@@ -206,7 +209,22 @@ export function getDefaultFileMenuItems(
     params.menuContext === 'ai-assistant' &&
     params.menuContextParams.canEditActiveRealm
   ) {
-    // TODO: add a CopyFileCommand menu item once we have that command
+    menuItems.push({
+      label: 'Copy to Workspace',
+      action: async () => {
+        const { newFileUrl } = await new CopyFileToRealmCommand(
+          params.commandContext,
+        ).execute({
+          sourceFileUrl: fileDefInstance.sourceUrl,
+          targetRealm: params.menuContextParams.activeRealmURL,
+        });
+
+        await new ShowFileCommand(params.commandContext).execute({
+          fileUrl: newFileUrl,
+        });
+      },
+      icon: ArrowLeft,
+    });
   }
   if (
     ['code-mode-preview', 'code-mode-playground'].includes(params.menuContext)

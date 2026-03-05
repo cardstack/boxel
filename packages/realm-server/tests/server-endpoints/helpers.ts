@@ -19,7 +19,7 @@ import {
   matrixURL,
   runTestRealmServer,
   setupDB,
-  setupPermissionedRealm,
+  setupPermissionedRealmCached,
 } from '../helpers';
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 
@@ -70,7 +70,7 @@ export function setupServerEndpointsTest(
     copySync(join(__dirname, '..', 'cards'), context.dir.name);
   });
 
-  setupPermissionedRealm(hooks, {
+  setupPermissionedRealmCached(hooks, {
     permissions: {
       '*': ['read', 'write'],
       '@node-test_realm:localhost': ['read', 'realm-owner'],

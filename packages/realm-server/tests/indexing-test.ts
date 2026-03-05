@@ -21,8 +21,8 @@ import {
   cleanWhiteSpace,
   runTestRealmServer,
   closeServer,
-  setupPermissionedRealms,
   cardInfo,
+  setupPermissionedRealms,
 } from './helpers';
 import {
   depsForIndexEntry,

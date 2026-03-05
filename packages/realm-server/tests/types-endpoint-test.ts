@@ -7,7 +7,7 @@ import { copySync, ensureDirSync } from 'fs-extra';
 import type { Realm } from '@cardstack/runtime-common';
 import type { QueuePublisher, QueueRunner } from '@cardstack/runtime-common';
 import {
-  setupPermissionedRealm,
+  setupPermissionedRealmCached,
   runTestRealmServer,
   setupDB,
   setupMatrixRoom,
@@ -19,7 +19,6 @@ import {
 } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import type { PgAdapter } from '@cardstack/postgres';
-import { resetCatalogRealms } from '../handlers/handle-fetch-catalog-realms';
 
 const testRealm2URL = new URL('http://127.0.0.1:4445/test/');
 
@@ -65,12 +64,7 @@ module(basename(__filename), function () {
       };
     }
 
-    hooks.afterEach(async function () {
-      await closeServer(testRealmHttpServer);
-      resetCatalogRealms();
-    });
-
-    setupPermissionedRealm(hooks, {
+    setupPermissionedRealmCached(hooks, {
       permissions: {
         '*': ['read', 'write'],
         '@node-test_realm:localhost': ['read', 'write', 'realm-owner'],
