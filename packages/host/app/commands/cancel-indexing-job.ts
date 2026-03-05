@@ -4,13 +4,13 @@ import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import HostBaseCommand from '../lib/host-base-command';
 
-import type RealmServerService from '../services/realm-server';
+import type RealmService from '../services/realm';
 
 export default class CancelIndexingJobCommand extends HostBaseCommand<
   typeof BaseCommandModule.CancelIndexingJobInput,
   undefined
 > {
-  @service declare private realmServer: RealmServerService;
+  @service declare private realm: RealmService;
 
   static actionVerb = 'Cancel';
   description = 'Cancel any currently running indexing job for a realm';
@@ -24,6 +24,6 @@ export default class CancelIndexingJobCommand extends HostBaseCommand<
   protected async run(
     input: BaseCommandModule.CancelIndexingJobInput,
   ): Promise<undefined> {
-    await this.realmServer.cancelIndexingJob(input.realmUrl);
+    await this.realm.cancelIndexingJob(input.realmUrl);
   }
 }

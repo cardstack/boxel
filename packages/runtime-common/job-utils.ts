@@ -73,6 +73,11 @@ export async function findRunningJobIdsForConcurrencyGroup(
     param(concurrencyGroup),
     `AND j.status = 'unfulfilled'`,
     `AND jr.completed_at IS NULL`,
+    `AND`,
+    dbExpression({
+      pg: `jr.locked_until > NOW()`,
+      sqlite: `jr.locked_until > CURRENT_TIMESTAMP`,
+    }),
     `ORDER BY j.id ASC`,
   ] as Expression)) as { id: string }[];
   return rows.map((row) => row.id);

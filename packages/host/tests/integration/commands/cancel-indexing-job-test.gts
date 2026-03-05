@@ -95,11 +95,26 @@ module('Integration | commands | cancel-indexing-job', function (hooks) {
       receivedAuthorizationHeader?.startsWith('Bearer '),
       'authorization header uses Bearer scheme',
     );
-    assert.ok(realmServer.token, 'realm server token exists');
+    let authToken = receivedAuthorizationHeader!.replace('Bearer ', '');
+    let [_header, payload] = authToken.split('.');
+    let tokenClaims = JSON.parse(atob(payload)) as {
+      realm?: string;
+      permissions?: string[];
+    };
     assert.strictEqual(
+      tokenClaims.realm,
+      realmURL,
+      'authorization token is realm-scoped',
+    );
+    assert.deepEqual(
+      tokenClaims.permissions,
+      ['read', 'write'],
+      'authorization token contains realm permissions',
+    );
+    assert.notStrictEqual(
       receivedAuthorizationHeader,
       `Bearer ${realmServer.token}`,
-      'authorization header value is correct',
+      'authorization header does not use realm-server session token',
     );
   });
 });

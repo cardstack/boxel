@@ -189,6 +189,46 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
         );
       });
 
+      test('does not treat expired reservations as running jobs', async function (assert) {
+        let concurrencyGroup = `indexing:${testRealm.url}`;
+        let [{ id: jobId }] = (await dbAdapter.execute(`INSERT INTO jobs
+        (args, job_type, concurrency_group, timeout, priority)
+        VALUES
+        (
+          '{"realmURL": "${testRealm.url}", "realmUsername":"node-test_realm"}',
+          'from-scratch-index',
+          '${concurrencyGroup}',
+          180,
+          0
+        ) RETURNING id`)) as { id: string }[];
+        await dbAdapter.execute(`INSERT INTO job_reservations
+        (job_id, locked_until ) VALUES (${jobId}, NOW() - INTERVAL '1 minutes')`);
+
+        let response = await request
+          .post('/_cancel-indexing-job')
+          .set('Accept', 'application/json')
+          .set(
+            'Authorization',
+            `Bearer ${createJWT(testRealm, 'writer', ['read', 'write'])}`,
+          );
+
+        assert.strictEqual(response.status, 204, 'HTTP 204 response');
+        let [job] = await dbAdapter.execute(
+          `SELECT status, result, finished_at FROM jobs WHERE id = ${jobId}`,
+        );
+        assert.strictEqual(
+          job.status,
+          'unfulfilled',
+          'job with expired reservation is not canceled',
+        );
+        assert.strictEqual(job.result, null, 'job result remains unchanged');
+        assert.strictEqual(
+          job.finished_at,
+          null,
+          'job finish time remains unchanged',
+        );
+      });
+
       test('worker can continue to process new jobs after canceling a running indexing job', async function (assert) {
         let jobStarted = new Deferred<void>();
         let releaseJob = new Deferred<void>();
