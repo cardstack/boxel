@@ -37,8 +37,7 @@ export default class PickerOptionRow extends Component<OptionRowSignature> {
   }
 
   get label() {
-    let { type, name } = this.args.option;
-    return type === 'select-all' ? 'Select All' : name;
+    return this.args.option.name;
   }
 
   get isIconString() {

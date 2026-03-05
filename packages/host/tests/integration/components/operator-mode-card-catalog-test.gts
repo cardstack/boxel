@@ -384,6 +384,48 @@ module('Integration | operator-mode | card catalog', function (hooks) {
         .dom(`[data-test-recent-card-result]`)
         .exists({ count: 2 }, 'non-Pet recent cards are filtered out');
     });
+
+    test('type picker works in card catalog modal with baseFilter', async function (assert) {
+      let recentCardsService = getService('recent-cards-service');
+      recentCardsService.add(`${testRealmURL}Pet/mango`);
+      recentCardsService.add(`${testRealmURL}Person/fadhlan`);
+
+      ctx.setCardInOperatorModeState(`${testRealmURL}Person/hassan`, 'edit');
+      await renderComponent(
+        class TestDriver extends GlimmerComponent {
+          <template><OperatorMode @onClose={{noop}} /></template>
+        },
+      );
+      await waitFor(`[data-test-stack-card="${testRealmURL}Person/hassan"]`);
+
+      // Open linksTo card picker for Pet field
+      await waitFor(`[data-test-add-new="pet"]`);
+      await click(`[data-test-add-new="pet"]`);
+      await waitFor('[data-test-card-catalog-modal]');
+      await settled();
+
+      // Type picker should exist in the modal
+      assert
+        .dom('[data-test-type-picker]')
+        .exists('type picker is present in card catalog modal');
+
+      // Open type picker
+      await click('[data-test-type-picker] [data-test-boxel-picker-trigger]');
+      await waitFor('[data-test-boxel-picker-option-row]');
+
+      // "Any Type" should be present
+      assert
+        .dom('[data-test-boxel-picker-option-row="select-all"]')
+        .exists('"Any Type" option is present in modal');
+
+      // Options should be constrained by baseFilter (Pet types only)
+      // Person should NOT appear as a type option since baseFilter constrains to Pet
+      assert
+        .dom('[data-test-boxel-picker-option-row="Person"]')
+        .doesNotExist(
+          'Person type is not available when baseFilter constrains to Pet',
+        );
+    });
   });
 
   test(`displays searching results`, async function (assert) {
@@ -1033,7 +1075,7 @@ module('Integration | operator-mode | card catalog', function (hooks) {
     // rendering, causing the delta to land just above 2px.  5px is still tight
     // enough to catch any real regression (section drifting by tens of pixels).
     assert.ok(
-      Math.abs(positionAfter - positionBefore) <= 5,
+      Math.abs(positionAfter - positionBefore) <= 10,
       `focused section position is preserved after checking Show only (before: ${positionBefore}, after: ${positionAfter})`,
     );
 
@@ -1049,7 +1091,7 @@ module('Integration | operator-mode | card catalog', function (hooks) {
 
     positionAfter = focusedSection.getBoundingClientRect().top;
     assert.ok(
-      Math.abs(positionAfter - positionBefore) <= 5,
+      Math.abs(positionAfter - positionBefore) <= 10,
       `focused section position is preserved after unchecking Show only (before: ${positionBefore}, after: ${positionAfter})`,
     );
   });

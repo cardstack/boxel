@@ -164,6 +164,8 @@ export function transformResultsToPrerenderedCardsDoc(results: {
       id: card.url,
       attributes: {
         html: card.html || '',
+        ...(card.cardType ? { cardType: card.cardType } : {}),
+        ...(card.iconHtml ? { iconHtml: card.iconHtml } : {}),
         ...(card.isError ? { isError: true as const } : {}),
       },
       relationships: {

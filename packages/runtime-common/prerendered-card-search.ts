@@ -2,12 +2,16 @@ import type { ComponentLike } from '@glint/template';
 import type { Query } from './query';
 import type { Format } from './formats';
 import type { QueryResultsMeta } from './index-query-engine';
+import type { ResolvedCodeRef } from './code-ref';
 
 export interface PrerenderedCardData {
   url: string;
   realmUrl: string;
   html: string;
   isError: boolean;
+  cardType?: string;
+  iconHtml?: string;
+  usedRenderType?: ResolvedCodeRef;
 }
 
 export interface PrerenderedCardLike {
@@ -15,6 +19,9 @@ export interface PrerenderedCardLike {
   isError: boolean;
   realmUrl: string;
   component: ComponentLike<{ Args: {}; Element: Element }>;
+  cardType?: string;
+  iconHtml?: string;
+  usedRenderType?: ResolvedCodeRef;
 }
 
 export interface PrerenderedCardComponentSignature {
