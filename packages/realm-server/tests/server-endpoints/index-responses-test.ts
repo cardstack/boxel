@@ -716,6 +716,111 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         );
       });
 
+      test('missing apple-touch-icon is filled with default when only favicon is present in head HTML', async function (assert) {
+        // Directly set head_html to contain only a favicon link (no apple-touch-icon)
+        let cardURL = `${testRealm2URL.href}isolated-test`;
+        await context.dbAdapter.execute(
+          `UPDATE boxel_index
+           SET head_html = '<title>Test</title><link rel="icon" href="https://example.com/custom-icon.png" type="image/png">'
+           WHERE url = '${cardURL}'
+             AND type = 'instance'
+             AND is_deleted IS NOT TRUE`,
+        );
+
+        let response = await context.request2
+          .get('/test/isolated-test')
+          .set('Accept', 'text/html');
+
+        assert.strictEqual(response.status, 200, 'serves HTML response');
+
+        let headMatch = response.text.match(
+          /data-boxel-head-start[^>]*>([\s\S]*?)data-boxel-head-end/,
+        );
+        let headContent = headMatch?.[1] ?? '';
+
+        assert.ok(
+          headContent.includes(
+            '<link rel="icon" href="https://example.com/custom-icon.png"',
+          ),
+          'custom favicon from head HTML is preserved',
+        );
+        assert.ok(
+          headContent.includes('rel="apple-touch-icon"'),
+          'default apple-touch-icon is injected when missing from head HTML',
+        );
+        assert.ok(
+          headContent.includes('boxel-webclip.png'),
+          'default apple-touch-icon points to boxel-webclip.png',
+        );
+
+        let faviconCount = (response.text.match(/rel="icon"/g) || []).length;
+        let appleTouchIconCount = (
+          response.text.match(/rel="apple-touch-icon"/g) || []
+        ).length;
+        assert.strictEqual(
+          faviconCount,
+          1,
+          'exactly one favicon link (no default duplicate)',
+        );
+        assert.strictEqual(
+          appleTouchIconCount,
+          1,
+          'exactly one apple-touch-icon link',
+        );
+      });
+
+      test('missing favicon is filled with default when only apple-touch-icon is present in head HTML', async function (assert) {
+        let cardURL = `${testRealm2URL.href}isolated-test`;
+        await context.dbAdapter.execute(
+          `UPDATE boxel_index
+           SET head_html = '<title>Test</title><link rel="apple-touch-icon" href="https://example.com/custom-touch.png">'
+           WHERE url = '${cardURL}'
+             AND type = 'instance'
+             AND is_deleted IS NOT TRUE`,
+        );
+
+        let response = await context.request2
+          .get('/test/isolated-test')
+          .set('Accept', 'text/html');
+
+        assert.strictEqual(response.status, 200, 'serves HTML response');
+
+        let headMatch = response.text.match(
+          /data-boxel-head-start[^>]*>([\s\S]*?)data-boxel-head-end/,
+        );
+        let headContent = headMatch?.[1] ?? '';
+
+        assert.ok(
+          headContent.includes(
+            '<link rel="apple-touch-icon" href="https://example.com/custom-touch.png"',
+          ),
+          'custom apple-touch-icon from head HTML is preserved',
+        );
+        assert.ok(
+          headContent.includes('rel="icon"'),
+          'default favicon is injected when missing from head HTML',
+        );
+        assert.ok(
+          headContent.includes('boxel-favicon.png'),
+          'default favicon points to boxel-favicon.png',
+        );
+
+        let faviconCount = (response.text.match(/rel="icon"/g) || []).length;
+        let appleTouchIconCount = (
+          response.text.match(/rel="apple-touch-icon"/g) || []
+        ).length;
+        assert.strictEqual(
+          faviconCount,
+          1,
+          'exactly one favicon link',
+        );
+        assert.strictEqual(
+          appleTouchIconCount,
+          1,
+          'exactly one apple-touch-icon link (no default duplicate)',
+        );
+      });
+
       test('default head template includes favicon and apple-touch-icon from cardInfo.theme', async function (assert) {
         // Create card-with-theme via API so it's indexed incrementally AFTER
         // the theme card is already in boxel_index (from-scratch indexing

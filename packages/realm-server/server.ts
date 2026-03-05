@@ -466,16 +466,25 @@ export class RealmServer {
       );
     }
 
-    let headHasIcons = false;
+    let hasFavicon = false;
+    let hasAppleTouchIcon = false;
     if (headHTML != null) {
       let fragment = doc.createRange().createContextualFragment(headHTML);
-      headHasIcons =
-        fragment.querySelector(
-          'link[rel~="icon"], link[rel~="apple-touch-icon"]',
-        ) != null;
+      hasFavicon = fragment.querySelector('link[rel~="icon"]') != null;
+      hasAppleTouchIcon =
+        fragment.querySelector('link[rel~="apple-touch-icon"]') != null;
     }
-    if (!headHasIcons) {
-      headFragments.push(...this.defaultIconLinks());
+    let faviconURL = new URL('boxel-favicon.png', this.assetsURL).href;
+    let webclipURL = new URL('boxel-webclip.png', this.assetsURL).href;
+    if (!hasFavicon) {
+      headFragments.push(
+        `<link href="${faviconURL}" rel="icon" type="image/x-icon" />`,
+      );
+    }
+    if (!hasAppleTouchIcon) {
+      headFragments.push(
+        `<link href="${webclipURL}" rel="apple-touch-icon" />`,
+      );
     }
 
     if (headFragments.length > 0) {
