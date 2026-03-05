@@ -58,8 +58,9 @@ module('Unit | file-def-manager canonicalize', function () {
     const content = 'canonical-test-content';
     const contentHash = await manager.getContentHash(content);
 
-    // Stub downloadContentAsText to return the content that matches the hash
-    manager.downloadContentAsText = async (_url: string) => content;
+    // Stub downloadContentAsBytes to return the content that matches the hash
+    manager.downloadContentAsBytes = async (_url: string) =>
+      new TextEncoder().encode(content);
 
     const originalUrl =
       'http://localhost/_matrix/media/v3/download/localhost/abc123/somefile.txt?version=1';
