@@ -809,11 +809,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         let appleTouchIconCount = (
           response.text.match(/rel="apple-touch-icon"/g) || []
         ).length;
-        assert.strictEqual(
-          faviconCount,
-          1,
-          'exactly one favicon link',
-        );
+        assert.strictEqual(faviconCount, 1, 'exactly one favicon link');
         assert.strictEqual(
           appleTouchIconCount,
           1,
