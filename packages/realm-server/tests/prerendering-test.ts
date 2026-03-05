@@ -17,7 +17,7 @@ import { PagePool } from '../prerender/page-pool';
 import { RenderRunner } from '../prerender/render-runner';
 
 import {
-  setupPermissionedRealms,
+  setupPermissionedRealmsCached,
   cleanWhiteSpace,
   testCreatePrerenderAuth,
   getPrerendererForTesting,
@@ -208,8 +208,7 @@ module(basename(__filename), function () {
       await prerenderer.disposeRealm(realmURL);
     });
 
-    setupPermissionedRealms(hooks, {
-      mode: 'beforeEach',
+    setupPermissionedRealmsCached(hooks, {
       realms: [
         {
           realmURL,
@@ -489,7 +488,7 @@ module(basename(__filename), function () {
         await prerenderer.disposeRealm(realmURL);
       });
 
-      setupPermissionedRealms(hooks, {
+      setupPermissionedRealmsCached(hooks, {
         mode: 'before',
         realms: [
           {
@@ -1631,7 +1630,7 @@ module(basename(__filename), function () {
         );
       }
 
-      setupPermissionedRealms(hooks, {
+      setupPermissionedRealmsCached(hooks, {
         mode: 'before',
         realms: [
           {
@@ -2038,7 +2037,7 @@ module(basename(__filename), function () {
       ]);
     });
 
-    setupPermissionedRealms(hooks, {
+    setupPermissionedRealmsCached(hooks, {
       mode: 'before',
       realms: [
         {
@@ -2397,7 +2396,7 @@ module(basename(__filename), function () {
       },
     });
 
-    setupPermissionedRealms(hooks, {
+    setupPermissionedRealmsCached(hooks, {
       mode: 'before',
       realms: [
         {
@@ -2587,7 +2586,7 @@ module(basename(__filename), function () {
         },
       });
 
-      setupPermissionedRealms(hooks, {
+      setupPermissionedRealmsCached(hooks, {
         mode: 'before',
         realms: [
           {
@@ -2693,7 +2692,7 @@ module(basename(__filename), function () {
         await prerenderer.stop();
       });
 
-      setupPermissionedRealms(hooks, {
+      setupPermissionedRealmsCached(hooks, {
         mode: 'before',
         realms: [
           {
