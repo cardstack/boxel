@@ -13,16 +13,31 @@ import { PolicyManual } from './policy-manual';
 import { GenerateDailyReport } from '../commands/generate-daily-report';
 
 class Isolated extends Component<typeof DailyReportDashboard> {
+  private get policyManualId(): string | undefined {
+    return this.args.model.policyManual?.id;
+  }
+
+  get isGenerateDisabled() {
+    return this._generateReport.isRunning || !this.args.model.policyManual;
+  }
+
   get dailyReportsQuery(): Query {
+    let policyManualId = this.policyManualId;
     return {
       filter: {
         on: {
           module: new URL('./daily-report', import.meta.url).href,
           name: 'DailyReport',
         },
-        eq: {
-          'policyManual.id': this.args.model.policyManual!.id,
-        },
+        every: policyManualId
+          ? [
+              {
+                eq: {
+                  'policyManual.id': policyManualId,
+                },
+              },
+            ]
+          : [],
       },
 
       sort: [
@@ -136,7 +151,7 @@ class Isolated extends Component<typeof DailyReportDashboard> {
                   </div>
                   <Button
                     class='generate-report-button'
-                    @disabled={{this._generateReport.isRunning}}
+                    @disabled={{this.isGenerateDisabled}}
                     {{on 'click' this.generateReport}}
                   >
                     {{#if this._generateReport.isRunning}}
