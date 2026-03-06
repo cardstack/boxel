@@ -973,6 +973,35 @@ export const SYSTEM_CARD_FIXTURE_CONTENTS: RealmContents = {
       },
     },
   },
+  'ModelConfiguration/test-claude-sonnet-46.json': {
+    data: {
+      type: 'card',
+      attributes: {
+        cardInfo: {
+          cardTitle: 'Anthropic: Claude Sonnet 4.6',
+          cardDescription:
+            'Test fixture model configuration referencing Claude Sonnet 4.6.',
+          cardThumbnailURL: null,
+          notes: null,
+        },
+        modelId: 'anthropic/claude-sonnet-4.6',
+        toolsSupported: true,
+      },
+      relationships: {
+        'cardInfo.theme': {
+          links: {
+            self: null,
+          },
+        },
+      },
+      meta: {
+        adoptsFrom: {
+          module: 'https://cardstack.com/base/system-card',
+          name: 'ModelConfiguration',
+        },
+      },
+    },
+  },
   'ModelConfiguration/test-claude-sonnet-45.json': {
     data: {
       type: 'card',
@@ -1038,7 +1067,7 @@ export const SYSTEM_CARD_FIXTURE_CONTENTS: RealmContents = {
       relationships: {
         defaultModelConfiguration: {
           links: {
-            self: '../ModelConfiguration/test-claude-sonnet-45',
+            self: '../ModelConfiguration/test-claude-sonnet-46',
           },
         },
         'modelConfigurations.0': {
@@ -1048,10 +1077,15 @@ export const SYSTEM_CARD_FIXTURE_CONTENTS: RealmContents = {
         },
         'modelConfigurations.1': {
           links: {
-            self: '../ModelConfiguration/test-claude-sonnet-45',
+            self: '../ModelConfiguration/test-claude-sonnet-46',
           },
         },
         'modelConfigurations.2': {
+          links: {
+            self: '../ModelConfiguration/test-claude-sonnet-45',
+          },
+        },
+        'modelConfigurations.3': {
           links: {
             self: '../ModelConfiguration/test-claude-37-sonnet',
           },

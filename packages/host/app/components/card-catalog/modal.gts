@@ -1,5 +1,5 @@
 import { registerDestructor } from '@ember/destroyable';
-import { fn, hash } from '@ember/helper';
+import { array, fn, hash } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
@@ -13,7 +13,6 @@ import focusTrap from 'ember-focus-trap/modifiers/focus-trap';
 import { TrackedArray, TrackedObject } from 'tracked-built-ins';
 
 import { Button } from '@cardstack/boxel-ui/components';
-import type { PickerOption } from '@cardstack/boxel-ui/components';
 import { eq, not } from '@cardstack/boxel-ui/helpers';
 
 import type { Loader, CardCatalogQuery } from '@cardstack/runtime-common';
@@ -35,8 +34,7 @@ import {
   getSuggestionWithLowestDepth,
 } from '../../utils/text-suggestion';
 
-import SearchBar from '../card-search/search-bar';
-import SearchContent from '../card-search/search-content';
+import SearchPanel from '../card-search/panel';
 
 import ModalContainer from '../modal-container';
 
@@ -73,7 +71,6 @@ type State = {
   dismissModal: boolean;
   errorMessage?: string;
   baseFilter?: Filter;
-  selectedRealms: PickerOption[];
   availableRealmUrls: string[];
   hasPreselectedCard?: boolean;
   consumingRealm?: URL;
@@ -86,71 +83,72 @@ export default class CardCatalogModal extends Component<Signature> {
     {{#if this.state}}
       {{! when we "and" these two conditions, the type checks don't seem to work as you'd expect }}
       {{#if (not this.state.dismissModal)}}
-        <ModalContainer
-          class='card-catalog-modal'
-          @title={{this.state.chooseCardTitle}}
-          @onClose={{this.cancelPick}}
-          @layer='urgent'
-          {{focusTrap
-            isActive=(not this.state.dismissModal)
-            focusTrapOptions=(hash
-              initialFocus='[data-test-search-field]' allowOutsideClick=true
-            )
-          }}
-          {{on 'keydown' this.handleKeydown}}
-          data-test-card-catalog-modal
-        >
-          <:header>
-            <SearchBar
-              class='card-catalog-search'
-              @value={{this.state.searchKey}}
-              @onInput={{this.setSearchKey}}
-              @placeholder='Search for a card or enter card URL'
-              @selectedRealms={{this.state.selectedRealms}}
-              @onRealmChange={{this.onRealmPickerChange}}
-            />
-          </:header>
-          <:content>
-            <SearchContent
-              @searchKey={{this.state.searchKey}}
-              @selectedRealmURLs={{this.selectedRealmURLs}}
-              @isCompact={{false}}
-              @handleSelect={{this.selectFromSearch}}
-              @onSubmit={{this.submitFromSearch}}
-              @selectedCard={{this.state.selectedCard}}
-              @baseFilter={{this.state.baseFilter}}
-              @offerToCreate={{this.offerToCreateArg}}
-            />
-          </:content>
-          <:footer>
-            <div class='footer'>
-              <div>
-                <Button
-                  @kind='secondary-light'
-                  @size='tall'
-                  class='footer-button'
-                  {{on 'click' this.cancelPick}}
-                  data-test-card-catalog-cancel-button
-                >
-                  Cancel
-                </Button>
-                <Button
-                  @kind='primary'
-                  @size='tall'
-                  @disabled={{eq this.state.selectedCard undefined}}
-                  class='footer-button'
-                  {{on
-                    'click'
-                    (fn this.pick this.state.selectedCard undefined)
-                  }}
-                  data-test-card-catalog-go-button
-                >
-                  Go
-                </Button>
-              </div>
-            </div>
-          </:footer>
-        </ModalContainer>
+        {{#each (array this.state) key='id' as |state|}}
+          <SearchPanel
+            @searchKey={{state.searchKey}}
+            @baseFilter={{state.baseFilter}}
+            @availableRealmUrls={{state.availableRealmUrls}}
+            as |Bar Content|
+          >
+            <ModalContainer
+              class='card-catalog-modal'
+              @title={{state.chooseCardTitle}}
+              @onClose={{this.cancelPick}}
+              @layer='urgent'
+              {{focusTrap
+                isActive=(not state.dismissModal)
+                focusTrapOptions=(hash
+                  initialFocus='[data-test-search-field]' allowOutsideClick=true
+                )
+              }}
+              {{on 'keydown' this.handleKeydown}}
+              data-test-card-catalog-modal
+            >
+              <:header>
+                <Bar
+                  class='card-catalog-search'
+                  @value={{state.searchKey}}
+                  @onInput={{this.setSearchKey}}
+                  @placeholder='Search for a card or enter card URL'
+                />
+              </:header>
+              <:content>
+                <Content
+                  @isCompact={{false}}
+                  @handleSelect={{this.selectFromSearch}}
+                  @onSubmit={{this.submitFromSearch}}
+                  @selectedCard={{state.selectedCard}}
+                  @offerToCreate={{this.offerToCreateArg}}
+                />
+              </:content>
+              <:footer>
+                <div class='footer'>
+                  <div>
+                    <Button
+                      @kind='secondary-light'
+                      @size='tall'
+                      class='footer-button'
+                      {{on 'click' this.cancelPick}}
+                      data-test-card-catalog-cancel-button
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      @kind='primary'
+                      @size='tall'
+                      @disabled={{eq state.selectedCard undefined}}
+                      class='footer-button'
+                      {{on 'click' (fn this.pick state.selectedCard undefined)}}
+                      data-test-card-catalog-go-button
+                    >
+                      Go
+                    </Button>
+                  </div>
+                </div>
+              </:footer>
+            </ModalContainer>
+          </SearchPanel>
+        {{/each}}
       {{/if}}
     {{/if}}
     <style scoped>
@@ -204,18 +202,6 @@ export default class CardCatalogModal extends Component<Signature> {
     return this.stateStack[this.stateStack.length - 1];
   }
 
-  private get selectedRealmURLs(): string[] {
-    if (!this.state) {
-      return [];
-    }
-    const selected = this.state.selectedRealms;
-    const hasSelectAll = selected.some((opt) => opt.type === 'select-all');
-    if (hasSelectAll || selected.length === 0) {
-      return this.state.availableRealmUrls;
-    }
-    return selected.map((opt) => opt.id).filter(Boolean);
-  }
-
   private get offerToCreateArg() {
     if (!this.state) {
       return undefined;
@@ -224,13 +210,6 @@ export default class CardCatalogModal extends Component<Signature> {
       return undefined;
     }
     return this.state.request.opts?.offerToCreate;
-  }
-
-  @action private onRealmPickerChange(selected: PickerOption[]) {
-    if (!this.state) {
-      return;
-    }
-    this.state.selectedRealms = selected;
   }
 
   // This is part of our public API for runtime-common to invoke the card chooser
@@ -332,7 +311,6 @@ export default class CardCatalogModal extends Component<Signature> {
         searchKey: '',
         dismissModal: false,
         baseFilter: query.filter,
-        selectedRealms: [],
         availableRealmUrls: this.realmServer.availableRealmURLs,
         selectedCard: preselectedCardUrl,
         hasPreselectedCard: Boolean(preselectedCardUrl),

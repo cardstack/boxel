@@ -10,7 +10,6 @@ import { Resource } from 'ember-modify-based-class-resource';
 
 import isEqual from 'lodash/isEqual';
 import { TrackedArray } from 'tracked-built-ins';
-import { TrackedSet } from 'tracked-built-ins';
 
 import {
   subscribeToRealm,
@@ -49,11 +48,27 @@ export class PrerenderedSearchResource extends Resource<Args> {
   @service declare private loaderService: LoaderService;
   @service declare private realmServer: RealmServerService;
 
-  @tracked private realmsToSearch: string[] = [];
+  private realmsToSearch: string[] = [];
   private subscriptions: { url: string; unsubscribe: () => void }[] = [];
   private _instances = new TrackedArray<PrerenderedCard>();
   @tracked private _meta: QueryResultsMeta = { page: { total: 0 } };
-  @tracked private realmsNeedingRefresh = new TrackedSet<string>();
+  @tracked private _hasSearchRun = false;
+
+  // Plain Set for storage + a tracked signal counter for reactivity.
+  // Using TrackedSet would cause a Glimmer backtracking assertion because
+  // modify() both reads (.size) and writes (.clear()) to the same tracked
+  // storage in successive render cycles.  Adding to the set increments the
+  // signal (triggering reactivity); clearing only empties the plain Set so
+  // no tracked write occurs and no backtracking is possible.
+  private realmsNeedingRefreshSet = new Set<string>();
+  @tracked private realmsNeedingRefreshSignal = 0;
+
+  // Reads the signal to establish a Glimmer tracking dependency, then
+  // returns the actual size of the plain Set.
+  private get realmsNeedingRefreshHasItems(): boolean {
+    this.realmsNeedingRefreshSignal;
+    return this.realmsNeedingRefreshSet.size > 0;
+  }
 
   #isLive = false;
   #previousQuery: Query | undefined;
@@ -92,7 +107,7 @@ export class PrerenderedSearchResource extends Resource<Args> {
       this.#previousFormat = undefined;
       this.#previousCardUrls = undefined;
       this.#previousRealms = undefined;
-      this.realmsNeedingRefresh.clear();
+      this.realmsNeedingRefreshSet.clear();
       this.search.cancelAll();
       for (let subscription of this.subscriptions) {
         subscription.unsubscribe();
@@ -140,7 +155,8 @@ export class PrerenderedSearchResource extends Resource<Args> {
               return;
             }
             // Mark this realm as needing refresh
-            this.realmsNeedingRefresh.add(realm);
+            this.realmsNeedingRefreshSet.add(realm);
+            this.realmsNeedingRefreshSignal++;
             // Trigger re-search
             this.search.perform(this.#previousQuery, this.#previousFormat!);
           }),
@@ -172,7 +188,7 @@ export class PrerenderedSearchResource extends Resource<Args> {
       queryChanged ||
       formatChanged ||
       cardUrlsChanged ||
-      (isLive && this.realmsNeedingRefresh.size > 0);
+      (isLive && this.realmsNeedingRefreshHasItems);
 
     if (!needsRefresh) {
       return;
@@ -191,6 +207,19 @@ export class PrerenderedSearchResource extends Resource<Args> {
 
   get isLoading() {
     return this.search.isRunning;
+  }
+
+  // Whether the search task has completed at least once for the current
+  // query. Unlike `isLoading` (which reads `search.isRunning`), this
+  // property is safe to consume during render alongside `instances`.
+  // Reading `isRunning` in a render pass where the task also toggles it
+  // would trigger Glimmer's backtracking assertion. This flag avoids
+  // that because it is only written inside the async task body (reset
+  // before the await, set in finally after the await), so its mutations
+  // occur across async boundaries — never in the same synchronous
+  // render cycle that reads it.
+  get hasSearchRun() {
+    return this._hasSearchRun;
   }
 
   get isLive() {
@@ -273,6 +302,12 @@ export class PrerenderedSearchResource extends Resource<Args> {
             realmUrl,
             html: r.attributes?.html,
             isError: !!r.attributes?.isError,
+            cardType: r.attributes?.cardType,
+            iconHtml: r.attributes?.iconHtml,
+            // adoptsFrom in prerendered results is always a ResolvedCodeRef
+            usedRenderType: r.meta?.adoptsFrom as
+              | { module: string; name: string }
+              | undefined,
             ...(isFileMeta ? { isFileMeta } : {}),
           },
           this.#cardComponentModifier,
@@ -288,11 +323,11 @@ export class PrerenderedSearchResource extends Resource<Args> {
       try {
         // Determine which realms to fetch
         let realmsToFetch: string[];
-        let isIncrementalRefresh = this.realmsNeedingRefresh.size > 0;
+        let isIncrementalRefresh = this.realmsNeedingRefreshSet.size > 0;
 
         if (isIncrementalRefresh) {
           // Only fetch realms that need refreshing
-          realmsToFetch = Array.from(this.realmsNeedingRefresh);
+          realmsToFetch = Array.from(this.realmsNeedingRefreshSet);
 
           // Remove old results from these realms
           this._instances = new TrackedArray(
@@ -305,6 +340,7 @@ export class PrerenderedSearchResource extends Resource<Args> {
           // Fetch all realms (query or format changed)
           realmsToFetch = this.realmsToSearch;
           this._instances = new TrackedArray();
+          this._hasSearchRun = false;
         }
 
         // Fetch fresh results
@@ -332,17 +368,18 @@ export class PrerenderedSearchResource extends Resource<Args> {
         }
 
         // Clear refresh flags
-        this.realmsNeedingRefresh.clear();
+        this.realmsNeedingRefreshSet.clear();
       } catch (e) {
         console.error(
           `Failed to search prerendered for realms ${Array.from(
-            this.realmsNeedingRefresh.values(),
+            this.realmsNeedingRefreshSet.values(),
           ).join(', ')}:`,
           e,
         );
         this._instances.splice(0, this._instances.length);
         this._meta = { page: { total: 0 } };
       } finally {
+        this._hasSearchRun = true;
         waiter.endAsync(token);
       }
     },
