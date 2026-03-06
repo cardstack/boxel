@@ -74,4 +74,47 @@ module('Unit | file-def-manager canonicalize', function () {
       'contentHashCache stores canonical HTTP URL',
     );
   });
+
+  test('recacheContentHash skips non-Matrix URLs (realm URLs)', async function (assert) {
+    let fakeClient: any = {
+      getAccessToken() {
+        return 'fake-token';
+      },
+      mxcUrlToHttp(mxc: string) {
+        return `http://localhost/_matrix/media/v3/download/localhost/${mxc.split('/').pop()}`;
+      },
+    };
+
+    const dummyApi = {} as any;
+    let manager = new FileDefManagerImpl({
+      owner: null as unknown as any,
+      client: fakeClient,
+      getCardAPI: () => dummyApi,
+      getFileAPI: () => dummyApi,
+    }) as any;
+
+    const content = 'realm-url-test-content';
+    const contentHash = await manager.getContentHash(content);
+
+    // Stub downloadContentAsBytes — should NOT be called for non-Matrix URLs
+    let downloadCalled = false;
+    manager.downloadContentAsBytes = async (_url: string) => {
+      downloadCalled = true;
+      return new TextEncoder().encode(content);
+    };
+
+    const realmUrl = 'http://localhost:4201/experiments/image.png';
+    await manager.recacheContentHash(contentHash, realmUrl);
+
+    assert.false(
+      downloadCalled,
+      'downloadContentAsBytes should not be called for non-Matrix URLs',
+    );
+    assert.strictEqual(
+      manager.contentHashCache.get(contentHash),
+      undefined,
+      'contentHashCache should not contain a realm URL',
+    );
+  });
+
 });

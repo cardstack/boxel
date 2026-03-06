@@ -205,8 +205,17 @@ export default class FileDefManagerImpl
     return url;
   }
 
-  // Validates the content hash against the contents of the URL and then updates the cache
+  private isMatrixMediaUrl(url: string): boolean {
+    return url.startsWith('mxc://') || url.includes('/_matrix/media/');
+  }
+
+  // Validates the content hash against the contents of the URL and then updates the cache.
+  // Only Matrix media URLs (mxc:// or /_matrix/media/) are cached; realm or
+  // other non-Matrix URLs are skipped to prevent cache poisoning.
   async recacheContentHash(contentHash: string, url: string) {
+    if (!this.isMatrixMediaUrl(url)) {
+      return;
+    }
     const canonicalKey = canonicalizeMatrixMediaKey(url) || url;
     if (this.invalidUrlCache.has(canonicalKey)) {
       // Skipping re-caching for this url as it was previously checked and is invalid
