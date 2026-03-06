@@ -1097,14 +1097,18 @@ export class RealmServer {
 
 function detectRealmCollision(realms: Realm[]): void {
   let collisions: string[] = [];
-  let realmsURLs = realms.map(({ url }) => ({
-    url,
-    path: new URL(url).pathname,
-  }));
+  let realmsURLs = realms.map(({ url }) => {
+    let parsed = new URL(url);
+    return {
+      url,
+      // Use origin+pathname so different schemes/hosts never collide (http:// vs cardstack://)
+      fullPath: parsed.origin + parsed.pathname,
+    };
+  });
   for (let realmA of realmsURLs) {
     for (let realmB of realmsURLs) {
-      if (realmA.path.length > realmB.path.length) {
-        if (realmA.path.startsWith(realmB.path)) {
+      if (realmA.fullPath.length > realmB.fullPath.length) {
+        if (realmA.fullPath.startsWith(realmB.fullPath)) {
           collisions.push(`${realmA.url} collides with ${realmB.url}`);
         }
       }
