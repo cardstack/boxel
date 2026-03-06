@@ -978,12 +978,16 @@ module('Integration | operator-mode | links', function (hooks) {
       .exists('Mango is selected');
 
     await click('[data-test-card-catalog-go-button]');
-    await waitUntil(() => !document.querySelector('[data-test-card-catalog-modal]'));
+    await waitUntil(
+      () => !document.querySelector('[data-test-card-catalog-modal]'),
+    );
 
     assert.dom('[data-test-field="friends"]').containsText('Jackie');
     assert.dom('[data-test-field="friends"]').containsText('Mango');
     assert
-      .dom('[data-test-links-to-many="friends"] [data-test-card-format="fitted"]')
+      .dom(
+        '[data-test-links-to-many="friends"] [data-test-card-format="fitted"]',
+      )
       .exists({ count: 2 });
   });
 
@@ -1036,10 +1040,12 @@ module('Integration | operator-mode | links', function (hooks) {
     // Click to select
     await click(`[data-test-card-catalog-item="${testRealmURL}Pet/jackie"]`);
     assert
-      .dom(
-        `[data-test-card-catalog-item="${testRealmURL}Pet/jackie"]`,
-      )
-      .hasAttribute('data-test-card-catalog-item-selected', 'true', 'card is selected');
+      .dom(`[data-test-card-catalog-item="${testRealmURL}Pet/jackie"]`)
+      .hasAttribute(
+        'data-test-card-catalog-item-selected',
+        'true',
+        'card is selected',
+      );
     assert.dom('[data-test-card-catalog-modal]').exists('modal remains open');
 
     // Click again to deselect
@@ -1050,7 +1056,9 @@ module('Integration | operator-mode | links', function (hooks) {
         'data-test-card-catalog-item-selected',
         'card is deselected after second click',
       );
-    assert.dom('[data-test-card-catalog-modal]').exists('modal remains open after deselect');
+    assert
+      .dom('[data-test-card-catalog-modal]')
+      .exists('modal remains open after deselect');
   });
 
   test('in multi-select mode, double-clicking a card toggles selection without submitting the modal', async function (assert) {
@@ -1068,8 +1076,12 @@ module('Integration | operator-mode | links', function (hooks) {
     await waitFor(`[data-test-card-catalog-item="${testRealmURL}Pet/jackie"]`);
 
     // Double-click should toggle selection but NOT submit
-    await doubleClick(`[data-test-card-catalog-item="${testRealmURL}Pet/jackie"]`);
-    assert.dom('[data-test-card-catalog-modal]').exists('modal remains open after double-click');
+    await doubleClick(
+      `[data-test-card-catalog-item="${testRealmURL}Pet/jackie"]`,
+    );
+    assert
+      .dom('[data-test-card-catalog-modal]')
+      .exists('modal remains open after double-click');
     assert
       .dom(`[data-test-card-catalog-item="${testRealmURL}Pet/jackie"]`)
       .hasAttribute(
@@ -1099,7 +1111,9 @@ module('Integration | operator-mode | links', function (hooks) {
       'keydown',
       'Enter',
     );
-    assert.dom('[data-test-card-catalog-modal]').exists('modal remains open after Enter');
+    assert
+      .dom('[data-test-card-catalog-modal]')
+      .exists('modal remains open after Enter');
     assert
       .dom(`[data-test-card-catalog-item="${testRealmURL}Pet/jackie"]`)
       .hasAttribute(
@@ -1120,7 +1134,9 @@ module('Integration | operator-mode | links', function (hooks) {
         'data-test-card-catalog-item-selected',
         'card is deselected after second Enter',
       );
-    assert.dom('[data-test-card-catalog-modal]').exists('modal remains open after deselect');
+    assert
+      .dom('[data-test-card-catalog-modal]')
+      .exists('modal remains open after deselect');
   });
 
   test('in multi-select mode, Go button is disabled when no cards are selected and shows selection count', async function (assert) {
@@ -1200,7 +1216,9 @@ module('Integration | operator-mode | links', function (hooks) {
     await click('[data-test-selection-dropdown-trigger]');
     await waitFor('[data-test-boxel-menu-item-text="Select All"]');
     await click('[data-test-boxel-menu-item-text="Select All"]');
-    let totalItems = document.querySelectorAll('[data-test-card-catalog-item]').length;
+    let totalItems = document.querySelectorAll(
+      '[data-test-card-catalog-item]',
+    ).length;
     assert.true(totalItems > 0, 'there are items to select');
     assert
       .dom('[data-test-card-catalog-item-selected]')
