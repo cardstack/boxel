@@ -38,10 +38,6 @@ export default class NetworkService extends Service {
     return this.virtualNetwork.resolveImport;
   }
 
-  get resolveForFetch() {
-    return this.virtualNetwork.resolveForFetch;
-  }
-
   get authedFetch() {
     return fetcher(this.fetch, [
       authorizationMiddleware(this.realm),
@@ -65,8 +61,16 @@ export default class NetworkService extends Service {
     });
     if (config.resolvedCatalogRealmURL) {
       let catalogURL = withTrailingSlash(config.resolvedCatalogRealmURL);
-      registerCardReferencePrefix('@cardstack/catalog/', catalogURL);
-      virtualNetwork.addRealmPrefix('@cardstack/catalog/', catalogURL);
+      let catalogSchemeURL = 'cardstack://catalog/';
+      registerCardReferencePrefix('@cardstack/catalog/', catalogSchemeURL);
+      virtualNetwork.addURLMapping(
+        new URL(catalogSchemeURL),
+        new URL(catalogURL),
+      );
+      virtualNetwork.addImportMap(
+        '@cardstack/catalog/',
+        (rest) => new URL(rest, catalogSchemeURL).href,
+      );
     }
     return virtualNetwork;
   }

@@ -12,7 +12,8 @@ function isUrlLikeReference(ref: string): boolean {
     ref.startsWith('.') ||
     ref.startsWith('/') ||
     ref.startsWith('http://') ||
-    ref.startsWith('https://')
+    ref.startsWith('https://') ||
+    ref.startsWith('cardstack://')
   );
 }
 

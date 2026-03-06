@@ -103,7 +103,7 @@ export default class LoaderService extends Service {
     middlewareStack.push(authorizationMiddleware(this.realm));
     middlewareStack.push(authErrorEventMiddleware());
     let fetch = fetcher(this.network.fetch, middlewareStack);
-    let loader = new Loader(fetch, this.network.resolveImport, this.network.resolveForFetch);
+    let loader = new Loader(fetch, this.network.resolveImport);
     return loader;
   }
 }

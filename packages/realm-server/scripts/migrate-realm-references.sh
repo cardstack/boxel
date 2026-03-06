@@ -25,21 +25,23 @@
 #     staging      -> https://realms-staging.stack.cards/
 #     production   -> https://app.boxel.ai/
 #
-#   The replacement is auto-derived as @cardstack/<realm>/
+#   The replacement is cardstack://<realm>/
 #
 # Examples:
-#   # Shortcut form
+#   # Shortcut form — convert environment URLs to cardstack:// scheme
 #   ./migrate-realm-references.sh --dry-run -e staging -r catalog /persistent/catalog /persistent/experiments
 #
-#   # Equivalent explicit form
-#   ./migrate-realm-references.sh --dry-run https://realms-staging.stack.cards/catalog/ @cardstack/catalog/ /persistent/catalog /persistent/experiments
+#   # Explicit: convert an environment URL to cardstack://
+#   ./migrate-realm-references.sh https://realms-staging.stack.cards/catalog/ cardstack://catalog/ /persistent/catalog
 #
-#   # More shortcut examples
-#   ./migrate-realm-references.sh -e production -r base /persistent/base /persistent/catalog /persistent/experiments
-#   ./migrate-realm-references.sh -e development -r skills ./realms/
+#   # Convert legacy @cardstack/ prefix to cardstack:// scheme
+#   ./migrate-realm-references.sh @cardstack/catalog/ cardstack://catalog/ ./realms/
 #
-#   # Reverse (prefix -> URL, explicit form only)
-#   ./migrate-realm-references.sh @cardstack/base/ https://cardstack.com/base/ ./realms/
+#   # Convert https://cardstack.com/base/ to cardstack:// scheme
+#   ./migrate-realm-references.sh https://cardstack.com/base/ cardstack://base/ ./realms/
+#
+#   # Reverse (cardstack:// -> URL, explicit form only)
+#   ./migrate-realm-references.sh cardstack://base/ https://cardstack.com/base/ ./realms/
 #
 # To roll back:
 #   patch -R -p0 < <name>.patch
@@ -100,7 +102,7 @@ if [ -n "$ENV" ] || [ -n "$REALM" ]; then
   esac
 
   FIND_STR="${BASE_URL}${REALM}/"
-  REPLACEMENT="@cardstack/${REALM}/"
+  REPLACEMENT="cardstack://${REALM}/"
 
   echo "Resolved: $FIND_STR -> $REPLACEMENT"
 
@@ -125,6 +127,16 @@ else
   echo "    development  -> http://localhost:4201/"
   echo "    staging      -> https://realms-staging.stack.cards/"
   echo "    production   -> https://app.boxel.ai/"
+  echo ""
+  echo "Examples:"
+  echo "  # Environment URLs to cardstack:// scheme"
+  echo "  $0 -e staging -r catalog /persistent/catalog"
+  echo ""
+  echo "  # Legacy @cardstack/ prefix to cardstack:// scheme"
+  echo "  $0 @cardstack/catalog/ cardstack://catalog/ ./realms/"
+  echo ""
+  echo "  # https://cardstack.com/base/ to cardstack:// scheme"
+  echo "  $0 https://cardstack.com/base/ cardstack://base/ ./realms/"
   exit 1
 fi
 
@@ -137,9 +149,8 @@ fi
 FIND_STR="${FIND_STR%/}/"
 REPLACEMENT="${REPLACEMENT%/}/"
 
-# If <find> is a URL, extract the path portion for matching path-only references.
-# e.g., https://realms-staging.stack.cards/catalog/ -> /catalog/
-# For non-URL find strings (like @cardstack/base/), skip path-only matching.
+# Determine the type of find string for matching strategy.
+# URLs get path-only matching; other strings (like @cardstack/) get literal-only.
 IS_URL=false
 REALM_PATH=""
 if echo "$FIND_STR" | grep -qE '^https?://'; then
@@ -149,7 +160,7 @@ fi
 
 # Derive patch filename from the find/replace strings
 # e.g. @cardstack/catalog/ -> catalog, https://cardstack.com/base/ -> base
-PATCH_NAME=$(echo "$FIND_STR $REPLACEMENT" | sed -E 's|https?://[^/]*/||g; s|@cardstack/||g; s|/||g; s| |-to-|')
+PATCH_NAME=$(echo "$FIND_STR $REPLACEMENT" | sed -E 's|https?://[^/]*/||g; s|cardstack://||g; s|@cardstack/||g; s|/||g; s| |-to-|')
 PATCH_FILE="${PATCH_NAME}.patch"
 
 total_files=0

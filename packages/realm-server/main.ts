@@ -204,10 +204,16 @@ for (let i = 0; i < fromUrls.length; i++) {
     virtualNetwork.addURLMapping(fromURL, to);
     urlMappings.push([fromURL, to]);
   } else {
-    // Non-URL prefix like @cardstack/catalog/
-    registerCardReferencePrefix(from, to.href);
-    virtualNetwork.addRealmPrefix(from, to.href);
-    urlMappings.push([to, to]); // use toUrl for both in hrefs
+    // Non-URL prefix like @cardstack/catalog/ → cardstack://catalog/
+    let realmName = from.replace(/^@cardstack\//, '').replace(/\/$/, '');
+    let schemeURL = new URL(`cardstack://${realmName}/`);
+    registerCardReferencePrefix(from, schemeURL.href);
+    virtualNetwork.addURLMapping(schemeURL, to);
+    virtualNetwork.addImportMap(
+      from,
+      (rest) => new URL(rest, schemeURL).href,
+    );
+    urlMappings.push([schemeURL, to]);
   }
 }
 let hrefs = urlMappings.map(([from, to]) => [from.href, to.href]);

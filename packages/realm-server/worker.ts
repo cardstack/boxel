@@ -106,8 +106,15 @@ for (let i = 0; i < fromUrls.length; i++) {
   if (isUrlLike(from)) {
     virtualNetwork.addURLMapping(new URL(from), to);
   } else {
-    registerCardReferencePrefix(from, to.href);
-    virtualNetwork.addRealmPrefix(from, to.href);
+    // Non-URL prefix like @cardstack/catalog/ → cardstack://catalog/
+    let realmName = from.replace(/^@cardstack\//, '').replace(/\/$/, '');
+    let schemeURL = new URL(`cardstack://${realmName}/`);
+    registerCardReferencePrefix(from, schemeURL.href);
+    virtualNetwork.addURLMapping(schemeURL, to);
+    virtualNetwork.addImportMap(
+      from,
+      (rest) => new URL(rest, schemeURL).href,
+    );
   }
 }
 let autoMigrate = migrateDB || undefined;
