@@ -12,10 +12,14 @@ import {
 import { BrowserManager } from './browser-manager';
 import { PagePool } from './page-pool';
 import { RenderRunner } from './render-runner';
+import { isEnvironmentMode, serviceURL } from '../lib/dev-service-registry';
 import { toAffinityKey } from './affinity';
 
 const log = logger('prerenderer');
-const boxelHostURL = process.env.BOXEL_HOST_URL ?? 'http://localhost:4200';
+const defaultHostURL = isEnvironmentMode()
+  ? serviceURL('host')
+  : 'http://localhost:4200';
+const boxelHostURL = process.env.BOXEL_HOST_URL ?? defaultHostURL;
 const DEFAULT_AFFINITY_IDLE_EVICT_MS = 12 * 60 * 60 * 1000;
 
 type PoolMeta = {
@@ -82,7 +86,7 @@ export class Prerenderer {
     this.#affinityIdleEvictMs = this.#resolveAffinityIdleEvictMs();
     this.#startCleanupLoop();
     void this.#pagePool.warmStandbys().catch((e) => {
-      log.error('Failed to warm standby pages during prerenderer startup:', e);
+      log.warn('Failed to warm standby pages during prerenderer startup:', e);
     });
   }
 

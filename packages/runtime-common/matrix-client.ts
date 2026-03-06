@@ -469,7 +469,12 @@ export async function waitForMatrixMessage(
 }
 
 export function userIdFromUsername(username: string, matrixURL: string) {
-  let host = new URL(matrixURL).hostname.split('.').slice(-2).join('.');
+  let hostname = new URL(matrixURL).hostname;
+  // For *.localhost subdomains (environment mode), the Matrix server_name is
+  // always "localhost" — the subdomains are just Traefik routing labels.
+  let host = hostname.endsWith('.localhost')
+    ? 'localhost'
+    : hostname.split('.').slice(-2).join('.');
   return `@${username}:${host}`;
 }
 
