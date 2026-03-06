@@ -931,7 +931,7 @@ export default class RealmServerService extends Service {
         type: 'claimed-domain',
         attributes: {
           source_realm_url: sourceRealmURL,
-          hostname: hostname,
+          hostname,
         },
       },
     };

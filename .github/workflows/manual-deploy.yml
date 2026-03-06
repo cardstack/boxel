@@ -132,14 +132,6 @@ jobs:
     with:
       environment: ${{ inputs.environment }}
 
-  deploy-motion:
-    name: Deploy boxel-motion
-    if: inputs.environment == 'staging'
-    uses: ./.github/workflows/deploy-motion.yml
-    secrets: inherit
-    with:
-      environment: staging
-
   deploy-ui:
     name: Deploy boxel-ui
     if: inputs.environment == 'staging'

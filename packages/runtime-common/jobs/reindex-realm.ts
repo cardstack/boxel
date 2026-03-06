@@ -1,11 +1,9 @@
-import { FROM_SCRATCH_JOB_TIMEOUT_SEC } from '../tasks/indexer';
-import type {
-  DBAdapter,
-  FromScratchArgs,
-  FromScratchResult,
-  QueuePublisher,
-} from '../';
+import type { DBAdapter, QueuePublisher } from '../';
 import { param, query } from '../';
+import {
+  FROM_SCRATCH_JOB_TIMEOUT_SEC,
+  type FromScratchResult,
+} from '../tasks/indexer';
 
 export async function enqueueReindexRealmJob(
   realmUrl: string,
@@ -14,7 +12,7 @@ export async function enqueueReindexRealmJob(
   dbAdapter: DBAdapter,
   priority: number,
 ) {
-  let args: FromScratchArgs = {
+  let args = {
     realmURL: realmUrl,
     realmUsername,
   };
@@ -23,7 +21,7 @@ export async function enqueueReindexRealmJob(
     param(realmUrl),
   ]);
   let job = await queue.publish<FromScratchResult>({
-    jobType: `from-scratch-index`,
+    jobType: 'from-scratch-index',
     concurrencyGroup: `indexing:${realmUrl}`,
     timeout: FROM_SCRATCH_JOB_TIMEOUT_SEC,
     priority,

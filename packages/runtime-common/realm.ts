@@ -167,6 +167,7 @@ import {
   type PublishabilityWarningType,
   type ResourceIndexEntry,
 } from './publishability';
+import { cancelRunningJobsInConcurrencyGroup } from './job-utils';
 
 export const REALM_ROOM_RETENTION_POLICY_MAX_LIFETIME = 60 * 60 * 1000;
 
@@ -665,6 +666,11 @@ export class Realm {
         SupportedMimeType.JSONAPI,
         this.handleAtomicOperations.bind(this),
       )
+      .post(
+        '/_cancel-indexing-job',
+        SupportedMimeType.JSON,
+        this.cancelIndexingJob.bind(this),
+      )
       .post('(/|/.+/)', SupportedMimeType.CardJson, this.createCard.bind(this))
       .get('/.*', SupportedMimeType.CardJson, this.getCard.bind(this))
       .patch(
@@ -758,6 +764,24 @@ export class Realm {
 
   async indexing() {
     return this.#realmIndexUpdater.indexing();
+  }
+
+  private async cancelIndexingJob(
+    _request: Request,
+    requestContext: RequestContext,
+  ) {
+    await cancelRunningJobsInConcurrencyGroup(
+      this.#dbAdapter,
+      `indexing:${this.url}`,
+    );
+
+    return createResponse({
+      body: null,
+      init: {
+        status: 204,
+      },
+      requestContext,
+    });
   }
 
   async start() {

@@ -981,6 +981,36 @@ export default class RealmService extends Service {
     return await resource.unpublish(publishedRealmURL);
   }
 
+  async cancelIndexingJob(realmURL: string): Promise<void> {
+    let normalizedRealmURL = ensureTrailingSlash(realmURL);
+    let resource = this.getOrCreateRealmResource(normalizedRealmURL);
+    await resource.login();
+
+    let headers = new Headers({
+      Accept: SupportedMimeType.JSON,
+    });
+    if (resource.token) {
+      headers.set('Authorization', `Bearer ${resource.token}`);
+    }
+
+    let response = await this.network.fetch(
+      `${normalizedRealmURL}_cancel-indexing-job`,
+      {
+        method: 'POST',
+        headers,
+      },
+    );
+
+    if (response.status === 204) {
+      return;
+    }
+
+    let errorText = await response.text();
+    throw new Error(
+      `Cancel indexing job failed: ${response.status} - ${errorText}`,
+    );
+  }
+
   isUnpublishingAnyRealms = (realmURL: string): boolean => {
     let resource = this.getOrCreateRealmResource(realmURL);
     return resource.isUnpublishingAnyRealms();

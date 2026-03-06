@@ -862,6 +862,9 @@ export class MockClient implements ExtendedClient {
     _content: string,
     _opts?: { type?: string; name?: string },
   ): Promise<any> {
+    if (this.sdkOpts.uploadContentInterceptor) {
+      await this.sdkOpts.uploadContentInterceptor();
+    }
     let contentUri = `mxc://mock-server/${Math.random()}`;
     this.serverState.addContent(
       this.mxcUrlToHttp(contentUri),
