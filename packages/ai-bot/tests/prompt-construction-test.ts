@@ -5150,6 +5150,280 @@ new
       'cache_control should be set to ephemeral',
     );
   });
+
+  test('excludes assistant messages with empty body and no tool calls', async () => {
+    const history: DiscreteMatrixEvent[] = [
+      {
+        type: 'm.room.message',
+        event_id: '1',
+        origin_server_ts: 1,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          body: 'Hello',
+          isStreamingFinished: true,
+          data: {
+            context: {
+              submode: 'interact',
+            },
+          },
+        },
+        sender: '@user:localhost',
+        room_id: 'room1',
+        unsigned: {
+          age: 1000,
+          transaction_id: '1',
+        },
+        status: EventStatus.SENT,
+      },
+      {
+        type: 'm.room.message',
+        event_id: '2',
+        origin_server_ts: 2,
+        content: {
+          body: '',
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          isStreamingFinished: true,
+        },
+        sender: '@aibot:localhost',
+        room_id: 'room1',
+        unsigned: {
+          age: 1000,
+          transaction_id: '2',
+        },
+        status: EventStatus.SENT,
+      },
+      {
+        type: 'm.room.message',
+        event_id: '3',
+        origin_server_ts: 3,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          body: 'Can you help me?',
+          isStreamingFinished: true,
+          data: {
+            context: {
+              submode: 'interact',
+            },
+          },
+        },
+        sender: '@user:localhost',
+        room_id: 'room1',
+        unsigned: {
+          age: 1000,
+          transaction_id: '3',
+        },
+        status: EventStatus.SENT,
+      },
+    ];
+
+    const result = await buildPromptForModel(
+      history,
+      '@aibot:localhost',
+      undefined,
+      undefined,
+      [],
+      fakeMatrixClient,
+    );
+
+    const assistantMessages = result.filter(
+      (message) => message.role === 'assistant',
+    );
+    assert.equal(
+      assistantMessages.length,
+      0,
+      'Empty assistant message should not be included',
+    );
+
+    const userMessages = result.filter((message) => message.role === 'user');
+    assert.equal(
+      userMessages.length,
+      2,
+      'Both user messages should be included',
+    );
+  });
+
+  test('keeps assistant messages with empty body when they have tool calls', async () => {
+    const history: DiscreteMatrixEvent[] = [
+      {
+        type: 'm.room.message',
+        event_id: '1',
+        origin_server_ts: 1,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          body: 'Update my card',
+          isStreamingFinished: true,
+          data: {
+            context: {
+              submode: 'interact',
+            },
+          },
+        },
+        sender: '@user:localhost',
+        room_id: 'room1',
+        unsigned: {
+          age: 1000,
+          transaction_id: '1',
+        },
+        status: EventStatus.SENT,
+      },
+      {
+        type: 'm.room.message',
+        event_id: '2',
+        origin_server_ts: 2,
+        content: {
+          body: '',
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          isStreamingFinished: true,
+          [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+            {
+              id: 'call_1',
+              name: 'patchCardInstance',
+              arguments: JSON.stringify({
+                card_id: 'http://localhost/card/1',
+                attributes: { title: 'Updated' },
+              }),
+            },
+          ],
+        },
+        sender: '@aibot:localhost',
+        room_id: 'room1',
+        unsigned: {
+          age: 1000,
+          transaction_id: '2',
+        },
+        status: EventStatus.SENT,
+      },
+      {
+        type: APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+        event_id: '3',
+        origin_server_ts: 3,
+        content: {
+          msgtype: APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+          body: 'Command result',
+          commandRequestId: 'call_1',
+          'm.relates_to': {
+            rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+            event_id: '2',
+            key: 'applied',
+          },
+        },
+        sender: '@user:localhost',
+        room_id: 'room1',
+        unsigned: {
+          age: 1000,
+          transaction_id: '3',
+        },
+        status: EventStatus.SENT,
+      },
+    ];
+
+    const result = await buildPromptForModel(
+      history,
+      '@aibot:localhost',
+      undefined,
+      undefined,
+      [],
+      fakeMatrixClient,
+    );
+
+    const assistantMessages = result.filter(
+      (message) => message.role === 'assistant',
+    );
+    assert.equal(
+      assistantMessages.length,
+      1,
+      'Assistant message with tool calls should be kept even with empty body',
+    );
+    assert.ok(
+      assistantMessages[0].tool_calls?.length,
+      'Assistant message should have tool calls',
+    );
+
+    const toolMessages = result.filter((message) => message.role === 'tool');
+    assert.equal(
+      toolMessages.length,
+      1,
+      'Tool result message should be present alongside the assistant tool call',
+    );
+    assert.equal(
+      toolMessages[0].tool_call_id,
+      'call_1',
+      'Tool result should reference the correct tool call id',
+    );
+  });
+
+  test('excludes user messages with empty body', async () => {
+    const history: DiscreteMatrixEvent[] = [
+      {
+        type: 'm.room.message',
+        event_id: '1',
+        origin_server_ts: 1,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          body: '',
+          isStreamingFinished: true,
+          data: {
+            context: {
+              submode: 'interact',
+            },
+          },
+        },
+        sender: '@user:localhost',
+        room_id: 'room1',
+        unsigned: {
+          age: 1000,
+          transaction_id: '1',
+        },
+        status: EventStatus.SENT,
+      },
+      {
+        type: 'm.room.message',
+        event_id: '2',
+        origin_server_ts: 2,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          body: 'Hello',
+          isStreamingFinished: true,
+          data: {
+            context: {
+              submode: 'interact',
+            },
+          },
+        },
+        sender: '@user:localhost',
+        room_id: 'room1',
+        unsigned: {
+          age: 1000,
+          transaction_id: '2',
+        },
+        status: EventStatus.SENT,
+      },
+    ];
+
+    const result = await buildPromptForModel(
+      history,
+      '@aibot:localhost',
+      undefined,
+      undefined,
+      [],
+      fakeMatrixClient,
+    );
+
+    const userMessages = result.filter((message) => message.role === 'user');
+    assert.equal(
+      userMessages.length,
+      1,
+      'Only the non-empty user message should be included',
+    );
+    assert.equal(userMessages[0].content, 'Hello');
+  });
 });
 
 module('set model in prompt', (hooks) => {
