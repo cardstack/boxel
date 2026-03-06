@@ -6,20 +6,19 @@ import { dirSync, type DirResult } from 'tmp';
 import { copySync, ensureDirSync } from 'fs-extra';
 import type { Server } from 'http';
 import jwt from 'jsonwebtoken';
-import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import type { RealmServerTokenClaim } from '../../utils/jwt';
 import {
   closeServer,
   createVirtualNetwork,
   matrixURL,
   realmSecretSeed,
-  realmServerTestMatrix,
   runTestRealmServer,
   setupDB,
   testRealmURL,
 } from '../helpers';
 import { createRealmServerSession } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
+import { MockMatrixClient } from '../helpers/mock-matrix-client';
 
 module(`server-endpoints/${basename(__filename)}`, function () {
   module('Realm server authentication', function (hooks) {
@@ -59,10 +58,8 @@ module(`server-endpoints/${basename(__filename)}`, function () {
     });
 
     test('authenticates user', async function (assert) {
-      let matrixClient = new MatrixClient({
-        matrixURL: realmServerTestMatrix.url,
-        // it's a little awkward that we are hijacking a realm user to pretend to
-        // act like a normal user, but that's what's happening here
+      let matrixClient = new MockMatrixClient({
+        matrixURL,
         username: 'test_realm',
         seed: realmSecretSeed,
       });

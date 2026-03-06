@@ -4,7 +4,6 @@ import sinon from 'sinon';
 import { basename } from 'path';
 
 import type { PgAdapter } from '@cardstack/postgres';
-import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import { fetchSessionRoom } from '@cardstack/runtime-common/db-queries/session-room-queries';
 
 import {
@@ -12,6 +11,7 @@ import {
   realmSecretSeed,
   testRealmHref,
 } from './helpers';
+import { MockMatrixClient } from './helpers/mock-matrix-client';
 import { createJWT as createRealmServerJWT } from '../utils/jwt';
 
 module(basename(__filename), function () {
@@ -39,13 +39,13 @@ module(basename(__filename), function () {
     test('POST /_realm-auth creates session rooms when missing', async function (assert) {
       let expectedRoomId = '!new-session-room:localhost';
       let createDMStub = sinon
-        .stub(MatrixClient.prototype, 'createDM')
+        .stub(MockMatrixClient.prototype, 'createDM')
         .resolves(expectedRoomId);
-      sinon.stub(MatrixClient.prototype, 'sendEvent').resolves();
-      sinon.stub(MatrixClient.prototype, 'getJoinedRooms').resolves({
+      sinon.stub(MockMatrixClient.prototype, 'sendEvent').resolves('$event');
+      sinon.stub(MockMatrixClient.prototype, 'getJoinedRooms').resolves({
         joined_rooms: [],
       });
-      sinon.stub(MatrixClient.prototype, 'joinRoom').resolves();
+      sinon.stub(MockMatrixClient.prototype, 'joinRoom').resolves();
 
       let existingRoom = await fetchSessionRoom(dbAdapter, matrixUserId);
       assert.strictEqual(
