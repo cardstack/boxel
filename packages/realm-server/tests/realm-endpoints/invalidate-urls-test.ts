@@ -160,6 +160,11 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
     });
 
     test('returns 400 and does not process when any url is out of realm', async function (assert) {
+      let initialVersionRows = (await dbAdapter.execute(
+        `SELECT current_version FROM realm_versions WHERE realm_url = $1`,
+        { bind: [testRealm.url] },
+      )) as { current_version: number }[];
+
       let response = await request
         .post('/_invalidate')
         .set('Accept', SupportedMimeType.JSONAPI)
@@ -188,8 +193,8 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
       )) as { current_version: number }[];
       assert.strictEqual(
         currentVersionRows[0]?.current_version,
-        1,
-        'no new index version was committed on failed validation',
+        initialVersionRows[0]?.current_version,
+        'failed validation does not commit a new index version',
       );
     });
 

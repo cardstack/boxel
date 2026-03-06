@@ -1635,6 +1635,55 @@ module(basename(__filename), function () {
       }
     });
 
+    test('realm.indexing waits for all queued indexing operations', async function (assert) {
+      let { blocker, release } = await startIndexingGroupBlocker();
+      try {
+        let incremental = realm.realmIndexUpdater.update(
+          [new URL(`${testRealm}mango`)],
+          { clientRequestId: 'indexing-race-incremental' },
+        );
+        let indexingDuringIncremental = realm.indexing();
+        let full = realm.realmIndexUpdater.fullIndex();
+        let indexingAfterFull = realm.indexing();
+        let indexingDuringIncrementalResolved = false;
+        let indexingAfterFullResolved = false;
+        indexingDuringIncremental?.then(() => {
+          indexingDuringIncrementalResolved = true;
+        });
+        indexingAfterFull?.then(() => {
+          indexingAfterFullResolved = true;
+        });
+
+        assert.ok(
+          indexingDuringIncremental,
+          'indexing promise is exposed for the first queued operation',
+        );
+        assert.ok(
+          indexingAfterFull,
+          'indexing promise is exposed for the later queued operation',
+        );
+
+        release.fulfill();
+        await Promise.all([
+          blocker.done,
+          incremental,
+          full,
+          indexingDuringIncremental,
+          indexingAfterFull,
+        ]);
+        assert.true(
+          indexingDuringIncrementalResolved,
+          'indexing promise captured before a later queued operation still resolves',
+        );
+        assert.true(
+          indexingAfterFullResolved,
+          'indexing promise captured after the later queued operation resolves too',
+        );
+      } finally {
+        release.fulfill();
+      }
+    });
+
     test('burst full-index requests dedupe to one pending canonical from-scratch job', async function (assert) {
       let { blocker, release } = await startIndexingGroupBlocker();
       try {

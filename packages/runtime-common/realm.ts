@@ -845,9 +845,15 @@ export class Realm {
     }
 
     let rawURLs = json.data?.attributes?.urls;
-    if (!Array.isArray(rawURLs)) {
+    if (rawURLs === undefined) {
       return badRequest({
         message: `The request body was missing urls`,
+        requestContext,
+      });
+    }
+    if (!Array.isArray(rawURLs)) {
+      return badRequest({
+        message: `urls must be an array of URL strings`,
         requestContext,
       });
     }

@@ -693,7 +693,9 @@ export class Batch {
     return typesByUrl;
   }
 
-  private async urlsMatchingSeedFromCurrentBatch(seedURL: URL): Promise<string[]> {
+  private async urlsMatchingSeedFromCurrentBatch(
+    seedURL: URL,
+  ): Promise<string[]> {
     let rows = (await this.#query([
       `SELECT DISTINCT url FROM boxel_index_working WHERE`,
       ...every([
@@ -709,7 +711,9 @@ export class Batch {
     return rows.map(({ url }) => url);
   }
 
-  private async urlsMatchingSeedFromProduction(seedURL: URL): Promise<string[]> {
+  private async urlsMatchingSeedFromProduction(
+    seedURL: URL,
+  ): Promise<string[]> {
     let rows = (await this.#query([
       `SELECT DISTINCT url FROM boxel_index WHERE`,
       ...every([
@@ -725,9 +729,8 @@ export class Batch {
   }
 
   private async urlsMatchingSeed(seedURL: URL): Promise<string[]> {
-    let currentBatchMatches = await this.urlsMatchingSeedFromCurrentBatch(
-      seedURL,
-    );
+    let currentBatchMatches =
+      await this.urlsMatchingSeedFromCurrentBatch(seedURL);
     if (currentBatchMatches.length > 0) {
       return currentBatchMatches;
     }
