@@ -77,7 +77,7 @@ const runCommand: Task<RunCommandArgs, RunCommandResponse> = ({
     }
 
     let result = await prerenderer.runCommand({
-      realm: normalizedRealmURL,
+      userId: runAsUserId,
       auth,
       command: normalizedCommand,
       commandInput: commandInput ?? undefined,

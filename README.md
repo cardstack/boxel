@@ -22,10 +22,6 @@ For a quickstart, see [here](./QUICKSTART.md)
 
 `packages/boxel-ui/test-app` is the test suite and component explorer for boxel-ui, deployed at [boxel-ui.stack.cards](https://boxel-ui.stack.cards)
 
-`packages/boxel-motion/addon` is the animation primitives ember addon.
-
-`packages/boxel-motion/test-app` is the demo app for boxel-motion, deployed at [boxel-motion.stack.cards](https://boxel-motion.stack.cards)
-
 `packages/matrix` is the docker container for running the matrix server: synapse, as well as tests that involve running a matrix client.
 
 `packages/ai-bot` is a node app that runs a matrix client session and an OpenAI session. Matrix message queries sent to the AI bot are packaged with an OpenAI system prompt and operator mode context and sent to OpenAI. The ai bot enriches the OpenAI response and posts the response back into the matrix room.
@@ -61,8 +57,7 @@ Make sure that you have created a matrix user for the base and experiments realm
 In order to run the ember-cli hosted app:
 
 1. `pnpm build` in the boxel-ui/addon workspace to build the boxel-ui addon.
-2. `pnpm build` in the boxel-motion/addon workspace to build the boxel-motion addon.
-3. `pnpm start` in the host/ workspace to serve the ember app.
+2. `pnpm start` in the host/ workspace to serve the ember app.
 4. `pnpm start:all` in the realm-server/ to serve the base and experiments realms -- this will also allow you to switch between the app and the tests without having to restart servers). This expects the Ember application to be running at `http://localhost:4200`, if you’re running it elsewhere you can specify it with `HOST_URL=http://localhost:5200 pnpm start:all`.
 
 The app is available at http://localhost:4200. You will be prompted to register an account. To make it easier, you can execute `pnpm register-test-user` in `packages/matrix/`. Now you can sign in with the test user using the credentials `username: user`, `password: password`.
@@ -291,14 +286,6 @@ There is a ember-freestyle component explorer available to assist with developme
 2. `pnpm start`
 3. Visit http://localhost:4220/ in your browser
 
-## Boxel Motion Demo App
-
-In order to run the boxel-motion demo app:
-
-1. `cd packages/boxel-motion/test-app`
-2. `pnpm start`
-3. Visit http://localhost:4200 in your browser
-
 ## Payment Setup
 
 There is some pre-setup needed to enable free plan on development account:
@@ -420,11 +407,6 @@ To run the `packages/realm-server/` workspace tests start:
 
 1. `cd packages/boxel-ui/test-app`
 2. `pnpm test` (or `pnpm start` and visit http://localhost:4220/tests to run tests in the browser)
-
-### Boxel Motion
-
-1. `cd packages/boxel-motion-test-app`
-2. `pnpm test` (or `pnpm start` and visit http://localhost:4200/tests to run tests in the browser)
 
 ### Matrix tests
 

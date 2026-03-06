@@ -41,6 +41,27 @@ module(basename(__filename), function (hooks) {
       }
     }
 
+    async function expectRunCommandValidationFailure(
+      assert: Assert,
+      attrs: any,
+      message: RegExp,
+    ) {
+      let originalFetch = globalThis.fetch;
+      let fetchCalled = false;
+      (globalThis as any).fetch = () => {
+        fetchCalled = true;
+        throw new Error('fetch should not be called when validation fails');
+      };
+
+      try {
+        let prerenderer = createRemotePrerenderer('http://127.0.0.1:0');
+        await assert.rejects(prerenderer.runCommand(attrs as any), message);
+        assert.false(fetchCalled, 'does not hit network on validation failure');
+      } finally {
+        (globalThis as any).fetch = originalFetch;
+      }
+    }
+
     test('sends JSON:API headers and attributes', async function (assert) {
       let receivedHeaders: any;
       let receivedBody: any;
@@ -65,6 +86,8 @@ module(basename(__filename), function (hooks) {
         let prerenderer = createRemotePrerenderer(url);
 
         await prerenderer.prerenderModule({
+          affinityType: 'realm',
+          affinityValue: 'realm-1',
           realm: 'realm-1',
           url: 'https://example.com/module',
           auth: '{"token":"x"}',
@@ -83,6 +106,8 @@ module(basename(__filename), function (hooks) {
         assert.deepEqual(
           receivedBody?.data?.attributes,
           {
+            affinityType: 'realm',
+            affinityValue: 'realm-1',
             realm: 'realm-1',
             url: 'https://example.com/module',
             auth: '{"token":"x"}',
@@ -99,7 +124,7 @@ module(basename(__filename), function (hooks) {
       await expectValidationFailure(
         assert,
         { realm: '', url: 'https://example.com/module', auth: '{}' },
-        /Missing prerender prerender-module-request attributes: realm/,
+        /Missing prerender prerender-module-request attributes: affinityValue, realm/,
       );
     });
 
@@ -124,6 +149,67 @@ module(basename(__filename), function (hooks) {
         assert,
         { realm: 'realm', url: 'https://example.com/module' },
         /Missing prerender prerender-module-request attributes: auth/,
+      );
+    });
+
+    test('sends run-command payload with user affinity derived from userId', async function (assert) {
+      let receivedBody: any;
+      let server = createServer((req, res) => {
+        let body: Buffer[] = [];
+        req.on('data', (chunk) => body.push(chunk));
+        req.on('end', () => {
+          receivedBody = JSON.parse(Buffer.concat(body).toString('utf-8'));
+          res.statusCode = 201;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(
+            JSON.stringify({
+              data: {
+                attributes: {
+                  status: 'ready',
+                  cardResultString: '{"ok":true}',
+                },
+              },
+            }),
+          );
+        });
+      }).listen(0);
+
+      try {
+        let url = `http://127.0.0.1:${(server.address() as any).port}`;
+        let prerenderer = createRemotePrerenderer(url);
+
+        await prerenderer.runCommand({
+          userId: '@alice:localhost',
+          auth: '{}',
+          command: 'https://example.com/commands/test/default',
+          commandInput: { value: 1 },
+        });
+
+        assert.deepEqual(
+          receivedBody?.data?.attributes,
+          {
+            affinityType: 'user',
+            affinityValue: '@alice:localhost',
+            auth: '{}',
+            command: 'https://example.com/commands/test/default',
+            commandInput: { value: 1 },
+          },
+          'run-command payload uses user affinity fields',
+        );
+      } finally {
+        await new Promise<void>((resolve) => server.close(() => resolve()));
+      }
+    });
+
+    test('rejects empty userId before sending run-command', async function (assert) {
+      await expectRunCommandValidationFailure(
+        assert,
+        {
+          userId: '',
+          auth: '{}',
+          command: 'https://example.com/commands/test/default',
+        },
+        /Missing prerender run-command-request attributes: affinityValue/,
       );
     });
   });
@@ -154,6 +240,8 @@ module(basename(__filename), function (hooks) {
       let prerenderer = createRemotePrerenderer(url);
 
       let result = await prerenderer.prerenderCard({
+        affinityType: 'realm',
+        affinityValue: 'realm',
         realm: 'realm',
         url: 'https://example.com/card',
         auth: '{}',
@@ -176,6 +264,8 @@ module(basename(__filename), function (hooks) {
 
       try {
         await prerenderer.prerenderCard({
+          affinityType: 'realm',
+          affinityValue: 'realm',
           realm: 'realm',
           url: 'https://example.com/card',
           auth: '{}',
@@ -221,6 +311,8 @@ module(basename(__filename), function (hooks) {
         let prerenderer = createRemotePrerenderer(url);
 
         let result = await prerenderer.prerenderCard({
+          affinityType: 'realm',
+          affinityValue: 'realm',
           realm: 'realm',
           url: 'https://example.com/card',
           auth: '{}',
@@ -255,6 +347,8 @@ module(basename(__filename), function () {
 
         await assert.rejects(
           prerenderer.prerenderCard({
+            affinityType: 'realm',
+            affinityValue: 'realm',
             realm: 'realm',
             url: 'https://example.com/card',
             auth: '{}',
