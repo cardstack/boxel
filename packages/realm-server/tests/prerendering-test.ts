@@ -205,7 +205,10 @@ module(basename(__filename), function () {
     });
 
     hooks.afterEach(async () => {
-      await prerenderer.disposeRealm(realmURL);
+      await prerenderer.disposeAffinity({
+        affinityType: 'realm',
+        affinityValue: realmURL,
+      });
     });
 
     setupPermissionedRealmsCached(hooks, {
@@ -255,6 +258,8 @@ module(basename(__filename), function () {
       const cardURL = `${realmURL}1`;
 
       let first = await prerenderer.prerenderCard({
+        affinityType: 'realm',
+        affinityValue: realmURL,
         realm: realmURL,
         url: cardURL,
         auth: auth(),
@@ -293,6 +298,8 @@ module(basename(__filename), function () {
       realm.__testOnlyClearCaches();
 
       let second = await prerenderer.prerenderCard({
+        affinityType: 'realm',
+        affinityValue: realmURL,
         realm: realmURL,
         url: cardURL,
         auth: auth(),
@@ -316,6 +323,8 @@ module(basename(__filename), function () {
       const moduleURL = `${realmURL}person.gts`;
 
       let first = await prerenderer.prerenderModule({
+        affinityType: 'realm',
+        affinityValue: realmURL,
         realm: realmURL,
         url: moduleURL,
         auth: auth(),
@@ -339,6 +348,8 @@ module(basename(__filename), function () {
       realm.__testOnlyClearCaches(); // out write bypasses the index so we need to manually flush the realm cache
 
       let second = await prerenderer.prerenderModule({
+        affinityType: 'realm',
+        affinityValue: realmURL,
         realm: realmURL,
         url: moduleURL,
         auth: auth(),
@@ -381,6 +392,8 @@ module(basename(__filename), function () {
       realm.__testOnlyClearCaches();
 
       let result = await prerenderer.prerenderModule({
+        affinityType: 'realm',
+        affinityValue: realmURL,
         realm: realmURL,
         url: moduleURL,
         auth: auth(),
@@ -415,6 +428,8 @@ module(basename(__filename), function () {
       realm.__testOnlyClearCaches();
 
       let result = await prerenderer.prerenderFileExtract({
+        affinityType: 'realm',
+        affinityValue: realmURL,
         realm: realmURL,
         url: `${realmURL}broken-file.mismatch`,
         auth: auth(),
@@ -485,7 +500,10 @@ module(basename(__filename), function () {
       });
 
       hooks.beforeEach(async () => {
-        await prerenderer.disposeRealm(realmURL);
+        await prerenderer.disposeAffinity({
+          affinityType: 'realm',
+          affinityValue: realmURL,
+        });
       });
 
       setupPermissionedRealmsCached(hooks, {
@@ -512,77 +530,6 @@ module(basename(__filename), function () {
                 data: {
                   attributes: {
                     name: 'Maple',
-                  },
-                  meta: {
-                    adoptsFrom: {
-                      module: './person',
-                      name: 'Person',
-                    },
-                  },
-                },
-              },
-              'dep-reset-consumer.gts': `
-              import { CardDef, field, linksTo, Component } from 'https://cardstack.com/base/card-api';
-              import { Person } from './person';
-              export class DepResetConsumer extends CardDef {
-                static displayName = 'Dep Reset Consumer';
-                @field friend = linksTo(() => Person);
-                static isolated = class extends Component<typeof this> {
-                  <template><@fields.friend/></template>
-                }
-              }
-            `,
-              'dep-reset-consumer-a.json': {
-                data: {
-                  relationships: {
-                    friend: {
-                      links: {
-                        self: './dep-reset-friend-a',
-                      },
-                    },
-                  },
-                  meta: {
-                    adoptsFrom: {
-                      module: './dep-reset-consumer',
-                      name: 'DepResetConsumer',
-                    },
-                  },
-                },
-              },
-              'dep-reset-consumer-b.json': {
-                data: {
-                  relationships: {
-                    friend: {
-                      links: {
-                        self: './dep-reset-friend-b',
-                      },
-                    },
-                  },
-                  meta: {
-                    adoptsFrom: {
-                      module: './dep-reset-consumer',
-                      name: 'DepResetConsumer',
-                    },
-                  },
-                },
-              },
-              'dep-reset-friend-a.json': {
-                data: {
-                  attributes: {
-                    name: 'Friend A',
-                  },
-                  meta: {
-                    adoptsFrom: {
-                      module: './person',
-                      name: 'Person',
-                    },
-                  },
-                },
-              },
-              'dep-reset-friend-b.json': {
-                data: {
-                  attributes: {
-                    name: 'Friend B',
                   },
                   meta: {
                     adoptsFrom: {
@@ -1013,38 +960,12 @@ module(basename(__filename), function () {
         },
       });
 
-      test('resets runtime deps between consecutive prerenders', async function (assert) {
-        let first = await prerenderer.prerenderCard({
-          realm: realmURL,
-          url: `${realmURL}dep-reset-consumer-a`,
-          auth: auth(),
-        });
-        let firstDeps = first.response.deps ?? [];
-        assert.true(
-          firstDeps.includes(`${realmURL}dep-reset-friend-a.json`),
-          'first prerender includes first relationship target',
-        );
-
-        let second = await prerenderer.prerenderCard({
-          realm: realmURL,
-          url: `${realmURL}dep-reset-consumer-b`,
-          auth: auth(),
-        });
-        let secondDeps = second.response.deps ?? [];
-        assert.true(
-          secondDeps.includes(`${realmURL}dep-reset-friend-b.json`),
-          'second prerender includes second relationship target',
-        );
-        assert.false(
-          secondDeps.includes(`${realmURL}dep-reset-friend-a.json`),
-          'second prerender deps do not leak first prerender relationship target',
-        );
-      });
-
       test('prerenderModule returns module metadata', async function (assert) {
         const moduleURL = `${realmURL}person.gts`;
 
         let result = await prerenderer.prerenderModule({
+          affinityType: 'realm',
+          affinityValue: realmURL,
           realm: realmURL,
           url: moduleURL,
           auth: auth(),
@@ -1075,6 +996,8 @@ module(basename(__filename), function () {
         let brokenCard = `${realmURL}broken.json`;
 
         let result = await prerenderer.prerenderCard({
+          affinityType: 'realm',
+          affinityValue: realmURL,
           realm: realmURL,
           url: brokenCard,
           auth: auth(),
@@ -1121,6 +1044,8 @@ module(basename(__filename), function () {
         let cardURL = `${realmURL}bad-icon-import.json`;
 
         let result = await prerenderer.prerenderCard({
+          affinityType: 'realm',
+          affinityValue: realmURL,
           realm: realmURL,
           url: cardURL,
           auth: auth(),
@@ -1144,6 +1069,8 @@ module(basename(__filename), function () {
         let cardURL = `${realmURL}no-icon.json`;
 
         let result = await prerenderer.prerenderCard({
+          affinityType: 'realm',
+          affinityValue: realmURL,
           realm: realmURL,
           url: cardURL,
           auth: auth(),
@@ -1184,6 +1111,8 @@ module(basename(__filename), function () {
         let cardURL = `${realmURL}throws.json`;
 
         let result = await prerenderer.prerenderCard({
+          affinityType: 'realm',
+          affinityValue: realmURL,
           realm: realmURL,
           url: cardURL,
           auth: auth(),
@@ -1213,6 +1142,8 @@ module(basename(__filename), function () {
         let cardURL = `${realmURL}console-error.json`;
 
         let result = await prerenderer.prerenderCard({
+          affinityType: 'realm',
+          affinityValue: realmURL,
           realm: realmURL,
           url: cardURL,
           auth: auth(),
@@ -1238,6 +1169,8 @@ module(basename(__filename), function () {
         let cardURL = `${realmURL}console-no-error.json`;
 
         let result = await prerenderer.prerenderCard({
+          affinityType: 'realm',
+          affinityValue: realmURL,
           realm: realmURL,
           url: cardURL,
           auth: auth(),
@@ -1250,6 +1183,8 @@ module(basename(__filename), function () {
         let cardURL = `${realmURL}rejects.json`;
 
         let result = await prerenderer.prerenderCard({
+          affinityType: 'realm',
+          affinityValue: realmURL,
           realm: realmURL,
           url: cardURL,
           auth: auth(),
@@ -1279,6 +1214,8 @@ module(basename(__filename), function () {
         let cardURL = `${realmURL}rsvp-rejects.json`;
 
         let result = await prerenderer.prerenderCard({
+          affinityType: 'realm',
+          affinityValue: realmURL,
           realm: realmURL,
           url: cardURL,
           auth: auth(),
@@ -1364,6 +1301,8 @@ module(basename(__filename), function () {
           };
 
           let result = await prerenderer.prerenderCard({
+            affinityType: 'realm',
+            affinityValue: realmURL,
             realm: realmURL,
             url: `${realmURL}1.json`,
             auth: auth(),
@@ -1412,6 +1351,8 @@ module(basename(__filename), function () {
         let delayedSearchPatch = installDelayedRuntimeRealmSearchPatch(150);
         try {
           let result = await prerenderer.prerenderCard({
+            affinityType: 'realm',
+            affinityValue: realmURL,
             realm: realmURL,
             url: cardURL,
             auth: auth(),
@@ -1494,6 +1435,8 @@ module(basename(__filename), function () {
         const moduleURL = `${realmURL}person.gts`;
 
         let first = await prerenderer.prerenderModule({
+          affinityType: 'realm',
+          affinityValue: realmURL,
           realm: realmURL,
           url: moduleURL,
           auth: auth(),
@@ -1502,6 +1445,8 @@ module(basename(__filename), function () {
         assert.false(first.pool.evicted, 'initial module render not evicted');
 
         let timedOut = await prerenderer.prerenderModule({
+          affinityType: 'realm',
+          affinityValue: realmURL,
           realm: realmURL,
           url: moduleURL,
           auth: auth(),
@@ -1532,6 +1477,8 @@ module(basename(__filename), function () {
         );
 
         let afterTimeout = await prerenderer.prerenderModule({
+          affinityType: 'realm',
+          affinityValue: realmURL,
           realm: realmURL,
           url: moduleURL,
           auth: auth(),
@@ -1556,6 +1503,8 @@ module(basename(__filename), function () {
         const fileURL = `${realmURL}notes.txt`;
 
         let result = await prerenderer.prerenderFileExtract({
+          affinityType: 'realm',
+          affinityValue: realmURL,
           realm: realmURL,
           url: fileURL,
           auth: auth(),
@@ -1579,6 +1528,179 @@ module(basename(__filename), function () {
         assert.notOk(
           result.response.deps.includes(fileURL),
           'deps exclude the file url itself',
+        );
+      });
+    });
+  }
+
+  function defineRuntimeDepsResetTests() {
+    module('runtime deps reset', function (hooks) {
+      let realmURL = 'http://127.0.0.1:4457/test/';
+      let prerenderServerURL = new URL(realmURL).origin;
+      let testUserId = '@user1:localhost';
+      let permissions: RealmPermissions = {
+        [realmURL]: ['read', 'write', 'realm-owner'],
+      };
+      let prerenderer: Prerenderer;
+      let auth = () => {
+        let sessions = JSON.parse(
+          testCreatePrerenderAuth(testUserId, permissions),
+        ) as Record<string, string>;
+        let token = sessions[realmURL];
+        if (token) {
+          sessions[new URL(realmURL).origin + '/'] = token;
+        }
+        return JSON.stringify(sessions);
+      };
+
+      hooks.before(async () => {
+        prerenderer = getPrerendererForTesting({
+          maxPages: 2,
+          serverURL: prerenderServerURL,
+        });
+      });
+
+      hooks.after(async () => {
+        await prerenderer.stop();
+      });
+
+      hooks.beforeEach(async () => {
+        await prerenderer.disposeAffinity({
+          affinityType: 'realm',
+          affinityValue: realmURL,
+        });
+      });
+
+      setupPermissionedRealmsCached(hooks, {
+        mode: 'before',
+        realms: [
+          {
+            realmURL,
+            permissions: {
+              '*': ['read'],
+              [testUserId]: ['read', 'write', 'realm-owner'],
+            },
+            fileSystem: {
+              'person.gts': `
+                import { CardDef, field, contains, StringField, Component } from 'https://cardstack.com/base/card-api';
+                export class Person extends CardDef {
+                  static displayName = "Person";
+                  @field name = contains(StringField);
+                  static isolated = class extends Component<typeof this> {
+                    <template>{{@model.name}}</template>
+                  }
+                }
+              `,
+              'dep-reset-consumer.gts': `
+                import { CardDef, field, linksTo, Component } from 'https://cardstack.com/base/card-api';
+                import { Person } from './person';
+                export class DepResetConsumer extends CardDef {
+                  static displayName = 'Dep Reset Consumer';
+                  @field friend = linksTo(() => Person);
+                  static isolated = class extends Component<typeof this> {
+                    <template><@fields.friend/></template>
+                  }
+                }
+              `,
+              'dep-reset-consumer-a.json': {
+                data: {
+                  relationships: {
+                    friend: {
+                      links: {
+                        self: './dep-reset-friend-a',
+                      },
+                    },
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: './dep-reset-consumer',
+                      name: 'DepResetConsumer',
+                    },
+                  },
+                },
+              },
+              'dep-reset-consumer-b.json': {
+                data: {
+                  relationships: {
+                    friend: {
+                      links: {
+                        self: './dep-reset-friend-b',
+                      },
+                    },
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: './dep-reset-consumer',
+                      name: 'DepResetConsumer',
+                    },
+                  },
+                },
+              },
+              'dep-reset-friend-a.json': {
+                data: {
+                  attributes: {
+                    name: 'Friend A',
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: './person',
+                      name: 'Person',
+                    },
+                  },
+                },
+              },
+              'dep-reset-friend-b.json': {
+                data: {
+                  attributes: {
+                    name: 'Friend B',
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: './person',
+                      name: 'Person',
+                    },
+                  },
+                },
+              },
+            },
+          },
+        ],
+        onRealmSetup() {
+          permissions = {
+            [realmURL]: ['read', 'write', 'realm-owner'],
+          };
+        },
+      });
+
+      test('resets runtime deps between consecutive prerenders', async function (assert) {
+        let first = await prerenderer.prerenderCard({
+          affinityType: 'realm',
+          affinityValue: realmURL,
+          realm: realmURL,
+          url: `${realmURL}dep-reset-consumer-a`,
+          auth: auth(),
+        });
+        let firstDeps = first.response.deps ?? [];
+        assert.true(
+          firstDeps.includes(`${realmURL}dep-reset-friend-a.json`),
+          'first prerender includes first relationship target',
+        );
+
+        let second = await prerenderer.prerenderCard({
+          affinityType: 'realm',
+          affinityValue: realmURL,
+          realm: realmURL,
+          url: `${realmURL}dep-reset-consumer-b`,
+          auth: auth(),
+        });
+        let secondDeps = second.response.deps ?? [];
+        assert.true(
+          secondDeps.includes(`${realmURL}dep-reset-friend-b.json`),
+          'second prerender includes second relationship target',
+        );
+        assert.false(
+          secondDeps.includes(`${realmURL}dep-reset-friend-a.json`),
+          'second prerender deps do not leak first prerender relationship target',
         );
       });
     });
@@ -1617,7 +1739,10 @@ module(basename(__filename), function () {
       });
 
       hooks.beforeEach(async () => {
-        await prerenderer.disposeRealm(realmURL);
+        await prerenderer.disposeAffinity({
+          affinityType: 'realm',
+          affinityValue: realmURL,
+        });
       });
 
       async function overrideIndexedIsolatedHTML(url: string, html: string) {
@@ -1915,6 +2040,8 @@ module(basename(__filename), function () {
           );
 
           let result = await prerenderer.prerenderCard({
+            affinityType: 'realm',
+            affinityValue: realmURL,
             realm: realmURL,
             url: cardURL,
             auth: auth(),
@@ -1967,6 +2094,8 @@ module(basename(__filename), function () {
           );
 
           let result = await prerenderer.prerenderCard({
+            affinityType: 'realm',
+            affinityValue: realmURL,
             realm: realmURL,
             url: cardURL,
             auth: auth(),
@@ -1998,6 +2127,7 @@ module(basename(__filename), function () {
 
   module('prerender - non-mutating tests', function () {
     defineNonMutatingRunnerTests();
+    defineRuntimeDepsResetTests();
     defineLivePrerenderedSearchFallbackTests();
     defineNonMutatingStaticTests();
   });
@@ -2032,8 +2162,14 @@ module(basename(__filename), function () {
 
     hooks.afterEach(async () => {
       await Promise.all([
-        prerenderer.disposeRealm(providerRealmURL),
-        prerenderer.disposeRealm(consumerRealmURL),
+        prerenderer.disposeAffinity({
+          affinityType: 'realm',
+          affinityValue: providerRealmURL,
+        }),
+        prerenderer.disposeAffinity({
+          affinityType: 'realm',
+          affinityValue: consumerRealmURL,
+        }),
       ]);
     });
 
@@ -2150,6 +2286,8 @@ module(basename(__filename), function () {
       const moduleURL = `${consumerRealmURL}website.gts`;
 
       let result = await prerenderer.prerenderModule({
+        affinityType: 'realm',
+        affinityValue: consumerRealmURL,
         realm: consumerRealmURL,
         url: moduleURL,
         auth: auth(),
@@ -2180,6 +2318,8 @@ module(basename(__filename), function () {
       const fileURL = `${providerRealmURL}secret.txt`;
 
       let result = await prerenderer.prerenderFileExtract({
+        affinityType: 'realm',
+        affinityValue: providerRealmURL,
         realm: providerRealmURL,
         url: fileURL,
         auth: auth(),
@@ -2211,6 +2351,8 @@ module(basename(__filename), function () {
       const cardURL = `${consumerRealmURL}auth-proxy-1`;
 
       let result = await prerenderer.prerenderCard({
+        affinityType: 'realm',
+        affinityValue: consumerRealmURL,
         realm: consumerRealmURL,
         url: cardURL,
         auth: auth(),
@@ -2241,6 +2383,8 @@ module(basename(__filename), function () {
       const cardURL = `${consumerRealmURL}auth-proxy-1`;
 
       let result = await prerenderer.prerenderCard({
+        affinityType: 'realm',
+        affinityValue: consumerRealmURL,
         realm: consumerRealmURL,
         url: cardURL,
         auth: auth(),
@@ -2287,7 +2431,10 @@ module(basename(__filename), function () {
     });
 
     hooks.afterEach(async () => {
-      await prerenderer.disposeRealm(publicRealmURL);
+      await prerenderer.disposeAffinity({
+        affinityType: 'realm',
+        affinityValue: publicRealmURL,
+      });
     });
 
     let makeQueryDirectoryFileSystem = () => ({
@@ -2423,6 +2570,8 @@ module(basename(__filename), function () {
       let delayedSearchPatch = installDelayedRuntimeRealmSearchPatch(150);
       try {
         let result = await prerenderer.prerenderCard({
+          affinityType: 'realm',
+          affinityValue: publicRealmURL,
           realm: publicRealmURL,
           url: cardURL,
           auth: auth(),
@@ -2477,7 +2626,10 @@ module(basename(__filename), function () {
       });
 
       hooks.afterEach(async () => {
-        await prerenderer.disposeRealm(privateRealmURL);
+        await prerenderer.disposeAffinity({
+          affinityType: 'realm',
+          affinityValue: privateRealmURL,
+        });
       });
 
       let makeQueryDirectoryFileSystem = () => ({
@@ -2614,6 +2766,8 @@ module(basename(__filename), function () {
         let delayedSearchPatch = installDelayedRuntimeRealmSearchPatch(150);
         try {
           let result = await prerenderer.prerenderCard({
+            affinityType: 'realm',
+            affinityValue: privateRealmURL,
             realm: privateRealmURL,
             url: cardURL,
             auth: auth(),
@@ -2675,9 +2829,18 @@ module(basename(__filename), function () {
       let auth = () => testCreatePrerenderAuth(testUserId, permissions);
       const disposeAllRealms = async () => {
         await Promise.all([
-          prerenderer.disposeRealm(realmURL1),
-          prerenderer.disposeRealm(realmURL2),
-          prerenderer.disposeRealm(realmURL3),
+          prerenderer.disposeAffinity({
+            affinityType: 'realm',
+            affinityValue: realmURL1,
+          }),
+          prerenderer.disposeAffinity({
+            affinityType: 'realm',
+            affinityValue: realmURL2,
+          }),
+          prerenderer.disposeAffinity({
+            affinityType: 'realm',
+            affinityValue: realmURL3,
+          }),
         ]);
       };
 
@@ -3242,6 +3405,8 @@ module(basename(__filename), function () {
         hooks.before(async () => {
           const testCardURL = `${realmURL2}1`;
           let { response } = await prerenderer.prerenderCard({
+            affinityType: 'realm',
+            affinityValue: realmURL2,
             realm: realmURL2,
             url: testCardURL,
             auth: auth(),
@@ -3362,6 +3527,8 @@ module(basename(__filename), function () {
         test('isUsed field includes a field in search doc that is not rendered in template', async function (assert) {
           const testCardURL = `${realmURL2}is-used`;
           let { response } = await prerenderer.prerenderCard({
+            affinityType: 'realm',
+            affinityValue: realmURL2,
             realm: realmURL2,
             url: testCardURL,
             auth: auth(),
@@ -3385,6 +3552,8 @@ module(basename(__filename), function () {
         test('isUsed linksToMany field includes links in search doc that are not rendered in template', async function (assert) {
           const testCardURL = `${realmURL2}is-used-many`;
           let { response } = await prerenderer.prerenderCard({
+            affinityType: 'realm',
+            affinityValue: realmURL2,
             realm: realmURL2,
             url: testCardURL,
             auth: auth(),
@@ -3413,6 +3582,8 @@ module(basename(__filename), function () {
         test('isUsed compound field includes nested linksTo relationship in search doc', async function (assert) {
           const testCardURL = `${realmURL2}is-used-field-def`;
           let { response } = await prerenderer.prerenderCard({
+            affinityType: 'realm',
+            affinityValue: realmURL2,
             realm: realmURL2,
             url: testCardURL,
             auth: auth(),
@@ -3436,6 +3607,8 @@ module(basename(__filename), function () {
         test('isUsed compound field includes nested linksToMany relationships in search doc', async function (assert) {
           const testCardURL = `${realmURL2}is-used-field-def`;
           let { response } = await prerenderer.prerenderCard({
+            affinityType: 'realm',
+            affinityValue: realmURL2,
             realm: realmURL2,
             url: testCardURL,
             auth: auth(),
@@ -3464,6 +3637,8 @@ module(basename(__filename), function () {
         test('non-isolated formats render linked fields and those links appear in search doc', async function (assert) {
           const testCardURL = `${realmURL2}non-isolated-links`;
           let { response } = await prerenderer.prerenderCard({
+            affinityType: 'realm',
+            affinityValue: realmURL2,
             realm: realmURL2,
             url: testCardURL,
             auth: auth(),
@@ -3561,6 +3736,8 @@ module(basename(__filename), function () {
         test('error during render', async function (assert) {
           const testCardURL = `${realmURL2}2`;
           let { response } = await prerenderer.prerenderCard({
+            affinityType: 'realm',
+            affinityValue: realmURL2,
             realm: realmURL2,
             url: testCardURL,
             auth: auth(),
@@ -3596,6 +3773,8 @@ module(basename(__filename), function () {
         test('error includes blocked timer summary when timers fire', async function (assert) {
           const testCardURL = `${realmURL2}timer-error`;
           let { response } = await prerenderer.prerenderCard({
+            affinityType: 'realm',
+            affinityValue: realmURL2,
             realm: realmURL2,
             url: testCardURL,
             auth: auth(),
@@ -3633,11 +3812,15 @@ module(basename(__filename), function () {
         test('timeout includes blocked timer summary in stack', async function (assert) {
           const testCardURL = `${realmURL2}timer-timeout`;
           await prerenderer.prerenderCard({
+            affinityType: 'realm',
+            affinityValue: realmURL2,
             realm: realmURL2,
             url: testCardURL,
             auth: auth(),
           });
           let { response } = await prerenderer.prerenderCard({
+            affinityType: 'realm',
+            affinityValue: realmURL2,
             realm: realmURL2,
             url: testCardURL,
             auth: auth(),
@@ -3667,6 +3850,8 @@ module(basename(__filename), function () {
         test('missing link surfaces 404 without eviction', async function (assert) {
           const testCardURL = `${realmURL2}missing-link`;
           let result = await prerenderer.prerenderCard({
+            affinityType: 'realm',
+            affinityValue: realmURL2,
             realm: realmURL2,
             url: testCardURL,
             auth: auth(),
@@ -3692,6 +3877,8 @@ module(basename(__filename), function () {
         test('fetch failed surfaces error without eviction', async function (assert) {
           const testCardURL = `${realmURL2}fetch-failed`;
           let result = await prerenderer.prerenderCard({
+            affinityType: 'realm',
+            affinityValue: realmURL2,
             realm: realmURL2,
             url: testCardURL,
             auth: auth(),
@@ -3717,6 +3904,8 @@ module(basename(__filename), function () {
         test('embedded error markup triggers render error', async function (assert) {
           const testCardURL = `${realmURL2}4`;
           let { response } = await prerenderer.prerenderCard({
+            affinityType: 'realm',
+            affinityValue: realmURL2,
             realm: realmURL2,
             url: testCardURL,
             auth: auth(),
@@ -3735,6 +3924,8 @@ module(basename(__filename), function () {
           // Render the card that forces unusable
           const unusableURL = `${realmURL2}3`;
           let unusable = await prerenderer.prerenderCard({
+            affinityType: 'realm',
+            affinityValue: realmURL2,
             realm: realmURL2,
             url: unusableURL,
             auth: auth(),
@@ -3802,6 +3993,8 @@ module(basename(__filename), function () {
           // After unusable, the realm should be evicted; a subsequent render should not reuse
           const healthyURL = `${realmURL2}1`;
           let next = await prerenderer.prerenderCard({
+            affinityType: 'realm',
+            affinityValue: realmURL2,
             realm: realmURL2,
             url: healthyURL,
             auth: auth(),
@@ -3816,6 +4009,8 @@ module(basename(__filename), function () {
         test('prerender surfaces module syntax errors without timing out', async function (assert) {
           const cardURL = `${realmURL2}broken`;
           let broken = await prerenderer.prerenderCard({
+            affinityType: 'realm',
+            affinityValue: realmURL2,
             realm: realmURL2,
             url: cardURL,
             auth: auth(),
@@ -3833,12 +4028,14 @@ module(basename(__filename), function () {
         });
       });
 
-      module('realm pooling', function (hooks) {
+      module('affinity pooling', function (hooks) {
         hooks.beforeEach(disposeAllRealms);
         test('evicts on timeout and does not reuse', async function (assert) {
           const testCardURL = `${realmURL2}1`;
           // First render to initialize pool
           let first = await prerenderer.prerenderCard({
+            affinityType: 'realm',
+            affinityValue: realmURL2,
             realm: realmURL2,
             url: testCardURL,
             auth: auth(),
@@ -3847,6 +4044,8 @@ module(basename(__filename), function () {
 
           // Now trigger a timeout; this should evict the realm
           let timeoutRun = await prerenderer.prerenderCard({
+            affinityType: 'realm',
+            affinityValue: realmURL2,
             realm: realmURL2,
             url: testCardURL,
             auth: auth(),
@@ -3867,6 +4066,8 @@ module(basename(__filename), function () {
 
           // A subsequent render should not reuse the previously pooled page
           let afterTimeout = await prerenderer.prerenderCard({
+            affinityType: 'realm',
+            affinityValue: realmURL2,
             realm: realmURL2,
             url: testCardURL,
             auth: auth(),
@@ -3882,22 +4083,26 @@ module(basename(__filename), function () {
         test('reuses the same page within a realm', async function (assert) {
           const testCardURL = `${realmURL2}1`;
           let first = await prerenderer.prerenderCard({
+            affinityType: 'realm',
+            affinityValue: realmURL2,
             realm: realmURL2,
             url: testCardURL,
             auth: auth(),
           });
           let second = await prerenderer.prerenderCard({
+            affinityType: 'realm',
+            affinityValue: realmURL2,
             realm: realmURL2,
             url: testCardURL,
             auth: auth(),
           });
           assert.strictEqual(
-            first.pool.realm,
+            first.pool.affinityValue,
             realmURL2,
             'first realm matches',
           );
           assert.strictEqual(
-            second.pool.realm,
+            second.pool.affinityValue,
             realmURL2,
             'second realm matches',
           );
@@ -3912,6 +4117,90 @@ module(basename(__filename), function () {
           assert.false(second.pool.timedOut, 'second call not timed out');
         });
 
+        test('reuses the same page within a user affinity', async function (assert) {
+          const testCardURL = `${realmURL2}1`;
+          const userAffinityValue = testUserId;
+          let first = await prerenderer.prerenderCard({
+            affinityType: 'user',
+            affinityValue: userAffinityValue,
+            realm: realmURL2,
+            url: testCardURL,
+            auth: auth(),
+          });
+          let second = await prerenderer.prerenderCard({
+            affinityType: 'user',
+            affinityValue: userAffinityValue,
+            realm: realmURL2,
+            url: testCardURL,
+            auth: auth(),
+          });
+          assert.strictEqual(
+            first.pool.affinityValue,
+            userAffinityValue,
+            'first user affinity matches',
+          );
+          assert.strictEqual(
+            second.pool.affinityValue,
+            userAffinityValue,
+            'second user affinity matches',
+          );
+          assert.strictEqual(
+            first.pool.pageId,
+            second.pool.pageId,
+            'pageId reused',
+          );
+          assert.false(first.pool.reused, 'first call not reused');
+          assert.true(second.pool.reused, 'second call reused');
+          assert.false(first.pool.timedOut, 'first call not timed out');
+          assert.false(second.pool.timedOut, 'second call not timed out');
+        });
+
+        test('does not reuse across affinity types when affinity values match', async function (assert) {
+          const testCardURL = `${realmURL2}1`;
+          const sharedAffinityValue = 'shared-affinity-value';
+
+          let firstRealm = await prerenderer.prerenderCard({
+            affinityType: 'realm',
+            affinityValue: sharedAffinityValue,
+            realm: realmURL2,
+            url: testCardURL,
+            auth: auth(),
+          });
+          let firstUser = await prerenderer.prerenderCard({
+            affinityType: 'user',
+            affinityValue: sharedAffinityValue,
+            realm: realmURL2,
+            url: testCardURL,
+            auth: auth(),
+          });
+          let secondRealm = await prerenderer.prerenderCard({
+            affinityType: 'realm',
+            affinityValue: sharedAffinityValue,
+            realm: realmURL2,
+            url: testCardURL,
+            auth: auth(),
+          });
+
+          assert.notStrictEqual(
+            firstRealm.pool.pageId,
+            firstUser.pool.pageId,
+            'realm and user affinities do not share tabs',
+          );
+          assert.false(
+            firstUser.pool.reused,
+            'first user-affinity call is fresh',
+          );
+          assert.strictEqual(
+            secondRealm.pool.pageId,
+            firstRealm.pool.pageId,
+            'realm affinity continues to reuse realm tab',
+          );
+          assert.true(
+            secondRealm.pool.reused,
+            'realm tab reuse remains intact',
+          );
+        });
+
         test('refreshes prerender session when auth changes for the same realm', async function (assert) {
           const testCardURL = `${realmURL2}1`;
           let authA = testCreatePrerenderAuth(testUserId, {
@@ -3923,11 +4212,15 @@ module(basename(__filename), function () {
           });
 
           let first = await prerenderer.prerenderCard({
+            affinityType: 'realm',
+            affinityValue: realmURL2,
             realm: realmURL2,
             url: testCardURL,
             auth: authA,
           });
           let second = await prerenderer.prerenderCard({
+            affinityType: 'realm',
+            affinityValue: realmURL2,
             realm: realmURL2,
             url: testCardURL,
             auth: authB,
@@ -3954,11 +4247,15 @@ module(basename(__filename), function () {
           const testCardURL1 = `${realmURL1}1`;
           const testCardURL2 = `${realmURL2}1`;
           let r1 = await prerenderer.prerenderCard({
+            affinityType: 'realm',
+            affinityValue: realmURL1,
             realm: realmURL1,
             url: testCardURL1,
             auth: auth(),
           });
           let r2 = await prerenderer.prerenderCard({
+            affinityType: 'realm',
+            affinityValue: realmURL2,
             realm: realmURL2,
             url: testCardURL2,
             auth: auth(),
@@ -3978,6 +4275,8 @@ module(basename(__filename), function () {
           const cardC = `${realmURL3}1`;
 
           let firstA = await prerenderer.prerenderCard({
+            affinityType: 'realm',
+            affinityValue: realmURL1,
             realm: realmURL1,
             url: cardA,
             auth: auth(),
@@ -3985,6 +4284,8 @@ module(basename(__filename), function () {
           assert.false(firstA.pool.reused, 'first A not reused');
 
           let firstB = await prerenderer.prerenderCard({
+            affinityType: 'realm',
+            affinityValue: realmURL2,
             realm: realmURL2,
             url: cardB,
             auth: auth(),
@@ -3993,6 +4294,8 @@ module(basename(__filename), function () {
 
           // Now adding C should evict the LRU (A), since maxPages=2
           let firstC = await prerenderer.prerenderCard({
+            affinityType: 'realm',
+            affinityValue: realmURL3,
             realm: realmURL3,
             url: cardC,
             auth: auth(),
@@ -4001,6 +4304,8 @@ module(basename(__filename), function () {
 
           // Returning to A should not reuse because it was evicted
           let secondA = await prerenderer.prerenderCard({
+            affinityType: 'realm',
+            affinityValue: realmURL1,
             realm: realmURL1,
             url: cardA,
             auth: auth(),
@@ -4014,14 +4319,14 @@ module(basename(__filename), function () {
         });
 
         test('serializes prerenders when only one tab is available', async function (assert) {
-          let prevTabMax = process.env.PRERENDER_REALM_TAB_MAX;
+          let prevTabMax = process.env.PRERENDER_AFFINITY_TAB_MAX;
           let semaphore = new TestSemaphore(1);
           let active = 0;
           let maxActive = 0;
           let pool: PagePool | undefined;
 
           try {
-            process.env.PRERENDER_REALM_TAB_MAX = '1';
+            process.env.PRERENDER_AFFINITY_TAB_MAX = '1';
             ({ pool } = makeStubPagePool(1, semaphore));
             await pool.warmStandbys();
 
@@ -4044,22 +4349,22 @@ module(basename(__filename), function () {
           } finally {
             await pool?.closeAll();
             if (prevTabMax === undefined) {
-              delete process.env.PRERENDER_REALM_TAB_MAX;
+              delete process.env.PRERENDER_AFFINITY_TAB_MAX;
             } else {
-              process.env.PRERENDER_REALM_TAB_MAX = prevTabMax;
+              process.env.PRERENDER_AFFINITY_TAB_MAX = prevTabMax;
             }
           }
         });
 
         test('runs prerenders in parallel when multiple tabs are available', async function (assert) {
-          let prevTabMax = process.env.PRERENDER_REALM_TAB_MAX;
+          let prevTabMax = process.env.PRERENDER_AFFINITY_TAB_MAX;
           let semaphore = new TestSemaphore(2);
           let active = 0;
           let maxActive = 0;
           let pool: PagePool | undefined;
 
           try {
-            process.env.PRERENDER_REALM_TAB_MAX = '2';
+            process.env.PRERENDER_AFFINITY_TAB_MAX = '2';
             ({ pool } = makeStubPagePool(2, semaphore));
             await pool.warmStandbys();
 
@@ -4082,9 +4387,9 @@ module(basename(__filename), function () {
           } finally {
             await pool?.closeAll();
             if (prevTabMax === undefined) {
-              delete process.env.PRERENDER_REALM_TAB_MAX;
+              delete process.env.PRERENDER_AFFINITY_TAB_MAX;
             } else {
-              process.env.PRERENDER_REALM_TAB_MAX = prevTabMax;
+              process.env.PRERENDER_AFFINITY_TAB_MAX = prevTabMax;
             }
           }
         });
@@ -4141,12 +4446,12 @@ module(basename(__filename), function () {
         });
 
         test('enforces per-realm tab cap by queueing on an existing tab', async function (assert) {
-          let prevTabMax = process.env.PRERENDER_REALM_TAB_MAX;
+          let prevTabMax = process.env.PRERENDER_AFFINITY_TAB_MAX;
           let pool: PagePool | undefined;
           let resolved = false;
 
           try {
-            process.env.PRERENDER_REALM_TAB_MAX = '1';
+            process.env.PRERENDER_AFFINITY_TAB_MAX = '1';
             ({ pool } = makeStubPagePool(2));
             await pool.warmStandbys();
 
@@ -4171,15 +4476,15 @@ module(basename(__filename), function () {
           } finally {
             await pool?.closeAll();
             if (prevTabMax === undefined) {
-              delete process.env.PRERENDER_REALM_TAB_MAX;
+              delete process.env.PRERENDER_AFFINITY_TAB_MAX;
             } else {
-              process.env.PRERENDER_REALM_TAB_MAX = prevTabMax;
+              process.env.PRERENDER_AFFINITY_TAB_MAX = prevTabMax;
             }
           }
         });
 
         test('queues on the least-pending tab when the realm cap is met', async function (assert) {
-          let prevTabMax = process.env.PRERENDER_REALM_TAB_MAX;
+          let prevTabMax = process.env.PRERENDER_AFFINITY_TAB_MAX;
           let pool: PagePool | undefined;
           let originalNow = Date.now;
           let now = 1000;
@@ -4188,7 +4493,7 @@ module(basename(__filename), function () {
           let fourthResolved = false;
 
           try {
-            process.env.PRERENDER_REALM_TAB_MAX = '2';
+            process.env.PRERENDER_AFFINITY_TAB_MAX = '2';
             ({ pool } = makeStubPagePool(2));
             await pool.warmStandbys();
 
@@ -4237,9 +4542,9 @@ module(basename(__filename), function () {
             (Date as any).now = originalNow;
             await pool?.closeAll();
             if (prevTabMax === undefined) {
-              delete process.env.PRERENDER_REALM_TAB_MAX;
+              delete process.env.PRERENDER_AFFINITY_TAB_MAX;
             } else {
-              process.env.PRERENDER_REALM_TAB_MAX = prevTabMax;
+              process.env.PRERENDER_AFFINITY_TAB_MAX = prevTabMax;
             }
           }
         });
@@ -4267,7 +4572,7 @@ module(basename(__filename), function () {
           let second = await secondPromise;
           assert.deepEqual(order, ['a'], 'queued realm-a request runs first');
           assert.true(
-            pool.getWarmRealms().includes('realm-a'),
+            pool.getWarmAffinities().includes('realm-a'),
             'tab aligned to realm-a while queued work runs',
           );
           second.release();
@@ -4280,7 +4585,7 @@ module(basename(__filename), function () {
             'queued realm-b request runs after',
           );
           assert.true(
-            pool.getWarmRealms().includes('realm-b'),
+            pool.getWarmAffinities().includes('realm-b'),
             'tab realigned to realm-b when queued request starts',
           );
           third.release();
@@ -4317,7 +4622,7 @@ module(basename(__filename), function () {
             second.release();
 
             assert.false(
-              pool.getWarmRealms().includes('realm-b'),
+              pool.getWarmAffinities().includes('realm-b'),
               'cross-realm request does not reassign the tab',
             );
           } finally {
@@ -4373,7 +4678,7 @@ module(basename(__filename), function () {
               'same-realm request uses the same tab',
             );
             assert.false(
-              pool.getWarmRealms().includes('realm-b'),
+              pool.getWarmAffinities().includes('realm-b'),
               'tab realigned back to realm-a after same-realm request',
             );
             same.release();
@@ -4383,7 +4688,7 @@ module(basename(__filename), function () {
         });
 
         test('does not oversubscribe contexts during async eviction', async function (assert) {
-          let prevTabMax = process.env.PRERENDER_REALM_TAB_MAX;
+          let prevTabMax = process.env.PRERENDER_AFFINITY_TAB_MAX;
           let pool: PagePool | undefined;
           let active = 0;
           let peak = 0;
@@ -4393,7 +4698,7 @@ module(basename(__filename), function () {
           });
 
           try {
-            process.env.PRERENDER_REALM_TAB_MAX = '2';
+            process.env.PRERENDER_AFFINITY_TAB_MAX = '2';
             ({ pool } = makeStubPagePool(2, undefined, undefined, {
               closeContextDelay: async () => closeGate,
               onContextCreated() {
@@ -4410,7 +4715,7 @@ module(basename(__filename), function () {
             let first = await pool.getPage('realm-a');
             let second = await pool.getPage('realm-a');
 
-            await pool.disposeRealm('realm-a', { awaitIdle: false });
+            await pool.disposeAffinity('realm-a', { awaitIdle: false });
             await pool.warmStandbys();
 
             assert.ok(
@@ -4427,9 +4732,9 @@ module(basename(__filename), function () {
             }
             await pool?.closeAll();
             if (prevTabMax === undefined) {
-              delete process.env.PRERENDER_REALM_TAB_MAX;
+              delete process.env.PRERENDER_AFFINITY_TAB_MAX;
             } else {
-              process.env.PRERENDER_REALM_TAB_MAX = prevTabMax;
+              process.env.PRERENDER_AFFINITY_TAB_MAX = prevTabMax;
             }
           }
         });
@@ -4556,13 +4861,13 @@ module(basename(__filename), function () {
             let now = Date.now();
             (Date as any).now = () => now + 13 * 60 * 60 * 1000; // 13 hours later
 
-            let evicted = await pool.evictIdleRealms(12 * 60 * 60 * 1000);
+            let evicted = await pool.evictIdleAffinities(12 * 60 * 60 * 1000);
 
-            assert.deepEqual(evicted, ['realm-a'], 'idle realm evicted');
+            assert.deepEqual(evicted, ['realm-a'], 'idle affinity evicted');
             assert.deepEqual(
-              pool.getWarmRealms(),
+              pool.getWarmAffinities(),
               [],
-              'realm entry removed from warm set',
+              'affinity entry removed from warm set',
             );
             let closedAtEviction = [...contextsClosed];
             assert.deepEqual(
@@ -4585,10 +4890,10 @@ module(basename(__filename), function () {
           await pool.warmStandbys();
 
           let createdBeforeSweep = contextsCreated.length;
-          let evicted = await pool.evictIdleRealms(1);
+          let evicted = await pool.evictIdleAffinities(1);
           let closedAfterSweep = contextsClosed.length;
 
-          assert.deepEqual(evicted, [], 'no idle realms to evict');
+          assert.deepEqual(evicted, [], 'no idle affinities to evict');
           assert.strictEqual(
             contextsCreated.length,
             createdBeforeSweep,
@@ -4618,7 +4923,7 @@ module(basename(__filename), function () {
         RenderRunner.prototype.prerenderModuleAttempt = async function (
           args: Parameters<RenderRunner['prerenderModuleAttempt']>[0],
         ) {
-          let { realm: attemptRealm, url, renderOptions } = args;
+          let { affinityType, affinityValue, url, renderOptions } = args;
           attempts.push(renderOptions);
           attemptCount++;
           let baseResponse = {
@@ -4656,7 +4961,8 @@ module(basename(__filename), function () {
             timings: { launchMs: 0, renderMs: 1 },
             pool: {
               pageId: `page-${attemptCount}`,
-              realm: attemptRealm,
+              affinityType,
+              affinityValue,
               reused: attemptCount > 1,
               evicted: false,
               timedOut: false,
@@ -4670,6 +4976,8 @@ module(basename(__filename), function () {
         });
 
         let result = await prerenderer.prerenderModule({
+          affinityType: 'realm',
+          affinityValue: retryRealm,
           realm: retryRealm,
           url: moduleURL,
           auth: 'test-auth',
@@ -4715,7 +5023,7 @@ module(basename(__filename), function () {
         RenderRunner.prototype.prerenderFileExtractAttempt = async function (
           args: Parameters<RenderRunner['prerenderFileExtractAttempt']>[0],
         ) {
-          let { realm: attemptRealm, url, renderOptions } = args;
+          let { affinityType, affinityValue, url, renderOptions } = args;
           attempts.push(renderOptions);
           attemptCount++;
           let response: FileExtractResponse =
@@ -4750,7 +5058,8 @@ module(basename(__filename), function () {
             timings: { launchMs: 0, renderMs: 1 },
             pool: {
               pageId: `page-${attemptCount}`,
-              realm: attemptRealm,
+              affinityType,
+              affinityValue,
               reused: attemptCount > 1,
               evicted: false,
               timedOut: false,
@@ -4764,6 +5073,8 @@ module(basename(__filename), function () {
         });
 
         let result = await prerenderer.prerenderFileExtract({
+          affinityType: 'realm',
+          affinityValue: retryRealm,
           realm: retryRealm,
           url: fileURL,
           auth: 'test-auth',
@@ -4810,7 +5121,12 @@ module(basename(__filename), function () {
         RenderRunner.prototype.prerenderCardAttempt = async function (
           args: Parameters<RenderRunner['prerenderCardAttempt']>[0],
         ) {
-          let { realm: attemptRealm, url: attemptUrl, renderOptions } = args;
+          let {
+            affinityType,
+            affinityValue,
+            url: attemptUrl,
+            renderOptions,
+          } = args;
           attempts.push(renderOptions);
           attemptCount++;
           let baseResponse: RenderResponse = {
@@ -4848,7 +5164,8 @@ module(basename(__filename), function () {
             timings: { launchMs: 0, renderMs: 1 },
             pool: {
               pageId: `page-${attemptCount}`,
-              realm: attemptRealm,
+              affinityType,
+              affinityValue,
               reused: attemptCount > 1,
               evicted: false,
               timedOut: false,
@@ -4862,6 +5179,8 @@ module(basename(__filename), function () {
         });
 
         let result = await prerenderer.prerenderCard({
+          affinityType: 'realm',
+          affinityValue: retryRealm,
           realm: retryRealm,
           url: cardURL,
           auth: 'test-auth',

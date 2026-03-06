@@ -3,4 +3,5 @@ node_modules/
 /playwright-report/
 /playwright
 /synapse-data
+/synapse-data-*
 /registration_secret.txt

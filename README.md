@@ -455,3 +455,45 @@ Mutliple workers are supported, two are used in CI and up to 4 or 8 can be used 
 Depending on load this can cause slowdowns enough to trigger failures in some tests, so if you see flakiness try reducing the number of workers.
 
 If the isolated realm server fails to get stopped you may see an error about port 4205 already being in use. You can find the process with `lsof -i :4205` and kill the server.
+
+## Environment mode: parallel environments
+
+“Environment mode” lets us run multiple Boxel environments simultaneously. This is experimental and opt-in via a `BOXEL_ENVIRONMENT` environment variable.
+
+Here’s an example using Git worktrees and a `parallel` environment name:
+
+```bash
+git worktree add ../parallel
+ln -s "$(pwd)/packages/boxel-icons/dist" ../parallel/packages/boxel-icons/dist # skip freshly building boxel-icons, which is quite slow
+cd ../parallel
+
+pnpm install
+```
+
+In a tab for the UI:
+
+```bash
+BOXEL_ENVIRONMENT=parallel pnpm --filter @cardstack/host start
+```
+
+In a tab for the realm server, skipping building the catalog since it takes a long time to index:
+
+```bash
+BOXEL_ENVIRONMENT=parallel SKIP_CATALOG=true pnpm --filter @cardstack/realm-server start:all
+```
+
+Optionally, for the AI bot:
+
+```bash
+BOXEL_ENVIRONMENT=parallel OPENROUTER_API_KEY=your_api_key pnpm --filter @cardstack/ai-bot start:development
+```
+
+### Utility script
+
+Run this script to terminate any dangling processes:
+
+```
+./scripts/stop-branch.sh
+```
+
+It also has a `--drop-db` flag if you need to start over, and `--dry-run` to see what processes would be terminated.

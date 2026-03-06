@@ -17,14 +17,14 @@ module('Integration | Component | picker', function (hooks) {
   setupRenderingTest(hooks);
 
   const testOptions: PickerOption[] = [
-    { id: '1', name: 'Option 1', icon: 'https://via.placeholder.com/20' },
-    { id: '2', name: 'Option 2', icon: 'https://via.placeholder.com/20' },
-    { id: '3', name: 'Option 3' },
-    { id: '4', name: 'Option 4' },
+    { id: '1', label: 'Option 1', icon: 'https://via.placeholder.com/20' },
+    { id: '2', label: 'Option 2', icon: 'https://via.placeholder.com/20' },
+    { id: '3', label: 'Option 3' },
+    { id: '4', label: 'Option 4' },
   ];
   const selectAllOption: PickerOption = {
     id: 'select-all',
-    name: 'All options',
+    label: 'All options',
     type: 'select-all',
   };
   const testOptionsWithSelectAll: PickerOption[] = [

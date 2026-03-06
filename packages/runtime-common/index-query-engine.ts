@@ -144,6 +144,8 @@ export interface WIPOptions {
 export interface PrerenderedCard {
   url: string;
   html: string | null;
+  cardType?: string;
+  iconHtml?: string;
   usedRenderType?: ResolvedCodeRef;
   isError?: true;
 }
@@ -637,7 +639,9 @@ export class IndexQueryEngine {
         ' as html,',
         ...usedRenderTypeColumnExpression,
         ' as used_render_type,',
-        'ANY_VALUE(deps) as deps',
+        'ANY_VALUE(deps) as deps,',
+        'ANY_VALUE(display_names) as display_names,',
+        'ANY_VALUE(icon_html) as icon_html',
       ],
       'instance',
     )) as {
@@ -676,9 +680,12 @@ export class IndexQueryEngine {
         }
       }
 
+      let displayNames = card.display_names as string[] | null;
       return {
         url: card.url!,
         html: card.html,
+        cardType: displayNames?.[0] ?? undefined,
+        iconHtml: (card.icon_html as string | null) ?? undefined,
         ...(usedRenderType ? { usedRenderType } : {}),
         ...(card.has_error ? { isError: true as const } : {}),
       };

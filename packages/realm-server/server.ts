@@ -255,7 +255,11 @@ export class RealmServer {
 
   listen(port: number) {
     let instance = this.app.listen(port);
-    this.log.info(`Realm server listening on port %s\n`, port);
+    instance.on('listening', () => {
+      let actualPort =
+        (instance.address() as import('net').AddressInfo | null)?.port ?? port;
+      this.log.info(`Realm server listening on port %s\n`, actualPort);
+    });
     return instance;
   }
 

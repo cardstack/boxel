@@ -1,3 +1,4 @@
+import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import type { RenderingTestContext } from '@ember/test-helpers';
 import { render, waitFor } from '@ember/test-helpers';
 
@@ -17,6 +18,7 @@ import {
   type LooseSingleCardDocument,
   CardContextName,
 } from '@cardstack/runtime-common';
+import type { PrerenderedCardLike } from '@cardstack/runtime-common/prerendered-card-search';
 
 import PrerenderedCardSearch, {
   knownFileMetaUrls,
@@ -949,5 +951,80 @@ module(`Integration | prerendered-card-search`, function (hooks) {
     assert
       .dom('[data-test-meta-page-total="5"]')
       .exists('meta.page.total remains correct on last page');
+  });
+
+  test('search results include cardType display name and usedRenderType code ref', async function (assert) {
+    let query: Query = {
+      filter: {
+        on: {
+          module: `${testRealmURL}book`,
+          name: 'Book',
+        },
+        eq: {
+          'author.firstName': 'Cardy',
+        },
+      },
+      sort: [
+        {
+          by: 'author.lastName',
+          on: { module: `${testRealmURL}book`, name: 'Book' },
+        },
+      ],
+    };
+    let realms = [testRealmURL];
+
+    // A helper component that exposes cardType and usedRenderType via data attributes
+    const CardMetaLister: TemplateOnlyComponent<{
+      Args: { cards: PrerenderedCardLike[] };
+    }> = <template>
+      {{#each @cards as |card|}}
+        <div
+          data-test-card-meta={{card.url}}
+          data-test-card-type={{card.cardType}}
+          data-test-used-render-type-module={{card.usedRenderType.module}}
+          data-test-used-render-type-name={{card.usedRenderType.name}}
+        ></div>
+      {{/each}}
+    </template>;
+
+    await render(
+      <template>
+        <PrerenderedCardSearch
+          @query={{query}}
+          @format='fitted'
+          @realms={{realms}}
+        >
+          <:loading>
+            Loading...
+          </:loading>
+          <:response as |cards|>
+            <CardMetaLister @cards={{cards}} />
+          </:response>
+        </PrerenderedCardSearch>
+      </template>,
+    );
+
+    await waitFor('[data-test-card-meta]');
+
+    const cardMeta = document.querySelectorAll('[data-test-card-meta]');
+    assert.strictEqual(cardMeta.length, 2, 'two Book cards are returned');
+
+    for (const el of cardMeta) {
+      assert.strictEqual(
+        el.getAttribute('data-test-card-type'),
+        'Book',
+        'cardType display name is "Book"',
+      );
+      assert.strictEqual(
+        el.getAttribute('data-test-used-render-type-module'),
+        `${testRealmURL}book`,
+        'usedRenderType.module points to the book module',
+      );
+      assert.strictEqual(
+        el.getAttribute('data-test-used-render-type-name'),
+        'Book',
+        'usedRenderType.name is "Book"',
+      );
+    }
   });
 });

@@ -5,7 +5,7 @@
     "relationships": {
       "defaultModelConfiguration": {
         "links": {
-          "self": "../ModelConfiguration/test-claude-sonnet-45"
+          "self": "../ModelConfiguration/test-claude-sonnet-46"
         }
       },
       "modelConfigurations.0": {
@@ -15,10 +15,15 @@
       },
       "modelConfigurations.1": {
         "links": {
-          "self": "../ModelConfiguration/test-claude-sonnet-45"
+          "self": "../ModelConfiguration/test-claude-sonnet-46"
         }
       },
       "modelConfigurations.2": {
+        "links": {
+          "self": "../ModelConfiguration/test-claude-sonnet-45"
+        }
+      },
+      "modelConfigurations.3": {
         "links": {
           "self": "../ModelConfiguration/test-claude-37-sonnet"
         }

@@ -58,21 +58,18 @@ export default class FittedFormatGallery extends Component<Signature> {
                   -
                   {{spec.width}}x{{spec.height}}
                 </div>
-                {{#if @isFieldDef}}
-                  <CardContainer
-                    class='item'
-                    @displayBoundaries={{true}}
-                    style={{setContainerSize spec}}
-                  >
-                    <this.renderedCard class='field' />
-                  </CardContainer>
-                {{else}}
-                  <this.renderedCard
-                    class='item'
-                    @displayContainer={{true}}
-                    style={{setContainerSize spec}}
-                  />
-                {{/if}}
+                <div class='item-sizer' style={{setContainerSize spec}}>
+                  {{#if @isFieldDef}}
+                    <CardContainer class='item' @displayBoundaries={{true}}>
+                      <this.renderedCard class='field' />
+                    </CardContainer>
+                  {{else}}
+                    <this.renderedCard
+                      class='item'
+                      @displayContainer={{true}}
+                    />
+                  {{/if}}
+                </div>
               </li>
             {{/each}}
           </ul>
@@ -110,7 +107,7 @@ export default class FittedFormatGallery extends Component<Signature> {
         letter-spacing: var(--boxel-lsp-sm);
         opacity: 70%;
       }
-      .spec-title + .item {
+      .spec-title + .item-sizer {
         margin-top: var(--boxel-sp-xs);
       }
       .item {
