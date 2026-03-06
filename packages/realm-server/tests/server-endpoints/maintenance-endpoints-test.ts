@@ -490,6 +490,32 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           2,
           'number of jobs initially is correct',
         );
+        let staleModuleForTargetRealmURL = `${realmURL}stale-module-${uuidv4()}.gts`;
+        let staleModuleForOtherRealmURL = `${testRealm2URL.href}stale-module-${uuidv4()}.gts`;
+        await context.dbAdapter.execute(
+          `INSERT INTO modules (url, file_alias, definitions, deps, created_at, resolved_realm_url, cache_scope, auth_user_id)
+           VALUES ('${staleModuleForTargetRealmURL}', '${staleModuleForTargetRealmURL}', '{}', '[]', ${Date.now()}, '${realmURL}', 'public', '')`,
+        );
+        await context.dbAdapter.execute(
+          `INSERT INTO modules (url, file_alias, definitions, deps, created_at, resolved_realm_url, cache_scope, auth_user_id)
+           VALUES ('${staleModuleForOtherRealmURL}', '${staleModuleForOtherRealmURL}', '{}', '[]', ${Date.now()}, '${testRealm2URL.href}', 'public', '')`,
+        );
+        let seededTargetRowsBefore = await context.dbAdapter.execute(
+          `SELECT * FROM modules WHERE url = '${staleModuleForTargetRealmURL}'`,
+        );
+        let seededOtherRowsBefore = await context.dbAdapter.execute(
+          `SELECT * FROM modules WHERE url = '${staleModuleForOtherRealmURL}'`,
+        );
+        assert.strictEqual(
+          seededTargetRowsBefore.length,
+          1,
+          'stale target realm module row was seeded',
+        );
+        assert.strictEqual(
+          seededOtherRowsBefore.length,
+          1,
+          'stale other realm module row was seeded',
+        );
         {
           let realmPath = realmURL.substring(
             new URL(testRealm2URL.origin).href.length,
@@ -507,6 +533,22 @@ module(`server-endpoints/${basename(__filename)}`, function () {
             totalIndexEntries: 2,
           });
         }
+        let seededTargetRowsAfter = await context.dbAdapter.execute(
+          `SELECT * FROM modules WHERE url = '${staleModuleForTargetRealmURL}'`,
+        );
+        let seededOtherRowsAfter = await context.dbAdapter.execute(
+          `SELECT * FROM modules WHERE url = '${staleModuleForOtherRealmURL}'`,
+        );
+        assert.strictEqual(
+          seededTargetRowsAfter.length,
+          0,
+          'realm reindex clears stale modules for the reindexed realm',
+        );
+        assert.strictEqual(
+          seededOtherRowsAfter.length,
+          1,
+          'realm reindex keeps modules for other realms',
+        );
         let finalJobs = await context.dbAdapter.execute('select * from jobs');
         assert.strictEqual(finalJobs.length, 3, 'an index job was created');
         let job = finalJobs.pop()!;
@@ -807,6 +849,24 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           2,
           'number of jobs initially is correct',
         );
+        let staleModuleForRealmOneURL = `${testRealm2URL.href}stale-module-${uuidv4()}.gts`;
+        let staleModuleForRealmTwoURL = `${realmURL}stale-module-${uuidv4()}.gts`;
+        await context.dbAdapter.execute(
+          `INSERT INTO modules (url, file_alias, definitions, deps, created_at, resolved_realm_url, cache_scope, auth_user_id)
+           VALUES ('${staleModuleForRealmOneURL}', '${staleModuleForRealmOneURL}', '{}', '[]', ${Date.now()}, '${testRealm2URL.href}', 'public', '')`,
+        );
+        await context.dbAdapter.execute(
+          `INSERT INTO modules (url, file_alias, definitions, deps, created_at, resolved_realm_url, cache_scope, auth_user_id)
+           VALUES ('${staleModuleForRealmTwoURL}', '${staleModuleForRealmTwoURL}', '{}', '[]', ${Date.now()}, '${realmURL}', 'public', '')`,
+        );
+        let seededRowsBefore = await context.dbAdapter.execute(
+          `SELECT * FROM modules WHERE url IN ('${staleModuleForRealmOneURL}', '${staleModuleForRealmTwoURL}')`,
+        );
+        assert.strictEqual(
+          seededRowsBefore.length,
+          2,
+          'stale module rows were seeded before full reindex',
+        );
         {
           let response = await context.request2
             .get(`/_grafana-full-reindex?authHeader=${grafanaSecret}`)
@@ -817,6 +877,14 @@ module(`server-endpoints/${basename(__filename)}`, function () {
             'indexed realms are correct',
           );
         }
+        let seededRowsAfter = await context.dbAdapter.execute(
+          `SELECT * FROM modules WHERE url IN ('${staleModuleForRealmOneURL}', '${staleModuleForRealmTwoURL}')`,
+        );
+        assert.strictEqual(
+          seededRowsAfter.length,
+          0,
+          'full reindex clears stale module rows for all realms',
+        );
         let finalJobs = await context.dbAdapter.execute('select * from jobs');
         assert.strictEqual(
           finalJobs.length,
@@ -833,6 +901,72 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           jobs[0].concurrency_group,
           `full-reindex-group`,
           'concurrency group is correct',
+        );
+      });
+
+      test('full reindex does not clear modules cache for bot-owned realms', async function (assert) {
+        let endpoint = `test-realm-${uuidv4()}`;
+        let owner = 'realm/bot';
+        let ownerUserId = `@${owner}:localhost`;
+        let botRealmURL: string;
+        {
+          let response = await context.request2
+            .post('/_create-realm')
+            .set('Accept', 'application/vnd.api+json')
+            .set('Content-Type', 'application/json')
+            .set(
+              'Authorization',
+              `Bearer ${createRealmServerJWT(
+                { user: ownerUserId, sessionRoom: 'session-room-test' },
+                realmSecretSeed,
+              )}`,
+            )
+            .send(
+              JSON.stringify({
+                data: {
+                  type: 'realm',
+                  attributes: {
+                    name: 'Bot Realm',
+                    endpoint,
+                  },
+                },
+              }),
+            );
+          assert.strictEqual(response.status, 201, 'HTTP 201 status');
+          botRealmURL = response.body.data.id;
+        }
+
+        let staleModuleForNonBotRealmURL = `${testRealm2URL.href}stale-module-${uuidv4()}.gts`;
+        let staleModuleForBotRealmURL = `${botRealmURL}stale-module-${uuidv4()}.gts`;
+        await context.dbAdapter.execute(
+          `INSERT INTO modules (url, file_alias, definitions, deps, created_at, resolved_realm_url, cache_scope, auth_user_id)
+           VALUES ('${staleModuleForNonBotRealmURL}', '${staleModuleForNonBotRealmURL}', '{}', '[]', ${Date.now()}, '${testRealm2URL.href}', 'public', '')`,
+        );
+        await context.dbAdapter.execute(
+          `INSERT INTO modules (url, file_alias, definitions, deps, created_at, resolved_realm_url, cache_scope, auth_user_id)
+           VALUES ('${staleModuleForBotRealmURL}', '${staleModuleForBotRealmURL}', '{}', '[]', ${Date.now()}, '${botRealmURL}', 'public', '')`,
+        );
+
+        let response = await context.request2
+          .get(`/_grafana-full-reindex?authHeader=${grafanaSecret}`)
+          .set('Content-Type', 'application/json');
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+
+        let staleRowsForNonBotRealm = await context.dbAdapter.execute(
+          `SELECT * FROM modules WHERE url = '${staleModuleForNonBotRealmURL}'`,
+        );
+        let staleRowsForBotRealm = await context.dbAdapter.execute(
+          `SELECT * FROM modules WHERE url = '${staleModuleForBotRealmURL}'`,
+        );
+        assert.strictEqual(
+          staleRowsForNonBotRealm.length,
+          0,
+          'full reindex clears stale module rows for non-bot realms',
+        );
+        assert.strictEqual(
+          staleRowsForBotRealm.length,
+          1,
+          'full reindex preserves module rows for bot realms that are skipped',
         );
       });
 
