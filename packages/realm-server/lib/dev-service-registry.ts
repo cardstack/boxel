@@ -80,9 +80,9 @@ export function isEnvironmentMode(): boolean {
 export function registerService(
   server: Server,
   serviceName: string,
-  env?: string,
+  opts?: { env?: string; wildcardSubdomains?: boolean },
 ): void {
-  let slug = env ?? getEnvironmentSlug();
+  let slug = opts?.env ?? getEnvironmentSlug();
   let addr = server.address() as AddressInfo;
   if (!addr || typeof addr === 'string') {
     log.error(
@@ -99,11 +99,19 @@ export function registerService(
   let routerKey = `${serviceName}-${slug}`;
   let hostname = serviceHostname(serviceName, slug);
 
+  // Build the Traefik Host rule. When wildcardSubdomains is true, also match
+  // any subdomain of the service hostname (e.g. *.realm-server.<slug>.localhost)
+  // so that published realm subdomains are routed to the same server.
+  let escapedHostname = hostname.replace(/\./g, '\\.');
+  let rule = opts?.wildcardSubdomains
+    ? `Host(\`${hostname}\`) || HostRegexp(\`^.+\\.${escapedHostname}$\`)`
+    : `Host(\`${hostname}\`)`;
+
   let config: any = {
     http: {
       routers: {
         [routerKey]: {
-          rule: `Host(\`${hostname}\`)`,
+          rule,
           service: routerKey,
           entryPoints: ['web'],
         },

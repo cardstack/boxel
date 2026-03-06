@@ -385,7 +385,7 @@ const getIndexHTML = async () => {
   let httpServer = server.listen(port);
   httpServer.on('listening', () => {
     if (isEnvironmentMode()) {
-      registerService(httpServer, serviceName);
+      registerService(httpServer, serviceName, { wildcardSubdomains: true });
     }
   });
   process.on('message', (message) => {
