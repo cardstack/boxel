@@ -71,19 +71,6 @@ module.exports = function (environment) {
     },
   };
 
-  if (environment === 'development') {
-    // ENV.APP.LOG_RESOLVER = true;
-    // ENV.APP.LOG_ACTIVE_GENERATION = true;
-    // ENV.APP.LOG_TRANSITIONS = true;
-    // ENV.APP.LOG_TRANSITIONS_INTERNAL = true;
-    // ENV.APP.LOG_VIEW_LOOKUPS = true;
-    ENV.defaultSystemCardId = process.env.DEFAULT_SYSTEM_CARD_ID;
-    if (!ENV.defaultSystemCardId && !skipCatalog) {
-      ENV.defaultSystemCardId =
-        'http://localhost:4201/catalog/SystemCard/default';
-    }
-  }
-
   if (environment === 'test') {
     // Testem prefers this...
     ENV.locationType = 'none';
@@ -105,24 +92,11 @@ module.exports = function (environment) {
     ENV.featureFlags = {
       SHOW_ASK_AI: true,
     };
-
-    ENV.defaultSystemCardId =
-      process.env.DEFAULT_SYSTEM_CARD_ID ??
-      'http://test-realm/test/SystemCard/default';
-  }
-
-  if (environment === 'staging') {
-    ENV.defaultSystemCardId =
-      process.env.DEFAULT_SYSTEM_CARD_ID ??
-      'https://realms-staging.stack.cards/catalog/SystemCard/default';
   }
 
   if (environment === 'production') {
     // here you can enable a production-specific feature
     ENV.logLevels = '*=warn';
-    ENV.defaultSystemCardId =
-      process.env.DEFAULT_SYSTEM_CARD_ID ??
-      'https://app.boxel.ai/catalog/SystemCard/default';
   }
 
   return ENV;
