@@ -90,6 +90,7 @@ export class Worker {
     queuePublisher,
     virtualNetwork,
     matrixURL,
+    matrixClient,
     realmServerMatrixUsername,
     secretSeed,
     reportStatus,
@@ -102,6 +103,7 @@ export class Worker {
     queuePublisher: QueuePublisher;
     virtualNetwork: VirtualNetwork;
     matrixURL: URL;
+    matrixClient?: MatrixClient;
     realmServerMatrixUsername: string;
     secretSeed: string;
     prerenderer: Prerenderer;
@@ -122,6 +124,12 @@ export class Worker {
     this.#queuePublisher = queuePublisher;
     this.#prerenderer = prerenderer;
     this.#createPrerenderAuth = createPrerenderAuth;
+    if (matrixClient) {
+      this.#matrixClientCache.set(
+        this.#realmServerMatrixUsername,
+        matrixClient,
+      );
+    }
   }
 
   async run() {

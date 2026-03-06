@@ -72,6 +72,7 @@ import { createRemotePrerenderer } from '../../prerender/remote-prerenderer';
 import { createPrerenderHttpServer } from '../../prerender/prerender-app';
 import { buildCreatePrerenderAuth } from '../../prerender/auth';
 import { Client as PgClient } from 'pg';
+import { MockMatrixClient } from './mock-matrix-client';
 
 const testRealmURL = new URL('http://127.0.0.1:4444/');
 const testRealmHref = testRealmURL.href;
@@ -173,7 +174,8 @@ export const realmServerSecretSeed = "mum's the word";
 export const realmSecretSeed = `shhh! it's a secret`;
 export const grafanaSecret = `shhh! it's a secret`;
 export const matrixRegistrationSecret: string =
-  getSynapseConfig()!.registration_shared_secret; // as long as synapse has been started at least once, this will always exist
+  getSynapseConfig()?.registration_shared_secret ??
+  'test-matrix-registration-secret';
 export const testCreatePrerenderAuth =
   buildCreatePrerenderAuth(realmSecretSeed);
 
@@ -496,6 +498,32 @@ function prerendererCacheKeyPart(prerenderer?: Prerenderer): string | null {
   return `injected:${id}`;
 }
 
+function makeTestMatrixClient({
+  matrixURL,
+  username,
+  seed,
+  useMockMatrix = true,
+}: {
+  matrixURL: URL;
+  username: string;
+  seed: string;
+  useMockMatrix?: boolean;
+}): MatrixClient {
+  if (useMockMatrix) {
+    return new MockMatrixClient({
+      matrixURL,
+      username,
+      seed,
+    });
+  }
+
+  return new MatrixClient({
+    matrixURL,
+    username,
+    seed,
+  });
+}
+
 async function startTestPrerenderServer(): Promise<string> {
   if (prerenderServer?.listening) {
     return testPrerenderURL;
@@ -671,6 +699,7 @@ export async function createRealm({
   withWorker,
   prerenderer: providedPrerenderer,
   enableFileWatcher = false,
+  useMockMatrix = true,
   cardSizeLimitBytes,
   fileSizeLimitBytes,
 }: {
@@ -687,6 +716,7 @@ export async function createRealm({
   deferStartUp?: true;
   prerenderer?: Prerenderer;
   enableFileWatcher?: boolean;
+  useMockMatrix?: boolean;
   cardSizeLimitBytes?: number;
   fileSizeLimitBytes?: number;
   // if you are creating a realm  to test it directly without a server, you can
@@ -710,6 +740,12 @@ export async function createRealm({
   }
 
   let adapter = new NodeAdapter(dir, enableFileWatcher);
+  let matrixClient = makeTestMatrixClient({
+    matrixURL: realmServerTestMatrix.url,
+    username: realmServerTestMatrix.username,
+    seed: realmSecretSeed,
+    useMockMatrix,
+  });
   let worker: Worker | undefined;
   if (withWorker) {
     if (!runner) {
@@ -723,17 +759,13 @@ export async function createRealm({
       queuePublisher: publisher,
       virtualNetwork,
       matrixURL: realmServerTestMatrix.url,
+      matrixClient: useMockMatrix ? matrixClient : undefined,
       secretSeed: realmSecretSeed,
       realmServerMatrixUsername: testRealmServerMatrixUsername,
       prerenderer,
       createPrerenderAuth: testCreatePrerenderAuth,
     });
   }
-  let matrixClient = new MatrixClient({
-    matrixURL: realmServerTestMatrix.url,
-    username: realmServerTestMatrix.username,
-    seed: realmSecretSeed,
-  });
   let realm = new Realm({
     url: realmURL,
     adapter,
@@ -775,6 +807,7 @@ export async function runTestRealmServer({
   matrixURL,
   permissions = { '*': ['read'] },
   enableFileWatcher = false,
+  useMockMatrix = true,
   cardSizeLimitBytes,
   fileSizeLimitBytes,
   domainsForPublishedRealms = {
@@ -795,6 +828,7 @@ export async function runTestRealmServer({
   matrixURL: URL;
   matrixConfig?: MatrixConfig;
   enableFileWatcher?: boolean;
+  useMockMatrix?: boolean;
   cardSizeLimitBytes?: number;
   fileSizeLimitBytes?: number;
   domainsForPublishedRealms?: {
@@ -817,6 +851,14 @@ export async function runTestRealmServer({
     queuePublisher: publisher,
     virtualNetwork,
     matrixURL,
+    matrixClient: useMockMatrix
+      ? makeTestMatrixClient({
+          matrixURL,
+          username: testRealmServerMatrixUsername,
+          seed: realmSecretSeed,
+          useMockMatrix,
+        })
+      : undefined,
     secretSeed: realmSecretSeed,
     realmServerMatrixUsername: testRealmServerMatrixUsername,
     prerenderer,
@@ -833,6 +875,7 @@ export async function runTestRealmServer({
     publisher,
     dbAdapter,
     enableFileWatcher,
+    useMockMatrix,
     definitionLookup,
     cardSizeLimitBytes,
     fileSizeLimitBytes,
@@ -842,10 +885,11 @@ export async function runTestRealmServer({
 
   virtualNetwork.mount(testRealm.handle);
   let realms = [testRealm];
-  let matrixClient = new MatrixClient({
+  let matrixClient = makeTestMatrixClient({
     matrixURL: realmServerTestMatrix.url,
     username: realmServerTestMatrix.username,
     seed: realmSecretSeed,
+    useMockMatrix,
   });
 
   let testRealmServer = new RealmServer({
@@ -890,6 +934,7 @@ export async function runTestRealmServerWithRealms({
   dbAdapter,
   matrixURL,
   enableFileWatcher = false,
+  useMockMatrix = true,
   domainsForPublishedRealms = {
     boxelSpace: 'localhost',
     boxelSite: 'localhost',
@@ -909,6 +954,7 @@ export async function runTestRealmServerWithRealms({
   dbAdapter: PgAdapter;
   matrixURL: URL;
   enableFileWatcher?: boolean;
+  useMockMatrix?: boolean;
   domainsForPublishedRealms?: {
     boxelSpace?: string;
     boxelSite?: string;
@@ -931,6 +977,14 @@ export async function runTestRealmServerWithRealms({
     queuePublisher: publisher,
     virtualNetwork,
     matrixURL,
+    matrixClient: useMockMatrix
+      ? makeTestMatrixClient({
+          matrixURL,
+          username: testRealmServerMatrixUsername,
+          seed: realmSecretSeed,
+          useMockMatrix,
+        })
+      : undefined,
     secretSeed: realmSecretSeed,
     realmServerMatrixUsername: testRealmServerMatrixUsername,
     prerenderer,
@@ -958,6 +1012,7 @@ export async function runTestRealmServerWithRealms({
       publisher,
       dbAdapter,
       enableFileWatcher,
+      useMockMatrix,
       definitionLookup,
     });
     await realm.logInToMatrix();
@@ -966,10 +1021,11 @@ export async function runTestRealmServerWithRealms({
     realmAdapters.push(adapter);
   }
 
-  let matrixClient = new MatrixClient({
+  let matrixClient = makeTestMatrixClient({
     matrixURL: realmServerTestMatrix.url,
     username: realmServerTestMatrix.username,
     seed: realmSecretSeed,
+    useMockMatrix,
   });
 
   let serverURL = new URL(realms[0].realmURL.origin);
@@ -1020,13 +1076,18 @@ type InternalPermissionedRealmsSetupOptions = {
     fileSystem?: Record<string, string | LooseSingleCardDocument>;
   }[];
   prerenderer?: Prerenderer;
+  useMockMatrix?: boolean;
 };
 
 async function startPermissionedRealmsFixture(
   dbAdapter: PgAdapter,
   publisher: QueuePublisher,
   runner: QueueRunner,
-  { realms: realmConfigs, prerenderer }: InternalPermissionedRealmsSetupOptions,
+  {
+    realms: realmConfigs,
+    prerenderer,
+    useMockMatrix = true,
+  }: InternalPermissionedRealmsSetupOptions,
 ): Promise<{ realms: PermissionedRealmsFixtureRealm[] }> {
   let realms: PermissionedRealmsFixtureRealm[] = [];
 
@@ -1047,6 +1108,7 @@ async function startPermissionedRealmsFixture(
       dbAdapter,
       publisher,
       runner,
+      useMockMatrix,
       prerenderer,
     });
     realms.push({
@@ -1076,6 +1138,7 @@ export function setupPermissionedRealms(
     realms: realmsArg,
     onRealmSetup,
     prerenderer,
+    useMockMatrix = true,
     dbTemplateDatabase,
   }: {
     mode?: 'beforeEach' | 'before';
@@ -1085,6 +1148,7 @@ export function setupPermissionedRealms(
       fileSystem?: Record<string, string | LooseSingleCardDocument>;
     }[];
     prerenderer?: Prerenderer;
+    useMockMatrix?: boolean;
     // Internal hook used by cached setup wrappers
     dbTemplateDatabase?: TestDatabaseTemplateProvider;
     onRealmSetup?: (args: {
@@ -1113,6 +1177,7 @@ export function setupPermissionedRealms(
         {
           realms: realmsArg,
           prerenderer,
+          useMockMatrix,
         },
       ));
       onRealmSetup?.({
@@ -1292,11 +1357,15 @@ export function setupMatrixRoom(
     dir: DirResult;
     dbAdapter: PgAdapter;
   },
+  options?: {
+    useMockMatrix?: boolean;
+  },
 ) {
-  let matrixClient = new MatrixClient({
+  let matrixClient = makeTestMatrixClient({
     matrixURL: realmServerTestMatrix.url,
     username: 'node-test_realm',
     seed: realmSecretSeed,
+    useMockMatrix: options?.useMockMatrix ?? true,
   });
 
   let testAuthRoomId: string | undefined;
@@ -1422,6 +1491,7 @@ type InternalPermissionedRealmSetupOptions = {
   fileSystem?: Record<string, string | LooseSingleCardDocument>;
   subscribeToRealmEvents?: boolean;
   prerenderer?: Prerenderer;
+  useMockMatrix?: boolean;
   published?: boolean;
   cardSizeLimitBytes?: number;
   fileSizeLimitBytes?: number;
@@ -1437,6 +1507,7 @@ async function startPermissionedRealmFixture(
     fileSystem,
     subscribeToRealmEvents = false,
     prerenderer,
+    useMockMatrix = true,
     published = false,
     cardSizeLimitBytes,
     fileSizeLimitBytes,
@@ -1498,6 +1569,7 @@ async function startPermissionedRealmFixture(
     matrixURL,
     fileSystem,
     enableFileWatcher: subscribeToRealmEvents,
+    useMockMatrix,
     cardSizeLimitBytes,
     fileSizeLimitBytes,
     prerenderer,
@@ -1533,6 +1605,7 @@ export function setupPermissionedRealm(
     subscribeToRealmEvents = false,
     mode = 'beforeEach',
     prerenderer,
+    useMockMatrix = true,
     dbTemplateDatabase,
     published = false,
     cardSizeLimitBytes,
@@ -1553,6 +1626,7 @@ export function setupPermissionedRealm(
     subscribeToRealmEvents?: boolean;
     mode?: 'beforeEach' | 'before';
     prerenderer?: Prerenderer;
+    useMockMatrix?: boolean;
     // Internal hook used by cached setup wrappers
     dbTemplateDatabase?: TestDatabaseTemplateProvider;
     published?: boolean;
@@ -1581,6 +1655,7 @@ export function setupPermissionedRealm(
         permissions,
         subscribeToRealmEvents,
         prerenderer,
+        useMockMatrix,
         published,
         cardSizeLimitBytes,
         fileSizeLimitBytes,
@@ -1622,6 +1697,7 @@ function permissionedRealmTemplateCacheKey(
     permissions: options.permissions,
     fileSystem: options.fileSystem ?? null,
     subscribeToRealmEvents: Boolean(options.subscribeToRealmEvents),
+    useMockMatrix: Boolean(options.useMockMatrix),
     published: Boolean(options.published),
     cardSizeLimitBytes: options.cardSizeLimitBytes ?? null,
     fileSizeLimitBytes: options.fileSizeLimitBytes ?? null,
@@ -1667,6 +1743,7 @@ async function buildPermissionedRealmTemplate(
         permissions: options.permissions,
         subscribeToRealmEvents: options.subscribeToRealmEvents,
         prerenderer: options.prerenderer,
+        useMockMatrix: options.useMockMatrix,
         published: options.published,
         cardSizeLimitBytes: options.cardSizeLimitBytes,
         fileSizeLimitBytes: options.fileSizeLimitBytes,
@@ -1812,6 +1889,7 @@ function permissionedRealmsTemplateCacheKey(
     version: 1,
     type: 'permissioned-realms',
     realms: options.realms,
+    useMockMatrix: Boolean(options.useMockMatrix),
     prerenderer: prerendererCacheKeyPart(options.prerenderer),
   });
 }
@@ -1851,6 +1929,7 @@ async function buildPermissionedRealmsTemplate(
       {
         realms: options.realms,
         prerenderer: options.prerenderer,
+        useMockMatrix: options.useMockMatrix,
       },
     );
 
