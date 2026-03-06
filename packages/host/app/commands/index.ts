@@ -7,6 +7,7 @@ import * as ApplySearchReplaceBlockCommandModule from './apply-search-replace-bl
 import * as AskAiCommandModule from './ask-ai';
 import * as CreateListingPRRequestCommandModule from './bot-requests/create-listing-pr-request';
 import * as SendBotTriggerEventCommandModule from './bot-requests/send-bot-trigger-event';
+import * as CancelIndexingJobCommandModule from './cancel-indexing-job';
 import * as CheckCorrectnessCommandModule from './check-correctness';
 import * as CopyAndEditCommandModule from './copy-and-edit';
 import * as CopyCardToRealmModule from './copy-card';
@@ -117,6 +118,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/check-correctness',
     CheckCorrectnessCommandModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/cancel-indexing-job',
+    CancelIndexingJobCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/generate-theme-example',
@@ -401,6 +406,7 @@ export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
   SwitchSubmodeCommandModule.default,
   TransformCardsCommandModule.default,
   UnregisterBotCommandModule.default,
+  CancelIndexingJobCommandModule.default,
   CheckCorrectnessCommandModule.default,
   UpdateCodePathWithSelectionCommandModule.default,
   UpdatePlaygroundSelectionCommandModule.default,

@@ -40,7 +40,7 @@ export default class PickerSelectedItem extends Component<PickerSelectedItemSign
   }
 
   get text() {
-    return this.args.option.name;
+    return this.args.option.shortLabel || this.args.option.label;
   }
 
   get isIconString() {

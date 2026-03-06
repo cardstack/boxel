@@ -1182,7 +1182,7 @@ export async function insertPlan(
   creditsIncluded: number,
   stripePlanId: string,
 ): Promise<Plan> {
-  let { valueExpressions, nameExpressions: nameExpressions } = asExpressions({
+  let { valueExpressions, nameExpressions } = asExpressions({
     name,
     monthly_price: monthlyPrice,
     credits_included: creditsIncluded,
@@ -1267,7 +1267,7 @@ export async function insertJob(
     priority?: number;
   },
 ): Promise<Record<string, any>> {
-  let { valueExpressions, nameExpressions: nameExpressions } = asExpressions({
+  let { valueExpressions, nameExpressions } = asExpressions({
     job_type: params.job_type,
     args: params.args ?? {},
     concurrency_group: params.concurrency_group ?? null,
@@ -1584,6 +1584,8 @@ export function setupPermissionedRealm(
     fileSystem?: Record<string, string | LooseSingleCardDocument>;
     onRealmSetup?: (args: {
       dbAdapter: PgAdapter;
+      publisher: QueuePublisher;
+      runner: QueueRunner;
       testRealm: Realm;
       testRealmPath: string;
       testRealmHttpServer: Server;
@@ -1630,6 +1632,8 @@ export function setupPermissionedRealm(
 
       onRealmSetup?.({
         dbAdapter,
+        publisher,
+        runner,
         testRealm: testRealmServer.testRealm,
         testRealmPath: testRealmServer.testRealmDir,
         testRealmHttpServer: testRealmServer.testRealmHttpServer,

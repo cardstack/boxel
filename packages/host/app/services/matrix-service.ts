@@ -1159,7 +1159,14 @@ export default class MatrixService extends Service {
     attachedFiles: ReturnType<FileDef['serialize']>[];
   }> {
     let cardFileDefs = await this.uploadCards(attachedCards);
-    let uploadedFileDefs = await this.uploadFiles(attachedFiles);
+    // Skip uploading files that were already eagerly uploaded (url is already
+    // set by startFileUpload); only upload files that don't yet have a url.
+    let filesToUpload = attachedFiles.filter((f) => !f.url);
+    if (filesToUpload.length > 0) {
+      await this.uploadFiles(filesToUpload);
+    }
+    // Preserve original order; freshly uploaded files now have url set on them.
+    let uploadedFileDefs = attachedFiles;
 
     return {
       context,

@@ -81,7 +81,8 @@ export default class PickerBeforeOptionsWithSearch extends Component<BeforeOptio
         border: none;
       }
 
-      .picker-before-options__search-input:focus-visible {
+      .picker-before-options__search-input:focus-visible,
+      .search {
         outline: none;
       }
     </style>
