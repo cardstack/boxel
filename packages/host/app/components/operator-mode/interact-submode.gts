@@ -688,7 +688,8 @@ export default class InteractSubmode extends Component {
       on: specRef,
       every: [{ eq: { isCard: true } }],
     };
-    let specId = await chooseCard({ filter: specFilter });
+    let specIds = await chooseCard({ filter: specFilter });
+    let specId = specIds?.[0];
     if (!specId) {
       return;
     }

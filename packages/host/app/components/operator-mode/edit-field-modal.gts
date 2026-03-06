@@ -174,11 +174,12 @@ export default class EditFieldModal extends Component<Signature> {
   });
 
   private chooseCardTask = restartableTask(async () => {
-    let specId = await chooseCard({
+    let specIds = await chooseCard({
       filter: {
         type: specRef,
       },
     });
+    let specId = specIds?.[0];
 
     if (specId) {
       let spec = await this.store.get<Spec>(specId);

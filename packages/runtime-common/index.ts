@@ -411,7 +411,7 @@ export interface CardChooser {
       createNewCard?: CreateNewCard;
       consumingRealm?: URL;
     },
-  ): Promise<undefined | string>;
+  ): Promise<undefined | string[]>;
 }
 
 export interface FileChooser {
@@ -434,7 +434,7 @@ export async function chooseCard(
     preselectedCardTypeQuery?: Query;
     consumingRealm?: URL;
   },
-): Promise<undefined | string> {
+): Promise<undefined | string[]> {
   let here = globalThis as any;
   if (!here._CARDSTACK_CARD_CHOOSER) {
     throw new Error(
