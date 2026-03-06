@@ -71,6 +71,13 @@ module.exports = function (environment) {
     },
   };
 
+  if (ENV.resolvedCatalogRealmURL) {
+    ENV.defaultSystemCardId = new URL(
+      'SystemCard/default',
+      withTrailingSlash(ENV.resolvedCatalogRealmURL),
+    ).href;
+  }
+
   if (environment === 'test') {
     // Testem prefers this...
     ENV.locationType = 'none';
@@ -92,6 +99,9 @@ module.exports = function (environment) {
     ENV.featureFlags = {
       SHOW_ASK_AI: true,
     };
+    if (!ENV.defaultSystemCardId) {
+      ENV.defaultSystemCardId = 'http://test-realm/test/SystemCard/default';
+    }
   }
 
   if (environment === 'production') {
@@ -123,4 +133,8 @@ function getLatestSchemaFile() {
     );
   }
   return path.join(schemaDir, latestSchemaFile);
+}
+
+function withTrailingSlash(url) {
+  return url.endsWith('/') ? url : `${url}/`;
 }

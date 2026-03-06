@@ -32,7 +32,6 @@ import {
   logger,
   isCardInstance,
   Deferred,
-  ensureTrailingSlash,
   SEARCH_MARKER,
   REPLACE_MARKER,
   SEPARATOR_MARKER,
@@ -142,13 +141,7 @@ import type {
 
 import type * as MatrixSDK from 'matrix-js-sdk';
 
-const { matrixURL } = ENV;
-const defaultSystemCardId = ENV.resolvedCatalogRealmURL
-  ? new URL(
-      'SystemCard/default',
-      ensureTrailingSlash(ENV.resolvedCatalogRealmURL),
-    ).href
-  : undefined;
+const { matrixURL, defaultSystemCardId } = ENV;
 const STATE_EVENTS_OF_INTEREST = ['m.room.create', 'm.room.name'];
 
 const realmEventsLogger = logger('realm:events');
