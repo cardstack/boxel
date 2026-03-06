@@ -534,9 +534,11 @@ async function probeImageURL(url: string): Promise<string> {
       response.headers.get('x-test-realm-sw-client-visibility') ?? '<missing>';
     let responseBuffer = await response.clone().arrayBuffer();
     let bytes = new Uint8Array(responseBuffer);
+    let checksum = checksum32(bytes);
     let magic = bytesToHexPrefix(bytes, 16);
     let inferredKind = inferImageKind(bytes, contentType);
     let bitmapProbe = await probeCreateImageBitmap(responseBuffer, contentType);
+    let virtualNetworkProbe = await probeVirtualNetworkImageURL(url, checksum);
 
     return [
       `fetchProbe=${response.status} ${response.statusText || ''}`.trim(),
@@ -547,13 +549,46 @@ async function probeImageURL(url: string): Promise<string> {
       `swClientVisibility=${swClientVisibility}`,
       `swClientURL=${swClientURL}`,
       `bodyBytes=${String(bytes.byteLength)}`,
+      `checksum=${checksum}`,
       `magic=${magic}`,
       `inferredKind=${inferredKind}`,
       bitmapProbe,
+      virtualNetworkProbe,
     ].join(' | ');
   } catch (error) {
     let reason = normalizeErrorMessage(error);
     return `fetchProbe=error (${reason})`;
+  }
+}
+
+async function probeVirtualNetworkImageURL(
+  url: string,
+  browserFetchChecksum: string,
+): Promise<string> {
+  try {
+    let network = getService('network') as {
+      virtualNetwork: { fetch: typeof fetch };
+    };
+    let response = await network.virtualNetwork.fetch(url);
+    let contentType = response.headers.get('content-type') ?? '<missing>';
+    let buffer = await response.arrayBuffer();
+    let bytes = new Uint8Array(buffer);
+    let checksum = checksum32(bytes);
+    let magic = bytesToHexPrefix(bytes, 16);
+    let inferredKind = inferImageKind(bytes, contentType);
+    let matchesBrowserFetch = checksum === browserFetchChecksum ? 'yes' : 'no';
+
+    return [
+      `virtualProbe=${response.status} ${response.statusText || ''}`.trim(),
+      `virtualContentType=${contentType}`,
+      `virtualBodyBytes=${String(bytes.byteLength)}`,
+      `virtualChecksum=${checksum}`,
+      `virtualMagic=${magic}`,
+      `virtualInferredKind=${inferredKind}`,
+      `virtualMatchesFetch=${matchesBrowserFetch}`,
+    ].join(' | ');
+  } catch (error) {
+    return `virtualProbe=error (${normalizeErrorMessage(error)})`;
   }
 }
 
@@ -696,6 +731,15 @@ function normalizeErrorMessage(error: unknown): string {
   return error instanceof Error && error.message
     ? error.message
     : String(error ?? 'unknown');
+}
+
+function checksum32(bytes: Uint8Array): string {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < bytes.length; i++) {
+    hash ^= bytes[i]!;
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return hash.toString(16).padStart(8, '0');
 }
 
 function normalizeCapturedErrorText(errorText: string): string {
