@@ -484,9 +484,6 @@ module(basename(__filename), function () {
         realm = testRealm;
       },
     });
-    hooks.before(async () => {
-      await realm.start();
-    });
 
     test('realm is full indexed at boot', async function (assert) {
       let jobs = await testDbAdapter.execute('select * from jobs');
@@ -1344,9 +1341,6 @@ module(basename(__filename), function () {
         realm = testRealm;
         adapter = testRealmAdapter;
       },
-    });
-    hooks.beforeEach(async () => {
-      await realm.start();
     });
 
     async function startIndexingGroupBlocker() {

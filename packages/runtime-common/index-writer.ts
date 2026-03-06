@@ -693,9 +693,25 @@ export class Batch {
     return typesByUrl;
   }
 
-  private async urlsMatchingSeed(seedURL: URL): Promise<string[]> {
+  private async urlsMatchingSeedFromCurrentBatch(seedURL: URL): Promise<string[]> {
     let rows = (await this.#query([
       `SELECT DISTINCT url FROM boxel_index_working WHERE`,
+      ...every([
+        ['realm_url =', param(this.realmURL.href)],
+        ['realm_version =', param(this.realmVersion)],
+        any([
+          ['url =', param(seedURL.href)],
+          ['file_alias =', param(seedURL.href)],
+        ]),
+      ]),
+    ] as Expression)) as Pick<BoxelIndexTable, 'url'>[];
+
+    return rows.map(({ url }) => url);
+  }
+
+  private async urlsMatchingSeedFromProduction(seedURL: URL): Promise<string[]> {
+    let rows = (await this.#query([
+      `SELECT DISTINCT url FROM boxel_index WHERE`,
       ...every([
         ['realm_url =', param(this.realmURL.href)],
         any([
@@ -706,6 +722,17 @@ export class Batch {
     ] as Expression)) as Pick<BoxelIndexTable, 'url'>[];
 
     return rows.map(({ url }) => url);
+  }
+
+  private async urlsMatchingSeed(seedURL: URL): Promise<string[]> {
+    let currentBatchMatches = await this.urlsMatchingSeedFromCurrentBatch(
+      seedURL,
+    );
+    if (currentBatchMatches.length > 0) {
+      return currentBatchMatches;
+    }
+
+    return await this.urlsMatchingSeedFromProduction(seedURL);
   }
 
   private async invalidationSeeds(url: URL): Promise<string[]> {
