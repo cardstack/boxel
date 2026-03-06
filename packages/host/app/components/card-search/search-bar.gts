@@ -13,6 +13,7 @@ import { IconSearch } from '@cardstack/boxel-ui/icons';
 import { autoFocus } from '@cardstack/boxel-ui/modifiers';
 
 import RealmPicker from '@cardstack/host/components/realm-picker';
+import TypePicker from '@cardstack/host/components/type-picker';
 
 let elementCallback = modifier(
   (element, [callback]: [((element: HTMLElement) => void) | undefined]) => {
@@ -35,6 +36,9 @@ interface Signature {
     onInputInsertion?: (element: HTMLElement) => void;
     selectedRealms: PickerOption[];
     onRealmChange: (selected: PickerOption[]) => void;
+    typeOptions: PickerOption[];
+    selectedTypes: PickerOption[];
+    onTypeChange: (selected: PickerOption[]) => void;
     bottomTreatment?: BoxelInputBottomTreatments;
     state?: 'none' | 'valid' | 'invalid' | 'loading' | 'initial';
     id?: string;
@@ -67,6 +71,14 @@ export default class SearchBar extends Component<Signature> {
           @onChange={{@onRealmChange}}
         />
       </div>
+      <div class='search-sheet__search-bar-picker'>
+        <TypePicker
+          @options={{@typeOptions}}
+          @selected={{@selectedTypes}}
+          @onChange={{@onTypeChange}}
+        />
+      </div>
+      <div class='search-sheet__search-bar-separator' aria-hidden='true'></div>
       {{! template-lint-disable no-invalid-interactive }}
       <div
         class='search-sheet__search-bar-input-wrap'
