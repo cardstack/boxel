@@ -116,5 +116,4 @@ module('Unit | file-def-manager canonicalize', function () {
       'contentHashCache should not contain a realm URL',
     );
   });
-
 });
