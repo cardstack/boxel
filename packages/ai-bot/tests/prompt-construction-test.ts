@@ -5418,9 +5418,14 @@ new
       let imageParts = messageContent.filter(
         (part: any) => part.type === 'image_url',
       );
+      assert.strictEqual(
+        imageParts.length,
+        1,
+        'Should include exactly one image_url content part',
+      );
       assert.ok(
-        imageParts.length > 0,
-        'Should include at least one image_url content part',
+        imageParts[0].image_url.url.startsWith('data:image/png;base64,'),
+        'image_url should be a base64 data URL with correct content type',
       );
 
       let textParts = messageContent.filter(
