@@ -605,7 +605,7 @@ class Isolated extends Component<typeof AILayoutBoard> {
     async (canvasX: number, canvasY: number) => {
       try {
         // Open card chooser with no type filter (any card can be linked)
-        const cardId = await chooseCard(
+        const cardIds = await chooseCard(
           { filter: { type: baseCardRef } }, // Allow any card type
           {
             offerToCreate: {
@@ -620,6 +620,7 @@ class Isolated extends Component<typeof AILayoutBoard> {
             ),
           },
         );
+        const cardId = cardIds?.[0];
 
         if (cardId) {
           // ¹²⁸ Create external card with selected card from chooser, right of anchor

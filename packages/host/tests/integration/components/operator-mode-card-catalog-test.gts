@@ -356,7 +356,7 @@ module('Integration | operator-mode | card catalog', function (hooks) {
 
       assert
         .dom('[data-test-search-label]')
-        .hasText('5 results across 3 realms'); // 5 in test realm
+        .hasText('5 results across 4 realms'); // 5 in test realm
       assert
         .dom(`[data-test-recent-card-result="${testRealmURL}Pet/mango"]`)
         .exists('Pet recent card appears in the linksTo picker');
@@ -373,7 +373,7 @@ module('Integration | operator-mode | card catalog', function (hooks) {
 
       assert
         .dom('[data-test-search-label]')
-        .hasText('5 results across 3 realms'); // 5 in test realm
+        .hasText('5 results across 4 realms'); // 5 in test realm
       assert
         .dom(`[data-test-recent-card-result="${testRealmURL}Pet/mango"]`)
         .exists('Pet recent card appears in the linksTo picker');
@@ -1315,5 +1315,36 @@ module('Integration | operator-mode | card catalog', function (hooks) {
 
     assert.dom(`[data-test-boxel-filter-list-button]`).exists({ count: 13 });
     assert.dom(`[data-test-boxel-filter-list-button="Skill"]`).doesNotExist();
+  });
+
+  test('selection-dropdown-trigger is visible in multi-select mode and hidden in single-select mode', async function (assert) {
+    ctx.setCardInOperatorModeState(`${testRealmURL}Person/hassan`, 'edit');
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+
+    await waitFor(`[data-test-stack-card="${testRealmURL}Person/hassan"]`);
+
+    // Open single-select linksTo chooser for 'pet' field
+    await waitFor(`[data-test-add-new="pet"]`);
+    await click(`[data-test-add-new="pet"]`);
+    await waitFor('[data-test-card-catalog-modal]');
+
+    assert
+      .dom('[data-test-selection-dropdown-trigger]')
+      .doesNotExist('selection dropdown is hidden in single-select mode');
+
+    // Close and open multi-select linksToMany chooser for 'friends' field
+    await click('[data-test-card-catalog-cancel-button]');
+    await waitFor('[data-test-card-catalog-modal]', { count: 0 });
+
+    await click(`[data-test-add-new="friends"]`);
+    await waitFor('[data-test-card-catalog-modal]');
+
+    assert
+      .dom('[data-test-selection-dropdown-trigger]')
+      .exists('selection dropdown is visible in multi-select mode');
   });
 });

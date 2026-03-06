@@ -84,7 +84,10 @@ interface Signature {
     selectedRealmURLs: string[];
     isCompact: boolean;
     handleSelect: (selection: string | NewCardArgs) => void;
-    selectedCard?: string | NewCardArgs;
+    selectedCards?: (string | NewCardArgs)[];
+    multiSelect?: boolean;
+    onSelectAll?: (cards: string[]) => void;
+    onDeselectAll?: () => void;
     baseFilter?: Filter;
     offerToCreate?: {
       ref: CodeRef;
@@ -478,6 +481,27 @@ export default class SearchContent extends Component<Signature> {
     return !!this.focusedSection && this.focusedSection !== sectionId;
   }
 
+  private get allCards(): string[] {
+    const urls: string[] = [];
+    // Cards from search results (realm sections)
+    for (const card of this.args.searchResource.instances) {
+      if (card.url) {
+        urls.push(card.url.replace(/\.json$/, ''));
+      }
+    }
+    // Cards from recents
+    for (const card of this.sortedRecentCards) {
+      if (card.id) {
+        urls.push(card.id.replace(/\.json$/, ''));
+      }
+    }
+    // Card from URL section
+    if (this.resolvedCard?.id) {
+      urls.push(this.resolvedCard.id.replace(/\.json$/, ''));
+    }
+    return [...new Set(urls)];
+  }
+
   private get hasNoResults(): boolean {
     return (
       this.sections.length === 0 &&
@@ -506,6 +530,11 @@ export default class SearchContent extends Component<Signature> {
             @sortOptions={{SORT_OPTIONS}}
             @onChangeView={{this.onChangeView}}
             @onChangeSort={{this.onChangeSort}}
+            @multiSelect={{@multiSelect}}
+            @selectedCards={{@selectedCards}}
+            @allCards={{this.allCards}}
+            @onSelectAll={{@onSelectAll}}
+            @onDeselectAll={{@onDeselectAll}}
           />
         {{/unless}}
       {{/if}}
@@ -543,7 +572,8 @@ export default class SearchContent extends Component<Signature> {
             @onFocusSection={{this.onFocusSection}}
             @getDisplayedCount={{this.getDisplayedCount}}
             @onShowMore={{this.onShowMore}}
-            @selectedCard={{@selectedCard}}
+            @selectedCards={{@selectedCards}}
+            @multiSelect={{@multiSelect}}
             @offerToCreate={{@offerToCreate}}
             @onSubmit={{@onSubmit}}
             data-section-sid={{section.sid}}

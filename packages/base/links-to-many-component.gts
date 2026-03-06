@@ -154,9 +154,15 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
       },
     );
     if (cardId) {
-      let card = await this.cardContext.store.get(cardId);
-      if (isCardInstance(card)) {
-        selectedCards = [...selectedCards, card];
+      let newCards = [];
+      for (let id of cardId) {
+        let card = await this.cardContext.store.get(id);
+        if (isCardInstance(card)) {
+          newCards.push(card);
+        }
+      }
+      if (newCards.length > 0) {
+        selectedCards = [...selectedCards, ...newCards];
         (this.args.model.value as any)[this.args.field.name] = selectedCards;
       }
     }

@@ -133,9 +133,10 @@ export default class AttachButton extends Component<Signature> {
   }
 
   private chooseCardTask = restartableTask(async () => {
-    let cardId = await chooseCard({
+    let cardIds = await chooseCard({
       filter: { type: baseCardRef },
     });
+    let cardId = cardIds?.[0];
     if (cardId) {
       this.args.chooseCard(cardId);
     }

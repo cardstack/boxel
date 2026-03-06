@@ -2,8 +2,10 @@ import {
   waitFor,
   waitUntil,
   click,
+  doubleClick,
   fillIn,
   triggerEvent,
+  triggerKeyEvent,
 } from '@ember/test-helpers';
 
 import GlimmerComponent from '@glimmer/component';
@@ -943,5 +945,268 @@ module('Integration | operator-mode | links', function (hooks) {
     assert
       .dom(`[data-test-plural-view-field="favoriteGames"]`)
       .containsText('Go');
+  });
+
+  test('can add multiple cards at once to a linksToMany field', async function (assert) {
+    ctx.setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+
+    await waitFor(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`);
+    await click('[data-test-edit-button]');
+
+    assert.dom('[data-test-field="friends"] [data-test-pet]').doesNotExist();
+    await click('[data-test-links-to-many="friends"] [data-test-add-new]');
+    await waitFor('[data-test-card-catalog-modal]');
+    await waitFor(`[data-test-card-catalog-item="${testRealmURL}Pet/jackie"]`);
+
+    await click(`[data-test-card-catalog-item="${testRealmURL}Pet/jackie"]`);
+    await click(`[data-test-card-catalog-item="${testRealmURL}Pet/mango"]`);
+
+    assert
+      .dom(
+        `[data-test-card-catalog-item="${testRealmURL}Pet/jackie"][data-test-card-catalog-item-selected]`,
+      )
+      .exists('Jackie is selected');
+    assert
+      .dom(
+        `[data-test-card-catalog-item="${testRealmURL}Pet/mango"][data-test-card-catalog-item-selected]`,
+      )
+      .exists('Mango is selected');
+
+    await click('[data-test-card-catalog-go-button]');
+    await waitUntil(() => !document.querySelector('[data-test-card-catalog-modal]'));
+
+    assert.dom('[data-test-field="friends"]').containsText('Jackie');
+    assert.dom('[data-test-field="friends"]').containsText('Mango');
+    assert
+      .dom('[data-test-links-to-many="friends"] [data-test-card-format="fitted"]')
+      .exists({ count: 2 });
+  });
+
+  test('already-linked cards are excluded from the multi-select chooser', async function (assert) {
+    ctx.setCardInOperatorModeState(`${testRealmURL}Person/burcu`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+
+    await waitFor(`[data-test-stack-card="${testRealmURL}Person/burcu"]`);
+    await click('[data-test-edit-button]');
+
+    assert.dom('[data-test-field="friends"]').containsText('Jackie Woody');
+    await click('[data-test-links-to-many="friends"] [data-test-add-new]');
+    await waitFor('[data-test-card-catalog-modal]');
+    await waitFor(`[data-test-card-catalog-item="${testRealmURL}Pet/mango"]`);
+
+    assert
+      .dom(`[data-test-card-catalog-item="${testRealmURL}Pet/jackie"]`)
+      .doesNotExist('Jackie is already linked and should be excluded');
+    assert
+      .dom(`[data-test-card-catalog-item="${testRealmURL}Pet/woody"]`)
+      .doesNotExist('Woody is already linked and should be excluded');
+    assert
+      .dom(`[data-test-card-catalog-item="${testRealmURL}Pet/buzz"]`)
+      .doesNotExist('Buzz is already linked and should be excluded');
+    assert
+      .dom(`[data-test-card-catalog-item="${testRealmURL}Pet/mango"]`)
+      .exists('Mango is not linked and should appear');
+  });
+
+  test('in multi-select mode, clicking a card toggles selection without submitting the modal', async function (assert) {
+    ctx.setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+
+    await waitFor(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`);
+    await click('[data-test-edit-button]');
+    await click('[data-test-links-to-many="friends"] [data-test-add-new]');
+    await waitFor('[data-test-card-catalog-modal]');
+    await waitFor(`[data-test-card-catalog-item="${testRealmURL}Pet/jackie"]`);
+
+    assert.dom('[data-test-card-catalog-item-selected]').doesNotExist();
+
+    // Click to select
+    await click(`[data-test-card-catalog-item="${testRealmURL}Pet/jackie"]`);
+    assert
+      .dom(
+        `[data-test-card-catalog-item="${testRealmURL}Pet/jackie"]`,
+      )
+      .hasAttribute('data-test-card-catalog-item-selected', 'true', 'card is selected');
+    assert.dom('[data-test-card-catalog-modal]').exists('modal remains open');
+
+    // Click again to deselect
+    await click(`[data-test-card-catalog-item="${testRealmURL}Pet/jackie"]`);
+    assert
+      .dom(`[data-test-card-catalog-item="${testRealmURL}Pet/jackie"]`)
+      .doesNotHaveAttribute(
+        'data-test-card-catalog-item-selected',
+        'card is deselected after second click',
+      );
+    assert.dom('[data-test-card-catalog-modal]').exists('modal remains open after deselect');
+  });
+
+  test('in multi-select mode, double-clicking a card toggles selection without submitting the modal', async function (assert) {
+    ctx.setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+
+    await waitFor(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`);
+    await click('[data-test-edit-button]');
+    await click('[data-test-links-to-many="friends"] [data-test-add-new]');
+    await waitFor('[data-test-card-catalog-modal]');
+    await waitFor(`[data-test-card-catalog-item="${testRealmURL}Pet/jackie"]`);
+
+    // Double-click should toggle selection but NOT submit
+    await doubleClick(`[data-test-card-catalog-item="${testRealmURL}Pet/jackie"]`);
+    assert.dom('[data-test-card-catalog-modal]').exists('modal remains open after double-click');
+    assert
+      .dom(`[data-test-card-catalog-item="${testRealmURL}Pet/jackie"]`)
+      .hasAttribute(
+        'data-test-card-catalog-item-selected',
+        'true',
+        'card is selected after double-click',
+      );
+  });
+
+  test('in multi-select mode, pressing Enter toggles selection without submitting the modal', async function (assert) {
+    ctx.setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+
+    await waitFor(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`);
+    await click('[data-test-edit-button]');
+    await click('[data-test-links-to-many="friends"] [data-test-add-new]');
+    await waitFor('[data-test-card-catalog-modal]');
+    await waitFor(`[data-test-card-catalog-item="${testRealmURL}Pet/jackie"]`);
+
+    // Press Enter to select
+    await triggerKeyEvent(
+      `[data-test-card-catalog-item="${testRealmURL}Pet/jackie"]`,
+      'keydown',
+      'Enter',
+    );
+    assert.dom('[data-test-card-catalog-modal]').exists('modal remains open after Enter');
+    assert
+      .dom(`[data-test-card-catalog-item="${testRealmURL}Pet/jackie"]`)
+      .hasAttribute(
+        'data-test-card-catalog-item-selected',
+        'true',
+        'card is selected after Enter',
+      );
+
+    // Press Enter again to deselect
+    await triggerKeyEvent(
+      `[data-test-card-catalog-item="${testRealmURL}Pet/jackie"]`,
+      'keydown',
+      'Enter',
+    );
+    assert
+      .dom(`[data-test-card-catalog-item="${testRealmURL}Pet/jackie"]`)
+      .doesNotHaveAttribute(
+        'data-test-card-catalog-item-selected',
+        'card is deselected after second Enter',
+      );
+    assert.dom('[data-test-card-catalog-modal]').exists('modal remains open after deselect');
+  });
+
+  test('in multi-select mode, Go button is disabled when no cards are selected and shows selection count', async function (assert) {
+    ctx.setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+
+    await waitFor(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`);
+    await click('[data-test-edit-button]');
+    await click('[data-test-links-to-many="friends"] [data-test-add-new]');
+    await waitFor('[data-test-card-catalog-modal]');
+    await waitFor(`[data-test-card-catalog-item="${testRealmURL}Pet/jackie"]`);
+
+    assert
+      .dom('[data-test-card-catalog-go-button]')
+      .isDisabled('Go button is disabled with no selection');
+    assert
+      .dom('[data-test-card-catalog-go-button]')
+      .hasText('Choose 0 Cards', 'button text shows 0 cards');
+
+    await click(`[data-test-card-catalog-item="${testRealmURL}Pet/jackie"]`);
+    assert
+      .dom('[data-test-card-catalog-go-button]')
+      .isNotDisabled('Go button is enabled after selecting 1 card');
+    assert
+      .dom('[data-test-card-catalog-go-button]')
+      .hasText('Choose 1 Card', 'button text shows singular card');
+
+    await click(`[data-test-card-catalog-item="${testRealmURL}Pet/mango"]`);
+    assert
+      .dom('[data-test-card-catalog-go-button]')
+      .hasText('Choose 2 Cards', 'button text shows plural cards');
+  });
+
+  test('in multi-select mode, selection dropdown shows count and supports Select All and Deselect All', async function (assert) {
+    ctx.setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+
+    await waitFor(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`);
+    await click('[data-test-edit-button]');
+    await click('[data-test-links-to-many="friends"] [data-test-add-new]');
+    await waitFor('[data-test-card-catalog-modal]');
+    await waitFor(`[data-test-card-catalog-item="${testRealmURL}Pet/jackie"]`);
+
+    assert
+      .dom('[data-test-selection-dropdown-trigger]')
+      .exists('selection dropdown trigger is visible in multi-select mode');
+    assert
+      .dom('[data-test-selection-dropdown-trigger]')
+      .containsText('0 Selected', 'shows 0 selected initially');
+
+    await click(`[data-test-card-catalog-item="${testRealmURL}Pet/jackie"]`);
+    await click(`[data-test-card-catalog-item="${testRealmURL}Pet/mango"]`);
+    assert
+      .dom('[data-test-selection-dropdown-trigger]')
+      .containsText('2 Selected', 'count updates as cards are selected');
+
+    // Test Deselect All
+    await click('[data-test-selection-dropdown-trigger]');
+    await waitFor('[data-test-boxel-menu-item-text="Deselect All"]');
+    await click('[data-test-boxel-menu-item-text="Deselect All"]');
+    assert
+      .dom('[data-test-card-catalog-item-selected]')
+      .doesNotExist('all cards deselected after Deselect All');
+    assert
+      .dom('[data-test-selection-dropdown-trigger]')
+      .containsText('0 Selected', 'count resets to 0');
+
+    // Test Select All
+    await click('[data-test-selection-dropdown-trigger]');
+    await waitFor('[data-test-boxel-menu-item-text="Select All"]');
+    await click('[data-test-boxel-menu-item-text="Select All"]');
+    let totalItems = document.querySelectorAll('[data-test-card-catalog-item]').length;
+    assert.true(totalItems > 0, 'there are items to select');
+    assert
+      .dom('[data-test-card-catalog-item-selected]')
+      .exists(
+        { count: totalItems },
+        'all visible cards are selected after Select All',
+      );
   });
 });
