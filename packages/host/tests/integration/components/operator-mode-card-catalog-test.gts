@@ -356,7 +356,7 @@ module('Integration | operator-mode | card catalog', function (hooks) {
 
       assert
         .dom('[data-test-search-label]')
-        .hasText('5 results across 4 realms'); // 5 in test realm
+        .hasText('5 results across 3 realms'); // 5 in test realm
       assert
         .dom(`[data-test-recent-card-result="${testRealmURL}Pet/mango"]`)
         .exists('Pet recent card appears in the linksTo picker');
@@ -373,7 +373,7 @@ module('Integration | operator-mode | card catalog', function (hooks) {
 
       assert
         .dom('[data-test-search-label]')
-        .hasText('5 results across 4 realms'); // 5 in test realm
+        .hasText('5 results across 3 realms'); // 5 in test realm
       assert
         .dom(`[data-test-recent-card-result="${testRealmURL}Pet/mango"]`)
         .exists('Pet recent card appears in the linksTo picker');
