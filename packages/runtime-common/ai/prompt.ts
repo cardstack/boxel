@@ -12,6 +12,7 @@ import type {
 import { constructHistory } from './history';
 import {
   downloadFile,
+  downloadFileAsBase64DataUrl,
   extractCodePatchBlocks,
   isCommandOrCodePatchResult,
 } from './matrix-utils';
@@ -1892,9 +1893,21 @@ export const buildAttachmentsMessagePart = async (
   }
   let imageUrls: string[] = [];
   if (isCurrentMessage) {
-    imageUrls = attachedFiles
-      .filter((f) => isImageContentType(f.contentType) && f.url)
-      .map((f) => f.url!);
+    let imageFiles = attachedFiles.filter(
+      (f) => isImageContentType(f.contentType) && f.url,
+    );
+    for (let f of imageFiles) {
+      try {
+        let dataUrl = await downloadFileAsBase64DataUrl(
+          client,
+          f.url!,
+          f.contentType!,
+        );
+        imageUrls.push(dataUrl);
+      } catch (e) {
+        getLog().error(`Failed to download image ${f.url}:`, e);
+      }
+    }
   }
   return { text, imageUrls };
 };

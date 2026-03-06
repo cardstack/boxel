@@ -347,6 +347,29 @@ export async function downloadFile(
   }
 }
 
+export async function downloadFileAsBase64DataUrl(
+  client: MatrixClient,
+  url: string,
+  contentType: string,
+): Promise<string> {
+  let response = await (globalThis as any).fetch(url, {
+    headers: {
+      Authorization: `Bearer ${client.getAccessToken()}`,
+    },
+  });
+  if (!response.ok) {
+    throw new Error(`HTTP error. Status: ${response.status}`);
+  }
+  let buffer = await response.arrayBuffer();
+  let bytes = new Uint8Array(buffer);
+  let binary = '';
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  let base64 = btoa(binary);
+  return `data:${contentType};base64,${base64}`;
+}
+
 export function isCommandOrCodePatchResult(
   event: MatrixEvent | DiscreteMatrixEvent,
 ): boolean {
