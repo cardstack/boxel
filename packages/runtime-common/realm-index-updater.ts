@@ -39,7 +39,7 @@ export class RealmIndexUpdater {
   };
   #indexWriter: IndexWriter;
   #queue: QueuePublisher;
-  #indexingDeferred: Deferred<void> | undefined;
+  #indexingDeferreds = new Set<Deferred<void>>();
 
   constructor({
     realm,
@@ -82,14 +82,20 @@ export class RealmIndexUpdater {
   }
 
   indexing() {
-    return this.#indexingDeferred?.promise;
+    if (this.#indexingDeferreds.size === 0) {
+      return undefined;
+    }
+    return Promise.all(
+      [...this.#indexingDeferreds].map((deferred) => deferred.promise),
+    ).then(() => undefined);
   }
 
   // TODO consider triggering realm events for invalidations now that we can
   // calculate fine grained invalidations for from-scratch indexing by passing
   // in an onInvalidation callback
   async fullIndex(priority = systemInitiatedPriority) {
-    this.#indexingDeferred = new Deferred<void>();
+    let indexingDeferred = new Deferred<void>();
+    this.#indexingDeferreds.add(indexingDeferred);
     let startedAt = performance.now();
     try {
       let args = {
@@ -123,7 +129,8 @@ export class RealmIndexUpdater {
     } catch (e: any) {
       this.#log.error(`Error running from-scratch-index: ${e.message}`);
     } finally {
-      this.#indexingDeferred.fulfill();
+      indexingDeferred.fulfill();
+      this.#indexingDeferreds.delete(indexingDeferred);
     }
   }
 
@@ -135,7 +142,8 @@ export class RealmIndexUpdater {
       clientRequestId?: string | null;
     },
   ): Promise<void> {
-    this.#indexingDeferred = new Deferred<void>();
+    let indexingDeferred = new Deferred<void>();
+    this.#indexingDeferreds.add(indexingDeferred);
     try {
       let args: IncrementalIndexEnqueueArgs = {
         changes: urls.map((url) => ({
@@ -164,10 +172,11 @@ export class RealmIndexUpdater {
         );
       }
     } catch (e: any) {
-      this.#indexingDeferred.reject(e);
+      indexingDeferred.reject(e);
       throw e;
     } finally {
-      this.#indexingDeferred.fulfill();
+      indexingDeferred.fulfill();
+      this.#indexingDeferreds.delete(indexingDeferred);
     }
   }
 
@@ -175,7 +184,8 @@ export class RealmIndexUpdater {
     sourceRealmURL: URL,
     onInvalidation?: (invalidatedURLs: URL[]) => Promise<void>,
   ): Promise<void> {
-    this.#indexingDeferred = new Deferred<void>();
+    let indexingDeferred = new Deferred<void>();
+    this.#indexingDeferreds.add(indexingDeferred);
     try {
       let args: CopyArgs = {
         realmURL: this.#realm.url,
@@ -196,10 +206,11 @@ export class RealmIndexUpdater {
         );
       }
     } catch (e: any) {
-      this.#indexingDeferred.reject(e);
+      indexingDeferred.reject(e);
       throw e;
     } finally {
-      this.#indexingDeferred.fulfill();
+      indexingDeferred.fulfill();
+      this.#indexingDeferreds.delete(indexingDeferred);
     }
   }
 

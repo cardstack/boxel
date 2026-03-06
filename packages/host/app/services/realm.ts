@@ -1011,6 +1011,46 @@ export default class RealmService extends Service {
     );
   }
 
+  async invalidateUrls(realmURL: string, urls: string[]): Promise<void> {
+    let normalizedRealmURL = ensureTrailingSlash(realmURL);
+    let resource = this.getOrCreateRealmResource(normalizedRealmURL);
+    await resource.login();
+
+    let headers = new Headers({
+      Accept: SupportedMimeType.JSONAPI,
+      'Content-Type': SupportedMimeType.JSONAPI,
+    });
+    if (resource.token) {
+      headers.set('Authorization', `Bearer ${resource.token}`);
+    }
+
+    let dedupedUrls = [...new Set(urls)];
+    let response = await this.network.fetch(
+      `${normalizedRealmURL}_invalidate`,
+      {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          data: {
+            type: 'invalidation-request',
+            attributes: {
+              urls: dedupedUrls,
+            },
+          },
+        }),
+      },
+    );
+
+    if (response.status === 204) {
+      return;
+    }
+
+    let errorText = await response.text();
+    throw new Error(
+      `Invalidate urls failed: ${response.status} - ${errorText}`,
+    );
+  }
+
   isUnpublishingAnyRealms = (realmURL: string): boolean => {
     let resource = this.getOrCreateRealmResource(realmURL);
     return resource.isUnpublishingAnyRealms();

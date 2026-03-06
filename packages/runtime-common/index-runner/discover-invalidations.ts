@@ -77,12 +77,6 @@ export async function discoverInvalidations({
       skipList.push(mtimeUrl);
     }
   }
-  if (skipList.length === 0) {
-    // the whole realm needs to be visited, no need to calculate
-    // invalidations--it's everything
-    return invalidationList;
-  }
-
   // Check for deleted files - files that exist in index but not on filesystem
   let indexedUrls = [...indexMtimes.keys()];
   let deletedUrls = indexedUrls.filter(
@@ -93,6 +87,17 @@ export async function discoverInvalidations({
       `${jobIdentity(jobInfo)} found ${deletedUrls.length} deleted files to add to invalidations: ${deletedUrls.join(', ')}`,
     );
     invalidationList.push(...deletedUrls);
+  }
+
+  if (skipList.length === 0) {
+    // the whole realm needs to be visited, but we still need to tombstone any
+    // deleted files that are only discoverable from the index.
+    if (deletedUrls.length > 0) {
+      await batch.invalidate(deletedUrls.map((u) => new URL(u)));
+      return [...new Set([...invalidationList, ...batch.invalidations])];
+    }
+
+    return invalidationList;
   }
 
   let invalidationStart = Date.now();
