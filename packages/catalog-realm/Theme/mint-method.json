@@ -1,0 +1,187 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "default",
+        "module": "https://cardstack.com/base/detailed-style-reference"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "version": "1.0.0",
+      "cardInfo": {
+        "name": "Mint & Method",
+        "notes": "Chart colors are the four spend-status states in order: healthy green, caution yellow, warning orange, overspent red, plus savings blue. The 1rem radius token matches the budget card's 16px border-radius. Dark mode inverts to deep forest tones; status colors brighten proportionally. JetBrains Mono for transaction strings keeps amounts tabularly aligned without table markup.",
+        "summary": "Personal finance theme — status-driven gradient budget cards, Outfit typeface, mint-green brand palette, and zero-based budgeting visual vocabulary.",
+        "cardThumbnailURL": null
+      },
+      "styleName": "Mint & Method",
+      "visualDNA": "Status-as-color: every surface answers one question first — am I on track? Green means healthy, yellow is a nudge, orange is a warning, red is a reckoning. Gradient cards replace flat UI chrome; the budget category IS the visual. Outfit's geometric friendliness keeps numerical data approachable rather than intimidating — this is personal finance for humans, not spreadsheets. Progress bars are the primary data visualization; their fill level is the headline. Whitespace is generous in structural shell but dense inside each budget card — the contrast between a calm dashboard and information-rich category tiles mirrors how good budgeting feels: organized chaos, resolved. The mint-green primary is optimistic without being naïve: it signals growth, health, and permission to spend — within the method.",
+      "cssImports": [
+        "https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap",
+        "https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap"
+      ],
+      "typography": {
+        "body": {
+          "fontSize": "0.9375rem",
+          "fontFamily": "'Outfit', system-ui, sans-serif",
+          "fontWeight": "400",
+          "lineHeight": "1.6",
+          "sampleText": "You have $176.13 remaining in Groceries. At this pace you'll finish the month with a small surplus — consider adding the difference to your emergency fund."
+        },
+        "caption": {
+          "fontSize": "0.6875rem",
+          "fontFamily": "'JetBrains Mono', 'Fira Code', monospace",
+          "fontWeight": "400",
+          "lineHeight": "1.5",
+          "sampleText": "Last: Verdant Market — $67.42"
+        },
+        "heading": {
+          "fontSize": "clamp(1.75rem, 4cqi, 2.5rem)",
+          "fontFamily": "'Outfit', system-ui, sans-serif",
+          "fontWeight": "700",
+          "lineHeight": "1.15",
+          "sampleText": "February Budget"
+        },
+        "subheading": {
+          "fontSize": "0.6875rem",
+          "fontFamily": "'Outfit', system-ui, sans-serif",
+          "fontWeight": "600",
+          "lineHeight": "1.4",
+          "sampleText": "ESSENTIAL · 8 TRANSACTIONS"
+        },
+        "sectionHeading": {
+          "fontSize": "clamp(1.1rem, 2.5cqi, 1.375rem)",
+          "fontFamily": "'Outfit', system-ui, sans-serif",
+          "fontWeight": "600",
+          "lineHeight": "1.25",
+          "sampleText": "Everyday Expenses"
+        }
+      },
+      "colorPalette": "Mint green (#00a878) anchors the brand — literally the color of the Mint app, and close to YNAB's own green, signaling growth, health, and approval to spend. Status colors are non-negotiable: #22c55e (healthy, under 75%), #eab308 (caution, 75–90%), #f97316 (warning, 90–100%), #ef4444 (overspent, over 100%). These four colors appear as card gradients and as data in charts. The light-mode shell is near-white with a faint mint tint (#f8fffe background) so budget cards glow against the surface. The sidebar uses #f0fdf4, a pale-green field that reinforces the brand without competing with status cards. Dark mode deepens to forest tones — #0a1a12 background, #0f2318 card surfaces — while status colors brighten proportionally for contrast: #4ade80, #fde047, #fb923c, #f87171.",
+      "contentVoice": "Encouraging but honest. The design does not hide difficult numbers — red is red, over-budget is over-budget — but the framing is always forward-looking and non-judgmental. Labels are plain English: Remaining, Spent, Budgeted, Over budget, Rolled over. No jargon. Transaction descriptions are verbatim from real-world sources (store names, amounts). Notes fields carry first-person reflections like 'Staying on track this month' — the system treats users as capable adults who want data, not moralizing. Progress percentages are stated plainly: '70% used', '8 transactions'.",
+      "inspirations": [
+        "YNAB (You Need A Budget) — zero-based budgeting UI, category assignment, and the 'Every Dollar Has a Job' principle",
+        "Mint by Intuit — color-coded spending categories, consumer-friendly dashboard, automatic transaction tagging",
+        "Copilot Money — polished gradient cards, emoji category identifiers, mobile-first personal finance aesthetic",
+        "Apple Wallet and Health app — status-driven color semantics, progress ring/bar as primary data visualization",
+        "Robinhood and Cash App — geometric sans-serif type paired with clean data surfaces in fintech consumer context"
+      ],
+      "designMindset": "The budget is the product. Every design decision asks: does this help someone understand where their money is and whether they are on track? Status color is not decoration — it is the primary data output. The system trusts that users can handle red; hiding it or softening it with euphemism would be a failure of honesty and utility. At the same time, the rounded forms and approachable typeface signal that this is a tool for living, not a compliance ledger. The method (YNAB's zero-based assignment) gives the system its structure; the mint-green brand gives it permission and optimism. Design for the moment of insight: opening the app mid-month and immediately knowing whether you are okay.",
+      "rootVariables": {
+        "card": "#ffffff",
+        "ring": "#00a878",
+        "input": "#e2e8f0",
+        "muted": "#f1f5f9",
+        "accent": "#dcfce7",
+        "border": "#e2e8f0",
+        "chart1": "#22c55e",
+        "chart2": "#eab308",
+        "chart3": "#f97316",
+        "chart4": "#ef4444",
+        "chart5": "#3b82f6",
+        "radius": "1rem",
+        "shadow": "0 4px 6px -1px rgb(0 0 0 / 0.08), 0 2px 4px -2px rgb(0 0 0 / 0.06)",
+        "popover": "#ffffff",
+        "primary": "#00a878",
+        "sidebar": "#f0fdf4",
+        "spacing": "0.25rem",
+        "fontMono": "'JetBrains Mono', 'Fira Code', 'Courier New', monospace",
+        "fontSans": "'Outfit', system-ui, -apple-system, BlinkMacSystemFont, sans-serif",
+        "shadowLg": "0 10px 24px -4px rgb(0 0 0 / 0.10), 0 6px 12px -4px rgb(0 0 0 / 0.08)",
+        "shadowMd": "0 6px 16px -4px rgb(0 0 0 / 0.08), 0 3px 6px -2px rgb(0 0 0 / 0.06)",
+        "shadowSm": "0 2px 4px -1px rgb(0 0 0 / 0.08), 0 1px 3px -1px rgb(0 0 0 / 0.06)",
+        "shadowXl": "0 20px 40px -8px rgb(0 0 0 / 0.12), 0 8px 16px -4px rgb(0 0 0 / 0.08)",
+        "shadowXs": "0 1px 3px 0 rgb(0 0 0 / 0.06), 0 1px 2px -1px rgb(0 0 0 / 0.06)",
+        "fontSerif": "Georgia, 'Times New Roman', serif",
+        "secondary": "#f0fdf4",
+        "shadow2xl": "0 25px 50px -12px rgb(0 0 0 / 0.18)",
+        "shadow2xs": "0 1px 2px 0 rgb(0 0 0 / 0.04)",
+        "background": "#f8fffe",
+        "foreground": "#0a1628",
+        "destructive": "#ef4444",
+        "sidebarRing": "#00a878",
+        "sidebarAccent": "#dcfce7",
+        "sidebarBorder": "#d1fae5",
+        "cardForeground": "#0a1628",
+        "sidebarPrimary": "#00a878",
+        "trackingNormal": "0em",
+        "mutedForeground": "#64748b",
+        "accentForeground": "#166534",
+        "popoverForeground": "#0a1628",
+        "primaryForeground": "#ffffff",
+        "sidebarForeground": "#0a1628",
+        "secondaryForeground": "#0a1628",
+        "destructiveForeground": "#ffffff",
+        "sidebarAccentForeground": "#166534",
+        "sidebarPrimaryForeground": "#ffffff"
+      },
+      "motionLanguage": "Progress bar fills animate width at 300ms ease-out on load — the gentle creep to fill position is the signature micro-interaction, like watching a tank fill. Status-color card backgrounds transition at 200ms ease-in-out when spend data updates. Hover on interactive cards lifts with a subtle translateY(-2px) and deepens the shadow at 150ms ease. Remaining-amount counters that cross into over-budget territory flash once with a 400ms pulse in the destructive red. All transitions prioritize the numerical data updating legibly over decorative motion.",
+      "technicalSpecs": "Font imports: Outfit (wght 400;500;600;700), JetBrains Mono (wght 400;500) from Google Fonts. Base font size: 16px. Card internal padding: 1.125rem. Grid gap: 1rem. Budget card min-height: fits naturally in fitted card context. Progress bar height: 10px; border-radius: 5px. Border-radius tokens: card/modal 1rem, badge 0.25rem, button 0.5rem, progress 0.3125rem. Responsive: single-column below 480px, two-column 480–768px, three-column above 768px. All gradient backgrounds use CSS linear-gradient(145deg). Amount displays use localeString formatting for comma separators. WCAG AA compliance required for all text on gradient backgrounds — white on the darkest gradient color passes at all status states.",
+      "wallpaperImages": [],
+      "compositionRules": "Budget categories are the primary content unit: a grid of fitted cards, each self-contained with emoji identity, category name, period, budgeted/spent amounts, progress bar, remaining balance, rollover indicator, and last-transaction footer. Dashboard layout: sidebar for navigation and account summary (mint-green tinted), main area for category grid (typically 2–3 columns at medium width). Within each card, the hierarchy flows from identity (emoji + name) → status (amounts + progress bar) → balance (remaining/over) → context (rollover + last transaction). Summary rows above the grid show total budgeted, total spent, and total remaining — these use Outfit 700 on plain white cards, no gradient. No decorative illustration; data is the decoration.",
+      "qualityStandards": "Every budget card must pass: (1) the color is earned — gradient status accurately reflects spend percent, no aesthetic overrides; (2) the remaining amount is the largest number on the card — it is the answer users came for; (3) white text on all gradient backgrounds meets WCAG AA (4.5:1 for normal text, 3:1 for large). Dashboard shell: no color on the surface itself — only the cards carry color. No gradient on the shell background or sidebar. Outfit must be loaded before render to prevent FOUT on numerical data. The Essential badge must never compete visually with the remaining amount.",
+      "typographySystem": "Outfit is the single workhorse typeface — a geometric sans-serif with open apertures and humanist numerals that makes dollar amounts feel readable rather than clinical. It runs at 400 for body and transaction metadata, 500 for labels, 600 for section headings and category names, 700 for page headings and remaining-amount figures. JetBrains Mono handles all transaction strings, amounts in footer lines, and any tabular numerical data — its monospaced rhythm keeps dollar figures aligned without requiring a table layout. There are no serif typefaces in this system: personal finance belongs to clarity, not heritage. Letter-spacing is near-zero for all weights (0em); the font's geometry does the work. All-caps utility labels (BUDGETED, SPENT, ESSENTIAL) use 0.08em tracking.",
+      "darkModeVariables": {
+        "card": "#0f2318",
+        "ring": "#34d399",
+        "input": "#1e4530",
+        "muted": "#1a3a26",
+        "accent": "#1a3a26",
+        "border": "#1e4530",
+        "chart1": "#4ade80",
+        "chart2": "#fde047",
+        "chart3": "#fb923c",
+        "chart4": "#f87171",
+        "chart5": "#60a5fa",
+        "radius": "1rem",
+        "shadow": "0 4px 6px -1px rgb(0 0 0 / 0.44), 0 2px 4px -2px rgb(0 0 0 / 0.40)",
+        "popover": "#0f2318",
+        "primary": "#34d399",
+        "sidebar": "#081510",
+        "spacing": "0.25rem",
+        "fontMono": "'JetBrains Mono', 'Fira Code', 'Courier New', monospace",
+        "fontSans": "'Outfit', system-ui, -apple-system, BlinkMacSystemFont, sans-serif",
+        "shadowLg": "0 10px 24px -4px rgb(0 0 0 / 0.52), 0 6px 12px -4px rgb(0 0 0 / 0.48)",
+        "shadowMd": "0 6px 16px -4px rgb(0 0 0 / 0.48), 0 3px 6px -2px rgb(0 0 0 / 0.44)",
+        "shadowSm": "0 2px 4px -1px rgb(0 0 0 / 0.44), 0 1px 3px -1px rgb(0 0 0 / 0.40)",
+        "shadowXl": "0 20px 40px -8px rgb(0 0 0 / 0.60), 0 8px 16px -4px rgb(0 0 0 / 0.52)",
+        "shadowXs": "0 1px 3px 0 rgb(0 0 0 / 0.40), 0 1px 2px -1px rgb(0 0 0 / 0.40)",
+        "fontSerif": "Georgia, 'Times New Roman', serif",
+        "secondary": "#1a3a26",
+        "shadow2xl": "0 25px 50px -12px rgb(0 0 0 / 0.70)",
+        "shadow2xs": "0 1px 2px 0 rgb(0 0 0 / 0.30)",
+        "background": "#0a1a12",
+        "foreground": "#f0fdf9",
+        "destructive": "#dc2626",
+        "sidebarRing": "#34d399",
+        "sidebarAccent": "#1a3a26",
+        "sidebarBorder": "#1e4530",
+        "cardForeground": "#f0fdf9",
+        "sidebarPrimary": "#34d399",
+        "trackingNormal": "0em",
+        "mutedForeground": "#86efac",
+        "accentForeground": "#86efac",
+        "popoverForeground": "#f0fdf9",
+        "primaryForeground": "#052e16",
+        "sidebarForeground": "#f0fdf9",
+        "secondaryForeground": "#f0fdf9",
+        "destructiveForeground": "#fef2f2",
+        "sidebarAccentForeground": "#86efac",
+        "sidebarPrimaryForeground": "#052e16"
+      },
+      "geometricLanguage": "16px (1rem) border radius on all budget cards — distinctly rounded, approachable, app-native. Inner elements like the Essential badge use 4px radius. Progress bars use 5px radius, fully pill-shaped relative to their 10px height. The remaining-section inset panel uses 8px radius. No hairlines or crop marks; this is a screen-native system with no print pretension. The progress bar is the primary geometric motif: a horizontal container communicating spent-vs-budgeted ratio through fill length and gradient color. Spacing follows an 8px base (0.5rem), with card internal padding at 1.125rem.",
+      "historicalContext": "Synthesizes two defining moments in consumer personal finance software. YNAB (You Need A Budget, founded 2004) introduced zero-based budgeting and envelope-method category allocation to a mainstream audience, earning a devoted following through its clarity of method and willingness to confront spending reality. Mint (Intuit, 2006–2023) brought automatic bank sync and a consumer-friendly dashboard to mass adoption, making finance tracking feel less like accounting and more like a health app. This design system inherits YNAB's methodical structure — every dollar assigned, every category tracked — and Mint's consumer warmth: rounded corners, color-coded status, and the reassuring sense that your money is being watched over. The Outfit typeface bridges both worlds: geometric enough for data, friendly enough for daily use.",
+      "materialVocabulary": "Budget cards ARE their material — full-card gradients that shift with spend status replace traditional card-on-background surfaces. The gradient runs 145deg from lighter to darker (e.g., #22c55e → #16a34a for healthy), giving cards a subtle faceted depth without shadows. Inside cards, a semi-transparent white panel (rgba(255,255,255,0.15)) creates the remaining-amount inset — frosted glass within a gradient. The dashboard shell (background and sidebar) uses flat, lightly tinted surfaces that recede so status cards read clearly. Shadows in the shell are minimal (xs and sm only) — the cards announce themselves through color, not elevation.",
+      "componentVocabulary": "Budget cards (fitted): gradient background, emoji + name header, budgeted/spent amount pair, progress bar with percent and transaction count, remaining/over-budget panel, optional rollover row, footer with last transaction and notes. Essential badge: small pill, rgba(255,255,255,0.9) background, dark text, uppercase tracked. Progress bar: 10px height, rgba(255,255,255,0.25) track, rgba(255,255,255,0.9) fill — consistent across all status states for legibility on colored backgrounds. Rollover row: icon + text in rgba(255,255,255,0.9), communicates carry-forward from prior month. Summary cards (isolated): white background, Outfit 700 large amount, small uppercase label, no gradient — provide stable reference amid status-colored category cards. Primary button: solid mint-green (#00a878), white text, 1rem radius. Destructive action: solid #ef4444.",
+      "applicationScenarios": "Personal budget dashboards with monthly category tracking. Envelope-method budgeting applications. Household expense tracking tools. Subscription and recurring-cost managers. Savings goal trackers with progress visualization. Financial wellness summary cards inside productivity suites. Income-vs-expense summary reports with status breakdowns. Individual category deep-dive views showing transaction history within a budget envelope."
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}
