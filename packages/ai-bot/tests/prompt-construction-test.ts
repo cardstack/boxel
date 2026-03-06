@@ -93,6 +93,8 @@ module('buildPromptForModel', (hooks) => {
           status: response.ok ? 200 : 404,
           statusText: response.ok ? 'OK' : 'Not Found',
           text: async () => response.text,
+          arrayBuffer: async () =>
+            new TextEncoder().encode(response.text).buffer,
         };
       }
       throw new Error(`No mock response for ${url}`);
