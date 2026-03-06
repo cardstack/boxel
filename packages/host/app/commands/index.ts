@@ -22,6 +22,7 @@ import * as GenerateThemeExampleCommandModule from './generate-theme-example';
 import * as GetAllRealmMetasCommandModule from './get-all-realm-metas';
 import * as GetCardCommandModule from './get-card';
 import * as GetEventsFromRoomCommandModule from './get-events-from-room';
+import * as InvalidateRealmUrlsCommandModule from './invalidate-realm-urls';
 import * as InviteUserToRoomCommandModule from './invite-user-to-room';
 import * as LintAndFixCommandModule from './lint-and-fix';
 import * as ListingBuildCommandModule from './listing-action-build';
@@ -134,6 +135,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/invite-user-to-room',
     InviteUserToRoomCommandModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/invalidate-realm-urls',
+    InvalidateRealmUrlsCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/lint-and-fix',
@@ -364,6 +369,7 @@ export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
   GetCardCommandModule.default,
   GetEventsFromRoomCommandModule.default,
   InviteUserToRoomCommandModule.default,
+  InvalidateRealmUrlsCommandModule.default,
   LintAndFixCommandModule.default,
   ListingBuildCommandModule.default,
   ListingInitCommandModule.default,

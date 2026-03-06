@@ -693,6 +693,26 @@ export class Batch {
     return typesByUrl;
   }
 
+  private async urlsMatchingSeed(seedURL: URL): Promise<string[]> {
+    let rows = (await this.#query([
+      `SELECT DISTINCT url FROM boxel_index_working WHERE`,
+      ...every([
+        ['realm_url =', param(this.realmURL.href)],
+        any([
+          ['url =', param(seedURL.href)],
+          ['file_alias =', param(seedURL.href)],
+        ]),
+      ]),
+    ] as Expression)) as Pick<BoxelIndexTable, 'url'>[];
+
+    return rows.map(({ url }) => url);
+  }
+
+  private async invalidationSeeds(url: URL): Promise<string[]> {
+    let matchedURLs = await this.urlsMatchingSeed(url);
+    return [...new Set([url.href, ...matchedURLs])];
+  }
+
   async invalidate(urls: URL[]): Promise<void> {
     await this.ready;
     let start = Date.now();
@@ -702,16 +722,18 @@ export class Batch {
     let visited = new Set<string>();
     let invalidations: string[] = [];
     for (let url of urls) {
-      let alias = trimExecutableExtension(url).href;
-      let workingInvalidations = [
-        ...new Set([
-          ...(!this.nodeResolvedInvalidations.includes(alias)
-            ? [url.href]
-            : []),
-          ...(alias ? await this.calculateInvalidations(alias, visited) : []),
-        ]),
-      ];
-      invalidations = [...new Set([...invalidations, ...workingInvalidations])];
+      for (let seed of await this.invalidationSeeds(url)) {
+        let alias = trimExecutableExtension(new URL(seed)).href;
+        let workingInvalidations = [
+          ...new Set([
+            ...(!this.nodeResolvedInvalidations.includes(alias) ? [seed] : []),
+            ...(alias ? await this.calculateInvalidations(alias, visited) : []),
+          ]),
+        ];
+        invalidations = [
+          ...new Set([...invalidations, ...workingInvalidations]),
+        ];
+      }
     }
 
     if (invalidations.length === 0) {
