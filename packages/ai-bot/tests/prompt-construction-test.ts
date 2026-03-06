@@ -5417,7 +5417,7 @@ new
     if (Array.isArray(messageContent)) {
       let imageParts = messageContent.filter(
         (part: any) => part.type === 'image_url',
-      );
+      ) as any[];
       assert.strictEqual(
         imageParts.length,
         1,
