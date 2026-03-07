@@ -39,6 +39,8 @@ export default class InputUsage extends Component {
   @tracked state: InputValidationState = 'initial';
   @tracked size: 'large' | 'default' = 'default';
 
+  @tracked isChecked = false;
+
   defaultType = InputTypes.Text;
   @tracked type = this.defaultType;
 
@@ -56,6 +58,10 @@ export default class InputUsage extends Component {
 
   @action logValue(value: any): void {
     console.log(value);
+  }
+
+  @action toggleChecked(ev: Event): void {
+    this.isChecked = (ev.target as HTMLInputElement).checked;
   }
 
   @action validate(ev: Event): void {
@@ -223,6 +229,83 @@ export default class InputUsage extends Component {
       </:cssVars>
     </FreestyleUsage>
 
+    <FreestyleUsage @name='Checkbox'>
+      <:description>
+        Use
+        <code>@type='checkbox'</code>
+        with
+        <code>@value</code>
+        to render a styled checkbox. Use
+        <code>@onChange</code>
+        to handle state changes.
+      </:description>
+      <:example>
+        <label class='checkbox-example-label'>
+          <BoxelInput
+            @type='checkbox'
+            @value={{this.isChecked}}
+            @disabled={{this.disabled}}
+            @onChange={{this.toggleChecked}}
+          />
+          <span>Example checkbox label</span>
+        </label>
+      </:example>
+      <:api as |Args|>
+        <Args.Bool
+          @name='value (checked)'
+          @value={{this.isChecked}}
+          @onInput={{fn (mut this.isChecked)}}
+          @description='Whether the checkbox is checked'
+        />
+        <Args.Bool
+          @name='disabled'
+          @value={{this.disabled}}
+          @onInput={{fn (mut this.disabled)}}
+        />
+        <Args.Action
+          @name='onChange'
+          @description='Receives the change Event'
+        />
+      </:api>
+      <:cssVars as |Css|>
+        <Css.Basic
+          @name='--boxel-checkbox-size'
+          @type='dimension'
+          @description='Checkbox width and height (default: 18px)'
+        />
+        <Css.Basic
+          @name='--boxel-checkbox-border-radius'
+          @type='dimension'
+          @description='Border radius (default: 3px)'
+        />
+        <Css.Basic
+          @name='--boxel-checkbox-border-color'
+          @type='color'
+          @description='Unchecked border color'
+        />
+        <Css.Basic
+          @name='--boxel-checkbox-background-color'
+          @type='color'
+          @description='Unchecked background color'
+        />
+        <Css.Basic
+          @name='--boxel-checkbox-checked-background-color'
+          @type='color'
+          @description='Checked background color'
+        />
+        <Css.Basic
+          @name='--boxel-checkbox-checked-border-color'
+          @type='color'
+          @description='Checked border color'
+        />
+        <Css.Basic
+          @name='--boxel-checkbox-checkmark-color'
+          @type='color'
+          @description='Checkmark stroke color (default: #333)'
+        />
+      </:cssVars>
+    </FreestyleUsage>
+
     <FreestyleUsage class='remove-in-percy' @name='Usage on nested card'>
       <:example>
         <CardContainer @displayBoundaries={{true}}>
@@ -350,6 +433,13 @@ export default class InputUsage extends Component {
       .sidebar-container {
         background-color: var(--sidebar);
         color: var(--sidebar-foreground);
+      }
+      .checkbox-example-label {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-xxs);
+        cursor: pointer;
+        font: var(--boxel-font-sm);
       }
       :deep(.FreestyleUsageCssVar input) {
         display: none;

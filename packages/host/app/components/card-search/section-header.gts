@@ -1,8 +1,7 @@
-import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
 
-import { RealmIcon } from '@cardstack/boxel-ui/components';
+import { BoxelInput, RealmIcon } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
 
 import type { RealmSectionInfo } from './search-content';
@@ -61,14 +60,14 @@ export default class SearchSheetSectionHeader extends Component<Signature> {
       {{/unless}}
       {{#if @showOnlyLabel}}
         <label class='show-only'>
-          <input
-            type='checkbox'
-            checked={{@showOnlyChecked}}
-            {{on 'change' this.handleShowOnlyChange}}
-            data-test-search-sheet-show-only
-          />
           <span class='show-only-label'>Show only
             <strong>{{@showOnlyLabel}}</strong></span>
+          <BoxelInput
+            @type='checkbox'
+            @value={{@showOnlyChecked}}
+            @onChange={{this.handleShowOnlyChange}}
+            data-test-search-sheet-show-only
+          />
         </label>
       {{/if}}
     </header>
