@@ -134,34 +134,6 @@ export default class RealmServerService extends Service {
     return response;
   }
 
-  async createUser(matrixUserId: string, registrationToken?: string) {
-    await this.login();
-    let response = await this.network.fetch(`${this.url.href}_user`, {
-      method: 'POST',
-      headers: {
-        Accept: SupportedMimeType.JSONAPI,
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${this.token}`,
-      },
-      body: JSON.stringify({
-        data: {
-          type: 'user',
-          attributes: {
-            matrixUserId,
-            registrationToken: registrationToken ?? null,
-          },
-        },
-      }),
-    });
-    if (!response.ok) {
-      let err = `Could not create user with parameters '${matrixUserId}' and '${registrationToken}': ${
-        response.status
-      } - ${await response.text()}`;
-      console.error(err);
-      throw new Error(err);
-    }
-  }
-
   async createRealm(args: {
     endpoint: string;
     name: string;
@@ -570,8 +542,12 @@ export default class RealmServerService extends Service {
   });
 
   private loggingIn: Promise<void> | undefined;
+  private pendingRegistrationToken: string | undefined;
 
-  async login(): Promise<void> {
+  async login(registrationToken?: string): Promise<void> {
+    if (registrationToken) {
+      this.pendingRegistrationToken = registrationToken;
+    }
     if (this.auth.type === 'logged-in') {
       return;
     }
@@ -592,8 +568,10 @@ export default class RealmServerService extends Service {
         this.network.authedFetch.bind(this.network),
         {
           authWithRealmServer: true,
+          registrationToken: this.pendingRegistrationToken,
         },
       );
+      this.pendingRegistrationToken = undefined;
       let token = await realmAuthClient.getJWT();
       this.token = token;
     } catch (e: any) {
