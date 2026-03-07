@@ -1,0 +1,36 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "PrCard",
+        "module": "../pr-card/pr-card"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "prUrl": "https://github.com/cardstack/boxel-catalog/pull/95",
+      "prTitle": "Add Blog App listing",
+      "cardInfo": {
+        "name": null,
+        "notes": null,
+        "summary": null,
+        "cardThumbnailURL": null
+      },
+      "prNumber": 95,
+      "submittedAt": "2026-02-27T10:31:00.000Z",
+      "submittedBy": "@lucas.stack.card"
+    },
+    "relationships": {
+      "listing": {
+        "links": {
+          "self": "../AppListing/95cbe2c7-9b60-4afd-8a3c-1382b610e316"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/github-pr-brand-guide"
+        }
+      }
+    }
+  }
+}
