@@ -58,8 +58,9 @@ module('Unit | file-def-manager canonicalize', function () {
     const content = 'canonical-test-content';
     const contentHash = await manager.getContentHash(content);
 
-    // Stub downloadContentAsText to return the content that matches the hash
-    manager.downloadContentAsText = async (_url: string) => content;
+    // Stub downloadContentAsBytes to return the content that matches the hash
+    manager.downloadContentAsBytes = async (_url: string) =>
+      new TextEncoder().encode(content);
 
     const originalUrl =
       'http://localhost/_matrix/media/v3/download/localhost/abc123/somefile.txt?version=1';
@@ -71,6 +72,48 @@ module('Unit | file-def-manager canonicalize', function () {
       manager.contentHashCache.get(contentHash),
       expected,
       'contentHashCache stores canonical HTTP URL',
+    );
+  });
+
+  test('recacheContentHash skips non-Matrix URLs (realm URLs)', async function (assert) {
+    let fakeClient: any = {
+      getAccessToken() {
+        return 'fake-token';
+      },
+      mxcUrlToHttp(mxc: string) {
+        return `http://localhost/_matrix/media/v3/download/localhost/${mxc.split('/').pop()}`;
+      },
+    };
+
+    const dummyApi = {} as any;
+    let manager = new FileDefManagerImpl({
+      owner: null as unknown as any,
+      client: fakeClient,
+      getCardAPI: () => dummyApi,
+      getFileAPI: () => dummyApi,
+    }) as any;
+
+    const content = 'realm-url-test-content';
+    const contentHash = await manager.getContentHash(content);
+
+    // Stub downloadContentAsBytes — should NOT be called for non-Matrix URLs
+    let downloadCalled = false;
+    manager.downloadContentAsBytes = async (_url: string) => {
+      downloadCalled = true;
+      return new TextEncoder().encode(content);
+    };
+
+    const realmUrl = 'http://localhost:4201/experiments/image.png';
+    await manager.recacheContentHash(contentHash, realmUrl);
+
+    assert.false(
+      downloadCalled,
+      'downloadContentAsBytes should not be called for non-Matrix URLs',
+    );
+    assert.strictEqual(
+      manager.contentHashCache.get(contentHash),
+      undefined,
+      'contentHashCache should not contain a realm URL',
     );
   });
 });

@@ -68,7 +68,21 @@ export interface FileDefManager {
     commandDefinitions: SkillModule.CommandField[],
   ): Promise<FileDef[]>;
 
+  /**
+   * Uploads files (text or binary) and returns their file definitions with
+   * content-hash-based deduplication.
+   * @param files Array of file definitions to upload
+   * @returns Promise resolving to array of uploaded file definitions
+   */
   uploadFiles(files: FileDef[]): Promise<FileDef[]>;
+
+  /**
+   * Pre-fetches file content at attach time so the bytes are captured
+   * before the user sends the message (guards against file modifications
+   * between attach and send).
+   */
+  prefetchFileContent(file: FileDef): Promise<void>;
+  clearPrefetchedContent(): void;
 
   /**
    * Downloads content from a file definition
@@ -93,7 +107,7 @@ export interface FileDefManager {
 export interface PrivilegedFileDefManager extends FileDefManager {
   contentHashCache: Map<string, string>;
   invalidUrlCache: Set<string>;
-  getContentHash(content: string): Promise<string>;
+  getContentHash(content: string | Uint8Array): Promise<string>;
 }
 
 export default class FileDefManagerImpl
@@ -105,6 +119,10 @@ export default class FileDefManagerImpl
   private inFlightBlobFetches: Map<string, Promise<Blob>> = new Map();
   contentHashCache: Map<string, string> = new Map(); // Maps content hash to URL
   invalidUrlCache: Set<string> = new Set(); // Cache for URLs where content hash validation failed
+  private prefetchedContent: Map<
+    string,
+    { bytes: Uint8Array; contentType: string }
+  > = new Map();
   private client: ExtendedClient;
   private getCardAPI: () => typeof CardAPI;
   private getFileAPI: () => typeof FileAPI;
@@ -139,31 +157,9 @@ export default class FileDefManagerImpl
     return this.getCardAPI();
   }
 
-  async getContentHash(content: string): Promise<string> {
-    return md5(content);
-  }
-
-  private async getCachedUrlForContent(
-    content: string,
-  ): Promise<string | null> {
-    const hash = await this.getContentHash(content);
-    return this.contentHashCache.get(hash) || null;
-  }
-
-  async uploadContentWithCaching(
-    content: string,
-    contentType: string,
-  ): Promise<string> {
-    // Check if we already have this content cached
-    const cachedUrl = await this.getCachedUrlForContent(content);
-    if (cachedUrl) {
-      return cachedUrl;
-    }
-    let response = await this.client.uploadContent(content, {
-      type: contentType,
-    });
-    let url = this.client.mxcUrlToHttp(
-      response.content_uri,
+  private mxcToHttpUrl(mxcUrl: string): string | null {
+    return this.client.mxcUrlToHttp(
+      mxcUrl,
       undefined,
       undefined,
       undefined,
@@ -171,6 +167,33 @@ export default class FileDefManagerImpl
       undefined,
       true,
     );
+  }
+
+  async getContentHash(content: string | Uint8Array): Promise<string> {
+    return md5(content);
+  }
+
+  private async getCachedUrlForContent(
+    content: string | Uint8Array,
+  ): Promise<string | null> {
+    const hash = await this.getContentHash(content);
+    return this.contentHashCache.get(hash) || null;
+  }
+
+  async uploadContentWithCaching(
+    content: string | Uint8Array,
+    contentType: string,
+  ): Promise<string> {
+    // Check if we already have this content cached
+    const cachedUrl = await this.getCachedUrlForContent(content);
+    if (cachedUrl) {
+      return cachedUrl;
+    }
+    let response = await this.client.uploadContent(
+      content as XMLHttpRequestBodyInit,
+      { type: contentType },
+    );
+    let url = this.mxcToHttpUrl(response.content_uri);
     if (!url) {
       throw new Error('Failed to convert mxcUrl to http');
     }
@@ -182,15 +205,24 @@ export default class FileDefManagerImpl
     return url;
   }
 
-  // Validates the content hash against the contents of the URL and then updates the cache
+  private isMatrixMediaUrl(url: string): boolean {
+    return url.startsWith('mxc://') || url.includes('/_matrix/media/');
+  }
+
+  // Validates the content hash against the contents of the URL and then updates the cache.
+  // Only Matrix media URLs (mxc:// or /_matrix/media/) are cached; realm or
+  // other non-Matrix URLs are skipped to prevent cache poisoning.
   async recacheContentHash(contentHash: string, url: string) {
+    if (!this.isMatrixMediaUrl(url)) {
+      return;
+    }
     const canonicalKey = canonicalizeMatrixMediaKey(url) || url;
     if (this.invalidUrlCache.has(canonicalKey)) {
       // Skipping re-caching for this url as it was previously checked and is invalid
       return;
     }
 
-    let content = await this.downloadContentAsText(url);
+    let content = await this.downloadContentAsBytes(url);
     const fetchedContentHash = await this.getContentHash(content);
     if (fetchedContentHash !== contentHash) {
       console.warn(
@@ -208,15 +240,7 @@ export default class FileDefManagerImpl
     let storedUrl = url;
     if (canonicalKey.startsWith('mxc://')) {
       try {
-        const maybeHttp = this.client.mxcUrlToHttp(
-          canonicalKey,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          true,
-        );
+        const maybeHttp = this.mxcToHttpUrl(canonicalKey);
         if (maybeHttp) {
           storedUrl = maybeHttp;
         }
@@ -347,6 +371,24 @@ export default class FileDefManagerImpl
     return fileDefs;
   }
 
+  async prefetchFileContent(file: FileDef): Promise<void> {
+    if (!file.sourceUrl) {
+      throw new Error('File needs a realm server source URL to prefetch');
+    }
+    let response = await this.network.authedFetch(file.sourceUrl, {
+      headers: {
+        Accept: 'application/vnd.card+source',
+      },
+    });
+    let bytes = new Uint8Array(await response.arrayBuffer());
+    let contentType = response.headers.get('content-type') ?? '';
+    this.prefetchedContent.set(file.sourceUrl, { bytes, contentType });
+  }
+
+  clearPrefetchedContent(): void {
+    this.prefetchedContent.clear();
+  }
+
   async uploadFiles(files: FileDef[]) {
     let uploadedFiles = await Promise.all(
       files.map(async (file) => {
@@ -354,24 +396,29 @@ export default class FileDefManagerImpl
           throw new Error('File needs a realm server source URL to upload');
         }
 
-        let response = await this.network.authedFetch(file.sourceUrl, {
-          headers: {
-            Accept: 'application/vnd.card+source',
-          },
-        });
-
-        // We only support uploading text files (code) for now.
-        // When we start supporting other file types (pdfs, images, etc)
-        // we will need to update this to support those file types.
-        let text = await response.text();
-        let contentType = response.headers.get('content-type');
+        let bytes: Uint8Array;
+        let contentType: string;
+        let cached = this.prefetchedContent.get(file.sourceUrl);
+        if (cached) {
+          bytes = cached.bytes;
+          contentType = cached.contentType;
+          this.prefetchedContent.delete(file.sourceUrl);
+        } else {
+          let response = await this.network.authedFetch(file.sourceUrl, {
+            headers: {
+              Accept: 'application/vnd.card+source',
+            },
+          });
+          bytes = new Uint8Array(await response.arrayBuffer());
+          contentType = response.headers.get('content-type') ?? '';
+        }
 
         if (!contentType) {
           throw new Error(`File has no content type: ${file.sourceUrl}`);
         }
-        file.url = await this.uploadContentWithCaching(text, contentType);
+        file.url = await this.uploadContentWithCaching(bytes, contentType);
         file.contentType = contentType;
-        file.contentHash = await this.getContentHash(text);
+        file.contentHash = await this.getContentHash(bytes);
 
         return file;
       }),
@@ -465,6 +512,18 @@ export default class FileDefManagerImpl
     } finally {
       this.inFlightTextFetches.delete(canonicalKey);
     }
+  }
+
+  async downloadContentAsBytes(url: string): Promise<Uint8Array> {
+    const response = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${this.client.getAccessToken()}`,
+      },
+    });
+    if (!response.ok) {
+      throw new Error(`HTTP error. Status: ${response.status}`);
+    }
+    return new Uint8Array(await response.arrayBuffer());
   }
 
   async downloadAsFileInBrowser(serializedFile: SerializedFile) {

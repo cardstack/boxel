@@ -25,10 +25,6 @@ import {
 
 import ENV from '@cardstack/host/config/environment';
 
-import type {
-  FileDefManager,
-  PrivilegedFileDefManager,
-} from '@cardstack/host/lib/file-def-manager';
 import FileDefManagerImpl from '@cardstack/host/lib/file-def-manager';
 import type { ExtendedClient } from '@cardstack/host/services/matrix-sdk-loader';
 
@@ -69,7 +65,7 @@ export class MockClient implements ExtendedClient {
   private listeners: Partial<Plural<MatrixSDK.ClientEventHandlerMap>> = {};
 
   private txnCtr = 0;
-  private fileDefManager: FileDefManager;
+  private fileDefManager: FileDefManagerImpl;
   slidingSyncInstance: any;
 
   constructor(
@@ -827,49 +823,66 @@ export class MockClient implements ExtendedClient {
   }
 
   async cacheContentHashIfNeeded(event: DiscreteMatrixEvent): Promise<void> {
-    this.fileDefManager.cacheContentHashIfNeeded(event);
+    await this.fileDefManager.cacheContentHashIfNeeded(event);
   }
 
   async recacheContentHash(contentHash: string, url: string): Promise<void> {
-    const fileDefManager = this.fileDefManager as PrivilegedFileDefManager;
-    if (fileDefManager.invalidUrlCache.has(url)) {
+    if (this.fileDefManager.invalidUrlCache.has(url)) {
       // Skipping re-caching for this url as it was previously checked and is invalid
       return;
     }
 
-    // Update the cache with the new URL for the content hash
-    fileDefManager.contentHashCache.set(contentHash, url);
-
     let contentArrayBuffer = this.serverState.getContent(url);
-    let content = contentArrayBuffer?.toString();
-    if (!content) {
+    if (!contentArrayBuffer) {
       throw new Error('No content found for URL: ' + url);
     }
-    const fetchedContentHash = await fileDefManager.getContentHash(content);
+    let content = new Uint8Array(contentArrayBuffer);
+    const fetchedContentHash =
+      await this.fileDefManager.getContentHash(content);
     if (fetchedContentHash !== contentHash) {
       console.warn(
         `Content hash mismatch for URL: ${url}, skipping re-caching step`,
       );
-      fileDefManager.invalidUrlCache.add(url);
+      this.fileDefManager.invalidUrlCache.add(url);
       return;
     }
 
     // Update the cache with the new URL for the content hash
-    fileDefManager.contentHashCache.set(contentHash, url);
+    this.fileDefManager.contentHashCache.set(contentHash, url);
+  }
+
+  async prefetchFileContent(file: FileDef): Promise<void> {
+    return await this.fileDefManager.prefetchFileContent(file);
+  }
+
+  clearPrefetchedContent(): void {
+    this.fileDefManager.clearPrefetchedContent();
   }
 
   async uploadContent(
-    _content: string,
-    _opts?: { type?: string; name?: string },
-  ): Promise<any> {
+    file: XMLHttpRequestBodyInit,
+    _opts?: MatrixSDK.UploadOpts,
+  ): Promise<MatrixSDK.UploadResponse> {
     if (this.sdkOpts.uploadContentInterceptor) {
       await this.sdkOpts.uploadContentInterceptor();
     }
     let contentUri = `mxc://mock-server/${Math.random()}`;
-    this.serverState.addContent(
-      this.mxcUrlToHttp(contentUri),
-      _content as unknown as ArrayBuffer,
-    );
+    let buffer: ArrayBuffer;
+    if (file instanceof Uint8Array) {
+      buffer = (file.buffer as ArrayBuffer).slice(
+        file.byteOffset,
+        file.byteOffset + file.byteLength,
+      );
+    } else if (file instanceof ArrayBuffer) {
+      buffer = file;
+    } else if (typeof file === 'string') {
+      buffer = new TextEncoder().encode(file).buffer as ArrayBuffer;
+    } else {
+      throw new Error(
+        `MockClient.uploadContent: unsupported file type ${typeof file}`,
+      );
+    }
+    this.serverState.addContent(this.mxcUrlToHttp(contentUri), buffer);
     return { content_uri: contentUri };
   }
 
@@ -880,7 +893,8 @@ export class MockClient implements ExtendedClient {
     if (!content) {
       throw new Error(`content not found for ${serializedFile.url}`);
     }
-    return JSON.parse(content.toString()) as LooseSingleCardDocument;
+    let text = new TextDecoder().decode(content);
+    return JSON.parse(text) as LooseSingleCardDocument;
   }
 
   async downloadAsFileInBrowser(
