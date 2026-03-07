@@ -280,7 +280,11 @@ export function getFields(
       }
       return [[maybeFieldName, maybeField]];
     });
-    fields = { ...fields, ...Object.fromEntries(currentFields) };
+    fields = Object.assign(
+      Object.create(null),
+      fields,
+      Object.fromEntries(currentFields),
+    );
     obj = Reflect.getPrototypeOf(obj);
   }
   return fields;
