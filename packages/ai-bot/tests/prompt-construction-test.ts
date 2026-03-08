@@ -5415,7 +5415,7 @@ new
     );
 
     if (Array.isArray(messageContent)) {
-      let imageParts = messageContent.filter(
+      let imageParts = (messageContent as any[]).filter(
         (part: any) => part.type === 'image_url',
       );
       assert.strictEqual(
