@@ -140,7 +140,7 @@ export default class AttachedItems extends Component<Signature> {
     }
     // Non-multimodal, non-text files only get metadata sent
     if (!isTextBasedContentType(file.contentType)) {
-      return 'File content will be sent as metadata only.';
+      return 'File type not supported. Will send file metadata only.';
     }
     return undefined;
   };
