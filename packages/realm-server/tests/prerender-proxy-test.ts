@@ -129,6 +129,7 @@ module(basename(__filename), function () {
           kind: 'card',
           prerenderer,
           dbAdapter,
+          realms: [],
           createPrerenderAuth,
         }),
       );
@@ -218,6 +219,7 @@ module(basename(__filename), function () {
           kind: 'card',
           prerenderer: undefined,
           dbAdapter: makeDbAdapter([]),
+          realms: [],
           createPrerenderAuth,
         }),
       );
@@ -251,6 +253,7 @@ module(basename(__filename), function () {
           kind: 'card',
           prerenderer,
           dbAdapter: makeDbAdapter([]),
+          realms: [],
           createPrerenderAuth,
         }),
       );
@@ -286,6 +289,7 @@ module(basename(__filename), function () {
           kind: 'card',
           prerenderer,
           dbAdapter: makeDbAdapter([]), // no permissions
+          realms: [],
           createPrerenderAuth,
         }),
       );
@@ -336,6 +340,7 @@ module(basename(__filename), function () {
           kind: 'card',
           prerenderer,
           dbAdapter,
+          realms: [],
           createPrerenderAuth,
         }),
       );
@@ -346,6 +351,7 @@ module(basename(__filename), function () {
           kind: 'module',
           prerenderer,
           dbAdapter,
+          realms: [],
           createPrerenderAuth,
         }),
       );
