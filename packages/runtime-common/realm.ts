@@ -671,6 +671,11 @@ export class Realm {
         SupportedMimeType.JSON,
         this.cancelIndexingJob.bind(this),
       )
+      .post(
+        '/_invalidate',
+        SupportedMimeType.JSONAPI,
+        this.invalidateURLs.bind(this),
+      )
       .post('(/|/.+/)', SupportedMimeType.CardJson, this.createCard.bind(this))
       .get('/.*', SupportedMimeType.CardJson, this.getCard.bind(this))
       .patch(
@@ -784,6 +789,117 @@ export class Realm {
     });
   }
 
+  private async updateIndexAndCollectInvalidations(
+    urls: URL[],
+    opts?: {
+      delete?: true;
+      clientRequestId?: string | null;
+    },
+  ): Promise<string[]> {
+    if (urls.length === 0) {
+      return [];
+    }
+
+    let invalidations = new Set<string>();
+    await this.#realmIndexUpdater.update(urls, {
+      ...(opts?.delete ? { delete: true } : {}),
+      clientRequestId: opts?.clientRequestId ?? null,
+      onInvalidation: async (invalidatedURLs: URL[]) => {
+        await this.handleExecutableInvalidations(invalidatedURLs);
+        for (let invalidatedURL of invalidatedURLs) {
+          invalidations.add(invalidatedURL.href);
+        }
+      },
+    });
+
+    return [...invalidations];
+  }
+
+  private broadcastIncrementalInvalidationEvent(
+    invalidations: string[],
+    opts?: { clientRequestId?: string | null },
+  ): void {
+    this.broadcastRealmEvent({
+      eventName: 'index',
+      indexType: 'incremental',
+      invalidations,
+      ...(opts && Object.prototype.hasOwnProperty.call(opts, 'clientRequestId')
+        ? { clientRequestId: opts.clientRequestId }
+        : {}),
+      realmURL: this.url,
+    });
+  }
+
+  private async invalidateURLs(
+    request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response> {
+    let json: { data?: { attributes?: { urls?: unknown } } };
+    try {
+      json = await request.json();
+    } catch (e: any) {
+      return badRequest({
+        message: `The request body was not json: ${e.message}`,
+        requestContext,
+      });
+    }
+
+    let rawURLs = json.data?.attributes?.urls;
+    if (rawURLs === undefined) {
+      return badRequest({
+        message: `The request body was missing urls`,
+        requestContext,
+      });
+    }
+    if (!Array.isArray(rawURLs)) {
+      return badRequest({
+        message: `urls must be an array of URL strings`,
+        requestContext,
+      });
+    }
+
+    let seen = new Set<string>();
+    let urls: URL[] = [];
+    for (let rawURL of rawURLs) {
+      if (typeof rawURL !== 'string') {
+        return badRequest({
+          message: `urls must be an array of URL strings`,
+          requestContext,
+        });
+      }
+      let parsedURL: URL;
+      try {
+        parsedURL = new URL(rawURL);
+      } catch (e: any) {
+        return badRequest({
+          message: `urls contains an invalid URL: ${rawURL} (${e.message})`,
+          requestContext,
+        });
+      }
+      if (!this.paths.inRealm(parsedURL)) {
+        return badRequest({
+          message: `URL is not in realm: ${parsedURL.href}`,
+          requestContext,
+        });
+      }
+      if (!seen.has(parsedURL.href)) {
+        seen.add(parsedURL.href);
+        urls.push(parsedURL);
+      }
+    }
+
+    let invalidations = await this.updateIndexAndCollectInvalidations(urls);
+    this.broadcastIncrementalInvalidationEvent(invalidations);
+
+    return createResponse({
+      body: null,
+      init: {
+        status: 204,
+      },
+      requestContext,
+    });
+  }
+
   async start() {
     this.#startedUp.fulfill((() => this.#startup())());
 
@@ -844,16 +960,13 @@ export class Realm {
     let invalidations: Set<string> = new Set();
     let clientRequestId: string | null = options?.clientRequestId ?? null;
     let performIndex = async () => {
-      await this.#realmIndexUpdater.update(urls, {
-        clientRequestId,
-        onInvalidation: async (invalidatedURLs: URL[]) => {
-          await this.handleExecutableInvalidations(invalidatedURLs);
-          invalidations = new Set([
-            ...invalidations,
-            ...invalidatedURLs.map((u) => u.href),
-          ]);
+      let workingInvalidations = await this.updateIndexAndCollectInvalidations(
+        urls,
+        {
+          clientRequestId,
         },
-      });
+      );
+      invalidations = new Set([...invalidations, ...workingInvalidations]);
     };
 
     for (let [path, content] of files) {
@@ -933,12 +1046,8 @@ export class Realm {
     if (urls.length > 0) {
       await performIndex();
     }
-    this.broadcastRealmEvent({
-      eventName: 'index',
-      indexType: 'incremental',
-      invalidations: [...invalidations],
+    this.broadcastIncrementalInvalidationEvent([...invalidations], {
       clientRequestId,
-      realmURL: this.url,
     });
     return results.map(({ path, lastModified }) => ({
       path,
@@ -1309,18 +1418,10 @@ export class Realm {
     }
     // Remove file meta for this path
     await this.removeFileMeta([path]);
-    await this.#realmIndexUpdater.update([url], {
+    let invalidations = await this.updateIndexAndCollectInvalidations([url], {
       delete: true,
-      onInvalidation: async (invalidatedURLs: URL[]) => {
-        await this.handleExecutableInvalidations(invalidatedURLs);
-        this.broadcastRealmEvent({
-          eventName: 'index',
-          indexType: 'incremental',
-          invalidations: invalidatedURLs.map((u) => u.href),
-          realmURL: this.url,
-        });
-      },
     });
+    this.broadcastIncrementalInvalidationEvent(invalidations);
   }
 
   async deleteAll(paths: LocalPath[]): Promise<void> {
@@ -1344,18 +1445,10 @@ export class Realm {
     await Promise.all(removePromises);
     // Remove file meta for all deleted paths
     await this.removeFileMeta(paths);
-    await this.#realmIndexUpdater.update(urls, {
+    let invalidations = await this.updateIndexAndCollectInvalidations(urls, {
       delete: true,
-      onInvalidation: async (invalidatedURLs: URL[]) => {
-        await this.handleExecutableInvalidations(invalidatedURLs);
-        this.broadcastRealmEvent({
-          eventName: 'index',
-          indexType: 'incremental',
-          invalidations: invalidatedURLs.map((u) => u.href),
-          realmURL: this.url,
-        });
-      },
     });
+    this.broadcastIncrementalInvalidationEvent(invalidations);
   }
 
   get realmIndexUpdater() {
@@ -4443,18 +4536,10 @@ export class Realm {
     this.#updateItems = [];
     for (let { operation, url } of items) {
       this.sendIndexInitiationEvent(url.href);
-      await this.#realmIndexUpdater.update([url], {
-        onInvalidation: async (invalidatedURLs: URL[]) => {
-          await this.handleExecutableInvalidations(invalidatedURLs);
-          this.broadcastRealmEvent({
-            eventName: 'index',
-            indexType: 'incremental',
-            invalidations: invalidatedURLs.map((u) => u.href),
-            realmURL: this.url,
-          });
-        },
+      let invalidations = await this.updateIndexAndCollectInvalidations([url], {
         ...(operation === 'removed' ? { delete: true } : {}),
       });
+      this.broadcastIncrementalInvalidationEvent(invalidations);
     }
     itemsDrained!();
   }

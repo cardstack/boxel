@@ -1589,6 +1589,7 @@ export function setupPermissionedRealm(
       dbAdapter: PgAdapter;
       publisher: QueuePublisher;
       runner: QueueRunner;
+      testRealmServer: Awaited<ReturnType<typeof runTestRealmServer>>;
       testRealm: Realm;
       testRealmPath: string;
       testRealmHttpServer: Server;
@@ -1637,6 +1638,7 @@ export function setupPermissionedRealm(
         dbAdapter,
         publisher,
         runner,
+        testRealmServer,
         testRealm: testRealmServer.testRealm,
         testRealmPath: testRealmServer.testRealmDir,
         testRealmHttpServer: testRealmServer.testRealmHttpServer,

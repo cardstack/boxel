@@ -1,9 +1,9 @@
 import { module, test } from 'qunit';
-import { dirSync } from 'tmp';
 import {
   internalKeyFor,
   SupportedMimeType,
   Deferred,
+  IndexWriter,
   userInitiatedPriority,
 } from '@cardstack/runtime-common';
 import type {
@@ -19,16 +19,13 @@ import type {
   QueuePublisher,
   QueueRunner,
 } from '@cardstack/runtime-common';
+import type { runTestRealmServer } from './helpers';
 import {
-  setupDB,
-  createVirtualNetwork,
-  matrixURL,
   cleanWhiteSpace,
   waitUntil,
-  runTestRealmServer,
-  closeServer,
   cardInfo,
-  setupPermissionedRealms,
+  setupPermissionedRealmCached,
+  setupPermissionedRealmsCached,
 } from './helpers';
 import {
   depsForIndexEntry,
@@ -37,13 +34,8 @@ import {
   typeForIndexEntry,
 } from './helpers/indexing';
 import stripScopedCSSAttributes from '@cardstack/runtime-common/helpers/strip-scoped-css-attributes';
-import { join, basename } from 'path';
-import { resetCatalogRealms } from '../handlers/handle-fetch-catalog-realms';
-import type {
-  PgQueueRunner,
-  PgAdapter,
-  PgQueuePublisher,
-} from '@cardstack/postgres';
+import { basename } from 'path';
+import type { PgAdapter } from '@cardstack/postgres';
 
 function trimCardContainer(text: string) {
   return cleanWhiteSpace(text)
@@ -465,45 +457,9 @@ function makeTestRealmFileSystem(): Record<
   };
 }
 
-async function startTestRealm({
-  dbAdapter,
-  publisher,
-  runner,
-}: {
-  dbAdapter: DBAdapter;
-  publisher: QueuePublisher;
-  runner: QueueRunner;
-}): Promise<TestRealmServerResult> {
-  let virtualNetwork = createVirtualNetwork();
-  let dir = dirSync().name;
-  let testRealmServer = await runTestRealmServer({
-    testRealmDir: dir,
-    realmsRootPath: join(dir, 'realm_server_1'),
-    virtualNetwork,
-    realmURL: testRealm,
-    dbAdapter: dbAdapter as PgAdapter,
-    publisher: publisher as PgQueuePublisher,
-    runner: runner as PgQueueRunner,
-    matrixURL,
-    fileSystem: makeTestRealmFileSystem(),
-  });
-  await testRealmServer.testRealm.start();
-  return testRealmServer;
-}
-
-async function stopTestRealm(testRealmServer?: TestRealmServerResult) {
-  if (!testRealmServer) {
-    return;
-  }
-  testRealmServer.testRealm.unsubscribe();
-  await closeServer(testRealmServer.testRealmHttpServer);
-  resetCatalogRealms();
-}
-
 module(basename(__filename), function () {
   module('indexing (read only)', function (hooks) {
     let realm: Realm;
-    let testRealmServer: TestRealmServerResult | undefined;
 
     async function getInstance(
       realm: Realm,
@@ -516,19 +472,16 @@ module(basename(__filename), function () {
       return maybeInstance as IndexedInstance | undefined;
     }
 
-    setupDB(hooks, {
-      before: async (dbAdapter, publisher, runner) => {
-        testDbAdapter = dbAdapter;
-        testRealmServer = await startTestRealm({
-          dbAdapter,
-          publisher,
-          runner,
-        });
-        realm = testRealmServer.testRealm;
+    setupPermissionedRealmCached(hooks, {
+      mode: 'before',
+      realmURL: testRealm,
+      permissions: {
+        '*': ['read'],
       },
-      after: async () => {
-        await stopTestRealm(testRealmServer);
-        testRealmServer = undefined;
+      fileSystem: makeTestRealmFileSystem(),
+      onRealmSetup({ dbAdapter, testRealm }) {
+        testDbAdapter = dbAdapter;
+        realm = testRealm;
       },
     });
 
@@ -1194,6 +1147,137 @@ module(basename(__filename), function () {
         'adoptsFrom name sourced from index types',
       );
     });
+
+    module('permissioned realm', function () {
+      let testRealm1URL = 'http://127.0.0.1:4447/test/';
+      let testRealm2URL = 'http://127.0.0.1:4448/test/';
+      let permissionedDbAdapter: PgAdapter;
+
+      function setupRealms(
+        hooks: NestedHooks,
+        permissions: {
+          consumer: RealmPermissions;
+          provider: RealmPermissions;
+        },
+      ) {
+        setupPermissionedRealmsCached(hooks, {
+          mode: 'before',
+          // provider
+          realms: [
+            {
+              realmURL: testRealm1URL,
+              permissions: permissions.provider,
+              fileSystem: {
+                'article.gts': `
+                import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
+                import StringField from "https://cardstack.com/base/string";
+                export class Article extends CardDef {
+                  @field title = contains(StringField);
+                }
+              `,
+              },
+            },
+            // consumer
+            {
+              realmURL: testRealm2URL,
+              permissions: permissions.consumer,
+              fileSystem: {
+                'website.gts': `
+                import { contains, field, CardDef, linksTo } from "https://cardstack.com/base/card-api";
+                import { Article } from "${testRealm1URL}article" // importing from another realm;
+                export class Website extends CardDef {
+                  @field linkedArticle = linksTo(Article);
+                }`,
+                'website-1.json': {
+                  data: {
+                    attributes: {},
+                    meta: {
+                      adoptsFrom: {
+                        module: './website',
+                        name: 'Website',
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          ],
+          onRealmSetup({ dbAdapter }) {
+            permissionedDbAdapter = dbAdapter;
+          },
+        });
+      }
+
+      module('readable realm', function (hooks) {
+        setupRealms(hooks, {
+          provider: {
+            ['@node-test_realm:localhost']: ['read'],
+          },
+          consumer: {
+            '*': ['read', 'write'],
+            '@node-test_realm:localhost': ['read', 'realm-owner'],
+          },
+        });
+
+        test('indexes a card from another realm when it has permission to read', async function (assert) {
+          let rows = (await permissionedDbAdapter.execute(
+            `SELECT type, has_error
+             FROM boxel_index
+             WHERE realm_url = $1
+               AND (is_deleted = FALSE OR is_deleted IS NULL)`,
+            { bind: [testRealm2URL] },
+          )) as { type: string; has_error: boolean | null }[];
+          let fileRows = rows.filter((row) => row.type === 'file');
+          let instanceRows = rows.filter((row) => row.type === 'instance');
+
+          assert.true(
+            rows.every((row) => !row.has_error),
+            'no index rows have errors',
+          );
+          assert.strictEqual(fileRows.length, 2, 'indexed all files');
+          assert.strictEqual(instanceRows.length, 1, 'indexed instances');
+          assert.strictEqual(rows.length, 3, 'total entries are correct');
+        });
+      });
+
+      module('un-readable realm', function (hooks) {
+        setupRealms(hooks, {
+          provider: {
+            nobody: ['read', 'write'], // Consumer's matrix user not authorized to read from provider
+          },
+          consumer: {
+            '*': ['read', 'write'],
+          },
+        });
+
+        test('surfaces instance errors when lacking permission to read from another realm', async function (assert) {
+          // Error during indexing will be: "Authorization error: Insufficient
+          // permissions to perform this action"
+          let rows = (await permissionedDbAdapter.execute(
+            `SELECT type, has_error
+             FROM boxel_index
+             WHERE realm_url = $1
+               AND (is_deleted = FALSE OR is_deleted IS NULL)`,
+            { bind: [testRealm2URL] },
+          )) as { type: string; has_error: boolean | null }[];
+          let instanceRows = rows.filter((row) => row.type === 'instance');
+          let erroredInstanceRows = instanceRows.filter((row) =>
+            Boolean(row.has_error),
+          );
+
+          assert.strictEqual(
+            erroredInstanceRows.length,
+            1,
+            'instance errors surfaced',
+          );
+          assert.strictEqual(
+            instanceRows.length - erroredInstanceRows.length,
+            0,
+            'no successfully indexed instances',
+          );
+        });
+      });
+    });
   });
 
   module('indexing (mutating)', function (hooks) {
@@ -1235,22 +1319,27 @@ module(basename(__filename), function () {
       );
     }
 
-    setupDB(hooks, {
-      beforeEach: async (dbAdapter, publisher, runner) => {
+    setupPermissionedRealmCached(hooks, {
+      mode: 'beforeEach',
+      realmURL: testRealm,
+      permissions: {
+        '*': ['read'],
+      },
+      fileSystem: makeTestRealmFileSystem(),
+      onRealmSetup({
+        dbAdapter,
+        publisher,
+        runner,
+        testRealmServer: server,
+        testRealm,
+        testRealmAdapter,
+      }) {
         testDbAdapter = dbAdapter;
         queuePublisher = publisher;
         queueRunner = runner;
-        testRealmServer = await startTestRealm({
-          dbAdapter,
-          publisher,
-          runner,
-        });
-        realm = testRealmServer.testRealm;
-        adapter = testRealmServer.testRealmAdapter;
-      },
-      afterEach: async () => {
-        await stopTestRealm(testRealmServer);
-        testRealmServer = undefined;
+        testRealmServer = server;
+        realm = testRealm;
+        adapter = testRealmAdapter;
       },
     });
 
@@ -1271,6 +1360,84 @@ module(basename(__filename), function () {
       await started.promise;
       return { blocker, release };
     }
+
+    test('batch invalidation resolves alias-like seeds via file_alias matching', async function (assert) {
+      let batch = await new IndexWriter(testDbAdapter).createBatch(
+        new URL(realm.url),
+      );
+
+      await batch.invalidate([new URL(`${testRealm}mango`)]);
+
+      assert.ok(
+        batch.invalidations.includes(`${testRealm}mango.json`),
+        'instance-id style seed resolves to concrete indexed URL',
+      );
+
+      let jsonSeedBatch = await new IndexWriter(testDbAdapter).createBatch(
+        new URL(realm.url),
+      );
+      await jsonSeedBatch.invalidate([new URL(`${testRealm}mango.json`)]);
+      assert.ok(
+        jsonSeedBatch.invalidations.includes(`${testRealm}mango.json`),
+        '.json seed resolves to concrete indexed URL',
+      );
+    });
+
+    test('batch invalidation resolves alias-like seeds from staged working rows', async function (assert) {
+      let stagedOnlyURL = new URL(`${testRealm}staged-only.json`);
+      let stagedAliasURL = new URL(`${testRealm}staged-only`);
+
+      let stagingBatch = await new IndexWriter(testDbAdapter).createBatch(
+        new URL(realm.url),
+      );
+      await stagingBatch.updateEntry(stagedOnlyURL, {
+        type: 'file',
+        deps: new Set<string>(),
+        lastModified: Date.now(),
+        resourceCreatedAt: Date.now(),
+      });
+
+      let invalidationBatch = await new IndexWriter(testDbAdapter).createBatch(
+        new URL(realm.url),
+      );
+      await invalidationBatch.invalidate([stagedAliasURL]);
+
+      assert.ok(
+        invalidationBatch.invalidations.includes(stagedOnlyURL.href),
+        'instance-id style seed resolves via boxel_index_working row before production commit',
+      );
+    });
+
+    test('batch invalidation tombstones all rows that share a matching file_alias', async function (assert) {
+      let batch = await new IndexWriter(testDbAdapter).createBatch(
+        new URL(realm.url),
+      );
+
+      await batch.invalidate([new URL(`${testRealm}mango`)]);
+      await batch.done();
+
+      let rows = (await testDbAdapter.execute(
+        `SELECT type, is_deleted
+         FROM boxel_index
+         WHERE realm_url = $1
+           AND url = $2
+           AND type IN ('instance', 'file')
+         ORDER BY type`,
+        {
+          bind: [realm.url, `${testRealm}mango.json`],
+        },
+      )) as { type: 'instance' | 'file'; is_deleted: boolean }[];
+
+      assert.deepEqual(
+        rows.map((row) => row.type),
+        ['file', 'instance'],
+        'both file and instance rows were selected',
+      );
+      assert.true(
+        rows.every((row) => row.is_deleted === true),
+        'all matching rows were tombstoned',
+      );
+    });
 
     test('can incrementally index updated instance', async function (assert) {
       await realm.write(
@@ -1463,6 +1630,55 @@ module(basename(__filename), function () {
 
         release.fulfill();
         await Promise.all([blocker.done, incremental, full]);
+      } finally {
+        release.fulfill();
+      }
+    });
+
+    test('realm.indexing waits for all queued indexing operations', async function (assert) {
+      let { blocker, release } = await startIndexingGroupBlocker();
+      try {
+        let incremental = realm.realmIndexUpdater.update(
+          [new URL(`${testRealm}mango`)],
+          { clientRequestId: 'indexing-race-incremental' },
+        );
+        let indexingDuringIncremental = realm.indexing();
+        let full = realm.realmIndexUpdater.fullIndex();
+        let indexingAfterFull = realm.indexing();
+        let indexingDuringIncrementalResolved = false;
+        let indexingAfterFullResolved = false;
+        indexingDuringIncremental?.then(() => {
+          indexingDuringIncrementalResolved = true;
+        });
+        indexingAfterFull?.then(() => {
+          indexingAfterFullResolved = true;
+        });
+
+        assert.ok(
+          indexingDuringIncremental,
+          'indexing promise is exposed for the first queued operation',
+        );
+        assert.ok(
+          indexingAfterFull,
+          'indexing promise is exposed for the later queued operation',
+        );
+
+        release.fulfill();
+        await Promise.all([
+          blocker.done,
+          incremental,
+          full,
+          indexingDuringIncremental,
+          indexingAfterFull,
+        ]);
+        assert.true(
+          indexingDuringIncrementalResolved,
+          'indexing promise captured before a later queued operation still resolves',
+        );
+        assert.true(
+          indexingAfterFullResolved,
+          'indexing promise captured after the later queued operation resolves too',
+        );
       } finally {
         release.fulfill();
       }
@@ -4072,110 +4288,6 @@ module(basename(__filename), function () {
         undefined,
         'deleted file is not retrievable',
       );
-    });
-  });
-
-  module('permissioned realm', function () {
-    let testRealm1URL = 'http://127.0.0.1:4447/test/';
-    let testRealm2URL = 'http://127.0.0.1:4448/test/';
-    let testRealm2: Realm;
-
-    function setupRealms(
-      hooks: NestedHooks,
-      permissions: {
-        consumer: RealmPermissions;
-        provider: RealmPermissions;
-      },
-    ) {
-      setupPermissionedRealms(hooks, {
-        // provider
-        realms: [
-          {
-            realmURL: testRealm1URL,
-            permissions: permissions.provider,
-            fileSystem: {
-              'article.gts': `
-              import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-              import StringField from "https://cardstack.com/base/string";
-              export class Article extends CardDef {
-                @field title = contains(StringField);
-              }
-            `,
-            },
-          },
-          // consumer
-          {
-            realmURL: testRealm2URL,
-            permissions: permissions.consumer,
-            fileSystem: {
-              'website.gts': `
-              import { contains, field, CardDef, linksTo } from "https://cardstack.com/base/card-api";
-              import { Article } from "${testRealm1URL}article" // importing from another realm;
-              export class Website extends CardDef {
-                @field linkedArticle = linksTo(Article);
-              }`,
-              'website-1.json': {
-                data: {
-                  attributes: {},
-                  meta: {
-                    adoptsFrom: {
-                      module: './website',
-                      name: 'Website',
-                    },
-                  },
-                },
-              },
-            },
-          },
-        ],
-        onRealmSetup({ realms: [_, realm2] }) {
-          testRealm2 = realm2.realm;
-        },
-      });
-    }
-
-    module('readable realm', function (hooks) {
-      setupRealms(hooks, {
-        provider: {
-          ['@node-test_realm:localhost']: ['read'],
-        },
-        consumer: {
-          '*': ['read', 'write'],
-          '@node-test_realm:localhost': ['read', 'realm-owner'],
-        },
-      });
-
-      test('indexes a card from another realm when it has permission to read', async function (assert) {
-        let stats = { ...testRealm2.realmIndexUpdater.stats };
-        assert.strictEqual(stats.fileErrors, 0, 'no file errors');
-        assert.strictEqual(stats.instanceErrors, 0, 'no instance errors');
-        assert.strictEqual(stats.filesIndexed, 2, 'indexed all files');
-        assert.strictEqual(stats.instancesIndexed, 1, 'indexed instances');
-        assert.strictEqual(
-          stats.totalIndexEntries,
-          3,
-          'total entries are correct',
-        );
-      });
-    });
-
-    module('un-readable realm', function (hooks) {
-      setupRealms(hooks, {
-        provider: {
-          nobody: ['read', 'write'], // Consumer's matrix user not authorized to read from provider
-        },
-        consumer: {
-          '*': ['read', 'write'],
-        },
-      });
-
-      test('surfaces instance errors when lacking permission to read from another realm', async function (assert) {
-        // Error during indexing will be: "Authorization error: Insufficient
-        // permissions to perform this action"
-        let stats = { ...testRealm2.realmIndexUpdater.stats };
-        assert.strictEqual(stats.instanceErrors, 1, 'instance errors surfaced');
-        assert.strictEqual(stats.instancesIndexed, 0, 'no instances indexed');
-      });
     });
   });
 });
