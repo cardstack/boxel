@@ -4,6 +4,10 @@ import { logger } from '@cardstack/runtime-common';
 import yargs from 'yargs';
 import type { Server } from 'http';
 import { createPrerenderHttpServer } from './prerender-app';
+import {
+  isEnvironmentMode,
+  registerService,
+} from '../lib/dev-service-registry';
 
 let log = logger('prerender-server');
 
@@ -28,7 +32,15 @@ webServerInstance = createPrerenderHttpServer({
   silent,
   port,
 }).listen(port);
-log.info(`prerender server HTTP listening on port ${port}`);
+let actualPort = port;
+webServerInstance.on('listening', () => {
+  actualPort =
+    (webServerInstance!.address() as import('net').AddressInfo).port ?? port;
+  if (isEnvironmentMode()) {
+    registerService(webServerInstance!, 'prerender');
+  }
+  log.info(`prerender server HTTP listening on port ${actualPort}`);
+});
 
 function shutdown() {
   log.info(`Shutting down prerender server...`);
@@ -38,7 +50,7 @@ function shutdown() {
       log.error(`Error while closing prerender server:`, err);
       process.exit(1);
     }
-    log.info(`prerender server HTTP on port ${port} has stopped.`);
+    log.info(`prerender server HTTP on port ${actualPort} has stopped.`);
     process.exit(0);
   });
 }

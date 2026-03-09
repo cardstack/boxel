@@ -103,6 +103,7 @@ let mockedFileContent = 'Hello, world!';
 const TEST_MODEL_NAMES: Record<string, string> = {
   'openai/gpt-5': 'OpenAI: GPT-5',
   'openai/gpt-4o-mini': 'OpenAI: GPT-4o-mini',
+  'anthropic/claude-sonnet-4.6': 'Anthropic: Claude Sonnet 4.6',
   'anthropic/claude-sonnet-4.5': 'Anthropic: Claude Sonnet 4.5',
   'anthropic/claude-3.7-sonnet': 'Anthropic: Claude 3.7 Sonnet',
   'deepseek/deepseek-chat-v3-0324': 'DeepSeek: DeepSeek V3 0324',
@@ -313,6 +314,14 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       toolsSupported: true,
     });
 
+    let anthropicClaudeSonnet46Model = new ModelConfiguration({
+      cardInfo: new CardInfoField({
+        name: modelNameFor('anthropic/claude-sonnet-4.6'),
+      }),
+      modelId: 'anthropic/claude-sonnet-4.6',
+      toolsSupported: true,
+    });
+
     let anthropicClaudeSonnet45Model = new ModelConfiguration({
       cardInfo: new CardInfoField({
         name: modelNameFor('anthropic/claude-sonnet-4.5'),
@@ -331,10 +340,11 @@ module('Acceptance | AI Assistant tests', function (hooks) {
 
     // Create system card with model configurations
     let defaultSystemCard = new SystemCard({
-      defaultModelConfiguration: anthropicClaudeSonnet45Model,
+      defaultModelConfiguration: anthropicClaudeSonnet46Model,
       modelConfigurations: [
         openAiGpt5Model,
         openAiGpt4oMiniModel,
+        anthropicClaudeSonnet46Model,
         anthropicClaudeSonnet45Model,
         anthropicClaudeSonnet37Model,
       ],
@@ -485,6 +495,8 @@ module('Acceptance | AI Assistant tests', function (hooks) {
         },
         'ModelConfiguration/gpt-4o-mini.json': openAiGpt4oMiniModel,
         'ModelConfiguration/gpt-5.json': openAiGpt5Model,
+        'ModelConfiguration/claude-sonnet-4.6.json':
+          anthropicClaudeSonnet46Model,
         'ModelConfiguration/claude-sonnet-4.5.json':
           anthropicClaudeSonnet45Model,
         'ModelConfiguration/claude-sonnet-3.7.json':
@@ -666,15 +678,15 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await waitFor(`[data-room-settled]`);
 
     // Default model should come from the system card's default configuration
-    let defaultModelId = 'anthropic/claude-sonnet-4.5';
+    let defaultModelId = 'anthropic/claude-sonnet-4.6';
     let defaultModelName = modelNameFor(defaultModelId);
 
     assert.dom('[data-test-llm-select-selected]').hasText(defaultModelName);
     await click('[data-test-llm-select-selected]');
 
-    // Should have 4 models from our system card
+    // Should have 5 models from our system card
     assert.dom('[data-test-llm-select-item]').exists({
-      count: 4,
+      count: 5,
     });
 
     let llmIdToChangeTo = 'anthropic/claude-3.7-sonnet';
