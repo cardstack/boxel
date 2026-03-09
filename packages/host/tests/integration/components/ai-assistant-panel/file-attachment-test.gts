@@ -11,6 +11,7 @@ import type { Loader } from '@cardstack/runtime-common/loader';
 
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
+import type FileUploadService from '@cardstack/host/services/file-upload';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import {
@@ -34,11 +35,13 @@ import {
 import { setupMockMatrix } from '../../../helpers/mock-matrix';
 import { renderComponent } from '../../../helpers/render-component';
 import { setupRenderingTest } from '../../../helpers/setup';
+import { getTestRealmRegistry } from '../../../helpers/test-realm-registry';
 
 module('Integration | ai-assistant-panel | file-attachment', function (hooks) {
   const realmName = 'Operator Mode Workspace';
   let loader: Loader;
   let operatorModeStateService: OperatorModeStateService;
+  let fileUploadService: FileUploadService;
 
   setupRenderingTest(hooks);
   setupOperatorModeStateCleanup(hooks);
@@ -46,6 +49,7 @@ module('Integration | ai-assistant-panel | file-attachment', function (hooks) {
 
   hooks.beforeEach(function () {
     loader = getService('loader-service').loader;
+    fileUploadService = getService('file-upload') as FileUploadService;
   });
 
   setupLocalIndexing(hooks);
@@ -199,6 +203,120 @@ module('Integration | ai-assistant-panel | file-attachment', function (hooks) {
         `[data-test-attached-file="${testRealmURL}person.gts"][data-test-file-upload-status]`,
       )
       .exists('file pill should have an upload status attribute');
+  });
+
+  test('attach menu shows card, workspace file, and local file options', async function (assert) {
+    setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+    await openAiAssistant();
+
+    await click('[data-test-attach-button]');
+
+    assert
+      .dom('[data-test-attach-card-btn]')
+      .hasText('Attach a Card', 'shows card option');
+    assert
+      .dom('[data-test-attach-workspace-file-btn]')
+      .hasText('Attach a File (Workspace)', 'shows workspace file option');
+    assert
+      .dom('[data-test-attach-local-file-btn]')
+      .hasText('Attach a File (Your Computer)', 'shows local file option');
+  });
+
+  test('local file attach uses synthetic source URL and does not upload to realm', async function (assert) {
+    setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+    let roomId = await openAiAssistant();
+
+    let localFileName = 'local-note.md';
+    fileUploadService.__queueLocalFileForTesting(
+      new File(['hello from local disk'], localFileName, {
+        type: 'text/markdown',
+      }),
+    );
+
+    let realmRecord = getTestRealmRegistry().get(testRealmURL);
+    assert.ok(realmRecord, 'test realm is registered');
+    assert.false(
+      await realmRecord!.adapter.exists(localFileName),
+      'local file does not exist in realm before attaching',
+    );
+
+    await click('[data-test-attach-button]');
+    await click('[data-test-attach-local-file-btn]');
+
+    await waitFor(
+      '[data-test-attached-file^="boxel-local://"][data-test-file-upload-status="complete"]',
+    );
+
+    assert.false(
+      await realmRecord!.adapter.exists(localFileName),
+      'local file bytes were not uploaded to workspace realm',
+    );
+
+    await fillIn('[data-test-message-field]', 'send local file');
+    await click('[data-test-send-message-btn]');
+
+    let messageEvents = mockMatrixUtils
+      .getRoomEvents(roomId)
+      .filter((e) => e.type === 'm.room.message');
+    let messageData = messageEvents[0].content.data
+      ? JSON.parse(messageEvents[0].content.data)
+      : undefined;
+    let attachedFile = messageData?.attachedFiles?.[0];
+
+    assert.ok(attachedFile, 'message includes attached local file');
+    assert.true(
+      String(attachedFile.sourceUrl).startsWith('boxel-local://'),
+      'attached file uses synthetic local source URL',
+    );
+  });
+
+  test('local image attachment pill renders filename without inline image preview', async function (assert) {
+    setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+    await openAiAssistant();
+
+    let pngBytes = new Uint8Array([
+      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d,
+      0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
+      0x08, 0x06, 0x00, 0x00, 0x00, 0x1f, 0x15, 0xc4, 0x89, 0x00, 0x00, 0x00,
+      0x0a, 0x49, 0x44, 0x41, 0x54, 0x78, 0xda, 0x63, 0xf8, 0x0f, 0x00, 0x01,
+      0x01, 0x01, 0x00, 0x18, 0xdd, 0x8d, 0xb1, 0x00, 0x00, 0x00, 0x00, 0x49,
+      0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82,
+    ]);
+    let localFileName = 'upload-preview.png';
+    fileUploadService.__queueLocalFileForTesting(
+      new File([pngBytes], localFileName, {
+        type: 'image/png',
+      }),
+    );
+
+    await click('[data-test-attach-button]');
+    await click('[data-test-attach-local-file-btn]');
+
+    await waitFor(
+      '[data-test-attached-file^="boxel-local://"][data-test-file-upload-status="complete"]',
+    );
+
+    assert
+      .dom('[data-test-attached-file^="boxel-local://"]')
+      .hasText(localFileName, 'local image pill displays the file name');
+    assert
+      .dom('[data-test-attached-file^="boxel-local://"] .image-atom__img')
+      .doesNotExist('local image pill does not render inline image atom');
   });
 
   test('file pill shows uploading indicator while Matrix upload is in progress', async function (assert) {

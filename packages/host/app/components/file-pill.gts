@@ -36,8 +36,12 @@ interface FilePillSignature {
 export default class FilePill extends Component<FilePillSignature> {
   @service declare operatorModeStateService: OperatorModeStateService;
 
-  get component() {
-    return this.args.file.constructor.getComponent(this.args.file);
+  get displayName() {
+    let fileName = this.args.file.name?.trim();
+    if (fileName) {
+      return fileName;
+    }
+    return this.args.file.sourceUrl ?? 'Unnamed file';
   }
 
   @action
@@ -100,9 +104,9 @@ export default class FilePill extends Component<FilePillSignature> {
         />
       </:iconLeft>
       <:default>
-        <div class='file-content' title={{@file.name}}>
-          <this.component @format='atom' @displayContainer={{false}} />
-        </div>
+        <span class='file-name' title={{this.displayName}}>
+          {{this.displayName}}
+        </span>
       </:default>
       <:iconRight>
         {{#if (eq @uploadStatus 'error')}}
@@ -159,12 +163,15 @@ export default class FilePill extends Component<FilePillSignature> {
         border-style: solid;
       }
 
-      .file-content {
+      .file-name {
+        display: inline-block;
         max-width: 100px;
         max-height: 100%;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
+        color: var(--boxel-900);
+        font: var(--boxel-font-sm);
       }
       .remove-button {
         --boxel-icon-button-width: var(--boxel-icon-sm);
