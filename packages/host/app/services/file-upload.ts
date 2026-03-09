@@ -54,17 +54,28 @@ export default class FileUploadService extends Service {
 
   uploadFile(opts: { realmURL: URL; acceptTypes?: string }): FileUploadTask {
     let task = new FileUploadTask();
-    this.activeUploads = [...this.activeUploads, task];
+    this._startTask(task, opts.realmURL);
 
     if (!isTesting()) {
       this._openFilePicker(task, opts.acceptTypes);
     }
 
-    this._processUpload(task, opts.realmURL).finally(() => {
-      this.activeUploads = this.activeUploads.filter((t) => t !== task);
-    });
+    return task;
+  }
+
+  uploadProvidedFile(opts: { realmURL: URL; file: File }): FileUploadTask {
+    let task = new FileUploadTask();
+    this._startTask(task, opts.realmURL);
+    task._resolveFile(opts.file);
 
     return task;
+  }
+
+  private _startTask(task: FileUploadTask, realmURL: URL) {
+    this.activeUploads = [...this.activeUploads, task];
+    this._processUpload(task, realmURL).finally(() => {
+      this.activeUploads = this.activeUploads.filter((t) => t !== task);
+    });
   }
 
   private _openFilePicker(task: FileUploadTask, acceptTypes?: string) {
