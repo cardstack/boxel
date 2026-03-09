@@ -50,6 +50,7 @@ export class FileDefAttributesExtractor {
   #baseFileDefCodeRef: ResolvedCodeRef;
   #contentHash: string | undefined;
   #contentSize: number | undefined;
+  #fileBytes: Uint8Array | undefined;
   #buildError: (url: string, error: unknown) => RenderError;
   #streamsPromise: Promise<
     [
@@ -69,6 +70,7 @@ export class FileDefAttributesExtractor {
     baseFileDefCodeRef,
     contentHash,
     contentSize,
+    fileBytes,
     buildError,
   }: {
     loaderService: LoaderService;
@@ -79,6 +81,7 @@ export class FileDefAttributesExtractor {
     baseFileDefCodeRef: ResolvedCodeRef;
     contentHash: string | undefined;
     contentSize: number | undefined;
+    fileBytes?: Uint8Array;
     buildError: (url: string, error: unknown) => RenderError;
   }) {
     this.#loaderService = loaderService;
@@ -89,6 +92,7 @@ export class FileDefAttributesExtractor {
     this.#baseFileDefCodeRef = baseFileDefCodeRef;
     this.#contentHash = contentHash;
     this.#contentSize = contentSize;
+    this.#fileBytes = fileBytes;
     this.#buildError = buildError;
   }
 
@@ -226,6 +230,10 @@ export class FileDefAttributesExtractor {
   async #getStreams() {
     if (!this.#streamsPromise) {
       this.#streamsPromise = (async () => {
+        if (this.#fileBytes) {
+          return [this.#fileBytes, this.#fileBytes];
+        }
+
         let response: Response;
         try {
           let request = new Request(this.#fileURL, {

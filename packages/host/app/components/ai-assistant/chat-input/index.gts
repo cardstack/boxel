@@ -22,7 +22,7 @@ interface Signature {
     canSend: boolean;
     attachButton?: WithBoundArgs<
       typeof AttachButton,
-      'chooseCard' | 'chooseFile'
+      'chooseCard' | 'chooseFile' | 'chooseLocalFile'
     >;
   };
 }

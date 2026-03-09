@@ -50,6 +50,7 @@ interface CacheEntry {
 }
 
 const CACHE_EXPIRATION_MS = 30 * 60 * 1000; // 30 minutes
+const LOCAL_SOURCE_URL_PREFIX = 'boxel-local://';
 
 export interface FileDefManager {
   /**
@@ -82,6 +83,11 @@ export interface FileDefManager {
    * between attach and send).
    */
   prefetchFileContent(file: FileDef): Promise<void>;
+  prefetchLocalFileContent(
+    file: FileDef,
+    bytes: Uint8Array,
+    contentType: string,
+  ): Promise<void>;
   clearPrefetchedContent(): void;
 
   /**
@@ -207,6 +213,10 @@ export default class FileDefManagerImpl
 
   private isMatrixMediaUrl(url: string): boolean {
     return url.startsWith('mxc://') || url.includes('/_matrix/media/');
+  }
+
+  private isLocalSourceUrl(url: string): boolean {
+    return url.startsWith(LOCAL_SOURCE_URL_PREFIX);
   }
 
   // Validates the content hash against the contents of the URL and then updates the cache.
@@ -385,6 +395,17 @@ export default class FileDefManagerImpl
     this.prefetchedContent.set(file.sourceUrl, { bytes, contentType });
   }
 
+  async prefetchLocalFileContent(
+    file: FileDef,
+    bytes: Uint8Array,
+    contentType: string,
+  ): Promise<void> {
+    if (!file.sourceUrl) {
+      throw new Error('File needs a source URL to prefetch local content');
+    }
+    this.prefetchedContent.set(file.sourceUrl, { bytes, contentType });
+  }
+
   clearPrefetchedContent(): void {
     this.prefetchedContent.clear();
   }
@@ -403,6 +424,10 @@ export default class FileDefManagerImpl
           bytes = cached.bytes;
           contentType = cached.contentType;
           this.prefetchedContent.delete(file.sourceUrl);
+        } else if (this.isLocalSourceUrl(file.sourceUrl)) {
+          throw new Error(
+            `Local file content is not available for upload: ${file.sourceUrl}`,
+          );
         } else {
           let response = await this.network.authedFetch(file.sourceUrl, {
             headers: {
@@ -419,6 +444,7 @@ export default class FileDefManagerImpl
         file.url = await this.uploadContentWithCaching(bytes, contentType);
         file.contentType = contentType;
         file.contentHash = await this.getContentHash(bytes);
+        file.contentSize = bytes.byteLength;
 
         return file;
       }),

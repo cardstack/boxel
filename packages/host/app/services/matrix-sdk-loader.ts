@@ -302,6 +302,8 @@ function extendedClient({
           return fileDefManager.uploadFiles.bind(fileDefManager);
         case 'prefetchFileContent':
           return fileDefManager.prefetchFileContent.bind(fileDefManager);
+        case 'prefetchLocalFileContent':
+          return fileDefManager.prefetchLocalFileContent.bind(fileDefManager);
         case 'clearPrefetchedContent':
           return fileDefManager.clearPrefetchedContent.bind(fileDefManager);
         case 'downloadAsFileInBrowser':

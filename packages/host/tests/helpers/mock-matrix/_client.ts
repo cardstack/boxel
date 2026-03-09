@@ -855,6 +855,18 @@ export class MockClient implements ExtendedClient {
     return await this.fileDefManager.prefetchFileContent(file);
   }
 
+  async prefetchLocalFileContent(
+    file: FileDef,
+    bytes: Uint8Array,
+    contentType: string,
+  ): Promise<void> {
+    return await this.fileDefManager.prefetchLocalFileContent(
+      file,
+      bytes,
+      contentType,
+    );
+  }
+
   clearPrefetchedContent(): void {
     this.fileDefManager.clearPrefetchedContent();
   }

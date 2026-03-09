@@ -38,6 +38,10 @@ export default class AiAssistantCardPickerUsage extends Component {
     }
   }
 
+  @action chooseLocalFile() {
+    // no-op in freestyle usage
+  }
+
   @action removeFile(file: FileDef) {
     let index = this.filesToAttach.findIndex(
       (f) => f.sourceUrl === file.sourceUrl,
@@ -59,6 +63,7 @@ export default class AiAssistantCardPickerUsage extends Component {
           @chooseCard={{this.chooseCard}}
           @removeCard={{this.removeCard}}
           @chooseFile={{this.chooseFile}}
+          @chooseLocalFile={{this.chooseLocalFile}}
           @removeFile={{this.removeFile}}
           @autoAttachedFiles={{this.autoAttachedFiles}}
           @filesToAttach={{this.filesToAttach}}

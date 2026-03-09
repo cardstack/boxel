@@ -32,6 +32,8 @@ import {
   logger,
   isCardInstance,
   Deferred,
+  baseRealm,
+  testRealmURL,
   SEARCH_MARKER,
   REPLACE_MARKER,
   SEPARATOR_MARKER,
@@ -801,7 +803,13 @@ export default class MatrixService extends Service {
         roomIds.forEach((id) => this.roomsWaitingForSync.get(id)?.fulfill());
         break;
       case SlidingSyncState.RequestFinished:
-        roomIds.forEach((id) => this.aiRoomIds.add(id));
+        for (let id of roomIds) {
+          let room = this.client.getRoom(id);
+          let botMembership = room?.getMember(this.aiBotUserId)?.membership;
+          if (botMembership === 'join' || botMembership === 'invite') {
+            this.aiRoomIds.add(id);
+          }
+        }
         break;
     }
   };
@@ -1093,6 +1101,14 @@ export default class MatrixService extends Service {
     return await this.client.prefetchFileContent(file);
   }
 
+  async prefetchLocalFileContent(
+    file: FileDef,
+    bytes: Uint8Array,
+    contentType: string,
+  ) {
+    return await this.client.prefetchLocalFileContent(file, bytes, contentType);
+  }
+
   async fetchMatrixHostedFile(matrixFileUrl: string) {
     let response = await fetch(matrixFileUrl, {
       headers: {
@@ -1269,14 +1285,91 @@ export default class MatrixService extends Service {
       defaultSkills = interactModeDefaultSkills;
     }
 
-    return (
+    let skillsRealmUrl = new URL(ENV.resolvedSkillsRealmURL).href;
+    let fallbackRealmUrls = new Set<string>(
+      Object.keys(this.realm.allRealmsInfo),
+    );
+    try {
+      let accountData = await this.client.getAccountDataFromServer(
+        APP_BOXEL_REALMS_EVENT_TYPE,
+      );
+      for (let realmUrl of accountData?.realms ?? []) {
+        fallbackRealmUrls.add(realmUrl);
+      }
+    } catch (_error) {
+      // We may still have local realm metadata in this.realm.allRealmsInfo.
+    }
+    if (isTesting()) {
+      fallbackRealmUrls.add(testRealmURL);
+    }
+
+    let loadedSkills = (
       await Promise.all(
         defaultSkills.map(async (skillCardURL) => {
-          let maybeCard = await this.store.get<SkillModule.Skill>(skillCardURL);
-          return isCardInstance(maybeCard) ? maybeCard : undefined;
+          let maybeCard = await this.loadSkillCardWithRetry(skillCardURL);
+          if (maybeCard) {
+            return maybeCard;
+          }
+
+          if (!skillCardURL.startsWith(skillsRealmUrl)) {
+            return undefined;
+          }
+
+          let relativeSkillPath = skillCardURL.slice(skillsRealmUrl.length);
+          let baseRealmSkillUrl = baseRealm.fileURL(relativeSkillPath).href;
+          let fallbackCard =
+            await this.loadSkillCardWithRetry(baseRealmSkillUrl);
+          if (fallbackCard) {
+            return fallbackCard;
+          }
+
+          for (let realmUrl of fallbackRealmUrls) {
+            let normalizedRealmUrl = realmUrl.endsWith('/')
+              ? realmUrl
+              : `${realmUrl}/`;
+            let candidateSkillUrl = `${normalizedRealmUrl}${relativeSkillPath}`;
+            if (
+              candidateSkillUrl === skillCardURL ||
+              candidateSkillUrl === baseRealmSkillUrl
+            ) {
+              continue;
+            }
+            let candidate =
+              await this.loadSkillCardWithRetry(candidateSkillUrl);
+            if (candidate) {
+              return candidate;
+            }
+          }
+          return undefined;
         }),
       )
     ).filter(Boolean) as SkillModule.Skill[];
+
+    return loadedSkills;
+  }
+
+  private async loadSkillCardWithRetry(
+    cardId: string,
+  ): Promise<SkillModule.Skill | undefined> {
+    let maxAttempts = isTesting() ? 8 : 2;
+    let delayMs = isTesting() ? 150 : 50;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        let maybeCard = await this.store.get<SkillModule.Skill>(cardId);
+        if (isCardInstance(maybeCard)) {
+          return maybeCard;
+        }
+      } catch {
+        // Retry because skill cards may not be queryable until realm indexing completes.
+      }
+
+      if (attempt < maxAttempts) {
+        await timeout(delayMs);
+      }
+    }
+
+    return undefined;
   }
 
   @cached

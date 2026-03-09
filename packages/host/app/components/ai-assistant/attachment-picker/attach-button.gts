@@ -34,6 +34,7 @@ interface Signature {
   Args: {
     chooseCard: (cardId: string) => void;
     chooseFile: (file: FileDef) => void | Promise<void>;
+    chooseLocalFile: () => void | Promise<void>;
   };
 }
 
@@ -58,8 +59,17 @@ export default class AttachButton extends Component<Signature> {
           <CaptionsIcon width='16px' height='16px' />
           <span>{{option}}</span>
         </div>
-      {{else if (eq option 'Attach a File')}}
-        <div class='menu-option' data-test-attach-file-btn>
+      {{else if (eq option 'Attach a File (Workspace)')}}
+        <div
+          class='menu-option'
+          data-test-attach-workspace-file-btn
+          data-test-attach-file-btn
+        >
+          <FileCode width='16px' height='16px' />
+          <span>{{option}}</span>
+        </div>
+      {{else if (eq option 'Attach a File (Your Computer)')}}
+        <div class='menu-option' data-test-attach-local-file-btn>
           <FileCode width='16px' height='16px' />
           <span>{{option}}</span>
         </div>
@@ -81,7 +91,7 @@ export default class AttachButton extends Component<Signature> {
           .ember-basic-dropdown-content-wormhole-origin .attach-button__dropdown
         ) {
         border-radius: 10px;
-        width: 179px;
+        width: 256px;
         padding: 0;
         position: absolute;
         z-index: var(--boxel-layer-modal-urgent);
@@ -110,15 +120,21 @@ export default class AttachButton extends Component<Signature> {
   </template>
 
   get menuOptions(): string[] {
-    return ['Attach a Card', 'Attach a File'];
+    return [
+      'Attach a Card',
+      'Attach a File (Workspace)',
+      'Attach a File (Your Computer)',
+    ];
   }
 
   @action
   handleSelection(option: string) {
     if (option === 'Attach a Card') {
       this.onAttachCard();
-    } else if (option === 'Attach a File') {
+    } else if (option === 'Attach a File (Workspace)') {
       this.onChooseFile();
+    } else if (option === 'Attach a File (Your Computer)') {
+      this.onChooseLocalFile();
     }
   }
 
@@ -130,6 +146,11 @@ export default class AttachButton extends Component<Signature> {
   @action
   onChooseFile() {
     this.doChooseFile.perform();
+  }
+
+  @action
+  onChooseLocalFile() {
+    this.doChooseLocalFile.perform();
   }
 
   private chooseCardTask = restartableTask(async () => {
@@ -147,5 +168,9 @@ export default class AttachButton extends Component<Signature> {
       await this.args.chooseFile(chosenFile);
     }
     return chosenFile;
+  });
+
+  private doChooseLocalFile = restartableTask(async () => {
+    await this.args.chooseLocalFile();
   });
 }
