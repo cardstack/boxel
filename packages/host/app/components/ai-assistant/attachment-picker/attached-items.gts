@@ -15,6 +15,12 @@ import {
   isCardErrorJSONAPI,
 } from '@cardstack/runtime-common';
 
+import {
+  requiredModality,
+  modalityLabel,
+  isTextBasedContentType,
+} from '@cardstack/runtime-common/ai/modality';
+
 import CardPill from '@cardstack/host/components/card-pill';
 import FilePill from '@cardstack/host/components/file-pill';
 import type {
@@ -24,12 +30,6 @@ import type {
 import { urlForRealmLookup } from '@cardstack/host/lib/utils';
 
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-
-import {
-  requiredModality,
-  modalityLabel,
-  isTextBasedContentType,
-} from '@cardstack/runtime-common/ai/modality';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type { FileDef } from 'https://cardstack.com/base/file-api';

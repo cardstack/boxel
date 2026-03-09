@@ -103,11 +103,7 @@ export default class FilePill extends Component<FilePillSignature> {
         {{#if @warningMessage}}
           <Tooltip @placement='top'>
             <:trigger>
-              <TriangleAlert
-                class='warning-icon'
-                width='18'
-                height='18'
-              />
+              <TriangleAlert class='warning-icon' width='18' height='18' />
             </:trigger>
             <:content>
               {{@warningMessage}}
