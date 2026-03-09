@@ -142,6 +142,7 @@ import './realm-endpoints/mtimes-test';
 import './realm-endpoints/permissions-test';
 import './realm-endpoints/cancel-indexing-job-test';
 import './realm-endpoints/publishability-test';
+import './realm-endpoints/reindex-test';
 import './realm-endpoints/search-test';
 import './realm-endpoints/user-test';
 import './search-prerendered-test';
