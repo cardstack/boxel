@@ -13,7 +13,8 @@ export default class InvalidateRealmUrlsCommand extends HostBaseCommand<
   @service declare private realm: RealmService;
 
   static actionVerb = 'Invalidate';
-  description = 'Invalidate files in a realm';
+  description =
+    'Invalidate files in a realm to trigger re-indexing. A user may request that they want to reload or refresh a card in order to re-index it.';
 
   async getInputType() {
     let commandModule = await this.loadCommandModule();
