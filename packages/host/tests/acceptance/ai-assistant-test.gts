@@ -1081,7 +1081,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await click('[data-test-file="person.gts"]');
     await click('[data-test-choose-file-modal-add-button]');
     assert.dom('[data-test-attached-file]').exists({ count: 1 });
-    assert.dom('[data-test-attached-file]').hasText('person');
+    assert.dom('[data-test-attached-file]').hasText('person.gts');
     // Add attachment item
     await click('[data-test-attach-button]');
     await click('[data-test-attach-file-btn]');
@@ -1090,16 +1090,16 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     assert.dom('[data-test-attached-file]').exists({ count: 2 });
     assert
       .dom(`[data-test-attached-file="${testRealmURL}person.gts"]`)
-      .hasText('person');
+      .hasText('person.gts');
     assert
       .dom(`[data-test-attached-file="${testRealmURL}pet.gts"]`)
-      .hasText('pet');
+      .hasText('pet.gts');
 
     // Add remove attachment item
     await click(
       `[data-test-attached-file="${testRealmURL}person.gts"] [data-test-remove-file-btn]`,
     );
-    assert.dom('[data-test-attached-file]').hasText('pet');
+    assert.dom('[data-test-attached-file]').hasText('pet.gts');
 
     await fillIn('[data-test-message-field]', `Message With File`);
     await click('[data-test-send-message-btn]');
