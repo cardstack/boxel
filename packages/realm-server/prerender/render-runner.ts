@@ -486,34 +486,11 @@ export class RenderRunner {
       let waitResult = await withTimeout(
         page,
         async () => {
-          await page.waitForFunction(
-            (expectedNonce: string) => {
-              let containers = Array.from(
-                document.querySelectorAll(
-                  '[data-prerender][data-prerender-id="command-runner"]',
-                ),
-              ) as HTMLElement[];
-              let container =
-                containers.find(
-                  (candidate) =>
-                    candidate.dataset.prerenderNonce === expectedNonce,
-                ) ?? null;
-              if (!container) {
-                return false;
-              }
-              let status = container.dataset.prerenderStatus ?? '';
-              return ['ready', 'error', 'unusable'].includes(status);
-            },
-            {},
-            String(this.#nonce),
-          );
-
           if (opts?.simulateTimeoutMs) {
             await new Promise((resolve) =>
               setTimeout(resolve, opts.simulateTimeoutMs),
             );
           }
-
           return true;
         },
         opts?.timeoutMs,
@@ -532,46 +509,82 @@ export class RenderRunner {
         };
       }
 
-      let payload = await page.evaluate((expectedNonce: string) => {
-        let containers = Array.from(
-          document.querySelectorAll(
-            '[data-prerender][data-prerender-id="command-runner"]',
-          ),
-        ) as HTMLElement[];
-        let container =
-          containers.find(
-            (candidate) => candidate.dataset.prerenderNonce === expectedNonce,
-          ) ?? null;
-        let status =
-          (container?.dataset.prerenderStatus as
-            | 'ready'
-            | 'error'
-            | 'unusable'
-            | undefined) ?? 'error';
-        let errorElement = container?.querySelector(
-          '[data-prerender-error]',
-        ) as HTMLElement | null;
-        let cardResultStringElement = container?.querySelector(
-          '[data-command-result]',
-        ) as HTMLElement | null;
-        let error = (errorElement?.textContent ?? '').trim();
-        let cardResultString = (
-          cardResultStringElement?.textContent ?? ''
-        ).trim();
-        return {
-          status,
-          error: error.length > 0 ? error : null,
-          cardResultString:
-            cardResultString.length > 0 ? cardResultString : null,
-        };
-      }, String(this.#nonce));
+      const jsHandle = await page.waitForFunction(
+        (expectedNonce: string) => {
+          let containers = Array.from(
+            document.querySelectorAll(
+              '[data-prerender][data-prerender-id="command-runner"]',
+            ),
+          ) as HTMLElement[];
+          let container =
+            containers.find(
+              (candidate) => candidate.dataset.prerenderNonce === expectedNonce,
+            ) ?? null;
+          if (!container) {
+            return false;
+          }
+          let status = container.dataset.prerenderStatus ?? '';
+          if (!['ready', 'error', 'unusable'].includes(status)) {
+            return false;
+          }
+          let errorElement = container.querySelector(
+            '[data-prerender-error]',
+          ) as HTMLElement | null;
+          let cardResultStringElement = container.querySelector(
+            '[data-command-result]',
+          ) as HTMLElement | null;
+          let errorFromChild = (errorElement?.textContent ?? '').trim();
+          let errorFromAttr = (
+            container.dataset.prerenderErrorMsg ?? ''
+          ).trim();
+          let error =
+            errorFromChild.length > 0
+              ? errorFromChild
+              : errorFromAttr.length > 0
+                ? errorFromAttr
+                : null;
+          let cardResultString = (
+            cardResultStringElement?.textContent ?? ''
+          ).trim();
+          return {
+            status: status as 'ready' | 'error' | 'unusable',
+            error,
+            cardResultString:
+              cardResultString.length > 0 ? cardResultString : null,
+          };
+        },
+        {},
+        String(this.#nonce),
+      );
+
+      const payload = (await jsHandle.jsonValue()) as {
+        status: 'ready' | 'error' | 'unusable';
+        error: string | null;
+        cardResultString: string | null;
+      };
+
+      let consoleErrors = this.#pagePool.takeConsoleErrors(pageId);
+      let consoleErrorSummary =
+        consoleErrors.length > 0
+          ? consoleErrors.map((e) => this.#formatConsoleError(e)).join('\n')
+          : undefined;
+
+      let errorDetail = [payload.error, consoleErrorSummary]
+        .filter(Boolean)
+        .join('\n---\n');
 
       let response: RunCommandResponse = {
         status: payload.status,
         cardResultString: payload.cardResultString ?? undefined,
-        error: payload.error ?? undefined,
+        error: errorDetail.length > 0 ? errorDetail : undefined,
       };
       markTimeout(response.status);
+
+      if (response.status === 'error') {
+        log.error(
+          `command runner returned error status command=${command} domError=${payload.error ?? 'null'} consoleErrors=${consoleErrors.length}`,
+        );
+      }
 
       return {
         response,
