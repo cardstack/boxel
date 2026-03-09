@@ -1179,22 +1179,30 @@ export default class MatrixService extends Service {
   }> {
     let cardFileDefs = await this.uploadCards(attachedCards);
     // Skip files that were already eagerly uploaded by startFileUpload (url
-    // differs from sourceUrl, meaning it was set to a Matrix media URL).
-    // Files loaded from the store have url === sourceUrl (both the realm URL),
-    // so we must still upload those.
+    // differs from sourceUrl, meaning they already point to Matrix media).
     let filesToUpload = attachedFiles.filter(
       (f) => !f.url || f.url === f.sourceUrl,
     );
+    let uploadedBySourceUrl = new Map<string, FileDef>();
     if (filesToUpload.length > 0) {
-      await this.uploadFiles(filesToUpload);
+      let uploaded = await this.uploadFiles(filesToUpload);
+      for (let file of uploaded) {
+        if (file.sourceUrl) {
+          uploadedBySourceUrl.set(file.sourceUrl, file);
+        }
+      }
     }
-    // Preserve original order; freshly uploaded files now have url set on them.
-    let uploadedFileDefs = attachedFiles;
+    let filesForMessage = attachedFiles.map((file) => {
+      let replacement = file.sourceUrl
+        ? uploadedBySourceUrl.get(file.sourceUrl)
+        : undefined;
+      return replacement ?? file;
+    });
 
     return {
       context,
       attachedCards: cardFileDefs.map((file: FileDef) => file.serialize()),
-      attachedFiles: uploadedFileDefs.map((file: FileDef) => file.serialize()),
+      attachedFiles: filesForMessage.map((file: FileDef) => file.serialize()),
     };
   }
 
