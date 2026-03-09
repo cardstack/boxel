@@ -20,10 +20,11 @@ import {
   runTestRealmServer,
   setupDB,
   setupPermissionedRealmCached,
+  testPort,
 } from '../helpers';
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 
-export const testRealm2URL = new URL('http://127.0.0.1:4445/test/');
+export const testRealm2URL = new URL(`http://127.0.0.1:${testPort(4445)}/test/`);
 
 export type ServerEndpointsTestContext = {
   testRealm: Realm;

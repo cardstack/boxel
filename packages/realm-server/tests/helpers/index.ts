@@ -72,23 +72,36 @@ import { createRemotePrerenderer } from '../../prerender/remote-prerenderer';
 import { createPrerenderHttpServer } from '../../prerender/prerender-app';
 import { buildCreatePrerenderAuth } from '../../prerender/auth';
 import { Client as PgClient } from 'pg';
-import { isEnvironmentMode, serviceURL } from '../../lib/dev-service-registry';
-
-const testRealmURL = new URL('http://127.0.0.1:4444/');
-const testRealmHref = testRealmURL.href;
+import {
+  isEnvironmentMode,
+  getEnvironmentSlug,
+  serviceURL,
+} from '../../lib/dev-service-registry';
 
 /**
- * In environment mode we listen on port 0 (OS-assigned) so that multiple
- * environments can run realm-server tests simultaneously without port
- * conflicts.  supertest connects to the server object directly, so the
- * actual listen port doesn't need to match the realm identity URL.
+ * In environment mode we shift test ports by a deterministic offset derived
+ * from the environment slug so that parallel environments never collide.
  */
-function resolveListenPort(realmURL: URL): number {
-  if (isEnvironmentMode()) {
+function environmentPortOffset(): number {
+  if (!isEnvironmentMode()) {
     return 0;
   }
-  return parseInt(realmURL.port);
+  let slug = getEnvironmentSlug();
+  let hash = 0;
+  for (let i = 0; i < slug.length; i++) {
+    hash = ((hash << 5) - hash + slug.charCodeAt(i)) | 0;
+  }
+  // offset in range [1000, 9000) — keeps ports well within valid range
+  return 1000 + (Math.abs(hash) % 8000);
 }
+
+/** Return a test port, shifted by a per-environment offset when needed. */
+export function testPort(basePort: number): number {
+  return basePort + environmentPortOffset();
+}
+
+const testRealmURL = new URL(`http://127.0.0.1:${testPort(4444)}/`);
+const testRealmHref = testRealmURL.href;
 
 /** Build the default test-realm URL with an optional sub-path. */
 export function testRealmURLFor(path: string): URL {
@@ -166,11 +179,16 @@ export async function waitUntil<T>(
 }
 
 export const testRealm = 'http://test-realm/';
-export const localBaseRealm = 'http://localhost:4201/base';
-export const matrixURL = new URL('http://localhost:8008');
+export const localBaseRealm = isEnvironmentMode()
+  ? `${serviceURL('realm-server')}/base`
+  : 'http://localhost:4201/base';
+export const matrixURL = new URL(
+  isEnvironmentMode()
+    ? serviceURL('matrix')
+    : 'http://localhost:8008',
+);
 const testPrerenderHost = '127.0.0.1';
-const testPrerenderPort = 4460;
-const testPrerenderURL = `http://${testPrerenderHost}:${testPrerenderPort}`;
+const testPrerenderPort = testPort(4460);
 
 export const testRealmInfo = {
   name: 'Test Realm',
@@ -527,6 +545,8 @@ function prerendererCacheKeyPart(prerenderer?: Prerenderer): string | null {
   }
   return `injected:${id}`;
 }
+
+const testPrerenderURL = `http://${testPrerenderHost}:${testPrerenderPort}`;
 
 async function startTestPrerenderServer(): Promise<string> {
   if (prerenderServer?.listening) {
@@ -900,7 +920,7 @@ export async function runTestRealmServer({
     definitionLookup,
     prerenderer,
   });
-  let testRealmHttpServer = testRealmServer.listen(resolveListenPort(realmURL));
+  let testRealmHttpServer = testRealmServer.listen(parseInt(realmURL.port));
   trackServer(testRealmHttpServer);
   await testRealmServer.start();
   return {
@@ -1025,7 +1045,7 @@ export async function runTestRealmServerWithRealms({
     definitionLookup,
     prerenderer,
   });
-  let testRealmHttpServer = testRealmServer.listen(resolveListenPort(serverURL));
+  let testRealmHttpServer = testRealmServer.listen(parseInt(serverURL.port));
   trackServer(testRealmHttpServer);
   await testRealmServer.start();
 
