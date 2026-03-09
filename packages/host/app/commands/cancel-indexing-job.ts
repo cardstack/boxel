@@ -7,7 +7,7 @@ import HostBaseCommand from '../lib/host-base-command';
 import type RealmService from '../services/realm';
 
 export default class CancelIndexingJobCommand extends HostBaseCommand<
-  typeof BaseCommandModule.CancelIndexingJobInput,
+  typeof BaseCommandModule.RealmUrlCard,
   undefined
 > {
   @service declare private realm: RealmService;
@@ -17,12 +17,12 @@ export default class CancelIndexingJobCommand extends HostBaseCommand<
 
   async getInputType() {
     let commandModule = await this.loadCommandModule();
-    const { CancelIndexingJobInput } = commandModule;
-    return CancelIndexingJobInput;
+    const { RealmUrlCard } = commandModule;
+    return RealmUrlCard;
   }
 
   protected async run(
-    input: BaseCommandModule.CancelIndexingJobInput,
+    input: BaseCommandModule.RealmUrlCard,
   ): Promise<undefined> {
     await this.realm.cancelIndexingJob(input.realmUrl);
   }
