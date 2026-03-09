@@ -183,9 +183,7 @@ export const localBaseRealm = isEnvironmentMode()
   ? `${serviceURL('realm-server')}/base`
   : 'http://localhost:4201/base';
 export const matrixURL = new URL(
-  isEnvironmentMode()
-    ? serviceURL('matrix')
-    : 'http://localhost:8008',
+  isEnvironmentMode() ? serviceURL('matrix') : 'http://localhost:8008',
 );
 const testPrerenderHost = '127.0.0.1';
 const testPrerenderPort = testPort(4460);
