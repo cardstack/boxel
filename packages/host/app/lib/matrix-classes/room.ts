@@ -104,6 +104,13 @@ export default class Room {
     return (event as ActiveLLMEvent)?.content.model;
   }
 
+  get activeInputModalities(): string[] | undefined {
+    let event = this._roomState?.events
+      .get(APP_BOXEL_ACTIVE_LLM)
+      ?.get('')?.event;
+    return (event as ActiveLLMEvent)?.content.inputModalities;
+  }
+
   get activeLLMMode(): LLMMode {
     let event = this._roomState?.events.get(APP_BOXEL_LLM_MODE)?.get('')?.event;
     return event && (event as any).content?.mode

@@ -211,6 +211,7 @@ export default class Room extends Component<Signature> {
             @filesToAttach={{this.filesToAttach}}
             @fileUploadStates={{this.fileUploadStates}}
             @retryFileUpload={{this.retryFileUpload}}
+            @inputModalities={{@roomResource.activeInputModalities}}
             @autoAttachedCardTooltipMessage={{if
               (eq this.operatorModeStateService.state.submode Submodes.Code)
               'Current card is shared automatically'

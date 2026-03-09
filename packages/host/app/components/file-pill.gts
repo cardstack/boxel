@@ -6,8 +6,9 @@ import Component from '@glimmer/component';
 
 import FileCode from '@cardstack/boxel-icons/file-code';
 import RefreshCw from '@cardstack/boxel-icons/refresh-cw';
+import TriangleAlert from '@cardstack/boxel-icons/triangle-alert';
 
-import { IconButton, Pill } from '@cardstack/boxel-ui/components';
+import { IconButton, Pill, Tooltip } from '@cardstack/boxel-ui/components';
 import { cn, cssVar, eq } from '@cardstack/boxel-ui/helpers';
 import { IconX, Download } from '@cardstack/boxel-ui/icons';
 
@@ -26,6 +27,7 @@ interface FilePillSignature {
     borderType?: 'dashed' | 'solid';
     fileActionsEnabled?: boolean;
     uploadStatus?: FileUploadStatus;
+    warningMessage?: string;
     onClick?: () => void;
     onRemove?: () => void;
     onDownload?: () => void;
@@ -90,18 +92,34 @@ export default class FilePill extends Component<FilePillSignature> {
   <template>
     <Pill
       @kind={{this.pillKind}}
-      class={{cn 'file-pill' this.borderClass}}
+      class={{cn 'file-pill' this.borderClass has-warning=@warningMessage}}
       data-test-attached-file={{@file.sourceUrl}}
       data-test-file-upload-status={{@uploadStatus}}
+      data-test-file-modality-warning={{if @warningMessage 'true'}}
       {{on 'click' this.handleFileClick}}
       ...attributes
     >
       <:iconLeft>
-        <FileCode
-          width='18'
-          height='18'
-          style={{cssVar icon-color='#0031ff'}}
-        />
+        {{#if @warningMessage}}
+          <Tooltip @placement='top'>
+            <:trigger>
+              <TriangleAlert
+                class='warning-icon'
+                width='18'
+                height='18'
+              />
+            </:trigger>
+            <:content>
+              {{@warningMessage}}
+            </:content>
+          </Tooltip>
+        {{else}}
+          <FileCode
+            width='18'
+            height='18'
+            style={{cssVar icon-color='#0031ff'}}
+          />
+        {{/if}}
       </:iconLeft>
       <:default>
         <span class='file-name' title={{this.displayName}}>
@@ -163,6 +181,12 @@ export default class FilePill extends Component<FilePillSignature> {
         border-style: solid;
       }
 
+      .has-warning {
+        border-color: var(--boxel-warning-200);
+      }
+      .warning-icon {
+        color: var(--boxel-warning-200);
+      }
       .file-name {
         display: inline-block;
         max-width: 100px;

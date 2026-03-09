@@ -1717,6 +1717,7 @@ export default class MatrixService extends Service {
       model,
       toolsSupported: modelConfiguration?.toolsSupported,
       reasoningEffort: modelConfiguration?.reasoningEffort,
+      inputModalities: modelConfiguration?.inputModalities,
     });
   }
 

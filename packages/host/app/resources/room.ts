@@ -355,6 +355,10 @@ export class RoomResource extends Resource<Args> {
     );
   }
 
+  get activeInputModalities(): string[] | undefined {
+    return this.matrixRoom?.activeInputModalities;
+  }
+
   private get defaultLLM(): string {
     let systemCard = this.matrixService.systemCard;
     return (
