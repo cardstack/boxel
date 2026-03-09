@@ -1073,6 +1073,16 @@ export default class StoreService extends Service implements StoreInterface {
         // we already dealt with this
         continue;
       }
+      let fileMetaInstance =
+        this.peekError(invalidation, { type: 'file-meta' }) ??
+        this.peek(invalidation, { type: 'file-meta' });
+      if (fileMetaInstance) {
+        realmEventsLogger.debug(
+          `reloading file-meta resource ${invalidation} because it was previously loaded`,
+        );
+        this.reloadFileMetaTask.perform(invalidation);
+        continue;
+      }
       let clientRequestId = event.clientRequestId ?? undefined;
 
       let instance = this.peekError(invalidation) ?? this.peek(invalidation);
@@ -1211,6 +1221,19 @@ export default class StoreService extends Service implements StoreInterface {
     } finally {
       this.finishTrackingCardLoad(instance.id, reloadTracker);
     }
+  });
+
+  private reloadFileMetaTask = task(async (url: string) => {
+    await this.withTestWaiters(async () => {
+      let instanceOrError = await this.getFileMetaInstance<FileDef>({
+        idOrDoc: url,
+        opts: { noCache: true },
+      });
+      this.setIdentityContext(
+        instanceOrError as FileDef | CardErrorJSONAPI,
+        'file-meta',
+      );
+    });
   });
 
   private onInstanceUpdated = (instance: BaseDef, fieldName: string) => {
