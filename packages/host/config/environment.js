@@ -28,7 +28,6 @@ function environmentDefaults() {
       baseRealmURL: 'http://localhost:4201/base/',
       catalogRealmURL: 'http://localhost:4201/catalog/',
       skillsRealmURL: 'http://localhost:4201/skills/',
-      defaultSystemCardBase: 'http://localhost:4201',
     };
   }
   let slug = environmentSlug();
@@ -40,12 +39,12 @@ function environmentDefaults() {
     baseRealmURL: `http://${realmHost}/base/`,
     catalogRealmURL: `http://${realmHost}/catalog/`,
     skillsRealmURL: `http://${realmHost}/skills/`,
-    defaultSystemCardBase: `http://${realmHost}`,
   };
 }
 
 module.exports = function (environment) {
   let defaults = environmentDefaults();
+  let skipCatalog = process.env.SKIP_CATALOG === 'true';
 
   const ENV = {
     modulePrefix: '@cardstack/host',
@@ -97,7 +96,7 @@ module.exports = function (environment) {
     realmServerURL: process.env.REALM_SERVER_DOMAIN || defaults.realmServerURL,
     resolvedBaseRealmURL:
       process.env.RESOLVED_BASE_REALM_URL || defaults.baseRealmURL,
-    resolvedCatalogRealmURL: process.env.SKIP_CATALOG
+    resolvedCatalogRealmURL: skipCatalog
       ? undefined
       : process.env.RESOLVED_CATALOG_REALM_URL || defaults.catalogRealmURL,
     resolvedSkillsRealmURL:
@@ -106,20 +105,6 @@ module.exports = function (environment) {
       SHOW_ASK_AI: process.env.SHOW_ASK_AI === 'true' || false,
     },
   };
-
-  if (ENV.resolvedCatalogRealmURL) {
-    ENV.defaultSystemCardId = new URL(
-      'SystemCard/default',
-      withTrailingSlash(ENV.resolvedCatalogRealmURL),
-    ).href;
-  }
-
-  if (environment === 'development') {
-    if (!ENV.defaultSystemCardId && !process.env.SKIP_CATALOG) {
-      ENV.defaultSystemCardId =
-        defaults.defaultSystemCardBase + '/catalog/SystemCard/default';
-    }
-  }
 
   if (environment === 'test') {
     // Testem prefers this...
@@ -143,17 +128,21 @@ module.exports = function (environment) {
       SHOW_ASK_AI: true,
     };
 
-    if (!ENV.defaultSystemCardId) {
-      ENV.defaultSystemCardId = 'http://test-realm/test/SystemCard/default';
-    }
-
     // Catalog realm is not available in test environment
     ENV.resolvedCatalogRealmURL = undefined;
+    ENV.defaultSystemCardId = 'http://test-realm/test/SystemCard/default';
   }
 
   if (environment === 'production') {
     // here you can enable a production-specific feature
     ENV.logLevels = '*=warn';
+  }
+
+  if (ENV.resolvedCatalogRealmURL) {
+    ENV.defaultSystemCardId = new URL(
+      'SystemCard/default',
+      withTrailingSlash(ENV.resolvedCatalogRealmURL),
+    ).href;
   }
 
   return ENV;
