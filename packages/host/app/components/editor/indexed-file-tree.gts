@@ -224,8 +224,13 @@ export default class IndexedFileTree extends Component<Signature> {
           currentIndex === -1
             ? 0
             : Math.min(currentIndex + 1, items.length - 1);
-        this.cursorPath = items[nextIndex]!.path;
-        this.scrollPathIntoView(this.cursorPath, nav);
+        const nextItem = items[nextIndex]!;
+        if (nextItem.kind === 'file') {
+          this.selectFile(nextItem.path as LocalPath);
+        } else {
+          this.cursorPath = nextItem.path;
+        }
+        this.scrollPathIntoView(nextItem.path, nav);
         break;
       }
 
@@ -240,8 +245,13 @@ export default class IndexedFileTree extends Component<Signature> {
           currentIndex === -1
             ? items.length - 1
             : Math.max(currentIndex - 1, 0);
-        this.cursorPath = items[prevIndex]!.path;
-        this.scrollPathIntoView(this.cursorPath, nav);
+        const prevItem = items[prevIndex]!;
+        if (prevItem.kind === 'file') {
+          this.selectFile(prevItem.path as LocalPath);
+        } else {
+          this.cursorPath = prevItem.path;
+        }
+        this.scrollPathIntoView(prevItem.path, nav);
         break;
       }
 
@@ -292,11 +302,13 @@ export default class IndexedFileTree extends Component<Signature> {
 
       case 'Enter': {
         event.preventDefault();
+        event.stopPropagation();
         if (!this.cursorPath) break;
         const current = this.visibleItems.find(
           (i) => i.path === this.cursorPath,
         );
         if (current?.kind === 'file') {
+          this.selectFile(current.path as LocalPath);
           this.args.onFileConfirmed?.(current.path as LocalPath);
         } else if (current?.kind === 'directory') {
           this.toggleDirectory(current.path as LocalPath);
@@ -340,8 +352,16 @@ export default class IndexedFileTree extends Component<Signature> {
         if (match) {
           const path =
             match.dataset['testFile'] ?? match.dataset['testDirectory'];
-          this.cursorPath = path;
-          match.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+          if (path) {
+            if (match.dataset['testFile']) {
+              // File: update selection (selectFile also sets cursorPath)
+              this.selectFile(path as LocalPath);
+            } else {
+              // Directory: just move cursor, don't expand
+              this.cursorPath = path;
+            }
+            match.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+          }
         }
         break;
       }

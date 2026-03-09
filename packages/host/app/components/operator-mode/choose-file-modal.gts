@@ -404,6 +404,12 @@ export default class ChooseFileModal extends Component<Signature> {
         font: var(--boxel-font-xs);
         overflow-wrap: anywhere;
       }
+
+      /* Ensure keyboard focus indicators are always visible throughout the modal */
+      :deep(:focus-visible) {
+        outline: 2px solid var(--boxel-highlight);
+        outline-offset: 2px;
+      }
     </style>
     {{#if this.deferred}}
       <ModalContainer
@@ -516,7 +522,6 @@ export default class ChooseFileModal extends Component<Signature> {
                   @size='tall'
                   @disabled={{this.isUploadBusy}}
                   {{on 'click' (fn this.pick this.selectedFile)}}
-                  {{onKeyMod 'Enter'}}
                   data-test-choose-file-modal-add-button
                 >
                   Add
