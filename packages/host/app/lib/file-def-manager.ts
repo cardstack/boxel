@@ -419,11 +419,12 @@ export default class FileDefManagerImpl
 
         let bytes: Uint8Array;
         let contentType: string;
+        let usedPrefetchedContent = false;
         let cached = this.prefetchedContent.get(file.sourceUrl);
         if (cached) {
           bytes = cached.bytes;
           contentType = cached.contentType;
-          this.prefetchedContent.delete(file.sourceUrl);
+          usedPrefetchedContent = true;
         } else if (this.isLocalSourceUrl(file.sourceUrl)) {
           throw new Error(
             `Local file content is not available for upload: ${file.sourceUrl}`,
@@ -445,6 +446,10 @@ export default class FileDefManagerImpl
         file.contentType = contentType;
         file.contentHash = await this.getContentHash(bytes);
         file.contentSize = bytes.byteLength;
+        if (usedPrefetchedContent) {
+          // Keep prefetched bytes around if upload throws so retry can reuse them.
+          this.prefetchedContent.delete(file.sourceUrl);
+        }
 
         return file;
       }),

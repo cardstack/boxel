@@ -11,6 +11,7 @@ import { baseRealm, unixTime } from '@cardstack/runtime-common';
 
 import { ensureTrailingSlash } from '@cardstack/runtime-common';
 import { BOT_TRIGGER_EVENT_TYPE } from '@cardstack/runtime-common';
+import { canonicalizeMatrixMediaKey } from '@cardstack/runtime-common/ai/matrix-utils';
 import {
   APP_BOXEL_ACTIVE_LLM,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
@@ -827,12 +828,20 @@ export class MockClient implements ExtendedClient {
   }
 
   async recacheContentHash(contentHash: string, url: string): Promise<void> {
-    if (this.fileDefManager.invalidUrlCache.has(url)) {
+    const canonicalKey = canonicalizeMatrixMediaKey(url) || url;
+    if (this.fileDefManager.invalidUrlCache.has(canonicalKey)) {
       // Skipping re-caching for this url as it was previously checked and is invalid
       return;
     }
 
-    let contentArrayBuffer = this.serverState.getContent(url);
+    let normalizedUrl = url;
+    if (canonicalKey.startsWith('mxc://')) {
+      normalizedUrl = this.mxcUrlToHttp(canonicalKey);
+    }
+
+    let contentArrayBuffer =
+      this.serverState.getContent(normalizedUrl) ||
+      this.serverState.getContent(url);
     if (!contentArrayBuffer) {
       throw new Error('No content found for URL: ' + url);
     }
@@ -843,12 +852,12 @@ export class MockClient implements ExtendedClient {
       console.warn(
         `Content hash mismatch for URL: ${url}, skipping re-caching step`,
       );
-      this.fileDefManager.invalidUrlCache.add(url);
+      this.fileDefManager.invalidUrlCache.add(canonicalKey);
       return;
     }
 
-    // Update the cache with the new URL for the content hash
-    this.fileDefManager.contentHashCache.set(contentHash, url);
+    // Update the cache with the canonical matrix media URL when possible.
+    this.fileDefManager.contentHashCache.set(contentHash, normalizedUrl);
   }
 
   async prefetchFileContent(file: FileDef): Promise<void> {

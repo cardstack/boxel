@@ -5353,6 +5353,97 @@ new
     );
   });
 
+  test('older image attachments still include metadata in text context', async () => {
+    const history: DiscreteMatrixEvent[] = [
+      {
+        type: 'm.room.message',
+        event_id: '1',
+        origin_server_ts: 1,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          body: 'Earlier message with image',
+          data: {
+            context: {
+              tools: [],
+              submode: 'code',
+              functions: [],
+            },
+            attachedFiles: [
+              {
+                sourceUrl: 'http://test.com/my-realm/diagram.png',
+                url: 'http://test.com/diagram-uploaded.png',
+                name: 'diagram.png',
+                contentType: 'image/png',
+                contentSize: 51200,
+              },
+            ],
+          },
+        },
+        sender: '@user:localhost',
+        room_id: 'room1',
+        unsigned: { age: 1000, transaction_id: '1' },
+        status: EventStatus.SENT,
+      },
+      {
+        type: 'm.room.message',
+        sender: '@aibot:localhost',
+        content: {
+          body: 'Acknowledged',
+          msgtype: 'm.text',
+          format: 'org.matrix.custom.html',
+          isStreamingFinished: true,
+        },
+        origin_server_ts: 2,
+        unsigned: { age: 1000, transaction_id: '2' },
+        event_id: '2',
+        room_id: 'room1',
+        status: EventStatus.SENT,
+      },
+      {
+        type: 'm.room.message',
+        event_id: '3',
+        origin_server_ts: 3,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          body: 'Most recent text-only message',
+          data: {
+            context: {
+              tools: [],
+              submode: 'code',
+              functions: [],
+            },
+          },
+        },
+        sender: '@user:localhost',
+        room_id: 'room1',
+        unsigned: { age: 1000, transaction_id: '3' },
+        status: EventStatus.SENT,
+      },
+    ];
+
+    let prompt = await buildPromptForModel(
+      history,
+      '@aibot:localhost',
+      undefined,
+      undefined,
+      [],
+      fakeMatrixClient,
+    );
+
+    let userMessages = prompt.filter((m) => m.role === 'user');
+    let firstMessage = userMessages[0]?.content as string;
+    assert.ok(
+      firstMessage.includes('diagram.png'),
+      'older image attachment should still be mentioned',
+    );
+    assert.ok(
+      firstMessage.includes('image/png'),
+      'older image attachment should include metadata',
+    );
+  });
+
   test('image attachments produce native image_url content parts', async () => {
     // Policy: when an image file is attached, the prompt should use
     // native image_url content parts (for vision-capable models)

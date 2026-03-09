@@ -232,4 +232,71 @@ module('Unit | file-def-manager canonicalize', function () {
       'sets file content type from prefetched local bytes',
     );
   });
+
+  test('uploadFiles keeps prefetched local bytes on failure so retry succeeds', async function (assert) {
+    assert.expect(4);
+
+    let uploadAttempt = 0;
+    let fakeClient: any = {
+      getAccessToken() {
+        return 'fake-token';
+      },
+      uploadContent(_content: XMLHttpRequestBodyInit) {
+        uploadAttempt++;
+        if (uploadAttempt === 1) {
+          return Promise.reject(new Error('transient upload failure'));
+        }
+        return Promise.resolve({
+          content_uri: `mxc://localhost/upload-${uploadAttempt}`,
+        });
+      },
+      mxcUrlToHttp(mxc: string) {
+        return `http://localhost/_matrix/media/v3/download/localhost/${mxc.split('/').pop()}`;
+      },
+    };
+
+    let manager = new FileDefManagerImpl({
+      owner: null as unknown as any,
+      client: fakeClient,
+      getCardAPI: () => ({}) as any,
+      getFileAPI: () => ({}) as any,
+    }) as any;
+
+    let localFile: any = {
+      sourceUrl: 'boxel-local://local-id/retry.txt',
+      name: 'retry.txt',
+      serialize() {
+        return {
+          sourceUrl: this.sourceUrl,
+          name: this.name,
+          url: this.url,
+          contentType: this.contentType,
+          contentHash: this.contentHash,
+          contentSize: this.contentSize,
+        };
+      },
+    };
+
+    let bytes = new TextEncoder().encode('retry local file');
+    await manager.prefetchLocalFileContent(localFile, bytes, 'text/plain');
+
+    await assert.rejects(
+      manager.uploadFiles([localFile]),
+      /transient upload failure/,
+      'first upload attempt fails',
+    );
+
+    await manager.uploadFiles([localFile]);
+
+    assert.strictEqual(
+      uploadAttempt,
+      2,
+      'retries upload with prefetched bytes',
+    );
+    assert.ok(localFile.url, 'retry succeeds and sets uploaded URL');
+    assert.false(
+      manager.prefetchedContent.has(localFile.sourceUrl),
+      'prefetched bytes are cleared after successful upload',
+    );
+  });
 });
