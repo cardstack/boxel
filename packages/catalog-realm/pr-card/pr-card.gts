@@ -112,7 +112,11 @@ class IsolatedTemplate extends Component<typeof PrCard> {
   }
 
   get latestPrActionLabel() {
-    return renderPrActionLabel(this.latestPrEventInstance?.action);
+    let event = this.latestPrEventInstance;
+    return renderPrActionLabel(
+      event?.action,
+      event?.payload?.pull_request?.merged,
+    );
   }
 
   get pillColor() {
@@ -365,7 +369,11 @@ class FittedTemplate extends Component<typeof PrCard> {
   }
 
   get latestPrActionLabel() {
-    return renderPrActionLabel(this.latestPrEventInstance?.action);
+    let event = this.latestPrEventInstance;
+    return renderPrActionLabel(
+      event?.action,
+      event?.payload?.pull_request?.merged,
+    );
   }
 
   get pillColor() {

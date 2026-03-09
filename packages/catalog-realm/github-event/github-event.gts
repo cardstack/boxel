@@ -17,19 +17,25 @@ export class GithubEventCard extends CardDef {
 
   @field prNumber = contains(NumberField, {
     computeVia: function (this: GithubEventCard) {
-      const isCheckRunEvent = this.payload?.check_run !== undefined;
-      return isCheckRunEvent
-        ? this.payload?.check_run?.pull_requests?.[0].number
-        : (this.payload?.pull_request?.number ?? null);
+      if (this.payload?.check_run !== undefined) {
+        return this.payload?.check_run?.pull_requests?.[0]?.number ?? null;
+      }
+      if (this.payload?.check_suite !== undefined) {
+        return this.payload?.check_suite?.pull_requests?.[0]?.number ?? null;
+      }
+      return this.payload?.pull_request?.number ?? null;
     },
   });
 
   @field prUrl = contains(StringField, {
     computeVia: function (this: GithubEventCard) {
-      const isCheckRunEvent = this.payload?.check_run !== undefined;
-      return isCheckRunEvent
-        ? this.payload?.check_run?.pull_requests?.[0].url
-        : (this.payload?.pull_request?.html_url ?? null);
+      if (this.payload?.check_run !== undefined) {
+        return this.payload?.check_run?.pull_requests?.[0]?.url ?? null;
+      }
+      if (this.payload?.check_suite !== undefined) {
+        return this.payload?.check_suite?.pull_requests?.[0]?.url ?? null;
+      }
+      return this.payload?.pull_request?.html_url ?? null;
     },
   });
 }

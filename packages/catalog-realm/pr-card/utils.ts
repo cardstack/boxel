@@ -33,6 +33,7 @@ export type ReviewState =
 
 export function renderPrActionLabel(
   action: string | null | undefined,
+  merged?: boolean | null,
 ): string {
   switch (action) {
     case 'opened':
@@ -40,7 +41,7 @@ export function renderPrActionLabel(
     case 'review_requested':
       return 'Open';
     case 'closed':
-      return 'Closed';
+      return merged ? 'Merged' : 'Closed';
     case 'draft':
       return 'Draft';
     default:
