@@ -33,10 +33,13 @@ import { and, eq, not } from '@cardstack/boxel-ui/helpers';
 
 import type { ResolvedCodeRef } from '@cardstack/runtime-common';
 import {
+  baseFileRef,
+  formattedError,
   type getCard,
   GetCardContextName,
   internalKeyFor,
   isCardInstance,
+  resolveFileDefCodeRef,
 } from '@cardstack/runtime-common';
 import {
   DEFAULT_LLM_LIST,
@@ -54,16 +57,21 @@ import type { RoomResource } from '@cardstack/host/resources/room';
 import type AiAssistantPanelService from '@cardstack/host/services/ai-assistant-panel-service';
 import type CardService from '@cardstack/host/services/card-service';
 import type CommandService from '@cardstack/host/services/command-service';
+import type FileUploadService from '@cardstack/host/services/file-upload';
+import type LoaderService from '@cardstack/host/services/loader-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type { MonacoSDK } from '@cardstack/host/services/monaco-service';
+import type NetworkService from '@cardstack/host/services/network';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type PlaygroundPanelService from '@cardstack/host/services/playground-panel-service';
 import type SpecPanelService from '@cardstack/host/services/spec-panel-service';
 import type StoreService from '@cardstack/host/services/store';
+import { FileDefAttributesExtractor } from '@cardstack/host/utils/file-def-attributes-extractor';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type { FileDef } from 'https://cardstack.com/base/file-api';
 
+import { errorJsonApiToErrorEntry } from '../../lib/window-error-handler';
 import AiAssistantActionBar from '../ai-assistant/action-bar';
 import AiAssistantAttachmentPicker from '../ai-assistant/attachment-picker';
 import AiAssistantChatInput from '../ai-assistant/chat-input';
@@ -81,6 +89,8 @@ import RoomMessage from './room-message';
 import type RoomData from '../../lib/matrix-classes/room';
 import type { RoomSkill } from '../../resources/room';
 import type { MatrixEvent } from 'matrix-js-sdk';
+
+const LOCAL_SOURCE_URL_PREFIX = 'boxel-local://';
 
 interface Signature {
   Element: HTMLElement;
@@ -195,6 +205,7 @@ export default class Room extends Component<Signature> {
             @chooseCard={{this.chooseCard}}
             @removeCard={{this.removeCard}}
             @chooseFile={{this.chooseFile}}
+            @chooseLocalFile={{this.chooseLocalFile}}
             @removeFile={{this.removeFile}}
             @autoAttachedFiles={{this.autoAttachedFiles}}
             @filesToAttach={{this.filesToAttach}}
@@ -444,7 +455,10 @@ export default class Room extends Component<Signature> {
   @service declare private store: StoreService;
   @service declare private cardService: CardService;
   @service declare private commandService: CommandService;
+  @service('file-upload') declare private fileUpload: FileUploadService;
+  @service('loader-service') declare private loaderService: LoaderService;
   @service declare private matrixService: MatrixService;
+  @service declare private network: NetworkService;
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private playgroundPanelService: PlaygroundPanelService;
   @service declare private specPanelService: SpecPanelService;
@@ -1056,6 +1070,29 @@ export default class Room extends Component<Signature> {
   }
 
   @action
+  private async chooseLocalFile() {
+    let localFile = await this.fileUpload.pickLocalFile();
+    if (!localFile) {
+      return;
+    }
+
+    let bytes = new Uint8Array(await localFile.arrayBuffer());
+    let file = await this.createLocalFileDef(localFile, bytes);
+    let files = this.filesToAttach;
+    if (!files?.find((f) => f.sourceUrl === file.sourceUrl)) {
+      let contentType =
+        file.contentType || localFile.type || 'application/octet-stream';
+      await this.matrixService.prefetchLocalFileContent(
+        file,
+        bytes,
+        contentType,
+      );
+      this.matrixService.setFilesToSend(this.args.roomId, [...files, file]);
+      this.startFileUpload(file);
+    }
+  }
+
+  @action
   private isAutoAttachedFile(file: FileDef) {
     return this.autoAttachedFiles.some(
       (autoFile) => autoFile.sourceUrl === file.sourceUrl,
@@ -1125,6 +1162,80 @@ export default class Room extends Component<Signature> {
   @action
   private retryFileUpload(file: FileDef) {
     this.startFileUpload(file);
+  }
+
+  private buildLocalSourceUrl(fileName: string): string {
+    return `${LOCAL_SOURCE_URL_PREFIX}${uuidv4()}/${encodeURIComponent(fileName)}`;
+  }
+
+  private async createLocalFileDef(
+    localFile: File,
+    bytes: Uint8Array,
+  ): Promise<FileDef> {
+    let sourceUrl = this.buildLocalSourceUrl(localFile.name);
+    let fileDefCodeRef = resolveFileDefCodeRef(new URL(sourceUrl));
+    let extractor = new FileDefAttributesExtractor({
+      loaderService: this.loaderService,
+      network: this.network,
+      fileURL: sourceUrl,
+      fileDefCodeRef,
+      baseFileDefCodeRef: baseFileRef,
+      contentHash: undefined,
+      contentSize: bytes.byteLength,
+      fileBytes: bytes,
+      buildError: (errorUrl, error) => {
+        let errorJSONAPI = formattedError(errorUrl, error).errors[0];
+        return errorJsonApiToErrorEntry(errorJSONAPI);
+      },
+    });
+    let extracted = await extractor.extract();
+    if (extracted.status === 'error' || !extracted.resource) {
+      throw new Error(
+        extracted.error?.error?.message ??
+          `Failed to extract file metadata for ${localFile.name}`,
+      );
+    }
+
+    let classCodeRef =
+      extracted.resource.meta.adoptsFrom &&
+      'module' in extracted.resource.meta.adoptsFrom &&
+      'name' in extracted.resource.meta.adoptsFrom
+        ? extracted.resource.meta.adoptsFrom
+        : fileDefCodeRef;
+    let fileDefModule = await this.loaderService.loader.import<
+      Record<string, unknown>
+    >(classCodeRef.module);
+    let FileDefKlass = fileDefModule[classCodeRef.name] as
+      | (new (attributes: Record<string, unknown>) => FileDef)
+      | undefined;
+    let baseAttributes = extracted.resource.attributes as Record<
+      string,
+      unknown
+    >;
+    let attributes: Record<string, unknown> = {
+      ...baseAttributes,
+      sourceUrl,
+      url: sourceUrl,
+      name: (baseAttributes.name as string | undefined) ?? localFile.name,
+      contentSize:
+        (baseAttributes.contentSize as number | undefined) ?? bytes.byteLength,
+    };
+
+    if (!FileDefKlass) {
+      return this.matrixService.fileAPI.createFileDef({
+        sourceUrl,
+        url: sourceUrl,
+        name: localFile.name,
+        contentType:
+          (attributes.contentType as string | undefined) ??
+          localFile.type ??
+          'application/octet-stream',
+        contentHash: attributes.contentHash as string | undefined,
+        contentSize: attributes.contentSize as number | undefined,
+      });
+    }
+
+    return new FileDefKlass(attributes);
   }
 
   private doSendMessage = enqueueTask(
