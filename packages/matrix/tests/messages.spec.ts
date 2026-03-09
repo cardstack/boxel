@@ -333,7 +333,7 @@ test.describe('Room messages', () => {
     expect(attachedFiles.length).toStrictEqual(1);
     expect(attachedFiles[0].name).toStrictEqual('person.gts');
     expect(attachedFiles[0].contentType).toStrictEqual(
-      'text/plain; charset=utf-8',
+      'text/typescript+glimmer',
     );
     expect(attachedFiles[0].sourceUrl).toStrictEqual(`${appURL}/person.gts`);
     expect(attachedFiles[0].url).toMatch(
@@ -442,7 +442,7 @@ test.describe('Room messages', () => {
     expect(petFile).toBeDefined();
     expect(petFile?.name).toStrictEqual('pet.gts');
     expect(petFile?.contentType).toStrictEqual(
-      'text/plain; charset=utf-8',
+      'text/typescript+glimmer',
     );
     expect(petFile?.sourceUrl).toStrictEqual(`${appURL}/pet.gts`);
     expect(petFile?.url).toMatch(
