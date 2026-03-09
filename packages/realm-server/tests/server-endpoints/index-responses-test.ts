@@ -718,7 +718,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
 
       test('missing apple-touch-icon is filled with default when only favicon is present in head HTML', async function (assert) {
         // Directly set head_html to contain only a favicon link (no apple-touch-icon)
-        let cardURL = `${testRealm2URL.href}isolated-test`;
+        let cardURL = `${testRealm2URL.href}isolated-test.json`;
         await context.dbAdapter.execute(
           `UPDATE boxel_index
            SET head_html = '<title>Test</title><link rel="icon" href="https://example.com/custom-icon.png" type="image/png">'
@@ -770,7 +770,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       });
 
       test('missing favicon is filled with default when only apple-touch-icon is present in head HTML', async function (assert) {
-        let cardURL = `${testRealm2URL.href}isolated-test`;
+        let cardURL = `${testRealm2URL.href}isolated-test.json`;
         await context.dbAdapter.execute(
           `UPDATE boxel_index
            SET head_html = '<title>Test</title><link rel="apple-touch-icon" href="https://example.com/custom-touch.png">'
