@@ -19,6 +19,7 @@ interface Signature {
     value: string;
     onInput: (val: string) => void;
     onSend: () => void;
+    onPaste?: (event: ClipboardEvent) => void | Promise<void>;
     canSend: boolean;
     attachButton?: WithBoundArgs<
       typeof AttachButton,
@@ -44,6 +45,7 @@ export default class AiAssistantChatInput extends Component<Signature> {
           placeholder='Enter a prompt'
           rows='1'
           {{on 'input' (pick 'target.value' @onInput)}}
+          {{on 'paste' this.onPaste}}
           {{onKeyMod 'Shift+Enter' this.insertNewLine}}
           {{onKeyMod 'Enter' this.onSend}}
           data-test-boxel-input-id='ai-chat-input'
@@ -169,6 +171,11 @@ export default class AiAssistantChatInput extends Component<Signature> {
       return;
     }
     this.args.onSend();
+  }
+
+  @action
+  onPaste(event: Event) {
+    this.args.onPaste?.(event as ClipboardEvent);
   }
 
   @action
