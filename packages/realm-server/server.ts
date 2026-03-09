@@ -693,6 +693,12 @@ export class RealmServer {
         new URL('/assets/content-tag/standalone.js', this.assetsURL.href).href,
       );
 
+    // Strip any static favicon/apple-touch-icon links from the base HTML
+    // since these are now dynamically injected between the head markers
+    indexHTML = indexHTML
+      .replace(/<link[^>]*\brel="icon"[^>]*\/?>/gi, '')
+      .replace(/<link[^>]*\brel="apple-touch-icon"[^>]*\/?>/gi, '');
+
     deferred.fulfill(indexHTML);
     return indexHTML;
   }
