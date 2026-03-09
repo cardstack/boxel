@@ -30,6 +30,7 @@ export interface RealmAuthMatrixClientInterface {
 
 interface Options {
   authWithRealmServer?: true;
+  registrationToken?: string;
 }
 
 const realmSessionRequests = new WeakMap<
@@ -72,6 +73,7 @@ function realmSessionCacheKey(realmURL: URL, sessionEndpoint: string) {
 export class RealmAuthClient {
   private _jwt: string | undefined;
   private isRealmServerAuth: boolean;
+  private registrationToken: string | undefined;
 
   constructor(
     private realmURL: URL,
@@ -80,6 +82,7 @@ export class RealmAuthClient {
     options?: Options,
   ) {
     this.isRealmServerAuth = Boolean(options?.authWithRealmServer);
+    this.registrationToken = options?.registrationToken;
   }
 
   get jwt(): string | undefined {
@@ -176,13 +179,17 @@ export class RealmAuthClient {
     if (!openAccessToken) {
       throw new Error('failed to fetch OpenID token from matrix');
     }
+    let body: Record<string, unknown> = { ...openAccessToken };
+    if (this.registrationToken) {
+      body.registration_token = this.registrationToken;
+    }
     return this.withRetries(() =>
       this.fetch(`${this.realmURL.href}${this.sessionEndpoint}`, {
         method: 'POST',
         headers: {
           Accept: 'application/json',
         },
-        body: JSON.stringify(openAccessToken),
+        body: JSON.stringify(body),
       }),
     );
   }

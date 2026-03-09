@@ -141,7 +141,7 @@ import type {
 
 import type * as MatrixSDK from 'matrix-js-sdk';
 
-const { matrixURL } = ENV;
+const { matrixURL, defaultSystemCardId } = ENV;
 const STATE_EVENTS_OF_INTEREST = ['m.room.create', 'm.room.name'];
 
 const realmEventsLogger = logger('realm:events');
@@ -538,9 +538,7 @@ export default class MatrixService extends Service {
       );
     }
 
-    await this.realmServer.createUser(userId, registrationToken);
-
-    await this.start({ auth });
+    await this.start({ auth, registrationToken });
     this.setDisplayName(displayName);
 
     await this.realmServer.authenticateToAllAccessibleRealms();
@@ -654,11 +652,12 @@ export default class MatrixService extends Service {
     opts: {
       auth?: MatrixSDK.LoginResponse;
       refreshRoutes?: true;
+      registrationToken?: string;
     } = {},
   ) {
     await this.ready;
 
-    let { auth, refreshRoutes } = opts;
+    let { auth, refreshRoutes, registrationToken } = opts;
     if (!auth) {
       auth = this.getAuth();
       if (!auth) {
@@ -670,7 +669,7 @@ export default class MatrixService extends Service {
 
     if (this.client.isLoggedIn()) {
       this.realmServer.setClient(this.client);
-      await this.realmServer.login();
+      await this.realmServer.login(registrationToken);
       this.saveAuth(auth);
       this.bindEventListeners();
 
@@ -1993,7 +1992,12 @@ export default class MatrixService extends Service {
     // Set the system card to use
     // If there is none, we fall back to the default
     if (!systemCardId) {
-      systemCardId = ENV.defaultSystemCardId;
+      systemCardId = defaultSystemCardId;
+    }
+    if (!systemCardId) {
+      this.store.dropReference(this._systemCard?.id);
+      this._systemCard = undefined;
+      return;
     }
     if (systemCardId === this._systemCard?.id) {
       // it's OK to call this multiple times with the same system card id

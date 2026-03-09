@@ -72,6 +72,7 @@ import { createRemotePrerenderer } from '../../prerender/remote-prerenderer';
 import { createPrerenderHttpServer } from '../../prerender/prerender-app';
 import { buildCreatePrerenderAuth } from '../../prerender/auth';
 import { Client as PgClient } from 'pg';
+import { isEnvironmentMode, serviceURL } from '../../lib/dev-service-registry';
 
 const testRealmURL = new URL('http://127.0.0.1:4444/');
 const testRealmHref = testRealmURL.href;
@@ -665,7 +666,9 @@ export function setupDB(
 }
 
 export async function getIndexHTML() {
-  let url = process.env.HOST_URL ?? 'http://localhost:4200/';
+  let url =
+    process.env.HOST_URL ??
+    (isEnvironmentMode() ? serviceURL('host') : 'http://localhost:4200/');
   let request = await fetch(url);
   return await request.text();
 }
@@ -1586,6 +1589,7 @@ export function setupPermissionedRealm(
       dbAdapter: PgAdapter;
       publisher: QueuePublisher;
       runner: QueueRunner;
+      testRealmServer: Awaited<ReturnType<typeof runTestRealmServer>>;
       testRealm: Realm;
       testRealmPath: string;
       testRealmHttpServer: Server;
@@ -1634,6 +1638,7 @@ export function setupPermissionedRealm(
         dbAdapter,
         publisher,
         runner,
+        testRealmServer,
         testRealm: testRealmServer.testRealm,
         testRealmPath: testRealmServer.testRealmDir,
         testRealmHttpServer: testRealmServer.testRealmHttpServer,

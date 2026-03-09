@@ -56,6 +56,17 @@ function makeMinimalGif(width: number, height: number): Uint8Array {
   return new Uint8Array(parts);
 }
 
+function makeRenderableGif(): Uint8Array {
+  // 1x1 browser-decodable GIF (transparent pixel).
+  let base64 = 'R0lGODlhAQABAIAAAP///wAAACH5BAAAAAAALAAAAAABAAEAAAICRAEAOw==';
+  let binary = atob(base64);
+  let bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
+}
+
 module('Acceptance | gif image def', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
@@ -135,12 +146,14 @@ module('Acceptance | gif image def', function (hooks) {
 
   hooks.beforeEach(async function () {
     let gifBytes = makeMinimalGif(6, 7);
+    let renderableGifBytes = makeRenderableGif();
     ({ realm } = await withCachedRealmSetup(async () =>
       setupAcceptanceTestRealm({
         mockMatrixUtils,
         contents: {
           ...SYSTEM_CARD_FIXTURE_CONTENTS,
           'sample.gif': gifBytes,
+          'renderable.gif': renderableGifBytes,
           'not-a-gif.gif': 'This is plain text, not a GIF file.',
         },
       }),
@@ -286,7 +299,9 @@ module('Acceptance | gif image def', function (hooks) {
   });
 
   test('authenticated images display in browser', async function (assert) {
-    let url = makeFileURL('sample.gif');
+    // Use renderable.gif (full image data) rather than sample.gif (header-only
+    // metadata fixture), so browser decode assertions are meaningful.
+    let url = makeFileURL('renderable.gif');
 
     // First extract the file to get the resource
     await visit(
@@ -318,7 +333,7 @@ module('Acceptance | gif image def', function (hooks) {
     let img = document.querySelector(imgSelector) as HTMLImageElement | null;
     assert.ok(img, 'img element is rendered');
     assert.ok(
-      img?.getAttribute('src')?.includes('sample.gif'),
+      img?.getAttribute('src')?.includes('renderable.gif'),
       'img src references the GIF file',
     );
 
