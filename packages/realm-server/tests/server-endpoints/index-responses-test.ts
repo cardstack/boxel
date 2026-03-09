@@ -10,7 +10,7 @@ import {
   type Realm,
 } from '@cardstack/runtime-common';
 import type { PgAdapter } from '@cardstack/postgres';
-import { setupServerEndpointsTest, testRealm2URL } from './helpers';
+import { setupServerEndpointsTest, testRealmURL } from './helpers';
 import {
   closeServer,
   createVirtualNetwork,
@@ -369,7 +369,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
 
       test('startup indexing uses system initiated queue priority', async function (assert) {
         let [job] = (await context.dbAdapter.execute(
-          `SELECT priority FROM jobs WHERE job_type = 'from-scratch-index' AND args->>'realmURL' = '${testRealm2URL.href}' ORDER BY created_at DESC LIMIT 1`,
+          `SELECT priority FROM jobs WHERE job_type = 'from-scratch-index' AND args->>'realmURL' = '${testRealmURL.href}' ORDER BY created_at DESC LIMIT 1`,
         )) as { priority: number }[];
 
         assert.ok(job, 'found startup from-scratch index job for realm');
@@ -381,7 +381,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       });
 
       test('serves isolated HTML for realm index request', async function (assert) {
-        let response = await context.request2
+        let response = await context.request
           .get('/test')
           .set('Accept', 'text/html');
 
@@ -393,7 +393,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       });
 
       test('serves isolated HTML in index responses for card URLs', async function (assert) {
-        let response = await context.request2
+        let response = await context.request
           .get('/test/isolated-test')
           .set('Accept', 'text/html');
 
@@ -405,7 +405,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       });
 
       test('HTML response does not include boxel-ready class on body', async function (assert) {
-        let response = await context.request2
+        let response = await context.request
           .get('/test/isolated-test')
           .set('Accept', 'text/html');
 
@@ -417,7 +417,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       });
 
       test('serves isolated HTML for /subdirectory/index.json at /subdirectory/', async function (assert) {
-        let response = await context.request2
+        let response = await context.request
           .get('/test/subdirectory/')
           .set('Accept', 'text/html');
 
@@ -431,10 +431,10 @@ module(`server-endpoints/${basename(__filename)}`, function () {
 
       test('does not inject head or isolated HTML when realm is not public', async function (assert) {
         await context.dbAdapter.execute(
-          `DELETE FROM realm_user_permissions WHERE realm_url = '${testRealm2URL.href}' AND username = '*'`,
+          `DELETE FROM realm_user_permissions WHERE realm_url = '${testRealmURL.href}' AND username = '*'`,
         );
 
-        let response = await context.request2
+        let response = await context.request
           .get('/test/private-index-test')
           .set('Accept', 'text/html');
 
@@ -450,7 +450,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       });
 
       test('serves scoped CSS in index responses for card URLs', async function (assert) {
-        let response = await context.request2
+        let response = await context.request
           .get('/test/scoped-css-test')
           .set('Accept', 'text/html');
 
@@ -466,7 +466,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       });
 
       test('serves scoped CSS from linked cards in index responses', async function (assert) {
-        let response = await context.request2
+        let response = await context.request
           .get('/test/linked-css-parent-1')
           .set('Accept', 'text/html');
 
@@ -482,7 +482,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       });
 
       test('sanitizes disallowed tags from head HTML in index responses', async function (assert) {
-        let response = await context.request2
+        let response = await context.request
           .get('/test/unsafe-head-test')
           .set('Accept', 'text/html');
 
@@ -517,7 +517,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       });
 
       test('serves isolated HTML containing dollar signs without corruption', async function (assert) {
-        let response = await context.request2
+        let response = await context.request
           .get('/test/dollar-sign-test')
           .set('Accept', 'text/html');
 
@@ -540,7 +540,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         let deleteSlugs = ['private-index-test', 'scoped-css-test'];
 
         for (let slug of deleteSlugs) {
-          let deleteResponse = await context.request2
+          let deleteResponse = await context.request
             .delete(`/test/${slug}`)
             .set('Accept', 'application/vnd.card+json');
 
@@ -553,7 +553,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
 
         await waitUntil(
           async () => {
-            let realmURLNoProtocol = testRealm2URL.href.replace(
+            let realmURLNoProtocol = testRealmURL.href.replace(
               /^https?:\/\//,
               '',
             );
@@ -585,7 +585,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           },
         );
 
-        let headResponse = await context.request2
+        let headResponse = await context.request
           .get('/test/private-index-test')
           .set('Accept', 'text/html');
 
@@ -599,7 +599,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           'deleted isolated HTML is not injected into the HTML response',
         );
 
-        let scopedCSSResponse = await context.request2
+        let scopedCSSResponse = await context.request
           .get('/test/scoped-css-test')
           .set('Accept', 'text/html');
 
@@ -623,7 +623,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       });
 
       test('HTML response includes exactly one favicon and one apple-touch-icon', async function (assert) {
-        let response = await context.request2
+        let response = await context.request
           .get('/test/isolated-test')
           .set('Accept', 'text/html');
 
@@ -651,7 +651,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       });
 
       test('default icon links are injected when card has no theme', async function (assert) {
-        let response = await context.request2
+        let response = await context.request
           .get('/test/isolated-test')
           .set('Accept', 'text/html');
 
@@ -686,10 +686,10 @@ module(`server-endpoints/${basename(__filename)}`, function () {
 
       test('non-public realm includes exactly one favicon and one apple-touch-icon', async function (assert) {
         await context.dbAdapter.execute(
-          `DELETE FROM realm_user_permissions WHERE realm_url = '${testRealm2URL.href}' AND username = '*'`,
+          `DELETE FROM realm_user_permissions WHERE realm_url = '${testRealmURL.href}' AND username = '*'`,
         );
 
-        let response = await context.request2
+        let response = await context.request
           .get('/test/private-index-test')
           .set('Accept', 'text/html');
 
@@ -718,7 +718,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
 
       test('missing apple-touch-icon is filled with default when only favicon is present in head HTML', async function (assert) {
         // Directly set head_html to contain only a favicon link (no apple-touch-icon)
-        let cardURL = `${testRealm2URL.href}isolated-test.json`;
+        let cardURL = `${testRealmURL.href}isolated-test.json`;
         await context.dbAdapter.execute(
           `UPDATE boxel_index
            SET head_html = '<title>Test</title><link rel="icon" href="https://example.com/custom-icon.png" type="image/png">'
@@ -727,7 +727,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
              AND is_deleted IS NOT TRUE`,
         );
 
-        let response = await context.request2
+        let response = await context.request
           .get('/test/isolated-test')
           .set('Accept', 'text/html');
 
@@ -770,7 +770,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       });
 
       test('missing favicon is filled with default when only apple-touch-icon is present in head HTML', async function (assert) {
-        let cardURL = `${testRealm2URL.href}isolated-test.json`;
+        let cardURL = `${testRealmURL.href}isolated-test.json`;
         await context.dbAdapter.execute(
           `UPDATE boxel_index
            SET head_html = '<title>Test</title><link rel="apple-touch-icon" href="https://example.com/custom-touch.png">'
@@ -779,7 +779,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
              AND is_deleted IS NOT TRUE`,
         );
 
-        let response = await context.request2
+        let response = await context.request
           .get('/test/isolated-test')
           .set('Accept', 'text/html');
 
@@ -849,7 +849,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           },
         });
 
-        let writeResponse = await context.request2
+        let writeResponse = await context.request
           .post('/test/card-with-theme.json')
           .set('Accept', 'application/vnd.card+source')
           .send(cardWithThemeJSON);
@@ -881,7 +881,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           },
         );
 
-        let response = await context.request2
+        let response = await context.request
           .get('/test/card-with-theme')
           .set('Accept', 'text/html');
 
@@ -950,7 +950,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           },
         });
 
-        let writeResponse = await context.request2
+        let writeResponse = await context.request
           .post('/test/card-with-brand-guide-theme.json')
           .set('Accept', 'application/vnd.card+source')
           .send(cardJSON);
@@ -981,7 +981,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           },
         );
 
-        let response = await context.request2
+        let response = await context.request
           .get('/test/card-with-brand-guide-theme')
           .set('Accept', 'text/html');
 
@@ -1022,13 +1022,13 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       });
 
       test('returns 404 for request that has malformed URI', async function (assert) {
-        let response = await context.request2.get('/%c0').set('Accept', '*/*');
+        let response = await context.request.get('/%c0').set('Accept', '*/*');
         assert.strictEqual(response.status, 404, 'HTTP 404 status');
       });
 
       test('preserves scoped CSS in HTML response after card enters error state', async function (assert) {
         // First verify the card is indexed successfully and scoped CSS is served
-        let initialResponse = await context.request2
+        let initialResponse = await context.request
           .get('/test/scoped-css-test')
           .set('Accept', 'text/html');
 
@@ -1057,7 +1057,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           },
         });
 
-        let writeResponse = await context.request2
+        let writeResponse = await context.request
           .post('/test/scoped-css-test.json')
           .set('Accept', 'application/vnd.card+source')
           .send(brokenInstanceJSON);
@@ -1073,7 +1073,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           async () => {
             let rows = (await context.dbAdapter.execute(
               `SELECT has_error FROM boxel_index
-               WHERE url = '${testRealm2URL.href}scoped-css-test.json'
+               WHERE url = '${testRealmURL.href}scoped-css-test.json'
                  AND type = 'instance'`,
             )) as { has_error: boolean }[];
 
@@ -1090,7 +1090,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         // Verify the database row has an error
         let errorRows = (await context.dbAdapter.execute(
           `SELECT has_error, last_known_good_deps FROM boxel_index
-           WHERE url = '${testRealm2URL.href}scoped-css-test.json'
+           WHERE url = '${testRealmURL.href}scoped-css-test.json'
              AND type = 'instance'`,
         )) as { has_error: boolean; last_known_good_deps: string[] | null }[];
 
@@ -1111,7 +1111,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         );
 
         // Now request the HTML again - it should still include scoped CSS from last_known_good_deps
-        let errorStateResponse = await context.request2
+        let errorStateResponse = await context.request
           .get('/test/scoped-css-test')
           .set('Accept', 'text/html');
 

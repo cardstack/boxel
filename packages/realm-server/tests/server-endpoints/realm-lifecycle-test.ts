@@ -18,7 +18,7 @@ import {
   testRealmInfo,
 } from '../helpers';
 import { createJWT as createRealmServerJWT } from '../../utils/jwt';
-import { setupServerEndpointsTest, testRealm2URL } from './helpers';
+import { setupServerEndpointsTest, testRealmURL } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
 module(`server-endpoints/${basename(__filename)}`, function () {
@@ -33,7 +33,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         let endpoint = `test-realm-${uuidv4()}`;
         let owner = 'mango';
         let ownerUserId = '@mango:localhost';
-        let response = await context.request2
+        let response = await context.request
           .post('/_create-realm')
           .set('Accept', 'application/vnd.api+json')
           .set('Content-Type', 'application/json')
@@ -65,7 +65,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           {
             data: {
               type: 'realm',
-              id: `${testRealm2URL.origin}/${owner}/${endpoint}/`,
+              id: `${testRealmURL.origin}/${owner}/${endpoint}/`,
               attributes: {
                 ...testRealmInfo,
                 endpoint,
@@ -124,7 +124,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         )!;
         {
           // owner can create an instance
-          let response = await context.request2
+          let response = await context.request
             .post(`/${owner}/${endpoint}/`)
             .send({
               data: {
@@ -155,7 +155,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
 
         {
           // owner can get an instance
-          let response = await context.request2
+          let response = await context.request
             .get(new URL(id).pathname)
             .set('Accept', 'application/vnd.card+json')
             .set(
@@ -178,7 +178,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
 
         {
           // owner can search in the realm
-          let response = await context.request2
+          let response = await context.request
             .post(`${new URL(realm.url).pathname}_search`)
             .set('Accept', 'application/vnd.card+json')
             .set('X-HTTP-Method-Override', 'QUERY')
@@ -210,7 +210,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         let endpoint = `test-realm-${uuidv4()}`;
         let owner = 'mango';
         let ownerUserId = '@mango:localhost';
-        let response = await context.request2
+        let response = await context.request
           .post('/_create-realm')
           .set('Accept', 'application/vnd.api+json')
           .set('Content-Type', 'application/json')
@@ -240,7 +240,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         )!;
 
         {
-          let response = await context.request2
+          let response = await context.request
             .post(`${new URL(realmURL).pathname}_search`)
             .set('Accept', 'application/vnd.card+json')
             .set('X-HTTP-Method-Override', 'QUERY')
@@ -256,7 +256,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
 
           assert.strictEqual(response.status, 403, 'HTTP 403 status');
 
-          response = await context.request2
+          response = await context.request
             .post(`/${owner}/${endpoint}/`)
             .send({
               data: {
@@ -285,7 +285,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         let ownerUserId = '@mango:localhost';
         let realmURL: string;
         {
-          let response = await context.request2
+          let response = await context.request
             .post('/_create-realm')
             .set('Accept', 'application/vnd.api+json')
             .set('Content-Type', 'application/json')
@@ -319,7 +319,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           (r) => r.url === realmURL,
         )!;
         {
-          let response = await context.request2
+          let response = await context.request
             .post(`/${owner}/${endpoint}/`)
             .send({
               data: {
@@ -365,7 +365,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         );
 
         {
-          let response = await context.request2
+          let response = await context.request
             .get(new URL(id).pathname)
             .set('Accept', 'application/vnd.card+json')
             .set(
@@ -389,7 +389,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
 
       test('POST /_create-realm without JWT', async function (assert) {
         let endpoint = `test-realm-${uuidv4()}`;
-        let response = await context.request2
+        let response = await context.request
           .post('/_create-realm')
           .set('Accept', 'application/vnd.api+json')
           .set('Content-Type', 'application/json')
@@ -415,7 +415,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
 
       test('POST /_create-realm with invalid JWT', async function (assert) {
         let endpoint = `test-realm-${uuidv4()}`;
-        let response = await context.request2
+        let response = await context.request
           .post('/_create-realm')
           .set('Accept', 'application/vnd.api+json')
           .set('Content-Type', 'application/json')
@@ -437,7 +437,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       });
 
       test('POST /_create-realm with invalid JSON', async function (assert) {
-        let response = await context.request2
+        let response = await context.request
           .post('/_create-realm')
           .set('Accept', 'application/vnd.api+json')
           .set('Content-Type', 'application/json')
@@ -458,7 +458,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       });
 
       test('POST /_create-realm with bad JSON-API', async function (assert) {
-        let response = await context.request2
+        let response = await context.request
           .post('/_create-realm')
           .set('Accept', 'application/vnd.api+json')
           .set('Content-Type', 'application/json')
@@ -483,7 +483,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       });
 
       test('POST /_create-realm without a realm endpoint', async function (assert) {
-        let response = await context.request2
+        let response = await context.request
           .post('/_create-realm')
           .set('Accept', 'application/vnd.api+json')
           .set('Content-Type', 'application/json')
@@ -514,7 +514,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
 
       test('POST /_create-realm without a realm name', async function (assert) {
         let endpoint = `test-realm-${uuidv4()}`;
-        let response = await context.request2
+        let response = await context.request
           .post('/_create-realm')
           .set('Accept', 'application/vnd.api+json')
           .set('Content-Type', 'application/json')
@@ -579,7 +579,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       test('cannot create a new realm that collides with an existing realm', async function (assert) {
         let endpoint = `test-realm-${uuidv4()}`;
         let ownerUserId = '@mango:localhost';
-        let response = await context.request2
+        let response = await context.request
           .post('/_create-realm')
           .set('Accept', 'application/vnd.api+json')
           .set('Content-Type', 'application/json')
@@ -603,7 +603,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           );
         assert.strictEqual(response.status, 201, 'HTTP 201 status');
         {
-          let response = await context.request2
+          let response = await context.request
             .post('/_create-realm')
             .set('Accept', 'application/vnd.api+json')
             .set('Content-Type', 'application/json')
@@ -637,7 +637,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       test('cannot create a realm with invalid characters in endpoint', async function (assert) {
         let ownerUserId = '@mango:localhost';
         {
-          let response = await context.request2
+          let response = await context.request
             .post('/_create-realm')
             .set('Accept', 'application/vnd.api+json')
             .set('Content-Type', 'application/json')
@@ -667,7 +667,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           );
         }
         {
-          let response = await context.request2
+          let response = await context.request
             .post('/_create-realm')
             .set('Accept', 'application/vnd.api+json')
             .set('Content-Type', 'application/json')
@@ -704,7 +704,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         let providerEndpoint = `test-realm-provider-${uuidv4()}`;
         let providerRealmURL: string;
         {
-          let response = await context.request2
+          let response = await context.request
             .post('/_create-realm')
             .set('Accept', 'application/vnd.api+json')
             .set('Content-Type', 'application/json')
@@ -737,7 +737,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         )!;
         {
           // create a card def
-          let response = await context.request2
+          let response = await context.request
             .post(`/${owner}/${providerEndpoint}/test-card.gts`)
             .set('Accept', 'application/vnd.card+source')
             .set(
@@ -755,7 +755,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         let consumerEndpoint = `test-realm-consumer-${uuidv4()}`;
         let consumerRealmURL: string;
         {
-          let response = await context.request2
+          let response = await context.request
             .post('/_create-realm')
             .set('Accept', 'application/vnd.api+json')
             .set('Content-Type', 'application/json')
@@ -790,7 +790,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         let id: string;
         {
           // create an instance using card def in different private realm
-          let response = await context.request2
+          let response = await context.request
             .post(`/${owner}/${consumerEndpoint}/`)
             .send({
               data: {
@@ -823,7 +823,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
 
         {
           // get the instance
-          let response = await context.request2
+          let response = await context.request
             .get(new URL(id).pathname)
             .set('Accept', 'application/vnd.card+json')
             .set(

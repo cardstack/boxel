@@ -10,19 +10,17 @@ module(`server-endpoints/${basename(__filename)}`, function () {
     let context = setupServerEndpointsTest(hooks);
 
     test('requires auth to create incoming webhook', async function (assert) {
-      let response = await context.request2
-        .post('/_incoming-webhooks')
-        .send({});
+      let response = await context.request.post('/_incoming-webhooks').send({});
       assert.strictEqual(response.status, 401, 'HTTP 401 status');
     });
 
     test('requires auth to list incoming webhooks', async function (assert) {
-      let response = await context.request2.get('/_incoming-webhooks');
+      let response = await context.request.get('/_incoming-webhooks');
       assert.strictEqual(response.status, 401, 'HTTP 401 status');
     });
 
     test('requires auth to delete incoming webhook', async function (assert) {
-      let response = await context.request2.delete('/_incoming-webhooks').send({
+      let response = await context.request.delete('/_incoming-webhooks').send({
         data: {
           type: 'incoming-webhook',
           id: uuidv4(),
@@ -40,7 +38,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         'user@example.com',
       );
 
-      let response = await context.request2
+      let response = await context.request
         .post('/_incoming-webhooks')
         .set('Accept', 'application/vnd.api+json')
         .set('Content-Type', 'application/vnd.api+json')
@@ -130,7 +128,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         'user@example.com',
       );
 
-      let response = await context.request2
+      let response = await context.request
         .post('/_incoming-webhooks')
         .set('Accept', 'application/vnd.api+json')
         .set('Content-Type', 'application/vnd.api+json')
@@ -166,7 +164,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         'user@example.com',
       );
 
-      let response = await context.request2
+      let response = await context.request
         .post('/_incoming-webhooks')
         .set('Accept', 'application/vnd.api+json')
         .set('Content-Type', 'application/vnd.api+json')
@@ -201,7 +199,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         'user@example.com',
       );
 
-      let response = await context.request2
+      let response = await context.request
         .post('/_incoming-webhooks')
         .set('Accept', 'application/vnd.api+json')
         .set('Content-Type', 'application/vnd.api+json')
@@ -283,7 +281,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         `)`,
       ]);
 
-      let response = await context.request2
+      let response = await context.request
         .get('/_incoming-webhooks')
         .set(
           'Authorization',
@@ -311,7 +309,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         'user@example.com',
       );
 
-      let createResponse = await context.request2
+      let createResponse = await context.request
         .post('/_incoming-webhooks')
         .set('Accept', 'application/vnd.api+json')
         .set('Content-Type', 'application/vnd.api+json')
@@ -337,7 +335,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
 
       let webhookId = createResponse.body.data.id;
 
-      let deleteResponse = await context.request2
+      let deleteResponse = await context.request
         .delete('/_incoming-webhooks')
         .set('Accept', 'application/vnd.api+json')
         .set('Content-Type', 'application/vnd.api+json')
@@ -379,7 +377,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         'other@example.com',
       );
 
-      let createResponse = await context.request2
+      let createResponse = await context.request
         .post('/_incoming-webhooks')
         .set('Accept', 'application/vnd.api+json')
         .set('Content-Type', 'application/vnd.api+json')
@@ -405,7 +403,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
 
       let webhookId = createResponse.body.data.id;
 
-      let deleteResponse = await context.request2
+      let deleteResponse = await context.request
         .delete('/_incoming-webhooks')
         .set('Accept', 'application/vnd.api+json')
         .set('Content-Type', 'application/vnd.api+json')
@@ -440,7 +438,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         'user@example.com',
       );
 
-      let createResponse = await context.request2
+      let createResponse = await context.request
         .post('/_incoming-webhooks')
         .set('Accept', 'application/vnd.api+json')
         .set('Content-Type', 'application/vnd.api+json')
@@ -482,7 +480,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         `)`,
       ]);
 
-      let deleteResponse = await context.request2
+      let deleteResponse = await context.request
         .delete('/_incoming-webhooks')
         .set('Accept', 'application/vnd.api+json')
         .set('Content-Type', 'application/vnd.api+json')

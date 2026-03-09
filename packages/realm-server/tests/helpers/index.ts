@@ -891,6 +891,7 @@ export async function runTestRealmServer({
     testRealmHttpServer,
     testRealmAdapter,
     matrixClient,
+    virtualNetwork,
   };
 }
 
@@ -1596,6 +1597,7 @@ export function setupPermissionedRealm(
       testRealmAdapter: RealmAdapter;
       request: SuperTest<Test>;
       dir: DirResult;
+      virtualNetwork: VirtualNetwork;
     }) => void;
     subscribeToRealmEvents?: boolean;
     mode?: 'beforeEach' | 'before';
@@ -1643,6 +1645,7 @@ export function setupPermissionedRealm(
         testRealmPath: testRealmServer.testRealmDir,
         testRealmHttpServer: testRealmServer.testRealmHttpServer,
         testRealmAdapter: testRealmServer.testRealmAdapter,
+        virtualNetwork: testRealmServer.virtualNetwork,
         request,
         dir,
       });
