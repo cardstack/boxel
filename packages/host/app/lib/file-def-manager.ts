@@ -11,6 +11,7 @@ import {
   baseRealm,
   codeRefWithAbsoluteURL,
   getClass,
+  inferContentType,
   SupportedMimeType,
   relativeTo,
   type LooseSingleCardDocument,
@@ -230,20 +231,34 @@ export default class FileDefManagerImpl
     file: FileDef,
     fetchedContentType?: string,
   ): string {
+    let hinted = file.contentType?.trim() ?? '';
     let fetched = fetchedContentType?.trim() ?? '';
-    if (!fetched) {
-      return file.contentType ?? '';
+
+    // Realm source reads (`Accept: application/vnd.card+source`) currently
+    // report text/plain for many files, including binaries, so prioritize a
+    // known file metadata type when available.
+    if (
+      hinted &&
+      hinted !== 'application/octet-stream' &&
+      hinted !== 'application/vnd.card+source'
+    ) {
+      return hinted;
     }
 
     let fetchedBase = fetched.split(';')[0]?.trim().toLowerCase();
     if (
+      !fetchedBase ||
       fetchedBase === 'application/octet-stream' ||
-      fetchedBase === 'application/vnd.card+source'
+      fetchedBase === 'application/vnd.card+source' ||
+      fetchedBase === 'text/plain'
     ) {
-      return file.contentType || fetched;
+      let inferred = inferContentType(file.name ?? file.sourceUrl ?? '');
+      if (inferred && inferred !== 'application/octet-stream') {
+        return inferred;
+      }
     }
 
-    return fetched;
+    return fetched || hinted;
   }
 
   // Validates the content hash against the contents of the URL and then updates the cache.

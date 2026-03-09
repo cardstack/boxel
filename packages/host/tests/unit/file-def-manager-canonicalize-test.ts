@@ -391,6 +391,92 @@ module('Unit | file-def-manager canonicalize', function () {
     assert.ok(uploadedFile.url, 'sets uploaded URL');
   });
 
+  test('uploadFiles infers image content type for workspace files when realm source reports text/plain', async function (assert) {
+    assert.expect(5);
+
+    let uploadedType: string | undefined;
+    let fakeClient: any = {
+      getAccessToken() {
+        return 'fake-token';
+      },
+      uploadContent(
+        _content: XMLHttpRequestBodyInit,
+        opts?: { type?: string },
+      ) {
+        uploadedType = opts?.type;
+        return Promise.resolve({
+          content_uri: 'mxc://localhost/workspace-inferred-image-upload',
+        });
+      },
+      mxcUrlToHttp(mxc: string) {
+        return `http://localhost/_matrix/media/v3/download/localhost/${mxc.split('/').pop()}`;
+      },
+    };
+
+    let manager = new FileDefManagerImpl({
+      owner: null as unknown as any,
+      client: fakeClient,
+      getCardAPI: () => ({}) as any,
+      getFileAPI: () => makeFakeFileApi(),
+    }) as any;
+
+    let imageBytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x01]);
+    manager.network = {
+      authedFetch(url: string, opts?: { headers?: { Accept?: string } }) {
+        assert.strictEqual(
+          url,
+          'http://test-realm-server/my-realm/green-mango.png',
+          'fetches workspace file bytes from sourceUrl',
+        );
+        assert.strictEqual(
+          opts?.headers?.Accept,
+          'application/vnd.card+source',
+          'requests realm source representation',
+        );
+        return Promise.resolve({
+          arrayBuffer: async () => imageBytes.slice().buffer,
+          headers: {
+            get(name: string) {
+              if (name.toLowerCase() === 'content-type') {
+                return 'text/plain; charset=UTF-8';
+              }
+              return null;
+            },
+          },
+        });
+      },
+    } as any;
+
+    let workspaceImageFile: any = {
+      sourceUrl: 'http://test-realm-server/my-realm/green-mango.png',
+      name: 'green-mango.png',
+      serialize() {
+        return {
+          sourceUrl: this.sourceUrl,
+          name: this.name,
+          url: this.url,
+          contentType: this.contentType,
+          contentHash: this.contentHash,
+          contentSize: this.contentSize,
+        };
+      },
+    };
+
+    let [uploadedFile] = await manager.uploadFiles([workspaceImageFile]);
+
+    assert.strictEqual(
+      uploadedType,
+      'image/png',
+      'infers image MIME type from file name instead of using text/plain',
+    );
+    assert.strictEqual(
+      uploadedFile.contentType,
+      'image/png',
+      'uploaded file keeps inferred image MIME type',
+    );
+    assert.ok(uploadedFile.url, 'sets uploaded URL');
+  });
+
   test('uploadFiles ignores stale non-Matrix content-hash cache entry and uploads fresh media', async function (assert) {
     assert.expect(3);
 
