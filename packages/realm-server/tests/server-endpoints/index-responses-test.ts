@@ -837,8 +837,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         {
           timeout: 30000,
           interval: 500,
-          timeoutMessage:
-            'Timed out waiting for card-with-theme to be indexed',
+          timeoutMessage: 'Timed out waiting for card-with-theme to be indexed',
         },
       );
 
@@ -1049,11 +1048,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         .get('/test/scoped-css-test')
         .set('Accept', 'text/html');
 
-      assert.strictEqual(
-        scopedCSSResponse.status,
-        200,
-        'serves HTML response',
-      );
+      assert.strictEqual(scopedCSSResponse.status, 200, 'serves HTML response');
       assert.notOk(
         scopedCSSResponse.text.includes('data-boxel-scoped-css'),
         'deleted scoped CSS is not injected into the HTML response',
@@ -1124,8 +1119,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         {
           timeout: 10000,
           interval: 200,
-          timeoutMessage:
-            'Timed out waiting for instance to enter error state',
+          timeoutMessage: 'Timed out waiting for instance to enter error state',
         },
       );
 
