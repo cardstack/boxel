@@ -34,6 +34,7 @@ interface Signature {
     autoAttachedCardTooltipMessage?: string;
     fileUploadStates?: ReadonlyMap<string, FileUploadState>;
     retryFileUpload?: (file: FileDef) => void;
+    inputModalities?: string[];
   };
   Blocks: {
     default: [
@@ -50,6 +51,7 @@ interface Signature {
         | 'isLoaded'
         | 'fileUploadStates'
         | 'retryFileUpload'
+        | 'inputModalities'
       >,
       WithBoundArgs<
         typeof AttachButton,
@@ -76,6 +78,7 @@ export default class AiAssistantAttachmentPicker extends Component<Signature> {
         autoAttachedCardTooltipMessage=@autoAttachedCardTooltipMessage
         fileUploadStates=@fileUploadStates
         retryFileUpload=@retryFileUpload
+        inputModalities=@inputModalities
       )
       (component
         AttachButton

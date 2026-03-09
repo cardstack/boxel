@@ -45,7 +45,41 @@ export type ImageContentPart = {
     type: 'ephemeral';
   };
 };
-type ContentPart = TextContent | ImageContentPart;
+export type FileContentPart = {
+  type: 'file';
+  file: {
+    filename: string;
+    file_data: string; // base64 data URL (data:application/pdf;base64,...) or public URL
+  };
+  cache_control?: {
+    type: 'ephemeral';
+  };
+};
+export type InputAudioContentPart = {
+  type: 'input_audio';
+  input_audio: {
+    data: string; // raw base64 string (no data: prefix)
+    format: string; // wav | mp3 | aiff | aac | ogg | flac | m4a | pcm16 | pcm24
+  };
+  cache_control?: {
+    type: 'ephemeral';
+  };
+};
+export type VideoContentPart = {
+  type: 'video_url';
+  video_url: {
+    url: string; // base64 data URL or public URL
+  };
+  cache_control?: {
+    type: 'ephemeral';
+  };
+};
+export type ContentPart =
+  | TextContent
+  | ImageContentPart
+  | FileContentPart
+  | InputAudioContentPart
+  | VideoContentPart;
 
 export interface OpenAIPromptMessage {
   role: 'system' | 'user' | 'assistant' | 'tool';

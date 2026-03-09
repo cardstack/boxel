@@ -5612,6 +5612,430 @@ new
     }
   });
 
+  test('PDF attachment produces native file content part', async () => {
+    const history: DiscreteMatrixEvent[] = [
+      {
+        type: 'm.room.message',
+        event_id: '1',
+        origin_server_ts: 1,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          body: 'Please review this document',
+          data: {
+            context: {
+              tools: [],
+              submode: 'code',
+              functions: [],
+            },
+            attachedFiles: [
+              {
+                sourceUrl: 'http://test.com/my-realm/report.pdf',
+                url: 'http://test.com/report-uploaded.pdf',
+                name: 'report.pdf',
+                contentType: 'application/pdf',
+                contentSize: 102400,
+              },
+            ],
+          },
+        },
+        sender: '@user:localhost',
+        room_id: 'room1',
+        unsigned: { age: 1000, transaction_id: '1' },
+        status: EventStatus.SENT,
+      },
+    ];
+
+    mockResponses.set('http://test.com/report-uploaded.pdf', {
+      ok: true,
+      text: 'JVBERi0xLjQK', // fake PDF base64
+    });
+
+    let prompt = await buildPromptForModel(
+      history,
+      '@aibot:localhost',
+      undefined,
+      undefined,
+      [],
+      fakeMatrixClient,
+    );
+
+    let userMessages = prompt.filter((m) => m.role === 'user');
+    let messageContent = userMessages[0]?.content;
+
+    assert.ok(
+      Array.isArray(messageContent),
+      'User message with PDF should have content as ContentPart[]',
+    );
+
+    if (Array.isArray(messageContent)) {
+      let fileParts = (messageContent as any[]).filter(
+        (part: any) => part.type === 'file',
+      );
+      assert.strictEqual(
+        fileParts.length,
+        1,
+        'Should include exactly one file content part',
+      );
+      assert.strictEqual(
+        fileParts[0].file.filename,
+        'report.pdf',
+        'file part should include the filename',
+      );
+      assert.ok(
+        fileParts[0].file.file_data.startsWith('data:application/pdf;base64,'),
+        'file_data should be a base64 data URL with PDF content type',
+      );
+    }
+  });
+
+  test('audio attachment produces native input_audio content part', async () => {
+    const history: DiscreteMatrixEvent[] = [
+      {
+        type: 'm.room.message',
+        event_id: '1',
+        origin_server_ts: 1,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          body: 'Transcribe this audio',
+          data: {
+            context: {
+              tools: [],
+              submode: 'code',
+              functions: [],
+            },
+            attachedFiles: [
+              {
+                sourceUrl: 'http://test.com/my-realm/recording.mp3',
+                url: 'http://test.com/recording-uploaded.mp3',
+                name: 'recording.mp3',
+                contentType: 'audio/mpeg',
+                contentSize: 204800,
+              },
+            ],
+          },
+        },
+        sender: '@user:localhost',
+        room_id: 'room1',
+        unsigned: { age: 1000, transaction_id: '1' },
+        status: EventStatus.SENT,
+      },
+    ];
+
+    mockResponses.set('http://test.com/recording-uploaded.mp3', {
+      ok: true,
+      text: 'AAAAAAAAAA==', // fake audio base64
+    });
+
+    let prompt = await buildPromptForModel(
+      history,
+      '@aibot:localhost',
+      undefined,
+      undefined,
+      [],
+      fakeMatrixClient,
+    );
+
+    let userMessages = prompt.filter((m) => m.role === 'user');
+    let messageContent = userMessages[0]?.content;
+
+    assert.ok(
+      Array.isArray(messageContent),
+      'User message with audio should have content as ContentPart[]',
+    );
+
+    if (Array.isArray(messageContent)) {
+      let audioParts = (messageContent as any[]).filter(
+        (part: any) => part.type === 'input_audio',
+      );
+      assert.strictEqual(
+        audioParts.length,
+        1,
+        'Should include exactly one input_audio content part',
+      );
+      assert.strictEqual(
+        audioParts[0].input_audio.format,
+        'mp3',
+        'input_audio format should be mp3',
+      );
+      assert.ok(
+        audioParts[0].input_audio.data.length > 0,
+        'input_audio data should contain raw base64 (no data: prefix)',
+      );
+      assert.ok(
+        !audioParts[0].input_audio.data.startsWith('data:'),
+        'input_audio data should NOT have a data URL prefix',
+      );
+    }
+  });
+
+  test('video attachment produces native video_url content part', async () => {
+    const history: DiscreteMatrixEvent[] = [
+      {
+        type: 'm.room.message',
+        event_id: '1',
+        origin_server_ts: 1,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          body: 'What happens in this video?',
+          data: {
+            context: {
+              tools: [],
+              submode: 'code',
+              functions: [],
+            },
+            attachedFiles: [
+              {
+                sourceUrl: 'http://test.com/my-realm/clip.mp4',
+                url: 'http://test.com/clip-uploaded.mp4',
+                name: 'clip.mp4',
+                contentType: 'video/mp4',
+                contentSize: 512000,
+              },
+            ],
+          },
+        },
+        sender: '@user:localhost',
+        room_id: 'room1',
+        unsigned: { age: 1000, transaction_id: '1' },
+        status: EventStatus.SENT,
+      },
+    ];
+
+    mockResponses.set('http://test.com/clip-uploaded.mp4', {
+      ok: true,
+      text: 'AAAAIGZ0eXA=', // fake MP4 base64
+    });
+
+    let prompt = await buildPromptForModel(
+      history,
+      '@aibot:localhost',
+      undefined,
+      undefined,
+      [],
+      fakeMatrixClient,
+    );
+
+    let userMessages = prompt.filter((m) => m.role === 'user');
+    let messageContent = userMessages[0]?.content;
+
+    assert.ok(
+      Array.isArray(messageContent),
+      'User message with video should have content as ContentPart[]',
+    );
+
+    if (Array.isArray(messageContent)) {
+      let videoParts = (messageContent as any[]).filter(
+        (part: any) => part.type === 'video_url',
+      );
+      assert.strictEqual(
+        videoParts.length,
+        1,
+        'Should include exactly one video_url content part',
+      );
+      assert.ok(
+        videoParts[0].video_url.url.startsWith('data:video/mp4;base64,'),
+        'video_url should be a base64 data URL with video/mp4 content type',
+      );
+    }
+  });
+
+  test('unsupported modality is gated when inputModalities is set', async () => {
+    // Model only supports text and image — a PDF attachment should be
+    // excluded from media parts and a warning should appear in the text.
+    const history: DiscreteMatrixEvent[] = [
+      {
+        type: 'm.room.message',
+        event_id: '1',
+        origin_server_ts: 1,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          body: 'Review this document and image',
+          data: {
+            context: {
+              tools: [],
+              submode: 'code',
+              functions: [],
+            },
+            attachedFiles: [
+              {
+                sourceUrl: 'http://test.com/my-realm/report.pdf',
+                url: 'http://test.com/report-uploaded.pdf',
+                name: 'report.pdf',
+                contentType: 'application/pdf',
+                contentSize: 102400,
+              },
+              {
+                sourceUrl: 'http://test.com/my-realm/photo.png',
+                url: 'http://test.com/photo-uploaded.png',
+                name: 'photo.png',
+                contentType: 'image/png',
+                contentSize: 2048,
+              },
+            ],
+          },
+        },
+        sender: '@user:localhost',
+        room_id: 'room1',
+        unsigned: { age: 1000, transaction_id: '1' },
+        status: EventStatus.SENT,
+      },
+    ];
+
+    mockResponses.set('http://test.com/photo-uploaded.png', {
+      ok: true,
+      text: 'iVBORw0KGgoAAAANSUhEUg==',
+    });
+    // PDF mock intentionally omitted — should never be downloaded
+
+    let prompt = await buildPromptForModel(
+      history,
+      '@aibot:localhost',
+      undefined,
+      undefined,
+      [],
+      fakeMatrixClient,
+      ['text', 'image'], // model supports text + image only
+    );
+
+    let userMessages = prompt.filter((m) => m.role === 'user');
+    let messageContent = userMessages[0]?.content;
+
+    assert.ok(
+      Array.isArray(messageContent),
+      'Content should be ContentPart[]',
+    );
+
+    if (Array.isArray(messageContent)) {
+      // Image should still be included
+      let imageParts = (messageContent as any[]).filter(
+        (part: any) => part.type === 'image_url',
+      );
+      assert.strictEqual(
+        imageParts.length,
+        1,
+        'Image should still be included when model supports it',
+      );
+
+      // PDF should NOT be included as a file part
+      let fileParts = (messageContent as any[]).filter(
+        (part: any) => part.type === 'file',
+      );
+      assert.strictEqual(
+        fileParts.length,
+        0,
+        'PDF should be excluded when model does not support file modality',
+      );
+
+      // Warning text should mention the gated file
+      let textContent = messageContent
+        .filter((p: any) => p.type === 'text')
+        .map((p: any) => p.text)
+        .join('\n');
+      assert.ok(
+        textContent.includes('report.pdf'),
+        'Warning should mention the excluded file name',
+      );
+      assert.ok(
+        textContent.includes('does not support'),
+        'Warning should explain the file was not sent',
+      );
+    }
+  });
+
+  test('all modalities sent when inputModalities is undefined', async () => {
+    // When no inputModalities is configured, all multimodal types should pass through.
+    const history: DiscreteMatrixEvent[] = [
+      {
+        type: 'm.room.message',
+        event_id: '1',
+        origin_server_ts: 1,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          body: 'Review these files',
+          data: {
+            context: {
+              tools: [],
+              submode: 'code',
+              functions: [],
+            },
+            attachedFiles: [
+              {
+                sourceUrl: 'http://test.com/my-realm/photo.png',
+                url: 'http://test.com/photo-uploaded.png',
+                name: 'photo.png',
+                contentType: 'image/png',
+                contentSize: 2048,
+              },
+              {
+                sourceUrl: 'http://test.com/my-realm/report.pdf',
+                url: 'http://test.com/report-uploaded.pdf',
+                name: 'report.pdf',
+                contentType: 'application/pdf',
+                contentSize: 102400,
+              },
+            ],
+          },
+        },
+        sender: '@user:localhost',
+        room_id: 'room1',
+        unsigned: { age: 1000, transaction_id: '1' },
+        status: EventStatus.SENT,
+      },
+    ];
+
+    mockResponses.set('http://test.com/photo-uploaded.png', {
+      ok: true,
+      text: 'iVBORw0KGgoAAAANSUhEUg==',
+    });
+    mockResponses.set('http://test.com/report-uploaded.pdf', {
+      ok: true,
+      text: 'JVBERi0xLjQK',
+    });
+
+    // No inputModalities arg — defaults to undefined
+    let prompt = await buildPromptForModel(
+      history,
+      '@aibot:localhost',
+      undefined,
+      undefined,
+      [],
+      fakeMatrixClient,
+    );
+
+    let userMessages = prompt.filter((m) => m.role === 'user');
+    let messageContent = userMessages[0]?.content;
+
+    assert.ok(
+      Array.isArray(messageContent),
+      'Content should be ContentPart[]',
+    );
+
+    if (Array.isArray(messageContent)) {
+      let imageParts = (messageContent as any[]).filter(
+        (part: any) => part.type === 'image_url',
+      );
+      let fileParts = (messageContent as any[]).filter(
+        (part: any) => part.type === 'file',
+      );
+      assert.strictEqual(imageParts.length, 1, 'Image should be included');
+      assert.strictEqual(fileParts.length, 1, 'PDF should be included');
+
+      let textContent = messageContent
+        .filter((p: any) => p.type === 'text')
+        .map((p: any) => p.text)
+        .join('\n');
+      assert.notOk(
+        textContent.includes('does not support'),
+        'No gating warning when inputModalities is undefined',
+      );
+    }
+  });
+
   test('read-file tool call is rejected for files not previously attached in the room', async () => {
     // Policy: the AI should only be able to read files that were
     // previously attached by the user in the same room.

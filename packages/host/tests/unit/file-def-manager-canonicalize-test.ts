@@ -1,6 +1,7 @@
 import { module, test } from 'qunit';
 
 import { canonicalizeMatrixMediaKey } from '@cardstack/runtime-common/ai/matrix-utils';
+import { inferContentType } from '@cardstack/runtime-common';
 
 import FileDefManagerImpl from '@cardstack/host/lib/file-def-manager';
 
@@ -547,4 +548,35 @@ module('Unit | file-def-manager canonicalize', function () {
       'file URL is refreshed to Matrix media URL',
     );
   });
+
+  test('inferContentType correctly classifies PDF, audio, and video extensions', function (assert) {
+    let cases: { filename: string; expected: string }[] = [
+      // PDF
+      { filename: 'report.pdf', expected: 'application/pdf' },
+      { filename: 'REPORT.PDF', expected: 'application/pdf' },
+      // Audio
+      { filename: 'clip.wav', expected: 'audio/wave' },
+      { filename: 'song.mp3', expected: 'audio/mpeg' },
+      { filename: 'voice.aac', expected: 'audio/x-aac' },
+      { filename: 'track.ogg', expected: 'audio/ogg' },
+      { filename: 'lossless.flac', expected: 'audio/x-flac' },
+      { filename: 'podcast.m4a', expected: 'audio/mp4' },
+      { filename: 'sample.aiff', expected: 'audio/x-aiff' },
+      // Video
+      { filename: 'demo.mp4', expected: 'video/mp4' },
+      { filename: 'clip.mpeg', expected: 'video/mpeg' },
+      { filename: 'screen.mov', expected: 'video/quicktime' },
+      { filename: 'stream.webm', expected: 'video/webm' },
+    ];
+
+    for (let c of cases) {
+      let result = inferContentType(c.filename);
+      assert.strictEqual(
+        result,
+        c.expected,
+        `${c.filename} => ${c.expected}`,
+      );
+    }
+  });
+
 });

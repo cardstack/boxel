@@ -1,7 +1,7 @@
 import type { MatrixClient, MatrixEvent } from 'matrix-js-sdk';
 import type {
   ChatCompletionMessageToolCall,
-  ImageContentPart,
+  ContentPart,
   OpenAIPromptMessage,
   PendingCodePatchCorrectnessCheck,
   CodePatchCorrectnessCard,
@@ -17,6 +17,13 @@ import {
   isCommandOrCodePatchResult,
 } from './matrix-utils';
 import { isRecognisedDebugCommand } from './debug';
+import {
+  isImageContentType,
+  isPdfContentType,
+  isAudioContentType,
+  isVideoContentType,
+  requiredModality,
+} from './modality';
 import type {
   ActiveLLMEvent,
   BoxelContext,
@@ -109,8 +116,25 @@ function isTextBasedContentType(contentType?: string): boolean {
   );
 }
 
-function isImageContentType(contentType?: string): boolean {
-  return !!contentType && contentType.startsWith('image/');
+const AUDIO_MIME_TO_FORMAT: Record<string, string> = {
+  'audio/wav': 'wav',
+  'audio/wave': 'wav',
+  'audio/x-wav': 'wav',
+  'audio/mpeg': 'mp3',
+  'audio/mp3': 'mp3',
+  'audio/aac': 'aac',
+  'audio/x-aac': 'aac',
+  'audio/ogg': 'ogg',
+  'audio/flac': 'flac',
+  'audio/x-flac': 'flac',
+  'audio/mp4': 'm4a',
+  'audio/x-m4a': 'm4a',
+  'audio/aiff': 'aiff',
+  'audio/x-aiff': 'aiff',
+};
+
+function audioFormatFromMime(contentType: string): string | undefined {
+  return AUDIO_MIME_TO_FORMAT[contentType.split(';')[0].trim().toLowerCase()];
 }
 
 // ── Read-file command scope helpers ──────────────────────────────────
@@ -199,6 +223,8 @@ export async function getPromptParts(
   let disabledSkillIds = await getDisabledSkillIds(eventList);
   let tools = await getTools(eventList, skills, aiBotUserId, client);
   let toolChoice = getToolChoice(history, aiBotUserId);
+  let { model, toolsSupported, reasoningEffort, inputModalities } =
+    getActiveLLMDetails(eventList);
   let messages = await buildPromptForModel(
     history,
     aiBotUserId,
@@ -206,9 +232,8 @@ export async function getPromptParts(
     skills,
     disabledSkillIds,
     client,
+    inputModalities,
   );
-  let { model, toolsSupported, reasoningEffort } =
-    getActiveLLMDetails(eventList);
   return {
     shouldRespond,
     tools,
@@ -1272,6 +1297,7 @@ export async function buildPromptForModel(
   skillCards: LooseCardResource[] = [],
   disabledSkillIds: string[] = [],
   client: MatrixClient,
+  inputModalities?: string[],
 ) {
   // Need to make sure the passed in username is a full id
   if (
@@ -1337,21 +1363,17 @@ export async function buildPromptForModel(
         event as CardMessageEvent,
         history,
         isCurrentMessage,
+        inputModalities,
       );
-      if (attachmentResult.imageUrls.length > 0) {
+      if (attachmentResult.mediaParts.length > 0) {
         let textContent = [body, attachmentResult.text]
           .filter(Boolean)
           .join('\n\n');
-        let contentParts: (TextContent | ImageContentPart)[] = [];
+        let contentParts: ContentPart[] = [];
         if (textContent) {
           contentParts.push({ type: 'text', text: textContent });
         }
-        for (let imageUrl of attachmentResult.imageUrls) {
-          contentParts.push({
-            type: 'image_url',
-            image_url: { url: imageUrl },
-          });
-        }
+        contentParts.push(...attachmentResult.mediaParts);
         if (contentParts.length) {
           historicalMessages.push({ role: 'user', content: contentParts });
         }
@@ -1886,7 +1908,8 @@ export const buildAttachmentsMessagePart = async (
   matrixEvent: MatrixEventWithBoxelContext,
   history: DiscreteMatrixEvent[],
   isCurrentMessage: boolean = false,
-): Promise<{ text: string; imageUrls: string[] }> => {
+  inputModalities?: string[],
+): Promise<{ text: string; mediaParts: ContentPart[] }> => {
   let attachedCards = await getAttachedCards(client, matrixEvent, history);
   let text = '';
   if (attachedCards.length > 0) {
@@ -1898,37 +1921,101 @@ export const buildAttachmentsMessagePart = async (
     history,
     isCurrentMessage,
   );
-  let imageUrls: string[] = [];
-  let imageSourceUrlsIncludedAsImageParts = new Set<string>();
+  let mediaParts: ContentPart[] = [];
+  let mediaSourceUrls = new Set<string>();
+  let unsupportedFiles: { name: string; contentType: string }[] = [];
   if (isCurrentMessage) {
-    let imageFiles = attachedFiles.filter(
-      (f) => isImageContentType(f.contentType) && f.url,
-    );
-    for (let f of imageFiles) {
+    for (let f of attachedFiles) {
+      if (!f.url) {
+        continue;
+      }
+      // Check model capability before downloading
+      let modality = requiredModality(f.contentType);
+      if (!modality) {
+        continue; // not a multimodal type — handled as text metadata below
+      }
+      if (inputModalities && !inputModalities.includes(modality)) {
+        unsupportedFiles.push({
+          name: f.name ?? 'unknown',
+          contentType: f.contentType ?? 'unknown',
+        });
+        continue;
+      }
       try {
-        let dataUrl = await downloadFileAsBase64DataUrl(
-          client,
-          f.url!,
-          f.contentType!,
-        );
-        imageUrls.push(dataUrl);
+        if (isImageContentType(f.contentType)) {
+          let dataUrl = await downloadFileAsBase64DataUrl(
+            client,
+            f.url,
+            f.contentType!,
+          );
+          mediaParts.push({
+            type: 'image_url',
+            image_url: { url: dataUrl },
+          });
+        } else if (isPdfContentType(f.contentType)) {
+          let dataUrl = await downloadFileAsBase64DataUrl(
+            client,
+            f.url,
+            f.contentType!,
+          );
+          mediaParts.push({
+            type: 'file',
+            file: {
+              filename: f.name ?? 'document.pdf',
+              file_data: dataUrl,
+            },
+          });
+        } else if (isAudioContentType(f.contentType)) {
+          let format = audioFormatFromMime(f.contentType!);
+          if (!format) {
+            getLog().error(`Unsupported audio format: ${f.contentType}`);
+            continue;
+          }
+          let dataUrl = await downloadFileAsBase64DataUrl(
+            client,
+            f.url,
+            f.contentType!,
+          );
+          // Strip data URL prefix — OpenRouter expects raw base64 for audio
+          let base64 = dataUrl.replace(/^data:[^;]+;base64,/, '');
+          mediaParts.push({
+            type: 'input_audio',
+            input_audio: { data: base64, format },
+          });
+        } else if (isVideoContentType(f.contentType)) {
+          let dataUrl = await downloadFileAsBase64DataUrl(
+            client,
+            f.url,
+            f.contentType!,
+          );
+          mediaParts.push({
+            type: 'video_url',
+            video_url: { url: dataUrl },
+          });
+        }
         if (f.sourceUrl) {
-          imageSourceUrlsIncludedAsImageParts.add(f.sourceUrl);
+          mediaSourceUrls.add(f.sourceUrl);
         }
       } catch (e) {
-        getLog().error(`Failed to download image ${f.url}:`, e);
+        getLog().error(`Failed to download media file ${f.url}:`, e);
       }
     }
+  }
+  if (unsupportedFiles.length > 0) {
+    let fileList = unsupportedFiles
+      .map((f) => `${f.name} (${f.contentType})`)
+      .join(', ');
+    text += `Note: The following files were not sent to the model because it does not support their input type: ${fileList}\n`;
   }
   if (attachedFiles.length > 0) {
     text += `Attached Files (files with newer versions don't show their content):\n${attachedFilesToMessage(
       attachedFiles,
       {
-        omitSourceUrls: imageSourceUrlsIncludedAsImageParts,
+        omitSourceUrls: mediaSourceUrls,
       },
     )}\n`;
   }
-  return { text, imageUrls };
+  return { text, mediaParts };
 };
 
 export const buildContextMessage = async (
@@ -2132,6 +2219,7 @@ function getActiveLLMDetails(eventlist: DiscreteMatrixEvent[]): {
   model: string;
   toolsSupported?: boolean;
   reasoningEffort?: ReasoningEffort;
+  inputModalities?: string[];
 } {
   let activeLLMEvent = findLast(
     eventlist,
@@ -2150,6 +2238,7 @@ function getActiveLLMDetails(eventlist: DiscreteMatrixEvent[]): {
     reasoningEffort: normalizeReasoningEffort(
       activeLLMEvent.content.reasoningEffort,
     ),
+    inputModalities: activeLLMEvent.content.inputModalities,
   };
 }
 

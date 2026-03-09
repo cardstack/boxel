@@ -25,6 +25,11 @@ import { urlForRealmLookup } from '@cardstack/host/lib/utils';
 
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
+import {
+  requiredModality,
+  modalityLabel,
+} from '@cardstack/runtime-common/ai/modality';
+
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type { FileDef } from 'https://cardstack.com/base/file-api';
 
@@ -46,6 +51,7 @@ interface Signature {
     autoAttachedCardTooltipMessage?: string;
     fileUploadStates?: ReadonlyMap<string, FileUploadState>;
     retryFileUpload?: (file: FileDef) => void;
+    inputModalities?: string[];
   };
 }
 
@@ -119,6 +125,18 @@ export default class AttachedItems extends Component<Signature> {
       return undefined;
     }
     return this.args.fileUploadStates?.get(sourceUrl)?.status;
+  };
+
+  private getModalityWarning = (file: FileDef): string | undefined => {
+    let modalities = this.args.inputModalities;
+    if (!modalities) {
+      return undefined;
+    }
+    let modality = requiredModality(file.contentType);
+    if (!modality || modalities.includes(modality)) {
+      return undefined;
+    }
+    return `Model does not support ${modalityLabel(modality)}. Only metadata will be sent.`;
   };
 
   <template>
@@ -207,6 +225,7 @@ export default class AttachedItems extends Component<Signature> {
                     @onRemove={{fn this.handleRemoveFile item}}
                     @uploadStatus={{this.getUploadStatus item}}
                     @onRetry={{if @retryFileUpload (fn @retryFileUpload item)}}
+                    @warningMessage={{this.getModalityWarning item}}
                     data-test-autoattached-file={{item.sourceUrl}}
                   />
                 </:trigger>
@@ -221,6 +240,7 @@ export default class AttachedItems extends Component<Signature> {
                 @onRemove={{fn this.handleRemoveFile item}}
                 @uploadStatus={{this.getUploadStatus item}}
                 @onRetry={{if @retryFileUpload (fn @retryFileUpload item)}}
+                @warningMessage={{this.getModalityWarning item}}
               />
             {{/if}}
           {{/if}}
