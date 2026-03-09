@@ -136,6 +136,7 @@ import './realm-endpoints-test';
 import './realm-endpoints/dependencies-test';
 import './realm-endpoints/directory-test';
 import './realm-endpoints/info-test';
+import './realm-endpoints/invalidate-urls-test';
 import './realm-endpoints/lint-test';
 import './realm-endpoints/mtimes-test';
 import './realm-endpoints/permissions-test';
