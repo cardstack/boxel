@@ -72,6 +72,7 @@ import { createRemotePrerenderer } from '../../prerender/remote-prerenderer';
 import { createPrerenderHttpServer } from '../../prerender/prerender-app';
 import { buildCreatePrerenderAuth } from '../../prerender/auth';
 import { Client as PgClient } from 'pg';
+import { isEnvironmentMode, serviceURL } from '../../lib/dev-service-registry';
 
 const testRealmURL = new URL('http://127.0.0.1:4444/');
 const testRealmHref = testRealmURL.href;
@@ -665,7 +666,9 @@ export function setupDB(
 }
 
 export async function getIndexHTML() {
-  let url = process.env.HOST_URL ?? 'http://localhost:4200/';
+  let url =
+    process.env.HOST_URL ??
+    (isEnvironmentMode() ? serviceURL('host') : 'http://localhost:4200/');
   let request = await fetch(url);
   return await request.text();
 }
@@ -1182,7 +1185,7 @@ export async function insertPlan(
   creditsIncluded: number,
   stripePlanId: string,
 ): Promise<Plan> {
-  let { valueExpressions, nameExpressions: nameExpressions } = asExpressions({
+  let { valueExpressions, nameExpressions } = asExpressions({
     name,
     monthly_price: monthlyPrice,
     credits_included: creditsIncluded,
@@ -1267,7 +1270,7 @@ export async function insertJob(
     priority?: number;
   },
 ): Promise<Record<string, any>> {
-  let { valueExpressions, nameExpressions: nameExpressions } = asExpressions({
+  let { valueExpressions, nameExpressions } = asExpressions({
     job_type: params.job_type,
     args: params.args ?? {},
     concurrency_group: params.concurrency_group ?? null,
@@ -1584,6 +1587,9 @@ export function setupPermissionedRealm(
     fileSystem?: Record<string, string | LooseSingleCardDocument>;
     onRealmSetup?: (args: {
       dbAdapter: PgAdapter;
+      publisher: QueuePublisher;
+      runner: QueueRunner;
+      testRealmServer: Awaited<ReturnType<typeof runTestRealmServer>>;
       testRealm: Realm;
       testRealmPath: string;
       testRealmHttpServer: Server;
@@ -1630,6 +1636,9 @@ export function setupPermissionedRealm(
 
       onRealmSetup?.({
         dbAdapter,
+        publisher,
+        runner,
+        testRealmServer,
         testRealm: testRealmServer.testRealm,
         testRealmPath: testRealmServer.testRealmDir,
         testRealmHttpServer: testRealmServer.testRealmHttpServer,

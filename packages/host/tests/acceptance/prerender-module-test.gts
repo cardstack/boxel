@@ -236,6 +236,8 @@ module('Acceptance | prerender | module', function (hooks) {
     let auth = createPrerenderAuth('@testuser:localhost', permissions);
 
     let response = await prerenderer.prerenderModule({
+      affinityType: 'realm',
+      affinityValue: testRealmURL,
       realm: testRealmURL,
       url: moduleURL,
       auth,
@@ -265,6 +267,8 @@ module('Acceptance | prerender | module', function (hooks) {
     let auth = createPrerenderAuth('@testuser:localhost', permissions);
 
     let response = await prerenderer.prerenderModule({
+      affinityType: 'realm',
+      affinityValue: testRealmURL,
       realm: testRealmURL,
       url: moduleURL,
       auth,

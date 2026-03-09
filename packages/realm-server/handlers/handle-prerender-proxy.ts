@@ -122,6 +122,8 @@ export default function handlePrerenderProxy({
       prerenderResponse =
         kind === 'card'
           ? await prerenderer.prerenderCard({
+              affinityType: 'realm',
+              affinityValue: attrs.realm,
               realm: attrs.realm,
               url: attrs.url,
               auth,
@@ -129,12 +131,16 @@ export default function handlePrerenderProxy({
             })
           : kind === 'module'
             ? await prerenderer.prerenderModule({
+                affinityType: 'realm',
+                affinityValue: attrs.realm,
                 realm: attrs.realm,
                 url: attrs.url,
                 auth,
                 renderOptions: attrs.renderOptions,
               })
             : await prerenderer.prerenderFileExtract({
+                affinityType: 'realm',
+                affinityValue: attrs.realm,
                 realm: attrs.realm,
                 url: attrs.url,
                 auth,

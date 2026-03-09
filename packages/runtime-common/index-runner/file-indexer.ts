@@ -79,6 +79,8 @@ export async function performFileIndexing({
   let uncaughtError: Error | undefined;
   try {
     extractResult = await prerenderer.prerenderFileExtract({
+      affinityType: 'realm',
+      affinityValue: realmURL.href,
       url: fileURL,
       realm: realmURL.href,
       auth,
@@ -188,6 +190,8 @@ export async function performFileIndexing({
         fileDefCodeRef,
       };
       renderResult = await prerenderer.prerenderFileRender({
+        affinityType: 'realm',
+        affinityValue: realmURL.href,
         url: fileURL,
         realm: realmURL.href,
         auth,

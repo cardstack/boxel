@@ -8,18 +8,23 @@ import {
   type Stats,
   type DBAdapter,
   type QueuePublisher,
-  type FromScratchArgs,
-  type FromScratchResult,
-  type IncrementalArgs,
-  type IncrementalResult,
   type CopyArgs,
   type CopyResult,
 } from '.';
-import { FROM_SCRATCH_JOB_TIMEOUT_SEC } from './tasks/indexer';
+import {
+  INCREMENTAL_INDEX_JOB_TIMEOUT_SEC,
+  makeIncrementalArgsWithCallerMetadata,
+  mapIncrementalDoneResult,
+  type IncrementalIndexEnqueueArgs,
+} from './jobs/indexing';
+import {
+  FROM_SCRATCH_JOB_TIMEOUT_SEC,
+  type FromScratchResult,
+  type IncrementalDoneResult,
+} from './tasks/indexer';
 import type { Realm } from './realm';
 import { RealmPaths } from './paths';
 import ignore, { type Ignore } from 'ignore';
-const INCREMENTAL_JOB_TIMEOUT_SEC = 10 * 60;
 
 export class RealmIndexUpdater {
   #realm: Realm;
@@ -34,7 +39,7 @@ export class RealmIndexUpdater {
   };
   #indexWriter: IndexWriter;
   #queue: QueuePublisher;
-  #indexingDeferred: Deferred<void> | undefined;
+  #indexingDeferreds = new Set<Deferred<void>>();
 
   constructor({
     realm,
@@ -77,17 +82,23 @@ export class RealmIndexUpdater {
   }
 
   indexing() {
-    return this.#indexingDeferred?.promise;
+    if (this.#indexingDeferreds.size === 0) {
+      return undefined;
+    }
+    return Promise.all(
+      [...this.#indexingDeferreds].map((deferred) => deferred.promise),
+    ).then(() => undefined);
   }
 
   // TODO consider triggering realm events for invalidations now that we can
   // calculate fine grained invalidations for from-scratch indexing by passing
   // in an onInvalidation callback
   async fullIndex(priority = systemInitiatedPriority) {
-    this.#indexingDeferred = new Deferred<void>();
+    let indexingDeferred = new Deferred<void>();
+    this.#indexingDeferreds.add(indexingDeferred);
     let startedAt = performance.now();
     try {
-      let args: FromScratchArgs = {
+      let args = {
         realmURL: this.#realm.url,
         realmUsername: await this.#realm.getRealmOwnerUsername(),
       };
@@ -95,7 +106,7 @@ export class RealmIndexUpdater {
       this.#log.info(`Realm ${this.realmURL.href} is starting indexing`);
 
       let job = await this.#queue.publish<FromScratchResult>({
-        jobType: `from-scratch-index`,
+        jobType: 'from-scratch-index',
         concurrencyGroup: `indexing:${this.#realm.url}`,
         timeout: FROM_SCRATCH_JOB_TIMEOUT_SEC,
         priority,
@@ -118,7 +129,8 @@ export class RealmIndexUpdater {
     } catch (e: any) {
       this.#log.error(`Error running from-scratch-index: ${e.message}`);
     } finally {
-      this.#indexingDeferred.fulfill();
+      indexingDeferred.fulfill();
+      this.#indexingDeferreds.delete(indexingDeferred);
     }
   }
 
@@ -130,22 +142,26 @@ export class RealmIndexUpdater {
       clientRequestId?: string | null;
     },
   ): Promise<void> {
-    this.#indexingDeferred = new Deferred<void>();
+    let indexingDeferred = new Deferred<void>();
+    this.#indexingDeferreds.add(indexingDeferred);
     try {
-      let args: IncrementalArgs = {
-        urls: urls.map((u) => u.href),
+      let args: IncrementalIndexEnqueueArgs = {
+        changes: urls.map((url) => ({
+          url: url.href,
+          operation: opts?.delete ? 'delete' : 'update',
+        })),
         realmURL: this.#realm.url,
         realmUsername: await this.#realm.getRealmOwnerUsername(),
-        operation: opts?.delete ? 'delete' : 'update',
         ignoreData: { ...this.#ignoreData },
-        clientRequestId: opts?.clientRequestId ?? null,
       };
-      let job = await this.#queue.publish<IncrementalResult>({
-        jobType: `incremental-index`,
+      let clientRequestId = opts?.clientRequestId ?? null;
+      let job = await this.#queue.publish<IncrementalDoneResult>({
+        jobType: 'incremental-index',
         concurrencyGroup: `indexing:${this.#realm.url}`,
-        timeout: INCREMENTAL_JOB_TIMEOUT_SEC,
+        timeout: INCREMENTAL_INDEX_JOB_TIMEOUT_SEC,
         priority: userInitiatedPriority,
-        args,
+        args: makeIncrementalArgsWithCallerMetadata(args, clientRequestId),
+        mapResult: mapIncrementalDoneResult(clientRequestId),
       });
       let { invalidations, ignoreData, stats } = await job.done;
       this.#stats = stats;
@@ -156,10 +172,11 @@ export class RealmIndexUpdater {
         );
       }
     } catch (e: any) {
-      this.#indexingDeferred.reject(e);
+      indexingDeferred.reject(e);
       throw e;
     } finally {
-      this.#indexingDeferred.fulfill();
+      indexingDeferred.fulfill();
+      this.#indexingDeferreds.delete(indexingDeferred);
     }
   }
 
@@ -167,7 +184,8 @@ export class RealmIndexUpdater {
     sourceRealmURL: URL,
     onInvalidation?: (invalidatedURLs: URL[]) => Promise<void>,
   ): Promise<void> {
-    this.#indexingDeferred = new Deferred<void>();
+    let indexingDeferred = new Deferred<void>();
+    this.#indexingDeferreds.add(indexingDeferred);
     try {
       let args: CopyArgs = {
         realmURL: this.#realm.url,
@@ -188,10 +206,11 @@ export class RealmIndexUpdater {
         );
       }
     } catch (e: any) {
-      this.#indexingDeferred.reject(e);
+      indexingDeferred.reject(e);
       throw e;
     } finally {
-      this.#indexingDeferred.fulfill();
+      indexingDeferred.fulfill();
+      this.#indexingDeferreds.delete(indexingDeferred);
     }
   }
 

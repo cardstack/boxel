@@ -19,6 +19,8 @@ import {
   testRealmURL,
 } from '../helpers';
 import { createRealmServerSession } from './helpers';
+import { getUserByMatrixUserId } from '@cardstack/billing/billing-queries';
+import type { PgAdapter } from '@cardstack/postgres';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
 module(`server-endpoints/${basename(__filename)}`, function () {
@@ -26,13 +28,15 @@ module(`server-endpoints/${basename(__filename)}`, function () {
     let testRealmServer: Server;
     let request: SuperTest<Test>;
     let dir: DirResult;
+    let dbAdapter: PgAdapter;
 
     hooks.beforeEach(async function () {
       dir = dirSync();
     });
 
     setupDB(hooks, {
-      beforeEach: async (dbAdapter, publisher, runner) => {
+      beforeEach: async (_dbAdapter, publisher, runner) => {
+        dbAdapter = _dbAdapter;
         let testRealmDir = join(dir.name, 'realm_server_5', 'test');
         ensureDirSync(testRealmDir);
         copySync(join(__dirname, '..', 'cards'), testRealmDir);
@@ -58,7 +62,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       },
     });
 
-    test('authenticates user', async function (assert) {
+    test('authenticates user and creates session room', async function (assert) {
       let matrixClient = new MatrixClient({
         matrixURL: realmServerTestMatrix.url,
         // it's a little awkward that we are hijacking a realm user to pretend to
@@ -67,7 +71,16 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         seed: realmSecretSeed,
       });
       await matrixClient.login();
-      let userId = matrixClient.getUserId();
+      let userId = matrixClient.getUserId()!;
+
+      // User exists (created by ensureTestUser in test setup) but has no session room
+      let userBefore = await getUserByMatrixUserId(dbAdapter, userId);
+      assert.ok(userBefore, 'User exists from test setup');
+      assert.strictEqual(
+        userBefore!.sessionRoomId,
+        null,
+        'No session room before first session',
+      );
 
       let { jwt: token, status } = await createRealmServerSession(
         matrixClient,
@@ -81,6 +94,51 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         decoded.sessionRoom,
         undefined,
         'sessionRoom should be defined',
+      );
+
+      // Session room should now be stored
+      let userAfter = await getUserByMatrixUserId(dbAdapter, userId);
+      assert.ok(userAfter!.sessionRoomId, 'Session room was created');
+
+      // Creating another session should reuse the session room
+      let { status: status2, sessionRoom: sessionRoom2 } =
+        await createRealmServerSession(matrixClient, request);
+      assert.strictEqual(status2, 201, 'Second session creation succeeds');
+      assert.strictEqual(
+        sessionRoom2,
+        decoded.sessionRoom,
+        'Second session reuses the same session room',
+      );
+    });
+
+    test('saves registration token passed during session creation', async function (assert) {
+      let matrixClient = new MatrixClient({
+        matrixURL: realmServerTestMatrix.url,
+        username: 'test_realm',
+        seed: realmSecretSeed,
+      });
+      await matrixClient.login();
+      let userId = matrixClient.getUserId()!;
+
+      // User exists from test setup but has no registration token
+      let userBefore = await getUserByMatrixUserId(dbAdapter, userId);
+      assert.strictEqual(
+        userBefore!.matrixRegistrationToken,
+        null,
+        'No registration token before session',
+      );
+
+      // Create session with a registration token (simulates initial signup)
+      let { status } = await createRealmServerSession(matrixClient, request, {
+        registrationToken: 'my-invite-code',
+      });
+      assert.strictEqual(status, 201, 'HTTP 201 status');
+
+      let user = await getUserByMatrixUserId(dbAdapter, userId);
+      assert.strictEqual(
+        user!.matrixRegistrationToken,
+        'my-invite-code',
+        'Registration token was saved during session creation',
       );
     });
   });

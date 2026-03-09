@@ -9,12 +9,14 @@ import {
   PRERENDER_SERVER_STATUS_HEADER,
   resolvePrerenderServerProxyTimeoutMs,
 } from './prerender-constants';
+import { fromAffinityKey, toAffinityKey } from './affinity';
+import type { AffinityType } from '@cardstack/runtime-common';
 
 type ServerInfo = {
   url: string;
   capacity: number;
-  activeRealms: Set<string>;
-  warmedRealms: Set<string>;
+  activeAffinities: Set<string>;
+  warmedAffinities: Set<string>;
   status: 'active' | 'draining';
   registeredAt: number;
   lastSeenAt: number;
@@ -23,8 +25,8 @@ type ServerInfo = {
 
 type Registry = {
   servers: Map<string, ServerInfo>; // key: serverUrl
-  realms: Map<string, string[]>; // realm -> array of serverUrls (deque semantics)
-  lastAccessByRealm: Map<string, number>;
+  affinities: Map<string, string[]>; // affinityKey (<type>:<value>) -> assigned serverUrls (deque semantics)
+  lastAccessByAffinity: Map<string, number>;
 };
 
 const log = logger('prerender-manager');
@@ -66,8 +68,9 @@ export function buildPrerenderManagerApp(options?: {
   app: Koa<Koa.DefaultState, Koa.Context>;
   registry: Registry;
   sweepServers: () => Promise<void>;
-  chooseServerForRealm: (
-    realm: string,
+  chooseServerForAffinity: (
+    affinityType: AffinityType,
+    affinityValue: string,
     options?: { exclude?: Iterable<string> },
   ) => string | null;
 } {
@@ -75,8 +78,8 @@ export function buildPrerenderManagerApp(options?: {
   const router = new Router();
   const registry: Registry = {
     servers: new Map(),
-    realms: new Map(),
-    lastAccessByRealm: new Map(),
+    affinities: new Map(),
+    lastAccessByAffinity: new Map(),
   };
   let lastRegistrySnapshot: string | undefined;
 
@@ -123,7 +126,7 @@ export function buildPrerenderManagerApp(options?: {
   }
 
   function hasCapacity(info: ServerInfo) {
-    return info.activeRealms.size < info.capacity;
+    return info.activeAffinities.size < info.capacity;
   }
 
   function isServerUsable(info: ServerInfo) {
@@ -137,8 +140,8 @@ export function buildPrerenderManagerApp(options?: {
         url: s.url,
         status: s.status,
         capacity: s.capacity,
-        activeRealms: Array.from(s.activeRealms),
-        warmedRealms: Array.from(s.warmedRealms),
+        activeAffinities: Array.from(s.activeAffinities),
+        warmedAffinities: Array.from(s.warmedAffinities),
         lastSeenAt: s.lastSeenAt,
       })),
     );
@@ -150,10 +153,10 @@ export function buildPrerenderManagerApp(options?: {
         url: s.url,
         status: s.status,
         capacity: s.capacity,
-        activeRealms: Array.from(s.activeRealms),
-        warmedRealms: Array.from(s.warmedRealms),
+        activeAffinities: Array.from(s.activeAffinities),
+        warmedAffinities: Array.from(s.warmedAffinities),
       })),
-      realms: [...registry.realms.entries()],
+      affinities: [...registry.affinities.entries()],
     });
     if (snapshot !== lastRegistrySnapshot) {
       lastRegistrySnapshot = snapshot;
@@ -162,23 +165,23 @@ export function buildPrerenderManagerApp(options?: {
   }
 
   function cleanupAssignments(): void {
-    for (let [realm, list] of registry.realms) {
+    for (let [affinityKey, list] of registry.affinities) {
       let filtered: string[] = [];
       for (let url of list) {
         let info = registry.servers.get(url);
         if (info && isServerUsable(info)) {
           filtered.push(url);
         } else {
-          registry.servers.get(url)?.activeRealms.delete(realm);
+          registry.servers.get(url)?.activeAffinities.delete(affinityKey);
         }
       }
       if (filtered.length === 0) {
-        registry.realms.delete(realm);
-        logRegistryIfChanged('cleanup removed realm');
+        registry.affinities.delete(affinityKey);
+        logRegistryIfChanged('cleanup removed affinity');
         continue;
       }
       if (filtered.length !== list.length) {
-        registry.realms.set(realm, filtered);
+        registry.affinities.set(affinityKey, filtered);
         logRegistryIfChanged('cleanup pruned assignments');
       }
     }
@@ -187,12 +190,12 @@ export function buildPrerenderManagerApp(options?: {
   function pruneServer(url: string) {
     registry.servers.delete(url);
     logRegistryIfChanged('prune server');
-    for (let [realm, list] of registry.realms) {
+    for (let [affinityKey, list] of registry.affinities) {
       let idx;
       while ((idx = list.indexOf(url)) !== -1) {
         list.splice(idx, 1);
       }
-      if (list.length === 0) registry.realms.delete(realm);
+      if (list.length === 0) registry.affinities.delete(affinityKey);
     }
   }
 
@@ -200,20 +203,20 @@ export function buildPrerenderManagerApp(options?: {
     url,
     capacity,
     status,
-    warmedRealms,
+    warmedAffinities,
   }: {
     url: string;
     capacity?: number;
     status?: 'active' | 'draining';
-    warmedRealms?: string[];
+    warmedAffinities?: string[];
   }) {
     log.debug(
-      `received heartbeat from ${url} status=${status} capacity=${capacity} warmedRealms=${warmedRealms ? warmedRealms.join() : 'none'}`,
+      `received heartbeat from ${url} status=${status} capacity=${capacity} warmedAffinities=${warmedAffinities ? warmedAffinities.join() : 'none'}`,
     );
     let existing = registry.servers.get(url);
     let changed = false;
     if (existing) {
-      let warmSet = new Set(warmedRealms ?? []);
+      let warmSet = new Set(warmedAffinities ?? []);
       existing.lastSeenAt = now();
       if (capacity && capacity !== existing.capacity) {
         existing.capacity = capacity;
@@ -224,44 +227,44 @@ export function buildPrerenderManagerApp(options?: {
         changed = true;
       }
       if (
-        warmedRealms &&
-        (warmedRealms.some((r) => !existing.warmedRealms.has(r)) ||
-          existing.warmedRealms.size !== warmSet.size)
+        warmedAffinities &&
+        (warmedAffinities.some((r) => !existing.warmedAffinities.has(r)) ||
+          existing.warmedAffinities.size !== warmSet.size)
       ) {
-        existing.warmedRealms = warmSet;
+        existing.warmedAffinities = warmSet;
         changed = true;
       }
       if (warmSet.size === 0) {
-        // server restarted; clear tracked active realms and mappings
-        for (let realm of [...existing.activeRealms]) {
-          existing.activeRealms.delete(realm);
-          let arr = registry.realms.get(realm) || [];
+        // server restarted; clear tracked active affinities and mappings
+        for (let affinityKey of [...existing.activeAffinities]) {
+          existing.activeAffinities.delete(affinityKey);
+          let arr = registry.affinities.get(affinityKey) || [];
           let idx;
           while ((idx = arr.indexOf(url)) !== -1) {
             arr.splice(idx, 1);
           }
           if (arr.length === 0) {
-            registry.realms.delete(realm);
-            registry.lastAccessByRealm.delete(realm);
+            registry.affinities.delete(affinityKey);
+            registry.lastAccessByAffinity.delete(affinityKey);
           } else {
-            registry.realms.set(realm, arr);
+            registry.affinities.set(affinityKey, arr);
           }
         }
       } else {
-        // drop active realms that are not warmed to free capacity
-        for (let realm of [...existing.activeRealms]) {
-          if (!warmSet.has(realm)) {
-            existing.activeRealms.delete(realm);
-            let arr = registry.realms.get(realm) || [];
+        // drop active affinities that are not warmed to free capacity
+        for (let affinityKey of [...existing.activeAffinities]) {
+          if (!warmSet.has(affinityKey)) {
+            existing.activeAffinities.delete(affinityKey);
+            let arr = registry.affinities.get(affinityKey) || [];
             let idx;
             while ((idx = arr.indexOf(url)) !== -1) {
               arr.splice(idx, 1);
             }
             if (arr.length === 0) {
-              registry.realms.delete(realm);
-              registry.lastAccessByRealm.delete(realm);
+              registry.affinities.delete(affinityKey);
+              registry.lastAccessByAffinity.delete(affinityKey);
             } else {
-              registry.realms.set(realm, arr);
+              registry.affinities.set(affinityKey, arr);
             }
           }
         }
@@ -275,8 +278,8 @@ export function buildPrerenderManagerApp(options?: {
     let info: ServerInfo = {
       url,
       capacity: capacity || 4,
-      activeRealms: new Set(),
-      warmedRealms: new Set(warmedRealms ?? []),
+      activeAffinities: new Set(),
+      warmedAffinities: new Set(warmedAffinities ?? []),
       status: status ?? 'active',
       registeredAt: now(),
       lastSeenAt: now(),
@@ -316,17 +319,20 @@ export function buildPrerenderManagerApp(options?: {
     }
     ctxt.set('Content-Type', 'application/vnd.api+json');
 
-    // Build the list of active servers with their realms
+    // Build the list of active servers with their affinities
     let servers = [];
     for (let [serverUrl, serverInfo] of registry.servers) {
-      let realms = [];
-      for (let realm of serverInfo.activeRealms) {
-        realms.push({
-          url: realm,
-          // Use the last access time if available, otherwise fall back to server registration time
-          // (which represents when the realm was first assigned to this server)
+      let affinities = [];
+      for (let affinityKey of serverInfo.activeAffinities) {
+        let parsed = fromAffinityKey(affinityKey);
+        affinities.push({
+          key: affinityKey,
+          affinityType: parsed?.affinityType ?? 'realm',
+          affinityValue: parsed?.affinityValue ?? affinityKey,
+          // Use the last access time if available, otherwise fall back to server registration time.
           lastUsed: formatTimestampWithTimezone(
-            registry.lastAccessByRealm.get(realm) || serverInfo.registeredAt,
+            registry.lastAccessByAffinity.get(affinityKey) ||
+              serverInfo.registeredAt,
           ),
         });
       }
@@ -340,8 +346,8 @@ export function buildPrerenderManagerApp(options?: {
           registeredAt: formatTimestampWithTimezone(serverInfo.registeredAt),
           lastSeenAt: formatTimestampWithTimezone(serverInfo.lastSeenAt),
           status: serverInfo.status,
-          warmedRealms: Array.from(serverInfo.warmedRealms.values()),
-          realms: realms,
+          warmedAffinities: Array.from(serverInfo.warmedAffinities.values()),
+          affinities,
         },
       });
     }
@@ -378,10 +384,10 @@ export function buildPrerenderManagerApp(options?: {
       let url: string | undefined = attrs.url;
       let status: 'active' | 'draining' =
         attrs.status === 'draining' ? 'draining' : 'active';
-      let warmedRealms: string[] | undefined;
-      if (Array.isArray(attrs.warmedRealms)) {
-        warmedRealms = attrs.warmedRealms.filter((v: unknown): v is string =>
-          Boolean(v && typeof v === 'string'),
+      let warmedAffinities: string[] | undefined;
+      if (Array.isArray(attrs.warmedAffinities)) {
+        warmedAffinities = attrs.warmedAffinities.filter(
+          (v: unknown): v is string => Boolean(v && typeof v === 'string'),
         );
       }
       if (!url) {
@@ -394,7 +400,7 @@ export function buildPrerenderManagerApp(options?: {
       }
       url = normalizeURL(url);
 
-      recordHeartbeat({ url, capacity, status, warmedRealms });
+      recordHeartbeat({ url, capacity, status, warmedAffinities });
       ctxt.status = 204;
       ctxt.set('X-Prerender-Server-Id', url);
     } catch (e) {
@@ -404,14 +410,16 @@ export function buildPrerenderManagerApp(options?: {
     }
   });
 
-  // maintenance: clear realm assignments and capacity tracking
+  // maintenance: clear affinity assignments and capacity tracking
   router.post('/prerender-maintenance/reset', async (ctxt) => {
     for (let [, info] of registry.servers) {
-      info.activeRealms.clear();
+      info.activeAffinities.clear();
     }
-    registry.realms.clear();
-    registry.lastAccessByRealm.clear();
-    log.warn('Maintenance reset: cleared realm assignments and activeRealms');
+    registry.affinities.clear();
+    registry.lastAccessByAffinity.clear();
+    log.warn(
+      'Maintenance reset: cleared affinity assignments and activeAffinities',
+    );
     ctxt.status = 204;
   });
 
@@ -433,46 +441,52 @@ export function buildPrerenderManagerApp(options?: {
     }
     url = normalizeURL(url);
     registry.servers.delete(url);
-    // remove from realms mappings
-    for (let [realm, list] of registry.realms) {
+    // remove from affinity mappings
+    for (let [affinityKey, list] of registry.affinities) {
       let idx = list.indexOf(url);
       if (idx >= 0) {
         list.splice(idx, 1);
-        if (list.length === 0) registry.realms.delete(realm);
+        if (list.length === 0) registry.affinities.delete(affinityKey);
       }
     }
     ctxt.status = 204;
   });
 
-  // realm disposal
-  router.delete('/prerender-servers/realms/:encodedRealm', async (ctxt) => {
-    let realm = decodeURIComponent(ctxt.params.encodedRealm);
-    let url = urlFromQuery(ctxt);
-    if (!url) {
-      log.warn('Cannot dispose realm %s: missing url query parameter', realm);
-      ctxt.status = 400;
-      ctxt.body = {
-        errors: [
-          {
-            status: 400,
-            message: 'Missing required query parameter: url',
-          },
-        ],
-      };
-      return;
-    }
-    url = normalizeURL(url);
-    let list = registry.realms.get(realm) || [];
-    let idx = list.indexOf(url);
-    if (idx >= 0) list.splice(idx, 1);
-    if (list.length === 0) registry.realms.delete(realm);
-    // free capacity marker
-    registry.servers.get(url)?.activeRealms.delete(realm);
-    ctxt.status = 204;
-  });
+  // affinity disposal
+  router.delete(
+    '/prerender-servers/affinities/:encodedAffinity',
+    async (ctxt) => {
+      let affinityKey = decodeURIComponent(ctxt.params.encodedAffinity);
+      let url = urlFromQuery(ctxt);
+      if (!url) {
+        log.warn(
+          'Cannot dispose affinity %s: missing url query parameter',
+          affinityKey,
+        );
+        ctxt.status = 400;
+        ctxt.body = {
+          errors: [
+            {
+              status: 400,
+              message: 'Missing required query parameter: url',
+            },
+          ],
+        };
+        return;
+      }
+      url = normalizeURL(url);
+      let list = registry.affinities.get(affinityKey) || [];
+      let idx = list.indexOf(url);
+      if (idx >= 0) list.splice(idx, 1);
+      if (list.length === 0) registry.affinities.delete(affinityKey);
+      // free capacity marker
+      registry.servers.get(url)?.activeAffinities.delete(affinityKey);
+      ctxt.status = 204;
+    },
+  );
 
   function leastRecentlyUsedServerWithCapacity(
-    realm: string,
+    affinityKey: string,
     options?: {
       exclude?: Iterable<string>;
     },
@@ -487,7 +501,7 @@ export function buildPrerenderManagerApp(options?: {
       if (!isServerUsable(info) || !hasCapacity(info)) {
         continue;
       }
-      if (info.warmedRealms.has(realm)) {
+      if (info.warmedAffinities.has(affinityKey)) {
         if (!bestWarm || info.lastAssignedAt < bestWarm.info.lastAssignedAt) {
           bestWarm = { url, info };
         }
@@ -504,20 +518,22 @@ export function buildPrerenderManagerApp(options?: {
     return bestWarm?.url ?? best?.url;
   }
 
-  // helper: choose server for realm
-  function chooseServerForRealm(
-    realm: string,
+  // helper: choose server for affinity
+  function chooseServerForAffinity(
+    affinityType: AffinityType,
+    affinityValue: string,
     options?: { exclude?: Iterable<string> },
   ): string | null {
+    let affinityKey = toAffinityKey({ affinityType, affinityValue });
     cleanupAssignments();
     let exclude = new Set(options?.exclude ? [...options.exclude] : []);
-    let assigned = (registry.realms.get(realm) || []).filter(
+    let assigned = (registry.affinities.get(affinityKey) || []).filter(
       (url) => !exclude.has(url),
     );
-    // If we have room to add another server for this realm, try to expand the
+    // If we have room to add another server for this affinity, try to expand the
     // assignment set before choosing among existing ones.
     if (assigned.length < multiplex) {
-      let candidate = leastRecentlyUsedServerWithCapacity(realm, {
+      let candidate = leastRecentlyUsedServerWithCapacity(affinityKey, {
         exclude: new Set([...assigned, ...exclude]),
       });
       if (candidate) {
@@ -525,10 +541,10 @@ export function buildPrerenderManagerApp(options?: {
         if (assigned.length > multiplex) {
           assigned.splice(0, assigned.length - multiplex);
         }
-        registry.realms.set(realm, assigned);
+        registry.affinities.set(affinityKey, assigned);
         let info = registry.servers.get(candidate);
         if (info) {
-          info.activeRealms.add(realm);
+          info.activeAffinities.add(affinityKey);
           info.lastAssignedAt = now();
         }
         return candidate;
@@ -546,7 +562,7 @@ export function buildPrerenderManagerApp(options?: {
           info &&
           isServerUsable(info) &&
           hasCapacity(info) &&
-          info.warmedRealms.has(realm)
+          info.warmedAffinities.has(affinityKey)
         );
       });
       let next = warmedPreferred ?? warmed;
@@ -556,116 +572,116 @@ export function buildPrerenderManagerApp(options?: {
         if (assigned.length > multiplex) {
           assigned.splice(0, assigned.length - multiplex);
         }
-        registry.realms.set(realm, assigned);
+        registry.affinities.set(affinityKey, assigned);
         let info = registry.servers.get(next);
         if (info) {
           info.lastAssignedAt = now();
-          info.activeRealms.add(realm);
+          info.activeAffinities.add(affinityKey);
         }
         return next;
       }
     }
     // pick server with available capacity, prefer warmed
-    let candidate = leastRecentlyUsedServerWithCapacity(realm, {
+    let candidate = leastRecentlyUsedServerWithCapacity(affinityKey, {
       exclude,
     });
     if (candidate) {
-      let list = registry.realms.get(realm) || [];
+      let list = registry.affinities.get(affinityKey) || [];
       if (!list.includes(candidate)) list.push(candidate);
       if (list.length > multiplex) list = list.slice(-multiplex);
-      registry.realms.set(realm, list);
+      registry.affinities.set(affinityKey, list);
       let info = registry.servers.get(candidate);
       if (info) {
-        info.activeRealms.add(realm);
+        info.activeAffinities.add(affinityKey);
         info.lastAssignedAt = now();
       }
       return candidate;
     }
-    // pressure mode: pick server owning globally LRU realm (may evict to free capacity)
-    let lruRealm: string | undefined;
+    // pressure mode: pick server owning globally LRU affinity (may evict to free capacity)
+    let lruAffinity: string | undefined;
     let lruTime = Infinity;
-    for (let [r, t] of registry.lastAccessByRealm) {
+    for (let [r, t] of registry.lastAccessByAffinity) {
       if (t < lruTime) {
         lruTime = t;
-        lruRealm = r;
+        lruAffinity = r;
       }
     }
-    if (lruRealm) {
-      let arr = [...(registry.realms.get(lruRealm) || [])];
+    if (lruAffinity) {
+      let arr = [...(registry.affinities.get(lruAffinity) || [])];
       while (arr.length > 0) {
         let url = arr.shift()!;
         let info = registry.servers.get(url);
         if (info && isServerUsable(info)) {
-          // evict lruRealm from this server to free capacity
-          info.activeRealms.delete(lruRealm);
-          let existing = registry.realms.get(lruRealm) || [];
+          // evict lru affinity from this server to free capacity
+          info.activeAffinities.delete(lruAffinity);
+          let existing = registry.affinities.get(lruAffinity) || [];
           let idx = existing.indexOf(url);
           if (idx > -1) existing.splice(idx, 1);
           if (existing.length === 0) {
-            registry.realms.delete(lruRealm);
+            registry.affinities.delete(lruAffinity);
           } else {
-            registry.realms.set(lruRealm, existing);
+            registry.affinities.set(lruAffinity, existing);
           }
-          registry.lastAccessByRealm.delete(lruRealm);
+          registry.lastAccessByAffinity.delete(lruAffinity);
 
-          let list = registry.realms.get(realm) || [];
+          let list = registry.affinities.get(affinityKey) || [];
           if (!list.includes(url)) list.push(url);
           if (list.length > multiplex) list = list.slice(-multiplex);
-          registry.realms.set(realm, list);
-          info.activeRealms.add(realm);
+          registry.affinities.set(affinityKey, list);
+          info.activeAffinities.add(affinityKey);
           info.lastAssignedAt = now();
           log.warn(
-            'Pressure-mode: evicted realm %s from %s to assign %s',
-            lruRealm,
+            'Pressure-mode: evicted affinity %s from %s to assign %s',
+            lruAffinity,
             url,
-            realm,
+            affinityKey,
           );
           return url;
         }
-        registry.servers.get(url)?.activeRealms.delete(lruRealm);
+        registry.servers.get(url)?.activeAffinities.delete(lruAffinity);
       }
       if (arr.length === 0) {
-        registry.realms.delete(lruRealm);
+        registry.affinities.delete(lruAffinity);
       }
     }
     // fallback: any usable server (evict if needed)
     for (let [url, info] of registry.servers) {
       if (!isServerUsable(info)) continue;
-      if (!hasCapacity(info) && info.activeRealms.size > 0) {
-        let evictRealm: string | undefined;
+      if (!hasCapacity(info) && info.activeAffinities.size > 0) {
+        let evictAffinity: string | undefined;
         let oldest = Infinity;
-        for (let r of info.activeRealms) {
-          let t = registry.lastAccessByRealm.get(r) ?? 0;
+        for (let r of info.activeAffinities) {
+          let t = registry.lastAccessByAffinity.get(r) ?? 0;
           if (t < oldest) {
             oldest = t;
-            evictRealm = r;
+            evictAffinity = r;
           }
         }
-        if (!evictRealm) evictRealm = [...info.activeRealms][0];
-        if (evictRealm) {
-          info.activeRealms.delete(evictRealm);
-          let existing = registry.realms.get(evictRealm) || [];
+        if (!evictAffinity) evictAffinity = [...info.activeAffinities][0];
+        if (evictAffinity) {
+          info.activeAffinities.delete(evictAffinity);
+          let existing = registry.affinities.get(evictAffinity) || [];
           let idx = existing.indexOf(url);
           if (idx > -1) existing.splice(idx, 1);
           if (existing.length === 0) {
-            registry.realms.delete(evictRealm);
+            registry.affinities.delete(evictAffinity);
           } else {
-            registry.realms.set(evictRealm, existing);
+            registry.affinities.set(evictAffinity, existing);
           }
-          registry.lastAccessByRealm.delete(evictRealm);
+          registry.lastAccessByAffinity.delete(evictAffinity);
           log.warn(
-            'Fallback eviction: evicted realm %s from %s to assign %s',
-            evictRealm,
+            'Fallback eviction: evicted affinity %s from %s to assign %s',
+            evictAffinity,
             url,
-            realm,
+            affinityKey,
           );
         }
       }
-      let list = registry.realms.get(realm) || [];
+      let list = registry.affinities.get(affinityKey) || [];
       if (!list.includes(url)) list.push(url);
       if (list.length > multiplex) list = list.slice(-multiplex);
-      registry.realms.set(realm, list);
-      info.activeRealms.add(realm);
+      registry.affinities.set(affinityKey, list);
+      info.activeAffinities.add(affinityKey);
       info.lastAssignedAt = now();
       return url;
     }
@@ -738,16 +754,40 @@ export function buildPrerenderManagerApp(options?: {
         }
       }
       let attrs = body?.data?.attributes || {};
-      let realm: string | undefined = attrs.realm;
-      if (!realm) {
+      let affinityType: AffinityType | undefined =
+        attrs.affinityType === 'realm' || attrs.affinityType === 'user'
+          ? attrs.affinityType
+          : undefined;
+      let affinityValue: string | undefined =
+        typeof attrs.affinityValue === 'string' &&
+        attrs.affinityValue.length > 0
+          ? attrs.affinityValue
+          : undefined;
+      if (!affinityType) {
         ctxt.status = 400;
         ctxt.body = {
           errors: [
-            { status: 400, message: 'Missing required attribute: realm' },
+            {
+              status: 400,
+              message: 'Missing required attribute: affinityType',
+            },
           ],
         };
         return;
       }
+      if (!affinityValue) {
+        ctxt.status = 400;
+        ctxt.body = {
+          errors: [
+            {
+              status: 400,
+              message: 'Missing required attribute: affinityValue',
+            },
+          ],
+        };
+        return;
+      }
+      let affinityKey = toAffinityKey({ affinityType, affinityValue });
       if (registry.servers.size === 0 && discoveryWaitMs > 0) {
         let start = now();
         while (registry.servers.size === 0 && now() - start < discoveryWaitMs) {
@@ -762,11 +802,13 @@ export function buildPrerenderManagerApp(options?: {
       }
       let attempts = new Set<string>();
       while (attempts.size < registry.servers.size) {
-        let target = chooseServerForRealm(realm, { exclude: attempts });
+        let target = chooseServerForAffinity(affinityType, affinityValue, {
+          exclude: attempts,
+        });
         if (!target) {
           log.debug(
-            '503 No servers: no usable target for realm=%s (registered=%d): %s',
-            realm,
+            '503 No servers: no usable target for affinity=%s (registered=%d): %s',
+            affinityKey,
             registry.servers.size,
             normalizeServersForLog(),
           );
@@ -867,14 +909,14 @@ export function buildPrerenderManagerApp(options?: {
           return;
         }
 
-        // on success, mark last access and active realm
+        // on success, mark last access and active affinity
         if (res.ok) {
-          registry.lastAccessByRealm.set(realm, now());
-          // ensure activeRealms marks include this assignment
-          let assigned = registry.realms.get(realm) || [];
+          registry.lastAccessByAffinity.set(affinityKey, now());
+          // ensure active affinity marks include this assignment
+          let assigned = registry.affinities.get(affinityKey) || [];
           for (let url of assigned) {
             if (url === target) {
-              registry.servers.get(url)?.activeRealms.add(realm);
+              registry.servers.get(url)?.activeAffinities.add(affinityKey);
               break;
             }
           }
@@ -887,7 +929,7 @@ export function buildPrerenderManagerApp(options?: {
           ctxt.set(k, v);
         }
         ctxt.set('x-boxel-prerender-target', target);
-        ctxt.set('x-boxel-prerender-realm', realm);
+        ctxt.set('x-boxel-prerender-affinity', affinityKey);
         const buf = Buffer.from(await res.arrayBuffer());
         ctxt.body = buf;
         return;
@@ -936,5 +978,5 @@ export function buildPrerenderManagerApp(options?: {
       return next();
     })
     .use(router.routes());
-  return { app, registry, sweepServers, chooseServerForRealm };
+  return { app, registry, sweepServers, chooseServerForAffinity };
 }

@@ -1,12 +1,13 @@
 import {
   fetchSessionRoom,
+  getOrCreateUser,
   logger,
   SupportedMimeType,
   upsertSessionRoom,
-  userExists,
 } from '@cardstack/runtime-common';
 import type { Utils } from '@cardstack/runtime-common/matrix-backend-authentication';
 import { MatrixBackendAuthentication } from '@cardstack/runtime-common/matrix-backend-authentication';
+import { addToCreditsLedger } from '@cardstack/billing/billing-queries';
 import type Koa from 'koa';
 import { createJWT } from '../utils/jwt';
 import {
@@ -15,6 +16,7 @@ import {
   setContextResponse,
 } from '../middleware';
 import type { CreateRoutesArgs } from '../routes';
+import { getLowCreditThreshold } from '../lib/daily-credit-grant-config';
 
 const log = logger('realm-server');
 
@@ -41,14 +43,25 @@ export default function handleCreateSessionRequest({
       },
       createJWT: async (user: string, sessionRoom: string) =>
         createJWT({ user, sessionRoom }, realmSecretSeed),
-      ensureSessionRoom: async (userId: string) => {
+      ensureSessionRoom: async (userId: string, registrationToken?: string) => {
         let sessionRoom = await fetchSessionRoom(dbAdapter, userId);
 
         if (!sessionRoom) {
-          let userExistsInDB = await userExists(dbAdapter, userId);
-          if (!userExistsInDB) {
-            // TODO: should we create it if it doesn't exist?
-            return undefined;
+          let { user, created } = await getOrCreateUser(
+            dbAdapter,
+            userId,
+            registrationToken,
+          );
+          if (created) {
+            let lowCreditThreshold = getLowCreditThreshold();
+            if (lowCreditThreshold != null) {
+              await addToCreditsLedger(dbAdapter, {
+                userId: user.id,
+                creditAmount: lowCreditThreshold,
+                creditType: 'daily_credit',
+                subscriptionCycleId: null,
+              });
+            }
           }
           sessionRoom = await matrixClient.createDM(userId);
           await upsertSessionRoom(dbAdapter, userId, sessionRoom);

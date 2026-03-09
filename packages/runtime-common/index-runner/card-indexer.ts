@@ -68,6 +68,8 @@ export async function performCardIndexing({
       : undefined;
 
     renderResult = await prerenderer.prerenderCard({
+      affinityType: 'realm',
+      affinityValue: realmURL.href,
       url: fileURL,
       realm: realmURL.href,
       auth,

@@ -139,6 +139,7 @@ module('Acceptance | jpg image def', function (hooks) {
         contents: {
           ...SYSTEM_CARD_FIXTURE_CONTENTS,
           'sample.jpg': VALID_JPEG_4x5,
+          'renderable.jpg': VALID_JPEG_4x5,
           'not-a-jpg.jpg': 'This is plain text, not a JPEG file.',
         },
       }),
@@ -284,7 +285,9 @@ module('Acceptance | jpg image def', function (hooks) {
   });
 
   test('authenticated images display in browser', async function (assert) {
-    let url = makeFileURL('sample.jpg');
+    // Use a dedicated renderable fixture so the browser-display assertion is
+    // isolated from the metadata fixture used elsewhere in this module.
+    let url = makeFileURL('renderable.jpg');
 
     // First extract the file to get the resource
     await visit(
@@ -316,7 +319,7 @@ module('Acceptance | jpg image def', function (hooks) {
     let img = document.querySelector(imgSelector) as HTMLImageElement | null;
     assert.ok(img, 'img element is rendered');
     assert.ok(
-      img?.getAttribute('src')?.includes('sample.jpg'),
+      img?.getAttribute('src')?.includes('renderable.jpg'),
       'img src references the JPEG file',
     );
 

@@ -1,4 +1,10 @@
-import { currentURL, click, settled, waitUntil } from '@ember/test-helpers';
+import {
+  currentURL,
+  click,
+  settled,
+  waitUntil,
+  triggerEvent,
+} from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
@@ -252,6 +258,72 @@ module('Acceptance | file chooser tests', function (hooks) {
         '[data-test-links-to-editor="attachment"] [data-test-card="http://test-realm/test/uploaded.txt"]',
       )
       .exists('attachment field now shows the uploaded file');
+  });
+
+  test('can drag and drop a file into chooser modal and see workspace feedback', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}FileLinkCard/empty`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    await click(`[data-test-operator-mode-stack="0"] [data-test-edit-button]`);
+    await click(
+      '[data-test-links-to-editor="attachment"] [data-test-add-new="attachment"]',
+    );
+
+    assert
+      .dom('[data-test-choose-file-modal]')
+      .exists('file chooser modal is open');
+
+    let droppedFile = new File(['hello drag upload'], 'dropped.txt', {
+      type: 'text/plain',
+    });
+
+    await triggerEvent('[data-test-choose-file-modal]', 'dragenter', {
+      dataTransfer: {
+        types: ['Files'],
+        files: [droppedFile],
+      },
+    });
+
+    assert
+      .dom('[data-test-choose-file-modal]')
+      .hasAttribute('data-drop-zone-active');
+    let dropZoneLabel = document
+      .querySelector('[data-test-choose-file-modal]')
+      ?.getAttribute('data-drop-zone-label');
+    assert.ok(dropZoneLabel, 'drop zone label is exposed on modal');
+    assert.true(
+      dropZoneLabel!.startsWith('Drop file to upload to '),
+      'drop zone label announces upload target',
+    );
+
+    await triggerEvent('[data-test-choose-file-modal]', 'drop', {
+      dataTransfer: {
+        types: ['Files'],
+        files: [droppedFile],
+      },
+    });
+
+    await waitUntil(
+      () => !document.querySelector('[data-test-choose-file-modal]'),
+      {
+        timeout: 10000,
+        timeoutMessage: 'file chooser modal did not close after drop upload',
+      },
+    );
+
+    assert
+      .dom(
+        '[data-test-links-to-editor="attachment"] [data-test-card="http://test-realm/test/dropped.txt"]',
+      )
+      .exists('attachment field now shows the dropped file');
   });
 
   test('uploading a file without an extension shows an error', async function (assert) {

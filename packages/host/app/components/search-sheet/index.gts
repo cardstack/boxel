@@ -8,7 +8,6 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
 import onClickOutside from 'ember-click-outside/modifiers/on-click-outside';
-import { consume } from 'ember-provide-consume-context';
 
 import { trackedFunction } from 'reactiveweb/function';
 
@@ -17,18 +16,13 @@ import {
   IconButton,
   BoxelInputBottomTreatments,
 } from '@cardstack/boxel-ui/components';
-import type { PickerOption } from '@cardstack/boxel-ui/components';
 
 import { eq } from '@cardstack/boxel-ui/helpers';
 import { IconSearch } from '@cardstack/boxel-ui/icons';
 
-import { type getCard, GetCardContextName } from '@cardstack/runtime-common';
-
-import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 
-import SearchBar from '../card-search/search-bar';
-import SearchContent from '../card-search/search-content';
+import SearchPanel from '../card-search/panel';
 import { getCodeRefFromSearchKey } from '../card-search/utils';
 
 import type StoreService from '../../services/store';
@@ -60,13 +54,9 @@ interface Signature {
 }
 
 export default class SearchSheet extends Component<Signature> {
-  @consume(GetCardContextName) declare private getCard: getCard;
-
   @tracked private searchKey = '';
-  @tracked selectedRealms: PickerOption[] = [];
 
   @service declare private realmServer: RealmServerService;
-  @service declare private realm: RealmService;
   @service declare private store: StoreService;
 
   constructor(owner: Owner, args: any) {
@@ -147,22 +137,6 @@ export default class SearchSheet extends Component<Signature> {
 
   private resetState() {
     this.searchKey = '';
-    this.selectedRealms = [];
-  }
-
-  private get selectedRealmURLs(): string[] {
-    const hasSelectAll = this.selectedRealms.some(
-      (opt) => opt.type === 'select-all',
-    );
-    if (hasSelectAll || this.selectedRealms.length === 0) {
-      return this.realmServer.availableRealmURLs;
-    }
-    return this.selectedRealms.map((opt) => opt.id).filter(Boolean);
-  }
-
-  @action
-  private onRealmChange(selected: PickerOption[]) {
-    this.selectedRealms = selected;
   }
 
   @action private debouncedSetSearchKey(searchKey: string) {
@@ -236,16 +210,11 @@ export default class SearchSheet extends Component<Signature> {
     }
   }
 
-  private get joinSelectedRealmURLs() {
-    return this.selectedRealmURLs?.join(',');
-  }
-
   <template>
     <div
       id='search-sheet'
       class='search-sheet {{this.sheetSize}}'
       data-test-search-sheet={{@mode}}
-      data-test-search-realms={{this.joinSelectedRealmURLs}}
       {{onClickOutside
         this.onBlur
         exceptSelector='.add-card-to-neighbor-stack,.boxel-picker__dropdown,.picker-before-options-with-search,.picker-option-row,.search-sheet-header,.search-sheet-section-header,.variant-default'
@@ -263,35 +232,37 @@ export default class SearchSheet extends Component<Signature> {
           data-test-open-search-field
         />
       {{else}}
-        <SearchBar
-          class='search-sheet__search-input-group'
-          @value={{this.searchKey}}
-          @placeholder={{this.placeholderText}}
-          @state={{this.inputValidationState}}
-          @bottomTreatment={{this.inputBottomTreatment}}
-          @onFocus={{@onFocus}}
-          @onInput={{this.debouncedSetSearchKey}}
-          @onKeyDown={{this.onSearchInputKeyDown}}
-          @onInputInsertion={{@onInputInsertion}}
-          @selectedRealms={{this.selectedRealms}}
-          @onRealmChange={{this.onRealmChange}}
-          @autocomplete='off'
-        />
-        <SearchContent
-          class='search-sheet__content'
+        <SearchPanel
           @searchKey={{this.searchKey}}
-          @selectedRealmURLs={{this.selectedRealmURLs}}
-          @isCompact={{this.isCompact}}
-          @handleSelect={{this.handleCardSelect}}
-        />
-        <div class='footer'>
-          <div class='buttons'>
-            <Button
-              {{on 'click' this.onCancel}}
-              data-test-search-sheet-cancel-button
-            >Cancel</Button>
+          as |Bar Content joinedRealmURLs|
+        >
+          <Bar
+            class='search-sheet__search-input-group'
+            @value={{this.searchKey}}
+            @placeholder={{this.placeholderText}}
+            @state={{this.inputValidationState}}
+            @bottomTreatment={{this.inputBottomTreatment}}
+            @onFocus={{@onFocus}}
+            @onInput={{this.debouncedSetSearchKey}}
+            @onKeyDown={{this.onSearchInputKeyDown}}
+            @onInputInsertion={{@onInputInsertion}}
+            @autocomplete='off'
+            data-test-search-realms={{joinedRealmURLs}}
+          />
+          <Content
+            class='search-sheet__content'
+            @isCompact={{this.isCompact}}
+            @handleSelect={{this.handleCardSelect}}
+          />
+          <div class='footer'>
+            <div class='buttons'>
+              <Button
+                {{on 'click' this.onCancel}}
+                data-test-search-sheet-cancel-button
+              >Cancel</Button>
+            </div>
           </div>
-        </div>
+        </SearchPanel>
       {{/if}}
     </div>
     <style scoped>
