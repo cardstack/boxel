@@ -2780,7 +2780,7 @@ module(basename(__filename), function () {
                 query: {
                   filter: {
                     eq: {
-                      cardTitle: 'target',
+                      cardTitle: 'overlap-target',
                     },
                   },
                   page: {
@@ -2804,7 +2804,7 @@ module(basename(__filename), function () {
           'query-rel-overlap-target-1.json',
           JSON.stringify({
             data: {
-              attributes: { cardTitle: 'target' },
+              attributes: { cardTitle: 'overlap-target' },
               meta: {
                 adoptsFrom: {
                   module: './query-rel-overlap-target',
