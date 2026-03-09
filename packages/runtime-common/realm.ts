@@ -805,8 +805,16 @@ export class Realm {
     });
 
     void completed.catch((error: unknown) => {
-      let message =
-        error instanceof Error ? error.message : JSON.stringify(error);
+      let message: string;
+      if (error instanceof Error) {
+        message = error.message;
+      } else {
+        try {
+          message = JSON.stringify(error);
+        } catch (_err) {
+          message = String(error);
+        }
+      }
       this.#log.error(`Error completing reindex for ${this.url}: ${message}`);
     });
 
