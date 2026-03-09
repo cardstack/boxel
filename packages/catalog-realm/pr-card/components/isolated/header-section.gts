@@ -1,12 +1,15 @@
 import GlimmerComponent from '@glimmer/component';
 import ExternalLinkIcon from '@cardstack/boxel-icons/external-link';
+import CopyIcon from '@cardstack/boxel-icons/copy';
 import { Pill } from '@cardstack/boxel-ui/components';
+import { on } from '@ember/modifier';
 import type { CardOrFieldTypeIcon } from 'https://cardstack.com/base/card-api';
 
 interface HeaderSectionSignature {
   Args: {
     title: string;
     prNumber: number | null | undefined;
+    branchname: string | null | undefined;
     prUrl: string | null;
     actionLabel: string;
     actionIcon: CardOrFieldTypeIcon;
@@ -19,6 +22,14 @@ interface HeaderSectionSignature {
 }
 
 export class HeaderSection extends GlimmerComponent<HeaderSectionSignature> {
+  copyBranchName = async () => {
+    let branchname = this.args.branchname?.trim();
+    if (!branchname) {
+      return;
+    }
+    await navigator.clipboard.writeText(branchname);
+  };
+
   <template>
     <header class='pr-hero'>
       <h1 class='pr-title'>
@@ -39,6 +50,21 @@ export class HeaderSection extends GlimmerComponent<HeaderSectionSignature> {
 
         {{#if @submittedBy}}
           <strong class='pr-author'>{{@submittedBy}}</strong>
+        {{/if}}
+
+        {{#if @branchname}}
+          <span class='pr-branch'>
+            <span class='pr-branch-label'>{{@branchname}}</span>
+            <button
+              type='button'
+              class='pr-branch-copy-button'
+              {{on 'click' this.copyBranchName}}
+              aria-label='Copy branch name'
+              title='Copy branch name'
+            >
+              <CopyIcon class='pr-branch-copy-icon' />
+            </button>
+          </span>
         {{/if}}
 
         {{#if (has-block 'date')}}
@@ -110,6 +136,46 @@ export class HeaderSection extends GlimmerComponent<HeaderSectionSignature> {
         font-size: var(--boxel-font-xs);
         color: #e6edf3;
         font-weight: 600;
+      }
+      .pr-branch {
+        font-size: var(--boxel-font-xs);
+        color: var(--pr-branch-foreground, #9ecbff);
+        border: 1px solid var(--pr-branch-border, #3d444d);
+        border-radius: 999px;
+        padding: 1px 4px 1px 8px;
+        max-width: 280px;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+      }
+      .pr-branch-label {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .pr-branch-copy-button {
+        border: none;
+        background: transparent;
+        color: inherit;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 2px;
+        border-radius: 999px;
+        cursor: pointer;
+        flex-shrink: 0;
+      }
+      .pr-branch-copy-button:hover {
+        background: color-mix(
+          in srgb,
+          var(--pr-branch-foreground, #9ecbff) 20%,
+          transparent
+        );
+      }
+      .pr-branch-copy-icon {
+        width: 11px;
+        height: 11px;
       }
       .pr-date {
         font-size: var(--boxel-font-xs);

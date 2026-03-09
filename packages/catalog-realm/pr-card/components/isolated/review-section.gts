@@ -74,6 +74,16 @@ interface ReviewSectionSignature {
 }
 
 export class ReviewSection extends GlimmerComponent<ReviewSectionSignature> {
+  get reviewItemStateClass() {
+    if (this.args.reviewState === 'changes_requested') {
+      return 'review-item--changes';
+    }
+    if (this.args.reviewState === 'approved') {
+      return 'review-item--approved';
+    }
+    return '';
+  }
+
   <template>
     <div class='review-section'>
       <div class='review-heading-row'>
@@ -83,7 +93,7 @@ export class ReviewSection extends GlimmerComponent<ReviewSectionSignature> {
 
       {{#if @hasReview}}
         <ul class='review-list'>
-          <li class='review-item'>
+          <li class='review-item {{this.reviewItemStateClass}}'>
             <div class='review-item-header'>
               <span class='review-author'>{{@reviewerName}}</span>
               {{#if @reviewUrl}}
@@ -151,6 +161,26 @@ export class ReviewSection extends GlimmerComponent<ReviewSectionSignature> {
         display: flex;
         flex-direction: column;
         gap: var(--boxel-sp-xs);
+      }
+      .review-item--changes {
+        background: color-mix(
+          in srgb,
+          var(--destructive, #d73a49) 10%,
+          var(--card, #ffffff)
+        );
+        border-color: color-mix(
+          in srgb,
+          var(--destructive, #d73a49) 30%,
+          var(--card, #ffffff)
+        );
+      }
+      .review-item--approved {
+        background: color-mix(
+          in srgb,
+          var(--chart-1, #28a745) 10%,
+          var(--card, #ffffff)
+        );
+        border-color: color-mix(in srgb, var(--chart-1, #28a745) 35%, var(--card, #ffffff));
       }
       .review-item-header {
         display: flex;

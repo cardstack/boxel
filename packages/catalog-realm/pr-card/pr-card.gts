@@ -4,20 +4,21 @@ import {
   StringField,
   field,
   contains,
-  linksTo,
   realmURL,
 } from 'https://cardstack.com/base/card-api';
-import { Listing } from '../catalog-app/listing/listing';
 import NumberField from 'https://cardstack.com/base/number';
 import DatetimeField from 'https://cardstack.com/base/datetime';
 import GitPullRequestIcon from '@cardstack/boxel-icons/git-pull-request';
 import ExternalLinkIcon from '@cardstack/boxel-icons/external-link';
+import CopyIcon from '@cardstack/boxel-icons/copy';
 import { Pill } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
+import { on } from '@ember/modifier';
 import type { GithubEventCard } from '../github-event/github-event';
 import { HeaderSection } from './components/isolated/header-section';
 import { CiSection } from './components/isolated/ci-section';
 import { ReviewSection } from './components/isolated/review-section';
+import { SummarySection } from './components/isolated/summary-section';
 
 import {
   renderPrActionLabel,
@@ -135,6 +136,19 @@ class IsolatedTemplate extends Component<typeof PrCard> {
     return this.args.model.prUrl ?? null;
   }
 
+  get prBranchName() {
+    return (
+      this.args.model.branchname ??
+      this.latestPrEventInstance?.payload?.pull_request?.head?.ref ??
+      null
+    );
+  }
+
+  get prBodySummary() {
+    let body = this.latestPrEventInstance?.payload?.pull_request?.body?.trim();
+    return body || 'No pull request summary provided.';
+  }
+
   // ── CI ──
   get ciItems() {
     return buildCiItems(
@@ -187,6 +201,7 @@ class IsolatedTemplate extends Component<typeof PrCard> {
       <HeaderSection
         @title={{this.prTitle}}
         @prNumber={{@model.prNumber}}
+        @branchname={{this.prBranchName}}
         @prUrl={{this.prUrl}}
         @actionLabel={{this.latestPrActionLabel}}
         @actionIcon={{this.prActionIcon}}
@@ -214,15 +229,7 @@ class IsolatedTemplate extends Component<typeof PrCard> {
           />
         </section>
 
-        {{! ── Listing ── }}
-        {{#if @model.listing}}
-          <section class='listing-section'>
-            <h2 class='section-heading'>View Listing</h2>
-            <div class='listing-embed'>
-              <@fields.listing @format='embedded' />
-            </div>
-          </section>
-        {{/if}}
+        <SummarySection @summary={{this.prBodySummary}} />
       </div>
     </article>
 
@@ -255,37 +262,6 @@ class IsolatedTemplate extends Component<typeof PrCard> {
         background: var(--border, var(--boxel-border-color));
         flex-shrink: 0;
         margin: var(--boxel-sp-lg) 0;
-      }
-
-      .section-heading {
-        font-size: 10px;
-        font-weight: 700;
-        text-transform: uppercase;
-        letter-spacing: 0.06em;
-        color: var(--foreground, #1f2328);
-        margin: 0;
-      }
-
-      /* ── Listing section ── */
-      .listing-section {
-        padding: var(--boxel-sp) var(--boxel-sp-xl);
-        display: flex;
-        flex-direction: column;
-        gap: var(--boxel-sp-xs);
-      }
-      .listing-embed {
-        border: 2px solid var(--border, var(--boxel-border-color));
-        border-radius: var(--radius, 6px);
-        overflow: hidden;
-        transition:
-          border-color 0.15s ease,
-          box-shadow 0.15s ease;
-        cursor: pointer;
-      }
-      .listing-embed:hover {
-        border-color: var(--primary, #0969da);
-        box-shadow: 0 0 0 3px
-          color-mix(in srgb, var(--primary, #0969da) 15%, transparent);
       }
     </style>
   </template>
@@ -392,6 +368,19 @@ class FittedTemplate extends Component<typeof PrCard> {
     return this.args.model.prUrl ?? null;
   }
 
+  get prBranchName() {
+    return (
+      this.args.model.branchname ??
+      this.latestPrEventInstance?.payload?.pull_request?.head?.ref ??
+      null
+    );
+  }
+
+  get prBodySummary() {
+    let body = this.latestPrEventInstance?.payload?.pull_request?.body?.trim();
+    return body || 'No pull request summary provided.';
+  }
+
   // ── CI ──
   get ciItems() {
     return buildCiItems(
@@ -457,26 +446,13 @@ class FittedTemplate extends Component<typeof PrCard> {
     return computeLatestReviewState(this.latestReviewByReviewer);
   }
 
-  get latestPrReviewCommentEventInstance() {
-    return findLatestChangesRequestedEvent(this.latestReviewByReviewer);
-  }
-
-  get latestChangesRequestedReviewerName() {
-    return (
-      this.latestPrReviewCommentEventInstance?.payload?.review?.user?.login ??
-      'Unknown reviewer'
-    );
-  }
-
-  get latestChangesRequestedComment() {
-    let comment =
-      this.latestPrReviewCommentEventInstance?.payload?.review?.body?.trim();
-    return comment || '';
-  }
-
-  get latestChangesRequestedReviewUrl() {
-    return this.latestPrReviewCommentEventInstance?.payload?.review?.html_url;
-  }
+  copyBranchName = async () => {
+    let branchname = this.prBranchName?.trim();
+    if (!branchname) {
+      return;
+    }
+    await navigator.clipboard.writeText(branchname);
+  };
 
   <template>
     <article class='pr-card'>
@@ -515,6 +491,22 @@ class FittedTemplate extends Component<typeof PrCard> {
             <span class='pr-meta-sep'>·</span>
             <span class='pr-author'>{{@model.submittedBy}}</span>
           {{/if}}
+
+          {{#if this.prBranchName}}
+            <span class='pr-meta-sep'>·</span>
+            <span class='pr-branch'>
+              <span class='pr-branch-label'>{{this.prBranchName}}</span>
+              <button
+                type='button'
+                class='pr-branch-copy-button'
+                {{on 'click' this.copyBranchName}}
+                aria-label='Copy branch name'
+                title='Copy branch name'
+              >
+                <CopyIcon class='pr-branch-copy-icon' />
+              </button>
+            </span>
+          {{/if}}
         </div>
       </header>
 
@@ -542,38 +534,9 @@ class FittedTemplate extends Component<typeof PrCard> {
         </div>
       {{/if}}
 
-      {{! ── Changes requested comment (shown at bigger sizes) ── }}
-      {{#if this.latestChangesRequestedComment}}
-        <div class='review-comment-section'>
-          <div class='review-comment-header'>
-            <span
-              class='review-comment-author'
-            >{{this.latestChangesRequestedReviewerName}}</span>
-            {{#if this.latestChangesRequestedReviewUrl}}
-              <a
-                href={{this.latestChangesRequestedReviewUrl}}
-                target='_blank'
-                rel='noopener noreferrer'
-                class='review-comment-link'
-                aria-label='View review on GitHub'
-              >
-                <ExternalLinkIcon class='review-comment-link-icon' />
-              </a>
-            {{/if}}
-          </div>
-          <blockquote
-            class='review-comment'
-          >{{this.latestChangesRequestedComment}}</blockquote>
-        </div>
-      {{/if}}
-
-      {{! ── Listing (biggest sizes) ── }}
-      {{#if @model.listing}}
-        <div class='listing-section'>
-          <h2 class='listing-heading'>View Listing</h2>
-          <@fields.listing @format='atom' />
-        </div>
-      {{/if}}
+      <div class='summary-section'>
+        <p class='summary-content'>{{this.prBodySummary}}</p>
+      </div>
     </article>
 
     <style scoped>
@@ -670,6 +633,46 @@ class FittedTemplate extends Component<typeof PrCard> {
         text-overflow: ellipsis;
         max-width: 140px;
       }
+      .pr-branch {
+        font-size: var(--boxel-font-xs);
+        color: var(--pr-branch-foreground, #9ecbff);
+        border: 1px solid var(--pr-branch-border, #3d444d);
+        border-radius: 999px;
+        padding: 1px 4px 1px 8px;
+        max-width: 180px;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+      }
+      .pr-branch-label {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .pr-branch-copy-button {
+        border: none;
+        background: transparent;
+        color: inherit;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 2px;
+        border-radius: 999px;
+        cursor: pointer;
+        flex-shrink: 0;
+      }
+      .pr-branch-copy-button:hover {
+        background: color-mix(
+          in srgb,
+          var(--pr-branch-foreground, #9ecbff) 20%,
+          transparent
+        );
+      }
+      .pr-branch-copy-icon {
+        width: 11px;
+        height: 11px;
+      }
 
       /* ── CI status row ── */
       .ci-status-row {
@@ -726,10 +729,18 @@ class FittedTemplate extends Component<typeof PrCard> {
         border-bottom: 1px solid var(--border, var(--boxel-border-color));
       }
       .review-status-row--changes {
-        background: color-mix(in srgb, var(--destructive, #d73a49) 5%, var(--card, #ffffff));
+        background: color-mix(
+          in srgb,
+          var(--destructive, #d73a49) 5%,
+          var(--card, #ffffff)
+        );
       }
       .review-status-row--approved {
-        background: color-mix(in srgb, var(--chart-1, #28a745) 5%, var(--card, #ffffff));
+        background: color-mix(
+          in srgb,
+          var(--chart-1, #28a745) 5%,
+          var(--card, #ffffff)
+        );
       }
       .review-status-label {
         font-size: var(--boxel-font-sm);
@@ -741,85 +752,31 @@ class FittedTemplate extends Component<typeof PrCard> {
       .review-status-row--approved .review-status-label {
         color: var(--chart-1, #28a745);
       }
-      .review-comment-section {
-        display: none;
-        padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
-        background: var(--card, #ffffff);
-        border-bottom: 1px solid var(--border, var(--boxel-border-color));
-      }
-      .review-comment-header {
+      /* ── Summary ── */
+      .summary-section {
         display: flex;
-        align-items: center;
+        flex-direction: column;
         gap: var(--boxel-sp-xs);
-        margin-bottom: var(--boxel-sp-xs);
-      }
-      .review-comment-author {
-        font-size: var(--boxel-font-sm);
-        font-weight: 500;
-        color: var(--foreground, #1f2328);
-      }
-      .review-comment-link {
-        margin-left: auto;
-        color: var(--muted-foreground, #656d76);
-        text-decoration: none;
-        display: inline-flex;
-        align-items: center;
-        transition: color 0.15s ease;
-        flex-shrink: 0;
-      }
-      .review-comment-link:hover {
-        color: var(--primary, #0969da);
-      }
-      .review-comment-link-icon {
-        width: 13px;
-        height: 13px;
-      }
-      .review-comment {
-        margin-block: 0;
-        margin-inline: 0;
-        padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
-        font-size: var(--boxel-font-sm);
-        color: var(--card-foreground, #1f2328);
-        border-left: 3px solid var(--border, var(--boxel-border-color));
-        font-style: normal;
-        line-height: 1.6;
+        padding: var(--boxel-sp-sm);
         background: var(--card, #ffffff);
-        border-radius: 0 var(--radius, 6px) var(--radius, 6px) 0;
-        transition:
-          border-left-color 0.15s ease,
-          background 0.15s ease;
-        cursor: default;
+        border-top: 1px solid var(--border, var(--boxel-border-color));
+        height: 100%;
+      }
+      .summary-content {
+        margin: 0;
+        border: 1px solid var(--border, var(--boxel-border-color));
+        border-radius: var(--radius, 6px);
+        padding: var(--boxel-sp-sm);
+        background: var(--muted, #f6f8fa);
+        color: var(--card-foreground, #1f2328);
+        line-height: 1.7;
         white-space: pre-line;
         overflow-wrap: anywhere;
         display: -webkit-box;
         -webkit-box-orient: vertical;
-        -webkit-line-clamp: 3;
+        -webkit-line-clamp: 7;
+        text-overflow: ellipsis;
         overflow: hidden;
-      }
-      .review-comment:hover {
-        border-left-color: var(--destructive, #d73a49);
-        background: color-mix(in srgb, var(--destructive, #d73a49) 5%, var(--card, #ffffff));
-      }
-
-      /* ── Listing ── */
-      .listing-section {
-        display: none;
-        align-items: center;
-        justify-content: end;
-        flex-wrap: wrap;
-        gap: var(--boxel-sp-xs);
-        padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
-        background: var(--card, #ffffff);
-        border: 1px solid var(--border, var(--boxel-border-color));
-        margin-top: auto;
-      }
-      .listing-heading {
-        font-size: 11px;
-        font-weight: 700;
-        text-transform: uppercase;
-        letter-spacing: 0.06em;
-        color: var(--muted-foreground, #656d76);
-        margin: 0;
       }
 
       /* ── Container queries ── */
@@ -874,7 +831,8 @@ class FittedTemplate extends Component<typeof PrCard> {
       /* Narrow: hide secondary text */
       @container fitted-card (width < 220px) {
         .pr-author,
-        .pr-meta-sep {
+        .pr-meta-sep,
+        .pr-branch {
           display: none;
         }
       }
@@ -932,13 +890,6 @@ class FittedTemplate extends Component<typeof PrCard> {
         }
       }
 
-      /* Narrow tall tile: <400px wide, ≥200px tall — show review comment */
-      @container fitted-card (width < 400px) and (200px <= height) {
-        .review-comment-section {
-          display: block;
-        }
-      }
-
       /* Large */
       @container fitted-card (400px <= width) and (200px <= height) {
         .pr-hero {
@@ -978,9 +929,6 @@ class FittedTemplate extends Component<typeof PrCard> {
         .review-status-row {
           padding: var(--boxel-sp-sm) var(--boxel-sp-lg);
         }
-        .review-comment-section {
-          display: block;
-        }
       }
 
       /* Very wide */
@@ -1003,22 +951,12 @@ class FittedTemplate extends Component<typeof PrCard> {
         .review-status-row {
           padding: var(--boxel-sp-sm) var(--boxel-sp-xl);
         }
-        .review-comment-section {
-          padding: var(--boxel-sp-sm) var(--boxel-sp-xl);
-        }
       }
 
-      /* Extra-large: show listing */
-      @container fitted-card (400px <= width) and (280px <= height) {
-        .listing-section {
-          display: flex;
-          padding: var(--boxel-sp-sm) var(--boxel-sp-lg);
-        }
-      }
-
+      /* Extra-large summary spacing */
       @container fitted-card (500px <= width) and (280px <= height) {
-        .listing-section {
-          padding: var(--boxel-sp-sm) var(--boxel-sp-xl);
+        .summary-content {
+          -webkit-line-clamp: 2;
         }
       }
     </style>
@@ -1030,13 +968,11 @@ export class PrCard extends CardDef {
   static icon = GitPullRequestIcon;
   static headerColor = '#24292f';
 
-  // === Links ===
-  @field listing = linksTo(Listing);
-
   // === PR identity (set on the card instance) ===
   @field prNumber = contains(NumberField);
   @field prUrl = contains(StringField);
   @field prTitle = contains(StringField);
+  @field branchname = contains(StringField);
 
   // === Provenance (set on the card instance) ===
   @field submittedBy = contains(StringField);
