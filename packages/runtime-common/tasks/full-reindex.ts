@@ -74,6 +74,9 @@ const fullReindex: Task<FullReindexArgs, void> = ({
           queuePublisher,
           dbAdapter,
           systemInitiatedPriority,
+          {
+            clearLastModified: true,
+          },
         );
       } catch (error: any) {
         log.error(

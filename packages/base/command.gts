@@ -113,6 +113,14 @@ export class CancelIndexingJobInput extends CardDef {
   @field realmUrl = contains(StringField);
 }
 
+export class ReindexRealmInput extends CardDef {
+  @field realmUrl = contains(StringField);
+}
+
+export class FullReindexRealmInput extends CardDef {
+  @field realmUrl = contains(StringField);
+}
+
 export class InvalidateRealmUrlsInput extends CardDef {
   @field realmUrl = contains(StringField);
   @field urls = containsMany(StringField);

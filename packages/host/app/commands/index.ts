@@ -16,6 +16,7 @@ import * as CopyFileToRealmCommandModule from './copy-file-to-realm';
 import * as CopySourceCommandModule from './copy-source';
 import * as CreateAIAssistantRoomCommandModule from './create-ai-assistant-room';
 import * as CreateSpecCommandModule from './create-specs';
+import * as FullReindexRealmCommandModule from './full-reindex-realm';
 import * as GenerateExampleCardsCommandModule from './generate-example-cards';
 import * as GenerateReadmeSpecCommandModule from './generate-readme-spec';
 import * as GenerateThemeExampleCommandModule from './generate-theme-example';
@@ -48,6 +49,7 @@ import * as ReadFileForAiAssistantCommandModule from './read-file-for-ai-assista
 import * as ReadSourceCommandModule from './read-source';
 import * as ReadTextFileCommandModule from './read-text-file';
 import * as RegisterBotCommandModule from './register-bot';
+import * as ReindexRealmCommandModule from './reindex-realm';
 import * as SaveCardCommandModule from './save-card';
 import * as SearchAndChooseCommandModule from './search-and-choose';
 import * as SearchCardsCommandModule from './search-cards';
@@ -127,6 +129,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/generate-theme-example',
     GenerateThemeExampleCommandModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/full-reindex-realm',
+    FullReindexRealmCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/get-events-from-room',
@@ -219,6 +225,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/read-text-file',
     ReadTextFileCommandModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/reindex-realm',
+    ReindexRealmCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/register-bot',
@@ -363,6 +373,7 @@ export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
   CreateAIAssistantRoomCommandModule.default,
   CopyAndEditCommandModule.default,
   CreateSpecCommandModule.default,
+  FullReindexRealmCommandModule.default,
   GenerateExampleCardsCommandModule.default,
   GenerateReadmeSpecCommandModule.default,
   GetAllRealmMetasCommandModule.default,
@@ -395,6 +406,7 @@ export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
   ReadSourceCommandModule.default,
   ReadTextFileCommandModule.default,
   RegisterBotCommandModule.default,
+  ReindexRealmCommandModule.default,
   SaveCardCommandModule.default,
   SerializeCardCommandModule.default,
   SearchAndChooseCommandModule.default,

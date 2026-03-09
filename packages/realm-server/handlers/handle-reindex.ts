@@ -87,5 +87,8 @@ export async function reindex({
     queue,
     dbAdapter,
     priority,
+    {
+      clearLastModified: true,
+    },
   );
 }

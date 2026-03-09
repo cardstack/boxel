@@ -500,6 +500,7 @@ jobs:
             "realm-endpoints/mtimes-test.ts",
             "realm-endpoints/permissions-test.ts",
             "realm-endpoints/publishability-test.ts",
+            "realm-endpoints/reindex-test.ts",
             "realm-endpoints/search-test.ts",
             "realm-endpoints/user-test.ts",
             "realm-endpoints-test.ts",

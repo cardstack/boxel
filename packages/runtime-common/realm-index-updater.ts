@@ -2,6 +2,7 @@ import { Memoize } from 'typescript-memoize';
 import {
   IndexWriter,
   Deferred,
+  type Job,
   logger,
   systemInitiatedPriority,
   userInitiatedPriority,
@@ -17,11 +18,8 @@ import {
   mapIncrementalDoneResult,
   type IncrementalIndexEnqueueArgs,
 } from './jobs/indexing';
-import {
-  FROM_SCRATCH_JOB_TIMEOUT_SEC,
-  type FromScratchResult,
-  type IncrementalDoneResult,
-} from './tasks/indexer';
+import { enqueueReindexRealmJob } from './jobs/reindex-realm';
+import type { FromScratchResult, IncrementalDoneResult } from './tasks/indexer';
 import type { Realm } from './realm';
 import { RealmPaths } from './paths';
 import ignore, { type Ignore } from 'ignore';
@@ -38,6 +36,7 @@ export class RealmIndexUpdater {
     totalIndexEntries: 0,
   };
   #indexWriter: IndexWriter;
+  #dbAdapter: DBAdapter;
   #queue: QueuePublisher;
   #indexingDeferreds = new Set<Deferred<void>>();
 
@@ -55,6 +54,7 @@ export class RealmIndexUpdater {
         `DB Adapter was not provided to SearchIndex constructor--this is required when using a db based index`,
       );
     }
+    this.#dbAdapter = dbAdapter;
     this.#indexWriter = new IndexWriter(dbAdapter);
     this.#queue = queue;
     this.#realm = realm;
@@ -90,48 +90,69 @@ export class RealmIndexUpdater {
     ).then(() => undefined);
   }
 
-  // TODO consider triggering realm events for invalidations now that we can
-  // calculate fine grained invalidations for from-scratch indexing by passing
-  // in an onInvalidation callback
-  async fullIndex(priority = systemInitiatedPriority) {
+  publishFullIndex(
+    priority = systemInitiatedPriority,
+    opts?: { clearLastModified?: boolean },
+  ): {
+    published: Promise<Job<FromScratchResult>>;
+    completed: Promise<FromScratchResult>;
+  } {
     let indexingDeferred = new Deferred<void>();
+    let published = new Deferred<Job<FromScratchResult>>();
     this.#indexingDeferreds.add(indexingDeferred);
     let startedAt = performance.now();
-    try {
-      let args = {
-        realmURL: this.#realm.url,
-        realmUsername: await this.#realm.getRealmOwnerUsername(),
-      };
 
-      this.#log.info(`Realm ${this.realmURL.href} is starting indexing`);
+    let completed = (async () => {
+      try {
+        this.#log.info(`Realm ${this.realmURL.href} is starting indexing`);
 
-      let job = await this.#queue.publish<FromScratchResult>({
-        jobType: 'from-scratch-index',
-        concurrencyGroup: `indexing:${this.#realm.url}`,
-        timeout: FROM_SCRATCH_JOB_TIMEOUT_SEC,
-        priority,
-        args,
-      });
-      let { ignoreData, stats } = await job.done;
-      this.#stats = stats;
-      this.#ignoreData = ignoreData;
-      let indexingDurationSeconds = (
-        (performance.now() - startedAt) /
-        1000
-      ).toFixed(2);
-      this.#log.info(
-        `Realm ${this.realmURL.href} has completed indexing in ${indexingDurationSeconds}s: ${JSON.stringify(
-          stats,
-          null,
-          2,
-        )}`,
-      );
-    } catch (e: any) {
-      this.#log.error(`Error running from-scratch-index: ${e.message}`);
-    } finally {
-      indexingDeferred.fulfill();
-      this.#indexingDeferreds.delete(indexingDeferred);
-    }
+        let job = await enqueueReindexRealmJob(
+          this.#realm.url,
+          await this.#realm.getRealmOwnerUsername(),
+          this.#queue,
+          this.#dbAdapter,
+          priority,
+          {
+            clearLastModified: opts?.clearLastModified,
+          },
+        );
+        published.fulfill(job);
+
+        let result = await job.done;
+        let { ignoreData, stats } = result;
+        this.#stats = stats;
+        this.#ignoreData = ignoreData;
+        let indexingDurationSeconds = (
+          (performance.now() - startedAt) /
+          1000
+        ).toFixed(2);
+        this.#log.info(
+          `Realm ${this.realmURL.href} has completed indexing in ${indexingDurationSeconds}s: ${JSON.stringify(
+            stats,
+            null,
+            2,
+          )}`,
+        );
+        return result;
+      } catch (e: any) {
+        published.reject(e);
+        this.#log.error(`Error running from-scratch-index: ${e.message}`);
+        throw e;
+      } finally {
+        indexingDeferred.fulfill();
+        this.#indexingDeferreds.delete(indexingDeferred);
+      }
+    })();
+
+    return {
+      published: published.promise,
+      completed,
+    };
+  }
+
+  async fullIndex(priority = systemInitiatedPriority) {
+    let { completed } = this.publishFullIndex(priority);
+    await completed;
   }
 
   async update(
