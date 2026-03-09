@@ -133,10 +133,6 @@ export class RealmIndexUpdater {
         );
         return result;
       })
-      .catch((e: any) => {
-        this.#log.error(`Error running from-scratch-index: ${e.message}`);
-        throw e;
-      })
       .finally(() => {
         indexingDeferred.fulfill();
         this.#indexingDeferreds.delete(indexingDeferred);
@@ -150,7 +146,13 @@ export class RealmIndexUpdater {
 
   async fullIndex(priority = systemInitiatedPriority) {
     let { completed } = this.publishFullIndex(priority);
-    await completed;
+    try {
+      await completed;
+    } catch (e: any) {
+      this.#log.error(`Error running from-scratch-index: ${e.message}`);
+      // Preserve the historical fullIndex() behavior for fire-and-forget
+      // callers such as startup.
+    }
   }
 
   async update(
