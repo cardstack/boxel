@@ -1,4 +1,10 @@
-import { waitFor, waitUntil, click, fillIn } from '@ember/test-helpers';
+import {
+  waitFor,
+  waitUntil,
+  click,
+  fillIn,
+  triggerEvent,
+} from '@ember/test-helpers';
 import { settled } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
@@ -317,6 +323,118 @@ module('Integration | ai-assistant-panel | file-attachment', function (hooks) {
     assert
       .dom('[data-test-attached-file^="boxel-local://"] .image-atom__img')
       .doesNotExist('local image pill does not render inline image atom');
+  });
+
+  test('dropping a local file onto chat input area attaches it', async function (assert) {
+    setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+    await openAiAssistant();
+
+    let localFileName = 'dragged-note.md';
+    let localFile = new File(['dragged content'], localFileName, {
+      type: 'text/markdown',
+    });
+
+    await triggerEvent('[data-test-chat-input-area]', 'dragover', {
+      dataTransfer: {
+        types: ['Files'],
+        files: [localFile],
+      },
+    });
+    await triggerEvent('[data-test-chat-input-area]', 'drop', {
+      dataTransfer: {
+        types: ['Files'],
+        files: [localFile],
+      },
+    });
+
+    await waitFor(
+      '[data-test-attached-file^="boxel-local://"][data-test-file-upload-status="complete"]',
+    );
+
+    assert
+      .dom('[data-test-attached-file^="boxel-local://"]')
+      .hasText(localFileName, 'dragged local file is attached');
+  });
+
+  test('chat input area shows visual drop-zone feedback during file drag', async function (assert) {
+    setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+    await openAiAssistant();
+
+    let localFile = new File(['dragged content'], 'dragged-note.md', {
+      type: 'text/markdown',
+    });
+
+    await triggerEvent('[data-test-chat-input-area]', 'dragenter', {
+      dataTransfer: {
+        types: ['Files'],
+        files: [localFile],
+      },
+    });
+
+    assert
+      .dom('[data-test-chat-input-drop-hint]')
+      .exists('drop-zone hint is shown while dragging files');
+
+    await triggerEvent('[data-test-chat-input-area]', 'dragleave', {
+      dataTransfer: {
+        types: ['Files'],
+        files: [localFile],
+      },
+    });
+
+    assert
+      .dom('[data-test-chat-input-drop-hint]')
+      .doesNotExist('drop-zone hint is hidden when drag leaves');
+  });
+
+  test('pasting clipboard file while focused in chat input attaches it', async function (assert) {
+    setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+    await openAiAssistant();
+
+    let pngBytes = new Uint8Array([
+      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d,
+      0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
+      0x08, 0x06, 0x00, 0x00, 0x00, 0x1f, 0x15, 0xc4, 0x89, 0x00, 0x00, 0x00,
+      0x0a, 0x49, 0x44, 0x41, 0x54, 0x78, 0xda, 0x63, 0xf8, 0x0f, 0x00, 0x01,
+      0x01, 0x01, 0x00, 0x18, 0xdd, 0x8d, 0xb1, 0x00, 0x00, 0x00, 0x00, 0x49,
+      0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82,
+    ]);
+    let fileName = 'pasted-image.png';
+    let pastedFile = new File([pngBytes], fileName, {
+      type: 'image/png',
+    });
+
+    await click('[data-test-message-field]');
+    await triggerEvent('[data-test-message-field]', 'paste', {
+      clipboardData: {
+        types: ['Files'],
+        files: [pastedFile],
+        items: [{ kind: 'file', getAsFile: () => pastedFile }],
+      },
+    });
+
+    await waitFor(
+      '[data-test-attached-file^="boxel-local://"][data-test-file-upload-status="complete"]',
+    );
+
+    assert
+      .dom('[data-test-attached-file^="boxel-local://"]')
+      .hasText(fileName, 'pasted clipboard file is attached');
   });
 
   test('file pill shows uploading indicator while Matrix upload is in progress', async function (assert) {

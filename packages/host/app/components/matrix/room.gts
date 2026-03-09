@@ -232,12 +232,29 @@ export default class Room extends Component<Signature> {
                 @scrollToFirstUnread={{this.scrollToFirstUnread}}
               />
             {{/if}}
-            <div class='chat-input-area' data-test-chat-input-area>
+            <div
+              class='chat-input-area'
+              data-test-chat-input-area
+              data-drop-zone-active={{this.isDropZoneActive}}
+              {{on 'dragover' this.handleChatInputDragOver}}
+              {{on 'dragenter' this.handleChatInputDragEnter}}
+              {{on 'dragleave' this.handleChatInputDragLeave}}
+              {{on 'drop' this.handleChatInputDrop}}
+            >
+              {{#if this.isDropZoneActive}}
+                <div
+                  class='chat-input-drop-hint'
+                  data-test-chat-input-drop-hint
+                >
+                  Drop file to attach
+                </div>
+              {{/if}}
               <AiAssistantChatInput
                 @attachButton={{AttachButton}}
                 @value={{this.messageToSend}}
                 @onInput={{this.setMessage}}
                 @onSend={{this.sendMessage}}
+                @onPaste={{this.handleChatInputPaste}}
                 @canSend={{this.canSend}}
                 data-test-message-field={{@roomId}}
               />
@@ -348,6 +365,26 @@ export default class Room extends Component<Signature> {
 
         timeline-scope: --chat-input-scroll-timeline;
       }
+      .chat-input-area[data-drop-zone-active='true'] {
+        box-shadow: inset 0 0 0 2px var(--boxel-dark);
+        background-color: #e8f0ff;
+      }
+      .chat-input-drop-hint {
+        position: absolute;
+        top: var(--boxel-sp-xs);
+        right: var(--boxel-sp-xs);
+        bottom: var(--boxel-sp-xs);
+        left: var(--boxel-sp-xs);
+        z-index: 3;
+        pointer-events: none;
+        color: var(--boxel-light-100);
+        font: 500 var(--boxel-font);
+        background-color: var(--boxel-darker-hover);
+        border-radius: var(--boxel-border-radius-lg);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+      }
       .chat-input-area__bottom-actions {
         display: flex;
         align-items: center;
@@ -451,6 +488,8 @@ export default class Room extends Component<Signature> {
     | undefined;
   @tracked lastCanceledActionMessageId: string | undefined;
   @tracked acceptingAllLabel: string | undefined;
+  @tracked private isDropZoneActive = false;
+  private dropZoneDragDepth = 0;
 
   @service declare private store: StoreService;
   @service declare private cardService: CardService;
@@ -1075,21 +1114,115 @@ export default class Room extends Component<Signature> {
     if (!localFile) {
       return;
     }
+    await this.attachLocalFile(localFile);
+  }
 
+  @action
+  private handleChatInputDragOver(event: DragEvent) {
+    if (!this.isFileDrag(event.dataTransfer)) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    this.isDropZoneActive = true;
+    if (event.dataTransfer) {
+      event.dataTransfer.dropEffect = 'copy';
+    }
+  }
+
+  @action
+  private handleChatInputDragEnter(event: DragEvent) {
+    if (!this.isFileDrag(event.dataTransfer)) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    this.dropZoneDragDepth++;
+    this.isDropZoneActive = true;
+  }
+
+  @action
+  private handleChatInputDragLeave(event: DragEvent) {
+    if (!this.isFileDrag(event.dataTransfer) && !this.isDropZoneActive) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    this.dropZoneDragDepth = Math.max(0, this.dropZoneDragDepth - 1);
+    if (this.dropZoneDragDepth === 0) {
+      this.isDropZoneActive = false;
+    }
+  }
+
+  @action
+  private async handleChatInputDrop(event: DragEvent) {
+    let files = Array.from(event.dataTransfer?.files ?? []);
+    if (!files.length) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    this.dropZoneDragDepth = 0;
+    this.isDropZoneActive = false;
+
+    for (let file of files) {
+      await this.attachLocalFile(file);
+    }
+  }
+
+  @action
+  private async handleChatInputPaste(event: ClipboardEvent) {
+    let files = this.getClipboardFiles(event.clipboardData);
+    if (!files.length) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    for (let file of files) {
+      await this.attachLocalFile(file);
+    }
+  }
+
+  private getClipboardFiles(clipboardData: DataTransfer | null): File[] {
+    if (!clipboardData) {
+      return [];
+    }
+
+    let files = Array.from(clipboardData.files ?? []);
+    if (files.length) {
+      return files;
+    }
+
+    let itemFiles: File[] = [];
+    for (let item of Array.from(clipboardData.items ?? [])) {
+      if (item.kind !== 'file') {
+        continue;
+      }
+      let file = item.getAsFile();
+      if (file) {
+        itemFiles.push(file);
+      }
+    }
+
+    return itemFiles;
+  }
+
+  private isFileDrag(dataTransfer: DataTransfer | null | undefined): boolean {
+    if (!dataTransfer) {
+      return false;
+    }
+    return Array.from(dataTransfer.types ?? []).includes('Files');
+  }
+
+  private async attachLocalFile(localFile: File) {
     let bytes = new Uint8Array(await localFile.arrayBuffer());
     let file = await this.createLocalFileDef(localFile, bytes);
     let files = this.filesToAttach;
-    if (!files?.find((f) => f.sourceUrl === file.sourceUrl)) {
-      let contentType =
-        file.contentType || localFile.type || 'application/octet-stream';
-      await this.matrixService.prefetchLocalFileContent(
-        file,
-        bytes,
-        contentType,
-      );
-      this.matrixService.setFilesToSend(this.args.roomId, [...files, file]);
-      this.startFileUpload(file);
-    }
+    let contentType =
+      file.contentType || localFile.type || 'application/octet-stream';
+    await this.matrixService.prefetchLocalFileContent(file, bytes, contentType);
+    this.matrixService.setFilesToSend(this.args.roomId, [...files, file]);
+    this.startFileUpload(file);
   }
 
   @action
