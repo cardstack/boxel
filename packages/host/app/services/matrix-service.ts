@@ -141,7 +141,7 @@ import type {
 
 import type * as MatrixSDK from 'matrix-js-sdk';
 
-const { matrixURL } = ENV;
+const { matrixURL, defaultSystemCardId } = ENV;
 const STATE_EVENTS_OF_INTEREST = ['m.room.create', 'm.room.name'];
 
 const realmEventsLogger = logger('realm:events');
@@ -1993,7 +1993,12 @@ export default class MatrixService extends Service {
     // Set the system card to use
     // If there is none, we fall back to the default
     if (!systemCardId) {
-      systemCardId = ENV.defaultSystemCardId;
+      systemCardId = defaultSystemCardId;
+    }
+    if (!systemCardId) {
+      this.store.dropReference(this._systemCard?.id);
+      this._systemCard = undefined;
+      return;
     }
     if (systemCardId === this._systemCard?.id) {
       // it's OK to call this multiple times with the same system card id

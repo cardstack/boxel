@@ -28,7 +28,6 @@ function environmentDefaults() {
       baseRealmURL: 'http://localhost:4201/base/',
       catalogRealmURL: 'http://localhost:4201/catalog/',
       skillsRealmURL: 'http://localhost:4201/skills/',
-      defaultSystemCardBase: 'http://localhost:4201',
     };
   }
   let slug = environmentSlug();
@@ -40,12 +39,12 @@ function environmentDefaults() {
     baseRealmURL: `http://${realmHost}/base/`,
     catalogRealmURL: `http://${realmHost}/catalog/`,
     skillsRealmURL: `http://${realmHost}/skills/`,
-    defaultSystemCardBase: `http://${realmHost}`,
   };
 }
 
 module.exports = function (environment) {
   let defaults = environmentDefaults();
+  let skipCatalog = process.env.SKIP_CATALOG === 'true';
 
   const ENV = {
     modulePrefix: '@cardstack/host',
@@ -97,7 +96,7 @@ module.exports = function (environment) {
     realmServerURL: process.env.REALM_SERVER_DOMAIN || defaults.realmServerURL,
     resolvedBaseRealmURL:
       process.env.RESOLVED_BASE_REALM_URL || defaults.baseRealmURL,
-    resolvedCatalogRealmURL: process.env.SKIP_CATALOG
+    resolvedCatalogRealmURL: skipCatalog
       ? undefined
       : process.env.RESOLVED_CATALOG_REALM_URL || defaults.catalogRealmURL,
     resolvedSkillsRealmURL:
@@ -106,19 +105,6 @@ module.exports = function (environment) {
       SHOW_ASK_AI: process.env.SHOW_ASK_AI === 'true' || false,
     },
   };
-
-  if (environment === 'development') {
-    // ENV.APP.LOG_RESOLVER = true;
-    // ENV.APP.LOG_ACTIVE_GENERATION = true;
-    // ENV.APP.LOG_TRANSITIONS = true;
-    // ENV.APP.LOG_TRANSITIONS_INTERNAL = true;
-    // ENV.APP.LOG_VIEW_LOOKUPS = true;
-    ENV.defaultSystemCardId = process.env.DEFAULT_SYSTEM_CARD_ID;
-    if (!ENV.defaultSystemCardId && !process.env.SKIP_CATALOG) {
-      ENV.defaultSystemCardId =
-        defaults.defaultSystemCardBase + '/catalog/SystemCard/default';
-    }
-  }
 
   if (environment === 'test') {
     // Testem prefers this...
@@ -144,24 +130,19 @@ module.exports = function (environment) {
 
     // Catalog realm is not available in test environment
     ENV.resolvedCatalogRealmURL = undefined;
-
-    ENV.defaultSystemCardId =
-      process.env.DEFAULT_SYSTEM_CARD_ID ??
-      'http://test-realm/test/SystemCard/default';
-  }
-
-  if (environment === 'staging') {
-    ENV.defaultSystemCardId =
-      process.env.DEFAULT_SYSTEM_CARD_ID ??
-      'https://realms-staging.stack.cards/catalog/SystemCard/default';
+    ENV.defaultSystemCardId = 'http://test-realm/test/SystemCard/default';
   }
 
   if (environment === 'production') {
     // here you can enable a production-specific feature
     ENV.logLevels = '*=warn';
-    ENV.defaultSystemCardId =
-      process.env.DEFAULT_SYSTEM_CARD_ID ??
-      'https://app.boxel.ai/catalog/SystemCard/default';
+  }
+
+  if (ENV.resolvedCatalogRealmURL) {
+    ENV.defaultSystemCardId = new URL(
+      'SystemCard/default',
+      withTrailingSlash(ENV.resolvedCatalogRealmURL),
+    ).href;
   }
 
   return ENV;
@@ -188,4 +169,8 @@ function getLatestSchemaFile() {
     );
   }
   return path.join(schemaDir, latestSchemaFile);
+}
+
+function withTrailingSlash(url) {
+  return url.endsWith('/') ? url : `${url}/`;
 }
