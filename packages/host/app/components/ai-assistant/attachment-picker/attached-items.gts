@@ -28,6 +28,7 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 import {
   requiredModality,
   modalityLabel,
+  isTextBasedContentType,
 } from '@cardstack/runtime-common/ai/modality';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
@@ -128,15 +129,20 @@ export default class AttachedItems extends Component<Signature> {
   };
 
   private getModalityWarning = (file: FileDef): string | undefined => {
-    let modalities = this.args.inputModalities;
-    if (!modalities) {
-      return undefined;
-    }
     let modality = requiredModality(file.contentType);
-    if (!modality || modalities.includes(modality)) {
+    if (modality) {
+      // Multimodal type — warn only if model doesn't support it
+      let modalities = this.args.inputModalities;
+      if (modalities && !modalities.includes(modality)) {
+        return `Model does not support ${modalityLabel(modality)}. Only metadata will be sent.`;
+      }
       return undefined;
     }
-    return `Model does not support ${modalityLabel(modality)}. Only metadata will be sent.`;
+    // Non-multimodal, non-text files only get metadata sent
+    if (!isTextBasedContentType(file.contentType)) {
+      return 'File content will be sent as metadata only.';
+    }
+    return undefined;
   };
 
   <template>
