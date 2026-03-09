@@ -4,6 +4,26 @@ import { canonicalizeMatrixMediaKey } from '@cardstack/runtime-common/ai/matrix-
 
 import FileDefManagerImpl from '@cardstack/host/lib/file-def-manager';
 
+function makeFakeFileApi() {
+  return {
+    createFileDef(initial: any) {
+      return {
+        ...initial,
+        serialize() {
+          return {
+            sourceUrl: this.sourceUrl,
+            name: this.name,
+            url: this.url,
+            contentType: this.contentType,
+            contentHash: this.contentHash,
+            contentSize: this.contentSize,
+          };
+        },
+      };
+    },
+  } as any;
+}
+
 module('Unit | file-def-manager canonicalize', function () {
   test('canonicalizeMatrixMediaKey normalizes various Matrix URLs to mxc://host/id', function (assert) {
     let cases = [
@@ -142,7 +162,7 @@ module('Unit | file-def-manager canonicalize', function () {
         };
       },
     } as any;
-    const fakeFileApi = {} as any;
+    const fakeFileApi = makeFakeFileApi();
     let manager = new FileDefManagerImpl({
       owner: null as unknown as any,
       client: fakeClient,
@@ -176,7 +196,7 @@ module('Unit | file-def-manager canonicalize', function () {
   });
 
   test('uploadFiles uploads local file bytes from prefetched content', async function (assert) {
-    assert.expect(3);
+    assert.expect(4);
 
     let uploadCalls: any[] = [];
     let callCounter = 0;
@@ -197,7 +217,7 @@ module('Unit | file-def-manager canonicalize', function () {
     };
 
     const fakeCardApi = {} as any;
-    const fakeFileApi = {} as any;
+    const fakeFileApi = makeFakeFileApi();
     let manager = new FileDefManagerImpl({
       owner: null as unknown as any,
       client: fakeClient,
@@ -222,14 +242,19 @@ module('Unit | file-def-manager canonicalize', function () {
 
     let bytes = new TextEncoder().encode('hello local file');
     await manager.prefetchLocalFileContent(localFile, bytes, 'text/plain');
-    await manager.uploadFiles([localFile]);
+    let [uploadedFile] = await manager.uploadFiles([localFile]);
 
     assert.strictEqual(uploadCalls.length, 1, 'uploaded local file bytes once');
-    assert.ok(localFile.url, 'sets uploaded file URL');
+    assert.ok(uploadedFile.url, 'sets uploaded file URL');
     assert.strictEqual(
-      localFile.contentType,
+      uploadedFile.contentType,
       'text/plain',
       'sets file content type from prefetched local bytes',
+    );
+    assert.strictEqual(
+      localFile.url,
+      undefined,
+      'does not mutate original file def instance',
     );
   });
 
@@ -259,7 +284,7 @@ module('Unit | file-def-manager canonicalize', function () {
       owner: null as unknown as any,
       client: fakeClient,
       getCardAPI: () => ({}) as any,
-      getFileAPI: () => ({}) as any,
+      getFileAPI: () => makeFakeFileApi(),
     }) as any;
 
     let localFile: any = {
@@ -286,14 +311,14 @@ module('Unit | file-def-manager canonicalize', function () {
       'first upload attempt fails',
     );
 
-    await manager.uploadFiles([localFile]);
+    let [uploadedFile] = await manager.uploadFiles([localFile]);
 
     assert.strictEqual(
       uploadAttempt,
       2,
       'retries upload with prefetched bytes',
     );
-    assert.ok(localFile.url, 'retry succeeds and sets uploaded URL');
+    assert.ok(uploadedFile.url, 'retry succeeds and returns uploaded URL');
     assert.false(
       manager.prefetchedContent.has(localFile.sourceUrl),
       'prefetched bytes are cleared after successful upload',
@@ -326,7 +351,7 @@ module('Unit | file-def-manager canonicalize', function () {
       owner: null as unknown as any,
       client: fakeClient,
       getCardAPI: () => ({}) as any,
-      getFileAPI: () => ({}) as any,
+      getFileAPI: () => makeFakeFileApi(),
     }) as any;
 
     let workspaceImageFile: any = {
@@ -351,7 +376,7 @@ module('Unit | file-def-manager canonicalize', function () {
       bytes,
       'application/vnd.card+source',
     );
-    await manager.uploadFiles([workspaceImageFile]);
+    let [uploadedFile] = await manager.uploadFiles([workspaceImageFile]);
 
     assert.strictEqual(
       uploadedType,
@@ -359,11 +384,11 @@ module('Unit | file-def-manager canonicalize', function () {
       'uploads workspace image bytes using original image mime type',
     );
     assert.strictEqual(
-      workspaceImageFile.contentType,
+      uploadedFile.contentType,
       'image/png',
       'retains image contentType instead of generic fetched type',
     );
-    assert.ok(workspaceImageFile.url, 'sets uploaded URL');
+    assert.ok(uploadedFile.url, 'sets uploaded URL');
   });
 
   test('uploadFiles ignores stale non-Matrix content-hash cache entry and uploads fresh media', async function (assert) {
@@ -393,7 +418,7 @@ module('Unit | file-def-manager canonicalize', function () {
       owner: null as unknown as any,
       client: fakeClient,
       getCardAPI: () => ({}) as any,
-      getFileAPI: () => ({}) as any,
+      getFileAPI: () => makeFakeFileApi(),
     }) as any;
 
     let workspaceImageFile: any = {
@@ -424,7 +449,7 @@ module('Unit | file-def-manager canonicalize', function () {
       'http://test-realm-server/my-realm/stale-cache.png',
     );
 
-    await manager.uploadFiles([workspaceImageFile]);
+    let [uploadedFile] = await manager.uploadFiles([workspaceImageFile]);
 
     assert.strictEqual(
       uploadCalls,
@@ -432,7 +457,7 @@ module('Unit | file-def-manager canonicalize', function () {
       'stale non-Matrix cache entry is ignored',
     );
     assert.true(
-      String(workspaceImageFile.url).includes('/_matrix/media/'),
+      String(uploadedFile.url).includes('/_matrix/media/'),
       'file URL is refreshed to Matrix media URL',
     );
   });

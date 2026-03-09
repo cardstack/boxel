@@ -471,16 +471,25 @@ export default class FileDefManagerImpl
         if (!contentType) {
           throw new Error(`File has no content type: ${file.sourceUrl}`);
         }
-        file.url = await this.uploadContentWithCaching(bytes, contentType);
-        file.contentType = contentType;
-        file.contentHash = await this.getContentHash(bytes);
-        file.contentSize = bytes.byteLength;
+        let uploadedUrl = await this.uploadContentWithCaching(
+          bytes,
+          contentType,
+        );
+        let contentHash = await this.getContentHash(bytes);
+        let contentSize = bytes.byteLength;
         if (usedPrefetchedContent) {
           // Keep prefetched bytes around if upload throws so retry can reuse them.
           this.prefetchedContent.delete(file.sourceUrl);
         }
 
-        return file;
+        return this.fileAPI.createFileDef({
+          sourceUrl: file.sourceUrl,
+          name: file.name,
+          url: uploadedUrl,
+          contentType,
+          contentHash,
+          contentSize,
+        });
       }),
     );
 

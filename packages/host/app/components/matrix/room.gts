@@ -1265,10 +1265,16 @@ export default class Room extends Component<Signature> {
     if (!sourceUrl) return;
     this._fileUploadStates.set(sourceUrl, { status: 'uploading' });
     try {
-      await this.matrixService.uploadFiles([file]);
+      let [uploadedFile] = await this.matrixService.uploadFiles([file]);
+      let uploadedOrOriginal = uploadedFile ?? file;
       // Only update state if the file is still attached (guards against
       // race where file is removed while upload was in-flight).
-      if (this.filesToAttach?.find((f) => f.sourceUrl === sourceUrl)) {
+      let files = this.filesToAttach;
+      if (files?.find((f) => f.sourceUrl === sourceUrl)) {
+        let nextFiles = files.map((f) =>
+          f.sourceUrl === sourceUrl ? uploadedOrOriginal : f,
+        );
+        this.matrixService.setFilesToSend(this.args.roomId, nextFiles);
         this._fileUploadStates.set(sourceUrl, { status: 'complete' });
       }
     } catch (e: any) {
