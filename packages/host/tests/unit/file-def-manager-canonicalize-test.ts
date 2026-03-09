@@ -299,4 +299,141 @@ module('Unit | file-def-manager canonicalize', function () {
       'prefetched bytes are cleared after successful upload',
     );
   });
+
+  test('uploadFiles preserves known image content type when prefetched type is generic', async function (assert) {
+    assert.expect(3);
+
+    let uploadedType: string | undefined;
+    let fakeClient: any = {
+      getAccessToken() {
+        return 'fake-token';
+      },
+      uploadContent(
+        _content: XMLHttpRequestBodyInit,
+        opts?: { type?: string },
+      ) {
+        uploadedType = opts?.type;
+        return Promise.resolve({
+          content_uri: 'mxc://localhost/workspace-image-upload',
+        });
+      },
+      mxcUrlToHttp(mxc: string) {
+        return `http://localhost/_matrix/media/v3/download/localhost/${mxc.split('/').pop()}`;
+      },
+    };
+
+    let manager = new FileDefManagerImpl({
+      owner: null as unknown as any,
+      client: fakeClient,
+      getCardAPI: () => ({}) as any,
+      getFileAPI: () => ({}) as any,
+    }) as any;
+
+    let workspaceImageFile: any = {
+      sourceUrl: 'http://test-realm-server/my-realm/diagram.png',
+      name: 'diagram.png',
+      contentType: 'image/png',
+      serialize() {
+        return {
+          sourceUrl: this.sourceUrl,
+          name: this.name,
+          url: this.url,
+          contentType: this.contentType,
+          contentHash: this.contentHash,
+          contentSize: this.contentSize,
+        };
+      },
+    };
+
+    let bytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
+    await manager.prefetchLocalFileContent(
+      workspaceImageFile,
+      bytes,
+      'application/vnd.card+source',
+    );
+    await manager.uploadFiles([workspaceImageFile]);
+
+    assert.strictEqual(
+      uploadedType,
+      'image/png',
+      'uploads workspace image bytes using original image mime type',
+    );
+    assert.strictEqual(
+      workspaceImageFile.contentType,
+      'image/png',
+      'retains image contentType instead of generic fetched type',
+    );
+    assert.ok(workspaceImageFile.url, 'sets uploaded URL');
+  });
+
+  test('uploadFiles ignores stale non-Matrix content-hash cache entry and uploads fresh media', async function (assert) {
+    assert.expect(3);
+
+    let uploadCalls = 0;
+    let fakeClient: any = {
+      getAccessToken() {
+        return 'fake-token';
+      },
+      uploadContent(
+        _content: XMLHttpRequestBodyInit,
+        opts?: { type?: string },
+      ) {
+        uploadCalls++;
+        assert.strictEqual(opts?.type, 'image/png', 'uploads with image mime');
+        return Promise.resolve({
+          content_uri: `mxc://localhost/fresh-upload-${uploadCalls}`,
+        });
+      },
+      mxcUrlToHttp(mxc: string) {
+        return `http://localhost/_matrix/media/v3/download/localhost/${mxc.split('/').pop()}`;
+      },
+    };
+
+    let manager = new FileDefManagerImpl({
+      owner: null as unknown as any,
+      client: fakeClient,
+      getCardAPI: () => ({}) as any,
+      getFileAPI: () => ({}) as any,
+    }) as any;
+
+    let workspaceImageFile: any = {
+      sourceUrl: 'http://test-realm-server/my-realm/stale-cache.png',
+      name: 'stale-cache.png',
+      contentType: 'image/png',
+      serialize() {
+        return {
+          sourceUrl: this.sourceUrl,
+          name: this.name,
+          url: this.url,
+          contentType: this.contentType,
+          contentHash: this.contentHash,
+          contentSize: this.contentSize,
+        };
+      },
+    };
+
+    let bytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x01]);
+    await manager.prefetchLocalFileContent(
+      workspaceImageFile,
+      bytes,
+      'image/png',
+    );
+    let staleHash = await manager.getContentHash(bytes);
+    manager.contentHashCache.set(
+      staleHash,
+      'http://test-realm-server/my-realm/stale-cache.png',
+    );
+
+    await manager.uploadFiles([workspaceImageFile]);
+
+    assert.strictEqual(
+      uploadCalls,
+      1,
+      'stale non-Matrix cache entry is ignored',
+    );
+    assert.true(
+      String(workspaceImageFile.url).includes('/_matrix/media/'),
+      'file URL is refreshed to Matrix media URL',
+    );
+  });
 });

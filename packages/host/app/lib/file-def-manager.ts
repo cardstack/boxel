@@ -183,7 +183,14 @@ export default class FileDefManagerImpl
     content: string | Uint8Array,
   ): Promise<string | null> {
     const hash = await this.getContentHash(content);
-    return this.contentHashCache.get(hash) || null;
+    let cachedUrl = this.contentHashCache.get(hash) || null;
+    if (cachedUrl && !this.isMatrixMediaUrl(cachedUrl)) {
+      // Self-heal stale/poisoned cache entries so uploads always produce
+      // Matrix media URLs that the bot can fetch with Matrix auth.
+      this.contentHashCache.delete(hash);
+      return null;
+    }
+    return cachedUrl;
   }
 
   async uploadContentWithCaching(
@@ -217,6 +224,26 @@ export default class FileDefManagerImpl
 
   private isLocalSourceUrl(url: string): boolean {
     return url.startsWith(LOCAL_SOURCE_URL_PREFIX);
+  }
+
+  private resolveUploadContentType(
+    file: FileDef,
+    fetchedContentType?: string,
+  ): string {
+    let fetched = fetchedContentType?.trim() ?? '';
+    if (!fetched) {
+      return file.contentType ?? '';
+    }
+
+    let fetchedBase = fetched.split(';')[0]?.trim().toLowerCase();
+    if (
+      fetchedBase === 'application/octet-stream' ||
+      fetchedBase === 'application/vnd.card+source'
+    ) {
+      return file.contentType || fetched;
+    }
+
+    return fetched;
   }
 
   // Validates the content hash against the contents of the URL and then updates the cache.
@@ -391,7 +418,8 @@ export default class FileDefManagerImpl
       },
     });
     let bytes = new Uint8Array(await response.arrayBuffer());
-    let contentType = response.headers.get('content-type') ?? '';
+    let fetchedContentType = response.headers.get('content-type') ?? '';
+    let contentType = this.resolveUploadContentType(file, fetchedContentType);
     this.prefetchedContent.set(file.sourceUrl, { bytes, contentType });
   }
 
@@ -423,7 +451,7 @@ export default class FileDefManagerImpl
         let cached = this.prefetchedContent.get(file.sourceUrl);
         if (cached) {
           bytes = cached.bytes;
-          contentType = cached.contentType;
+          contentType = this.resolveUploadContentType(file, cached.contentType);
           usedPrefetchedContent = true;
         } else if (this.isLocalSourceUrl(file.sourceUrl)) {
           throw new Error(
@@ -436,7 +464,8 @@ export default class FileDefManagerImpl
             },
           });
           bytes = new Uint8Array(await response.arrayBuffer());
-          contentType = response.headers.get('content-type') ?? '';
+          let fetchedContentType = response.headers.get('content-type') ?? '';
+          contentType = this.resolveUploadContentType(file, fetchedContentType);
         }
 
         if (!contentType) {
