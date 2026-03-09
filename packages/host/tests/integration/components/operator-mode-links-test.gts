@@ -111,7 +111,6 @@ module('Integration | operator-mode | links', function (hooks) {
     await click('[data-test-add-new="authorBio"]');
     await waitFor(`[data-test-card-catalog-modal]`);
     await click(`[data-test-card-catalog-create-new-button]`);
-    await click(`[data-test-card-catalog-go-button]`);
     await waitFor('[data-test-stack-card-index="1"]');
 
     assert
@@ -355,7 +354,6 @@ module('Integration | operator-mode | links', function (hooks) {
       .dom('[data-test-card-catalog-create-new-button]')
       .hasText('Create New Pet');
     await click('[data-test-card-catalog-create-new-button]');
-    await click(`[data-test-card-catalog-go-button]`);
 
     await waitFor(`[data-test-stack-card-index="1"]`);
     await fillIn(
@@ -394,7 +392,6 @@ module('Integration | operator-mode | links', function (hooks) {
       .dom('[data-test-card-catalog-create-new-button]')
       .hasText('Create New Pet');
     await click('[data-test-card-catalog-create-new-button]');
-    await click(`[data-test-card-catalog-go-button]`);
 
     await waitFor(`[data-test-stack-card-index="1"]`);
     await fillIn(
@@ -480,13 +477,20 @@ module('Integration | operator-mode | links', function (hooks) {
     await waitFor(`[data-test-card-catalog-modal]`);
     await waitFor(`[data-test-card-catalog-create-new-button]`);
     await click(`[data-test-card-catalog-create-new-button]`);
-    click(`[data-test-card-catalog-go-button]`);
     await waitFor('[data-test-stack-card-index="1"]');
-    assert.deepEqual(
-      [...savedCards],
-      [`${testRealmURL}Person/1`],
-      'linked card has not been saved yet',
+
+    // After clicking "Create New", both the Person card and the new Pet card should be saved
+    assert.strictEqual(
+      savedCards.size,
+      2,
+      'Person and Pet cards have been saved',
     );
+    assert.ok(
+      savedCards.has(`${testRealmURL}Person/1`),
+      'Person card was saved',
+    );
+    let petCardUrl = [...savedCards].find((url) => url.includes('Pet/'));
+    assert.ok(petCardUrl, 'Pet card was saved');
     await fillIn(
       `[data-test-stack-card-index="1"] [data-test-field="name"] input`,
       'Mango',
@@ -551,7 +555,6 @@ module('Integration | operator-mode | links', function (hooks) {
     await click('[data-test-add-new="authorBio"]');
     await waitFor(`[data-test-card-catalog-modal]`);
     await click(`[data-test-card-catalog-create-new-button]`);
-    await click(`[data-test-card-catalog-go-button]`);
     await waitFor('[data-test-stack-card-index="1"]');
 
     await click('[data-test-stack-card-index="1"] [data-test-edit-button]');
