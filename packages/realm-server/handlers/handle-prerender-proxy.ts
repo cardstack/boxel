@@ -3,6 +3,7 @@ import type Koa from 'koa';
 import {
   fetchRealmPermissions,
   type DBAdapter,
+  type Realm,
   type RealmPermissions,
   type Prerenderer,
 } from '@cardstack/runtime-common';
@@ -21,11 +22,13 @@ export default function handlePrerenderProxy({
   kind,
   prerenderer,
   dbAdapter,
+  realms,
   createPrerenderAuth,
 }: {
   kind: 'card' | 'module' | 'file-extract';
   prerenderer?: Prerenderer;
   dbAdapter: DBAdapter;
+  realms: Realm[];
   createPrerenderAuth: (
     userId: string,
     permissions: RealmPermissions,
@@ -93,9 +96,23 @@ export default function handlePrerenderProxy({
       return;
     }
 
+    // Include permissions for all known realms so cross-realm
+    // dependencies (e.g. base realm modules) can be fetched during prerender
     let permissions: RealmPermissions = {
       [attrs.realm]: userPermissions,
     };
+    for (let realm of realms) {
+      if (realm.url !== attrs.realm) {
+        let realmPerms = await fetchRealmPermissions(
+          dbAdapter,
+          new URL(realm.url),
+        );
+        let perms = realmPerms[token.user];
+        if (perms?.length) {
+          permissions[realm.url] = perms;
+        }
+      }
+    }
 
     let auth = createPrerenderAuth(token.user, permissions);
 

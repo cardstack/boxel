@@ -177,6 +177,7 @@ export function createRoutes(args: CreateRoutesArgs) {
       kind: 'card',
       prerenderer: args.prerenderer,
       dbAdapter: args.dbAdapter,
+      realms: args.realms,
       createPrerenderAuth,
     }),
   );
@@ -187,6 +188,7 @@ export function createRoutes(args: CreateRoutesArgs) {
       kind: 'module',
       prerenderer: args.prerenderer,
       dbAdapter: args.dbAdapter,
+      realms: args.realms,
       createPrerenderAuth,
     }),
   );
@@ -197,6 +199,7 @@ export function createRoutes(args: CreateRoutesArgs) {
       kind: 'file-extract',
       prerenderer: args.prerenderer,
       dbAdapter: args.dbAdapter,
+      realms: args.realms,
       createPrerenderAuth,
     }),
   );
