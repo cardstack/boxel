@@ -5529,6 +5529,89 @@ new
     }
   });
 
+  test('image attachments fall back to canonical Matrix media URL when original URL fails', async () => {
+    let staleUrl =
+      'http://stale-host/_matrix/media/v3/download/localhost/abc123/file.png';
+    let fallbackUrl = fakeMatrixClient.mxcUrlToHttp(
+      'mxc://localhost/abc123',
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      true,
+    );
+    assert.ok(fallbackUrl, 'matrix client should resolve canonical mxc URL');
+
+    const history: DiscreteMatrixEvent[] = [
+      {
+        type: 'm.room.message',
+        event_id: '1',
+        origin_server_ts: 1,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          body: 'Describe this workspace image',
+          data: {
+            context: {
+              tools: [],
+              submode: 'code',
+              functions: [],
+            },
+            attachedFiles: [
+              {
+                sourceUrl: 'http://test.com/my-realm/screenshot.png',
+                url: staleUrl,
+                name: 'screenshot.png',
+                contentType: 'image/png',
+                contentSize: 1024,
+              },
+            ],
+          },
+        },
+        sender: '@user:localhost',
+        room_id: 'room1',
+        unsigned: { age: 1000, transaction_id: '1' },
+        status: EventStatus.SENT,
+      },
+    ];
+
+    mockResponses.set(staleUrl, {
+      ok: false,
+      text: 'not found',
+    });
+    mockResponses.set(fallbackUrl!, {
+      ok: true,
+      text: 'iVBORw0KGgoAAAANSUhEUg==',
+    });
+
+    let prompt = await buildPromptForModel(
+      history,
+      '@aibot:localhost',
+      undefined,
+      undefined,
+      [],
+      fakeMatrixClient,
+    );
+
+    let userMessages = prompt.filter((m) => m.role === 'user');
+    let messageContent = userMessages[0]?.content;
+    assert.ok(
+      Array.isArray(messageContent),
+      'User message should use content parts when fallback media URL succeeds',
+    );
+    if (Array.isArray(messageContent)) {
+      let imageParts = (messageContent as any[]).filter(
+        (part: any) => part.type === 'image_url',
+      );
+      assert.strictEqual(
+        imageParts.length,
+        1,
+        'Should include one image_url part after fallback download',
+      );
+    }
+  });
+
   test('read-file tool call is rejected for files not previously attached in the room', async () => {
     // Policy: the AI should only be able to read files that were
     // previously attached by the user in the same room.
