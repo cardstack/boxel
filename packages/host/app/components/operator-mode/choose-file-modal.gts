@@ -279,7 +279,7 @@ export default class ChooseFileModal extends Component<Signature> {
         content: '';
         position: absolute;
         inset: 0;
-        background-color: var(--boxel-hover-darker, var(--boxel-darker-hover));
+        background-color: var(--boxel-darker-hover);
         pointer-events: none;
         z-index: 2;
       }
