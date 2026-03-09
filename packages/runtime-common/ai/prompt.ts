@@ -633,12 +633,22 @@ export async function loadCurrentlySerializedFileDefs(
 
 export function attachedFilesToMessage(
   attachedFiles: SerializedFileDef[],
+  options?: {
+    omitSourceUrls?: Set<string>;
+  },
 ): string {
   if (!attachedFiles.length) {
     return 'No attached files';
   }
   return attachedFiles
-    .filter((f) => !isImageContentType(f.contentType))
+    .filter(
+      (f) =>
+        !(
+          f.sourceUrl &&
+          options?.omitSourceUrls &&
+          options.omitSourceUrls.has(f.sourceUrl)
+        ),
+    )
     .map((f) => {
       let hyperlink = f.sourceUrl ? `[${f.name}](${f.sourceUrl})` : f.name;
       if (f.error) {
@@ -1888,10 +1898,8 @@ export const buildAttachmentsMessagePart = async (
     history,
     isCurrentMessage,
   );
-  if (attachedFiles.length > 0) {
-    text += `Attached Files (files with newer versions don't show their content):\n${attachedFilesToMessage(attachedFiles)}\n`;
-  }
   let imageUrls: string[] = [];
+  let imageSourceUrlsIncludedAsImageParts = new Set<string>();
   if (isCurrentMessage) {
     let imageFiles = attachedFiles.filter(
       (f) => isImageContentType(f.contentType) && f.url,
@@ -1904,10 +1912,21 @@ export const buildAttachmentsMessagePart = async (
           f.contentType!,
         );
         imageUrls.push(dataUrl);
+        if (f.sourceUrl) {
+          imageSourceUrlsIncludedAsImageParts.add(f.sourceUrl);
+        }
       } catch (e) {
         getLog().error(`Failed to download image ${f.url}:`, e);
       }
     }
+  }
+  if (attachedFiles.length > 0) {
+    text += `Attached Files (files with newer versions don't show their content):\n${attachedFilesToMessage(
+      attachedFiles,
+      {
+        omitSourceUrls: imageSourceUrlsIncludedAsImageParts,
+      },
+    )}\n`;
   }
   return { text, imageUrls };
 };

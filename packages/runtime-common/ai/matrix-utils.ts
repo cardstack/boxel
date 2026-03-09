@@ -362,11 +362,25 @@ export async function downloadFileAsBase64DataUrl(
   }
   let buffer = await response.arrayBuffer();
   let bytes = new Uint8Array(buffer);
-  let binary = '';
-  for (let i = 0; i < bytes.length; i++) {
-    binary += String.fromCharCode(bytes[i]);
+  let maybeBuffer = (globalThis as any).Buffer;
+  if (maybeBuffer?.from) {
+    let base64 = maybeBuffer.from(bytes).toString('base64');
+    return `data:${contentType};base64,${base64}`;
   }
-  let base64 = btoa(binary);
+
+  let btoaFn = (globalThis as any).btoa;
+  if (typeof btoaFn !== 'function') {
+    throw new Error('No base64 encoder available in this runtime');
+  }
+
+  // Build binary string in chunks to avoid quadratic concatenation behavior.
+  let binaryChunks: string[] = [];
+  let chunkSize = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    let chunk = bytes.subarray(i, i + chunkSize);
+    binaryChunks.push(String.fromCharCode(...chunk));
+  }
+  let base64 = btoaFn(binaryChunks.join(''));
   return `data:${contentType};base64,${base64}`;
 }
 
