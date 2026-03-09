@@ -111,6 +111,15 @@ class CiStatusLabel extends GlimmerComponent<CiStatusLabelSignature> {
         line-height: 1.3;
         color: var(--card-foreground, #1f2328);
       }
+      .ci-status-label--failure {
+        color: var(--destructive, #d73a49);
+      }
+      .ci-status-label--pending {
+        color: var(--chart-4, #dbab09);
+      }
+      .ci-status-label--success {
+        color: var(--chart-1, #28a745);
+      }
     </style>
   </template>
 }
