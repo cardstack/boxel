@@ -1,7 +1,6 @@
 import GlimmerComponent from '@glimmer/component';
 import ExternalLinkIcon from '@cardstack/boxel-icons/external-link';
 import type { ReviewState } from '../../utils';
-import { eq } from '@cardstack/boxel-ui/helpers';
 
 // ── Sub-components ──────────────────────────────────────────────────────
 
@@ -10,14 +9,28 @@ interface ReviewStateBadgeSignature {
 }
 
 class ReviewStateBadge extends GlimmerComponent<ReviewStateBadgeSignature> {
+  get stateClass() {
+    if (this.args.state === 'changes_requested')
+      return 'review-state-badge--changes';
+    if (this.args.state === 'approved') return 'review-state-badge--approved';
+    return '';
+  }
+
+  get label() {
+    if (this.args.state === 'changes_requested') return 'Changes Requested';
+    if (this.args.state === 'approved') return 'Approved';
+    return '';
+  }
+
+  get hasState() {
+    return (
+      this.args.state === 'changes_requested' || this.args.state === 'approved'
+    );
+  }
+
   <template>
-    {{#if (eq @state 'changes_requested')}}
-      <span class='review-state-badge review-state-badge--changes'>Changes
-        Requested</span>
-    {{else if (eq @state 'approved')}}
-      <span
-        class='review-state-badge review-state-badge--approved'
-      >Approved</span>
+    {{#if this.hasState}}
+      <span class='review-state-badge {{this.stateClass}}'>{{this.label}}</span>
     {{/if}}
 
     <style scoped>
@@ -113,7 +126,7 @@ export class ReviewSection extends GlimmerComponent<ReviewSectionSignature> {
           </li>
         </ul>
       {{else}}
-        <div class='empty-state'>
+        <div class='empty-state {{this.reviewItemStateClass}}'>
           <span class='empty-state-icon' aria-hidden='true'>
             <span class='empty-state-dot'></span>
           </span>
@@ -161,26 +174,6 @@ export class ReviewSection extends GlimmerComponent<ReviewSectionSignature> {
         display: flex;
         flex-direction: column;
         gap: var(--boxel-sp-xs);
-      }
-      .review-item--changes {
-        background: color-mix(
-          in srgb,
-          var(--destructive, #d73a49) 10%,
-          var(--card, #ffffff)
-        );
-        border-color: color-mix(
-          in srgb,
-          var(--destructive, #d73a49) 30%,
-          var(--card, #ffffff)
-        );
-      }
-      .review-item--approved {
-        background: color-mix(
-          in srgb,
-          var(--chart-1, #28a745) 10%,
-          var(--card, #ffffff)
-        );
-        border-color: color-mix(in srgb, var(--chart-1, #28a745) 35%, var(--card, #ffffff));
       }
       .review-item-header {
         display: flex;
@@ -261,8 +254,31 @@ export class ReviewSection extends GlimmerComponent<ReviewSectionSignature> {
       }
       .empty-state-text {
         font-size: var(--boxel-font-xs);
-        font-weight: 600;
         color: var(--muted-foreground, #656d76);
+      }
+      .review-item--changes {
+        background: color-mix(
+          in srgb,
+          var(--destructive, #d73a49) 10%,
+          var(--card, #ffffff)
+        );
+        border-color: color-mix(
+          in srgb,
+          var(--destructive, #d73a49) 30%,
+          var(--card, #ffffff)
+        );
+      }
+      .review-item--approved {
+        background: color-mix(
+          in srgb,
+          var(--chart-1, #28a745) 10%,
+          var(--card, #ffffff)
+        );
+        border-color: color-mix(
+          in srgb,
+          var(--chart-1, #28a745) 35%,
+          var(--card, #ffffff)
+        );
       }
     </style>
   </template>

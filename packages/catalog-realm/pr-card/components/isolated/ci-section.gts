@@ -1,5 +1,4 @@
 import GlimmerComponent from '@glimmer/component';
-import { eq } from '@cardstack/boxel-ui/helpers';
 import type { CiStatus, CiGroup } from '../../utils';
 
 // ── Sub-components ──────────────────────────────────────────────────────
@@ -9,16 +8,28 @@ interface CiDotSignature {
 }
 
 class CiDot extends GlimmerComponent<CiDotSignature> {
+  get stateClass() {
+    if (this.args.state === 'failure') return 'ci-dot--failure';
+    if (this.args.state === 'in_progress') return 'ci-dot--pending';
+    return 'ci-dot--success';
+  }
+
+  get ariaLabel() {
+    if (this.args.state === 'failure') return 'failed';
+    if (this.args.state === 'in_progress') return 'in progress';
+    return 'passed';
+  }
+
+  get isPending() {
+    return this.args.state === 'in_progress';
+  }
+
   <template>
-    {{#if (eq @state 'failure')}}
-      <span class='ci-dot ci-dot--failure' aria-label='failed'></span>
-    {{else if (eq @state 'in_progress')}}
-      <span class='ci-dot ci-dot--pending' aria-label='in progress'>
+    <span class='ci-dot {{this.stateClass}}' aria-label={{this.ariaLabel}}>
+      {{#if this.isPending}}
         <span class='ci-dot-inner'></span>
-      </span>
-    {{else}}
-      <span class='ci-dot ci-dot--success' aria-label='passed'></span>
-    {{/if}}
+      {{/if}}
+    </span>
 
     <style scoped>
       .ci-dot {
@@ -83,8 +94,12 @@ class CiDot extends GlimmerComponent<CiDotSignature> {
         background: var(--chart-4, #dbab09);
       }
       @keyframes ci-spin {
-        from { transform: rotate(0deg); }
-        to { transform: rotate(360deg); }
+        from {
+          transform: rotate(0deg);
+        }
+        to {
+          transform: rotate(360deg);
+        }
       }
     </style>
   </template>
@@ -95,14 +110,14 @@ interface CiStatusLabelSignature {
 }
 
 class CiStatusLabel extends GlimmerComponent<CiStatusLabelSignature> {
+  get stateClass() {
+    if (this.args.state === 'failure') return 'ci-status-label--failure';
+    if (this.args.state === 'in_progress') return 'ci-status-label--pending';
+    return 'ci-status-label--success';
+  }
+
   <template>
-    {{#if (eq @state 'failure')}}
-      <span class='ci-status-label ci-status-label--failure'>{{@text}}</span>
-    {{else if (eq @state 'in_progress')}}
-      <span class='ci-status-label ci-status-label--pending'>{{@text}}</span>
-    {{else}}
-      <span class='ci-status-label ci-status-label--success'>{{@text}}</span>
-    {{/if}}
+    <span class='ci-status-label {{this.stateClass}}'>{{@text}}</span>
 
     <style scoped>
       .ci-status-label {
@@ -145,7 +160,10 @@ export class CiSection extends GlimmerComponent<CiSectionSignature> {
                 <CiDot @state={{item.state}} />
                 <div class='ci-item-detail'>
                   <span class='ci-item-name'>{{item.name}}</span>
-                  <CiStatusLabel @state={{item.state}} @text={{item.statusText}} />
+                  <CiStatusLabel
+                    @state={{item.state}}
+                    @text={{item.statusText}}
+                  />
                 </div>
               </li>
             {{/each}}
@@ -237,7 +255,6 @@ export class CiSection extends GlimmerComponent<CiSectionSignature> {
       }
       .empty-state-text {
         font-size: var(--boxel-font-xs);
-        font-weight: 600;
         color: var(--muted-foreground, #656d76);
       }
     </style>
