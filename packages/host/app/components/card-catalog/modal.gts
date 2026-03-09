@@ -395,8 +395,8 @@ export default class CardCatalogModal extends Component<Signature> {
     if (!this.state) {
       return;
     }
-    if (this.state.multiSelect) {
-      // In multi-select, double-click just toggles (don't submit)
+    if (this.state.multiSelect && typeof selection === 'string') {
+      // In multi-select, double-click on existing cards just toggles (don't submit)
       this.selectFromSearch(selection);
       return;
     }

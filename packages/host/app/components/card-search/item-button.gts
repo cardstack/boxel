@@ -4,7 +4,7 @@ import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
 import { Button } from '@cardstack/boxel-ui/components';
-import { and, cn } from '@cardstack/boxel-ui/helpers';
+import { and, cn, not } from '@cardstack/boxel-ui/helpers';
 import { IconPlus } from '@cardstack/boxel-ui/icons';
 
 import { isCardInstance } from '@cardstack/runtime-common';
@@ -95,12 +95,18 @@ export default class ItemButton extends Component<Signature> {
   }
 
   @action handleClick() {
+    if (this.isNewCard) {
+      // "Create New" always submits immediately, even in multi-select mode
+      this.args.onSelect(this.selectPayload);
+      this.args.onSubmit?.(this.selectPayload);
+      return;
+    }
     this.args.onSelect(this.selectPayload);
   }
 
   @action handleDblClick() {
-    if (this.args.multiSelect) {
-      // In multi-select, double-click just toggles (handled by onSelect)
+    if (this.args.multiSelect && !this.isNewCard) {
+      // In multi-select, double-click just toggles for existing cards
       this.args.onSelect(this.selectPayload);
       return;
     }
@@ -110,7 +116,8 @@ export default class ItemButton extends Component<Signature> {
 
   @action handleKeydown(event: KeyboardEvent) {
     if (event.key === 'Enter') {
-      if (this.args.multiSelect) {
+      if (this.args.multiSelect && !this.isNewCard) {
+        // In multi-select, Enter just toggles for existing cards
         this.args.onSelect(this.selectPayload);
         return;
       }
@@ -136,7 +143,7 @@ export default class ItemButton extends Component<Signature> {
       data-test-card-catalog-item-selected={{if @isSelected 'true'}}
       ...attributes
     >
-      {{#if (and @multiSelect @isSelected)}}
+      {{#if (and @multiSelect @isSelected (not this.isNewCard))}}
         <div class='selection-indicator'>
           <div class='selection-circle' />
         </div>
