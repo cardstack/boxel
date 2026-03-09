@@ -610,12 +610,11 @@ module('Acceptance | file chooser keyboard tests', function (hooks) {
     );
 
     assert.ok(trigger, 'realm chooser trigger element exists');
-    assert.ok(
+    const triggerIsFocusable =
       trigger?.getAttribute('tabindex') !== null ||
-        trigger?.getAttribute('role') === 'button' ||
-        trigger?.tagName.toLowerCase() === 'button',
-      'realm chooser trigger is keyboard focusable',
-    );
+      trigger?.getAttribute('role') === 'button' ||
+      trigger?.tagName.toLowerCase() === 'button';
+    assert.ok(triggerIsFocusable, 'realm chooser trigger is keyboard focusable');
 
     await click('[data-test-choose-file-modal-cancel-button]');
   });

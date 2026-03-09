@@ -200,8 +200,7 @@ export default class IndexedFileTree extends Component<Signature> {
     );
 
     if (match) {
-      const path =
-        match.dataset['testFile'] ?? match.dataset['testDirectory'];
+      const path = match.dataset['testFile'] ?? match.dataset['testDirectory'];
       this.typeAheadMatch = path;
       match.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     } else {
