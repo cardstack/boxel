@@ -1280,27 +1280,7 @@ module(basename(__filename), function () {
     });
   });
 
-  module('indexing (mutating)', function (hooks) {
-    let realm: Realm;
-    let adapter: RealmAdapter;
-    let queuePublisher: QueuePublisher;
-    let queueRunner: QueueRunner;
-    let testRealmServer: TestRealmServerResult | undefined;
-
-    async function depsFor(
-      url: string,
-      type: 'instance' | 'file' = 'instance',
-    ): Promise<string[]> {
-      return depsForIndexEntry(testDbAdapter, url, type);
-    }
-
-    async function indexedAtFor(
-      url: string,
-      type: 'instance' | 'file' = 'instance',
-    ): Promise<string | null> {
-      return indexedAtForIndexEntry(testDbAdapter, url, type);
-    }
-
+  module('indexing (mutating)', function () {
     function hasErrorDetail(
       error: {
         message?: string;
@@ -1319,47 +1299,51 @@ module(basename(__filename), function () {
       );
     }
 
-    setupPermissionedRealmCached(hooks, {
-      mode: 'beforeEach',
-      realmURL: testRealm,
-      permissions: {
-        '*': ['read'],
-      },
-      fileSystem: makeTestRealmFileSystem(),
-      onRealmSetup({
-        dbAdapter,
-        publisher,
-        runner,
-        testRealmServer: server,
-        testRealm,
-        testRealmAdapter,
-      }) {
-        testDbAdapter = dbAdapter;
-        queuePublisher = publisher;
-        queueRunner = runner;
-        testRealmServer = server;
-        realm = testRealm;
-        adapter = testRealmAdapter;
-      },
-    });
+    module('batch and incremental operations', function (hooks) {
+      let realm: Realm;
+      let queuePublisher: QueuePublisher;
+      let queueRunner: QueueRunner;
+      let testRealmServer: TestRealmServerResult | undefined;
 
-    async function startIndexingGroupBlocker() {
-      let started = new Deferred<void>();
-      let release = new Deferred<void>();
-      queueRunner.register('blocking-indexing-group', async () => {
-        started.fulfill();
-        await release.promise;
-        return null;
+      setupPermissionedRealmCached(hooks, {
+        mode: 'beforeEach',
+        realmURL: testRealm,
+        permissions: {
+          '*': ['read'],
+        },
+        fileSystem: makeTestRealmFileSystem(),
+        onRealmSetup({
+          dbAdapter,
+          publisher,
+          runner,
+          testRealmServer: server,
+          testRealm: r,
+        }) {
+          testDbAdapter = dbAdapter;
+          queuePublisher = publisher;
+          queueRunner = runner;
+          testRealmServer = server;
+          realm = r;
+        },
       });
-      let blocker = await queuePublisher.publish<void>({
-        jobType: 'blocking-indexing-group',
-        concurrencyGroup: `indexing:${realm.url}`,
-        timeout: 30,
-        args: null,
-      });
-      await started.promise;
-      return { blocker, release };
-    }
+
+      async function startIndexingGroupBlocker() {
+        let started = new Deferred<void>();
+        let release = new Deferred<void>();
+        queueRunner.register('blocking-indexing-group', async () => {
+          started.fulfill();
+          await release.promise;
+          return null;
+        });
+        let blocker = await queuePublisher.publish<void>({
+          jobType: 'blocking-indexing-group',
+          concurrencyGroup: `indexing:${realm.url}`,
+          timeout: 30,
+          args: null,
+        });
+        await started.promise;
+        return { blocker, release };
+      }
 
     test('batch invalidation resolves alias-like seeds via file_alias matching', async function (assert) {
       let batch = await new IndexWriter(testDbAdapter).createBatch(
@@ -2178,6 +2162,43 @@ module(basename(__filename), function () {
       );
       assert.true(rows[0].is_sql_null, 'error_doc is SQL NULL after recovery');
     });
+    });
+
+    module('additive writes', function (hooks) {
+      let realm: Realm;
+      let testRealmServer: TestRealmServerResult | undefined;
+
+      async function depsFor(
+        url: string,
+        type: 'instance' | 'file' = 'instance',
+      ): Promise<string[]> {
+        return depsForIndexEntry(testDbAdapter, url, type);
+      }
+
+      async function indexedAtFor(
+        url: string,
+        type: 'instance' | 'file' = 'instance',
+      ): Promise<string | null> {
+        return indexedAtForIndexEntry(testDbAdapter, url, type);
+      }
+
+      setupPermissionedRealmCached(hooks, {
+        mode: 'before',
+        realmURL: testRealm,
+        permissions: {
+          '*': ['read'],
+        },
+        fileSystem: makeTestRealmFileSystem(),
+        onRealmSetup({
+          dbAdapter,
+          testRealmServer: server,
+          testRealm: r,
+        }) {
+          testDbAdapter = dbAdapter;
+          testRealmServer = server;
+          realm = r;
+        },
+      });
 
     test('propagates module cache errors through intermediate modules to instances', async function (assert) {
       await realm.write(
@@ -3431,6 +3452,43 @@ module(basename(__filename), function () {
         'grandparent deps include transitive relationship target URL',
       );
     });
+    });
+
+    module('error recovery and deletion', function (hooks) {
+      let realm: Realm;
+      let adapter: RealmAdapter;
+
+      async function depsFor(
+        url: string,
+        type: 'instance' | 'file' = 'instance',
+      ): Promise<string[]> {
+        return depsForIndexEntry(testDbAdapter, url, type);
+      }
+
+      async function indexedAtFor(
+        url: string,
+        type: 'instance' | 'file' = 'instance',
+      ): Promise<string | null> {
+        return indexedAtForIndexEntry(testDbAdapter, url, type);
+      }
+
+      setupPermissionedRealmCached(hooks, {
+        mode: 'beforeEach',
+        realmURL: testRealm,
+        permissions: {
+          '*': ['read'],
+        },
+        fileSystem: makeTestRealmFileSystem(),
+        onRealmSetup({
+          dbAdapter,
+          testRealm: r,
+          testRealmAdapter,
+        }) {
+          testDbAdapter = dbAdapter;
+          realm = r;
+          adapter = testRealmAdapter;
+        },
+      });
 
     test('repairs relationship consumers when an errored second-degree FileDef target is fixed', async function (assert) {
       await realm.write(
@@ -4288,6 +4346,7 @@ module(basename(__filename), function () {
         undefined,
         'deleted file is not retrievable',
       );
+    });
     });
   });
 });
