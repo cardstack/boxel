@@ -8,7 +8,7 @@
     },
     "type": "card",
     "attributes": {
-      "prUrl": "https://github.com/cardstack/boxel-catalog/pull/95",
+      "prUrl": "https://github.com/cardstack/boxel-catalog/pull/105",
       "prTitle": "Add Blog App listing",
       "cardInfo": {
         "name": null,
@@ -16,9 +16,9 @@
         "summary": null,
         "cardThumbnailURL": null
       },
-      "prNumber": 95,
+      "prNumber": 105,
       "submittedAt": "2026-02-27T10:31:00.000Z",
-      "submittedBy": "@lucas.stack.card"
+      "submittedBy": "boxel-submission-bot"
     },
     "relationships": {
       "listing": {

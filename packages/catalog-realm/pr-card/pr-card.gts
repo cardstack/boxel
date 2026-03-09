@@ -5,87 +5,122 @@ import {
   field,
   contains,
   linksTo,
+  realmURL,
 } from 'https://cardstack.com/base/card-api';
 import { Listing } from '../catalog-app/listing/listing';
 import NumberField from 'https://cardstack.com/base/number';
 import DatetimeField from 'https://cardstack.com/base/datetime';
 import GitPullRequestIcon from '@cardstack/boxel-icons/git-pull-request';
-import GitPullRequestClosedIcon from '@cardstack/boxel-icons/git-pull-request-closed';
-import GitPullRequestDraftIcon from '@cardstack/boxel-icons/git-pull-request-draft';
-import GitMergeIcon from '@cardstack/boxel-icons/git-merge';
 import ExternalLinkIcon from '@cardstack/boxel-icons/external-link';
 import { Pill } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
+import type { GithubEventCard } from '../github-event/github-event';
+import { HeaderSection } from './components/isolated/header-section';
+import { CiSection } from './components/isolated/ci-section';
+import { ReviewSection } from './components/isolated/review-section';
 
-// ── Mock data (state only — title/number/url/provenance come from @model) ──
-const MOCK_STATE: {
-  state: 'open' | 'closed';
-  draft: boolean;
-  merged: boolean;
-} = {
-  state: 'open',
-  draft: false,
-  merged: false,
-};
-
-// Latest CI run — single overall status event
-const MOCK_CI: { status: 'success' | 'failure' | 'in_progress' } = {
-  status: 'in_progress',
-};
-
-type MockReview = {
-  reviewer: string;
-  state: 'approved' | 'changes_requested';
-  comment: string;
-};
-
-// Review: state, reviewer, comment only
-const MOCK_REVIEWS: MockReview[] = [
-  {
-    reviewer: 'tintinthong',
-    state: 'changes_requested',
-    comment:
-      "The token-refresh logic in `authenticate()` doesn't handle concurrent " +
-      'requests – if two calls race, both may try to refresh and one will fail. ' +
-      'Please add a mutex / single-flight guard before merging.',
-  },
-];
-
-// ── Helpers ────────────────────────────────────────────────────────────────
-function prStateLabel(s: typeof MOCK_STATE) {
-  if (s.merged) return 'Merged';
-  if (s.draft) return 'Draft';
-  if (s.state === 'closed') return 'Closed';
-  return 'Open';
-}
-
-// Colors match github-pr-brand-guide.json rootVariables:
-function stateColor(label: string) {
-  switch (label) {
-    case 'Merged':
-      return '#8957e5';
-    case 'Closed':
-      return '#cf222e';
-    case 'Draft':
-      return '#6e7681';
-    default:
-      return '#238636';
-  }
-}
+import {
+  renderPrActionLabel,
+  getStateColor,
+  getPrActionIcon,
+  buildCiItems,
+  buildCiGroups,
+  buildLatestReviewByReviewer,
+  computeLatestReviewState,
+  findLatestChangesRequestedEvent,
+  buildGithubEventCardRef,
+  searchEventQuery,
+  buildRealmHrefs,
+  pluralize,
+} from './utils';
 
 class IsolatedTemplate extends Component<typeof PrCard> {
-  get mockCi() {
-    return MOCK_CI;
-  }
-  get mockReviews() {
-    return MOCK_REVIEWS;
+  // ── Realm & card ref ──
+  get realmHrefs() {
+    return buildRealmHrefs(this.args.model[realmURL]?.href);
   }
 
-  get stateLabel() {
-    return prStateLabel(MOCK_STATE);
+  get githubEventCardRef() {
+    return buildGithubEventCardRef(import.meta.url);
   }
+
+  // ── Queries ──
+  get pullRequestEventQuery() {
+    return searchEventQuery(
+      this.githubEventCardRef,
+      this.args.model.prNumber,
+      'pull_request',
+    );
+  }
+
+  get checkRunEventQuery() {
+    return searchEventQuery(
+      this.githubEventCardRef,
+      this.args.model.prNumber,
+      'check_run',
+    );
+  }
+
+  get checkSuiteEventQuery() {
+    return searchEventQuery(
+      this.githubEventCardRef,
+      this.args.model.prNumber,
+      'check_suite',
+    );
+  }
+
+  get prReviewEventQuery() {
+    return searchEventQuery(
+      this.githubEventCardRef,
+      this.args.model.prNumber,
+      'pull_request_review',
+    );
+  }
+
+  // ── Live queries ──
+  prEventData = this.args.context?.getCards(
+    this,
+    () => this.pullRequestEventQuery,
+    () => this.realmHrefs,
+    { isLive: true },
+  );
+
+  checkRunEventData = this.args.context?.getCards(
+    this,
+    () => this.checkRunEventQuery,
+    () => this.realmHrefs,
+    { isLive: true },
+  );
+
+  checkSuiteEventData = this.args.context?.getCards(
+    this,
+    () => this.checkSuiteEventQuery,
+    () => this.realmHrefs,
+    { isLive: true },
+  );
+
+  prReviewEventData = this.args.context?.getCards(
+    this,
+    () => this.prReviewEventQuery,
+    () => this.realmHrefs,
+    { isLive: true },
+  );
+
+  // ── PR state ──
+  get latestPrEventInstance(): GithubEventCard | null {
+    return (this.prEventData?.instances[0] as GithubEventCard) ?? null;
+  }
+
+  get latestPrActionLabel() {
+    return renderPrActionLabel(this.latestPrEventInstance?.action);
+  }
+
   get pillColor() {
-    return stateColor(this.stateLabel);
+    return getStateColor(this.latestPrActionLabel);
+  }
+
+  get prActionIcon() {
+    return getPrActionIcon(this.latestPrActionLabel);
   }
 
   get prTitle() {
@@ -96,184 +131,90 @@ class IsolatedTemplate extends Component<typeof PrCard> {
     return this.args.model.prUrl ?? null;
   }
 
-  get changesRequestedCount() {
-    return this.mockReviews.filter((r) => r.state === 'changes_requested')
-      .length;
+  // ── CI ──
+  get ciItems() {
+    return buildCiItems(
+      this.checkRunEventData?.instances ?? [],
+      this.checkSuiteEventData?.instances ?? [],
+      this.args.model.prNumber,
+    );
   }
 
-  get latestChangesRequestedReview() {
-    let changesRequestedReviews = this.mockReviews.filter(
-      (r) => r.state === 'changes_requested',
+  get ciGroups() {
+    return buildCiGroups(this.ciItems);
+  }
+
+  // ── Reviews ──
+  get latestReviewByReviewer() {
+    return buildLatestReviewByReviewer(this.prReviewEventData?.instances ?? []);
+  }
+
+  get latestReviewState() {
+    return computeLatestReviewState(this.latestReviewByReviewer);
+  }
+
+  get latestPrReviewCommentEventInstance() {
+    return findLatestChangesRequestedEvent(this.latestReviewByReviewer);
+  }
+
+  get latestChangesRequestedReviewerName() {
+    return (
+      this.latestPrReviewCommentEventInstance?.payload?.review?.user?.login ??
+      'Unknown reviewer'
     );
-    return changesRequestedReviews[changesRequestedReviews.length - 1] ?? null;
   }
 
   get latestChangesRequestedComment() {
-    let comment = this.latestChangesRequestedReview?.comment?.trim();
+    let comment =
+      this.latestPrReviewCommentEventInstance?.payload?.review?.body?.trim();
     return comment || '-';
   }
 
-  get overallReviewState() {
-    if (this.mockReviews.some((r) => r.state === 'changes_requested'))
-      return 'changes_requested';
-    if (
-      this.mockReviews.length &&
-      this.mockReviews.every((r) => r.state === 'approved')
-    )
-      return 'approved';
-    return null;
+  get latestChangesRequestedReviewUrl() {
+    return this.latestPrReviewCommentEventInstance?.payload?.review?.html_url;
+  }
+
+  get hasReview() {
+    return !!this.latestPrReviewCommentEventInstance;
   }
 
   <template>
     <article class='pr-card'>
-      {{! ── Dark hero — always GitHub dark canvas ── }}
-      <div class='pr-hero'>
-        <h1 class='pr-title'>
-          {{this.prTitle}}
-          {{#if @model.prNumber}}
-            <span class='pr-number'>#{{@model.prNumber}}</span>
-          {{/if}}
-        </h1>
-        <div class='pr-meta-row'>
-          <Pill class='pr-state-pill' @pillBackgroundColor={{this.pillColor}}>
-            <:iconLeft>
-              {{#if (eq this.stateLabel 'Merged')}}
-                <GitMergeIcon class='pr-pill-icon' />
-              {{else if (eq this.stateLabel 'Closed')}}
-                <GitPullRequestClosedIcon class='pr-pill-icon' />
-              {{else if (eq this.stateLabel 'Draft')}}
-                <GitPullRequestDraftIcon class='pr-pill-icon' />
-              {{else}}
-                <GitPullRequestIcon class='pr-pill-icon' />
-              {{/if}}
-            </:iconLeft>
-            <:default>
-              <span class='pr-state-label'>{{this.stateLabel}}</span>
-            </:default>
-          </Pill>
-
-          {{#if @model.submittedBy}}
-            <span class='pr-meta-text'>
-              <strong class='pr-meta-author'>{{@model.submittedBy}}</strong>
-            </span>
-          {{/if}}
-
+      <HeaderSection
+        @title={{this.prTitle}}
+        @prNumber={{@model.prNumber}}
+        @prUrl={{this.prUrl}}
+        @actionLabel={{this.latestPrActionLabel}}
+        @actionIcon={{this.prActionIcon}}
+        @pillColor={{this.pillColor}}
+        @submittedBy={{@model.submittedBy}}
+      >
+        <:date>
           {{#if @model.submittedAt}}
-            <span class='pr-meta-sep'>·</span>
-            <span class='pr-meta-text'><@fields.submittedAt /></span>
+            <@fields.submittedAt />
           {{/if}}
+        </:date>
+      </HeaderSection>
 
-          <a
-            href={{this.prUrl}}
-            target='_blank'
-            rel='noopener noreferrer'
-            class='pr-external-link'
-            title='Open PR on GitHub'
-            aria-label='Open PR on GitHub'
-          >
-            <ExternalLinkIcon class='pr-external-icon' />
-          </a>
-        </div>
-      </div>
-
-      {{! ── White body ── }}
+      {{! ── Body ── }}
       <div class='pr-body'>
-        {{! ── 2-column: CI Checks + Reviews ── }}
-        <section class='pr-status-section'>
-          {{! ── Left: CI Checks ── }}
-          <div class='status-col'>
-            <div class='col-header'>
-              <label class='header-label'>CI Checks</label>
-              {{#if (eq this.mockCi.status 'in_progress')}}
-                <span class='ci-overall-badge ci-overall-badge--pending'>In
-                  Progress</span>
-              {{else if (eq this.mockCi.status 'failure')}}
-                <span
-                  class='ci-overall-badge ci-overall-badge--failure'
-                >Failed</span>
-              {{else}}
-                <span
-                  class='ci-overall-badge ci-overall-badge--success'
-                >Passed</span>
-              {{/if}}
-            </div>
-
-            <div class='ci-status-row'>
-              {{#if (eq this.mockCi.status 'success')}}
-                <span class='ci-dot ci-dot--success' aria-label='passed'></span>
-                <span class='ci-status-label ci-status-label--success'>
-                  All checks passed
-                </span>
-              {{else if (eq this.mockCi.status 'failure')}}
-                <span class='ci-dot ci-dot--failure' aria-label='failed'></span>
-                <span class='ci-status-label ci-status-label--failure'>
-                  Check run failed
-                </span>
-              {{else}}
-                <span class='ci-dot ci-dot--pending' aria-label='in progress'>
-                  <span class='ci-dot-inner'></span>
-                </span>
-                <span class='ci-status-label ci-status-label--pending'>
-                  Checks running…
-                </span>
-              {{/if}}
-            </div>
-          </div>
-
-          <div class='status-divider'></div>
-
-          {{! ── Right: Reviews ── }}
-          <div class='status-col'>
-            <div class='col-header'>
-              <label class='header-label'>Reviews</label>
-              {{#if (eq this.overallReviewState 'changes_requested')}}
-                <span class='review-state-badge review-state-badge--changes'>
-                  Changes Requested
-                </span>
-              {{else if (eq this.overallReviewState 'approved')}}
-                <span class='review-state-badge review-state-badge--approved'>
-                  Approved
-                </span>
-              {{/if}}
-            </div>
-
-            {{#if this.latestChangesRequestedReview}}
-              <ul class='review-list'>
-                <li class='review-item'>
-                  <div class='review-top-row'>
-                    <span class='reviewer-name'>
-                      {{this.latestChangesRequestedReview.reviewer}}
-                    </span>
-                    <a
-                      href={{this.prUrl}}
-                      target='_blank'
-                      rel='noopener noreferrer'
-                      class='review-external-link'
-                      title='View pull request on GitHub'
-                    >
-                      <ExternalLinkIcon class='review-external-icon' />
-                    </a>
-                  </div>
-
-                  <blockquote class='review-comment'>
-                    {{this.latestChangesRequestedComment}}
-                  </blockquote>
-                </li>
-              </ul>
-            {{else}}
-              -
-            {{/if}}
-          </div>
-
+        <section class='pr-status-columns'>
+          <CiSection @ciGroups={{this.ciGroups}} />
+          <hr class='status-divider' />
+          <ReviewSection
+            @reviewState={{this.latestReviewState}}
+            @reviewerName={{this.latestChangesRequestedReviewerName}}
+            @comment={{this.latestChangesRequestedComment}}
+            @reviewUrl={{this.latestChangesRequestedReviewUrl}}
+            @hasReview={{this.hasReview}}
+          />
         </section>
 
         {{! ── Listing ── }}
         {{#if @model.listing}}
-          <section class='pr-listing-section'>
-            <div class='listing-section-label'>
-              <label class='header-label'>View Listing</label>
-            </div>
-            <div class='pr-listing-embedded'>
+          <section class='listing-section'>
+            <h2 class='section-heading'>View Listing</h2>
+            <div class='listing-embed'>
               <@fields.listing @format='embedded' />
             </div>
           </section>
@@ -289,456 +230,251 @@ class IsolatedTemplate extends Component<typeof PrCard> {
         overflow: hidden;
       }
 
-      /* ── Dark hero ── */
-      .pr-hero {
-        background: #0d1117;
-        color: #e6edf3;
-        padding: var(--boxel-sp-lg) var(--boxel-sp-xl);
-        display: flex;
-        flex-direction: column;
-        gap: var(--boxel-sp-sm);
-        flex-shrink: 0;
-        border-bottom: 1px solid #30363d;
-      }
-      .pr-title {
-        font-size: 1.4rem;
-        font-weight: 600;
-        margin: 0;
-        line-height: 1.3;
-        color: #e6edf3;
-        display: flex;
-        align-items: baseline;
-        gap: var(--boxel-sp-xs);
-        flex-wrap: wrap;
-      }
-      .pr-number {
-        font-size: 1.2rem;
-        font-weight: 600;
-        color: #8b949e;
-      }
-      .pr-meta-row {
-        display: flex;
-        align-items: center;
-        gap: var(--boxel-sp-xs);
-        flex-wrap: wrap;
-      }
-      /* pill border-radius via CSS var — avoids overwriting @pillBackgroundColor */
-      .pr-state-pill {
-        --boxel-pill-border-radius: 2em;
-      }
-
-      .pr-pill-icon {
-        width: 14px;
-        height: 14px;
-        color: #fff;
-        flex-shrink: 0;
-      }
-      .pr-state-label {
-        font-size: var(--boxel-font-xs);
-        font-weight: 600;
-        color: #fff;
-      }
-      .pr-meta-text {
-        font-size: var(--boxel-font-xs);
-        color: #8b949e;
-      }
-      .pr-meta-author {
-        color: #e6edf3;
-        font-weight: 600;
-      }
-      .pr-meta-sep {
-        color: #484f58;
-        font-size: var(--boxel-font-xs);
-      }
-      .pr-external-link {
-        margin-left: auto;
-        color: #8b949e;
-        text-decoration: none;
-        display: inline-flex;
-        align-items: center;
-        transition: color 0.15s ease;
-      }
-      .pr-external-link:hover {
-        color: #58a6ff;
-      }
-      .pr-external-icon {
-        width: 14px;
-        height: 14px;
-      }
-
       /* ── Body ── */
       .pr-body {
         flex: 1;
         display: flex;
         flex-direction: column;
         background: var(--card, #ffffff);
-        color: var(--card-foreground, #24292f);
+        color: var(--card-foreground, #1f2328);
         overflow-y: auto;
       }
 
+      /* ── Status columns ── */
+      .pr-status-columns {
+        display: flex;
+        flex-wrap: wrap;
+      }
+      .status-divider {
+        width: 1px;
+        border: none;
+        background: var(--border, var(--boxel-border-color));
+        flex-shrink: 0;
+        margin: var(--boxel-sp-lg) 0;
+      }
+
+      .section-heading {
+        font-size: 10px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--foreground, #1f2328);
+        margin: 0;
+      }
+
       /* ── Listing section ── */
-      .pr-listing-section {
+      .listing-section {
         padding: var(--boxel-sp) var(--boxel-sp-xl);
         display: flex;
         flex-direction: column;
         gap: var(--boxel-sp-xs);
       }
-      .listing-section-label {
-        display: inline-flex;
-        align-items: center;
-        gap: var(--boxel-sp-xxs);
-
-        font-size: var(--boxel-font-xs);
-        font-weight: 600;
-        color: var(--muted-foreground, #57606a);
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-      }
-      .listing-label-icon {
-        width: 11px;
-        height: 11px;
-        color: var(--muted-foreground, #57606a);
-      }
-      .pr-listing-embedded {
-        border: 2px solid var(--border, #d0d7de);
-        border-radius: var(--radius, 0.375rem);
+      .listing-embed {
+        border: 2px solid var(--border, var(--boxel-border-color));
+        border-radius: var(--radius, 6px);
         overflow: hidden;
         transition:
           border-color 0.15s ease,
           box-shadow 0.15s ease;
         cursor: pointer;
       }
-      .pr-listing-embedded:hover {
+      .listing-embed:hover {
         border-color: var(--primary, #0969da);
         box-shadow: 0 0 0 3px
           color-mix(in srgb, var(--primary, #0969da) 15%, transparent);
-      }
-
-      /* ── 2-column status section ── */
-      .pr-status-section {
-        display: flex;
-        flex-wrap: wrap;
-      }
-      .status-col {
-        flex: 1;
-        padding: var(--boxel-sp) var(--boxel-sp-lg);
-        display: flex;
-        flex-direction: column;
-        gap: var(--boxel-sp-xs);
-        overflow-y: auto;
-      }
-      .status-divider {
-        width: 1px;
-        background: var(--border, #d0d7de);
-        flex-shrink: 0;
-        margin: var(--boxel-sp-lg) 0;
-      }
-
-      /* ── Column headers ── */
-      .col-header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: var(--boxel-sp-xs);
-      }
-      .header-label {
-        font-size: 10px;
-        font-weight: 700;
-        text-transform: uppercase;
-        letter-spacing: 0.06em;
-        color: var(--foreground, #24292f);
-      }
-
-      /* CI overall badge */
-      .ci-overall-badge {
-        font-size: 11px;
-        font-weight: 600;
-        border-radius: 2em;
-        padding: 1px 8px;
-      }
-      .ci-overall-badge--pending {
-        background: color-mix(
-          in srgb,
-          var(--chart-4, #9a6700) 12%,
-          var(--card, #ffffff)
-        );
-        color: var(--chart-4, #9a6700);
-        border: 1px solid
-          color-mix(in srgb, var(--chart-4, #9a6700) 40%, var(--card, #ffffff));
-      }
-      .ci-overall-badge--failure {
-        background: color-mix(
-          in srgb,
-          var(--destructive, #cf222e) 10%,
-          var(--card, #ffffff)
-        );
-        color: var(--destructive, #cf222e);
-        border: 1px solid
-          color-mix(
-            in srgb,
-            var(--destructive, #cf222e) 30%,
-            var(--card, #ffffff)
-          );
-      }
-      .ci-overall-badge--success {
-        background: color-mix(
-          in srgb,
-          var(--chart-1, #238636) 10%,
-          var(--card, #ffffff)
-        );
-        color: var(--chart-1, #238636);
-        border: 1px solid
-          color-mix(in srgb, var(--chart-1, #238636) 35%, var(--card, #ffffff));
-      }
-
-      /* ── Single CI status row ── */
-      .ci-status-row {
-        display: flex;
-        align-items: center;
-        gap: var(--boxel-sp-xs);
-        background: var(--muted, #f6f8fa);
-        border: 1px solid var(--border, #d0d7de);
-        border-radius: var(--radius, 0.375rem);
-        padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
-      }
-      .ci-dot {
-        width: 12px;
-        height: 12px;
-        border-radius: 50%;
-        flex-shrink: 0;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-      }
-      .ci-dot--success {
-        background: var(--chart-1, #238636);
-        position: relative;
-      }
-      .ci-dot--success::after {
-        content: '';
-        display: block;
-        width: 6px;
-        height: 3px;
-        border-left: 1.5px solid #fff;
-        border-bottom: 1.5px solid #fff;
-        transform: rotate(-45deg) translateY(-1px);
-      }
-      .ci-dot--failure {
-        background: var(--destructive, #cf222e);
-        position: relative;
-      }
-      .ci-dot--failure::after {
-        content: '';
-        display: block;
-        width: 6px;
-        height: 6px;
-        background:
-          linear-gradient(
-              45deg,
-              transparent 30%,
-              #fff 30%,
-              #fff 70%,
-              transparent 70%
-            )
-            no-repeat center / 100% 1.5px,
-          linear-gradient(
-              -45deg,
-              transparent 30%,
-              #fff 30%,
-              #fff 70%,
-              transparent 70%
-            )
-            no-repeat center / 100% 1.5px;
-      }
-      .ci-dot--pending {
-        border: 2px solid var(--chart-4, #9a6700);
-        background: transparent;
-        animation: ci-spin 1s linear infinite;
-      }
-      .ci-dot-inner {
-        display: block;
-        width: 4px;
-        height: 4px;
-        border-radius: 50%;
-        background: var(--chart-4, #9a6700);
-      }
-      @keyframes ci-spin {
-        from {
-          transform: rotate(0deg);
-        }
-        to {
-          transform: rotate(360deg);
-        }
-      }
-      .ci-status-label {
-        font-size: var(--boxel-font-sm);
-        font-weight: 400;
-        color: var(--card-foreground, #24292f);
-      }
-
-      /* ── Review list ── */
-      .review-list {
-        list-style: none;
-        margin: 0;
-        padding: 0;
-        display: flex;
-        flex-direction: column;
-        gap: var(--boxel-sp-sm);
-      }
-      .review-item {
-        background: var(--muted, #f6f8fa);
-        border: 1px solid var(--border, #d0d7de);
-        border-radius: var(--radius, 0.375rem);
-        padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
-        display: flex;
-        flex-direction: column;
-        gap: var(--boxel-sp-xs);
-      }
-      .review-top-row {
-        display: flex;
-        align-items: center;
-        gap: var(--boxel-sp-xs);
-      }
-      .reviewer-name {
-        font-size: var(--boxel-font-sm);
-        font-weight: 500;
-        color: var(--foreground, #24292f);
-      }
-      .review-external-link {
-        margin-left: auto;
-        color: var(--muted-foreground, #57606a);
-        text-decoration: none;
-        display: inline-flex;
-        align-items: center;
-        transition: color 0.15s ease;
-        flex-shrink: 0;
-      }
-      .review-external-link:hover {
-        color: var(--primary, #0969da);
-      }
-      .review-external-icon {
-        width: 13px;
-        height: 13px;
-      }
-
-      .review-state-badge {
-        display: inline-flex;
-        align-self: center;
-        font-size: 11px;
-        font-weight: 600;
-        border-radius: 2em;
-        padding: 2px 10px;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        flex-shrink: 0;
-      }
-      .review-state-badge--changes {
-        background: color-mix(
-          in srgb,
-          var(--destructive, #cf222e) 10%,
-          var(--card, #ffffff)
-        );
-        color: var(--destructive, #cf222e);
-        border: 1px solid
-          color-mix(
-            in srgb,
-            var(--destructive, #cf222e) 30%,
-            var(--card, #ffffff)
-          );
-      }
-      .review-state-badge--approved {
-        background: color-mix(
-          in srgb,
-          var(--chart-1, #238636) 10%,
-          var(--card, #ffffff)
-        );
-        color: var(--chart-1, #238636);
-        border: 1px solid
-          color-mix(in srgb, var(--chart-1, #238636) 35%, var(--card, #ffffff));
-      }
-
-      .review-comment {
-        margin: 0;
-        padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
-        font-size: var(--boxel-font-sm);
-        color: var(--card-foreground, #24292f);
-        border-left: 3px solid var(--border, #d0d7de);
-        font-style: normal;
-        line-height: 1.6;
-        background: var(--card, #ffffff);
-        border-radius: 0 var(--radius, 0.375rem) var(--radius, 0.375rem) 0;
-        transition:
-          border-left-color 0.15s ease,
-          background 0.15s ease;
-        cursor: default;
-      }
-      .review-comment:hover {
-        border-left-color: var(--destructive, #cf222e);
-        background: color-mix(
-          in srgb,
-          var(--destructive, #cf222e) 5%,
-          var(--card, #ffffff)
-        );
       }
     </style>
   </template>
 }
 
 class FittedTemplate extends Component<typeof PrCard> {
-  get mockCi() {
-    return MOCK_CI;
+  // ── Realm & card ref ──
+  get realmHrefs() {
+    return buildRealmHrefs(this.args.model[realmURL]?.href);
   }
-  get mockReviews() {
-    return MOCK_REVIEWS;
+
+  get githubEventCardRef() {
+    return buildGithubEventCardRef(import.meta.url);
   }
-  get stateLabel() {
-    return prStateLabel(MOCK_STATE);
+
+  // ── Queries ──
+  get pullRequestEventQuery() {
+    return searchEventQuery(
+      this.githubEventCardRef,
+      this.args.model.prNumber,
+      'pull_request',
+    );
   }
+
+  get checkRunEventQuery() {
+    return searchEventQuery(
+      this.githubEventCardRef,
+      this.args.model.prNumber,
+      'check_run',
+    );
+  }
+
+  get checkSuiteEventQuery() {
+    return searchEventQuery(
+      this.githubEventCardRef,
+      this.args.model.prNumber,
+      'check_suite',
+    );
+  }
+
+  get prReviewEventQuery() {
+    return searchEventQuery(
+      this.githubEventCardRef,
+      this.args.model.prNumber,
+      'pull_request_review',
+    );
+  }
+
+  // ── Live queries ──
+  prEventData = this.args.context?.getCards(
+    this,
+    () => this.pullRequestEventQuery,
+    () => this.realmHrefs,
+    { isLive: true },
+  );
+
+  checkRunEventData = this.args.context?.getCards(
+    this,
+    () => this.checkRunEventQuery,
+    () => this.realmHrefs,
+    { isLive: true },
+  );
+
+  checkSuiteEventData = this.args.context?.getCards(
+    this,
+    () => this.checkSuiteEventQuery,
+    () => this.realmHrefs,
+    { isLive: true },
+  );
+
+  prReviewEventData = this.args.context?.getCards(
+    this,
+    () => this.prReviewEventQuery,
+    () => this.realmHrefs,
+    { isLive: true },
+  );
+
+  // ── PR state ──
+  get latestPrEventInstance(): GithubEventCard | null {
+    return (this.prEventData?.instances[0] as GithubEventCard) ?? null;
+  }
+
+  get latestPrActionLabel() {
+    return renderPrActionLabel(this.latestPrEventInstance?.action);
+  }
+
   get pillColor() {
-    return stateColor(this.stateLabel);
+    return getStateColor(this.latestPrActionLabel);
+  }
+
+  get prActionIcon() {
+    return getPrActionIcon(this.latestPrActionLabel);
   }
 
   get prTitle() {
     return this.args.model.prTitle ?? 'Pull Request';
   }
+
   get prUrl() {
-    return this.args.model.prUrl ?? '#';
+    return this.args.model.prUrl ?? null;
   }
 
-  get changesRequestedCount() {
-    return this.mockReviews.filter((r) => r.state === 'changes_requested')
-      .length;
-  }
-
-  get latestChangesRequestedReview() {
-    let changesRequestedReviews = this.mockReviews.filter(
-      (r) => r.state === 'changes_requested',
+  // ── CI ──
+  get ciItems() {
+    return buildCiItems(
+      this.checkRunEventData?.instances ?? [],
+      this.checkSuiteEventData?.instances ?? [],
+      this.args.model.prNumber,
     );
-    return changesRequestedReviews[changesRequestedReviews.length - 1] ?? null;
+  }
+
+  get ciFailedCount() {
+    return this.ciItems.filter((i) => i.state === 'failure').length;
+  }
+
+  get ciSuccessCount() {
+    return this.ciItems.filter((i) => i.state === 'success').length;
+  }
+
+  get ciInProgressCount() {
+    return this.ciItems.filter((i) => i.state === 'in_progress').length;
+  }
+
+  get ciTotalCount() {
+    return this.ciItems.length;
+  }
+
+  get ciHeadline() {
+    if (this.ciTotalCount === 0) return null;
+    if (this.ciFailedCount > 0) return 'Some checks were not successful';
+    if (this.ciInProgressCount > 0) return 'Some checks are in progress';
+    return 'All checks have passed';
+  }
+
+  get ciSubtitle() {
+    if (this.ciTotalCount === 0) return null;
+    let parts: string[] = [];
+    if (this.ciFailedCount > 0) parts.push(`${this.ciFailedCount} failing`);
+    if (this.ciInProgressCount > 0)
+      parts.push(`${this.ciInProgressCount} in progress`);
+    if (this.ciSuccessCount > 0)
+      parts.push(`${this.ciSuccessCount} successful`);
+    let suffix = pluralize(this.ciTotalCount, 'check', 'checks');
+    return `${parts.join(', ')} ${suffix}`;
+  }
+
+  get ciDonutStyle() {
+    let success = this.ciSuccessCount;
+    let failed = this.ciFailedCount;
+    let total = this.ciTotalCount;
+    if (total === 0) return 'background: var(--muted-foreground, #656d76)';
+    let successPct = (success / total) * 100;
+    let failedPct = (failed / total) * 100;
+    let s1 = successPct;
+    let s2 = s1 + failedPct;
+    return `background: conic-gradient(var(--chart-1, #28a745) 0% ${s1}%, var(--destructive, #d73a49) ${s1}% ${s2}%, var(--chart-4, #dbab09) ${s2}% 100%)`;
+  }
+
+  // ── Reviews ──
+  get latestReviewByReviewer() {
+    return buildLatestReviewByReviewer(this.prReviewEventData?.instances ?? []);
+  }
+
+  get latestReviewState() {
+    return computeLatestReviewState(this.latestReviewByReviewer);
+  }
+
+  get latestPrReviewCommentEventInstance() {
+    return findLatestChangesRequestedEvent(this.latestReviewByReviewer);
+  }
+
+  get latestChangesRequestedReviewerName() {
+    return (
+      this.latestPrReviewCommentEventInstance?.payload?.review?.user?.login ??
+      'Unknown reviewer'
+    );
   }
 
   get latestChangesRequestedComment() {
-    let comment = this.latestChangesRequestedReview?.comment?.trim();
-    return comment || '-';
+    let comment =
+      this.latestPrReviewCommentEventInstance?.payload?.review?.body?.trim();
+    return comment || '';
   }
 
-  get overallReviewState() {
-    if (this.mockReviews.some((r) => r.state === 'changes_requested'))
-      return 'changes_requested';
-    if (
-      this.mockReviews.length &&
-      this.mockReviews.every((r) => r.state === 'approved')
-    )
-      return 'approved';
-    return null;
+  get latestChangesRequestedReviewUrl() {
+    return this.latestPrReviewCommentEventInstance?.payload?.review?.html_url;
   }
 
   <template>
     <article class='pr-card'>
-      {{! ── Top: dark hero — title, number, pill, author ── }}
-      <div class='pr-hero'>
-        <div class='fit-title-row'>
+      {{! ── Hero ── }}
+      <header class='pr-hero'>
+        <div class='pr-title-row'>
           <p class='pr-title'>
             {{this.prTitle}}
             {{#if @model.prNumber}}
@@ -749,145 +485,90 @@ class FittedTemplate extends Component<typeof PrCard> {
             href={{this.prUrl}}
             target='_blank'
             rel='noopener noreferrer'
-            class='pr-external-link'
+            class='pr-github-link'
             title='Open PR on GitHub'
+            aria-label='Open PR on GitHub'
           >
-            <ExternalLinkIcon class='pr-external-icon' />
+            <ExternalLinkIcon class='pr-github-link-icon' />
           </a>
         </div>
 
-        <div class='pr-meta-row'>
+        <div class='pr-meta'>
           <Pill class='pr-state-pill' @pillBackgroundColor={{this.pillColor}}>
             <:iconLeft>
-              {{#if (eq this.stateLabel 'Merged')}}
-                <GitMergeIcon class='pr-pill-icon' />
-              {{else if (eq this.stateLabel 'Closed')}}
-                <GitPullRequestClosedIcon class='pr-pill-icon' />
-              {{else if (eq this.stateLabel 'Draft')}}
-                <GitPullRequestDraftIcon class='pr-pill-icon' />
-              {{else}}
-                <GitPullRequestIcon class='pr-pill-icon' />
-              {{/if}}
+              <this.prActionIcon class='pr-state-icon' />
             </:iconLeft>
             <:default>
-              <span class='pr-state-label'>{{this.stateLabel}}</span>
+              <span class='pr-state-label'>{{this.latestPrActionLabel}}</span>
             </:default>
           </Pill>
 
           {{#if @model.submittedBy}}
             <span class='pr-meta-sep'>·</span>
-            <span class='pr-meta-author'>{{@model.submittedBy}}</span>
+            <span class='pr-author'>{{@model.submittedBy}}</span>
           {{/if}}
         </div>
-      </div>
+      </header>
 
-      {{! ── Light body — pills, shown at medium sizes ── }}
-      <div class='pr-body'>
-        {{#if (eq this.mockCi.status 'in_progress')}}
-          <span class='fit-status-pill fit-ci-pill--pending'>CI In Progress</span>
-        {{else if (eq this.mockCi.status 'failure')}}
-          <span class='fit-status-pill fit-ci-pill--failure'>CI Failed</span>
-        {{else}}
-          <span class='fit-status-pill fit-ci-pill--success'>CI Passed</span>
-        {{/if}}
-
-        {{#if this.changesRequestedCount}}
-          <span class='fit-status-pill fit-review-pill'>
-            {{this.changesRequestedCount}}
-            Changes Requested
+      {{! ── CI status row ── }}
+      {{#if this.ciHeadline}}
+        <div class='ci-status-row'>
+          <span class='ci-donut' style={{this.ciDonutStyle}}>
+            <span class='ci-donut-hole'></span>
           </span>
-        {{/if}}
-      </div>
-
-      {{! ── Detailed body — large sizes: CI top, reviews bottom ── }}
-      <div class='fit-detail'>
-
-        {{! CI column }}
-        <div class='status-col'>
-          <div class='col-header'>
-            <label class='header-label'>CI Checks</label>
-            {{#if (eq this.mockCi.status 'in_progress')}}
-              <span class='ci-overall-badge ci-overall-badge--pending'>In
-                Progress</span>
-            {{else if (eq this.mockCi.status 'failure')}}
-              <span
-                class='ci-overall-badge ci-overall-badge--failure'
-              >Failed</span>
-            {{else}}
-              <span
-                class='ci-overall-badge ci-overall-badge--success'
-              >Passed</span>
-            {{/if}}
-          </div>
-          <div class='ci-status-row'>
-            {{#if (eq this.mockCi.status 'success')}}
-              <span class='ci-dot ci-dot--success' aria-label='passed'></span>
-              <span class='ci-status-label ci-status-label--success'>
-                All checks passed
-              </span>
-            {{else if (eq this.mockCi.status 'failure')}}
-              <span class='ci-dot ci-dot--failure' aria-label='failed'></span>
-              <span class='ci-status-label ci-status-label--failure'>
-                Check run failed
-              </span>
-            {{else}}
-              <span class='ci-dot ci-dot--pending' aria-label='in progress'>
-                <span class='ci-dot-inner'></span>
-              </span>
-              <span class='ci-status-label ci-status-label--pending'>
-                Checks running…
-              </span>
-            {{/if}}
+          <div class='ci-status-text'>
+            <span class='ci-headline'>{{this.ciHeadline}}</span>
+            <span class='ci-subtitle'>{{this.ciSubtitle}}</span>
           </div>
         </div>
+      {{/if}}
 
-        {{! Reviews column }}
-        {{#if this.mockReviews.length}}
-          <div class='status-col'>
-            <div class='col-header'>
-              <label class='header-label'>Reviews</label>
-              {{#if (eq this.overallReviewState 'changes_requested')}}
-                <span class='review-state-badge review-state-badge--changes'>
-                  Changes Requested
-                </span>
-              {{else if (eq this.overallReviewState 'approved')}}
-                <span class='review-state-badge review-state-badge--approved'>
-                  Approved
-                </span>
-              {{/if}}
-            </div>
-            {{#if this.latestChangesRequestedReview}}
-              <ul class='review-list'>
-                <li class='review-item'>
-                  <div class='review-top-row'>
-                    <span class='reviewer-name'>
-                      {{this.latestChangesRequestedReview.reviewer}}
-                    </span>
-                    <a
-                      href={{this.prUrl}}
-                      target='_blank'
-                      rel='noopener noreferrer'
-                      class='review-external-link'
-                      title='View review on GitHub'
-                    >
-                      <ExternalLinkIcon class='review-external-icon' />
-                    </a>
-                  </div>
-                  <blockquote class='review-comment'>
-                    {{this.latestChangesRequestedComment}}
-                  </blockquote>
-                </li>
-              </ul>
-            {{else}}
-              -
+      {{! ── Review status row ── }}
+      {{#if (eq this.latestReviewState 'changes_requested')}}
+        <div class='review-status-row review-status-row--changes'>
+          <span class='review-status-label'>Changes Requested</span>
+        </div>
+      {{else if (eq this.latestReviewState 'approved')}}
+        <div class='review-status-row review-status-row--approved'>
+          <span class='review-status-label'>Approved</span>
+        </div>
+      {{/if}}
+
+      {{! ── Changes requested comment (shown at bigger sizes) ── }}
+      {{#if this.latestChangesRequestedComment}}
+        <div class='review-comment-section'>
+          <div class='review-comment-header'>
+            <span
+              class='review-comment-author'
+            >{{this.latestChangesRequestedReviewerName}}</span>
+            {{#if this.latestChangesRequestedReviewUrl}}
+              <a
+                href={{this.latestChangesRequestedReviewUrl}}
+                target='_blank'
+                rel='noopener noreferrer'
+                class='review-comment-link'
+                aria-label='View review on GitHub'
+              >
+                <ExternalLinkIcon class='review-comment-link-icon' />
+              </a>
             {{/if}}
           </div>
-        {{/if}}
-      </div>
+          <blockquote
+            class='review-comment'
+          >{{this.latestChangesRequestedComment}}</blockquote>
+        </div>
+      {{/if}}
+
+      {{! ── Listing (biggest sizes) ── }}
+      {{#if @model.listing}}
+        <div class='listing-section'>
+          <h2 class='listing-heading'>View Listing</h2>
+          <@fields.listing @format='atom' />
+        </div>
+      {{/if}}
     </article>
 
     <style scoped>
-      /* ── Shell ── */
       .pr-card {
         display: flex;
         flex-direction: column;
@@ -903,24 +584,21 @@ class FittedTemplate extends Component<typeof PrCard> {
         flex-direction: column;
         gap: var(--boxel-sp-xs);
         padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
-        background: var(--background, #0d1117);
-        color: var(--foreground, #e6edf3);
-        border-bottom: 1px solid var(--border, #30363d);
+        background: #0d1117;
+        color: #e6edf3;
+        border-bottom: 1px solid #30363d;
       }
-
-      /* Fitted-only: title + external link on same row */
-      .fit-title-row {
+      .pr-title-row {
         display: flex;
         align-items: flex-start;
         gap: var(--boxel-sp-xs);
         min-width: 0;
       }
-
       .pr-title {
         margin: 0;
         font-size: var(--boxel-font-sm);
         font-weight: 600;
-        color: var(--foreground, #e6edf3);
+        color: #e6edf3;
         line-height: 1.3;
         flex: 1;
         min-width: 0;
@@ -929,16 +607,14 @@ class FittedTemplate extends Component<typeof PrCard> {
         -webkit-line-clamp: 2;
         overflow: hidden;
       }
-
       .pr-number {
         font-size: 0.85em;
         font-weight: 600;
-        color: var(--muted-foreground, #8b949e);
+        color: #8b949e;
         white-space: nowrap;
       }
-
-      .pr-external-link {
-        color: var(--muted-foreground, #8b949e);
+      .pr-github-link {
+        color: #8b949e;
         text-decoration: none;
         display: inline-flex;
         align-items: center;
@@ -946,27 +622,25 @@ class FittedTemplate extends Component<typeof PrCard> {
         transition: color 0.12s ease;
         padding-top: 2px;
       }
-      .pr-external-link:hover {
-        color: var(--primary, #58a6ff);
+      .pr-github-link:hover {
+        color: #58a6ff;
       }
-      .pr-external-icon {
-        width: 12px;
-        height: 12px;
+      .pr-github-link-icon {
+        width: 13px;
+        height: 13px;
       }
-
-      .pr-meta-row {
+      .pr-meta {
         display: flex;
         align-items: center;
         gap: var(--boxel-sp-xs);
         flex-wrap: wrap;
         min-width: 0;
       }
-
       .pr-state-pill {
         flex-shrink: 0;
         --boxel-pill-border-radius: 2em;
       }
-      .pr-pill-icon {
+      .pr-state-icon {
         width: 11px;
         height: 11px;
         color: #fff;
@@ -976,99 +650,176 @@ class FittedTemplate extends Component<typeof PrCard> {
         font-weight: 600;
         color: #fff;
       }
-
       .pr-meta-sep {
-        color: var(--muted-foreground, #484f58);
+        color: #484f58;
         font-size: var(--boxel-font-xs);
       }
-      .pr-meta-author {
+      .pr-author {
         font-size: var(--boxel-font-xs);
-        color: var(--muted-foreground, #8b949e);
+        color: #8b949e;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
         max-width: 140px;
       }
 
-      /* ── Light body — status pills (medium sizes) ── */
-      .pr-body {
-        flex: 1;
+      /* ── CI status row ── */
+      .ci-status-row {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-sm);
+        padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
+        background: var(--card, #ffffff);
+        border-bottom: 1px solid var(--border, var(--boxel-border-color));
+        min-width: 0;
+      }
+      .ci-donut {
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .ci-donut-hole {
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        background: var(--card, #ffffff);
+      }
+      .ci-status-text {
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 1px;
+      }
+      .ci-headline {
+        font-size: var(--boxel-font-sm);
+        font-weight: 600;
+        color: var(--foreground, #1f2328);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .ci-subtitle {
+        font-size: var(--boxel-font-xs);
+        color: var(--muted-foreground, #656d76);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      /* ── Review status row ── */
+      .review-status-row {
+        display: flex;
+        align-items: center;
+        padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
+        border-bottom: 1px solid var(--border, var(--boxel-border-color));
+      }
+      .review-status-row--changes {
+        background: color-mix(in srgb, var(--destructive, #d73a49) 5%, var(--card, #ffffff));
+      }
+      .review-status-row--approved {
+        background: color-mix(in srgb, var(--chart-1, #28a745) 5%, var(--card, #ffffff));
+      }
+      .review-status-label {
+        font-size: var(--boxel-font-sm);
+        font-weight: 600;
+      }
+      .review-status-row--changes .review-status-label {
+        color: var(--destructive, #d73a49);
+      }
+      .review-status-row--approved .review-status-label {
+        color: var(--chart-1, #28a745);
+      }
+      .review-comment-section {
+        display: none;
+        padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
+        background: var(--card, #ffffff);
+        border-bottom: 1px solid var(--border, var(--boxel-border-color));
+      }
+      .review-comment-header {
         display: flex;
         align-items: center;
         gap: var(--boxel-sp-xs);
-        padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
-        background: var(--card, #ffffff);
-        overflow: hidden;
-        flex-wrap: wrap;
+        margin-bottom: var(--boxel-sp-xs);
       }
-
-      /* Fitted-only: summary status pills */
-      .fit-status-pill {
+      .review-comment-author {
+        font-size: var(--boxel-font-sm);
+        font-weight: 500;
+        color: var(--foreground, #1f2328);
+      }
+      .review-comment-link {
+        margin-left: auto;
+        color: var(--muted-foreground, #656d76);
+        text-decoration: none;
         display: inline-flex;
         align-items: center;
+        transition: color 0.15s ease;
         flex-shrink: 0;
+      }
+      .review-comment-link:hover {
+        color: var(--primary, #0969da);
+      }
+      .review-comment-link-icon {
+        width: 13px;
+        height: 13px;
+      }
+      .review-comment {
+        margin-block: 0;
+        margin-inline: 0;
+        padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
+        font-size: var(--boxel-font-sm);
+        color: var(--card-foreground, #1f2328);
+        border-left: 3px solid var(--border, var(--boxel-border-color));
+        font-style: normal;
+        line-height: 1.6;
+        background: var(--card, #ffffff);
+        border-radius: 0 var(--radius, 6px) var(--radius, 6px) 0;
+        transition:
+          border-left-color 0.15s ease,
+          background 0.15s ease;
+        cursor: default;
+        white-space: pre-line;
+        overflow-wrap: anywhere;
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 3;
+        overflow: hidden;
+      }
+      .review-comment:hover {
+        border-left-color: var(--destructive, #d73a49);
+        background: color-mix(in srgb, var(--destructive, #d73a49) 5%, var(--card, #ffffff));
+      }
+
+      /* ── Listing ── */
+      .listing-section {
+        display: none;
+        align-items: center;
+        justify-content: end;
+        flex-wrap: wrap;
+        gap: var(--boxel-sp-xs);
+        padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
+        background: var(--card, #ffffff);
+        border: 1px solid var(--border, var(--boxel-border-color));
+        margin-top: auto;
+      }
+      .listing-heading {
         font-size: 11px;
-        font-weight: 600;
-        border-radius: 2em;
-        padding: 3px 10px;
-        white-space: nowrap;
-      }
-      .fit-ci-pill--pending {
-        background: color-mix(
-          in srgb,
-          var(--chart-4, #9a6700) 12%,
-          var(--card, #ffffff)
-        );
-        color: var(--chart-4, #9a6700);
-        border: 1px solid
-          color-mix(in srgb, var(--chart-4, #9a6700) 40%, var(--card, #ffffff));
-      }
-      .fit-ci-pill--failure {
-        background: color-mix(
-          in srgb,
-          var(--destructive, #cf222e) 10%,
-          var(--card, #ffffff)
-        );
-        color: var(--destructive, #cf222e);
-        border: 1px solid
-          color-mix(
-            in srgb,
-            var(--destructive, #cf222e) 30%,
-            var(--card, #ffffff)
-          );
-      }
-      .fit-ci-pill--success {
-        background: color-mix(
-          in srgb,
-          var(--chart-1, #238636) 10%,
-          var(--card, #ffffff)
-        );
-        color: var(--chart-1, #238636);
-        border: 1px solid
-          color-mix(in srgb, var(--chart-1, #238636) 35%, var(--card, #ffffff));
-      }
-      .fit-review-pill {
-        background: color-mix(
-          in srgb,
-          var(--destructive, #cf222e) 10%,
-          var(--card, #ffffff)
-        );
-        color: var(--destructive, #cf222e);
-        border: 1px solid
-          color-mix(
-            in srgb,
-            var(--destructive, #cf222e) 30%,
-            var(--card, #ffffff)
-          );
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--muted-foreground, #656d76);
+        margin: 0;
       }
 
-      /* ═══════════════════════════════════════════════════════
-         CONTAINER QUERIES
-         ═══════════════════════════════════════════════════════ */
+      /* ── Container queries ── */
 
-      /* Short: hide body, hero fills card */
+      /* Short: hide CI/review rows, hero fills card */
       @container fitted-card (height <= 80px) {
-        .pr-body {
+        .ci-status-row,
+        .review-status-row {
           display: none;
         }
         .pr-hero {
@@ -1081,9 +832,7 @@ class FittedTemplate extends Component<typeof PrCard> {
           -webkit-line-clamp: 1;
           font-size: var(--boxel-font-xs);
         }
-        .pr-meta-author {
-          display: none;
-        }
+        .pr-author,
         .pr-meta-sep {
           display: none;
         }
@@ -1096,12 +845,12 @@ class FittedTemplate extends Component<typeof PrCard> {
           align-items: center;
           gap: var(--boxel-sp-xs);
         }
-        .fit-title-row {
+        .pr-title-row {
           flex: 1;
           min-width: 0;
           align-items: center;
         }
-        .pr-meta-row {
+        .pr-meta {
           flex-shrink: 0;
           flex-wrap: nowrap;
         }
@@ -1109,28 +858,27 @@ class FittedTemplate extends Component<typeof PrCard> {
 
       /* Tiny: just title */
       @container fitted-card (height <= 40px) {
-        .pr-meta-row {
+        .pr-meta {
           display: none;
         }
       }
 
       /* Narrow: hide secondary text */
       @container fitted-card (width < 220px) {
-        .pr-meta-author {
-          display: none;
-        }
+        .pr-author,
         .pr-meta-sep {
           display: none;
         }
       }
 
+      /* Narrow: hide CI subtitle */
       @container fitted-card (width < 150px) {
-        .pr-body {
+        .ci-subtitle {
           display: none;
         }
       }
 
-      /* Extra tiny: very narrow strip (<100px) — hide number, clamp to 1 line */
+      /* Extra tiny: hide number, clamp to 1 line */
       @container fitted-card (width < 100px) {
         .pr-number {
           display: none;
@@ -1141,10 +889,10 @@ class FittedTemplate extends Component<typeof PrCard> {
         }
       }
 
-      /* Wide + short banner: ≥300px wide, 80–120px tall
-         Landscape ratio — switch hero to a single horizontal row */
+      /* Wide + short banner: ≥300px wide, 80–120px tall */
       @container fitted-card (300px <= width) and (80px < height) and (height <= 120px) {
-        .pr-body {
+        .ci-status-row,
+        .review-status-row {
           display: none;
         }
         .pr-hero {
@@ -1155,19 +903,18 @@ class FittedTemplate extends Component<typeof PrCard> {
           padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
           border-bottom: none;
         }
-        .fit-title-row {
+        .pr-title-row {
           flex: 1;
           min-width: 0;
           align-items: center;
         }
-        .pr-meta-row {
+        .pr-meta {
           flex-shrink: 0;
           flex-wrap: nowrap;
         }
       }
 
-      /* Medium-wide tile: ≥300px wide, 120–200px tall
-         Extra breathing room before the large-font breakpoint kicks in */
+      /* Medium-wide tile: ≥300px wide, 120–200px tall */
       @container fitted-card (300px <= width) and (120px <= height) and (height < 200px) {
         .pr-hero {
           padding: var(--boxel-sp-xs) var(--boxel-sp);
@@ -1175,15 +922,16 @@ class FittedTemplate extends Component<typeof PrCard> {
         .pr-title {
           font-size: 1rem;
         }
-        .pr-body {
-          padding: var(--boxel-sp-xs) var(--boxel-sp);
-        }
-        .fit-status-pill {
-          font-size: var(--boxel-font-xs);
+      }
+
+      /* Narrow tall tile: <400px wide, ≥200px tall — show review comment */
+      @container fitted-card (width < 400px) and (200px <= height) {
+        .review-comment-section {
+          display: block;
         }
       }
 
-      /* Large: bigger hero fonts and icons */
+      /* Large */
       @container fitted-card (400px <= width) and (200px <= height) {
         .pr-hero {
           padding: var(--boxel-sp-sm) var(--boxel-sp-lg);
@@ -1193,345 +941,41 @@ class FittedTemplate extends Component<typeof PrCard> {
           font-size: 1.25rem;
           -webkit-line-clamp: 3;
         }
-        .pr-external-icon {
+        .pr-github-link-icon {
           width: 18px;
           height: 18px;
         }
-        .pr-pill-icon {
+        .pr-state-icon {
           width: 15px;
           height: 15px;
         }
         .pr-state-label {
           font-size: var(--boxel-font-sm);
         }
-        .pr-meta-author {
+        .pr-author {
           font-size: var(--boxel-font-sm);
           max-width: 200px;
         }
-        .pr-body {
-          padding: var(--boxel-sp-xs) var(--boxel-sp-lg);
-          gap: var(--boxel-sp-sm);
+        .ci-status-row {
+          padding: var(--boxel-sp-sm) var(--boxel-sp-lg);
         }
-        .fit-status-pill {
-          font-size: var(--boxel-font-xs);
-          padding: 4px 12px;
+        .ci-donut {
+          width: 36px;
+          height: 36px;
         }
-      }
-
-      /* ── Detailed body — hidden by default, shown at large ── */
-      .fit-detail {
-        display: none;
-        flex-direction: column;
-        flex: 1;
-        background: var(--card, #ffffff);
-        overflow: hidden;
-      }
-
-      /* Columns — same pattern as isolated .status-col */
-      .status-col {
-        padding: var(--boxel-sp-sm) var(--boxel-sp-lg);
-        display: flex;
-        flex-direction: column;
-        gap: var(--boxel-sp-xs);
-        flex-shrink: 0;
-      }
-      /* Reviews column grows to fill remaining space */
-      .fit-detail .status-col:last-child {
-        flex: 1;
-        overflow: hidden;
-      }
-
-      .col-header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: var(--boxel-sp-xs);
-      }
-      .header-label {
-        font-size: 12px;
-        font-weight: 700;
-        text-transform: uppercase;
-        letter-spacing: 0.06em;
-        color: var(--foreground, #24292f);
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        flex-shrink: 1;
-        min-width: 0;
-      }
-
-      /* CI overall badge */
-      .ci-overall-badge {
-        font-size: 12px;
-        font-weight: 600;
-        border-radius: 2em;
-        padding: 1px 8px;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        flex-shrink: 0;
-      }
-      .ci-overall-badge--pending {
-        background: color-mix(
-          in srgb,
-          var(--chart-4, #9a6700) 12%,
-          var(--card, #ffffff)
-        );
-        color: var(--chart-4, #9a6700);
-        border: 1px solid
-          color-mix(in srgb, var(--chart-4, #9a6700) 40%, var(--card, #ffffff));
-      }
-      .ci-overall-badge--failure {
-        background: color-mix(
-          in srgb,
-          var(--destructive, #cf222e) 10%,
-          var(--card, #ffffff)
-        );
-        color: var(--destructive, #cf222e);
-        border: 1px solid
-          color-mix(
-            in srgb,
-            var(--destructive, #cf222e) 30%,
-            var(--card, #ffffff)
-          );
-      }
-      .ci-overall-badge--success {
-        background: color-mix(
-          in srgb,
-          var(--chart-1, #238636) 10%,
-          var(--card, #ffffff)
-        );
-        color: var(--chart-1, #238636);
-        border: 1px solid
-          color-mix(in srgb, var(--chart-1, #238636) 35%, var(--card, #ffffff));
-      }
-
-      /* CI status row */
-      .ci-status-row {
-        display: flex;
-        align-items: center;
-        gap: var(--boxel-sp-xs);
-        background: var(--muted, #f6f8fa);
-        border: 1px solid var(--border, #d0d7de);
-        border-radius: var(--radius, 0.375rem);
-        padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
-      }
-      .ci-dot {
-        width: 12px;
-        height: 12px;
-        border-radius: 50%;
-        flex-shrink: 0;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-      }
-      .ci-dot--success {
-        background: var(--chart-1, #238636);
-        position: relative;
-      }
-      .ci-dot--success::after {
-        content: '';
-        display: block;
-        width: 6px;
-        height: 3px;
-        border-left: 1.5px solid #fff;
-        border-bottom: 1.5px solid #fff;
-        transform: rotate(-45deg) translateY(-1px);
-      }
-      .ci-dot--failure {
-        background: var(--destructive, #cf222e);
-        position: relative;
-      }
-      .ci-dot--failure::after {
-        content: '';
-        display: block;
-        width: 6px;
-        height: 6px;
-        background:
-          linear-gradient(
-              45deg,
-              transparent 30%,
-              #fff 30%,
-              #fff 70%,
-              transparent 70%
-            )
-            no-repeat center / 100% 1.5px,
-          linear-gradient(
-              -45deg,
-              transparent 30%,
-              #fff 30%,
-              #fff 70%,
-              transparent 70%
-            )
-            no-repeat center / 100% 1.5px;
-      }
-      .ci-dot--pending {
-        border: 2px solid var(--chart-4, #9a6700);
-        background: transparent;
-        animation: ci-spin 1s linear infinite;
-      }
-      .ci-dot-inner {
-        display: block;
-        width: 4px;
-        height: 4px;
-        border-radius: 50%;
-        background: var(--chart-4, #9a6700);
-      }
-      @keyframes ci-spin {
-        from {
-          transform: rotate(0deg);
+        .ci-donut-hole {
+          width: 20px;
+          height: 20px;
         }
-        to {
-          transform: rotate(360deg);
+        .review-status-row {
+          padding: var(--boxel-sp-sm) var(--boxel-sp-lg);
         }
-      }
-      .ci-status-label {
-        font-size: var(--boxel-font-sm);
-        font-weight: 400;
-        color: var(--card-foreground, #24292f);
-      }
-
-      /* ── Review list ── */
-      .review-list {
-        list-style: none;
-        margin: 0;
-        padding: 0;
-        display: flex;
-        flex-direction: column;
-        gap: var(--boxel-sp-sm);
-      }
-      .review-item {
-        background: var(--muted, #f6f8fa);
-        border: 1px solid var(--border, #d0d7de);
-        border-radius: var(--radius, 0.375rem);
-        padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
-        display: flex;
-        flex-direction: column;
-        gap: var(--boxel-sp-xs);
-      }
-      .review-top-row {
-        display: flex;
-        align-items: center;
-        gap: var(--boxel-sp-xs);
-      }
-      .reviewer-name {
-        font-size: var(--boxel-font-sm);
-        font-weight: 500;
-        color: var(--foreground, #24292f);
-      }
-      .review-external-link {
-        margin-left: auto;
-        color: var(--muted-foreground, #57606a);
-        text-decoration: none;
-        display: inline-flex;
-        align-items: center;
-        transition: color 0.15s ease;
-        flex-shrink: 0;
-      }
-      .review-external-link:hover {
-        color: var(--primary, #0969da);
-      }
-      .review-external-icon {
-        width: 13px;
-        height: 13px;
-      }
-
-      .review-state-badge {
-        display: inline-flex;
-        align-self: center;
-        font-size: 11px;
-        font-weight: 600;
-        border-radius: 2em;
-        padding: 2px 10px;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        flex-shrink: 0;
-      }
-      .review-state-badge--changes {
-        background: color-mix(
-          in srgb,
-          var(--destructive, #cf222e) 10%,
-          var(--card, #ffffff)
-        );
-        color: var(--destructive, #cf222e);
-        border: 1px solid
-          color-mix(
-            in srgb,
-            var(--destructive, #cf222e) 30%,
-            var(--card, #ffffff)
-          );
-      }
-      .review-state-badge--approved {
-        background: color-mix(
-          in srgb,
-          var(--chart-1, #238636) 10%,
-          var(--card, #ffffff)
-        );
-        color: var(--chart-1, #238636);
-        border: 1px solid
-          color-mix(in srgb, var(--chart-1, #238636) 35%, var(--card, #ffffff));
-      }
-
-      .review-comment {
-        margin: 0;
-        padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
-        font-size: var(--boxel-font-sm);
-        color: var(--card-foreground, #24292f);
-        border-left: 3px solid var(--border, #d0d7de);
-        font-style: normal;
-        line-height: 1.6;
-        background: var(--card, #ffffff);
-        border-radius: 0 var(--radius, 0.375rem) var(--radius, 0.375rem) 0;
-        transition:
-          border-left-color 0.15s ease,
-          background 0.15s ease;
-        cursor: default;
-      }
-      .review-comment:hover {
-        border-left-color: var(--destructive, #cf222e);
-        background: color-mix(
-          in srgb,
-          var(--destructive, #cf222e) 5%,
-          var(--card, #ffffff)
-        );
-      }
-
-      /* Narrow tall tile: <300px wide but ≥200px tall
-         Too much whitespace with just floating pills — show labeled
-         stacked columns (CI Checks + Reviews) instead */
-      @container fitted-card (width < 300px) and (200px <= height) {
-        .pr-body {
-          display: none;
-        }
-        .fit-detail {
-          display: flex;
-          flex-direction: column;
-        }
-        /* Tighter horizontal padding for narrow widths */
-        .status-col {
-          padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
-        }
-        /* Clamp review comment to 2 lines so it doesn't overflow */
-        .review-comment {
-          display: -webkit-box;
-          -webkit-box-orient: vertical;
-          -webkit-line-clamp: 2;
-          overflow: hidden;
+        .review-comment-section {
+          display: block;
         }
       }
 
-      /* Switch to detailed layout at large sizes */
-      @container fitted-card (400px <= width) and (240px <= height) {
-        .pr-body {
-          display: none;
-        }
-        .fit-detail {
-          display: flex;
-        }
-      }
-
-      /* Very wide cards: ≥500px wide, ≥200px tall — scale up fonts & padding */
+      /* Very wide */
       @container fitted-card (500px <= width) and (200px <= height) {
         .pr-hero {
           padding: var(--boxel-sp-sm) var(--boxel-sp-xl);
@@ -1540,25 +984,33 @@ class FittedTemplate extends Component<typeof PrCard> {
           font-size: 1.4rem;
           -webkit-line-clamp: 3;
         }
-        .pr-external-icon {
+        .pr-github-link-icon {
           width: 20px;
           height: 20px;
         }
-        .pr-meta-author {
+        .pr-author {
           max-width: 280px;
+        }
+        .ci-status-row,
+        .review-status-row {
+          padding: var(--boxel-sp-sm) var(--boxel-sp-xl);
+        }
+        .review-comment-section {
+          padding: var(--boxel-sp-sm) var(--boxel-sp-xl);
         }
       }
 
-      /* Extra-large tiles: ≥500px wide, ≥280px tall — bigger detail spacing */
+      /* Extra-large: show listing */
+      @container fitted-card (400px <= width) and (280px <= height) {
+        .listing-section {
+          display: flex;
+          padding: var(--boxel-sp-sm) var(--boxel-sp-lg);
+        }
+      }
+
       @container fitted-card (500px <= width) and (280px <= height) {
-        .fit-detail .status-col {
-          padding: var(--boxel-sp) var(--boxel-sp-xl);
-        }
-        .review-item {
-          padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
-        }
-        .review-comment {
-          font-size: var(--boxel-font-sm);
+        .listing-section {
+          padding: var(--boxel-sp-sm) var(--boxel-sp-xl);
         }
       }
     </style>

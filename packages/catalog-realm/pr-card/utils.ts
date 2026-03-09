@@ -12,11 +12,9 @@ export type CiEventType = 'check_run' | 'check_suite';
 export type CiItem = {
   name: string;
   statusText: string;
-  dotClass: string;
-  statusClass: string;
-  ariaLabel: string;
   isInProgress: boolean;
   state: CiStatus;
+  url: string | null;
 };
 
 export type CiGroup = {
@@ -50,7 +48,7 @@ export function renderPrActionLabel(
   }
 }
 
-export function stateColor(label: string): string {
+export function getStateColor(label: string): string {
   switch (label) {
     case 'Open':
       return '#28a745';
@@ -65,7 +63,7 @@ export function stateColor(label: string): string {
   }
 }
 
-export function prActionIconComponent(label: string) {
+export function getPrActionIcon(label: string) {
   switch (label) {
     case 'Merged':
       return GitMergeIcon;
@@ -80,39 +78,6 @@ export function prActionIconComponent(label: string) {
 
 // ── CI Helpers ───────────────────────────────────────────────────────────
 
-export function ciDotClass(status: CiStatus): string {
-  switch (status) {
-    case 'in_progress':
-      return 'ci-dot ci-dot--pending';
-    case 'failure':
-      return 'ci-dot ci-dot--failure';
-    default:
-      return 'ci-dot ci-dot--success';
-  }
-}
-
-export function ciDotAriaLabel(status: CiStatus): string {
-  switch (status) {
-    case 'in_progress':
-      return 'in progress';
-    case 'failure':
-      return 'failed';
-    default:
-      return 'passed';
-  }
-}
-
-export function ciStatusLabelClass(status: CiStatus): string {
-  switch (status) {
-    case 'in_progress':
-      return 'ci-status-label ci-status-label--pending';
-    case 'failure':
-      return 'ci-status-label ci-status-label--failure';
-    default:
-      return 'ci-status-label ci-status-label--success';
-  }
-}
-
 export function formatCiValue(value: string | null | undefined): string {
   if (!value) {
     return 'Unknown';
@@ -123,7 +88,7 @@ export function formatCiValue(value: string | null | undefined): string {
     .join(' ');
 }
 
-export function ciStatusFromEvent(
+export function getCiStatusFromEvent(
   status: string | null | undefined,
   conclusion: string | null | undefined,
 ): CiStatus {
@@ -147,14 +112,14 @@ export function ciStatusFromEvent(
   }
 }
 
-export function ciItemFromEvent(event: any, type: CiEventType): CiItem {
+export function buildCiItemFromEvent(event: any, type: CiEventType): CiItem {
   const checkData =
     type === 'check_run'
       ? event?.payload?.check_run
       : event?.payload?.check_suite;
   const status = checkData?.status ?? null;
   const conclusion = checkData?.conclusion ?? null;
-  const state = ciStatusFromEvent(status, conclusion);
+  const state = getCiStatusFromEvent(status, conclusion);
   const name =
     type === 'check_run'
       ? (checkData?.name ?? 'Check run')
@@ -167,11 +132,9 @@ export function ciItemFromEvent(event: any, type: CiEventType): CiItem {
   return {
     name,
     statusText,
-    dotClass: ciDotClass(state),
-    statusClass: ciStatusLabelClass(state),
-    ariaLabel: ciDotAriaLabel(state),
     isInProgress: state === 'in_progress',
     state,
+    url: checkData?.html_url ?? checkData?.url ?? null,
   };
 }
 
@@ -277,7 +240,7 @@ export function buildCiItems(
       continue;
     }
     seenNames.add(name);
-    items.push(ciItemFromEvent(event, type));
+    items.push(buildCiItemFromEvent(event, type));
   }
 
   return items;
@@ -347,20 +310,6 @@ export function findLatestChangesRequestedEvent(
       (event?.payload?.review?.body ?? '').trim().length > 0,
   );
   return activeChangesRequestedEvents[0] ?? null;
-}
-
-export function reviewStatusLabel(state: ReviewState): string | null {
-  if (state === 'changes_requested') return 'Changes Requested';
-  if (state === 'approved') return 'Approved';
-  return null;
-}
-
-export function reviewStatusBadgeClass(state: ReviewState): string | null {
-  if (state === 'changes_requested')
-    return 'review-state-badge review-state-badge--changes';
-  if (state === 'approved')
-    return 'review-state-badge review-state-badge--approved';
-  return null;
 }
 
 // ── Query Builders ───────────────────────────────────────────────────────
