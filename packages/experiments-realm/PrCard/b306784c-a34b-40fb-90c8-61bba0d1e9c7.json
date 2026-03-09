@@ -3,7 +3,7 @@
     "meta": {
       "adoptsFrom": {
         "name": "PrCard",
-        "module": "../pr-card/pr-card"
+        "module": "http://localhost:4201/catalog/pr-card/pr-card"
       }
     },
     "type": "card",
@@ -17,18 +17,14 @@
         "cardThumbnailURL": null
       },
       "prNumber": 105,
+      "branchname": "room-IUNOdGdNR1VYVGJ0SmRyUlJlaDpsb2NhbGhvc3Q/blog-app",
       "submittedAt": "2026-02-27T10:31:00.000Z",
       "submittedBy": "boxel-submission-bot"
     },
     "relationships": {
-      "listing": {
-        "links": {
-          "self": "../AppListing/95cbe2c7-9b60-4afd-8a3c-1382b610e316"
-        }
-      },
       "cardInfo.theme": {
         "links": {
-          "self": "../Theme/github-pr-brand-guide"
+          "self": "http://localhost:4201/catalog/Theme/github-pr-brand-guide"
         }
       }
     }
