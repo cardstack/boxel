@@ -98,26 +98,24 @@ export class RealmIndexUpdater {
     completed: Promise<FromScratchResult>;
   } {
     let indexingDeferred = new Deferred<void>();
-    let published = new Deferred<Job<FromScratchResult>>();
     this.#indexingDeferreds.add(indexingDeferred);
     let startedAt = performance.now();
 
-    let completed = (async () => {
-      try {
-        this.#log.info(`Realm ${this.realmURL.href} is starting indexing`);
+    this.#log.info(`Realm ${this.realmURL.href} is starting indexing`);
+    let published = (async () =>
+      await enqueueReindexRealmJob(
+        this.#realm.url,
+        await this.#realm.getRealmOwnerUsername(),
+        this.#queue,
+        this.#dbAdapter,
+        priority,
+        {
+          clearLastModified: opts?.clearLastModified,
+        },
+      ))();
 
-        let job = await enqueueReindexRealmJob(
-          this.#realm.url,
-          await this.#realm.getRealmOwnerUsername(),
-          this.#queue,
-          this.#dbAdapter,
-          priority,
-          {
-            clearLastModified: opts?.clearLastModified,
-          },
-        );
-        published.fulfill(job);
-
+    let completed = published
+      .then(async (job) => {
         let result = await job.done;
         let { ignoreData, stats } = result;
         this.#stats = stats;
@@ -134,18 +132,18 @@ export class RealmIndexUpdater {
           )}`,
         );
         return result;
-      } catch (e: any) {
-        published.reject(e);
+      })
+      .catch((e: any) => {
         this.#log.error(`Error running from-scratch-index: ${e.message}`);
         throw e;
-      } finally {
+      })
+      .finally(() => {
         indexingDeferred.fulfill();
         this.#indexingDeferreds.delete(indexingDeferred);
-      }
-    })();
+      });
 
     return {
-      published: published.promise,
+      published,
       completed,
     };
   }
