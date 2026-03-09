@@ -109,12 +109,7 @@ export class RealmUrlCard extends CardDef {
   @field realmUrl = contains(StringField);
 }
 
-export class CancelIndexingJobInput extends CardDef {
-  @field realmUrl = contains(StringField);
-}
-
-export class InvalidateRealmUrlsInput extends CardDef {
-  @field realmUrl = contains(StringField);
+export class InvalidateRealmUrlsInput extends RealmUrlCard {
   @field urls = containsMany(StringField);
 }
 

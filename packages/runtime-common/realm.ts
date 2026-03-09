@@ -64,6 +64,7 @@ import {
   type ResourceObjectWithId,
   type DirectoryEntryRelationship,
   type DBAdapter,
+  type Job,
   type QueuePublisher,
   type FileMeta,
   type DirectoryMeta,
@@ -87,6 +88,7 @@ import {
   PRERENDERED_HTML_FORMATS,
   hasExtension,
 } from './index';
+import type { FromScratchResult } from './tasks/indexer';
 import { isCodeRef, visitModuleDeps } from './code-ref';
 import merge from 'lodash/merge';
 import mergeWith from 'lodash/mergeWith';
@@ -671,6 +673,12 @@ export class Realm {
         SupportedMimeType.JSON,
         this.cancelIndexingJob.bind(this),
       )
+      .post('/_reindex', SupportedMimeType.JSON, this.queueReindex.bind(this))
+      .post(
+        '/_full-reindex',
+        SupportedMimeType.JSON,
+        this.queueFullReindex.bind(this),
+      )
       .post(
         '/_invalidate',
         SupportedMimeType.JSONAPI,
@@ -771,6 +779,51 @@ export class Realm {
     return this.#realmIndexUpdater.indexing();
   }
 
+  private startReindex(opts?: {
+    clearLastModified?: boolean;
+    priority?: number;
+  }): { published: Promise<Job<FromScratchResult>>; completed: Promise<void> } {
+    let { published, completed: indexingCompleted } =
+      this.#realmIndexUpdater.publishFullIndex(
+        opts?.priority ?? systemInitiatedPriority,
+        {
+          clearLastModified: opts?.clearLastModified,
+        },
+      );
+
+    let completed = indexingCompleted.then(async ({ invalidations }) => {
+      await this.#definitionLookup.clearRealmCache(this.url);
+      this.#moduleCache.clear();
+      if (invalidations.length > 0) {
+        this.broadcastIncrementalInvalidationEvent(invalidations);
+      }
+      this.broadcastRealmEvent({
+        eventName: 'index',
+        indexType: 'full',
+        realmURL: this.url,
+      });
+    });
+
+    void completed.catch((error: unknown) => {
+      let message: string;
+      if (error instanceof Error) {
+        message = error.message;
+      } else {
+        try {
+          message = JSON.stringify(error);
+        } catch (_err) {
+          message = String(error);
+        }
+      }
+      this.#log.error(`Error completing reindex for ${this.url}: ${message}`);
+    });
+
+    return {
+      published,
+      completed,
+    };
+  }
+
   private async cancelIndexingJob(
     _request: Request,
     requestContext: RequestContext,
@@ -779,6 +832,43 @@ export class Realm {
       this.#dbAdapter,
       `indexing:${this.url}`,
     );
+
+    return createResponse({
+      body: null,
+      init: {
+        status: 204,
+      },
+      requestContext,
+    });
+  }
+
+  private async queueReindex(
+    _request: Request,
+    requestContext: RequestContext,
+  ) {
+    let { published } = this.startReindex({
+      priority: userInitiatedPriority,
+    });
+    await published;
+
+    return createResponse({
+      body: null,
+      init: {
+        status: 204,
+      },
+      requestContext,
+    });
+  }
+
+  private async queueFullReindex(
+    _request: Request,
+    requestContext: RequestContext,
+  ) {
+    let { published } = this.startReindex({
+      clearLastModified: true,
+      priority: userInitiatedPriority,
+    });
+    await published;
 
     return createResponse({
       body: null,
@@ -1460,14 +1550,8 @@ export class Realm {
   }
 
   async reindex() {
-    await this.#realmIndexUpdater.fullIndex();
-    await this.#definitionLookup.clearRealmCache(this.url);
-    this.#moduleCache.clear();
-    this.broadcastRealmEvent({
-      eventName: 'index',
-      indexType: 'full',
-      realmURL: this.url,
-    });
+    let { completed } = this.startReindex();
+    await completed;
   }
 
   async #startup() {

@@ -5,21 +5,28 @@ import {
   type FromScratchResult,
 } from '../tasks/indexer';
 
+interface EnqueueReindexRealmJobOptions {
+  clearLastModified?: boolean;
+}
+
 export async function enqueueReindexRealmJob(
   realmUrl: string,
   realmUsername: string,
   queue: QueuePublisher,
   dbAdapter: DBAdapter,
   priority: number,
+  opts?: EnqueueReindexRealmJobOptions,
 ) {
   let args = {
     realmURL: realmUrl,
     realmUsername,
   };
-  await query(dbAdapter, [
-    `UPDATE boxel_index SET last_modified = NULL WHERE realm_url =`,
-    param(realmUrl),
-  ]);
+  if (opts?.clearLastModified) {
+    await query(dbAdapter, [
+      `UPDATE boxel_index SET last_modified = NULL WHERE realm_url =`,
+      param(realmUrl),
+    ]);
+  }
   let job = await queue.publish<FromScratchResult>({
     jobType: 'from-scratch-index',
     concurrencyGroup: `indexing:${realmUrl}`,

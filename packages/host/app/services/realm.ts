@@ -1011,6 +1011,61 @@ export default class RealmService extends Service {
     );
   }
 
+  async reindex(realmURL: string): Promise<void> {
+    let normalizedRealmURL = ensureTrailingSlash(realmURL);
+    let resource = this.getOrCreateRealmResource(normalizedRealmURL);
+    await resource.login();
+
+    let headers = new Headers({
+      Accept: SupportedMimeType.JSON,
+    });
+    if (resource.token) {
+      headers.set('Authorization', `Bearer ${resource.token}`);
+    }
+
+    let response = await this.network.fetch(`${normalizedRealmURL}_reindex`, {
+      method: 'POST',
+      headers,
+    });
+
+    if (response.status === 204) {
+      return;
+    }
+
+    let errorText = await response.text();
+    throw new Error(`Reindex realm failed: ${response.status} - ${errorText}`);
+  }
+
+  async fullReindex(realmURL: string): Promise<void> {
+    let normalizedRealmURL = ensureTrailingSlash(realmURL);
+    let resource = this.getOrCreateRealmResource(normalizedRealmURL);
+    await resource.login();
+
+    let headers = new Headers({
+      Accept: SupportedMimeType.JSON,
+    });
+    if (resource.token) {
+      headers.set('Authorization', `Bearer ${resource.token}`);
+    }
+
+    let response = await this.network.fetch(
+      `${normalizedRealmURL}_full-reindex`,
+      {
+        method: 'POST',
+        headers,
+      },
+    );
+
+    if (response.status === 204) {
+      return;
+    }
+
+    let errorText = await response.text();
+    throw new Error(
+      `Full reindex realm failed: ${response.status} - ${errorText}`,
+    );
+  }
+
   async invalidateUrls(realmURL: string, urls: string[]): Promise<void> {
     let normalizedRealmURL = ensureTrailingSlash(realmURL);
     let resource = this.getOrCreateRealmResource(normalizedRealmURL);
