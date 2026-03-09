@@ -76,6 +76,25 @@ import { isEnvironmentMode, serviceURL } from '../../lib/dev-service-registry';
 
 const testRealmURL = new URL('http://127.0.0.1:4444/');
 const testRealmHref = testRealmURL.href;
+
+/**
+ * In environment mode we listen on port 0 (OS-assigned) so that multiple
+ * environments can run realm-server tests simultaneously without port
+ * conflicts.  supertest connects to the server object directly, so the
+ * actual listen port doesn't need to match the realm identity URL.
+ */
+function resolveListenPort(realmURL: URL): number {
+  if (isEnvironmentMode()) {
+    return 0;
+  }
+  return parseInt(realmURL.port);
+}
+
+/** Build the default test-realm URL with an optional sub-path. */
+export function testRealmURLFor(path: string): URL {
+  return new URL(path, testRealmURL);
+}
+
 const migratedTestDatabaseTemplate = 'boxel_migrated_template';
 
 export const testRealmServerMatrixUsername = 'node-test_realm-server';
@@ -881,7 +900,7 @@ export async function runTestRealmServer({
     definitionLookup,
     prerenderer,
   });
-  let testRealmHttpServer = testRealmServer.listen(parseInt(realmURL.port));
+  let testRealmHttpServer = testRealmServer.listen(resolveListenPort(realmURL));
   trackServer(testRealmHttpServer);
   await testRealmServer.start();
   return {
@@ -1006,7 +1025,7 @@ export async function runTestRealmServerWithRealms({
     definitionLookup,
     prerenderer,
   });
-  let testRealmHttpServer = testRealmServer.listen(parseInt(serverURL.port));
+  let testRealmHttpServer = testRealmServer.listen(resolveListenPort(serverURL));
   trackServer(testRealmHttpServer);
   await testRealmServer.start();
 
