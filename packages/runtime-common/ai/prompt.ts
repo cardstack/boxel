@@ -91,15 +91,27 @@ function getLog() {
  *    sourceUrl) is re-attached in a later event, the earlier version
  *    is shown as metadata only (the later version wins).
  *
- * 3. **MIME type handling**:
+ * 3. **MIME type handling** (see `modality.ts` for classification):
  *    - Text-based types (text/*, application/vnd.card+json) → content
  *      downloaded and displayed with line numbers.
- *    - Image types (image/*) → presented as native image_url content
- *      parts for vision-capable models.
- *    - Other types (PDF, binary, etc.) → metadata shown inline
- *      ([contentType, contentSize bytes]) without an error prefix.
+ *    - Supported images (PNG, JPEG, WEBP, GIF) → native `image_url`
+ *      content parts.
+ *    - PDF (application/pdf) → native `file` content parts with base64
+ *      data URL in `file_data`.
+ *    - Audio (audio/*) → native `input_audio` content parts with raw
+ *      base64 and format string (data URL prefix stripped).
+ *    - Video (video/*) → native `video_url` content parts with base64
+ *      data URL.
+ *    - Other types → metadata shown inline ([contentType, contentSize
+ *      bytes]) without an error prefix.
  *
- * 4. **Read-file command scoping**: When the AI requests to read a file
+ * 4. **Model capability gating**: When `inputModalities` is provided
+ *    (from the active LLM's model configuration), multimodal parts are
+ *    only included if the model supports the required modality. Gated
+ *    files are listed in a warning appended to the prompt text. When
+ *    `inputModalities` is undefined, all modalities pass through.
+ *
+ * 5. **Read-file command scoping**: When the AI requests to read a file
  *    via a tool call, the file URL must match a sourceUrl previously
  *    attached by the user in the same room. Unrecognised URLs produce
  *    a rejection message in the tool result.
