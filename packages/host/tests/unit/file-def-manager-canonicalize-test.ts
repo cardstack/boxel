@@ -1,7 +1,7 @@
 import { module, test } from 'qunit';
 
-import { canonicalizeMatrixMediaKey } from '@cardstack/runtime-common/ai/matrix-utils';
 import { inferContentType } from '@cardstack/runtime-common';
+import { canonicalizeMatrixMediaKey } from '@cardstack/runtime-common/ai/matrix-utils';
 
 import FileDefManagerImpl from '@cardstack/host/lib/file-def-manager';
 
@@ -571,12 +571,7 @@ module('Unit | file-def-manager canonicalize', function () {
 
     for (let c of cases) {
       let result = inferContentType(c.filename);
-      assert.strictEqual(
-        result,
-        c.expected,
-        `${c.filename} => ${c.expected}`,
-      );
+      assert.strictEqual(result, c.expected, `${c.filename} => ${c.expected}`);
     }
   });
-
 });

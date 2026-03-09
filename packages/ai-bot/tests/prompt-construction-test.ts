@@ -5904,10 +5904,7 @@ new
     let userMessages = prompt.filter((m) => m.role === 'user');
     let messageContent = userMessages[0]?.content;
 
-    assert.ok(
-      Array.isArray(messageContent),
-      'Content should be ContentPart[]',
-    );
+    assert.ok(Array.isArray(messageContent), 'Content should be ContentPart[]');
 
     if (Array.isArray(messageContent)) {
       // Image should still be included
@@ -6010,10 +6007,7 @@ new
     let userMessages = prompt.filter((m) => m.role === 'user');
     let messageContent = userMessages[0]?.content;
 
-    assert.ok(
-      Array.isArray(messageContent),
-      'Content should be ContentPart[]',
-    );
+    assert.ok(Array.isArray(messageContent), 'Content should be ContentPart[]');
 
     if (Array.isArray(messageContent)) {
       let imageParts = (messageContent as any[]).filter(
