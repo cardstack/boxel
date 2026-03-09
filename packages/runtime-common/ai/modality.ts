@@ -2,8 +2,17 @@
 // Used by both prompt construction (server-side) and the UI (client-side)
 // to determine which modality a file requires.
 
+// Only image formats broadly supported by OpenRouter providers (Anthropic, OpenAI, Google).
+// Unsupported formats like AVIF, TIFF, BMP fall through to metadata-only.
+const SUPPORTED_IMAGE_TYPES = new Set([
+  'image/png',
+  'image/jpeg',
+  'image/webp',
+  'image/gif',
+]);
+
 function isImageContentType(contentType?: string): boolean {
-  return !!contentType && contentType.startsWith('image/');
+  return !!contentType && SUPPORTED_IMAGE_TYPES.has(contentType);
 }
 
 function isPdfContentType(contentType?: string): boolean {
