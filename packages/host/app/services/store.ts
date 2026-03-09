@@ -1081,7 +1081,6 @@ export default class StoreService extends Service implements StoreInterface {
           `reloading file-meta resource ${invalidation} because it was previously loaded`,
         );
         this.reloadFileMetaTask.perform(invalidation);
-        continue;
       }
       let clientRequestId = event.clientRequestId ?? undefined;
 

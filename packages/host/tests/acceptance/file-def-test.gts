@@ -34,6 +34,25 @@ module('Acceptance | file def', function (hooks) {
 
   let { createAndJoinRoom } = mockMatrixUtils;
 
+  let waitForRealmEvent = (matches: (event: RealmEventContent) => boolean) => {
+    let realmEventDeferred = new Deferred<RealmEventContent>();
+    let messageService = getService('message-service');
+    let callbacks = messageService.listenerCallbacks.get(testRealmURL)!;
+    let callback = (event: RealmEventContent) => {
+      if (!matches(event)) {
+        return;
+      }
+      let index = callbacks.indexOf(callback);
+      if (index !== -1) {
+        callbacks.splice(index, 1);
+      }
+      realmEventDeferred.fulfill(event);
+    };
+
+    callbacks.push(callback);
+    return realmEventDeferred;
+  };
+
   hooks.beforeEach(async function () {
     createAndJoinRoom({
       sender: '@testuser:localhost',
@@ -55,7 +74,7 @@ module('Acceptance | file def', function (hooks) {
     markdownFileDef = await loader.import(`${baseRealm.url}markdown-file-def`);
     skillModule = await loader.import(`${baseRealm.url}skill`);
 
-    let { field, contains, linksTo, Component } = cardApi;
+    let { field, contains, linksTo, Component, CardDef } = cardApi;
     let { default: StringField } = string;
     let { default: MarkdownField } = markdown;
     let { MarkdownDef } = markdownFileDef;
@@ -87,11 +106,38 @@ module('Acceptance | file def', function (hooks) {
       };
     }
 
+    class PlainCard extends CardDef {
+      static displayName = 'Plain Card';
+
+      @field title = contains(StringField);
+
+      static isolated = class Isolated extends Component<typeof this> {
+        <template>
+          <h2 data-test-plain-card-title><@fields.title /></h2>
+        </template>
+      };
+    }
+
     ({ realm } = await setupAcceptanceTestRealm({
       mockMatrixUtils,
       contents: {
         ...SYSTEM_CARD_FIXTURE_CONTENTS,
+        'plain-card.gts': { PlainCard },
         'skill-plus-markdown.gts': { SkillPlusMarkdown },
+        'PlainCard/example.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              title: 'Before',
+            },
+            meta: {
+              adoptsFrom: {
+                module: '../plain-card',
+                name: 'PlainCard',
+              },
+            },
+          },
+        },
         'Skill/env-indexing-operations.json': {
           data: {
             type: 'card',
@@ -172,10 +218,8 @@ Initial paragraph.`,
         'initial instructions come from markdown',
       );
 
-    let realmEventDeferred = new Deferred<RealmEventContent>();
-    let messageService = getService('message-service');
-    messageService.listenerCallbacks.get(testRealmURL)!.push((event) => {
-      if (
+    let realmEventDeferred = waitForRealmEvent(
+      (event) =>
         event.eventName === 'index' &&
         event.indexType === 'incremental' &&
         Array.isArray(
@@ -184,11 +228,8 @@ Initial paragraph.`,
         ) &&
         (
           event as RealmEventContent & { invalidations: string[] }
-        ).invalidations.includes(markdownURL)
-      ) {
-        realmEventDeferred.fulfill(event);
-      }
-    });
+        ).invalidations.includes(markdownURL),
+    );
 
     await realm.write(
       'Skill/env-indexing-operations.md',
@@ -229,6 +270,81 @@ Updated paragraph.`,
       .includesText(
         'Updated paragraph.',
         'instructions live update from markdown',
+      );
+  });
+
+  test('a rendered card still reloads when its source file is loaded as file-meta', async function (assert) {
+    let cardURL = `${testRealmURL}PlainCard/example`;
+    let sourceURL = `${cardURL}.json`;
+    let store = getService('store');
+
+    await visitOperatorMode({
+      stacks: [[{ id: cardURL, format: 'isolated' }]],
+    });
+
+    await waitFor('[data-test-plain-card-title]');
+    assert
+      .dom('[data-test-plain-card-title]')
+      .hasText('Before', 'initial card content is rendered');
+
+    await store.get(sourceURL, { type: 'file-meta' });
+
+    let realmEventDeferred = waitForRealmEvent(
+      (event) =>
+        event.eventName === 'index' &&
+        event.indexType === 'incremental' &&
+        Array.isArray(
+          (event as RealmEventContent & { invalidations?: string[] })
+            .invalidations,
+        ) &&
+        (
+          event as RealmEventContent & { invalidations: string[] }
+        ).invalidations.includes(cardURL),
+    );
+
+    await realm.write(
+      'PlainCard/example.json',
+      JSON.stringify({
+        data: {
+          type: 'card',
+          attributes: {
+            title: 'After',
+          },
+          meta: {
+            adoptsFrom: {
+              module: '../plain-card',
+              name: 'PlainCard',
+            },
+          },
+        },
+      }),
+    );
+
+    let event = (await realmEventDeferred.promise) as RealmEventContent & {
+      invalidations: string[];
+    };
+    assert.true(
+      event.invalidations.includes(cardURL),
+      'realm event invalidates the rendered card instance',
+    );
+
+    await waitUntil(
+      () =>
+        document
+          .querySelector('[data-test-plain-card-title]')
+          ?.textContent?.includes('After'),
+      {
+        timeout: 5000,
+        timeoutMessage:
+          'rendered card did not live update after card invalidation',
+      },
+    );
+
+    assert
+      .dom('[data-test-plain-card-title]')
+      .hasText(
+        'After',
+        'card still live updates when its source file is loaded',
       );
   });
 });
