@@ -803,7 +803,13 @@ export default class MatrixService extends Service {
         roomIds.forEach((id) => this.roomsWaitingForSync.get(id)?.fulfill());
         break;
       case SlidingSyncState.RequestFinished:
-        roomIds.forEach((id) => this.aiRoomIds.add(id));
+        for (let id of roomIds) {
+          let room = this.client.getRoom(id);
+          let botMembership = room?.getMember(this.aiBotUserId)?.membership;
+          if (botMembership === 'join' || botMembership === 'invite') {
+            this.aiRoomIds.add(id);
+          }
+        }
         break;
     }
   };
