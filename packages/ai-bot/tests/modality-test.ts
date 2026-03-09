@@ -6,6 +6,7 @@ import {
   isPdfContentType,
   isAudioContentType,
   isVideoContentType,
+  isTextBasedContentType,
 } from '@cardstack/runtime-common/ai/modality';
 
 module('modality helpers', () => {
@@ -74,5 +75,20 @@ module('modality helpers', () => {
     assert.true(isVideoContentType('video/webm'));
     assert.false(isVideoContentType('audio/mpeg'));
     assert.false(isVideoContentType(undefined));
+  });
+
+  test('isTextBasedContentType identifies text and card JSON types', () => {
+    assert.true(isTextBasedContentType('text/plain'));
+    assert.true(isTextBasedContentType('text/typescript'));
+    assert.true(isTextBasedContentType('text/html'));
+    assert.true(isTextBasedContentType('application/vnd.card+json'));
+    assert.false(isTextBasedContentType('application/json'));
+    assert.false(
+      isTextBasedContentType(
+        'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+      ),
+    );
+    assert.false(isTextBasedContentType('application/zip'));
+    assert.false(isTextBasedContentType(undefined));
   });
 });

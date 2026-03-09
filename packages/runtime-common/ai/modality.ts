@@ -39,6 +39,16 @@ export function modalityLabel(modality: Modality): string {
   return MODALITY_LABELS[modality];
 }
 
+// Matches the server-side isTextBasedContentType in prompt.ts — files with
+// these types get their full content downloaded and sent as text.
+export function isTextBasedContentType(contentType?: string): boolean {
+  return (
+    !!contentType &&
+    (contentType.includes('text/') ||
+      contentType.includes('application/vnd.card+json'))
+  );
+}
+
 export {
   isImageContentType,
   isPdfContentType,
