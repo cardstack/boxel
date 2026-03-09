@@ -1,3 +1,4 @@
+import { registerDestructor } from '@ember/destroyable';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
@@ -6,6 +7,7 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
 import { restartableTask, timeout } from 'ember-concurrency';
+import Modifier from 'ember-modifier';
 import { TrackedSet } from 'tracked-built-ins';
 
 import { LoadingIndicator } from '@cardstack/boxel-ui/components';
@@ -22,6 +24,21 @@ import {
 } from '@cardstack/host/resources/file-tree-from-index';
 import { normalizeDirPath } from '@cardstack/host/utils/normalized-dir-path';
 
+// Focuses the element on first insertion when the positional arg is true.
+class AutoFocusModifier extends Modifier<{
+  Element: HTMLElement;
+  Args: { Positional: [boolean | undefined] };
+}> {
+  #firstRun = true;
+
+  modify(element: HTMLElement, [shouldFocus]: [boolean | undefined]) {
+    if (shouldFocus && this.#firstRun) {
+      this.#firstRun = false;
+      element.focus();
+    }
+  }
+}
+
 interface Signature {
   Args: {
     realmURL: string;
@@ -31,12 +48,19 @@ interface Signature {
     onFileSelected?: (entryPath: LocalPath) => void;
     onDirectorySelected?: (entryPath: LocalPath) => void;
     scrollPositionKey?: LocalPath;
+    autoFocus?: boolean;
   };
 }
 
 export default class IndexedFileTree extends Component<Signature> {
   <template>
-    <nav>
+    <nav
+      aria-label='File tree'
+      tabindex='0'
+      data-test-file-tree-nav
+      {{on 'keydown' this.handleTypeAhead}}
+      {{AutoFocusModifier @autoFocus}}
+    >
       <TreeLevel
         @entries={{this.fileTree.entries}}
         @fileTree={{this.fileTree}}
@@ -46,6 +70,7 @@ export default class IndexedFileTree extends Component<Signature> {
         @onDirectorySelected={{this.toggleDirectory}}
         @scrollPositionKey={{@scrollPositionKey}}
         @relativePath=''
+        @typeAheadMatch={{this.typeAheadMatch}}
       />
       {{#if this.showMask}}
         <div class='mask' data-test-file-tree-mask>
@@ -72,6 +97,11 @@ export default class IndexedFileTree extends Component<Signature> {
         position: relative;
         min-height: 100%;
       }
+      nav:focus-visible {
+        outline: 2px solid var(--boxel-highlight);
+        outline-offset: -2px;
+        border-radius: var(--boxel-border-radius-xs);
+      }
     </style>
   </template>
 
@@ -83,10 +113,16 @@ export default class IndexedFileTree extends Component<Signature> {
   private localOpenDirs = new TrackedSet<string>();
   @tracked private selectedFile?: LocalPath;
   @tracked private maskDismissed = false;
+  @tracked private typeAheadMatch?: string;
+  private typeAheadBuffer = '';
+  private typeAheadTimer?: ReturnType<typeof setTimeout>;
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
     this.hideMask.perform();
+    registerDestructor(this, () => {
+      clearTimeout(this.typeAheadTimer);
+    });
   }
 
   private get showMask(): boolean {
@@ -127,6 +163,51 @@ export default class IndexedFileTree extends Component<Signature> {
 
     this.args.onDirectorySelected?.(dirPath);
   }
+
+  @action
+  private handleTypeAhead(event: KeyboardEvent) {
+    const key = event.key;
+
+    // Only handle single printable characters; ignore modifier combos
+    if (key.length !== 1 || event.ctrlKey || event.metaKey || event.altKey) {
+      return;
+    }
+
+    // If focus is on a child button, let Space activate that button normally
+    if (key === ' ' && event.target !== event.currentTarget) {
+      return;
+    }
+
+    // Prevent default so Space doesn't scroll the page
+    event.preventDefault();
+
+    this.typeAheadBuffer += key.toLowerCase();
+
+    // Reset buffer after 600 ms of inactivity
+    clearTimeout(this.typeAheadTimer);
+    this.typeAheadTimer = setTimeout(() => {
+      this.typeAheadBuffer = '';
+      this.typeAheadMatch = undefined;
+    }, 600);
+
+    // Search all visible (rendered) file and directory buttons
+    const nav = event.currentTarget as HTMLElement;
+    const buttons = Array.from(
+      nav.querySelectorAll<HTMLButtonElement>('button:not([disabled])'),
+    );
+    const match = buttons.find((btn) =>
+      btn.getAttribute('title')?.toLowerCase().startsWith(this.typeAheadBuffer),
+    );
+
+    if (match) {
+      const path =
+        match.dataset['testFile'] ?? match.dataset['testDirectory'];
+      this.typeAheadMatch = path;
+      match.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    } else {
+      this.typeAheadMatch = undefined;
+    }
+  }
 }
 
 interface TreeLevelSignature {
@@ -139,6 +220,7 @@ interface TreeLevelSignature {
     onDirectorySelected: (entryPath: LocalPath) => void;
     scrollPositionKey?: LocalPath;
     relativePath: string;
+    typeAheadMatch?: string;
   };
 }
 
@@ -156,7 +238,9 @@ class TreeLevel extends Component<TreeLevelSignature> {
               container='file-tree'
               key=@scrollPositionKey
             }}
-            class='file {{if (this.isSelectedFile entry.path) "selected"}}'
+            class='file
+              {{if (this.isSelectedFile entry.path) "selected"}}
+              {{if (this.isTypeAheadMatch entry.path) "type-ahead-match"}}'
           >
             {{entry.name}}
           </button>
@@ -165,7 +249,8 @@ class TreeLevel extends Component<TreeLevelSignature> {
             data-test-directory={{entry.path}}
             title={{entry.name}}
             {{on 'click' (fn @onDirectorySelected entry.path)}}
-            class='directory'
+            class='directory
+              {{if (this.isTypeAheadMatch entry.path) "type-ahead-match"}}'
           >
             <DropdownArrowDown
               class='icon
@@ -182,6 +267,7 @@ class TreeLevel extends Component<TreeLevelSignature> {
               @onDirectorySelected={{@onDirectorySelected}}
               @scrollPositionKey={{@scrollPositionKey}}
               @relativePath={{entry.path}}
+              @typeAheadMatch={{@typeAheadMatch}}
             />
           {{/if}}
         {{/if}}
@@ -224,6 +310,13 @@ class TreeLevel extends Component<TreeLevelSignature> {
         background-color: var(--boxel-highlight);
       }
 
+      .file.type-ahead-match,
+      .directory.type-ahead-match {
+        background-color: var(--boxel-200);
+        outline: 2px solid var(--boxel-highlight);
+        outline-offset: -2px;
+      }
+
       .directory {
         padding-left: 0;
       }
@@ -254,6 +347,17 @@ class TreeLevel extends Component<TreeLevelSignature> {
   isOpenDirectory(path: string): boolean {
     let dirPath = normalizeDirPath(path);
     return this.args.openDirs.has(dirPath);
+  }
+
+  @action
+  isTypeAheadMatch(path: string): boolean {
+    if (!this.args.typeAheadMatch) {
+      return false;
+    }
+    return (
+      this.args.typeAheadMatch === path ||
+      this.args.typeAheadMatch === normalizeDirPath(path)
+    );
   }
 
   @action

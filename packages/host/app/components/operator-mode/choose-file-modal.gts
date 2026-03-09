@@ -452,6 +452,7 @@ export default class ChooseFileModal extends Component<Signature> {
                 @realmURL={{realmURL}}
                 @fileTypeFilter={{this.fileTypeFilter}}
                 @onFileSelected={{this.selectFile}}
+                @autoFocus={{true}}
               />
             {{/each}}
           </FieldContainer>

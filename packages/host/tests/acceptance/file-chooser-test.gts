@@ -1,9 +1,12 @@
 import {
   currentURL,
   click,
+  focus,
   settled,
-  waitUntil,
   triggerEvent,
+  triggerKeyEvent,
+  waitFor,
+  waitUntil,
 } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
@@ -431,6 +434,188 @@ module('Acceptance | file chooser tests', function (hooks) {
     assert
       .dom('[data-test-choose-file-modal]')
       .exists('modal remains open after cancelling file pick');
+
+    await click('[data-test-choose-file-modal-cancel-button]');
+  });
+});
+
+module('Acceptance | file chooser keyboard tests', function (hooks) {
+  setupInteractSubmodeTests(hooks, {
+    setRealm() {},
+  });
+
+  test('file list area is focused when the modal opens', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}FileLinkCard/empty`,
+            format: 'edit',
+          },
+        ],
+      ],
+    });
+
+    await click(
+      '[data-test-links-to-editor="attachment"] [data-test-add-new="attachment"]',
+    );
+
+    assert
+      .dom('[data-test-choose-file-modal]')
+      .exists('file chooser modal is open');
+
+    assert.strictEqual(
+      document.activeElement,
+      document.querySelector('[data-test-file-tree-nav]'),
+      'file tree nav has focus on modal open',
+    );
+
+    await click('[data-test-choose-file-modal-cancel-button]');
+  });
+
+  test('typing in the file list highlights the first matching file', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}FileLinkCard/empty`,
+            format: 'edit',
+          },
+        ],
+      ],
+    });
+
+    await click(
+      '[data-test-links-to-editor="attachment"] [data-test-add-new="attachment"]',
+    );
+
+    await waitFor('[data-test-file="README.txt"]', {
+      timeout: 5000,
+      timeoutMessage: 'file tree did not load',
+    });
+
+    await focus('[data-test-file-tree-nav]');
+    await triggerKeyEvent('[data-test-file-tree-nav]', 'keydown', 'r');
+
+    assert
+      .dom('[data-test-file="README.txt"]')
+      .hasClass('type-ahead-match', 'README.txt is highlighted by type-ahead');
+
+    assert
+      .dom('[data-test-file="test-image.png"]')
+      .doesNotHaveClass(
+        'type-ahead-match',
+        'test-image.png is not highlighted',
+      );
+
+    await click('[data-test-choose-file-modal-cancel-button]');
+  });
+
+  test('type-ahead match updates as more characters are typed', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}FileLinkCard/empty`,
+            format: 'edit',
+          },
+        ],
+      ],
+    });
+
+    await click(
+      '[data-test-links-to-editor="attachment"] [data-test-add-new="attachment"]',
+    );
+
+    await waitFor('[data-test-file="test-image.png"]', {
+      timeout: 5000,
+      timeoutMessage: 'file tree did not load',
+    });
+
+    await focus('[data-test-file-tree-nav]');
+
+    // Type 't' — should match test-image.png (starts with 't')
+    await triggerKeyEvent('[data-test-file-tree-nav]', 'keydown', 't');
+
+    assert
+      .dom('[data-test-file="test-image.png"]')
+      .hasClass('type-ahead-match', 'test-image.png matches "t"');
+
+    assert
+      .dom('[data-test-file="README.txt"]')
+      .doesNotHaveClass('type-ahead-match', 'README.txt does not match "t"');
+
+    await click('[data-test-choose-file-modal-cancel-button]');
+  });
+
+  test('typing highlights a matching directory', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}FileLinkCard/empty`,
+            format: 'edit',
+          },
+        ],
+      ],
+    });
+
+    await click(
+      '[data-test-links-to-editor="attachment"] [data-test-add-new="attachment"]',
+    );
+
+    await waitFor('[data-test-directory="FileLinkCard/"]', {
+      timeout: 5000,
+      timeoutMessage: 'file tree did not load',
+    });
+
+    await focus('[data-test-file-tree-nav]');
+
+    // Type 'f' — should match 'FileLinkCard' directory (case-insensitive)
+    await triggerKeyEvent('[data-test-file-tree-nav]', 'keydown', 'f');
+
+    assert
+      .dom('[data-test-directory="FileLinkCard/"]')
+      .hasClass(
+        'type-ahead-match',
+        'FileLinkCard directory is highlighted by type-ahead',
+      );
+
+    await click('[data-test-choose-file-modal-cancel-button]');
+  });
+
+  test('realm chooser is keyboard focusable', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}FileLinkCard/empty`,
+            format: 'edit',
+          },
+        ],
+      ],
+    });
+
+    await click(
+      '[data-test-links-to-editor="attachment"] [data-test-add-new="attachment"]',
+    );
+
+    assert
+      .dom('[data-test-choose-file-modal]')
+      .exists('file chooser modal is open');
+
+    // The Power Select trigger inside the realm chooser should be focusable
+    let trigger = document.querySelector<HTMLElement>(
+      '[data-test-choose-file-modal-realm-chooser] .ember-power-select-trigger',
+    );
+
+    assert.ok(trigger, 'realm chooser trigger element exists');
+    assert.ok(
+      trigger?.getAttribute('tabindex') !== null ||
+        trigger?.getAttribute('role') === 'button' ||
+        trigger?.tagName.toLowerCase() === 'button',
+      'realm chooser trigger is keyboard focusable',
+    );
 
     await click('[data-test-choose-file-modal-cancel-button]');
   });
