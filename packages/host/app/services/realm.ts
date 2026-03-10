@@ -229,13 +229,11 @@ class RealmResource {
             return;
           }
           let data = event as IndexRealmEventContent;
-          if (data.indexType === 'full') {
-            return;
-          }
           switch (data.indexType) {
             case 'incremental-index-initiation':
               this.info.isIndexing = true;
               break;
+            case 'full':
             case 'copy':
             case 'incremental':
               this.info.isIndexing = false;

@@ -172,6 +172,40 @@ module('Integration | commands | reindex-realm', function (hooks) {
     );
   });
 
+  test('full realm event also stops the indexing animation for no-op reindex', async function (assert) {
+    let commandService = getService('command-service');
+    let realmServer = getService('realm-server');
+    let realmService = getService('realm') as RealmService;
+    let command = new ReindexRealmCommand(commandService.commandContext);
+    let realmURL = new URL('test/', realmServer.url).href;
+
+    await command.execute({
+      realmUrl: realmURL,
+    });
+
+    assert.true(
+      realmService.info(realmURL).isIndexing,
+      'command starts the realm indexing animation',
+    );
+
+    mockMatrixUtils.simulateRemoteMessage(
+      mockMatrixUtils.getRoomIdForRealmAndUser(realmURL, '@testuser:localhost'),
+      testRealmInfo.realmUserId!,
+      {
+        eventName: 'index',
+        indexType: 'full',
+        realmURL,
+      },
+      { type: APP_BOXEL_REALM_EVENT_TYPE },
+    );
+    await settled();
+
+    assert.false(
+      realmService.info(realmURL).isIndexing,
+      'full realm event stops the indexing animation when no incremental event arrives',
+    );
+  });
+
   test('description explains lighter reindex semantics', async function (assert) {
     let commandService = getService('command-service');
     let command = new ReindexRealmCommand(commandService.commandContext);
