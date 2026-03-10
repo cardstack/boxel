@@ -925,7 +925,12 @@ export class MockClient implements ExtendedClient {
   }
 
   mxcUrlToHttp(mxcUrl: string): string {
-    return mxcUrl.replace('mxc://', 'http://mock-server/');
+    // Produce URLs that include /_matrix/media/ so they are recognized as
+    // Matrix media URLs by isMatrixMediaUrl and canonicalizeMatrixMediaKey.
+    // mxc://mock-server/id → http://mock-server/_matrix/media/v3/download/mock-server/id
+    let [serverName, ...rest] = mxcUrl.replace('mxc://', '').split('/');
+    let mediaId = rest.join('/');
+    return `http://mock-server/_matrix/media/v3/download/${serverName}/${mediaId}`;
   }
 
   async slidingSync(
