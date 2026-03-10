@@ -579,9 +579,7 @@ export default class AiAssistantPanelService extends Service {
       if (!resource.matrixRoom) {
         continue;
       }
-      if (
-        !resource.matrixRoom.memberIds.includes(this.matrixService.aiBotUserId)
-      ) {
+      if (!resource.matrixRoom.hasActiveMember(this.matrixService.aiBotUserId)) {
         continue;
       }
       if (resource.name && resource.roomId) {

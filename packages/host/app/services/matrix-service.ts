@@ -1865,9 +1865,18 @@ export default class MatrixService extends Service {
     roomStates = Array.from(roomStateMap.values());
     for (let rs of roomStates) {
       // The auth rooms are not stored
-      // so we don't need to process the state updates
+      // so we don't need to process the state updates.
+      // However, a room may arrive before the bot has joined — re-check
+      // bot membership on every state update so the room is promoted to
+      // an AI room as soon as the bot's join/invite event lands.
       if (!this.aiRoomIds.has(rs.roomId)) {
-        continue;
+        let room = this.client.getRoom(rs.roomId);
+        let botMembership = room?.getMember(this.aiBotUserId)?.membership;
+        if (botMembership === 'join' || botMembership === 'invite') {
+          this.aiRoomIds.add(rs.roomId);
+        } else {
+          continue;
+        }
       }
       let roomData = this.ensureRoomData(rs.roomId);
       roomData.notifyRoomStateUpdated(rs);
