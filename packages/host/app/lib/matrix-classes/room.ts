@@ -66,9 +66,7 @@ export default class Room {
   }
 
   hasActiveMember(userId: string): boolean {
-    let memberEvent = this._roomState?.events
-      .get('m.room.member')
-      ?.get(userId);
+    let memberEvent = this._roomState?.events.get('m.room.member')?.get(userId);
     let membership = memberEvent?.event.content?.membership;
     return membership === 'join' || membership === 'invite';
   }
