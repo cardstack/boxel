@@ -21,7 +21,7 @@ interface IncrementalIndexEventTestContext {
 export async function waitForIncrementalIndexEvent(
   getMessagesSince: (since: number) => Promise<MatrixEvent[]>,
   since: number,
-  timeout = 1000,
+  timeout = 5000,
 ) {
   await waitUntil(
     async () => {

@@ -18,7 +18,6 @@ import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
 module(`server-endpoints/${basename(__filename)}`, function () {
   module('Realm server authentication', function (hooks) {
-    let testRealmServer: Server;
     let request: SuperTest<Test>;
     let dbAdapter: PgAdapter;
 
@@ -27,7 +26,6 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       request: SuperTest<Test>;
       dbAdapter: PgAdapter;
     }) {
-      testRealmServer = args.testRealmHttpServer;
       dbAdapter = args.dbAdapter;
       request = args.request;
     }
