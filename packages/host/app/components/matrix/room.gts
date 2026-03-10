@@ -204,8 +204,8 @@ export default class Room extends Component<Signature> {
             @cardIdsToAttach={{this.cardIdsToAttach}}
             @chooseCard={{this.chooseCard}}
             @removeCard={{this.removeCard}}
-            @chooseFile={{this.chooseFile}}
-            @chooseLocalFile={{this.chooseLocalFile}}
+            @chooseFile={{perform this.chooseFileTask}}
+            @chooseLocalFile={{perform this.chooseLocalFileTask}}
             @removeFile={{this.removeFile}}
             @autoAttachedFiles={{this.autoAttachedFiles}}
             @filesToAttach={{this.filesToAttach}}
@@ -1094,8 +1094,7 @@ export default class Room extends Component<Signature> {
     );
   }
 
-  @action
-  private async chooseFile(file: FileDef) {
+  private chooseFileTask = enqueueTask(async (file: FileDef) => {
     // handle the case where auto-attached file pill is clicked
     if (this.isAutoAttachedFile(file)) {
       this.removeAutoAttachedFile(file.sourceUrl ?? undefined);
@@ -1105,18 +1104,17 @@ export default class Room extends Component<Signature> {
     if (!files?.find((f) => f.sourceUrl === file.sourceUrl)) {
       await this.matrixService.prefetchFileContent(file);
       this.matrixService.setFilesToSend(this.args.roomId, [...files, file]);
-      this.startFileUpload(file);
+      this.startFileUploadTask.perform(file);
     }
-  }
+  });
 
-  @action
-  private async chooseLocalFile() {
+  private chooseLocalFileTask = task(async () => {
     let localFile = await this.fileUpload.pickLocalFile();
     if (!localFile) {
       return;
     }
     await this.attachLocalFile(localFile);
-  }
+  });
 
   @action
   private handleChatInputDragOver(event: DragEvent) {
@@ -1156,7 +1154,7 @@ export default class Room extends Component<Signature> {
   }
 
   @action
-  private async handleChatInputDrop(event: DragEvent) {
+  private handleChatInputDrop(event: DragEvent) {
     let files = Array.from(event.dataTransfer?.files ?? []);
     if (!files.length) {
       return;
@@ -1165,24 +1163,25 @@ export default class Room extends Component<Signature> {
     event.stopPropagation();
     this.dropZoneDragDepth = 0;
     this.isDropZoneActive = false;
-
-    for (let file of files) {
-      await this.attachLocalFile(file);
-    }
+    this.attachLocalFilesTask.perform(files);
   }
 
   @action
-  private async handleChatInputPaste(event: ClipboardEvent) {
+  private handleChatInputPaste(event: ClipboardEvent) {
     let files = this.getClipboardFiles(event.clipboardData);
     if (!files.length) {
       return;
     }
     event.preventDefault();
     event.stopPropagation();
+    this.attachLocalFilesTask.perform(files);
+  }
+
+  private attachLocalFilesTask = enqueueTask(async (files: File[]) => {
     for (let file of files) {
       await this.attachLocalFile(file);
     }
-  }
+  });
 
   private getClipboardFiles(clipboardData: DataTransfer | null): File[] {
     if (!clipboardData) {
@@ -1223,7 +1222,7 @@ export default class Room extends Component<Signature> {
       file.contentType || localFile.type || 'application/octet-stream';
     await this.matrixService.prefetchLocalFileContent(file, bytes, contentType);
     this.matrixService.setFilesToSend(this.args.roomId, [...files, file]);
-    this.startFileUpload(file);
+    this.startFileUploadTask.perform(file);
   }
 
   @action
@@ -1261,7 +1260,7 @@ export default class Room extends Component<Signature> {
     }
   }
 
-  private async startFileUpload(file: FileDef) {
+  private startFileUploadTask = task(async (file: FileDef) => {
     let sourceUrl = file.sourceUrl;
     if (!sourceUrl) return;
     this._fileUploadStates.set(sourceUrl, { status: 'uploading' });
@@ -1288,7 +1287,7 @@ export default class Room extends Component<Signature> {
         });
       }
     }
-  }
+  });
 
   private get hasFileUploadIssues() {
     for (let [, state] of this._fileUploadStates) {
@@ -1301,7 +1300,7 @@ export default class Room extends Component<Signature> {
 
   @action
   private retryFileUpload(file: FileDef) {
-    this.startFileUpload(file);
+    this.startFileUploadTask.perform(file);
   }
 
   private buildLocalSourceUrl(fileName: string): string {
