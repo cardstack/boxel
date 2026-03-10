@@ -35,7 +35,7 @@ function resolveMaxBufferBytes() {
 
 function usage() {
   console.log(
-    `Usage: pnpm ci:failures -- [options]\n\nOptions:\n  --run <id|url>      GitHub Actions run id or run URL\n  --pr <number|url>   Pull request number or URL\n  --branch <name>     Branch name (defaults to current git branch)\n  --workflow <name>   Workflow name filter (substring match)\n  --repo <o/r>        Repository in owner/repo form\n  --limit <n>         Runs to scan when resolving by branch/pr (default: 30)\n  --max-lines <n>     Max extracted failure lines to print (default: 30)\n  --context-lines <n> Extra lines of failure context (default: 3)\n  --fail-on-findings  Exit with code 1 when failed jobs are found\n  --json              Print JSON output\n  -h, --help          Show this help\n\nExamples:\n  pnpm ci:failures -- --run 22916286599\n  pnpm ci:failures -- --run https://github.com/cardstack/boxel/actions/runs/22916286599\n  pnpm ci:failures -- --pr 4153\n  pnpm ci:failures -- --branch main\n  pnpm ci:failures -- --branch main --workflow "CI Host"\n`,
+    `Usage: pnpm ci:failures -- [options]\n\nOptions:\n  --run <id|url>      GitHub Actions run id or run URL\n  --pr <number|url>   Pull request number or URL\n  --branch <name>     Branch name (defaults to current git branch)\n  --workflow <name>   Workflow name filter (substring match)\n  --repo <o/r>        Repository in owner/repo form\n  --limit <n>         Runs to scan when resolving by branch/pr (default: 30)\n  --max-lines <n>     Max extracted failure lines to print (default: 30)\n  --context-lines <n> Extra lines of failure context (default: 3)\n  --no-progress       Disable progress messages (enabled by default)\n  --fail-on-findings  Exit with code 1 when failed jobs are found\n  --json              Print JSON output\n  -h, --help          Show this help\n\nExamples:\n  pnpm ci:failures -- --run 22916286599\n  pnpm ci:failures -- --run https://github.com/cardstack/boxel/actions/runs/22916286599\n  pnpm ci:failures -- --pr 4153\n  pnpm ci:failures -- --branch main\n  pnpm ci:failures -- --branch main --workflow "CI Host"\n`,
   );
 }
 
@@ -44,6 +44,7 @@ function parseArgs(argv) {
     limit: 30,
     maxLines: 30,
     contextLines: 3,
+    progress: true,
     failOnFindings: false,
     json: false,
   };
@@ -61,6 +62,10 @@ function parseArgs(argv) {
     }
     if (token === '--json') {
       args.json = true;
+      continue;
+    }
+    if (token === '--no-progress') {
+      args.progress = false;
       continue;
     }
     if (token === '--fail-on-findings') {
@@ -127,6 +132,17 @@ function parseArgs(argv) {
   }
 
   return args;
+}
+
+function createProgressReporter(args) {
+  let enabled = args.progress && !args.json;
+  return (message) => {
+    if (!enabled) {
+      return;
+    }
+    let now = new Date().toISOString().slice(11, 19);
+    console.error(`[ci-failures ${now}] ${message}`);
+  };
 }
 
 function runCommand(command, commandArgs, options = {}) {
@@ -204,11 +220,13 @@ function normalizeRunId(value) {
   throw new Error(`Could not parse run id from "${value}"`);
 }
 
-function resolveRepo(explicitRepo) {
+function resolveRepo(explicitRepo, progress) {
   if (explicitRepo) {
+    progress(`Using repo ${explicitRepo}`);
     return explicitRepo;
   }
 
+  progress('Resolving repo from `gh repo view`');
   let viewed = gh(
     ['repo', 'view', '--json', 'nameWithOwner', '--jq', '.nameWithOwner'],
     {
@@ -217,9 +235,11 @@ function resolveRepo(explicitRepo) {
   );
   let resolved = viewed.stdout.trim();
   if (resolved) {
+    progress(`Resolved repo ${resolved}`);
     return resolved;
   }
 
+  progress('Falling back to git remote for repo resolution');
   let remote = git(['remote', 'get-url', 'origin'], {
     allowFailure: true,
   }).stdout.trim();
@@ -278,8 +298,9 @@ function matchesWorkflow(run, workflowFilter) {
   return workflowName.toLowerCase().includes(workflowFilter.toLowerCase());
 }
 
-function resolveRunTargets(args, repo) {
+function resolveRunTargets(args, repo, progress) {
   if (args.run) {
+    progress(`Using explicit run ${args.run}`);
     return {
       runIds: [normalizeRunId(args.run)],
       branch: args.branch || null,
@@ -297,6 +318,7 @@ function resolveRunTargets(args, repo) {
     branch = resolveCurrentBranch();
   }
 
+  progress(`Loading workflow runs for branch ${branch} (limit ${args.limit})`);
   let runs = ghJson([
     'run',
     'list',
@@ -313,6 +335,9 @@ function resolveRunTargets(args, repo) {
   if (runs.length === 0) {
     throw new Error('No workflow runs found for the provided filters.');
   }
+  progress(
+    `Found ${runs.length} run(s)${args.workflow ? ` matching workflow ${args.workflow}` : ''}`,
+  );
 
   let completedRuns = runs.filter((run) => run.status === 'completed');
   if (completedRuns.length === 0) {
@@ -334,6 +359,9 @@ function resolveRunTargets(args, repo) {
   );
 
   if (failedForLatestSha.length > 0) {
+    progress(
+      `Selected ${failedForLatestSha.length} failed run(s) for latest completed commit ${latestHeadSha}`,
+    );
     return {
       runIds: failedForLatestSha.map((run) => String(run.databaseId)),
       branch,
@@ -342,6 +370,9 @@ function resolveRunTargets(args, repo) {
     };
   }
 
+  progress(
+    `No failed runs on latest completed commit ${latestHeadSha}; selecting latest completed run`,
+  );
   return {
     runIds: [String(latestCompleted.databaseId)],
     branch,
@@ -696,13 +727,14 @@ function summarizeRun(runData) {
   };
 }
 
-function buildOutput(args, repo, resolved, runDataList) {
+function buildOutput(args, repo, resolved, runDataList, progress) {
   let runs = runDataList.map(summarizeRun);
   let failures = [];
   let logErrors = [];
   let failedRuns = [];
 
-  for (let runData of runDataList) {
+  for (let runIndex = 0; runIndex < runDataList.length; runIndex++) {
+    let runData = runDataList[runIndex];
     let runSummary = summarizeRun(runData);
     let allJobs = Array.isArray(runData.jobs) ? runData.jobs : [];
     let failedJobs = allJobs
@@ -718,7 +750,11 @@ function buildOutput(args, repo, resolved, runDataList) {
       failedJobs,
     });
 
-    for (let job of failedJobs) {
+    for (let jobIndex = 0; jobIndex < failedJobs.length; jobIndex++) {
+      let job = failedJobs[jobIndex];
+      progress(
+        `Fetching failed logs for run ${runIndex + 1}/${runDataList.length} (${runSummary.workflowName} #${runSummary.number}), job ${jobIndex + 1}/${failedJobs.length}: ${job.name}`,
+      );
       let collected = collectFailuresForJob(
         repo,
         String(runSummary.id),
@@ -765,11 +801,16 @@ function main() {
     return;
   }
 
-  let repo = resolveRepo(args.repo);
-  let resolved = resolveRunTargets(args, repo);
+  let progress = createProgressReporter(args);
+  progress('Starting triage');
 
-  let runDataList = resolved.runIds.map((runId) =>
-    ghJson([
+  let repo = resolveRepo(args.repo, progress);
+  let resolved = resolveRunTargets(args, repo, progress);
+  progress(`Fetching details for ${resolved.runIds.length} selected run(s)`);
+
+  let runDataList = resolved.runIds.map((runId, index) => {
+    progress(`Fetching run ${index + 1}/${resolved.runIds.length}: ${runId}`);
+    return ghJson([
       'run',
       'view',
       runId,
@@ -777,10 +818,14 @@ function main() {
       repo,
       '--json',
       'databaseId,number,workflowName,displayTitle,status,conclusion,url,headBranch,headSha,event,createdAt,updatedAt,jobs',
-    ]),
-  );
+    ]);
+  });
 
-  let output = buildOutput(args, repo, resolved, runDataList);
+  progress('Extracting failed jobs and failure lines');
+  let output = buildOutput(args, repo, resolved, runDataList, progress);
+  progress(
+    `Done: ${output.failedRuns.length} failed run(s), ${output.failures.length} extracted failure line(s)`,
+  );
 
   if (args.json) {
     console.log(JSON.stringify(output, null, 2));

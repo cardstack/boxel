@@ -19,6 +19,7 @@
   - `--workflow <name>` to focus on a specific workflow (for example `CI Host`)
   - `--max-lines <n>` to limit extracted failure lines
   - `--context-lines <n>` to include surrounding stack/assertion context for each failure
+  - `--no-progress` to suppress progress updates if you only want final output
   - `--json` for machine-readable output
   - `--fail-on-findings` to exit non-zero when failed jobs are found
 
