@@ -1,8 +1,10 @@
 import { getOwner } from '@ember/owner';
-import type { RenderingTestContext } from '@ember/test-helpers';
+import { settled, type RenderingTestContext } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
+
+import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 
 import FullReindexRealmCommand from '@cardstack/host/commands/full-reindex-realm';
 import RealmService from '@cardstack/host/services/realm';
@@ -80,8 +82,14 @@ module('Integration | commands | full-reindex-realm', function (hooks) {
   test('calls realm endpoint with expected auth header', async function (assert) {
     let commandService = getService('command-service');
     let realmServer = getService('realm-server');
+    let realmService = getService('realm') as RealmService;
     let command = new FullReindexRealmCommand(commandService.commandContext);
     let realmURL = new URL('test/', realmServer.url).href;
+
+    assert.false(
+      realmService.info(realmURL).isIndexing,
+      'realm is not indexing before the command runs',
+    );
 
     let result = await command.execute({
       realmUrl: realmURL,
@@ -122,11 +130,34 @@ module('Integration | commands | full-reindex-realm', function (hooks) {
       `Bearer ${realmServer.token}`,
       'authorization header does not use realm-server session token',
     );
+    assert.true(
+      realmService.info(realmURL).isIndexing,
+      'command starts the realm indexing animation immediately',
+    );
+
+    mockMatrixUtils.simulateRemoteMessage(
+      mockMatrixUtils.getRoomIdForRealmAndUser(realmURL, '@testuser:localhost'),
+      testRealmInfo.realmUserId!,
+      {
+        eventName: 'index',
+        indexType: 'incremental',
+        invalidations: [],
+        realmURL,
+      },
+      { type: APP_BOXEL_REALM_EVENT_TYPE },
+    );
+    await settled();
+
+    assert.false(
+      realmService.info(realmURL).isIndexing,
+      'incremental realm event stops the indexing animation',
+    );
   });
 
   test('throws when full reindex endpoint returns non-204', async function (assert) {
     let commandService = getService('command-service');
     let realmServer = getService('realm-server');
+    let realmService = getService('realm') as RealmService;
     let command = new FullReindexRealmCommand(commandService.commandContext);
     let realmURL = new URL('test/', realmServer.url).href;
     responseStatus = 500;
@@ -138,6 +169,10 @@ module('Integration | commands | full-reindex-realm', function (hooks) {
       }),
       /Full reindex realm failed: 500 - boom/,
       'propagates non-204 failure as an error',
+    );
+    assert.false(
+      realmService.info(realmURL).isIndexing,
+      'failed full reindex restores the pre-command animation state',
     );
   });
 
