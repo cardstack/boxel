@@ -8,6 +8,6 @@ pnpm --dir=../skills-realm skills:setup
 # we probably need to add that via the isolated realm server--not here...
 WAIT_ON_TIMEOUT=600000 NODE_NO_WARNINGS=1 SKIP_SUBMISSION=true \
   start-server-and-test \
-    'run-p -ln start:pg start:prerender-dev start:prerender-manager-dev start:worker-base start:base' \
+    'run-p -ln start:pg start:icons start:prerender-dev start:prerender-manager-dev start:worker-base start:base' \
     'http-get://localhost:4201/base/_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson|http://localhost:4206' \
     'wait'
