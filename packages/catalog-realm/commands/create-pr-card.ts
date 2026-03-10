@@ -3,6 +3,7 @@ import {
   CardDef,
   field,
   contains,
+  type Theme,
 } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
 import NumberField from 'https://cardstack.com/base/number';
@@ -50,14 +51,14 @@ export default class CreatePrCardCommand extends Command<
       cardId: themeCardId,
     });
     if (theme) {
-      card.cardInfo.theme = theme;
+      card.cardInfo.theme = theme as Theme;
     }
 
     // Save the PR card to the submission realm
-    let savedCard = await new SaveCardCommand(this.commandContext).execute({
+    let savedCard = (await new SaveCardCommand(this.commandContext).execute({
       card,
       realm,
-    });
+    })) as unknown as PrCard;
 
     return savedCard;
   }
