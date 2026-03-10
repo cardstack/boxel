@@ -50,15 +50,15 @@ test.describe('Skills', () => {
     ).toContainClass('checked');
   }
 
-  const environmentSkillCardId = `http://localhost:4205/skills/Skill/boxel-environment`;
+  const serverIndexUrl = new URL(appURL).origin;
+  const environmentSkillCardId = `${serverIndexUrl}/skills/Skill/boxel-environment`;
   const defaultSkillCardsForCodeMode = [
-    `http://localhost:4205/skills/Skill/boxel-development`,
+    `${serverIndexUrl}/skills/Skill/boxel-development`,
     environmentSkillCardId,
   ];
   const skillCard1 = `${appURL}/skill-pirate-speak`;
   const skillCard2 = `${appURL}/skill-seo`;
   const skillCard3 = `${appURL}/skill-card-title-editing`;
-  const serverIndexUrl = new URL(appURL).origin;
 
   test(`it can attach skill cards and toggle activation`, async ({ page }) => {
     await login(page, firstUser.username, firstUser.password, { url: appURL });

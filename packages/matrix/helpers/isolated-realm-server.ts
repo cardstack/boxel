@@ -31,6 +31,10 @@ function getRealmBaseURL(): string {
   return `http://localhost:${DEFAULT_REALM_PORT}`;
 }
 
+export const realmDomain = isEnvironmentMode()
+  ? `${ISOLATED_REALM_SERVICE}.${getEnvironmentSlug()}.localhost`
+  : `localhost:${DEFAULT_REALM_PORT}`;
+
 export const appURL = `${getRealmBaseURL()}/test`;
 
 const DEFAULT_PRERENDER_PORT = 4231;
