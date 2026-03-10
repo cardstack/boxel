@@ -149,7 +149,8 @@ function runCommand(command, commandArgs, options = {}) {
   return {
     stdout: result.stdout || '',
     stderr: result.stderr || '',
-    status: result.status || 0,
+    status: result.status ?? 0,
+    signal: result.signal ?? null,
   };
 }
 
