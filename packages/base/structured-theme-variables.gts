@@ -450,6 +450,10 @@ export default class ThemeVarField extends FieldDef {
   @field trackingNormal = contains(CSSValueField, {
     description: 'Specifies letter-spacing base value.',
   });
+  @field boxelBodyFontSize = contains(CSSValueField, {
+    description:
+      'Base body font size. Also controls checkbox and radio button dimensions.',
+  });
 
   // box-shadow variables
   @field shadow2xs = contains(CSSValueField, {

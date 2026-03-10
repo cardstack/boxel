@@ -10,7 +10,9 @@ import NumberField from 'https://cardstack.com/base/number';
 import DateField from 'https://cardstack.com/base/date';
 
 import { dayjsFormat } from '@cardstack/boxel-ui/helpers';
-import { CardContainer } from '@cardstack/boxel-ui/components';
+import { CardContainer, BoxelInput } from '@cardstack/boxel-ui/components';
+import { tracked } from '@glimmer/tracking';
+import { action } from '@ember/object';
 
 import { BrandTheme as Theme, sanitize } from './theme';
 
@@ -38,6 +40,12 @@ export class ThemedInvoice extends CardDef {
   @field companyAddress = contains(StringField);
 
   static isolated = class Isolated extends Component<typeof ThemedInvoice> {
+    @tracked isPaymentConfirmed = false;
+
+    @action togglePaymentConfirmed() {
+      this.isPaymentConfirmed = !this.isPaymentConfirmed;
+    }
+
     <template>
       <div
         class='themed-invoice-container'
@@ -101,6 +109,18 @@ export class ThemedInvoice extends CardDef {
             <div class='invoice-total'>
               <div class='total-label'>Total Due</div>
               <div class='total-amount'>$ {{@model.amount}}</div>
+            </div>
+
+            <div class='confirmation-section'>
+              <h3>Payment Confirmation</h3>
+              <label class='confirmation-label'>
+                <BoxelInput
+                  @type='checkbox'
+                  @value={{this.isPaymentConfirmed}}
+                  @onChange={{this.togglePaymentConfirmed}}
+                />
+                <span>I confirm this payment has been received</span>
+              </label>
             </div>
 
             <footer>
@@ -264,6 +284,27 @@ export class ThemedInvoice extends CardDef {
         .brand-symbol {
           height: 40px;
           width: auto;
+        }
+
+        .confirmation-section {
+          margin-bottom: calc(var(--spacing-unit) * 4);
+          padding: calc(var(--spacing-unit) * 2);
+          border-radius: var(--radius-base);
+          background-color: rgba(var(--color-background-rgb, 0, 0, 0), 0.05);
+        }
+
+        .confirmation-label {
+          display: flex;
+          align-items: center;
+          gap: calc(var(--spacing-unit) * 1.5);
+          cursor: pointer;
+          font-size: var(--typescale-body);
+          /* Bridge theme variables to BoxelInput checkbox variables */
+          --boxel-checkbox-checked-background-color: var(--color-primary, #0058A3);
+          --boxel-checkbox-checked-border-color: var(--color-primary, #0058A3);
+          --boxel-checkbox-border-color: var(--color-dark, #003B6F);
+          --boxel-checkbox-checkmark-color: var(--color-light, #FFFFFF);
+          --boxel-checkbox-border-radius: var(--radius-base, 0px);
         }
       </style>
     </template>

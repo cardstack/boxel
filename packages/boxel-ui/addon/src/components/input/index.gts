@@ -440,13 +440,22 @@ export default class BoxelInput extends Component<Signature> {
 
         /* Checkbox type */
         .input-container.is-checkbox {
-          display: inline-flex;
-          align-items: center;
+          display: inline-grid;
+          grid-template-columns: auto;
+          grid-template-areas:
+            'optional'
+            'input'
+            'error'
+            'helper';
           width: auto;
+          align-items: center;
         }
 
         .boxel-input[type='checkbox'] {
-          --checkbox-size: var(--boxel-checkbox-size, 18px);
+          --checkbox-size: var(
+            --boxel-checkbox-size,
+            var(--boxel-body-font-size)
+          );
           --checkbox-border-radius: var(--boxel-checkbox-border-radius, 3px);
           --checkbox-border-color: var(
             --boxel-checkbox-border-color,
@@ -466,9 +475,14 @@ export default class BoxelInput extends Component<Signature> {
           );
           --checkbox-checkmark-color: var(
             --boxel-checkbox-checkmark-color,
-            #333
+            var(--primary-foreground, #333)
+          );
+          --checkbox-padding: var(
+            --boxel-checkbox-padding,
+            var(--spacing, 2px)
           );
 
+          grid-area: input;
           appearance: none;
           /* stylelint-disable-next-line property-no-vendor-prefix */
           -webkit-appearance: none;
@@ -498,13 +512,17 @@ export default class BoxelInput extends Component<Signature> {
         .boxel-input[type='checkbox']:checked::after {
           content: '';
           position: absolute;
-          left: 5px;
-          top: 1px;
-          width: 5px;
-          height: 9px;
+          left: 50%;
+          top: 50%;
+          width: calc(
+            (var(--checkbox-size) - 2 * var(--checkbox-padding)) * 0.35
+          );
+          height: calc(
+            (var(--checkbox-size) - 2 * var(--checkbox-padding)) * 0.65
+          );
           border: solid var(--checkbox-checkmark-color);
           border-width: 0 2px 2px 0;
-          transform: rotate(45deg);
+          transform: translate(-50%, -60%) rotate(45deg);
         }
 
         .boxel-input[type='checkbox']:focus-visible {

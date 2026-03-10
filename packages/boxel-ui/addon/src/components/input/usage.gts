@@ -437,7 +437,7 @@ export default class InputUsage extends Component {
       .checkbox-example-label {
         display: flex;
         align-items: center;
-        gap: var(--boxel-sp-xxs);
+        gap: var(--boxel-sp-2xs);
         cursor: pointer;
         font: var(--boxel-font-sm);
       }
