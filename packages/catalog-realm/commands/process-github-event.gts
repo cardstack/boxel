@@ -50,7 +50,6 @@ export default class ProcessGithubEventCommand extends Command<
     let savedCard = await new SaveCardCommand(this.commandContext).execute({
       card,
       realm,
-      doNotWaitForPersist: true,
     });
 
     return savedCard;
