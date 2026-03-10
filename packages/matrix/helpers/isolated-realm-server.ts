@@ -6,6 +6,7 @@ import { ensureDirSync, copySync, readFileSync } from 'fs-extra';
 import { Pool } from 'pg';
 import { createServer as createNetServer, type AddressInfo } from 'net';
 import type { SynapseInstance } from '../docker/synapse';
+import { isEnvironmentMode, getEnvironmentSlug } from './environment-config';
 
 setGracefulCleanup();
 
@@ -142,7 +143,11 @@ export async function startPrerenderServer(
     ...process.env,
     NODE_ENV: process.env.NODE_ENV ?? 'development',
     NODE_NO_WARNINGS: '1',
-    BOXEL_HOST_URL: process.env.HOST_URL ?? 'http://localhost:4200',
+    BOXEL_HOST_URL:
+      process.env.HOST_URL ??
+      (isEnvironmentMode()
+        ? `http://host.${getEnvironmentSlug()}.localhost`
+        : 'http://localhost:4200'),
   };
   let prerenderArgs = [
     '--transpileOnly',
