@@ -10,6 +10,8 @@ import Component from '@glimmer/component';
 import { restartableTask, task } from 'ember-concurrency';
 import focusTrap from 'ember-focus-trap/modifiers/focus-trap';
 
+import pluralize from 'pluralize';
+
 import { TrackedArray, TrackedObject } from 'tracked-built-ins';
 
 import { Button } from '@cardstack/boxel-ui/components';
@@ -22,7 +24,6 @@ import {
   type Filter,
   baseRealm,
   Deferred,
-  isCardInstance,
 } from '@cardstack/runtime-common';
 
 import type { Query } from '@cardstack/runtime-common/query';
@@ -52,7 +53,7 @@ interface Signature {
 }
 
 type Request = {
-  deferred: Deferred<string | undefined>;
+  deferred: Deferred<string[] | undefined>;
   opts?: {
     offerToCreate?: {
       ref: CodeRef;
@@ -65,7 +66,8 @@ type Request = {
 type State = {
   id: number;
   request: Request;
-  selectedCard?: string | NewCardArgs;
+  selectedCards: (string | NewCardArgs)[];
+  multiSelect: boolean;
   searchKey: string;
   chooseCardTitle: string;
   dismissModal: boolean;
@@ -75,6 +77,27 @@ type State = {
   hasPreselectedCard?: boolean;
   consumingRealm?: URL;
 };
+
+function isNewCardArgs(item: string | NewCardArgs): item is NewCardArgs {
+  return typeof item !== 'string' && 'realmURL' in item;
+}
+
+function normalizeCardUrl(url: string): string {
+  return url.replace(/\.json$/, '');
+}
+
+function selectionEquals(
+  a: string | NewCardArgs,
+  b: string | NewCardArgs,
+): boolean {
+  if (typeof a === 'string' && typeof b === 'string') {
+    return normalizeCardUrl(a) === normalizeCardUrl(b);
+  }
+  if (isNewCardArgs(a) && isNewCardArgs(b)) {
+    return a.realmURL === b.realmURL;
+  }
+  return false;
+}
 
 const DEFAULT_CHOOOSE_CARD_TITLE = 'Choose a Card';
 
@@ -117,7 +140,10 @@ export default class CardCatalogModal extends Component<Signature> {
                   @isCompact={{false}}
                   @handleSelect={{this.selectFromSearch}}
                   @onSubmit={{this.submitFromSearch}}
-                  @selectedCard={{state.selectedCard}}
+                  @selectedCards={{state.selectedCards}}
+                  @multiSelect={{state.multiSelect}}
+                  @onSelectAll={{this.selectAll}}
+                  @onDeselectAll={{this.deselectAll}}
                   @offerToCreate={{this.offerToCreateArg}}
                 />
               </:content>
@@ -136,12 +162,12 @@ export default class CardCatalogModal extends Component<Signature> {
                     <Button
                       @kind='primary'
                       @size='tall'
-                      @disabled={{eq state.selectedCard undefined}}
+                      @disabled={{eq state.selectedCards.length 0}}
                       class='footer-button'
-                      {{on 'click' (fn this.pick state.selectedCard undefined)}}
+                      {{on 'click' (fn this.pickCards state)}}
                       data-test-card-catalog-go-button
                     >
-                      Go
+                      {{this.goButtonText}}
                     </Button>
                   </div>
                 </div>
@@ -212,6 +238,14 @@ export default class CardCatalogModal extends Component<Signature> {
     return this.state.request.opts?.offerToCreate;
   }
 
+  private get goButtonText(): string {
+    if (!this.state?.multiSelect) {
+      return 'Go';
+    }
+    const count = this.state.selectedCards.length;
+    return `Choose ${count} ${pluralize('Card', count)}`;
+  }
+
   // This is part of our public API for runtime-common to invoke the card chooser
   async chooseCard(
     query: CardCatalogQuery,
@@ -226,8 +260,8 @@ export default class CardCatalogModal extends Component<Signature> {
       preselectedCardTypeQuery?: Query;
       consumingRealm?: URL;
     },
-  ): Promise<undefined | string> {
-    return await this._chooseCard.perform(
+  ): Promise<undefined | string | string[]> {
+    let result = await this._chooseCard.perform(
       {
         // default to cardTitle sort so that we can maintain stability in
         // the ordering of the search results (server sorts results
@@ -245,6 +279,10 @@ export default class CardCatalogModal extends Component<Signature> {
       },
       opts,
     );
+    if (opts?.multiSelect) {
+      return result;
+    }
+    return result?.[0];
   }
 
   private _chooseCard = task(
@@ -312,7 +350,8 @@ export default class CardCatalogModal extends Component<Signature> {
         dismissModal: false,
         baseFilter: query.filter,
         availableRealmUrls: this.realmServer.availableRealmURLs,
-        selectedCard: preselectedCardUrl,
+        selectedCards: preselectedCardUrl ? [preselectedCardUrl] : [],
+        multiSelect: opts?.multiSelect ?? false,
         hasPreselectedCard: Boolean(preselectedCardUrl),
         consumingRealm: opts.consumingRealm,
       });
@@ -328,7 +367,7 @@ export default class CardCatalogModal extends Component<Signature> {
     }
     this.state.searchKey = searchKey;
     if (!this.state.searchKey) {
-      this.state.selectedCard = undefined;
+      this.state.selectedCards = [];
       this.state.hasPreselectedCard = false;
     }
   }
@@ -337,7 +376,22 @@ export default class CardCatalogModal extends Component<Signature> {
     if (!this.state || !selection) {
       return;
     }
-    this.state.selectedCard = selection;
+    if (this.state.multiSelect) {
+      // Toggle: add if absent, remove if present
+      const idx = this.state.selectedCards.findIndex((s) =>
+        selectionEquals(s, selection),
+      );
+      if (idx >= 0) {
+        this.state.selectedCards = this.state.selectedCards.filter(
+          (_, i) => i !== idx,
+        );
+      } else {
+        this.state.selectedCards = [...this.state.selectedCards, selection];
+      }
+    } else {
+      // Single-select: replace
+      this.state.selectedCards = [selection];
+    }
     this.state.hasPreselectedCard = false;
   }
 
@@ -345,65 +399,87 @@ export default class CardCatalogModal extends Component<Signature> {
     if (!this.state) {
       return;
     }
-    this.state.selectedCard = selection;
-    this.pickCard.perform(selection);
+    if (this.state.multiSelect && typeof selection === 'string') {
+      // In multi-select, double-click on existing cards just toggles (don't submit)
+      this.selectFromSearch(selection);
+      return;
+    }
+    this.state.selectedCards = [selection];
+    this.pickCards(this.state);
   }
 
-  pickCard = restartableTask(
-    async (selectedItem?: string | CardDef | NewCardArgs, state?: State) => {
-      if (!this.state) {
-        return;
-      }
-      let cardId: string | undefined;
-      if (selectedItem) {
-        let newCard: NewCardArgs | undefined;
-        if (isCardInstance(selectedItem)) {
-          cardId = selectedItem.id;
-        } else if (typeof selectedItem === 'string') {
-          cardId = selectedItem;
-        } else {
-          newCard = selectedItem;
-        }
+  @action private selectAll(cards: string[]): void {
+    if (!this.state) {
+      return;
+    }
+    this.state.selectedCards = [...cards];
+  }
 
-        if (newCard) {
-          cardId = await this.createNewTask.perform(
-            newCard.ref,
-            newCard.relativeTo ? new URL(newCard.relativeTo) : undefined,
-            new URL(newCard.realmURL),
-          );
-        }
-      }
+  @action private deselectAll(): void {
+    if (!this.state) {
+      return;
+    }
+    this.state.selectedCards = [];
+  }
 
-      let request = state ? state.request : this.state.request;
-      if (request) {
-        request.deferred.fulfill(cardId?.replace(/\.json$/, ''));
-      }
+  @action private pickCards(state?: State) {
+    this.pickCard.perform(state);
+  }
 
-      // TODO is this still necessary:
-      // In the 'createNewCard' case, auto-save doesn't follow any specific order,
-      // so we cannot guarantee that the outer 'createNewCard' process (the top item in the stack) will be saved before the inner one.
-      // That's why we use state ID to remove state from the stack.
-      if (state) {
-        let stateIndex = this.stateStack.findIndex((s) => s.id === state.id);
-        this.stateStack.splice(stateIndex, 1);
+  pickCard = restartableTask(async (state?: State) => {
+    let currentState = state ?? this.state;
+    if (!currentState) {
+      return;
+    }
+
+    let cardIds: string[] = [];
+    for (let selectedItem of currentState.selectedCards) {
+      if (typeof selectedItem === 'string') {
+        cardIds.push(selectedItem.replace(/\.json$/, ''));
       } else {
-        this.stateStack.pop();
+        // NewCardArgs — create the card
+        let newCardId = await this.createNewTask.perform(
+          selectedItem.ref,
+          selectedItem.relativeTo
+            ? new URL(selectedItem.relativeTo)
+            : undefined,
+          new URL(selectedItem.realmURL),
+        );
+        if (newCardId) {
+          cardIds.push(newCardId.replace(/\.json$/, ''));
+        }
       }
-    },
-  );
+    }
+
+    let request = currentState.request;
+    if (request) {
+      request.deferred.fulfill(cardIds.length > 0 ? cardIds : undefined);
+    }
+
+    // Remove state from stack
+    let stateIndex = this.stateStack.findIndex(
+      (s) => s.id === currentState!.id,
+    );
+    if (stateIndex >= 0) {
+      this.stateStack.splice(stateIndex, 1);
+    }
+  });
 
   @action private handleKeydown(event: KeyboardEvent) {
     if (event.key === 'Escape') {
-      this.pick(undefined);
+      this.cancelPick();
     }
   }
 
-  @action private pick(item?: string | CardDef | NewCardArgs, state?: State) {
-    this.pickCard.perform(item, state);
-  }
-
   @action private cancelPick() {
-    this.pick(undefined, undefined);
+    if (!this.state) {
+      return;
+    }
+    let request = this.state.request;
+    if (request) {
+      request.deferred.fulfill(undefined);
+    }
+    this.stateStack.pop();
   }
 
   private createNewTask = task(

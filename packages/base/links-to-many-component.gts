@@ -40,6 +40,7 @@ import {
   type ResolvedCodeRef,
   uuidv4,
   CardCrudFunctionsContextName,
+  CardErrorJSONAPI,
 } from '@cardstack/runtime-common';
 import {
   IconMinusCircle,
@@ -154,9 +155,14 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
       },
     );
     if (cardId) {
-      let card = await this.cardContext.store.get(cardId);
-      if (isCardInstance(card)) {
-        selectedCards = [...selectedCards, card];
+      let cardsOrCardErrors = (await Promise.all(
+        cardId.map((id: string) => this.cardContext.store.get(id)),
+      )) as (CardDef | CardErrorJSONAPI)[];
+      let newCards = cardsOrCardErrors.filter((card) =>
+        isCardInstance(card),
+      ) as CardDef[];
+      if (newCards.length > 0) {
+        selectedCards = [...selectedCards, ...newCards];
         (this.args.model.value as any)[this.args.field.name] = selectedCards;
       }
     }
@@ -533,11 +539,7 @@ export function getLinksToManyComponent({
   let linksToManyComponent = class LinksToManyComponent extends GlimmerComponent<BoxComponentSignature> {
     <template>
       <DefaultFormatsConsumer as |defaultFormats|>
-        {{#if
-          (shouldRenderEditor
-            @format defaultFormats.cardDef isComputed
-          )
-        }}
+        {{#if (shouldRenderEditor @format defaultFormats.cardDef isComputed)}}
           <LinksToManyEditor
             @model={{model}}
             @arrayField={{arrayField}}
