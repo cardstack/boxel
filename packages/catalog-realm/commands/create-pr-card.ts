@@ -18,6 +18,7 @@ class CreatePrCardInput extends CardDef {
   @field prUrl = contains(StringField);
   @field prTitle = contains(StringField);
   @field branchname = contains(StringField);
+  @field submittedBy = contains(StringField);
 }
 
 export default class CreatePrCardCommand extends Command<
@@ -31,7 +32,7 @@ export default class CreatePrCardCommand extends Command<
   }
 
   protected async run(input: CreatePrCardInput): Promise<PrCard> {
-    let { realm, prNumber, prUrl, prTitle, branchname } = input;
+    let { realm, prNumber, prUrl, prTitle, branchname, submittedBy } = input;
     let catalogRealmUrl = new RealmPaths(new URL('..', import.meta.url)).url;
 
     let card = new PrCard({
@@ -39,7 +40,7 @@ export default class CreatePrCardCommand extends Command<
       prUrl,
       prTitle,
       branchname,
-      submittedBy: 'boxel-submission-bot',
+      submittedBy,
       submittedAt: new Date(),
     });
 

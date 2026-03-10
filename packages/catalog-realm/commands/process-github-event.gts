@@ -42,6 +42,7 @@ export default class ProcessGithubEventCommand extends Command<
           prUrl: pr.html_url,
           prTitle: pr.title,
           branchname: pr.head?.ref,
+          submittedBy: pr.user?.login,
         });
       }
     }
