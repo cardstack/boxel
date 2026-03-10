@@ -23,16 +23,19 @@ export async function waitForIncrementalIndexEvent(
   since: number,
   timeout = 1000,
 ) {
-  await waitUntil(async () => {
-    let matrixMessages = await getMessagesSince(since);
+  await waitUntil(
+    async () => {
+      let matrixMessages = await getMessagesSince(since);
 
-    return matrixMessages.some(
-      (m) =>
-        m.type === APP_BOXEL_REALM_EVENT_TYPE &&
-        m.content.eventName === 'index' &&
-        m.content.indexType === 'incremental',
-    );
-  }, { timeout });
+      return matrixMessages.some(
+        (m) =>
+          m.type === APP_BOXEL_REALM_EVENT_TYPE &&
+          m.content.eventName === 'index' &&
+          m.content.indexType === 'incremental',
+      );
+    },
+    { timeout },
+  );
 }
 
 export async function expectIncrementalIndexEvent(

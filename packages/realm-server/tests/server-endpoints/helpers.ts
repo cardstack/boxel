@@ -1,5 +1,9 @@
+import { join } from 'path';
+import supertest from 'supertest';
 import type { Test, SuperTest } from 'supertest';
-import type { DirResult } from 'tmp';
+import { dirSync, type DirResult } from 'tmp';
+import { copySync, ensureDirSync } from 'fs-extra';
+import { DEFAULT_PERMISSIONS } from '@cardstack/runtime-common';
 import type {
   QueuePublisher,
   QueueRunner,
@@ -10,6 +14,11 @@ import type { Server } from 'http';
 import type { PgAdapter } from '@cardstack/postgres';
 import type { RealmServer } from '../../server';
 import {
+  closeServer,
+  createVirtualNetwork,
+  matrixURL,
+  runTestRealmServer,
+  setupDB,
   setupPermissionedRealmCached,
   testRealmURL as baseTestRealmURL,
 } from '../helpers';
@@ -41,6 +50,49 @@ export function setupServerEndpointsTest(
   options: ServerEndpointsTestOptions = {},
 ) {
   let context = {} as ServerEndpointsTestContext;
+  let ownerUserId = '@mango:localhost';
+
+  if (options.beforeStartRealmServer) {
+    hooks.beforeEach(function () {
+      context.dir = dirSync();
+    });
+
+    setupDB(hooks, {
+      beforeEach: async (_dbAdapter, _publisher, _runner) => {
+        context.dbAdapter = _dbAdapter;
+        context.publisher = _publisher;
+        context.runner = _runner;
+        context.virtualNetwork = createVirtualNetwork();
+        context.testRealmDir = join(context.dir.name, 'realm_server_1', 'test');
+        ensureDirSync(context.testRealmDir);
+        copySync(join(__dirname, '..', 'cards'), context.testRealmDir);
+        await options.beforeStartRealmServer?.(context);
+        let server = await runTestRealmServer({
+          virtualNetwork: context.virtualNetwork,
+          testRealmDir: context.testRealmDir,
+          realmsRootPath: join(context.dir.name, 'realm_server_1'),
+          realmURL: testRealmURL,
+          dbAdapter: _dbAdapter,
+          publisher: _publisher,
+          runner: _runner,
+          matrixURL,
+          permissions: {
+            '*': ['read', 'write'],
+            [ownerUserId]: DEFAULT_PERMISSIONS,
+          },
+        });
+        context.testRealm = server.testRealm;
+        context.testRealmServer = server.testRealmServer;
+        context.testRealmHttpServer = server.testRealmHttpServer;
+        context.request = supertest(server.testRealmHttpServer);
+      },
+      afterEach: async () => {
+        await closeServer(context.testRealmHttpServer);
+      },
+    });
+
+    return context;
+  }
 
   function onRealmSetup(args: {
     testRealmServer: {
@@ -66,7 +118,6 @@ export function setupServerEndpointsTest(
     context.publisher = args.publisher;
     context.testRealmDir = args.testRealmPath;
     context.virtualNetwork = args.virtualNetwork;
-    void options.beforeStartRealmServer?.(context);
   }
 
   setupPermissionedRealmCached(hooks, {

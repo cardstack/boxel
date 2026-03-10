@@ -150,7 +150,7 @@ import './server-endpoints/authentication-test';
 import './server-endpoints/bot-commands-test';
 import './server-endpoints/bot-registration-test';
 import './server-endpoints/download-realm-test';
-// TODO: import './server-endpoints/index-responses-test';
+import './server-endpoints/index-responses-test';
 import './server-endpoints/maintenance-endpoints-test';
 import './server-endpoints/queue-status-test';
 import './server-endpoints/realm-lifecycle-test';
