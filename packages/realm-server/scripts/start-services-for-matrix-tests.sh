@@ -32,6 +32,17 @@ if [ -n "$BOXEL_ENVIRONMENT" ]; then
   "$REPO_ROOT/scripts/ensure-branch-db.sh" "$ENV_SLUG"
   echo "Running database migrations..."
   pnpm migrate
+
+  # Start icons server in background (env-aware: dynamic port + Traefik registration).
+  # In non-env mode, icons is expected to be started externally (e.g. CI does this).
+  sh "$SCRIPTS_DIR/start-icons.sh" &
+  ICONS_PID=$!
+  cleanup_icons_server() {
+    if [ -n "$ICONS_PID" ]; then
+      kill "$ICONS_PID" >/dev/null 2>&1 || true
+    fi
+  }
+  trap cleanup_icons_server EXIT INT TERM
 else
   READINESS_URL="http-get://localhost:4201/base/_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson"
   ICONS_URL="http://localhost:4206"
