@@ -32,6 +32,7 @@ if [ -n "$BOXEL_ENVIRONMENT" ]; then
   "$REPO_ROOT/scripts/ensure-branch-db.sh" "$ENV_SLUG"
   echo "Running database migrations..."
   pnpm migrate
+  ./scripts/start-matrix.sh
 
   # Start icons server in background (env-aware: dynamic port + Traefik registration).
   # In non-env mode, icons is expected to be started externally (e.g. CI does this).
