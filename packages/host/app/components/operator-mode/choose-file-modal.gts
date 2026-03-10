@@ -360,7 +360,7 @@ export default class ChooseFileModal extends Component<Signature> {
         font: 500 var(--boxel-font-sm);
       }
       .choose-file {
-        overflow: hidden;
+        overflow: visible;
       }
       .choose-file :deep(.content) {
         height: 267px;
@@ -369,6 +369,13 @@ export default class ChooseFileModal extends Component<Signature> {
         border: var(--boxel-border);
         border-radius: var(--boxel-border-radius);
         padding: var(--boxel-sp-xxs);
+      }
+      .choose-file :deep(.content:focus-within) {
+        outline: 2px solid var(--ring, var(--boxel-highlight-hover));
+        outline-offset: 2px;
+      }
+      .choose-file :deep(.content [data-test-file-tree-nav]:focus-visible) {
+        outline: none;
       }
       :deep(.dialog-box__footer) {
         height: auto;

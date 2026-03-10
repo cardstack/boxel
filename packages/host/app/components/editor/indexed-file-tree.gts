@@ -458,29 +458,43 @@ class TreeLevel extends Component<TreeLevelSignature> {
         overflow: hidden;
         text-overflow: ellipsis;
         cursor: default;
+        transition:
+          background-color var(--boxel-transition),
+          outline-color var(--boxel-transition),
+          box-shadow var(--boxel-transition);
       }
 
-      .directory:hover,
-      .file:hover {
+      .directory:hover:not(.cursor),
+      .file:hover:not(.cursor):not(.selected) {
         background-color: var(--boxel-200);
       }
 
-      .file.selected,
-      .file:active {
+      /* Selected file: green inverse state */
+      .file.selected {
         color: var(--boxel-dark);
         background-color: var(--boxel-highlight);
       }
 
-      .file.cursor,
-      .directory.cursor {
-        background-color: var(--boxel-200);
-        outline: 2px solid var(--boxel-highlight);
-        outline-offset: -2px;
+      /* Keyboard cursor on files: same green inverse state */
+      .file.cursor {
+        color: var(--boxel-dark);
+        background-color: var(--boxel-highlight);
       }
 
+      /* Keyboard cursor on directories: lighter active state */
+      .directory.cursor {
+        color: var(--boxel-dark);
+        background-color: color-mix(
+          in srgb,
+          var(--boxel-highlight) 24%,
+          var(--boxel-light)
+        );
+        box-shadow: inset 0 0 0 1px var(--boxel-highlight);
+      }
+
+      /* Ensure stacked states stay visually identical */
       .file.selected.cursor {
-        outline: 2px solid color-mix(in srgb, var(--boxel-highlight) 60%, black);
-        outline-offset: -2px;
+        box-shadow: none;
       }
 
       .directory {
