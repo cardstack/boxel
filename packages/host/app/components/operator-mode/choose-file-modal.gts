@@ -54,6 +54,7 @@ export default class ChooseFileModal extends Component<Signature> {
   @tracked acceptTypes?: string;
   @tracked currentUpload?: FileUploadTask;
   @tracked isDropZoneActive = false;
+  @tracked private fileTreeRenderNonce = 0;
   private dropZoneDragDepth = 0;
 
   @service declare private operatorModeStateService: OperatorModeStateService;
@@ -97,6 +98,7 @@ export default class ChooseFileModal extends Component<Signature> {
         r.url.toString() === this.operatorModeStateService.realmURL?.toString(),
     );
     this.selectedRealm = defaultRealm ?? this.selectedRealm;
+    this.fileTreeRenderNonce++;
 
     if (opts?.fileType) {
       try {
@@ -230,6 +232,10 @@ export default class ChooseFileModal extends Component<Signature> {
 
   private get dropZoneLabel() {
     return `Drop file to upload to ${this.selectedRealm.info.name}`;
+  }
+
+  private get fileTreeRenderKey(): string {
+    return `${this.fileTreeRenderNonce}:${this.selectedRealm.url.href}`;
   }
 
   private resetState() {
@@ -374,7 +380,7 @@ export default class ChooseFileModal extends Component<Signature> {
         outline: 2px solid var(--ring, var(--boxel-highlight-hover));
         outline-offset: 2px;
       }
-      .choose-file :deep(.content [data-test-file-tree-nav]:focus-visible) {
+      .choose-file :deep(.content [data-file-tree-nav]:focus-visible) {
         outline: none;
       }
       :deep(.dialog-box__footer) {
@@ -459,10 +465,10 @@ export default class ChooseFileModal extends Component<Signature> {
             @label='Choose File'
             @tag='div'
           >
-            {{! Use #each with single-element array to force component recreation when realm changes }}
-            {{#each (array this.selectedRealm.url.href) as |realmURL|}}
+            {{! Force recreation when realm changes or chooser reopens }}
+            {{#each (array this.fileTreeRenderKey)}}
               <IndexedFileTree
-                @realmURL={{realmURL}}
+                @realmURL={{this.selectedRealm.url.href}}
                 @fileTypeFilter={{this.fileTypeFilter}}
                 @onFileSelected={{this.selectFile}}
                 @onFileConfirmed={{this.pick}}

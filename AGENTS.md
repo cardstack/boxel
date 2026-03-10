@@ -115,6 +115,11 @@
 
 - Always run `pnpm lint` in modified packages before committing
 
+## Production-safe selectors
+
+- `data-test-*` attributes are stripped from production builds. Never use them for runtime behavior or styling in app code.
+- For production hooks, use classes or non-test `data-*` attributes (for example `data-path`, `data-kind`) and keep `data-test-*` only for tests.
+
 ## `.gts` file gotcha: regex literals can break content-tag
 
 The `content-tag` preprocessor (used by glint and ember-eslint-parser to parse `.gts` files) has bugs in its JavaScript lexer that cause it to misparse certain regex literals. When this happens, it fails to recognize `<template>` tags later in the file, producing cascading parse errors. Two known triggers:

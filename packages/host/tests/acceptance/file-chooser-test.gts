@@ -486,6 +486,57 @@ module('Acceptance | file chooser keyboard tests', function (hooks) {
     await click('[data-test-choose-file-modal-cancel-button]');
   });
 
+  test('file list area is focused when the modal reopens', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}FileLinkCard/empty`,
+            format: 'edit',
+          },
+        ],
+      ],
+    });
+
+    await click(
+      '[data-test-links-to-editor="attachment"] [data-test-add-new="attachment"]',
+    );
+
+    await waitUntil(
+      () =>
+        document.activeElement ===
+        document.querySelector('[data-test-file-tree-nav]'),
+      {
+        timeout: 5000,
+        timeoutMessage: 'file tree nav was not focused on first open',
+      },
+    );
+
+    await click('[data-test-choose-file-modal-cancel-button]');
+
+    await click(
+      '[data-test-links-to-editor="attachment"] [data-test-add-new="attachment"]',
+    );
+
+    await waitUntil(
+      () =>
+        document.activeElement ===
+        document.querySelector('[data-test-file-tree-nav]'),
+      {
+        timeout: 5000,
+        timeoutMessage: 'file tree nav was not focused on reopen',
+      },
+    );
+
+    assert.strictEqual(
+      document.activeElement,
+      document.querySelector('[data-test-file-tree-nav]'),
+      'file tree nav has focus on modal reopen',
+    );
+
+    await click('[data-test-choose-file-modal-cancel-button]');
+  });
+
   test('individual file buttons are not in the tab order', async function (assert) {
     await visitOperatorMode({
       stacks: [

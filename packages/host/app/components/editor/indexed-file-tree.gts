@@ -56,8 +56,10 @@ interface Signature {
 export default class IndexedFileTree extends Component<Signature> {
   <template>
     <nav
+      class='indexed-file-tree-nav'
       aria-label='File tree'
       tabindex='0'
+      data-file-tree-nav
       data-test-file-tree-nav
       {{on 'keydown' this.handleKeydown}}
       {{AutoFocusModifier @autoFocus}}
@@ -179,10 +181,9 @@ export default class IndexedFileTree extends Component<Signature> {
   }
 
   private scrollPathIntoView(path: string, nav: HTMLElement) {
-    const escaped = CSS.escape(path);
-    const el = nav.querySelector<HTMLElement>(
-      `[data-test-file="${escaped}"], [data-test-directory="${escaped}"]`,
-    );
+    const el = Array.from(
+      nav.querySelectorAll<HTMLElement>('[data-path]'),
+    ).find((candidate) => candidate.dataset.path === path);
     el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }
 
@@ -350,10 +351,9 @@ export default class IndexedFileTree extends Component<Signature> {
             .startsWith(this.typeAheadBuffer),
         );
         if (match) {
-          const path =
-            match.dataset['testFile'] ?? match.dataset['testDirectory'];
+          const path = match.dataset.path;
           if (path) {
-            if (match.dataset['testFile']) {
+            if (match.dataset.kind === 'file') {
               // File: update selection (selectFile also sets cursorPath)
               this.selectFile(path as LocalPath);
             } else {
@@ -390,6 +390,8 @@ class TreeLevel extends Component<TreeLevelSignature> {
         {{#if (eq entry.kind 'file')}}
           <button
             data-test-file={{entry.path}}
+            data-path={{entry.path}}
+            data-kind='file'
             title={{entry.name}}
             tabindex='-1'
             {{on 'click' (fn @onFileSelected entry.path)}}
@@ -407,6 +409,8 @@ class TreeLevel extends Component<TreeLevelSignature> {
         {{else}}
           <button
             data-test-directory={{entry.path}}
+            data-path={{entry.path}}
+            data-kind='directory'
             title={{entry.name}}
             tabindex='-1'
             {{on 'click' (fn @onDirectorySelected entry.path)}}
