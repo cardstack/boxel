@@ -644,10 +644,10 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     const mxcUrl = attachedCard.url;
 
     assert.ok(mxcUrl, 'Attached card has a URL (mxc)');
-    // The mock matrix server uses http://mock-server/ for its mxc content
+    // The mock matrix server uses http://mock-server/_matrix/media/ for its mxc content
     assert.ok(
-      mxcUrl.startsWith('http://mock-server/'),
-      `Card URL "${mxcUrl}" should start with http://mock-server/`,
+      mxcUrl.startsWith('http://mock-server/_matrix/media/'),
+      `Card URL "${mxcUrl}" should start with http://mock-server/_matrix/media/`,
     );
 
     // Download the card file def
