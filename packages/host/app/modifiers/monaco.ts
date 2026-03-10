@@ -154,7 +154,10 @@ export default class Monaco extends Modifier<Signature> {
 
     registerDestructor(this, () => {
       this.onDispose?.();
-      this.editor!.dispose();
+      this.model?.dispose();
+      this.model = undefined;
+      this.editor?.dispose();
+      this.editor = undefined;
     });
 
     this.model = this.editor.getModel()!;

@@ -1,6 +1,8 @@
+import { registerDestructor } from '@ember/destroyable';
 import { fn, concat, array } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
+import type Owner from '@ember/owner';
 import Component from '@glimmer/component';
 
 import { tracked } from '@glimmer/tracking';
@@ -219,6 +221,13 @@ export default class Directory extends Component<Args> {
   @tracked private selectedFile?: LocalPath;
   private openDirs: TrackedArray<LocalPath> = new TrackedArray();
   private dropdownApis = new Map<LocalPath, BoxelDropdownAPI>();
+
+  constructor(owner: Owner, args: Args['Args']) {
+    super(owner, args);
+    registerDestructor(this, () => {
+      this.dropdownApis.clear();
+    });
+  }
 
   @action
   private selectFile(entryPath: LocalPath) {

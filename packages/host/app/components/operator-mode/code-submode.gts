@@ -213,6 +213,7 @@ export default class CodeSubmode extends Component<Signature> {
 
     registerDestructor(this, () => {
       this.operatorModeStateService.unsubscribeFromOpenFileStateChanges(this);
+      this.codeSemanticsService.clearOnModuleEditCallback(this.onModuleEdit);
     });
   }
 

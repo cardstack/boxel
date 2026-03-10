@@ -24,7 +24,7 @@ import max from 'lodash/max';
 
 import pluralize from 'pluralize';
 
-import { TrackedObject, TrackedArray, TrackedMap } from 'tracked-built-ins';
+import { TrackedObject, TrackedMap, TrackedSet } from 'tracked-built-ins';
 
 import { v4 as uuidv4 } from 'uuid';
 
@@ -90,6 +90,15 @@ interface Signature {
     monacoSDK: MonacoSDK;
     selectedCardRef?: ResolvedCodeRef;
   };
+}
+
+interface RoomScrollState {
+  messageElements: Map<HTMLElement, number>;
+  messageScrollers: Map<number, Element['scrollIntoView']>;
+  messageVisibilityObserver: IntersectionObserver;
+  isScrolledToBottom: boolean;
+  userHasScrolled: boolean;
+  isConversationScrollable: boolean;
 }
 
 export default class Room extends Component<Signature> {
@@ -168,6 +177,7 @@ export default class Room extends Component<Signature> {
                 @roomResource={{@roomResource}}
                 @index={{i}}
                 @registerScroller={{this.registerMessageScroller}}
+                @unregisterScroller={{this.unregisterMessageScroller}}
                 @isPending={{this.isPendingMessage message}}
                 @monacoSDK={{@monacoSDK}}
                 @isStreaming={{this.isMessageStreaming message}}
@@ -461,22 +471,13 @@ export default class Room extends Component<Signature> {
     attachedCardIds: () => this.cardIdsToAttach,
     removedCardIds: () => this.removedAttachedCardIds,
   });
-  private removedAttachedCardIds = new TrackedArray<string>();
+  private removedAttachedCardIds = new TrackedSet<string>();
   private removedAttachedFileUrls: string[] = [];
   private lastAutoAttachedFileUrlsKey: string | undefined;
+  private lastKnownRoom: RoomData | undefined;
   private getConversationScrollability: (() => boolean) | undefined;
   private scrollConversationToBottom: (() => void) | undefined;
-  private roomScrollState: WeakMap<
-    RoomData,
-    {
-      messageElements: WeakMap<HTMLElement, number>;
-      messageScrollers: Map<number, Element['scrollIntoView']>;
-      messageVisibilityObserver: IntersectionObserver;
-      isScrolledToBottom: boolean;
-      userHasScrolled: boolean;
-      isConversationScrollable: boolean;
-    }
-  > = new WeakMap();
+  private roomScrollState: WeakMap<RoomData, RoomScrollState> = new WeakMap();
 
   @tracked private unknownMessageSendError: string | undefined = undefined;
   private _fileUploadStates = new TrackedMap<string, FileUploadState>();
@@ -499,28 +500,43 @@ export default class Room extends Component<Signature> {
     super(owner, args);
     this.doMatrixEventFlush.perform();
     registerDestructor(this, () => {
-      this.scrollState().messageVisibilityObserver.disconnect();
+      this.cleanupScrollState();
+      this.getConversationScrollability = undefined;
+      this.scrollConversationToBottom = undefined;
     });
   }
 
-  private scrollState() {
-    if (!this.room) {
-      throw new Error(`Cannot get room scroll state before room is loaded`);
+  private get existingScrollState() {
+    let room = this.roomForCleanup;
+    return room ? this.roomScrollState.get(room) : undefined;
+  }
+
+  private ensureScrollState() {
+    let room = this.room;
+    if (!room) {
+      return;
     }
-    let state = this.roomScrollState.get(this.room);
+    if (this.lastKnownRoom && this.lastKnownRoom !== room) {
+      this.cleanupScrollState(this.lastKnownRoom);
+    }
+    this.lastKnownRoom = room;
+    let state = this.roomScrollState.get(room);
     if (!state) {
-      state = new TrackedObject({
+      let nextState!: RoomScrollState;
+      nextState = new TrackedObject({
         isScrolledToBottom: false,
         userHasScrolled: false,
         isConversationScrollable: false,
-        messageElements: new WeakMap(),
+        messageElements: new Map(),
         messageScrollers: new Map(),
         messageVisibilityObserver: new IntersectionObserver((entries) => {
           entries.forEach((entry) => {
-            let index = this.messageElements.get(entry.target as HTMLElement);
+            let index = nextState.messageElements.get(
+              entry.target as HTMLElement,
+            );
             if (index != null) {
               if (
-                (!this.isConversationScrollable || entry.isIntersecting) &&
+                (!nextState.isConversationScrollable || entry.isIntersecting) &&
                 index > this.lastReadMessageIndex
               ) {
                 this.sendReadReceipt(this.messages[index]);
@@ -529,9 +545,30 @@ export default class Room extends Component<Signature> {
           });
         }),
       });
-      this.roomScrollState.set(this.room, state);
+      state = nextState;
+      this.roomScrollState.set(room, state);
     }
     return state;
+  }
+
+  private cleanupScrollState(room = this.roomForCleanup) {
+    if (!room) {
+      return;
+    }
+    let scrollState = this.roomScrollState.get(room);
+    if (!scrollState) {
+      return;
+    }
+    for (let element of scrollState.messageElements.keys()) {
+      scrollState.messageVisibilityObserver.unobserve(element);
+    }
+    scrollState.messageVisibilityObserver.disconnect();
+    scrollState.messageElements.clear();
+    scrollState.messageScrollers.clear();
+    scrollState.isScrolledToBottom = false;
+    scrollState.userHasScrolled = false;
+    scrollState.isConversationScrollable = false;
+    this.roomScrollState.delete(room);
   }
 
   // Using a resource for automatically attached files,
@@ -678,27 +715,15 @@ export default class Room extends Component<Signature> {
   }
 
   private get isScrolledToBottom() {
-    return this.scrollState().isScrolledToBottom;
+    return this.existingScrollState?.isScrolledToBottom ?? false;
   }
 
   private get userHasScrolled() {
-    return this.scrollState().userHasScrolled;
+    return this.existingScrollState?.userHasScrolled ?? false;
   }
 
   private get isConversationScrollable() {
-    return this.scrollState().isConversationScrollable;
-  }
-
-  private get messageElements() {
-    return this.scrollState().messageElements;
-  }
-
-  private get messageScrollers() {
-    return this.scrollState().messageScrollers;
-  }
-
-  private get messageVisibilityObserver() {
-    return this.scrollState().messageVisibilityObserver;
+    return this.existingScrollState?.isConversationScrollable ?? false;
   }
 
   private registerMessageScroller = ({
@@ -710,10 +735,24 @@ export default class Room extends Component<Signature> {
     element: HTMLElement;
     scrollTo: (arg?: any) => void;
   }) => {
-    this.messageElements.set(element, index);
-    this.messageScrollers.set(index, scrollTo);
-    this.messageVisibilityObserver.observe(element);
-    this.scrollState().isConversationScrollable = Boolean(
+    let scrollState = this.ensureScrollState();
+    if (!scrollState) {
+      return;
+    }
+    for (let [
+      registeredElement,
+      registeredIndex,
+    ] of scrollState.messageElements) {
+      if (registeredIndex === index && registeredElement !== element) {
+        scrollState.messageElements.delete(registeredElement);
+        scrollState.messageVisibilityObserver.unobserve(registeredElement);
+        break;
+      }
+    }
+    scrollState.messageElements.set(element, index);
+    scrollState.messageScrollers.set(index, scrollTo);
+    scrollState.messageVisibilityObserver.observe(element);
+    scrollState.isConversationScrollable = Boolean(
       this.getConversationScrollability?.(),
     );
     if (!this.isConversationScrollable || !this.isAllowedToAutoScroll) {
@@ -742,6 +781,22 @@ export default class Room extends Component<Signature> {
     }
   };
 
+  private unregisterMessageScroller = ({
+    index,
+    element,
+  }: {
+    index: number;
+    element: HTMLElement;
+  }) => {
+    let scrollState = this.existingScrollState;
+    if (!scrollState) {
+      return;
+    }
+    scrollState.messageElements.delete(element);
+    scrollState.messageScrollers.delete(index);
+    scrollState.messageVisibilityObserver.unobserve(element);
+  };
+
   private registerConversationScroller = (
     isConversationScrollable: () => boolean,
     scrollToBottom: () => void,
@@ -751,9 +806,13 @@ export default class Room extends Component<Signature> {
   };
 
   private setScrollPosition = ({ isBottom }: { isBottom: boolean }) => {
-    this.scrollState().isScrolledToBottom = isBottom;
+    let scrollState = this.ensureScrollState();
+    if (!scrollState) {
+      return;
+    }
+    scrollState.isScrolledToBottom = isBottom;
     if (!isBottom) {
-      this.scrollState().userHasScrolled = true;
+      scrollState.userHasScrolled = true;
     }
   };
 
@@ -763,7 +822,8 @@ export default class Room extends Component<Signature> {
     }
 
     let firstUnreadIndex = this.lastReadMessageIndex + 1;
-    let scrollTo = this.messageScrollers.get(firstUnreadIndex);
+    let scrollTo =
+      this.existingScrollState?.messageScrollers.get(firstUnreadIndex);
     if (!scrollTo) {
       console.warn(`No scroller for message index ${firstUnreadIndex}`);
     } else {
@@ -927,8 +987,11 @@ export default class Room extends Component<Signature> {
   }
 
   private get room() {
-    let room = this.args.roomResource.matrixRoom;
-    return room;
+    return this.args.roomResource?.matrixRoom;
+  }
+
+  private get roomForCleanup() {
+    return this.room ?? this.lastKnownRoom;
   }
 
   private doWhenRoomChanges = restartableTask(async () => {
@@ -1003,7 +1066,7 @@ export default class Room extends Component<Signature> {
   private chooseCard(cardId: string) {
     // handle the case where auto-attached card pill is clicked
     if (this.autoAttachedCardIds.has(cardId)) {
-      this.removedAttachedCardIds.push(cardId);
+      this.removedAttachedCardIds.add(cardId);
     }
 
     let cardIds = this.cardIdsToAttach ?? [];
@@ -1020,7 +1083,7 @@ export default class Room extends Component<Signature> {
     }
 
     if (this.autoAttachedCardIds.has(id)) {
-      this.removedAttachedCardIds.push(id);
+      this.removedAttachedCardIds.add(id);
       return;
     }
 
@@ -1234,7 +1297,7 @@ export default class Room extends Component<Signature> {
 
   private resetAutoAttachedRemovedStateTask = task(async () => {
     await Promise.resolve();
-    this.removedAttachedCardIds.splice(0);
+    this.removedAttachedCardIds.clear();
   });
 
   private get autoAttachedCardIds() {

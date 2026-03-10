@@ -1,7 +1,9 @@
+import { registerDestructor } from '@ember/destroyable';
 import { concat } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { getOwner } from '@ember/owner';
+import type Owner from '@ember/owner';
 import type { MiddlewareState } from '@floating-ui/dom';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
@@ -24,10 +26,16 @@ interface Signature {
 export default class Tooltip extends Component<Signature> {
   @tracked isHoverOnTrigger = false;
   private overlayContainer?: HTMLElement | null = null;
+  private triggerElement?: HTMLElement | null = null;
   private themeObserver?: MutationObserver | null = null;
 
+  constructor(owner: Owner, args: Signature['Args']) {
+    super(owner, args);
+    registerDestructor(this, () => this.cleanup());
+  }
+
   get triggerEl(): HTMLElement {
-    return document.querySelector('[data-tooltip-trigger]') as HTMLElement;
+    return this.triggerElement as HTMLElement;
   }
 
   get appRootEl(): HTMLElement {
@@ -103,7 +111,7 @@ export default class Tooltip extends Component<Signature> {
 
     this.syncCustomProps();
 
-    this.themeObserver?.disconnect();
+    this.stopObservingTheme();
     this.themeObserver = new MutationObserver(() => this.syncCustomProps());
     this.themeObserver.observe(this.triggerEl, {
       attributes: true,
@@ -112,8 +120,20 @@ export default class Tooltip extends Component<Signature> {
     });
   }
 
+  private stopObservingTheme() {
+    this.themeObserver?.disconnect();
+    this.themeObserver = null;
+  }
+
+  private cleanup() {
+    this.stopObservingTheme();
+    this.triggerElement = null;
+    this.overlayContainer = null;
+  }
+
   @action
-  onMouseEnter() {
+  onMouseEnter(event: MouseEvent) {
+    this.triggerElement = event.currentTarget as HTMLElement;
     this.isHoverOnTrigger = true;
     this.startObservingTheme();
   }
@@ -121,7 +141,8 @@ export default class Tooltip extends Component<Signature> {
   @action
   onMouseLeave() {
     this.isHoverOnTrigger = false;
-    this.themeObserver?.disconnect();
+    this.stopObservingTheme();
+    this.triggerElement = null;
   }
 
   <template>

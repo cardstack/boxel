@@ -5,14 +5,28 @@ import { tracked } from '@glimmer/tracking';
 import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
 
 import type NetworkService from './network';
+import type ResetService from './reset';
 
 export default class MessageService extends Service {
   @tracked listenerCallbacks: Map<string, ((ev: RealmEventContent) => void)[]> =
     new Map();
   @service declare private network: NetworkService;
+  @service declare private reset: ResetService;
+
+  constructor(...args: ConstructorParameters<typeof Service>) {
+    super(...args);
+    this.reset.register(this);
+  }
 
   register() {
     (globalThis as any)._CARDSTACK_REALM_SUBSCRIBE = this;
+  }
+
+  resetState() {
+    this.listenerCallbacks = new Map();
+    if ((globalThis as any)._CARDSTACK_REALM_SUBSCRIBE === this) {
+      delete (globalThis as any)._CARDSTACK_REALM_SUBSCRIBE;
+    }
   }
 
   subscribe(realmURL: string, cb: (ev: RealmEventContent) => void): () => void {
@@ -41,6 +55,9 @@ export default class MessageService extends Service {
 
     if (callbacksForRealm) {
       callbacksForRealm.splice(callbacksForRealm.indexOf(cb), 1);
+      if (callbacksForRealm.length === 0) {
+        this.listenerCallbacks.delete(realmURL);
+      }
     }
   }
 

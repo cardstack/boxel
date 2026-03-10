@@ -16,6 +16,7 @@ import type * as FileAPI from 'https://cardstack.com/base/file-api';
 
 import type MatrixService from './matrix-service';
 import type NetworkService from './network';
+import type ResetService from './reset';
 import type * as MatrixSDK from 'matrix-js-sdk';
 
 type JoinedRoomsResponse = { joined_rooms: string[] };
@@ -48,7 +49,13 @@ function getJoinedRoomsWithCache(client: MatrixSDK.MatrixClient) {
 export default class MatrixSDKLoader extends Service {
   @service declare private network: NetworkService;
   @service declare private matrixService: MatrixService;
+  @service declare private reset: ResetService;
   #extended: ExtendedMatrixSDK | undefined;
+
+  constructor(owner: Owner) {
+    super(owner);
+    this.reset.register(this);
+  }
 
   async load(): Promise<ExtendedMatrixSDK> {
     if (!this.#extended) {
@@ -67,6 +74,10 @@ export default class MatrixSDKLoader extends Service {
   // For testing purposes, we need to mock the SlidingSync class
   get SlidingSync() {
     return SlidingSync;
+  }
+
+  resetState() {
+    this.#extended = undefined;
   }
 }
 
@@ -156,6 +167,7 @@ export type ExtendedClient = Pick<
   | 'setPowerLevel'
   | 'setRoomName'
   | 'startClient'
+  | 'stopClient'
   | 'getAccountDataFromServer'
   | 'setAccountData'
   | 'getDeviceId'

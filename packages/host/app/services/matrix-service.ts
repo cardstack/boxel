@@ -1,3 +1,4 @@
+import { registerDestructor } from '@ember/destroyable';
 import type Owner from '@ember/owner';
 import { getOwner } from '@ember/owner';
 import type RouterService from '@ember/routing/router-service';
@@ -114,8 +115,6 @@ import { importResource } from '../resources/import';
 
 import { getRoom } from '../resources/room';
 
-import { clearLocalStorage } from '../utils/local-storage-keys';
-
 import type CardService from './card-service';
 import type CommandService from './command-service';
 import type LoaderService from './loader-service';
@@ -210,9 +209,11 @@ export default class MatrixService extends Service {
 
   constructor(owner: Owner) {
     super(owner);
+    this.reset.register(this);
     this.setLoggerLevelFromEnvironment();
     this.setAgentId();
     this.#ready = this.loadState.perform();
+    registerDestructor(this, () => this.teardownClient());
   }
 
   setMessageToSend(roomId: string, message: string | undefined) {
@@ -1283,29 +1284,53 @@ export default class MatrixService extends Service {
     return resources;
   }
 
-  private resetState() {
-    this.roomDataMap = new TrackedMap();
+  resetState() {
+    this.teardownClient();
+    this.roomDataMap.clear();
     this.roomMembershipQueue = [];
     this.roomStateQueue = [];
+    for (let roomResource of this.roomResourcesCache.values()) {
+      roomResource.teardown();
+    }
     this.roomResourcesCache.clear();
     this.canceledActionMessageIdByRoom.clear();
+    this.failedCommandState.clear();
+    this.reasoningExpandedState.clear();
     this.timelineQueue = [];
     this.flushMembership = undefined;
     this.flushTimeline = undefined;
     this.flushRoomState = undefined;
-    this.unbindEventListeners();
+    this.timelineLoadingState.clear();
     this._client = this.matrixSDK.createClient({ baseUrl: matrixURL });
     this._currentRoomId = undefined;
-    this.messagesToSend = new TrackedMap();
-    this.cardsToSend = new TrackedMap();
-    this.filesToSend = new TrackedMap();
-    this.currentUserEventReadReceipts = new TrackedMap();
+    this._isInitializingNewUser = false;
+    this.postLoginCompleted = false;
+    this._isLoadingMoreAIRooms = false;
+    this.messagesToSend.clear();
+    this.cardsToSend.clear();
+    this.filesToSend.clear();
+    this.currentUserEventReadReceipts.clear();
     this.restoredDraftRooms = new Set();
+    this.aiRoomIds.clear();
+    this.initialSyncCompleted = false;
+    this.initialSyncCompletedDeferred = new Deferred<void>();
+    this.roomsWaitingForSync.clear();
+    this._systemCard = undefined;
+    this.startedAtTs = -1;
+    this.#clientReadyDeferred = new Deferred<void>();
+  }
 
-    // Reset it here rather than in the reset function of each service
-    // because it is possible that
-    // there are some services that are not initialized yet
-    clearLocalStorage(this.storage);
+  private teardownClient() {
+    if (this.#eventBindings && this._client) {
+      this.unbindEventListeners();
+    }
+    this.slidingSync?.off?.(
+      SlidingSyncEvent.Lifecycle,
+      this.onSlidingSyncLifecycle,
+    );
+    this.slidingSync?.stop?.();
+    this.slidingSync = undefined;
+    this._client?.stopClient?.();
   }
 
   markActionAsCanceled(roomId: string, eventId: string) {

@@ -112,8 +112,12 @@ export default class MonacoDiffEditor extends Modifier<MonacoDiffEditorSignature
     registerDestructor(this, () => {
       let editor = this.monacoState?.editor;
       if (editor) {
+        let model = editor.getModel();
+        model?.original.dispose();
+        model?.modified.dispose();
         editor.dispose();
       }
+      this.monacoState = null;
     });
   }
 }

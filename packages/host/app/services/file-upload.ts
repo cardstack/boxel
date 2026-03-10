@@ -1,3 +1,4 @@
+import type Owner from '@ember/owner';
 import Service, { service } from '@ember/service';
 
 import { isTesting } from '@embroider/macros';
@@ -13,6 +14,7 @@ import {
 import type { FileDef } from 'https://cardstack.com/base/file-api';
 
 import type NetworkService from './network';
+import type ResetService from './reset';
 import type StoreService from './store';
 
 export class FileUploadTask {
@@ -48,9 +50,19 @@ export class FileUploadTask {
 
 export default class FileUploadService extends Service {
   @service declare private network: NetworkService;
+  @service declare private reset: ResetService;
   @service declare private store: StoreService;
 
   @tracked activeUploads: FileUploadTask[] = [];
+
+  constructor(owner: Owner) {
+    super(owner);
+    this.reset.register(this);
+  }
+
+  resetState() {
+    this.activeUploads = [];
+  }
 
   uploadFile(opts: { realmURL: URL; acceptTypes?: string }): FileUploadTask {
     let task = new FileUploadTask();

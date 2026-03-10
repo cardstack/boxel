@@ -36,6 +36,7 @@ import type LocalPersistenceService from './local-persistence-service';
 import type MatrixService from './matrix-service';
 import type MonacoService from './monaco-service';
 import type OperatorModeStateService from './operator-mode-state-service';
+import type ResetService from './reset';
 import type StoreService from './store';
 import type { Message } from '../lib/matrix-classes/message';
 
@@ -54,6 +55,7 @@ export default class AiAssistantPanelService extends Service {
   @service declare private monacoService: MonacoService;
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private localPersistenceService: LocalPersistenceService;
+  @service declare private reset: ResetService;
   @service declare private store: StoreService;
 
   @tracked displayRoomError = false;
@@ -64,9 +66,25 @@ export default class AiAssistantPanelService extends Service {
 
   constructor(owner: Owner) {
     super(owner);
+    this.reset.register(this);
+    this.resetState();
     if (this.isOpen) {
       this.loadRoomsTask.perform();
     }
+  }
+
+  resetState() {
+    this.displayRoomError = false;
+    this.isShowingPastSessions = false;
+    this.roomToRename = undefined;
+    this.roomToDelete = undefined;
+    this.roomDeleteError = undefined;
+    window.localStorage.removeItem(NewSessionIdPersistenceKey);
+    this.loadRoomsTask.cancelAll();
+    this.doCreateRoom.cancelAll();
+    this.summarizeSessionTask.cancelAll();
+    this.copyFileHistoryTask.cancelAll();
+    this.prepareSessionContextTask.cancelAll();
   }
 
   private commandModuleResource = importResource(
@@ -541,22 +559,32 @@ export default class AiAssistantPanelService extends Service {
       if (!roomToEnter) {
         // If you open the AI Assistant right away, the room might not be loaded yet.
         // In that case, let's wait for it for up to 2 seconds.
-        await Promise.race([
-          timeout(2000),
-          new Promise<void>((resolve) => {
-            let interval = setInterval(() => {
-              roomToEnter = this.aiSessionRooms.find(
-                (r) => r.roomId === persistedRoomId,
-              );
-              if (roomToEnter) {
-                clearInterval(interval);
-                resolve();
-              }
-              // cast here is because @types/node is polluting our definition of
-              // setInterval on the browser.
-            }, 250) as unknown as number;
-          }),
-        ]);
+        let interval: number | undefined;
+        try {
+          await Promise.race([
+            timeout(2000),
+            new Promise<void>((resolve) => {
+              interval = window.setInterval(() => {
+                roomToEnter = this.aiSessionRooms.find(
+                  (r) => r.roomId === persistedRoomId,
+                );
+                if (roomToEnter) {
+                  if (interval !== undefined) {
+                    window.clearInterval(interval);
+                    interval = undefined;
+                  }
+                  resolve();
+                }
+                // cast here is because @types/node is polluting our definition of
+                // setInterval on the browser.
+              }, 250) as unknown as number;
+            }),
+          ]);
+        } finally {
+          if (interval !== undefined) {
+            window.clearInterval(interval);
+          }
+        }
       }
       if (roomToEnter) {
         this.enterRoom(roomToEnter.roomId);

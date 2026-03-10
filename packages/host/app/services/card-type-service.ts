@@ -1,3 +1,4 @@
+import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import Service from '@ember/service';
 
@@ -26,6 +27,7 @@ import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
 import type LoaderService from '../services/loader-service';
 import type NetworkService from '../services/network';
+import type ResetService from '../services/reset';
 
 export type CodeRefType = CodeRef & {
   displayName: string;
@@ -60,10 +62,21 @@ export default class CardTypeService extends Service {
   @service declare private cardService: CardService;
   @service declare private network: NetworkService;
   @service declare private loaderService: LoaderService;
+  @service declare private reset: ResetService;
 
   private typeCache: Map<string, Type> = new Map();
   private moduleInfoCache: Map<string, ModuleInfo> = new Map();
   private loader: object | undefined; //keeps track of the current used loader so cache is reset after a loader reset
+
+  constructor(owner: Owner) {
+    super(owner);
+    this.reset.register(this);
+  }
+
+  resetState() {
+    this.invalidateAllCaches();
+    this.loader = undefined;
+  }
 
   invalidateAllCaches(): void {
     this.typeCache.clear();

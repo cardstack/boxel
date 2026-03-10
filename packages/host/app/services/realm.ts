@@ -674,6 +674,11 @@ export default class RealmService extends Service {
 
   resetState() {
     this.logout();
+    this._realms = new Map();
+    this.currentKnownRealms = new TrackedSet();
+    this.reauthentications.clear();
+    this.bulkInfoPromise = undefined;
+    this.identifyRealmTracker++;
   }
 
   async waitForBulkInfoIfNeeded(): Promise<void> {

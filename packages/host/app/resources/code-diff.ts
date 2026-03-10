@@ -20,28 +20,40 @@ interface CodeDiffResourceArgs {
 }
 
 export class CodeDiffResource extends Resource<CodeDiffResourceArgs> {
-  @tracked fileUrl: string | undefined | null;
-  @tracked originalCode: string | undefined | null;
-  @tracked modifiedCode: string | undefined | null;
-  @tracked searchReplaceBlock: string | undefined | null;
-  @tracked errorMessage: string | undefined | null;
-  codePatchStatus: CodePatchStatus | undefined | null;
+  @tracked fileUrl: string | undefined | null = null;
+  @tracked originalCode: string | undefined | null = null;
+  @tracked modifiedCode: string | undefined | null = null;
+  @tracked searchReplaceBlock: string | undefined | null = null;
+  @tracked errorMessage: string | undefined | null = null;
+  codePatchStatus: CodePatchStatus | undefined | null = null;
 
   @service declare private cardService: CardService;
   @service declare private commandService: CommandService;
 
   modify(_positional: never[], named: CodeDiffResourceArgs['named']) {
     let { fileUrl, searchReplaceBlock, codePatchStatus } = named;
+    if (
+      this.fileUrl !== fileUrl ||
+      this.searchReplaceBlock !== searchReplaceBlock ||
+      this.codePatchStatus !== codePatchStatus
+    ) {
+      this.originalCode = null;
+      this.modifiedCode = null;
+    }
     this.errorMessage = null;
     this.fileUrl = fileUrl;
     this.searchReplaceBlock = searchReplaceBlock;
     this.codePatchStatus = codePatchStatus;
     if (!fileUrl) {
+      this.originalCode = null;
+      this.modifiedCode = null;
       this.errorMessage = 'Missing file URL in the code block';
       return;
     }
 
     if (!searchReplaceBlock) {
+      this.originalCode = null;
+      this.modifiedCode = null;
       this.errorMessage = 'Missing search and replace block';
       return;
     }
@@ -56,6 +68,8 @@ export class CodeDiffResource extends Resource<CodeDiffResourceArgs> {
   private load = restartableTask(async () => {
     let { fileUrl, searchReplaceBlock, codePatchStatus } = this;
     if (codePatchStatus === 'applied') {
+      this.originalCode = null;
+      this.modifiedCode = null;
       // We currently don't show the diff for applied code patches.
       // Showing the diff for applied code patches won't work since in the
       // current code below we try to apply the patch against the original code,

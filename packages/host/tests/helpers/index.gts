@@ -44,7 +44,10 @@ import {
 
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import ENV from '@cardstack/host/config/environment';
-import { render as renderIntoElement } from '@cardstack/host/lib/isolated-render';
+import {
+  render as renderIntoElement,
+  teardown as teardownIsolatedRender,
+} from '@cardstack/host/lib/isolated-render';
 import SQLiteAdapter from '@cardstack/host/lib/sqlite-adapter';
 import type { CardSaveSubscriber } from '@cardstack/host/services/store';
 
@@ -856,10 +859,16 @@ class MockLocalIndexer extends Service {
   #indexWriter: IndexWriter | undefined;
   #prerenderer: Prerenderer | undefined;
   setup(prerenderer: Prerenderer) {
-    if (this.#prerenderer) {
+    if (this.#prerenderer === prerenderer) {
       return;
     }
     this.#prerenderer = prerenderer;
+  }
+  teardown(prerenderer?: Prerenderer) {
+    if (prerenderer && this.#prerenderer !== prerenderer) {
+      return;
+    }
+    this.#prerenderer = undefined;
   }
   async configureRunner(adapter: RealmAdapter, indexWriter: IndexWriter) {
     this.#adapter = adapter;
@@ -909,7 +918,12 @@ export function setupLocalIndexing(hooks: NestedHooks) {
     await store.flushSaves();
     await store.loaded();
     let context = this as RenderingContextWithPrerender;
-    context.__cardPrerenderElement?.remove();
+    if (context.__cardPrerenderElement) {
+      teardownIsolatedRender(
+        context.__cardPrerenderElement as unknown as SimpleElement,
+      );
+      context.__cardPrerenderElement.remove();
+    }
     context.__cardPrerenderElement = undefined;
     // reference counts should balance out automatically as components are destroyed
     store.resetCache({ preserveReferences: true });
@@ -920,6 +934,7 @@ export function setupLocalIndexing(hooks: NestedHooks) {
       clearFetchCache: true,
       reason: 'test teardown',
     });
+    getTestRealmRegistry().clear();
   });
 }
 

@@ -67,6 +67,7 @@ const publicRealmURLs = [
 
 export class MockClient implements ExtendedClient {
   private listeners: Partial<Plural<MatrixSDK.ClientEventHandlerMap>> = {};
+  private stopServerStateSubscriptions: Array<() => void> = [];
 
   private txnCtr = 0;
   private fileDefManager: FileDefManager;
@@ -112,24 +113,30 @@ export class MockClient implements ExtendedClient {
   async startClient(
     opts?: MatrixSDK.IStartClientOpts | undefined,
   ): Promise<void> {
+    this.stopClient();
+
     if (opts?.slidingSync) {
       this.slidingSyncInstance = opts.slidingSync;
       await opts.slidingSync.start();
     }
 
-    this.serverState.onEvent((serverEvent: IEvent) => {
-      this.emitEvent(new MatrixEvent(serverEvent));
-    });
+    this.stopServerStateSubscriptions.push(
+      this.serverState.onEvent((serverEvent: IEvent) => {
+        this.emitEvent(new MatrixEvent(serverEvent));
+      }),
+    );
 
-    this.serverState.onSlidingSyncEvent((roomId, roomName) => {
-      if (this.slidingSyncInstance) {
-        this.slidingSyncInstance.triggerRoomSync(
-          roomId,
-          roomName,
-          this.serverState,
-        );
-      }
-    });
+    this.stopServerStateSubscriptions.push(
+      this.serverState.onSlidingSyncEvent((roomId, roomName) => {
+        if (this.slidingSyncInstance) {
+          this.slidingSyncInstance.triggerRoomSync(
+            roomId,
+            roomName,
+            this.serverState,
+          );
+        }
+      }),
+    );
 
     this.emitEvent(
       new MatrixEvent({
@@ -410,6 +417,9 @@ export class MockClient implements ExtendedClient {
   }
 
   logout(_stopClient?: boolean | undefined): Promise<{}> {
+    if (_stopClient) {
+      this.stopClient();
+    }
     this.clientOpts.userId = undefined;
     return Promise.resolve({});
   }
@@ -727,14 +737,32 @@ export class MockClient implements ExtendedClient {
   }
 
   off<T extends MatrixSDK.EmittedEvents | MatrixSDK.EventEmitterEvents>(
-    _event: T,
-    _listener: MatrixSDK.Listener<
+    event: T,
+    listener: MatrixSDK.Listener<
       MatrixSDK.EmittedEvents,
       MatrixSDK.ClientEventHandlerMap,
       T
     >,
   ): MatrixSDK.MatrixClient {
+    // @ts-expect-error haven't got the types right yet
+    let list = this.listeners[event];
+    if (!list) {
+      return this as unknown as MatrixSDK.MatrixClient;
+    }
+    let index = list.indexOf(listener as never);
+    if (index > -1) {
+      list.splice(index, 1);
+    }
     return this as unknown as MatrixSDK.MatrixClient;
+  }
+
+  stopClient(): void {
+    for (let stop of this.stopServerStateSubscriptions) {
+      stop();
+    }
+    this.stopServerStateSubscriptions = [];
+    this.slidingSyncInstance?.stop?.();
+    this.slidingSyncInstance = undefined;
   }
 
   async setPowerLevel(

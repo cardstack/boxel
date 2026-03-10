@@ -1,4 +1,5 @@
 import { getOwner, setOwner } from '@ember/owner';
+import type Owner from '@ember/owner';
 
 import { debounce } from '@ember/runloop';
 import Service, { service } from '@ember/service';
@@ -32,12 +33,13 @@ import type Realm from '@cardstack/host/services/realm';
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type { CodePatchStatus } from 'https://cardstack.com/base/matrix-event';
 
-import { waitForRealmState } from '../commands/utils';
 import LimitedSet from '../lib/limited-set';
 
 import type LoaderService from './loader-service';
+import type MessageService from './message-service';
 import type OperatorModeStateService from './operator-mode-state-service';
 import type RealmServerService from './realm-server';
+import type ResetService from './reset';
 import type StoreService from './store';
 import type { CodeData } from '../lib/formatted-message/utils';
 import type MessageCodePatchResult from '../lib/matrix-classes/message-code-patch-result';
@@ -55,9 +57,11 @@ type GenericCommand = Command<
 export default class CommandService extends Service {
   @service declare private loaderService: LoaderService;
   @service declare private matrixService: MatrixService;
+  @service declare private messageService: MessageService;
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private realm: Realm;
   @service declare private realmServer: RealmServerService;
+  @service declare private reset: ResetService;
   @service declare private store: StoreService;
   currentlyExecutingCommandRequestIds = new TrackedSet<string>();
   executedCommandRequestIds = new TrackedSet<string>();
@@ -75,10 +79,37 @@ export default class CommandService extends Service {
       deferred: Deferred<void>;
     }
   >();
+  private aiAssistantInvalidationWaiters = new Map<
+    string,
+    { unsubscribe: () => void; timeoutId: ReturnType<typeof setTimeout> }
+  >();
   private commandProcessingEventQueue: string[] = [];
   private codePatchProcessingEventQueue: string[] = [];
   private flushCommandProcessingQueue: Promise<void> | undefined;
   private flushCodePatchProcessingQueue: Promise<void> | undefined;
+
+  constructor(owner: Owner) {
+    super(owner);
+    this.reset.register(this);
+  }
+
+  resetState() {
+    this.currentlyExecutingCommandRequestIds.clear();
+    this.executedCommandRequestIds.clear();
+    this.acceptingAllRoomIds.clear();
+    this.aiAssistantClientRequestIdsByRoom.clear();
+    for (let invalidation of this.aiAssistantInvalidations.values()) {
+      invalidation.deferred.fulfill();
+    }
+    this.aiAssistantInvalidations.clear();
+    for (let key of this.aiAssistantInvalidationWaiters.keys()) {
+      this.cleanupInvalidationWaiter(key);
+    }
+    this.commandProcessingEventQueue = [];
+    this.codePatchProcessingEventQueue = [];
+    this.flushCommandProcessingQueue = undefined;
+    this.flushCodePatchProcessingQueue = undefined;
+  }
 
   registerAiAssistantClientRequestId(action: string, roomId: string): string {
     let encodedRoom = encodeURIComponent(roomId);
@@ -130,6 +161,8 @@ export default class CommandService extends Service {
     }
 
     let deferred = new Deferred<void>();
+    this.aiAssistantInvalidations.get(key)?.deferred.fulfill();
+    this.cleanupInvalidationWaiter(key);
     this.aiAssistantInvalidations.set(key, {
       clientRequestId,
       roomId,
@@ -137,27 +170,45 @@ export default class CommandService extends Service {
       deferred,
     });
 
-    waitForRealmState(
-      this.commandContext,
-      realmURL.href,
-      (event) => {
-        return Boolean(
+    let unsubscribe = this.messageService.subscribe(realmURL.href, (event) => {
+      if (
+        !(
           event &&
           event.eventName === 'index' &&
           event.indexType === 'incremental' &&
-          event.clientRequestId === clientRequestId,
-        );
-      },
-      { timeoutMs: 5 * 60 * 1000, keepRealmSubscription: true }, // we don't wanna close the realm subscription since other places could be subscribed, like the store service
-    )
-      .then(() => {
+          event.clientRequestId === clientRequestId
+        )
+      ) {
+        return;
+      }
+      this.cleanupInvalidationWaiter(key);
+      let current = this.aiAssistantInvalidations.get(key);
+      current?.deferred.fulfill();
+    });
+    let timeoutId = setTimeout(
+      () => {
+        this.cleanupInvalidationWaiter(key);
         let current = this.aiAssistantInvalidations.get(key);
         current?.deferred.fulfill();
-      })
-      .catch(() => {
         this.aiAssistantInvalidations.delete(key);
-      });
+      },
+      5 * 60 * 1000,
+    );
+    this.aiAssistantInvalidationWaiters.set(key, {
+      unsubscribe,
+      timeoutId,
+    });
     return clientRequestId;
+  }
+
+  private cleanupInvalidationWaiter(key: string) {
+    let waiter = this.aiAssistantInvalidationWaiters.get(key);
+    if (!waiter) {
+      return;
+    }
+    waiter.unsubscribe();
+    clearTimeout(waiter.timeoutId);
+    this.aiAssistantInvalidationWaiters.delete(key);
   }
 
   async waitForInvalidationAfterAIAssistantRequest(

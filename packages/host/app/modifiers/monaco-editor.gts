@@ -40,6 +40,7 @@ export default class MonacoEditorModifier extends Modifier<MonacoEditorSignature
   private monacoState: {
     editor: _MonacoSDK.editor.IStandaloneCodeEditor;
   } | null = null;
+  private hasDestructor = false;
   private waiterManager = createMonacoWaiterManager();
   modify(
     element: HTMLElement,
@@ -154,11 +155,15 @@ export default class MonacoEditorModifier extends Modifier<MonacoEditorSignature
       }
     }
 
-    registerDestructor(this, () => {
-      let editor = this.monacoState?.editor;
-      if (editor) {
-        editor.dispose();
-      }
-    });
+    if (!this.hasDestructor) {
+      this.hasDestructor = true;
+      registerDestructor(this, () => {
+        let editor = this.monacoState?.editor;
+        let model = editor?.getModel();
+        model?.dispose();
+        editor?.dispose();
+        this.monacoState = null;
+      });
+    }
   }
 }
