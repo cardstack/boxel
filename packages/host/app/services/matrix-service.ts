@@ -32,8 +32,6 @@ import {
   logger,
   isCardInstance,
   Deferred,
-  baseRealm,
-  testRealmURL,
   SEARCH_MARKER,
   REPLACE_MARKER,
   SEPARATOR_MARKER,
@@ -791,27 +789,19 @@ export default class MatrixService extends Service {
     switch (state) {
       case SlidingSyncState.Complete:
         if (!this.initialSyncCompleted) {
-          // drainRoomState must complete before drainTimeline so that
-          // bot-membership checks can promote rooms into aiRoomIds before
-          // timeline events are routed (otherwise the first message can be
-          // misclassified as an auth-room event and dropped).
-          Promise.allSettled([this.drainRoomState(), this.drainMembership()])
-            .then(() => this.drainTimeline())
-            .then(() => {
-              this.initialSyncCompleted = true;
-              this.initialSyncCompletedDeferred.fulfill();
-            });
+          Promise.allSettled([
+            this.drainRoomState(),
+            this.drainMembership(),
+            this.drainTimeline(),
+          ]).then(() => {
+            this.initialSyncCompleted = true;
+            this.initialSyncCompletedDeferred.fulfill();
+          });
         }
         roomIds.forEach((id) => this.roomsWaitingForSync.get(id)?.fulfill());
         break;
       case SlidingSyncState.RequestFinished:
-        for (let id of roomIds) {
-          let room = this.client.getRoom(id);
-          let botMembership = room?.getMember(this.aiBotUserId)?.membership;
-          if (botMembership === 'join' || botMembership === 'invite') {
-            this.aiRoomIds.add(id);
-          }
-        }
+        roomIds.forEach((id) => this.aiRoomIds.add(id));
         break;
     }
   };
@@ -1295,91 +1285,14 @@ export default class MatrixService extends Service {
       defaultSkills = interactModeDefaultSkills;
     }
 
-    let skillsRealmUrl = new URL(ENV.resolvedSkillsRealmURL).href;
-    let fallbackRealmUrls = new Set<string>(
-      Object.keys(this.realm.allRealmsInfo),
-    );
-    try {
-      let accountData = await this.client.getAccountDataFromServer(
-        APP_BOXEL_REALMS_EVENT_TYPE,
-      );
-      for (let realmUrl of accountData?.realms ?? []) {
-        fallbackRealmUrls.add(realmUrl);
-      }
-    } catch (_error) {
-      // We may still have local realm metadata in this.realm.allRealmsInfo.
-    }
-    if (isTesting()) {
-      fallbackRealmUrls.add(testRealmURL);
-    }
-
-    let loadedSkills = (
+    return (
       await Promise.all(
         defaultSkills.map(async (skillCardURL) => {
-          let maybeCard = await this.loadSkillCardWithRetry(skillCardURL);
-          if (maybeCard) {
-            return maybeCard;
-          }
-
-          if (!skillCardURL.startsWith(skillsRealmUrl)) {
-            return undefined;
-          }
-
-          let relativeSkillPath = skillCardURL.slice(skillsRealmUrl.length);
-          let baseRealmSkillUrl = baseRealm.fileURL(relativeSkillPath).href;
-          let fallbackCard =
-            await this.loadSkillCardWithRetry(baseRealmSkillUrl);
-          if (fallbackCard) {
-            return fallbackCard;
-          }
-
-          for (let realmUrl of fallbackRealmUrls) {
-            let normalizedRealmUrl = realmUrl.endsWith('/')
-              ? realmUrl
-              : `${realmUrl}/`;
-            let candidateSkillUrl = `${normalizedRealmUrl}${relativeSkillPath}`;
-            if (
-              candidateSkillUrl === skillCardURL ||
-              candidateSkillUrl === baseRealmSkillUrl
-            ) {
-              continue;
-            }
-            let candidate =
-              await this.loadSkillCardWithRetry(candidateSkillUrl);
-            if (candidate) {
-              return candidate;
-            }
-          }
-          return undefined;
+          let maybeCard = await this.store.get<SkillModule.Skill>(skillCardURL);
+          return isCardInstance(maybeCard) ? maybeCard : undefined;
         }),
       )
     ).filter(Boolean) as SkillModule.Skill[];
-
-    return loadedSkills;
-  }
-
-  private async loadSkillCardWithRetry(
-    cardId: string,
-  ): Promise<SkillModule.Skill | undefined> {
-    let maxAttempts = isTesting() ? 8 : 2;
-    let delayMs = isTesting() ? 150 : 50;
-
-    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      try {
-        let maybeCard = await this.store.get<SkillModule.Skill>(cardId);
-        if (isCardInstance(maybeCard)) {
-          return maybeCard;
-        }
-      } catch {
-        // Retry because skill cards may not be queryable until realm indexing completes.
-      }
-
-      if (attempt < maxAttempts) {
-        await timeout(delayMs);
-      }
-    }
-
-    return undefined;
   }
 
   @cached
@@ -1867,18 +1780,9 @@ export default class MatrixService extends Service {
     roomStates = Array.from(roomStateMap.values());
     for (let rs of roomStates) {
       // The auth rooms are not stored
-      // so we don't need to process the state updates.
-      // However, a room may arrive before the bot has joined — re-check
-      // bot membership on every state update so the room is promoted to
-      // an AI room as soon as the bot's join/invite event lands.
+      // so we don't need to process the state updates
       if (!this.aiRoomIds.has(rs.roomId)) {
-        let room = this.client.getRoom(rs.roomId);
-        let botMembership = room?.getMember(this.aiBotUserId)?.membership;
-        if (botMembership === 'join' || botMembership === 'invite') {
-          this.aiRoomIds.add(rs.roomId);
-        } else {
-          continue;
-        }
+        continue;
       }
       let roomData = this.ensureRoomData(rs.roomId);
       roomData.notifyRoomStateUpdated(rs);

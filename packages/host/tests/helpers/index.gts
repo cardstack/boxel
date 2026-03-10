@@ -10,9 +10,6 @@ import { findAll, waitUntil, waitFor, click } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
-import boxelDevelopmentSkill from '@cardstack/base/Skill/boxel-development.json';
-import boxelEnvironmentSkill from '@cardstack/base/Skill/boxel-environment.json';
-import sourceCodeEditingSkill from '@cardstack/base/Skill/source-code-editing.json';
 import { getService } from '@universal-ember/test-support';
 
 import QUnit from 'qunit';
@@ -49,7 +46,6 @@ import CardPrerender from '@cardstack/host/components/card-prerender';
 import ENV from '@cardstack/host/config/environment';
 import { render as renderIntoElement } from '@cardstack/host/lib/isolated-render';
 import SQLiteAdapter from '@cardstack/host/lib/sqlite-adapter';
-import { skillsRealm } from '@cardstack/host/lib/utils';
 import type { CardSaveSubscriber } from '@cardstack/host/services/store';
 
 import {
@@ -1154,8 +1150,6 @@ export async function setupIntegrationTestRealm({
   startMatrix?: boolean;
   fileSizeLimitBytes?: number;
 }) {
-  await ensureDefaultSkillsRealm(mockMatrixUtils);
-
   let resolvedRealmURL = ensureTrailingSlash(realmURL ?? testRealmURL);
   setupAuthEndpoints({
     [resolvedRealmURL]: deriveTestUserPermissions(permissions),
@@ -1174,33 +1168,6 @@ export async function setupIntegrationTestRealm({
     adapter: result.adapter,
   });
   return result;
-}
-
-async function ensureDefaultSkillsRealm(mockMatrixUtils: MockUtils) {
-  let skillsRealmURL = ensureTrailingSlash(skillsRealm.url);
-
-  setupAuthEndpoints({
-    [skillsRealmURL]: deriveTestUserPermissions({ '*': ['read'] }),
-  });
-
-  let result = await setupTestRealm({
-    contents: {
-      'Skill/boxel-environment.json': boxelEnvironmentSkill,
-      'Skill/source-code-editing.json': sourceCodeEditingSkill,
-      'Skill/boxel-development.json': boxelDevelopmentSkill,
-      '.realm.json': '{ "name": "Skills" }',
-    },
-    realmURL: skillsRealmURL,
-    isAcceptanceTest: false,
-    permissions: { '*': ['read'] },
-    mockMatrixUtils,
-    startMatrix: false,
-  });
-
-  getTestRealmRegistry().set(result.realm.url, {
-    realm: result.realm,
-    adapter: result.adapter,
-  });
 }
 
 export async function withoutLoaderMonitoring<T>(cb: () => Promise<T>) {
