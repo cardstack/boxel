@@ -17,8 +17,8 @@ export function clearInjectedScopedCSS() {
   if (typeof document === 'undefined') {
     return;
   }
-  for (let styleNode of document.querySelectorAll(
-    `style[${SCOPED_CSS_ATTR}]`,
+  for (let styleNode of Array.from(
+    document.querySelectorAll(`style[${SCOPED_CSS_ATTR}]`),
   )) {
     styleNode.remove();
   }
