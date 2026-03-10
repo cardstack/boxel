@@ -5,9 +5,9 @@ import type { Test, SuperTest } from 'supertest';
 import type { Server } from 'http';
 import { dirSync, type DirResult } from 'tmp';
 import {
-  DBAdapter,
   DEFAULT_PERMISSIONS,
   systemInitiatedPriority,
+  type DBAdapter,
   type Realm,
 } from '@cardstack/runtime-common';
 import type { PgAdapter } from '@cardstack/postgres';
@@ -23,7 +23,7 @@ import {
   waitUntil,
 } from '../helpers';
 import { createJWT as createRealmServerJWT } from '../../utils/jwt';
-import { copySync, ensureDirSync } from 'fs-extra';
+import { ensureDirSync } from 'fs-extra';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
 module(`server-endpoints/${basename(__filename)}`, function () {
