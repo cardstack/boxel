@@ -1,0 +1,16 @@
+#!/bin/sh
+#MISE description="Ensure Synapse is running and users are registered"
+#MISE dir="packages/matrix"
+
+pnpm assert-synapse-running
+
+# In environment mode, register users once per fresh Synapse data dir.
+if [ -n "$BOXEL_ENVIRONMENT" ]; then
+  MARKER="./synapse-data-${ENV_SLUG}/.users-registered"
+  if [ ! -f "$MARKER" ]; then
+    echo "First start for environment — registering users..."
+    pnpm register-all && touch "$MARKER"
+  else
+    echo "Users already registered for this environment, skipping."
+  fi
+fi

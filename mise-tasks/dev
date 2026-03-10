@@ -1,0 +1,44 @@
+#!/bin/sh
+#MISE description="Start full dev stack (realm server, workers, test realms)"
+#MISE dir="packages/realm-server"
+
+READY_PATH="_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson"
+
+# Phase 1 readiness URLs
+BASE_REALM_READY="http-get://${REALM_BASE_URL#http://}/base/${READY_PATH}"
+SKILLS_READY="http-get://${REALM_BASE_URL#http://}/skills/${READY_PATH}"
+WAIT_URLS="${BASE_REALM_READY}|${SKILLS_READY}"
+
+if [ -z "${SKIP_CATALOG:-}" ]; then
+  WAIT_URLS="${WAIT_URLS}|http-get://${REALM_BASE_URL#http://}/catalog/${READY_PATH}"
+fi
+if [ -z "${SKIP_BOXEL_HOMEPAGE:-}" ]; then
+  WAIT_URLS="${WAIT_URLS}|http-get://${REALM_BASE_URL#http://}/boxel-homepage/${READY_PATH}"
+fi
+if [ -z "${SKIP_EXPERIMENTS:-}" ]; then
+  WAIT_URLS="${WAIT_URLS}|http-get://${REALM_BASE_URL#http://}/experiments/${READY_PATH}"
+fi
+
+WAIT_URLS="${WAIT_URLS}|${MATRIX_URL_VAL}|http://localhost:5001|${ICONS_URL}"
+
+# Phase 2 readiness URL
+NODE_TEST_REALM_READY="http-get://${REALM_TEST_URL#http://}/node-test/${READY_PATH}"
+
+# In environment mode, bootstrap infra before starting services
+if [ -n "$BOXEL_ENVIRONMENT" ]; then
+  ./scripts/start-pg.sh
+  echo "Waiting for Postgres to accept connections..."
+  until docker exec boxel-pg pg_isready -U postgres >/dev/null 2>&1; do sleep 1; done
+  REPO_ROOT="$(cd "../.." && pwd)"
+  "$REPO_ROOT/scripts/ensure-branch-db.sh"
+  echo "Running database migrations..."
+  pnpm migrate
+  ./scripts/start-matrix.sh
+fi
+
+WAIT_ON_TIMEOUT=2400000 NODE_NO_WARNINGS=1 start-server-and-test \
+  'run-p -ln start:pg start:matrix start:smtp start:prerender-dev start:prerender-manager-dev start:worker-development start:development' \
+  "$WAIT_URLS" \
+  'run-p -ln start:worker-test start:test-realms' \
+  "$NODE_TEST_REALM_READY" \
+  'wait'
