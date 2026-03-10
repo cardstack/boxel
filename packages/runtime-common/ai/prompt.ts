@@ -1,6 +1,7 @@
 import type { MatrixClient, MatrixEvent } from 'matrix-js-sdk';
 import type {
   ChatCompletionMessageToolCall,
+  ContentPart,
   OpenAIPromptMessage,
   PendingCodePatchCorrectnessCheck,
   CodePatchCorrectnessCard,
@@ -11,10 +12,18 @@ import type {
 import { constructHistory } from './history';
 import {
   downloadFile,
+  downloadFileAsBase64DataUrl,
   extractCodePatchBlocks,
   isCommandOrCodePatchResult,
 } from './matrix-utils';
 import { isRecognisedDebugCommand } from './debug';
+import {
+  isImageContentType,
+  isPdfContentType,
+  isAudioContentType,
+  isVideoContentType,
+  requiredModality,
+} from './modality';
 import type {
   ActiveLLMEvent,
   BoxelContext,
@@ -67,6 +76,136 @@ function getLog() {
   return logger('ai-bot:prompt');
 }
 
+/*
+ * ── Attachment Context Policy ────────────────────────────────────────
+ *
+ * When building prompts for the model, file attachments are handled
+ * according to the following rules:
+ *
+ * 1. **Content inclusion**: Only the most recent user message's attached
+ *    files have their content downloaded and included in the prompt.
+ *    Older messages show file metadata (name, type) only. This keeps
+ *    the prompt focused on fresh data and avoids redundant downloads.
+ *
+ * 2. **Supersession**: Within the current message, if a file (by
+ *    sourceUrl) is re-attached in a later event, the earlier version
+ *    is shown as metadata only (the later version wins).
+ *
+ * 3. **MIME type handling** (see `modality.ts` for classification):
+ *    - Text-based types (text/*, application/vnd.card+json) → content
+ *      downloaded and displayed with line numbers.
+ *    - Supported images (PNG, JPEG, WEBP, GIF) → native `image_url`
+ *      content parts.
+ *    - PDF (application/pdf) → native `file` content parts with base64
+ *      data URL in `file_data`.
+ *    - Audio (audio/*) → native `input_audio` content parts with raw
+ *      base64 and format string (data URL prefix stripped).
+ *    - Video (video/*) → native `video_url` content parts with base64
+ *      data URL.
+ *    - Other types → metadata shown inline ([contentType, contentSize
+ *      bytes]) without an error prefix.
+ *
+ * 4. **Model capability gating**: When `inputModalities` is provided
+ *    (from the active LLM's model configuration), multimodal parts are
+ *    only included if the model supports the required modality. Gated
+ *    files are listed in a warning appended to the prompt text. When
+ *    `inputModalities` is undefined, all modalities pass through.
+ *
+ * 5. **Read-file command scoping**: When the AI requests to read a file
+ *    via a tool call, the file URL must match a sourceUrl previously
+ *    attached by the user in the same room. Unrecognised URLs produce
+ *    a rejection message in the tool result.
+ * ─────────────────────────────────────────────────────────────────────
+ */
+
+// ── MIME / category helpers ──────────────────────────────────────────
+
+function isTextBasedContentType(contentType?: string): boolean {
+  return (
+    !!contentType &&
+    (contentType.includes('text/') ||
+      contentType.includes('application/vnd.card+json'))
+  );
+}
+
+const AUDIO_MIME_TO_FORMAT: Record<string, string> = {
+  'audio/wav': 'wav',
+  'audio/wave': 'wav',
+  'audio/x-wav': 'wav',
+  'audio/mpeg': 'mp3',
+  'audio/mp3': 'mp3',
+  'audio/aac': 'aac',
+  'audio/x-aac': 'aac',
+  'audio/ogg': 'ogg',
+  'audio/flac': 'flac',
+  'audio/x-flac': 'flac',
+  'audio/mp4': 'm4a',
+  'audio/x-m4a': 'm4a',
+  'audio/aiff': 'aiff',
+  'audio/x-aiff': 'aiff',
+};
+
+function audioFormatFromMime(contentType: string): string | undefined {
+  return AUDIO_MIME_TO_FORMAT[contentType.split(';')[0].trim().toLowerCase()];
+}
+
+// ── Read-file command scope helpers ──────────────────────────────────
+
+function isReadFileCommand(request?: CommandRequest): boolean {
+  return !!request?.name?.startsWith('read-file-for-ai-assistant');
+}
+
+function getReadFileUrl(request?: CommandRequest): string | undefined {
+  try {
+    let args =
+      typeof request?.arguments === 'string'
+        ? JSON.parse(request.arguments)
+        : request?.arguments;
+    return args?.attributes?.fileUrl;
+  } catch {
+    return undefined;
+  }
+}
+
+function isFileAttachedInRoom(
+  fileUrl: string,
+  history: DiscreteMatrixEvent[],
+): boolean {
+  return history.some((event) => {
+    let attachedFiles = (event as MatrixEventWithBoxelContext).content?.data
+      ?.attachedFiles;
+    return attachedFiles?.some(
+      (f: SerializedFileDef) => f.sourceUrl === fileUrl,
+    );
+  });
+}
+
+// ── Shared attachment helpers ────────────────────────────────────────
+
+function toFileDefMetadata(file: SerializedFileDef): SerializedFileDef {
+  return {
+    url: file.url,
+    sourceUrl: file.sourceUrl ?? '',
+    name: file.name,
+    contentType: file.contentType,
+    contentSize: file.contentSize,
+  };
+}
+
+async function downloadTextContent(
+  client: MatrixClient,
+  file: SerializedFileDef,
+): Promise<SerializedFileDef> {
+  let result = toFileDefMetadata(file);
+  try {
+    result.content = await downloadFile(client, file);
+  } catch (error) {
+    getLog().error(`Failed to fetch file ${file.url}:`, error);
+    result.error = `Error loading attached file: ${(error as Error).message}`;
+  }
+  return result;
+}
+
 export async function getPromptParts(
   eventList: DiscreteMatrixEvent[],
   aiBotUserId: string,
@@ -96,6 +235,8 @@ export async function getPromptParts(
   let disabledSkillIds = await getDisabledSkillIds(eventList);
   let tools = await getTools(eventList, skills, aiBotUserId, client);
   let toolChoice = getToolChoice(history, aiBotUserId);
+  let { model, toolsSupported, reasoningEffort, inputModalities } =
+    getActiveLLMDetails(eventList);
   let messages = await buildPromptForModel(
     history,
     aiBotUserId,
@@ -103,9 +244,8 @@ export async function getPromptParts(
     skills,
     disabledSkillIds,
     client,
+    inputModalities,
   );
-  let { model, toolsSupported, reasoningEffort } =
-    getActiveLLMDetails(eventList);
   return {
     shouldRespond,
     tools,
@@ -466,39 +606,29 @@ export async function getAttachedFiles(
   client: MatrixClient,
   matrixEvent: MatrixEventWithBoxelContext,
   history: DiscreteMatrixEvent[],
+  isCurrentMessage: boolean = false,
 ): Promise<SerializedFileDef[]> {
   let attachedFiles = matrixEvent.content?.data?.attachedFiles ?? [];
   return Promise.all(
-    attachedFiles.map(async (attachedFile: SerializedFileDef) => {
-      // If the file is attached later in the history, we should not include the content here
-      let shouldIncludeContent = !history
+    attachedFiles.map(async (file: SerializedFileDef) => {
+      let isSuperseded = history
         .slice(history.indexOf(matrixEvent) + 1)
-        .some((event) => {
-          // event is not always MatrixEventWithBoxelContext but casting lets us safely check attachedFiles
-          return (
+        .some((event) =>
+          (
             event as MatrixEventWithBoxelContext
           ).content?.data?.attachedFiles?.some(
-            (file: SerializedFileDef) =>
-              file.sourceUrl === attachedFile.sourceUrl,
-          );
-        });
+            (f: SerializedFileDef) => f.sourceUrl === file.sourceUrl,
+          ),
+        );
 
-      let result: SerializedFileDef = {
-        url: attachedFile.url,
-        sourceUrl: attachedFile.sourceUrl ?? '',
-        name: attachedFile.name,
-        contentType: attachedFile.contentType,
-      };
-      if (shouldIncludeContent) {
-        try {
-          result.content = await downloadFile(client, attachedFile);
-        } catch (error) {
-          getLog().error(`Failed to fetch file ${attachedFile.url}:`, error);
-          result.error = `Error loading attached file: ${(error as Error).message}`;
-          result.content = undefined;
-        }
+      if (
+        isCurrentMessage &&
+        !isSuperseded &&
+        isTextBasedContentType(file.contentType)
+      ) {
+        return downloadTextContent(client, file);
       }
-      return result;
+      return toFileDefMetadata(file);
     }),
   );
 }
@@ -518,60 +648,44 @@ export async function loadCurrentlySerializedFileDefs(
         event.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE),
   );
 
-  let mostRecentUserMessageContent = lastMessageEventByUser?.content as {
-    msgtype?: string;
-    data?: {
-      attachedFiles?: SerializedFileDef[];
-    };
-  };
-
-  if (!mostRecentUserMessageContent) {
+  if (!lastMessageEventByUser) {
     return [];
   }
 
-  // We are only interested in downloading the most recently attached files -
-  // downloading older ones is not needed since the prompt that is being constructed
-  // should operate on fresh data
-  if (!mostRecentUserMessageContent.data?.attachedFiles?.length) {
+  let attachedFiles = (lastMessageEventByUser as MatrixEventWithBoxelContext)
+    .content?.data?.attachedFiles;
+  if (!attachedFiles?.length) {
     return [];
   }
 
-  let attachedFiles = mostRecentUserMessageContent.data.attachedFiles;
-
-  return Promise.all(
-    attachedFiles.map(async (attachedFile: SerializedFileDef) => {
-      try {
-        let content = await downloadFile(client, attachedFile);
-
-        return {
-          url: attachedFile.url,
-          sourceUrl: attachedFile.sourceUrl ?? '',
-          name: attachedFile.name,
-          contentType: attachedFile.contentType,
-          content,
-        };
-      } catch (error) {
-        getLog().error(`Failed to fetch file ${attachedFile.url}:`, error);
-        return {
-          sourceUrl: attachedFile.sourceUrl ?? '',
-          url: attachedFile.url,
-          name: attachedFile.name,
-          contentType: attachedFile.contentType,
-          content: undefined,
-          error: `Error loading attached file: ${(error as Error).message}`,
-        };
-      }
-    }),
+  // Reuse getAttachedFiles with isCurrentMessage=true — this is always the
+  // most recent user event, so supersession can't apply (no later events).
+  return getAttachedFiles(
+    client,
+    lastMessageEventByUser as MatrixEventWithBoxelContext,
+    history,
+    true,
   );
 }
 
 export function attachedFilesToMessage(
   attachedFiles: SerializedFileDef[],
+  options?: {
+    omitSourceUrls?: Set<string>;
+  },
 ): string {
   if (!attachedFiles.length) {
     return 'No attached files';
   }
   return attachedFiles
+    .filter(
+      (f) =>
+        !(
+          f.sourceUrl &&
+          options?.omitSourceUrls &&
+          options.omitSourceUrls.has(f.sourceUrl)
+        ),
+    )
     .map((f) => {
       let hyperlink = f.sourceUrl ? `[${f.name}](${f.sourceUrl})` : f.name;
       if (f.error) {
@@ -588,6 +702,14 @@ export function attachedFilesToMessage(
           )
           .join('\n');
         return `${hyperlink}:\n${numberedContent}`;
+      } else if (!isTextBasedContentType(f.contentType) && f.contentType) {
+        let meta = [
+          f.contentType,
+          f.contentSize ? `${f.contentSize} bytes` : '',
+        ]
+          .filter(Boolean)
+          .join(', ');
+        return `${hyperlink}: [${meta}]`;
       } else {
         return `${hyperlink}`;
       }
@@ -797,6 +919,13 @@ async function toResultMessages(
           );
           content = checkCorrectnessContent.toolMessage;
           followUpUserMessage = checkCorrectnessContent.followUpUserMessage;
+        } else if (isReadFileCommand(decodedCommandRequest)) {
+          let fileUrl = getReadFileUrl(decodedCommandRequest);
+          if (fileUrl && !isFileAttachedInRoom(fileUrl, history)) {
+            content = `Tool call rejected: the file "${fileUrl}" was not previously attached in the room. Only files attached by the user can be read.\n`;
+          } else {
+            content = `Tool call ${status == 'applied' ? 'executed' : status}.\n`;
+          }
         } else if (
           commandResult.content.msgtype ===
             APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE &&
@@ -809,12 +938,13 @@ async function toResultMessages(
         } else {
           content = `Tool call ${status == 'applied' ? 'executed' : status}.\n`;
         }
-        let attachments = await buildAttachmentsMessagePart(
+        let attachmentResult = await buildAttachmentsMessagePart(
           client,
           commandResult,
           history,
+          true,
         );
-        content = [content, attachments].filter(Boolean).join('\n\n');
+        content = [content, attachmentResult.text].filter(Boolean).join('\n\n');
         let toolMessage: OpenAIPromptMessage = {
           role: 'tool',
           tool_call_id: commandRequest.id,
@@ -1179,6 +1309,7 @@ export async function buildPromptForModel(
   skillCards: LooseCardResource[] = [],
   disabledSkillIds: string[] = [],
   client: MatrixClient,
+  inputModalities?: string[],
 ) {
   // Need to make sure the passed in username is a full id
   if (
@@ -1188,6 +1319,13 @@ export async function buildPromptForModel(
     throw new Error("Username must be a full id, e.g. '@aibot:localhost'");
   }
   let historicalMessages: OpenAIPromptMessage[] = [];
+  let lastUserMessageEvent = findLast(
+    history,
+    (event) =>
+      event.sender !== aiBotUserId &&
+      event.type === 'm.room.message' &&
+      !isCommandOrCodePatchResult(event),
+  );
   for (let event of history) {
     if (event.type !== 'm.room.message') {
       continue;
@@ -1231,17 +1369,36 @@ export async function buildPromptForModel(
       ).forEach((message) => historicalMessages.push(message));
     }
     if (event.sender !== aiBotUserId) {
-      let attachments = await buildAttachmentsMessagePart(
+      let isCurrentMessage = event === lastUserMessageEvent;
+      let attachmentResult = await buildAttachmentsMessagePart(
         client,
         event as CardMessageEvent,
         history,
+        isCurrentMessage,
+        inputModalities,
       );
-      let content = [body, attachments].filter(Boolean).join('\n\n');
-      if (content) {
-        historicalMessages.push({
-          role: 'user',
-          content,
-        });
+      if (attachmentResult.mediaParts.length > 0) {
+        let textContent = [body, attachmentResult.text]
+          .filter(Boolean)
+          .join('\n\n');
+        let contentParts: ContentPart[] = [];
+        if (textContent) {
+          contentParts.push({ type: 'text', text: textContent });
+        }
+        contentParts.push(...attachmentResult.mediaParts);
+        if (contentParts.length) {
+          historicalMessages.push({ role: 'user', content: contentParts });
+        }
+      } else {
+        let content = [body, attachmentResult.text]
+          .filter(Boolean)
+          .join('\n\n');
+        if (content) {
+          historicalMessages.push({
+            role: 'user',
+            content,
+          });
+        }
       }
     }
   }
@@ -1762,17 +1919,115 @@ export const buildAttachmentsMessagePart = async (
   client: MatrixClient,
   matrixEvent: MatrixEventWithBoxelContext,
   history: DiscreteMatrixEvent[],
-) => {
+  isCurrentMessage: boolean = false,
+  inputModalities?: string[],
+): Promise<{ text: string; mediaParts: ContentPart[] }> => {
   let attachedCards = await getAttachedCards(client, matrixEvent, history);
-  let result = '';
+  let text = '';
   if (attachedCards.length > 0) {
-    result += `Attached Cards (cards with newer versions don't show their content):\n${JSON.stringify(attachedCards, null, 2)}\n`;
+    text += `Attached Cards (cards with newer versions don't show their content):\n${JSON.stringify(attachedCards, null, 2)}\n`;
   }
-  let attachedFiles = await getAttachedFiles(client, matrixEvent, history);
+  let attachedFiles = await getAttachedFiles(
+    client,
+    matrixEvent,
+    history,
+    isCurrentMessage,
+  );
+  let mediaParts: ContentPart[] = [];
+  let mediaSourceUrls = new Set<string>();
+  let unsupportedFiles: { name: string; contentType: string }[] = [];
+  if (isCurrentMessage) {
+    for (let f of attachedFiles) {
+      if (!f.url) {
+        continue;
+      }
+      // Check model capability before downloading
+      let modality = requiredModality(f.contentType);
+      if (!modality) {
+        continue; // not a multimodal type — handled as text metadata below
+      }
+      if (inputModalities && !inputModalities.includes(modality)) {
+        unsupportedFiles.push({
+          name: f.name ?? 'unknown',
+          contentType: f.contentType ?? 'unknown',
+        });
+        continue;
+      }
+      try {
+        if (isImageContentType(f.contentType)) {
+          let dataUrl = await downloadFileAsBase64DataUrl(
+            client,
+            f.url,
+            f.contentType!,
+          );
+          mediaParts.push({
+            type: 'image_url',
+            image_url: { url: dataUrl },
+          });
+        } else if (isPdfContentType(f.contentType)) {
+          let dataUrl = await downloadFileAsBase64DataUrl(
+            client,
+            f.url,
+            f.contentType!,
+          );
+          mediaParts.push({
+            type: 'file',
+            file: {
+              filename: f.name ?? 'document.pdf',
+              file_data: dataUrl,
+            },
+          });
+        } else if (isAudioContentType(f.contentType)) {
+          let format = audioFormatFromMime(f.contentType!);
+          if (!format) {
+            getLog().error(`Unsupported audio format: ${f.contentType}`);
+            continue;
+          }
+          let dataUrl = await downloadFileAsBase64DataUrl(
+            client,
+            f.url,
+            f.contentType!,
+          );
+          // Strip data URL prefix — OpenRouter expects raw base64 for audio
+          let base64 = dataUrl.replace(/^data:[^;]+;base64,/, '');
+          mediaParts.push({
+            type: 'input_audio',
+            input_audio: { data: base64, format },
+          });
+        } else if (isVideoContentType(f.contentType)) {
+          let dataUrl = await downloadFileAsBase64DataUrl(
+            client,
+            f.url,
+            f.contentType!,
+          );
+          mediaParts.push({
+            type: 'video_url',
+            video_url: { url: dataUrl },
+          });
+        }
+        if (f.sourceUrl) {
+          mediaSourceUrls.add(f.sourceUrl);
+        }
+      } catch (e) {
+        getLog().error(`Failed to download media file ${f.url}:`, e);
+      }
+    }
+  }
+  if (unsupportedFiles.length > 0) {
+    let fileList = unsupportedFiles
+      .map((f) => `${f.name} (${f.contentType})`)
+      .join(', ');
+    text += `Note: The following files were not sent to the model because it does not support their input type: ${fileList}\n`;
+  }
   if (attachedFiles.length > 0) {
-    result += `Attached Files (files with newer versions don't show their content):\n${attachedFilesToMessage(attachedFiles)}\n`;
+    text += `Attached Files (files with newer versions don't show their content):\n${attachedFilesToMessage(
+      attachedFiles,
+      {
+        omitSourceUrls: mediaSourceUrls,
+      },
+    )}\n`;
   }
-  return result;
+  return { text, mediaParts };
 };
 
 export const buildContextMessage = async (
@@ -1976,6 +2231,7 @@ function getActiveLLMDetails(eventlist: DiscreteMatrixEvent[]): {
   model: string;
   toolsSupported?: boolean;
   reasoningEffort?: ReasoningEffort;
+  inputModalities?: string[];
 } {
   let activeLLMEvent = findLast(
     eventlist,
@@ -1994,6 +2250,7 @@ function getActiveLLMDetails(eventlist: DiscreteMatrixEvent[]): {
     reasoningEffort: normalizeReasoningEffort(
       activeLLMEvent.content.reasoningEffort,
     ),
+    inputModalities: activeLLMEvent.content.inputModalities,
   };
 }
 
