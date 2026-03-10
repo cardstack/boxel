@@ -499,7 +499,6 @@ module('Integration | operator-mode | basics', function (hooks) {
     await click('[data-test-add-new="blogPost"]');
     await waitFor(`[data-test-card-catalog-modal]`);
     await click(`[data-test-card-catalog-create-new-button]`);
-    await click(`[data-test-card-catalog-go-button]`);
 
     await waitFor(`[data-test-stack-card-index="2"]`);
     assert.dom('[data-test-stack-card-index]').exists({ count: 3 });
@@ -517,7 +516,6 @@ module('Integration | operator-mode | basics', function (hooks) {
     );
     await waitFor(`[data-test-card-catalog-modal]`);
     await click(`[data-test-card-catalog-create-new-button]`);
-    await click(`[data-test-card-catalog-go-button]`);
 
     await waitFor(`[data-test-stack-card-index="3"]`);
 

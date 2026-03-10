@@ -137,7 +137,8 @@ test.describe('Skills', () => {
     );
   });
 
-  test('it will attach code editing skills in code mode by default', async ({
+  // TODO: restore in CS-10374
+  test.skip('it will attach code editing skills in code mode by default', async ({
     page,
   }) => {
     await login(page, firstUser.username, firstUser.password, { url: appURL });

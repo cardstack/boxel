@@ -354,6 +354,35 @@ module(basename(__filename), function () {
         assert.ok(res.body.meta?.timing?.totalMs >= 0, 'has timing');
         assert.ok(res.body.meta?.pool?.pageId, 'has pool.pageId');
       });
+
+      test('it returns unusable status when command times out', async function (assert) {
+        let permissions = {
+          [realmURL.href]: ['read', 'write', 'realm-owner'] as (
+            | 'read'
+            | 'write'
+            | 'realm-owner'
+          )[],
+        };
+        let auth = testCreatePrerenderAuth(testUserId, permissions);
+        let command = `${realmURL.href}command-runner-test/SayHelloCommand`;
+        let result = await prerenderer.runCommand({
+          userId: testUserId,
+          auth,
+          command,
+          opts: { timeoutMs: 1, simulateTimeoutMs: 25 },
+        });
+
+        assert.strictEqual(
+          result.response.status,
+          'unusable',
+          'timed-out command returns unusable status',
+        );
+        assert.ok(
+          result.response.error?.includes('Render timed-out'),
+          `error message mentions timeout (got: ${result.response.error})`,
+        );
+        assert.true(result.pool.timedOut, 'pool.timedOut is set');
+      });
     });
 
     test('reports draining status when shutting down', async function (assert) {
