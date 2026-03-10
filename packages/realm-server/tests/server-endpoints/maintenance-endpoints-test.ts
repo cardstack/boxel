@@ -7,8 +7,7 @@ import { sumUpCreditsLedger } from '@cardstack/billing/billing-queries';
 import * as boxelUIChangeChecker from '../../lib/boxel-ui-change-checker';
 import { grafanaSecret, insertUser, realmSecretSeed } from '../helpers';
 import { createJWT as createRealmServerJWT } from '../../utils/jwt';
-import { setupServerEndpointsTest } from './helpers';
-import { testRealmURL } from '../helpers';
+import { setupServerEndpointsTest, testRealmURL } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
 module(`server-endpoints/${basename(__filename)}`, function () {

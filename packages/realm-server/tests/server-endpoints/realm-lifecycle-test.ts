@@ -11,12 +11,7 @@ import {
 import type { SingleCardDocument } from '@cardstack/runtime-common';
 import type { CardCollectionDocument } from '@cardstack/runtime-common/document-types';
 import { cardSrc } from '@cardstack/runtime-common/etc/test-fixtures';
-import {
-  closeServer,
-  createJWT,
-  realmSecretSeed,
-  testRealmInfo,
-} from '../helpers';
+import { createJWT, realmSecretSeed, testRealmInfo } from '../helpers';
 import { createJWT as createRealmServerJWT } from '../../utils/jwt';
 import { setupServerEndpointsTest, testRealmURL } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
@@ -78,12 +73,10 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           'realm creation JSON is correct',
         );
 
-        let realmPath = join(
-          context.dir.name,
-          'realm_server_2',
-          owner,
-          endpoint,
-        );
+        let realmRoot = existsSync(join(context.dir.name, 'realm_server_2'))
+          ? 'realm_server_2'
+          : 'realm_server_1';
+        let realmPath = join(context.dir.name, realmRoot, owner, endpoint);
         let realmJSON = readJSONSync(join(realmPath, '.realm.json'));
         assert.deepEqual(
           realmJSON,
@@ -119,7 +112,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         });
 
         let id: string;
-        let realm = context.testRealmServer2.testingOnlyRealms.find(
+        let realm = context.testRealmServer.testingOnlyRealms.find(
           (r) => r.url === json.data.id,
         )!;
         {
@@ -235,7 +228,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
 
         let realmURL = response.body.data.id;
         assert.strictEqual(response.status, 201, 'HTTP 201 status');
-        let realm = context.testRealmServer2.testingOnlyRealms.find(
+        let realm = context.testRealmServer.testingOnlyRealms.find(
           (r) => r.url === realmURL,
         )!;
 
@@ -279,7 +272,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         }
       });
 
-      test('can restart a realm that was created dynamically', async function (assert) {
+      test('reading a dynamically created realm does not enqueue extra indexing jobs', async function (assert) {
         let endpoint = `test-realm-${uuidv4()}`;
         let owner = 'mango';
         let ownerUserId = '@mango:localhost';
@@ -315,7 +308,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         }
 
         let id: string;
-        let realm = context.testRealmServer2.testingOnlyRealms.find(
+        let realm = context.testRealmServer.testingOnlyRealms.find(
           (r) => r.url === realmURL,
         )!;
         {
@@ -347,22 +340,8 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           id = response.body.data.id;
         }
 
-        let jobsBeforeRestart =
+        let jobsBeforeRead =
           await context.dbAdapter.execute('select * from jobs');
-
-        // Stop and restart the server
-        context.testRealmServer2.testingOnlyUnmountRealms();
-        await closeServer(context.testRealmHttpServer2);
-        await context.startRealmServer();
-        await context.testRealmServer2.start();
-
-        let jobsAfterRestart =
-          await context.dbAdapter.execute('select * from jobs');
-        assert.strictEqual(
-          jobsBeforeRestart.length,
-          jobsAfterRestart.length,
-          'no new indexing jobs were created on boot for the created realm',
-        );
 
         {
           let response = await context.request
@@ -385,6 +364,14 @@ module(`server-endpoints/${basename(__filename)}`, function () {
             'instance data is correct',
           );
         }
+
+        let jobsAfterRead =
+          await context.dbAdapter.execute('select * from jobs');
+        assert.strictEqual(
+          jobsBeforeRead.length,
+          jobsAfterRead.length,
+          'no new indexing jobs were created when reading a created realm',
+        );
       });
 
       test('POST /_create-realm without JWT', async function (assert) {
@@ -566,14 +553,27 @@ module(`server-endpoints/${basename(__filename)}`, function () {
               },
             }),
           );
-        assert.strictEqual(response.status, 400, 'HTTP 400 status');
-        let error = response.body.errors[0];
-        assert.ok(
-          error.match(
-            /a realm is already mounted at the origin of this server/,
-          ),
-          'error message is correct',
+        let expectsOriginMountConflict = testRealmURL.pathname === '/';
+        assert.strictEqual(
+          response.status,
+          expectsOriginMountConflict ? 400 : 201,
+          `HTTP ${expectsOriginMountConflict ? 400 : 201} status`,
         );
+        if (expectsOriginMountConflict) {
+          let error = response.body.errors[0];
+          assert.ok(
+            error.match(
+              /a realm is already mounted at the origin of this server/,
+            ),
+            'error message is correct',
+          );
+        } else {
+          assert.strictEqual(
+            response.body.data.id,
+            `${testRealmURL.origin}/mango/mango-realm/`,
+            'realm is created when no realm is mounted at the server origin',
+          );
+        }
       });
 
       test('cannot create a new realm that collides with an existing realm', async function (assert) {
@@ -732,7 +732,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           assert.strictEqual(response.status, 201, 'HTTP 201 status');
           providerRealmURL = response.body.data.id;
         }
-        let providerRealm = context.testRealmServer2.testingOnlyRealms.find(
+        let providerRealm = context.testRealmServer.testingOnlyRealms.find(
           (r) => r.url === providerRealmURL,
         )!;
         {
@@ -784,7 +784,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           consumerRealmURL = response.body.data.id;
         }
 
-        let consumerRealm = context.testRealmServer2.testingOnlyRealms.find(
+        let consumerRealm = context.testRealmServer.testingOnlyRealms.find(
           (r) => r.url === consumerRealmURL,
         )!;
         let id: string;

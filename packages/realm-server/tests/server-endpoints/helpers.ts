@@ -1,5 +1,5 @@
 import type { Test, SuperTest } from 'supertest';
-import { type DirResult } from 'tmp';
+import type { DirResult } from 'tmp';
 import type {
   QueuePublisher,
   QueueRunner,
@@ -9,8 +9,13 @@ import type {
 import type { Server } from 'http';
 import type { PgAdapter } from '@cardstack/postgres';
 import type { RealmServer } from '../../server';
-import { setupPermissionedRealmCached } from '../helpers';
+import {
+  setupPermissionedRealmCached,
+  testRealmURL as baseTestRealmURL,
+} from '../helpers';
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
+
+export const testRealmURL = new URL('/test/', baseTestRealmURL);
 
 export type ServerEndpointsTestContext = {
   testRealm: Realm;
@@ -23,7 +28,6 @@ export type ServerEndpointsTestContext = {
   runner: QueueRunner;
   testRealmDir: string;
   virtualNetwork: VirtualNetwork;
-  startRealmServer: () => Promise<void>;
 };
 
 export type ServerEndpointsTestOptions = {
@@ -32,11 +36,19 @@ export type ServerEndpointsTestOptions = {
   ) => void | Promise<void>;
 };
 
-export function setupServerEndpointsTest(hooks: NestedHooks) {
+export function setupServerEndpointsTest(
+  hooks: NestedHooks,
+  options: ServerEndpointsTestOptions = {},
+) {
   let context = {} as ServerEndpointsTestContext;
 
   function onRealmSetup(args: {
+    testRealmServer: {
+      testRealmServer: RealmServer;
+      testRealmHttpServer: Server;
+    };
     testRealm: Realm;
+    testRealmPath: string;
     request: SuperTest<Test>;
     dir: DirResult;
     dbAdapter: PgAdapter;
@@ -44,16 +56,21 @@ export function setupServerEndpointsTest(hooks: NestedHooks) {
     publisher: QueuePublisher;
     virtualNetwork: VirtualNetwork;
   }) {
+    context.testRealmServer = args.testRealmServer.testRealmServer;
+    context.testRealmHttpServer = args.testRealmServer.testRealmHttpServer;
     context.testRealm = args.testRealm;
     context.request = args.request;
     context.dir = args.dir;
     context.dbAdapter = args.dbAdapter;
     context.runner = args.runner;
     context.publisher = args.publisher;
+    context.testRealmDir = args.testRealmPath;
     context.virtualNetwork = args.virtualNetwork;
+    void options.beforeStartRealmServer?.(context);
   }
 
   setupPermissionedRealmCached(hooks, {
+    realmURL: testRealmURL,
     permissions: {
       '*': ['read', 'write'],
       '@node-test_realm:localhost': ['read', 'realm-owner'],
