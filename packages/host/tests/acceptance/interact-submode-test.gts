@@ -630,7 +630,6 @@ module('Acceptance | interact submode tests', function (hooks) {
       await click(
         `[data-test-card-catalog-create-new-button="${testRealmURL}"]`,
       );
-      await click(`[data-test-card-catalog-go-button]`);
       await click(
         `[data-test-operator-mode-stack="0"] [data-test-stack-card-index="1"] [data-test-edit-button]`,
       );

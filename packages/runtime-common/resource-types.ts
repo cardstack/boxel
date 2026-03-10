@@ -110,6 +110,8 @@ export interface PrerenderedCardResource {
   type: 'prerendered-card';
   attributes: {
     html: string;
+    cardType?: string;
+    iconHtml?: string;
     isError?: true;
   };
   relationships: {

@@ -53,6 +53,8 @@ export default class ChooseFileModal extends Component<Signature> {
   @tracked fileTypeName?: string;
   @tracked acceptTypes?: string;
   @tracked currentUpload?: FileUploadTask;
+  @tracked isDropZoneActive = false;
+  private dropZoneDragDepth = 0;
 
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private realm: RealmService;
@@ -144,6 +146,70 @@ export default class ChooseFileModal extends Component<Signature> {
       realmURL: this.selectedRealm.url,
       acceptTypes: this.acceptTypes,
     });
+    this.beginUpload(task);
+  }
+
+  @action
+  private handleDragEnter(event: DragEvent) {
+    if (!this.isFileDrag(event.dataTransfer)) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    this.dropZoneDragDepth++;
+    this.isDropZoneActive = true;
+  }
+
+  @action
+  private handleDragOver(event: DragEvent) {
+    if (!this.isFileDrag(event.dataTransfer)) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    this.isDropZoneActive = true;
+    if (event.dataTransfer) {
+      event.dataTransfer.dropEffect = 'copy';
+    }
+  }
+
+  @action
+  private handleDragLeave(event: DragEvent) {
+    if (!this.isFileDrag(event.dataTransfer) && !this.isDropZoneActive) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    this.dropZoneDragDepth = Math.max(0, this.dropZoneDragDepth - 1);
+    if (this.dropZoneDragDepth === 0) {
+      this.isDropZoneActive = false;
+    }
+  }
+
+  @action
+  private handleDrop(event: DragEvent) {
+    if (!this.isFileDrag(event.dataTransfer)) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    this.dropZoneDragDepth = 0;
+    this.isDropZoneActive = false;
+    if (this.isUploadBusy) {
+      return;
+    }
+    let file = event.dataTransfer?.files?.[0];
+    if (!file) {
+      return;
+    }
+    let task = this.fileUpload.uploadProvidedFile({
+      realmURL: this.selectedRealm.url,
+      file,
+    });
+    this.beginUpload(task);
+  }
+
+  private beginUpload(task: FileUploadTask) {
     this.currentUpload = task;
     task.result.then((fileDef) => {
       if (fileDef && this.deferred) {
@@ -155,6 +221,17 @@ export default class ChooseFileModal extends Component<Signature> {
     });
   }
 
+  private isFileDrag(dataTransfer: DataTransfer | null | undefined): boolean {
+    if (!dataTransfer) {
+      return false;
+    }
+    return Array.from(dataTransfer.types ?? []).includes('Files');
+  }
+
+  private get dropZoneLabel() {
+    return `Drop file to upload to ${this.selectedRealm.info.name}`;
+  }
+
   private resetState() {
     this.selectedRealm = this.knownRealms[0];
     this.selectedFile = undefined;
@@ -162,6 +239,8 @@ export default class ChooseFileModal extends Component<Signature> {
     this.fileTypeName = undefined;
     this.acceptTypes = undefined;
     this.currentUpload = undefined;
+    this.isDropZoneActive = false;
+    this.dropZoneDragDepth = 0;
     this.deferred = undefined;
   }
 
@@ -196,8 +275,32 @@ export default class ChooseFileModal extends Component<Signature> {
       .choose-file-modal {
         --horizontal-gap: var(--boxel-sp-xs);
       }
+      .choose-file-modal[data-drop-zone-active]::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background-color: var(--boxel-darker-hover);
+        pointer-events: none;
+        z-index: 2;
+      }
+      .choose-file-modal[data-drop-zone-active]::after {
+        content: attr(data-drop-zone-label);
+        position: absolute;
+        inset: 0;
+        padding: var(--boxel-sp-xl);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--boxel-light);
+        font: 600 var(--boxel-font-lg);
+        text-align: center;
+        pointer-events: none;
+        z-index: 3;
+      }
       .choose-file-modal > :deep(.boxel-modal__inner) {
         display: flex;
+        position: relative;
+        z-index: 1;
       }
       :deep(.choose-file-modal__container) {
         height: 32rem;
@@ -309,8 +412,14 @@ export default class ChooseFileModal extends Component<Signature> {
         @size='medium'
         @centered={{true}}
         {{on 'keydown' this.handleKeydown}}
+        {{on 'dragenter' this.handleDragEnter}}
+        {{on 'dragover' this.handleDragOver}}
+        {{on 'dragleave' this.handleDragLeave}}
+        {{on 'drop' this.handleDrop}}
         @cardContainerClass='choose-file-modal__container'
         class='choose-file-modal'
+        data-drop-zone-active={{this.isDropZoneActive}}
+        data-drop-zone-label={{this.dropZoneLabel}}
         data-test-choose-file-modal
       >
         <:content>

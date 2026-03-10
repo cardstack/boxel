@@ -18,6 +18,7 @@ import {
   type PrerenderedCardLike,
   type PrerenderedCardData,
   type PrerenderedCardComponentSignature,
+  type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 
 import type { CardContext, CardDef } from 'https://cardstack.com/base/card-api';
@@ -71,6 +72,15 @@ export class PrerenderedCard implements PrerenderedCardLike {
   }
   get realmUrl(): string {
     return this.data.realmUrl;
+  }
+  get cardType(): string | undefined {
+    return this.data.cardType;
+  }
+  get iconHtml(): string | undefined {
+    return this.data.iconHtml;
+  }
+  get usedRenderType(): ResolvedCodeRef | undefined {
+    return this.data.usedRenderType;
   }
 }
 function getErrorComponent(realmURL: string, url: string) {

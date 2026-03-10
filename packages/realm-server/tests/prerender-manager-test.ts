@@ -12,6 +12,7 @@ import {
   PRERENDER_SERVER_STATUS_DRAINING,
   PRERENDER_SERVER_STATUS_HEADER,
 } from '../prerender/prerender-constants';
+import { toAffinityKey } from '../prerender/affinity';
 import { Deferred } from '@cardstack/runtime-common';
 import { testCreatePrerenderAuth } from './helpers';
 
@@ -96,7 +97,7 @@ module(basename(__filename), function () {
       );
     });
 
-    test('health includes active servers with realms and last used times', async function (assert) {
+    test('health includes active servers with affinities and last used times', async function (assert) {
       process.env.PRERENDER_MULTIPLEX = '2';
       let { app } = buildPrerenderManagerApp();
       let request: SuperTest<Test> = supertest(app.callback());
@@ -168,24 +169,34 @@ module(basename(__filename), function () {
         'has lastSeenAt timestamp',
       );
 
-      // Verify realms array
+      // Verify affinities array
       assert.ok(
-        Array.isArray(assignedServerData.attributes.realms),
-        'realms is array',
+        Array.isArray(assignedServerData.attributes.affinities),
+        'affinities is array',
       );
       assert.strictEqual(
-        assignedServerData.attributes.realms.length,
+        assignedServerData.attributes.affinities.length,
         1,
-        'one realm active',
+        'one affinity active',
       );
       assert.strictEqual(
-        assignedServerData.attributes.realms[0].url,
+        assignedServerData.attributes.affinities[0].affinityType,
+        'realm',
+        'affinity type is realm',
+      );
+      assert.strictEqual(
+        assignedServerData.attributes.affinities[0].affinityValue,
         realm,
-        'realm url',
+        'affinity value is realm URL',
+      );
+      assert.strictEqual(
+        assignedServerData.attributes.affinities[0].key,
+        realmAffinityKey(realm),
+        'affinity key matches encoded key',
       );
       assert.ok(
-        assignedServerData.attributes.realms[0].lastUsed,
-        'has realm lastUsed timestamp',
+        assignedServerData.attributes.affinities[0].lastUsed,
+        'has affinity lastUsed timestamp',
       );
       assert.strictEqual(
         assignedServerData.attributes.status,
@@ -193,19 +204,19 @@ module(basename(__filename), function () {
         'status reflects heartbeat',
       );
       assert.ok(
-        Array.isArray(assignedServerData.attributes.warmedRealms),
-        'warmed realms included',
+        Array.isArray(assignedServerData.attributes.warmedAffinities),
+        'warmed affinities included',
       );
 
-      // Verify the other server has no realms
+      // Verify the other server has no affinities
       let otherServerUrl =
         assignedServer === serverUrlA ? serverUrlB : serverUrlA;
       let otherServerData = included.find((s: any) => s.id === otherServerUrl);
       assert.ok(otherServerData, 'other server in included');
       assert.strictEqual(
-        otherServerData.attributes.realms.length,
+        otherServerData.attributes.affinities.length,
         0,
-        'other server has no realms',
+        'other server has no affinities',
       );
     });
 
@@ -320,7 +331,7 @@ module(basename(__filename), function () {
       );
     });
 
-    test('heartbeat: url required; heartbeat updates warmed realms and status', async function (assert) {
+    test('heartbeat: url required; heartbeat updates warmed affinities and status', async function (assert) {
       let { app } = buildPrerenderManagerApp();
       let request: SuperTest<Test> = supertest(app.callback());
 
@@ -331,7 +342,9 @@ module(basename(__filename), function () {
             capacity: 2,
             url: serverUrlA,
             status: 'active',
-            warmedRealms: ['https://realm.example/warmed'],
+            warmedAffinities: [
+              realmAffinityKey('https://realm.example/warmed'),
+            ],
           },
         },
       });
@@ -442,7 +455,7 @@ module(basename(__filename), function () {
         realm2ProxyResponse.headers['x-boxel-prerender-target'];
       assert.ok(
         [serverUrlA, serverUrlB].includes(realm2Target),
-        'second realm assigned to one server',
+        'second affinity assigned to one server',
       );
 
       // now pressure: third realm
@@ -461,7 +474,7 @@ module(basename(__filename), function () {
       );
     });
 
-    test('realm disposal removes server from realm mapping', async function (assert) {
+    test('affinity disposal removes server from affinity mapping', async function (assert) {
       process.env.PRERENDER_MULTIPLEX = '2';
       let { app } = buildPrerenderManagerApp();
       let request: SuperTest<Test> = supertest(app.callback());
@@ -480,25 +493,28 @@ module(basename(__filename), function () {
 
       let realm = 'https://realm.example/R';
       let body = makeBody(realm, `${realm}/1`);
+      let affinityKey = realmAffinityKey(realm);
       let firstProxyResponse = await request.post('/prerender-card').send(body);
       assert.strictEqual(firstProxyResponse.status, 201, 'initial proxy ok');
       let firstTarget = firstProxyResponse.headers['x-boxel-prerender-target'];
       assert.ok(firstTarget, 'proxy response includes target header');
 
       let missingUrlDisposalResponse = await request.delete(
-        `/prerender-servers/realms/${encodeURIComponent(realm)}`,
+        `/prerender-servers/affinities/${encodeURIComponent(affinityKey)}`,
       );
       assert.strictEqual(
         missingUrlDisposalResponse.status,
         400,
-        'realm disposal requires url query param',
+        'affinity disposal requires url query param',
       );
 
       // simulate prerender server notifying disposal
       let disposalResponse = await request
-        .delete(`/prerender-servers/realms/${encodeURIComponent(realm)}`)
+        .delete(
+          `/prerender-servers/affinities/${encodeURIComponent(affinityKey)}`,
+        )
         .query({ url: firstTarget as string });
-      assert.strictEqual(disposalResponse.status, 204, 'realm disposal 204');
+      assert.strictEqual(disposalResponse.status, 204, 'affinity disposal 204');
 
       // next request should succeed; mapping for that realm should no longer be required
       let secondProxyResponse = await request
@@ -517,7 +533,7 @@ module(basename(__filename), function () {
       );
     });
 
-    test('realm disposal selects least recently used idle server when multiplex=1', async function (assert) {
+    test('affinity disposal selects least recently used idle server when multiplex=1', async function (assert) {
       process.env.PRERENDER_MULTIPLEX = '1';
       let { app } = buildPrerenderManagerApp();
       let request: SuperTest<Test> = supertest(app.callback());
@@ -536,15 +552,18 @@ module(basename(__filename), function () {
 
       let realm = 'https://realm.example/R';
       let body = makeBody(realm, `${realm}/1`);
+      let affinityKey = realmAffinityKey(realm);
       let firstProxyResponse = await request.post('/prerender-card').send(body);
       assert.strictEqual(firstProxyResponse.status, 201, 'initial proxy ok');
       let firstTarget = firstProxyResponse.headers['x-boxel-prerender-target'];
       assert.ok(firstTarget, 'proxy response includes target header');
 
       let disposalResponse = await request
-        .delete(`/prerender-servers/realms/${encodeURIComponent(realm)}`)
+        .delete(
+          `/prerender-servers/affinities/${encodeURIComponent(affinityKey)}`,
+        )
         .query({ url: firstTarget as string });
-      assert.strictEqual(disposalResponse.status, 204, 'realm disposal 204');
+      assert.strictEqual(disposalResponse.status, 204, 'affinity disposal 204');
 
       let otherTarget = firstTarget === serverUrlA ? serverUrlB : serverUrlA;
       let secondProxyResponse = await request
@@ -592,7 +611,7 @@ module(basename(__filename), function () {
         .query({ url: serverUrlA as string });
       assert.strictEqual(unregisterResponse.status, 204, 'unregister 204');
 
-      // new realm should not target A anymore
+      // new affinity should not target A anymore
       let realm2RequestBody = makeBody(
         'https://realm.example/R2',
         'https://realm.example/R2/1',
@@ -737,7 +756,7 @@ module(basename(__filename), function () {
       );
     });
 
-    test('manager prefers warmed realm when available', async function (assert) {
+    test('manager prefers warmed affinity when available', async function (assert) {
       process.env.PRERENDER_MULTIPLEX = '2';
       let { app } = buildPrerenderManagerApp();
       let request: SuperTest<Test> = supertest(app.callback());
@@ -749,7 +768,7 @@ module(basename(__filename), function () {
           attributes: {
             capacity: 2,
             url: serverUrlA,
-            warmedRealms: [realm],
+            warmedAffinities: [realmAffinityKey(realm)],
           },
         },
       });
@@ -772,9 +791,91 @@ module(basename(__filename), function () {
       );
     });
 
+    test('does not treat warmed user affinity as warmed realm affinity for the same value', async function (assert) {
+      process.env.PRERENDER_MULTIPLEX = '2';
+      let { app } = buildPrerenderManagerApp();
+      let request: SuperTest<Test> = supertest(app.callback());
+      let sharedValue = 'https://affinity.example/shared';
+
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: {
+            capacity: 2,
+            url: serverUrlA,
+            warmedAffinities: [userAffinityKey(sharedValue)],
+          },
+        },
+      });
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: {
+            capacity: 2,
+            url: serverUrlB,
+            warmedAffinities: [realmAffinityKey(sharedValue)],
+          },
+        },
+      });
+
+      let response = await request
+        .post('/prerender-card')
+        .send(makeBody(sharedValue, `${sharedValue}/1`));
+
+      assert.strictEqual(response.status, 201, 'proxy ok');
+      assert.strictEqual(
+        response.headers['x-boxel-prerender-target'],
+        serverUrlB,
+        'realm request prefers realm-warmed server, not user-warmed server',
+      );
+    });
+
+    test('run-command prefers user-warmed server', async function (assert) {
+      process.env.PRERENDER_MULTIPLEX = '2';
+      let { app } = buildPrerenderManagerApp();
+      let request: SuperTest<Test> = supertest(app.callback());
+
+      let realm = 'https://realm.example/commands/';
+      let runAs = '@alice:localhost';
+      let command = `${realm}commands/say-hello/SayHelloCommand`;
+
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: {
+            capacity: 2,
+            url: serverUrlA,
+            warmedAffinities: [realmAffinityKey(realm)],
+          },
+        },
+      });
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: {
+            capacity: 2,
+            url: serverUrlB,
+            warmedAffinities: [userAffinityKey(runAs)],
+          },
+        },
+      });
+
+      let response = await request
+        .post('/run-command')
+        .send(makeCommandBody(realm, command, runAs));
+
+      assert.strictEqual(response.status, 201, 'command proxy ok');
+      assert.strictEqual(
+        response.headers['x-boxel-prerender-target'],
+        serverUrlB,
+        'command request prefers user-warmed server',
+      );
+    });
+
     test('pressure mode skips unusable LRU server and falls back to healthy', async function (assert) {
       process.env.PRERENDER_MULTIPLEX = '2';
-      let { app, registry, chooseServerForRealm } = buildPrerenderManagerApp();
+      let { app, registry, chooseServerForAffinity } =
+        buildPrerenderManagerApp();
       let request: SuperTest<Test> = supertest(app.callback());
 
       await request.post('/prerender-servers').send({
@@ -792,13 +893,14 @@ module(basename(__filename), function () {
 
       // seed LRU realm with both servers so pressure mode has multiple candidates
       let lruRealm = 'https://realm.example/lru';
-      registry.realms.set(lruRealm, [
+      let lruAffinityKey = realmAffinityKey(lruRealm);
+      registry.affinities.set(lruAffinityKey, [
         serverUrlA as string,
         serverUrlB as string,
       ]);
-      registry.lastAccessByRealm.set(lruRealm, Date.now() - 1000);
-      registry.servers.get(serverUrlA!)!.activeRealms.add(lruRealm);
-      registry.servers.get(serverUrlB!)!.activeRealms.add(lruRealm);
+      registry.lastAccessByAffinity.set(lruAffinityKey, Date.now() - 1000);
+      registry.servers.get(serverUrlA!)!.activeAffinities.add(lruAffinityKey);
+      registry.servers.get(serverUrlB!)!.activeAffinities.add(lruAffinityKey);
 
       // make A unusable
       let infoA = registry.servers.get(serverUrlA!);
@@ -807,22 +909,22 @@ module(basename(__filename), function () {
       }
 
       // simulate full capacity to bypass earlier capacity selection
-      registry.servers.get(serverUrlA!)!.activeRealms.add('fillA');
-      registry.servers.get(serverUrlB!)!.activeRealms.add('fillB');
+      registry.servers.get(serverUrlA!)!.activeAffinities.add('fillA');
+      registry.servers.get(serverUrlB!)!.activeAffinities.add('fillB');
 
-      // choose for new realm should drop A and pick B from LRU set
+      // choose for new affinity should drop A and pick B from LRU set
       let realm = 'https://realm.example/new';
-      let target = chooseServerForRealm(realm);
+      let target = chooseServerForAffinity('realm', realm);
       assert.strictEqual(
         target,
         serverUrlB,
         'selects healthy server after dropping unusable LRU entry',
       );
       assert.false(
-        registry.servers.get(serverUrlA!)?.activeRealms.has(lruRealm),
-        'unusable server activeRealms cleaned up',
+        registry.servers.get(serverUrlA!)?.activeAffinities.has(lruAffinityKey),
+        'unusable server activeAffinities cleaned up',
       );
-      let lruMapping = registry.realms.get(lruRealm) || [];
+      let lruMapping = registry.affinities.get(lruAffinityKey) || [];
       assert.false(
         lruMapping.includes(serverUrlA as string),
         'LRU mapping drops unusable',
@@ -842,7 +944,7 @@ module(basename(__filename), function () {
       }
     });
 
-    test('cleanup keeps activeRealms in sync so capacity is restored after draining', async function (assert) {
+    test('cleanup keeps activeAffinities in sync so capacity is restored after draining', async function (assert) {
       process.env.PRERENDER_MULTIPLEX = '1';
       let { app, registry } = buildPrerenderManagerApp();
       let request: SuperTest<Test> = supertest(app.callback());
@@ -861,9 +963,9 @@ module(basename(__filename), function () {
         .send(makeBody(realm1, `${realm1}/1`));
       assert.strictEqual(res1.status, 201, 'first prerender ok');
       assert.strictEqual(
-        registry.servers.get(serverUrlA!)?.activeRealms.size,
+        registry.servers.get(serverUrlA!)?.activeAffinities.size,
         1,
-        'activeRealms tracked',
+        'activeAffinities tracked',
       );
 
       // mark draining and trigger cleanup via a new request (will 503)
@@ -878,9 +980,9 @@ module(basename(__filename), function () {
         .send(makeBody(realm2, `${realm2}/1`));
       assert.strictEqual(res2.status, 503, 'no servers while draining');
       assert.strictEqual(
-        registry.servers.get(serverUrlA!)?.activeRealms.size,
+        registry.servers.get(serverUrlA!)?.activeAffinities.size,
         0,
-        'activeRealms cleared when assignments dropped',
+        'activeAffinities cleared when assignments dropped',
       );
 
       // back to active; capacity should allow new assignment
@@ -894,14 +996,17 @@ module(basename(__filename), function () {
         .send(makeBody(realm3, `${realm3}/1`));
       assert.strictEqual(res3.status, 201, 'prerender ok after recovery');
       assert.true(
-        registry.servers.get(serverUrlA!)?.activeRealms.has(realm3) as boolean,
-        'realm assigned after capacity restored',
+        registry.servers
+          .get(serverUrlA!)
+          ?.activeAffinities.has(realmAffinityKey(realm3)) as boolean,
+        'affinity assigned after capacity restored',
       );
     });
 
-    test('pressure mode assignment updates activeRealms for capacity accounting', async function (assert) {
+    test('pressure mode assignment updates activeAffinities for capacity accounting', async function (assert) {
       process.env.PRERENDER_MULTIPLEX = '1';
-      let { app, registry, chooseServerForRealm } = buildPrerenderManagerApp();
+      let { app, registry, chooseServerForAffinity } =
+        buildPrerenderManagerApp();
       let request: SuperTest<Test> = supertest(app.callback());
 
       await request.post('/prerender-servers').send({
@@ -912,12 +1017,13 @@ module(basename(__filename), function () {
       });
 
       let lruRealm = 'https://realm.example/lru';
-      let first = chooseServerForRealm(lruRealm);
-      assert.strictEqual(first, serverUrlA, 'initial realm assigned');
-      registry.lastAccessByRealm.set(lruRealm, Date.now() - 1000);
+      let lruAffinityKey = realmAffinityKey(lruRealm);
+      let first = chooseServerForAffinity('realm', lruRealm);
+      assert.strictEqual(first, serverUrlA, 'initial affinity assigned');
+      registry.lastAccessByAffinity.set(lruAffinityKey, Date.now() - 1000);
 
       let newRealm = 'https://realm.example/new-capacity';
-      let target = chooseServerForRealm(newRealm, {
+      let target = chooseServerForAffinity('realm', newRealm, {
         exclude: [serverUrlA as string],
       });
       assert.strictEqual(
@@ -928,8 +1034,8 @@ module(basename(__filename), function () {
       assert.true(
         registry.servers
           .get(serverUrlA!)
-          ?.activeRealms.has(newRealm) as boolean,
-        'activeRealms updated for new realm',
+          ?.activeAffinities.has(realmAffinityKey(newRealm)) as boolean,
+        'activeAffinities updated for new affinity',
       );
     });
 
@@ -1162,20 +1268,28 @@ module(basename(__filename), function () {
         },
       });
       let realm = 'https://realm.example/reset';
+      let affinityKey = realmAffinityKey(realm);
       await request.post('/prerender-card').send(makeBody(realm, `${realm}/1`));
       assert.true(
-        registry.servers.get(serverUrlA!)?.activeRealms.has(realm) as boolean,
-        'realm assigned before reset',
+        registry.servers
+          .get(serverUrlA!)
+          ?.activeAffinities.has(affinityKey) as boolean,
+        'affinity assigned before reset',
       );
 
       let resetRes = await request.post('/prerender-maintenance/reset');
       assert.strictEqual(resetRes.status, 204, 'reset endpoint 204');
 
       assert.false(
-        registry.servers.get(serverUrlA!)?.activeRealms.has(realm) as boolean,
-        'activeRealms cleared after reset',
+        registry.servers
+          .get(serverUrlA!)
+          ?.activeAffinities.has(affinityKey) as boolean,
+        'activeAffinities cleared after reset',
       );
-      assert.false(registry.realms.has(realm), 'realm mapping cleared');
+      assert.false(
+        registry.affinities.has(affinityKey),
+        'affinity mapping cleared',
+      );
     });
 
     test('pressure mode evicts LRU realm when all servers at capacity', async function (assert) {
@@ -1196,7 +1310,7 @@ module(basename(__filename), function () {
       let res1 = await request
         .post('/prerender-card')
         .send(makeBody(realm1, `${realm1}1`));
-      assert.strictEqual(res1.status, 201, 'first realm assigned');
+      assert.strictEqual(res1.status, 201, 'first affinity assigned');
 
       let res2 = await request
         .post('/prerender-card')
@@ -1208,18 +1322,21 @@ module(basename(__filename), function () {
       );
 
       assert.false(
-        registry.realms.has(realm1),
-        'evicted realm mapping removed after steal',
+        registry.affinities.has(realmAffinityKey(realm1)),
+        'evicted affinity mapping removed after steal',
       );
       assert.true(
-        registry.servers.get(serverUrlA!)?.activeRealms.has(realm2) as boolean,
-        'new realm assigned to server after eviction',
+        registry.servers
+          .get(serverUrlA!)
+          ?.activeAffinities.has(realmAffinityKey(realm2)) as boolean,
+        'new affinity assigned to server after eviction',
       );
     });
 
-    test('heartbeat clears stale active realms when warmedRealms are empty', async function (assert) {
+    test('heartbeat clears stale active affinities when warmedAffinities are empty', async function (assert) {
       process.env.PRERENDER_MULTIPLEX = '1';
-      let { app, registry, chooseServerForRealm } = buildPrerenderManagerApp();
+      let { app, registry, chooseServerForAffinity } =
+        buildPrerenderManagerApp();
       let request: SuperTest<Test> = supertest(app.callback());
 
       await request.post('/prerender-servers').send({
@@ -1230,8 +1347,9 @@ module(basename(__filename), function () {
       });
 
       let staleRealm = 'https://realm.example/stale';
-      registry.servers.get(serverUrlA!)?.activeRealms.add(staleRealm);
-      registry.realms.set(staleRealm, [serverUrlA as string]);
+      let staleAffinityKey = realmAffinityKey(staleRealm);
+      registry.servers.get(serverUrlA!)?.activeAffinities.add(staleAffinityKey);
+      registry.affinities.set(staleAffinityKey, [serverUrlA as string]);
 
       await request.post('/prerender-servers').send({
         data: {
@@ -1239,20 +1357,23 @@ module(basename(__filename), function () {
           attributes: {
             capacity: 1,
             url: serverUrlA,
-            warmedRealms: [],
+            warmedAffinities: [],
           },
         },
       });
 
       assert.strictEqual(
-        registry.servers.get(serverUrlA!)?.activeRealms.size,
+        registry.servers.get(serverUrlA!)?.activeAffinities.size,
         0,
-        'activeRealms cleared on heartbeat',
+        'activeAffinities cleared on heartbeat',
       );
-      assert.false(registry.realms.has(staleRealm), 'realm mapping removed');
+      assert.false(
+        registry.affinities.has(staleAffinityKey),
+        'affinity mapping removed',
+      );
 
       let newRealm = 'https://realm.example/newafterclear';
-      let target = chooseServerForRealm(newRealm);
+      let target = chooseServerForAffinity('realm', newRealm);
       assert.strictEqual(target, serverUrlA, 'server reused after clear');
     });
 
@@ -1414,7 +1535,8 @@ function makeMockPrerender(): {
           timing: { launchMs: 0, renderMs: 0, totalMs: 0 },
           pool: {
             pageId: 'p',
-            realm: body?.data?.attributes?.realm,
+            affinityType: body?.data?.attributes?.affinityType ?? 'realm',
+            affinityValue: body?.data?.attributes?.affinityValue ?? 'unknown',
             reused: false,
             evicted: false,
           },
@@ -1440,7 +1562,8 @@ function makeMockPrerender(): {
           timing: { launchMs: 0, renderMs: 0, totalMs: 0 },
           pool: {
             pageId: 'p',
-            realm: body?.data?.attributes?.realm,
+            affinityType: body?.data?.attributes?.affinityType ?? 'realm',
+            affinityValue: body?.data?.attributes?.affinityValue ?? 'unknown',
             reused: false,
             evicted: false,
           },
@@ -1460,7 +1583,8 @@ function makeMockPrerender(): {
           timing: { launchMs: 0, renderMs: 0, totalMs: 0 },
           pool: {
             pageId: 'p',
-            realm: body?.data?.attributes?.realm,
+            affinityType: body?.data?.attributes?.affinityType ?? 'realm',
+            affinityValue: body?.data?.attributes?.affinityValue ?? 'unknown',
             reused: false,
             evicted: false,
           },
@@ -1508,12 +1632,22 @@ function makeBody(realm: string, url: string) {
     data: {
       type: 'prerender-request',
       attributes: {
+        affinityType: 'realm',
+        affinityValue: realm,
         url,
         auth,
         realm,
       },
     },
   };
+}
+
+function realmAffinityKey(realm: string) {
+  return toAffinityKey({ affinityType: 'realm', affinityValue: realm });
+}
+
+function userAffinityKey(userId: string) {
+  return toAffinityKey({ affinityType: 'user', affinityValue: userId });
 }
 
 function makeModuleBody(realm: string, url: string) {
@@ -1522,6 +1656,8 @@ function makeModuleBody(realm: string, url: string) {
     data: {
       type: 'prerender-module-request',
       attributes: {
+        affinityType: 'realm',
+        affinityValue: realm,
         url,
         auth,
         realm,
@@ -1530,12 +1666,18 @@ function makeModuleBody(realm: string, url: string) {
   };
 }
 
-function makeCommandBody(realm: string, command: string) {
+function makeCommandBody(
+  realm: string,
+  command: string,
+  runAs = '@user:localhost',
+) {
   let auth = makeAuth(realm);
   return {
     data: {
       type: 'command-request',
       attributes: {
+        affinityType: 'user',
+        affinityValue: runAs,
         realm,
         auth,
         command,

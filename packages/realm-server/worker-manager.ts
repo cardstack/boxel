@@ -29,6 +29,11 @@ import {
   createDailyCreditGrantCronJob,
   parseLowCreditThreshold,
 } from './lib/daily-credit-grant-config';
+import {
+  isEnvironmentMode,
+  registerService,
+  deregisterService,
+} from './lib/dev-service-registry';
 
 /* About the Worker Manager
  *
@@ -62,6 +67,7 @@ let {
   toUrl: toUrls,
   migrateDB,
   prerendererUrl,
+  serviceName = 'worker',
 } = yargs(process.argv.slice(2))
   .usage('Start worker manager')
   .options({
@@ -105,6 +111,11 @@ let {
       description: 'URL of the prerender server to invoke',
       type: 'string',
     },
+    serviceName: {
+      description:
+        'Traefik service name for registration in branch mode (default: worker)',
+      type: 'string',
+    },
   })
   .parseSync();
 
@@ -119,7 +130,7 @@ process.on('SIGTERM', () => (isExiting = true));
 let webServerInstance: Server | undefined;
 let autoMigrate = migrateDB || undefined;
 
-if (port) {
+if (port != null) {
   let webServer = new Koa<Koa.DefaultState, Koa.Context>();
   let router = new Router();
   router.head('/', livenessCheck);
@@ -165,11 +176,21 @@ if (port) {
   });
 
   webServerInstance = webServer.listen(port);
-  log.info(`worker manager HTTP listening on port ${port}`);
+  webServerInstance.on('listening', () => {
+    let actualPort =
+      (webServerInstance!.address() as import('net').AddressInfo).port ?? port;
+    if (isEnvironmentMode()) {
+      registerService(webServerInstance!, serviceName);
+    }
+    log.info(`worker manager HTTP listening on port ${actualPort}`);
+  });
 }
 
 const shutdown = (onShutdown?: () => void) => {
   log.info(`Shutting down server for worker manager...`);
+  if (isEnvironmentMode()) {
+    deregisterService(serviceName);
+  }
 
   if (dailyCreditGrantJob) {
     log.info('Stopping daily-credit-grant cron job...');

@@ -4,7 +4,7 @@ import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
 import { Button } from '@cardstack/boxel-ui/components';
-import { cn } from '@cardstack/boxel-ui/helpers';
+import { and, cn, not } from '@cardstack/boxel-ui/helpers';
 import { IconPlus } from '@cardstack/boxel-ui/icons';
 
 import { isCardInstance } from '@cardstack/runtime-common';
@@ -28,6 +28,7 @@ interface Signature {
     item: ItemType;
     itemId?: string;
     isSelected: boolean;
+    multiSelect?: boolean;
     onSelect: (selection: string | NewCardArgs) => void;
     onSubmit?: (selection: string | NewCardArgs) => void;
   };
@@ -94,16 +95,32 @@ export default class ItemButton extends Component<Signature> {
   }
 
   @action handleClick() {
+    if (this.isNewCard) {
+      // "Create New" always submits immediately, even in multi-select mode
+      this.args.onSelect(this.selectPayload);
+      this.args.onSubmit?.(this.selectPayload);
+      return;
+    }
     this.args.onSelect(this.selectPayload);
   }
 
   @action handleDblClick() {
+    if (this.args.multiSelect && !this.isNewCard) {
+      // In multi-select, double-click just toggles for existing cards
+      this.args.onSelect(this.selectPayload);
+      return;
+    }
     this.args.onSelect(this.selectPayload);
     this.args.onSubmit?.(this.selectPayload);
   }
 
   @action handleKeydown(event: KeyboardEvent) {
     if (event.key === 'Enter') {
+      if (this.args.multiSelect && !this.isNewCard) {
+        // In multi-select, Enter just toggles for existing cards
+        this.args.onSelect(this.selectPayload);
+        return;
+      }
       this.args.onSelect(this.selectPayload);
       this.args.onSubmit?.(this.selectPayload);
     }
@@ -116,6 +133,7 @@ export default class ItemButton extends Component<Signature> {
         'catalog-item'
         selected=@isSelected
         create-new-button=this.isNewCard
+        multi-select=@multiSelect
       }}
       {{on 'click' this.handleClick}}
       {{on 'dblclick' this.handleDblClick}}
@@ -125,6 +143,11 @@ export default class ItemButton extends Component<Signature> {
       data-test-card-catalog-item-selected={{if @isSelected 'true'}}
       ...attributes
     >
+      {{#if (and @multiSelect @isSelected (not this.isNewCard))}}
+        <div class='selection-indicator'>
+          <div class='selection-circle' />
+        </div>
+      {{/if}}
       {{#if this.isNewCard}}
         <IconPlus
           class='plus-icon'
@@ -154,6 +177,7 @@ export default class ItemButton extends Component<Signature> {
         height: 100%;
         width: 100%;
         max-width: 100%;
+        position: relative;
       }
       .catalog-item:not(.create-new-button) {
         --boxel-button-padding: 0;
@@ -169,7 +193,6 @@ export default class ItemButton extends Component<Signature> {
       }
       .catalog-item.selected {
         border-color: var(--boxel-highlight);
-        box-shadow: 0 0 0 1px var(--boxel-highlight);
       }
       .catalog-item:hover {
         box-shadow: var(--boxel-box-shadow);
@@ -189,6 +212,29 @@ export default class ItemButton extends Component<Signature> {
       }
       .plus-icon > :deep(path) {
         stroke: none;
+      }
+
+      .selection-indicator {
+        position: absolute;
+        top: var(--boxel-sp-xxxs);
+        left: var(--boxel-sp-xxxs);
+        z-index: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--boxel-light);
+        border: 1px solid var(--boxel-450);
+        border-radius: var(--boxel-border-radius-sm);
+        box-shadow: 0 3px 3px 0 rgba(0, 0, 0, 0.5);
+        padding: var(--boxel-sp-3xs);
+        pointer-events: none;
+      }
+      .selection-circle {
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        background-color: var(--boxel-highlight);
+        border: 1.5px solid var(--boxel-dark);
       }
     </style>
   </template>

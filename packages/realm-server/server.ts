@@ -255,7 +255,11 @@ export class RealmServer {
 
   listen(port: number) {
     let instance = this.app.listen(port);
-    this.log.info(`Realm server listening on port %s\n`, port);
+    instance.on('listening', () => {
+      let actualPort =
+        (instance.address() as import('net').AddressInfo | null)?.port ?? port;
+      this.log.info(`Realm server listening on port %s\n`, actualPort);
+    });
     return instance;
   }
 
@@ -389,7 +393,10 @@ export class RealmServer {
     let hasPublicPermissions = await this.hasPublicPermissions(cardURL);
 
     if (!hasPublicPermissions) {
-      ctxt.body = indexHTML;
+      ctxt.body = injectHeadHTML(
+        indexHTML,
+        `<title>Boxel</title>\n${this.defaultIconLinks().join('\n')}`,
+      );
       return;
     }
 
@@ -415,8 +422,8 @@ export class RealmServer {
       }),
     ]);
 
+    let doc = new JSDOM().window.document;
     if (headHTML != null) {
-      let doc = new JSDOM().window.document;
       let sanitized = sanitizeHeadHTMLToString(headHTML, doc);
       if (sanitized !== null) {
         headHTML = sanitized;
@@ -452,12 +459,33 @@ export class RealmServer {
 
     if (headHTML != null) {
       headFragments.push(ensureSingleTitle(headHTML));
+    } else {
+      headFragments.push('<title>Boxel</title>');
     }
 
     if (scopedCSS != null) {
       this.scopedCSSLog.debug(`Injecting scoped CSS for ${cardURL.href}`);
       headFragments.push(
         `<style data-boxel-scoped-css>\n${scopedCSS}\n</style>`,
+      );
+    }
+
+    let hasFavicon = false;
+    let hasAppleTouchIcon = false;
+    if (headHTML != null) {
+      let fragment = doc.createRange().createContextualFragment(headHTML);
+      hasFavicon = fragment.querySelector('link[rel~="icon"]') != null;
+      hasAppleTouchIcon =
+        fragment.querySelector('link[rel~="apple-touch-icon"]') != null;
+    }
+    let faviconURL = new URL('boxel-favicon.png', this.assetsURL).href;
+    let webclipURL = new URL('boxel-webclip.png', this.assetsURL).href;
+    if (!hasFavicon) {
+      headFragments.push(`<link href="${faviconURL}" rel="icon" />`);
+    }
+    if (!hasAppleTouchIcon) {
+      headFragments.push(
+        `<link href="${webclipURL}" rel="apple-touch-icon" />`,
       );
     }
 
@@ -665,8 +693,23 @@ export class RealmServer {
         new URL('/assets/content-tag/standalone.js', this.assetsURL.href).href,
       );
 
+    // Strip any static favicon/apple-touch-icon links from the base HTML
+    // since these are now dynamically injected between the head markers
+    indexHTML = indexHTML
+      .replace(/<link[^>]*\brel="icon"[^>]*\/?>/gi, '')
+      .replace(/<link[^>]*\brel="apple-touch-icon"[^>]*\/?>/gi, '');
+
     deferred.fulfill(indexHTML);
     return indexHTML;
+  }
+
+  private defaultIconLinks(): string[] {
+    let faviconURL = new URL('boxel-favicon.png', this.assetsURL).href;
+    let webclipURL = new URL('boxel-webclip.png', this.assetsURL).href;
+    return [
+      `<link href="${faviconURL}" rel="icon" />`,
+      `<link href="${webclipURL}" rel="apple-touch-icon" />`,
+    ];
   }
 
   private truncateLogLines(value: string, maxLines = 3): string {

@@ -7,6 +7,7 @@ import * as ApplySearchReplaceBlockCommandModule from './apply-search-replace-bl
 import * as AskAiCommandModule from './ask-ai';
 import * as CreateListingPRRequestCommandModule from './bot-requests/create-listing-pr-request';
 import * as SendBotTriggerEventCommandModule from './bot-requests/send-bot-trigger-event';
+import * as CancelIndexingJobCommandModule from './cancel-indexing-job';
 import * as CheckCorrectnessCommandModule from './check-correctness';
 import * as CopyAndEditCommandModule from './copy-and-edit';
 import * as CopyCardToRealmModule from './copy-card';
@@ -15,12 +16,14 @@ import * as CopyFileToRealmCommandModule from './copy-file-to-realm';
 import * as CopySourceCommandModule from './copy-source';
 import * as CreateAIAssistantRoomCommandModule from './create-ai-assistant-room';
 import * as CreateSpecCommandModule from './create-specs';
+import * as FullReindexRealmCommandModule from './full-reindex-realm';
 import * as GenerateExampleCardsCommandModule from './generate-example-cards';
 import * as GenerateReadmeSpecCommandModule from './generate-readme-spec';
 import * as GenerateThemeExampleCommandModule from './generate-theme-example';
 import * as GetAllRealmMetasCommandModule from './get-all-realm-metas';
 import * as GetCardCommandModule from './get-card';
 import * as GetEventsFromRoomCommandModule from './get-events-from-room';
+import * as InvalidateRealmUrlsCommandModule from './invalidate-realm-urls';
 import * as InviteUserToRoomCommandModule from './invite-user-to-room';
 import * as LintAndFixCommandModule from './lint-and-fix';
 import * as ListingBuildCommandModule from './listing-action-build';
@@ -46,6 +49,7 @@ import * as ReadFileForAiAssistantCommandModule from './read-file-for-ai-assista
 import * as ReadSourceCommandModule from './read-source';
 import * as ReadTextFileCommandModule from './read-text-file';
 import * as RegisterBotCommandModule from './register-bot';
+import * as ReindexRealmCommandModule from './reindex-realm';
 import * as SaveCardCommandModule from './save-card';
 import * as SearchAndChooseCommandModule from './search-and-choose';
 import * as SearchCardsCommandModule from './search-cards';
@@ -119,8 +123,16 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
     CheckCorrectnessCommandModule,
   );
   virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/cancel-indexing-job',
+    CancelIndexingJobCommandModule,
+  );
+  virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/generate-theme-example',
     GenerateThemeExampleCommandModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/full-reindex-realm',
+    FullReindexRealmCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/get-events-from-room',
@@ -129,6 +141,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/invite-user-to-room',
     InviteUserToRoomCommandModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/invalidate-realm-urls',
+    InvalidateRealmUrlsCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/lint-and-fix',
@@ -209,6 +225,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/read-text-file',
     ReadTextFileCommandModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/reindex-realm',
+    ReindexRealmCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/register-bot',
@@ -353,12 +373,14 @@ export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
   CreateAIAssistantRoomCommandModule.default,
   CopyAndEditCommandModule.default,
   CreateSpecCommandModule.default,
+  FullReindexRealmCommandModule.default,
   GenerateExampleCardsCommandModule.default,
   GenerateReadmeSpecCommandModule.default,
   GetAllRealmMetasCommandModule.default,
   GetCardCommandModule.default,
   GetEventsFromRoomCommandModule.default,
   InviteUserToRoomCommandModule.default,
+  InvalidateRealmUrlsCommandModule.default,
   LintAndFixCommandModule.default,
   ListingBuildCommandModule.default,
   ListingInitCommandModule.default,
@@ -384,6 +406,7 @@ export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
   ReadSourceCommandModule.default,
   ReadTextFileCommandModule.default,
   RegisterBotCommandModule.default,
+  ReindexRealmCommandModule.default,
   SaveCardCommandModule.default,
   SerializeCardCommandModule.default,
   SearchAndChooseCommandModule.default,
@@ -401,6 +424,7 @@ export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
   SwitchSubmodeCommandModule.default,
   TransformCardsCommandModule.default,
   UnregisterBotCommandModule.default,
+  CancelIndexingJobCommandModule.default,
   CheckCorrectnessCommandModule.default,
   UpdateCodePathWithSelectionCommandModule.default,
   UpdatePlaygroundSelectionCommandModule.default,

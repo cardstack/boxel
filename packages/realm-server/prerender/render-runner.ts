@@ -8,11 +8,13 @@ import {
   type FileRenderArgs,
   type RenderRouteOptions,
   type RunCommandResponse,
+  type AffinityType,
   serializeRenderRouteOptions,
   logger,
 } from '@cardstack/runtime-common';
 import type { SerializedError } from '@cardstack/runtime-common/error';
 import type { ConsoleErrorEntry, PagePool } from './page-pool';
+import { toAffinityKey } from './affinity';
 import {
   captureResult,
   captureModule,
@@ -50,17 +52,17 @@ export class RenderRunner {
   #boxelHostURL: string;
   #nonce = 0;
   #evictionMetrics = {
-    byRealm: new Map<string, { unusable: number; timeout: number }>(),
+    byAffinity: new Map<string, { unusable: number; timeout: number }>(),
   };
-  #lastAuthByRealm = new Map<string, string>();
+  #lastAuthByAffinity = new Map<string, string>();
 
   constructor(options: { pagePool: PagePool; boxelHostURL: string }) {
     this.#pagePool = options.pagePool;
     this.#boxelHostURL = options.boxelHostURL;
   }
 
-  async #getPageForRealm(realm: string, auth: string) {
-    let lastAuth = this.#lastAuthByRealm.get(realm);
+  async #getPageForAffinity(affinityKey: string, auth: string) {
+    let lastAuth = this.#lastAuthByAffinity.get(affinityKey);
     if (lastAuth) {
       let lastKeys = this.#authKeys(lastAuth);
       let nextKeys = this.#authKeys(auth);
@@ -70,17 +72,17 @@ export class RenderRunner {
             lastKeys.some((k) => !nextKeys.includes(k))
           : lastAuth !== auth;
       if (authChanged) {
-        await this.#pagePool.disposeRealm(realm);
-        this.#lastAuthByRealm.delete(realm);
+        await this.#pagePool.disposeAffinity(affinityKey);
+        this.#lastAuthByAffinity.delete(affinityKey);
       }
     }
-    let pageInfo = await this.#pagePool.getPage(realm);
-    this.#lastAuthByRealm.set(realm, auth);
+    let pageInfo = await this.#pagePool.getPage(affinityKey);
+    this.#lastAuthByAffinity.set(affinityKey, auth);
     return pageInfo;
   }
 
-  clearAuthCache(realm: string) {
-    this.#lastAuthByRealm.delete(realm);
+  clearAuthCache(affinityKey: string) {
+    this.#lastAuthByAffinity.delete(affinityKey);
   }
 
   #authKeys(auth: string): string[] | null {
@@ -93,12 +95,16 @@ export class RenderRunner {
   }
 
   async prerenderCardAttempt({
+    affinityType,
+    affinityValue,
     realm,
     url,
     auth,
     opts,
     renderOptions,
   }: {
+    affinityType: AffinityType;
+    affinityValue: string;
     realm: string;
     url: string;
     auth: string;
@@ -109,20 +115,25 @@ export class RenderRunner {
     timings: { launchMs: number; renderMs: number };
     pool: {
       pageId: string;
-      realm: string;
+      affinityType: AffinityType;
+      affinityValue: string;
       reused: boolean;
       evicted: boolean;
       timedOut: boolean;
     };
   }> {
     this.#nonce++;
-    log.info(`prerendering url ${url}, nonce=${this.#nonce} realm=${realm}`);
+    let affinityKey = toAffinityKey({ affinityType, affinityValue });
+    log.info(
+      `prerendering url ${url}, nonce=${this.#nonce} affinity=${affinityKey} realm=${realm}`,
+    );
 
     const { page, reused, launchMs, pageId, release } =
-      await this.#getPageForRealm(realm, auth);
+      await this.#getPageForAffinity(affinityKey, auth);
     const poolInfo = {
       pageId: pageId ?? 'unknown',
-      realm,
+      affinityType,
+      affinityValue,
       reused,
       evicted: false,
       timedOut: false,
@@ -165,7 +176,7 @@ export class RenderRunner {
         step: string,
         stepError: RenderError,
       ) => {
-        let evicted = await this.#maybeEvict(realm, step, stepError);
+        let evicted = await this.#maybeEvict(affinityKey, step, stepError);
         applyStepError(stepError, evicted);
       };
       let runTimedStep = async <T>(
@@ -175,7 +186,7 @@ export class RenderRunner {
         if (shortCircuit) {
           return;
         }
-        let stepResult = await this.#step(realm, step, () =>
+        let stepResult = await this.#step(affinityKey, step, () =>
           withTimeout(page, fn, opts?.timeoutMs),
         );
         if (stepResult.ok) {
@@ -394,13 +405,15 @@ export class RenderRunner {
   }
 
   async runCommandAttempt({
-    realm,
+    affinityType,
+    affinityValue,
     auth,
     command,
     commandInput,
     opts,
   }: {
-    realm: string;
+    affinityType: AffinityType;
+    affinityValue: string;
     auth: string;
     command: string;
     commandInput?: Record<string, unknown> | null;
@@ -410,22 +423,25 @@ export class RenderRunner {
     timings: { launchMs: number; renderMs: number };
     pool: {
       pageId: string;
-      realm: string;
+      affinityType: AffinityType;
+      affinityValue: string;
       reused: boolean;
       evicted: boolean;
       timedOut: boolean;
     };
   }> {
     this.#nonce++;
+    let affinityKey = toAffinityKey({ affinityType, affinityValue });
     log.info(
-      `running command ${command ?? '<unknown>'}, nonce=${this.#nonce} realm=${realm}`,
+      `running command ${command ?? '<unknown>'}, nonce=${this.#nonce} affinity=${affinityKey}`,
     );
 
     const { page, reused, launchMs, pageId, release } =
-      await this.#getPageForRealm(realm, auth);
+      await this.#getPageForAffinity(affinityKey, auth);
     const poolInfo = {
       pageId: pageId ?? 'unknown',
-      realm,
+      affinityType,
+      affinityValue,
       reused,
       evicted: false,
       timedOut: false,
@@ -470,7 +486,7 @@ export class RenderRunner {
       let waitResult = await withTimeout(
         page,
         async () => {
-          await page.waitForFunction(
+          const jsHandle = await page.waitForFunction(
             (expectedNonce: string) => {
               let containers = Array.from(
                 document.querySelectorAll(
@@ -486,19 +502,44 @@ export class RenderRunner {
                 return false;
               }
               let status = container.dataset.prerenderStatus ?? '';
-              return ['ready', 'error', 'unusable'].includes(status);
+              if (!['ready', 'error', 'unusable'].includes(status)) {
+                return false;
+              }
+              let errorElement = container.querySelector(
+                '[data-prerender-error]',
+              ) as HTMLElement | null;
+              let cardResultStringElement = container.querySelector(
+                '[data-command-result]',
+              ) as HTMLElement | null;
+              let domError = (errorElement?.textContent ?? '').trim() || null;
+              let cardResultString = (
+                cardResultStringElement?.textContent ?? ''
+              ).trim();
+              return {
+                status: status as 'ready' | 'error' | 'unusable',
+                domError,
+                cardResultString:
+                  cardResultString.length > 0 ? cardResultString : null,
+              };
             },
             {},
-            String(this.#nonce),
+            nonce,
           );
-
-          if (opts?.simulateTimeoutMs) {
-            await new Promise((resolve) =>
-              setTimeout(resolve, opts.simulateTimeoutMs),
-            );
+          try {
+            const payload = (await jsHandle.jsonValue()) as {
+              status: 'ready' | 'error' | 'unusable';
+              domError: string | null;
+              cardResultString: string | null;
+            };
+            if (opts?.simulateTimeoutMs) {
+              await new Promise((resolve) =>
+                setTimeout(resolve, opts.simulateTimeoutMs),
+              );
+            }
+            return payload;
+          } finally {
+            await jsHandle.dispose();
           }
-
-          return true;
         },
         opts?.timeoutMs,
       );
@@ -516,45 +557,30 @@ export class RenderRunner {
         };
       }
 
-      let payload = await page.evaluate((expectedNonce: string) => {
-        let containers = Array.from(
-          document.querySelectorAll(
-            '[data-prerender][data-prerender-id="command-runner"]',
-          ),
-        ) as HTMLElement[];
-        let container =
-          containers.find(
-            (candidate) => candidate.dataset.prerenderNonce === expectedNonce,
-          ) ?? null;
-        let status =
-          (container?.dataset.prerenderStatus as
-            | 'ready'
-            | 'error'
-            | 'unusable'
-            | undefined) ?? 'error';
-        let errorElement = container?.querySelector(
-          '[data-prerender-error]',
-        ) as HTMLElement | null;
-        let cardResultStringElement = container?.querySelector(
-          '[data-command-result]',
-        ) as HTMLElement | null;
-        let error = (errorElement?.textContent ?? '').trim();
-        let cardResultString = (
-          cardResultStringElement?.textContent ?? ''
-        ).trim();
-        return {
-          status,
-          error: error.length > 0 ? error : null,
-          cardResultString:
-            cardResultString.length > 0 ? cardResultString : null,
-        };
-      }, String(this.#nonce));
+      const payload = waitResult;
+
+      let consoleErrors = this.#pagePool.takeConsoleErrors(pageId);
 
       let response: RunCommandResponse = {
         status: payload.status,
         cardResultString: payload.cardResultString ?? undefined,
-        error: payload.error ?? undefined,
       };
+
+      if (payload.status !== 'ready') {
+        let consoleErrorSummary =
+          consoleErrors.length > 0
+            ? consoleErrors.map((e) => this.#formatConsoleError(e)).join('\n')
+            : undefined;
+        let errorDetail = [payload.domError, consoleErrorSummary]
+          .filter(Boolean)
+          .join('\n---\n');
+        response.error = errorDetail.length > 0 ? errorDetail : undefined;
+
+        log.error(
+          `command runner returned error status command=${command} domError=${payload.domError ?? 'null'} consoleErrors=${consoleErrors.length}`,
+        );
+      }
+
       markTimeout(response.status);
 
       return {
@@ -579,12 +605,16 @@ export class RenderRunner {
   }
 
   async prerenderModuleAttempt({
+    affinityType,
+    affinityValue,
     realm,
     url,
     auth,
     opts,
     renderOptions,
   }: {
+    affinityType: AffinityType;
+    affinityValue: string;
     realm: string;
     url: string;
     auth: string;
@@ -595,22 +625,25 @@ export class RenderRunner {
     timings: { launchMs: number; renderMs: number };
     pool: {
       pageId: string;
-      realm: string;
+      affinityType: AffinityType;
+      affinityValue: string;
       reused: boolean;
       evicted: boolean;
       timedOut: boolean;
     };
   }> {
     this.#nonce++;
+    let affinityKey = toAffinityKey({ affinityType, affinityValue });
     log.info(
-      `module prerendering url ${url}, nonce=${this.#nonce} realm=${realm}`,
+      `module prerendering url ${url}, nonce=${this.#nonce} affinity=${affinityKey} realm=${realm}`,
     );
 
     const { page, reused, launchMs, pageId, release } =
-      await this.#getPageForRealm(realm, auth);
+      await this.#getPageForAffinity(affinityKey, auth);
     const poolInfo = {
       pageId: pageId ?? 'unknown',
-      realm,
+      affinityType,
+      affinityValue,
       reused,
       evicted: false,
       timedOut: false,
@@ -656,7 +689,7 @@ export class RenderRunner {
         let renderError = capture as RenderError;
         renderError.type = 'module-error';
         markTimeout(renderError);
-        if (await this.#maybeEvict(realm, 'module render', renderError)) {
+        if (await this.#maybeEvict(affinityKey, 'module render', renderError)) {
           poolInfo.evicted = true;
         }
         response = {
@@ -681,7 +714,9 @@ export class RenderRunner {
               { title: 'Invalid module response', evict: true },
             );
             markTimeout(renderError);
-            if (await this.#maybeEvict(realm, 'module render', renderError)) {
+            if (
+              await this.#maybeEvict(affinityKey, 'module render', renderError)
+            ) {
               poolInfo.evicted = true;
             }
             response = {
@@ -706,7 +741,9 @@ export class RenderRunner {
             { title: 'Invalid module response' },
           );
           markTimeout(renderError);
-          if (await this.#maybeEvict(realm, 'module render', renderError)) {
+          if (
+            await this.#maybeEvict(affinityKey, 'module render', renderError)
+          ) {
             poolInfo.evicted = true;
           }
           response = {
@@ -735,12 +772,16 @@ export class RenderRunner {
   }
 
   async prerenderFileExtractAttempt({
+    affinityType,
+    affinityValue,
     realm,
     url,
     auth,
     opts,
     renderOptions,
   }: {
+    affinityType: AffinityType;
+    affinityValue: string;
     realm: string;
     url: string;
     auth: string;
@@ -751,22 +792,25 @@ export class RenderRunner {
     timings: { launchMs: number; renderMs: number };
     pool: {
       pageId: string;
-      realm: string;
+      affinityType: AffinityType;
+      affinityValue: string;
       reused: boolean;
       evicted: boolean;
       timedOut: boolean;
     };
   }> {
     this.#nonce++;
+    let affinityKey = toAffinityKey({ affinityType, affinityValue });
     log.info(
-      `file extract prerendering url ${url}, nonce=${this.#nonce} realm=${realm}`,
+      `file extract prerendering url ${url}, nonce=${this.#nonce} affinity=${affinityKey} realm=${realm}`,
     );
 
     const { page, reused, launchMs, pageId, release } =
-      await this.#getPageForRealm(realm, auth);
+      await this.#getPageForAffinity(affinityKey, auth);
     const poolInfo = {
       pageId: pageId ?? 'unknown',
-      realm,
+      affinityType,
+      affinityValue,
       reused,
       evicted: false,
       timedOut: false,
@@ -811,7 +855,13 @@ export class RenderRunner {
       if (isRenderError(capture)) {
         let renderError = capture as RenderError;
         markTimeout(renderError);
-        if (await this.#maybeEvict(realm, 'file extract render', renderError)) {
+        if (
+          await this.#maybeEvict(
+            affinityKey,
+            'file extract render',
+            renderError,
+          )
+        ) {
           poolInfo.evicted = true;
         }
         response = {
@@ -834,7 +884,11 @@ export class RenderRunner {
             );
             markTimeout(renderError);
             if (
-              await this.#maybeEvict(realm, 'file extract render', renderError)
+              await this.#maybeEvict(
+                affinityKey,
+                'file extract render',
+                renderError,
+              )
             ) {
               poolInfo.evicted = true;
             }
@@ -858,7 +912,11 @@ export class RenderRunner {
           );
           markTimeout(renderError);
           if (
-            await this.#maybeEvict(realm, 'file extract render', renderError)
+            await this.#maybeEvict(
+              affinityKey,
+              'file extract render',
+              renderError,
+            )
           ) {
             poolInfo.evicted = true;
           }
@@ -885,6 +943,8 @@ export class RenderRunner {
   }
 
   async prerenderFileRenderAttempt({
+    affinityType,
+    affinityValue,
     realm,
     url,
     auth,
@@ -893,6 +953,8 @@ export class RenderRunner {
     opts,
     renderOptions,
   }: {
+    affinityType: AffinityType;
+    affinityValue: string;
     realm: string;
     url: string;
     auth: string;
@@ -905,22 +967,25 @@ export class RenderRunner {
     timings: { launchMs: number; renderMs: number };
     pool: {
       pageId: string;
-      realm: string;
+      affinityType: AffinityType;
+      affinityValue: string;
       reused: boolean;
       evicted: boolean;
       timedOut: boolean;
     };
   }> {
     this.#nonce++;
+    let affinityKey = toAffinityKey({ affinityType, affinityValue });
     log.info(
-      `file render prerendering url ${url}, nonce=${this.#nonce} realm=${realm}`,
+      `file render prerendering url ${url}, nonce=${this.#nonce} affinity=${affinityKey} realm=${realm}`,
     );
 
     const { page, reused, launchMs, pageId, release } =
-      await this.#getPageForRealm(realm, auth);
+      await this.#getPageForAffinity(affinityKey, auth);
     const poolInfo = {
       pageId: pageId ?? 'unknown',
-      realm,
+      affinityType,
+      affinityValue,
       reused,
       evicted: false,
       timedOut: false,
@@ -988,7 +1053,7 @@ export class RenderRunner {
         error = result;
         markTimeout(error);
         let evicted = await this.#maybeEvict(
-          realm,
+          affinityKey,
           'file isolated render',
           result as RenderError,
         );
@@ -1010,7 +1075,7 @@ export class RenderRunner {
           }
           markTimeout(capErr);
           let evicted = await this.#maybeEvict(
-            realm,
+            affinityKey,
             'file isolated render',
             capErr,
           );
@@ -1049,12 +1114,15 @@ export class RenderRunner {
         fittedHTML: Record<string, string> | null = null;
 
       if (!shortCircuit) {
-        let headHTMLResult = await this.#step(realm, 'file head render', () =>
-          withTimeout(
-            page,
-            () => renderHTML(page, 'head', 0, captureOptions),
-            opts?.timeoutMs,
-          ),
+        let headHTMLResult = await this.#step(
+          affinityKey,
+          'file head render',
+          () =>
+            withTimeout(
+              page,
+              () => renderHTML(page, 'head', 0, captureOptions),
+              opts?.timeoutMs,
+            ),
         );
         if (headHTMLResult.ok) {
           headHTML = headHTMLResult.value as string;
@@ -1120,7 +1188,7 @@ export class RenderRunner {
           if (shortCircuit) {
             break;
           }
-          let res = await this.#step(realm, step.name, () =>
+          let res = await this.#step(affinityKey, step.name, () =>
             withTimeout(page, step.cb, opts?.timeoutMs),
           );
           if (res.ok) {
@@ -1201,24 +1269,24 @@ export class RenderRunner {
   }
 
   async #step<T>(
-    realm: string,
+    affinityKey: string,
     step: string,
     fn: () => Promise<T | RenderError>,
   ): Promise<
     { ok: true; value: T } | { ok: false; error: RenderError; evicted: boolean }
   > {
-    log.debug(`prerender step start realm=${realm} step=${step}`);
+    log.debug(`prerender step start affinity=${affinityKey} step=${step}`);
     let r = await fn();
     if (isRenderError(r)) {
-      let evicted = await this.#maybeEvict(realm, step, r as RenderError);
+      let evicted = await this.#maybeEvict(affinityKey, step, r as RenderError);
       log.debug(
-        `prerender step error realm=${realm} step=${step} status=${
+        `prerender step error affinity=${affinityKey} step=${step} status=${
           (r as RenderError).error?.status
         } title=${(r as RenderError).error?.title} evicted=${evicted}`,
       );
       return { ok: false, error: r as RenderError, evicted };
     }
-    log.debug(`prerender step done realm=${realm} step=${step}`);
+    log.debug(`prerender step done affinity=${affinityKey} step=${step}`);
     return { ok: true, value: r as T };
   }
 
@@ -1333,17 +1401,17 @@ export class RenderRunner {
     return null;
   }
 
-  #incEvictionMetric(realm: string, reason: 'unusable' | 'timeout') {
-    let current = this.#evictionMetrics.byRealm.get(realm) ?? {
+  #incEvictionMetric(affinityKey: string, reason: 'unusable' | 'timeout') {
+    let current = this.#evictionMetrics.byAffinity.get(affinityKey) ?? {
       unusable: 0,
       timeout: 0,
     };
     current[reason]++;
-    this.#evictionMetrics.byRealm.set(realm, current);
+    this.#evictionMetrics.byAffinity.set(affinityKey, current);
   }
 
   async #maybeEvict(
-    realm: string,
+    affinityKey: string,
     step: string,
     err?: RenderError,
   ): Promise<boolean> {
@@ -1358,24 +1426,29 @@ export class RenderRunner {
     if (!reason) {
       return false;
     }
-    await this.#evictRealm(realm, step, reason);
+    await this.#evictAffinity(affinityKey, step, reason);
     return true;
   }
 
-  async #evictRealm(
-    realm: string,
+  async #evictAffinity(
+    affinityKey: string,
     step: string,
     reason: 'timeout' | 'unusable',
   ) {
-    this.#incEvictionMetric(realm, reason);
-    log.warn(`Evicting realm %s due to %s during %s`, realm, reason, step);
+    this.#incEvictionMetric(affinityKey, reason);
+    log.warn(
+      `Evicting affinity %s due to %s during %s`,
+      affinityKey,
+      reason,
+      step,
+    );
     try {
-      await this.#pagePool.disposeRealm(realm, {
+      await this.#pagePool.disposeAffinity(affinityKey, {
         awaitIdle: false,
         retainConsoleErrors: true,
       });
     } catch (e) {
-      log.warn(`Error disposing realm %s on %s:`, realm, reason, e);
+      log.warn(`Error disposing affinity %s on %s:`, affinityKey, reason, e);
     }
   }
 }

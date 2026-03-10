@@ -1,5 +1,5 @@
 import type Koa from 'koa';
-import type { DBAdapter } from '@cardstack/runtime-common';
+import type { DBAdapter, DefinitionLookup } from '@cardstack/runtime-common';
 import {
   type FromScratchResult,
   type QueuePublisher,
@@ -21,6 +21,7 @@ export default function handleReindex({
   queue,
   serverURL,
   dbAdapter,
+  definitionLookup,
   realms,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
@@ -49,6 +50,7 @@ export default function handleReindex({
       job = await reindex({
         queue,
         dbAdapter,
+        definitionLookup,
         realm,
       });
     } catch (e: any) {
@@ -69,18 +71,24 @@ export async function reindex({
   realm,
   queue,
   dbAdapter,
+  definitionLookup,
   priority = userInitiatedPriority,
 }: {
   realm: Realm;
   queue: QueuePublisher;
   dbAdapter: DBAdapter;
+  definitionLookup: DefinitionLookup;
   priority?: number;
 }) {
+  await definitionLookup.clearRealmCache(realm.url);
   return await enqueueReindexRealmJob(
     realm.url,
     await realm.getRealmOwnerUsername(),
     queue,
     dbAdapter,
     priority,
+    {
+      clearLastModified: true,
+    },
   );
 }

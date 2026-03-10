@@ -5,6 +5,7 @@ import { createServer } from 'http';
 import * as Sentry from '@sentry/node';
 import {
   Deferred,
+  type AffinityType,
   logger,
   type RenderRouteOptions,
   type RenderResponse,
@@ -21,6 +22,7 @@ import {
 } from '../middleware';
 import { Prerenderer } from './index';
 import { resolvePrerenderManagerURL } from './config';
+import { isEnvironmentMode, serviceURL } from '../lib/dev-service-registry';
 import {
   PRERENDER_SERVER_DRAINING_STATUS_CODE,
   PRERENDER_SERVER_STATUS_DRAINING,
@@ -80,16 +82,20 @@ export function buildPrerenderApp(options: {
   });
 
   type RouteBaseArgs = {
-    realm: string;
     auth: string;
     renderOptions: RenderRouteOptions;
   };
 
   type PrerenderArgs = RouteBaseArgs & {
+    affinityType: AffinityType;
+    affinityValue: string;
+    realm: string;
     url: string;
   };
 
   type RunCommandRouteArgs = RouteBaseArgs & {
+    affinityType: 'user';
+    affinityValue: string;
     command: string;
     commandInput?: unknown;
   };
@@ -108,7 +114,8 @@ export function buildPrerenderApp(options: {
     timings: { launchMs: number; renderMs: number };
     pool: {
       pageId: string;
-      realm: string;
+      affinityType: AffinityType;
+      affinityValue: string;
       reused: boolean;
       evicted: boolean;
       timedOut: boolean;
@@ -136,17 +143,26 @@ export function buildPrerenderApp(options: {
     let rawUrl = attrs.url;
     let rawAuth = attrs.auth;
     let rawRealm = attrs.realm;
+    let rawAffinityType = attrs.affinityType;
+    let rawAffinityValue = attrs.affinityValue;
     let renderOptions = parseRenderOptions(attrs);
     let missing = missingAttrs([
       { value: rawUrl, name: 'url' },
       { value: rawRealm, name: 'realm' },
       { value: rawAuth, name: 'auth' },
+      {
+        value: rawAffinityType === 'realm' ? rawAffinityType : undefined,
+        name: 'affinityType',
+      },
+      { value: rawAffinityValue, name: 'affinityValue' },
     ]);
     return {
       args:
         missing.length > 0
           ? undefined
           : {
+              affinityType: rawAffinityType as AffinityType,
+              affinityValue: rawAffinityValue as string,
               realm: rawRealm as string,
               url: rawUrl as string,
               auth: rawAuth as string,
@@ -154,10 +170,12 @@ export function buildPrerenderApp(options: {
             },
       missing,
       missingMessage:
-        'Missing or invalid required attributes: url, auth, realm',
+        'Missing or invalid required attributes: url, auth, realm, affinityType, affinityValue',
       logTarget: (rawUrl as string | undefined) ?? '<missing>',
       responseId: (rawUrl as string | undefined) ?? 'unknown',
-      rejectionLogDetails: `realm=${
+      rejectionLogDetails: `affinityType=${
+        (rawAffinityType as string | undefined) ?? '<missing>'
+      } affinityValue=${(rawAffinityValue as string | undefined) ?? '<missing>'} realm=${
         (rawRealm as string | undefined) ?? '<missing>'
       } url=${(rawUrl as string | undefined) ?? '<missing>'} authProvided=${
         typeof rawAuth === 'string' && rawAuth.trim().length > 0
@@ -169,13 +187,15 @@ export function buildPrerenderApp(options: {
     attrs: any,
   ): RouteParseResult<RunCommandRouteArgs> => {
     let rawAuth = attrs.auth;
-    let rawRealm = attrs.realm;
+    let rawAffinityType = attrs.affinityType;
+    let rawAffinityValue = attrs.affinityValue;
     let command = attrs.command;
     let commandInput = attrs.commandInput;
     let renderOptions = parseRenderOptions(attrs);
     let missing: string[] = [];
-    if (!isNonEmptyString(rawRealm)) missing.push('realm');
     if (!isNonEmptyString(rawAuth)) missing.push('auth');
+    if (rawAffinityType !== 'user') missing.push('affinityType');
+    if (!isNonEmptyString(rawAffinityValue)) missing.push('affinityValue');
     if (!isNonEmptyString(command)) missing.push('command');
     let commandValue = isNonEmptyString(command) ? command : undefined;
     return {
@@ -183,7 +203,8 @@ export function buildPrerenderApp(options: {
         missing.length > 0
           ? undefined
           : {
-              realm: rawRealm as string,
+              affinityType: rawAffinityType as 'user',
+              affinityValue: rawAffinityValue as string,
               auth: rawAuth as string,
               command: command as string,
               commandInput,
@@ -191,12 +212,12 @@ export function buildPrerenderApp(options: {
             },
       missing,
       missingMessage:
-        'Missing or invalid required attributes: realm, auth, command',
+        'Missing or invalid required attributes: auth, command, affinityType, affinityValue',
       logTarget: commandValue ?? '<unknown>',
       responseId: commandValue ?? 'command',
-      rejectionLogDetails: `realm=${
-        (rawRealm as string | undefined) ?? '<missing>'
-      } authProvided=${
+      rejectionLogDetails: `affinityType=${
+        (rawAffinityType as string | undefined) ?? '<missing>'
+      } affinityValue=${(rawAffinityValue as string | undefined) ?? '<missing>'} authProvided=${
         typeof rawAuth === 'string' && rawAuth.trim().length > 0
       } commandProvided=${Boolean(commandValue)}`,
     };
@@ -240,11 +261,20 @@ export function buildPrerenderApp(options: {
         let attrs = body?.data?.attributes ?? {};
         let parsed = options.parseAttributes(attrs);
         let routeArgs = parsed.args;
-        let realmForLog = routeArgs?.realm ?? (attrs.realm as string);
+        let realmForLog =
+          (routeArgs as { realm?: string } | undefined)?.realm ??
+          (attrs.realm as string | undefined) ??
+          '<none>';
+        let affinityTypeForLog =
+          (routeArgs as { affinityType?: string } | undefined)?.affinityType ??
+          (attrs.affinityType as string);
+        let affinityValueForLog =
+          (routeArgs as { affinityValue?: string } | undefined)
+            ?.affinityValue ?? (attrs.affinityValue as string);
         let renderOptionsForLog = routeArgs?.renderOptions ?? {};
 
         log.debug(
-          `received ${options.requestDescription} ${parsed.logTarget}: realm=${realmForLog} options=${JSON.stringify(renderOptionsForLog)}`,
+          `received ${options.requestDescription} ${parsed.logTarget}: affinityType=${affinityTypeForLog} affinityValue=${affinityValueForLog} realm=${realmForLog} options=${JSON.stringify(renderOptionsForLog)}`,
         );
         if (parsed.missing.length > 0 || !routeArgs) {
           log.warn(
@@ -308,14 +338,15 @@ export function buildPrerenderApp(options: {
         let poolFlagSuffix =
           poolFlags.length > 0 ? ` flags=[${poolFlags}]` : '';
         log.info(
-          '%s %s total=%dms launch=%dms render=%dms pageId=%s realm=%s%s',
+          '%s %s total=%dms launch=%dms render=%dms pageId=%s affinityType=%s affinityValue=%s%s',
           options.infoLabel,
           parsed.logTarget,
           totalMs,
           timings.launchMs,
           timings.renderMs,
           pool.pageId,
-          pool.realm,
+          pool.affinityType,
+          pool.affinityValue,
           poolFlagSuffix,
         );
         ctxt.status = 201;
@@ -432,7 +463,7 @@ export function buildPrerenderApp(options: {
       parseAttributes: parseRunCommandAttributes,
       execute: (args) =>
         prerenderer.runCommand({
-          realm: args.realm,
+          userId: args.affinityValue,
           auth: args.auth,
           command: args.command,
           commandInput: args.commandInput as Record<string, unknown> | null,
@@ -462,6 +493,8 @@ export function buildPrerenderApp(options: {
       let rawUrl = attrs.url;
       let rawAuth = attrs.auth;
       let rawRealm = attrs.realm;
+      let rawAffinityType = attrs.affinityType;
+      let rawAffinityValue = attrs.affinityValue;
       let renderOptions: RenderRouteOptions =
         attrs.renderOptions &&
         typeof attrs.renderOptions === 'object' &&
@@ -478,6 +511,11 @@ export function buildPrerenderApp(options: {
         { value: rawUrl, name: 'url' },
         { value: rawRealm, name: 'realm' },
         { value: rawAuth, name: 'auth' },
+        {
+          value: rawAffinityType === 'realm' ? rawAffinityType : undefined,
+          name: 'affinityType',
+        },
+        { value: rawAffinityValue, name: 'affinityValue' },
       ]
         .filter(({ value }) => !isNonEmptyString(value))
         .map(({ name }) => name);
@@ -490,7 +528,7 @@ export function buildPrerenderApp(options: {
       }
 
       log.debug(
-        `received file render prerender request ${rawUrl}: realm=${rawRealm}`,
+        `received file render prerender request ${rawUrl}: affinityType=${rawAffinityType} affinityValue=${rawAffinityValue} realm=${rawRealm}`,
       );
       if (missing.length > 0) {
         ctxt.status = 400;
@@ -506,12 +544,16 @@ export function buildPrerenderApp(options: {
       }
 
       let realm = rawRealm as string;
+      let affinityType = rawAffinityType as AffinityType;
+      let affinityValue = rawAffinityValue as string;
       let url = rawUrl as string;
       let auth = rawAuth as string;
 
       let start = Date.now();
       let execPromise = prerenderer
         .prerenderFileRender({
+          affinityType,
+          affinityValue,
           realm,
           url,
           auth,
@@ -560,13 +602,14 @@ export function buildPrerenderApp(options: {
         .join(', ');
       let poolFlagSuffix = poolFlags.length > 0 ? ` flags=[${poolFlags}]` : '';
       log.info(
-        'file render prerendered %s total=%dms launch=%dms render=%dms pageId=%s realm=%s%s',
+        'file render prerendered %s total=%dms launch=%dms render=%dms pageId=%s affinityType=%s affinityValue=%s%s',
         url,
         totalMs,
         timings.launchMs,
         timings.renderMs,
         pool.pageId,
-        pool.realm,
+        pool.affinityType,
+        pool.affinityValue,
         poolFlagSuffix,
       );
       ctxt.status = 201;
@@ -657,6 +700,9 @@ export function buildPrerenderApp(options: {
 }
 
 function resolvePrerenderServerURL(port?: number): string {
+  if (isEnvironmentMode()) {
+    return serviceURL('prerender');
+  }
   let hostname = process.env.HOSTNAME ?? 'localhost';
   let resolvedPort = port ?? defaultPrerenderServerPort;
   return `http://${hostname}:${resolvedPort}`.replace(/\/$/, '');
@@ -734,7 +780,7 @@ export function createPrerenderHttpServer(options?: {
             capacity,
             url: serverURL,
             status: status ?? (draining ? 'draining' : 'active'),
-            warmedRealms: prerenderer.getWarmRealms(),
+            warmedAffinities: prerenderer.getWarmAffinities(),
           },
         },
       };

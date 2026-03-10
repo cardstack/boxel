@@ -8,12 +8,6 @@ import type RealmServerService from '@cardstack/host/services/realm-server';
 
 import WithKnownRealmsLoaded from '../with-known-realms-loaded';
 
-const SELECT_ALL_OPTION: PickerOption = {
-  id: 'select-all',
-  name: 'All',
-  type: 'select-all',
-};
-
 interface Signature {
   Args: {
     selected: PickerOption[];
@@ -30,15 +24,22 @@ export default class RealmPicker extends Component<Signature> {
 
   get realmOptions(): PickerOption[] {
     const urls = this.realmServer.availableRealmURLs;
-    const options: PickerOption[] = [SELECT_ALL_OPTION];
+    const options: PickerOption[] = [
+      {
+        id: 'select-all',
+        label: `Select All (${urls.length})`,
+        shortLabel: `All`,
+        type: 'select-all',
+      },
+    ];
     for (const realmURL of urls) {
       const info = this.realm.info(realmURL);
-      const name = info?.name ?? this.realmDisplayNameFromURL(realmURL);
+      const label = info?.name ?? this.realmDisplayNameFromURL(realmURL);
       const icon = info?.iconURL ?? undefined;
       options.push({
         id: realmURL,
         icon,
-        name,
+        label,
         type: 'option',
       });
     }

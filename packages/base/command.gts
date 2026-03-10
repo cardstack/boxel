@@ -109,6 +109,10 @@ export class RealmUrlCard extends CardDef {
   @field realmUrl = contains(StringField);
 }
 
+export class InvalidateRealmUrlsInput extends RealmUrlCard {
+  @field urls = containsMany(StringField);
+}
+
 export class ReadTextFileInput extends CardDef {
   @field realm = contains(StringField);
   @field path = contains(StringField);

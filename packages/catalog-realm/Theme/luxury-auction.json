@@ -1,0 +1,186 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "default",
+        "module": "https://cardstack.com/base/detailed-style-reference"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "version": "1.0.0",
+      "cardInfo": {
+        "name": "Luxury Auction",
+        "notes": "Serif-dominant by design — Cormorant Garamond at 400 weight is the primary display typeface; resist any impulse to bold headlines. The 2px corner radius is intentional and signals print heritage. Dark mode inverts the hierarchy: antique gold becomes primary, making the dark surface feel like a velvet auction room rather than a generic dark UI. Best paired with warm-toned architectural photography with natural or golden-hour light.",
+        "summary": "Warm editorial luxury theme inspired by Sotheby's auction catalogs and Architectural Digest — Cormorant Garamond serifs, antique gold accents, cream parchment grounds, and the authority of provenance.",
+        "cardThumbnailURL": null
+      },
+      "styleName": "Sotheby's Editorial",
+      "visualDNA": "Printed authority: Garamond on heavy cream, antique gold as the single accent, hairline rules in warm taupe, and photography that treats architecture as art. The absence of color is itself a quality signal — this palette trusts its serif and its whitespace. Provenance over promotion: copy that reads like catalog notes, not marketing copy. Restraint as aspiration: the most expensive thing in the room has the fewest words. The through-line is earned gravitas — nothing here announces itself; everything rewards attention.",
+      "cssImports": [
+        "https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400;1,500&family=EB+Garamond:ital,wght@0,400;0,500;1,400&family=Montserrat:wght@300;400;500;600&display=swap"
+      ],
+      "typography": {
+        "body": {
+          "fontSize": "16px",
+          "fontFamily": "EB Garamond, Cormorant Garamond, Georgia, serif",
+          "fontWeight": "400",
+          "lineHeight": "1.75",
+          "sampleText": "Conceived by a devotee of Mies van der Rohe and completed in 1968, this extraordinary residence has been in a single family for over half a century. Its proportions are without peer — soaring twelve-foot ceilings, a forty-foot gallery, and glass walls that frame the autumn light as if it were an installation."
+        },
+        "caption": {
+          "fontSize": "11px",
+          "fontFamily": "Montserrat, DM Sans, system-ui, sans-serif",
+          "fontWeight": "400",
+          "lineHeight": "1.5",
+          "sampleText": "Photograph by Simon Upton / Architectural Digest"
+        },
+        "heading": {
+          "fontSize": "48px",
+          "fontFamily": "Cormorant Garamond, EB Garamond, Georgia, serif",
+          "fontWeight": "400",
+          "lineHeight": "1.1",
+          "sampleText": "A Masterpiece of Postwar Modernism — 5,400 Square Feet of Curated Living"
+        },
+        "subheading": {
+          "fontSize": "10px",
+          "fontFamily": "Montserrat, DM Sans, system-ui, sans-serif",
+          "fontWeight": "600",
+          "lineHeight": "1.5",
+          "sampleText": "EAST HAMPTON · 5 BD · 7.5 BA · OFFERED AT $12,500,000"
+        },
+        "sectionHeading": {
+          "fontSize": "22px",
+          "fontFamily": "Cormorant Garamond, EB Garamond, Georgia, serif",
+          "fontWeight": "500",
+          "lineHeight": "1.3",
+          "sampleText": "The Principal Suite"
+        }
+      },
+      "colorPalette": "Warm ivory and parchment anchor every surface — never cold white, never clinical. Ink-black serves as the primary editorial weight: authoritative without aggression, the color of a well-inked copper engraving. Antique gold is the single accent, deployed with extreme restraint as an unmistakable quality marker — it reads as brass hardware, a gilded frame, afternoon light pooling on a limestone floor. Warm taupe and sandy beige fill the secondary tier. The palette deliberately excludes any blue or purple tone; every hue leans amber. The effect is of a printed auction catalog on heavy-weight Zerkall stock: dignified, tactile, and positioned without apology at the top of the market.",
+      "contentVoice": "Third-person, precise, and unhurried. Every listing is presented as a provenance: the architect, the year, the original owner, the materials. Superlatives are used sparingly and only when earned — 'exceptional', not 'amazing'. Measurements are given in square feet and hectares. Room descriptions favor the noun over the adjective: 'a forty-foot gallery hung with contemporary works' rather than 'a beautiful, spacious gallery'. The writing assumes a buyer who is also a collector, who cares about the view from a specific window at a specific hour. Tone never tips into salesmanship; it maintains the authority of an expert witness.",
+      "inspirations": [
+        "Sotheby's auction catalog design (1980s–present), authority serif typography and cream stock aesthetic",
+        "Architectural Digest under Paige Rense (1975–2010), editorial grandeur and property photography",
+        "Christie's International Real Estate prime property brochures, restrained luxury positioning",
+        "Knight Frank Prime Global Cities report, data presented with editorial dignity",
+        "AD100 special issues, the annual intersection of architecture, art, and residential excellence"
+      ],
+      "designMindset": "The property as provenance, the listing as catalog essay. This design is for buyers who read auction records before making an offer, who know their Sir John Soane from their Carlo Scarpa, who subscribe to AD and keep the back issues. The design should feel like it was commissioned, not assembled. Every typographic decision asks: does this honor the craft of the property it describes? Warmth and authority are not in tension here — they are the same quality, expressed through restraint. Aspiration is communicated by what is left out as much as by what is included.",
+      "rootVariables": {
+        "card": "oklch(99.2% 0.006 80)",
+        "ring": "oklch(67% 0.10 78)",
+        "input": "oklch(89% 0.014 76)",
+        "muted": "oklch(94% 0.014 78)",
+        "accent": "oklch(67% 0.10 78)",
+        "border": "oklch(89% 0.014 76)",
+        "chart1": "oklch(67% 0.10 78)",
+        "chart2": "oklch(46% 0.08 170)",
+        "chart3": "oklch(75% 0.08 82)",
+        "chart4": "oklch(35% 0.08 22)",
+        "chart5": "oklch(60% 0.06 60)",
+        "radius": "0.125rem",
+        "shadow": "0 4px 10px -1px oklch(13% 0.012 52 / 0.07), 0 2px 4px -2px oklch(13% 0.012 52 / 0.07)",
+        "popover": "oklch(99.2% 0.006 80)",
+        "primary": "oklch(16% 0.012 52)",
+        "sidebar": "oklch(95.5% 0.012 80)",
+        "spacing": "0.25rem",
+        "fontMono": "\"JetBrains Mono\", \"Fira Code\", monospace",
+        "fontSans": "\"Montserrat\", \"DM Sans\", system-ui, sans-serif",
+        "shadowLg": "0 10px 24px -3px oklch(13% 0.012 52 / 0.10), 0 4px 8px -4px oklch(13% 0.012 52 / 0.10)",
+        "shadowMd": "0 6px 16px -2px oklch(13% 0.012 52 / 0.08), 0 3px 6px -3px oklch(13% 0.012 52 / 0.08)",
+        "shadowSm": "0 2px 6px 0 oklch(13% 0.012 52 / 0.06), 0 1px 2px -1px oklch(13% 0.012 52 / 0.06)",
+        "shadowXl": "0 16px 40px -4px oklch(13% 0.012 52 / 0.12), 0 6px 12px -6px oklch(13% 0.012 52 / 0.12)",
+        "shadowXs": "0 1px 3px 0 oklch(13% 0.012 52 / 0.05), 0 1px 2px -1px oklch(13% 0.012 52 / 0.05)",
+        "fontSerif": "\"Cormorant Garamond\", \"EB Garamond\", Georgia, serif",
+        "secondary": "oklch(91% 0.018 78)",
+        "shadow2xl": "0 24px 60px -8px oklch(13% 0.012 52 / 0.16)",
+        "shadow2xs": "0 1px 2px 0 oklch(13% 0.012 52 / 0.04)",
+        "background": "oklch(97.5% 0.010 82)",
+        "foreground": "oklch(13% 0.012 52)",
+        "destructive": "oklch(48% 0.14 24)",
+        "sidebarRing": "oklch(67% 0.10 78)",
+        "sidebarAccent": "oklch(91% 0.018 78)",
+        "sidebarBorder": "oklch(87% 0.012 76)",
+        "cardForeground": "oklch(13% 0.012 52)",
+        "sidebarPrimary": "oklch(16% 0.012 52)",
+        "trackingNormal": "0.005em",
+        "mutedForeground": "oklch(54% 0.018 65)",
+        "accentForeground": "oklch(13% 0.012 52)",
+        "popoverForeground": "oklch(13% 0.012 52)",
+        "primaryForeground": "oklch(97.5% 0.010 82)",
+        "sidebarForeground": "oklch(13% 0.012 52)",
+        "secondaryForeground": "oklch(28% 0.015 55)",
+        "destructiveForeground": "oklch(98% 0.006 78)",
+        "sidebarAccentForeground": "oklch(28% 0.015 55)",
+        "sidebarPrimaryForeground": "oklch(97.5% 0.010 82)"
+      },
+      "motionLanguage": "The stillness of a gallery. Hover transitions run at 200ms ease-in-out with no transform — only a 2% brightness shift and a hairline gold underline appearing beneath links. Page transitions are a gentle cross-dissolve at 250ms, the pace of turning a heavy page. Image reveals use a slow linear wipe from left to right at 400ms — evoking an auction reveal. Loading states pulse at 3s ease-in-out in warm parchment. Nothing scales on hover. Nothing translates. Motion is the exception, not the language.",
+      "technicalSpecs": "Base font size: 16px. Base line height: 1.75 for body, 1.1 for display headings. Max content width: 620px for editorial prose, 960px for property card grids. Image aspect ratios: 3:2 for hero and feature cards, 4:3 for gallery thumbnails, 1:1 for detail and material close-ups. Responsive breakpoints: 480px (single column, stacked), 768px (two column), 1024px (editorial two-column with wide image), 1280px (full spread). Corner radius: 2px maximum. Minimum tap target: 44×44px. Focus rings use the antique gold accent. Letter-spacing on all-caps utility text: 0.14em. Font weights in use: 300, 400, 500 (no 700 anywhere).",
+      "wallpaperImages": [],
+      "compositionRules": "Property-first, always. The hero photograph commands the opening at full width with no visible UI chrome. Listing titles are set large and light — the thinness of Cormorant at 400 weight is the luxury signal, not its size. Price and provenance data appear as small tracked caps above the headline, like a lot number in an auction catalog. Section divisions use a centered hairline rule flanked by thin whitespace. Text columns max at 620px; the prose never wraps to more than sixty characters per line. The composition assumes print: generous margins, editorial breathing room, and a clear hierarchy that moves from photograph → headline → provenance → detail.",
+      "qualityStandards": "Every screen should feel as though it could be printed and placed into a Sotheby's catalog without alteration. Typography must never feel crowded — Cormorant Garamond at 400 weight is legible only with room to breathe. Photography must be warm-toned and architecturally composed; any cold blue-cast image will break the aesthetic. If a component feels like a web component, reconsider it until it feels like a printed artifact that happens to be interactive. The test: would the AD art director approve the spread? Would Sotheby's use this to represent a nine-figure property? If not, refine.",
+      "typographySystem": "An unapologetically serif-first system organized around three distinct registers. Cormorant Garamond governs all display and headline type — its high contrast strokes, generous italic, and Renaissance lineage give the system its editorial authority; used at 300–500 weight, never bold. EB Garamond handles long-form body copy with warmth and sustained legibility, honoring the tradition of scholarly prose. Montserrat handles all utility text — property metadata, labels, captions, price points — in small-caps or tracked uppercase at 10–11px. Letter-spacing: display type runs at 0.005em (barely open), uppercase labels at 0.14em (generously aired), body at 0.01em. The system deliberately avoids any geometric sans-serif for headline use; if it must be said in a display context, it must be said in a serif.",
+      "darkModeVariables": {
+        "card": "oklch(14% 0.010 52)",
+        "ring": "oklch(72% 0.11 80)",
+        "input": "oklch(26% 0.012 54)",
+        "muted": "oklch(18% 0.010 52)",
+        "accent": "oklch(74% 0.11 80)",
+        "border": "oklch(26% 0.012 54)",
+        "chart1": "oklch(72% 0.11 80)",
+        "chart2": "oklch(55% 0.09 170)",
+        "chart3": "oklch(78% 0.08 82)",
+        "chart4": "oklch(48% 0.10 22)",
+        "chart5": "oklch(65% 0.07 60)",
+        "radius": "0.125rem",
+        "shadow": "0 4px 10px -1px oklch(4% 0.008 52 / 0.40), 0 2px 4px -2px oklch(4% 0.008 52 / 0.40)",
+        "popover": "oklch(14% 0.010 52)",
+        "primary": "oklch(72% 0.11 80)",
+        "sidebar": "oklch(12% 0.010 52)",
+        "spacing": "0.25rem",
+        "fontMono": "\"JetBrains Mono\", \"Fira Code\", monospace",
+        "fontSans": "\"Montserrat\", \"DM Sans\", system-ui, sans-serif",
+        "shadowLg": "0 10px 24px -3px oklch(4% 0.008 52 / 0.48), 0 4px 8px -4px oklch(4% 0.008 52 / 0.48)",
+        "shadowMd": "0 6px 16px -2px oklch(4% 0.008 52 / 0.44), 0 3px 6px -3px oklch(4% 0.008 52 / 0.44)",
+        "shadowSm": "0 2px 6px 0 oklch(4% 0.008 52 / 0.38), 0 1px 2px -1px oklch(4% 0.008 52 / 0.38)",
+        "shadowXl": "0 16px 40px -4px oklch(4% 0.008 52 / 0.52), 0 6px 12px -6px oklch(4% 0.008 52 / 0.52)",
+        "shadowXs": "0 1px 3px 0 oklch(4% 0.008 52 / 0.35), 0 1px 2px -1px oklch(4% 0.008 52 / 0.35)",
+        "fontSerif": "\"Cormorant Garamond\", \"EB Garamond\", Georgia, serif",
+        "secondary": "oklch(22% 0.012 54)",
+        "shadow2xl": "0 24px 60px -8px oklch(4% 0.008 52 / 0.58)",
+        "shadow2xs": "0 1px 2px 0 oklch(4% 0.008 52 / 0.30)",
+        "background": "oklch(10% 0.010 54)",
+        "foreground": "oklch(94% 0.010 80)",
+        "destructive": "oklch(55% 0.15 24)",
+        "sidebarRing": "oklch(72% 0.11 80)",
+        "sidebarAccent": "oklch(22% 0.012 54)",
+        "sidebarBorder": "oklch(24% 0.010 52)",
+        "cardForeground": "oklch(94% 0.010 80)",
+        "sidebarPrimary": "oklch(72% 0.11 80)",
+        "trackingNormal": "0.005em",
+        "mutedForeground": "oklch(62% 0.016 68)",
+        "accentForeground": "oklch(10% 0.010 54)",
+        "popoverForeground": "oklch(94% 0.010 80)",
+        "primaryForeground": "oklch(10% 0.010 54)",
+        "sidebarForeground": "oklch(94% 0.010 80)",
+        "secondaryForeground": "oklch(88% 0.012 78)",
+        "destructiveForeground": "oklch(10% 0.010 54)",
+        "sidebarAccentForeground": "oklch(88% 0.012 78)",
+        "sidebarPrimaryForeground": "oklch(10% 0.010 54)"
+      },
+      "geometricLanguage": "Nearly square corners — a 2px corner radius maximum, the edge of a printed catalog card rather than a digital component. Hairline rules (0.5px) in warm taupe delineate sections, never thick dividers. Image frames are full-bleed with no border radius. The grid is asymmetric in the editorial tradition: a wide image column paired with a narrower text column, evoking the classic AD property spread. Proportions are generous and unhurried — this is a layout that assumes the viewer has time. Nothing is rounded, nothing is bubbly; every corner is resolved with quiet authority.",
+      "historicalContext": "Rooted in the visual authority of Sotheby's auction catalogs from the 1970s through the present, and the editorial grandeur of Architectural Digest under Paige Rense's legendary thirty-year tenure. The aesthetic crystallized at the intersection of provenance and place — where a property is presented with the same gravitas as a Cy Twombly canvas going to auction. Christie's International Real Estate, Knight Frank's prime residential publications, and the AD100 special issues all inform the vocabulary. Typographically, the heritage traces to the great English serif traditions: Garamond's Renaissance origins, letterpress printing on heavy cream stock, the restrained dignity of a catalog that assumes its reader does not need to be impressed.",
+      "materialVocabulary": "Heavy cream paper stock — the background reads as Zerkall or Crane wove, slightly textured to the imagination. Cards feel like pages lifted from a catalog printed in an edition of five hundred. Shadows are whisper-thin and cast at a low angle, simulating the raking light that a fine-art photographer uses to reveal surface texture. Depth is implied through layering and the subtlest of drop shadows — never a dramatic outer glow. Hover states suggest the physical sensation of a fingertip on glossy art paper: a barely perceptible increase in surface brightness. The material vocabulary excludes glass morphism, gradients, and anything that reads as screen-native.",
+      "componentVocabulary": "Price tags and lot numbers are set in Montserrat tracked small-caps with a hairline border. The primary call-to-action is a near-black button with cream text — understated authority. Secondary actions are text links with a 0.5px gold underline on hover. Property cards present a 3:2 image at full width, followed by a compact typographic block: lot number in small-caps, title in Cormorant at 20px, essential details in tracked sans below. Badges indicating status (Under Offer, Sold, New to Market) are minimal rectangular chips in warm taupe with dark text. No filled accent-color buttons unless it is the single primary action on a page.",
+      "applicationScenarios": "Prime residential property listings with editorial photography. Auction lot detail pages for fine art and design objects. Interior design portfolio presentations. Architectural showcase cards for historic or significant residences. Property provenance timelines. Room-by-room feature cards for luxury estates. Agent and specialist profile cards. Curated collection or estate sale inventory grids. Seasonal market reports with editorial photography."
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}
