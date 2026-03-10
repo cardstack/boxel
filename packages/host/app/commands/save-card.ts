@@ -31,7 +31,6 @@ export default class SaveCardCommand extends HostBaseCommand<
     await this.store.add(input.card, {
       realm: input.realm,
       localDir: input.localDir,
-      doNotWaitForPersist: true
     });
   }
 }
