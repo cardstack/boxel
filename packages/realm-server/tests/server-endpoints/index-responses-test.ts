@@ -5,12 +5,13 @@ import type { Test, SuperTest } from 'supertest';
 import type { Server } from 'http';
 import { dirSync, type DirResult } from 'tmp';
 import {
+  DBAdapter,
   DEFAULT_PERMISSIONS,
   systemInitiatedPriority,
   type Realm,
 } from '@cardstack/runtime-common';
 import type { PgAdapter } from '@cardstack/postgres';
-import { setupServerEndpointsTest, testRealmURL } from './helpers';
+import { testRealmURL } from './helpers';
 import {
   closeServer,
   createVirtualNetwork,
@@ -22,23 +23,71 @@ import {
   waitUntil,
 } from '../helpers';
 import { createJWT as createRealmServerJWT } from '../../utils/jwt';
-import {
-  copySync,
-  ensureDirSync,
-  writeFileSync,
-  writeJSONSync,
-} from 'fs-extra';
+import { copySync, ensureDirSync } from 'fs-extra';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
 module(`server-endpoints/${basename(__filename)}`, function () {
   module(
     'Realm Server Endpoints (not specific to one realm)',
     function (hooks) {
-      let context = setupServerEndpointsTest(hooks, {
-        beforeStartRealmServer: async (context) => {
-          let subdirectoryPath = join(context.testRealmDir, 'subdirectory');
-          ensureDirSync(subdirectoryPath);
-          writeJSONSync(join(subdirectoryPath, 'index.json'), {
+      let request: SuperTest<Test>;
+      let dbAdapter: DBAdapter;
+
+      function onRealmSetup(args: {
+        request: SuperTest<Test>;
+        testRealm: Realm;
+        dbAdapter: DBAdapter;
+      }) {
+        request = args.request;
+        dbAdapter = args.dbAdapter;
+      }
+
+      setupPermissionedRealmCached(hooks, {
+        realmURL: testRealmURL,
+        fileSystem: {
+          'index.json': {
+            data: {
+              type: 'card',
+              attributes: {},
+              meta: {
+                adoptsFrom: {
+                  module: './home.gts',
+                  name: 'Home',
+                },
+              },
+            },
+          },
+          'home.gts': `import { Component, CardDef } from 'https://cardstack.com/base/card-api';
+                      export class Home extends CardDef {
+                        static isolated = class Isolated extends Component<typeof this> {
+                          <template>
+                            <p data-test-home-card>Hello, world</p>
+                          </template>
+                        };
+                      }`,
+          'person.gts': `import {
+                            contains,
+                            field,
+                            Component,
+                            CardDef,
+                          } from 'https://cardstack.com/base/card-api';
+                          import StringField from 'https://cardstack.com/base/string';
+
+                          export class Person extends CardDef {
+                            static displayName = 'Person';
+                            @field firstName = contains(StringField);
+                            @field cardTitle = contains(StringField, {
+                              computeVia: function (this: Person) {
+                                return this.firstName;
+                              },
+                            });
+                            static isolated = class Isolated extends Component<typeof this> {
+                              <template>
+                                <h1 data-test-card><@fields.firstName /></h1>
+                              </template>
+                            };
+                          }`,
+          'subdirectory/index.json': {
             data: {
               type: 'card',
               attributes: {
@@ -51,11 +100,8 @@ module(`server-endpoints/${basename(__filename)}`, function () {
                 },
               },
             },
-          });
-
-          writeFileSync(
-            join(context.testRealmDir, 'isolated-card.gts'),
-            `
+          },
+          'isolated-card.gts': `
               import { Component, CardDef } from 'https://cardstack.com/base/card-api';
 
               export class IsolatedCard extends CardDef {
@@ -66,9 +112,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
                 };
               }
               `,
-          );
-
-          writeJSONSync(join(context.testRealmDir, 'isolated-test.json'), {
+          'isolated-test.json': {
             data: {
               type: 'card',
               attributes: {},
@@ -79,11 +123,9 @@ module(`server-endpoints/${basename(__filename)}`, function () {
                 },
               },
             },
-          });
+          },
 
-          writeFileSync(
-            join(context.testRealmDir, 'dollar-sign-card.gts'),
-            `
+          'dollar-sign-card.gts': `
             import { Component, CardDef } from 'https://cardstack.com/base/card-api';
 
             export class DollarSignCard extends CardDef {
@@ -94,9 +136,8 @@ module(`server-endpoints/${basename(__filename)}`, function () {
               };
             }
             `,
-          );
 
-          writeJSONSync(join(context.testRealmDir, 'dollar-sign-test.json'), {
+          'dollar-sign-test.json': {
             data: {
               type: 'card',
               attributes: {},
@@ -107,11 +148,9 @@ module(`server-endpoints/${basename(__filename)}`, function () {
                 },
               },
             },
-          });
+          },
 
-          writeFileSync(
-            join(context.testRealmDir, 'head-card.gts'),
-            `
+          'head-card.gts': `
             import { Component, CardDef } from 'https://cardstack.com/base/card-api';
 
             export class HeadCard extends CardDef {
@@ -128,9 +167,8 @@ module(`server-endpoints/${basename(__filename)}`, function () {
               };
             }
             `,
-          );
 
-          writeJSONSync(join(context.testRealmDir, 'private-index-test.json'), {
+          'private-index-test.json': {
             data: {
               type: 'card',
               attributes: {},
@@ -141,11 +179,9 @@ module(`server-endpoints/${basename(__filename)}`, function () {
                 },
               },
             },
-          });
+          },
 
-          writeFileSync(
-            join(context.testRealmDir, 'unsafe-head-card.gts'),
-            `
+          'unsafe-head-card.gts': `
             import { Component, CardDef } from 'https://cardstack.com/base/card-api';
 
             export class UnsafeHeadCard extends CardDef {
@@ -166,9 +202,8 @@ module(`server-endpoints/${basename(__filename)}`, function () {
               };
             }
             `,
-          );
 
-          writeJSONSync(join(context.testRealmDir, 'unsafe-head-test.json'), {
+          'unsafe-head-test.json': {
             data: {
               type: 'card',
               attributes: {},
@@ -179,11 +214,9 @@ module(`server-endpoints/${basename(__filename)}`, function () {
                 },
               },
             },
-          });
+          },
 
-          writeFileSync(
-            join(context.testRealmDir, 'scoped-css-card.gts'),
-            `
+          'scoped-css-card.gts': `
             import { Component, CardDef } from 'https://cardstack.com/base/card-api';
 
             export class ScopedCssCard extends CardDef {
@@ -199,9 +232,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
               };
             }
             `,
-          );
-
-          writeJSONSync(join(context.testRealmDir, 'scoped-css-test.json'), {
+          'scoped-css-test.json': {
             data: {
               type: 'card',
               attributes: {},
@@ -212,16 +243,15 @@ module(`server-endpoints/${basename(__filename)}`, function () {
                 },
               },
             },
-          });
+          },
 
           // Cards for testing scoped CSS from linked card instances.
           // The parent declares linksTo with a base type, but the actual linked
           // instance is a subclass with its own scoped CSS. This means the child's
           // CSS is NOT reachable through the parent's static module imports — it
           // can only be found by iterating over serialized.included resources.
-          writeFileSync(
-            join(context.testRealmDir, 'linked-css-base.gts'),
-            `
+
+          'linked-css-base.gts': `
             import { Component, CardDef } from 'https://cardstack.com/base/card-api';
 
             export class LinkedCssBase extends CardDef {
@@ -232,11 +262,8 @@ module(`server-endpoints/${basename(__filename)}`, function () {
               };
             }
             `,
-          );
 
-          writeFileSync(
-            join(context.testRealmDir, 'linked-css-child.gts'),
-            `
+          'linked-css-child.gts': `
             import { Component } from 'https://cardstack.com/base/card-api';
             import { LinkedCssBase } from './linked-css-base.gts';
 
@@ -263,11 +290,8 @@ module(`server-endpoints/${basename(__filename)}`, function () {
               };
             }
             `,
-          );
 
-          writeFileSync(
-            join(context.testRealmDir, 'linked-css-parent.gts'),
-            `
+          'linked-css-parent.gts': `
             import { Component, CardDef, field, linksTo } from 'https://cardstack.com/base/card-api';
             import { LinkedCssBase } from './linked-css-base.gts';
 
@@ -281,9 +305,8 @@ module(`server-endpoints/${basename(__filename)}`, function () {
               };
             }
             `,
-          );
 
-          writeJSONSync(join(context.testRealmDir, 'linked-css-child-1.json'), {
+          'linked-css-child-1.json': {
             data: {
               type: 'card',
               attributes: {},
@@ -294,33 +317,30 @@ module(`server-endpoints/${basename(__filename)}`, function () {
                 },
               },
             },
-          });
+          },
 
-          writeJSONSync(
-            join(context.testRealmDir, 'linked-css-parent-1.json'),
-            {
-              data: {
-                type: 'card',
-                attributes: {},
-                relationships: {
-                  child: {
-                    links: {
-                      self: './linked-css-child-1',
-                    },
-                  },
-                },
-                meta: {
-                  adoptsFrom: {
-                    module: './linked-css-parent.gts',
-                    name: 'LinkedCssParent',
+          'linked-css-parent-1.json': {
+            data: {
+              type: 'card',
+              attributes: {},
+              relationships: {
+                child: {
+                  links: {
+                    self: './linked-css-child-1',
                   },
                 },
               },
+              meta: {
+                adoptsFrom: {
+                  module: './linked-css-parent.gts',
+                  name: 'LinkedCssParent',
+                },
+              },
             },
-          );
+          },
 
           // Cards for testing default head template with cardInfo.theme
-          writeJSONSync(join(context.testRealmDir, 'a-test-theme.json'), {
+          'a-test-theme.json': {
             data: {
               type: 'card',
               attributes: {
@@ -335,40 +355,33 @@ module(`server-endpoints/${basename(__filename)}`, function () {
                 },
               },
             },
-          });
+          },
 
-          writeJSONSync(
-            join(context.testRealmDir, 'a-brand-guide-theme.json'),
-            {
-              data: {
-                type: 'card',
-                attributes: {
-                  markUsage: {
-                    socialMediaProfileIcon:
-                      'https://example.com/social-icon.png',
-                  },
+          'a-brand-guide-theme.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                markUsage: {
+                  socialMediaProfileIcon: 'https://example.com/social-icon.png',
                 },
-                meta: {
-                  adoptsFrom: {
-                    module: 'https://cardstack.com/base/brand-guide',
-                    name: 'default',
-                  },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: 'https://cardstack.com/base/brand-guide',
+                  name: 'default',
                 },
               },
             },
-          );
-
-          // NOTE: card-with-theme.json is NOT written here because from-scratch
-          // indexing uses a batched write strategy (boxel_index_working → boxel_index).
-          // Cards within the same batch can't resolve linksTo references to each other
-          // because the data isn't in the production table yet. Instead, card-with-theme
-          // is created via API in the test itself, triggering incremental indexing
-          // after the theme card is already committed to boxel_index.
+          },
         },
+        permissions: {
+          '*': ['read', 'write'],
+        },
+        onRealmSetup,
       });
 
       test('startup indexing uses system initiated queue priority', async function (assert) {
-        let [job] = (await context.dbAdapter.execute(
+        let [job] = (await dbAdapter.execute(
           `SELECT priority FROM jobs WHERE job_type = 'from-scratch-index' AND args->>'realmURL' = '${testRealmURL.href}' ORDER BY created_at DESC LIMIT 1`,
         )) as { priority: number }[];
 
@@ -381,9 +394,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       });
 
       test('serves isolated HTML for realm index request', async function (assert) {
-        let response = await context.request
-          .get('/test')
-          .set('Accept', 'text/html');
+        let response = await request.get('/test').set('Accept', 'text/html');
 
         assert.strictEqual(response.status, 200, 'serves HTML response');
         assert.ok(
@@ -393,7 +404,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       });
 
       test('serves isolated HTML in index responses for card URLs', async function (assert) {
-        let response = await context.request
+        let response = await request
           .get('/test/isolated-test')
           .set('Accept', 'text/html');
 
@@ -405,7 +416,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       });
 
       test('HTML response does not include boxel-ready class on body', async function (assert) {
-        let response = await context.request
+        let response = await request
           .get('/test/isolated-test')
           .set('Accept', 'text/html');
 
@@ -417,7 +428,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       });
 
       test('serves isolated HTML for /subdirectory/index.json at /subdirectory/', async function (assert) {
-        let response = await context.request
+        let response = await request
           .get('/test/subdirectory/')
           .set('Accept', 'text/html');
 
@@ -430,11 +441,11 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       });
 
       test('does not inject head or isolated HTML when realm is not public', async function (assert) {
-        await context.dbAdapter.execute(
+        await dbAdapter.execute(
           `DELETE FROM realm_user_permissions WHERE realm_url = '${testRealmURL.href}' AND username = '*'`,
         );
 
-        let response = await context.request
+        let response = await request
           .get('/test/private-index-test')
           .set('Accept', 'text/html');
 
@@ -450,7 +461,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       });
 
       test('serves scoped CSS in index responses for card URLs', async function (assert) {
-        let response = await context.request
+        let response = await request
           .get('/test/scoped-css-test')
           .set('Accept', 'text/html');
 
@@ -466,7 +477,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       });
 
       test('serves scoped CSS from linked cards in index responses', async function (assert) {
-        let response = await context.request
+        let response = await request
           .get('/test/linked-css-parent-1')
           .set('Accept', 'text/html');
 
@@ -482,7 +493,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       });
 
       test('sanitizes disallowed tags from head HTML in index responses', async function (assert) {
-        let response = await context.request
+        let response = await request
           .get('/test/unsafe-head-test')
           .set('Accept', 'text/html');
 
@@ -517,7 +528,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       });
 
       test('serves isolated HTML containing dollar signs without corruption', async function (assert) {
-        let response = await context.request
+        let response = await request
           .get('/test/dollar-sign-test')
           .set('Accept', 'text/html');
 
@@ -540,7 +551,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         let deleteSlugs = ['private-index-test', 'scoped-css-test'];
 
         for (let slug of deleteSlugs) {
-          let deleteResponse = await context.request
+          let deleteResponse = await request
             .delete(`/test/${slug}`)
             .set('Accept', 'application/vnd.card+json');
 
@@ -560,7 +571,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
 
             for (let slug of deleteSlugs) {
               for (let table of ['boxel_index', 'boxel_index_working']) {
-                let rows = (await context.dbAdapter.execute(
+                let rows = (await dbAdapter.execute(
                   `SELECT COUNT(*) AS count
                    FROM ${table}
                    WHERE type = 'instance'
@@ -585,7 +596,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           },
         );
 
-        let headResponse = await context.request
+        let headResponse = await request
           .get('/test/private-index-test')
           .set('Accept', 'text/html');
 
@@ -599,7 +610,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           'deleted isolated HTML is not injected into the HTML response',
         );
 
-        let scopedCSSResponse = await context.request
+        let scopedCSSResponse = await request
           .get('/test/scoped-css-test')
           .set('Accept', 'text/html');
 
@@ -623,7 +634,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       });
 
       test('HTML response includes exactly one favicon and one apple-touch-icon', async function (assert) {
-        let response = await context.request
+        let response = await request
           .get('/test/isolated-test')
           .set('Accept', 'text/html');
 
@@ -651,7 +662,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       });
 
       test('default icon links are injected when card has no theme', async function (assert) {
-        let response = await context.request
+        let response = await request
           .get('/test/isolated-test')
           .set('Accept', 'text/html');
 
@@ -685,11 +696,11 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       });
 
       test('non-public realm includes exactly one favicon and one apple-touch-icon', async function (assert) {
-        await context.dbAdapter.execute(
+        await dbAdapter.execute(
           `DELETE FROM realm_user_permissions WHERE realm_url = '${testRealmURL.href}' AND username = '*'`,
         );
 
-        let response = await context.request
+        let response = await request
           .get('/test/private-index-test')
           .set('Accept', 'text/html');
 
@@ -719,7 +730,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       test('missing apple-touch-icon is filled with default when only favicon is present in head HTML', async function (assert) {
         // Directly set head_html to contain only a favicon link (no apple-touch-icon)
         let cardURL = `${testRealmURL.href}isolated-test.json`;
-        await context.dbAdapter.execute(
+        await dbAdapter.execute(
           `UPDATE boxel_index
            SET head_html = '<title>Test</title><link rel="icon" href="https://example.com/custom-icon.png" type="image/png">'
            WHERE url = '${cardURL}'
@@ -727,7 +738,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
              AND is_deleted IS NOT TRUE`,
         );
 
-        let response = await context.request
+        let response = await request
           .get('/test/isolated-test')
           .set('Accept', 'text/html');
 
@@ -771,7 +782,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
 
       test('missing favicon is filled with default when only apple-touch-icon is present in head HTML', async function (assert) {
         let cardURL = `${testRealmURL.href}isolated-test.json`;
-        await context.dbAdapter.execute(
+        await dbAdapter.execute(
           `UPDATE boxel_index
            SET head_html = '<title>Test</title><link rel="apple-touch-icon" href="https://example.com/custom-touch.png">'
            WHERE url = '${cardURL}'
@@ -779,7 +790,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
              AND is_deleted IS NOT TRUE`,
         );
 
-        let response = await context.request
+        let response = await request
           .get('/test/isolated-test')
           .set('Accept', 'text/html');
 
@@ -849,7 +860,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           },
         });
 
-        let writeResponse = await context.request
+        let writeResponse = await request
           .post('/test/card-with-theme.json')
           .set('Accept', 'application/vnd.card+source')
           .send(cardWithThemeJSON);
@@ -863,7 +874,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         // Wait for the card to be indexed (head_html populated, even if empty string).
         await waitUntil(
           async () => {
-            let rows = (await context.dbAdapter.execute(
+            let rows = (await dbAdapter.execute(
               `SELECT url, head_html FROM boxel_index
                WHERE url LIKE '%card-with-theme%'
                  AND type = 'instance'
@@ -881,7 +892,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           },
         );
 
-        let response = await context.request
+        let response = await request
           .get('/test/card-with-theme')
           .set('Accept', 'text/html');
 
@@ -950,7 +961,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           },
         });
 
-        let writeResponse = await context.request
+        let writeResponse = await request
           .post('/test/card-with-brand-guide-theme.json')
           .set('Accept', 'application/vnd.card+source')
           .send(cardJSON);
@@ -963,7 +974,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
 
         await waitUntil(
           async () => {
-            let rows = (await context.dbAdapter.execute(
+            let rows = (await dbAdapter.execute(
               `SELECT url, head_html FROM boxel_index
                WHERE url LIKE '%card-with-brand-guide-theme%'
                  AND type = 'instance'
@@ -981,7 +992,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           },
         );
 
-        let response = await context.request
+        let response = await request
           .get('/test/card-with-brand-guide-theme')
           .set('Accept', 'text/html');
 
@@ -1022,13 +1033,13 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       });
 
       test('returns 404 for request that has malformed URI', async function (assert) {
-        let response = await context.request.get('/%c0').set('Accept', '*/*');
+        let response = await request.get('/%c0').set('Accept', '*/*');
         assert.strictEqual(response.status, 404, 'HTTP 404 status');
       });
 
       test('preserves scoped CSS in HTML response after card enters error state', async function (assert) {
         // First verify the card is indexed successfully and scoped CSS is served
-        let initialResponse = await context.request
+        let initialResponse = await request
           .get('/test/scoped-css-test')
           .set('Accept', 'text/html');
 
@@ -1057,7 +1068,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           },
         });
 
-        let writeResponse = await context.request
+        let writeResponse = await request
           .post('/test/scoped-css-test.json')
           .set('Accept', 'application/vnd.card+source')
           .send(brokenInstanceJSON);
@@ -1071,7 +1082,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         // Wait for the index to reflect the error state
         await waitUntil(
           async () => {
-            let rows = (await context.dbAdapter.execute(
+            let rows = (await dbAdapter.execute(
               `SELECT has_error FROM boxel_index
                WHERE url = '${testRealmURL.href}scoped-css-test.json'
                  AND type = 'instance'`,
@@ -1088,7 +1099,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         );
 
         // Verify the database row has an error
-        let errorRows = (await context.dbAdapter.execute(
+        let errorRows = (await dbAdapter.execute(
           `SELECT has_error, last_known_good_deps FROM boxel_index
            WHERE url = '${testRealmURL.href}scoped-css-test.json'
              AND type = 'instance'`,
@@ -1111,7 +1122,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         );
 
         // Now request the HTML again - it should still include scoped CSS from last_known_good_deps
-        let errorStateResponse = await context.request
+        let errorStateResponse = await request
           .get('/test/scoped-css-test')
           .set('Accept', 'text/html');
 
@@ -1214,7 +1225,6 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       hooks.beforeEach(function () {
         dir = dirSync();
       });
-
       setupDB(hooks, {
         beforeEach: async (_dbAdapter, _publisher, _runner) => {
           dbAdapter = _dbAdapter;
