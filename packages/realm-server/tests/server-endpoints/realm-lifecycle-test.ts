@@ -73,10 +73,12 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           'realm creation JSON is correct',
         );
 
-        let realmRoot = existsSync(join(context.dir.name, 'realm_server_2'))
-          ? 'realm_server_2'
-          : 'realm_server_1';
-        let realmPath = join(context.dir.name, realmRoot, owner, endpoint);
+        let realmPath = join(
+          context.dir.name,
+          'realm_server_1',
+          owner,
+          endpoint,
+        );
         let realmJSON = readJSONSync(join(realmPath, '.realm.json'));
         assert.deepEqual(
           realmJSON,
