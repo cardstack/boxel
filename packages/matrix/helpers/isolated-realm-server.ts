@@ -19,7 +19,19 @@ const skillsRealmDir = resolve(
 );
 const baseRealmDir = resolve(join(__dirname, '..', '..', 'base'));
 const matrixDir = resolve(join(__dirname, '..'));
-export const appURL = 'http://localhost:4205/test';
+
+const ISOLATED_REALM_SERVICE = 'realm-matrix-test';
+const ISOLATED_WORKER_SERVICE = 'worker-matrix-test';
+const DEFAULT_REALM_PORT = 4205;
+
+function getRealmBaseURL(): string {
+  if (isEnvironmentMode()) {
+    return `http://${ISOLATED_REALM_SERVICE}.${getEnvironmentSlug()}.localhost`;
+  }
+  return `http://localhost:${DEFAULT_REALM_PORT}`;
+}
+
+export const appURL = `${getRealmBaseURL()}/test`;
 
 const DEFAULT_PRERENDER_PORT = 4231;
 
@@ -221,6 +233,13 @@ export async function startServer({
   let testDBName = `test_db_${Math.floor(10000000 * Math.random())}`;
   let workerManagerPort = await findAvailablePort(4232);
 
+  let envMode = isEnvironmentMode();
+  let realmBaseURL = getRealmBaseURL();
+  let realmPort = envMode ? 0 : DEFAULT_REALM_PORT;
+  let realmDomain = envMode
+    ? `${ISOLATED_REALM_SERVICE}.${getEnvironmentSlug()}.localhost`
+    : `localhost:${DEFAULT_REALM_PORT}`;
+
   process.env.PGPORT = '5435';
   process.env.PGDATABASE = testDBName;
   process.env.NODE_NO_WARNINGS = '1';
@@ -241,13 +260,16 @@ export async function startServer({
     `--prerendererUrl='${prerenderURL}'`,
     `--migrateDB`,
 
-    `--fromUrl='http://localhost:4205/test/'`,
-    `--toUrl='http://localhost:4205/test/'`,
+    `--fromUrl='${realmBaseURL}/test/'`,
+    `--toUrl='${realmBaseURL}/test/'`,
   ];
   workerArgs = workerArgs.concat([
     `--fromUrl='https://cardstack.com/base/'`,
-    `--toUrl='http://localhost:4205/base/'`,
+    `--toUrl='${realmBaseURL}/base/'`,
   ]);
+  if (envMode) {
+    workerArgs.push(`--serviceName=${ISOLATED_WORKER_SERVICE}`);
+  }
 
   let workerManager = spawn('ts-node', workerArgs, {
     cwd: realmServerDir,
@@ -267,7 +289,7 @@ export async function startServer({
   let serverArgs = [
     `--transpileOnly`,
     'main',
-    `--port=4205`,
+    `--port=${realmPort}`,
     `--matrixURL='${matrixURL}'`,
     `--realmsRootPath='${dir.name}'`,
     `--workerManagerPort=${workerManagerPort}`,
@@ -276,21 +298,24 @@ export async function startServer({
 
     `--path='${testRealmDir}'`,
     `--username='test_realm'`,
-    `--fromUrl='http://localhost:4205/test/'`,
-    `--toUrl='http://localhost:4205/test/'`,
+    `--fromUrl='${realmBaseURL}/test/'`,
+    `--toUrl='${realmBaseURL}/test/'`,
   ];
   serverArgs = serverArgs.concat([
     `--username='skills_realm'`,
     `--path='${skillsRealmDir}'`,
-    `--fromUrl='http://localhost:4205/skills/'`,
-    `--toUrl='http://localhost:4205/skills/'`,
+    `--fromUrl='${realmBaseURL}/skills/'`,
+    `--toUrl='${realmBaseURL}/skills/'`,
   ]);
   serverArgs = serverArgs.concat([
     `--username='base_realm'`,
     `--path='${baseRealmDir}'`,
     `--fromUrl='https://cardstack.com/base/'`,
-    `--toUrl='http://localhost:4205/base/'`,
+    `--toUrl='${realmBaseURL}/base/'`,
   ]);
+  if (envMode) {
+    serverArgs.push(`--serviceName=${ISOLATED_REALM_SERVICE}`);
+  }
 
   console.log(`realm server database: ${testDBName}`);
 
@@ -299,8 +324,8 @@ export async function startServer({
     stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
     env: {
       ...process.env,
-      PUBLISHED_REALM_BOXEL_SPACE_DOMAIN: 'localhost:4205',
-      PUBLISHED_REALM_BOXEL_SITE_DOMAIN: 'localhost:4205',
+      PUBLISHED_REALM_BOXEL_SPACE_DOMAIN: realmDomain,
+      PUBLISHED_REALM_BOXEL_SITE_DOMAIN: realmDomain,
     },
   });
   realmServer.unref();
