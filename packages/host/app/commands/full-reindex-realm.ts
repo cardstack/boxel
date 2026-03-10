@@ -14,7 +14,7 @@ export default class FullReindexRealmCommand extends HostBaseCommand<
 
   static actionVerb = 'Full Reindex';
   description =
-    'Force a full realm reindex. This republishes a from-scratch indexing job after clearing indexed mtimes, so every file in the realm is revisited even if mtimes have not changed. Use this when the user suspects indexing drift, stale cached results, or wants a full rebuild instead of the lighter default reindex. A user may request that they want to perform a full or deep reload/refresh of a realm in order to full re-index it.';
+    'Force a full realm reindex. This republishes a from-scratch indexing job after clearing indexed mtimes, so every file in the realm is revisited even if mtimes have not changed. Use this when the user suspects indexing drift, stale cached results, or wants a full rebuild instead of the lighter default reindex. A user may request that they want to perform a full or deep reload/refresh of a realm in order to fully reindex it.';
 
   async getInputType() {
     let commandModule = await this.loadCommandModule();

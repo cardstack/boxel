@@ -14,7 +14,7 @@ export default class ReindexRealmCommand extends HostBaseCommand<
 
   static actionVerb = 'Reindex';
   description =
-    'Reindex a realm using the lighter/default mode. This republishes a from-scratch indexing job but only revisits files whose indexed state appears stale based on current mtime, deletion, or error semantics. Use this when the user wants to pick up normal recent changes. A user may request that they want to reload or refresh a realm in order to re-index it.';
+    'Reindex a realm using the lighter/default mode. This republishes a from-scratch indexing job but only revisits files whose indexed state appears stale based on current mtime, deletion, or error semantics. Use this when a user wants to pick up normal recent changes or refresh a realm without performing a full reindex.';
 
   async getInputType() {
     let commandModule = await this.loadCommandModule();
