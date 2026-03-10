@@ -30,12 +30,6 @@ export type ServerEndpointsTestContext = {
   virtualNetwork: VirtualNetwork;
 };
 
-export type ServerEndpointsTestOptions = {
-  beforeStartRealmServer?: (
-    context: ServerEndpointsTestContext,
-  ) => void | Promise<void>;
-};
-
 export function setupServerEndpointsTest(hooks: NestedHooks) {
   let context = {} as ServerEndpointsTestContext;
 
