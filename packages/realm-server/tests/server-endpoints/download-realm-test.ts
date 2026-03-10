@@ -1,7 +1,7 @@
 import { module, test } from 'qunit';
 import { basename } from 'path';
-import { setupServerEndpointsTest } from './helpers';
-import { realmSecretSeed, testRealmURL } from '../helpers';
+import { setupServerEndpointsTest, testRealmURL } from './helpers';
+import { realmSecretSeed } from '../helpers';
 import { createJWT } from '../../utils/jwt';
 import { createURLSignatureSync } from '@cardstack/runtime-common/url-signature';
 import type { Response } from 'superagent';
@@ -110,7 +110,7 @@ module(`server-endpoints/${basename(__filename)}`, function (hooks) {
     );
 
     // Build the URL and compute signature
-    let downloadURL = new URL('http://127.0.0.1:4445/_download-realm');
+    let downloadURL = new URL('/_download-realm', testRealmURL.origin);
     downloadURL.searchParams.set('realm', testRealmURL.href);
     downloadURL.searchParams.set('token', token);
     let sig = createURLSignatureSync(token, downloadURL);
