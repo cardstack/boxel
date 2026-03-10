@@ -66,7 +66,7 @@ export interface Signature {
     onBlur?: (ev: Event) => void;
     onChange?: (ev: Event) => void;
     onFocus?: (ev: Event) => void;
-    onInput?: (val: string) => void;
+    onInput?: (val: string | boolean) => void;
     onKeyPress?: (ev: KeyboardEvent) => Promise<void> | void;
     optional?: boolean;
     placeholder?: string;
@@ -97,6 +97,10 @@ export default class BoxelInput extends Component<Signature> {
 
   private get isCheckbox() {
     return this.args.type === 'checkbox';
+  }
+
+  private get onInputPath() {
+    return this.isCheckbox ? 'target.checked' : 'target.value';
   }
 
   private get type() {
@@ -164,7 +168,7 @@ export default class BoxelInput extends Component<Signature> {
           }}
           id={{this.id}}
           type={{this.type}}
-          value={{@value}}
+          value={{unless this.isCheckbox @value}}
           checked={{if (and (eq @type 'checkbox') (bool @value)) @value}}
           placeholder={{@placeholder}}
           min={{@min}}
@@ -187,7 +191,7 @@ export default class BoxelInput extends Component<Signature> {
           data-test-boxel-input
           data-test-boxel-input-id={{@id}}
           data-test-boxel-input-validation-state={{if @disabled false @state}}
-          {{on 'input' (pick 'target.value' (optional @onInput))}}
+          {{on 'input' (pick this.onInputPath (optional @onInput))}}
           {{on 'blur' (optional @onBlur)}}
           {{on 'keypress' (optional @onKeyPress)}}
           {{on 'focus' (optional @onFocus)}}
@@ -533,6 +537,10 @@ export default class BoxelInput extends Component<Signature> {
 
         .boxel-input[type='checkbox']:hover:not(:disabled):not(:checked) {
           border-color: var(--boxel-dark);
+        }
+
+        .boxel-input[type='checkbox']:hover:not(:disabled):checked {
+          border-color: var(--checkbox-checked-border-color);
         }
 
         .boxel-input[type='checkbox']:disabled {
