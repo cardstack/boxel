@@ -6,6 +6,22 @@
 - pnpm is required for all scripts; use the pinned version as specified above.
 - Docker is required (Postgres, Synapse, SMTP, Stripe CLI container). Ensure the daemon is running and you can run `docker` without sudo.
 
+## GitHub Actions failure triage helper
+
+- Use `pnpm ci:failures -- ...` to quickly summarize failed jobs and extract actionable test failures from GitHub Actions logs.
+- This command requires GitHub CLI (`gh`) to be installed and authenticated.
+- Common usage:
+  - `pnpm ci:failures -- --run <run-id-or-url>`
+  - `pnpm ci:failures -- --pr <pr-number-or-url>`
+  - `pnpm ci:failures -- --branch <branch-name>`
+- Useful flags:
+  - `--repo <owner/repo>` to target a specific repository
+  - `--workflow <name>` to focus on a specific workflow (for example `CI Host`)
+  - `--max-lines <n>` to limit extracted failure lines
+  - `--context-lines <n>` to include surrounding stack/assertion context for each failure
+  - `--json` for machine-readable output
+  - `--fail-on-findings` to exit non-zero when failed jobs are found
+
 ## Testing instructions by package
 
 ### packages/ai-bot
