@@ -1030,6 +1030,7 @@ export default class RealmService extends Service {
     let normalizedRealmURL = ensureTrailingSlash(realmURL);
     let resource = this.getOrCreateRealmResource(normalizedRealmURL);
     await resource.login();
+    await resource.fetchInfo();
     let wasIndexing = this.beginIndexingAnimation(resource);
 
     try {
@@ -1063,6 +1064,7 @@ export default class RealmService extends Service {
     let normalizedRealmURL = ensureTrailingSlash(realmURL);
     let resource = this.getOrCreateRealmResource(normalizedRealmURL);
     await resource.login();
+    await resource.fetchInfo();
     let wasIndexing = this.beginIndexingAnimation(resource);
 
     try {
