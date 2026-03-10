@@ -791,14 +791,16 @@ export default class MatrixService extends Service {
     switch (state) {
       case SlidingSyncState.Complete:
         if (!this.initialSyncCompleted) {
-          Promise.allSettled([
-            this.drainRoomState(),
-            this.drainMembership(),
-            this.drainTimeline(),
-          ]).then(() => {
-            this.initialSyncCompleted = true;
-            this.initialSyncCompletedDeferred.fulfill();
-          });
+          // drainRoomState must complete before drainTimeline so that
+          // bot-membership checks can promote rooms into aiRoomIds before
+          // timeline events are routed (otherwise the first message can be
+          // misclassified as an auth-room event and dropped).
+          Promise.allSettled([this.drainRoomState(), this.drainMembership()])
+            .then(() => this.drainTimeline())
+            .then(() => {
+              this.initialSyncCompleted = true;
+              this.initialSyncCompletedDeferred.fulfill();
+            });
         }
         roomIds.forEach((id) => this.roomsWaitingForSync.get(id)?.fulfill());
         break;
