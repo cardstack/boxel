@@ -4,6 +4,8 @@ import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
 import { debounce } from 'lodash';
 
+import GlimmerComponent from '@glimmer/component';
+
 import {
   CardDef,
   Component,
@@ -20,17 +22,20 @@ import type {
 } from 'https://cardstack.com/base/command';
 import GetAllRealmMetasCommand from '@cardstack/boxel-host/commands/get-all-realm-metas';
 
-import GlimmerComponent from '@glimmer/component';
-
 import { eq, gt } from '@cardstack/boxel-ui/helpers';
-import { BoxelInput, ViewSelector, Pill } from '@cardstack/boxel-ui/components';
-import { type ViewItem } from '@cardstack/boxel-ui/components';
-import CardList from 'https://cardstack.com/base/components/card-list';
-import BotIcon from '@cardstack/boxel-icons/bot';
+import {
+  BoxelInput,
+  ViewSelector,
+  Pill,
+  type ViewItem,
+} from '@cardstack/boxel-ui/components';
 import {
   Grid3x3 as GridIcon,
   Rows4 as StripIcon,
 } from '@cardstack/boxel-ui/icons';
+import BotIcon from '@cardstack/boxel-icons/bot';
+
+import { CardsGrid } from '../catalog-app/components/grid';
 
 type ViewOption = 'strip' | 'grid';
 
@@ -81,15 +86,20 @@ class RealmTabs extends GlimmerComponent<RealmTabsSignature> {
         --pill-border-radius: 50px;
         --pill-font: var(--boxel-font-sm);
         --pill-padding: var(--boxel-sp-5xs) var(--boxel-sp);
+        background-color: var(--card, #ffffff);
+        color: var(--foreground, #1f2328);
+        border: 1px solid var(--border, #d0d7de);
       }
 
       .realm-pill.active {
-        background-color: var(--boxel-dark);
-        color: var(--boxel-light);
+        background-color: var(--foreground, #1f2328);
+        color: var(--card, #ffffff);
+        border-color: var(--foreground, #1f2328);
       }
 
       .realm-pill:not(.active):hover {
-        background-color: var(--boxel-300);
+        background-color: var(--muted, #f6f8fa);
+        border-color: var(--muted-foreground, #656d76);
       }
     </style>
   </template>
@@ -225,7 +235,7 @@ class Isolated extends Component<typeof SubmissionCardPortal> {
             @items={{SUBMISSION_VIEW_OPTIONS}}
           />
         </div>
-        {{#if (gt this.availableRealms.length 1)}}
+        {{#if (gt this.availableRealms.length 0)}}
           <RealmTabs
             @realms={{this.availableRealms}}
             @selectedRealm={{this.selectedRealm}}
@@ -235,13 +245,11 @@ class Isolated extends Component<typeof SubmissionCardPortal> {
       </header>
 
       <div class='portal-content'>
-        <CardList
+        <CardsGrid
           @query={{this.query}}
           @realms={{this.realmHrefs}}
-          @format='fitted'
-          @viewOption={{this.selectedView}}
+          @selectedView={{this.selectedView}}
           @context={{@context}}
-          @isLive={{true}}
         />
       </div>
     </div>
@@ -251,7 +259,7 @@ class Isolated extends Component<typeof SubmissionCardPortal> {
         display: flex;
         flex-direction: column;
         height: 100%;
-        background: var(--boxel-light);
+        background: var(--muted, #f6f8fa);
       }
 
       .portal-header {
@@ -259,14 +267,18 @@ class Isolated extends Component<typeof SubmissionCardPortal> {
         flex-direction: column;
         gap: var(--boxel-sp-sm);
         padding: var(--boxel-sp-lg) var(--boxel-sp-xl);
-        background: var(--boxel-200);
-        border-bottom: 1px solid var(--boxel-200);
+        background: color-mix(
+          in srgb,
+          var(--primary, #e5f0ff) 12%,
+          var(--card, #ffffff)
+        );
+        border-bottom: 1px solid var(--border, #d0d7de);
       }
 
       .portal-title {
         margin: 0;
         font: 700 var(--boxel-font-xl);
-        color: var(--boxel-dark);
+        color: var(--foreground, #1f2328);
       }
 
       .portal-controls {
@@ -277,30 +289,36 @@ class Isolated extends Component<typeof SubmissionCardPortal> {
 
       .search-input {
         flex: 1;
+        --boxel-input-search-background-color: var(--foreground, #1f2328);
+        --boxel-input-search-color: var(--card, #ffffff);
+        --boxel-input-search-icon-color: var(--primary-foreground, #ffffff);
+        --border: var(--foreground, #1f2328);
+        --muted-foreground: color-mix(
+          in srgb,
+          var(--card, #ffffff) 72%,
+          transparent
+        );
       }
 
       .portal-content {
         flex: 1;
         overflow-y: auto;
         padding: var(--boxel-sp);
+        background: var(--card, #ffffff);
       }
 
       .portal-view-selector {
         margin-left: auto;
         flex-shrink: 0;
         --boxel-view-option-group-column-gap: var(--boxel-sp-2xs);
+        color: var(--muted-foreground, #656d76);
       }
 
-      /* Each list item must be a sized container so fitted template
-         container queries (@container fitted-card) resolve correctly */
-      .portal-content :deep(.grid-view) {
-        --item-width: 300px;
-        --item-height: 380px;
-      }
-
-      .portal-content :deep(.strip-view) {
-        --item-height: 120px;
-        grid-template-columns: 1fr;
+      .portal-content :deep(.cards) {
+        --grid-view-min-width: 300px;
+        --grid-view-height: 420px;
+        --strip-view-min-width: 100%;
+        --strip-view-height: 120px;
       }
     </style>
   </template>
@@ -311,8 +329,9 @@ export class SubmissionCardPortal extends CardDef {
   static prefersWideFormat = true;
   static headerColor = '#e5f0ff';
   static icon = BotIcon;
-  static isolated = Isolated;
 
   @field title = contains(StringField);
   @field description = contains(StringField);
+
+  static isolated = Isolated;
 }

@@ -1,3 +1,5 @@
+import { on } from '@ember/modifier';
+
 import {
   CardDef,
   FieldDef,
@@ -6,27 +8,22 @@ import {
   containsMany,
   field,
   linksTo,
+  realmURL,
 } from 'https://cardstack.com/base/card-api';
-import { or } from '@cardstack/boxel-ui/helpers';
-import { on } from '@ember/modifier';
-import { BoxelButton } from '@cardstack/boxel-ui/components';
 import StringField from 'https://cardstack.com/base/string';
+import type { Query } from '@cardstack/runtime-common';
+
+import { or } from '@cardstack/boxel-ui/helpers';
+import { BoxelButton } from '@cardstack/boxel-ui/components';
+
 import BotIcon from '@cardstack/boxel-icons/bot';
-import BrandGithubIcon from '@cardstack/boxel-icons/brand-github';
 import FileCodeIcon from '@cardstack/boxel-icons/file-code';
 import GitBranchIcon from '@cardstack/boxel-icons/git-branch';
+import GitPullRequestIcon from '@cardstack/boxel-icons/git-pull-request';
 import MessageIcon from '@cardstack/boxel-icons/message';
+
 import { Listing } from '../catalog-app/listing/listing';
-
-const GITHUB_BRANCH_URL_PREFIX =
-  'https://github.com/cardstack/boxel-catalog/tree/';
-
-function encodeBranchName(branchName: string): string {
-  return branchName
-    .split('/')
-    .map((segment) => encodeURIComponent(segment))
-    .join('/');
-}
+import { buildRealmHrefs } from '../pr-card/utils';
 
 export class FileContentField extends FieldDef {
   @field filename = contains(StringField);
@@ -48,7 +45,7 @@ export class FileContentField extends FieldDef {
           align-items: center;
           gap: 4px;
           padding: 2px 6px;
-          background: var(--boxel-200);
+          background: var(--muted, #f6f8fa);
           border-radius: var(--boxel-border-radius-sm);
           max-width: 100%;
           overflow: hidden;
@@ -56,14 +53,14 @@ export class FileContentField extends FieldDef {
 
         .file-atom-icon {
           flex-shrink: 0;
-          color: var(--boxel-450);
+          color: var(--muted-foreground, #656d76);
         }
 
         .file-atom-name {
           font-size: var(--boxel-font-size-2xs);
           font-weight: 500;
           font-family: var(--boxel-monospace-font-family);
-          color: var(--boxel-600);
+          color: var(--foreground, #1f2328);
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
@@ -106,10 +103,10 @@ export class FileContentField extends FieldDef {
         .file-embedded {
           display: flex;
           flex-direction: column;
-          border: 1px solid var(--boxel-border-color);
+          border: 1px solid var(--border, #d0d7de);
           border-radius: var(--boxel-border-radius);
           overflow: hidden;
-          background: var(--boxel-light);
+          background: var(--card, #ffffff);
         }
 
         .file-header {
@@ -117,14 +114,14 @@ export class FileContentField extends FieldDef {
           align-items: center;
           gap: var(--boxel-sp-4xs);
           padding: var(--boxel-sp-4xs) var(--boxel-sp-xs);
-          background: var(--boxel-200);
-          border-bottom: 1px solid var(--boxel-border-color);
+          background: var(--muted, #f6f8fa);
+          border-bottom: 1px solid var(--border, #d0d7de);
           min-width: 0;
         }
 
         .file-header-icon {
           flex-shrink: 0;
-          color: var(--boxel-450);
+          color: var(--muted-foreground, #656d76);
         }
 
         .file-name {
@@ -132,7 +129,7 @@ export class FileContentField extends FieldDef {
           font-size: var(--boxel-font-size-xs);
           font-weight: 500;
           font-family: var(--boxel-monospace-font-family);
-          color: var(--boxel-dark);
+          color: var(--foreground, #1f2328);
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
@@ -146,8 +143,8 @@ export class FileContentField extends FieldDef {
           font-family: var(--boxel-font-family);
           letter-spacing: var(--boxel-lsp-sm);
           padding: 1px 5px;
-          background: var(--boxel-300);
-          color: var(--boxel-600);
+          background: var(--muted, #f6f8fa);
+          color: var(--muted-foreground, #656d76);
           border-radius: var(--boxel-border-radius-sm);
           white-space: nowrap;
         }
@@ -159,7 +156,7 @@ export class FileContentField extends FieldDef {
           font-weight: 400;
           font-family: var(--boxel-monospace-font-family);
           line-height: 1.6;
-          color: var(--boxel-600);
+          color: var(--muted-foreground, #656d76);
           white-space: pre;
           overflow: hidden;
           display: -webkit-box;
@@ -184,22 +181,10 @@ export class SubmissionCard extends CardDef {
   });
   @field roomId = contains(StringField);
   @field branchName = contains(StringField);
-  @field githubURL = contains(StringField, {
-    computeVia: function (this: SubmissionCard) {
-      if (!this.branchName) {
-        return undefined;
-      }
-      return `${GITHUB_BRANCH_URL_PREFIX}${encodeBranchName(this.branchName)}`;
-    },
-  });
   @field listing = linksTo(() => Listing);
   @field allFileContents = containsMany(FileContentField);
 
   static fitted = class Fitted extends Component<typeof SubmissionCard> {
-    get fileCount() {
-      return this.args.model.allFileContents?.length ?? 0;
-    }
-
     get listingName() {
       return (
         this.args.model.listing?.name ?? this.args.model.listing?.cardTitle
@@ -208,10 +193,6 @@ export class SubmissionCard extends CardDef {
 
     get title() {
       return this.args.model.cardTitle;
-    }
-
-    get githubURL() {
-      return this.args.model.githubURL;
     }
 
     get branchName() {
@@ -226,9 +207,58 @@ export class SubmissionCard extends CardDef {
       return this.args.model.listing?.images?.[0];
     }
 
+    openListing = (e: Event) => {
+      e.stopPropagation();
+      const listing = this.args.model.listing;
+      if (listing) {
+        this.args.viewCard?.(listing, 'isolated');
+      }
+    };
+
+    // ── PrCard live query ──
+    get realmHrefs() {
+      return buildRealmHrefs(this.args.model[realmURL]?.href);
+    }
+
+    get prCardQuery(): Query | undefined {
+      if (!this.args.model.branchName) return undefined;
+      return {
+        filter: {
+          on: {
+            module: new URL('../pr-card/pr-card', import.meta.url).href,
+            name: 'PrCard',
+          },
+          eq: { branchName: this.args.model.branchName },
+        },
+      };
+    }
+
+    prCardData = this.args.context?.getCards(
+      this,
+      () => this.prCardQuery,
+      () => this.realmHrefs,
+      { isLive: true },
+    );
+
+    get prCardInstance() {
+      return this.prCardData?.instances?.[0] ?? null;
+    }
+
+    openPrCard = (e: Event) => {
+      e.stopPropagation();
+      if (this.prCardInstance) {
+        this.args.viewCard?.(this.prCardInstance, 'isolated');
+      }
+    };
+
+    openSubmission = (e: Event) => {
+      e.stopPropagation();
+      this.args.viewCard?.(this.args.model, 'isolated');
+    };
+
     <template>
-      <div class='submission-fitted'>
-        <div class='image-icon-section'>
+      <article class='submission-fitted'>
+        <header class='image-icon-section'>
           {{#if this.listingImage}}
             <img
               class='listing-image'
@@ -238,44 +268,69 @@ export class SubmissionCard extends CardDef {
           {{else}}
             <@model.constructor.icon class='card-icon' />
           {{/if}}
-        </div>
-        <div class='info-section'>
-          <h3 class='title'>{{this.title}}</h3>
+          {{#if @model.listing}}
+            <div class='hover-overlay'>
+              <BoxelButton
+                @kind='primary'
+                @size='extra-small'
+                class='footer-button details-button overlay-button'
+                aria-label='View listing'
+                {{on 'click' this.openListing}}
+              >
+                View Listing
+              </BoxelButton>
+            </div>
+          {{/if}}
+        </header>
+        <section class='info-section'>
+          <button
+            type='button'
+            class='info-main-button'
+            aria-label='View submission details'
+            {{on 'click' this.openSubmission}}
+          >
+            <span class='title'>{{this.title}}</span>
           {{#if this.branchName}}
-            <p class='branch-name'>
+            <span class='branch-name'>
               <span class='meta-label'>
                 <GitBranchIcon class='meta-icon' width='10' height='10' />Branch
               </span>
               <span class='meta-value'>{{this.branchName}}</span>
-            </p>
+            </span>
           {{/if}}
           {{#if this.roomId}}
-            <p class='room-id'>
+            <span class='room-id'>
               <span class='meta-label'>
                 <MessageIcon class='meta-icon' width='10' height='10' />Room
               </span>
               <span class='meta-value'>{{this.roomId}}</span>
-            </p>
+            </span>
           {{/if}}
-          <div class='footer'>
-            {{#if this.fileCount}}
-              <span class='file-badge'>{{this.fileCount}}
-                file{{#if (isPlural this.fileCount)}}s{{/if}}</span>
-            {{/if}}
-            {{#if this.githubURL}}
-              <a
-                class='github-link'
-                href={{this.githubURL}}
-                target='_blank'
-                rel='noopener noreferrer'
-                aria-label='View on GitHub'
+          </button>
+          <footer class='footer'>
+            {{#if this.prCardInstance}}
+              <BoxelButton
+                @kind='secondary-dark'
+                @size='extra-small'
+                class='footer-button view-pr-button'
+                aria-label='View PR card'
+                {{on 'click' this.openPrCard}}
               >
-                <BrandGithubIcon width='12' height='12' />
-              </a>
+                <GitPullRequestIcon width='12' height='12' />View PR
+              </BoxelButton>
             {{/if}}
-          </div>
-        </div>
-      </div>
+            <BoxelButton
+              @kind='primary'
+              @size='extra-small'
+              class='footer-button details-button'
+              aria-label='View submission details'
+              {{on 'click' this.openSubmission}}
+            >
+              View Details
+            </BoxelButton>
+          </footer>
+        </section>
+      </article>
 
       <style scoped>
         /* ── Base (horizontal default) ─────────────────────────────── */
@@ -288,37 +343,33 @@ export class SubmissionCard extends CardDef {
           padding: var(--boxel-sp-xs);
           overflow: hidden;
           box-sizing: border-box;
+          background: var(--card, #ffffff);
         }
 
-        /*
-         * Fixed explicit sizes per breakpoint so the icon never derives
-         * its width from the container height on horizontal rectangle cards.
-         */
         .image-icon-section {
+          position: relative;
           flex-shrink: 0;
           display: flex;
           align-items: center;
           justify-content: center;
-          background: var(--boxel-200);
-          border: 1px solid var(--border, var(--boxel-border-color));
+          background: var(--muted, #f6f8fa);
+          border: 1px solid var(--border, #d0d7de);
           border-radius: var(--boxel-border-radius);
-          width: 60px;
-          height: 60px;
-          align-self: center;
           overflow: hidden;
+          aspect-ratio: 1;
+          max-width: 44%;
         }
 
         .listing-image {
           width: 100%;
           height: 100%;
           object-fit: contain;
-          border-radius: var(--boxel-border-radius);
         }
 
         .card-icon {
           width: 52%;
           height: 52%;
-          color: var(--boxel-blue);
+          color: var(--primary, #0969da);
         }
 
         .info-section {
@@ -330,9 +381,27 @@ export class SubmissionCard extends CardDef {
           overflow: hidden;
         }
 
+        .info-main-button {
+          appearance: none;
+          border: none;
+          background: transparent;
+          padding: 0;
+          margin: 0;
+          width: 100%;
+          min-width: 0;
+          display: flex;
+          flex-direction: column;
+          gap: var(--boxel-sp-5xs);
+          align-items: flex-start;
+          text-align: left;
+          color: inherit;
+          cursor: pointer;
+        }
+
         .title {
           margin: 0;
-          font: 600 var(--boxel-font-sm);
+          font-size: var(--boxel-font-size-sm);
+          font-weight: 600;
           letter-spacing: var(--boxel-lsp-sm);
           line-height: 1.3;
           text-align: left;
@@ -340,13 +409,12 @@ export class SubmissionCard extends CardDef {
           -webkit-box-orient: vertical;
           -webkit-line-clamp: 2;
           overflow: hidden;
-          color: var(--boxel-dark);
+          color: var(--foreground, #1f2328);
         }
 
         .branch-name,
         .room-id {
           display: none;
-          margin: 0;
           width: 100%;
           align-items: end;
           gap: var(--boxel-sp-5xs);
@@ -358,240 +426,266 @@ export class SubmissionCard extends CardDef {
           align-items: center;
           gap: 3px;
           flex-shrink: 0;
-          font: 600 var(--boxel-font-size-2xs) var(--boxel-font-family);
+          font-size: var(--boxel-font-size-2xs);
+          font-weight: 600;
+          font-family: var(--boxel-font-family);
           letter-spacing: var(--boxel-lsp-xl);
           text-transform: uppercase;
-          color: var(--boxel-400);
+          color: var(--muted-foreground, #656d76);
         }
 
         .meta-icon {
-          color: var(--boxel-400);
+          color: var(--muted-foreground, #656d76);
         }
 
         .meta-value {
           flex: 1;
-          text-align: left;
-          font: 500 var(--boxel-font-size-xs) var(--boxel-monospace-font-family);
-          color: var(--boxel-600);
+          min-width: 0;
+          font-size: var(--boxel-font-size-2xs);
+          font-weight: 500;
+          font-family: var(--boxel-monospace-font-family);
+          color: var(--foreground, #1f2328);
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
-          min-width: 0;
         }
 
-        .footer {
+        /* ── Hover overlay on image ─────────────────────────────── */
+        .hover-overlay {
+          position: absolute;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 100%;
           display: flex;
+          justify-content: center;
           align-items: center;
-          gap: var(--boxel-sp-4xs);
-          margin-top: auto;
+          opacity: 0;
+          background-color: rgba(0, 0, 0, 0.6);
+          transition: opacity 0.3s ease;
+          pointer-events: none;
         }
 
-        .file-badge {
-          font: 600 var(--boxel-font-size-2xs) var(--boxel-font-family);
-          letter-spacing: var(--boxel-lsp-sm);
-          padding: 2px 6px;
-          background: #e0f2fe;
-          color: #0369a1;
-          border-radius: var(--boxel-border-radius-sm);
+        .image-icon-section:hover .hover-overlay {
+          opacity: 1;
+          pointer-events: auto;
+        }
+
+        .overlay-button {
+          --boxel-button-font: 600 var(--boxel-font-xs);
+          --boxel-button-padding: var(--boxel-sp-5xs) var(--boxel-sp-xs);
+          pointer-events: auto;
           white-space: nowrap;
         }
 
-        .github-link {
+        /* ── Footer ───────────────────────────────────────────── */
+        .footer {
           display: flex;
           align-items: center;
-          justify-content: center;
-          color: var(--boxel-450);
-          border-radius: var(--boxel-border-radius-sm);
-          text-decoration: none;
-          transition: color 0.15s;
-          flex-shrink: 0;
+          justify-content: flex-end;
+          gap: var(--boxel-sp-4xs);
+          margin-top: auto;
+          width: 100%;
         }
 
-        .github-link:hover {
-          color: var(--boxel-dark);
+        .footer-button {
+          --boxel-button-font: 600 var(--boxel-font-xs);
+          --boxel-button-padding: var(--boxel-sp-5xs) var(--boxel-sp-xs);
+          flex: 0 0 auto;
+          line-height: 1;
         }
 
-        /* ── Vertical layout (square tiles & tall cards) ───────────── */
+        .view-pr-button {
+          display: inline-flex;
+          align-items: center;
+          gap: var(--boxel-sp-5xs);
+          --boxel-button-color: var(--muted, #f6f8fa);
+          --boxel-button-text-color: var(--foreground, #1f2328);
+          --boxel-button-border: 1px solid var(--border, #d0d7de);
+        }
+
+        /* ── Vertical (aspect-ratio ≤ 1.0) ──────────────────────── */
         @container fitted-card (aspect-ratio <= 1.0) {
           .submission-fitted {
             flex-direction: column;
-            padding: var(--boxel-sp-xs);
-            gap: var(--boxel-sp-4xs);
           }
 
-          /* Fill full width, proportional height based on container */
           .image-icon-section {
             width: 100%;
-            height: 46cqmin;
-            align-self: auto;
+            height: 50cqmax;
+            max-width: none;
+            aspect-ratio: auto;
           }
 
           .info-section {
-            align-items: flex-start;
-          }
-
-          .title {
-            -webkit-line-clamp: 2;
-          }
-        }
-
-        /* Small vertical tile: trim icon */
-        @container fitted-card (aspect-ratio <= 1.0) and (height <= 190px) {
-          .image-icon-section {
-            height: 38cqmin;
+            flex-direction: column;
+            justify-content: space-between;
+            height: 100%;
+            padding: var(--boxel-sp-xs);
           }
         }
 
-        /* Compact vertical tile: hide footer, 1-line title */
-        @container fitted-card (aspect-ratio <= 1.0) and (height <= 140px) {
-          .footer {
-            display: none;
-          }
-
-          .title {
-            -webkit-line-clamp: 1;
-            font-size: var(--boxel-font-size-xs);
-          }
-        }
-
-        /* Tiny vertical: hide icon, just title */
-        @container fitted-card (aspect-ratio <= 1.0) and (height <= 80px) {
+        @container fitted-card (aspect-ratio <= 1.0) and (height <= 118px) {
           .image-icon-section {
             display: none;
           }
-
-          .title {
-            font-size: var(--boxel-font-size-xs);
-          }
         }
 
-        /* ── Large vertical card: tall portrait ─────────────────────── */
-        /* Show extra fields, larger image; font stays modest on narrow cards */
-        @container fitted-card (aspect-ratio <= 1.0) and (275px <= height) {
-          .submission-fitted {
-            padding: var(--boxel-sp-sm);
-            gap: var(--boxel-sp-xs);
-          }
-
-          .image-icon-section {
-            height: 55cqmin;
-          }
-
+        /* Small Tile (150 x 170) */
+        @container fitted-card (aspect-ratio <= 1.0) and (150px <= width) and (170px <= height) {
           .title {
-            line-height: 1.5rem;
-            -webkit-line-clamp: 2;
-          }
-
-          .branch-name,
-          .room-id {
-            display: flex;
-          }
-
-          .file-list {
-            display: flex;
-          }
-
-          .file-badge {
-            font-size: var(--boxel-font-size-2xs);
-            padding: 3px 8px;
-          }
-        }
-
-        /* ── Large vertical card: tall + wide ───────────────────────── */
-        /* Only upgrade font sizes when there's enough width to fit them */
-        @container fitted-card (aspect-ratio <= 1.0) and (275px <= height) and (200px <= width) {
-          .title {
-            font: 700 var(--boxel-font-lg);
-          }
-
-          .meta-value {
-            font-size: var(--boxel-font-size-xs);
-          }
-
-          .file-badge {
-            font-size: var(--boxel-font-size-xs);
-          }
-
-          .file-item,
-          .file-more {
-            font-size: var(--boxel-font-size-xs);
-          }
-        }
-
-        /* ── Horizontal strips (height <= 80px) ────────────────────── */
-        /* Icon shrinks to fit height, title + listing go inline */
-        @container fitted-card (1.0 < aspect-ratio) and (height <= 80px) {
-          .submission-fitted {
-            align-items: center;
-            gap: var(--boxel-sp-xs);
-          }
-
-          .image-icon-section {
-            width: 44px;
-            height: 44px;
-          }
-
-          .info-section {
-            flex-direction: row;
-            align-items: center;
-            gap: var(--boxel-sp-xs);
-            flex-wrap: nowrap;
-          }
-
-          .title {
-            -webkit-line-clamp: 1;
-            white-space: nowrap;
-            flex-shrink: 0;
-          }
-
-          .footer {
-            margin-top: 0;
-            margin-left: auto;
-            flex-shrink: 0;
-          }
-        }
-
-        /* Tiny strip (height <= 55px): even smaller icon */
-        @container fitted-card (1.0 < aspect-ratio) and (height <= 55px) {
-          .image-icon-section {
-            width: 32px;
-            height: 32px;
-          }
-
-          .title {
-            font-size: var(--boxel-font-size-xs);
-          }
-        }
-
-        /* ── Medium horizontal strip (81px–169px tall) ─────────────── */
-        /* Show branch + room on wide strips that have vertical breathing room */
-        @container fitted-card (1.0 < aspect-ratio) and (81px <= height) and (height < 170px) {
-          .branch-name,
-          .room-id {
-            display: flex;
-          }
-        }
-
-        /* ── Large horizontal card (400px+ wide, 170px+ tall) ───────── */
-        /*
-         * Icon is a modest fixed square — content (title, listing, branch,
-         * footer) gets the remaining width which is always the majority.
-         */
-        @container fitted-card (1.0 < aspect-ratio) and (400px <= width) and (170px <= height) {
-          .submission-fitted {
-            padding: var(--boxel-sp);
-            gap: var(--boxel-sp-sm);
-          }
-
-          .image-icon-section {
-            width: 88px;
-            height: 88px;
-          }
-
-          .title {
-            font: 700 var(--boxel-font-lg);
+            font-size: var(--boxel-font-size-sm);
             -webkit-line-clamp: 3;
           }
+        }
+
+        /* CardsGrid Tile (170 x 250) */
+        @container fitted-card (aspect-ratio <= 1.0) and (150px < width < 250px) and (170px < height < 275px) {
+          .image-icon-section {
+            height: 55cqmax;
+          }
+
+          .title {
+            font-size: var(--boxel-font-size);
+            -webkit-line-clamp: 1;
+          }
+
+          .branch-name,
+          .room-id {
+            display: none;
+          }
+        }
+
+        /* Tall Tile (150 x 275) */
+        @container fitted-card (aspect-ratio <= 1.0) and (150px <= width) and (275px <= height) {
+          .title {
+            font-size: var(--boxel-font-size);
+            -webkit-line-clamp: 1;
+          }
+
+          .branch-name,
+          .room-id {
+            display: flex;
+          }
+        }
+
+        /* Large Tile (250 x 275) */
+        @container fitted-card (aspect-ratio <= 1.0) and (250px <= width) and (275px <= height) {
+          .title {
+            -webkit-line-clamp: 1;
+          }
+
+          .meta-value {
+            font-size: var(--boxel-font-size-xs);
+          }
+        }
+
+        /* Vertical Cards (400w+) */
+        @container fitted-card (aspect-ratio <= 1.0) and (400px <= width) {
+          .title {
+            font-size: var(--boxel-font-size-md);
+            -webkit-line-clamp: 4;
+          }
+        }
+
+        @container fitted-card (aspect-ratio <= 1.0) and (width <= 275px) {
+          .footer {
+            flex-wrap: wrap;
+          }
+        }
+
+        @container fitted-card (aspect-ratio <= 1.0) and (height <= 275px) {
+          .title {
+            -webkit-line-clamp: 1;
+          }
+
+          .branch-name,
+          .room-id {
+            display: none;
+          }
+        }
+
+        /* ── Horizontal (aspect-ratio > 1.0) ─────────────────────── */
+        @container fitted-card (1.0 < aspect-ratio) {
+          .image-icon-section {
+            aspect-ratio: 1;
+            max-width: 30%;
+          }
+
+          .info-section {
+            flex-direction: column;
+            justify-content: space-between;
+          }
+        }
+
+        @container fitted-card (1.0 < aspect-ratio) and (height <= 65px) {
+          .info-section {
+            align-self: center;
+          }
+
+          .footer,
+          .hover-overlay {
+            display: none;
+          }
+        }
+
+        /* Badges (width < 250px) */
+        @container fitted-card (1.0 < aspect-ratio) and (width < 250px) {
+          .image-icon-section {
+            display: none;
+          }
+        }
+
+        /* Small Badge (< 250w, < 65h) */
+        @container fitted-card (1.0 < aspect-ratio) and (width < 250px) and (height < 65px) {
+          .title {
+            -webkit-line-clamp: 1;
+            font: 600 var(--boxel-font-xs);
+          }
+        }
+
+        /* Large Badge (< 250w, 105h+) */
+        @container fitted-card (1.0 < aspect-ratio) and (width < 250px) and (105px <= height) {
+          .title {
+            -webkit-line-clamp: 3;
+          }
+        }
+
+        /* Strips (250w+, < 65h) */
+        @container fitted-card (1.0 < aspect-ratio) and (250px <= width) and (height < 65px) {
+          .submission-fitted {
+            padding: var(--boxel-sp-xxxs);
+          }
+
+          .branch-name,
+          .room-id {
+            display: none;
+          }
+        }
+
+        /* Regular Tile (250–400w, 170h+) */
+        @container fitted-card (1.0 < aspect-ratio) and (250px <= width < 400px) and (170px <= height) {
+          .title {
+            -webkit-line-clamp: 4;
+            font-size: var(--boxel-font-size);
+          }
+
+          .branch-name,
+          .room-id {
+            display: flex;
+          }
+        }
+
+        /* Compact Card (400w+, 170h+) */
+        @container fitted-card (1.0 < aspect-ratio) and (400px <= width) and (170px <= height) {
+          .image-icon-section {
+            height: 100%;
+          }
+
+          .title {
+            -webkit-line-clamp: 4;
+            font-size: var(--boxel-font-size);
+          }
 
           .branch-name,
           .room-id {
@@ -601,25 +695,40 @@ export class SubmissionCard extends CardDef {
           .meta-value {
             font-size: var(--boxel-font-size-xs);
           }
+        }
 
-          .file-badge {
-            font-size: var(--boxel-font-size-xs);
-            padding: 3px 8px;
+        /* Full Card (400w+, 275h+) */
+        @container fitted-card (1.0 < aspect-ratio) and (400px <= width) and (275px <= height) {
+          .title {
+            font-size: var(--boxel-font-size-md);
+          }
+
+          .info-section {
+            padding: var(--boxel-sp);
           }
         }
 
-        /* ── Horizontal badge (too narrow for icon) ─────────────────── */
-        @container fitted-card (1.0 < aspect-ratio) and (width < 220px) {
+        /* ── Global: compact buttons for smaller cards ─────────── */
+        @container fitted-card (width < 400px) {
+          .footer-button {
+            --boxel-button-font: 600 var(--boxel-font-xs);
+            --boxel-button-padding: var(--boxel-sp-5xs) var(--boxel-sp-xs);
+          }
+
+          .overlay-button {
+            --boxel-button-font: 600 var(--boxel-font-xs);
+            --boxel-button-padding: var(--boxel-sp-5xs) var(--boxel-sp-xs);
+          }
+        }
+
+        /* ── Global: height ≤ 65px ───────────────────────────────── */
+        @container fitted-card (height <= 65px) {
           .image-icon-section {
-            display: none;
+            padding: var(--boxel-sp-xs);
           }
 
-          .title {
-            font-size: var(--boxel-font-size-xs);
-            -webkit-line-clamp: 1;
-          }
-
-          .footer {
+          .footer,
+          .hover-overlay {
             display: none;
           }
         }
@@ -642,10 +751,6 @@ export class SubmissionCard extends CardDef {
       return this.args.model.cardTitle;
     }
 
-    get githubURL() {
-      return this.args.model.githubURL;
-    }
-
     get branchName() {
       return this.args.model.branchName;
     }
@@ -662,6 +767,41 @@ export class SubmissionCard extends CardDef {
       const listing = this.args.model.listing;
       if (listing) {
         this.args.viewCard?.(listing, 'isolated');
+      }
+    };
+
+    // ── PrCard live query ──
+    get realmHrefs() {
+      return buildRealmHrefs(this.args.model[realmURL]?.href);
+    }
+
+    get prCardQuery(): Query | undefined {
+      if (!this.args.model.branchName) return undefined;
+      return {
+        filter: {
+          on: {
+            module: new URL('../pr-card/pr-card', import.meta.url).href,
+            name: 'PrCard',
+          },
+          eq: { branchName: this.args.model.branchName },
+        },
+      };
+    }
+
+    prCardData = this.args.context?.getCards(
+      this,
+      () => this.prCardQuery,
+      () => this.realmHrefs,
+      { isLive: true },
+    );
+
+    get prCardInstance() {
+      return this.prCardData?.instances?.[0] ?? null;
+    }
+
+    openPrCard = () => {
+      if (this.prCardInstance) {
+        this.args.viewCard?.(this.prCardInstance, 'isolated');
       }
     };
 
@@ -715,15 +855,15 @@ export class SubmissionCard extends CardDef {
                   file{{#if (isPlural this.fileCount)}}s{{/if}}
                 </span>
               {{/if}}
-              {{#if this.githubURL}}
-                <a
-                  class='github-link'
-                  href={{this.githubURL}}
-                  target='_blank'
-                  rel='noopener noreferrer'
+              {{#if this.prCardInstance}}
+                <BoxelButton
+                  @kind='secondary-dark'
+                  class='view-pr-btn'
+                  aria-label='View PR card'
+                  {{on 'click' this.openPrCard}}
                 >
-                  <BrandGithubIcon width='14' height='14' />View on GitHub
-                </a>
+                  <GitPullRequestIcon width='14' height='14' />View PR
+                </BoxelButton>
               {{/if}}
             </div>
           </div>
@@ -739,14 +879,17 @@ export class SubmissionCard extends CardDef {
               <@model.constructor.icon class='listing-icon' />
             {{/if}}
             {{#if @model.listing}}
-              <BoxelButton
-                @kind='secondary-dark'
-                class='view-listing-btn'
-                aria-label='View listing details'
-                {{on 'click' this.openListing}}
-              >
-                View Listing
-              </BoxelButton>
+              <div class='hero-image-overlay'>
+                <BoxelButton
+                  @kind='primary'
+                  @size='extra-small'
+                  class='details-button view-listing-btn'
+                  aria-label='View listing details'
+                  {{on 'click' this.openListing}}
+                >
+                  View Listing
+                </BoxelButton>
+              </div>
             {{/if}}
           </div>
         </div>
@@ -775,7 +918,7 @@ export class SubmissionCard extends CardDef {
           flex-direction: column;
           height: 100%;
           overflow-y: auto;
-          background: var(--boxel-light);
+          background: var(--card, #ffffff);
         }
 
         /* ── Dark hero: two-column grid ─────────────────────────── */
@@ -859,7 +1002,7 @@ export class SubmissionCard extends CardDef {
           min-width: 0;
         }
 
-        /* Actions (file count + GitHub link) */
+        /* Actions (file count + View PR) */
         .meta-actions {
           display: flex;
           align-items: center;
@@ -885,28 +1028,20 @@ export class SubmissionCard extends CardDef {
           white-space: nowrap;
         }
 
-        .github-link {
+        .view-pr-btn {
           display: inline-flex;
           align-items: center;
           gap: var(--boxel-sp-4xs);
-          font-size: var(--boxel-font-size-xs);
-          font-weight: 600;
-          font-family: var(--boxel-font-family);
-          letter-spacing: var(--boxel-lsp-sm);
-          padding: 4px 10px;
-          color: rgba(255, 255, 255, 0.7);
-          text-decoration: none;
-          border: 1px solid rgba(255, 255, 255, 0.25);
-          border-radius: var(--boxel-border-radius-sm);
-          transition:
-            color 0.15s,
-            border-color 0.15s;
+          --boxel-button-font: 600 var(--boxel-font-xs);
+          --boxel-button-padding: 4px 10px;
+          --boxel-button-text-color: rgba(255, 255, 255, 0.7);
+          --boxel-button-border: 1px solid rgba(255, 255, 255, 0.25);
           white-space: nowrap;
         }
 
-        .github-link:hover {
-          color: #fff;
-          border-color: rgba(255, 255, 255, 0.6);
+        .view-pr-btn:hover {
+          --boxel-button-text-color: #fff;
+          --boxel-button-border: 1px solid rgba(255, 255, 255, 0.6);
         }
 
         /* Right column — listing image or icon */
@@ -931,17 +1066,17 @@ export class SubmissionCard extends CardDef {
           color: rgba(255, 255, 255, 0.2);
         }
 
-        /* Always-visible "View Listing" button, centered in image panel */
-        .view-listing-btn {
+        .hero-image-overlay {
           position: absolute;
-          top: 50%;
-          left: 50%;
-          transform: translate(-50%, -50%);
+          inset: 0;
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          background-color: rgba(0, 0, 0, 0.6);
+        }
+
+        .view-listing-btn {
           --boxel-button-font: 600 var(--boxel-font-sm);
-          --boxel-button-padding: var(--boxel-sp-xs) var(--boxel-sp-lg);
-          --boxel-button-color: var(--boxel-purple);
-          --boxel-button-border: 1px solid var(--boxel-light);
-          --boxel-button-text-color: var(--boxel-light);
           white-space: nowrap;
         }
 
@@ -979,18 +1114,18 @@ export class SubmissionCard extends CardDef {
           font-family: var(--boxel-font-family);
           letter-spacing: var(--boxel-lsp-xl);
           text-transform: uppercase;
-          color: var(--boxel-400);
+          color: var(--muted-foreground, #656d76);
         }
 
         .section-icon {
-          color: var(--boxel-400);
+          color: var(--muted-foreground, #656d76);
         }
 
         .section-count {
           margin-left: var(--boxel-sp-4xs);
           padding: 1px 6px;
-          background: var(--boxel-300);
-          color: var(--boxel-600);
+          background: var(--muted, #f6f8fa);
+          color: var(--muted-foreground, #656d76);
           border-radius: var(--boxel-border-radius-sm);
           font-size: var(--boxel-font-size-2xs);
           font-weight: 600;
