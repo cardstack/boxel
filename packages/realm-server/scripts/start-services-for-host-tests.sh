@@ -46,6 +46,37 @@ done
 
 export CATALOG_REALM_PATH="$CATALOG_TEMP_PATH"
 
+# Environment-mode configuration
+if [ -n "$BOXEL_ENVIRONMENT" ]; then
+  . "$SCRIPTS_DIR/ensure-traefik.sh"
+  ensure_traefik
+
+  ENV_SLUG=$(echo "$BOXEL_ENVIRONMENT" | tr '[:upper:]' '[:lower:]' | sed 's|/|-|g; s|[^a-z0-9-]||g; s|-\+|-|g; s|^-\|-$||g')
+  REALM_HOST="realm-server.${ENV_SLUG}.localhost"
+  REALM_TEST_HOST="realm-test.${ENV_SLUG}.localhost"
+  READY_PATH="_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson"
+
+  PHASE1_URLS="http-get://${REALM_HOST}/base/${READY_PATH}|http://matrix.${ENV_SLUG}.localhost|http://localhost:5001|http://icons.${ENV_SLUG}.localhost"
+  PHASE2_URLS="http-get://${REALM_TEST_HOST}/node-test/${READY_PATH}"
+
+  # Pre-setup: ensure Postgres, database, and migrations are ready before
+  # starting the realm server (follows the same pattern as start-all.sh).
+  REPO_ROOT="$(cd "$SCRIPTS_DIR/../../.." && pwd)"
+  export PGPORT="${PGPORT:-5435}"
+  export PGDATABASE="${PGDATABASE:-boxel_${ENV_SLUG}}"
+
+  ./scripts/start-pg.sh
+  echo "Waiting for Postgres to accept connections..."
+  until docker exec boxel-pg pg_isready -U postgres >/dev/null 2>&1; do sleep 1; done
+  "$REPO_ROOT/scripts/ensure-branch-db.sh" "$ENV_SLUG"
+  echo "Running database migrations..."
+  pnpm migrate
+  ./scripts/start-matrix.sh
+else
+  PHASE1_URLS="http-get://localhost:4201/base/_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson|http://localhost:8008|http://localhost:5001|http://localhost:4206"
+  PHASE2_URLS="http-get://localhost:4202/node-test/_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson"
+fi
+
 # Make host-test startup logs focus on indexing progress rather than per-request noise.
 HOST_TEST_LOG_LEVELS="${HOST_TEST_LOG_LEVELS:-*=info,realm:requests=warn,realm-index-updater=debug,index-runner=debug,index-perf=debug,index-writer=debug,worker=debug,worker-manager=debug}"
 SKIP_CATALOG="${SKIP_CATALOG:-}"
@@ -63,7 +94,7 @@ WAIT_ON_TIMEOUT=900000 \
   NODE_NO_WARNINGS=1 \
   start-server-and-test \
     'run-p -ln start:pg start:prerender-dev start:prerender-manager-dev start:matrix start:smtp start:worker-development start:development' \
-    'http-get://localhost:4201/base/_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson|http://localhost:8008|http://localhost:5001|http://localhost:4206' \
+    "$PHASE1_URLS" \
     'run-p -ln start:worker-test start:test-realms' \
-    'http-get://localhost:4202/node-test/_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson' \
+    "$PHASE2_URLS" \
     'wait'
