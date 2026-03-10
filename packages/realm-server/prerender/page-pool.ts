@@ -8,6 +8,19 @@ type RenderSemaphore = {
   acquire(): Promise<() => void>;
 };
 
+export type BrowserRequest = {
+  pageId: string;
+  realm?: string;
+  url: string;
+  method: string;
+  headers: Record<string, string>;
+  body?: string;
+};
+
+export type BrowserRequestHandler = (
+  request: BrowserRequest,
+) => Promise<Response | null>;
+
 class TabQueue {
   #pending: Promise<void> = Promise.resolve();
   #depth = 0;
@@ -87,9 +100,11 @@ export class PagePool {
   #standbyTimeoutMs: number;
   #renderSemaphore: RenderSemaphore | undefined;
   #disableStandbyRefill: boolean;
+  #browserRequestHandler: BrowserRequestHandler | undefined;
   #ensuringStandbys: Promise<void> | null = null;
   #creatingStandbys = 0;
   #consoleErrorsByPageId = new Map<string, Map<string, ConsoleErrorEntry>>();
+  #realmByPageId = new Map<string, string | null>();
 
   constructor(options: {
     maxPages: number;
@@ -99,6 +114,7 @@ export class PagePool {
     standbyTimeoutMs?: number;
     renderSemaphore?: RenderSemaphore;
     disableStandbyRefill?: boolean;
+    browserRequestHandler?: BrowserRequestHandler;
   }) {
     this.#maxPages = options.maxPages;
     let envTabMax = Number(process.env.PRERENDER_REALM_TAB_MAX ?? 1);
@@ -112,6 +128,7 @@ export class PagePool {
     this.#standbyTimeoutMs = options.standbyTimeoutMs ?? 30_000;
     this.#renderSemaphore = options.renderSemaphore;
     this.#disableStandbyRefill = options.disableStandbyRefill ?? false;
+    this.#browserRequestHandler = options.browserRequestHandler;
   }
 
   getWarmRealms(): string[] {
@@ -350,6 +367,8 @@ export class PagePool {
       context = await browser.createBrowserContext();
       let page = await context.newPage();
       let pageId = uuidv4();
+      this.#realmByPageId.set(pageId, null);
+      await this.#installRequestInterception(page, pageId);
       this.#attachPageConsole(page, 'standby', pageId);
       await this.#loadStandbyPage(page, pageId);
       let entry: StandbyEntry = {
@@ -390,6 +409,100 @@ export class PagePool {
         }),
       pageId,
     );
+  }
+
+  async #installRequestInterception(page: Page, pageId: string): Promise<void> {
+    if (!this.#browserRequestHandler) {
+      return;
+    }
+    await page.setRequestInterception(true);
+    page.on('request', async (request) => {
+      try {
+        let url = request.url();
+        if (!/^https?:/i.test(url)) {
+          await request.continue();
+          return;
+        }
+        let corsHeaders = this.#corsHeaders(request.headers());
+        let response = await this.#browserRequestHandler?.({
+          pageId,
+          realm: this.#realmByPageId.get(pageId) ?? undefined,
+          url,
+          method: request.method(),
+          headers: request.headers(),
+          body:
+            request.method() === 'GET' || request.method() === 'HEAD'
+              ? undefined
+              : (request.postData() ?? undefined),
+        });
+        if (!response) {
+          await request.continue();
+          return;
+        }
+
+        let headers: Record<string, string> = {};
+        for (let [name, value] of response.headers.entries()) {
+          headers[name] = value;
+        }
+        headers = {
+          ...headers,
+          ...corsHeaders,
+          'access-control-expose-headers': this.#exposedHeaderNames(headers),
+        };
+        let body =
+          request.method() === 'HEAD'
+            ? undefined
+            : Buffer.from(await response.arrayBuffer());
+
+        await request.respond({
+          status: response.status,
+          headers,
+          body,
+        });
+      } catch (error) {
+        log.warn(`Error intercepting browser request ${request.url()}:`, error);
+        try {
+          await request.respond({
+            status: 502,
+            headers: { 'content-type': 'text/plain' },
+            body: `Request interception failed for ${request.url()}: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          });
+        } catch {
+          try {
+            await request.abort();
+          } catch {
+            // best-effort cleanup
+          }
+        }
+      }
+    });
+  }
+
+  #corsHeaders(requestHeaders: Record<string, string>): Record<string, string> {
+    let origin = requestHeaders.origin ?? '*';
+    let requestedHeaders =
+      requestHeaders['access-control-request-headers'] ??
+      Object.keys(requestHeaders).join(', ');
+    return {
+      'access-control-allow-origin': origin,
+      'access-control-allow-methods':
+        'GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS, QUERY',
+      'access-control-allow-headers': requestedHeaders,
+      'access-control-max-age': '600',
+      vary: 'Origin, Access-Control-Request-Headers, Access-Control-Request-Method',
+    };
+  }
+
+  #exposedHeaderNames(headers: Record<string, string>): string {
+    let names = new Set(Object.keys(headers).map((name) => name.toLowerCase()));
+    names.add('authorization');
+    names.add('x-boxel-realm-url');
+    names.add('x-boxel-realm-public-readable');
+    names.add('last-modified');
+    names.add('x-created');
+    return [...names].join(', ');
   }
 
   async #withStandbyTimeout<T>(
@@ -532,6 +645,7 @@ export class PagePool {
       lastUsedAt: Date.now(),
       queue: standby.queue,
     };
+    this.#realmByPageId.set(entry.pageId, realm);
     entry.page.removeAllListeners('console');
     this.#attachPageConsole(entry.page, realm, entry.pageId);
     this.#addRealmEntry(realm, entry);
@@ -541,6 +655,7 @@ export class PagePool {
   #reassignRealmTab(entry: PoolEntry, realm: string): PoolEntry {
     this.#detachRealmEntry(entry);
     entry.realm = realm;
+    this.#realmByPageId.set(entry.pageId, realm);
     entry.page.removeAllListeners('console');
     this.#attachPageConsole(entry.page, realm, entry.pageId);
     this.#addRealmEntry(realm, entry);
@@ -603,6 +718,7 @@ export class PagePool {
     if (!retainConsoleErrors) {
       this.#consoleErrorsByPageId.delete(entry.pageId);
     }
+    this.#realmByPageId.delete(entry.pageId);
   }
 
   #attachPageConsole(page: Page, realm: string, pageId: string): void {

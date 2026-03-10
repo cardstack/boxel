@@ -12,6 +12,7 @@ import {
   type FileExtractResponse,
   type FileRenderResponse,
 } from '@cardstack/runtime-common';
+import type { BrowserRequestHandler } from './page-pool';
 import {
   ecsMetadata,
   fullRequestURL,
@@ -38,6 +39,7 @@ export function buildPrerenderApp(options: {
   maxPages?: number;
   isDraining?: () => boolean;
   drainingPromise?: Promise<void>;
+  browserRequestHandler?: BrowserRequestHandler;
 }): {
   app: Koa<Koa.DefaultState, Koa.Context>;
   prerenderer: Prerenderer;
@@ -49,6 +51,7 @@ export function buildPrerenderApp(options: {
   let prerenderer = new Prerenderer({
     maxPages,
     serverURL: options.serverURL,
+    browserRequestHandler: options.browserRequestHandler,
   });
 
   router.head('/', (ctxt: Koa.Context) => {
@@ -578,6 +581,7 @@ export function createPrerenderHttpServer(options?: {
   maxPages?: number;
   silent?: boolean;
   port?: number;
+  browserRequestHandler?: BrowserRequestHandler;
 }): Server {
   let draining = false;
   let drainingResolved = false;
@@ -591,6 +595,7 @@ export function createPrerenderHttpServer(options?: {
     serverURL,
     isDraining: () => draining,
     drainingPromise: drainingDeferred.promise,
+    browserRequestHandler: options?.browserRequestHandler,
   });
   let stopPromise: Promise<void> | null = null;
 

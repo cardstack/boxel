@@ -8,7 +8,7 @@ import {
   logger,
 } from '@cardstack/runtime-common';
 import { BrowserManager } from './browser-manager';
-import { PagePool } from './page-pool';
+import { PagePool, type BrowserRequestHandler } from './page-pool';
 import { RenderRunner } from './render-runner';
 
 const log = logger('prerenderer');
@@ -52,7 +52,11 @@ export class Prerenderer {
   #realmIdleEvictMs: number;
   #semaphore: AsyncSemaphore;
 
-  constructor(options: { serverURL: string; maxPages?: number }) {
+  constructor(options: {
+    serverURL: string;
+    maxPages?: number;
+    browserRequestHandler?: BrowserRequestHandler;
+  }) {
     let maxPages = options.maxPages ?? 4;
     this.#semaphore = new AsyncSemaphore(maxPages);
     this.#browserManager = new BrowserManager();
@@ -62,6 +66,7 @@ export class Prerenderer {
       browserManager: this.#browserManager,
       boxelHostURL,
       renderSemaphore: this.#semaphore,
+      browserRequestHandler: options.browserRequestHandler,
     });
     this.#renderRunner = new RenderRunner({
       pagePool: this.#pagePool,

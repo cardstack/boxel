@@ -18,12 +18,7 @@ import {
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 describe('atomic-endpoints-test.ts', function () {
   describe('Realm-specific Endpoints: can make request to post /_atomic', function () {
-    let workerId = Number(
-      process.env.VITEST_WORKER_ID ?? process.env.VITEST_POOL_ID ?? '1',
-    );
-    let realmURL = new URL(
-      `http://127.0.0.1:${4443 + (Number.isNaN(workerId) ? 1 : workerId)}/test/`,
-    );
+    let realmURL = new URL('http://test-realm/test/');
     let testRealmHref = realmURL.href;
     let testRealm: Realm;
     let testRealmAdapter: RealmAdapter;

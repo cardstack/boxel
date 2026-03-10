@@ -52,12 +52,13 @@ import {
   PgQueuePublisher,
   PgQueueRunner,
 } from '@cardstack/postgres';
-import { createServer as createHttpServer, type Server } from 'http';
+import type { Server } from 'http';
 import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import {
   Prerenderer as LocalPrerenderer,
   type Prerenderer as TestPrerenderer,
 } from '../../prerender';
+import type { BrowserRequest } from '../../prerender/page-pool';
 
 import type { SuperTest, Test } from 'supertest';
 import supertest from 'supertest';
@@ -181,7 +182,16 @@ type WorkerPrerenderServerState = {
   start?: Promise<string>;
   url?: string;
 };
+type RegisteredPrerenderVirtualRealm = {
+  prerenderRealm: string;
+  realmURL: URL;
+  virtualNetwork: VirtualNetwork;
+};
 const prerenderServersByWorker = new Map<string, WorkerPrerenderServerState>();
+const prerenderVirtualRealmsByWorker = new Map<
+  string,
+  Map<string, RegisteredPrerenderVirtualRealm>
+>();
 const trackedServers = new Set<Server>();
 const trackedPrerenderers = new Set<TestPrerenderer>();
 const trackedDbAdapters = new Set<PgAdapter>();
@@ -260,71 +270,101 @@ async function withResolvedServerURL(serverURL: URL): Promise<URL> {
   return resolved;
 }
 
-async function startRealmProxyServer(
-  virtualRealmURL: URL,
-  serverURL: URL,
-): Promise<Server> {
-  let proxy = createHttpServer(async (incomingRequest, outgoingResponse) => {
-    try {
-      let targetURL = new URL(
-        incomingRequest.url ?? '/',
-        new URL(serverURL.origin),
-      );
-      let method = incomingRequest.method ?? 'GET';
-      let hasBody = ['POST', 'PUT', 'PATCH', 'QUERY'].includes(method);
-      let body = hasBody
-        ? await new Promise<Buffer>((resolve, reject) => {
-            let chunks: Buffer[] = [];
-            incomingRequest.on('data', (chunk) =>
-              chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)),
-            );
-            incomingRequest.on('end', () => resolve(Buffer.concat(chunks)));
-            incomingRequest.on('error', reject);
-          })
-        : undefined;
-
-      let upstreamResponse = await fetch(targetURL, {
-        method,
-        headers: incomingRequest.headers as Record<string, string>,
-        body,
-      });
-
-      outgoingResponse.statusCode = upstreamResponse.status;
-      outgoingResponse.statusMessage = upstreamResponse.statusText;
-      for (let [name, value] of upstreamResponse.headers.entries()) {
-        outgoingResponse.setHeader(name, value);
-      }
-      if (method === 'HEAD') {
-        outgoingResponse.end();
-        return;
-      }
-      let upstreamBody = Buffer.from(await upstreamResponse.arrayBuffer());
-      outgoingResponse.end(upstreamBody);
-    } catch (error: any) {
-      outgoingResponse.statusCode = 502;
-      outgoingResponse.setHeader('content-type', 'text/plain');
-      outgoingResponse.end(
-        `Proxy error forwarding ${incomingRequest.url ?? '/'}: ${error?.message ?? error}`,
-      );
+function registerPrerenderVirtualRealm(
+  workerId: string,
+  prerenderRealm: string,
+  realmURL: URL,
+  virtualNetwork: VirtualNetwork,
+): () => void {
+  let registered = prerenderVirtualRealmsByWorker.get(workerId);
+  if (!registered) {
+    registered = new Map();
+    prerenderVirtualRealmsByWorker.set(workerId, registered);
+  }
+  let entry = { prerenderRealm, realmURL, virtualNetwork };
+  registered.set(prerenderRealm, entry);
+  return () => {
+    let current = prerenderVirtualRealmsByWorker.get(workerId);
+    if (!current) {
+      return;
     }
-  });
+    current.delete(prerenderRealm);
+    if (current.size === 0) {
+      prerenderVirtualRealmsByWorker.delete(workerId);
+    }
+  };
+}
 
-  await new Promise<void>((resolve, reject) => {
-    proxy.once('error', reject);
-    proxy.listen(
-      parseInt(virtualRealmURL.port),
-      virtualRealmURL.hostname,
-      () => {
-        proxy.off('error', reject);
-        resolve();
-      },
-    );
+function createPrerenderRealmKey(
+  workerId: string,
+  realmURL: URL,
+  serverURL: URL,
+): string {
+  if (realmURL.href === serverURL.href) {
+    return realmURL.href;
+  }
+  return `${realmURL.href}#prerender-fixture=${workerId}-${uuidv4()}`;
+}
+
+function namespacePrerendererRealm(
+  prerenderer: Prerenderer,
+  prerenderRealm: string,
+): Prerenderer {
+  return {
+    prerenderCard(args) {
+      return prerenderer.prerenderCard({ ...args, realm: prerenderRealm });
+    },
+    prerenderModule(args) {
+      return prerenderer.prerenderModule({ ...args, realm: prerenderRealm });
+    },
+    prerenderFileExtract(args) {
+      return prerenderer.prerenderFileExtract({
+        ...args,
+        realm: prerenderRealm,
+      });
+    },
+    prerenderFileRender(args) {
+      return prerenderer.prerenderFileRender({
+        ...args,
+        realm: prerenderRealm,
+      });
+    },
+  };
+}
+
+async function routePrerenderBrowserRequest(
+  workerId: string,
+  { realm, url, method, headers, body }: BrowserRequest,
+): Promise<Response | null> {
+  let current = prerenderVirtualRealmsByWorker.get(workerId);
+  if (!current || current.size === 0 || !realm) {
+    return null;
+  }
+
+  let entry = current.get(realm);
+  if (!entry) {
+    return null;
+  }
+  let requestURL = new URL(url);
+  if (!new RealmPaths(entry.realmURL).inRealm(requestURL)) {
+    return null;
+  }
+  let sanitizedHeaders = { ...headers };
+  delete sanitizedHeaders.host;
+  delete sanitizedHeaders.connection;
+  delete sanitizedHeaders['content-length'];
+  delete sanitizedHeaders['content-encoding'];
+  delete sanitizedHeaders['transfer-encoding'];
+
+  if (method === 'OPTIONS') {
+    return new Response(null, { status: 204 });
+  }
+  return await entry.virtualNetwork.fetch(url, {
+    method,
+    headers: sanitizedHeaders,
+    body:
+      method === 'GET' || method === 'HEAD' ? undefined : (body ?? undefined),
   });
-  trackServer(proxy);
-  logRealmSetup(
-    `realm proxy listening at ${virtualRealmURL.origin} -> ${serverURL.origin}`,
-  );
-  return proxy;
 }
 
 export function prepareTestDB(): void {
@@ -346,6 +386,46 @@ function quotePgIdentifier(identifier: string): string {
     throw new Error(`unsafe postgres identifier: ${identifier}`);
   }
   return `"${identifier}"`;
+}
+
+function advisoryLockKeys(lockKey: string): [number, number] {
+  return [
+    parseInt(lockKey.slice(0, 8), 16) | 0,
+    parseInt(lockKey.slice(8, 16), 16) | 0,
+  ];
+}
+
+async function withTemplateBuildLock<T>(
+  cacheKey: string,
+  fn: (client: PgClient) => Promise<T>,
+): Promise<T> {
+  let client = new PgClient(pgAdminConnectionConfig());
+  let [key1, key2] = advisoryLockKeys(cacheKey);
+  try {
+    await client.connect();
+    await client.query(`SELECT pg_advisory_lock($1, $2)`, [key1, key2]);
+    return await fn(client);
+  } finally {
+    try {
+      await client.query(`SELECT pg_advisory_unlock($1, $2)`, [key1, key2]);
+    } catch {
+      // best-effort unlock
+    }
+    await client.end();
+  }
+}
+
+async function isReusableTemplateDatabase(
+  templateDatabaseName: string,
+  client: PgClient,
+): Promise<boolean> {
+  let result = await client.query(
+    `SELECT datistemplate
+     FROM pg_database
+     WHERE datname = $1`,
+    [templateDatabaseName],
+  );
+  return result.rows[0]?.datistemplate === true;
 }
 
 async function withPgDatabaseEnv<T>(
@@ -700,6 +780,8 @@ async function startTestPrerenderServer(): Promise<string> {
   let server = createPrerenderHttpServer({
     silent: Boolean(process.env.SILENT_PRERENDERER),
     maxPages: 1,
+    browserRequestHandler: (request) =>
+      routePrerenderBrowserRequest(workerId, request),
   });
   state.server = server;
   trackServer(server);
@@ -750,6 +832,7 @@ export async function stopTestPrerenderServer() {
     }
   }
   prerenderServersByWorker.clear();
+  prerenderVirtualRealmsByWorker.clear();
 }
 
 interface StoppablePrerenderServer extends Server {
@@ -1680,7 +1763,7 @@ async function startPermissionedRealmFixture(
   testRealmServer: Awaited<ReturnType<typeof runTestRealmServer>>;
   request: SuperTest<Test>;
   dir: DirResult;
-  realmProxyServer?: Server;
+  unregisterPrerenderVirtualRealm?: () => void;
 }> {
   let fixtureStart = Date.now();
   let resolvedRealmURL = realmURL ?? testRealmURL;
@@ -1731,12 +1814,26 @@ async function startPermissionedRealmFixture(
   if (resolvedRealmURL.href !== resolvedServerURL.href) {
     virtualNetwork.addURLMapping(resolvedRealmURL, resolvedServerURL);
   }
-
-  let realmProxyServer: Server | undefined;
+  let workerId = currentVitestWorkerId();
+  let prerenderRealmKey = createPrerenderRealmKey(
+    workerId,
+    resolvedRealmURL,
+    resolvedServerURL,
+  );
+  let unregisterPrerenderVirtualRealm =
+    resolvedRealmURL.href !== resolvedServerURL.href
+      ? registerPrerenderVirtualRealm(
+          workerId,
+          prerenderRealmKey,
+          resolvedRealmURL,
+          virtualNetwork,
+        )
+      : undefined;
+  let fixturePrerenderer = prerenderer ?? (await getTestPrerenderer());
   if (resolvedRealmURL.href !== resolvedServerURL.href) {
-    realmProxyServer = await startRealmProxyServer(
-      resolvedRealmURL,
-      resolvedServerURL,
+    fixturePrerenderer = namespacePrerendererRealm(
+      fixturePrerenderer,
+      prerenderRealmKey,
     );
   }
 
@@ -1758,7 +1855,7 @@ async function startPermissionedRealmFixture(
         enableFileWatcher: subscribeToRealmEvents,
         cardSizeLimitBytes,
         fileSizeLimitBytes,
-        prerenderer,
+        prerenderer: fixturePrerenderer,
       }),
   );
 
@@ -1772,22 +1869,20 @@ async function startPermissionedRealmFixture(
     testRealmServer,
     request,
     dir,
-    realmProxyServer,
+    unregisterPrerenderVirtualRealm,
   };
 }
 
 async function teardownPermissionedRealmFixture(
   testRealmServer: Awaited<ReturnType<typeof runTestRealmServer>>,
-  realmProxyServer?: Server,
+  unregisterPrerenderVirtualRealm?: () => void,
 ): Promise<void> {
   testRealmServer.testRealm.unsubscribe();
   if (!testRealmServer.matrixClient.isLoggedIn()) {
     await testRealmServer.matrixClient.login();
   }
   await closeServer(testRealmServer.testRealmHttpServer);
-  if (realmProxyServer?.listening) {
-    await closeServer(realmProxyServer);
-  }
+  unregisterPrerenderVirtualRealm?.();
   resetCatalogRealms();
 }
 
@@ -1831,7 +1926,7 @@ export function setupPermissionedRealm(
   },
 ) {
   let testRealmServer: Awaited<ReturnType<typeof runTestRealmServer>>;
-  let realmProxyServer: Server | undefined;
+  let unregisterPrerenderVirtualRealm: (() => void) | undefined;
 
   setGracefulCleanup();
 
@@ -1846,7 +1941,7 @@ export function setupPermissionedRealm(
         testRealmServer: server,
         request,
         dir,
-        realmProxyServer: proxyServer,
+        unregisterPrerenderVirtualRealm: unregisterVirtualRealm,
       } = await startPermissionedRealmFixture(dbAdapter, publisher, runner, {
         realmURL,
         serverURL,
@@ -1859,7 +1954,7 @@ export function setupPermissionedRealm(
         fileSizeLimitBytes,
       });
       testRealmServer = server;
-      realmProxyServer = proxyServer;
+      unregisterPrerenderVirtualRealm = unregisterVirtualRealm;
 
       onRealmSetup?.({
         dbAdapter,
@@ -1874,7 +1969,10 @@ export function setupPermissionedRealm(
   });
 
   hooks[mode === 'beforeEach' ? 'afterEach' : 'after'](async function () {
-    await teardownPermissionedRealmFixture(testRealmServer, realmProxyServer);
+    await teardownPermissionedRealmFixture(
+      testRealmServer,
+      unregisterPrerenderVirtualRealm,
+    );
   });
 }
 
@@ -1961,34 +2059,43 @@ async function buildPermissionedRealmTemplate(
         fileSizeLimitBytes: options.fileSizeLimitBytes,
       },
     );
+    if (!dbAdapter || !publisher || !runner || !fixture) {
+      throw new Error(
+        `permissioned realm template setup was incomplete for ${builderDatabaseName}`,
+      );
+    }
+    let templateDbAdapter = dbAdapter;
+    let templatePublisher = publisher;
+    let templateRunner = runner;
+    let templateFixture = fixture;
 
     await timeRealmSetup(
       `waitForQueueIdle(${builderDatabaseName})`,
-      async () => await waitForQueueIdle(dbAdapter),
+      async () => await waitForQueueIdle(templateDbAdapter),
     );
     await timeRealmSetup(
       `teardownPermissionedRealmFixture(${builderDatabaseName})`,
       async () =>
         await teardownPermissionedRealmFixture(
-          fixture.testRealmServer,
-          fixture.realmProxyServer,
+          templateFixture.testRealmServer,
+          templateFixture.unregisterPrerenderVirtualRealm,
         ),
     );
     fixture = undefined;
 
     await timeRealmSetup(
       `destroy publisher(${builderDatabaseName})`,
-      async () => await publisher.destroy(),
+      async () => await templatePublisher.destroy(),
     );
     publisher = undefined;
     await timeRealmSetup(
       `destroy runner(${builderDatabaseName})`,
-      async () => await runner.destroy(),
+      async () => await templateRunner.destroy(),
     );
     runner = undefined;
     await timeRealmSetup(
       `close dbAdapter(${builderDatabaseName})`,
-      async () => await dbAdapter.close(),
+      async () => await templateDbAdapter.close(),
     );
     dbAdapter = undefined;
 
@@ -2005,7 +2112,7 @@ async function buildPermissionedRealmTemplate(
       try {
         await teardownPermissionedRealmFixture(
           fixture.testRealmServer,
-          fixture.realmProxyServer,
+          fixture.unregisterPrerenderVirtualRealm,
         );
       } catch {
         // best-effort cleanup
@@ -2040,6 +2147,22 @@ async function buildPermissionedRealmTemplate(
   }
 }
 
+async function ensurePermissionedRealmTemplateBuilt(
+  cacheKey: string,
+  options: SetupPermissionedRealmCachedOptions,
+): Promise<void> {
+  let templateDatabaseName = templateDatabaseNameForCacheKey(cacheKey);
+  await withTemplateBuildLock(cacheKey, async (client) => {
+    if (await isReusableTemplateDatabase(templateDatabaseName, client)) {
+      logRealmSetup(
+        `permissioned realm template shared hit ${cacheKey.slice(0, 12)} db=${templateDatabaseName}`,
+      );
+      return;
+    }
+    await buildPermissionedRealmTemplate(cacheKey, options);
+  });
+}
+
 async function acquirePermissionedRealmTemplate(
   options: SetupPermissionedRealmCachedOptions,
 ): Promise<{ cacheKey: string; templateDatabaseName: string }> {
@@ -2062,7 +2185,7 @@ async function acquirePermissionedRealmTemplate(
     refs: 1,
     ready: Promise.resolve(),
   };
-  entry.ready = buildPermissionedRealmTemplate(cacheKey, options).catch(
+  entry.ready = ensurePermissionedRealmTemplateBuilt(cacheKey, options).catch(
     async (error) => {
       permissionedRealmTemplateCache.delete(cacheKey);
       try {
@@ -2234,6 +2357,22 @@ async function buildPermissionedRealmsTemplate(
   }
 }
 
+async function ensurePermissionedRealmsTemplateBuilt(
+  cacheKey: string,
+  options: SetupPermissionedRealmsCachedOptions,
+): Promise<void> {
+  let templateDatabaseName = templateDatabaseNameForCacheKey(cacheKey);
+  await withTemplateBuildLock(cacheKey, async (client) => {
+    if (await isReusableTemplateDatabase(templateDatabaseName, client)) {
+      logRealmSetup(
+        `permissioned realms template shared hit ${cacheKey.slice(0, 12)} db=${templateDatabaseName}`,
+      );
+      return;
+    }
+    await buildPermissionedRealmsTemplate(cacheKey, options);
+  });
+}
+
 async function acquirePermissionedRealmsTemplate(
   options: SetupPermissionedRealmsCachedOptions,
 ): Promise<{ cacheKey: string; templateDatabaseName: string }> {
@@ -2250,7 +2389,7 @@ async function acquirePermissionedRealmsTemplate(
     refs: 1,
     ready: Promise.resolve(),
   };
-  entry.ready = buildPermissionedRealmsTemplate(cacheKey, options).catch(
+  entry.ready = ensurePermissionedRealmsTemplateBuilt(cacheKey, options).catch(
     async (error) => {
       permissionedRealmTemplateCache.delete(cacheKey);
       try {
