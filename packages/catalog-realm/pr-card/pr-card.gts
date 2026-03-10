@@ -138,7 +138,7 @@ class IsolatedTemplate extends Component<typeof PrCard> {
 
   get prBranchName() {
     return (
-      this.args.model.branchname ??
+      this.args.model.branchName ??
       this.latestPrEventInstance?.payload?.pull_request?.head?.ref ??
       null
     );
@@ -201,7 +201,7 @@ class IsolatedTemplate extends Component<typeof PrCard> {
       <HeaderSection
         @title={{this.prTitle}}
         @prNumber={{@model.prNumber}}
-        @branchname={{this.prBranchName}}
+        @branchName={{this.prBranchName}}
         @prUrl={{this.prUrl}}
         @actionLabel={{this.latestPrActionLabel}}
         @actionIcon={{this.prActionIcon}}
@@ -370,7 +370,7 @@ class FittedTemplate extends Component<typeof PrCard> {
 
   get prBranchName() {
     return (
-      this.args.model.branchname ??
+      this.args.model.branchName ??
       this.latestPrEventInstance?.payload?.pull_request?.head?.ref ??
       null
     );
@@ -447,11 +447,11 @@ class FittedTemplate extends Component<typeof PrCard> {
   }
 
   copyBranchName = async () => {
-    let branchname = this.prBranchName?.trim();
-    if (!branchname) {
+    let branchName = this.prBranchName?.trim();
+    if (!branchName) {
       return;
     }
-    await navigator.clipboard.writeText(branchname);
+    await navigator.clipboard.writeText(branchName);
   };
 
   <template>
@@ -972,7 +972,7 @@ export class PrCard extends CardDef {
   @field prNumber = contains(NumberField);
   @field prUrl = contains(StringField);
   @field prTitle = contains(StringField);
-  @field branchname = contains(StringField);
+  @field branchName = contains(StringField);
 
   // === Provenance (set on the card instance) ===
   @field submittedBy = contains(StringField);

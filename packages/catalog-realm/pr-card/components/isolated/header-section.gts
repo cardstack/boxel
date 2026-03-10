@@ -9,7 +9,7 @@ interface HeaderSectionSignature {
   Args: {
     title: string;
     prNumber: number | null | undefined;
-    branchname: string | null | undefined;
+    branchName: string | null | undefined;
     prUrl: string | null;
     actionLabel: string;
     actionIcon: CardOrFieldTypeIcon;
@@ -23,11 +23,11 @@ interface HeaderSectionSignature {
 
 export class HeaderSection extends GlimmerComponent<HeaderSectionSignature> {
   copyBranchName = async () => {
-    let branchname = this.args.branchname?.trim();
-    if (!branchname) {
+    let branchName = this.args.branchName?.trim();
+    if (!branchName) {
       return;
     }
-    await navigator.clipboard.writeText(branchname);
+    await navigator.clipboard.writeText(branchName);
   };
 
   <template>
@@ -52,9 +52,9 @@ export class HeaderSection extends GlimmerComponent<HeaderSectionSignature> {
           <strong class='pr-author'>{{@submittedBy}}</strong>
         {{/if}}
 
-        {{#if @branchname}}
+        {{#if @branchName}}
           <span class='pr-branch'>
-            <span class='pr-branch-label'>{{@branchname}}</span>
+            <span class='pr-branch-label'>{{@branchName}}</span>
             <button
               type='button'
               class='pr-branch-copy-button'

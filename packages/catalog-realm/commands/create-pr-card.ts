@@ -18,7 +18,7 @@ class CreatePrCardInput extends CardDef {
   @field prNumber = contains(NumberField);
   @field prUrl = contains(StringField);
   @field prTitle = contains(StringField);
-  @field branchname = contains(StringField);
+  @field branchName = contains(StringField);
   @field submittedBy = contains(StringField);
 }
 
@@ -33,14 +33,14 @@ export default class CreatePrCardCommand extends Command<
   }
 
   protected async run(input: CreatePrCardInput): Promise<PrCard> {
-    let { realm, prNumber, prUrl, prTitle, branchname, submittedBy } = input;
+    let { realm, prNumber, prUrl, prTitle, branchName, submittedBy } = input;
     let catalogRealmUrl = new RealmPaths(new URL('..', import.meta.url)).url;
 
     let card = new PrCard({
       prNumber,
       prUrl,
       prTitle,
-      branchname,
+      branchName,
       submittedBy,
       submittedAt: new Date(),
     });
