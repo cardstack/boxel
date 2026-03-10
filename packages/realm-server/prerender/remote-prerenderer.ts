@@ -8,6 +8,7 @@ import {
   type FileRenderArgs,
   type RenderRouteOptions,
   type RunCommandResponse,
+  type RunTestsResponse,
   logger,
 } from '@cardstack/runtime-common';
 import {
@@ -242,6 +243,20 @@ export function createRemotePrerenderer(
         },
       );
     },
+    async runTests({ affinityType, affinityValue, auth, moduleUrl, realm, filter }) {
+      return await requestWithRetry<RunTestsResponse>(
+        'run-tests',
+        'run-tests-request',
+        {
+          affinityType,
+          affinityValue,
+          auth,
+          moduleUrl,
+          realm,
+          ...(filter ? { filter } : {}),
+        },
+      );
+    },
   };
 }
 
@@ -272,6 +287,7 @@ function validatePrerenderAttributes(
   }
   if (
     requestType !== 'run-command-request' &&
+    requestType !== 'run-tests-request' &&
     (typeof attrs.url !== 'string' || attrs.url.trim().length === 0)
   ) {
     missing.add('url');

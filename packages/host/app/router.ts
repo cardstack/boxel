@@ -21,6 +21,7 @@ Router.map(function () {
   this.route('command-runner', {
     path: '/command-runner/:request_id/:nonce',
   });
+  this.route('test-runner', { path: '/_test-runner' });
 
   this.route('index', { path: '/*path' });
   this.route('index-root', { path: '/' });

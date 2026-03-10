@@ -43,6 +43,12 @@ export interface Reexport extends BaseDeclaration {
   type: 'reexport';
 }
 
+export interface TestDeclaration extends BaseDeclaration {
+  type: 'test';
+  testName: string;
+  path: NodePath<t.ExpressionStatement>;
+}
+
 export interface PossibleField {
   card: ClassReference;
   type: ExternalReference | InternalReference;
@@ -54,7 +60,8 @@ export type Declaration =
   | PossibleCardOrFieldDeclaration
   | FunctionDeclaration
   | ClassDeclaration
-  | Reexport;
+  | Reexport
+  | TestDeclaration;
 
 export interface Options {
   possibleCardsOrFields: PossibleCardOrFieldDeclaration[]; //cards may not be exports
@@ -179,6 +186,33 @@ const coreVisitor = {
     },
     exit(_path: NodePath<t.ClassDeclaration>, state: State) {
       state.insideCard = false;
+    },
+  },
+  ExpressionStatement: {
+    enter(path: NodePath<t.ExpressionStatement>, state: State) {
+      if (!path.parentPath.isProgram()) {
+        return;
+      }
+      let expr = path.node.expression;
+      if (
+        expr.type !== 'CallExpression' ||
+        expr.callee.type !== 'Identifier' ||
+        expr.callee.name !== 'test'
+      ) {
+        return;
+      }
+      let [firstArg] = expr.arguments;
+      if (!firstArg || firstArg.type !== 'StringLiteral') {
+        return;
+      }
+      let testName = firstArg.value;
+      state.opts.declarations.push({
+        localName: testName,
+        exportName: undefined,
+        path,
+        type: 'test',
+        testName,
+      });
     },
   },
   Decorator(path: NodePath<t.Decorator>, state: State) {

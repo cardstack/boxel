@@ -1,3 +1,4 @@
+import * as emberOwner from '@ember/owner';
 import * as emberComponent from '@ember/component';
 import * as emberComponentTemplateOnly from '@ember/component/template-only';
 import * as emberDestroyable from '@ember/destroyable';
@@ -7,6 +8,7 @@ import * as emberObject from '@ember/object';
 import * as emberObjectInternals from '@ember/object/internals';
 import * as emberTemplate from '@ember/template';
 import * as emberTemplateFactory from '@ember/template-factory';
+import * as emberTestHelpers from '@ember/test-helpers';
 import * as glimmerComponent from '@glimmer/component';
 import * as glimmerTracking from '@glimmer/tracking';
 
@@ -43,6 +45,7 @@ import * as matrixJsSDK from 'matrix-js-sdk';
 import * as rsvp from 'rsvp';
 import * as superFastMD5 from 'super-fast-md5';
 import * as tracked from 'tracked-built-ins';
+import * as qunit from 'qunit';
 
 import * as boxelUiComponents from '@cardstack/boxel-ui/components';
 import * as boxelUiHelpers from '@cardstack/boxel-ui/helpers';
@@ -53,6 +56,7 @@ import * as runtime from '@cardstack/runtime-common';
 import type { VirtualNetwork } from '@cardstack/runtime-common';
 
 import { shimHostCommands } from '../commands';
+import * as boxelTestHelpers from '../test-helpers';
 
 export function shimExternals(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule('@cardstack/runtime-common', runtime);
@@ -64,6 +68,7 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule('@cardstack/boxel-ui/icons', boxelUiIcons);
   virtualNetwork.shimModule('@cardstack/boxel-ui/modifiers', boxelUiModifiers);
   virtualNetwork.shimModule('@glimmer/component', glimmerComponent);
+  virtualNetwork.shimModule('@ember/owner', emberOwner);
   virtualNetwork.shimModule('@ember/component', emberComponent);
   virtualNetwork.shimModule(
     '@ember/component/template-only',
@@ -162,5 +167,18 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
     resolve: () => import('uuid'),
   });
   virtualNetwork.shimModule('awesome-phonenumber', awesomePhoneNumber);
+  // Use a Proxy so that patches applied to QUnit (e.g. QUnit.test / QUnit.module
+  // in the test runner) are immediately visible to realm code that imports
+  // { test, module } from 'qunit' via the shim.
+  virtualNetwork.shimModule(
+    'qunit',
+    new Proxy(qunit as any, {
+      get(target, key) {
+        return (globalThis as any).QUnit?.[key] ?? target[key];
+      },
+    }),
+  );
+  virtualNetwork.shimModule('@ember/test-helpers', emberTestHelpers);
+  virtualNetwork.shimModule('@cardstack/boxel-host/test-helpers', boxelTestHelpers);
   shimHostCommands(virtualNetwork);
 }

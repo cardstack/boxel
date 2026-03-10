@@ -119,6 +119,8 @@ export default class Selector extends Component<Signature> {
       return 'class';
     } else if (declaration.type === 'function') {
       return 'function';
+    } else if (declaration.type === 'test') {
+      return 'test';
     }
     return '';
   }

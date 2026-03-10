@@ -13,6 +13,7 @@ import {
   type FileExtractResponse,
   type FileRenderResponse,
   type RunCommandResponse,
+  type RunTestsResponse,
 } from '@cardstack/runtime-common';
 import {
   ecsMetadata,
@@ -98,6 +99,14 @@ export function buildPrerenderApp(options: {
     affinityValue: string;
     command: string;
     commandInput?: unknown;
+  };
+
+  type RunTestsRouteArgs = RouteBaseArgs & {
+    affinityType: AffinityType;
+    affinityValue: string;
+    realm: string;
+    moduleUrl: string;
+    filter?: string;
   };
 
   type RouteParseResult<A extends RouteBaseArgs> = {
@@ -220,6 +229,54 @@ export function buildPrerenderApp(options: {
       } affinityValue=${(rawAffinityValue as string | undefined) ?? '<missing>'} authProvided=${
         typeof rawAuth === 'string' && rawAuth.trim().length > 0
       } commandProvided=${Boolean(commandValue)}`,
+    };
+  };
+
+  let parseRunTestsAttributes = (
+    attrs: any,
+  ): RouteParseResult<RunTestsRouteArgs> => {
+    let rawAuth = attrs.auth;
+    let rawAffinityType = attrs.affinityType;
+    let rawAffinityValue = attrs.affinityValue;
+    let rawRealm = attrs.realm;
+    let moduleUrl = attrs.moduleUrl;
+    let filter =
+      typeof attrs.filter === 'string' && attrs.filter.trim().length > 0
+        ? (attrs.filter as string)
+        : undefined;
+    let renderOptions = parseRenderOptions(attrs);
+    let missing: string[] = [];
+    if (!isNonEmptyString(rawAuth)) missing.push('auth');
+    if (rawAffinityType !== 'realm' && rawAffinityType !== 'user')
+      missing.push('affinityType');
+    if (!isNonEmptyString(rawAffinityValue)) missing.push('affinityValue');
+    if (!isNonEmptyString(rawRealm)) missing.push('realm');
+    if (!isNonEmptyString(moduleUrl)) missing.push('moduleUrl');
+    return {
+      args:
+        missing.length > 0
+          ? undefined
+          : {
+              affinityType: rawAffinityType as AffinityType,
+              affinityValue: rawAffinityValue as string,
+              auth: rawAuth as string,
+              realm: rawRealm as string,
+              moduleUrl: moduleUrl as string,
+              filter,
+              renderOptions,
+            },
+      missing,
+      missingMessage:
+        'Missing or invalid required attributes: auth, moduleUrl, realm, affinityType, affinityValue',
+      logTarget: (moduleUrl as string | undefined) ?? '<unknown>',
+      responseId: (moduleUrl as string | undefined) ?? 'test-runner',
+      rejectionLogDetails: `affinityType=${
+        (rawAffinityType as string | undefined) ?? '<missing>'
+      } affinityValue=${(rawAffinityValue as string | undefined) ?? '<missing>'} realm=${
+        (rawRealm as string | undefined) ?? '<missing>'
+      } moduleUrlProvided=${Boolean(isNonEmptyString(moduleUrl))} authProvided=${
+        typeof rawAuth === 'string' && rawAuth.trim().length > 0
+      }`,
     };
   };
 
@@ -467,6 +524,28 @@ export function buildPrerenderApp(options: {
           auth: args.auth,
           command: args.command,
           commandInput: args.commandInput as Record<string, unknown> | null,
+        }),
+      drainingPromise: options.drainingPromise,
+    },
+  );
+
+  registerPrerenderRoute<RunTestsResponse, RunTestsRouteArgs>(
+    '/run-tests',
+    {
+      requestDescription: 'test-runner',
+      responseType: 'test-result',
+      infoLabel: 'test-runner',
+      warnTimeoutMessage: (target) => `test run of ${target} timed out`,
+      errorContext: '/run-tests',
+      errorMessage: 'Error running tests',
+      parseAttributes: parseRunTestsAttributes,
+      execute: (args) =>
+        prerenderer.runTests({
+          affinityType: args.affinityType,
+          affinityValue: args.affinityValue,
+          auth: args.auth,
+          moduleUrl: args.moduleUrl,
+          filter: args.filter,
         }),
       drainingPromise: options.drainingPromise,
     },

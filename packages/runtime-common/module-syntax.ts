@@ -11,6 +11,7 @@ import {
   type FunctionDeclaration,
   type ClassDeclaration,
   type Reexport,
+  type TestDeclaration,
   isInternalReference,
 } from './schema-analysis-plugin';
 import type { Options as RemoveOptions } from './remove-field-plugin';
@@ -49,6 +50,7 @@ export type {
   FunctionDeclaration,
   ClassDeclaration,
   Reexport,
+  TestDeclaration,
 };
 export { isInternalReference };
 

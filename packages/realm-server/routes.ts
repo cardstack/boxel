@@ -38,6 +38,7 @@ import handleGetBoxelClaimedDomainRequest from './handlers/handle-get-boxel-clai
 import handleClaimBoxelDomainRequest from './handlers/handle-claim-boxel-domain';
 import handleDeleteBoxelClaimedDomainRequest from './handlers/handle-delete-boxel-claimed-domain';
 import handlePrerenderProxy from './handlers/handle-prerender-proxy';
+import handleRunTests from './handlers/handle-run-tests';
 import handleSearch from './handlers/handle-search';
 import handleSearchPrerendered from './handlers/handle-search-prerendered';
 import handleRealmInfo from './handlers/handle-realm-info';
@@ -195,6 +196,15 @@ export function createRoutes(args: CreateRoutesArgs) {
     jwtMiddleware(args.realmSecretSeed),
     handlePrerenderProxy({
       kind: 'file-extract',
+      prerenderer: args.prerenderer,
+      dbAdapter: args.dbAdapter,
+      createPrerenderAuth,
+    }),
+  );
+  router.post(
+    '/_run-tests',
+    jwtMiddleware(args.realmSecretSeed),
+    handleRunTests({
       prerenderer: args.prerenderer,
       dbAdapter: args.dbAdapter,
       createPrerenderAuth,

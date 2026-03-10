@@ -23,6 +23,8 @@
     "experimentalDecorators": true,
     "paths": {
       "https://cardstack.com/base/*": ["../base/*"],
+      "@cardstack/boxel-host/commands/*": ["../host/app/commands/*"],
+      "@cardstack/boxel-host/test-helpers": ["../host/app/test-helpers/index.ts"],
       "@cardstack/catalog/commands/*": ["../catalog-realm/commands/*"],
       "@cardstack/catalog/*": ["../catalog-realm/catalog-app/*"]
     },
