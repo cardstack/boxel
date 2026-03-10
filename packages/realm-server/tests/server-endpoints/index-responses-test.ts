@@ -1231,11 +1231,10 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           let virtualNetwork = createVirtualNetwork();
           let testRealmDir = join(dir.name, 'realm_server_theme', 'test');
           ensureDirSync(testRealmDir);
-          copySync(join(__dirname, '..', 'cards'), testRealmDir);
-
           ({ testRealmHttpServer } = await runTestRealmServer({
             virtualNetwork,
             testRealmDir,
+            fileSystem: {},
             realmsRootPath: join(dir.name, 'realm_server_theme'),
             realmURL: new URL('http://127.0.0.1:4444/test/'),
             dbAdapter: _dbAdapter,
