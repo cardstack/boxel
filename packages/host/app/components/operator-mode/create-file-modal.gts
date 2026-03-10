@@ -747,7 +747,7 @@ export default class CreateFileModal extends Component<Signature> {
     let isField = this.fileType.id === 'field-definition';
     let isFile = this.fileType.id === 'file-definition';
 
-    let specIds = await chooseCard({
+    let specId = await chooseCard({
       filter: {
         on: specRef,
         every: [
@@ -755,7 +755,6 @@ export default class CreateFileModal extends Component<Signature> {
         ],
       },
     });
-    let specId = specIds?.[0];
     this.chosenSpecResource = this.getCard(this, () => specId);
   });
 

@@ -693,10 +693,9 @@ export default class PlaygroundPanel extends Component<Signature> {
   }
 
   private chooseCard = task(async () => {
-    let cardIds = await chooseCard({
+    let cardId = await chooseCard({
       filter: { type: this.args.codeRef },
     });
-    let cardId = cardIds?.[0];
 
     if (cardId) {
       this.recentFilesService.addRecentFileUrl(`${cardId}.json`);

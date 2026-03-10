@@ -243,13 +243,12 @@ class Isolated extends Component<typeof CardsGrid> {
         spec = instances[0] as Spec;
       }
     } else {
-      let specIds = await chooseCard({
+      let specId = await chooseCard({
         filter: {
           on: specRef,
           every: [{ eq: { isCard: true } }],
         },
       });
-      let specId = specIds?.[0];
 
       if (!specId) {
         return;

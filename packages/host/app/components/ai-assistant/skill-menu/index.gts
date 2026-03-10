@@ -172,8 +172,7 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
         every: [{ type: skillCardRef }, ...selectedCardIds],
       },
     };
-    let cardIds = await chooseCard(query);
-    let cardId = cardIds?.[0];
+    let cardId = await chooseCard(query);
     if (cardId) {
       try {
         this.isAttachingSkill = true;

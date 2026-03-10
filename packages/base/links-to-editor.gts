@@ -185,7 +185,7 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
     if (this.args.typeConstraint) {
       type = await getNarrowestType(this.args.typeConstraint, type, myLoader());
     }
-    let cardIds = await chooseCard(
+    let cardId = await chooseCard(
       { filter: { type } },
       {
         offerToCreate: {
@@ -197,7 +197,6 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
         consumingRealm: this.realmURL,
       },
     );
-    let cardId = cardIds?.[0];
     if (cardId) {
       let card = await this.cardContext.store.get(cardId);
       if (isCardInstance(card)) {

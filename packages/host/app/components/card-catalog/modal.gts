@@ -260,8 +260,8 @@ export default class CardCatalogModal extends Component<Signature> {
       preselectedCardTypeQuery?: Query;
       consumingRealm?: URL;
     },
-  ): Promise<undefined | string[]> {
-    return await this._chooseCard.perform(
+  ): Promise<undefined | string | string[]> {
+    let result = await this._chooseCard.perform(
       {
         // default to cardTitle sort so that we can maintain stability in
         // the ordering of the search results (server sorts results
@@ -279,6 +279,10 @@ export default class CardCatalogModal extends Component<Signature> {
       },
       opts,
     );
+    if (opts?.multiSelect) {
+      return result;
+    }
+    return result?.[0];
   }
 
   private _chooseCard = task(
