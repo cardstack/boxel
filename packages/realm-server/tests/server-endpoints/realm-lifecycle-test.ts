@@ -1,6 +1,8 @@
 import { module, test } from 'qunit';
 import { basename, join } from 'path';
 import { existsSync, readJSONSync } from 'fs-extra';
+import supertest from 'supertest';
+import type { Test, SuperTest } from 'supertest';
 import { v4 as uuidv4 } from 'uuid';
 import type { Query } from '@cardstack/runtime-common/query';
 import {
@@ -11,7 +13,16 @@ import {
 import type { SingleCardDocument } from '@cardstack/runtime-common';
 import type { CardCollectionDocument } from '@cardstack/runtime-common/document-types';
 import { cardSrc } from '@cardstack/runtime-common/etc/test-fixtures';
-import { createJWT, realmSecretSeed, testRealmInfo } from '../helpers';
+import {
+  closeServer,
+  createJWT,
+  matrixURL,
+  realmSecretSeed,
+  runTestRealmServer,
+  setupPermissionedRealmCached,
+  testRealmInfo,
+  testRealmURL as rootTestRealmURL,
+} from '../helpers';
 import { createJWT as createRealmServerJWT } from '../../utils/jwt';
 import { setupServerEndpointsTest, testRealmURL } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
@@ -274,7 +285,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         }
       });
 
-      test('reading a dynamically created realm does not enqueue extra indexing jobs', async function (assert) {
+      test('can restart a realm that was created dynamically', async function (assert) {
         let endpoint = `test-realm-${uuidv4()}`;
         let owner = 'mango';
         let ownerUserId = '@mango:localhost';
@@ -342,16 +353,48 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           id = response.body.data.id;
         }
 
-        let jobsBeforeRead =
+        let jobsBeforeRestart =
           await context.dbAdapter.execute('select * from jobs');
 
-        {
-          let response = await context.request
+        context.testRealmServer.testingOnlyUnmountRealms();
+        await closeServer(context.testRealmHttpServer);
+
+        let restartedServer = await runTestRealmServer({
+          virtualNetwork: context.virtualNetwork,
+          testRealmDir: context.testRealmDir,
+          realmsRootPath: join(context.dir.name, 'realm_server_1'),
+          realmURL: testRealmURL,
+          permissions: {
+            '*': ['read', 'write'],
+            '@node-test_realm:localhost': ['read', 'realm-owner'],
+          },
+          dbAdapter: context.dbAdapter,
+          publisher: context.publisher,
+          runner: context.runner,
+          matrixURL,
+        });
+
+        try {
+          let jobsAfterRestart =
+            await context.dbAdapter.execute('select * from jobs');
+          assert.strictEqual(
+            jobsBeforeRestart.length,
+            jobsAfterRestart.length,
+            'no new indexing jobs were created on boot for the created realm',
+          );
+
+          let restartedRealm =
+            restartedServer.testRealmServer.testingOnlyRealms.find(
+              (r) => r.url === realmURL,
+            );
+          assert.ok(restartedRealm, 'realm is mounted after restart');
+          let restartedRequest = supertest(restartedServer.testRealmHttpServer);
+          let response = await restartedRequest
             .get(new URL(id).pathname)
             .set('Accept', 'application/vnd.card+json')
             .set(
               'Authorization',
-              `Bearer ${createJWT(realm, ownerUserId, [
+              `Bearer ${createJWT(restartedRealm!, ownerUserId, [
                 'read',
                 'write',
                 'realm-owner',
@@ -365,15 +408,10 @@ module(`server-endpoints/${basename(__filename)}`, function () {
             'Test Card',
             'instance data is correct',
           );
+        } finally {
+          restartedServer.testRealmServer.testingOnlyUnmountRealms();
+          await closeServer(restartedServer.testRealmHttpServer);
         }
-
-        let jobsAfterRead =
-          await context.dbAdapter.execute('select * from jobs');
-        assert.strictEqual(
-          jobsBeforeRead.length,
-          jobsAfterRead.length,
-          'no new indexing jobs were created when reading a created realm',
-        );
       });
 
       test('POST /_create-realm without JWT', async function (assert) {
@@ -530,52 +568,6 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           error.match(/name is required and must be a string/),
           'error message is correct',
         );
-      });
-
-      test('cannot create a realm on a realm server that has a realm mounted at the origin', async function (assert) {
-        let response = await context.request
-          .post('/_create-realm')
-          .set('Accept', 'application/vnd.api+json')
-          .set('Content-Type', 'application/json')
-          .set(
-            'Authorization',
-            `Bearer ${createRealmServerJWT(
-              { user: '@mango:localhost', sessionRoom: 'session-room-test' },
-              realmSecretSeed,
-            )}`,
-          )
-          .send(
-            JSON.stringify({
-              data: {
-                type: 'realm',
-                attributes: {
-                  endpoint: 'mango-realm',
-                  name: 'Test Realm',
-                },
-              },
-            }),
-          );
-        let expectsOriginMountConflict = testRealmURL.pathname === '/';
-        assert.strictEqual(
-          response.status,
-          expectsOriginMountConflict ? 400 : 201,
-          `HTTP ${expectsOriginMountConflict ? 400 : 201} status`,
-        );
-        if (expectsOriginMountConflict) {
-          let error = response.body.errors[0];
-          assert.ok(
-            error.match(
-              /a realm is already mounted at the origin of this server/,
-            ),
-            'error message is correct',
-          );
-        } else {
-          assert.strictEqual(
-            response.body.data.id,
-            `${testRealmURL.origin}/mango/mango-realm/`,
-            'realm is created when no realm is mounted at the server origin',
-          );
-        }
       });
 
       test('cannot create a new realm that collides with an existing realm', async function (assert) {
@@ -845,6 +837,58 @@ module(`server-endpoints/${basename(__filename)}`, function () {
             'instance data is correct',
           );
         }
+      });
+    },
+  );
+
+  module(
+    'Realm creation when a realm is mounted at server origin',
+    function (hooks) {
+      let request!: SuperTest<Test>;
+
+      setupPermissionedRealmCached(hooks, {
+        realmURL: rootTestRealmURL,
+        permissions: {
+          '*': ['read', 'write'],
+          '@node-test_realm:localhost': ['read', 'realm-owner'],
+        },
+        onRealmSetup(args) {
+          request = args.request;
+        },
+      });
+
+      test('cannot create a realm on a realm server that has a realm mounted at the origin', async function (assert) {
+        let response = await request
+          .post('/_create-realm')
+          .set('Accept', 'application/vnd.api+json')
+          .set('Content-Type', 'application/json')
+          .set(
+            'Authorization',
+            `Bearer ${createRealmServerJWT(
+              { user: '@mango:localhost', sessionRoom: 'session-room-test' },
+              realmSecretSeed,
+            )}`,
+          )
+          .send(
+            JSON.stringify({
+              data: {
+                type: 'realm',
+                attributes: {
+                  endpoint: 'mango-realm',
+                  name: 'Test Realm',
+                },
+              },
+            }),
+          );
+
+        assert.strictEqual(response.status, 400, 'HTTP 400 status');
+        let error = response.body.errors[0];
+        assert.ok(
+          error.match(
+            /a realm is already mounted at the origin of this server/,
+          ),
+          'error message is correct',
+        );
       });
     },
   );
