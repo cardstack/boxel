@@ -1020,7 +1020,7 @@ module('Integration | operator-mode | card catalog', function (hooks) {
     );
   });
 
-  test(`Show only preserves scroll position of the focused section`, async function (assert) {
+  test(`Show only reorders focused section to top and scrolls back on uncheck`, async function (assert) {
     ctx.setCardInOperatorModeState(`${testRealmURL}grid`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -1032,9 +1032,7 @@ module('Integration | operator-mode | card catalog', function (hooks) {
     await fillIn(`[data-test-search-field]`, 'ma');
     await waitFor('[data-test-search-sheet-show-only]');
 
-    let sections = document.querySelectorAll(
-      '[data-test-search-result-section]',
-    );
+    let sections = document.querySelectorAll('[data-section-sid]');
     assert.ok(sections.length >= 1, 'at least one section is rendered');
 
     let showOnlyCheckbox = document.querySelector(
@@ -1049,62 +1047,48 @@ module('Integration | operator-mode | card catalog', function (hooks) {
     );
     const focusedSectionSid = focusedSection.getAttribute('data-section-sid');
     assert.ok(focusedSectionSid, 'focused section has a section sid');
-    const getFocusedSection = () =>
-      document.querySelector(
-        `[data-section-sid="${focusedSectionSid}"]`,
-      ) as HTMLElement;
 
     let scrollContainer = document.querySelector(
       '.search-sheet-content',
     ) as HTMLElement;
-    const getFocusedSectionTopInContainer = () =>
-      getFocusedSection().getBoundingClientRect().top -
-      scrollContainer.getBoundingClientRect().top;
 
-    // Force the scroll container to be short enough to require scrolling
-    scrollContainer.style.maxHeight = '200px';
-    scrollContainer.scrollTop = 50;
-
-    // Wait for all pending renders (realm indexing callbacks, card loads, etc.)
-    // to complete before we baseline the scroll-anchor position map.
-    // Without this, background MutationObserver-driven capturePositions() calls
-    // can re-baseline the modifier's internal map between our dispatchEvent and
-    // the read of positionBefore, causing a divergence that leads to a ~3px
-    // undershoot in the subsequent scroll-anchor adjustment.
-    await settled();
-
-    // Sync the modifier's position map and read positionBefore in the same
-    // synchronous tick so they are guaranteed to reflect the same layout state.
-    scrollContainer.dispatchEvent(new Event('scroll'));
-    let positionBefore = getFocusedSectionTopInContainer();
-
+    // Check "show only" — focused section should move to top
     await click('[data-test-search-sheet-show-only]');
 
-    let positionAfter = getFocusedSectionTopInContainer();
-    // Use a 10px tolerance instead of 2px: the scroll-anchor adjustment is
-    // sub-pixel-accurate in local environments but CI Chromium instances can
-    // render element positions with slight differences depending on DPI/font
-    // rendering, causing the delta to land just above 2px.  10px is still tight
-    // enough to catch any real regression (section drifting by tens of pixels).
-    assert.ok(
-      Math.abs(positionAfter - positionBefore) <= 10,
-      `focused section position is preserved after checking Show only (before: ${positionBefore}, after: ${positionAfter})`,
+    let firstSection = scrollContainer.querySelector(
+      '[data-section-sid]',
+    ) as HTMLElement;
+    assert.strictEqual(
+      firstSection?.getAttribute('data-section-sid'),
+      focusedSectionSid,
+      'focused section is the first section in the container after checking Show only',
+    );
+    assert.strictEqual(
+      scrollContainer.scrollTop,
+      0,
+      'scroll container is scrolled to top after checking Show only',
     );
 
-    // Uncheck: sections expand, position should still be preserved.
-    // The modifier's handleMutations recaptured positions after the previous
-    // adjustment, so no manual scroll dispatch is needed — but we do need
-    // another settled() call so the re-expanded layout is stable before we
-    // record positionBefore for this second assertion.
-    await settled();
-    scrollContainer.dispatchEvent(new Event('scroll'));
-    positionBefore = getFocusedSectionTopInContainer();
+    // Uncheck "show only" — the previously focused section should be visible
     await click('[data-test-search-sheet-show-only]');
 
-    positionAfter = getFocusedSectionTopInContainer();
+    let restoredSection = scrollContainer.querySelector(
+      `[data-section-sid="${focusedSectionSid}"]`,
+    ) as HTMLElement;
     assert.ok(
-      Math.abs(positionAfter - positionBefore) <= 10,
-      `focused section position is preserved after unchecking Show only (before: ${positionBefore}, after: ${positionAfter})`,
+      restoredSection,
+      'previously focused section is still in the DOM',
+    );
+
+    let containerRect = scrollContainer.getBoundingClientRect();
+    let sectionRect = restoredSection.getBoundingClientRect();
+    assert.ok(
+      sectionRect.top >= containerRect.top - 1,
+      `previously focused section top is at or below container top after unchecking Show only (sectionTop: ${sectionRect.top}, containerTop: ${containerRect.top})`,
+    );
+    assert.ok(
+      sectionRect.top < containerRect.bottom,
+      `previously focused section top is above container bottom after unchecking Show only (sectionTop: ${sectionRect.top}, containerBottom: ${containerRect.bottom})`,
     );
   });
 
