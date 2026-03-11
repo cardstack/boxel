@@ -1,6 +1,6 @@
 import { expect, type Page } from '@playwright/test';
+import type { Credentials } from '../docker/synapse';
 import {
-  Credentials,
   loginUser,
   getAllRoomEvents,
   getJoinedRooms,
@@ -11,7 +11,8 @@ import {
   type UpdateUserOptions,
 } from '../docker/synapse';
 import { realmPassword } from './realm-credentials';
-import { appURL, BasicSQLExecutor, SQLExecutor } from './isolated-realm-server';
+import type { SQLExecutor } from './isolated-realm-server';
+import { appURL, BasicSQLExecutor } from './isolated-realm-server';
 import { APP_BOXEL_MESSAGE_MSGTYPE } from './matrix-constants';
 import { randomUUID } from 'crypto';
 
@@ -370,6 +371,13 @@ export async function showAllCards(page: Page) {
 }
 
 export async function logout(page: Page) {
+  await page
+    .locator('[data-test-room-settled]')
+    .waitFor({ state: 'attached', timeout: 5000 })
+    .catch(() => undefined);
+  await expect(
+    page.locator('[data-test-ai-assistant-message-pending="true"]'),
+  ).toHaveCount(0);
   await page.locator('[data-test-profile-icon-button]').click();
   await page.locator('[data-test-signout-button]').click();
 }

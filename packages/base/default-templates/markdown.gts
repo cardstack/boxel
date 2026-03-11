@@ -2,7 +2,6 @@ import { task } from 'ember-concurrency';
 import GlimmerComponent from '@glimmer/component';
 import { cached, tracked } from '@glimmer/tracking';
 import { htmlSafe } from '@ember/template';
-import { and } from '@cardstack/boxel-ui/helpers';
 
 import {
   hasCodeBlocks,

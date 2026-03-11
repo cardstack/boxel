@@ -490,8 +490,11 @@ export default class MatrixService extends Service {
   }
 
   async logout() {
+    let client = this._client;
     try {
-      await this.flushAll;
+      // Logout should synchronously move the app into a logged-out state.
+      // Waiting on background Matrix flush promises first can leave the
+      // authenticated shell visible for an arbitrarily long time.
       this.clearAuth();
       this.postLoginCompleted = false;
       // Logout is the explicit boundary where we forget persisted workspace UI
@@ -500,7 +503,7 @@ export default class MatrixService extends Service {
       clearLocalStorage(window.localStorage);
       this.reset.resetAll();
       this.unbindEventListeners();
-      await this.client.logout(true);
+      await client?.logout(true);
       // when user logs out we transition them back to an empty stack with the
       // workspace chooser open. this way we don't inadvertently leak private
       // card id's in the URL
@@ -511,6 +514,8 @@ export default class MatrixService extends Service {
             submode: Submodes.Interact,
             workspaceChooserOpened: true,
           } as OperatorModeSerializedState),
+          sid: null,
+          clientSecret: null,
         },
       });
     } catch (e) {

@@ -11,8 +11,6 @@ import type { MonacoEditorOptions } from './monaco';
 
 import type * as _MonacoSDK from 'monaco-editor';
 
-const MODEL_DISPOSAL_GRACE_MS = 100;
-
 export interface MonacoDiffEditorSignature {
   Args: {
     Named: {
@@ -156,21 +154,12 @@ export default class MonacoDiffEditor extends Modifier<MonacoDiffEditorSignature
     } catch {
       // See note above: cleanup should be tolerant of partially-disposed editors.
     }
-    let originalModel = model?.original;
-    let modifiedModel = model?.modified;
-    // Let Monaco observe the editor disposal first so any in-flight diff worker
-    // can see its cancellation token before the backing models disappear.
-    // A short grace period avoids spurious "no diff result available" errors
-    // during fast teardown/update cycles, especially when multiple diff editors
-    // are removed together via "Accept All".
-    setTimeout(() => {
-      if (originalModel && !originalModel.isDisposed()) {
-        originalModel.dispose();
-      }
-      if (modifiedModel && !modifiedModel.isDisposed()) {
-        modifiedModel.dispose();
-      }
-    }, MODEL_DISPOSAL_GRACE_MS);
+    if (model?.original) {
+      this.disposeModelWhenDetached(model.original);
+    }
+    if (model?.modified) {
+      this.disposeModelWhenDetached(model.modified);
+    }
   }
 
   private getLineChanges(editor: _MonacoSDK.editor.IStandaloneDiffEditor) {
@@ -182,5 +171,22 @@ export default class MonacoDiffEditor extends Modifier<MonacoDiffEditorSignature
       // rendering failure and wait for the next diff update.
       return null;
     }
+  }
+
+  private disposeModelWhenDetached(model: _MonacoSDK.editor.ITextModel) {
+    if (model.isDisposed()) {
+      return;
+    }
+    if (!model.isAttachedToEditor()) {
+      model.dispose();
+      return;
+    }
+
+    let disposable = model.onDidChangeAttached(() => {
+      if (!model.isAttachedToEditor() && !model.isDisposed()) {
+        disposable.dispose();
+        model.dispose();
+      }
+    });
   }
 }
