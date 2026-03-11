@@ -2,6 +2,8 @@
 
 DEFAULT_CATALOG_REALM_URL='https://app.boxel.ai/catalog/'
 CATALOG_REALM_URL="${RESOLVED_CATALOG_REALM_URL:-$DEFAULT_CATALOG_REALM_URL}"
+DEFAULT_NEW_CATALOG_REALM_URL='https://app.boxel.ai/catalog-new/'
+NEW_CATALOG_REALM_URL="${RESOLVED_NEW_CATALOG_REALM_URL:-$DEFAULT_NEW_CATALOG_REALM_URL}"
 
 NODE_NO_WARNINGS=1 \
   NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=4096}" \
@@ -24,4 +26,7 @@ NODE_NO_WARNINGS=1 \
   --toUrl="${CATALOG_REALM_URL}" \
   \
   --fromUrl='https://app.boxel.ai/skills/' \
-  --toUrl='https://app.boxel.ai/skills/'
+  --toUrl='https://app.boxel.ai/skills/' \
+  \
+  --fromUrl="${NEW_CATALOG_REALM_URL}" \
+  --toUrl="${NEW_CATALOG_REALM_URL}"

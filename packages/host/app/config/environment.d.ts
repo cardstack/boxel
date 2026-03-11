@@ -17,6 +17,7 @@ declare const config: {
   realmServerURL: string;
   resolvedBaseRealmURL: string;
   resolvedCatalogRealmURL: string | undefined;
+  resolvedNewCatalogRealmURL: string | undefined;
   resolvedSkillsRealmURL: string;
   hostsOwnAssets: boolean;
   realmsServed?: string[];
