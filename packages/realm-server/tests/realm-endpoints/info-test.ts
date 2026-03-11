@@ -10,13 +10,14 @@ import {
   closeServer,
   testRealmInfo,
   createJWT,
+  testRealmURLFor,
 } from '../helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms';
 
 module(`realm-endpoints/${basename(__filename)}`, function () {
   module('Realm-specific Endpoints | QUERY _info', function (hooks) {
-    let realmURL = new URL('http://127.0.0.1:4444/test/');
+    let realmURL = testRealmURLFor('test/');
     let testRealm: Realm;
     let testRealmHttpServer: Server;
     let request: SuperTest<Test>;
