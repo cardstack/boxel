@@ -62,7 +62,7 @@ export class Message implements RoomMessageInterface {
   @tracked _isCanceled?: boolean;
   @tracked hasContinuation?: boolean;
   @tracked continuedInMessage?: Message | null;
-  continuationOf?: string | null;
+  @tracked continuationOf?: string | null;
 
   attachedCardIds?: string[] | null;
   attachedFiles?: FileDef[];
@@ -70,14 +70,14 @@ export class Message implements RoomMessageInterface {
   attachedSkillCardIds?: string[] | null;
   index?: number;
   transactionId?: string | null;
-  errorMessage?: string;
+  @tracked errorMessage?: string;
   clientGeneratedId?: string;
   isDebugMessage?: boolean;
   isCodePatchCorrectness?: boolean;
 
   author: RoomMember;
   status: EventStatus | null;
-  _updated: Date;
+  @tracked _updated: Date;
   eventId: string;
   roomId: string;
   agentId?: string;
