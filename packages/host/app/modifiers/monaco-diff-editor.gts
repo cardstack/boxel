@@ -134,7 +134,7 @@ export default class MonacoDiffEditor extends Modifier<MonacoDiffEditorSignature
 
   private destroyEditor(
     editor: _MonacoSDK.editor.IStandaloneDiffEditor,
-    model: _MonacoSDK.editor.IDiffEditorModel | null,
+    model: _MonacoSDK.editor.IDiffEditorModel | null | undefined,
   ) {
     let hasDisposedModels =
       model?.original?.isDisposed() || model?.modified?.isDisposed();
