@@ -58,6 +58,7 @@ interface ScrollToFocusedSectionSignature {
 
 class ScrollToFocusedSection extends Modifier<ScrollToFocusedSectionSignature> {
   #previousSid: string | null = null;
+  #rafId: number | null = null;
 
   modify(
     element: HTMLElement,
@@ -72,21 +73,31 @@ class ScrollToFocusedSection extends Modifier<ScrollToFocusedSectionSignature> {
     const prevSid = this.#previousSid;
     this.#previousSid = currentSid;
 
+    // Cancel any pending scroll adjustment from a previous modify() call
+    // so rapid toggles don't cause stale callbacks to fire.
+    if (this.#rafId !== null) {
+      cancelAnimationFrame(this.#rafId);
+      this.#rafId = null;
+    }
+
     if (currentSid && currentSid !== prevSid) {
       // Checking "show only" — section moved to top, scroll to top.
       // Defer to next frame so the DOM has re-rendered with the reordered sections;
       // otherwise the browser's scroll anchoring can shift position back.
-      requestAnimationFrame(() => {
+      this.#rafId = requestAnimationFrame(() => {
+        this.#rafId = null;
         element.scrollTop = 0;
       });
     } else if (!currentSid && prevSid && sectionSelector) {
       // Unchecking "show only" — scroll to the previously focused section.
       // Defer so the DOM has re-rendered with all sections restored.
-      requestAnimationFrame(() => {
+      const targetSid = prevSid;
+      this.#rafId = requestAnimationFrame(() => {
+        this.#rafId = null;
         const sectionEl = element.querySelector(
-          `${sectionSelector}[data-section-sid="${prevSid}"]`,
+          `${sectionSelector}[data-section-sid="${targetSid}"]`,
         ) as HTMLElement | null;
-        sectionEl?.scrollIntoView({ block: 'start', behavior: 'instant' });
+        sectionEl?.scrollIntoView({ block: 'start', behavior: 'auto' });
       });
     }
   }

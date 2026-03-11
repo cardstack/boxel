@@ -1052,8 +1052,20 @@ module('Integration | operator-mode | card catalog', function (hooks) {
       '.search-sheet-content',
     ) as HTMLElement;
 
+    // Force a non-zero scrollTop so the post-click scrollTop === 0 assertion
+    // validates an actual scroll change rather than passing vacuously.
+    scrollContainer.scrollTop = scrollContainer.scrollHeight;
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    assert.ok(
+      scrollContainer.scrollTop > 0,
+      `scrollTop is non-zero before checking Show only (scrollTop: ${scrollContainer.scrollTop})`,
+    );
+
     // Check "show only" — focused section should move to top
     await click('[data-test-search-sheet-show-only]');
+    // The modifier defers scrollTop = 0 via requestAnimationFrame, so wait
+    // one frame for the scroll adjustment to complete.
+    await new Promise((resolve) => requestAnimationFrame(resolve));
 
     let firstSection = scrollContainer.querySelector(
       '[data-section-sid]',
@@ -1071,6 +1083,9 @@ module('Integration | operator-mode | card catalog', function (hooks) {
 
     // Uncheck "show only" — the previously focused section should be visible
     await click('[data-test-search-sheet-show-only]');
+    // The modifier defers scrollIntoView via requestAnimationFrame, so wait
+    // one frame for the scroll adjustment to complete before reading rects.
+    await new Promise((resolve) => requestAnimationFrame(resolve));
 
     let restoredSection = scrollContainer.querySelector(
       `[data-section-sid="${focusedSectionSid}"]`,
