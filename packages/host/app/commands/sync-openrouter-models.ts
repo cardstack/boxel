@@ -9,7 +9,6 @@ import HostBaseCommand from '../lib/host-base-command';
 
 import type CardService from '../services/card-service';
 import type NetworkService from '../services/network';
-import type RealmServerService from '../services/realm-server';
 
 const OPENROUTER_MODELS_URL = 'https://openrouter.ai/api/v1/models';
 const BATCH_SIZE = 50;
@@ -133,7 +132,7 @@ function buildCardJson(model: OpenRouterApiModel) {
       },
       meta: {
         adoptsFrom: {
-          module: './openrouter-model',
+          module: '../openrouter-model',
           name: 'OpenRouterModel',
         },
       },
@@ -147,7 +146,6 @@ export default class SyncOpenRouterModelsCommand extends HostBaseCommand<
 > {
   @service declare private cardService: CardService;
   @service declare private network: NetworkService;
-  @service declare private realmServer: RealmServerService;
 
   static actionVerb = 'Sync';
   description = 'Sync OpenRouter model data from the OpenRouter API';
@@ -169,11 +167,8 @@ export default class SyncOpenRouterModelsCommand extends HostBaseCommand<
       realmURL += '/';
     }
 
-    // Step 1: Fetch all models from OpenRouter API
-    let response = await this.realmServer.requestForward({
-      url: OPENROUTER_MODELS_URL,
-      method: 'GET',
-      requestBody: '',
+    // Step 1: Fetch all models from OpenRouter API (public endpoint, no auth needed)
+    let response = await fetch(OPENROUTER_MODELS_URL, {
       headers: {
         'Content-Type': 'application/json',
         'X-Title': 'Boxel OpenRouter Model Sync',
@@ -231,7 +226,7 @@ export default class SyncOpenRouterModelsCommand extends HostBaseCommand<
             },
             meta: {
               adoptsFrom: {
-                module: './openrouter-model',
+                module: '../openrouter-model',
                 name: 'OpenRouterModel',
               },
             },

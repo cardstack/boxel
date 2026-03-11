@@ -137,6 +137,7 @@
     "full-reindex": "./scripts/full-reindex.sh",
     "check-user-pg-connections": "./scripts/check-user-pg-connections.sh",
     "sync-stripe-products": "NODE_NO_WARNINGS=1 PGDATABASE=boxel PGPORT=5435 ts-node --transpileOnly scripts/sync-stripe-products.ts",
+    "sync-openrouter-models": "NODE_NO_WARNINGS=1 PGDATABASE=boxel PGPORT=5435 ts-node --transpileOnly scripts/sync-openrouter-models.ts",
     "stripe": "docker run --rm --add-host=host.docker.internal:host-gateway -it stripe/stripe-cli:latest"
   },
   "volta": {

@@ -16,6 +16,27 @@ const COMMAND_SPECIFIER =
 const REALM_USERNAME = 'openrouter_realm';
 const SYNC_JOB_TIMEOUT_SEC = 5 * 60; // 5 minutes for full model sync
 
+async function main() {
+  let realmURL = process.env.OPENROUTER_REALM_URL;
+  if (!realmURL) {
+    console.error(
+      'OPENROUTER_REALM_URL is required. Example: OPENROUTER_REALM_URL=http://localhost:4201/openrouter/',
+    );
+    process.exit(1);
+  }
+  await enqueueSyncOpenRouterModels({ realmURL });
+  log.info('done');
+  process.exit(0);
+}
+
+// When run directly as a script
+if (require.main === module) {
+  main().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
+}
+
 export async function enqueueSyncOpenRouterModels({
   realmURL,
   priority = systemInitiatedPriority,
