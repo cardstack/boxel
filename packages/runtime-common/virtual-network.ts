@@ -354,7 +354,7 @@ async function buildRequest(url: string, originalRequest: Request) {
 
   let body = null;
   if (['POST', 'PUT', 'PATCH', 'QUERY'].includes(originalRequest.method)) {
-    body = await originalRequest.clone().text();
+    body = new Uint8Array(await originalRequest.clone().arrayBuffer());
   }
 
   return new Request(url, {
