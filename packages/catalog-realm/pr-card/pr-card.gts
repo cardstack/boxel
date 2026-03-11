@@ -19,6 +19,7 @@ import { HeaderSection } from './components/isolated/header-section';
 import { CiSection } from './components/isolated/ci-section';
 import { ReviewSection } from './components/isolated/review-section';
 import { SummarySection } from './components/isolated/summary-section';
+import { MergeableSection } from './components/isolated/mergeable-section';
 
 import {
   renderPrActionLabel,
@@ -196,6 +197,44 @@ class IsolatedTemplate extends Component<typeof PrCard> {
     return !!this.latestPrReviewCommentEventInstance;
   }
 
+  // ── Mergeability ──
+  get isClosed() {
+    let label = this.latestPrActionLabel;
+    return label === 'Closed' || label === 'Merged';
+  }
+
+  get isDraft() {
+    return this.latestPrActionLabel === 'Draft';
+  }
+
+  get mergeBlockReasons(): string[] {
+    if (this.isClosed) return [];
+    let reasons: string[] = [];
+    if (this.isDraft) {
+      reasons.push('This pull request is still a work in progress');
+    }
+    let { ciItems } = this;
+    if (ciItems.some((i) => i.state === 'failure')) {
+      reasons.push('Some checks were not successful');
+    } else if (ciItems.some((i) => i.state === 'in_progress')) {
+      reasons.push('Some checks are still in progress');
+    }
+    let reviewState = this.latestReviewState;
+    if (reviewState === 'changes_requested') {
+      reasons.push('Changes were requested by a reviewer');
+    } else if (reviewState !== 'approved') {
+      reasons.push(
+        'At least 1 approving review is required by reviewers with write access',
+      );
+    }
+    return reasons;
+  }
+
+  get isMergeable() {
+    if (this.isClosed) return false;
+    return this.mergeBlockReasons.length === 0;
+  }
+
   <template>
     <article class='pr-card'>
       <HeaderSection
@@ -228,6 +267,12 @@ class IsolatedTemplate extends Component<typeof PrCard> {
             @hasReview={{this.hasReview}}
           />
         </section>
+
+        <MergeableSection
+          @isMergeable={{this.isMergeable}}
+          @isClosedOrMerged={{this.isClosed}}
+          @blockReasons={{this.mergeBlockReasons}}
+        />
 
         <SummarySection @summary={{this.prBodySummary}} />
       </div>
@@ -446,6 +491,21 @@ class FittedTemplate extends Component<typeof PrCard> {
     return computeLatestReviewState(this.latestReviewByReviewer);
   }
 
+  // ── Mergeability ──
+  get isClosed() {
+    let label = this.latestPrActionLabel;
+    return label === 'Closed' || label === 'Merged';
+  }
+
+  get isMergeBlocked() {
+    if (this.isClosed) return false;
+    if (this.latestPrActionLabel === 'Draft') return true;
+    if (this.ciItems.some((i) => i.state === 'failure')) return true;
+    if (this.ciItems.some((i) => i.state === 'in_progress')) return true;
+    if (this.latestReviewState !== 'approved') return true;
+    return false;
+  }
+
   copyBranchName = async () => {
     let branchName = this.prBranchName?.trim();
     if (!branchName) {
@@ -527,14 +587,29 @@ class FittedTemplate extends Component<typeof PrCard> {
       {{#if (eq this.latestReviewState 'changes_requested')}}
         <div class='review-status-row review-status-row--changes'>
           <span class='review-status-label'>Changes Requested</span>
+          {{#if this.isMergeBlocked}}
+            <Pill class='merge-blocked-pill' @pillBackgroundColor='#d73a49'>
+              <:default><span class='merge-blocked-label'>Merge blocked</span></:default>
+            </Pill>
+          {{/if}}
         </div>
       {{else if (eq this.latestReviewState 'approved')}}
         <div class='review-status-row review-status-row--approved'>
           <span class='review-status-label'>Approved</span>
+          {{#if this.isMergeBlocked}}
+            <Pill class='merge-blocked-pill' @pillBackgroundColor='#d73a49'>
+              <:default><span class='merge-blocked-label'>Merge blocked</span></:default>
+            </Pill>
+          {{/if}}
         </div>
       {{else}}
         <div class='review-status-row review-status-row--pending'>
           <span class='review-status-label'>Pending Review</span>
+          {{#if this.isMergeBlocked}}
+            <Pill class='merge-blocked-pill' @pillBackgroundColor='#d73a49'>
+              <:default><span class='merge-blocked-label'>Merge blocked</span></:default>
+            </Pill>
+          {{/if}}
         </div>
       {{/if}}
 
@@ -729,6 +804,7 @@ class FittedTemplate extends Component<typeof PrCard> {
       .review-status-row {
         display: flex;
         align-items: center;
+        justify-content: space-between;
         padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
         border-bottom: 1px solid var(--border, var(--boxel-border-color));
       }
@@ -761,6 +837,15 @@ class FittedTemplate extends Component<typeof PrCard> {
       }
       .review-status-row--approved .review-status-label {
         color: var(--chart-1, #28a745);
+      }
+      /* ── Merge blocked pill ── */
+      .merge-blocked-pill {
+        --boxel-pill-border-radius: 2em;
+      }
+      .merge-blocked-label {
+        font-size: 10px;
+        font-weight: 600;
+        color: #fff;
       }
       /* ── Summary ── */
       .summary-section {

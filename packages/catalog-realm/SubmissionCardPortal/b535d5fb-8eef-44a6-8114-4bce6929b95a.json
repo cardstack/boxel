@@ -10,12 +10,12 @@
     "attributes": {
       "title": "Submission Card Portal",
       "cardInfo": {
-        "name": null,
+        "name": "Submission Card Portal",
         "notes": null,
         "summary": null,
         "cardThumbnailURL": null
       },
-      "description": null
+      "description": ""
     },
     "relationships": {
       "cardInfo.theme": {
