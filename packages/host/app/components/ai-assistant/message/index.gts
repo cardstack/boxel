@@ -58,6 +58,10 @@ interface Signature {
       element: HTMLElement;
       scrollTo: Element['scrollIntoView'];
     }) => void;
+    unregisterScroller?: (args: {
+      index: number;
+      element: HTMLElement;
+    }) => void;
     errorMessage?: string;
     isDebugMessage?: boolean;
     isPending?: boolean;
@@ -79,6 +83,10 @@ interface MessageScrollerSignature {
         element: HTMLElement;
         scrollTo: Element['scrollIntoView'];
       }) => void;
+      unregisterScroller?: (args: {
+        index: number;
+        element: HTMLElement;
+      }) => void;
     };
   };
 }
@@ -86,11 +94,38 @@ interface MessageScrollerSignature {
 class MessageScroller extends Modifier<MessageScrollerSignature> {
   private hasRegistered = false;
   private observer?: MutationObserver;
+  private element?: HTMLElement;
+  private index?: number;
+  private unregisterScroller?:
+    | MessageScrollerSignature['Args']['Named']['unregisterScroller']
+    | undefined;
+  private hasDestructor = false;
   modify(
     element: HTMLElement,
     _positional: [],
-    { index, registerScroller }: MessageScrollerSignature['Args']['Named'],
+    {
+      index,
+      registerScroller,
+      unregisterScroller,
+    }: MessageScrollerSignature['Args']['Named'],
   ) {
+    if (!this.hasDestructor) {
+      this.hasDestructor = true;
+      registerDestructor(this, () => this.unregister());
+    }
+
+    if (
+      this.element !== element ||
+      this.index !== index ||
+      this.unregisterScroller !== unregisterScroller
+    ) {
+      this.unregister();
+      this.element = element;
+      this.index = index;
+      this.unregisterScroller = unregisterScroller;
+      this.hasRegistered = false;
+    }
+
     if (!this.hasRegistered) {
       this.hasRegistered = true;
       registerScroller({
@@ -101,7 +136,6 @@ class MessageScroller extends Modifier<MessageScrollerSignature> {
     }
 
     this.observer?.disconnect();
-
     this.observer = new MutationObserver(() => {
       registerScroller({
         index,
@@ -110,10 +144,21 @@ class MessageScroller extends Modifier<MessageScrollerSignature> {
       });
     });
     this.observer.observe(element, { childList: true, subtree: true });
+  }
 
-    registerDestructor(this, () => {
-      this.observer?.disconnect();
-    });
+  private unregister() {
+    this.observer?.disconnect();
+    this.observer = undefined;
+    this.hasRegistered = false;
+    if (this.element && this.index != null && this.unregisterScroller) {
+      this.unregisterScroller({
+        index: this.index,
+        element: this.element,
+      });
+    }
+    this.element = undefined;
+    this.index = undefined;
+    this.unregisterScroller = undefined;
   }
 }
 
@@ -133,7 +178,31 @@ interface ScrollPositionSignature {
 // be scrolled "all the way down"
 export const BOTTOM_THRESHOLD = 50;
 class ScrollPosition extends Modifier<ScrollPositionSignature> {
-  private hasRegistered = false;
+  private element?: HTMLElement;
+  private setScrollPosition?:
+    | ScrollPositionSignature['Args']['Named']['setScrollPosition']
+    | undefined;
+  private hasDestructor = false;
+  private detectPosition = throttle(() => {
+    let element = this.element;
+    let setScrollPosition = this.setScrollPosition;
+    if (!element || !setScrollPosition) {
+      return;
+    }
+    let isBottom =
+      Math.abs(
+        element.scrollHeight - element.clientHeight - element.scrollTop,
+      ) <= BOTTOM_THRESHOLD;
+    setScrollPosition({ isBottom });
+  }, 500);
+  private cleanup() {
+    if (this.element) {
+      this.element.removeEventListener('scroll', this.detectPosition);
+    }
+    this.detectPosition.cancel();
+    this.element = undefined;
+    this.setScrollPosition = undefined;
+  }
   modify(
     element: HTMLElement,
     _positional: [],
@@ -142,27 +211,25 @@ class ScrollPosition extends Modifier<ScrollPositionSignature> {
       registerConversationScroller,
     }: ScrollPositionSignature['Args']['Named'],
   ) {
-    if (!this.hasRegistered) {
-      this.hasRegistered = true;
-      registerConversationScroller(
-        () => element.scrollHeight > element.clientHeight,
-        () => {
-          element.scrollTop = element.scrollHeight - element.clientHeight;
-        },
-      );
+    if (!this.hasDestructor) {
+      this.hasDestructor = true;
+      registerDestructor(this, () => this.cleanup());
     }
 
-    let detectPosition = throttle(() => {
-      let isBottom =
-        Math.abs(
-          element.scrollHeight - element.clientHeight - element.scrollTop,
-        ) <= BOTTOM_THRESHOLD;
-      setScrollPosition({ isBottom });
-    }, 500);
-    element.addEventListener('scroll', detectPosition);
-    registerDestructor(this, () =>
-      element.removeEventListener('scroll', detectPosition),
+    this.setScrollPosition = setScrollPosition;
+    registerConversationScroller(
+      () => element.scrollHeight > element.clientHeight,
+      () => {
+        element.scrollTop = element.scrollHeight - element.clientHeight;
+      },
     );
+
+    if (this.element !== element) {
+      this.detectPosition.cancel();
+      this.element?.removeEventListener('scroll', this.detectPosition);
+      this.element = element;
+      element.addEventListener('scroll', this.detectPosition);
+    }
   }
 }
 
@@ -227,7 +294,11 @@ export default class AiAssistantMessage extends Component<Signature> {
         meta-hidden=@hideMeta
         code-patch-correctness=@isCodePatchCorrectness
       }}
-      {{MessageScroller index=@index registerScroller=@registerScroller}}
+      {{MessageScroller
+        index=@index
+        registerScroller=@registerScroller
+        unregisterScroller=@unregisterScroller
+      }}
       data-test-ai-assistant-message
       data-test-ai-assistant-message-pending={{@isPending}}
       ...attributes

@@ -160,7 +160,15 @@ export function createMonacoWaiterManager(): MonacoWaiterManager | null {
 
       const updateDiffReady = () => {
         if (!diffEditor) return;
-        const lineChanges = diffEditor.getLineChanges();
+        let lineChanges: MonacoSDK.editor.ILineChange[] | null | undefined;
+        try {
+          lineChanges = diffEditor.getLineChanges();
+        } catch {
+          // Monaco can fire diff update hooks before its worker has published a
+          // usable diff result. In that transient state, the next update will
+          // carry the real data, so tests should keep waiting instead of failing.
+          return;
+        }
         if (!lineChanges) {
           return;
         }

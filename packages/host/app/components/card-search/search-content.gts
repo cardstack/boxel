@@ -1,7 +1,7 @@
 import { action } from '@ember/object';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
+import { cached, tracked } from '@glimmer/tracking';
 
 import { consume } from 'ember-provide-consume-context';
 
@@ -19,7 +19,6 @@ import {
 
 import { cardTypeDisplayName } from '@cardstack/runtime-common/helpers/card-type-display-name';
 
-import consumeContext from '@cardstack/host/helpers/consume-context';
 import { urlForRealmLookup } from '@cardstack/host/lib/utils';
 import ScrollAnchor from '@cardstack/host/modifiers/scroll-anchor';
 import type { PrerenderedSearchResource } from '@cardstack/host/resources/prerendered-search';
@@ -124,10 +123,11 @@ export default class SearchContent extends Component<Signature> {
   }
 
   @consume(GetCardContextName) declare private getCard: getCard;
-  @tracked private cardResource: ReturnType<getCard> | undefined;
-  private makeCardResource = () => {
-    this.cardResource = this.getCard(this, () => this.searchKeyAsURL);
-  };
+
+  @cached
+  private get cardResource(): ReturnType<getCard> {
+    return this.getCard(this, () => this.searchKeyAsURL);
+  }
 
   private get shouldSkipQuery() {
     // In baseFilter mode (modal), only skip when search key is a URL
@@ -514,7 +514,6 @@ export default class SearchContent extends Component<Signature> {
   }
 
   <template>
-    {{consumeContext this.makeCardResource}}
     <div
       {{ScrollAnchor
         trackSelector='[data-section-sid]'

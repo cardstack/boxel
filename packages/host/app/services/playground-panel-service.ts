@@ -1,3 +1,4 @@
+import { registerDestructor } from '@ember/destroyable';
 import type Owner from '@ember/owner';
 import { schedule } from '@ember/runloop';
 import Service, { service } from '@ember/service';
@@ -16,9 +17,11 @@ import type {
   BaseDef,
   Format,
 } from 'https://cardstack.com/base/card-api';
+import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
 import type CardService from './card-service';
 import type OperatorModeStateService from './operator-mode-state-service';
+import type ResetService from './reset';
 
 import type StoreService from './store';
 
@@ -36,7 +39,10 @@ export default class PlaygroundPanelService extends Service {
   @service declare private cardService: CardService;
   @service declare private store: StoreService;
   @service declare private operatorModeStateService: OperatorModeStateService;
-  playgroundSelections: Record<string, PlaygroundSelection>; // TrackedObject<moduleId, PlaygroundSelection>
+  @service declare private reset: ResetService;
+  declare playgroundSelections: Record<string, PlaygroundSelection>; // TrackedObject<moduleId, PlaygroundSelection>
+  private cachedAPI?: typeof CardAPI;
+  private pendingCardIdSubscriptions = new Map<string, CardDef>();
   private selectionsForNewInstances = new Map<
     string,
     {
@@ -49,8 +55,16 @@ export default class PlaygroundPanelService extends Service {
   private storageSnapshot: string | null = null;
   constructor(owner: Owner) {
     super(owner);
-    let selections = window.localStorage.getItem(PlaygroundSelections);
+    this.resetState();
+    this.reset.register(this);
+    registerDestructor(this, () => {
+      this.clearPendingCardIdSubscriptions();
+    });
+  }
 
+  resetState() {
+    this.clearPendingCardIdSubscriptions();
+    let selections = window.localStorage.getItem(PlaygroundSelections);
     this.storageSnapshot = selections;
     this.playgroundSelections = new TrackedObject(
       selections?.length ? JSON.parse(selections) : {},
@@ -114,12 +128,17 @@ export default class PlaygroundPanelService extends Service {
         this.persistSelections(moduleId, instance.id, format, fieldIndex);
       } else {
         let api = await this.cardService.getAPI();
+        this.cachedAPI = api;
         this.selectionsForNewInstances.set(instance[localId], {
           moduleId,
           format,
           fieldIndex,
           url: this.operatorModeStateService.codePathString,
         });
+        if (this.pendingCardIdSubscriptions.has(instance[localId])) {
+          return;
+        }
+        this.pendingCardIdSubscriptions.set(instance[localId], instance);
         api.subscribeToChanges(instance, this.listenForCardId);
       }
     },
@@ -137,7 +156,9 @@ export default class PlaygroundPanelService extends Service {
       this.selectionsForNewInstances.delete(instance[localId]);
       schedule('afterRender', () => this.setStorage());
     }
-    let api = await this.cardService.getAPI();
+    this.pendingCardIdSubscriptions.delete(instance[localId]);
+    let api = this.cachedAPI ?? (await this.cardService.getAPI());
+    this.cachedAPI = api;
     api.unsubscribeFromChanges(instance, this.listenForCardId);
   });
 
@@ -148,6 +169,7 @@ export default class PlaygroundPanelService extends Service {
   };
 
   resetSelections = () => {
+    this.clearPendingCardIdSubscriptions();
     this.playgroundSelections = new TrackedObject({});
     this.selectionsForNewInstances.clear();
     window.localStorage.removeItem(PlaygroundSelections);
@@ -189,6 +211,16 @@ export default class PlaygroundPanelService extends Service {
     this.playgroundSelections = new TrackedObject(
       latest?.length ? JSON.parse(latest) : {},
     );
+  }
+
+  private clearPendingCardIdSubscriptions() {
+    if (this.cachedAPI) {
+      for (let instance of this.pendingCardIdSubscriptions.values()) {
+        this.cachedAPI.unsubscribeFromChanges(instance, this.listenForCardId);
+      }
+    }
+    this.pendingCardIdSubscriptions.clear();
+    this.selectionsForNewInstances.clear();
   }
 }
 

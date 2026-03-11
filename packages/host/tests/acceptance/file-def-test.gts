@@ -37,19 +37,16 @@ module('Acceptance | file def', function (hooks) {
   let waitForRealmEvent = (matches: (event: RealmEventContent) => boolean) => {
     let realmEventDeferred = new Deferred<RealmEventContent>();
     let messageService = getService('message-service');
-    let callbacks = messageService.listenerCallbacks.get(testRealmURL)!;
-    let callback = (event: RealmEventContent) => {
-      if (!matches(event)) {
-        return;
-      }
-      let index = callbacks.indexOf(callback);
-      if (index !== -1) {
-        callbacks.splice(index, 1);
-      }
-      realmEventDeferred.fulfill(event);
-    };
-
-    callbacks.push(callback);
+    let unsubscribe = messageService.subscribe(
+      testRealmURL,
+      (event: RealmEventContent) => {
+        if (!matches(event)) {
+          return;
+        }
+        unsubscribe();
+        realmEventDeferred.fulfill(event);
+      },
+    );
     return realmEventDeferred;
   };
 

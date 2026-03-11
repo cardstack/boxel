@@ -1,10 +1,12 @@
+import { registerDestructor } from '@ember/destroyable';
+import type Owner from '@ember/owner';
 import { inject as service } from '@ember/service';
 
 import Modifier from 'ember-modifier';
 
 import type ScrollPositionService from '@cardstack/host/services/scroll-position-service';
 
-import type { NamedArgs, PositionalArgs } from 'ember-modifier';
+import type { ArgsFor, NamedArgs, PositionalArgs } from 'ember-modifier';
 
 interface ScrollIntoViewModifierArgs {
   Positional: [boolean];
@@ -20,7 +22,17 @@ export default class ScrollIntoViewModifier extends Modifier<ScrollIntoViewModif
   @service declare scrollPositionService: ScrollPositionService;
 
   element!: Element;
+  #intersectionObserver?: IntersectionObserver;
   #lastRunScrolled = false;
+
+  constructor(owner: Owner, args: ArgsFor<ScrollIntoViewModifierSignature>) {
+    super(owner, args);
+    registerDestructor(this, () => {
+      this.#intersectionObserver?.disconnect();
+      this.#intersectionObserver = undefined;
+      this.element = undefined as never;
+    });
+  }
 
   async modify(
     element: Element,
@@ -40,6 +52,8 @@ export default class ScrollIntoViewModifier extends Modifier<ScrollIntoViewModif
       this.#lastRunScrolled = true;
     } else {
       this.#lastRunScrolled = false;
+      this.#intersectionObserver?.disconnect();
+      this.#intersectionObserver = undefined;
     }
   }
 
@@ -47,8 +61,12 @@ export default class ScrollIntoViewModifier extends Modifier<ScrollIntoViewModif
     let element = this.element;
 
     return new Promise((resolve) => {
-      let intersectionObserver = new IntersectionObserver(function (entries) {
-        intersectionObserver.unobserve(element);
+      this.#intersectionObserver?.disconnect();
+      let intersectionObserver = new IntersectionObserver((entries) => {
+        intersectionObserver.disconnect();
+        if (this.#intersectionObserver === intersectionObserver) {
+          this.#intersectionObserver = undefined;
+        }
 
         if (!entries[0].isIntersecting) {
           element.scrollIntoView({ block: 'center' });
@@ -56,6 +74,7 @@ export default class ScrollIntoViewModifier extends Modifier<ScrollIntoViewModif
 
         resolve(void 0);
       });
+      this.#intersectionObserver = intersectionObserver;
 
       intersectionObserver.observe(element);
     });
