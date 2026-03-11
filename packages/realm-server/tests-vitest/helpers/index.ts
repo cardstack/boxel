@@ -1691,6 +1691,62 @@ export async function insertJob(
   };
 }
 
+type MatrixRoomRequestContext = {
+  request: { post(path: string): Test };
+  serverRequest?: SuperTest<Test>;
+};
+
+export async function createMatrixRoomSession(
+  realmSetup: MatrixRoomRequestContext,
+): Promise<{
+  matrixClient: MatrixClient;
+  getMessagesSince: (since: number) => Promise<MatrixEvent[]>;
+}> {
+  let matrixClient = makeTestMatrixClient({
+    matrixURL: realmServerTestMatrix.url,
+    username: 'node-test_realm',
+    seed: realmSecretSeed,
+  });
+
+  await matrixClient.login();
+
+  let openIdToken = await matrixClient.getOpenIdToken();
+  if (!openIdToken) {
+    throw new Error('matrixClient did not return an OpenID token');
+  }
+
+  let response = await (realmSetup.serverRequest ?? realmSetup.request)
+    .post('/_server-session')
+    .send(JSON.stringify(openIdToken))
+    .set('Accept', 'application/json')
+    .set('Content-Type', 'application/json');
+
+  let jwt = response.header['authorization'];
+  if (!jwt) {
+    throw new Error('Realm server did not send Authorization header');
+  }
+
+  let payload = JSON.parse(
+    Buffer.from(jwt.split('.')[1], 'base64').toString('utf8'),
+  ) as { sessionRoom: string };
+  console.log('Session room', payload.sessionRoom);
+
+  let { joined_rooms: rooms } = await matrixClient.getJoinedRooms();
+  if (!rooms.includes(payload.sessionRoom)) {
+    await matrixClient.joinRoom(payload.sessionRoom);
+  }
+
+  return {
+    matrixClient,
+    getMessagesSince: async function (since: number) {
+      let allMessages = await matrixClient.roomMessages(payload.sessionRoom);
+      // Allow same-ms clock values between the test process and matrix so we don't
+      // miss events that are emitted immediately after we record the start time.
+      return allMessages.filter((m) => m.origin_server_ts >= since);
+    },
+  };
+}
+
 export function setupMatrixRoom(
   hooks: NestedHooks,
   getRealmSetup: () => {
@@ -1702,59 +1758,26 @@ export function setupMatrixRoom(
     dbAdapter: PgAdapter;
   },
 ) {
-  let matrixClient = makeTestMatrixClient({
-    matrixURL: realmServerTestMatrix.url,
-    username: 'node-test_realm',
-    seed: realmSecretSeed,
-  });
-
-  let testAuthRoomId: string | undefined;
+  let matrixRoom:
+    | Awaited<ReturnType<typeof createMatrixRoomSession>>
+    | undefined;
 
   hooks.beforeEach(async function () {
-    await matrixClient.login();
-
-    let realmSetup = getRealmSetup();
-    let openIdToken = await matrixClient.getOpenIdToken();
-    if (!openIdToken) {
-      throw new Error('matrixClient did not return an OpenID token');
-    }
-
-    let response = await (realmSetup.serverRequest ?? realmSetup.request)
-      .post('/_server-session')
-      .send(JSON.stringify(openIdToken))
-      .set('Accept', 'application/json')
-      .set('Content-Type', 'application/json');
-
-    let jwt = response.header['authorization'];
-    if (!jwt) {
-      throw new Error('Realm server did not send Authorization header');
-    }
-
-    let payload = JSON.parse(
-      Buffer.from(jwt.split('.')[1], 'base64').toString('utf8'),
-    ) as { sessionRoom: string };
-    console.log('Session room', payload.sessionRoom);
-
-    let { joined_rooms: rooms } = await matrixClient.getJoinedRooms();
-
-    if (!rooms.includes(payload.sessionRoom)) {
-      await matrixClient.joinRoom(payload.sessionRoom);
-    }
-
-    testAuthRoomId = payload.sessionRoom;
+    matrixRoom = await createMatrixRoomSession(getRealmSetup());
   });
 
   return {
-    matrixClient,
+    get matrixClient() {
+      if (!matrixRoom) {
+        throw new Error('setupMatrixRoom used before beforeEach completed');
+      }
+      return matrixRoom.matrixClient;
+    },
     getMessagesSince: async function (since: number) {
-      let allMessages = await matrixClient.roomMessages(testAuthRoomId!);
-      // Allow same-ms clock values between the test process and matrix so we don't
-      // miss events that are emitted immediately after we record the start time.
-      let messagesAfterSentinel = allMessages.filter(
-        (m) => m.origin_server_ts >= since,
-      );
-
-      return messagesAfterSentinel;
+      if (!matrixRoom) {
+        throw new Error('setupMatrixRoom used before beforeEach completed');
+      }
+      return await matrixRoom.getMessagesSince(since);
     },
   };
 }
