@@ -1100,6 +1100,18 @@ export default class MatrixService extends Service {
     return await this.client.uploadFiles(files);
   }
 
+  async prefetchFileContent(file: FileDef) {
+    return await this.client.prefetchFileContent(file);
+  }
+
+  async prefetchLocalFileContent(
+    file: FileDef,
+    bytes: Uint8Array,
+    contentType: string,
+  ) {
+    return await this.client.prefetchLocalFileContent(file, bytes, contentType);
+  }
+
   async fetchMatrixHostedFile(matrixFileUrl: string) {
     let response = await fetch(matrixFileUrl, {
       headers: {
@@ -1169,19 +1181,31 @@ export default class MatrixService extends Service {
     attachedFiles: ReturnType<FileDef['serialize']>[];
   }> {
     let cardFileDefs = await this.uploadCards(attachedCards);
-    // Skip uploading files that were already eagerly uploaded (url is already
-    // set by startFileUpload); only upload files that don't yet have a url.
-    let filesToUpload = attachedFiles.filter((f) => !f.url);
+    // Skip files that were already eagerly uploaded by startFileUpload (url
+    // differs from sourceUrl, meaning they already point to Matrix media).
+    let filesToUpload = attachedFiles.filter(
+      (f) => !f.url || f.url === f.sourceUrl,
+    );
+    let uploadedBySourceUrl = new Map<string, FileDef>();
     if (filesToUpload.length > 0) {
-      await this.uploadFiles(filesToUpload);
+      let uploaded = await this.uploadFiles(filesToUpload);
+      for (let file of uploaded) {
+        if (file.sourceUrl) {
+          uploadedBySourceUrl.set(file.sourceUrl, file);
+        }
+      }
     }
-    // Preserve original order; freshly uploaded files now have url set on them.
-    let uploadedFileDefs = attachedFiles;
+    let filesForMessage = attachedFiles.map((file) => {
+      let replacement = file.sourceUrl
+        ? uploadedBySourceUrl.get(file.sourceUrl)
+        : undefined;
+      return replacement ?? file;
+    });
 
     return {
       context,
       attachedCards: cardFileDefs.map((file: FileDef) => file.serialize()),
-      attachedFiles: uploadedFileDefs.map((file: FileDef) => file.serialize()),
+      attachedFiles: filesForMessage.map((file: FileDef) => file.serialize()),
     };
   }
 
@@ -1643,6 +1667,7 @@ export default class MatrixService extends Service {
       model,
       toolsSupported: modelConfiguration?.toolsSupported,
       reasoningEffort: modelConfiguration?.reasoningEffort,
+      inputModalities: modelConfiguration?.inputModalities,
     });
   }
 

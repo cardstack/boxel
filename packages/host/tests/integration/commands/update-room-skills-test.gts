@@ -42,6 +42,8 @@ class StubRealmService extends RealmService {
   }
 }
 
+const decoder = new TextDecoder();
+
 module('Integration | Command | update-room-skills', function (hooks) {
   setupRenderingTest(hooks);
   setupWindowMock(hooks);
@@ -219,7 +221,7 @@ export class DoThing extends Command {
       );
       assert.strictEqual(
         [...uploadedContents.values()]
-          .map((s) => JSON.parse(s as any))
+          .map((s) => JSON.parse(decoder.decode(s)))
           .filter((json) => json.data?.type === 'card').length,
         1,
         'one skill card uploaded',
@@ -344,7 +346,7 @@ export class DoThing extends Command {
         'skill plus one command definitions were uploaded',
       );
       let commandDefJson = JSON.parse(
-        [...uploadedContents.values()][1] as unknown as string,
+        decoder.decode([...uploadedContents.values()][1]),
       );
       assert.deepEqual(
         commandDefJson.codeRef.name,

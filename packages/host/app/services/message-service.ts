@@ -70,7 +70,8 @@ export default class MessageService extends Service {
     if (!realmURL) {
       return;
     }
-    this.listenerCallbacks.get(realmURL)?.forEach((cb) => {
+    let callbacks = this.listenerCallbacks.get(realmURL);
+    callbacks?.forEach((cb) => {
       cb(event);
     });
   }

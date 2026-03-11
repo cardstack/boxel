@@ -33,10 +33,13 @@ import { and, eq, not } from '@cardstack/boxel-ui/helpers';
 
 import type { ResolvedCodeRef } from '@cardstack/runtime-common';
 import {
+  baseFileRef,
+  formattedError,
   type getCard,
   GetCardContextName,
   internalKeyFor,
   isCardInstance,
+  resolveFileDefCodeRef,
 } from '@cardstack/runtime-common';
 import {
   DEFAULT_LLM_LIST,
@@ -54,16 +57,21 @@ import type { RoomResource } from '@cardstack/host/resources/room';
 import type AiAssistantPanelService from '@cardstack/host/services/ai-assistant-panel-service';
 import type CardService from '@cardstack/host/services/card-service';
 import type CommandService from '@cardstack/host/services/command-service';
+import type FileUploadService from '@cardstack/host/services/file-upload';
+import type LoaderService from '@cardstack/host/services/loader-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type { MonacoSDK } from '@cardstack/host/services/monaco-service';
+import type NetworkService from '@cardstack/host/services/network';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type PlaygroundPanelService from '@cardstack/host/services/playground-panel-service';
 import type SpecPanelService from '@cardstack/host/services/spec-panel-service';
 import type StoreService from '@cardstack/host/services/store';
+import { FileDefAttributesExtractor } from '@cardstack/host/utils/file-def-attributes-extractor';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type { FileDef } from 'https://cardstack.com/base/file-api';
 
+import { errorJsonApiToErrorEntry } from '../../lib/window-error-handler';
 import AiAssistantActionBar from '../ai-assistant/action-bar';
 import AiAssistantAttachmentPicker from '../ai-assistant/attachment-picker';
 import AiAssistantChatInput from '../ai-assistant/chat-input';
@@ -81,6 +89,8 @@ import RoomMessage from './room-message';
 import type RoomData from '../../lib/matrix-classes/room';
 import type { RoomSkill } from '../../resources/room';
 import type { MatrixEvent } from 'matrix-js-sdk';
+
+const LOCAL_SOURCE_URL_PREFIX = 'boxel-local://';
 
 interface Signature {
   Element: HTMLElement;
@@ -204,12 +214,14 @@ export default class Room extends Component<Signature> {
             @cardIdsToAttach={{this.cardIdsToAttach}}
             @chooseCard={{this.chooseCard}}
             @removeCard={{this.removeCard}}
-            @chooseFile={{this.chooseFile}}
+            @chooseFile={{perform this.chooseFileTask}}
+            @chooseLocalFile={{perform this.chooseLocalFileTask}}
             @removeFile={{this.removeFile}}
             @autoAttachedFiles={{this.autoAttachedFiles}}
             @filesToAttach={{this.filesToAttach}}
             @fileUploadStates={{this.fileUploadStates}}
             @retryFileUpload={{this.retryFileUpload}}
+            @inputModalities={{@roomResource.activeInputModalities}}
             @autoAttachedCardTooltipMessage={{if
               (eq this.operatorModeStateService.state.submode Submodes.Code)
               'Current card is shared automatically'
@@ -231,12 +243,29 @@ export default class Room extends Component<Signature> {
                 @scrollToFirstUnread={{this.scrollToFirstUnread}}
               />
             {{/if}}
-            <div class='chat-input-area' data-test-chat-input-area>
+            <div
+              class='chat-input-area'
+              data-test-chat-input-area
+              data-drop-zone-active={{this.isDropZoneActive}}
+              {{on 'dragover' this.handleChatInputDragOver}}
+              {{on 'dragenter' this.handleChatInputDragEnter}}
+              {{on 'dragleave' this.handleChatInputDragLeave}}
+              {{on 'drop' this.handleChatInputDrop}}
+            >
+              {{#if this.isDropZoneActive}}
+                <div
+                  class='chat-input-drop-hint'
+                  data-test-chat-input-drop-hint
+                >
+                  Drop file to attach
+                </div>
+              {{/if}}
               <AiAssistantChatInput
                 @attachButton={{AttachButton}}
                 @value={{this.messageToSend}}
                 @onInput={{this.setMessage}}
                 @onSend={{this.sendMessage}}
+                @onPaste={{this.handleChatInputPaste}}
                 @canSend={{this.canSend}}
                 data-test-message-field={{@roomId}}
               />
@@ -347,6 +376,26 @@ export default class Room extends Component<Signature> {
 
         timeline-scope: --chat-input-scroll-timeline;
       }
+      .chat-input-area[data-drop-zone-active='true'] {
+        box-shadow: inset 0 0 0 2px var(--boxel-dark);
+        background-color: #e8f0ff;
+      }
+      .chat-input-drop-hint {
+        position: absolute;
+        top: var(--boxel-sp-xs);
+        right: var(--boxel-sp-xs);
+        bottom: var(--boxel-sp-xs);
+        left: var(--boxel-sp-xs);
+        z-index: 3;
+        pointer-events: none;
+        color: var(--boxel-light-100);
+        font: 500 var(--boxel-font);
+        background-color: var(--boxel-darker-hover);
+        border-radius: var(--boxel-border-radius-lg);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+      }
       .chat-input-area__bottom-actions {
         display: flex;
         align-items: center;
@@ -450,11 +499,16 @@ export default class Room extends Component<Signature> {
     | undefined;
   @tracked lastCanceledActionMessageId: string | undefined;
   @tracked acceptingAllLabel: string | undefined;
+  @tracked private isDropZoneActive = false;
+  private dropZoneDragDepth = 0;
 
   @service declare private store: StoreService;
   @service declare private cardService: CardService;
   @service declare private commandService: CommandService;
+  @service('file-upload') declare private fileUpload: FileUploadService;
+  @service('loader-service') declare private loaderService: LoaderService;
   @service declare private matrixService: MatrixService;
+  @service declare private network: NetworkService;
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private playgroundPanelService: PlaygroundPanelService;
   @service declare private specPanelService: SpecPanelService;
@@ -1103,8 +1157,7 @@ export default class Room extends Component<Signature> {
     );
   }
 
-  @action
-  private chooseFile(file: FileDef) {
+  private chooseFileTask = enqueueTask(async (file: FileDef) => {
     // handle the case where auto-attached file pill is clicked
     if (this.isAutoAttachedFile(file)) {
       this.removeAutoAttachedFile(file.sourceUrl ?? undefined);
@@ -1112,9 +1165,127 @@ export default class Room extends Component<Signature> {
 
     let files = this.filesToAttach;
     if (!files?.find((f) => f.sourceUrl === file.sourceUrl)) {
+      await this.matrixService.prefetchFileContent(file);
       this.matrixService.setFilesToSend(this.args.roomId, [...files, file]);
-      this.startFileUpload(file);
+      this.startFileUploadTask.perform(file);
     }
+  });
+
+  private chooseLocalFileTask = task(async () => {
+    let localFile = await this.fileUpload.pickLocalFile();
+    if (!localFile) {
+      return;
+    }
+    await this.attachLocalFile(localFile);
+  });
+
+  @action
+  private handleChatInputDragOver(event: DragEvent) {
+    if (!this.isFileDrag(event.dataTransfer)) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    this.isDropZoneActive = true;
+    if (event.dataTransfer) {
+      event.dataTransfer.dropEffect = 'copy';
+    }
+  }
+
+  @action
+  private handleChatInputDragEnter(event: DragEvent) {
+    if (!this.isFileDrag(event.dataTransfer)) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    this.dropZoneDragDepth++;
+    this.isDropZoneActive = true;
+  }
+
+  @action
+  private handleChatInputDragLeave(event: DragEvent) {
+    if (!this.isFileDrag(event.dataTransfer) && !this.isDropZoneActive) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    this.dropZoneDragDepth = Math.max(0, this.dropZoneDragDepth - 1);
+    if (this.dropZoneDragDepth === 0) {
+      this.isDropZoneActive = false;
+    }
+  }
+
+  @action
+  private handleChatInputDrop(event: DragEvent) {
+    let files = Array.from(event.dataTransfer?.files ?? []);
+    if (!files.length) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    this.dropZoneDragDepth = 0;
+    this.isDropZoneActive = false;
+    this.attachLocalFilesTask.perform(files);
+  }
+
+  @action
+  private handleChatInputPaste(event: ClipboardEvent) {
+    let files = this.getClipboardFiles(event.clipboardData);
+    if (!files.length) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    this.attachLocalFilesTask.perform(files);
+  }
+
+  private attachLocalFilesTask = enqueueTask(async (files: File[]) => {
+    for (let file of files) {
+      await this.attachLocalFile(file);
+    }
+  });
+
+  private getClipboardFiles(clipboardData: DataTransfer | null): File[] {
+    if (!clipboardData) {
+      return [];
+    }
+
+    let files = Array.from(clipboardData.files ?? []);
+    if (files.length) {
+      return files;
+    }
+
+    let itemFiles: File[] = [];
+    for (let item of Array.from(clipboardData.items ?? [])) {
+      if (item.kind !== 'file') {
+        continue;
+      }
+      let file = item.getAsFile();
+      if (file) {
+        itemFiles.push(file);
+      }
+    }
+
+    return itemFiles;
+  }
+
+  private isFileDrag(dataTransfer: DataTransfer | null | undefined): boolean {
+    if (!dataTransfer) {
+      return false;
+    }
+    return Array.from(dataTransfer.types ?? []).includes('Files');
+  }
+
+  private async attachLocalFile(localFile: File) {
+    let bytes = new Uint8Array(await localFile.arrayBuffer());
+    let file = await this.createLocalFileDef(localFile, bytes);
+    let files = this.filesToAttach;
+    let contentType =
+      file.contentType || localFile.type || 'application/octet-stream';
+    await this.matrixService.prefetchLocalFileContent(file, bytes, contentType);
+    this.matrixService.setFilesToSend(this.args.roomId, [...files, file]);
+    this.startFileUploadTask.perform(file);
   }
 
   @action
@@ -1152,15 +1323,21 @@ export default class Room extends Component<Signature> {
     }
   }
 
-  private async startFileUpload(file: FileDef) {
+  private startFileUploadTask = task(async (file: FileDef) => {
     let sourceUrl = file.sourceUrl;
     if (!sourceUrl) return;
     this._fileUploadStates.set(sourceUrl, { status: 'uploading' });
     try {
-      await this.matrixService.uploadFiles([file]);
+      let [uploadedFile] = await this.matrixService.uploadFiles([file]);
+      let uploadedOrOriginal = uploadedFile ?? file;
       // Only update state if the file is still attached (guards against
       // race where file is removed while upload was in-flight).
-      if (this.filesToAttach?.find((f) => f.sourceUrl === sourceUrl)) {
+      let files = this.filesToAttach;
+      if (files?.find((f) => f.sourceUrl === sourceUrl)) {
+        let nextFiles = files.map((f) =>
+          f.sourceUrl === sourceUrl ? uploadedOrOriginal : f,
+        );
+        this.matrixService.setFilesToSend(this.args.roomId, nextFiles);
         this._fileUploadStates.set(sourceUrl, { status: 'complete' });
       }
     } catch (e: any) {
@@ -1173,7 +1350,7 @@ export default class Room extends Component<Signature> {
         });
       }
     }
-  }
+  });
 
   private get hasFileUploadIssues() {
     for (let [, state] of this._fileUploadStates) {
@@ -1186,7 +1363,81 @@ export default class Room extends Component<Signature> {
 
   @action
   private retryFileUpload(file: FileDef) {
-    this.startFileUpload(file);
+    this.startFileUploadTask.perform(file);
+  }
+
+  private buildLocalSourceUrl(fileName: string): string {
+    return `${LOCAL_SOURCE_URL_PREFIX}${uuidv4()}/${encodeURIComponent(fileName)}`;
+  }
+
+  private async createLocalFileDef(
+    localFile: File,
+    bytes: Uint8Array,
+  ): Promise<FileDef> {
+    let sourceUrl = this.buildLocalSourceUrl(localFile.name);
+    let fileDefCodeRef = resolveFileDefCodeRef(new URL(sourceUrl));
+    let extractor = new FileDefAttributesExtractor({
+      loaderService: this.loaderService,
+      network: this.network,
+      fileURL: sourceUrl,
+      fileDefCodeRef,
+      baseFileDefCodeRef: baseFileRef,
+      contentHash: undefined,
+      contentSize: bytes.byteLength,
+      fileBytes: bytes,
+      buildError: (errorUrl, error) => {
+        let errorJSONAPI = formattedError(errorUrl, error).errors[0];
+        return errorJsonApiToErrorEntry(errorJSONAPI);
+      },
+    });
+    let extracted = await extractor.extract();
+    if (extracted.status === 'error' || !extracted.resource) {
+      throw new Error(
+        extracted.error?.error?.message ??
+          `Failed to extract file metadata for ${localFile.name}`,
+      );
+    }
+
+    let classCodeRef =
+      extracted.resource.meta.adoptsFrom &&
+      'module' in extracted.resource.meta.adoptsFrom &&
+      'name' in extracted.resource.meta.adoptsFrom
+        ? extracted.resource.meta.adoptsFrom
+        : fileDefCodeRef;
+    let fileDefModule = await this.loaderService.loader.import<
+      Record<string, unknown>
+    >(classCodeRef.module);
+    let FileDefKlass = fileDefModule[classCodeRef.name] as
+      | (new (attributes: Record<string, unknown>) => FileDef)
+      | undefined;
+    let baseAttributes = extracted.resource.attributes as Record<
+      string,
+      unknown
+    >;
+    let attributes: Record<string, unknown> = {
+      ...baseAttributes,
+      sourceUrl,
+      url: sourceUrl,
+      name: (baseAttributes.name as string | undefined) ?? localFile.name,
+      contentSize:
+        (baseAttributes.contentSize as number | undefined) ?? bytes.byteLength,
+    };
+
+    if (!FileDefKlass) {
+      return this.matrixService.fileAPI.createFileDef({
+        sourceUrl,
+        url: sourceUrl,
+        name: localFile.name,
+        contentType:
+          (attributes.contentType as string | undefined) ??
+          localFile.type ??
+          'application/octet-stream',
+        contentHash: attributes.contentHash as string | undefined,
+        contentSize: attributes.contentSize as number | undefined,
+      });
+    }
+
+    return new FileDefKlass(attributes);
   }
 
   private doSendMessage = enqueueTask(

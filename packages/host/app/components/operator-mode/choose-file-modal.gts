@@ -8,6 +8,8 @@ import Component from '@glimmer/component';
 
 import { tracked } from '@glimmer/tracking';
 
+import { task } from 'ember-concurrency';
+import perform from 'ember-concurrency/helpers/perform';
 import onKeyMod from 'ember-keyboard/modifiers/on-key';
 
 import {
@@ -54,6 +56,7 @@ export default class ChooseFileModal extends Component<Signature> {
   @tracked acceptTypes?: string;
   @tracked currentUpload?: FileUploadTask;
   @tracked isDropZoneActive = false;
+  @tracked private fileTreeRenderNonce = 0;
   private dropZoneDragDepth = 0;
 
   @service declare private operatorModeStateService: OperatorModeStateService;
@@ -97,6 +100,7 @@ export default class ChooseFileModal extends Component<Signature> {
         r.url.toString() === this.operatorModeStateService.realmURL?.toString(),
     );
     this.selectedRealm = defaultRealm ?? this.selectedRealm;
+    this.fileTreeRenderNonce++;
 
     if (opts?.fileType) {
       try {
@@ -117,8 +121,7 @@ export default class ChooseFileModal extends Component<Signature> {
     }
   }
 
-  @action
-  private async pick(path: LocalPath | undefined) {
+  private pickTask = task(async (path: LocalPath | undefined) => {
     try {
       if (this.deferred && this.selectedRealm && path) {
         let fileURL = new RealmPaths(this.selectedRealm.url).fileURL(path);
@@ -138,7 +141,7 @@ export default class ChooseFileModal extends Component<Signature> {
     } finally {
       this.resetState();
     }
-  }
+  });
 
   @action
   private triggerUpload() {
@@ -232,6 +235,10 @@ export default class ChooseFileModal extends Component<Signature> {
     return `Drop file to upload to ${this.selectedRealm.info.name}`;
   }
 
+  private get fileTreeRenderKey(): string {
+    return `${this.fileTreeRenderNonce}:${this.selectedRealm.url.href}`;
+  }
+
   private resetState() {
     this.selectedRealm = this.knownRealms[0];
     this.selectedFile = undefined;
@@ -263,7 +270,7 @@ export default class ChooseFileModal extends Component<Signature> {
 
   @action private handleKeydown(event: KeyboardEvent) {
     if (event.key === 'Escape') {
-      this.pick(undefined);
+      this.pickTask.perform(undefined);
     }
   }
 
@@ -360,7 +367,7 @@ export default class ChooseFileModal extends Component<Signature> {
         font: 500 var(--boxel-font-sm);
       }
       .choose-file {
-        overflow: hidden;
+        overflow: visible;
       }
       .choose-file :deep(.content) {
         height: 267px;
@@ -369,6 +376,13 @@ export default class ChooseFileModal extends Component<Signature> {
         border: var(--boxel-border);
         border-radius: var(--boxel-border-radius);
         padding: var(--boxel-sp-xxs);
+      }
+      .choose-file :deep(.content:focus-within) {
+        outline: 2px solid var(--ring, var(--boxel-highlight-hover));
+        outline-offset: 2px;
+      }
+      .choose-file :deep(.content [data-file-tree-nav]:focus-visible) {
+        outline: none;
       }
       :deep(.dialog-box__footer) {
         height: auto;
@@ -404,11 +418,17 @@ export default class ChooseFileModal extends Component<Signature> {
         font: var(--boxel-font-xs);
         overflow-wrap: anywhere;
       }
+
+      /* Ensure keyboard focus indicators are always visible throughout the modal */
+      :deep(:focus-visible) {
+        outline: 2px solid var(--boxel-highlight);
+        outline-offset: 2px;
+      }
     </style>
     {{#if this.deferred}}
       <ModalContainer
         @title={{this.modalTitle}}
-        @onClose={{fn this.pick undefined}}
+        @onClose={{fn (perform this.pickTask) undefined}}
         @size='medium'
         @centered={{true}}
         {{on 'keydown' this.handleKeydown}}
@@ -446,12 +466,14 @@ export default class ChooseFileModal extends Component<Signature> {
             @label='Choose File'
             @tag='div'
           >
-            {{! Use #each with single-element array to force component recreation when realm changes }}
-            {{#each (array this.selectedRealm.url.href) as |realmURL|}}
+            {{! Force recreation when realm changes or chooser reopens }}
+            {{#each (array this.fileTreeRenderKey)}}
               <IndexedFileTree
-                @realmURL={{realmURL}}
+                @realmURL={{this.selectedRealm.url.href}}
                 @fileTypeFilter={{this.fileTypeFilter}}
                 @onFileSelected={{this.selectFile}}
+                @onFileConfirmed={{perform this.pickTask}}
+                @autoFocus={{true}}
               />
             {{/each}}
           </FieldContainer>
@@ -503,7 +525,7 @@ export default class ChooseFileModal extends Component<Signature> {
               <div class='footer-buttons'>
                 <BoxelButton
                   @size='tall'
-                  {{on 'click' (fn this.pick undefined)}}
+                  {{on 'click' (fn (perform this.pickTask) undefined)}}
                   {{onKeyMod 'Escape'}}
                   data-test-choose-file-modal-cancel-button
                 >
@@ -513,7 +535,7 @@ export default class ChooseFileModal extends Component<Signature> {
                   @kind='primary'
                   @size='tall'
                   @disabled={{this.isUploadBusy}}
-                  {{on 'click' (fn this.pick this.selectedFile)}}
+                  {{on 'click' (fn (perform this.pickTask) this.selectedFile)}}
                   {{onKeyMod 'Enter'}}
                   data-test-choose-file-modal-add-button
                 >

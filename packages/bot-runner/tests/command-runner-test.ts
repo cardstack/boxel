@@ -99,6 +99,8 @@ module('command runner', () => {
 
   test('handles pr-listing-create with branch, commit, and PR', async (assert) => {
     let publishedJobs: unknown[] = [];
+    let submissionCardUrl =
+      'http://localhost:4201/submissions/SubmissionCard/abc-123';
     let queuePublisher: QueuePublisher = {
       publish: async (job: unknown) => {
         publishedJobs.push(job);
@@ -108,6 +110,7 @@ module('command runner', () => {
             status: 'ready',
             cardResultString: JSON.stringify({
               data: {
+                id: submissionCardUrl,
                 attributes: {
                   allFileContents: [
                     {
@@ -197,6 +200,11 @@ module('command runner', () => {
     assert.strictEqual(createdBranches.length, 1, 'creates branch');
     assert.strictEqual(branchWrites.length, 1, 'writes files to branch');
     assert.strictEqual(openedPRs.length, 1, 'opens pull request');
+    let prBody = (openedPRs[0] as { params: Record<string, unknown> }).params.body?.toString() ?? '';
+    assert.true(
+      prBody.includes(`[${submissionCardUrl}](${submissionCardUrl})`),
+      'PR body includes submission card URL as markdown link',
+    );
   });
 
   test('propagates run-command error for pr-listing-create and skips github writes', async (assert) => {

@@ -54,6 +54,7 @@ export default class FileUploadService extends Service {
   @service declare private store: StoreService;
 
   @tracked activeUploads: FileUploadTask[] = [];
+  private queuedLocalFilesForTesting: (File | null)[] = [];
 
   constructor(owner: Owner) {
     super(owner);
@@ -90,7 +91,30 @@ export default class FileUploadService extends Service {
     });
   }
 
+  async pickLocalFile(opts?: {
+    acceptTypes?: string;
+  }): Promise<File | undefined> {
+    if (isTesting()) {
+      let next = this.queuedLocalFilesForTesting.shift();
+      return next ?? undefined;
+    }
+    let file = await this._openNativeFilePicker(opts?.acceptTypes);
+    return file ?? undefined;
+  }
+
+  // Test seam for local-file attachment flow
+  __queueLocalFileForTesting(file: File | null) {
+    this.queuedLocalFilesForTesting.push(file);
+  }
+
   private _openFilePicker(task: FileUploadTask, acceptTypes?: string) {
+    this._openNativeFilePicker(acceptTypes).then((file) => {
+      task._resolveFile(file);
+    });
+  }
+
+  private _openNativeFilePicker(acceptTypes?: string): Promise<File | null> {
+    let deferred = new Deferred<File | null>();
     let input = document.createElement('input');
     input.type = 'file';
     input.accept = acceptTypes ?? '';
@@ -100,7 +124,7 @@ export default class FileUploadService extends Service {
     input.addEventListener(
       'change',
       () => {
-        task._resolveFile(input.files?.[0] ?? null);
+        deferred.fulfill(input.files?.[0] ?? null);
         input.remove();
       },
       { once: true },
@@ -108,13 +132,14 @@ export default class FileUploadService extends Service {
     input.addEventListener(
       'cancel',
       () => {
-        task._resolveFile(null);
+        deferred.fulfill(null);
         input.remove();
       },
       { once: true },
     );
 
     input.click();
+    return deferred.promise;
   }
 
   private async _processUpload(task: FileUploadTask, realmURL: URL) {
