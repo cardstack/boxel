@@ -101,8 +101,10 @@ module.exports = function (environment) {
     resolvedCatalogRealmURL: skipCatalog
       ? undefined
       : process.env.RESOLVED_CATALOG_REALM_URL || defaults.catalogRealmURL,
-    resolvedNewCatalogRealmURL:
-      process.env.RESOLVED_NEW_CATALOG_REALM_URL || defaults.newCatalogRealmURL,
+    resolvedNewCatalogRealmURL: skipCatalog
+      ? undefined
+      : process.env.RESOLVED_NEW_CATALOG_REALM_URL ||
+        defaults.newCatalogRealmURL,
     resolvedSkillsRealmURL:
       process.env.RESOLVED_SKILLS_REALM_URL || defaults.skillsRealmURL,
     featureFlags: {

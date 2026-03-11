@@ -62,5 +62,5 @@ NODE_ENV=development \
   --fromUrl="${REALM_BASE_URL}/skills/" \
   --toUrl="${REALM_BASE_URL}/skills/" \
   \
-  --fromUrl="${NEW_CATALOG_REALM_URL}" \
-  --toUrl="${NEW_CATALOG_REALM_URL}"
+  ${START_CATALOG:+--fromUrl="${NEW_CATALOG_REALM_URL}"} \
+  ${START_CATALOG:+--toUrl="${NEW_CATALOG_REALM_URL}"}
