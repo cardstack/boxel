@@ -8,6 +8,8 @@ import Component from '@glimmer/component';
 
 import { tracked } from '@glimmer/tracking';
 
+import { task } from 'ember-concurrency';
+import perform from 'ember-concurrency/helpers/perform';
 import onKeyMod from 'ember-keyboard/modifiers/on-key';
 
 import {
@@ -119,8 +121,7 @@ export default class ChooseFileModal extends Component<Signature> {
     }
   }
 
-  @action
-  private async pick(path: LocalPath | undefined) {
+  private pickTask = task(async (path: LocalPath | undefined) => {
     try {
       if (this.deferred && this.selectedRealm && path) {
         let fileURL = new RealmPaths(this.selectedRealm.url).fileURL(path);
@@ -140,7 +141,7 @@ export default class ChooseFileModal extends Component<Signature> {
     } finally {
       this.resetState();
     }
-  }
+  });
 
   @action
   private triggerUpload() {
@@ -269,7 +270,7 @@ export default class ChooseFileModal extends Component<Signature> {
 
   @action private handleKeydown(event: KeyboardEvent) {
     if (event.key === 'Escape') {
-      this.pick(undefined);
+      this.pickTask.perform(undefined);
     }
   }
 
@@ -427,7 +428,7 @@ export default class ChooseFileModal extends Component<Signature> {
     {{#if this.deferred}}
       <ModalContainer
         @title={{this.modalTitle}}
-        @onClose={{fn this.pick undefined}}
+        @onClose={{fn (perform this.pickTask) undefined}}
         @size='medium'
         @centered={{true}}
         {{on 'keydown' this.handleKeydown}}
@@ -471,7 +472,7 @@ export default class ChooseFileModal extends Component<Signature> {
                 @realmURL={{this.selectedRealm.url.href}}
                 @fileTypeFilter={{this.fileTypeFilter}}
                 @onFileSelected={{this.selectFile}}
-                @onFileConfirmed={{this.pick}}
+                @onFileConfirmed={{perform this.pickTask}}
                 @autoFocus={{true}}
               />
             {{/each}}
@@ -524,7 +525,7 @@ export default class ChooseFileModal extends Component<Signature> {
               <div class='footer-buttons'>
                 <BoxelButton
                   @size='tall'
-                  {{on 'click' (fn this.pick undefined)}}
+                  {{on 'click' (fn (perform this.pickTask) undefined)}}
                   {{onKeyMod 'Escape'}}
                   data-test-choose-file-modal-cancel-button
                 >
@@ -534,7 +535,8 @@ export default class ChooseFileModal extends Component<Signature> {
                   @kind='primary'
                   @size='tall'
                   @disabled={{this.isUploadBusy}}
-                  {{on 'click' (fn this.pick this.selectedFile)}}
+                  {{on 'click' (fn (perform this.pickTask) this.selectedFile)}}
+                  {{onKeyMod 'Enter'}}
                   data-test-choose-file-modal-add-button
                 >
                   Add

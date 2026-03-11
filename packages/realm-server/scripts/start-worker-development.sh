@@ -27,6 +27,8 @@ wait_for_prerender "$PRERENDER_URL"
 
 DEFAULT_CATALOG_REALM_URL="${REALM_BASE_URL}/catalog/"
 CATALOG_REALM_URL="${RESOLVED_CATALOG_REALM_URL:-$DEFAULT_CATALOG_REALM_URL}"
+DEFAULT_NEW_CATALOG_REALM_URL="${REALM_BASE_URL}/catalog-new/"
+NEW_CATALOG_REALM_URL="${RESOLVED_NEW_CATALOG_REALM_URL:-$DEFAULT_NEW_CATALOG_REALM_URL}"
 
 START_EXPERIMENTS=$(if [ -z "${SKIP_EXPERIMENTS:-}" ]; then echo "true"; else echo ""; fi)
 START_CATALOG=$(if [ -z "${SKIP_CATALOG:-}" ]; then echo "true"; else echo ""; fi)
@@ -58,4 +60,7 @@ NODE_ENV=development \
   ${START_CATALOG:+--toUrl="${CATALOG_REALM_URL}"} \
   \
   --fromUrl="${REALM_BASE_URL}/skills/" \
-  --toUrl="${REALM_BASE_URL}/skills/"
+  --toUrl="${REALM_BASE_URL}/skills/" \
+  \
+  ${START_CATALOG:+--fromUrl="${NEW_CATALOG_REALM_URL}"} \
+  ${START_CATALOG:+--toUrl="${NEW_CATALOG_REALM_URL}"}

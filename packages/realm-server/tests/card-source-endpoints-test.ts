@@ -282,8 +282,8 @@ module(basename(__filename), function () {
 
           assert.strictEqual(
             response.headers['content-type'],
-            'text/plain; charset=utf-8',
-            'content type is correct',
+            'text/typescript+glimmer',
+            'content type is correct for .gts source',
           );
           assert.strictEqual(
             readFileSync(
@@ -1126,6 +1126,82 @@ module(basename(__filename), function () {
             new Uint8Array(fileBytes),
             bytes,
             'file bytes match uploaded bytes',
+          );
+        });
+
+        test('card source GET returns correct content-type for image files', async function (assert) {
+          let bytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
+          await request
+            .post('/photo.png')
+            .set('Content-Type', 'application/octet-stream')
+            .send(Buffer.from(bytes));
+
+          let response = await request
+            .get('/photo.png')
+            .set('Accept', 'application/vnd.card+source');
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          assert.strictEqual(
+            response.headers['content-type'],
+            'image/png',
+            'content-type is image/png for .png files',
+          );
+        });
+
+        test('card source GET returns correct content-type for PDF files', async function (assert) {
+          let bytes = new Uint8Array([0x25, 0x50, 0x44, 0x46]); // %PDF
+          await request
+            .post('/report.pdf')
+            .set('Content-Type', 'application/octet-stream')
+            .send(Buffer.from(bytes));
+
+          let response = await request
+            .get('/report.pdf')
+            .set('Accept', 'application/vnd.card+source');
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          assert.strictEqual(
+            response.headers['content-type'],
+            'application/pdf',
+            'content-type is application/pdf for .pdf files',
+          );
+        });
+
+        test('card source GET returns correct content-type for audio files', async function (assert) {
+          let bytes = new Uint8Array([0x49, 0x44, 0x33]); // ID3
+          await request
+            .post('/clip.mp3')
+            .set('Content-Type', 'application/octet-stream')
+            .send(Buffer.from(bytes));
+
+          let response = await request
+            .get('/clip.mp3')
+            .set('Accept', 'application/vnd.card+source');
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          assert.strictEqual(
+            response.headers['content-type'],
+            'audio/mpeg',
+            'content-type is audio/mpeg for .mp3 files',
+          );
+        });
+
+        test('card source GET returns correct content-type for video files', async function (assert) {
+          let bytes = new Uint8Array([0x00, 0x00, 0x00, 0x1c]);
+          await request
+            .post('/demo.mp4')
+            .set('Content-Type', 'application/octet-stream')
+            .send(Buffer.from(bytes));
+
+          let response = await request
+            .get('/demo.mp4')
+            .set('Accept', 'application/vnd.card+source');
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          assert.strictEqual(
+            response.headers['content-type'],
+            'video/mp4',
+            'content-type is video/mp4 for .mp4 files',
           );
         });
 

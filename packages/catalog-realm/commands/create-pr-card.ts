@@ -55,11 +55,11 @@ export default class CreatePrCardCommand extends Command<
     }
 
     // Save the PR card to the submission realm
-    let savedCard = (await new SaveCardCommand(this.commandContext).execute({
+    await new SaveCardCommand(this.commandContext).execute({
       card,
       realm,
-    })) as unknown as PrCard;
+    });
 
-    return savedCard;
+    return card;
   }
 }
