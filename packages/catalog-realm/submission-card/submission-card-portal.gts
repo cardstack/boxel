@@ -21,6 +21,7 @@ import GetAllRealmMetasCommand from '@cardstack/boxel-host/commands/get-all-real
 import { gt } from '@cardstack/boxel-ui/helpers';
 import {
   BoxelInput,
+  LoadingIndicator,
   ViewSelector,
   type ViewItem,
 } from '@cardstack/boxel-ui/components';
@@ -100,6 +101,7 @@ class Isolated extends Component<typeof SubmissionCardPortal> {
           name: 'SubmissionCard',
         },
       },
+      sort: [{ by: 'createdAt', direction: 'desc' }],
     };
   }
 
@@ -124,19 +126,27 @@ class Isolated extends Component<typeof SubmissionCardPortal> {
     return this.allRealmMetas.filter((r) => realmUrlsWithCards.has(r.url));
   }
 
+  get isRealmsReady(): boolean {
+    return (
+      this.allRealmsInfoResource?.isSuccess === true &&
+      this.submissionDiscovery?.isLoading === false
+    );
+  }
+
   get realmHrefs(): string[] {
-    if (!this.allRealmsInfoResource?.isSuccess) return this.currentRealmHrefs;
+    const fallback = this.currentRealmHrefs;
+    if (!this.allRealmsInfoResource?.isSuccess) return fallback;
     if (this.selectedRealm) return [this.selectedRealm];
 
     const availableUrls = this.availableRealms.map((r) => r.url);
-    return availableUrls.length > 0 ? availableUrls : this.currentRealmHrefs;
+    return availableUrls.length > 0 ? availableUrls : fallback;
   }
 
   get query(): Query {
-    const baseFilter = this.baseTypeFilter.filter!;
+    const { filter: baseFilter, sort } = this.baseTypeFilter;
 
     if (!this.searchText) {
-      return { filter: baseFilter };
+      return { filter: baseFilter, sort };
     }
 
     return {
@@ -148,6 +158,7 @@ class Isolated extends Component<typeof SubmissionCardPortal> {
           },
         ],
       },
+      sort,
     };
   }
 
@@ -180,12 +191,16 @@ class Isolated extends Component<typeof SubmissionCardPortal> {
       </header>
 
       <div class='portal-content'>
-        <CardsGrid
-          @query={{this.query}}
-          @realms={{this.realmHrefs}}
-          @selectedView={{this.selectedView}}
-          @context={{@context}}
-        />
+        {{#if this.isRealmsReady}}
+          <CardsGrid
+            @query={{this.query}}
+            @realms={{this.realmHrefs}}
+            @selectedView={{this.selectedView}}
+            @context={{@context}}
+          />
+        {{else}}
+          <LoadingIndicator />
+        {{/if}}
       </div>
     </div>
 

@@ -55,6 +55,7 @@ export class FittedTemplate extends Component<typeof SubmissionCard> {
         },
         eq: { branchName: this.args.model.branchName },
       },
+      sort: [{ by: 'lastModified', direction: 'desc' }],
     };
   }
 
