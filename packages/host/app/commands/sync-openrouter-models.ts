@@ -141,7 +141,7 @@ function buildCardJson(model: OpenRouterApiModel) {
 }
 
 export default class SyncOpenRouterModelsCommand extends HostBaseCommand<
-  typeof BaseCommandModule.SyncOpenRouterModelsInput,
+  typeof BaseCommandModule.RealmUrlCard,
   typeof BaseCommandModule.SyncOpenRouterModelsResult
 > {
   @service declare private cardService: CardService;
@@ -153,14 +153,14 @@ export default class SyncOpenRouterModelsCommand extends HostBaseCommand<
 
   async getInputType() {
     let commandModule = await this.loadCommandModule();
-    return commandModule.SyncOpenRouterModelsInput;
+    return commandModule.RealmUrlCard;
   }
 
   protected async run(
-    input: BaseCommandModule.SyncOpenRouterModelsInput,
+    input: BaseCommandModule.RealmUrlCard,
   ): Promise<BaseCommandModule.SyncOpenRouterModelsResult> {
     let commandModule = await this.loadCommandModule();
-    let realmURL = input.realmURL;
+    let realmURL = input.realmUrl;
     if (!realmURL) {
       throw new Error('realmURL is required');
     }

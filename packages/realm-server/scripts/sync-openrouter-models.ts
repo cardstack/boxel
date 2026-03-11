@@ -33,7 +33,7 @@ export async function enqueueSyncOpenRouterModels({
     realmUsername: REALM_USERNAME,
     runAs: REALM_USERNAME,
     command: COMMAND_SPECIFIER,
-    commandInput: { realmURL },
+    commandInput: { realmUrl: realmURL },
   };
 
   try {
