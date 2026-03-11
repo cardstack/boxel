@@ -75,6 +75,19 @@ module(basename(__filename), function () {
             }
           }
 
+          export class SayGoodbyeCommand extends Command<
+            undefined,
+            typeof CommandResult
+          > {
+            static displayName = 'SayGoodbyeCommand';
+            async getInputType() {
+              return undefined;
+            }
+            protected async run(): Promise<CommandResult> {
+              return new CommandResult({ message: 'goodbye from command' });
+            }
+          }
+
           export class ThrowErrorCommand extends Command<
             undefined,
             typeof CommandResult
@@ -353,6 +366,73 @@ module(basename(__filename), function () {
         );
         assert.ok(res.body.meta?.timing?.totalMs >= 0, 'has timing');
         assert.ok(res.body.meta?.pool?.pageId, 'has pool.pageId');
+      });
+
+      test('concurrent commands each return their own correct result', async function (assert) {
+        let permissions = {
+          [realmURL.href]: ['read', 'write', 'realm-owner'] as (
+            | 'read'
+            | 'write'
+            | 'realm-owner'
+          )[],
+        };
+        let auth = testCreatePrerenderAuth(testUserId, permissions);
+        let helloCommand = `${realmURL.href}command-runner-test/SayHelloCommand`;
+        let goodbyeCommand = `${realmURL.href}command-runner-test/SayGoodbyeCommand`;
+
+        let [resultA, resultB, resultC] = await Promise.all([
+          prerenderer.runCommand({
+            userId: '@user-a:localhost',
+            auth,
+            command: helloCommand,
+            opts: { simulateTimeoutMs: 500 },
+          }),
+          prerenderer.runCommand({
+            userId: '@user-b:localhost',
+            auth,
+            command: goodbyeCommand,
+            opts: { simulateTimeoutMs: 500 },
+          }),
+          prerenderer.runCommand({
+            userId: '@user-c:localhost',
+            auth,
+            command: helloCommand,
+            opts: { simulateTimeoutMs: 500 },
+          }),
+        ]);
+
+        assert.strictEqual(
+          resultA.response.status,
+          'ready',
+          'command A (hello) returns ready despite concurrent nonce increments',
+        );
+        assert.strictEqual(
+          resultB.response.status,
+          'ready',
+          'command B (goodbye) returns ready despite concurrent nonce increments',
+        );
+        assert.strictEqual(
+          resultC.response.status,
+          'ready',
+          'command C (hello) returns ready despite concurrent nonce increments',
+        );
+
+        assert.ok(
+          resultA.response.cardResultString?.includes('hello from command'),
+          'command A payload contains "hello from command"',
+        );
+        assert.ok(
+          resultB.response.cardResultString?.includes('goodbye from command'),
+          'command B payload contains "goodbye from command"',
+        );
+        assert.ok(
+          resultC.response.cardResultString?.includes('hello from command'),
+          'command C payload contains "hello from command"',
+        );
+
+        assert.notOk(resultA.response.error, 'command A has no error');
+        assert.notOk(resultB.response.error, 'command B has no error');
+        assert.notOk(resultC.response.error, 'command C has no error');
       });
 
       test('it returns unusable status when command times out', async function (assert) {
