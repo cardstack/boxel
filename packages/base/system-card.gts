@@ -1,4 +1,11 @@
-import { CardDef, field, contains, linksToMany, linksTo } from './card-api';
+import {
+  CardDef,
+  field,
+  contains,
+  containsMany,
+  linksToMany,
+  linksTo,
+} from './card-api';
 import BooleanField from './boolean';
 import StringField from './string';
 import { getMenuItems } from '@cardstack/runtime-common';
@@ -21,6 +28,11 @@ export class ModelConfiguration extends CardDef {
   @field reasoningEffort = contains(StringField, {
     description:
       'Optional reasoning effort to pass when invoking this model (e.g. minimal, medium, maximal)',
+  });
+
+  @field inputModalities = containsMany(StringField, {
+    description:
+      'Input modalities supported by this model (e.g. text, image, file, audio, video)',
   });
 }
 

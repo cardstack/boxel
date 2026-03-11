@@ -47,11 +47,11 @@ export default class ProcessGithubEventCommand extends Command<
       }
     }
 
-    let savedCard = await new SaveCardCommand(this.commandContext).execute({
+    await new SaveCardCommand(this.commandContext).execute({
       card,
       realm,
     });
 
-    return savedCard;
+    return card;
   }
 }

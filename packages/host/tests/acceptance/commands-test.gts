@@ -78,6 +78,7 @@ import { suspendGlobalErrorHook } from '../helpers/uncaught-exceptions';
 
 let matrixRoomId = '';
 let maybeBoomShouldBoom = true;
+let savedMeetingCardId: string | undefined;
 
 module('Acceptance | Commands tests', function (hooks) {
   setupApplicationTest(hooks);
@@ -100,6 +101,7 @@ module('Acceptance | Commands tests', function (hooks) {
   setupBaseRealm(hooks);
 
   hooks.beforeEach(async function () {
+    savedMeetingCardId = undefined;
     matrixRoomId = await createAndJoinRoom({
       sender: '@testuser:localhost',
       name: 'room-test',
@@ -169,10 +171,11 @@ module('Acceptance | Commands tests', function (hooks) {
           participants: input.participants,
         });
         let saveCardCommand = new SaveCardCommand(this.commandContext);
-        await saveCardCommand.execute({
+        let savedMeeting = await saveCardCommand.execute({
           card: meeting,
           realm: testRealmURL,
         });
+        savedMeetingCardId = savedMeeting?.id;
 
         let createAIAssistantRoomCommand = new CreateAiAssistantRoomCommand(
           this.commandContext,
@@ -543,6 +546,24 @@ module('Acceptance | Commands tests', function (hooks) {
       assert.dom('[data-prerender-error]').includesText('Boom!');
       assert.dom('[data-test-command-runner-greeting]').doesNotExist();
     });
+  });
+
+  test('SaveCardCommand returns the saved card with its id set', async function (assert) {
+    await visitOperatorMode({
+      stacks: [[{ id: `${testRealmURL}index`, format: 'isolated' }]],
+    });
+    const testCard = `${testRealmURL}Person/hassan`;
+    await click('[data-test-boxel-filter-list-button="All Cards"]');
+    await click(
+      `[data-test-stack-card="${testRealmURL}index"] [data-test-cards-grid-item="${testCard}"] .field-component-card`,
+    );
+    await click('[data-test-schedule-meeting-button]');
+    await waitUntil(() => savedMeetingCardId !== undefined);
+    assert.ok(savedMeetingCardId, 'SaveCardCommand returned the saved card');
+    assert.true(
+      savedMeetingCardId!.startsWith(testRealmURL),
+      'saved card id is a URL within the test realm',
+    );
   });
 
   test('a scripted command can create a card, update it and show it', async function (assert) {

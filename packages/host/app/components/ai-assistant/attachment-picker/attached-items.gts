@@ -15,6 +15,12 @@ import {
   isCardErrorJSONAPI,
 } from '@cardstack/runtime-common';
 
+import {
+  requiredModality,
+  modalityLabel,
+  isTextBasedContentType,
+} from '@cardstack/runtime-common/ai/modality';
+
 import CardPill from '@cardstack/host/components/card-pill';
 import FilePill from '@cardstack/host/components/file-pill';
 import type {
@@ -46,6 +52,7 @@ interface Signature {
     autoAttachedCardTooltipMessage?: string;
     fileUploadStates?: ReadonlyMap<string, FileUploadState>;
     retryFileUpload?: (file: FileDef) => void;
+    inputModalities?: string[];
   };
 }
 
@@ -119,6 +126,23 @@ export default class AttachedItems extends Component<Signature> {
       return undefined;
     }
     return this.args.fileUploadStates?.get(sourceUrl)?.status;
+  };
+
+  private getModalityWarning = (file: FileDef): string | undefined => {
+    let modality = requiredModality(file.contentType);
+    if (modality) {
+      // Multimodal type — warn only if model doesn't support it
+      let modalities = this.args.inputModalities;
+      if (modalities && !modalities.includes(modality)) {
+        return `Model does not support ${modalityLabel(modality)}. Only metadata will be sent.`;
+      }
+      return undefined;
+    }
+    // Non-multimodal, non-text files only get metadata sent
+    if (!isTextBasedContentType(file.contentType)) {
+      return 'File type not supported. Will send file metadata only.';
+    }
+    return undefined;
   };
 
   <template>
@@ -207,6 +231,7 @@ export default class AttachedItems extends Component<Signature> {
                     @onRemove={{fn this.handleRemoveFile item}}
                     @uploadStatus={{this.getUploadStatus item}}
                     @onRetry={{if @retryFileUpload (fn @retryFileUpload item)}}
+                    @warningMessage={{this.getModalityWarning item}}
                     data-test-autoattached-file={{item.sourceUrl}}
                   />
                 </:trigger>
@@ -221,6 +246,7 @@ export default class AttachedItems extends Component<Signature> {
                 @onRemove={{fn this.handleRemoveFile item}}
                 @uploadStatus={{this.getUploadStatus item}}
                 @onRetry={{if @retryFileUpload (fn @retryFileUpload item)}}
+                @warningMessage={{this.getModalityWarning item}}
               />
             {{/if}}
           {{/if}}

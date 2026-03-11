@@ -44,31 +44,31 @@ else
   export ENV_SLUG=""
   export ENV_MODE=""
 
-  # Service URLs (fixed localhost ports)
-  export REALM_BASE_URL="http://localhost:4201"
-  export REALM_TEST_URL="http://localhost:4202"
-  export MATRIX_URL_VAL="http://localhost:8008"
-  export WORKER_MGR_URL="http://localhost:4210"
-  export WORKER_TEST_MGR_URL="http://localhost:4211"
+  # Service URLs — use :- so production/staging env vars are not clobbered
+  export REALM_BASE_URL="${REALM_BASE_URL:-http://localhost:4201}"
+  export REALM_TEST_URL="${REALM_TEST_URL:-http://localhost:4202}"
+  export MATRIX_URL_VAL="${MATRIX_URL_VAL:-http://localhost:8008}"
+  export WORKER_MGR_URL="${WORKER_MGR_URL:-http://localhost:4210}"
+  export WORKER_TEST_MGR_URL="${WORKER_TEST_MGR_URL:-http://localhost:4211}"
   export PRERENDER_URL="${PRERENDER_URL:-http://localhost:4221}"
   export PRERENDER_MGR_URL="${PRERENDER_MGR_URL:-http://localhost:4222}"
-  export ICONS_URL="http://localhost:4206"
-  export HOST_URL="http://localhost:4200"
+  export ICONS_URL="${ICONS_URL:-http://localhost:4206}"
+  export HOST_URL="${HOST_URL:-http://localhost:4200}"
 
   # Database
   export PGDATABASE="${PGDATABASE:-boxel}"
-  export PGDATABASE_TEST="boxel_test"
+  export PGDATABASE_TEST="${PGDATABASE_TEST:-boxel_test}"
 
   # Ports (fixed in standard mode)
-  export REALM_PORT=4201
-  export TEST_PORT=4202
-  export WORKER_PORT=4210
-  export WORKER_TEST_PORT=4211
-  export PRERENDER_PORT=4221
-  export PRERENDER_MGR_PORT=4222
-  export ICONS_PORT=4206
+  export REALM_PORT="${REALM_PORT:-4201}"
+  export TEST_PORT="${TEST_PORT:-4202}"
+  export WORKER_PORT="${WORKER_PORT:-4210}"
+  export WORKER_TEST_PORT="${WORKER_TEST_PORT:-4211}"
+  export PRERENDER_PORT="${PRERENDER_PORT:-4221}"
+  export PRERENDER_MGR_PORT="${PRERENDER_MGR_PORT:-4222}"
+  export ICONS_PORT="${ICONS_PORT:-4206}"
 
   # Paths
-  export REALMS_ROOT="./realms/localhost_4201"
-  export REALMS_TEST_ROOT="./realms/localhost_4202"
+  export REALMS_ROOT="${REALMS_ROOT:-./realms/localhost_4201}"
+  export REALMS_TEST_ROOT="${REALMS_TEST_ROOT:-./realms/localhost_4202}"
 fi
