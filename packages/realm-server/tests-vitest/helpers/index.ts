@@ -76,6 +76,7 @@ import { buildCreatePrerenderAuth } from '../../prerender/auth';
 import { Client as PgClient } from 'pg';
 import { createServer as createNetServer } from 'net';
 import { MockMatrixClient } from '../../tests/helpers/mock-matrix-client';
+import { nodeStreamToBuffer } from '../../stream';
 
 const testRealmURL = new URL('http://127.0.0.1:4444/');
 const testRealmHref = testRealmURL.href;
@@ -420,12 +421,28 @@ async function routePrerenderBrowserRequest(
   if (method === 'OPTIONS') {
     return new Response(null, { status: 204 });
   }
-  return await entry.virtualNetwork.fetch(url, {
+  let response = await entry.virtualNetwork.fetch(url, {
     method,
     headers: sanitizedHeaders,
     body:
       method === 'GET' || method === 'HEAD' ? undefined : (body ?? undefined),
   });
+
+  // VirtualNetwork can satisfy in-realm requests without going through HTTP,
+  // which means cache-miss source responses may arrive as Response objects that
+  // carry a nodeStream side channel instead of a readable body. Puppeteer only
+  // understands ordinary response bodies, so materialize those streams here.
+  let maybeNodeStream = (response as Response & { nodeStream?: unknown })
+    .nodeStream;
+  if (maybeNodeStream) {
+    let body = new Uint8Array(await nodeStreamToBuffer(maybeNodeStream as any));
+    response = new Response(body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: response.headers,
+    });
+  }
+  return response;
 }
 
 export function prepareTestDB(): void {
