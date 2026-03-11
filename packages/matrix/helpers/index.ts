@@ -520,10 +520,22 @@ export async function sendMessage(
       await selectCardFromCatalog(page, cardId);
     }
   }
-  // can we check it's higher than before?
+  let messageCountBeforeSend = await page
+    .locator('[data-test-message-idx]')
+    .count();
   await page.waitForSelector(`[data-test-room-settled]`);
   await page.waitForSelector(`[data-test-can-send-msg]`);
   await page.locator('[data-test-send-message-btn]').click();
+  await expect(
+    page.locator(`[data-test-message-field="${roomId}"]`),
+  ).toHaveValue('');
+  await expect(
+    page.locator('[data-test-ai-assistant-message-pending="true"]'),
+  ).toHaveCount(0);
+  await expect(page.locator('[data-test-message-idx]')).toHaveCount(
+    messageCountBeforeSend + 1,
+  );
+  await page.waitForSelector(`[data-test-room-settled]`);
 }
 
 export async function assertMessages(
