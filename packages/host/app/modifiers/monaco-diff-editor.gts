@@ -11,6 +11,8 @@ import type { MonacoEditorOptions } from './monaco';
 
 import type * as _MonacoSDK from 'monaco-editor';
 
+const MODEL_DISPOSAL_GRACE_MS = 100;
+
 export interface MonacoDiffEditorSignature {
   Args: {
     Named: {
@@ -31,6 +33,7 @@ export default class MonacoDiffEditor extends Modifier<MonacoDiffEditorSignature
   private monacoState: {
     editor: _MonacoSDK.editor.IStandaloneDiffEditor;
   } | null = null;
+  private hasDestructor = false;
   private waiterManager = createMonacoWaiterManager();
 
   modify(
@@ -48,12 +51,22 @@ export default class MonacoDiffEditor extends Modifier<MonacoDiffEditorSignature
     if (originalCode === undefined || modifiedCode === undefined) {
       return;
     }
-    if (this.monacoState) {
-      let { editor } = this.monacoState;
-      let model = editor.getModel();
-      let originalModel = model?.original;
-      let modifiedModel = model?.modified;
+    let editor = this.monacoState?.editor;
+    let model = editor?.getModel();
+    let originalModel = model?.original;
+    let modifiedModel = model?.modified;
+    let hasDisposedModels =
+      originalModel?.isDisposed() || modifiedModel?.isDisposed();
 
+    if (editor && hasDisposedModels) {
+      this.destroyEditor(editor, model);
+      editor = undefined;
+      model = undefined;
+      originalModel = undefined;
+      modifiedModel = undefined;
+    }
+
+    if (editor) {
       let newOriginalCode = originalCode ?? '';
       let newModifiedCode = modifiedCode ?? '';
 
@@ -98,7 +111,7 @@ export default class MonacoDiffEditor extends Modifier<MonacoDiffEditorSignature
 
       editor.onDidUpdateDiff(() => {
         if (updateDiffEditorStats) {
-          updateDiffEditorStats(makeCodeDiffStats(editor.getLineChanges()));
+          updateDiffEditorStats(makeCodeDiffStats(this.getLineChanges(editor)));
         }
       });
 
@@ -109,15 +122,65 @@ export default class MonacoDiffEditor extends Modifier<MonacoDiffEditorSignature
       }
     }
 
-    registerDestructor(this, () => {
-      let editor = this.monacoState?.editor;
-      if (editor) {
-        let model = editor.getModel();
-        model?.original.dispose();
-        model?.modified.dispose();
-        editor.dispose();
+    if (!this.hasDestructor) {
+      this.hasDestructor = true;
+      registerDestructor(this, () => {
+        let editor = this.monacoState?.editor;
+        if (editor) {
+          this.destroyEditor(editor, editor.getModel());
+        }
+        this.monacoState = null;
+      });
+    }
+  }
+
+  private destroyEditor(
+    editor: _MonacoSDK.editor.IStandaloneDiffEditor,
+    model: _MonacoSDK.editor.IDiffEditorModel | null,
+  ) {
+    let hasDisposedModels =
+      model?.original?.isDisposed() || model?.modified?.isDisposed();
+
+    if (!hasDisposedModels) {
+      try {
+        editor.setModel(null);
+      } catch {
+        // Monaco can already be half-disposed when Glimmer updates race with
+        // test teardown. In that case we still want best-effort cleanup, but we
+        // should not let Monaco disposal errors break rendering.
       }
-      this.monacoState = null;
-    });
+    }
+
+    try {
+      editor.dispose();
+    } catch {
+      // See note above: cleanup should be tolerant of partially-disposed editors.
+    }
+    let originalModel = model?.original;
+    let modifiedModel = model?.modified;
+    // Let Monaco observe the editor disposal first so any in-flight diff worker
+    // can see its cancellation token before the backing models disappear.
+    // A short grace period avoids spurious "no diff result available" errors
+    // during fast teardown/update cycles, especially when multiple diff editors
+    // are removed together via "Accept All".
+    setTimeout(() => {
+      if (originalModel && !originalModel.isDisposed()) {
+        originalModel.dispose();
+      }
+      if (modifiedModel && !modifiedModel.isDisposed()) {
+        modifiedModel.dispose();
+      }
+    }, MODEL_DISPOSAL_GRACE_MS);
+  }
+
+  private getLineChanges(editor: _MonacoSDK.editor.IStandaloneDiffEditor) {
+    try {
+      return editor.getLineChanges();
+    } catch {
+      // Monaco diff workers can briefly report an update before the underlying
+      // diff result is available. Treat that as "not ready yet" rather than a
+      // rendering failure and wait for the next diff update.
+      return null;
+    }
   }
 }

@@ -1,4 +1,5 @@
 import { byteStreamToUint8Array } from '@cardstack/runtime-common';
+import { htmlSafe } from '@ember/template';
 import FileCodeIcon from '@cardstack/boxel-icons/file-code';
 import {
   BaseDefComponent,
@@ -7,7 +8,6 @@ import {
   contains,
   field,
 } from './card-api';
-import sanitizedHtml from './helpers/sanitized-html';
 import {
   FileContentMismatchError,
   FileDef,
@@ -52,9 +52,13 @@ class Isolated extends Component<typeof TsFileDef> {
   get highlightedContent() {
     let content = this.args.model?.content;
     if (!content) {
-      return null;
+      return htmlSafe('');
     }
-    return highlightTs(content);
+    // `highlightTs()` owns the whole rendering pipeline for this preview: it
+    // escapes the TypeScript source first and only adds the syntax-highlight
+    // wrappers we control. A second sanitizer pass just reparses our own HTML
+    // during prerender/indexing and was showing up as avoidable DOMParser churn.
+    return htmlSafe(highlightTs(content));
   }
 
   get title() {
@@ -64,9 +68,7 @@ class Isolated extends Component<typeof TsFileDef> {
   <template>
     <article class='ts-isolated' data-test-ts-isolated>
       {{#if this.highlightedContent}}
-        <pre class='ts-isolated__code'><code>{{sanitizedHtml
-              this.highlightedContent
-            }}</code></pre>
+        <pre class='ts-isolated__code'><code>{{this.highlightedContent}}</code></pre>
       {{else}}
         <header class='ts-isolated__title'>{{this.title}}</header>
       {{/if}}
@@ -132,9 +134,13 @@ class Embedded extends Component<typeof TsFileDef> {
   get codePreview() {
     let content = this.args.model?.content;
     if (!content) {
-      return null;
+      return htmlSafe('');
     }
-    return highlightTs(content);
+    // `highlightTs()` owns the whole rendering pipeline for this preview: it
+    // escapes the TypeScript source first and only adds the syntax-highlight
+    // wrappers we control. A second sanitizer pass just reparses our own HTML
+    // during prerender/indexing and was showing up as avoidable DOMParser churn.
+    return htmlSafe(highlightTs(content));
   }
 
   <template>
@@ -142,9 +148,7 @@ class Embedded extends Component<typeof TsFileDef> {
       <header class='ts-embedded__title'>{{this.title}}</header>
       {{#if this.codePreview}}
         <div class='ts-embedded__preview'>
-          <pre class='ts-embedded__code'><code>{{sanitizedHtml
-                this.codePreview
-              }}</code></pre>
+          <pre class='ts-embedded__code'><code>{{this.codePreview}}</code></pre>
         </div>
       {{/if}}
     </article>

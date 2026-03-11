@@ -791,13 +791,14 @@ module('Acceptance | Spec preview', function (hooks) {
     const receivedEventDeferred = new Deferred<void>();
     const messageService = getService('message-service');
 
-    messageService.listenerCallbacks.get(testRealmURL)!.push((e) => {
+    const unsubscribe = messageService.subscribe(testRealmURL, (e) => {
       if (
         e.eventName === 'index' &&
         e.indexType === 'incremental-index-initiation'
       ) {
         return; // ignore the index initiation event
       }
+      unsubscribe();
       receivedEventDeferred.fulfill();
     });
     await visitOperatorMode({

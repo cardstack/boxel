@@ -80,6 +80,7 @@ import type { TempEvent } from '@cardstack/host/lib/matrix-classes/room';
 import Room from '@cardstack/host/lib/matrix-classes/room';
 import { getRandomBackgroundURL, iconURLFor } from '@cardstack/host/lib/utils';
 import { getMatrixProfile } from '@cardstack/host/resources/matrix-profile';
+import { clearLocalStorage } from '@cardstack/host/utils/local-storage-keys';
 
 import type { BaseDef, CardDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
@@ -384,7 +385,7 @@ export default class MatrixService extends Service {
   }
 
   get isLoggedIn() {
-    return this.client.isLoggedIn() && this.postLoginCompleted;
+    return this._client?.isLoggedIn() === true && this.postLoginCompleted;
   }
 
   private get client() {
@@ -493,6 +494,10 @@ export default class MatrixService extends Service {
       await this.flushAll;
       this.clearAuth();
       this.postLoginCompleted = false;
+      // Logout is the explicit boundary where we forget persisted workspace UI
+      // state for the signed-in user. Generic reset paths must stay in-memory
+      // only so tests and app reloads do not accidentally wipe durable state.
+      clearLocalStorage(window.localStorage);
       this.reset.resetAll();
       this.unbindEventListeners();
       await this.client.logout(true);

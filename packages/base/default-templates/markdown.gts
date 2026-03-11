@@ -1,6 +1,7 @@
 import { task } from 'ember-concurrency';
 import GlimmerComponent from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
+import { cached, tracked } from '@glimmer/tracking';
+import { htmlSafe } from '@ember/template';
 import { and } from '@cardstack/boxel-ui/helpers';
 
 import {
@@ -8,9 +9,6 @@ import {
   markdownToHtml,
   preloadMarkdownLanguages,
 } from '@cardstack/runtime-common';
-
-import sanitizedHtml from '../helpers/sanitized-html';
-
 function wrapTablesHtml(html: string | null | undefined): string {
   if (!html) return '';
   // Fast path when there are no tables to wrap.
@@ -60,20 +58,24 @@ export default class MarkDownTemplate extends GlimmerComponent<{
   get hasCodeBlocks() {
     return hasCodeBlocks(this.args.content);
   }
+
+  @cached
+  get renderedHtml() {
+    let html = markdownToHtml(this.args.content, {
+      enableMonacoSyntaxHighlighting: !!(
+        this.hasCodeBlocks && this.monacoContext
+      ),
+      monaco: this.monacoContext,
+    });
+    // `markdownToHtml()` already sanitizes by default. `wrapTablesHtml()` only
+    // reparses that sanitized HTML so it can add wrapper divs around tables we
+    // control for styling/overflow behavior. Re-sanitizing the result was
+    // adding avoidable DOMParser churn during prerender and acceptance tests.
+    return htmlSafe(wrapTablesHtml(html));
+  }
+
   <template>
-    <div class='markdown-content'>
-      {{sanitizedHtml
-        (wrapTablesHtml
-          (markdownToHtml
-            @content
-            enableMonacoSyntaxHighlighting=(and
-              this.hasCodeBlocks this.monacoContext
-            )
-            monaco=this.monacoContext
-          )
-        )
-      }}
-    </div>
+    <div class='markdown-content'>{{this.renderedHtml}}</div>
     <style scoped>
       @layer baseComponent {
         .markdown-content {

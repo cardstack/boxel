@@ -1,9 +1,10 @@
 import { array, fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { service } from '@ember/service';
+import { htmlSafe } from '@ember/template';
 
 import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
+import { cached, tracked } from '@glimmer/tracking';
 
 import { Alert } from '@cardstack/boxel-ui/components';
 import { and, bool, eq } from '@cardstack/boxel-ui/helpers';
@@ -28,10 +29,7 @@ import type MessageCodePatchResult from '@cardstack/host/lib/matrix-classes/mess
 
 import { parseSearchReplace } from '@cardstack/host/lib/search-replace-block-parsing';
 
-import {
-  type CodeDiffResource,
-  getCodeDiffResultResource,
-} from '@cardstack/host/resources/code-diff';
+import { getCodeDiffResultResource } from '@cardstack/host/resources/code-diff';
 
 import type CommandService from '@cardstack/host/services/command-service';
 import type { MonacoSDK } from '@cardstack/host/services/monaco-service';
@@ -64,6 +62,13 @@ interface Signature {
 export default class FormattedAiBotMessage extends Component<Signature> {
   @service declare private commandService: CommandService;
 
+  @cached
+  private get reasoningHtml() {
+    // `markdownToHtml()` already sanitizes by default, so this only needs to
+    // mark that sanitized result as renderable HTML.
+    return htmlSafe(markdownToHtml(this.args.reasoning?.content));
+  }
+
   private isLastHtmlGroup = (index: number) => {
     return index === (this.args.htmlParts?.length ?? 0) - 1;
   };
@@ -93,7 +98,7 @@ export default class FormattedAiBotMessage extends Component<Signature> {
               <summary>
                 Thinking...
               </summary>
-              {{sanitizedHtml (markdownToHtml @reasoning.content)}}
+              {{this.reasoningHtml}}
             </details>
           {{/if}}
         </div>
@@ -196,39 +201,16 @@ interface HtmlGroupCodeBlockSignature {
 }
 
 class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
-  _codeDiffResource: CodeDiffResource | undefined;
-  _searchReplaceBlock: string | null | undefined = null;
-  _fileUrl: string | null | undefined = null;
   @tracked diffEditorStats: {
     linesRemoved: number;
     linesAdded: number;
   } | null = null;
 
-  get codeDiffResource() {
-    if (this._codeDiffResource) {
-      if (
-        this._fileUrl === this.args.codeData.fileUrl &&
-        this._searchReplaceBlock === this.args.codeData.searchReplaceBlock
-      ) {
-        return this._codeDiffResource;
-      }
-    }
-
-    /* eslint-disable-next-line ember/no-side-effects */
-    this._fileUrl = this.args.codeData.fileUrl;
-    /* eslint-disable-next-line ember/no-side-effects */
-    this._searchReplaceBlock = this.args.codeData.searchReplaceBlock;
-    /* eslint-disable-next-line ember/no-side-effects */
-    this._codeDiffResource = this.args.codeData.searchReplaceBlock
-      ? getCodeDiffResultResource(
-          this,
-          this.args.codeData.fileUrl,
-          this.args.codeData.searchReplaceBlock,
-          this.args.codePatchStatus as CodePatchStatus,
-        )
-      : undefined;
-    return this._codeDiffResource;
-  }
+  codeDiffResource = getCodeDiffResultResource(this, () => ({
+    fileUrl: this.args.codeData.fileUrl,
+    searchReplaceBlock: this.args.codeData.searchReplaceBlock,
+    codePatchStatus: this.args.codePatchStatus as CodePatchStatus,
+  }));
 
   errorMessage(errorMessage: string) {
     return 'Code could not be displayed: ' + errorMessage;

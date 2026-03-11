@@ -20,10 +20,10 @@ interface CodeDiffResourceArgs {
 }
 
 export class CodeDiffResource extends Resource<CodeDiffResourceArgs> {
-  @tracked fileUrl: string | undefined | null = null;
+  fileUrl: string | undefined | null = null;
   @tracked originalCode: string | undefined | null = null;
   @tracked modifiedCode: string | undefined | null = null;
-  @tracked searchReplaceBlock: string | undefined | null = null;
+  searchReplaceBlock: string | undefined | null = null;
   @tracked errorMessage: string | undefined | null = null;
   codePatchStatus: CodePatchStatus | undefined | null = null;
 
@@ -117,15 +117,9 @@ export class CodeDiffResource extends Resource<CodeDiffResourceArgs> {
 
 export function getCodeDiffResultResource(
   parent: object,
-  fileUrl?: string | null,
-  searchReplaceBlock?: string | null,
-  codePatchStatus?: CodePatchStatus | null,
+  getNamedArgs: () => CodeDiffResourceArgs['named'],
 ) {
   return CodeDiffResource.from(parent, () => ({
-    named: {
-      fileUrl,
-      searchReplaceBlock,
-      codePatchStatus,
-    },
+    named: getNamedArgs(),
   }));
 }

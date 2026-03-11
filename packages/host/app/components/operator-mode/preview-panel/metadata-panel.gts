@@ -1,10 +1,9 @@
 import { service } from '@ember/service';
+import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 
 import { resource, use } from 'ember-resources';
 import { TrackedObject } from 'tracked-built-ins';
-
-import { sanitizeHtmlSafe } from '@cardstack/boxel-ui/helpers';
 
 import type StoreService from '@cardstack/host/services/store';
 
@@ -128,9 +127,11 @@ export default class MetadataPanel extends Component<Signature> {
   private get highlightedJson() {
     let json = this.documentResource?.json;
     if (!json) {
-      return '';
+      return htmlSafe('');
     }
-    return highlightJson(json);
+    // `highlightJson()` escapes the JSON payload before inserting the span
+    // wrappers we control, so this HTML is already constrained to our own markup.
+    return htmlSafe(highlightJson(json));
   }
 
   private get isLoading() {
@@ -155,7 +156,7 @@ export default class MetadataPanel extends Component<Signature> {
         <pre
           class='metadata-panel__content'
           data-test-metadata-content
-        >{{sanitizeHtmlSafe this.highlightedJson}}</pre>
+        >{{this.highlightedJson}}</pre>
       {{/if}}
     </article>
     <style scoped>

@@ -1,5 +1,5 @@
 import { registerDestructor } from '@ember/destroyable';
-import { fn, concat, array } from '@ember/helper';
+import { fn, concat } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
@@ -15,7 +15,7 @@ import {
   Menu,
   type BoxelDropdownAPI,
 } from '@cardstack/boxel-ui/components';
-import { eq, menuItem } from '@cardstack/boxel-ui/helpers';
+import { eq, MenuItem } from '@cardstack/boxel-ui/helpers';
 
 import { DropdownArrowDown, IconTrash } from '@cardstack/boxel-ui/icons';
 
@@ -63,35 +63,14 @@ export default class Directory extends Component<Args> {
                 {{entry.name}}
               </button>
               {{#if @onDeleteFile}}
-                <BoxelDropdown
-                  @registerAPI={{fn this.registerDropdownApi entryPath}}
-                  @contentClass='file-tree-context-menu'
-                >
-                  <:trigger as |bindings|>
-                    <ContextButton
-                      class='file-menu-trigger'
-                      @icon='context-menu'
-                      @size='extra-small'
-                      @label='File options'
-                      @variant='ghost'
-                      {{bindings}}
-                    />
-                  </:trigger>
-                  <:content as |dd|>
-                    <Menu
-                      class='file-tree-context-menu-list'
-                      @items={{array
-                        (menuItem
-                          'Delete'
-                          (fn this.deleteFileEntry entryPath)
-                          icon=IconTrash
-                          dangerous=true
-                        )
-                      }}
-                      @closeMenu={{dd.close}}
-                    />
-                  </:content>
-                </BoxelDropdown>
+                <ContextButton
+                  class='file-menu-trigger'
+                  @icon='context-menu'
+                  @size='extra-small'
+                  @label='File options'
+                  @variant='ghost'
+                  {{on 'click' (fn this.openFileMenu entryPath)}}
+                />
               {{/if}}
             </div>
           {{else}}
@@ -128,6 +107,30 @@ export default class Directory extends Component<Args> {
         {{/let}}
       </div>
     {{/each}}
+    {{#if @onDeleteFile}}
+      <BoxelDropdown
+        @registerAPI={{this.registerDropdownApi}}
+        @onClose={{this.clearFileMenu}}
+        @contentClass='file-tree-context-menu'
+      >
+        <:trigger as |bindings|>
+          <button
+            type='button'
+            class='file-tree-menu-anchor'
+            aria-hidden='true'
+            tabindex='-1'
+            {{bindings}}
+          ></button>
+        </:trigger>
+        <:content as |dd|>
+          <Menu
+            class='file-tree-context-menu-list'
+            @items={{this.menuItems}}
+            @closeMenu={{dd.close}}
+          />
+        </:content>
+      </BoxelDropdown>
+    {{/if}}
     <style scoped>
       .level {
         --icon-length: 14px;
@@ -181,6 +184,15 @@ export default class Directory extends Component<Args> {
       .file-row:focus-within .file-menu-trigger {
         visibility: visible;
       }
+      .file-tree-menu-anchor {
+        position: fixed;
+        width: 0;
+        height: 0;
+        padding: 0;
+        border: 0;
+        opacity: 0;
+        pointer-events: none;
+      }
 
       .directory {
         border-radius: var(--boxel-border-radius-xs);
@@ -220,12 +232,14 @@ export default class Directory extends Component<Args> {
 
   @tracked private selectedFile?: LocalPath;
   private openDirs: TrackedArray<LocalPath> = new TrackedArray();
-  private dropdownApis = new Map<LocalPath, BoxelDropdownAPI>();
+  private dropdownApi?: BoxelDropdownAPI;
+  private menuEntryPath?: LocalPath;
 
   constructor(owner: Owner, args: Args['Args']) {
     super(owner, args);
     registerDestructor(this, () => {
-      this.dropdownApis.clear();
+      this.dropdownApi = undefined;
+      this.menuEntryPath = undefined;
     });
   }
 
@@ -265,8 +279,38 @@ export default class Directory extends Component<Args> {
   }
 
   @action
-  private registerDropdownApi(entryPath: LocalPath, api: BoxelDropdownAPI) {
-    this.dropdownApis.set(entryPath, api);
+  private registerDropdownApi(api: BoxelDropdownAPI) {
+    this.dropdownApi = api;
+  }
+
+  private get menuItems() {
+    if (!this.menuEntryPath) {
+      return [];
+    }
+    return [
+      new MenuItem({
+        label: 'Delete',
+        action: () => this.deleteFileEntry(this.menuEntryPath!),
+        icon: IconTrash,
+        dangerous: true,
+      }),
+    ];
+  }
+
+  @action
+  private clearFileMenu() {
+    this.menuEntryPath = undefined;
+  }
+
+  @action
+  private openFileMenu(entryPath: LocalPath, e: MouseEvent) {
+    if (!this.args.onDeleteFile) {
+      return;
+    }
+    e.preventDefault();
+    e.stopPropagation();
+    this.menuEntryPath = entryPath;
+    this.dropdownApi?.actions.open(e);
   }
 
   @action
@@ -274,9 +318,7 @@ export default class Directory extends Component<Args> {
     if (!this.args.onDeleteFile) {
       return;
     }
-    e.preventDefault();
-    const api = this.dropdownApis.get(entryPath);
-    api?.actions.open(e);
+    this.openFileMenu(entryPath, e);
   }
 
   @action
