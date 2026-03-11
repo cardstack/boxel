@@ -54,7 +54,11 @@ export default class MessageService extends Service {
     let callbacksForRealm = this.listenerCallbacks.get(realmURL);
 
     if (callbacksForRealm) {
-      callbacksForRealm.splice(callbacksForRealm.indexOf(cb), 1);
+      let callbackIndex = callbacksForRealm.indexOf(cb);
+      if (callbackIndex === -1) {
+        return;
+      }
+      callbacksForRealm.splice(callbackIndex, 1);
       if (callbacksForRealm.length === 0) {
         this.listenerCallbacks.delete(realmURL);
       }
