@@ -196,17 +196,7 @@ export default class MonacoDiffEditor extends Modifier<MonacoDiffEditorSignature
     editor: _MonacoSDK.editor.IStandaloneDiffEditor,
     model: _MonacoSDK.editor.IDiffEditorModel | null | undefined,
   ) {
-    try {
-      editor.dispose();
-    } catch {
-      // See note above: cleanup should be tolerant of partially-disposed editors.
-    }
-    if (model?.original) {
-      this.disposeModelWhenDetached(model.original);
-    }
-    if (model?.modified) {
-      this.disposeModelWhenDetached(model.modified);
-    }
+    this.disposeEditorAfterInitialLayout(editor, model);
   }
 
   private disposeModelsAfterEditorReset(
@@ -263,5 +253,28 @@ export default class MonacoDiffEditor extends Modifier<MonacoDiffEditorSignature
 
     maybeCleanup();
     return cleanupDisposables;
+  }
+
+  private disposeEditorAfterInitialLayout(
+    editor: _MonacoSDK.editor.IStandaloneDiffEditor,
+    model: _MonacoSDK.editor.IDiffEditorModel | null | undefined,
+  ) {
+    // Diff editors hit the same Monaco bootstrap race as standard editors when
+    // search/replace blocks finish streaming and swap render modes within one
+    // Glimmer turn. Waiting until the next paint keeps teardown deterministic
+    // without relying on a fixed timeout.
+    requestAnimationFrame(() => {
+      try {
+        editor.dispose();
+      } catch {
+        // See note above: cleanup should be tolerant of partially-disposed editors.
+      }
+      if (model?.original) {
+        this.disposeModelWhenDetached(model.original);
+      }
+      if (model?.modified) {
+        this.disposeModelWhenDetached(model.modified);
+      }
+    });
   }
 }

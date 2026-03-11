@@ -31,6 +31,7 @@ const { serverEchoDebounceMs } = config;
 
 export default class MonacoService extends Service {
   #ready: Promise<MonacoSDK>;
+  #monacoSDK: MonacoSDK | undefined;
   @tracked editor: _MonacoSDK.editor.ICodeEditor | null = null;
   @tracked hasFocus = false;
   @service declare cardService: CardService;
@@ -51,13 +52,11 @@ export default class MonacoService extends Service {
     this.editor = null;
     this.hasFocus = false;
     this.trackedSelection = undefined;
-    void this.#ready.then((monaco) => {
-      for (let model of monaco.editor.getModels()) {
-        if (!model.isDisposed()) {
-          model.dispose();
-        }
+    for (let model of this.#monacoSDK?.editor.getModels() ?? []) {
+      if (!model.isDisposed() && !model.isAttachedToEditor()) {
+        model.dispose();
       }
-    });
+    }
   }
 
   private loadMonacoSDK = task(async () => {
@@ -108,6 +107,7 @@ export default class MonacoService extends Service {
       }
     });
     await Promise.all(promises);
+    this.#monacoSDK = monaco;
     return monaco;
   });
 
