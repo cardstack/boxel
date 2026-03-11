@@ -199,7 +199,9 @@ class Isolated extends Component<typeof SubmissionCardPortal> {
             @context={{@context}}
           />
         {{else}}
-          <LoadingIndicator />
+          <div class='loading-screen'>
+            <LoadingIndicator />
+          </div>
         {{/if}}
       </div>
     </div>
@@ -269,6 +271,15 @@ class Isolated extends Component<typeof SubmissionCardPortal> {
         --grid-view-height: 420px;
         --strip-view-min-width: 100%;
         --strip-view-height: 120px;
+      }
+
+      .portal-content .loading-screen {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        height: 100%;
+        min-height: 300px;
       }
     </style>
   </template>

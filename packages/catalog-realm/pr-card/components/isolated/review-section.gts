@@ -142,7 +142,7 @@ export class ReviewSection extends GlimmerComponent<ReviewSectionSignature> {
           <span class='empty-state-icon' aria-hidden='true'>
             <span class='empty-state-dot'></span>
           </span>
-          <span class='empty-state-text'>Pending Review</span>
+          <span class='empty-state-text'>-</span>
         </div>
       {{/if}}
     </div>
