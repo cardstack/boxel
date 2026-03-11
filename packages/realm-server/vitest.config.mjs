@@ -8,7 +8,7 @@ export default defineConfig({
     setupFiles: ['tests-vitest/setup.ts'],
     testTimeout: 60000,
     hookTimeout: 120000,
-    fileParallelism: false,
+    fileParallelism: true,
     server: {
       deps: {
         external: ['pg'],

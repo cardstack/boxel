@@ -25,7 +25,6 @@ type ExperimentalRealmTest = {
 const test = createExperimentalPermissionedRealmTest({
   permissions: {
     '*': ['read', 'write'],
-    '1': ['read'],
   },
   realmURL,
   serverURL: new URL('http://127.0.0.1:0/test/'),
