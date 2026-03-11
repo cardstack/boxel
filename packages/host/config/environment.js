@@ -27,6 +27,7 @@ function environmentDefaults() {
       iconsURL: 'http://localhost:4206',
       baseRealmURL: 'http://localhost:4201/base/',
       catalogRealmURL: 'http://localhost:4201/catalog/',
+      newCatalogRealmURL: 'http://localhost:4201/catalog-new/',
       skillsRealmURL: 'http://localhost:4201/skills/',
     };
   }
@@ -38,6 +39,7 @@ function environmentDefaults() {
     iconsURL: `http://icons.${slug}.localhost`,
     baseRealmURL: `http://${realmHost}/base/`,
     catalogRealmURL: `http://${realmHost}/catalog/`,
+    newCatalogRealmURL: `http://${realmHost}/catalog-new/`,
     skillsRealmURL: `http://${realmHost}/skills/`,
   };
 }
@@ -99,6 +101,8 @@ module.exports = function (environment) {
     resolvedCatalogRealmURL: skipCatalog
       ? undefined
       : process.env.RESOLVED_CATALOG_REALM_URL || defaults.catalogRealmURL,
+    resolvedNewCatalogRealmURL:
+      process.env.RESOLVED_NEW_CATALOG_REALM_URL || defaults.newCatalogRealmURL,
     resolvedSkillsRealmURL:
       process.env.RESOLVED_SKILLS_REALM_URL || defaults.skillsRealmURL,
     featureFlags: {
@@ -128,8 +132,9 @@ module.exports = function (environment) {
       SHOW_ASK_AI: true,
     };
 
-    // Catalog realm is not available in test environment
+    // Catalog realms are not available in test environment
     ENV.resolvedCatalogRealmURL = undefined;
+    ENV.resolvedNewCatalogRealmURL = undefined;
     ENV.defaultSystemCardId = 'http://test-realm/test/SystemCard/default';
   }
 
