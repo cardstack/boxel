@@ -238,30 +238,28 @@ export default class SyncOpenRouterModelsCommand extends HostBaseCommand<
       }
     }
 
-    // Step 5: Execute in batches
-    let processed = 0;
+    // Step 5: Execute batches concurrently
     let errors: string[] = [];
-
+    let batches: AtomicOperation[][] = [];
     for (let i = 0; i < operations.length; i += BATCH_SIZE) {
-      let batch = operations.slice(i, i + BATCH_SIZE);
-      try {
-        await this.cardService.executeAtomicOperations(
-          batch,
-          new URL(realmURL),
-        );
-        processed += batch.length;
-      } catch (batchError: unknown) {
-        let msg =
-          batchError instanceof Error
-            ? batchError.message
-            : String(batchError);
-        console.error(
-          `Batch ${Math.floor(i / BATCH_SIZE) + 1} failed:`,
-          msg,
-        );
-        errors.push(
-          `Batch ${Math.floor(i / BATCH_SIZE) + 1} (${batch.length} ops): ${msg}`,
-        );
+      batches.push(operations.slice(i, i + BATCH_SIZE));
+    }
+
+    let results = await Promise.allSettled(
+      batches.map((batch) =>
+        this.cardService.executeAtomicOperations(batch, new URL(realmURL)),
+      ),
+    );
+
+    let processed = 0;
+    for (let i = 0; i < results.length; i++) {
+      if (results[i].status === 'fulfilled') {
+        processed += batches[i].length;
+      } else {
+        let reason = (results[i] as PromiseRejectedResult).reason;
+        let msg = reason instanceof Error ? reason.message : String(reason);
+        console.error(`Batch ${i + 1} failed:`, msg);
+        errors.push(`Batch ${i + 1} (${batches[i].length} ops): ${msg}`);
       }
     }
 
