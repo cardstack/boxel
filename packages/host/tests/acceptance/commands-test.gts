@@ -550,9 +550,7 @@ module('Acceptance | Commands tests', function (hooks) {
 
   test('SaveCardCommand returns the saved card with its id set', async function (assert) {
     await visitOperatorMode({
-      stacks: [
-        [{ id: `${testRealmURL}index`, format: 'isolated' }],
-      ],
+      stacks: [[{ id: `${testRealmURL}index`, format: 'isolated' }]],
     });
     const testCard = `${testRealmURL}Person/hassan`;
     await click('[data-test-boxel-filter-list-button="All Cards"]');

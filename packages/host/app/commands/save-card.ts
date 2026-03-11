@@ -29,7 +29,9 @@ export default class SaveCardCommand extends HostBaseCommand<
   // collection--meaning that it will be detached from the store. This means you
   // MUST consume the instance IMMEDIATELY! it should not live in the state of
   // the consumer.
-  protected async run(input: BaseCommandModule.SaveCardInput): Promise<CardDef> {
+  protected async run(
+    input: BaseCommandModule.SaveCardInput,
+  ): Promise<CardDef> {
     let result = await this.store.add(input.card, {
       realm: input.realm,
       localDir: input.localDir,
