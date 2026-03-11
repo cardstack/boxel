@@ -1,10 +1,6 @@
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
-import { on } from '@ember/modifier';
-import { fn } from '@ember/helper';
 import { debounce } from 'lodash';
-
-import GlimmerComponent from '@glimmer/component';
 
 import {
   CardDef,
@@ -14,19 +10,18 @@ import {
   realmURL,
 } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
-import { type Query, type getCards } from '@cardstack/runtime-common';
 import { commandData } from 'https://cardstack.com/base/resources/command-data';
 import type {
   GetAllRealmMetasResult,
   RealmMetaField,
 } from 'https://cardstack.com/base/command';
+import { type Query, type getCards } from '@cardstack/runtime-common';
 import GetAllRealmMetasCommand from '@cardstack/boxel-host/commands/get-all-realm-metas';
 
-import { eq, gt } from '@cardstack/boxel-ui/helpers';
+import { gt } from '@cardstack/boxel-ui/helpers';
 import {
   BoxelInput,
   ViewSelector,
-  Pill,
   type ViewItem,
 } from '@cardstack/boxel-ui/components';
 import {
@@ -36,6 +31,7 @@ import {
 import BotIcon from '@cardstack/boxel-icons/bot';
 
 import { CardsGrid } from '../catalog-app/components/grid';
+import { RealmTabs } from './components/portal/realm-tabs';
 
 type ViewOption = 'strip' | 'grid';
 
@@ -43,67 +39,6 @@ const SUBMISSION_VIEW_OPTIONS: ViewItem[] = [
   { id: 'strip', icon: StripIcon },
   { id: 'grid', icon: GridIcon },
 ];
-
-interface RealmTabsSignature {
-  Args: {
-    realms: RealmMetaField[];
-    selectedRealm: string | null;
-    onChange: (realm: string | null) => void;
-  };
-}
-
-class RealmTabs extends GlimmerComponent<RealmTabsSignature> {
-  <template>
-    <div class='realm-tabs' role='tablist' aria-label='Filter by realm'>
-      <Pill
-        @kind='button'
-        class='realm-pill {{if (eq @selectedRealm null) "active"}}'
-        aria-selected={{if (eq @selectedRealm null) 'true' 'false'}}
-        {{on 'click' (fn @onChange null)}}
-      >
-        <:default>All Realms</:default>
-      </Pill>
-      {{#each @realms as |realm|}}
-        <Pill
-          @kind='button'
-          class='realm-pill {{if (eq @selectedRealm realm.url) "active"}}'
-          aria-selected={{if (eq @selectedRealm realm.url) 'true' 'false'}}
-          title={{realm.url}}
-          {{on 'click' (fn @onChange realm.url)}}
-        >
-          <:default>{{realm.info.name}}</:default>
-        </Pill>
-      {{/each}}
-    </div>
-    <style scoped>
-      .realm-tabs {
-        display: flex;
-        gap: var(--boxel-sp-xs);
-        flex-wrap: wrap;
-      }
-
-      .realm-pill {
-        --pill-border-radius: 50px;
-        --pill-font: var(--boxel-font-sm);
-        --pill-padding: var(--boxel-sp-5xs) var(--boxel-sp);
-        background-color: var(--card, #ffffff);
-        color: var(--foreground, #1f2328);
-        border: 1px solid var(--border, #d0d7de);
-      }
-
-      .realm-pill.active {
-        background-color: var(--foreground, #1f2328);
-        color: var(--card, #ffffff);
-        border-color: var(--foreground, #1f2328);
-      }
-
-      .realm-pill:not(.active):hover {
-        background-color: var(--muted, #f6f8fa);
-        border-color: var(--muted-foreground, #656d76);
-      }
-    </style>
-  </template>
-}
 
 class Isolated extends Component<typeof SubmissionCardPortal> {
   @tracked searchText: string = '';
@@ -148,7 +83,7 @@ class Isolated extends Component<typeof SubmissionCardPortal> {
   }
 
   // Query SubmissionCards across all known realms so we can see which ones
-  // actually have instances (via instancesByRealm)
+  // The filter uses adoptsFrom type matching — it looks for cards whose module/name matches SubmissionCard
   submissionDiscovery: ReturnType<getCards> | undefined =
     this.args.context?.getCards(
       this,
@@ -168,33 +103,33 @@ class Isolated extends Component<typeof SubmissionCardPortal> {
     };
   }
 
+  private get currentRealmHrefs(): string[] {
+    const url = this.args.model[realmURL];
+    return url ? [url.href] : [];
+  }
+
+  private get allRealmMetas(): RealmMetaField[] {
+    if (!this.allRealmsInfoResource?.isSuccess) return [];
+    return (
+      (this.allRealmsInfoResource.cardResult as GetAllRealmMetasResult)
+        ?.results ?? []
+    );
+  }
+
   // Only realms that actually have SubmissionCard instances, with full meta
   get availableRealms(): RealmMetaField[] {
-    const realmsWithCards = new Set(
+    const realmUrlsWithCards = new Set(
       (this.submissionDiscovery?.instancesByRealm ?? []).map((r) => r.realm),
     );
-    const allMetas =
-      (this.allRealmsInfoResource?.cardResult as GetAllRealmMetasResult)
-        ?.results ?? [];
-    return allMetas.filter((r) => realmsWithCards.has(r.url));
+    return this.allRealmMetas.filter((r) => realmUrlsWithCards.has(r.url));
   }
 
   get realmHrefs(): string[] {
-    // Fall back to own realm while realm data is loading
-    if (!this.allRealmsInfoResource?.isSuccess) {
-      const url = this.args.model[realmURL];
-      return url ? [url.href] : [];
-    }
+    if (!this.allRealmsInfoResource?.isSuccess) return this.currentRealmHrefs;
+    if (this.selectedRealm) return [this.selectedRealm];
 
-    if (this.selectedRealm) {
-      return [this.selectedRealm];
-    }
-
-    // All realms selected — query every realm that has submissions
-    const urls = this.availableRealms.map((r) => r.url);
-    if (urls.length > 0) return urls;
-    const url = this.args.model[realmURL];
-    return url ? [url.href] : [];
+    const availableUrls = this.availableRealms.map((r) => r.url);
+    return availableUrls.length > 0 ? availableUrls : this.currentRealmHrefs;
   }
 
   get query(): Query {
@@ -327,7 +262,7 @@ class Isolated extends Component<typeof SubmissionCardPortal> {
 export class SubmissionCardPortal extends CardDef {
   static displayName = 'Submission Card Portal';
   static prefersWideFormat = true;
-  static headerColor = '#e5f0ff';
+  static headerColor = '#00ffba';
   static icon = BotIcon;
 
   @field title = contains(StringField);
