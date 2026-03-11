@@ -125,6 +125,7 @@ export class CreateListingPRHandler {
     eventContent: BotTriggerEventContent,
     runAs: string,
     runCommandResult?: RunCommandResponse | null,
+    submissionCardUrl?: string | null,
   ): Promise<void> {
     let context = getCreateListingPRContext(eventContent);
     if (!context) {
@@ -137,6 +138,7 @@ export class CreateListingPRHandler {
         eventContent,
         runAs,
         runCommandResult,
+        submissionCardUrl,
       );
       let prParams = {
         owner,
@@ -190,6 +192,7 @@ export class CreateListingPRHandler {
     eventContent: BotTriggerEventContent,
     runAs: string,
     runCommandResult?: RunCommandResponse | null,
+    submissionCardUrl?: string | null,
   ): Promise<string | null> {
     let context = getCreateListingPRContext(eventContent);
     if (!context) {
@@ -216,6 +219,9 @@ export class CreateListingPRHandler {
       `- Room ID: \`${context.roomId}\``,
       `- User ID: \`${runAs}\``,
       `- Number of Files: ${files.files.length}`,
+      ...(submissionCardUrl
+        ? [`- Submission Card: [${submissionCardUrl}](${submissionCardUrl})`]
+        : []),
     ].join('\n');
   }
 }
