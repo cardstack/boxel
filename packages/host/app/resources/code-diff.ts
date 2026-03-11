@@ -32,11 +32,12 @@ export class CodeDiffResource extends Resource<CodeDiffResourceArgs> {
 
   modify(_positional: never[], named: CodeDiffResourceArgs['named']) {
     let { fileUrl, searchReplaceBlock, codePatchStatus } = named;
-    if (
+    let fileOrPatchChanged =
       this.fileUrl !== fileUrl ||
-      this.searchReplaceBlock !== searchReplaceBlock ||
-      this.codePatchStatus !== codePatchStatus
-    ) {
+      this.searchReplaceBlock !== searchReplaceBlock;
+    let appliedStateChanged =
+      this.codePatchStatus === 'applied' || codePatchStatus === 'applied';
+    if (fileOrPatchChanged || appliedStateChanged) {
       this.originalCode = null;
       this.modifiedCode = null;
     }
@@ -44,6 +45,7 @@ export class CodeDiffResource extends Resource<CodeDiffResourceArgs> {
     this.fileUrl = fileUrl;
     this.searchReplaceBlock = searchReplaceBlock;
     this.codePatchStatus = codePatchStatus;
+
     if (!fileUrl) {
       this.originalCode = null;
       this.modifiedCode = null;
@@ -55,6 +57,15 @@ export class CodeDiffResource extends Resource<CodeDiffResourceArgs> {
       this.originalCode = null;
       this.modifiedCode = null;
       this.errorMessage = 'Missing search and replace block';
+      return;
+    }
+
+    if (
+      !fileOrPatchChanged &&
+      codePatchStatus !== 'applied' &&
+      this.originalCode != null &&
+      this.modifiedCode != null
+    ) {
       return;
     }
 

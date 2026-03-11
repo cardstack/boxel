@@ -139,26 +139,22 @@ export default class MonacoDiffEditor extends Modifier<MonacoDiffEditorSignature
     let hasDisposedModels =
       model?.original?.isDisposed() || model?.modified?.isDisposed();
 
-    if (!hasDisposedModels) {
+    if (!hasDisposedModels && model?.original && model.modified) {
+      let cancelDeferredCleanup = this.disposeModelsAfterEditorReset(
+        editor,
+        model,
+      );
       try {
         editor.setModel(null);
       } catch {
         // Monaco can already be half-disposed when Glimmer updates race with
         // test teardown. In that case we still want best-effort cleanup, but we
         // should not let Monaco disposal errors break rendering.
+        cancelDeferredCleanup();
+        this.disposeEditorAndModels(editor, model);
       }
-    }
-
-    try {
-      editor.dispose();
-    } catch {
-      // See note above: cleanup should be tolerant of partially-disposed editors.
-    }
-    if (model?.original) {
-      this.disposeModelWhenDetached(model.original);
-    }
-    if (model?.modified) {
-      this.disposeModelWhenDetached(model.modified);
+    } else {
+      this.disposeEditorAndModels(editor, model);
     }
   }
 
@@ -178,15 +174,94 @@ export default class MonacoDiffEditor extends Modifier<MonacoDiffEditorSignature
       return;
     }
     if (!model.isAttachedToEditor()) {
-      model.dispose();
+      this.disposeModelOnNextFrame(model);
       return;
     }
 
     let disposable = model.onDidChangeAttached(() => {
       if (!model.isAttachedToEditor() && !model.isDisposed()) {
         disposable.dispose();
-        model.dispose();
+        this.disposeModelOnNextFrame(model);
       }
     });
+  }
+
+  private disposeModelOnNextFrame(model: _MonacoSDK.editor.ITextModel) {
+    if (!model.isAttachedToEditor() && !model.isDisposed()) {
+      model.dispose();
+    }
+  }
+
+  private disposeEditorAndModels(
+    editor: _MonacoSDK.editor.IStandaloneDiffEditor,
+    model: _MonacoSDK.editor.IDiffEditorModel | null | undefined,
+  ) {
+    try {
+      editor.dispose();
+    } catch {
+      // See note above: cleanup should be tolerant of partially-disposed editors.
+    }
+    if (model?.original) {
+      this.disposeModelWhenDetached(model.original);
+    }
+    if (model?.modified) {
+      this.disposeModelWhenDetached(model.modified);
+    }
+  }
+
+  private disposeModelsAfterEditorReset(
+    editor: _MonacoSDK.editor.IStandaloneDiffEditor,
+    model: _MonacoSDK.editor.IDiffEditorModel,
+  ) {
+    let originalEditor = editor.getOriginalEditor();
+    let modifiedEditor = editor.getModifiedEditor();
+
+    let originalEditorCleared = originalEditor.getModel() === null;
+    let modifiedEditorCleared = modifiedEditor.getModel() === null;
+    let originalDetached = !model.original.isAttachedToEditor();
+    let modifiedDetached = !model.modified.isAttachedToEditor();
+    let cleanedUp = false;
+
+    let disposeOriginalEditorChange = originalEditor.onDidChangeModel(() => {
+      originalEditorCleared = originalEditor.getModel() === null;
+      maybeCleanup();
+    });
+    let disposeModifiedEditorChange = modifiedEditor.onDidChangeModel(() => {
+      modifiedEditorCleared = modifiedEditor.getModel() === null;
+      maybeCleanup();
+    });
+    let disposeOriginalAttachment = model.original.onDidChangeAttached(() => {
+      originalDetached = !model.original.isAttachedToEditor();
+      maybeCleanup();
+    });
+    let disposeModifiedAttachment = model.modified.onDidChangeAttached(() => {
+      modifiedDetached = !model.modified.isAttachedToEditor();
+      maybeCleanup();
+    });
+
+    let cleanupDisposables = () => {
+      disposeOriginalEditorChange.dispose();
+      disposeModifiedEditorChange.dispose();
+      disposeOriginalAttachment.dispose();
+      disposeModifiedAttachment.dispose();
+    };
+
+    let maybeCleanup = () => {
+      if (
+        cleanedUp ||
+        !originalEditorCleared ||
+        !modifiedEditorCleared ||
+        !originalDetached ||
+        !modifiedDetached
+      ) {
+        return;
+      }
+      cleanedUp = true;
+      cleanupDisposables();
+      this.disposeEditorAndModels(editor, model);
+    };
+
+    maybeCleanup();
+    return cleanupDisposables;
   }
 }

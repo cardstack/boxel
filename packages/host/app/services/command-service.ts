@@ -1,7 +1,7 @@
 import { getOwner, setOwner } from '@ember/owner';
 import type Owner from '@ember/owner';
 
-import { debounce } from '@ember/runloop';
+import { debounce, schedule } from '@ember/runloop';
 import Service, { service } from '@ember/service';
 import { isTesting } from '@embroider/macros';
 
@@ -723,6 +723,9 @@ export default class CommandService extends Service {
         `${codeData.eventId}:${codeData.codeBlockIndex}`,
       );
     }
+    // Give Glimmer one render turn to reflect the "applying" state before we
+    // start mutating files and emitting result events.
+    await new Promise<void>((resolve) => schedule('afterRender', resolve));
     let finalFileUrl: string | undefined;
 
     try {

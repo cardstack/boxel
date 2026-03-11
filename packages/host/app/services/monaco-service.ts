@@ -51,6 +51,13 @@ export default class MonacoService extends Service {
     this.editor = null;
     this.hasFocus = false;
     this.trackedSelection = undefined;
+    void this.#ready.then((monaco) => {
+      for (let model of monaco.editor.getModels()) {
+        if (!model.isDisposed()) {
+          model.dispose();
+        }
+      }
+    });
   }
 
   private loadMonacoSDK = task(async () => {
