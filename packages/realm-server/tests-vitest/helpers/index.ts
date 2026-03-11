@@ -53,7 +53,7 @@ import {
   PgQueueRunner,
 } from '@cardstack/postgres';
 import type { Server } from 'http';
-import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
+import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import {
   Prerenderer as LocalPrerenderer,
   type Prerenderer as TestPrerenderer,
@@ -75,6 +75,7 @@ import { createPrerenderHttpServer } from '../../prerender/prerender-app';
 import { buildCreatePrerenderAuth } from '../../prerender/auth';
 import { Client as PgClient } from 'pg';
 import { createServer as createNetServer } from 'net';
+import { MockMatrixClient } from '../../tests/helpers/mock-matrix-client';
 
 const testRealmURL = new URL('http://127.0.0.1:4444/');
 const testRealmHref = testRealmURL.href;
@@ -174,7 +175,8 @@ export const realmServerSecretSeed = "mum's the word";
 export const realmSecretSeed = `shhh! it's a secret`;
 export const grafanaSecret = `shhh! it's a secret`;
 export const matrixRegistrationSecret: string =
-  getSynapseConfig()!.registration_shared_secret; // as long as synapse has been started at least once, this will always exist
+  getSynapseConfig()?.registration_shared_secret ??
+  'test-matrix-registration-secret';
 export const testCreatePrerenderAuth =
   buildCreatePrerenderAuth(realmSecretSeed);
 
@@ -778,6 +780,22 @@ function prerendererCacheKeyPart(prerenderer?: Prerenderer): string | null {
   return `injected:${id}`;
 }
 
+function makeTestMatrixClient({
+  matrixURL,
+  username,
+  seed,
+}: {
+  matrixURL: URL;
+  username: string;
+  seed: string;
+}): MatrixClient {
+  return new MockMatrixClient({
+    matrixURL,
+    username,
+    seed,
+  });
+}
+
 async function assertPrerenderDependenciesReady(): Promise<void> {
   let checks = [
     {
@@ -1066,6 +1084,11 @@ export async function createRealm({
   }
 
   let adapter = new NodeAdapter(dir, enableFileWatcher);
+  let matrixClient = makeTestMatrixClient({
+    matrixURL: realmServerTestMatrix.url,
+    username: realmServerTestMatrix.username,
+    seed: realmSecretSeed,
+  });
   let worker: Worker | undefined;
   if (withWorker) {
     if (!runner) {
@@ -1079,17 +1102,13 @@ export async function createRealm({
       queuePublisher: publisher,
       virtualNetwork,
       matrixURL: realmServerTestMatrix.url,
+      matrixClient,
       secretSeed: realmSecretSeed,
       realmServerMatrixUsername: testRealmServerMatrixUsername,
       prerenderer,
       createPrerenderAuth: testCreatePrerenderAuth,
     });
   }
-  let matrixClient = new MatrixClient({
-    matrixURL: realmServerTestMatrix.url,
-    username: realmServerTestMatrix.username,
-    seed: realmSecretSeed,
-  });
   let realm = new Realm({
     url: realmURL,
     adapter,
@@ -1180,6 +1199,11 @@ export async function runTestRealmServer({
     queuePublisher: publisher,
     virtualNetwork,
     matrixURL,
+    matrixClient: makeTestMatrixClient({
+      matrixURL,
+      username: testRealmServerMatrixUsername,
+      seed: realmSecretSeed,
+    }),
     secretSeed: realmSecretSeed,
     realmServerMatrixUsername: testRealmServerMatrixUsername,
     prerenderer,
@@ -1215,7 +1239,7 @@ export async function runTestRealmServer({
 
   virtualNetwork.mount(testRealm.handle);
   let realms = [testRealm];
-  let matrixClient = new MatrixClient({
+  let matrixClient = makeTestMatrixClient({
     matrixURL: realmServerTestMatrix.url,
     username: realmServerTestMatrix.username,
     seed: realmSecretSeed,
@@ -1311,6 +1335,11 @@ export async function runTestRealmServerWithRealms({
     queuePublisher: publisher,
     virtualNetwork,
     matrixURL,
+    matrixClient: makeTestMatrixClient({
+      matrixURL,
+      username: testRealmServerMatrixUsername,
+      seed: realmSecretSeed,
+    }),
     secretSeed: realmSecretSeed,
     realmServerMatrixUsername: testRealmServerMatrixUsername,
     prerenderer,
@@ -1346,7 +1375,7 @@ export async function runTestRealmServerWithRealms({
     realmAdapters.push(adapter);
   }
 
-  let matrixClient = new MatrixClient({
+  let matrixClient = makeTestMatrixClient({
     matrixURL: realmServerTestMatrix.url,
     username: realmServerTestMatrix.username,
     seed: realmSecretSeed,
@@ -1673,7 +1702,7 @@ export function setupMatrixRoom(
     dbAdapter: PgAdapter;
   },
 ) {
-  let matrixClient = new MatrixClient({
+  let matrixClient = makeTestMatrixClient({
     matrixURL: realmServerTestMatrix.url,
     username: 'node-test_realm',
     seed: realmSecretSeed,
@@ -2077,7 +2106,7 @@ function permissionedRealmTemplateCacheKey(
 ): string {
   let resolvedRealmURL = options.realmURL ?? testRealmURL;
   return hashCacheKeyPayload({
-    version: 1,
+    version: 2,
     type: 'permissioned-realm',
     realmURL: resolvedRealmURL.href,
     permissions: options.permissions,
@@ -2492,7 +2521,7 @@ function permissionedRealmsTemplateCacheKey(
   options: SetupPermissionedRealmsCachedOptions,
 ): string {
   return hashCacheKeyPayload({
-    version: 1,
+    version: 2,
     type: 'permissioned-realms',
     realms: options.realms,
     prerenderer: prerendererCacheKeyPart(options.prerenderer),
