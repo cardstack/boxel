@@ -40,6 +40,7 @@
     "@types/tmp": "catalog:",
     "@types/uuid": "catalog:",
     "@types/yargs": "catalog:",
+    "@vitest/ui": "2.1.9",
     "archiver": "catalog:",
     "concurrently": "catalog:",
     "content-tag": "catalog:",

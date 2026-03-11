@@ -403,7 +403,7 @@ catalogs:
       specifier: ^8.0.1
       version: 8.2.5
     eslint-plugin-qunit-dom:
-      specifier: mainmatter/eslint-plugin-qunit-dom#d66c841
+      specifier: mainmatter/eslint-plugin-qunit-dom#d66c84190b018deb96c715c7f2bde3536a9c704b
       version: 0.2.0
     eslint-plugin-simple-import-sort:
       specifier: ^8.0.0
@@ -2056,7 +2056,7 @@ importers:
         version: 6.4.1(@types/node@25.0.8)(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.2)
       vitest:
         specifier: 'catalog:'
-        version: 2.1.9(@types/node@25.0.8)(jsdom@25.0.1)(terser@5.44.1)
+        version: 2.1.9(@types/node@25.0.8)(@vitest/ui@2.1.9)(jsdom@25.0.1)(terser@5.44.1)
 
   packages/eslint-plugin-cardstack-host: {}
 
@@ -2471,7 +2471,7 @@ importers:
         version: 8.2.5(eslint@8.57.1)
       eslint-plugin-qunit-dom:
         specifier: 'catalog:'
-        version: https://codeload.github.com/mainmatter/eslint-plugin-qunit-dom/tar.gz/d66c841(eslint@8.57.1)
+        version: https://codeload.github.com/mainmatter/eslint-plugin-qunit-dom/tar.gz/d66c84190b018deb96c715c7f2bde3536a9c704b(eslint@8.57.1)
       ethers:
         specifier: 'catalog:'
         version: 6.16.0
@@ -2807,6 +2807,9 @@ importers:
       '@types/yargs':
         specifier: 'catalog:'
         version: 17.0.35
+      '@vitest/ui':
+        specifier: 2.1.9
+        version: 2.1.9(vitest@2.1.9)
       archiver:
         specifier: 'catalog:'
         version: 7.0.1
@@ -2935,7 +2938,7 @@ importers:
         version: 9.0.1
       vitest:
         specifier: 'catalog:'
-        version: 2.1.9(@types/node@24.10.8)(jsdom@21.1.2)(terser@5.44.1)
+        version: 2.1.9(@types/node@24.10.8)(@vitest/ui@2.1.9)(jsdom@21.1.2)(terser@5.44.1)
       wait-for-localhost-cli:
         specifier: 'catalog:'
         version: 3.2.0
@@ -5706,6 +5709,9 @@ packages:
     resolution: {integrity: sha512-0iJnNkS4T8lJE4ldOhRERgER1o59iHA1nMlvpUI5lxNC9SUruH6peRUOlP4/rNcDg+UQ9u0rt5loYOnWKCojtw==}
     engines: {node: '>=16.14'}
 
+  '@polka/url@1.0.0-next.29':
+    resolution: {integrity: sha512-wwQAWhWSuHaag8c4q/KN/vCoeOJYshAIvMQwD4GpSb3OiZklFfvAgmj0VCBBImRpuF/aFgIRzllXlVX93Jevww==}
+
   '@prettier/sync@0.2.1':
     resolution: {integrity: sha512-7ls1R6//+GPYD9vof1XaL5psViv83CwpdwlS8oUkWldYgbPhzZ3WgxIQMWqGyBmWPmoBfQg8C7jj7KI/ZuDHhQ==}
     peerDependencies:
@@ -6539,6 +6545,11 @@ packages:
 
   '@vitest/spy@2.1.9':
     resolution: {integrity: sha512-E1B35FwzXXTs9FHNK6bDszs7mtydNi5MIfUWpceJ8Xbfb1gBMscAnwLbEu+B44ed6W3XjL9/ehLPHR1fkf1KLQ==}
+
+  '@vitest/ui@2.1.9':
+    resolution: {integrity: sha512-izzd2zmnk8Nl5ECYkW27328RbQ1nKvkm6Bb5DAaz1Gk59EbLkiCMa6OLT0NoaAYTjOFS6N+SMYW1nh4/9ljPiw==}
+    peerDependencies:
+      vitest: 2.1.9
 
   '@vitest/utils@2.1.9':
     resolution: {integrity: sha512-v0psaMSkNJ3A2NMrUEHFRzJtDPFn+/VWZ5WxImB21T9fjucJRmS7xCS3ppEnARb9y11OAzaD+P2Ps+b+BGX5iQ==}
@@ -9313,8 +9324,8 @@ packages:
       eslint-config-prettier:
         optional: true
 
-  eslint-plugin-qunit-dom@https://codeload.github.com/mainmatter/eslint-plugin-qunit-dom/tar.gz/d66c841:
-    resolution: {tarball: https://codeload.github.com/mainmatter/eslint-plugin-qunit-dom/tar.gz/d66c841}
+  eslint-plugin-qunit-dom@https://codeload.github.com/mainmatter/eslint-plugin-qunit-dom/tar.gz/d66c84190b018deb96c715c7f2bde3536a9c704b:
+    resolution: {tarball: https://codeload.github.com/mainmatter/eslint-plugin-qunit-dom/tar.gz/d66c84190b018deb96c715c7f2bde3536a9c704b}
     version: 0.2.0
     engines: {node: 12.* || 14.* || >= 16.*}
     peerDependencies:
@@ -9581,6 +9592,9 @@ packages:
     peerDependenciesMeta:
       picomatch:
         optional: true
+
+  fflate@0.8.2:
+    resolution: {integrity: sha512-cPJU47OaAoCbg0pBvzsgpTPhmhqI5eJjh/JIu8tPj5q+T7iLvW/JAYUqmE7KOB4R1ZyEhzBaIQpQpardBF5z8A==}
 
   figures@2.0.0:
     resolution: {integrity: sha512-Oa2M9atig69ZkfwiApY8F2Yy+tzMbazyvqv21R0NsSC8floSOC09BbT1ITWAdoMGQvJ/aZnR1KMwdx9tvHnTNA==}
@@ -11369,6 +11383,10 @@ packages:
     resolution: {integrity: sha512-223dMRJtI/l25dJKWpgij2cMtywuG/WiUKXdvwfbhGKBhy1puASqXwFzmWZ7+K73vUPoR7SS2Qz2cI/g9MKw0A==}
     engines: {node: '>= 0.8.0'}
 
+  mrmime@2.0.1:
+    resolution: {integrity: sha512-Y3wQdFg2Va6etvQ5I82yUhGdsKrcYox6p7FfL1LbK2J4V01F9TGlepTIhnK24t7koZibmg82KGglhA1XK5IsLQ==}
+    engines: {node: '>=10'}
+
   ms@2.0.0:
     resolution: {integrity: sha512-Tpp60P6IUJDTuOq/5Z8cdskzJujfwqfOTkrwIwj7IRISpnkJnT6SyJ4PCPnGMoFjC9ddhal5KVIYtAt97ix05A==}
 
@@ -12828,6 +12846,10 @@ packages:
   sinon@19.0.5:
     resolution: {integrity: sha512-r15s9/s+ub/d4bxNXqIUmwp6imVSdTorIRaxoecYjqTVLZ8RuoXr/4EDGwIBo6Waxn7f2gnURX9zuhAfCwaF6Q==}
 
+  sirv@3.0.2:
+    resolution: {integrity: sha512-2wcC/oGxHis/BoHkkPwldgiPSYcpZK3JU28WoMVv55yHJgcZ8rlXvuG9iZggz+sU1d4bRgIGASwyWqjxu3FM0g==}
+    engines: {node: '>=18'}
+
   slash@3.0.0:
     resolution: {integrity: sha512-g9Q1haeby36OSStwb4ntCGGGaKsaVSjQ68fBxoQcutl5fS1vuY18H3wSt3jFyFtrkx+Kz0V1G85A4MyAdDMi2Q==}
     engines: {node: '>=8'}
@@ -13377,6 +13399,10 @@ packages:
   toidentifier@1.0.1:
     resolution: {integrity: sha512-o5sSPKEkg/DIQNmH43V0/uerLrpzVedkUh8tGNvaeXpfpuwjKenlSox/2O/BTlZUtEe+JG7s5YhEz608PlAHRA==}
     engines: {node: '>=0.6'}
+
+  totalist@3.0.1:
+    resolution: {integrity: sha512-sf4i37nQ2LBx4m3wB74y+ubopq6W/dIzXg0FDGjsYnZHVa1Da8FH853wlL2gtUhg+xJXjfk3kUZS3BRoQeoQBQ==}
+    engines: {node: '>=6'}
 
   tough-cookie@4.1.4:
     resolution: {integrity: sha512-Loo5UUvLD9ScZ6jh8beX1T6sO1w2/MpCRpEP7V280GKMVUQ0Jzar2U3UJPsrdbziLEMMhu3Ujnq//rhiFuIeag==}
@@ -17037,6 +17063,8 @@ snapshots:
       '@pnpm/error': 5.0.3
       find-up: 5.0.0
 
+  '@polka/url@1.0.0-next.29': {}
+
   '@prettier/sync@0.2.1(prettier@3.7.4)':
     dependencies:
       prettier: 3.7.4
@@ -18005,6 +18033,17 @@ snapshots:
   '@vitest/spy@2.1.9':
     dependencies:
       tinyspy: 3.0.2
+
+  '@vitest/ui@2.1.9(vitest@2.1.9)':
+    dependencies:
+      '@vitest/utils': 2.1.9
+      fflate: 0.8.2
+      flatted: 3.3.3
+      pathe: 1.1.2
+      sirv: 3.0.2
+      tinyglobby: 0.2.15
+      tinyrainbow: 1.2.0
+      vitest: 2.1.9(@types/node@24.10.8)(@vitest/ui@2.1.9)(jsdom@21.1.2)(terser@5.44.1)
 
   '@vitest/utils@2.1.9':
     dependencies:
@@ -22231,7 +22270,7 @@ snapshots:
       '@types/eslint': 8.56.5
       eslint-config-prettier: 9.1.2(eslint@8.57.1)
 
-  eslint-plugin-qunit-dom@https://codeload.github.com/mainmatter/eslint-plugin-qunit-dom/tar.gz/d66c841(eslint@8.57.1):
+  eslint-plugin-qunit-dom@https://codeload.github.com/mainmatter/eslint-plugin-qunit-dom/tar.gz/d66c84190b018deb96c715c7f2bde3536a9c704b(eslint@8.57.1):
     dependencies:
       eslint: 8.57.1
 
@@ -22629,6 +22668,8 @@ snapshots:
   fdir@6.5.0(picomatch@4.0.3):
     optionalDependencies:
       picomatch: 4.0.3
+
+  fflate@0.8.2: {}
 
   figures@2.0.0:
     dependencies:
@@ -24705,6 +24746,8 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
+  mrmime@2.0.1: {}
+
   ms@2.0.0: {}
 
   ms@2.1.2: {}
@@ -26381,6 +26424,12 @@ snapshots:
       nise: 6.1.1
       supports-color: 7.2.0
 
+  sirv@3.0.2:
+    dependencies:
+      '@polka/url': 1.0.0-next.29
+      mrmime: 2.0.1
+      totalist: 3.0.1
+
   slash@3.0.0: {}
 
   slash@5.1.0: {}
@@ -27120,6 +27169,8 @@ snapshots:
 
   toidentifier@1.0.1: {}
 
+  totalist@3.0.1: {}
+
   tough-cookie@4.1.4:
     dependencies:
       psl: 1.15.0
@@ -27589,7 +27640,7 @@ snapshots:
       tsx: 4.21.0
       yaml: 2.8.2
 
-  vitest@2.1.9(@types/node@24.10.8)(jsdom@21.1.2)(terser@5.44.1):
+  vitest@2.1.9(@types/node@24.10.8)(@vitest/ui@2.1.9)(jsdom@21.1.2)(terser@5.44.1):
     dependencies:
       '@vitest/expect': 2.1.9
       '@vitest/mocker': 2.1.9(vite@5.4.21(@types/node@24.10.8)(terser@5.44.1))
@@ -27613,6 +27664,7 @@ snapshots:
       why-is-node-running: 2.3.0
     optionalDependencies:
       '@types/node': 24.10.8
+      '@vitest/ui': 2.1.9(vitest@2.1.9)
       jsdom: 21.1.2
     transitivePeerDependencies:
       - less
@@ -27625,7 +27677,7 @@ snapshots:
       - supports-color
       - terser
 
-  vitest@2.1.9(@types/node@25.0.8)(jsdom@25.0.1)(terser@5.44.1):
+  vitest@2.1.9(@types/node@25.0.8)(@vitest/ui@2.1.9)(jsdom@25.0.1)(terser@5.44.1):
     dependencies:
       '@vitest/expect': 2.1.9
       '@vitest/mocker': 2.1.9(vite@5.4.21(@types/node@25.0.8)(terser@5.44.1))
@@ -27649,6 +27701,7 @@ snapshots:
       why-is-node-running: 2.3.0
     optionalDependencies:
       '@types/node': 25.0.8
+      '@vitest/ui': 2.1.9(vitest@2.1.9)
       jsdom: 25.0.1(supports-color@8.1.1)
     transitivePeerDependencies:
       - less
