@@ -1,7 +1,7 @@
 import { test, expect } from './fixtures';
 import type { Page } from '@playwright/test';
 import { randomUUID } from 'crypto';
-import { appURL } from '../helpers/isolated-realm-server';
+import { appURL, realmDomain } from '../helpers/isolated-realm-server';
 import {
   clearLocalStorage,
   createRealm,
@@ -82,7 +82,7 @@ test.describe('Head tags', () => {
   }) => {
     await publishDefaultRealm(page);
 
-    let publishedRealmURLString = `http://${user.username}.localhost:4205/new-workspace/index`;
+    let publishedRealmURLString = `http://${user.username}.${realmDomain}/new-workspace/index`;
 
     await page.goto(publishedRealmURLString);
 
@@ -270,7 +270,7 @@ test.describe('Head tags', () => {
     await page.locator('[data-test-publish-button]').click();
     await page.waitForSelector('[data-test-unpublish-button]');
 
-    let publishedRealmURL = `http://${user.username}.localhost:4205/${realmName}/`;
+    let publishedRealmURL = `http://${user.username}.${realmDomain}/${realmName}/`;
     let defaultCardURL = `${publishedRealmURL}default-head-card.json`;
 
     await page.goto(defaultCardURL);
