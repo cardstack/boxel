@@ -49,6 +49,18 @@ export default class LoaderService extends Service {
   }
 
   public resetLoader(options?: { clearFetchCache?: boolean; reason?: string }) {
+    // clearFetchCache requests must never be debounced--the caller is
+    // signalling that cached responses are stale (e.g. a module was
+    // rewritten). Skipping this would cause re-indexing to use the old
+    // (broken) module from the fetch cache.
+    if (options?.clearFetchCache) {
+      this.resetTime = Date.now();
+      log.debug(`resetting loader (clearFetchCache, ${options.reason ?? ''})`);
+      clearFetchCache();
+      this.loader = this.makeInstance();
+      return;
+    }
+
     // This method is called in both the FileResource and in RealmSubscription,
     // oftentimes for the same update. It is very difficult to coordinate
     // between these two, as a CardResource is not always present (e.g. schema
@@ -56,14 +68,7 @@ export default class LoaderService extends Service {
     // unnecessary screen flashes) we add a simple leading edge debounce.
     if (this.resetTime == null || Date.now() - this.resetTime > 250) {
       this.resetTime = Date.now();
-      let reasonSuffix = options?.reason ? ` (${options.reason})` : '';
-      let clearFlag = options?.clearFetchCache ? ' [clearFetchCache]' : '';
-      log.debug(`resetting loader${reasonSuffix}${clearFlag}`);
-      if (options?.clearFetchCache) {
-        clearFetchCache();
-        this.loader = this.makeInstance();
-        return;
-      }
+      log.debug(`resetting loader (${options?.reason ?? ''})`);
       // by default we keep the fetch cache so we can take advantage of HTTP
       // caching when rebuilding the loader state
       if (this.loader) {
@@ -71,10 +76,6 @@ export default class LoaderService extends Service {
       } else {
         this.loader = this.makeInstance();
       }
-    } else if (options?.reason) {
-      log.debug(
-        `skipping loader reset due to debounce window (${options.reason})`,
-      );
     }
   }
 
