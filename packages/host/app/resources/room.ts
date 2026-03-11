@@ -562,7 +562,15 @@ export class RoomResource extends Resource<Args> {
     let effectiveEventId = this.getEffectiveEventId(event);
     event = this.getAggregatedReplacement(event);
 
-    let message = this._messageCache.get(effectiveEventId);
+    let clientGeneratedId =
+      'clientGeneratedId' in event.content
+        ? event.content.clientGeneratedId
+        : undefined;
+    let message =
+      this._messageCache.get(effectiveEventId) ??
+      (clientGeneratedId
+        ? this._messageCache.get(clientGeneratedId)
+        : undefined);
     if (!message?.isStreamingOfEventFinished) {
       let author = this.upsertRoomMember({
         roomId,
