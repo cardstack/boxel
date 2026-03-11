@@ -62,6 +62,7 @@ import type { BrowserRequest } from '../../prerender/page-pool';
 
 import type { SuperTest, Test } from 'supertest';
 import supertest from 'supertest';
+import { test as vitestTest } from 'vitest';
 import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 import type {
   IncrementalIndexEventContent,
@@ -197,6 +198,7 @@ const trackedPrerenderers = new Set<TestPrerenderer>();
 const trackedDbAdapters = new Set<PgAdapter>();
 const trackedQueuePublishers = new Set<QueuePublisher>();
 const trackedQueueRunners = new Set<QueueRunner>();
+const experimentalRealmFixtureSlotsByWorker = new Map<string, AsyncSlotPool>();
 const realmSetupDebug = process.env.VITEST_REALM_SETUP_DEBUG === '1';
 
 function logRealmSetup(message: string) {
@@ -241,6 +243,62 @@ function currentVitestWorkerId(): string {
     process.env.VITEST_POOL_ID ??
     `pid-${process.pid}`
   );
+}
+
+function experimentalRealmFixtureConcurrency(): number {
+  let requested = Number(
+    process.env.EXPERIMENTAL_REALM_FIXTURE_CONCURRENCY ?? '1',
+  );
+  if (!Number.isFinite(requested) || requested < 1) {
+    return 1;
+  }
+  return Math.floor(requested);
+}
+
+function testPrerenderMaxPages(): number {
+  let requested = Number(
+    process.env.TEST_PRERENDER_MAX_PAGES ??
+      String(experimentalRealmFixtureConcurrency()),
+  );
+  if (!Number.isFinite(requested) || requested < 1) {
+    return 1;
+  }
+  return Math.floor(requested);
+}
+
+class AsyncSlotPool {
+  #limit: number;
+  #active = 0;
+  #waiters: Array<() => void> = [];
+
+  constructor(limit: number) {
+    this.#limit = limit;
+  }
+
+  async acquire(): Promise<() => void> {
+    if (this.#active >= this.#limit) {
+      await new Promise<void>((resolve) => this.#waiters.push(resolve));
+    }
+    this.#active++;
+    let released = false;
+    return () => {
+      if (released) {
+        return;
+      }
+      released = true;
+      this.#active--;
+      this.#waiters.shift()?.();
+    };
+  }
+}
+
+function experimentalRealmFixtureSlotPool(workerId: string): AsyncSlotPool {
+  let pool = experimentalRealmFixtureSlotsByWorker.get(workerId);
+  if (!pool) {
+    pool = new AsyncSlotPool(experimentalRealmFixtureConcurrency());
+    experimentalRealmFixtureSlotsByWorker.set(workerId, pool);
+  }
+  return pool;
 }
 
 async function findAvailablePort(hostname = '127.0.0.1'): Promise<number> {
@@ -368,7 +426,11 @@ async function routePrerenderBrowserRequest(
 }
 
 export function prepareTestDB(): void {
-  process.env.PGDATABASE = `test_db_${Math.floor(10000000 * Math.random())}`;
+  process.env.PGDATABASE = randomTestDatabaseName();
+}
+
+function randomTestDatabaseName(): string {
+  return `test_db_${process.pid}_${Math.floor(1000000000 * Math.random())}`;
 }
 
 function pgAdminConnectionConfig() {
@@ -779,7 +841,7 @@ async function startTestPrerenderServer(): Promise<string> {
   logRealmSetup(`starting prerender server for worker ${workerId}`);
   let server = createPrerenderHttpServer({
     silent: Boolean(process.env.SILENT_PRERENDERER),
-    maxPages: 1,
+    maxPages: testPrerenderMaxPages(),
     browserRequestHandler: (request) =>
       routePrerenderBrowserRequest(workerId, request),
   });
@@ -833,6 +895,7 @@ export async function stopTestPrerenderServer() {
   }
   prerenderServersByWorker.clear();
   prerenderVirtualRealmsByWorker.clear();
+  experimentalRealmFixtureSlotsByWorker.clear();
 }
 
 interface StoppablePrerenderServer extends Server {
@@ -1983,6 +2046,31 @@ type SetupPermissionedRealmCachedOptions = Omit<
   useTemplateCache?: boolean;
 };
 
+export type ExperimentalPermissionedRealmFixture = {
+  dbAdapter: PgAdapter;
+  testRealm: Realm;
+  testRealmPath: string;
+  testRealmHttpServer: Server;
+  testRealmAdapter: RealmAdapter;
+  request: RealmRequest;
+  serverRequest: SuperTest<Test>;
+  dir: DirResult;
+  realmURL: URL;
+  testRealmHref: string;
+};
+
+type ExperimentalPermissionedRealmTestOptions = {
+  permissions?: RealmPermissions;
+  realmURL?: URL;
+  serverURL?: URL;
+  fileSystem?: Record<string, string | LooseSingleCardDocument>;
+  subscribeToRealmEvents?: boolean;
+  prerenderer?: Prerenderer;
+  cardSizeLimitBytes?: number;
+  fileSizeLimitBytes?: number;
+  useTemplateCache?: boolean;
+};
+
 function permissionedRealmTemplateCacheKey(
   options: SetupPermissionedRealmCachedOptions,
 ): string {
@@ -2249,6 +2337,162 @@ export function setupPermissionedRealmCached(
         `setupPermissionedRealmCached released cacheKey=${cacheKey.slice(0, 12)}`,
       );
     }
+  });
+}
+
+export function createExperimentalPermissionedRealmTest(
+  options: ExperimentalPermissionedRealmTestOptions = {},
+) {
+  let realmURL = new URL(
+    (options.realmURL ?? new URL('http://test-realm/test/')).href,
+  );
+  let serverURL = new URL(
+    (options.serverURL ?? new URL('http://127.0.0.1:0/test/')).href,
+  );
+  let permissions = options.permissions ?? {
+    '*': ['read', 'write'],
+    '1': ['read'],
+  };
+  let templateOptions: SetupPermissionedRealmCachedOptions = {
+    permissions,
+    realmURL,
+    serverURL,
+    fileSystem: options.fileSystem,
+    subscribeToRealmEvents: options.subscribeToRealmEvents,
+    prerenderer: options.prerenderer,
+    cardSizeLimitBytes: options.cardSizeLimitBytes,
+    fileSizeLimitBytes: options.fileSizeLimitBytes,
+  };
+
+  return (vitestTest as any).extend({
+    realmTemplate: [
+      async (
+        _context: unknown,
+        use: (
+          fixture: { cacheKey: string; templateDatabaseName: string } | null,
+        ) => Promise<void>,
+      ) => {
+        if (options.useTemplateCache === false) {
+          await use(null);
+          return;
+        }
+        let { cacheKey, templateDatabaseName } =
+          await acquirePermissionedRealmTemplate(templateOptions);
+        try {
+          await use({ cacheKey, templateDatabaseName });
+        } finally {
+          await releasePermissionedRealmTemplate(cacheKey);
+        }
+      },
+      { scope: 'worker' },
+    ],
+    realm: async (
+      {
+        realmTemplate,
+      }: {
+        realmTemplate: {
+          cacheKey: string;
+          templateDatabaseName: string;
+        } | null;
+      },
+      use: (fixture: ExperimentalPermissionedRealmFixture) => Promise<void>,
+    ) => {
+      let releaseSlot = await experimentalRealmFixtureSlotPool(
+        currentVitestWorkerId(),
+      ).acquire();
+      let databaseName = randomTestDatabaseName();
+      let dbAdapter: PgAdapter | undefined;
+      let publisher: QueuePublisher | undefined;
+      let runner: QueueRunner | undefined;
+
+      let fixture:
+        | Awaited<ReturnType<typeof startPermissionedRealmFixture>>
+        | undefined;
+      try {
+        dbAdapter = await createTestPgAdapter({
+          databaseName,
+          templateDatabase: realmTemplate?.templateDatabaseName,
+        });
+        trackedDbAdapters.add(dbAdapter);
+        publisher = new PgQueuePublisher(dbAdapter);
+        trackedQueuePublishers.add(publisher);
+        runner = new PgQueueRunner({
+          adapter: dbAdapter,
+          workerId: `test-worker-${uuidv4()}`,
+        });
+        trackedQueueRunners.add(runner);
+
+        fixture = await startPermissionedRealmFixture(
+          dbAdapter,
+          publisher,
+          runner,
+          {
+            permissions,
+            realmURL: new URL(realmURL.href),
+            serverURL: new URL(serverURL.href),
+            fileSystem: options.fileSystem,
+            subscribeToRealmEvents: options.subscribeToRealmEvents,
+            prerenderer: options.prerenderer,
+            cardSizeLimitBytes: options.cardSizeLimitBytes,
+            fileSizeLimitBytes: options.fileSizeLimitBytes,
+          },
+        );
+
+        await use({
+          dbAdapter,
+          testRealm: fixture.testRealmServer.testRealm,
+          testRealmPath: fixture.testRealmServer.testRealmDir,
+          testRealmHttpServer: fixture.testRealmServer.testRealmHttpServer,
+          testRealmAdapter: fixture.testRealmServer.testRealmAdapter,
+          request: withRealmPath(fixture.request, realmURL),
+          serverRequest: fixture.request,
+          dir: fixture.dir,
+          realmURL,
+          testRealmHref: realmURL.href,
+        });
+      } finally {
+        if (fixture) {
+          try {
+            await teardownPermissionedRealmFixture(
+              fixture.testRealmServer,
+              fixture.unregisterPrerenderVirtualRealm,
+            );
+          } catch {
+            // best-effort cleanup
+          }
+        }
+        if (publisher) {
+          try {
+            await publisher.destroy();
+          } catch {
+            // best-effort cleanup
+          }
+          trackedQueuePublishers.delete(publisher);
+        }
+        if (runner) {
+          try {
+            await runner.destroy();
+          } catch {
+            // best-effort cleanup
+          }
+          trackedQueueRunners.delete(runner);
+        }
+        if (dbAdapter) {
+          try {
+            await dbAdapter.close();
+          } catch {
+            // best-effort cleanup
+          }
+          trackedDbAdapters.delete(dbAdapter);
+        }
+        try {
+          await dropDatabase(databaseName);
+        } catch {
+          // best-effort cleanup
+        }
+        releaseSlot();
+      }
+    },
   });
 }
 
