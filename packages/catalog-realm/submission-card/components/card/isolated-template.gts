@@ -10,8 +10,8 @@ import FileCodeIcon from '@cardstack/boxel-icons/file-code';
 import GitPullRequestIcon from '@cardstack/boxel-icons/git-pull-request';
 import MessageIcon from '@cardstack/boxel-icons/message';
 import GitBranchIcon from '@cardstack/boxel-icons/git-branch';
-import CheckCircleIcon from '@cardstack/boxel-icons/check-circle';
-import XCircleIcon from '@cardstack/boxel-icons/x-circle';
+import CheckCircleIcon from '@cardstack/boxel-icons/circle-check';
+import XCircleIcon from '@cardstack/boxel-icons/circle-x';
 import ClockIcon from '@cardstack/boxel-icons/clock';
 
 import {
@@ -20,6 +20,7 @@ import {
   computeLatestReviewState,
   searchEventQuery,
 } from '../../../pr-card/utils';
+import type { PrCard } from '../../../pr-card/pr-card';
 import type { SubmissionCard } from '../../submission-card';
 
 export class IsolatedTemplate extends Component<typeof SubmissionCard> {
@@ -79,8 +80,8 @@ export class IsolatedTemplate extends Component<typeof SubmissionCard> {
     { isLive: true },
   );
 
-  get prCardInstance() {
-    return this.prCardData?.instances?.[0] ?? null;
+  get prCardInstance(): PrCard | null {
+    return (this.prCardData?.instances?.[0] as PrCard) ?? null;
   }
 
   get githubEventCardRef() {

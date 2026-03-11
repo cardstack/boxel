@@ -6,12 +6,12 @@ import type { Query } from '@cardstack/runtime-common';
 import { eq } from '@cardstack/boxel-ui/helpers';
 import { BoxelButton } from '@cardstack/boxel-ui/components';
 
-import CheckCircleIcon from '@cardstack/boxel-icons/check-circle';
+import CheckCircleIcon from '@cardstack/boxel-icons/circle-check';
 import ClockIcon from '@cardstack/boxel-icons/clock';
 import GitBranchIcon from '@cardstack/boxel-icons/git-branch';
 import GitPullRequestIcon from '@cardstack/boxel-icons/git-pull-request';
 import MessageIcon from '@cardstack/boxel-icons/message';
-import XCircleIcon from '@cardstack/boxel-icons/x-circle';
+import XCircleIcon from '@cardstack/boxel-icons/circle-x';
 
 import {
   buildRealmHrefs,
@@ -19,6 +19,7 @@ import {
   computeLatestReviewState,
   searchEventQuery,
 } from '../../../pr-card/utils';
+import type { PrCard } from '../../../pr-card/pr-card';
 import type { SubmissionCard } from '../../submission-card';
 
 export class FittedTemplate extends Component<typeof SubmissionCard> {
@@ -75,8 +76,8 @@ export class FittedTemplate extends Component<typeof SubmissionCard> {
     { isLive: true },
   );
 
-  get prCardInstance() {
-    return this.prCardData?.instances?.[0] ?? null;
+  get prCardInstance(): PrCard | null {
+    return (this.prCardData?.instances?.[0] as PrCard) ?? null;
   }
 
   get githubEventCardRef() {

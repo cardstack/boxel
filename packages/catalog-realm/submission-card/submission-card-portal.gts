@@ -152,7 +152,7 @@ class Isolated extends Component<typeof SubmissionCardPortal> {
     return {
       filter: {
         every: [
-          baseFilter,
+          baseFilter!,
           {
             any: [{ contains: { cardTitle: this.searchText } }],
           },
