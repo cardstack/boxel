@@ -86,6 +86,7 @@ export class CommandRunner {
           });
           throw new Error(errorMessage);
         }
+        let submissionCardUrl = getSubmissionCardUrl(result.cardResultString);
         await this.createListingPRHandler.ensureCreateListingBranch(
           eventContent,
         );
@@ -97,6 +98,7 @@ export class CommandRunner {
           eventContent,
           runAs,
           result,
+          submissionCardUrl,
         );
         return result;
       }
@@ -163,5 +165,20 @@ export class CommandRunner {
       commands.push({ type: filter.content_type, command: row.command });
     }
     return commands;
+  }
+}
+
+function getSubmissionCardUrl(
+  cardResultString?: string | null,
+): string | null {
+  if (!cardResultString || !cardResultString.trim()) {
+    return null;
+  }
+  try {
+    let parsed = JSON.parse(cardResultString);
+    let id = parsed?.data?.id;
+    return typeof id === 'string' ? id : null;
+  } catch {
+    return null;
   }
 }
