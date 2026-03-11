@@ -63,6 +63,7 @@ import * as ShowCardCommandModule from './show-card';
 import * as ShowFileCommandModule from './show-file';
 import * as SummarizeSessionCommandModule from './summarize-session';
 import * as SwitchSubmodeCommandModule from './switch-submode';
+import * as SyncOpenRouterModelsCommandModule from './sync-openrouter-models';
 import * as TransformCardsCommandModule from './transform-cards';
 import * as UnregisterBotCommandModule from './unregister-bot';
 import * as UpdateCodePathWithSelectionCommandModule from './update-code-path-with-selection';
@@ -311,6 +312,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
     SummarizeSessionCommandModule,
   );
   virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/sync-openrouter-models',
+    SyncOpenRouterModelsCommandModule,
+  );
+  virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/ai-assistant',
     UseAiAssistantCommandModule,
   );
@@ -422,6 +427,7 @@ export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
   ShowFileCommandModule.default,
   SummarizeSessionCommandModule.default,
   SwitchSubmodeCommandModule.default,
+  SyncOpenRouterModelsCommandModule.default,
   TransformCardsCommandModule.default,
   UnregisterBotCommandModule.default,
   CancelIndexingJobCommandModule.default,

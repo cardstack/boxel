@@ -1,5 +1,8 @@
 import { service } from '@ember/service';
 
+import { SupportedMimeType } from '@cardstack/runtime-common';
+import type { AtomicOperation } from '@cardstack/runtime-common/atomic-document';
+
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import HostBaseCommand from '../lib/host-base-command';
@@ -7,8 +10,6 @@ import HostBaseCommand from '../lib/host-base-command';
 import type CardService from '../services/card-service';
 import type NetworkService from '../services/network';
 import type RealmServerService from '../services/realm-server';
-import type { AtomicOperation } from '@cardstack/runtime-common';
-import { SupportedMimeType } from '@cardstack/runtime-common';
 
 const OPENROUTER_MODELS_URL = 'https://openrouter.ai/api/v1/models';
 const BATCH_SIZE = 50;
@@ -172,6 +173,7 @@ export default class SyncOpenRouterModelsCommand extends HostBaseCommand<
     let response = await this.realmServer.requestForward({
       url: OPENROUTER_MODELS_URL,
       method: 'GET',
+      requestBody: '',
       headers: {
         'Content-Type': 'application/json',
         'X-Title': 'Boxel OpenRouter Model Sync',
