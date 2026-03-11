@@ -13,18 +13,22 @@ class ReviewStateBadge extends GlimmerComponent<ReviewStateBadgeSignature> {
     if (this.args.state === 'changes_requested')
       return 'review-state-badge--changes';
     if (this.args.state === 'approved') return 'review-state-badge--approved';
+    if (this.args.state === 'unknown') return 'review-state-badge--pending';
     return '';
   }
 
   get label() {
     if (this.args.state === 'changes_requested') return 'Changes Requested';
     if (this.args.state === 'approved') return 'Approved';
+    if (this.args.state === 'unknown') return 'Pending Review';
     return '';
   }
 
   get hasState() {
     return (
-      this.args.state === 'changes_requested' || this.args.state === 'approved'
+      this.args.state === 'changes_requested' ||
+      this.args.state === 'approved' ||
+      this.args.state === 'unknown'
     );
   }
 
@@ -70,6 +74,11 @@ class ReviewStateBadge extends GlimmerComponent<ReviewStateBadgeSignature> {
         border: 1px solid
           color-mix(in srgb, var(--chart-1, #28a745) 35%, var(--card, #ffffff));
       }
+      .review-state-badge--pending {
+        background: color-mix(in srgb, #9a6700 10%, var(--card, #ffffff));
+        color: #9a6700;
+        border: 1px solid color-mix(in srgb, #9a6700 30%, var(--card, #ffffff));
+      }
     </style>
   </template>
 }
@@ -93,6 +102,9 @@ export class ReviewSection extends GlimmerComponent<ReviewSectionSignature> {
     }
     if (this.args.reviewState === 'approved') {
       return 'review-item--approved';
+    }
+    if (this.args.reviewState === 'unknown') {
+      return 'review-item--pending';
     }
     return '';
   }
@@ -130,7 +142,7 @@ export class ReviewSection extends GlimmerComponent<ReviewSectionSignature> {
           <span class='empty-state-icon' aria-hidden='true'>
             <span class='empty-state-dot'></span>
           </span>
-          <span class='empty-state-text'>-</span>
+          <span class='empty-state-text'>Pending Review</span>
         </div>
       {{/if}}
     </div>
@@ -279,6 +291,14 @@ export class ReviewSection extends GlimmerComponent<ReviewSectionSignature> {
           var(--chart-1, #28a745) 35%,
           var(--card, #ffffff)
         );
+      }
+      .review-item--pending {
+        background: color-mix(in srgb, #9a6700 8%, var(--card, #ffffff));
+        border-color: color-mix(in srgb, #9a6700 25%, var(--card, #ffffff));
+      }
+      .review-item--pending .empty-state-text {
+        color: #9a6700;
+        font-weight: 600;
       }
     </style>
   </template>

@@ -3,15 +3,23 @@ import { on } from '@ember/modifier';
 import { Component, realmURL } from 'https://cardstack.com/base/card-api';
 import type { Query } from '@cardstack/runtime-common';
 
-import { or } from '@cardstack/boxel-ui/helpers';
+import { eq, or } from '@cardstack/boxel-ui/helpers';
 import { BoxelButton } from '@cardstack/boxel-ui/components';
 
 import FileCodeIcon from '@cardstack/boxel-icons/file-code';
 import GitPullRequestIcon from '@cardstack/boxel-icons/git-pull-request';
 import MessageIcon from '@cardstack/boxel-icons/message';
 import GitBranchIcon from '@cardstack/boxel-icons/git-branch';
+import CheckCircleIcon from '@cardstack/boxel-icons/check-circle';
+import XCircleIcon from '@cardstack/boxel-icons/x-circle';
+import ClockIcon from '@cardstack/boxel-icons/clock';
 
-import { buildRealmHrefs } from '../../../pr-card/utils';
+import {
+  buildRealmHrefs,
+  buildLatestReviewByReviewer,
+  computeLatestReviewState,
+  searchEventQuery,
+} from '../../../pr-card/utils';
 import type { SubmissionCard } from '../../submission-card';
 
 export class IsolatedTemplate extends Component<typeof SubmissionCard> {
@@ -73,6 +81,39 @@ export class IsolatedTemplate extends Component<typeof SubmissionCard> {
 
   get prCardInstance() {
     return this.prCardData?.instances?.[0] ?? null;
+  }
+
+  get githubEventCardRef() {
+    return {
+      module: new URL('../../../github-event/github-event', import.meta.url)
+        .href,
+      name: 'GithubEventCard' as const,
+    };
+  }
+
+  get prReviewEventQuery(): Query | undefined {
+    const prNumber = this.prCardInstance?.prNumber;
+    if (!prNumber) return undefined;
+    return searchEventQuery(
+      this.githubEventCardRef,
+      prNumber,
+      'pull_request_review',
+    );
+  }
+
+  prReviewEventData = this.args.context?.getCards(
+    this,
+    () => this.prReviewEventQuery,
+    () => this.realmHrefs,
+    { isLive: true },
+  );
+
+  get reviewState() {
+    if (!this.prCardInstance) return null;
+    const reviews = buildLatestReviewByReviewer(
+      this.prReviewEventData?.instances ?? [],
+    );
+    return computeLatestReviewState(reviews);
   }
 
   openPrCard = () => {
@@ -167,6 +208,26 @@ export class IsolatedTemplate extends Component<typeof SubmissionCard> {
           {{/if}}
         </div>
       </div>
+
+      {{#if this.reviewState}}
+        <div
+          class='review-banner
+            {{if (eq this.reviewState "approved") "review-banner--approved"}}
+            {{if
+              (eq this.reviewState "changes_requested")
+              "review-banner--changes"
+            }}
+            {{if (eq this.reviewState "unknown") "review-banner--pending"}}'
+        >
+          {{#if (eq this.reviewState 'approved')}}
+            <CheckCircleIcon width='14' height='14' />Approved
+          {{else if (eq this.reviewState 'changes_requested')}}
+            <XCircleIcon width='14' height='14' />Changes Requested
+          {{else}}
+            <ClockIcon width='14' height='14' />Pending Review
+          {{/if}}
+        </div>
+      {{/if}}
 
       {{#if this.fileCount}}
         <section class='files-section'>
@@ -294,6 +355,31 @@ export class IsolatedTemplate extends Component<typeof SubmissionCard> {
         color: rgba(255, 255, 255, 0.85);
         border-radius: var(--boxel-border-radius-sm);
         white-space: nowrap;
+      }
+
+      .review-banner {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-xs);
+        padding: var(--boxel-sp-xs) var(--boxel-sp-xl);
+        font-size: var(--boxel-font-size-sm);
+        font-weight: 600;
+        flex-shrink: 0;
+      }
+
+      .review-banner--approved {
+        background: #d4edda;
+        color: #1a7f37;
+      }
+
+      .review-banner--changes {
+        background: #fde8ea;
+        color: #d73a49;
+      }
+
+      .review-banner--pending {
+        background: #fff3cd;
+        color: #9a6700;
       }
 
       .view-pr-btn {

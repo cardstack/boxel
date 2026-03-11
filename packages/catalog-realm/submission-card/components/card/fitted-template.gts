@@ -3,13 +3,22 @@ import { on } from '@ember/modifier';
 import { Component, realmURL } from 'https://cardstack.com/base/card-api';
 import type { Query } from '@cardstack/runtime-common';
 
+import { eq } from '@cardstack/boxel-ui/helpers';
 import { BoxelButton } from '@cardstack/boxel-ui/components';
 
+import CheckCircleIcon from '@cardstack/boxel-icons/check-circle';
+import ClockIcon from '@cardstack/boxel-icons/clock';
 import GitBranchIcon from '@cardstack/boxel-icons/git-branch';
 import GitPullRequestIcon from '@cardstack/boxel-icons/git-pull-request';
 import MessageIcon from '@cardstack/boxel-icons/message';
+import XCircleIcon from '@cardstack/boxel-icons/x-circle';
 
-import { buildRealmHrefs } from '../../../pr-card/utils';
+import {
+  buildRealmHrefs,
+  buildLatestReviewByReviewer,
+  computeLatestReviewState,
+  searchEventQuery,
+} from '../../../pr-card/utils';
 import type { SubmissionCard } from '../../submission-card';
 
 export class FittedTemplate extends Component<typeof SubmissionCard> {
@@ -70,6 +79,39 @@ export class FittedTemplate extends Component<typeof SubmissionCard> {
     return this.prCardData?.instances?.[0] ?? null;
   }
 
+  get githubEventCardRef() {
+    return {
+      module: new URL('../../../github-event/github-event', import.meta.url)
+        .href,
+      name: 'GithubEventCard' as const,
+    };
+  }
+
+  get prReviewEventQuery(): Query | undefined {
+    const prNumber = this.prCardInstance?.prNumber;
+    if (!prNumber) return undefined;
+    return searchEventQuery(
+      this.githubEventCardRef,
+      prNumber,
+      'pull_request_review',
+    );
+  }
+
+  prReviewEventData = this.args.context?.getCards(
+    this,
+    () => this.prReviewEventQuery,
+    () => this.realmHrefs,
+    { isLive: true },
+  );
+
+  get reviewState() {
+    if (!this.prCardInstance) return null;
+    const reviews = buildLatestReviewByReviewer(
+      this.prReviewEventData?.instances ?? [],
+    );
+    return computeLatestReviewState(reviews);
+  }
+
   openPrCard = (e: Event) => {
     e.stopPropagation();
     if (this.prCardInstance) {
@@ -95,6 +137,27 @@ export class FittedTemplate extends Component<typeof SubmissionCard> {
           />
         {{else}}
           <@model.constructor.icon class='card-icon' />
+        {{/if}}
+        {{#if this.reviewState}}
+          <span
+            class='review-corner-badge
+              {{if (eq this.reviewState "approved") "review-corner-badge--approved"}}
+              {{if (eq this.reviewState "changes_requested") "review-corner-badge--changes"}}
+              {{if (eq this.reviewState "unknown") "review-corner-badge--pending"}}'
+            title={{if
+              (eq this.reviewState 'approved')
+              'Approved'
+              (if (eq this.reviewState 'changes_requested') 'Changes Requested' 'Pending Review')
+            }}
+          >
+            {{#if (eq this.reviewState 'approved')}}
+              <CheckCircleIcon width='12' height='12' />
+            {{else if (eq this.reviewState 'changes_requested')}}
+              <XCircleIcon width='12' height='12' />
+            {{else}}
+              <ClockIcon width='12' height='12' />
+            {{/if}}
+          </span>
         {{/if}}
         {{#if @model.listing}}
           <div class='hover-overlay'>
@@ -327,6 +390,35 @@ export class FittedTemplate extends Component<typeof SubmissionCard> {
         --boxel-button-color: var(--muted, #f6f8fa);
         --boxel-button-text-color: var(--foreground, #1f2328);
         --boxel-button-border: 1px solid var(--border, #d0d7de);
+      }
+
+      .review-corner-badge {
+        position: absolute;
+        top: var(--boxel-sp-4xs);
+        right: var(--boxel-sp-4xs);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        z-index: 1;
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45), 0 0 0 1.5px rgba(255, 255, 255, 0.9);
+      }
+
+      .review-corner-badge--approved {
+        background: #d4edda;
+        color: #1a7f37;
+      }
+
+      .review-corner-badge--changes {
+        background: #fde8ea;
+        color: #d73a49;
+      }
+
+      .review-corner-badge--pending {
+        background: #fff3cd;
+        color: #9a6700;
       }
 
       @container fitted-card (aspect-ratio <= 1.0) {

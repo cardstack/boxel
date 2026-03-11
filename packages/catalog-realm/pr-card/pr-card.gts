@@ -532,6 +532,10 @@ class FittedTemplate extends Component<typeof PrCard> {
         <div class='review-status-row review-status-row--approved'>
           <span class='review-status-label'>Approved</span>
         </div>
+      {{else}}
+        <div class='review-status-row review-status-row--pending'>
+          <span class='review-status-label'>Pending Review</span>
+        </div>
       {{/if}}
 
       <div class='summary-section'>
@@ -742,12 +746,18 @@ class FittedTemplate extends Component<typeof PrCard> {
           var(--card, #ffffff)
         );
       }
+      .review-status-row--pending {
+        background: color-mix(in srgb, #9a6700 8%, var(--card, #ffffff));
+      }
       .review-status-label {
         font-size: var(--boxel-font-sm);
         font-weight: 600;
       }
       .review-status-row--changes .review-status-label {
         color: var(--destructive, #d73a49);
+      }
+      .review-status-row--pending .review-status-label {
+        color: #9a6700;
       }
       .review-status-row--approved .review-status-label {
         color: var(--chart-1, #28a745);
