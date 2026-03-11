@@ -49,9 +49,13 @@ function tsTitle(
 }
 
 class Isolated extends Component<typeof TsFileDef> {
+  get hasContent() {
+    return Boolean(this.args.model?.content?.trim());
+  }
+
   get highlightedContent() {
-    let content = this.args.model?.content;
-    if (!content) {
+    let content = this.args.model?.content ?? '';
+    if (!content.trim()) {
       return htmlSafe('');
     }
     // `highlightTs()` owns the whole rendering pipeline for this preview: it
@@ -67,7 +71,7 @@ class Isolated extends Component<typeof TsFileDef> {
 
   <template>
     <article class='ts-isolated' data-test-ts-isolated>
-      {{#if this.highlightedContent}}
+      {{#if this.hasContent}}
         <pre class='ts-isolated__code'><code>{{this.highlightedContent}}</code></pre>
       {{else}}
         <header class='ts-isolated__title'>{{this.title}}</header>
@@ -131,9 +135,13 @@ class Embedded extends Component<typeof TsFileDef> {
     return tsTitle(this.args.model);
   }
 
+  get hasContent() {
+    return Boolean(this.args.model?.content?.trim());
+  }
+
   get codePreview() {
-    let content = this.args.model?.content;
-    if (!content) {
+    let content = this.args.model?.content ?? '';
+    if (!content.trim()) {
       return htmlSafe('');
     }
     // `highlightTs()` owns the whole rendering pipeline for this preview: it
@@ -146,7 +154,7 @@ class Embedded extends Component<typeof TsFileDef> {
   <template>
     <article class='ts-embedded' data-test-ts-embedded>
       <header class='ts-embedded__title'>{{this.title}}</header>
-      {{#if this.codePreview}}
+      {{#if this.hasContent}}
         <div class='ts-embedded__preview'>
           <pre class='ts-embedded__code'><code>{{this.codePreview}}</code></pre>
         </div>

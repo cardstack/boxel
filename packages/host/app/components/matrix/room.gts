@@ -846,8 +846,11 @@ export default class Room extends Component<Signature> {
     if (!scrollState) {
       return;
     }
+    let elementOwnsIndex = scrollState.messageElements.get(element) === index;
     scrollState.messageElements.delete(element);
-    scrollState.messageScrollers.delete(index);
+    if (elementOwnsIndex) {
+      scrollState.messageScrollers.delete(index);
+    }
     scrollState.messageVisibilityObserver.unobserve(element);
   };
 
