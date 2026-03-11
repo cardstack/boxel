@@ -452,8 +452,8 @@ const permissionedRealmTemplateCache = new Map<
   string,
   CachedPermissionedRealmTemplateEntry
 >();
-const permissionedRealmTemplateNamePrefix = `rs_tpl_${process.pid}_`;
-const permissionedRealmBuilderDbNamePrefix = `rs_bld_${process.pid}_`;
+const permissionedRealmTemplateNamePrefix = `rs_tpl_`;
+const permissionedRealmBuilderDbNamePrefix = `rs_bld_`;
 const prerendererCacheIds = new WeakMap<object, number>();
 let nextPrerendererCacheId = 1;
 
@@ -1106,10 +1106,15 @@ export function setupPermissionedRealms(
       runner: QueueRunner,
     ) => {
       _dbAdapter = dbAdapter;
-      ({ realms } = await startPermissionedRealmsFixture(dbAdapter, publisher, runner, {
-        realms: realmsArg,
-        prerenderer,
-      }));
+      ({ realms } = await startPermissionedRealmsFixture(
+        dbAdapter,
+        publisher,
+        runner,
+        {
+          realms: realmsArg,
+          prerenderer,
+        },
+      ));
       onRealmSetup?.({
         dbAdapter: _dbAdapter!,
         realms,
@@ -1821,7 +1826,9 @@ async function buildPermissionedRealmsTemplate(
   let dbAdapter: PgAdapter | undefined;
   let publisher: QueuePublisher | undefined;
   let runner: QueueRunner | undefined;
-  let fixture: Awaited<ReturnType<typeof startPermissionedRealmsFixture>> | undefined;
+  let fixture:
+    | Awaited<ReturnType<typeof startPermissionedRealmsFixture>>
+    | undefined;
 
   await dropDatabase(templateDatabaseName);
   await dropDatabase(builderDatabaseName);
@@ -1837,10 +1844,15 @@ async function buildPermissionedRealmsTemplate(
       workerId: 'template-worker',
     });
 
-    fixture = await startPermissionedRealmsFixture(dbAdapter, publisher, runner, {
-      realms: options.realms,
-      prerenderer: options.prerenderer,
-    });
+    fixture = await startPermissionedRealmsFixture(
+      dbAdapter,
+      publisher,
+      runner,
+      {
+        realms: options.realms,
+        prerenderer: options.prerenderer,
+      },
+    );
 
     await waitForQueueIdle(dbAdapter);
     await teardownPermissionedRealmsFixture(fixture.realms);

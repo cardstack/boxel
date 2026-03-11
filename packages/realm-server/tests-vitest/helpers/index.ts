@@ -246,11 +246,12 @@ function currentVitestWorkerId(): string {
 }
 
 function experimentalRealmFixtureConcurrency(): number {
-  let requested = Number(
-    process.env.EXPERIMENTAL_REALM_FIXTURE_CONCURRENCY ?? '1',
-  );
-  if (!Number.isFinite(requested) || requested < 1) {
-    return 1;
+  if (process.env.EXPERIMENTAL_REALM_FIXTURE_CONCURRENCY == null) {
+    return 0;
+  }
+  let requested = Number(process.env.EXPERIMENTAL_REALM_FIXTURE_CONCURRENCY);
+  if (!Number.isFinite(requested) || requested < 0) {
+    return 0;
   }
   return Math.floor(requested);
 }
@@ -258,7 +259,7 @@ function experimentalRealmFixtureConcurrency(): number {
 function testPrerenderMaxPages(): number {
   let requested = Number(
     process.env.TEST_PRERENDER_MAX_PAGES ??
-      String(experimentalRealmFixtureConcurrency()),
+      String(experimentalRealmFixtureConcurrency() || 5),
   );
   if (!Number.isFinite(requested) || requested < 1) {
     return 1;
@@ -733,8 +734,8 @@ const permissionedRealmTemplateCache = new Map<
   string,
   CachedPermissionedRealmTemplateEntry
 >();
-const permissionedRealmTemplateNamePrefix = `rs_tpl_${process.pid}_`;
-const permissionedRealmBuilderDbNamePrefix = `rs_bld_${process.pid}_`;
+const permissionedRealmTemplateNamePrefix = `rs_tpl_`;
+const permissionedRealmBuilderDbNamePrefix = `rs_bld_`;
 const prerendererCacheIds = new WeakMap<object, number>();
 let nextPrerendererCacheId = 1;
 
@@ -2365,42 +2366,20 @@ export function createExperimentalPermissionedRealmTest(
   };
 
   return (vitestTest as any).extend({
-    realmTemplate: [
-      async (
-        _context: unknown,
-        use: (
-          fixture: { cacheKey: string; templateDatabaseName: string } | null,
-        ) => Promise<void>,
-      ) => {
-        if (options.useTemplateCache === false) {
-          await use(null);
-          return;
-        }
-        let { cacheKey, templateDatabaseName } =
-          await acquirePermissionedRealmTemplate(templateOptions);
-        try {
-          await use({ cacheKey, templateDatabaseName });
-        } finally {
-          await releasePermissionedRealmTemplate(cacheKey);
-        }
-      },
-      { scope: 'worker' },
-    ],
     realm: async (
-      {
-        realmTemplate,
-      }: {
-        realmTemplate: {
-          cacheKey: string;
-          templateDatabaseName: string;
-        } | null;
-      },
+      { _: _unused }: { _?: never },
       use: (fixture: ExperimentalPermissionedRealmFixture) => Promise<void>,
     ) => {
-      let releaseSlot = await experimentalRealmFixtureSlotPool(
-        currentVitestWorkerId(),
-      ).acquire();
+      let releaseSlot = () => {};
+      let concurrencyLimit = experimentalRealmFixtureConcurrency();
+      if (concurrencyLimit > 0) {
+        releaseSlot = await experimentalRealmFixtureSlotPool(
+          currentVitestWorkerId(),
+        ).acquire();
+      }
       let databaseName = randomTestDatabaseName();
+      let template: { cacheKey: string; templateDatabaseName: string } | null =
+        null;
       let dbAdapter: PgAdapter | undefined;
       let publisher: QueuePublisher | undefined;
       let runner: QueueRunner | undefined;
@@ -2409,9 +2388,12 @@ export function createExperimentalPermissionedRealmTest(
         | Awaited<ReturnType<typeof startPermissionedRealmFixture>>
         | undefined;
       try {
+        if (options.useTemplateCache !== false) {
+          template = await acquirePermissionedRealmTemplate(templateOptions);
+        }
         dbAdapter = await createTestPgAdapter({
           databaseName,
-          templateDatabase: realmTemplate?.templateDatabaseName,
+          templateDatabase: template?.templateDatabaseName,
         });
         trackedDbAdapters.add(dbAdapter);
         publisher = new PgQueuePublisher(dbAdapter);
@@ -2489,6 +2471,9 @@ export function createExperimentalPermissionedRealmTest(
           await dropDatabase(databaseName);
         } catch {
           // best-effort cleanup
+        }
+        if (template) {
+          await releasePermissionedRealmTemplate(template.cacheKey);
         }
         releaseSlot();
       }
