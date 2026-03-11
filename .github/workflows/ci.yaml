@@ -305,9 +305,6 @@ jobs:
       - name: Install Playwright Browsers
         run: pnpm exec playwright install
         working-directory: packages/matrix
-      - name: Serve boxel-icons
-        run: pnpm serve &
-        working-directory: packages/boxel-icons
       - name: Serve host dist (test assets) for realm server
         uses: JarvusInnovations/background-action@2428e7b970a846423095c79d43f759abf979a635 # 1.0.7
         with:
