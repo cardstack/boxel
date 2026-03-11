@@ -29,6 +29,12 @@ import {
   createDailyCreditGrantCronJob,
   parseLowCreditThreshold,
 } from './lib/daily-credit-grant-config';
+import { enqueueSyncOpenRouterModels } from './scripts/sync-openrouter-models';
+import {
+  OPENROUTER_SYNC_CRON_TZ,
+  createOpenRouterSyncCronJob,
+  getOpenRouterRealmURL,
+} from './lib/openrouter-sync-config';
 import {
   isEnvironmentMode,
   registerService,
@@ -123,6 +129,7 @@ let isReady = false;
 let isExiting = false;
 let workers: ChildProcess[] = [];
 let dailyCreditGrantJob: CronJob | undefined;
+let openRouterSyncJob: CronJob | undefined;
 
 process.on('SIGINT', () => (isExiting = true));
 process.on('SIGTERM', () => (isExiting = true));
@@ -195,6 +202,10 @@ const shutdown = (onShutdown?: () => void) => {
   if (dailyCreditGrantJob) {
     log.info('Stopping daily-credit-grant cron job...');
     dailyCreditGrantJob.stop();
+  }
+  if (openRouterSyncJob) {
+    log.info('Stopping openrouter-sync cron job...');
+    openRouterSyncJob.stop();
   }
 
   // Stop all workers
@@ -286,6 +297,7 @@ let adapter: PgAdapter;
   isReady = true;
   log.info('All workers have been started');
   dailyCreditGrantJob = startDailyCreditGrantCron();
+  openRouterSyncJob = startOpenRouterSyncCron();
 })().catch((e: any) => {
   Sentry.captureException(e);
   log.error(
@@ -576,6 +588,33 @@ function startDailyCreditGrantCron() {
   job.start();
   log.info(
     `daily-credit-grant cron scheduled for 3:00am ${DAILY_CREDIT_GRANT_CRON_TZ}`,
+  );
+  return job;
+}
+
+function startOpenRouterSyncCron(): CronJob | undefined {
+  let realmURL = getOpenRouterRealmURL();
+  if (!realmURL) {
+    log.info(
+      'OPENROUTER_REALM_URL not set, skipping openrouter-sync cron setup',
+    );
+    return undefined;
+  }
+  let job = createOpenRouterSyncCronJob(
+    async () => {
+      try {
+        await enqueueSyncOpenRouterModels({ realmURL: realmURL! });
+      } catch (error) {
+        Sentry.captureException(error);
+        log.error('openrouter-sync cron failed to enqueue job', error);
+      }
+    },
+    { runOnInit: false },
+  );
+
+  job.start();
+  log.info(
+    `openrouter-sync cron scheduled for 4:00am ${OPENROUTER_SYNC_CRON_TZ}`,
   );
   return job;
 }

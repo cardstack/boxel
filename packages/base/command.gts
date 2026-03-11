@@ -613,3 +613,14 @@ export class SearchAndChooseResult extends CardDef {
   @field selectedIds = containsMany(StringField);
   @field selectedCards = linksToMany(CardDef);
 }
+
+export class SyncOpenRouterModelsInput extends CardDef {
+  @field realmURL = contains(StringField);
+}
+
+export class SyncOpenRouterModelsResult extends CardDef {
+  @field modelsProcessed = contains(NumberField);
+  @field totalModels = contains(NumberField);
+  @field status = contains(StringField);
+  @field errors = contains(StringField);
+}
