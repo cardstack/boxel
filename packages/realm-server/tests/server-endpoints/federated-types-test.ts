@@ -138,14 +138,26 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
 
       assert.strictEqual(response.status, 200, 'HTTP 200 status');
       let { data } = response.body as {
-        data: Record<string, { data: { type: string; id: string; attributes: { displayName: string; total: number } }[] }>;
+        data: Record<
+          string,
+          {
+            data: {
+              type: string;
+              id: string;
+              attributes: { displayName: string; total: number };
+            }[];
+          }
+        >;
       };
 
       assert.ok(data[testRealm.url], 'includes primary realm data');
       assert.ok(data[secondaryRealm.url], 'includes secondary realm data');
 
       let primarySummaries = data[testRealm.url].data;
-      assert.ok(primarySummaries.length > 0, 'primary realm has type summaries');
+      assert.ok(
+        primarySummaries.length > 0,
+        'primary realm has type summaries',
+      );
       assert.strictEqual(
         primarySummaries[0].type,
         'card-type-summary',
