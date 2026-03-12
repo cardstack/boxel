@@ -28,7 +28,7 @@ import { TrackedObject, TrackedMap, TrackedSet } from 'tracked-built-ins';
 
 import { v4 as uuidv4 } from 'uuid';
 
-import { Alert, BoxelButton, LoadingIndicator } from '@cardstack/boxel-ui/components';
+import { Alert, LoadingIndicator } from '@cardstack/boxel-ui/components';
 import { and, eq, not } from '@cardstack/boxel-ui/helpers';
 
 import type { ResolvedCodeRef } from '@cardstack/runtime-common';
@@ -308,26 +308,24 @@ export default class Room extends Component<Signature> {
                     <:footer>
                       <li class='llm-select-footer'>
                         {{#if this.systemCardId}}
-                          <BoxelButton
-                            @kind='text-only'
-                            @size='extra-small'
+                          <button
+                            type='button'
                             class='llm-select-footer-action'
                             {{on 'click' this.goToSystemCard}}
                             data-test-go-to-system-card
                           >
                             Go to current system card
-                          </BoxelButton>
+                          </button>
                         {{/if}}
                         {{#unless this.isDefaultSystemCard}}
-                          <BoxelButton
-                            @kind='text-only'
-                            @size='extra-small'
+                          <button
+                            type='button'
                             class='llm-select-footer-action'
                             {{on 'click' (perform this.restoreDefaultSystemCardTask)}}
                             data-test-restore-default-system-card
                           >
                             Restore default system card
-                          </BoxelButton>
+                          </button>
                         {{/unless}}
                       </li>
                     </:footer>
@@ -523,11 +521,14 @@ export default class Room extends Component<Signature> {
       }
 
       .llm-select-footer-action {
-        --boxel-button-padding: 0;
-        --boxel-button-min-height: unset;
-        justify-content: flex-start;
+        background: none;
+        border: none;
+        padding: var(--boxel-sp-xxxs) var(--boxel-sp-sm);
         font: 500 var(--boxel-font-xs);
         color: var(--boxel-500);
+        cursor: pointer;
+        text-align: left;
+        width: 100%;
       }
 
       .llm-select-footer-action:hover {
