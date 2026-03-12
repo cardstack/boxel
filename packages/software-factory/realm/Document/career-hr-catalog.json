@@ -3,7 +3,7 @@
     "meta": {
       "adoptsFrom": {
         "name": "Document",
-        "module": "https://realms-staging.stack.cards/ctse/topaz-crossing/document"
+        "module": "../document"
       }
     },
     "type": "card",
