@@ -281,7 +281,9 @@ export default class SyncOpenRouterModelsCommand extends HostBaseCommand<
     // Parse failing hrefs from error details and flip their ops
     let flippedHrefs = new Set<string>();
     for (let error of result.errors) {
-      let hrefMatch = (error.detail ?? '').match(/Resource (.+?) (?:already exists|does not exist)/);
+      let hrefMatch = (error.detail ?? '').match(
+        /Resource (.+?) (?:already exists|does not exist)/,
+      );
       if (!hrefMatch) {
         continue;
       }
@@ -306,7 +308,10 @@ export default class SyncOpenRouterModelsCommand extends HostBaseCommand<
     // Retry with flipped ops
     let retryBatch = batch.map((op) => {
       if (flippedHrefs.has(op.href)) {
-        return { ...op, op: (op.op === 'add' ? 'update' : 'add') as 'add' | 'update' };
+        return {
+          ...op,
+          op: (op.op === 'add' ? 'update' : 'add') as 'add' | 'update',
+        };
       }
       return op;
     });

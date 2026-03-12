@@ -13,7 +13,7 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
 import DateTimeField from 'https://cardstack.com/base/datetime';
-import { type Query } from '@cardstack/runtime-common';
+import { type Query, type Filter } from '@cardstack/runtime-common';
 
 import CardList from 'https://cardstack.com/base/components/card-list';
 
@@ -32,9 +32,9 @@ class Isolated extends Component<typeof OpenRouterIndex> {
   }
 
   get query(): Query {
-    let typeFilter = { type: this.modelRef };
+    let typeFilter: Filter = { type: this.modelRef };
     let trimmed = this.filterText.trim();
-    let filter = trimmed
+    let filter: Filter = trimmed
       ? {
           every: [
             typeFilter,
@@ -42,7 +42,7 @@ class Isolated extends Component<typeof OpenRouterIndex> {
               any: [
                 { contains: { name: trimmed }, on: this.modelRef },
                 { contains: { modelId: trimmed }, on: this.modelRef },
-              ],
+              ] as Filter[],
             },
           ],
         }
