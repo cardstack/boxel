@@ -46,6 +46,7 @@ import type RealmService from '@cardstack/host/services/realm';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 import type SpecPanelService from '@cardstack/host/services/spec-panel-service';
 import type StoreService from '@cardstack/host/services/store';
+import { runWhileActive } from '@cardstack/host/utils/run-while-active';
 
 import type { CardContext } from 'https://cardstack.com/base/card-api';
 import type { Spec } from 'https://cardstack.com/base/spec';
@@ -343,28 +344,24 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
     if (!codeRef.module || !codeRef.name) {
       return state;
     }
-    let isActive = true;
     let loader = this.loaderService.loader;
     let relativeTo = new URL(this.operatorModeStateService.realmURL);
-    on.cleanup(() => {
-      isActive = false;
-    });
-    (async () => {
+    runWhileActive(on, async (isActive) => {
       try {
         let cardDef = await loadCardDef(codeRef, {
           loader,
           relativeTo,
         });
-        if (!isActive) {
+        if (!isActive()) {
           return;
         }
         state.value = isSpecCard(cardDef);
       } catch {
-        if (isActive) {
+        if (isActive()) {
           state.value = false;
         }
       }
-    })();
+    });
     return state;
   });
 

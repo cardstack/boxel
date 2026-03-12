@@ -108,10 +108,15 @@ export function setupRenderingTest(hooks: NestedHooks) {
 }
 
 function resetServiceIfPresent(
-  owner: { lookup(name: string): unknown },
+  owner: {
+    __container__?: { cache?: Record<string, unknown> };
+    lookup(name: string): unknown;
+  },
   name: string,
 ) {
   (
-    owner.lookup(name) as { resetState?: () => void } | undefined
+    owner.__container__?.cache?.[name] as
+      | { resetState?: () => void }
+      | undefined
   )?.resetState?.();
 }

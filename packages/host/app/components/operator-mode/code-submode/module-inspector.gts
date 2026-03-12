@@ -82,6 +82,7 @@ import type SpecPanelService from '@cardstack/host/services/spec-panel-service';
 import type StoreService from '@cardstack/host/services/store';
 
 import { PlaygroundSelections } from '@cardstack/host/utils/local-storage-keys';
+import { runWhileActive } from '@cardstack/host/utils/run-while-active';
 
 import type {
   CardDef,
@@ -149,28 +150,24 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
     if (!codeRef.module || !codeRef.name) {
       return state;
     }
-    let isActive = true;
     let loader = this.loaderService.loader;
     let relativeTo = new URL(this.operatorModeStateService.realmURL);
-    on.cleanup(() => {
-      isActive = false;
-    });
-    (async () => {
+    runWhileActive(on, async (isActive) => {
       try {
         let cardDef = await loadCardDef(codeRef, {
           loader,
           relativeTo,
         });
-        if (!isActive) {
+        if (!isActive()) {
           return;
         }
         state.value = isSpecCard(cardDef);
       } catch {
-        if (isActive) {
+        if (isActive()) {
           state.value = false;
         }
       }
-    })();
+    });
     return state;
   });
 
@@ -187,20 +184,16 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
     if (!this.args.isIncompatibleFile || !this.args.readyFile?.url) {
       return state;
     }
-    let isActive = true;
     let fileUrl = this.args.readyFile.url;
     let store = this.store;
-    on.cleanup(() => {
-      isActive = false;
-    });
     void this.args.readyFile?.lastModified; // track lastModified to re-run on save
     state.isLoading = true;
-    (async () => {
+    runWhileActive(on, async (isActive) => {
       try {
         let result = await store.getWithoutCache(fileUrl, {
           type: 'file-meta',
         });
-        if (!isActive) {
+        if (!isActive()) {
           return;
         }
         if (isCardErrorJSONAPI(result)) {
@@ -211,17 +204,17 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
           state.error = undefined;
         }
       } catch (e) {
-        if (!isActive) {
+        if (!isActive()) {
           return;
         }
         state.error = e;
         state.value = undefined;
       } finally {
-        if (isActive) {
+        if (isActive()) {
           state.isLoading = false;
         }
       }
-    })();
+    });
     return state;
   });
 

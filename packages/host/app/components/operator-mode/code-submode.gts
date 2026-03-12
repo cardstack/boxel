@@ -76,6 +76,7 @@ import {
   CodeModePanelWidths,
   CodeModePanelHeights,
 } from '../../utils/local-storage-keys';
+import { runWhileActive } from '../../utils/run-while-active';
 import FileTree from '../editor/file-tree';
 
 import CardURLBar from './card-url-bar';
@@ -659,17 +660,13 @@ export default class CodeSubmode extends Component<Signature> {
     if (!this.isNonModuleFile) {
       return state;
     }
-    let isActive = true;
     let store = this.store;
     let fileUrl = this.readyFile.url;
-    on.cleanup(() => {
-      isActive = false;
-    });
     state.isLoading = true;
-    (async () => {
+    runWhileActive(on, async (isActive) => {
       try {
         let result = await store.get(fileUrl, { type: 'file-meta' });
-        if (!isActive) {
+        if (!isActive()) {
           return;
         }
         if (isCardErrorJSONAPI(result)) {
@@ -680,17 +677,17 @@ export default class CodeSubmode extends Component<Signature> {
           state.error = undefined;
         }
       } catch (e) {
-        if (!isActive) {
+        if (!isActive()) {
           return;
         }
         state.error = e;
         state.value = undefined;
       } finally {
-        if (isActive) {
+        if (isActive()) {
           state.isLoading = false;
         }
       }
-    })();
+    });
     return state;
   });
 
