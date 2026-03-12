@@ -1,11 +1,13 @@
+import { registerDestructor } from '@ember/destroyable';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
+import { cached, tracked } from '@glimmer/tracking';
 
 import { restartableTask, timeout } from 'ember-concurrency';
+import Modifier from 'ember-modifier';
 import { TrackedSet } from 'tracked-built-ins';
 
 import { LoadingIndicator } from '@cardstack/boxel-ui/components';
@@ -22,6 +24,21 @@ import {
 } from '@cardstack/host/resources/file-tree-from-index';
 import { normalizeDirPath } from '@cardstack/host/utils/normalized-dir-path';
 
+// Focuses the element on first insertion when the positional arg is true.
+class AutoFocusModifier extends Modifier<{
+  Element: HTMLElement;
+  Args: { Positional: [boolean | undefined] };
+}> {
+  #firstRun = true;
+
+  modify(element: HTMLElement, [shouldFocus]: [boolean | undefined]) {
+    if (shouldFocus && this.#firstRun) {
+      this.#firstRun = false;
+      element.focus();
+    }
+  }
+}
+
 interface Signature {
   Args: {
     realmURL: string;
@@ -29,14 +46,24 @@ interface Signature {
     selectedFile?: LocalPath;
     openDirs?: LocalPath[];
     onFileSelected?: (entryPath: LocalPath) => void;
+    onFileConfirmed?: (entryPath: LocalPath) => void;
     onDirectorySelected?: (entryPath: LocalPath) => void;
     scrollPositionKey?: LocalPath;
+    autoFocus?: boolean;
   };
 }
 
 export default class IndexedFileTree extends Component<Signature> {
   <template>
-    <nav>
+    <nav
+      class='indexed-file-tree-nav'
+      aria-label='File tree'
+      tabindex='0'
+      data-file-tree-nav
+      data-test-file-tree-nav
+      {{on 'keydown' this.handleKeydown}}
+      {{AutoFocusModifier @autoFocus}}
+    >
       <TreeLevel
         @entries={{this.fileTree.entries}}
         @fileTree={{this.fileTree}}
@@ -46,6 +73,7 @@ export default class IndexedFileTree extends Component<Signature> {
         @onDirectorySelected={{this.toggleDirectory}}
         @scrollPositionKey={{@scrollPositionKey}}
         @relativePath=''
+        @cursorPath={{this.cursorPath}}
       />
       {{#if this.showMask}}
         <div class='mask' data-test-file-tree-mask>
@@ -72,6 +100,11 @@ export default class IndexedFileTree extends Component<Signature> {
         position: relative;
         min-height: 100%;
       }
+      nav:focus-visible {
+        outline: 2px solid var(--boxel-highlight);
+        outline-offset: -2px;
+        border-radius: var(--boxel-border-radius-xs);
+      }
     </style>
   </template>
 
@@ -83,10 +116,16 @@ export default class IndexedFileTree extends Component<Signature> {
   private localOpenDirs = new TrackedSet<string>();
   @tracked private selectedFile?: LocalPath;
   @tracked private maskDismissed = false;
+  @tracked private cursorPath?: string;
+  private typeAheadBuffer = '';
+  private typeAheadTimer?: ReturnType<typeof setTimeout>;
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
     this.hideMask.perform();
+    registerDestructor(this, () => {
+      clearTimeout(this.typeAheadTimer);
+    });
   }
 
   private get showMask(): boolean {
@@ -109,15 +148,56 @@ export default class IndexedFileTree extends Component<Signature> {
     return this.localOpenDirs;
   }
 
+  @cached
+  private get visibleItems(): FileTreeNode[] {
+    return this.flattenVisible(this.fileTree.entries, this.effectiveOpenDirs);
+  }
+
+  private flattenVisible(
+    entries: FileTreeNode[],
+    openDirs: Set<string>,
+  ): FileTreeNode[] {
+    const result: FileTreeNode[] = [];
+    for (const entry of entries) {
+      result.push(entry);
+      if (
+        entry.kind === 'directory' &&
+        entry.children &&
+        openDirs.has(normalizeDirPath(entry.path))
+      ) {
+        result.push(
+          ...this.flattenVisible(Array.from(entry.children.values()), openDirs),
+        );
+      }
+    }
+    return result;
+  }
+
+  private getParentPath(path: string): string | undefined {
+    const p = path.endsWith('/') ? path.slice(0, -1) : path;
+    const lastSlash = p.lastIndexOf('/');
+    if (lastSlash === -1) return undefined;
+    return p.substring(0, lastSlash) + '/';
+  }
+
+  private scrollPathIntoView(path: string, nav: HTMLElement) {
+    const el = Array.from(
+      nav.querySelectorAll<HTMLElement>('[data-path]'),
+    ).find((candidate) => candidate.dataset.path === path);
+    el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }
+
   @action
   private selectFile(entryPath: LocalPath) {
     this.selectedFile = entryPath;
+    this.cursorPath = entryPath;
     this.args.onFileSelected?.(entryPath);
   }
 
   @action
   private toggleDirectory(entryPath: LocalPath) {
     let dirPath = normalizeDirPath(entryPath);
+    this.cursorPath = dirPath;
 
     if (this.localOpenDirs.has(dirPath)) {
       this.localOpenDirs.delete(dirPath);
@@ -126,6 +206,166 @@ export default class IndexedFileTree extends Component<Signature> {
     }
 
     this.args.onDirectorySelected?.(dirPath);
+  }
+
+  @action
+  private handleKeydown(event: KeyboardEvent) {
+    const key = event.key;
+    const nav = event.currentTarget as HTMLElement;
+
+    switch (key) {
+      case 'ArrowDown': {
+        event.preventDefault();
+        const items = this.visibleItems;
+        if (!items.length) break;
+        const currentIndex = this.cursorPath
+          ? items.findIndex((i) => i.path === this.cursorPath)
+          : -1;
+        const nextIndex =
+          currentIndex === -1
+            ? 0
+            : Math.min(currentIndex + 1, items.length - 1);
+        const nextItem = items[nextIndex]!;
+        if (nextItem.kind === 'file') {
+          this.selectFile(nextItem.path as LocalPath);
+        } else {
+          this.cursorPath = nextItem.path;
+        }
+        this.scrollPathIntoView(nextItem.path, nav);
+        break;
+      }
+
+      case 'ArrowUp': {
+        event.preventDefault();
+        const items = this.visibleItems;
+        if (!items.length) break;
+        const currentIndex = this.cursorPath
+          ? items.findIndex((i) => i.path === this.cursorPath)
+          : -1;
+        const prevIndex =
+          currentIndex === -1
+            ? items.length - 1
+            : Math.max(currentIndex - 1, 0);
+        const prevItem = items[prevIndex]!;
+        if (prevItem.kind === 'file') {
+          this.selectFile(prevItem.path as LocalPath);
+        } else {
+          this.cursorPath = prevItem.path;
+        }
+        this.scrollPathIntoView(prevItem.path, nav);
+        break;
+      }
+
+      case 'ArrowRight': {
+        event.preventDefault();
+        if (!this.cursorPath) break;
+        const current = this.visibleItems.find(
+          (i) => i.path === this.cursorPath,
+        );
+        if (current?.kind === 'directory') {
+          const dirPath = normalizeDirPath(current.path);
+          if (!this.effectiveOpenDirs.has(dirPath)) {
+            this.toggleDirectory(current.path as LocalPath);
+          }
+          // Move cursor into first child (works whether just opened or already open)
+          const items = this.visibleItems;
+          const idx = items.findIndex((i) => i.path === this.cursorPath);
+          if (idx !== -1 && idx < items.length - 1) {
+            this.cursorPath = items[idx + 1]!.path;
+            this.scrollPathIntoView(this.cursorPath, nav);
+          }
+        }
+        break;
+      }
+
+      case 'ArrowLeft': {
+        event.preventDefault();
+        if (!this.cursorPath) break;
+        const current = this.visibleItems.find(
+          (i) => i.path === this.cursorPath,
+        );
+        if (current?.kind === 'directory') {
+          const dirPath = normalizeDirPath(current.path);
+          if (this.effectiveOpenDirs.has(dirPath)) {
+            // Collapse this directory
+            this.toggleDirectory(current.path as LocalPath);
+            break;
+          }
+        }
+        // Move cursor to parent directory
+        const parent = this.getParentPath(this.cursorPath);
+        if (parent) {
+          this.cursorPath = parent;
+          this.scrollPathIntoView(parent, nav);
+        }
+        break;
+      }
+
+      case 'Enter': {
+        event.preventDefault();
+        event.stopPropagation();
+        if (!this.cursorPath) break;
+        const current = this.visibleItems.find(
+          (i) => i.path === this.cursorPath,
+        );
+        if (current?.kind === 'file') {
+          this.selectFile(current.path as LocalPath);
+          this.args.onFileConfirmed?.(current.path as LocalPath);
+        } else if (current?.kind === 'directory') {
+          this.toggleDirectory(current.path as LocalPath);
+        }
+        break;
+      }
+
+      default: {
+        // Type-ahead: single printable characters, no modifier combos
+        if (
+          key.length !== 1 ||
+          event.ctrlKey ||
+          event.metaKey ||
+          event.altKey
+        ) {
+          break;
+        }
+        // If focus is on a child button, let Space activate the button
+        if (key === ' ' && event.target !== event.currentTarget) {
+          break;
+        }
+        event.preventDefault();
+
+        this.typeAheadBuffer += key.toLowerCase();
+
+        clearTimeout(this.typeAheadTimer);
+        this.typeAheadTimer = setTimeout(() => {
+          this.typeAheadBuffer = '';
+          // Cursor stays where it is — don't clear cursorPath
+        }, 600);
+
+        const buttons = Array.from(
+          nav.querySelectorAll<HTMLButtonElement>('button:not([disabled])'),
+        );
+        const match = buttons.find((btn) =>
+          btn
+            .getAttribute('title')
+            ?.toLowerCase()
+            .startsWith(this.typeAheadBuffer),
+        );
+        if (match) {
+          const path = match.dataset.path;
+          if (path) {
+            if (match.dataset.kind === 'file') {
+              // File: update selection (selectFile also sets cursorPath)
+              this.selectFile(path as LocalPath);
+            } else {
+              // Directory: just move cursor, don't expand
+              this.cursorPath = path;
+            }
+            match.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+          }
+        }
+        break;
+      }
+    }
   }
 }
 
@@ -139,6 +379,7 @@ interface TreeLevelSignature {
     onDirectorySelected: (entryPath: LocalPath) => void;
     scrollPositionKey?: LocalPath;
     relativePath: string;
+    cursorPath?: string;
   };
 }
 
@@ -149,23 +390,31 @@ class TreeLevel extends Component<TreeLevelSignature> {
         {{#if (eq entry.kind 'file')}}
           <button
             data-test-file={{entry.path}}
+            data-path={{entry.path}}
+            data-kind='file'
             title={{entry.name}}
+            tabindex='-1'
             {{on 'click' (fn @onFileSelected entry.path)}}
             {{scrollIntoViewModifier
               (this.isSelectedFile entry.path)
               container='file-tree'
               key=@scrollPositionKey
             }}
-            class='file {{if (this.isSelectedFile entry.path) "selected"}}'
+            class='file
+              {{if (this.isSelectedFile entry.path) "selected"}}
+              {{if (this.isCursorItem entry.path) "cursor"}}'
           >
             {{entry.name}}
           </button>
         {{else}}
           <button
             data-test-directory={{entry.path}}
+            data-path={{entry.path}}
+            data-kind='directory'
             title={{entry.name}}
+            tabindex='-1'
             {{on 'click' (fn @onDirectorySelected entry.path)}}
-            class='directory'
+            class='directory {{if (this.isCursorItem entry.path) "cursor"}}'
           >
             <DropdownArrowDown
               class='icon
@@ -182,6 +431,7 @@ class TreeLevel extends Component<TreeLevelSignature> {
               @onDirectorySelected={{@onDirectorySelected}}
               @scrollPositionKey={{@scrollPositionKey}}
               @relativePath={{entry.path}}
+              @cursorPath={{@cursorPath}}
             />
           {{/if}}
         {{/if}}
@@ -211,17 +461,44 @@ class TreeLevel extends Component<TreeLevelSignature> {
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
+        cursor: default;
+        transition:
+          background-color var(--boxel-transition),
+          outline-color var(--boxel-transition),
+          box-shadow var(--boxel-transition);
       }
 
-      .directory:hover,
-      .file:hover {
+      .directory:hover:not(.cursor),
+      .file:hover:not(.cursor):not(.selected) {
         background-color: var(--boxel-200);
       }
 
-      .file.selected,
-      .file:active {
+      /* Selected file: green inverse state */
+      .file.selected {
         color: var(--boxel-dark);
         background-color: var(--boxel-highlight);
+      }
+
+      /* Keyboard cursor on files: same green inverse state */
+      .file.cursor {
+        color: var(--boxel-dark);
+        background-color: var(--boxel-highlight);
+      }
+
+      /* Keyboard cursor on directories: lighter active state */
+      .directory.cursor {
+        color: var(--boxel-dark);
+        background-color: color-mix(
+          in srgb,
+          var(--boxel-highlight) 24%,
+          var(--boxel-light)
+        );
+        box-shadow: inset 0 0 0 1px var(--boxel-highlight);
+      }
+
+      /* Ensure stacked states stay visually identical */
+      .file.selected.cursor {
+        box-shadow: none;
       }
 
       .directory {
@@ -254,6 +531,17 @@ class TreeLevel extends Component<TreeLevelSignature> {
   isOpenDirectory(path: string): boolean {
     let dirPath = normalizeDirPath(path);
     return this.args.openDirs.has(dirPath);
+  }
+
+  @action
+  isCursorItem(path: string): boolean {
+    if (!this.args.cursorPath) {
+      return false;
+    }
+    return (
+      this.args.cursorPath === path ||
+      this.args.cursorPath === normalizeDirPath(path)
+    );
   }
 
   @action

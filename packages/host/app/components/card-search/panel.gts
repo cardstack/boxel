@@ -3,7 +3,7 @@ import { action } from '@ember/object';
 import { getOwner } from '@ember/owner';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
+import { cached, tracked } from '@glimmer/tracking';
 
 import { consume } from 'ember-provide-consume-context';
 
@@ -86,16 +86,14 @@ export default class SearchPanel extends Component<Signature> {
 
   @tracked private selectedRealms: PickerOption[] = [];
   @tracked private activeSort: SortOption = SORT_OPTIONS[0];
-  @tracked private recentCardCollection:
-    | ReturnType<getCardCollection>
-    | undefined;
 
-  private getRecentCardCollection = () => {
-    this.recentCardCollection = this.getCardCollection(
+  @cached
+  private get recentCardCollection(): ReturnType<getCardCollection> {
+    return this.getCardCollection(
       this,
       () => this.recentCardsService.recentCardIds,
     );
-  };
+  }
 
   // Non-tracked: persists across resource re-runs without creating
   // tracking dependencies. Updated by onTypeChange and the resource itself.
@@ -282,7 +280,6 @@ export default class SearchPanel extends Component<Signature> {
   }
 
   <template>
-    {{consumeContext this.getRecentCardCollection}}
     {{yield
       (component
         SearchBar

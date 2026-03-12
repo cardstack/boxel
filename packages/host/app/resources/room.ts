@@ -113,12 +113,28 @@ export class RoomResource extends Resource<Args> {
     this.processing = this.processRoomTask.perform(named.roomId);
     if (!this.#hasRegisteredDestructor) {
       this.#hasRegisteredDestructor = true;
-      registerDestructor(this, () => {
-        for (let id of this.#skillIds ?? []) {
-          this.store.dropReference(id);
-        }
-      });
+      registerDestructor(this, () => this.teardown());
     }
+  }
+
+  teardown() {
+    this.processRoomTask.cancelAll();
+    this.activateLLMTask.cancelAll();
+    this.activateLLMModeTask.cancelAll();
+    for (let id of this.#skillIds ?? []) {
+      this.store.dropReference(id);
+    }
+    this.#skillIds.clear();
+    this._messageCache.clear();
+    this._nameEventsCache.clear();
+    this._memberCache.clear();
+    this._isDisplayingViewCodeMap.clear();
+    this._createEvent = undefined;
+    this.matrixRoom = undefined;
+    this.processing = undefined;
+    this.roomId = undefined;
+    this.llmBeingActivated = undefined;
+    this.llmModeBeingActivated = undefined;
   }
 
   get isProcessing() {
@@ -353,6 +369,10 @@ export class RoomResource extends Resource<Args> {
     return (
       this.llmBeingActivated ?? this.matrixRoom?.activeLLM ?? this.defaultLLM
     );
+  }
+
+  get activeInputModalities(): string[] | undefined {
+    return this.matrixRoom?.activeInputModalities;
   }
 
   private get defaultLLM(): string {

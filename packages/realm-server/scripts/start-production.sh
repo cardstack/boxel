@@ -5,6 +5,7 @@ pnpm setup:experiments-in-deployment
 pnpm setup:catalog-in-deployment
 pnpm setup:skills-in-deployment
 pnpm setup:boxel-homepage-in-deployment
+pnpm setup:catalog-new-in-deployment
 
 SUBMISSION_REALM_PATH='/persistent/submissions'
 SUBMISSION_REALM_URL="${RESOLVED_SUBMISSION_REALM_URL:-https://app.boxel.ai/submissions/}"
@@ -14,6 +15,8 @@ DEFAULT_CATALOG_REALM_URL='https://app.boxel.ai/catalog/'
 CATALOG_REALM_URL="${RESOLVED_CATALOG_REALM_URL:-$DEFAULT_CATALOG_REALM_URL}"
 DEFAULT_BOXEL_HOMEPAGE_REALM_URL='https://app.boxel.ai/boxel-homepage/'
 BOXEL_HOMEPAGE_REALM_URL="${RESOLVED_BOXEL_HOMEPAGE_REALM_URL:-$DEFAULT_BOXEL_HOMEPAGE_REALM_URL}"
+DEFAULT_NEW_CATALOG_REALM_URL='https://app.boxel.ai/catalog-new/'
+NEW_CATALOG_REALM_URL="${RESOLVED_NEW_CATALOG_REALM_URL:-$DEFAULT_NEW_CATALOG_REALM_URL}"
 
 NODE_NO_WARNINGS=1 \
   LOW_CREDIT_THRESHOLD=2000 \
@@ -59,4 +62,9 @@ NODE_NO_WARNINGS=1 \
   --path='/persistent/experiments' \
   --username='experiments_realm' \
   --fromUrl='https://app.boxel.ai/experiments/' \
-  --toUrl='https://app.boxel.ai/experiments/'
+  --toUrl='https://app.boxel.ai/experiments/' \
+  \
+  --path='/persistent/catalog-new' \
+  --username='catalog_new_realm' \
+  --fromUrl="${NEW_CATALOG_REALM_URL}" \
+  --toUrl="${NEW_CATALOG_REALM_URL}"

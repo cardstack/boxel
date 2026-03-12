@@ -103,7 +103,17 @@ export default class RealmServerService extends Service {
   }
 
   resetState() {
+    let catalogRealms = this.availableRealms.filter(
+      (realm) => realm.type === 'catalog',
+    );
     this.logout();
+    this.availableRealms = new TrackedArray([
+      { type: 'base', url: baseRealm.url },
+      ...catalogRealms,
+    ]);
+    this.eventSubscribers = new Map();
+    this._ready = new Deferred<void>();
+    this._ready.fulfill();
   }
 
   setClient(client: ExtendedClient) {
@@ -381,7 +391,18 @@ export default class RealmServerService extends Service {
     }
 
     let { data } = await response.json();
+    let newCatalogURL = ENV.resolvedNewCatalogRealmURL;
+    let showNewCatalog =
+      window.localStorage.getItem('boxel:newCatalog') === 'true';
+
     data.forEach((publicRealm: { id: string }) => {
+      if (
+        newCatalogURL &&
+        publicRealm.id === newCatalogURL &&
+        !showNewCatalog
+      ) {
+        return;
+      }
       if (!this.availableRealms.find((r) => r.url === publicRealm.id)) {
         this.availableRealms.push({
           type: 'catalog',
@@ -389,6 +410,16 @@ export default class RealmServerService extends Service {
         });
       }
     });
+
+    if (showNewCatalog && newCatalogURL) {
+      if (!this.availableRealms.find((r) => r.url === newCatalogURL)) {
+        this.availableRealms.push({
+          type: 'catalog',
+          url: newCatalogURL,
+        });
+      }
+    }
+
     this._ready.fulfill();
   }
 

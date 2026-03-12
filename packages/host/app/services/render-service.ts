@@ -32,7 +32,7 @@ import type {
 } from 'https://cardstack.com/base/card-api';
 import type { FileDef } from 'https://cardstack.com/base/file-api';
 
-import { render } from '../lib/isolated-render';
+import { render, teardown } from '../lib/isolated-render';
 
 import type CardService from './card-service';
 import type LoaderService from './loader-service';
@@ -309,10 +309,5 @@ export function getIsolatedRenderElement(
 }
 
 function clearIsolatedRenderElement(element: SimpleElement) {
-  let child = element.firstChild;
-  while (child) {
-    let next = child.nextSibling;
-    element.removeChild(child);
-    child = next;
-  }
+  teardown(element);
 }

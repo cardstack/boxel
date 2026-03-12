@@ -237,6 +237,52 @@ function cleanupCache() {
   }
 }
 
+async function fetchMatrixMediaWithFallback(
+  client: MatrixClient,
+  url: string,
+): Promise<Response> {
+  let headers = {
+    Authorization: `Bearer ${client.getAccessToken()}`,
+  };
+
+  let primaryError: unknown;
+  try {
+    let primaryResponse = await (globalThis as any).fetch(url, { headers });
+    if (primaryResponse.ok) {
+      return primaryResponse;
+    }
+    primaryError = new Error(`HTTP error. Status: ${primaryResponse.status}`);
+  } catch (err) {
+    primaryError = err;
+  }
+
+  let canonical = canonicalizeMatrixMediaKey(url);
+  let fallbackUrl =
+    canonical?.startsWith('mxc://') && canonical !== url
+      ? client.mxcUrlToHttp(
+          canonical,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          true,
+        )
+      : null;
+  if (!fallbackUrl || fallbackUrl === url) {
+    throw primaryError;
+  }
+
+  let fallbackResponse = await (globalThis as any).fetch(fallbackUrl, {
+    headers,
+  });
+  if (!fallbackResponse.ok) {
+    throw new Error(`HTTP error. Status: ${fallbackResponse.status}`);
+  }
+
+  return fallbackResponse;
+}
+
 /**
  * Retrieves the last 1000 non-replace events from a Matrix room
  * @param roomId - The ID of the Matrix room
@@ -283,6 +329,10 @@ export async function downloadFile(
   client: MatrixClient,
   attachedFile: SerializedFileDef,
 ): Promise<string> {
+  let fileUrl = attachedFile?.url;
+  if (!fileUrl) {
+    throw new Error('Attached file URL is missing');
+  }
   if (
     !attachedFile?.contentType?.includes('text/') &&
     !attachedFile.contentType?.includes('application/vnd.card+json')
@@ -292,12 +342,12 @@ export async function downloadFile(
     );
   }
 
-  const canonicalKey = canonicalizeMatrixMediaKey(attachedFile.url);
+  const canonicalKey = canonicalizeMatrixMediaKey(fileUrl);
 
   // Check cache by canonical key first
   const cachedEntry = canonicalKey
     ? fileCache.get(canonicalKey)
-    : fileCache.get(attachedFile.url!);
+    : fileCache.get(fileUrl);
   if (cachedEntry) {
     // cache hit - minimal logging
     cachedEntry.timestamp = Date.now();
@@ -305,7 +355,7 @@ export async function downloadFile(
   }
 
   // If a fetch for this canonical key is already in-flight, wait for it instead
-  const inFlightKey = canonicalKey || attachedFile.url!;
+  const inFlightKey = canonicalKey || fileUrl;
   const inFlight = inFlightFetches.get(inFlightKey);
   if (inFlight) {
     return await inFlight;
@@ -315,19 +365,12 @@ export async function downloadFile(
 
   // create an in-flight promise and store it so others can await
   const fetchPromise = (async () => {
-    let response = await (globalThis as any).fetch(attachedFile.url, {
-      headers: {
-        Authorization: `Bearer ${client.getAccessToken()}`,
-      },
-    });
-    if (!response.ok) {
-      throw new Error(`HTTP error. Status: ${response.status}`);
-    }
+    let response = await fetchMatrixMediaWithFallback(client, fileUrl);
 
     const content = await response.text();
 
     // store in cache under canonical key when available
-    const cacheKey = canonicalKey || attachedFile.url!;
+    const cacheKey = canonicalKey || fileUrl;
     fileCache.set(cacheKey, {
       content,
       timestamp: Date.now(),
@@ -345,6 +388,36 @@ export async function downloadFile(
   } finally {
     inFlightFetches.delete(inFlightKey);
   }
+}
+
+export async function downloadFileAsBase64DataUrl(
+  client: MatrixClient,
+  url: string,
+  contentType: string,
+): Promise<string> {
+  let response = await fetchMatrixMediaWithFallback(client, url);
+  let buffer = await response.arrayBuffer();
+  let bytes = new Uint8Array(buffer);
+  let maybeBuffer = (globalThis as any).Buffer;
+  if (maybeBuffer?.from) {
+    let base64 = maybeBuffer.from(bytes).toString('base64');
+    return `data:${contentType};base64,${base64}`;
+  }
+
+  let btoaFn = (globalThis as any).btoa;
+  if (typeof btoaFn !== 'function') {
+    throw new Error('No base64 encoder available in this runtime');
+  }
+
+  // Build binary string in chunks to avoid quadratic concatenation behavior.
+  let binaryChunks: string[] = [];
+  let chunkSize = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    let chunk = bytes.subarray(i, i + chunkSize);
+    binaryChunks.push(String.fromCharCode(...chunk));
+  }
+  let base64 = btoaFn(binaryChunks.join(''));
+  return `data:${contentType};base64,${base64}`;
 }
 
 export function isCommandOrCodePatchResult(

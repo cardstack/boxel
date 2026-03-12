@@ -65,10 +65,7 @@ module('Integration | commands | read-file-for-ai-assistant', function (hooks) {
       fileUrl: `${testRealmURL}files/test.txt`,
     });
     assert.true(!!result.fileForAttachment.contentHash);
-    assert.strictEqual(
-      result.fileForAttachment.contentType,
-      'text/plain; charset=utf-8',
-    );
+    assert.strictEqual(result.fileForAttachment.contentType, 'text/plain');
     assert.strictEqual(result.fileForAttachment.name, 'test.txt');
     assert.strictEqual(
       result.fileForAttachment.sourceUrl,

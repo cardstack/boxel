@@ -1566,6 +1566,8 @@ importers:
 
   packages/catalog: {}
 
+  packages/catalog-new: {}
+
   packages/catalog-realm:
     dependencies:
       ember-modify-based-class-resource:

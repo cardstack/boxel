@@ -12,6 +12,7 @@ import {
   createJWT,
   setupPermissionedRealmCached,
   setupPermissionedRealmsCached,
+  testRealmURLFor,
   type RealmRequest,
   withRealmPath,
 } from '../helpers';
@@ -20,7 +21,7 @@ const ownerUserId = '@mango:localhost';
 
 module(`realm-endpoints/${basename(__filename)}`, function () {
   module('with a publishable realm', function (hooks) {
-    let realmURL = new URL('http://127.0.0.1:4444/test/');
+    let realmURL = testRealmURLFor('test/');
     let request: RealmRequest;
     let testRealm: Realm;
 
