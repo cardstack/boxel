@@ -42,9 +42,11 @@ export default function handleFederatedTypes({
       }),
     );
 
-    for (let result of results) {
+    for (let [index, result] of results.entries()) {
       if (result.status === 'rejected') {
-        log.warn(`Failed to fetch card type summary: ${result.reason}`);
+        log.warn(
+          `Failed to fetch card type summary for realm ${realmList[index]}: ${result.reason}`,
+        );
       }
     }
 
