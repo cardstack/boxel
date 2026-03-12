@@ -10,9 +10,13 @@ import {
   maybeHandleScopedCSSRequest,
   authorizationMiddleware,
   clearFetchCache,
+  clearInjectedScopedCSS,
   logger,
 } from '@cardstack/runtime-common';
+
 import { Loader } from '@cardstack/runtime-common/loader';
+
+import { clearKnownFileMetaUrls } from '@cardstack/host/components/prerendered-card-search';
 
 import config from '@cardstack/host/config/environment';
 
@@ -46,6 +50,8 @@ export default class LoaderService extends Service {
     // this clears the fetch cache in between logins, the idea being that we
     // don't want to leak modules from private realms between sessions.
     clearFetchCache();
+    clearInjectedScopedCSS();
+    clearKnownFileMetaUrls();
   }
 
   public resetLoader(options?: { clearFetchCache?: boolean; reason?: string }) {

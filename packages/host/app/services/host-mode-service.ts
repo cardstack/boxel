@@ -1,3 +1,4 @@
+import type Owner from '@ember/owner';
 import Service, { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 
@@ -22,6 +23,7 @@ import type HostModeStateService from '@cardstack/host/services/host-mode-state-
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
+import type ResetService from '@cardstack/host/services/reset';
 
 interface PublishedRealmMetadata {
   urlString: string;
@@ -34,12 +36,23 @@ export default class HostModeService extends Service {
   @service declare operatorModeStateService: OperatorModeStateService;
   @service declare realm: RealmService;
   @service declare realmServer: RealmServerService;
+  @service declare reset: ResetService;
 
   // increasing token to ignore stale async head fetches
   private headUpdateRequestId = 0;
 
   // tracks whether the current head template contains a title tag
   @tracked headTemplateContainsTitle = false;
+
+  constructor(owner: Owner) {
+    super(owner);
+    this.reset.register(this);
+  }
+
+  resetState() {
+    this.headUpdateRequestId = 0;
+    this.headTemplateContainsTitle = false;
+  }
 
   get isActive() {
     if (this.simulatingHostMode) {

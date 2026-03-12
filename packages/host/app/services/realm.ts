@@ -11,7 +11,13 @@ import { isTesting } from '@embroider/macros';
 
 import { tracked, cached } from '@glimmer/tracking';
 
-import { dropTask, task, restartableTask, rawTimeout } from 'ember-concurrency';
+import {
+  didCancel,
+  dropTask,
+  task,
+  restartableTask,
+  rawTimeout,
+} from 'ember-concurrency';
 import window from 'ember-window-mock';
 
 import { TrackedSet, TrackedObject, TrackedArray } from 'tracked-built-ins';
@@ -281,7 +287,17 @@ class RealmResource {
       // share the work if there are multiple requests to get the info for a realm
       this.fetchingInfo = this.fetchInfoTask.perform();
     }
-    await this.fetchingInfo;
+    try {
+      await this.fetchingInfo;
+    } catch (error) {
+      // Realm info loading is best-effort during teardown. When the app/test is
+      // already being destroyed, callers cannot do anything useful with a
+      // cancellation, and surfacing it as a global failure makes normal
+      // component unmounts look like test regressions.
+      if (!didCancel(error)) {
+        throw error;
+      }
+    }
   }
 
   private fetchInfoTask = dropTask(async () => {
@@ -672,6 +688,11 @@ export default class RealmService extends Service {
 
   resetState() {
     this.logout();
+    this._realms = new Map();
+    this.currentKnownRealms = new TrackedSet();
+    this.reauthentications.clear();
+    this.bulkInfoPromise = undefined;
+    this.identifyRealmTracker++;
   }
 
   async waitForBulkInfoIfNeeded(): Promise<void> {

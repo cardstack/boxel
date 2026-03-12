@@ -1,11 +1,15 @@
 /* eslint-disable cardstack-host/wrapped-setup-helpers-only */
 // This is the one place we allow these to be used directly.
 
+import { settled } from '@ember/test-helpers';
+
 import {
   setupApplicationTest as emberSetupApplicationTest,
   setupRenderingTest as emberSetupRenderingTest,
 } from 'ember-qunit';
 import { setupWindowMock } from 'ember-window-mock/test-support';
+
+import type ResetService from '@cardstack/host/services/reset';
 
 import { cleanupMonacoEditorModels } from './index';
 
@@ -78,12 +82,24 @@ export function setupApplicationTest(hooks: NestedHooks) {
   emberSetupApplicationTest(hooks);
   setupWindowMock(hooks);
   setupFetchDebugging(hooks);
-  hooks.afterEach(cleanupMonacoEditorModels);
+  hooks.afterEach(async function () {
+    await settled();
+    (
+      this.owner.lookup('service:reset') as ResetService | undefined
+    )?.resetAll();
+    cleanupMonacoEditorModels();
+  });
 }
 
 export function setupRenderingTest(hooks: NestedHooks) {
   emberSetupRenderingTest(hooks);
   setupWindowMock(hooks);
   setupFetchDebugging(hooks);
-  hooks.afterEach(cleanupMonacoEditorModels);
+  hooks.afterEach(async function () {
+    await settled();
+    (
+      this.owner.lookup('service:reset') as ResetService | undefined
+    )?.resetAll();
+    cleanupMonacoEditorModels();
+  });
 }
