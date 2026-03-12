@@ -87,7 +87,11 @@ module.exports = function (environment) {
     fileSizeLimitBytes: Number(
       process.env.FILE_SIZE_LIMIT_BYTES ?? DEFAULT_FILE_SIZE_LIMIT_BYTES,
     ),
-    iconsURL: process.env.ICONS_URL || defaults.iconsURL,
+    // In environment mode, use computed Traefik hostname (not env var, which
+    // may be stale from mise's shell-activation cache in standard mode).
+    iconsURL: process.env.BOXEL_ENVIRONMENT
+      ? defaults.iconsURL
+      : (process.env.ICONS_URL || defaults.iconsURL),
     publishedRealmBoxelSpaceDomain:
       process.env.PUBLISHED_REALM_BOXEL_SPACE_DOMAIN || defaults.realmHost,
     publishedRealmBoxelSiteDomain:
