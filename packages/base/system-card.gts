@@ -105,9 +105,8 @@ class SystemCardIsolated extends Component<typeof SystemCard> {
       return;
     }
     try {
-      let result = await new GetUserSystemCardCommand(commandContext).execute(
-        undefined,
-      );
+      let result =
+        await new GetUserSystemCardCommand(commandContext).execute();
       this.activeSystemCardId = result.cardId ?? undefined;
       this.activeIsDefault = result.isDefault ?? false;
     } finally {
@@ -183,7 +182,7 @@ class SystemCardIsolated extends Component<typeof SystemCard> {
       let copyResult = await new CopyCardToRealmCommand(
         commandContext,
       ).execute({
-        sourceCard: this.args.model,
+        sourceCard: this.args.model as CardDef,
         targetRealm: targetRealmUrl,
       });
       if (copyResult.newCardId) {
@@ -221,9 +220,8 @@ class SystemCardIsolated extends Component<typeof SystemCard> {
     });
     this.activeSystemCardId = this.args.model.id;
     // Re-check default status after setting active
-    let result = await new GetUserSystemCardCommand(commandContext).execute(
-      undefined,
-    );
+    let result =
+      await new GetUserSystemCardCommand(commandContext).execute();
     this.activeIsDefault = result.isDefault ?? false;
     this.isExpanded = false;
   });
@@ -239,9 +237,8 @@ class SystemCardIsolated extends Component<typeof SystemCard> {
     }
     await new SetUserSystemCardCommand(commandContext).execute({});
     // Reload to pick up the new active system card (the default)
-    let result = await new GetUserSystemCardCommand(commandContext).execute(
-      undefined,
-    );
+    let result =
+      await new GetUserSystemCardCommand(commandContext).execute();
     this.activeSystemCardId = result.cardId ?? undefined;
     this.activeIsDefault = result.isDefault ?? false;
     this.isExpanded = false;
@@ -345,8 +342,6 @@ class SystemCardIsolated extends Component<typeof SystemCard> {
       {{/if}}
 
       <div class='system-card-content'>
-        <@fields.title />
-        <@fields.description />
         <@fields.defaultModelConfiguration />
         <@fields.modelConfigurations />
       </div>

@@ -57,7 +57,7 @@ module('Integration | commands | get-user-system-card', function (hooks) {
     let commandService = getService('command-service');
     let command = new GetUserSystemCardCommand(commandService.commandContext);
 
-    let result = await command.execute(undefined);
+    let result = await command.execute();
     assert.strictEqual(
       result.cardId,
       undefined,
@@ -79,7 +79,7 @@ module('Integration | commands | get-user-system-card', function (hooks) {
     let commandService = getService('command-service');
     let command = new GetUserSystemCardCommand(commandService.commandContext);
 
-    let result = await command.execute(undefined);
+    let result = await command.execute();
     assert.strictEqual(result.cardId, systemCardId);
     assert.false(
       result.isDefault,

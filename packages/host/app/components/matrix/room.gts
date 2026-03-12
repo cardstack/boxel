@@ -28,7 +28,11 @@ import { TrackedObject, TrackedMap, TrackedSet } from 'tracked-built-ins';
 
 import { v4 as uuidv4 } from 'uuid';
 
-import { Alert, BoxelButton, LoadingIndicator } from '@cardstack/boxel-ui/components';
+import {
+  Alert,
+  BoxelButton,
+  LoadingIndicator,
+} from '@cardstack/boxel-ui/components';
 import { and, eq, not } from '@cardstack/boxel-ui/helpers';
 
 import type { ResolvedCodeRef } from '@cardstack/runtime-common';
@@ -46,8 +50,8 @@ import {
   DEFAULT_LLM_ID_TO_NAME,
 } from '@cardstack/runtime-common/matrix-constants';
 
-import ENV from '@cardstack/host/config/environment';
 import UpdateRoomSkillsCommand from '@cardstack/host/commands/update-room-skills';
+import ENV from '@cardstack/host/config/environment';
 import type { FileUploadState } from '@cardstack/host/lib/file-upload-state';
 import type { Message } from '@cardstack/host/lib/matrix-classes/message';
 import type { StackItem } from '@cardstack/host/lib/stack-item';
@@ -323,7 +327,10 @@ export default class Room extends Component<Signature> {
                             @kind='text-only'
                             @size='extra-small'
                             class='llm-select-footer-action'
-                            {{on 'click' (perform this.restoreDefaultSystemCardTask)}}
+                            {{on
+                              'click'
+                              (perform this.restoreDefaultSystemCardTask)
+                            }}
                             data-test-restore-default-system-card
                           >
                             Restore default system card
