@@ -2,7 +2,7 @@
 
 ## Tooling prerequisites
 
-- We pin the toolchain with Volta (`.volta`), using the versions of Node.js and pnpm specified in package.json. Install Volta and set `VOLTA_FEATURE_PNPM=1` so pnpm is managed automatically—avoid global installs outside Volta.
+- We pin the toolchain with [mise](https://mise.jdx.dev/) (`.mise.toml`), which manages Node.js and pnpm versions. Run `mise install` from the repo root to get the correct versions—avoid global installs outside mise.
 - pnpm is required for all scripts; use the pinned version as specified above.
 - Docker is required (Postgres, Synapse, SMTP, Stripe CLI container). Ensure the daemon is running and you can run `docker` without sudo.
 
