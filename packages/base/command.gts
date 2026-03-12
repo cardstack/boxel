@@ -87,6 +87,11 @@ export class CardIdCard extends CardDef {
   @field cardId = contains(StringField);
 }
 
+export class GetUserSystemCardResult extends CardDef {
+  @field cardId = contains(StringField);
+  @field isDefault = contains(BooleanField);
+}
+
 export class ShowCardInput extends CardDef {
   @field cardId = contains(StringField);
   @field format = contains(StringField);

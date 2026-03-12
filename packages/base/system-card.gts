@@ -1,5 +1,6 @@
 import {
   CardDef,
+  Component,
   field,
   contains,
   containsMany,
@@ -12,7 +13,12 @@ import { getMenuItems } from '@cardstack/runtime-common';
 import { type GetMenuItemParams } from './menu-items';
 import { type MenuItemOptions } from '@cardstack/boxel-ui/helpers';
 import SetUserSystemCardCommand from '@cardstack/boxel-host/commands/set-user-system-card';
+import GetUserSystemCardCommand from '@cardstack/boxel-host/commands/get-user-system-card';
+import { BoxelButton } from '@cardstack/boxel-ui/components';
 import AppsIcon from '@cardstack/boxel-icons/apps';
+import { on } from '@ember/modifier';
+import { restartableTask } from 'ember-concurrency';
+import { tracked } from '@glimmer/tracking';
 
 export class ModelConfiguration extends CardDef {
   static displayName = 'Model Configuration';
@@ -67,3 +73,273 @@ export class SystemCard extends CardDef {
     return menuItems;
   }
 }
+
+class SystemCardIsolated extends Component<typeof SystemCard> {
+  @tracked activeSystemCardId: string | undefined;
+  @tracked activeIsDefault = false;
+  @tracked hasLoaded = false;
+  @tracked isExpanded = false;
+
+  constructor(owner: any, args: any) {
+    super(owner, args);
+    this.loadActiveSystemCard.perform();
+  }
+
+  loadActiveSystemCard = restartableTask(async () => {
+    let commandContext = this.args.context?.commandContext;
+    if (!commandContext) {
+      this.hasLoaded = true;
+      return;
+    }
+    let result = await new GetUserSystemCardCommand(commandContext).execute(
+      undefined,
+    );
+    this.activeSystemCardId = result.cardId ?? undefined;
+    this.activeIsDefault = result.isDefault ?? false;
+    this.hasLoaded = true;
+  });
+
+  get isActive(): boolean {
+    return (
+      this.hasLoaded &&
+      !!this.args.model.id &&
+      this.activeSystemCardId === this.args.model.id
+    );
+  }
+
+  get isInactive(): boolean {
+    return (
+      this.hasLoaded &&
+      !!this.activeSystemCardId &&
+      this.activeSystemCardId !== this.args.model.id
+    );
+  }
+
+  toggleExpanded = () => {
+    this.isExpanded = !this.isExpanded;
+  };
+
+  navigateToActive = async () => {
+    if (this.activeSystemCardId && this.args.viewCard) {
+      await this.args.viewCard(new URL(this.activeSystemCardId), 'isolated');
+    }
+  };
+
+  setAsActive = () => {
+    this.setAsActiveTask.perform();
+  };
+
+  setAsActiveTask = restartableTask(async () => {
+    let commandContext = this.args.context?.commandContext;
+    if (!commandContext || !this.args.model.id) {
+      return;
+    }
+    await new SetUserSystemCardCommand(commandContext).execute({
+      cardId: this.args.model.id,
+    });
+    this.activeSystemCardId = this.args.model.id;
+    // Re-check default status after setting active
+    let result = await new GetUserSystemCardCommand(commandContext).execute(
+      undefined,
+    );
+    this.activeIsDefault = result.isDefault ?? false;
+    this.isExpanded = false;
+  });
+
+  restoreDefault = () => {
+    this.restoreDefaultTask.perform();
+  };
+
+  restoreDefaultTask = restartableTask(async () => {
+    let commandContext = this.args.context?.commandContext;
+    if (!commandContext) {
+      return;
+    }
+    await new SetUserSystemCardCommand(commandContext).execute({});
+    // Reload to pick up the new active system card (the default)
+    let result = await new GetUserSystemCardCommand(commandContext).execute(
+      undefined,
+    );
+    this.activeSystemCardId = result.cardId ?? undefined;
+    this.activeIsDefault = result.isDefault ?? false;
+    this.isExpanded = false;
+  });
+
+  <template>
+    <div class='system-card-isolated'>
+      {{#if this.hasLoaded}}
+        <div class='status-badge-container'>
+          {{#if this.isActive}}
+            <button
+              class='status-badge active {{if this.isExpanded "expanded"}}'
+              type='button'
+              {{on 'click' this.toggleExpanded}}
+            >
+              Active System Card
+              <svg class='chevron' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'></polyline></svg>
+            </button>
+            {{#if this.isExpanded}}
+              <div class='badge-panel'>
+                <span class='panel-label'>This system card is currently active.</span>
+                {{#unless this.activeIsDefault}}
+                  <BoxelButton
+                    @kind='secondary'
+                    @size='small'
+                    class='panel-action'
+                    {{on 'click' this.restoreDefault}}
+                  >
+                    Restore default system card
+                  </BoxelButton>
+                {{/unless}}
+              </div>
+            {{/if}}
+          {{else if this.isInactive}}
+            <button
+              class='status-badge inactive {{if this.isExpanded "expanded"}}'
+              type='button'
+              {{on 'click' this.toggleExpanded}}
+            >
+              Inactive
+              <svg class='chevron' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'></polyline></svg>
+            </button>
+            {{#if this.isExpanded}}
+              <div class='badge-panel'>
+                <div class='panel-row'>
+                  <span class='panel-label'>Currently active:</span>
+                  <BoxelButton
+                    @kind='text-only'
+                    @size='small'
+                    class='panel-link'
+                    {{on 'click' this.navigateToActive}}
+                  >
+                    {{this.activeSystemCardId}}
+                  </BoxelButton>
+                </div>
+                <BoxelButton
+                  @kind='primary-dark'
+                  @size='small'
+                  class='panel-action'
+                  {{on 'click' this.setAsActive}}
+                >
+                  Make This My System Card
+                </BoxelButton>
+              </div>
+            {{/if}}
+          {{/if}}
+        </div>
+      {{/if}}
+
+      <div class='system-card-content'>
+        <@fields.title />
+        <@fields.description />
+        <@fields.defaultModelConfiguration />
+        <@fields.modelConfigurations />
+      </div>
+    </div>
+
+    <style scoped>
+      .system-card-isolated {
+        position: relative;
+        padding: var(--boxel-sp-lg);
+      }
+
+      .status-badge-container {
+        position: absolute;
+        top: var(--boxel-sp-sm);
+        right: var(--boxel-sp-sm);
+        z-index: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+      }
+
+      .status-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--boxel-sp-5xs);
+        font-size: var(--boxel-font-size-xs);
+        font-weight: 600;
+        padding: var(--boxel-sp-5xs) var(--boxel-sp-xs);
+        border-radius: var(--boxel-border-radius-sm);
+        border: none;
+        cursor: pointer;
+        transition: filter 0.15s;
+      }
+
+      .status-badge:hover {
+        filter: brightness(0.95);
+      }
+
+      .status-badge.active {
+        background: #d1fae5;
+        color: #065f46;
+      }
+
+      .status-badge.inactive {
+        background: var(--boxel-100, #f3f4f6);
+        color: var(--boxel-500, #6b7280);
+      }
+
+      .status-badge.expanded {
+        border-bottom-left-radius: 0;
+        border-bottom-right-radius: 0;
+      }
+
+      .chevron {
+        width: 14px;
+        height: 14px;
+        flex-shrink: 0;
+        transition: transform 0.15s;
+      }
+
+      .status-badge.expanded .chevron {
+        transform: rotate(180deg);
+      }
+
+      .badge-panel {
+        background: var(--boxel-light, #ffffff);
+        border: 1px solid var(--boxel-200, #e8e8e8);
+        border-radius: 0 0 var(--boxel-border-radius-sm) var(--boxel-border-radius-sm);
+        padding: var(--boxel-sp-xs);
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-xs);
+        min-width: 240px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+      }
+
+      .panel-row {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-6xs);
+      }
+
+      .panel-label {
+        font-size: var(--boxel-font-size-xs);
+        color: var(--boxel-500, #6b7280);
+        font-weight: 500;
+      }
+
+      .panel-link {
+        text-decoration: underline;
+        text-align: left;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        max-width: 100%;
+        font-size: var(--boxel-font-size-xs);
+        color: var(--boxel-dark, #272330);
+      }
+
+      .panel-action {
+        width: 100%;
+      }
+
+      .system-card-content {
+        padding-top: var(--boxel-sp-sm);
+      }
+    </style>
+  </template>
+}
+
+SystemCard.isolated = SystemCardIsolated;
