@@ -16,6 +16,9 @@ const realmServerDir = resolve(join(__dirname, '..', '..', 'realm-server'));
 const skillsRealmDir = resolve(
   join(__dirname, '..', '..', 'skills-realm', 'contents'),
 );
+const softwareFactoryRealmDir = resolve(
+  join(__dirname, '..', '..', 'software-factory', 'realm'),
+);
 const baseRealmDir = resolve(join(__dirname, '..', '..', 'base'));
 const matrixDir = resolve(join(__dirname, '..'));
 export const appURL = 'http://localhost:4205/test';
@@ -243,6 +246,10 @@ export async function startServer({
     `--fromUrl='https://cardstack.com/base/'`,
     `--toUrl='http://localhost:4205/base/'`,
   ]);
+  workerArgs = workerArgs.concat([
+    `--fromUrl='http://localhost:4205/software-factory/'`,
+    `--toUrl='http://localhost:4205/software-factory/'`,
+  ]);
 
   let workerManager = spawn('ts-node', workerArgs, {
     cwd: realmServerDir,
@@ -279,6 +286,12 @@ export async function startServer({
     `--path='${skillsRealmDir}'`,
     `--fromUrl='http://localhost:4205/skills/'`,
     `--toUrl='http://localhost:4205/skills/'`,
+  ]);
+  serverArgs = serverArgs.concat([
+    `--username='software_factory_realm'`,
+    `--path='${softwareFactoryRealmDir}'`,
+    `--fromUrl='http://localhost:4205/software-factory/'`,
+    `--toUrl='http://localhost:4205/software-factory/'`,
   ]);
   serverArgs = serverArgs.concat([
     `--username='base_realm'`,

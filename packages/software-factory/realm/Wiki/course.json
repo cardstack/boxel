@@ -1,0 +1,33 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Wiki",
+        "module": "../wiki"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "tags": ["learning-education", "course"],
+      "content": "## Overview\n\nThe Course card gives the workspace a structured home for learning course with modules, lessons, prerequisites, and enrollment.\n\nAs a first-class Boxel card, it can be linked to adjacent records, surfaced in filtered views, and reused in automation without the information collapsing into disconnected notes or one-off documents.\n\n## Core Mechanics\n\nCourse organizes instructional or learning-specific structure in a way that remains reusable across planning, delivery, and review. The card should support both direct authoring and automation-assisted generation while keeping its context intact.\n\nThe card can be created directly by a user, produced from a [[Workflow Playbook]], or updated in response to a [[Trigger]]. When AI is involved, a [[Prompt Template]] or [[Skill Card]] can shape how it is drafted, summarized, classified, or routed.\n\n## Integration Points\n\n- **[[Assignment]]** -- Assignment can provide adjacent context, downstream output, or grouped navigation around Course.\n- **[[Quiz]]** -- Quiz can provide adjacent context, downstream output, or grouped navigation around Course.\n- **[[Lesson Plan]]** -- Lesson Plan can provide adjacent context, downstream output, or grouped navigation around Course.\n- **[[Report]]** -- Course can feed rollups and summaries that surface trends, status, or outcomes.\n- **[[Workflow Playbook]]** -- Course can be created, reviewed, or progressed as one step inside a repeatable workflow.\n- **[[Certificate]]** -- Certificate can provide adjacent context, downstream output, or grouped navigation around Course.\n\n## Example Use Cases\n\n- **System of record:** Teams create Course as the structured home for learning course with modules, lessons, prerequisites, and enrollment and keep related work linked instead of scattered across notes.\n- **Automation handoff:** A [[Workflow Playbook]] or [[Trigger]] creates or updates Course when upstream conditions are met, reducing repetitive setup work.\n- **Search and reporting:** Course stays queryable for dashboards, summaries, and downstream actions without re-entering the same information in multiple places.",
+      "cardInfo": {
+        "name": "Course",
+        "notes": null,
+        "summary": "Learning course with modules, lessons, prerequisites, and enrollment.",
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "relatedPages": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

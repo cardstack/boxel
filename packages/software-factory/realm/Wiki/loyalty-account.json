@@ -1,0 +1,33 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Wiki",
+        "module": "../wiki"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "tags": ["people-contacts", "loyalty", "account"],
+      "content": "## Overview\n\nThe Loyalty Account card gives the workspace a structured home for customer loyalty/rewards account with points balance, tier, and redemption history.\n\nAs a first-class Boxel card, it can be linked to adjacent records, surfaced in filtered views, and reused in automation without the information collapsing into disconnected notes or one-off documents.\n\n## Core Mechanics\n\nLoyalty Account anchors identity, permissions, or relationship context. It becomes most useful when other cards can link to it consistently, query against it safely, and inherit its context without duplicating sensitive or fast-changing information.\n\nThe card can be created directly by a user, produced from a [[Workflow Playbook]], or updated in response to a [[Trigger]]. When AI is involved, a [[Prompt Template]] or [[Skill Card]] can shape how it is drafted, summarized, classified, or routed.\n\n## Integration Points\n\n- **[[Organization]]** -- Loyalty Account frequently sits inside an account, company, or team-level relationship context.\n- **[[Contact]]** -- Loyalty Account often needs a person-level reference for ownership, communication, or accountability.\n- **[[Task]]** -- Loyalty Account often creates follow-up work or is itself tracked through task execution.\n- **[[Deal]]** -- Deal can provide adjacent context, downstream output, or grouped navigation around Loyalty Account.\n- **[[Case]]** -- Case can provide adjacent context, downstream output, or grouped navigation around Loyalty Account.\n- **[[Email Template]]** -- Email Template can provide adjacent context, downstream output, or grouped navigation around Loyalty Account.\n\n## Example Use Cases\n\n- **System of record:** Teams create Loyalty Account as the structured home for customer loyalty/rewards account with points balance, tier, and redemption history and keep related work linked instead of scattered across notes.\n- **Automation handoff:** A [[Workflow Playbook]] or [[Trigger]] creates or updates Loyalty Account when upstream conditions are met, reducing repetitive setup work.\n- **Search and reporting:** Loyalty Account stays queryable for dashboards, summaries, and downstream actions without re-entering the same information in multiple places.",
+      "cardInfo": {
+        "name": "Loyalty Account",
+        "notes": null,
+        "summary": "Customer loyalty/rewards account with points balance, tier, and redemption history.",
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "relatedPages": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

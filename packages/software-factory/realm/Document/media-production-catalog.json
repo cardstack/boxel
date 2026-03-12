@@ -1,0 +1,28 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Document",
+        "module": "https://realms-staging.stack.cards/ctse/topaz-crossing/document"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "content": "# Media Production Card Catalog\n\nCondensed stubs for Media Production card types. These capture the domain memory and reusable behavior an agent should preserve, not exhaustive schema.\n\n### Drum Machine\n**Priority:** P3\n\n- **Core idea:** Step sequencer drum machine: patterns, samples, tempo, and playback.\n\n---\n\n### Piano\n**Priority:** P3\n\n- **Core idea:** Interactive piano keyboard: keys, octaves, recording, and playback.\n\n---\n\n### Recording Studio\n**Priority:** P3\n\n- **Core idea:** Multi-track recording interface: tracks, mixing, effects, and export.\n\n---\n\n### Stream\n**Priority:** P3\n\n- **Core idea:** Live stream card: video/audio source, chat, viewer count, recording.\n\n---\n\n### Layout Board\n**Priority:** P2\n\n- **Core idea:** Visual layout/mood board: arranged images, text blocks, and design elements.\n",
+      "cardInfo": {
+        "name": "Media Production Card Catalog",
+        "notes": null,
+        "title": "Media Production Card Catalog",
+        "summary": "Condensed stubs for Media Production card types.",
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "https://realms-staging.stack.cards/catalog/Theme/boxel-brand-guide"
+        }
+      }
+    }
+  }
+}

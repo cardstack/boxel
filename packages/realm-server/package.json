@@ -102,6 +102,7 @@
     "setup:experiments-in-deployment": "mkdir -p /persistent/experiments && rsync --dry-run --itemize-changes --checksum --recursive ../experiments-realm/. /persistent/experiments/ && rsync --checksum --recursive ../experiments-realm/. /persistent/experiments/",
     "setup:catalog-in-deployment": "mkdir -p /persistent/catalog && rsync --dry-run --itemize-changes --checksum --recursive --delete ../catalog-realm/. /persistent/catalog/ && rsync --checksum --recursive --delete ../catalog-realm/. /persistent/catalog/",
     "setup:skills-in-deployment": "mkdir -p /persistent/skills",
+    "setup:software-factory-in-deployment": "mkdir -p /persistent/software-factory && rsync --dry-run --itemize-changes --checksum --recursive --delete ../software-factory/realm/. /persistent/software-factory/ && rsync --checksum --recursive --delete ../software-factory/realm/. /persistent/software-factory/",
     "setup:boxel-homepage-in-deployment": "mkdir -p /persistent/boxel-homepage",
     "setup:catalog-new-in-deployment": "mkdir -p /persistent/catalog-new && pnpm --dir=../catalog-new catalog-new:setup && rsync --dry-run --itemize-changes --checksum --recursive --delete ../catalog-new/contents/. /persistent/catalog-new/ && rsync --checksum --recursive --delete ../catalog-new/contents/. /persistent/catalog-new/",
     "start": "PGPORT=5435 NODE_NO_WARNINGS=1 ts-node --transpileOnly main",

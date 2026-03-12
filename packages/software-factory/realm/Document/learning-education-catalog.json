@@ -1,0 +1,28 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Document",
+        "module": "https://realms-staging.stack.cards/ctse/topaz-crossing/document"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "content": "# Learning & Education Card Catalog\n\nCondensed stubs for Learning & Education card types. These capture the domain memory and reusable behavior an agent should preserve, not exhaustive schema.\n\n### Quiz\n**Priority:** P2\n\n- **Core idea:** Assessment with questions, answer options, scoring, and results.\n\n---\n\n### Assignment\n**Priority:** P2\n\n- **Core idea:** Student assignment with description, due date, rubric, submission, and grading.\n\n---\n\n### Certificate\n**Priority:** P2\n\n- **Core idea:** Completion certificate with recipient, course, date, and verifiable credential.\n\n---\n\n### Course\n**Priority:** P1\n\n- **Core idea:** Learning course with modules, lessons, prerequisites, and enrollment.\n\n---\n\n### Lesson Plan\n**Priority:** P2\n\n- **Core idea:** Teaching plan with objectives, activities, materials, assessment, and duration.\n\n---\n\n### Flash Card\n**Priority:** P2\n\n- **Core idea:** Front/back study card with spaced repetition metadata (interval, ease, next review).\n\n---\n\n### Deck\n**Priority:** P2\n\n- **Core idea:** Collection of flash cards with study progress, mastery stats, and session tracking.\n\n---\n\n### Study Guide\n**Priority:** P2\n\n- **Core idea:** Curated study material: topics, key concepts, linked resources, and practice questions.\n\n---\n\n### Source / Citation\n**Priority:** P2\n\n- **Core idea:** Bibliographic reference: author, title, publication, date, DOI/URL. Generates formatted citations.\n\n---\n\n### Transcript\n**Priority:** P2\n\n- **Core idea:** Academic transcript with courses, grades, GPA, credits, and terms.\n\n---\n\n### Gradebook\n**Priority:** P2\n\n- **Core idea:** Instructor's grade tracking: students, assignments, scores, weighted averages.\n\n---\n\n### Session Report\n**Priority:** P2\n\n- **Core idea:** Tutoring/coaching session report: attendee, topics covered, progress, action items.\n",
+      "cardInfo": {
+        "name": "Learning & Education Card Catalog",
+        "notes": null,
+        "title": "Learning & Education Card Catalog",
+        "summary": "Condensed stubs for Learning & Education card types.",
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "https://realms-staging.stack.cards/catalog/Theme/boxel-brand-guide"
+        }
+      }
+    }
+  }
+}

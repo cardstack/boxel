@@ -1,0 +1,28 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Document",
+        "module": "https://realms-staging.stack.cards/ctse/topaz-crossing/document"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "content": "# Identity & Security Card Catalog\n\nCondensed stubs for Identity & Security card types. These capture the domain memory and reusable behavior an agent should preserve, not exhaustive schema.\n\n### Credential\n**Priority:** P1\n\n- **Core idea:** Stored credential reference (API key, token) with name, service, masked value, expiry, and rotation status. Never displays raw secrets.\n\n---\n\n### Pass / Wallet Item\n**Priority:** P2\n\n- **Core idea:** Apple Wallet-style pass: boarding pass, movie ticket, payment card, loyalty card. Visual pass rendering with barcode/QR.\n\n---\n\n### API Key\n**Priority:** P1\n\n- **Core idea:** API key management for OpenAI, Gemini, etc. Service name, masked key, usage stats, rate limits.\n\n---\n\n### Invitation\n**Priority:** P2\n\n- **Core idea:** Access invitation with recipient, resource, permissions, expiry, and acceptance status.\n",
+      "cardInfo": {
+        "name": "Identity & Security Card Catalog",
+        "notes": null,
+        "title": "Identity & Security Card Catalog",
+        "summary": "Condensed stubs for Identity & Security card types.",
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "https://realms-staging.stack.cards/catalog/Theme/boxel-brand-guide"
+        }
+      }
+    }
+  }
+}

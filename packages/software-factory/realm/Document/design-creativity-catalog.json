@@ -1,0 +1,28 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Document",
+        "module": "https://realms-staging.stack.cards/ctse/topaz-crossing/document"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "content": "# Design & Creativity Card Catalog\n\nCondensed stubs for Design & Creativity card types. These capture the domain memory and reusable behavior an agent should preserve, not exhaustive schema.\n\n### Mockup\n**Priority:** P2\n\n- **Core idea:** Design mockup with image, annotations, version history, and feedback thread.\n\n---\n\n### HTML Mockup\n**Priority:** P1\n\n- **Core idea:** Live HTML/CSS concept rendered in an iframe. Generate via AI (Gemini, Claude) and iterate. Interactive prototype card.\n\n---\n\n### Image\n**Priority:** P1\n\n- **Core idea:** Static image card with URL, alt text, dimensions, format metadata. Base image type without AI generation.\n\n---\n\n### Photo Collage\n**Priority:** P2\n\n- **Core idea:** Arrangement of multiple images in a configurable grid/layout with optional captions.\n\n---\n\n### Canvas\n**Priority:** P2\n\n- **Core idea:** Infinite canvas for freeform arrangement of cards, images, drawing, and connections.\n\n---\n\n### Playlist\n**Priority:** P2\n\n- **Core idea:** Ordered collection of media items (audio, video) with playback controls and metadata.\n\n---\n\n### Story (Vertical Video)\n**Priority:** P3\n\n- **Core idea:** Vertical video/image story format with swipe navigation, captions, and duration.\n\n---\n\n### Podcast Episode\n**Priority:** P2\n\n- **Core idea:** Audio episode with transcript, show notes, guest info, timestamps, and chapters.\n\n---\n\n### Theme Card\n**Priority:** P1\n\n- **Core idea:** Design theme with color tokens, typography, spacing. Applied to other cards via cardInfo.theme.\n\n---\n\n### Style Reference\n**Priority:** P2\n\n- **Core idea:** Visual reference board: mood images, color swatches, typography samples, design direction.\n\n---\n\n### Brand Guide\n**Priority:** P1\n\n- **Core idea:** Comprehensive brand identity: logos, colors, fonts, voice, usage guidelines. The source of truth for brand consistency.\n",
+      "cardInfo": {
+        "name": "Design & Creativity Card Catalog",
+        "notes": null,
+        "title": "Design & Creativity Card Catalog",
+        "summary": "Condensed stubs for Design & Creativity card types.",
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "https://realms-staging.stack.cards/catalog/Theme/boxel-brand-guide"
+        }
+      }
+    }
+  }
+}

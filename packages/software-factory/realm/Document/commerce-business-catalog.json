@@ -1,0 +1,28 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Document",
+        "module": "https://realms-staging.stack.cards/ctse/topaz-crossing/document"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "content": "# Commerce & Business Card Catalog\n\nCondensed stubs for Commerce & Business card types. These capture the domain memory and reusable behavior an agent should preserve, not exhaustive schema.\n\n### Product\n**Priority:** P1\n\n- **Core idea:** A sellable product with pricing, description, images, variants, and inventory status.\n\n---\n\n### Invoice\n**Priority:** P1\n\n- **Core idea:** A billing document with line items, totals, tax, due date, and payment status. Links to customer and order.\n\n---\n\n### Order\n**Priority:** P1\n\n- **Core idea:** A customer order containing line items, shipping info, status tracking, and payment reference.\n\n---\n\n### Deal\n**Priority:** P1\n\n- **Core idea:** A sales opportunity with stage tracking, value, probability, expected close date. CRM pipeline card.\n\n---\n\n### Subscription\n**Priority:** P2\n\n- **Core idea:** Recurring billing relationship: plan, billing cycle, renewal date, usage, cancellation.\n\n---\n\n### Quote\n**Priority:** P2\n\n- **Core idea:** A price quote with line items, validity period, terms. Converts to Order when accepted.\n\n---\n\n### Lead\n**Priority:** P1\n\n- **Core idea:** A potential customer with source tracking, qualification status, and conversion pipeline. Converts to Contact + Deal.\n\n---\n\n### Shopping Cart\n**Priority:** P2\n\n- **Core idea:** Active shopping session with line items, quantities, subtotals. Converts to Order at checkout.\n\n---\n\n### Receipt\n**Priority:** P2\n\n- **Core idea:** Proof of payment with line items, payment method, date, and total. Read-only record (replaces \"Transaction\").\n\n---\n\n### Coupon\n**Priority:** P3\n\n- **Core idea:** Discount code with type (percentage/fixed), validity period, usage limits, and applicable products.\n\n---\n\n### Gift Card\n**Priority:** P3\n\n- **Core idea:** Stored value card with balance, activation status, and transaction history.\n\n---\n\n### Warranty\n**Priority:** P3\n\n- **Core idea:** Warranty record linked to a product/order with coverage details, expiry, and claim history.\n",
+      "cardInfo": {
+        "name": "Commerce & Business Card Catalog",
+        "notes": null,
+        "title": "Commerce & Business Card Catalog",
+        "summary": "Condensed stubs for Commerce & Business card types.",
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "https://realms-staging.stack.cards/catalog/Theme/boxel-brand-guide"
+        }
+      }
+    }
+  }
+}

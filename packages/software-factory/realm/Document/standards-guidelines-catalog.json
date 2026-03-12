@@ -1,0 +1,28 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Document",
+        "module": "https://realms-staging.stack.cards/ctse/topaz-crossing/document"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "content": "# Standards & Guidelines Card Catalog\n\nCondensed stubs for Standards & Guidelines card types. These capture the domain memory and reusable behavior an agent should preserve, not exhaustive schema.\n\n### Brand Voice\n**Priority:** P2\n\n- **Core idea:** Brand voice definition: tone, personality, do/don't, example phrases, and audience.\n\n---\n\n### Writing Style\n**Priority:** P2\n\n- **Core idea:** Writing style guide: grammar rules, preferred terms, formatting standards.\n\n---\n\n### Coding Standard\n**Priority:** P2\n\n- **Core idea:** Coding conventions: language, linting rules, patterns, naming conventions, and examples.\n\n---\n\n### Design System\n**Priority:** P1\n\n- **Core idea:** Design system documentation: components, tokens, usage guidelines, and examples.\n",
+      "cardInfo": {
+        "name": "Standards & Guidelines Card Catalog",
+        "notes": null,
+        "title": "Standards & Guidelines Card Catalog",
+        "summary": "Condensed stubs for Standards & Guidelines card types.",
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "https://realms-staging.stack.cards/catalog/Theme/boxel-brand-guide"
+        }
+      }
+    }
+  }
+}

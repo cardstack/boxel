@@ -1,0 +1,28 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Document",
+        "module": "https://realms-staging.stack.cards/ctse/topaz-crossing/document"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "content": "# People & Contacts Card Catalog\n\nCondensed stubs for People & Contacts card types. These capture the domain memory and reusable behavior an agent should preserve, not exhaustive schema.\n\n### Organization\n**Priority:** P0\n\n- **Core idea:** Company or group entity with name, logo, industry, size, and linked contacts.\n\n---\n\n### Contact\n**Priority:** P0\n\n- **Core idea:** Person with name, email, phone, social profiles, organization link, and interaction history.\n\n---\n\n### Social Profile\n**Priority:** P2\n\n- **Core idea:** Linked social media profile with platform, handle, follower count, and bio.\n\n---\n\n### Author\n**Priority:** P1\n\n- **Core idea:** Content creator identity with bio, avatar, social links, and published works.\n\n---\n\n### Post (Social)\n**Priority:** P2\n\n- **Core idea:** Social media post with content, media, engagement metrics, and platform metadata.\n\n---\n\n### Review\n**Priority:** P2\n\n- **Core idea:** Rating and review with score, text, author, date. Links to the reviewed entity.\n\n---\n\n### Follower / Subscriber\n**Priority:** P3\n\n- **Core idea:** Subscription relationship between a person and a channel/creator/list.\n\n---\n\n### Audio Recording\n**Priority:** P2\n\n- **Core idea:** Recorded audio with waveform display, transcript, duration, and speaker identification.\n\n---\n\n### Comment\n**Priority:** P1\n\n- **Core idea:** Threaded comment attached to any card. Author, timestamp, and reply chain.\n\n---\n\n### Loyalty Account\n**Priority:** P3\n\n- **Core idea:** Customer loyalty/rewards account with points balance, tier, and redemption history.\n\n---\n\n### Avatar\n**Priority:** P2\n\n- **Core idea:** User avatar/profile image with multiple sizes, fallback initials, and status indicator.\n",
+      "cardInfo": {
+        "name": "People & Contacts Card Catalog",
+        "notes": null,
+        "title": "People & Contacts Card Catalog",
+        "summary": "Condensed stubs for People & Contacts card types.",
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "https://realms-staging.stack.cards/catalog/Theme/boxel-brand-guide"
+        }
+      }
+    }
+  }
+}
