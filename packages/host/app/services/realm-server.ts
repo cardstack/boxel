@@ -514,13 +514,25 @@ export default class RealmServerService extends Service {
     }
 
     let json = (await response.json()) as {
-      data: {
-        id: string;
-        type: 'card-type-summary';
-        attributes: { displayName: string; total: number; iconHTML: string };
-      }[];
+      data: Record<
+        string,
+        {
+          data: {
+            id: string;
+            type: 'card-type-summary';
+            attributes: {
+              displayName: string;
+              total: number;
+              iconHTML: string;
+            };
+          }[];
+        }
+      >;
     };
-    return { data: json.data ?? [] };
+    let flatData = Object.values(json.data ?? {}).flatMap(
+      (realm) => realm.data,
+    );
+    return { data: flatData };
   }
 
   async handleEvent(event: Partial<IEvent>) {

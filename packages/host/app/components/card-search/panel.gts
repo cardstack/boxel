@@ -18,9 +18,9 @@ import {
   type getCardCollection,
   CardContextName,
   GetCardCollectionContextName,
+  internalKeyFor,
+  isResolvedCodeRef,
 } from '@cardstack/runtime-common';
-
-import consumeContext from '@cardstack/host/helpers/consume-context';
 
 import { getPrerenderedSearch } from '@cardstack/host/resources/prerendered-search';
 import type RealmServerService from '@cardstack/host/services/realm-server';
@@ -183,6 +183,20 @@ export default class SearchPanel extends Component<Signature> {
     return state;
   });
 
+  private get baseFilterCodeRefs(): Set<string> | undefined {
+    const typeRefs = getFilterTypeRefs(this.args.baseFilter, '');
+    if (!typeRefs || typeRefs.length === 0) {
+      return undefined;
+    }
+    const refs = new Set<string>();
+    for (const { ref, negated } of typeRefs) {
+      if (!negated && isResolvedCodeRef(ref)) {
+        refs.add(internalKeyFor(ref, undefined));
+      }
+    }
+    return refs.size > 0 ? refs : undefined;
+  }
+
   @use private typeFilter = resource(() => {
     let value: { selected: PickerOption[]; options: PickerOption[] } =
       new TrackedObject({
@@ -192,11 +206,17 @@ export default class SearchPanel extends Component<Signature> {
 
     const seen = new Map<string, PickerOption>();
     const codeRefsByDisplayName = new Map<string, string[]>();
+    const allowedCodeRefs = this.baseFilterCodeRefs;
 
     for (const item of this.cardTypeSummaries.data) {
       const name = item.attributes.displayName;
       const codeRef = item.id;
       if (!name) {
+        continue;
+      }
+
+      // When baseFilter constrains to specific types, only show matching types
+      if (allowedCodeRefs && !allowedCodeRefs.has(codeRef)) {
         continue;
       }
 

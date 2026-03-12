@@ -19,7 +19,6 @@ import {
   type LinkableCollectionDocument,
   type PrerenderedCardCollectionDocument,
 } from '@cardstack/runtime-common/document-types';
-import type { CardTypeSummary } from '@cardstack/runtime-common/index-structure';
 
 import ENV from '@cardstack/host/config/environment';
 
@@ -232,20 +231,22 @@ function registerTypesRoutes() {
       }
 
       let registry = getTestRealmRegistry();
-      let allSummaries: CardTypeSummary[] = [];
+      let result: Record<
+        string,
+        ReturnType<typeof makeCardTypeSummaryDoc>
+      > = {};
 
       for (let realmURL of realmList) {
-        let registryEntry = registry.get(ensureTrailingSlash(realmURL));
+        let normalizedURL = ensureTrailingSlash(realmURL);
+        let registryEntry = registry.get(normalizedURL);
         if (registryEntry?.realm) {
           let summaries =
             await registryEntry.realm.realmIndexQueryEngine.fetchCardTypeSummary();
-          allSummaries.push(...summaries);
+          result[normalizedURL] = makeCardTypeSummaryDoc(summaries);
         }
       }
 
-      let doc = makeCardTypeSummaryDoc(allSummaries);
-
-      return new Response(JSON.stringify(doc), {
+      return new Response(JSON.stringify({ data: result }), {
         status: 200,
         headers: { 'content-type': SupportedMimeType.CardTypeSummary },
       });
