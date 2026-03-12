@@ -491,6 +491,27 @@ class ModelConfigurationIsolated extends Component<typeof ModelConfiguration> {
 }
 
 class ModelConfigurationFitted extends Component<typeof ModelConfiguration> {
+    get leftBadgeTitle(): string {
+      let variant = this.args.model.leftBadgeVariant;
+      if (variant === 'purpose') {
+        return 'Assigned purpose for this model configuration';
+      }
+      if (variant === 'recommended-badge') {
+        return 'Linked to a verified OpenRouter model';
+      }
+      return '';
+    }
+
+    get rightBadgeTitle(): string {
+      if (this.args.model.reasoningEffort) {
+        return 'Reasoning enabled — uses extended thinking';
+      }
+      if (this.args.model.openRouterModel) {
+        return 'Verified — linked to OpenRouter model';
+      }
+      return '';
+    }
+
     formatContext(num: number | undefined): string {
       if (!num) return '\u2014';
       if (num >= 1000000) {
@@ -540,7 +561,7 @@ class ModelConfigurationFitted extends Component<typeof ModelConfiguration> {
           <div class='strip-content'>
             <div class='strip-row'>
               {{#if @model.leftBadge}}
-                <div class='strip-badge {{@model.leftBadgeVariant}}'>
+                <div class='strip-badge {{@model.leftBadgeVariant}}' title={{this.leftBadgeTitle}}>
                   {{@model.leftBadge}}
                 </div>
               {{/if}}
@@ -553,7 +574,7 @@ class ModelConfigurationFitted extends Component<typeof ModelConfiguration> {
               </div>
               <div class='strip-spacer'></div>
               {{#if @model.rightBadge}}
-                <div class='strip-badge {{@model.rightBadgeVariant}}'>
+                <div class='strip-badge {{@model.rightBadgeVariant}}' title={{this.rightBadgeTitle}}>
                   {{#if (eq @model.rightBadgeVariant 'recommended')}}
                     <svg
                       class='badge-icon'
@@ -611,14 +632,14 @@ class ModelConfigurationFitted extends Component<typeof ModelConfiguration> {
           <div class='tile-header'>
             <div class='tile-badges'>
               {{#if @model.leftBadge}}
-                <div class='tile-badge {{@model.leftBadgeVariant}}'>
+                <div class='tile-badge {{@model.leftBadgeVariant}}' title={{this.leftBadgeTitle}}>
                   {{@model.leftBadge}}
                 </div>
               {{/if}}
             </div>
             <div class='tile-badges-right'>
               {{#if @model.rightBadge}}
-                <div class='tile-badge {{@model.rightBadgeVariant}}'>
+                <div class='tile-badge {{@model.rightBadgeVariant}}' title={{this.rightBadgeTitle}}>
                   {{#if (eq @model.rightBadgeVariant 'recommended')}}
                     <svg
                       class='badge-icon'
@@ -711,12 +732,12 @@ class ModelConfigurationFitted extends Component<typeof ModelConfiguration> {
             </div>
             <div class='card-badges'>
               {{#if @model.leftBadge}}
-                <div class='card-badge {{@model.leftBadgeVariant}}'>
+                <div class='card-badge {{@model.leftBadgeVariant}}' title={{this.leftBadgeTitle}}>
                   {{@model.leftBadge}}
                 </div>
               {{/if}}
               {{#if @model.rightBadge}}
-                <div class='card-badge {{@model.rightBadgeVariant}}'>
+                <div class='card-badge {{@model.rightBadgeVariant}}' title={{this.rightBadgeTitle}}>
                   {{#if (eq @model.rightBadgeVariant 'recommended')}}
                     <svg
                       class='badge-icon'
