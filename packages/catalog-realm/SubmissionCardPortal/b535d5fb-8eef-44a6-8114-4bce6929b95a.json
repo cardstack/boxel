@@ -8,14 +8,12 @@
     },
     "type": "card",
     "attributes": {
-      "title": "Submission Card Portal",
       "cardInfo": {
         "name": "Submission Card Portal",
         "notes": null,
         "summary": null,
         "cardThumbnailURL": null
-      },
-      "description": ""
+      }
     },
     "relationships": {
       "cardInfo.theme": {

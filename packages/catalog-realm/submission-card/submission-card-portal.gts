@@ -165,7 +165,7 @@ class Isolated extends Component<typeof SubmissionCardPortal> {
   <template>
     <div class='submission-portal'>
       <header class='portal-header'>
-        <h1 class='portal-title'>{{@model.title}}</h1>
+        <h1 class='portal-cardTitle'>{{@model.cardTitle}}</h1>
         <div class='portal-controls'>
           <BoxelInput
             class='search-input'
@@ -227,7 +227,7 @@ class Isolated extends Component<typeof SubmissionCardPortal> {
         border-bottom: 1px solid var(--border, #d0d7de);
       }
 
-      .portal-title {
+      .portal-cardTitle {
         margin: 0;
         font: 700 var(--boxel-font-xl);
         color: var(--foreground, #1f2328);
@@ -291,8 +291,11 @@ export class SubmissionCardPortal extends CardDef {
   static headerColor = '#00ffba';
   static icon = BotIcon;
 
-  @field title = contains(StringField);
-  @field description = contains(StringField);
+  @field cardTitle = contains(StringField, {
+    computeVia: function (this: SubmissionCardPortal) {
+      return 'Submission Card Portal';
+    },
+  });
 
   static isolated = Isolated;
 }
