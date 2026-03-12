@@ -5,6 +5,7 @@ import {
   contains,
   type Theme,
 } from 'https://cardstack.com/base/card-api';
+import MarkdownField from 'https://cardstack.com/base/markdown';
 import StringField from 'https://cardstack.com/base/string';
 import NumberField from 'https://cardstack.com/base/number';
 import GetCardCommand from '@cardstack/boxel-host/commands/get-card';
@@ -19,6 +20,7 @@ class CreatePrCardInput extends CardDef {
   @field prUrl = contains(StringField);
   @field prTitle = contains(StringField);
   @field branchName = contains(StringField);
+  @field prSummary = contains(MarkdownField);
   @field submittedBy = contains(StringField);
 }
 
@@ -39,6 +41,7 @@ export default class CreatePrCardCommand extends Command<
       prUrl,
       prTitle,
       branchName,
+      prSummary,
       submittedBy,
     } = input;
     let catalogRealmUrl = new RealmPaths(new URL('..', import.meta.url)).url;
@@ -48,6 +51,7 @@ export default class CreatePrCardCommand extends Command<
       prUrl,
       prTitle,
       branchName,
+      prSummary,
       submittedBy,
       submittedAt: new Date(),
     });

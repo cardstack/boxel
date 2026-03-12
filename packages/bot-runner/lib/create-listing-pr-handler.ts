@@ -29,6 +29,7 @@ export interface CreatedListingPRResult {
   prUrl: string;
   prTitle: string;
   branchName: string;
+  summary: string | null;
 }
 
 function getCreateListingPRContext(
@@ -141,7 +142,7 @@ export class CreateListingPRHandler {
     let { owner, repoName, repo, head, title, listingDisplayName } = context;
 
     try {
-      let body = await this.getSubmissionSummary(
+      let summary = await this.getSubmissionSummary(
         eventContent,
         runAs,
         runCommandResult,
@@ -153,7 +154,7 @@ export class CreateListingPRHandler {
         title,
         head,
         base: DEFAULT_BASE_BRANCH,
-        body: body ?? undefined,
+        body: summary ?? undefined,
       };
       let result = await this.githubClient.openPullRequest(prParams);
 
@@ -162,7 +163,7 @@ export class CreateListingPRHandler {
         repo,
         prUrl: result.html_url,
       });
-      return mapOpenPullRequestResult(result, title, head);
+      return mapOpenPullRequestResult(result, title, head, summary);
     } catch (error) {
       let message = error instanceof Error ? error.message : String(error);
       if (message.includes('No commits between')) {
@@ -238,12 +239,14 @@ function mapOpenPullRequestResult(
   result: OpenPullRequestResult,
   prTitle: string,
   branchName: string,
+  summary: string | null,
 ): CreatedListingPRResult {
   return {
     prNumber: result.number,
     prUrl: result.html_url,
     prTitle,
     branchName,
+    summary,
   };
 }
 

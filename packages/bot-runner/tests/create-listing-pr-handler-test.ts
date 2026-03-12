@@ -59,6 +59,10 @@ module('create-listing-pr handler', () => {
       result?.branchName?.endsWith('/my-listing') ?? false,
       'returns branch name used to open the PR',
     );
+    assert.true(
+      result?.summary?.includes('## Summary') ?? false,
+      'returns generated summary for downstream consumers',
+    );
 
     assert.strictEqual(opened.length, 1, 'opens exactly one PR');
     let openedCall = opened[0] as {
@@ -139,6 +143,11 @@ module('create-listing-pr handler', () => {
       submissionCardUrl,
     );
     assert.strictEqual(result?.prNumber, 2, 'returns PR metadata when opened');
+    assert.true(
+      result?.summary?.includes(`[${submissionCardUrl}](${submissionCardUrl})`) ??
+        false,
+      'returns summary including the submission card URL',
+    );
 
     assert.strictEqual(opened.length, 1, 'opens exactly one PR');
     let body = (opened[0] as { params: Record<string, unknown> }).params.body?.toString() ?? '';

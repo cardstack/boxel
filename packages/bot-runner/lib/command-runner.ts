@@ -175,15 +175,16 @@ export class CommandRunner {
       runAs: this.submissionBotUserId,
       realmURL: submissionRealm,
       command: CREATE_PR_CARD_COMMAND,
-      commandInput: {
-        realm: submissionRealm,
-        prNumber: prResult.prNumber,
-        prUrl: prResult.prUrl,
-        prTitle: prResult.prTitle,
-        branchName: prResult.branchName,
-        submittedBy: runAs,
-      },
-    });
+        commandInput: {
+          realm: submissionRealm,
+          prNumber: prResult.prNumber,
+          prUrl: prResult.prUrl,
+          prTitle: prResult.prTitle,
+          branchName: prResult.branchName,
+          prSummary: prResult.summary,
+          submittedBy: runAs,
+        },
+      });
 
     let prCardUrl = getCardUrl(prCardResult.cardResultString);
     await this.enqueueRunCommand({

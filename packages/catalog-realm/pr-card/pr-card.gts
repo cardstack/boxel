@@ -6,6 +6,7 @@ import {
   contains,
   realmURL,
 } from 'https://cardstack.com/base/card-api';
+import MarkdownField from 'https://cardstack.com/base/markdown';
 import NumberField from 'https://cardstack.com/base/number';
 import DatetimeField from 'https://cardstack.com/base/datetime';
 import GitPullRequestIcon from '@cardstack/boxel-icons/git-pull-request';
@@ -18,7 +19,6 @@ import type { GithubEventCard } from '../github-event/github-event';
 import { HeaderSection } from './components/isolated/header-section';
 import { CiSection } from './components/isolated/ci-section';
 import { ReviewSection } from './components/isolated/review-section';
-import { SummarySection } from './components/isolated/summary-section';
 import { MergeableSection } from './components/isolated/mergeable-section';
 
 import {
@@ -145,11 +145,6 @@ class IsolatedTemplate extends Component<typeof PrCard> {
     );
   }
 
-  get prBodySummary() {
-    let body = this.latestPrEventInstance?.payload?.pull_request?.body?.trim();
-    return body || 'No pull request summary provided.';
-  }
-
   // ── CI ──
   get ciItems() {
     return buildCiItems(
@@ -274,7 +269,9 @@ class IsolatedTemplate extends Component<typeof PrCard> {
           @blockReasons={{this.mergeBlockReasons}}
         />
 
-        <SummarySection @summary={{this.prBodySummary}} />
+        {{#if @model.prSummary}}
+          <@fields.prSummary />
+        {{/if}}
       </div>
     </article>
 
@@ -307,6 +304,17 @@ class IsolatedTemplate extends Component<typeof PrCard> {
         background: var(--border, var(--boxel-border-color));
         flex-shrink: 0;
         margin: var(--boxel-sp-lg) 0;
+      }
+
+      /* ── Summary section ── */
+      .pr-card :deep(.markdown-content) {
+        padding: var(--boxel-sp) var(--boxel-sp-lg);
+      }
+      .pr-card :deep(.markdown-content) > h2 {
+        margin-top: 0;
+      }
+      .pr-card :deep(.markdown-content) > ul {
+        list-style-position: inside;
       }
     </style>
   </template>
@@ -419,11 +427,6 @@ class FittedTemplate extends Component<typeof PrCard> {
       this.latestPrEventInstance?.payload?.pull_request?.head?.ref ??
       null
     );
-  }
-
-  get prBodySummary() {
-    let body = this.latestPrEventInstance?.payload?.pull_request?.body?.trim();
-    return body || 'No pull request summary provided.';
   }
 
   // ── CI ──
@@ -613,9 +616,9 @@ class FittedTemplate extends Component<typeof PrCard> {
         </div>
       {{/if}}
 
-      <div class='summary-section'>
-        <p class='summary-content'>{{this.prBodySummary}}</p>
-      </div>
+      {{#if @model.prSummary}}
+        <@fields.prSummary />
+      {{/if}}
     </article>
 
     <style scoped>
@@ -848,30 +851,19 @@ class FittedTemplate extends Component<typeof PrCard> {
         color: #fff;
       }
       /* ── Summary ── */
-      .summary-section {
-        display: flex;
-        flex-direction: column;
-        gap: var(--boxel-sp-xs);
-        padding: var(--boxel-sp-sm);
-        background: var(--card, #ffffff);
-        border-top: 1px solid var(--border, var(--boxel-border-color));
-        height: 100%;
+      .pr-card :deep(.markdown-content) {
+        padding: var(--boxel-sp-sm) var(--boxel-sp);
       }
-      .summary-content {
-        margin: 0;
-        border: 1px solid var(--border, var(--boxel-border-color));
-        border-radius: var(--radius, 6px);
-        padding: var(--boxel-sp-sm);
-        background: var(--muted, #f6f8fa);
-        color: var(--card-foreground, #1f2328);
-        line-height: 1.7;
-        white-space: pre-line;
-        overflow-wrap: anywhere;
-        display: -webkit-box;
-        -webkit-box-orient: vertical;
-        -webkit-line-clamp: 7;
-        text-overflow: ellipsis;
+      .pr-card :deep(.markdown-content) > h2 {
+        margin-top: 0;
+      }
+      .pr-card :deep(.markdown-content) > ul {
+        list-style-position: inside;
+      }
+      .pr-card :deep(.markdown-content) > ul li {
+        white-space: nowrap;
         overflow: hidden;
+        text-overflow: ellipsis;
       }
 
       /* ── Container queries ── */
@@ -1068,6 +1060,7 @@ export class PrCard extends CardDef {
   @field prUrl = contains(StringField);
   @field prTitle = contains(StringField);
   @field branchName = contains(StringField);
+  @field prSummary = contains(MarkdownField);
 
   // === Provenance (set on the card instance) ===
   @field submittedBy = contains(StringField);

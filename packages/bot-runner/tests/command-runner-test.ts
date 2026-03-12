@@ -244,6 +244,14 @@ module('command runner', () => {
           prUrl: 'https://example/pr/1',
           prTitle: 'Add My Listing listing',
           branchName: 'room-IWFiYzEyMzpsb2NhbGhvc3Q/my-listing',
+          prSummary: `## Summary
+
+- Listing Name: My Listing
+- Listing Description: Example listing
+- Room ID: \`!abc123:localhost\`
+- User ID: \`@alice:localhost\`
+- Number of Files: 1
+- Submission Card: [${submissionCardUrl}](${submissionCardUrl})`,
           submittedBy: '@alice:localhost',
         },
       },
