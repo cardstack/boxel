@@ -104,12 +104,15 @@ class SystemCardIsolated extends Component<typeof SystemCard> {
       this.hasLoaded = true;
       return;
     }
-    let result = await new GetUserSystemCardCommand(commandContext).execute(
-      undefined,
-    );
-    this.activeSystemCardId = result.cardId ?? undefined;
-    this.activeIsDefault = result.isDefault ?? false;
-    this.hasLoaded = true;
+    try {
+      let result = await new GetUserSystemCardCommand(commandContext).execute(
+        undefined,
+      );
+      this.activeSystemCardId = result.cardId ?? undefined;
+      this.activeIsDefault = result.isDefault ?? false;
+    } finally {
+      this.hasLoaded = true;
+    }
   });
 
   get isActive(): boolean {
@@ -253,6 +256,7 @@ class SystemCardIsolated extends Component<typeof SystemCard> {
               <button
                 class='status-badge active {{if this.isExpanded "expanded"}}'
                 type='button'
+                aria-expanded={{if this.isExpanded "true" "false"}}
                 {{on 'click' this.toggleExpanded}}
               >
                 Active System Card
@@ -262,6 +266,7 @@ class SystemCardIsolated extends Component<typeof SystemCard> {
               <button
                 class='status-badge inactive {{if this.isExpanded "expanded"}}'
                 type='button'
+                aria-expanded={{if this.isExpanded "true" "false"}}
                 {{on 'click' this.toggleExpanded}}
               >
                 Inactive
@@ -277,6 +282,7 @@ class SystemCardIsolated extends Component<typeof SystemCard> {
               @kind='secondary'
               @size='small'
               @loading={{this.cloneTask.isRunning}}
+              @disabled={{this.cloneTask.isRunning}}
               {{bindings}}
             >
               {{this.cloneButtonLabel}}

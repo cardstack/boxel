@@ -1087,7 +1087,11 @@ export default class Room extends Component<Signature> {
 
   private get isDefaultSystemCard(): boolean {
     let systemCardId = this.systemCardId;
-    return !systemCardId || systemCardId === ENV.defaultSystemCardId;
+    let defaultSystemCardId = ENV.defaultSystemCardId;
+    if (!defaultSystemCardId) {
+      return true;
+    }
+    return !systemCardId || systemCardId === defaultSystemCardId;
   }
 
   @action
