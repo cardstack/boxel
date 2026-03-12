@@ -3,7 +3,7 @@ import { action } from '@ember/object';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
-import { tracked } from '@glimmer/tracking';
+import { cached } from '@glimmer/tracking';
 
 import { consume } from 'ember-provide-consume-context';
 
@@ -17,8 +17,6 @@ import { cn } from '@cardstack/boxel-ui/helpers';
 import { IconX } from '@cardstack/boxel-ui/icons';
 
 import { type getCard, GetCardContextName } from '@cardstack/runtime-common';
-
-import consumeContext from '@cardstack/host/helpers/consume-context';
 
 import type { FileDef } from 'https://cardstack.com/base/file-api';
 
@@ -43,11 +41,11 @@ interface CardPillSignature {
 export default class CardPill extends Component<CardPillSignature> {
   @consume(GetCardContextName) declare private getCard: getCard;
   @service declare private realm: RealmService;
-  @tracked private cardResource: ReturnType<getCard> | undefined;
 
-  private makeCardResource = () => {
-    this.cardResource = this.getCard(this, () => this.args.cardId);
-  };
+  @cached
+  private get cardResource(): ReturnType<getCard> {
+    return this.getCard(this, () => this.args.cardId);
+  }
 
   private get cardTitle() {
     return this.card?.cardTitle || this.cardError?.meta.cardTitle;
@@ -94,8 +92,6 @@ export default class CardPill extends Component<CardPillSignature> {
   }
 
   <template>
-    {{consumeContext this.makeCardResource}}
-
     {{#if this.isCreating}}
       <LoadingIndicator />
     {{else}}

@@ -41,6 +41,25 @@ const VALID_WEBP_8x9 = new Uint8Array([
   0xf2, 0x00, 0x00, 0x00,
 ]);
 
+async function makeRenderableWebp(
+  width: number,
+  height: number,
+): Promise<Uint8Array> {
+  let canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  let ctx = canvas.getContext('2d')!;
+  ctx.fillStyle = 'red';
+  ctx.fillRect(0, 0, width, height);
+  let blob: Blob = await new Promise((resolve, reject) => {
+    canvas.toBlob(
+      (b) => (b ? resolve(b) : reject(new Error('toBlob returned null'))),
+      'image/webp',
+    );
+  });
+  return new Uint8Array(await blob.arrayBuffer());
+}
+
 module('Acceptance | webp image def', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
@@ -119,12 +138,14 @@ module('Acceptance | webp image def', function (hooks) {
   }
 
   hooks.beforeEach(async function () {
+    let renderableWebp = await makeRenderableWebp(8, 9);
     ({ realm } = await withCachedRealmSetup(async () =>
       setupAcceptanceTestRealm({
         mockMatrixUtils,
         contents: {
           ...SYSTEM_CARD_FIXTURE_CONTENTS,
           'sample.webp': VALID_WEBP_8x9,
+          'renderable.webp': renderableWebp,
           'not-a-webp.webp': 'This is plain text, not a WebP file.',
         },
       }),
@@ -270,7 +291,9 @@ module('Acceptance | webp image def', function (hooks) {
   });
 
   test('authenticated images display in browser', async function (assert) {
-    let url = makeFileURL('sample.webp');
+    // Use renderable.webp (canvas-generated, browser-decodable) rather than
+    // sample.webp for the browser-display assertion.
+    let url = makeFileURL('renderable.webp');
 
     // First extract the file to get the resource
     await visit(
@@ -302,7 +325,7 @@ module('Acceptance | webp image def', function (hooks) {
     let img = document.querySelector(imgSelector) as HTMLImageElement | null;
     assert.ok(img, 'img element is rendered');
     assert.ok(
-      img?.getAttribute('src')?.includes('sample.webp'),
+      img?.getAttribute('src')?.includes('renderable.webp'),
       'img src references the WebP file',
     );
 

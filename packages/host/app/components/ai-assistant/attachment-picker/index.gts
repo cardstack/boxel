@@ -1,5 +1,5 @@
 import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
+import { cached } from '@glimmer/tracking';
 
 import { consume } from 'ember-provide-consume-context';
 
@@ -8,7 +8,6 @@ import {
   type getCardCollection,
 } from '@cardstack/runtime-common';
 
-import consumeContext from '@cardstack/host/helpers/consume-context';
 import type { FileUploadState } from '@cardstack/host/lib/file-upload-state';
 
 import type { FileDef } from 'https://cardstack.com/base/file-api';
@@ -63,7 +62,6 @@ interface Signature {
 
 export default class AiAssistantAttachmentPicker extends Component<Signature> {
   <template>
-    {{consumeContext this.makeCardResources}}
     {{yield
       (component
         AttachedItems
@@ -92,11 +90,10 @@ export default class AiAssistantAttachmentPicker extends Component<Signature> {
   @consume(GetCardCollectionContextName)
   declare private getCardCollection: getCardCollection;
 
-  @tracked private cardCollection: ReturnType<getCardCollection> | undefined;
-
-  private makeCardResources = () => {
-    this.cardCollection = this.getCardCollection(this, () => this.cardIds);
-  };
+  @cached
+  private get cardCollection(): ReturnType<getCardCollection> {
+    return this.getCardCollection(this, () => this.cardIds);
+  }
 
   private get items() {
     return [...this.cards, ...this.cardErrors, ...this.files];

@@ -1,3 +1,4 @@
+import { registerDestructor } from '@ember/destroyable';
 import type Owner from '@ember/owner';
 import { getOwner } from '@ember/owner';
 import type RouterService from '@ember/routing/router-service';
@@ -79,6 +80,7 @@ import type { TempEvent } from '@cardstack/host/lib/matrix-classes/room';
 import Room from '@cardstack/host/lib/matrix-classes/room';
 import { getRandomBackgroundURL, iconURLFor } from '@cardstack/host/lib/utils';
 import { getMatrixProfile } from '@cardstack/host/resources/matrix-profile';
+import { clearLocalStorage } from '@cardstack/host/utils/local-storage-keys';
 
 import type { BaseDef, CardDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
@@ -113,8 +115,6 @@ import { skillCardURL, devSkillId, envSkillId } from '../lib/utils';
 import { importResource } from '../resources/import';
 
 import { getRoom } from '../resources/room';
-
-import { clearLocalStorage } from '../utils/local-storage-keys';
 
 import type CardService from './card-service';
 import type CommandService from './command-service';
@@ -210,9 +210,11 @@ export default class MatrixService extends Service {
 
   constructor(owner: Owner) {
     super(owner);
+    this.reset.register(this);
     this.setLoggerLevelFromEnvironment();
     this.setAgentId();
     this.#ready = this.loadState.perform();
+    registerDestructor(this, () => this.teardownClient());
   }
 
   setMessageToSend(roomId: string, message: string | undefined) {
@@ -383,7 +385,7 @@ export default class MatrixService extends Service {
   }
 
   get isLoggedIn() {
-    return this.client.isLoggedIn() && this.postLoginCompleted;
+    return this._client?.isLoggedIn() === true && this.postLoginCompleted;
   }
 
   private get client() {
@@ -488,13 +490,20 @@ export default class MatrixService extends Service {
   }
 
   async logout() {
+    let client = this._client;
     try {
-      await this.flushAll;
+      // Logout should synchronously move the app into a logged-out state.
+      // Waiting on background Matrix flush promises first can leave the
+      // authenticated shell visible for an arbitrarily long time.
       this.clearAuth();
       this.postLoginCompleted = false;
+      // Logout is the explicit boundary where we forget persisted workspace UI
+      // state for the signed-in user. Generic reset paths must stay in-memory
+      // only so tests and app reloads do not accidentally wipe durable state.
+      clearLocalStorage(window.localStorage);
       this.reset.resetAll();
       this.unbindEventListeners();
-      await this.client.logout(true);
+      await client?.logout(true);
       // when user logs out we transition them back to an empty stack with the
       // workspace chooser open. this way we don't inadvertently leak private
       // card id's in the URL
@@ -505,6 +514,8 @@ export default class MatrixService extends Service {
             submode: Submodes.Interact,
             workspaceChooserOpened: true,
           } as OperatorModeSerializedState),
+          sid: null,
+          clientSecret: null,
         },
       });
     } catch (e) {
@@ -1307,29 +1318,53 @@ export default class MatrixService extends Service {
     return resources;
   }
 
-  private resetState() {
-    this.roomDataMap = new TrackedMap();
+  resetState() {
+    this.teardownClient();
+    this.roomDataMap.clear();
     this.roomMembershipQueue = [];
     this.roomStateQueue = [];
+    for (let roomResource of this.roomResourcesCache.values()) {
+      roomResource.teardown();
+    }
     this.roomResourcesCache.clear();
     this.canceledActionMessageIdByRoom.clear();
+    this.failedCommandState.clear();
+    this.reasoningExpandedState.clear();
     this.timelineQueue = [];
     this.flushMembership = undefined;
     this.flushTimeline = undefined;
     this.flushRoomState = undefined;
-    this.unbindEventListeners();
-    this._client = this.matrixSDK.createClient({ baseUrl: matrixURL });
+    this.timelineLoadingState.clear();
+    this._client = this.#matrixSDK?.createClient({ baseUrl: matrixURL });
     this._currentRoomId = undefined;
-    this.messagesToSend = new TrackedMap();
-    this.cardsToSend = new TrackedMap();
-    this.filesToSend = new TrackedMap();
-    this.currentUserEventReadReceipts = new TrackedMap();
+    this._isInitializingNewUser = false;
+    this.postLoginCompleted = false;
+    this._isLoadingMoreAIRooms = false;
+    this.messagesToSend.clear();
+    this.cardsToSend.clear();
+    this.filesToSend.clear();
+    this.currentUserEventReadReceipts.clear();
     this.restoredDraftRooms = new Set();
+    this.aiRoomIds.clear();
+    this.initialSyncCompleted = false;
+    this.initialSyncCompletedDeferred = new Deferred<void>();
+    this.roomsWaitingForSync.clear();
+    this._systemCard = undefined;
+    this.startedAtTs = -1;
+    this.#clientReadyDeferred = new Deferred<void>();
+  }
 
-    // Reset it here rather than in the reset function of each service
-    // because it is possible that
-    // there are some services that are not initialized yet
-    clearLocalStorage(this.storage);
+  private teardownClient() {
+    if (this.#eventBindings && this._client) {
+      this.unbindEventListeners();
+    }
+    this.slidingSync?.off?.(
+      SlidingSyncEvent.Lifecycle,
+      this.onSlidingSyncLifecycle,
+    );
+    this.slidingSync?.stop?.();
+    this.slidingSync = undefined;
+    this._client?.stopClient?.();
   }
 
   markActionAsCanceled(roomId: string, eventId: string) {

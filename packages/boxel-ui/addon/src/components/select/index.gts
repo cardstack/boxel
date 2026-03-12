@@ -2,12 +2,14 @@ import 'ember-power-select/styles';
 
 import Check from '@cardstack/boxel-icons/check';
 import { eq } from '@cardstack/boxel-ui/helpers';
+import { registerDestructor } from '@ember/destroyable';
 import { concat } from '@ember/helper';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { get } from '@ember/object';
 import { action } from '@ember/object';
 import { guidFor } from '@ember/object/internals';
+import type Owner from '@ember/owner';
 import Component from '@glimmer/component';
 import PowerSelect, {
   type PowerSelectArgs,
@@ -34,6 +36,11 @@ interface Signature<ItemT = any> {
 export default class BoxelSelect<ItemT> extends Component<Signature<ItemT>> {
   private themeObserver?: MutationObserver | null = null;
   private selectId = `boxel-select-${guidFor(this)}`;
+
+  constructor(owner: Owner, args: Signature<ItemT>['Args']) {
+    super(owner, args);
+    registerDestructor(this, () => this.stopObservingTheme());
+  }
 
   get selectEl(): HTMLElement | null {
     return document.getElementById(this.selectId);
@@ -105,7 +112,7 @@ export default class BoxelSelect<ItemT> extends Component<Signature<ItemT>> {
     this.syncCustomProps();
     this.detectAndSetThemeColors();
 
-    this.themeObserver?.disconnect();
+    this.stopObservingTheme();
     this.themeObserver = new MutationObserver(() => {
       this.syncCustomProps();
       this.detectAndSetThemeColors();
@@ -117,12 +124,26 @@ export default class BoxelSelect<ItemT> extends Component<Signature<ItemT>> {
     });
   }
 
+  private stopObservingTheme() {
+    this.themeObserver?.disconnect();
+    this.themeObserver = null;
+  }
+
   @action
   onOpen() {
     // Only start theme observation if not rendering in place
     if (!this.args.renderInPlace) {
       this.startObservingTheme();
     }
+  }
+
+  @action
+  onClose(
+    select: Parameters<NonNullable<Signature<ItemT>['Args']['onClose']>>[0],
+    event: Event,
+  ) {
+    this.stopObservingTheme();
+    this.args.onClose?.(select, event);
   }
 
   private detectAndSetThemeColors() {
@@ -197,6 +218,7 @@ export default class BoxelSelect<ItemT> extends Component<Signature<ItemT>> {
       @placeholder={{@placeholder}}
       @onChange={{@onChange}}
       @onBlur={{@onBlur}}
+      @onClose={{this.onClose}}
       @renderInPlace={{@renderInPlace}}
       @verticalPosition={{@verticalPosition}}
       @dropdownClass={{cn

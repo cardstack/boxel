@@ -89,6 +89,7 @@ export default class CodeEditor extends Component<Signature> {
   @tracked private formattingError: string | undefined;
 
   private hasUnsavedSourceChanges = false;
+  private hasSavedUnsavedSourceOnClose = false;
   private codePath;
   private formatContextKey:
     | ReturnType<
@@ -108,16 +109,7 @@ export default class CodeEditor extends Component<Signature> {
     this.codePath = this.operatorModeStateService.state.codePath;
 
     registerDestructor(this, () => {
-      // destructor functons are called synchronously. in order to save,
-      // which is async, we leverage an EC task that is running in a
-      // parent component (EC task lifetimes are bound to their context)
-      // that is not being destroyed.
-      if (this.codePath && this.hasUnsavedSourceChanges) {
-        let monacoContent = this.monacoService.getMonacoContent();
-        if (monacoContent) {
-          this.args.saveSourceOnClose(this.codePath, monacoContent);
-        }
-      }
+      this.saveUnsavedSourceOnClose();
       this.formatActionDisposable?.dispose();
       this.formatActionDisposable = undefined;
       this.formatContextKey = undefined;
@@ -129,16 +121,7 @@ export default class CodeEditor extends Component<Signature> {
   }
 
   private onEditorDispose = () => {
-    // destructor functons are called synchronously. in order to save,
-    // which is async, we leverage an EC task that is running in a
-    // parent component (EC task lifetimes are bound to their context)
-    // that is not being destroyed.
-    if (this.codePath && this.hasUnsavedSourceChanges) {
-      let monacoContent = this.monacoService.getMonacoContent();
-      if (monacoContent) {
-        this.args.saveSourceOnClose(this.codePath, monacoContent);
-      }
-    }
+    this.saveUnsavedSourceOnClose();
   };
 
   private get isReady() {
@@ -349,6 +332,7 @@ export default class CodeEditor extends Component<Signature> {
 
   private contentChangedTask = restartableTask(async (content: string) => {
     this.hasUnsavedSourceChanges = true;
+    this.hasSavedUnsavedSourceOnClose = false;
     if (!isReady(this.args.file) || content === this.args.file?.content) {
       return;
     }
@@ -365,6 +349,7 @@ export default class CodeEditor extends Component<Signature> {
     );
     this.waitForSourceCodeWrite.perform();
     this.hasUnsavedSourceChanges = false;
+    this.hasSavedUnsavedSourceOnClose = false;
   });
 
   private canSyncWithStore(content: string): boolean {
@@ -503,6 +488,28 @@ export default class CodeEditor extends Component<Signature> {
       );
       return;
     }
+  }
+
+  private saveUnsavedSourceOnClose() {
+    // The component destructor and the Monaco modifier's onDispose callback can
+    // both run during the same file switch. We only want to persist the pending
+    // buffer once for that transition.
+    if (
+      this.hasSavedUnsavedSourceOnClose ||
+      !this.codePath ||
+      !this.hasUnsavedSourceChanges
+    ) {
+      return;
+    }
+
+    let monacoContent = this.monacoService.getMonacoContent();
+    if (!monacoContent) {
+      return;
+    }
+
+    this.hasSavedUnsavedSourceOnClose = true;
+    this.hasUnsavedSourceChanges = false;
+    this.args.saveSourceOnClose(this.codePath, monacoContent);
   }
 
   private get language(): string | undefined {

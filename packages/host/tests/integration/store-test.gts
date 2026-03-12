@@ -2217,13 +2217,15 @@ module('Integration | Store', function (hooks) {
     );
 
     let deferred = new Deferred<void>();
-    getService('message-service')
-      .listenerCallbacks.get(testRealmURL)!
-      .push((ev: RealmEventContent) => {
+    let unsubscribe = getService('message-service').subscribe(
+      testRealmURL,
+      (ev: RealmEventContent) => {
         if (ev.eventName === 'index' && ev.indexType === 'incremental') {
+          unsubscribe();
           deferred.fulfill();
         }
-      });
+      },
+    );
 
     await testRealm.write(
       'Person/hassan.json',
@@ -2309,13 +2311,15 @@ module('Integration | Store', function (hooks) {
     );
 
     let deferred = new Deferred<void>();
-    getService('message-service')
-      .listenerCallbacks.get(testRealmURL)!
-      .push((ev: RealmEventContent) => {
+    let unsubscribe = getService('message-service').subscribe(
+      testRealmURL,
+      (ev: RealmEventContent) => {
         if (ev.eventName === 'index' && ev.indexType === 'incremental') {
+          unsubscribe();
           deferred.fulfill();
         }
-      });
+      },
+    );
 
     await testRealm.write(
       'Person/hassan.json',
@@ -2398,13 +2402,15 @@ module('Integration | Store', function (hooks) {
     );
 
     let deferred = new Deferred<void>();
-    getService('message-service')
-      .listenerCallbacks.get(testRealmURL)!
-      .push((ev: RealmEventContent) => {
+    let unsubscribe = getService('message-service').subscribe(
+      testRealmURL,
+      (ev: RealmEventContent) => {
         if (ev.eventName === 'index' && ev.indexType === 'incremental') {
+          unsubscribe();
           deferred.fulfill();
         }
-      });
+      },
+    );
 
     await testRealm.write(
       'Person/hassan.json',
