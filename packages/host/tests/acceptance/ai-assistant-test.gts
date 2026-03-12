@@ -110,6 +110,23 @@ const TEST_MODEL_NAMES: Record<string, string> = {
   'google/gemini-2.5-flash': 'Google: Gemini 2.5 Flash',
 };
 
+// Maps model IDs to their ModelConfiguration card IDs in the test realm.
+// These correspond to the file paths used in the test setup (e.g.,
+// 'ModelConfiguration/gpt-5.json' → `${testRealmURL}ModelConfiguration/gpt-5`).
+const TEST_MODEL_CONFIG_IDS: Record<string, string> = {
+  'openai/gpt-5': `${testRealmURL}ModelConfiguration/gpt-5`,
+  'openai/gpt-4o-mini': `${testRealmURL}ModelConfiguration/gpt-4o-mini`,
+  'anthropic/claude-sonnet-4.6': `${testRealmURL}ModelConfiguration/claude-sonnet-4.6`,
+  'anthropic/claude-sonnet-4.5': `${testRealmURL}ModelConfiguration/claude-sonnet-4.5`,
+  'anthropic/claude-3.7-sonnet': `${testRealmURL}ModelConfiguration/claude-sonnet-3.7`,
+  'deepseek/deepseek-chat-v3-0324': `${testRealmURL}ModelConfiguration/deepseek-chat-v3-0324`,
+  'google/gemini-2.5-flash': `${testRealmURL}ModelConfiguration/gemini-2.5-flash`,
+};
+
+function configIdFor(modelId: string): string {
+  return TEST_MODEL_CONFIG_IDS[modelId] ?? modelId;
+}
+
 function modelNameFor(llmId: string): string {
   return TEST_MODEL_NAMES[llmId] ?? llmId;
 }
@@ -690,12 +707,13 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     });
 
     let llmIdToChangeTo = 'anthropic/claude-3.7-sonnet';
+    let llmConfigId = configIdFor(llmIdToChangeTo);
     let llmNameToChangeTo = modelNameFor('anthropic/claude-3.7-sonnet');
 
     assert
-      .dom(`[data-test-llm-select-item="${llmIdToChangeTo}"]`)
+      .dom(`[data-test-llm-select-item="${llmConfigId}"]`)
       .hasText(llmNameToChangeTo);
-    await click(`[data-test-llm-select-item="${llmIdToChangeTo}"] button`);
+    await click(`[data-test-llm-select-item="${llmConfigId}"] button`);
     await click('[data-test-llm-select-selected]');
     assert.dom('[data-test-llm-select-selected]').hasText(llmNameToChangeTo);
 
@@ -718,7 +736,9 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await waitFor('[data-room-settled]');
 
     await click('[data-test-llm-select-selected]');
-    await click(`[data-test-llm-select-item="openai/gpt-4o-mini"] button`);
+    await click(
+      `[data-test-llm-select-item="${configIdFor('openai/gpt-4o-mini')}"] button`,
+    );
     await click('[data-test-llm-select-selected]');
 
     await waitUntil(() => {
@@ -743,7 +763,9 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     );
 
     await click('[data-test-llm-select-selected]');
-    await click(`[data-test-llm-select-item="openai/gpt-5"] button`);
+    await click(
+      `[data-test-llm-select-item="${configIdFor('openai/gpt-5')}"] button`,
+    );
     await click('[data-test-llm-select-selected]');
 
     await waitUntil(() => {
@@ -816,7 +838,9 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await waitFor(`[data-room-settled]`);
     await click('[data-test-llm-select-selected]');
     assert
-      .dom('[data-test-llm-select-item="deepseek/deepseek-chat-v3-0324"]')
+      .dom(
+        `[data-test-llm-select-item="${configIdFor('deepseek/deepseek-chat-v3-0324')}"]`,
+      )
       .doesNotExist();
     await click('[data-test-llm-select-selected]');
     await click('[data-test-close-ai-assistant]');
@@ -838,13 +862,19 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       .hasText(modelNameFor('deepseek/deepseek-chat-v3-0324'));
     await click('[data-test-llm-select-selected]');
     assert
-      .dom('[data-test-llm-select-item="deepseek/deepseek-chat-v3-0324"]')
+      .dom(
+        `[data-test-llm-select-item="${configIdFor('deepseek/deepseek-chat-v3-0324')}"]`,
+      )
       .exists();
     assert
-      .dom('[data-test-llm-select-item="deepseek/deepseek-chat-v3-0324"]')
+      .dom(
+        `[data-test-llm-select-item="${configIdFor('deepseek/deepseek-chat-v3-0324')}"]`,
+      )
       .hasText(modelNameFor('deepseek/deepseek-chat-v3-0324'));
     assert
-      .dom('[data-test-llm-select-item="google/gemini-2.5-flash"]')
+      .dom(
+        `[data-test-llm-select-item="${configIdFor('google/gemini-2.5-flash')}"]`,
+      )
       .exists();
     await click('[data-test-pill-menu-button]');
     await click('[data-test-close-ai-assistant]');
