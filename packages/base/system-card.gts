@@ -162,6 +162,13 @@ class SystemCardIsolated extends Component<typeof SystemCard> {
     });
   }
 
+  get cloneButtonLabel(): string {
+    if (this.cloneTask.isRunning && this.cloningToRealmName) {
+      return `Cloning to ${this.cloningToRealmName}`;
+    }
+    return 'Clone';
+  }
+
   cloneTask = task(async (targetRealmUrl: string, realmName: string) => {
     this.cloningToRealmName = realmName;
     let commandContext = this.args.context?.commandContext;
@@ -272,7 +279,7 @@ class SystemCardIsolated extends Component<typeof SystemCard> {
               @loading={{this.cloneTask.isRunning}}
               {{bindings}}
             >
-              {{if this.cloneTask.isRunning (concat "Cloning to " this.cloningToRealmName) "Clone"}}
+              {{this.cloneButtonLabel}}
             </BoxelButton>
           </:trigger>
           <:content as |dd|>
