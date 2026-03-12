@@ -102,7 +102,6 @@ const DARK_GOLD_THEME_VARS = {
   border: '#3a4073',
   background: '#1a1f3a',
   spacing: '0.3rem',
-  boxelBodyFontSize: '18px',
 };
 
 const OCEAN_BLUE_THEME_VARS = {
@@ -111,7 +110,6 @@ const OCEAN_BLUE_THEME_VARS = {
   border: '#003B6F',
   background: '#E3F2FD',
   spacing: '0.25rem',
-  boxelBodyFontSize: '14px',
 };
 
 const FOREST_GREEN_THEME_VARS = {
@@ -120,7 +118,6 @@ const FOREST_GREEN_THEME_VARS = {
   border: '#1b5e20',
   background: '#E8F5E9',
   spacing: '0.25rem',
-  boxelBodyFontSize: '16px',
 };
 
 function hexToRgb(hex: string): string {
@@ -352,6 +349,9 @@ module('Acceptance | theme-card-test', function (hooks) {
                   name: 'Dark Gold',
                 },
                 rootVariables: DARK_GOLD_THEME_VARS,
+                typography: {
+                  body: { fontSize: '18px' },
+                },
               },
             },
           },
@@ -369,6 +369,9 @@ module('Acceptance | theme-card-test', function (hooks) {
                   name: 'Ocean Blue',
                 },
                 rootVariables: OCEAN_BLUE_THEME_VARS,
+                typography: {
+                  body: { fontSize: '14px' },
+                },
               },
             },
           },
@@ -386,6 +389,9 @@ module('Acceptance | theme-card-test', function (hooks) {
                   name: 'Forest Green',
                 },
                 rootVariables: FOREST_GREEN_THEME_VARS,
+                typography: {
+                  body: { fontSize: '16px' },
+                },
               },
             },
           },
@@ -810,8 +816,8 @@ module('Acceptance | theme-card-test', function (hooks) {
         'inline style includes --background',
       );
       assert.ok(
-        styleAttr.includes('--boxel-body-font-size: 18px'),
-        'inline style includes --boxel-body-font-size',
+        styleAttr.includes('--theme-body-font-size: 18px'),
+        'inline style includes --theme-body-font-size',
       );
 
       assert
@@ -850,7 +856,7 @@ module('Acceptance | theme-card-test', function (hooks) {
       assert.strictEqual(
         window.getComputedStyle(checkedEl!).getPropertyValue('width'),
         '18px',
-        'checkbox size matches --boxel-body-font-size',
+        'checkbox size matches --theme-body-font-size',
       );
     });
 
@@ -883,8 +889,8 @@ module('Acceptance | theme-card-test', function (hooks) {
         'inline style includes --background',
       );
       assert.ok(
-        styleAttr.includes('--boxel-body-font-size: 14px'),
-        'inline style includes --boxel-body-font-size',
+        styleAttr.includes('--theme-body-font-size: 14px'),
+        'inline style includes --theme-body-font-size',
       );
 
       assert
@@ -923,7 +929,7 @@ module('Acceptance | theme-card-test', function (hooks) {
       assert.strictEqual(
         window.getComputedStyle(checkedEl!).getPropertyValue('width'),
         '14px',
-        'checkbox size matches --boxel-body-font-size',
+        'checkbox size matches --theme-body-font-size',
       );
     });
 
@@ -956,8 +962,8 @@ module('Acceptance | theme-card-test', function (hooks) {
         'inline style includes --background',
       );
       assert.ok(
-        styleAttr.includes('--boxel-body-font-size: 16px'),
-        'inline style includes --boxel-body-font-size',
+        styleAttr.includes('--theme-body-font-size: 16px'),
+        'inline style includes --theme-body-font-size',
       );
 
       assert
@@ -996,7 +1002,7 @@ module('Acceptance | theme-card-test', function (hooks) {
       assert.strictEqual(
         window.getComputedStyle(checkedEl!).getPropertyValue('width'),
         '16px',
-        'checkbox size matches --boxel-body-font-size',
+        'checkbox size matches --theme-body-font-size',
       );
     });
   });

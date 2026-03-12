@@ -8,6 +8,7 @@ import element from '../../helpers/element.ts';
 import optional from '../../helpers/optional.ts';
 import pick from '../../helpers/pick.ts';
 import { and, bool, eq, not } from '../../helpers/truth-helpers.ts';
+import CheckMark from '../../icons/check-mark.gts';
 import FailureBordered from '../../icons/failure-bordered.gts';
 import IconSearch from '../../icons/icon-search.gts';
 import LoadingIndicator from '../../icons/loading-indicator.gts';
@@ -198,6 +199,9 @@ export default class BoxelInput extends Component<Signature> {
           {{on 'change' (optional @onChange)}}
           ...attributes
         />
+        {{#if (and this.isCheckbox (bool @value))}}
+          <CheckMark class='checkbox-checkmark-icon' />
+        {{/if}}
         {{#if this.isSearch}}
           <div
             class={{cn
@@ -444,18 +448,6 @@ export default class BoxelInput extends Component<Signature> {
 
         /* Checkbox type */
         .input-container.is-checkbox {
-          display: inline-grid;
-          grid-template-columns: auto;
-          grid-template-areas:
-            'optional'
-            'input'
-            'error'
-            'helper';
-          width: auto;
-          align-items: center;
-        }
-
-        .boxel-input[type='checkbox'] {
           --checkbox-size: var(
             --boxel-checkbox-size,
             var(--boxel-body-font-size)
@@ -486,11 +478,36 @@ export default class BoxelInput extends Component<Signature> {
             var(--spacing, 2px)
           );
 
+          display: inline-grid;
+          grid-template-columns: auto;
+          grid-template-areas: 'input';
+          width: auto;
+          align-items: center;
+          justify-items: center;
+          position: relative;
+        }
+
+        .input-container.is-checkbox .optional,
+        .input-container.is-checkbox .error-message,
+        .input-container.is-checkbox .helper-text,
+        .input-container.is-checkbox .search-icon-container,
+        .input-container.is-checkbox .validation-icon-container {
+          display: none;
+        }
+
+        .checkbox-checkmark-icon {
+          grid-area: input;
+          pointer-events: none;
+          width: calc(var(--checkbox-size) * 0.8);
+          height: calc(var(--checkbox-size) * 0.8);
+          --icon-color: var(--checkbox-checkmark-color);
+        }
+
+        .boxel-input[type='checkbox'] {
           grid-area: input;
           appearance: none;
           /* stylelint-disable-next-line property-no-vendor-prefix */
           -webkit-appearance: none;
-          position: relative;
           box-sizing: border-box;
           width: var(--checkbox-size);
           height: var(--checkbox-size);
@@ -511,22 +528,6 @@ export default class BoxelInput extends Component<Signature> {
         .boxel-input[type='checkbox']:checked {
           background-color: var(--checkbox-checked-background);
           border-color: var(--checkbox-checked-border-color);
-        }
-
-        .boxel-input[type='checkbox']:checked::after {
-          content: '';
-          position: absolute;
-          left: 50%;
-          top: 50%;
-          width: calc(
-            (var(--checkbox-size) - 2 * var(--checkbox-padding)) * 0.35
-          );
-          height: calc(
-            (var(--checkbox-size) - 2 * var(--checkbox-padding)) * 0.65
-          );
-          border: solid var(--checkbox-checkmark-color);
-          border-width: 0 2px 2px 0;
-          transform: translate(-50%, -60%) rotate(45deg);
         }
 
         .boxel-input[type='checkbox']:focus-visible {

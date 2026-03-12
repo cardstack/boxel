@@ -26,7 +26,7 @@ const validStates = Object.values(InputValidationStates);
 
 export default class InputUsage extends Component {
   @tracked id = 'sample-input';
-  @tracked value = '';
+  @tracked value: string | boolean = '';
   @tracked disabled = false;
   @tracked readonly = false;
   @tracked required = false;
@@ -52,8 +52,13 @@ export default class InputUsage extends Component {
 
   @action set(ev: Event): void {
     let target = ev.target as HTMLInputElement;
-    this.value = target?.value;
-    this.validate(ev);
+    if (target.type === 'checkbox') {
+      this.isChecked = target.checked;
+      this.value = target.checked;
+    } else {
+      this.value = target?.value;
+      this.validate(ev);
+    }
   }
 
   @action logValue(value: any): void {
