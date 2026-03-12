@@ -11,14 +11,26 @@ import BooleanField from './boolean';
 import StringField from './string';
 import { getMenuItems } from '@cardstack/runtime-common';
 import { type GetMenuItemParams } from './menu-items';
-import { type MenuItemOptions } from '@cardstack/boxel-ui/helpers';
+import { type MenuItemOptions, MenuItem } from '@cardstack/boxel-ui/helpers';
 import SetUserSystemCardCommand from '@cardstack/boxel-host/commands/set-user-system-card';
 import GetUserSystemCardCommand from '@cardstack/boxel-host/commands/get-user-system-card';
-import { BoxelButton } from '@cardstack/boxel-ui/components';
+import {
+  BoxelButton,
+  BoxelDropdown,
+  Menu as BoxelMenu,
+} from '@cardstack/boxel-ui/components';
 import AppsIcon from '@cardstack/boxel-icons/apps';
+import CopyCardToRealmCommand from '@cardstack/boxel-host/commands/copy-card';
+import GetAllRealmMetasCommand from '@cardstack/boxel-host/commands/get-all-realm-metas';
+import ShowCardCommand from '@cardstack/boxel-host/commands/show-card';
 import { on } from '@ember/modifier';
-import { restartableTask } from 'ember-concurrency';
+import { restartableTask, task } from 'ember-concurrency';
 import { tracked } from '@glimmer/tracking';
+import { commandData } from './resources/command-data';
+import type {
+  GetAllRealmMetasResult,
+  RealmMetaField,
+} from './command';
 
 export class ModelConfiguration extends CardDef {
   static displayName = 'Model Configuration';
@@ -114,6 +126,57 @@ class SystemCardIsolated extends Component<typeof SystemCard> {
       this.activeSystemCardId !== this.args.model.id
     );
   }
+
+  allRealmsInfoResource = commandData<typeof GetAllRealmMetasResult>(
+    this,
+    GetAllRealmMetasCommand,
+  );
+
+  get writableRealms(): { name: string; url: string; iconURL?: string }[] {
+    let commandResource = this.allRealmsInfoResource;
+    if (commandResource?.isSuccess && commandResource.cardResult) {
+      let result = commandResource.cardResult as GetAllRealmMetasResult;
+      if (result.results) {
+        return result.results
+          .filter((realmMeta: RealmMetaField) => realmMeta.canWrite)
+          .map((realmMeta: RealmMetaField) => ({
+            name: realmMeta.info.name,
+            url: realmMeta.url,
+            iconURL: realmMeta.info.iconURL ?? undefined,
+          }));
+      }
+    }
+    return [];
+  }
+
+  get realmMenuItems() {
+    return this.writableRealms.map((realm) => {
+      return new MenuItem({
+        label: realm.name,
+        action: () => {
+          this.cloneTask.perform(realm.url);
+        },
+        iconURL: realm.iconURL ?? '/default-realm-icon.png',
+      });
+    });
+  }
+
+  cloneTask = task(async (targetRealmUrl: string) => {
+    let commandContext = this.args.context?.commandContext;
+    if (!commandContext || !this.args.model.id) {
+      return;
+    }
+    let copyResult = await new CopyCardToRealmCommand(commandContext).execute({
+      sourceCard: this.args.model,
+      targetRealm: targetRealmUrl,
+    });
+    if (copyResult.newCardId) {
+      await new ShowCardCommand(commandContext).execute({
+        cardId: copyResult.newCardId,
+        format: 'isolated',
+      });
+    }
+  });
 
   toggleExpanded = () => {
     this.isExpanded = !this.isExpanded;
@@ -229,6 +292,28 @@ class SystemCardIsolated extends Component<typeof SystemCard> {
         </div>
       {{/if}}
 
+      <div class='clone-button-container'>
+        <BoxelDropdown>
+          <:trigger as |bindings|>
+            <BoxelButton
+              @kind='secondary'
+              @size='small'
+              @loading={{this.cloneTask.isRunning}}
+              {{bindings}}
+            >
+              Clone
+            </BoxelButton>
+          </:trigger>
+          <:content as |dd|>
+            <BoxelMenu
+              class='realm-dropdown-menu'
+              @closeMenu={{dd.close}}
+              @items={{this.realmMenuItems}}
+            />
+          </:content>
+        </BoxelDropdown>
+      </div>
+
       <div class='system-card-content'>
         <@fields.title />
         <@fields.description />
@@ -333,6 +418,25 @@ class SystemCardIsolated extends Component<typeof SystemCard> {
 
       .panel-action {
         width: 100%;
+      }
+
+      .clone-button-container {
+        position: absolute;
+        top: var(--boxel-sp-sm);
+        left: var(--boxel-sp-sm);
+        z-index: 1;
+      }
+
+      .realm-dropdown-menu {
+        --boxel-menu-item-content-padding: var(--boxel-sp-xs);
+        --boxel-menu-item-gap: var(--boxel-sp-xs);
+        min-width: 13rem;
+        max-height: 13rem;
+        overflow-y: auto;
+      }
+
+      .realm-dropdown-menu :deep(.menu-item__icon-url) {
+        border-radius: var(--boxel-border-radius-xs);
       }
 
       .system-card-content {
