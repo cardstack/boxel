@@ -1,67 +1,220 @@
 import { eq } from '@cardstack/boxel-ui/helpers';
-import { ModelConfiguration as BaseModelConfiguration } from 'https://cardstack.com/base/system-card'; // ¹ Import base ModelConfiguration
+import { ModelConfiguration as BaseModelConfiguration } from 'https://cardstack.com/base/system-card';
 import {
   field,
   contains,
+  linksTo,
   Component,
 } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
 import NumberField from 'https://cardstack.com/base/number';
+import enumField from 'https://cardstack.com/base/enum';
+import { OpenRouterModel } from '@cardstack/openrouter/openrouter-model';
+
+const PurposeField = enumField(StringField, {
+  options: [
+    { value: '', label: '(No specific purpose)' },
+    { value: 'code', label: 'Code' },
+    { value: 'design', label: 'Design' },
+    { value: 'debug', label: 'Debug' },
+    { value: 'chat', label: 'Chat' },
+  ],
+});
+
+const ThinkingEffortField = enumField(StringField, {
+  options: [
+    { value: 'none', label: 'None' },
+    { value: 'minimal', label: 'Minimal (10% tokens)' },
+    { value: 'low', label: 'Low (20% tokens)' },
+    { value: 'medium', label: 'Medium (50% tokens)' },
+    { value: 'high', label: 'High (80% tokens)' },
+  ],
+});
 
 export class ModelConfiguration extends BaseModelConfiguration {
   static displayName = 'Model Configuration';
 
+  @field openRouterModel = linksTo(OpenRouterModel);
+
+  @field purpose = contains(PurposeField);
+
+  @field thinkingEffort = contains(ThinkingEffortField);
+
   @field contextLength = contains(NumberField, {
-    description:
-      'The maximum context length (in tokens) supported by the model',
+    computeVia: function (this: ModelConfiguration) {
+      try {
+        return this.openRouterModel?.contextLength ?? null;
+      } catch (e) {
+        return null;
+      }
+    },
   });
+
   @field canonicalSlug = contains(StringField, {
-    description: 'Canonical slug identifier for the model',
+    computeVia: function (this: ModelConfiguration) {
+      try {
+        return this.openRouterModel?.canonicalSlug ?? null;
+      } catch (e) {
+        return null;
+      }
+    },
   });
 
   @field name = contains(StringField, {
-    description: 'Display name of the model',
-  });
-
-  @field leftBadge = contains(StringField, {
     computeVia: function (this: ModelConfiguration) {
-      return ''; // Default: no badge
+      try {
+        return this.openRouterModel?.name ?? null;
+      } catch (e) {
+        return null;
+      }
     },
   });
 
-  @field rightBadge = contains(StringField, {
+  @field modelId = contains(StringField, {
     computeVia: function (this: ModelConfiguration) {
-      return ''; // Default: no badge
+      try {
+        return this.openRouterModel?.modelId ?? null;
+      } catch (e) {
+        return null;
+      }
     },
   });
 
-  @field leftBadgeVariant = contains(StringField, {
+  @field toolsSupported = contains(StringField, {
     computeVia: function (this: ModelConfiguration) {
-      return ''; // Default: no variant
+      try {
+        return this.openRouterModel?.toolsSupported ?? false;
+      } catch (e) {
+        return false;
+      }
     },
   });
 
-  @field rightBadgeVariant = contains(StringField, {
+  @field inputModalities = contains(StringField, {
     computeVia: function (this: ModelConfiguration) {
-      return ''; // Default: no variant
+      try {
+        return this.openRouterModel?.inputModalities ?? [];
+      } catch (e) {
+        return [];
+      }
     },
   });
 
-  // Override inherited title to respect cardInfo.name
+  @field reasoningEffort = contains(StringField, {
+    computeVia: function (this: ModelConfiguration) {
+      if (!this.thinkingEffort || this.thinkingEffort === 'none') {
+        return '';
+      }
+      return this.thinkingEffort;
+    },
+  });
+
   @field cardTitle = contains(StringField, {
     computeVia: function (this: ModelConfiguration) {
+      let fullModelName = '';
+      let modelName = '';
+
+      try {
+        fullModelName = this.openRouterModel?.name ?? '';
+        if (fullModelName) {
+          const parts = fullModelName.split(':');
+          if (parts.length > 1) {
+            modelName = parts[1].trim();
+          } else {
+            modelName = fullModelName.trim();
+          }
+        }
+      } catch (e) {
+        fullModelName = '';
+      }
+
+      const hasRoleSpecificPurpose = this.purpose && this.purpose !== '';
+
+      if (hasRoleSpecificPurpose) {
+        const purposeEmojis: Record<string, string> = {
+          code: '\u{1F4BB}',
+          design: '\u{1F3A8}',
+          debug: '\u{1F527}',
+          chat: '\u{1F4AC}',
+        };
+        const emoji = purposeEmojis[this.purpose] || '\u{1F4AC}';
+        const purposeLabel =
+          this.purpose.charAt(0).toUpperCase() + this.purpose.slice(1);
+        const purposeSegment = `${emoji} ${purposeLabel}\u30FB`;
+        const modelSegment = modelName || fullModelName || 'Model';
+        const thinkingSuffix =
+          this.thinkingEffort && this.thinkingEffort !== 'none'
+            ? '\u30FBThinking'
+            : '';
+        const autoTitle = `${purposeSegment}${modelSegment}${thinkingSuffix}`;
+        return this.cardInfo?.name || autoTitle;
+      }
+
+      if (fullModelName) {
+        const thinkingSuffix =
+          this.thinkingEffort && this.thinkingEffort !== 'none'
+            ? '\u30FBThinking'
+            : '';
+        const autoTitle = `\u2713 ${fullModelName}${thinkingSuffix}`;
+        return this.cardInfo?.name || autoTitle;
+      }
+
       return (
         this.cardInfo?.name ||
-        this.name ||
         this.modelId ||
         'Model Configuration'
       );
     },
   });
 
+  @field leftBadge = contains(StringField, {
+    computeVia: function (this: ModelConfiguration) {
+      if (this.purpose && this.purpose !== '') {
+        return this.purpose.toUpperCase();
+      }
+      if (this.openRouterModel) {
+        return 'RECOMMENDED';
+      }
+      return '';
+    },
+  });
+
+  @field leftBadgeVariant = contains(StringField, {
+    computeVia: function (this: ModelConfiguration) {
+      if (this.purpose && this.purpose !== '') {
+        return 'purpose';
+      }
+      if (this.openRouterModel) {
+        return 'recommended-badge';
+      }
+      return '';
+    },
+  });
+
+  @field rightBadge = contains(StringField, {
+    computeVia: function (this: ModelConfiguration) {
+      if (!this.openRouterModel) {
+        return '';
+      }
+      if (this.thinkingEffort && this.thinkingEffort !== 'none') {
+        return '\u{1F4A1}';
+      }
+      return '\u26A1';
+    },
+  });
+
+  @field rightBadgeVariant = contains(StringField, {
+    computeVia: function (this: ModelConfiguration) {
+      if (!this.openRouterModel) {
+        return '';
+      }
+      return 'recommended';
+    },
+  });
+
   static fitted = class Fitted extends Component<typeof this> {
     formatContext(num: number | undefined): string {
-      if (!num) return '—';
+      if (!num) return '\u2014';
       if (num >= 1000000) {
         return `${(num / 1000000).toFixed(1).replace(/\.0$/, '')}M`;
       }
@@ -366,12 +519,11 @@ export class ModelConfiguration extends BaseModelConfiguration {
           padding: 0.25rem;
         }
 
-        /* NEW: recommended-badge variant (used by RecommendedModel leftBadgeVariant) */
         .strip-badge.recommended-badge,
         .tile-badge.recommended-badge,
         .card-badge.recommended-badge {
-          background: #bbf7d0; /* slightly brighter green */
-          color: #065f46; /* readable deep green */
+          background: #bbf7d0;
+          color: #065f46;
           padding: 0.25rem 0.5rem;
         }
 

@@ -20,7 +20,7 @@ import {
   OpenRouterTopProvider,
   OpenRouterPerRequestLimits,
   OpenRouterDefaultParameters,
-} from './openrouter-model';
+} from '@cardstack/openrouter/openrouter-model';
 import { tracked } from '@glimmer/tracking';
 
 class Isolated extends Component<typeof ModelUpdater> {
