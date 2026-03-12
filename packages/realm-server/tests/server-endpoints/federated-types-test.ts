@@ -197,6 +197,25 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
       );
     });
 
+    test('QUERY /_federated-types returns 403 for authenticated request to non-public realm without read permission', async function (assert) {
+      let unauthorizedToken = createRealmServerJWT(
+        { user: 'unauthorized-user', sessionRoom: 'session-room-test' },
+        realmSecretSeed,
+      );
+
+      let response = await request
+        .post('/_federated-types')
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .set('Accept', 'application/json')
+        .set('Authorization', `Bearer ${unauthorizedToken}`)
+        .send({ realms: [secondaryRealm.url] });
+
+      assert.strictEqual(response.status, 403, 'HTTP 403 status');
+      assert.ok(
+        response.body.errors?.[0]?.includes(secondaryRealm.url),
+        'response lists realms lacking read permission',
+      );
+    });
     test('QUERY /_federated-types returns 400 when realms are missing', async function (assert) {
       let response = await request
         .post('/_federated-types')
