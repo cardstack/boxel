@@ -523,10 +523,11 @@ export default class Room extends Component<Signature> {
       }
 
       .llm-select-footer-action {
+        --boxel-button-padding: 0;
+        --boxel-button-min-height: unset;
         justify-content: flex-start;
         font: 500 var(--boxel-font-xs);
         color: var(--boxel-500);
-        padding: var(--boxel-sp-xxxs) 0;
       }
 
       .llm-select-footer-action:hover {
