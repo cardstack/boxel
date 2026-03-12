@@ -15,6 +15,7 @@ import {
   type Filter,
   type getCard,
   GetCardContextName,
+  internalKeyFor,
 } from '@cardstack/runtime-common';
 
 import { cardTypeDisplayName } from '@cardstack/runtime-common/helpers/card-type-display-name';
@@ -96,6 +97,7 @@ interface Signature {
     onSubmit?: (selection: string | NewCardArgs) => void;
     showHeader?: boolean;
     selectedCardTypes?: PickerOption[];
+    typeCodeRefs?: Map<string, string[]>;
     filteredRecentCards?: CardDef[];
     searchResource: PrerenderedSearchResource;
     activeSort: SortOption;
@@ -368,18 +370,28 @@ export default class SearchContent extends Component<Signature> {
   }
 
   private get filteredSearchResults(): PrerenderedCard[] {
-    const selectedTypeNames = new Set(
-      (this.args.selectedCardTypes ?? [])
-        .filter((opt) => opt.type !== 'select-all')
-        .map((opt) => opt.id),
-    );
+    const selectedCodeRefs = new Set<string>();
+    for (const opt of this.args.selectedCardTypes ?? []) {
+      if (opt.type === 'select-all') {
+        continue;
+      }
+      for (const ref of this.args.typeCodeRefs?.get(opt.id) ?? []) {
+        selectedCodeRefs.add(ref);
+      }
+    }
 
     const allCards = this.args.searchResource.instances;
-    return selectedTypeNames.size > 0
-      ? allCards.filter(
-          (card) => card.cardType && selectedTypeNames.has(card.cardType),
-        )
-      : allCards;
+    if (selectedCodeRefs.size === 0) {
+      return allCards;
+    }
+    return allCards.filter((card) => {
+      if (!card.usedRenderType) {
+        return false;
+      }
+      return selectedCodeRefs.has(
+        internalKeyFor(card.usedRenderType, undefined),
+      );
+    });
   }
 
   private get cardsByQuerySection(): SearchSheetSection[] | null {

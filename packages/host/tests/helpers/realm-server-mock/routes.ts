@@ -14,10 +14,12 @@ import {
   type Query,
 } from '@cardstack/runtime-common';
 
-import type {
-  LinkableCollectionDocument,
-  PrerenderedCardCollectionDocument,
+import {
+  makeCardTypeSummaryDoc,
+  type LinkableCollectionDocument,
+  type PrerenderedCardCollectionDocument,
 } from '@cardstack/runtime-common/document-types';
+import type { CardTypeSummary } from '@cardstack/runtime-common/index-structure';
 
 import ENV from '@cardstack/host/config/environment';
 
@@ -64,6 +66,7 @@ export function getRealmServerRoute(
 export function registerDefaultRoutes() {
   registerSearchRoutes();
   registerInfoRoutes();
+  registerTypesRoutes();
   registerCatalogRoutes();
   registerAuthRoutes();
 }
@@ -199,6 +202,52 @@ function registerInfoRoutes() {
       return new Response(JSON.stringify({ data }), {
         status: 200,
         headers,
+      });
+    },
+  });
+}
+
+function registerTypesRoutes() {
+  registerRealmServerRoute({
+    path: '/_federated-types',
+    handler: async (req) => {
+      let payload;
+      try {
+        payload = await parseSearchRequestPayload(req.clone());
+      } catch (e) {
+        if (e instanceof SearchRequestError) {
+          return buildSearchErrorResponse(e.message);
+        }
+        throw e;
+      }
+
+      let realmList: string[];
+      try {
+        realmList = parseRealmsFromPayload(payload);
+      } catch (e) {
+        if (e instanceof SearchRequestError) {
+          return buildSearchErrorResponse(e.message);
+        }
+        throw e;
+      }
+
+      let registry = getTestRealmRegistry();
+      let allSummaries: CardTypeSummary[] = [];
+
+      for (let realmURL of realmList) {
+        let registryEntry = registry.get(ensureTrailingSlash(realmURL));
+        if (registryEntry?.realm) {
+          let summaries =
+            await registryEntry.realm.realmIndexQueryEngine.fetchCardTypeSummary();
+          allSummaries.push(...summaries);
+        }
+      }
+
+      let doc = makeCardTypeSummaryDoc(allSummaries);
+
+      return new Response(JSON.stringify(doc), {
+        status: 200,
+        headers: { 'content-type': SupportedMimeType.CardTypeSummary },
       });
     },
   });

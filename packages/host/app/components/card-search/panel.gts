@@ -20,11 +20,6 @@ import {
   GetCardCollectionContextName,
 } from '@cardstack/runtime-common';
 
-import {
-  cardTypeDisplayName,
-  cardTypeIcon,
-} from '@cardstack/runtime-common/helpers/card-type-display-name';
-
 import consumeContext from '@cardstack/host/helpers/consume-context';
 
 import { getPrerenderedSearch } from '@cardstack/host/resources/prerendered-search';
@@ -40,7 +35,6 @@ import {
   buildSearchQuery,
   filterCardsByTypeRefs,
   getFilterTypeRefs,
-  getSearchTerm,
   shouldSkipSearchQuery,
 } from './utils';
 
@@ -69,6 +63,7 @@ interface Signature {
         | 'searchKey'
         | 'selectedRealmURLs'
         | 'selectedCardTypes'
+        | 'typeCodeRefs'
         | 'baseFilter'
         | 'searchResource'
         | 'activeSort'
@@ -138,18 +133,6 @@ export default class SearchPanel extends Component<Signature> {
     return filterCardsByTypeRefs(realmFiltered, typeRefs);
   }
 
-  private get searchTermFilteredRecentCards(): CardDef[] {
-    const cards = this.baseFilteredRecentCards;
-    const term = getSearchTerm(this.args.searchKey);
-    if (!term) {
-      return cards;
-    }
-    const lowerTerm = term.toLowerCase();
-    return cards.filter((c) =>
-      (c.cardTitle ?? '').toLowerCase().includes(lowerTerm),
-    );
-  }
-
   private get cardComponentModifier() {
     if (isDestroying(this) || isDestroyed(this)) {
       return undefined;
@@ -167,6 +150,41 @@ export default class SearchPanel extends Component<Signature> {
     }
   }
 
+  // Stores code_ref mappings for each display name (multiple code_refs
+  // can map to the same display name, e.g. different modules with the same card type name).
+  private _typeCodeRefs = new Map<string, string[]>();
+
+  @use private cardTypeSummaries = resource(() => {
+    // Track selectedRealmURLs so we re-fetch when realms change
+    let realmURLs = this.selectedRealmURLs;
+    let state: {
+      data: {
+        id: string;
+        type: string;
+        attributes: { displayName: string; total: number; iconHTML: string };
+      }[];
+      isLoading: boolean;
+    } = new TrackedObject({ data: [], isLoading: true });
+
+    (async () => {
+      try {
+        let result = await this.realmServer.fetchCardTypeSummaries(realmURLs);
+        if (!isDestroyed(this) && !isDestroying(this)) {
+          state.data = result.data;
+          state.isLoading = false;
+        }
+      } catch (e) {
+        console.error('Failed to fetch card type summaries', e);
+        if (!isDestroyed(this) && !isDestroying(this)) {
+          state.data = [];
+          state.isLoading = false;
+        }
+      }
+    })();
+
+    return state;
+  });
+
   @use private typeFilter = resource(() => {
     let value: { selected: PickerOption[]; options: PickerOption[] } =
       new TrackedObject({
@@ -175,37 +193,31 @@ export default class SearchPanel extends Component<Signature> {
       });
 
     const seen = new Map<string, PickerOption>();
+    const codeRefsByDisplayName = new Map<string, string[]>();
 
-    // Derive types from search results (these have icons)
-    for (const card of this.searchResource.instances) {
-      const name = card.cardType;
+    for (const item of this.cardTypeSummaries.data) {
+      const name = item.attributes.displayName;
+      const codeRef = item.id;
       if (!name) {
         continue;
       }
+
+      if (!codeRefsByDisplayName.has(name)) {
+        codeRefsByDisplayName.set(name, []);
+      }
+      codeRefsByDisplayName.get(name)!.push(codeRef);
+
       if (!seen.has(name)) {
         seen.set(name, {
           id: name,
           label: name,
-          icon: card.iconHtml ?? undefined,
+          icon: item.attributes.iconHTML ?? undefined,
           type: 'option',
         });
       }
     }
 
-    // Also derive types from recent cards so the picker has options
-    // even when searchKey is blank and no search query runs.
-    for (const card of this.searchTermFilteredRecentCards) {
-      const name = cardTypeDisplayName(card);
-      if (!name || seen.has(name)) {
-        continue;
-      }
-      seen.set(name, {
-        id: name,
-        label: name,
-        icon: cardTypeIcon(card),
-        type: 'option',
-      });
-    }
+    this._typeCodeRefs = codeRefsByDisplayName;
 
     value.options = [
       ...[...seen.values()].sort((a, b) => a.label.localeCompare(b.label)),
@@ -220,17 +232,9 @@ export default class SearchPanel extends Component<Signature> {
 
     if (hadSelectAll) {
       value.selected = [];
-    } else if (
-      this.searchResource.instances.length === 0 &&
-      this.args.searchKey?.trim() &&
-      !this.searchResource.hasSearchRun
-    ) {
-      // Active search but results haven't arrived yet — keep previous
-      // selections to avoid jarring UI changes while loading.
-      // `hasSearchRun` is false while the search task is in-flight and
-      // becomes true once it completes (success or error), so a completed
-      // search with zero results falls through to the else branch below
-      // which correctly reverts to "Any Type".
+    } else if (this.cardTypeSummaries.isLoading) {
+      // Type summaries still loading — keep previous selections
+      // to avoid jarring UI changes.
       value.selected = prev;
     } else {
       // Keep previous selections that still exist in the new options,
@@ -293,6 +297,7 @@ export default class SearchPanel extends Component<Signature> {
         searchKey=@searchKey
         selectedRealmURLs=this.selectedRealmURLs
         selectedCardTypes=this.typeFilter.selected
+        typeCodeRefs=this._typeCodeRefs
         baseFilter=@baseFilter
         searchResource=this.searchResource
         activeSort=this.activeSort
