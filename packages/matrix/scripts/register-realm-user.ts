@@ -22,6 +22,8 @@ if (!realmUser) {
 (async () => {
   let password = await realmPassword(realmUser, realmSecretSeed);
   return new Promise<string>((resolve, reject) => {
+    console.log(`Registering realm user ${realmUser}`);
+
     const command = `docker exec ${getSynapseContainerName()} register_new_matrix_user http://localhost:8008 -c /data/homeserver.yaml -u ${realmUser} -p ${password} --no-admin`;
     childProcess.exec(command, async (err, stdout) => {
       if (err) {
