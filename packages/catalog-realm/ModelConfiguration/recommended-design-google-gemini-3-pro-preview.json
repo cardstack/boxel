@@ -15,7 +15,7 @@
         "summary": null,
         "cardThumbnailURL": null
       },
-      "thinkingEffort": "low"
+      "reasoningEffort": "low"
     },
     "relationships": {
       "cardInfo.theme": {

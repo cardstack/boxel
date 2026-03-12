@@ -8,7 +8,7 @@
         "cardThumbnailURL": null,
         "notes": null
       },
-      "thinkingEffort": "minimal"
+      "reasoningEffort": "minimal"
     },
     "relationships": {
       "cardInfo.theme": {
