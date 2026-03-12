@@ -1,5 +1,7 @@
 import { click, waitUntil } from '@ember/test-helpers';
 
+import { getService } from '@universal-ember/test-support';
+
 import { module, test } from 'qunit';
 
 import {
@@ -12,6 +14,7 @@ import {
 } from '../helpers';
 import { setupBaseRealm } from '../helpers/base-realm';
 import { setupMockMatrix } from '../helpers/mock-matrix';
+import { assertRecentFileURLs } from '../helpers/recent-files-cards';
 import { setupApplicationTest } from '../helpers/setup';
 
 const ownedRealmURL = 'http://test-realm/testuser/owned-workspace/';
@@ -122,7 +125,34 @@ export class Person extends CardDef {}
       stacks: [[{ id: `${ownedRealmURL}index`, format: 'isolated' }]],
     });
 
+    let recentFilesService = getService('recent-files-service');
+    recentFilesService.recentFiles.push(
+      {
+        realmURL: new URL(ownedRealmURL),
+        filePath: 'Person/1.json',
+        cursorPosition: null,
+        timestamp: 3,
+      },
+      {
+        realmURL: new URL(ownedRealmURL),
+        filePath: 'person.gts',
+        cursorPosition: null,
+        timestamp: 2,
+      },
+      {
+        realmURL: new URL(sharedRealmURL),
+        filePath: 'index.json',
+        cursorPosition: null,
+        timestamp: 1,
+      },
+    );
+
     assert.dom('[data-test-workspace="Owned Workspace"]').exists();
+    assertRecentFileURLs(assert, recentFilesService.recentFiles, [
+      `${ownedRealmURL}Person/1.json`,
+      `${ownedRealmURL}person.gts`,
+      `${sharedRealmURL}index.json`,
+    ]);
 
     await click(`[data-test-workspace-menu-trigger="${ownedRealmURL}"]`);
     await click('[data-test-boxel-menu-item-text="Delete workspace"]');
@@ -138,5 +168,11 @@ export class Person extends CardDef {}
     assert.dom('[data-test-workspace="Owned Workspace"]').doesNotExist();
     assert.dom('[data-test-workspace="Shared Workspace"]').exists();
     assert.dom('[data-test-workspace-chooser]').exists();
+    assertRecentFileURLs(
+      assert,
+      recentFilesService.recentFiles,
+      [`${sharedRealmURL}index.json`],
+      'deleting a workspace removes its files from recent files',
+    );
   });
 });

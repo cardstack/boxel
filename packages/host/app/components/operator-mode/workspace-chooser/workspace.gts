@@ -29,6 +29,7 @@ import type NetworkService from '@cardstack/host/services/network';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
+import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 
 import ItemContainer from './item-container';
 import WorkspaceLoadingIndicator from './workspace-loading-indicator';
@@ -364,6 +365,7 @@ export default class Workspace extends Component<Signature> {
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private matrixService: MatrixService;
   @service declare private network: NetworkService;
+  @service declare private recentFilesService: RecentFilesService;
   @service declare private realm: RealmService;
   @service declare private realmServer: RealmServerService;
 
@@ -545,6 +547,10 @@ export default class Workspace extends Component<Signature> {
 
       await this.realmServer.deleteRealm(this.args.realmURL);
       await this.matrixService.removeRealmFromAccountData(this.args.realmURL);
+      this.recentFilesService.removeRecentFilesForRealmURL(this.args.realmURL);
+      for (let publishedRealmURL of this.publishedRealmURLs) {
+        this.recentFilesService.removeRecentFilesForRealmURL(publishedRealmURL);
+      }
       this.realm.removeRealm(this.args.realmURL);
 
       if (isActiveWorkspace) {
