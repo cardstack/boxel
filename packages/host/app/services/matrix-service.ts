@@ -640,6 +640,19 @@ export default class MatrixService extends Service {
     await this.realmServer.setAvailableRealmURLs(newRealms);
   }
 
+  public async removeRealmFromAccountData(realmURLString: string) {
+    let { realms = [] } =
+      ((await this.client.getAccountDataFromServer(
+        APP_BOXEL_REALMS_EVENT_TYPE,
+      )) as { realms: string[] }) ?? {};
+
+    let newRealms = realms.filter((realmURL) => realmURL !== realmURLString);
+    await this.client.setAccountData(APP_BOXEL_REALMS_EVENT_TYPE, {
+      realms: newRealms,
+    });
+    await this.realmServer.setAvailableRealmURLs(newRealms);
+  }
+
   async setDisplayName(displayName: string) {
     await this.client.setDisplayName(displayName);
   }

@@ -827,6 +827,16 @@ export default class RealmService extends Service {
     await this.knownRealm(url)?.setHostHome(hostHome);
   }
 
+  removeRealm(url: string) {
+    let resource = this._realms.get(url);
+    if (!resource) {
+      return;
+    }
+    resource.logout();
+    this._realms.delete(url);
+    this.currentKnownRealms.delete(url);
+  }
+
   isPublic = (url: string): boolean => {
     return this.knownRealm(url)?.isPublic ?? false;
   };

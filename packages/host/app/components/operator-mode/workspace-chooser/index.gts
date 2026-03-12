@@ -43,6 +43,7 @@ export default class WorkspaceChooser extends Component<Signature> {
           {{#each this.realmServer.userRealmURLs as |realmURL|}}
             <Workspace
               @realmURL={{realmURL}}
+              @showMenu={{true}}
               data-test-workspace={{realmURL}}
             />
           {{/each}}

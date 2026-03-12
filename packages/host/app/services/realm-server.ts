@@ -166,6 +166,33 @@ export default class RealmServerService extends Service {
     return new URL(realmURL);
   }
 
+  async deleteRealm(realmURL: string) {
+    await this.login();
+
+    let response = await this.network.fetch(`${this.url.href}_delete-realm`, {
+      method: 'DELETE',
+      headers: {
+        Accept: SupportedMimeType.JSONAPI,
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${this.token}`,
+      },
+      body: JSON.stringify({
+        data: {
+          type: 'realm',
+          id: realmURL,
+        },
+      }),
+    });
+
+    if (!response.ok) {
+      let err = `Could not delete realm '${realmURL}': ${
+        response.status
+      } - ${await response.text()}`;
+      console.error(err);
+      throw new Error(err);
+    }
+  }
+
   logout(): void {
     this.loginTask.cancelAll();
     this.tokenRefresher.cancelAll();
