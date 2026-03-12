@@ -306,7 +306,7 @@ export default class Room extends Component<Signature> {
                     @onCollapse={{fn this.setSelectedBottomAction undefined}}
                   >
                     <:footer>
-                      <div class='llm-select-footer'>
+                      <li class='llm-select-footer'>
                         {{#if this.systemCardId}}
                           <BoxelButton
                             @kind='text-only'
@@ -329,7 +329,7 @@ export default class Room extends Component<Signature> {
                             Restore default system card
                           </BoxelButton>
                         {{/unless}}
-                      </div>
+                      </li>
                     </:footer>
                   </LLMSelect>
                 {{/if}}
