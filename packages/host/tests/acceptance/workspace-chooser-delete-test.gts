@@ -16,10 +16,6 @@ import { setupApplicationTest } from '../helpers/setup';
 
 const ownedRealmURL = 'http://test-realm/testuser/owned-workspace/';
 const sharedRealmURL = 'http://test-realm/otheruser/shared-workspace/';
-const publishedOwnedRealmURL =
-  'http://testuser.localhost:4201/owned-workspace/';
-const customPublishedOwnedRealmURL =
-  'https://published.boxel.site/owned-workspace/';
 
 module('Acceptance | workspace-chooser-delete', function (hooks) {
   setupApplicationTest(hooks);
@@ -48,10 +44,6 @@ module('Acceptance | workspace-chooser-delete', function (hooks) {
           name: 'Owned Workspace',
           backgroundURL: null,
           iconURL: null,
-          lastPublishedAt: {
-            [publishedOwnedRealmURL]: '1735689600000',
-            [customPublishedOwnedRealmURL]: '1735603200000',
-          },
         },
         'index.json': {
           data: {
@@ -146,39 +138,5 @@ export class Person extends CardDef {}
     assert.dom('[data-test-workspace="Owned Workspace"]').doesNotExist();
     assert.dom('[data-test-workspace="Shared Workspace"]').exists();
     assert.dom('[data-test-workspace-chooser]').exists();
-  });
-
-  test('delete confirmation summarizes contents without zero-count items and lists published realms', async function (assert) {
-    await visitOperatorMode({ workspaceChooserOpened: true });
-
-    await click(`[data-test-workspace-menu-trigger="${ownedRealmURL}"]`);
-    await click('[data-test-boxel-menu-item-text="Delete workspace"]');
-
-    await waitUntil(() =>
-      document
-        .querySelector('[data-test-delete-msg]')
-        ?.textContent?.includes('Contains 2 cards and 1 definition.'),
-    );
-
-    assert
-      .dom('[data-test-delete-msg]')
-      .includesText('Delete workspace Owned Workspace');
-    assert
-      .dom('[data-test-delete-msg]')
-      .includesText('Contains 2 cards and 1 definition.');
-    assert.dom('[data-test-delete-msg]').doesNotIncludeText('0 files');
-    assert
-      .dom('[data-test-delete-msg]')
-      .includesText('Published realms that will also be removed');
-    assert
-      .dom(
-        `[data-test-delete-modal="${ownedRealmURL}"] a[href="${publishedOwnedRealmURL}"]`,
-      )
-      .exists();
-    assert
-      .dom(
-        `[data-test-delete-modal="${ownedRealmURL}"] a[href="${customPublishedOwnedRealmURL}"]`,
-      )
-      .exists();
   });
 });

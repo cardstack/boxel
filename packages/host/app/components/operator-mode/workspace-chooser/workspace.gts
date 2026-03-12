@@ -592,7 +592,7 @@ function summarizeWorkspaceContents(
   );
 }
 
-function formatWorkspaceDeleteSummary(
+export function formatWorkspaceDeleteSummary(
   counts: { label: string; count: number }[],
 ): string {
   let nonZeroCounts = counts
@@ -606,7 +606,7 @@ function formatWorkspaceDeleteSummary(
   return joinWithAnd(nonZeroCounts);
 }
 
-function joinWithAnd(parts: string[]): string {
+export function joinWithAnd(parts: string[]): string {
   if (parts.length <= 1) {
     return parts[0] ?? '';
   }
