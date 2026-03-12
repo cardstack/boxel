@@ -68,10 +68,8 @@ export default class LLMSelect extends Component<Signature> {
             </li>
           {{/each-in}}
         </ul>
-      </:content>
-      <:footer>
         {{yield to='footer'}}
-      </:footer>
+      </:content>
     </PillMenu>
     <style scoped>
       .llm-select {
