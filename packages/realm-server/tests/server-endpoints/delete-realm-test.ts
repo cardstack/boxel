@@ -213,4 +213,34 @@ module(`server-endpoints/${basename(__filename)}`, function (hooks) {
       'returns a namespace ownership error',
     );
   });
+
+  test('DELETE /_delete-realm rejects an invalid realm URL', async function (assert) {
+    let ownerUserId = `@mango-${uuidv4()}:localhost`;
+
+    let response = await context.request2
+      .delete('/_delete-realm')
+      .set('Accept', 'application/vnd.api+json')
+      .set('Content-Type', 'application/json')
+      .set(
+        'Authorization',
+        `Bearer ${createRealmServerJWT(
+          { user: ownerUserId, sessionRoom: 'session-room-test' },
+          realmSecretSeed,
+        )}`,
+      )
+      .send(
+        JSON.stringify({
+          data: {
+            type: 'realm',
+            id: 'not-a-valid-url',
+          },
+        }),
+      );
+
+    assert.strictEqual(response.status, 400, 'invalid realm URL is rejected');
+    assert.ok(
+      response.body.errors?.[0]?.includes('Invalid realm URL supplied'),
+      'returns an invalid URL error',
+    );
+  });
 });

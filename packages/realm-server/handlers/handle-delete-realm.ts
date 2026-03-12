@@ -72,9 +72,15 @@ export default function handleDeleteRealm({
       return;
     }
 
-    let realmURL = json.data.id.endsWith('/')
-      ? json.data.id
-      : `${json.data.id}/`;
+    let parsedRealmURL = normalizeRealmURL(json.data.id);
+    if (!parsedRealmURL) {
+      await sendResponseForBadRequest(
+        ctxt,
+        `Invalid realm URL supplied: ${json.data.id}`,
+      );
+      return;
+    }
+    let realmURL = parsedRealmURL.href;
 
     try {
       let sourceRealm = realms.find(
@@ -97,10 +103,7 @@ export default function handleDeleteRealm({
         return;
       }
 
-      let permissions = await fetchRealmPermissions(
-        dbAdapter,
-        new URL(realmURL),
-      );
+      let permissions = await fetchRealmPermissions(dbAdapter, parsedRealmURL);
       let { user: ownerUserId } = token;
       if (!permissions[ownerUserId]?.includes('realm-owner')) {
         await sendResponseForForbiddenRequest(
@@ -110,7 +113,7 @@ export default function handleDeleteRealm({
         return;
       }
 
-      let ownerNamespace = getRealmNamespace(realmURL);
+      let ownerNamespace = getRealmNamespace(parsedRealmURL);
       if (
         !ownerNamespace ||
         ownerNamespace !== getMatrixUsername(ownerUserId)
@@ -189,7 +192,7 @@ export default function handleDeleteRealm({
         realms,
         virtualNetwork,
       });
-      await removeRealmPermissions(dbAdapter, new URL(realmURL));
+      await removeRealmPermissions(dbAdapter, parsedRealmURL);
 
       await setContextResponse(
         ctxt,
@@ -229,8 +232,20 @@ function ensureTrailingSlash(url: string) {
   return url.endsWith('/') ? url : `${url}/`;
 }
 
-function getRealmNamespace(realmURL: string): string | null {
-  let segments = new URL(realmURL).pathname.split('/').filter(Boolean);
+function normalizeRealmURL(realmURL: string): URL | null {
+  try {
+    let parsedRealmURL = new URL(realmURL);
+    parsedRealmURL.pathname = ensureTrailingSlash(parsedRealmURL.pathname);
+    parsedRealmURL.search = '';
+    parsedRealmURL.hash = '';
+    return parsedRealmURL;
+  } catch {
+    return null;
+  }
+}
+
+function getRealmNamespace(realmURL: URL): string | null {
+  let segments = realmURL.pathname.split('/').filter(Boolean);
   if (segments.length < 2) {
     return null;
   }

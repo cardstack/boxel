@@ -1,13 +1,22 @@
 import type { Realm, VirtualNetwork } from '@cardstack/runtime-common';
 import { ensureTrailingSlash } from '@cardstack/runtime-common';
-import { readdirSync, removeSync } from 'fs-extra';
+import { pathExistsSync, readdirSync, removeSync } from 'fs-extra';
 import { join } from 'path';
 
 export function collectAllFilePaths(realmPath: string): string[] {
   let allPaths: string[] = [];
 
   function traverseDirectory(currentPath: string, basePath: string) {
-    let entries = readdirSync(currentPath, { withFileTypes: true });
+    if (!pathExistsSync(currentPath)) {
+      return;
+    }
+
+    let entries;
+    try {
+      entries = readdirSync(currentPath, { withFileTypes: true });
+    } catch {
+      return;
+    }
 
     for (let entry of entries) {
       let fullPath = join(currentPath, entry.name);
@@ -15,7 +24,7 @@ export function collectAllFilePaths(realmPath: string): string[] {
       if (entry.isDirectory()) {
         traverseDirectory(fullPath, basePath);
       } else {
-        let relativePath = fullPath.replace(basePath, '').replace(/^\//, '');
+        let relativePath = fullPath.replace(basePath, '').replace(/^[/\\]/, '');
         if (relativePath) {
           allPaths.push(relativePath);
         }
@@ -34,14 +43,32 @@ export async function removeMountedRealm(args: {
   virtualNetwork: VirtualNetwork;
 }) {
   let { realm, realmPath, realms, virtualNetwork } = args;
-  let allFilePaths = collectAllFilePaths(realmPath);
+  let cleanupError: Error | undefined;
 
-  if (allFilePaths.length > 0) {
-    await realm.deleteAll(allFilePaths);
+  try {
+    let allFilePaths = collectAllFilePaths(realmPath);
+    if (allFilePaths.length > 0) {
+      await realm.deleteAll(allFilePaths);
+    }
+
+    if (pathExistsSync(realmPath)) {
+      removeSync(realmPath);
+    }
+  } catch (error) {
+    cleanupError =
+      error instanceof Error
+        ? error
+        : new Error(`Failed to remove realm at ${realmPath}: ${String(error)}`);
   }
-  removeSync(realmPath);
 
-  virtualNetwork.unmount(realm.handle);
+  try {
+    virtualNetwork.unmount(realm.handle);
+  } catch (error) {
+    cleanupError ??=
+      error instanceof Error
+        ? error
+        : new Error(`Failed to unmount realm ${realm.url}: ${String(error)}`);
+  }
 
   let realmIndex = realms.findIndex(
     (candidate) =>
@@ -49,5 +76,9 @@ export async function removeMountedRealm(args: {
   );
   if (realmIndex !== -1) {
     realms.splice(realmIndex, 1);
+  }
+
+  if (cleanupError) {
+    throw cleanupError;
   }
 }
