@@ -68,7 +68,7 @@ function formatPrice(price: string | undefined): string {
 }
 
 function formatDate(timestamp: number | undefined): string {
-  if (!timestamp) return '\u2014';
+  if (timestamp == null) return '\u2014';
   return new Date(timestamp * 1000).toLocaleDateString('en-US', {
     year: 'numeric',
     month: 'short',
@@ -77,12 +77,12 @@ function formatDate(timestamp: number | undefined): string {
 }
 
 function formatNumber(num: number | undefined): string {
-  if (!num) return '\u2014';
+  if (num == null) return '\u2014';
   return num.toLocaleString('en-US');
 }
 
 function formatContext(num: number | undefined): string {
-  if (!num) return '\u2014';
+  if (num == null) return '\u2014';
   if (num >= 1000000) {
     return `${(num / 1000000).toFixed(1).replace(/\.0$/, '')}M`;
   }

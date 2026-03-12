@@ -43,3 +43,4 @@ ts-node --transpileOnly ./scripts/register-realm-user.ts node-test_realm
 ts-node --transpileOnly ./scripts/register-realm-user.ts skills_realm
 ts-node --transpileOnly ./scripts/register-realm-user.ts catalog_new_realm
 ts-node --transpileOnly ./scripts/register-realm-user.ts test_realm
+ts-node --transpileOnly ./scripts/register-realm-user.ts openrouter_realm

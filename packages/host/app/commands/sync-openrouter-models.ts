@@ -161,7 +161,7 @@ export default class SyncOpenRouterModelsCommand extends HostBaseCommand<
     let commandModule = await this.loadCommandModule();
     let realmURL = input.realmUrl;
     if (!realmURL) {
-      throw new Error('realmURL is required');
+      throw new Error('realmUrl is required');
     }
     if (!realmURL.endsWith('/')) {
       realmURL += '/';
@@ -211,7 +211,6 @@ export default class SyncOpenRouterModelsCommand extends HostBaseCommand<
     }
 
     // Step 4: Mark deprecated models (in API last time, not in API now)
-    let nowEpoch = Math.floor(Date.now() / 1000);
     for (let existingSlug of existingSlugs) {
       if (!apiSlugs.has(existingSlug)) {
         // Model no longer in API — mark deprecated
@@ -222,7 +221,6 @@ export default class SyncOpenRouterModelsCommand extends HostBaseCommand<
             type: 'card',
             attributes: {
               deprecated: true,
-              lastSeenInApi: nowEpoch,
             },
             meta: {
               adoptsFrom: {
@@ -294,10 +292,14 @@ export default class SyncOpenRouterModelsCommand extends HostBaseCommand<
         let cards = result?.data ?? [];
         for (let card of cards) {
           let id: string = card.id ?? '';
-          // Extract slug from URL: .../OpenRouterModel/slug-name
+          // Extract slug from URL: .../OpenRouterModel/slug-name or .../OpenRouterModel/slug-name.json
           let match = id.match(/OpenRouterModel\/([^/]+)$/);
           if (match) {
-            slugs.add(match[1]);
+            let slug = match[1];
+            if (slug.endsWith('.json')) {
+              slug = slug.slice(0, -5);
+            }
+            slugs.add(slug);
           }
         }
       }
