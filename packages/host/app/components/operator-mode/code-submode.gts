@@ -646,7 +646,7 @@ export default class CodeSubmode extends Component<Signature> {
     return !this.isModule && !isCardDocumentString(this.readyFile.content);
   }
 
-  @use private fileDefResource = resource(() => {
+  @use private fileDefResource = resource(({ on }) => {
     let state = new TrackedObject<{
       value: BaseDef | undefined;
       isLoading: boolean;
@@ -659,11 +659,19 @@ export default class CodeSubmode extends Component<Signature> {
     if (!this.isNonModuleFile) {
       return state;
     }
+    let isActive = true;
+    let store = this.store;
     let fileUrl = this.readyFile.url;
+    on.cleanup(() => {
+      isActive = false;
+    });
     state.isLoading = true;
     (async () => {
       try {
-        let result = await this.store.get(fileUrl, { type: 'file-meta' });
+        let result = await store.get(fileUrl, { type: 'file-meta' });
+        if (!isActive) {
+          return;
+        }
         if (isCardErrorJSONAPI(result)) {
           state.error = result;
           state.value = undefined;
@@ -672,10 +680,15 @@ export default class CodeSubmode extends Component<Signature> {
           state.error = undefined;
         }
       } catch (e) {
+        if (!isActive) {
+          return;
+        }
         state.error = e;
         state.value = undefined;
       } finally {
-        state.isLoading = false;
+        if (isActive) {
+          state.isLoading = false;
+        }
       }
     })();
     return state;

@@ -337,21 +337,32 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
   @service declare private specPanelService: SpecPanelService;
   @service declare private store: StoreService;
 
-  @use private selectedDeclarationSpecState = resource(() => {
+  @use private selectedDeclarationSpecState = resource(({ on }) => {
     let state = new TrackedObject<{ value: boolean }>({ value: false });
     let codeRef = this.args.selectedDeclarationAsCodeRef;
     if (!codeRef.module || !codeRef.name) {
       return state;
     }
+    let isActive = true;
+    let loader = this.loaderService.loader;
+    let relativeTo = new URL(this.operatorModeStateService.realmURL);
+    on.cleanup(() => {
+      isActive = false;
+    });
     (async () => {
       try {
         let cardDef = await loadCardDef(codeRef, {
-          loader: this.loaderService.loader,
-          relativeTo: new URL(this.operatorModeStateService.realmURL),
+          loader,
+          relativeTo,
         });
+        if (!isActive) {
+          return;
+        }
         state.value = isSpecCard(cardDef);
       } catch {
-        state.value = false;
+        if (isActive) {
+          state.value = false;
+        }
       }
     })();
     return state;
