@@ -20,7 +20,6 @@ import {
   computeLatestReviewState,
   searchEventQuery,
 } from '../../../pr-card/utils';
-import type { PrCard } from '../../../pr-card/pr-card';
 import type { SubmissionCard } from '../../submission-card';
 
 export class IsolatedTemplate extends Component<typeof SubmissionCard> {
@@ -59,31 +58,6 @@ export class IsolatedTemplate extends Component<typeof SubmissionCard> {
     return buildRealmHrefs(this.args.model[realmURL]?.href);
   }
 
-  get prCardQuery(): Query | undefined {
-    if (!this.args.model.branchName) return undefined;
-    return {
-      filter: {
-        on: {
-          module: new URL('../../../pr-card/pr-card', import.meta.url).href,
-          name: 'PrCard',
-        },
-        eq: { branchName: this.args.model.branchName },
-      },
-      sort: [{ by: 'lastModified', direction: 'desc' }],
-    };
-  }
-
-  prCardData = this.args.context?.getCards(
-    this,
-    () => this.prCardQuery,
-    () => this.realmHrefs,
-    { isLive: true },
-  );
-
-  get prCardInstance(): PrCard | null {
-    return (this.prCardData?.instances?.[0] as PrCard) ?? null;
-  }
-
   get githubEventCardRef() {
     return {
       module: new URL('../../../github-event/github-event', import.meta.url)
@@ -93,7 +67,7 @@ export class IsolatedTemplate extends Component<typeof SubmissionCard> {
   }
 
   get prReviewEventQuery(): Query | undefined {
-    const prNumber = this.prCardInstance?.prNumber;
+    const prNumber = this.args.model.prCard?.prNumber;
     if (!prNumber) return undefined;
     return searchEventQuery(
       this.githubEventCardRef,
@@ -110,7 +84,7 @@ export class IsolatedTemplate extends Component<typeof SubmissionCard> {
   );
 
   get reviewState() {
-    if (!this.prCardInstance) return null;
+    if (!this.args.model.prCard) return null;
     const reviews = buildLatestReviewByReviewer(
       this.prReviewEventData?.instances ?? [],
     );
@@ -118,8 +92,8 @@ export class IsolatedTemplate extends Component<typeof SubmissionCard> {
   }
 
   openPrCard = () => {
-    if (this.prCardInstance) {
-      this.args.viewCard?.(this.prCardInstance, 'isolated');
+    if (this.args.model.prCard) {
+      this.args.viewCard?.(this.args.model.prCard, 'isolated');
     }
   };
 
@@ -171,7 +145,7 @@ export class IsolatedTemplate extends Component<typeof SubmissionCard> {
                 file{{#if (isPlural this.fileCount)}}s{{/if}}
               </span>
             {{/if}}
-            {{#if this.prCardInstance}}
+            {{#if @model.prCard}}
               <BoxelButton
                 @kind='secondary-dark'
                 class='view-pr-btn'

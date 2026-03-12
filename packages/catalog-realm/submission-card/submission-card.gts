@@ -13,6 +13,7 @@ import BotIcon from '@cardstack/boxel-icons/bot';
 import FileCodeIcon from '@cardstack/boxel-icons/file-code';
 
 import { Listing } from '../catalog-app/listing/listing';
+import { PrCard } from '../pr-card/pr-card';
 
 import { FittedTemplate } from './components/card/fitted-template';
 import { IsolatedTemplate } from './components/card/isolated-template';
@@ -176,6 +177,7 @@ export class SubmissionCard extends CardDef {
   });
   @field roomId = contains(StringField);
   @field branchName = contains(StringField);
+  @field prCard = linksTo(() => PrCard);
   @field listing = linksTo(() => Listing);
   @field allFileContents = containsMany(FileContentField);
 }

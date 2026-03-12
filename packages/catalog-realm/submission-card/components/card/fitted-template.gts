@@ -1,7 +1,6 @@
 import { on } from '@ember/modifier';
 
-import { Component, realmURL } from 'https://cardstack.com/base/card-api';
-import type { Query } from '@cardstack/runtime-common';
+import { Component } from 'https://cardstack.com/base/card-api';
 
 import { BoxelButton } from '@cardstack/boxel-ui/components';
 
@@ -9,8 +8,6 @@ import GitBranchIcon from '@cardstack/boxel-icons/git-branch';
 import GitPullRequestIcon from '@cardstack/boxel-icons/git-pull-request';
 import MessageIcon from '@cardstack/boxel-icons/message';
 
-import { buildRealmHrefs } from '../../../pr-card/utils';
-import type { PrCard } from '../../../pr-card/pr-card';
 import type { SubmissionCard } from '../../submission-card';
 
 export class FittedTemplate extends Component<typeof SubmissionCard> {
@@ -30,39 +27,10 @@ export class FittedTemplate extends Component<typeof SubmissionCard> {
     }
   };
 
-  get realmHrefs() {
-    return buildRealmHrefs(this.args.model[realmURL]?.href);
-  }
-
-  get prCardQuery(): Query | undefined {
-    if (!this.args.model.branchName) return undefined;
-    return {
-      filter: {
-        on: {
-          module: new URL('../../../pr-card/pr-card', import.meta.url).href,
-          name: 'PrCard',
-        },
-        eq: { branchName: this.args.model.branchName },
-      },
-      sort: [{ by: 'lastModified', direction: 'desc' }],
-    };
-  }
-
-  prCardData = this.args.context?.getCards(
-    this,
-    () => this.prCardQuery,
-    () => this.realmHrefs,
-    { isLive: true },
-  );
-
-  get prCardInstance(): PrCard | null {
-    return (this.prCardData?.instances?.[0] as PrCard) ?? null;
-  }
-
   openPrCard = (e: Event) => {
     e.stopPropagation();
-    if (this.prCardInstance) {
-      this.args.viewCard?.(this.prCardInstance, 'isolated');
+    if (this.args.model.prCard) {
+      this.args.viewCard?.(this.args.model.prCard, 'isolated');
     }
   };
 
@@ -125,7 +93,7 @@ export class FittedTemplate extends Component<typeof SubmissionCard> {
           {{/if}}
         </button>
         <footer class='footer'>
-          {{#if this.prCardInstance}}
+          {{#if @model.prCard}}
             <BoxelButton
               @kind='secondary-dark'
               @size='extra-small'

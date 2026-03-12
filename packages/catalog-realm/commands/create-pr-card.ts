@@ -33,7 +33,14 @@ export default class CreatePrCardCommand extends Command<
   }
 
   protected async run(input: CreatePrCardInput): Promise<PrCard> {
-    let { realm, prNumber, prUrl, prTitle, branchName, submittedBy } = input;
+    let {
+      realm,
+      prNumber,
+      prUrl,
+      prTitle,
+      branchName,
+      submittedBy,
+    } = input;
     let catalogRealmUrl = new RealmPaths(new URL('..', import.meta.url)).url;
 
     let card = new PrCard({
@@ -55,11 +62,11 @@ export default class CreatePrCardCommand extends Command<
     }
 
     // Save the PR card to the submission realm
-    await new SaveCardCommand(this.commandContext).execute({
+    let savedCard = (await new SaveCardCommand(this.commandContext).execute({
       card,
       realm,
-    });
+    })) as PrCard;
 
-    return card;
+    return savedCard;
   }
 }
