@@ -145,6 +145,16 @@ export class IsolatedTemplate extends Component<typeof SubmissionCard> {
                 file{{#if (isPlural this.fileCount)}}s{{/if}}
               </span>
             {{/if}}
+            {{#if @model.listing}}
+              <BoxelButton
+                @kind='secondary-dark'
+                class='view-pr-btn'
+                aria-label='View listing'
+                {{on 'click' this.openListing}}
+              >
+                View Listing
+              </BoxelButton>
+            {{/if}}
             {{#if @model.prCard}}
               <BoxelButton
                 @kind='secondary-dark'
@@ -167,19 +177,6 @@ export class IsolatedTemplate extends Component<typeof SubmissionCard> {
             />
           {{else}}
             <@model.constructor.icon class='listing-icon' />
-          {{/if}}
-          {{#if @model.listing}}
-            <div class='hero-image-overlay'>
-              <BoxelButton
-                @kind='primary'
-                @size='extra-small'
-                class='details-button view-listing-btn'
-                aria-label='View listing details'
-                {{on 'click' this.openListing}}
-              >
-                View Listing
-              </BoxelButton>
-            </div>
           {{/if}}
         </div>
       </div>
@@ -392,20 +389,6 @@ export class IsolatedTemplate extends Component<typeof SubmissionCard> {
         width: 80px;
         height: 80px;
         color: rgba(255, 255, 255, 0.2);
-      }
-
-      .hero-image-overlay {
-        position: absolute;
-        inset: 0;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        background-color: rgba(0, 0, 0, 0.6);
-      }
-
-      .view-listing-btn {
-        --boxel-button-font: 600 var(--boxel-font-sm);
-        white-space: nowrap;
       }
 
       @container (max-width: 560px) {

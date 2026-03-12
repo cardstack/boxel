@@ -1,5 +1,5 @@
-import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
+import { tracked } from '@glimmer/tracking';
 import { debounce } from 'lodash';
 
 import {
@@ -9,14 +9,16 @@ import {
   field,
   realmURL,
 } from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-import { commandData } from 'https://cardstack.com/base/resources/command-data';
+import CardList from 'https://cardstack.com/base/components/card-list';
 import type {
   GetAllRealmMetasResult,
   RealmMetaField,
 } from 'https://cardstack.com/base/command';
-import { type Query, type getCards } from '@cardstack/runtime-common';
+import { commandData } from 'https://cardstack.com/base/resources/command-data';
+import StringField from 'https://cardstack.com/base/string';
+
 import GetAllRealmMetasCommand from '@cardstack/boxel-host/commands/get-all-realm-metas';
+import BotIcon from '@cardstack/boxel-icons/bot';
 
 import { gt } from '@cardstack/boxel-ui/helpers';
 import {
@@ -29,9 +31,8 @@ import {
   Grid3x3 as GridIcon,
   Rows4 as StripIcon,
 } from '@cardstack/boxel-ui/icons';
-import BotIcon from '@cardstack/boxel-icons/bot';
+import { type Query, type getCards } from '@cardstack/runtime-common';
 
-import { CardsGrid } from '../catalog-app/components/grid';
 import { RealmTabs } from './components/portal/realm-tabs';
 
 type ViewOption = 'strip' | 'grid';
@@ -192,11 +193,13 @@ class Isolated extends Component<typeof SubmissionCardPortal> {
 
       <div class='portal-content'>
         {{#if this.isRealmsReady}}
-          <CardsGrid
+          <CardList
             @query={{this.query}}
             @realms={{this.realmHrefs}}
-            @selectedView={{this.selectedView}}
+            @format='fitted'
+            @viewOption={{this.selectedView}}
             @context={{@context}}
+            @isLive={{true}}
           />
         {{else}}
           <div class='loading-screen'>
@@ -266,11 +269,27 @@ class Isolated extends Component<typeof SubmissionCardPortal> {
         color: var(--muted-foreground, #656d76);
       }
 
-      .portal-content :deep(.cards) {
-        --grid-view-min-width: 300px;
-        --grid-view-height: 420px;
-        --strip-view-min-width: 100%;
-        --strip-view-height: 120px;
+      .portal-content :deep(.boxel-card-list) {
+        --boxel-card-list-padding: 0;
+        --boxel-card-list-gap: var(--boxel-sp);
+      }
+
+      .portal-content :deep(.boxel-card-list.grid-view) {
+        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      }
+
+      .portal-content :deep(.boxel-card-list.strip-view) {
+        grid-template-columns: repeat(auto-fill, minmax(100%, 1fr));
+      }
+
+      .portal-content :deep(.boxel-card-list.grid-view .boxel-card-list-item) {
+        width: 100%;
+        height: 420px;
+      }
+
+      .portal-content :deep(.boxel-card-list.strip-view .boxel-card-list-item) {
+        width: 100%;
+        height: 120px;
       }
 
       .portal-content .loading-screen {
