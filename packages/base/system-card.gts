@@ -91,6 +91,7 @@ class SystemCardIsolated extends Component<typeof SystemCard> {
   @tracked activeIsDefault = false;
   @tracked hasLoaded = false;
   @tracked isExpanded = false;
+  @tracked cloningToRealmName: string | undefined;
 
   constructor(owner: any, args: any) {
     super(owner, args);
@@ -154,27 +155,35 @@ class SystemCardIsolated extends Component<typeof SystemCard> {
       return new MenuItem({
         label: realm.name,
         action: () => {
-          this.cloneTask.perform(realm.url);
+          this.cloneTask.perform(realm.url, realm.name);
         },
         iconURL: realm.iconURL ?? '/default-realm-icon.png',
       });
     });
   }
 
-  cloneTask = task(async (targetRealmUrl: string) => {
+  cloneTask = task(async (targetRealmUrl: string, realmName: string) => {
+    this.cloningToRealmName = realmName;
     let commandContext = this.args.context?.commandContext;
     if (!commandContext || !this.args.model.id) {
+      this.cloningToRealmName = undefined;
       return;
     }
-    let copyResult = await new CopyCardToRealmCommand(commandContext).execute({
-      sourceCard: this.args.model,
-      targetRealm: targetRealmUrl,
-    });
-    if (copyResult.newCardId) {
-      await new ShowCardCommand(commandContext).execute({
-        cardId: copyResult.newCardId,
-        format: 'isolated',
+    try {
+      let copyResult = await new CopyCardToRealmCommand(
+        commandContext,
+      ).execute({
+        sourceCard: this.args.model,
+        targetRealm: targetRealmUrl,
       });
+      if (copyResult.newCardId) {
+        await new ShowCardCommand(commandContext).execute({
+          cardId: copyResult.newCardId,
+          format: 'isolated',
+        });
+      }
+    } finally {
+      this.cloningToRealmName = undefined;
     }
   });
 
@@ -230,69 +239,31 @@ class SystemCardIsolated extends Component<typeof SystemCard> {
 
   <template>
     <div class='system-card-isolated'>
-      {{#if this.hasLoaded}}
-        <div class='status-badge-container'>
-          {{#if this.isActive}}
-            <button
-              class='status-badge active {{if this.isExpanded "expanded"}}'
-              type='button'
-              {{on 'click' this.toggleExpanded}}
-            >
-              Active System Card
-              <svg class='chevron' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'></polyline></svg>
-            </button>
-            {{#if this.isExpanded}}
-              <div class='badge-panel'>
-                <span class='panel-label'>This system card is currently active.</span>
-                {{#unless this.activeIsDefault}}
-                  <BoxelButton
-                    @kind='secondary'
-                    @size='small'
-                    class='panel-action'
-                    {{on 'click' this.restoreDefault}}
-                  >
-                    Restore default system card
-                  </BoxelButton>
-                {{/unless}}
-              </div>
+      <div class='top-bar'>
+        {{#if this.hasLoaded}}
+          {{#unless this.cloneTask.isRunning}}
+            {{#if this.isActive}}
+              <button
+                class='status-badge active {{if this.isExpanded "expanded"}}'
+                type='button'
+                {{on 'click' this.toggleExpanded}}
+              >
+                Active System Card
+                <svg class='chevron' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'></polyline></svg>
+              </button>
+            {{else if this.isInactive}}
+              <button
+                class='status-badge inactive {{if this.isExpanded "expanded"}}'
+                type='button'
+                {{on 'click' this.toggleExpanded}}
+              >
+                Inactive
+                <svg class='chevron' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'></polyline></svg>
+              </button>
             {{/if}}
-          {{else if this.isInactive}}
-            <button
-              class='status-badge inactive {{if this.isExpanded "expanded"}}'
-              type='button'
-              {{on 'click' this.toggleExpanded}}
-            >
-              Inactive
-              <svg class='chevron' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'></polyline></svg>
-            </button>
-            {{#if this.isExpanded}}
-              <div class='badge-panel'>
-                <div class='panel-row'>
-                  <span class='panel-label'>Currently active:</span>
-                  <BoxelButton
-                    @kind='text-only'
-                    @size='small'
-                    class='panel-link'
-                    {{on 'click' this.navigateToActive}}
-                  >
-                    {{this.activeSystemCardId}}
-                  </BoxelButton>
-                </div>
-                <BoxelButton
-                  @kind='primary-dark'
-                  @size='small'
-                  class='panel-action'
-                  {{on 'click' this.setAsActive}}
-                >
-                  Make This My System Card
-                </BoxelButton>
-              </div>
-            {{/if}}
-          {{/if}}
-        </div>
-      {{/if}}
+          {{/unless}}
+        {{/if}}
 
-      <div class='clone-button-container'>
         <BoxelDropdown>
           <:trigger as |bindings|>
             <BoxelButton
@@ -301,7 +272,7 @@ class SystemCardIsolated extends Component<typeof SystemCard> {
               @loading={{this.cloneTask.isRunning}}
               {{bindings}}
             >
-              Clone
+              {{if this.cloneTask.isRunning (concat "Cloning to " this.cloningToRealmName) "Clone"}}
             </BoxelButton>
           </:trigger>
           <:content as |dd|>
@@ -313,6 +284,52 @@ class SystemCardIsolated extends Component<typeof SystemCard> {
           </:content>
         </BoxelDropdown>
       </div>
+
+      {{#if this.hasLoaded}}
+        {{#unless this.cloneTask.isRunning}}
+          {{#if this.isExpanded}}
+            <div class='badge-panel-container'>
+              {{#if this.isActive}}
+                <div class='badge-panel'>
+                  <span class='panel-label'>This system card is currently active.</span>
+                  {{#unless this.activeIsDefault}}
+                    <BoxelButton
+                      @kind='secondary'
+                      @size='small'
+                      class='panel-action'
+                      {{on 'click' this.restoreDefault}}
+                    >
+                      Restore default system card
+                    </BoxelButton>
+                  {{/unless}}
+                </div>
+              {{else if this.isInactive}}
+                <div class='badge-panel'>
+                  <div class='panel-row'>
+                    <span class='panel-label'>Currently active:</span>
+                    <BoxelButton
+                      @kind='text-only'
+                      @size='small'
+                      class='panel-link'
+                      {{on 'click' this.navigateToActive}}
+                    >
+                      {{this.activeSystemCardId}}
+                    </BoxelButton>
+                  </div>
+                  <BoxelButton
+                    @kind='primary-dark'
+                    @size='small'
+                    class='panel-action'
+                    {{on 'click' this.setAsActive}}
+                  >
+                    Make This My System Card
+                  </BoxelButton>
+                </div>
+              {{/if}}
+            </div>
+          {{/if}}
+        {{/unless}}
+      {{/if}}
 
       <div class='system-card-content'>
         <@fields.title />
@@ -328,14 +345,14 @@ class SystemCardIsolated extends Component<typeof SystemCard> {
         padding: var(--boxel-sp-lg);
       }
 
-      .status-badge-container {
+      .top-bar {
         position: absolute;
         top: var(--boxel-sp-sm);
         right: var(--boxel-sp-sm);
         z-index: 1;
         display: flex;
-        flex-direction: column;
-        align-items: flex-end;
+        align-items: center;
+        gap: var(--boxel-sp-xs);
       }
 
       .status-badge {
@@ -366,8 +383,7 @@ class SystemCardIsolated extends Component<typeof SystemCard> {
       }
 
       .status-badge.expanded {
-        border-bottom-left-radius: 0;
-        border-bottom-right-radius: 0;
+        filter: brightness(0.95);
       }
 
       .chevron {
@@ -384,7 +400,7 @@ class SystemCardIsolated extends Component<typeof SystemCard> {
       .badge-panel {
         background: var(--boxel-light, #ffffff);
         border: 1px solid var(--boxel-200, #e8e8e8);
-        border-radius: 0 0 var(--boxel-border-radius-sm) var(--boxel-border-radius-sm);
+        border-radius: var(--boxel-border-radius-sm);
         padding: var(--boxel-sp-xs);
         display: flex;
         flex-direction: column;
@@ -420,11 +436,14 @@ class SystemCardIsolated extends Component<typeof SystemCard> {
         width: 100%;
       }
 
-      .clone-button-container {
+      .badge-panel-container {
         position: absolute;
-        top: var(--boxel-sp-sm);
-        left: var(--boxel-sp-sm);
+        top: calc(var(--boxel-sp-sm) + 30px);
+        right: var(--boxel-sp-sm);
         z-index: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
       }
 
       .realm-dropdown-menu {
