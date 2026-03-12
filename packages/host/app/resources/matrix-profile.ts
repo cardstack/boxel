@@ -26,6 +26,13 @@ export class MatrixProfileResource extends Resource<Args> {
     let { userId } = named;
     this.userId = userId;
 
+    if (!userId) {
+      this.email = undefined;
+      this.threePids = [];
+      this.avatarUrl = undefined;
+      this.displayName = undefined;
+    }
+
     this.loaded = this.load.perform();
   }
 
