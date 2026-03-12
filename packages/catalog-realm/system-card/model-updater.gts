@@ -23,6 +23,8 @@ import {
 } from '@cardstack/openrouter/openrouter-model';
 import { tracked } from '@glimmer/tracking';
 
+const OPENROUTER_MODEL_MODULE = '@cardstack/openrouter/openrouter-model';
+
 class Isolated extends Component<typeof ModelUpdater> {
   @tracked isProcessing = false;
   @tracked statusMessage = '';
@@ -117,7 +119,7 @@ class Isolated extends Component<typeof ModelUpdater> {
   get modelSearchQuery_computed(): Query {
     const baseFilter: any = {
       type: {
-        module: new URL('./openrouter-model', import.meta.url).href,
+        module: OPENROUTER_MODEL_MODULE,
         name: 'OpenRouterModel',
       },
     };
@@ -130,7 +132,7 @@ class Isolated extends Component<typeof ModelUpdater> {
             baseFilter,
             {
               on: {
-                module: new URL('./openrouter-model', import.meta.url).href,
+                module: OPENROUTER_MODEL_MODULE,
                 name: 'OpenRouterModel',
               },
               contains: { name: this.modelSearchQuery },
@@ -141,7 +143,7 @@ class Isolated extends Component<typeof ModelUpdater> {
           {
             by: 'name',
             on: {
-              module: new URL('./openrouter-model', import.meta.url).href,
+              module: OPENROUTER_MODEL_MODULE,
               name: 'OpenRouterModel',
             },
             direction: 'asc',
@@ -157,7 +159,7 @@ class Isolated extends Component<typeof ModelUpdater> {
         {
           by: 'name',
           on: {
-            module: new URL('./openrouter-model', import.meta.url).href,
+            module: OPENROUTER_MODEL_MODULE,
             name: 'OpenRouterModel',
           },
           direction: 'asc',
@@ -405,7 +407,7 @@ class Isolated extends Component<typeof ModelUpdater> {
               },
               meta: {
                 adoptsFrom: {
-                  module: '../openrouter-model',
+                  module: OPENROUTER_MODEL_MODULE,
                   name: 'OpenRouterModel',
                 },
               },

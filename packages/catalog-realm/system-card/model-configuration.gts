@@ -3,11 +3,13 @@ import { ModelConfiguration as BaseModelConfiguration } from 'https://cardstack.
 import {
   field,
   contains,
+  containsMany,
   linksTo,
   Component,
 } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
 import NumberField from 'https://cardstack.com/base/number';
+import BooleanField from 'https://cardstack.com/base/boolean';
 import enumField from 'https://cardstack.com/base/enum';
 import { OpenRouterModel } from '@cardstack/openrouter/openrouter-model';
 
@@ -30,6 +32,8 @@ const ThinkingEffortField = enumField(StringField, {
     { value: 'high', label: 'High (80% tokens)' },
   ],
 });
+
+const TRAILING_ZERO_DECIMAL_RE = new RegExp('\\.0$');
 
 export class ModelConfiguration extends BaseModelConfiguration {
   static displayName = 'Model Configuration';
@@ -80,7 +84,7 @@ export class ModelConfiguration extends BaseModelConfiguration {
     },
   });
 
-  @field toolsSupported = contains(StringField, {
+  @field toolsSupported = contains(BooleanField, {
     computeVia: function (this: ModelConfiguration) {
       try {
         return this.openRouterModel?.toolsSupported ?? false;
@@ -90,7 +94,7 @@ export class ModelConfiguration extends BaseModelConfiguration {
     },
   });
 
-  @field inputModalities = contains(StringField, {
+  @field inputModalities = containsMany(StringField, {
     computeVia: function (this: ModelConfiguration) {
       try {
         return this.openRouterModel?.inputModalities ?? [];
@@ -131,7 +135,7 @@ export class ModelConfiguration extends BaseModelConfiguration {
       const hasRoleSpecificPurpose = this.purpose && this.purpose !== '';
 
       if (hasRoleSpecificPurpose) {
-        const purposeEmojis: Record<string, string> = {
+        const purposeEmojis: { [key: string]: string } = {
           code: '\u{1F4BB}',
           design: '\u{1F3A8}',
           debug: '\u{1F527}',
@@ -140,13 +144,13 @@ export class ModelConfiguration extends BaseModelConfiguration {
         const emoji = purposeEmojis[this.purpose] || '\u{1F4AC}';
         const purposeLabel =
           this.purpose.charAt(0).toUpperCase() + this.purpose.slice(1);
-        const purposeSegment = `${emoji} ${purposeLabel}\u30FB`;
+        const purposeSegment = emoji + ' ' + purposeLabel + '\u30FB';
         const modelSegment = modelName || fullModelName || 'Model';
         const thinkingSuffix =
           this.thinkingEffort && this.thinkingEffort !== 'none'
             ? '\u30FBThinking'
             : '';
-        const autoTitle = `${purposeSegment}${modelSegment}${thinkingSuffix}`;
+        const autoTitle = purposeSegment + modelSegment + thinkingSuffix;
         return this.cardInfo?.name || autoTitle;
       }
 
@@ -155,7 +159,7 @@ export class ModelConfiguration extends BaseModelConfiguration {
           this.thinkingEffort && this.thinkingEffort !== 'none'
             ? '\u30FBThinking'
             : '';
-        const autoTitle = `\u2713 ${fullModelName}${thinkingSuffix}`;
+        const autoTitle = '\u2713 ' + fullModelName + thinkingSuffix;
         return this.cardInfo?.name || autoTitle;
       }
 
@@ -212,14 +216,19 @@ export class ModelConfiguration extends BaseModelConfiguration {
     },
   });
 
-  static fitted = class Fitted extends Component<typeof this> {
+}
+
+class ModelConfigurationFitted extends Component<typeof ModelConfiguration> {
     formatContext(num: number | undefined): string {
       if (!num) return '\u2014';
       if (num >= 1000000) {
-        return `${(num / 1000000).toFixed(1).replace(/\.0$/, '')}M`;
+        return (
+          (num / 1000000).toFixed(1).replace(TRAILING_ZERO_DECIMAL_RE, '') +
+          'M'
+        );
       }
       if (num >= 1000) {
-        return `${(num / 1000).toFixed(0)}K`;
+        return (num / 1000).toFixed(0) + 'K';
       }
       return num.toLocaleString('en-US');
     }
@@ -788,5 +797,6 @@ export class ModelConfiguration extends BaseModelConfiguration {
         }
       </style>
     </template>
-  };
 }
+
+ModelConfiguration.fitted = ModelConfigurationFitted;
