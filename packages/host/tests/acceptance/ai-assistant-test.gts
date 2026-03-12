@@ -102,6 +102,7 @@ let matrixRoomId: string;
 let mockedFileContent = 'Hello, world!';
 const TEST_MODEL_NAMES: Record<string, string> = {
   'openai/gpt-5': 'OpenAI: GPT-5',
+  'openai/gpt-5-extended': 'OpenAI: GPT-5 Extended Thinking',
   'openai/gpt-4o-mini': 'OpenAI: GPT-4o-mini',
   'anthropic/claude-sonnet-4.6': 'Anthropic: Claude Sonnet 4.6',
   'anthropic/claude-sonnet-4.5': 'Anthropic: Claude Sonnet 4.5',
@@ -115,6 +116,7 @@ const TEST_MODEL_NAMES: Record<string, string> = {
 // 'ModelConfiguration/gpt-5.json' → `${testRealmURL}ModelConfiguration/gpt-5`).
 const TEST_MODEL_CONFIG_IDS: Record<string, string> = {
   'openai/gpt-5': `${testRealmURL}ModelConfiguration/gpt-5`,
+  'openai/gpt-5-extended': `${testRealmURL}ModelConfiguration/gpt-5-extended`,
   'openai/gpt-4o-mini': `${testRealmURL}ModelConfiguration/gpt-4o-mini`,
   'anthropic/claude-sonnet-4.6': `${testRealmURL}ModelConfiguration/claude-sonnet-4.6`,
   'anthropic/claude-sonnet-4.5': `${testRealmURL}ModelConfiguration/claude-sonnet-4.5`,
@@ -323,6 +325,15 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       reasoningEffort: 'minimal',
     });
 
+    let openAiGpt5ExtendedModel = new ModelConfiguration({
+      cardInfo: new CardInfoField({
+        name: modelNameFor('openai/gpt-5-extended'),
+      }),
+      modelId: 'openai/gpt-5',
+      toolsSupported: true,
+      reasoningEffort: 'high',
+    });
+
     let openAiGpt4oMiniModel = new ModelConfiguration({
       cardInfo: new CardInfoField({
         name: modelNameFor('openai/gpt-4o-mini'),
@@ -360,6 +371,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       defaultModelConfiguration: anthropicClaudeSonnet46Model,
       modelConfigurations: [
         openAiGpt5Model,
+        openAiGpt5ExtendedModel,
         openAiGpt4oMiniModel,
         anthropicClaudeSonnet46Model,
         anthropicClaudeSonnet45Model,
@@ -512,6 +524,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
         },
         'ModelConfiguration/gpt-4o-mini.json': openAiGpt4oMiniModel,
         'ModelConfiguration/gpt-5.json': openAiGpt5Model,
+        'ModelConfiguration/gpt-5-extended.json': openAiGpt5ExtendedModel,
         'ModelConfiguration/claude-sonnet-4.6.json':
           anthropicClaudeSonnet46Model,
         'ModelConfiguration/claude-sonnet-4.5.json':
@@ -701,9 +714,9 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     assert.dom('[data-test-llm-select-selected]').hasText(defaultModelName);
     await click('[data-test-llm-select-selected]');
 
-    // Should have 5 models from our system card
+    // Should have 6 models from our system card (including duplicate modelId with different config)
     assert.dom('[data-test-llm-select-item]').exists({
-      count: 5,
+      count: 6,
     });
 
     let llmIdToChangeTo = 'anthropic/claude-3.7-sonnet';
@@ -787,6 +800,83 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       secondState.reasoningEffort,
       'minimal',
       'Active LLM event records configured reasoning effort for GPT-5',
+    );
+  });
+
+  test('duplicate model IDs render as distinct menu items with correct state', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+    await click('[data-test-open-ai-assistant]');
+    await waitFor(`[data-room-settled]`);
+    await click('[data-test-llm-select-selected]');
+
+    let gpt5ConfigId = configIdFor('openai/gpt-5');
+    let gpt5ExtendedConfigId = configIdFor('openai/gpt-5-extended');
+
+    // Both configs with the same modelId should appear as distinct menu items
+    assert
+      .dom(`[data-test-llm-select-item="${gpt5ConfigId}"]`)
+      .exists('GPT-5 (minimal) config appears in the menu');
+    assert
+      .dom(`[data-test-llm-select-item="${gpt5ExtendedConfigId}"]`)
+      .exists('GPT-5 Extended Thinking config appears in the menu');
+    assert
+      .dom(`[data-test-llm-select-item="${gpt5ConfigId}"]`)
+      .hasText(modelNameFor('openai/gpt-5'));
+    assert
+      .dom(`[data-test-llm-select-item="${gpt5ExtendedConfigId}"]`)
+      .hasText(modelNameFor('openai/gpt-5-extended'));
+
+    // Select the extended thinking variant
+    await click(`[data-test-llm-select-item="${gpt5ExtendedConfigId}"] button`);
+    await click('[data-test-llm-select-selected]');
+
+    await waitUntil(() => {
+      let state = getRoomState(matrixRoomId, APP_BOXEL_ACTIVE_LLM, '');
+      return state.model === 'openai/gpt-5' && state.reasoningEffort === 'high';
+    });
+
+    let extendedState = getRoomState(matrixRoomId, APP_BOXEL_ACTIVE_LLM, '');
+    assert.strictEqual(
+      extendedState.model,
+      'openai/gpt-5',
+      'Extended thinking variant sends the same modelId',
+    );
+    assert.strictEqual(
+      extendedState.reasoningEffort,
+      'high',
+      'Extended thinking variant sends its own reasoningEffort',
+    );
+
+    // Now select the minimal variant
+    await click(`[data-test-llm-select-item="${gpt5ConfigId}"] button`);
+    await click('[data-test-llm-select-selected]');
+
+    await waitUntil(() => {
+      let state = getRoomState(matrixRoomId, APP_BOXEL_ACTIVE_LLM, '');
+      return (
+        state.model === 'openai/gpt-5' && state.reasoningEffort === 'minimal'
+      );
+    });
+
+    let minimalState = getRoomState(matrixRoomId, APP_BOXEL_ACTIVE_LLM, '');
+    assert.strictEqual(
+      minimalState.model,
+      'openai/gpt-5',
+      'Minimal variant sends the same modelId',
+    );
+    assert.strictEqual(
+      minimalState.reasoningEffort,
+      'minimal',
+      'Minimal variant sends its own reasoningEffort',
     );
   });
 
