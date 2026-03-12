@@ -20,7 +20,7 @@
     "relationships": {
       "cardInfo.theme": {
         "links": {
-          "self": "https://realms-staging.stack.cards/catalog/Theme/boxel-brand-guide"
+          "self": "@cardstack/catalog/Theme/boxel-brand-guide"
         }
       }
     }
