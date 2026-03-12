@@ -1335,7 +1335,7 @@ export default class MatrixService extends Service {
     this.flushTimeline = undefined;
     this.flushRoomState = undefined;
     this.timelineLoadingState.clear();
-    this._client = this.matrixSDK.createClient({ baseUrl: matrixURL });
+    this._client = this.#matrixSDK?.createClient({ baseUrl: matrixURL });
     this._currentRoomId = undefined;
     this._isInitializingNewUser = false;
     this.postLoginCompleted = false;
