@@ -175,7 +175,7 @@ catalogs:
       specifier: ^21.1.1
       version: 21.1.7
     '@types/jsonwebtoken':
-      specifier: ^9.0.5
+      specifier: 9.0.10
       version: 9.0.10
     '@types/koa':
       specifier: ^2.13.5
@@ -469,7 +469,7 @@ catalogs:
       specifier: ^1.1.2
       version: 1.1.2
     jsonwebtoken:
-      specifier: ^9.0.2
+      specifier: 9.0.3
       version: 9.0.3
     koa:
       specifier: ^2.14.1
@@ -2838,6 +2838,9 @@ importers:
       '@types/fs-extra':
         specifier: 'catalog:'
         version: 11.0.4
+      '@types/jsonwebtoken':
+        specifier: 'catalog:'
+        version: 9.0.10
       '@types/node':
         specifier: 'catalog:'
         version: 24.10.8
@@ -2859,6 +2862,9 @@ importers:
       fs-extra:
         specifier: 'catalog:'
         version: 11.3.3
+      jsonwebtoken:
+        specifier: 'catalog:'
+        version: 9.0.3
       pg:
         specifier: 'catalog:'
         version: 8.16.3
@@ -2868,6 +2874,9 @@ importers:
       ts-node:
         specifier: ^10.9.1
         version: 10.9.2(@types/node@24.10.8)(typescript@5.9.3)
+      tsx:
+        specifier: ^4.21.0
+        version: 4.21.0
       typescript:
         specifier: 'catalog:'
         version: 5.9.3

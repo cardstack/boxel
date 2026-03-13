@@ -1,6 +1,6 @@
 import { spawnSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const packageRoot = resolve(fileURLToPath(new URL('.', import.meta.url)));
 const realmDir = resolve(

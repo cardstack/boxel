@@ -1,107 +1,33 @@
-// @ts-nocheck
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { createServer as createNetServer } from 'node:net';
 import {
-  mkdirSync,
   mkdtempSync,
   readdirSync,
   readFileSync,
   rmSync,
   statSync,
 } from 'node:fs';
-import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join, relative, resolve } from 'node:path';
 
+import fsExtra from 'fs-extra';
+import jwt from 'jsonwebtoken';
 import { Client as PgClient } from 'pg';
+import type { RealmAction } from '../../runtime-common/index.ts';
 
-const require = createRequire(import.meta.url);
-require('decorator-transforms/globals');
-const ContentTagGlobal = require('content-tag');
-if (!(globalThis as any).ContentTagGlobal) {
-  (globalThis as any).ContentTagGlobal = ContentTagGlobal;
-}
-if (!(globalThis as any).__environment) {
-  (globalThis as any).__environment = 'test';
-}
-const {
-  PgQueuePublisher,
-  PgQueueRunner,
-} = require('../../postgres/pg-queue.ts');
-const {
-  CachingDefinitionLookup,
-} = require('../../runtime-common/definition-lookup.ts');
-const { IndexWriter } = require('../../runtime-common/index-writer.ts');
-const { Worker } = require('../../runtime-common/worker.ts');
-const {
-  MatrixClient,
-  passwordFromSeed,
-} = require('../../runtime-common/matrix-client.ts');
-const { RealmServer } = require('../../realm-server/server.ts');
-const { registerUser } = require('../../realm-server/synapse.ts');
-const {
-  createRemotePrerenderer,
-} = require('../../realm-server/prerender/remote-prerenderer.ts');
-const {
-  createPrerenderHttpServer,
-} = require('../../realm-server/prerender/prerender-app.ts');
-const {
-  closeServer,
-  createRealm,
-  createTestPgAdapter,
-  createVirtualNetwork,
-  getIndexHTML,
-  grafanaSecret,
-  matrixRegistrationSecret,
-  matrixURL,
-  realmSecretSeed,
-  realmServerSecretSeed,
-  testCreatePrerenderAuth,
-  waitUntil,
-} = require('../../realm-server/tests/helpers/index.ts');
+type RealmPermissions = Record<string, RealmAction[]>;
 
-type LooseSingleCardDocument = any;
-type QueuePublisher = any;
-type QueueRunner = any;
-type RealmPermissions = Record<string, string[]>;
-
-const DEFAULT_REALM_PORT = Number(
-  process.env.SOFTWARE_FACTORY_REALM_PORT ?? 4444,
-);
-const DEFAULT_REALM_URL = new URL(
-  process.env.SOFTWARE_FACTORY_REALM_URL ??
-    `http://127.0.0.1:${DEFAULT_REALM_PORT}/`,
-);
-const DEFAULT_REALM_DIR = resolve(
-  process.cwd(),
-  process.env.SOFTWARE_FACTORY_REALM_DIR ?? 'demo-realm',
-);
-const DEFAULT_REALM_OWNER = '@software-factory-owner:localhost';
-const DEFAULT_HOST_URL = process.env.HOST_URL ?? 'http://localhost:4200/';
-const DEFAULT_BASE_REALM_URL =
-  process.env.SOFTWARE_FACTORY_BASE_REALM_URL ?? 'http://localhost:4201/base/';
-const DEFAULT_MATRIX_URL = new URL(process.env.MATRIX_URL ?? matrixURL.href);
-const DEFAULT_MATRIX_USERNAME =
-  process.env.SOFTWARE_FACTORY_MATRIX_USERNAME ?? 'software-factory-backend';
-const DEFAULT_MATRIX_SERVER_USERNAME =
-  process.env.SOFTWARE_FACTORY_MATRIX_SERVER_USERNAME ??
-  'software-factory-realm-server';
-const DEFAULT_MATRIX_BROWSER_USERNAME =
-  process.env.SOFTWARE_FACTORY_BROWSER_MATRIX_USERNAME ??
-  'software-factory-browser';
-const DEFAULT_PERMISSIONS: RealmPermissions = {
-  '*': ['read'],
-  [DEFAULT_REALM_OWNER]: ['read', 'write', 'realm-owner'],
+type FactorySupportContext = {
+  matrixURL: string;
+  matrixRegistrationSecret: string;
+  prerenderURL: string;
 };
-const TEST_PG_PORT = process.env.PGPORT ?? '55436';
-const TEST_PG_HOST = process.env.PGHOST ?? '127.0.0.1';
-const TEST_PG_USER = process.env.PGUSER ?? 'postgres';
-const CACHE_VERSION = 1;
 
-let prepareTestPgPromise: Promise<void> | undefined;
-let ensureMatrixUsersPromise: Promise<void> | undefined;
-let ensurePrerequisitesPromise: Promise<void> | undefined;
+type SynapseInstance = {
+  synapseId: string;
+  port: number;
+  registrationSecret: string;
+};
 
 export interface FactoryRealmOptions {
   realmDir?: string;
@@ -110,6 +36,7 @@ export interface FactoryRealmOptions {
   useCache?: boolean;
   cacheSalt?: string;
   templateDatabaseName?: string;
+  context?: FactoryTestContext | FactorySupportContext;
 }
 
 export interface FactoryRealmTemplate {
@@ -119,243 +46,100 @@ export interface FactoryRealmTemplate {
   cacheHit: boolean;
 }
 
+export interface FactoryTestContext extends FactorySupportContext {
+  cacheKey: string;
+  fixtureHash: string;
+  realmDir: string;
+  realmURL: string;
+  templateDatabaseName: string;
+}
+
 export interface StartedFactoryRealm {
   realmDir: string;
   realmURL: URL;
   databaseName: string;
   cardURL(path: string): string;
-  createBearerToken(user?: string, permissions?: string[]): string;
+  createBearerToken(user?: string, permissions?: RealmAction[]): string;
   authorizationHeaders(
     user?: string,
-    permissions?: string[],
+    permissions?: RealmAction[],
   ): Record<string, string>;
   stop(): Promise<void>;
 }
 
-function applyTestPgEnv() {
-  process.env.PGHOST = TEST_PG_HOST;
-  process.env.PGPORT = TEST_PG_PORT;
-  process.env.PGUSER = TEST_PG_USER;
-}
+type FactoryGlobalContextHandle = {
+  context: FactoryTestContext;
+  stop(): Promise<void>;
+};
 
-function pgAdminConnectionConfig(database = 'postgres') {
-  return {
-    host: TEST_PG_HOST,
-    port: Number(TEST_PG_PORT),
-    user: TEST_PG_USER,
-    password: process.env.PGPASSWORD || undefined,
-    database,
-  };
-}
+type SpawnedProcess = ChildProcess & {
+  send(message: string): boolean;
+};
 
-function quotePgIdentifier(identifier: string): string {
-  if (!/^[a-zA-Z0-9_]+$/.test(identifier)) {
-    throw new Error(`unsafe postgres identifier: ${identifier}`);
-  }
-  return `"${identifier}"`;
-}
+type RunningFactoryStack = {
+  realmServer: SpawnedProcess;
+  workerManager: SpawnedProcess;
+  rootDir: string;
+};
 
-async function runCommand(command: string, args: string[], cwd: string) {
-  await new Promise<void>((resolve, reject) => {
-    let child = spawn(command, args, {
-      cwd,
-      stdio: 'inherit',
-      env: {
-        ...process.env,
-        PGHOST: TEST_PG_HOST,
-        PGPORT: TEST_PG_PORT,
-        PGUSER: TEST_PG_USER,
-      },
-    });
-    child.on('error', reject);
-    child.on('exit', (code) => {
-      if (code === 0) {
-        resolve();
-      } else {
-        reject(
-          new Error(`command failed: ${command} ${args.join(' ')} (${code})`),
-        );
-      }
-    });
-  });
-}
+const packageRoot = resolve(process.cwd());
+const workspaceRoot = resolve(packageRoot, '..', '..');
+const realmServerDir = resolve(packageRoot, '..', 'realm-server');
+const baseRealmDir = resolve(packageRoot, '..', 'base');
+const skillsRealmDir = resolve(packageRoot, '..', 'skills-realm', 'contents');
+const boxelIconsDir = resolve(packageRoot, '..', 'boxel-icons');
+const prepareTestPgScript = resolve(
+  realmServerDir,
+  'tests',
+  'scripts',
+  'prepare-test-pg.sh',
+);
 
-async function canConnectToTestPg(): Promise<boolean> {
-  let client = new PgClient({
-    ...pgAdminConnectionConfig(),
-    connectionTimeoutMillis: 1000,
-  });
-  try {
-    await client.connect();
-    await client.query('SELECT 1');
-    return true;
-  } catch {
-    return false;
-  } finally {
-    try {
-      await client.end();
-    } catch {
-      // best effort cleanup
-    }
-  }
-}
+const CACHE_VERSION = 4;
+const REALM_SERVER_PORT = Number(
+  process.env.SOFTWARE_FACTORY_REALM_PORT ?? 4205,
+);
+const WORKER_MANAGER_PORT = Number(
+  process.env.SOFTWARE_FACTORY_WORKER_MANAGER_PORT ?? 4232,
+);
+const DEFAULT_REALM_URL = new URL(
+  process.env.SOFTWARE_FACTORY_REALM_URL ??
+    `http://localhost:${REALM_SERVER_PORT}/test/`,
+);
+const DEFAULT_REALM_DIR = resolve(
+  packageRoot,
+  process.env.SOFTWARE_FACTORY_REALM_DIR ?? 'demo-realm',
+);
+const DEFAULT_HOST_URL = process.env.HOST_URL ?? 'http://localhost:4200/';
+const DEFAULT_ICONS_URL = process.env.ICONS_URL ?? 'http://localhost:4206/';
+const DEFAULT_PG_PORT = process.env.SOFTWARE_FACTORY_PGPORT ?? '55436';
+const DEFAULT_PG_HOST = process.env.SOFTWARE_FACTORY_PGHOST ?? '127.0.0.1';
+const DEFAULT_PG_USER = process.env.SOFTWARE_FACTORY_PGUSER ?? 'postgres';
+const DEFAULT_MIGRATED_TEMPLATE_DB =
+  process.env.SOFTWARE_FACTORY_MIGRATED_TEMPLATE_DB ??
+  'boxel_migrated_template';
+const DEFAULT_REALM_OWNER = '@software-factory-owner:localhost';
+const REALM_SECRET_SEED = "shhh! it's a secret";
+const REALM_SERVER_SECRET_SEED = "mum's the word";
+const GRAFANA_SECRET = "shhh! it's a secret";
+const DEFAULT_MATRIX_SERVER_USERNAME =
+  process.env.SOFTWARE_FACTORY_MATRIX_SERVER_USERNAME ?? 'realm_server';
+const DEFAULT_MATRIX_BROWSER_USERNAME =
+  process.env.SOFTWARE_FACTORY_BROWSER_MATRIX_USERNAME ??
+  'software-factory-browser';
+const DEFAULT_BROWSER_MATRIX_URL =
+  process.env.SOFTWARE_FACTORY_BROWSER_MATRIX_URL ?? 'http://localhost:8008/';
+const INCLUDE_SKILLS = process.env.SOFTWARE_FACTORY_INCLUDE_SKILLS === '1';
+const DEFAULT_PERMISSIONS: RealmPermissions = {
+  '*': ['read'],
+  [DEFAULT_REALM_OWNER]: ['read', 'write', 'realm-owner'],
+};
+const managedProcessStdio =
+  process.env.SOFTWARE_FACTORY_DEBUG_SERVER === '1'
+    ? ['ignore', 'inherit', 'inherit', 'ipc']
+    : ['ignore', 'ignore', 'ignore', 'ipc'];
 
-async function ensureTestPgPrepared() {
-  applyTestPgEnv();
-  if (!prepareTestPgPromise) {
-    prepareTestPgPromise = (async () => {
-      if (await canConnectToTestPg()) {
-        return;
-      }
-      let script = resolve(
-        process.cwd(),
-        '../realm-server/tests/scripts/prepare-test-pg.sh',
-      );
-      await runCommand('bash', [script], process.cwd());
-    })().catch((error) => {
-      prepareTestPgPromise = undefined;
-      throw error;
-    });
-  }
-  await prepareTestPgPromise;
-}
-
-async function ensureServiceReady(
-  name: string,
-  request: Promise<Response>,
-  url: string,
-): Promise<void> {
-  let response: Response;
-  try {
-    response = await request;
-  } catch (error) {
-    throw new Error(
-      `${name} is not reachable at ${url}: ${
-        error instanceof Error ? error.message : String(error)
-      }`,
-    );
-  }
-
-  if (!response.ok) {
-    throw new Error(
-      `${name} is not ready at ${url}: status ${response.status}`,
-    );
-  }
-}
-
-async function ensureFactoryPrerequisites(): Promise<void> {
-  if (!ensurePrerequisitesPromise) {
-    ensurePrerequisitesPromise = (async () => {
-      await ensureServiceReady(
-        'Host app',
-        fetch(DEFAULT_HOST_URL),
-        DEFAULT_HOST_URL,
-      );
-      let baseInfoURL = new URL('_info', DEFAULT_BASE_REALM_URL).href;
-      await ensureServiceReady(
-        'Base realm',
-        fetch(baseInfoURL, {
-          method: 'QUERY',
-          headers: {
-            Accept: 'application/vnd.api+json',
-          },
-        }),
-        baseInfoURL,
-      );
-      let matrixVersionsURL = new URL(
-        '_matrix/client/versions',
-        DEFAULT_MATRIX_URL,
-      ).href;
-      await ensureServiceReady(
-        'Matrix server',
-        fetch(matrixVersionsURL),
-        matrixVersionsURL,
-      );
-    })().catch((error) => {
-      ensurePrerequisitesPromise = undefined;
-      throw error;
-    });
-  }
-
-  await ensurePrerequisitesPromise;
-}
-
-async function ensureFactoryMatrixUser(username: string): Promise<void> {
-  let password = await passwordFromSeed(username, realmSecretSeed);
-  let loginResponse = await fetch(
-    new URL('_matrix/client/v3/login', DEFAULT_MATRIX_URL),
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        identifier: {
-          type: 'm.id.user',
-          user: username,
-        },
-        password,
-        type: 'm.login.password',
-      }),
-    },
-  );
-
-  if (loginResponse.ok) {
-    return;
-  }
-
-  if (loginResponse.status !== 403) {
-    throw new Error(
-      `Unable to probe matrix user ${username}: ${loginResponse.status} ${await loginResponse.text()}`,
-    );
-  }
-
-  try {
-    await registerUser({
-      matrixURL: DEFAULT_MATRIX_URL,
-      displayname: username,
-      username,
-      password,
-      registrationSecret: matrixRegistrationSecret,
-    });
-  } catch (error) {
-    let message = String(error);
-    if (
-      !message.includes('M_USER_IN_USE') &&
-      !message.includes('User ID already taken') &&
-      !message.includes('already taken')
-    ) {
-      throw error;
-    }
-  }
-
-  let registeredClient = new MatrixClient({
-    matrixURL: DEFAULT_MATRIX_URL,
-    username,
-    seed: realmSecretSeed,
-  });
-  await registeredClient.login();
-}
-
-async function ensureFactoryMatrixUsers(): Promise<void> {
-  if (
-    !matrixRegistrationSecret ||
-    matrixRegistrationSecret === 'software-factory-no-matrix'
-  ) {
-    return;
-  }
-  if (!ensureMatrixUsersPromise) {
-    ensureMatrixUsersPromise = (async () => {
-      await ensureFactoryMatrixUser(DEFAULT_MATRIX_USERNAME);
-      await ensureFactoryMatrixUser(DEFAULT_MATRIX_SERVER_USERNAME);
-      await ensureFactoryMatrixUser(DEFAULT_MATRIX_BROWSER_USERNAME);
-    })().catch((error) => {
-      ensureMatrixUsersPromise = undefined;
-      throw error;
-    });
-  }
-  await ensureMatrixUsersPromise;
-}
+let preparePgPromise: Promise<void> | undefined;
 
 function stableStringify(value: unknown): string {
   if (value === null || typeof value !== 'object') {
@@ -390,42 +174,6 @@ function shouldIgnoreFixturePath(relativePath: string): boolean {
         'test-results',
       ].includes(segment),
     );
-}
-
-function readRealmFixture(
-  realmDir: string,
-): Record<string, string | LooseSingleCardDocument> {
-  let fileSystem: Record<string, string | LooseSingleCardDocument> = {};
-
-  function visit(currentDir: string) {
-    for (let entry of readdirSync(currentDir, { withFileTypes: true })) {
-      let absolutePath = join(currentDir, entry.name);
-      let relativePath = relative(realmDir, absolutePath).replace(/\\/g, '/');
-      if (shouldIgnoreFixturePath(relativePath)) {
-        continue;
-      }
-      if (entry.isDirectory()) {
-        visit(absolutePath);
-        continue;
-      }
-      if (!entry.isFile()) {
-        continue;
-      }
-      let raw = readFileSync(absolutePath, 'utf8');
-      if (relativePath.endsWith('.json')) {
-        try {
-          fileSystem[relativePath] = JSON.parse(raw) as LooseSingleCardDocument;
-          continue;
-        } catch {
-          // fall back to a plain text file if JSON parsing fails
-        }
-      }
-      fileSystem[relativePath] = raw;
-    }
-  }
-
-  visit(realmDir);
-  return fileSystem;
 }
 
 function hashRealmFixture(realmDir: string): string {
@@ -463,13 +211,253 @@ function templateDatabaseNameForCacheKey(cacheKey: string): string {
 }
 
 function builderDatabaseNameForCacheKey(cacheKey: string): string {
-  return `sf_bld_${process.pid}_${cacheKey.slice(0, 16)}`;
+  return `sf_bld_${cacheKey.slice(0, 16)}`;
 }
 
 function runtimeDatabaseName(): string {
-  return `sf_run_${process.pid}_${Date.now().toString(36)}_${Math.random()
+  return `sf_run_${Date.now().toString(36)}_${Math.random()
     .toString(36)
     .slice(2, 8)}`;
+}
+
+function pgAdminConnectionConfig(database = 'postgres') {
+  return {
+    host: DEFAULT_PG_HOST,
+    port: Number(DEFAULT_PG_PORT),
+    user: DEFAULT_PG_USER,
+    password: process.env.PGPASSWORD || undefined,
+    database,
+  };
+}
+
+function quotePgIdentifier(identifier: string): string {
+  if (!/^[a-zA-Z0-9_]+$/.test(identifier)) {
+    throw new Error(`unsafe postgres identifier: ${identifier}`);
+  }
+  return `"${identifier}"`;
+}
+
+async function waitUntil<T>(
+  condition: () => Promise<T>,
+  options: {
+    timeout?: number;
+    interval?: number;
+    timeoutMessage?: string;
+  } = {},
+): Promise<T> {
+  let timeout = options.timeout ?? 30_000;
+  let interval = options.interval ?? 250;
+  let start = Date.now();
+  while (Date.now() - start < timeout) {
+    let result = await condition();
+    if (result) {
+      return result;
+    }
+    await new Promise((resolve) => setTimeout(resolve, interval));
+  }
+  throw new Error(options.timeoutMessage ?? 'Timed out waiting for condition');
+}
+
+async function canConnectToPg(): Promise<boolean> {
+  let client = new PgClient({
+    ...pgAdminConnectionConfig(),
+    connectionTimeoutMillis: 1000,
+  });
+  try {
+    await client.connect();
+    await client.query('SELECT 1');
+    return true;
+  } catch {
+    return false;
+  } finally {
+    try {
+      await client.end();
+    } catch {
+      // best effort cleanup
+    }
+  }
+}
+
+function runCommand(command: string, args: string[], cwd: string) {
+  let result = spawnSync(command, args, {
+    cwd,
+    stdio: 'inherit',
+    env: {
+      ...process.env,
+      PGHOST: DEFAULT_PG_HOST,
+      PGPORT: DEFAULT_PG_PORT,
+      PGUSER: DEFAULT_PG_USER,
+    },
+  });
+  if (result.status !== 0) {
+    throw new Error(`command failed: ${command} ${args.join(' ')}`);
+  }
+}
+
+function cleanupStaleSynapseContainers() {
+  let result = spawnSync(
+    'docker',
+    [
+      'ps',
+      '-aq',
+      '--filter',
+      'name=synapsedocker-',
+      '--filter',
+      'name=boxel-synapse',
+    ],
+    {
+      cwd: workspaceRoot,
+      encoding: 'utf8',
+    },
+  );
+
+  if (result.status !== 0) {
+    return;
+  }
+
+  let containerIds = result.stdout
+    .split(/\s+/)
+    .map((id) => id.trim())
+    .filter(Boolean);
+
+  if (containerIds.length === 0) {
+    return;
+  }
+
+  spawnSync('docker', ['rm', '-f', ...containerIds], {
+    cwd: workspaceRoot,
+    stdio: 'ignore',
+  });
+}
+
+function maybeRequire(specifier: string) {
+  if (typeof require === 'function') {
+    return require(specifier);
+  }
+  return undefined;
+}
+
+async function loadSynapseModule() {
+  return (maybeRequire('../../matrix/docker/synapse/index.ts') ??
+    (await import('../../matrix/docker/synapse/index.ts'))) as {
+    registerUser: (
+      synapse: SynapseInstance,
+      username: string,
+      password: string,
+      admin?: boolean,
+      displayName?: string,
+    ) => Promise<unknown>;
+    synapseStart: (
+      opts?: { suppressRegistrationSecretFile?: true },
+      stopExisting?: boolean,
+    ) => Promise<SynapseInstance>;
+    synapseStop: (id: string) => Promise<void>;
+  };
+}
+
+async function loadIsolatedRealmServerModule() {
+  return (maybeRequire('../../matrix/helpers/isolated-realm-server.ts') ??
+    (await import('../../matrix/helpers/isolated-realm-server'))) as {
+    startPrerenderServer: () => Promise<{
+      url: string;
+      stop(): Promise<void>;
+    }>;
+  };
+}
+
+async function ensureHostReady(): Promise<void> {
+  let response: Response;
+  try {
+    response = await fetch(DEFAULT_HOST_URL);
+  } catch (error) {
+    throw new Error(
+      `Host app is not reachable at ${DEFAULT_HOST_URL}: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+  }
+  if (!response.ok) {
+    throw new Error(
+      `Host app is not ready at ${DEFAULT_HOST_URL}: status ${response.status}`,
+    );
+  }
+}
+
+async function ensureIconsReady(): Promise<{
+  stop?: () => Promise<void>;
+}> {
+  try {
+    let response = await fetch(DEFAULT_ICONS_URL);
+    if (response.ok) {
+      return {};
+    }
+  } catch {
+    // fall through and start the local icon server
+  }
+
+  let child = spawn('pnpm', ['serve'], {
+    cwd: boxelIconsDir,
+    detached: true,
+    stdio: ['ignore', 'pipe', 'pipe'],
+    env: process.env,
+  });
+
+  let logs = '';
+  child.stdout?.on('data', (chunk) => {
+    logs = `${logs}${String(chunk)}`.slice(-20_000);
+  });
+  child.stderr?.on('data', (chunk) => {
+    logs = `${logs}${String(chunk)}`.slice(-20_000);
+  });
+
+  await waitUntil(
+    async () => {
+      try {
+        let response = await fetch(DEFAULT_ICONS_URL);
+        return response.ok;
+      } catch {
+        return false;
+      }
+    },
+    {
+      timeout: 30_000,
+      interval: 250,
+      timeoutMessage: `Timed out waiting for icons server at ${DEFAULT_ICONS_URL}\n${logs}`,
+    },
+  );
+
+  return {
+    async stop() {
+      if (child.exitCode === null) {
+        try {
+          process.kill(-child.pid!, 'SIGTERM');
+        } catch {
+          // best effort cleanup
+        }
+      }
+    },
+  };
+}
+
+async function ensurePgReady(): Promise<void> {
+  if (!preparePgPromise) {
+    preparePgPromise = (async () => {
+      if (await canConnectToPg()) {
+        return;
+      }
+      runCommand('bash', [prepareTestPgScript], workspaceRoot);
+      await waitUntil(() => canConnectToPg(), {
+        timeout: 30_000,
+        interval: 250,
+        timeoutMessage: `Timed out waiting for Postgres on ${DEFAULT_PG_HOST}:${DEFAULT_PG_PORT}`,
+      });
+    })().catch((error) => {
+      preparePgPromise = undefined;
+      throw error;
+    });
+  }
+
+  await preparePgPromise;
 }
 
 async function databaseExists(databaseName: string): Promise<boolean> {
@@ -498,6 +486,23 @@ async function dropDatabase(databaseName: string): Promise<void> {
     );
     await client.query(
       `DROP DATABASE IF EXISTS ${quotePgIdentifier(databaseName)}`,
+    );
+  } finally {
+    await client.end();
+  }
+}
+
+async function cloneDatabaseFromTemplate(
+  templateDatabaseName: string,
+  databaseName: string,
+): Promise<void> {
+  let client = new PgClient(pgAdminConnectionConfig());
+  try {
+    await client.connect();
+    await client.query(
+      `CREATE DATABASE ${quotePgIdentifier(databaseName)} TEMPLATE ${quotePgIdentifier(
+        templateDatabaseName,
+      )}`,
     );
   } finally {
     await client.end();
@@ -533,10 +538,71 @@ async function createTemplateSnapshot(
   }
 }
 
-async function waitForQueueIdle(
+async function seedRealmPermissions(
   databaseName: string,
-  timeout = 30000,
+  realmURL: URL,
+  permissions: RealmPermissions,
 ): Promise<void> {
+  let client = new PgClient(pgAdminConnectionConfig(databaseName));
+  try {
+    await client.connect();
+    await client.query('BEGIN');
+
+    for (let [username, actions] of Object.entries(permissions)) {
+      if (!actions || actions.length === 0) {
+        await client.query(
+          `DELETE FROM realm_user_permissions
+           WHERE realm_url = $1 AND username = $2`,
+          [realmURL.href, username],
+        );
+        continue;
+      }
+
+      if (username !== '*') {
+        await client.query(
+          `INSERT INTO users (matrix_user_id)
+           VALUES ($1)
+           ON CONFLICT (matrix_user_id) DO NOTHING`,
+          [username],
+        );
+      }
+
+      await client.query(
+        `INSERT INTO realm_user_permissions (
+          realm_url,
+          username,
+          read,
+          write,
+          realm_owner
+        ) VALUES ($1, $2, $3, $4, $5)
+        ON CONFLICT (realm_url, username) DO UPDATE
+        SET read = EXCLUDED.read,
+            write = EXCLUDED.write,
+            realm_owner = EXCLUDED.realm_owner`,
+        [
+          realmURL.href,
+          username,
+          actions.includes('read'),
+          actions.includes('write'),
+          actions.includes('realm-owner'),
+        ],
+      );
+    }
+
+    await client.query('COMMIT');
+  } catch (error) {
+    try {
+      await client.query('ROLLBACK');
+    } catch {
+      // best effort cleanup
+    }
+    throw error;
+  } finally {
+    await client.end();
+  }
+}
+
+async function waitForQueueIdle(databaseName: string): Promise<void> {
   await waitUntil(
     async () => {
       let client = new PgClient(pgAdminConnectionConfig(databaseName));
@@ -558,41 +624,416 @@ async function waitForQueueIdle(
       }
     },
     {
-      timeout,
-      interval: 50,
-      timeoutMessage: 'waiting for queue to become idle',
+      timeout: 30_000,
+      interval: 100,
+      timeoutMessage: `Timed out waiting for queue to become idle in ${databaseName}`,
     },
   );
 }
 
-async function buildTemplate(
-  options: Required<
-    Pick<FactoryRealmOptions, 'realmDir' | 'realmURL' | 'permissions'>
-  > & {
-    cacheKey: string;
-    templateDatabaseName: string;
-  },
+function browserPassword(username: string): string {
+  let cleanUsername = username.replace(/^@/, '').replace(/:.*$/, '');
+  return createHash('sha256')
+    .update(cleanUsername)
+    .update(REALM_SECRET_SEED)
+    .digest('hex');
+}
+
+async function ensureSupportUsers(synapse: SynapseInstance): Promise<void> {
+  let { registerUser } = await loadSynapseModule();
+
+  await registerUser(
+    synapse,
+    DEFAULT_MATRIX_SERVER_USERNAME,
+    browserPassword(DEFAULT_MATRIX_SERVER_USERNAME),
+  );
+  await registerUser(
+    synapse,
+    DEFAULT_MATRIX_BROWSER_USERNAME,
+    browserPassword(DEFAULT_MATRIX_BROWSER_USERNAME),
+  );
+}
+
+function parseFactoryContext(): FactoryTestContext | undefined {
+  let raw = process.env.SOFTWARE_FACTORY_CONTEXT;
+  if (!raw) {
+    return undefined;
+  }
+  return JSON.parse(raw) as FactoryTestContext;
+}
+
+function hasTemplateDatabaseName(
+  context: FactorySupportContext | FactoryTestContext,
+): context is FactoryTestContext {
+  return 'templateDatabaseName' in context;
+}
+
+function buildRealmToken(
+  realmURL: URL,
+  user = DEFAULT_REALM_OWNER,
+  permissions = DEFAULT_PERMISSIONS[DEFAULT_REALM_OWNER] ?? [
+    'read',
+    'write',
+    'realm-owner',
+  ],
+): string {
+  return jwt.sign(
+    {
+      user,
+      realm: realmURL.href,
+      permissions,
+      sessionRoom: `software-factory-session-room-for-${user}`,
+      realmServerURL: new URL(realmURL.origin).href,
+    },
+    REALM_SECRET_SEED,
+    { expiresIn: '7d' },
+  );
+}
+
+function createProcessExitPromise(
+  proc: SpawnedProcess,
+  label: string,
+): Promise<never> {
+  return new Promise((_, reject) => {
+    proc.once('exit', (code, signal) => {
+      reject(
+        new Error(
+          `${label} exited before it became ready (code: ${code}, signal: ${signal})`,
+        ),
+      );
+    });
+    proc.once('error', reject);
+  });
+}
+
+async function waitForReady(
+  proc: SpawnedProcess,
+  label: string,
 ): Promise<void> {
-  let builderDatabaseName = builderDatabaseNameForCacheKey(options.cacheKey);
-  let runtime = await startFactoryRealmServer({
-    realmDir: options.realmDir,
-    realmURL: options.realmURL,
-    permissions: options.permissions,
-    useCache: false,
+  let timedOut = await Promise.race([
+    new Promise<void>((resolve) => {
+      let onMessage = (message: unknown) => {
+        if (message === 'ready') {
+          proc.off('message', onMessage);
+          resolve();
+        }
+      };
+      proc.on('message', onMessage);
+    }),
+    createProcessExitPromise(proc, label),
+    new Promise<true>((resolve) => setTimeout(() => resolve(true), 120_000)),
+  ]);
+
+  if (timedOut) {
+    throw new Error(`Timed out waiting for ${label} to start`);
+  }
+}
+
+async function stopManagedProcess(proc: SpawnedProcess): Promise<void> {
+  if (proc.exitCode !== null) {
+    return;
+  }
+  let stopped = new Promise<void>((resolve) => {
+    let onMessage = (message: unknown) => {
+      if (message === 'stopped') {
+        proc.off('message', onMessage);
+        resolve();
+      }
+    };
+    proc.on('message', onMessage);
+  });
+  proc.send('stop');
+  await Promise.race([
+    stopped,
+    new Promise<void>((resolve) => setTimeout(resolve, 15_000)),
+  ]);
+  proc.send('kill');
+}
+
+function copyRealmFixture(realmDir: string, destination: string): void {
+  fsExtra.copySync(realmDir, destination, {
+    preserveTimestamps: true,
+    filter(src) {
+      let relativePath = relative(realmDir, src).replace(/\\/g, '/');
+      return relativePath === '' || !shouldIgnoreFixturePath(relativePath);
+    },
+  });
+}
+
+async function startIsolatedRealmStack({
+  realmDir,
+  realmURL,
+  databaseName,
+  context,
+  migrateDB,
+}: {
+  realmDir: string;
+  realmURL: URL;
+  databaseName: string;
+  context: FactorySupportContext;
+  migrateDB: boolean;
+}): Promise<RunningFactoryStack> {
+  let rootDir = mkdtempSync(join(tmpdir(), 'software-factory-realms-'));
+  let testRealmDir = join(rootDir, 'test');
+  fsExtra.ensureDirSync(testRealmDir);
+  copyRealmFixture(realmDir, testRealmDir);
+
+  let env = {
+    ...process.env,
+    PGHOST: DEFAULT_PG_HOST,
+    PGPORT: DEFAULT_PG_PORT,
+    PGUSER: DEFAULT_PG_USER,
+    PGDATABASE: databaseName,
+    NODE_NO_WARNINGS: '1',
+    NODE_ENV: 'test',
+    REALM_SERVER_SECRET_SEED,
+    REALM_SECRET_SEED,
+    GRAFANA_SECRET,
+    MATRIX_URL: context.matrixURL,
+    MATRIX_REGISTRATION_SHARED_SECRET: context.matrixRegistrationSecret,
+    REALM_SERVER_MATRIX_USERNAME: DEFAULT_MATRIX_SERVER_USERNAME,
+    LOW_CREDIT_THRESHOLD: '2000',
+    PUBLISHED_REALM_BOXEL_SPACE_DOMAIN: `localhost:${REALM_SERVER_PORT}`,
+    PUBLISHED_REALM_BOXEL_SITE_DOMAIN: `localhost:${REALM_SERVER_PORT}`,
+  };
+
+  let workerArgs = [
+    '--transpileOnly',
+    'worker-manager',
+    `--port=${WORKER_MANAGER_PORT}`,
+    `--matrixURL=${context.matrixURL}`,
+    `--prerendererUrl=${context.prerenderURL}`,
+    `--fromUrl=${realmURL.href}`,
+    `--toUrl=${realmURL.href}`,
+    '--fromUrl=https://cardstack.com/base/',
+    `--toUrl=http://localhost:${REALM_SERVER_PORT}/base/`,
+  ];
+  if (INCLUDE_SKILLS) {
+    workerArgs.push(
+      `--fromUrl=http://localhost:${REALM_SERVER_PORT}/skills/`,
+      `--toUrl=http://localhost:${REALM_SERVER_PORT}/skills/`,
+    );
+  }
+  if (migrateDB) {
+    workerArgs.splice(5, 0, '--migrateDB');
+  }
+
+  let workerManager = spawn('ts-node', workerArgs, {
+    cwd: realmServerDir,
+    env,
+    stdio: managedProcessStdio,
+  }) as SpawnedProcess;
+
+  let serverArgs = [
+    '--transpileOnly',
+    'main',
+    `--port=${REALM_SERVER_PORT}`,
+    `--matrixURL=${context.matrixURL}`,
+    `--realmsRootPath=${rootDir}`,
+    `--workerManagerPort=${WORKER_MANAGER_PORT}`,
+    `--prerendererUrl=${context.prerenderURL}`,
+    `--path=${testRealmDir}`,
+    '--username=test_realm',
+    `--fromUrl=${realmURL.href}`,
+    `--toUrl=${realmURL.href}`,
+    '--username=base_realm',
+    `--path=${baseRealmDir}`,
+    '--fromUrl=https://cardstack.com/base/',
+    `--toUrl=http://localhost:${REALM_SERVER_PORT}/base/`,
+  ];
+  if (INCLUDE_SKILLS) {
+    serverArgs.splice(
+      11,
+      0,
+      '--username=skills_realm',
+      `--path=${skillsRealmDir}`,
+      `--fromUrl=http://localhost:${REALM_SERVER_PORT}/skills/`,
+      `--toUrl=http://localhost:${REALM_SERVER_PORT}/skills/`,
+    );
+  }
+
+  let realmServer = spawn('ts-node', serverArgs, {
+    cwd: realmServerDir,
+    env,
+    stdio: managedProcessStdio,
+  }) as SpawnedProcess;
+
+  try {
+    await Promise.race([
+      waitForReady(realmServer, 'realm server'),
+      createProcessExitPromise(workerManager, 'worker manager'),
+    ]);
+  } catch (error) {
+    try {
+      await stopManagedProcess(realmServer);
+    } catch {
+      // best effort cleanup
+    }
+    try {
+      await stopManagedProcess(workerManager);
+    } catch {
+      // best effort cleanup
+    }
+    rmSync(rootDir, { recursive: true, force: true });
+    throw error;
+  }
+
+  return {
+    realmServer,
+    workerManager,
+    rootDir,
+  };
+}
+
+async function stopIsolatedRealmStack(
+  stack: RunningFactoryStack,
+): Promise<void> {
+  let cleanupError: unknown;
+
+  try {
+    await stopManagedProcess(stack.realmServer);
+  } catch (error) {
+    cleanupError ??= error;
+  }
+
+  try {
+    await stopManagedProcess(stack.workerManager);
+  } catch (error) {
+    cleanupError ??= error;
+  }
+
+  try {
+    rmSync(stack.rootDir, { recursive: true, force: true });
+  } catch (error) {
+    cleanupError ??= error;
+  }
+
+  if (cleanupError) {
+    throw cleanupError;
+  }
+}
+
+async function buildTemplateDatabase({
+  realmDir,
+  realmURL,
+  permissions,
+  context,
+  cacheKey,
+  templateDatabaseName,
+}: {
+  realmDir: string;
+  realmURL: URL;
+  permissions: RealmPermissions;
+  context: FactorySupportContext;
+  cacheKey: string;
+  templateDatabaseName: string;
+}): Promise<void> {
+  let builderDatabaseName = builderDatabaseNameForCacheKey(cacheKey);
+  let hasMigratedTemplate = await databaseExists(DEFAULT_MIGRATED_TEMPLATE_DB);
+
+  await dropDatabase(templateDatabaseName);
+  await dropDatabase(builderDatabaseName);
+
+  if (hasMigratedTemplate) {
+    await cloneDatabaseFromTemplate(
+      DEFAULT_MIGRATED_TEMPLATE_DB,
+      builderDatabaseName,
+    );
+  }
+
+  await seedRealmPermissions(builderDatabaseName, realmURL, permissions);
+
+  let stack = await startIsolatedRealmStack({
+    realmDir,
+    realmURL,
     databaseName: builderDatabaseName,
+    context,
+    migrateDB: !hasMigratedTemplate,
   });
 
   try {
     await waitForQueueIdle(builderDatabaseName);
   } finally {
-    await runtime.stop({ preserveDatabase: true });
+    await stopIsolatedRealmStack(stack);
   }
 
-  await createTemplateSnapshot(
-    builderDatabaseName,
-    options.templateDatabaseName,
-  );
+  await createTemplateSnapshot(builderDatabaseName, templateDatabaseName);
   await dropDatabase(builderDatabaseName);
+}
+
+async function startFactorySupportServices(): Promise<{
+  context: FactorySupportContext;
+  stop(): Promise<void>;
+}> {
+  await ensurePgReady();
+  await ensureHostReady();
+  let icons = await ensureIconsReady();
+  cleanupStaleSynapseContainers();
+  let { synapseStart, synapseStop } = await loadSynapseModule();
+  let { startPrerenderServer } = await loadIsolatedRealmServerModule();
+
+  let synapse = await synapseStart(
+    { suppressRegistrationSecretFile: true },
+    true,
+  );
+  await ensureSupportUsers(synapse);
+  let prerender = await startPrerenderServer();
+  let matrixURL =
+    process.env.SOFTWARE_FACTORY_MATRIX_URL ?? DEFAULT_BROWSER_MATRIX_URL;
+
+  return {
+    context: {
+      matrixURL,
+      matrixRegistrationSecret: synapse.registrationSecret,
+      prerenderURL: prerender.url,
+    },
+    async stop() {
+      await prerender.stop();
+      await synapseStop(synapse.synapseId);
+      await icons.stop?.();
+    },
+  };
+}
+
+export function getFactoryTestContext(): FactoryTestContext {
+  let context = parseFactoryContext();
+  if (!context) {
+    throw new Error('SOFTWARE_FACTORY_CONTEXT is not defined');
+  }
+  return context;
+}
+
+export async function startFactoryGlobalContext(
+  options: FactoryRealmOptions = {},
+): Promise<FactoryGlobalContextHandle> {
+  let realmDir = resolve(options.realmDir ?? DEFAULT_REALM_DIR);
+  let realmURL = new URL((options.realmURL ?? DEFAULT_REALM_URL).href);
+  let support = await startFactorySupportServices();
+  try {
+    let template = await ensureFactoryRealmTemplate({
+      ...options,
+      realmDir,
+      realmURL,
+      context: support.context,
+    });
+
+    let context: FactoryTestContext = {
+      ...support.context,
+      cacheKey: template.cacheKey,
+      fixtureHash: template.fixtureHash,
+      realmDir,
+      realmURL: realmURL.href,
+      templateDatabaseName: template.templateDatabaseName,
+    };
+
+    return {
+      context,
+      stop: support.stop,
+    };
+  } catch (error) {
+    await support.stop();
+    throw error;
+  }
 }
 
 export async function ensureFactoryRealmTemplate(
@@ -614,318 +1055,89 @@ export async function ensureFactoryRealmTemplate(
   );
   let templateDatabaseName = templateDatabaseNameForCacheKey(cacheKey);
 
-  await ensureTestPgPrepared();
-  await ensureFactoryPrerequisites();
-  if (await databaseExists(templateDatabaseName)) {
+  let ownedSupport:
+    | {
+        context: FactorySupportContext;
+        stop(): Promise<void>;
+      }
+    | undefined;
+  let context = options.context;
+  if (!context) {
+    ownedSupport = await startFactorySupportServices();
+    context = ownedSupport.context;
+  }
+
+  try {
+    if (await databaseExists(templateDatabaseName)) {
+      return {
+        cacheKey,
+        templateDatabaseName,
+        fixtureHash,
+        cacheHit: true,
+      };
+    }
+
+    await buildTemplateDatabase({
+      realmDir,
+      realmURL,
+      permissions,
+      context,
+      cacheKey,
+      templateDatabaseName,
+    });
+
     return {
       cacheKey,
       templateDatabaseName,
       fixtureHash,
-      cacheHit: true,
+      cacheHit: false,
     };
-  }
-
-  await buildTemplate({
-    realmDir,
-    realmURL,
-    permissions,
-    cacheKey,
-    templateDatabaseName,
-  });
-
-  return {
-    cacheKey,
-    templateDatabaseName,
-    fixtureHash,
-    cacheHit: false,
-  };
-}
-
-async function buildStartedRealm(
-  options: Required<
-    Pick<FactoryRealmOptions, 'realmDir' | 'realmURL' | 'permissions'>
-  > & {
-    databaseName: string;
-    templateDatabase?: string;
-  },
-) {
-  applyTestPgEnv();
-  await ensureFactoryMatrixUsers();
-
-  let fileSystem = readRealmFixture(options.realmDir);
-  let runtimeRoot = mkdtempSync(join(tmpdir(), 'software-factory-realm-'));
-  let realmPath = join(runtimeRoot, 'realm');
-  mkdirSync(realmPath, { recursive: true });
-
-  let dbAdapter = await createTestPgAdapter({
-    databaseName: options.databaseName,
-    templateDatabase: options.templateDatabase,
-  });
-  let publisher: QueuePublisher | undefined;
-  let runner: QueueRunner | undefined;
-  let prerenderer: any;
-  let prerenderServer: any;
-  let managedPrerenderServer = false;
-  let testRealmServer: RealmServer | undefined;
-  let httpServer;
-
-  try {
-    publisher = new PgQueuePublisher(dbAdapter);
-    runner = new PgQueueRunner({
-      adapter: dbAdapter,
-      workerId: `software-factory-${process.pid}`,
-    });
-    ({
-      prerenderer,
-      server: prerenderServer,
-      managed: managedPrerenderServer,
-    } = await startPrerenderServer());
-    let virtualNetwork = createVirtualNetwork();
-    let definitionLookup = new CachingDefinitionLookup(
-      dbAdapter,
-      prerenderer,
-      virtualNetwork,
-      testCreatePrerenderAuth,
-    );
-    let worker = new Worker({
-      indexWriter: new IndexWriter(dbAdapter),
-      queue: runner,
-      dbAdapter,
-      queuePublisher: publisher,
-      virtualNetwork,
-      matrixURL: DEFAULT_MATRIX_URL,
-      secretSeed: realmSecretSeed,
-      realmServerMatrixUsername: DEFAULT_MATRIX_SERVER_USERNAME,
-      prerenderer,
-      createPrerenderAuth: testCreatePrerenderAuth,
-    });
-    await worker.run();
-
-    let { realm } = await createRealm({
-      dir: realmPath,
-      definitionLookup,
-      fileSystem,
-      realmURL: options.realmURL.href,
-      permissions: options.permissions,
-      virtualNetwork,
-      publisher,
-      dbAdapter,
-      cardSizeLimitBytes: undefined,
-      fileSizeLimitBytes: undefined,
-    });
-
-    virtualNetwork.mount(realm.handle);
-
-    testRealmServer = new RealmServer({
-      realms: [realm],
-      virtualNetwork,
-      matrixClient: new MatrixClient({
-        matrixURL: DEFAULT_MATRIX_URL,
-        username: DEFAULT_MATRIX_USERNAME,
-        seed: realmSecretSeed,
-      }),
-      realmServerSecretSeed,
-      realmSecretSeed,
-      matrixRegistrationSecret,
-      realmsRootPath: runtimeRoot,
-      dbAdapter,
-      queue: publisher,
-      getIndexHTML,
-      grafanaSecret,
-      serverURL: new URL(options.realmURL.origin),
-      assetsURL: new URL(DEFAULT_HOST_URL),
-      definitionLookup,
-      prerenderer,
-    });
-
-    httpServer = testRealmServer.listen(Number(options.realmURL.port));
-    await testRealmServer.start();
-
-    return {
-      createBearerToken: (
-        user = DEFAULT_REALM_OWNER,
-        permissions = DEFAULT_PERMISSIONS[DEFAULT_REALM_OWNER] ?? [
-          'read',
-          'write',
-          'realm-owner',
-        ],
-      ) =>
-        realm.createJWT(
-          {
-            user,
-            realm: realm.url,
-            permissions,
-            sessionRoom: `software-factory-session-room-for-${user}`,
-            realmServerURL: options.realmURL.href,
-          },
-          '7d',
-        ),
-      stop: async ({
-        preserveDatabase = false,
-      }: { preserveDatabase?: boolean } = {}) => {
-        let cleanupError: unknown;
-
-        try {
-          if (httpServer?.listening) {
-            await closeServer(httpServer);
-          }
-        } catch (error) {
-          cleanupError ??= error;
-        }
-
-        try {
-          await publisher?.destroy();
-        } catch (error) {
-          cleanupError ??= error;
-        }
-
-        try {
-          await runner?.destroy();
-        } catch (error) {
-          cleanupError ??= error;
-        }
-
-        try {
-          await dbAdapter.close();
-        } catch (error) {
-          cleanupError ??= error;
-        }
-
-        try {
-          if (
-            managedPrerenderServer &&
-            prerenderServer &&
-            typeof prerenderServer.__stopPrerenderer === 'function'
-          ) {
-            await prerenderServer.__stopPrerenderer();
-          }
-        } catch (error) {
-          cleanupError ??= error;
-        }
-
-        try {
-          if (managedPrerenderServer && prerenderServer?.listening) {
-            await closeServer(prerenderServer);
-          }
-        } catch (error) {
-          cleanupError ??= error;
-        }
-
-        try {
-          if (managedPrerenderServer) {
-            await (prerenderer as { stop?: () => Promise<void> })?.stop?.();
-          }
-        } catch (error) {
-          cleanupError ??= error;
-        }
-
-        if (!preserveDatabase) {
-          try {
-            await dropDatabase(options.databaseName);
-          } catch (error) {
-            cleanupError ??= error;
-          }
-        }
-
-        try {
-          rmSync(runtimeRoot, { recursive: true, force: true });
-        } catch (error) {
-          cleanupError ??= error;
-        }
-
-        if (cleanupError) {
-          throw cleanupError;
-        }
-      },
-    };
-  } catch (error) {
-    try {
-      await publisher?.destroy();
-    } catch {
-      // best effort cleanup
-    }
-    try {
-      await runner?.destroy();
-    } catch {
-      // best effort cleanup
-    }
-    try {
-      await dbAdapter.close();
-    } catch {
-      // best effort cleanup
-    }
-    try {
-      if (
-        managedPrerenderServer &&
-        prerenderServer &&
-        typeof prerenderServer.__stopPrerenderer === 'function'
-      ) {
-        await prerenderServer.__stopPrerenderer();
-      }
-    } catch {
-      // best effort cleanup
-    }
-    try {
-      if (managedPrerenderServer && prerenderServer?.listening) {
-        await closeServer(prerenderServer);
-      }
-    } catch {
-      // best effort cleanup
-    }
-    try {
-      if (managedPrerenderServer) {
-        await (prerenderer as { stop?: () => Promise<void> })?.stop?.();
-      }
-    } catch {
-      // best effort cleanup
-    }
-    try {
-      await dropDatabase(options.databaseName);
-    } catch {
-      // best effort cleanup
-    }
-    rmSync(runtimeRoot, { recursive: true, force: true });
-    throw error;
+  } finally {
+    await ownedSupport?.stop();
   }
 }
 
-async function startFactoryRealmServer(
-  options: FactoryRealmOptions & {
-    databaseName?: string;
-  } = {},
-): Promise<
-  StartedFactoryRealm & {
-    stop(args?: { preserveDatabase?: boolean }): Promise<void>;
-  }
-> {
+export async function startFactoryRealmServer(
+  options: FactoryRealmOptions = {},
+): Promise<StartedFactoryRealm> {
   let realmDir = resolve(options.realmDir ?? DEFAULT_REALM_DIR);
   let realmURL = new URL((options.realmURL ?? DEFAULT_REALM_URL).href);
-  let permissions = options.permissions ?? DEFAULT_PERMISSIONS;
-  let databaseName = options.databaseName ?? runtimeDatabaseName();
+  let templateDatabaseName = options.templateDatabaseName;
 
-  await ensureTestPgPrepared();
-  await ensureFactoryPrerequisites();
-
-  let templateDatabase: string | undefined;
-  if (options.templateDatabaseName) {
-    templateDatabase = options.templateDatabaseName;
-  } else if (options.useCache !== false) {
-    templateDatabase = (
-      await ensureFactoryRealmTemplate({
-        realmDir,
-        realmURL,
-        permissions,
-        cacheSalt: options.cacheSalt,
-      })
-    ).templateDatabaseName;
+  let ownedGlobalContext: FactoryGlobalContextHandle | undefined;
+  let context = options.context ?? parseFactoryContext();
+  if (!context) {
+    ownedGlobalContext = await startFactoryGlobalContext({
+      ...options,
+      realmDir,
+      realmURL,
+    });
+    context = ownedGlobalContext.context;
   }
 
-  let runtime = await buildStartedRealm({
+  if (!templateDatabaseName) {
+    templateDatabaseName = hasTemplateDatabaseName(context)
+      ? context.templateDatabaseName
+      : (
+          await ensureFactoryRealmTemplate({
+            ...options,
+            realmDir,
+            realmURL,
+            context,
+          })
+        ).templateDatabaseName;
+  }
+
+  let databaseName = runtimeDatabaseName();
+  await dropDatabase(databaseName);
+  await cloneDatabaseFromTemplate(templateDatabaseName, databaseName);
+
+  let stack = await startIsolatedRealmStack({
     realmDir,
     realmURL,
-    permissions,
     databaseName,
-    templateDatabase,
+    context,
+    migrateDB: false,
   });
 
   return {
@@ -935,17 +1147,41 @@ async function startFactoryRealmServer(
     cardURL(path: string) {
       return new URL(path, realmURL).href;
     },
-    createBearerToken: runtime.createBearerToken,
-    authorizationHeaders(user?: string, permissions?: string[]) {
+    createBearerToken(user = DEFAULT_REALM_OWNER, permissions?: RealmAction[]) {
+      return buildRealmToken(realmURL, user, permissions);
+    },
+    authorizationHeaders(user?: string, permissions?: RealmAction[]) {
       return {
-        Authorization: `Bearer ${runtime.createBearerToken(user, permissions)}`,
+        Authorization: `Bearer ${buildRealmToken(realmURL, user, permissions)}`,
       };
     },
-    stop: runtime.stop,
+    async stop() {
+      let cleanupError: unknown;
+
+      try {
+        await stopIsolatedRealmStack(stack);
+      } catch (error) {
+        cleanupError ??= error;
+      }
+
+      try {
+        await dropDatabase(databaseName);
+      } catch (error) {
+        cleanupError ??= error;
+      }
+
+      try {
+        await ownedGlobalContext?.stop();
+      } catch (error) {
+        cleanupError ??= error;
+      }
+
+      if (cleanupError) {
+        throw cleanupError;
+      }
+    },
   };
 }
-
-export { startFactoryRealmServer };
 
 export async function fetchRealmCardJson(
   path: string,
@@ -966,58 +1202,4 @@ export async function fetchRealmCardJson(
   } finally {
     await runtime.stop();
   }
-}
-
-async function getFreePort(): Promise<number> {
-  return await new Promise<number>((resolve, reject) => {
-    let server = createNetServer();
-    server.once('error', reject);
-    server.listen(0, '127.0.0.1', () => {
-      let address = server.address();
-      if (!address || typeof address === 'string') {
-        server.close(() => reject(new Error('unable to determine free port')));
-        return;
-      }
-      let { port } = address;
-      server.close((error) => {
-        if (error) {
-          reject(error);
-          return;
-        }
-        resolve(port);
-      });
-    });
-  });
-}
-
-async function startPrerenderServer(): Promise<{
-  prerenderer: any;
-  server: any;
-  managed: boolean;
-}> {
-  if (process.env.SOFTWARE_FACTORY_PRERENDER_SERVER_URL) {
-    return {
-      prerenderer: createRemotePrerenderer(
-        process.env.SOFTWARE_FACTORY_PRERENDER_SERVER_URL,
-      ),
-      server: undefined,
-      managed: false,
-    };
-  }
-  let port = await getFreePort();
-  let server = createPrerenderHttpServer({
-    silent: Boolean(process.env.SILENT_PRERENDERER),
-    maxPages: 2,
-  });
-
-  await new Promise<void>((resolve, reject) => {
-    server.once('error', reject);
-    server.listen(port, '127.0.0.1', () => resolve());
-  });
-
-  return {
-    prerenderer: createRemotePrerenderer(`http://127.0.0.1:${port}`),
-    server,
-    managed: true,
-  };
 }

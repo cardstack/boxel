@@ -179,9 +179,10 @@ async function getRealmAuthTokens(
 
 export async function buildBrowserState(
   realmURL: string,
+  realmServerURL = new URL('/', realmURL).href,
 ): Promise<FactoryBrowserState> {
   let matrixAuth = await matrixLogin();
-  let realmTokens = await getRealmAuthTokens(matrixAuth, realmURL);
+  let realmTokens = await getRealmAuthTokens(matrixAuth, realmServerURL);
 
   return {
     auth: {

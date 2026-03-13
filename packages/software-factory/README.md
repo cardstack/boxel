@@ -2,29 +2,31 @@
 
 Local card-development harness for fast Boxel iteration.
 
-This package gives you a cached local realm fixture, a realm server boot path
-that mirrors the test harness, and a Playwright loop that exercises the card in
-the real browser app shell.
+This package gives you a cached local realm fixture, a fixed-port isolated realm
+server, and a Playwright loop that exercises cards in the real browser app
+shell.
 
 ## Prerequisites
 
-- Docker running for the cached test Postgres on `127.0.0.1:55436`
+- Docker running
 - Host app assets available at `http://localhost:4200/`
-- Base realm available at `http://localhost:4201/base/`
-- Matrix available at `http://localhost:8008/`
+  - use `cd packages/host && pnpm serve:dist`
 
-Those are the same local services the realm-server tests expect.
+The harness starts its own seeded test Postgres, Synapse, prerender server, and
+isolated realm server. By default it serves the test realm and base realm from
+the same fixed realm-server origin. The skills realm can be enabled when needed
+with `SOFTWARE_FACTORY_INCLUDE_SKILLS=1`.
 
 ## Commands
 
 - `pnpm cache:prepare`
   - Builds or reuses the cached template database for `demo-realm/`
 - `pnpm serve:realm`
-  - Starts the realm server on `http://127.0.0.1:4444/`
+  - Starts the isolated realm server on `http://localhost:4205/test/`
 - `pnpm smoke:realm`
-  - Boots the realm server, fetches `person-1` as card JSON, and exits
+  - Boots the isolated realm server, fetches `person-1` as card JSON, and exits
 - `pnpm test:playwright`
-  - Runs the browser test against a fresh per-test realm server cloned from the cached template
+  - Runs the browser tests against a fresh per-test realm server cloned from the cached template
 
 All commands accept an optional realm directory argument:
 
@@ -39,23 +41,18 @@ pnpm smoke:realm ./my-realm Person/example-card
 - `demo-realm/`
   - Example card definitions and instances
 - `src/harness.ts`
-  - Cached template DB creation and realm server startup
+  - Cached template DB creation and isolated realm server startup
 - `tests/`
   - Playwright fixtures and browser specs
 
 ## Notes
 
-- Template DBs are intentionally reused across runs while the realm-server
-  codebase stays stable.
-- Playwright uses a single worker-scoped browser context so host assets and app
-  shell requests stay warm in the browser cache across tests.
-- The Playwright worker also keeps a shared prerender server alive so per-test
-  realm restarts do not relaunch Chromium for realm-side prerender work.
+- Template DBs are reused across runs while the seeded Postgres container stays up.
 - Each Playwright test still starts a fresh realm server and fresh runtime
   database cloned from the cached template DB, so server-side mutations do not
   leak across tests.
-- Realm-origin requests are forced to revalidate between tests. That preserves
-  host asset caching without letting mutated card responses leak into the next
-  fresh realm runtime.
-- The browser test seeds a deterministic local Matrix user
-  (`software-factory-browser`) so it does not depend on a human-managed profile.
+- The browser tests seed a deterministic local Matrix user
+  (`software-factory-browser`) so they do not depend on a human-managed profile.
+- Host requests for the base realm URL are redirected to the isolated realm
+  server. Skills redirects are only enabled when
+  `SOFTWARE_FACTORY_INCLUDE_SKILLS=1`.

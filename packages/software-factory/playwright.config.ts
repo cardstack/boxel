@@ -1,8 +1,9 @@
 import { defineConfig } from '@playwright/test';
 
-const realmPort = Number(process.env.SOFTWARE_FACTORY_REALM_PORT ?? 4444);
+const realmPort = Number(process.env.SOFTWARE_FACTORY_REALM_PORT ?? 4205);
 const realmURL =
-  process.env.SOFTWARE_FACTORY_REALM_URL ?? `http://127.0.0.1:${realmPort}/`;
+  process.env.SOFTWARE_FACTORY_REALM_URL ??
+  `http://localhost:${realmPort}/test/`;
 
 export default defineConfig({
   testDir: './tests',
