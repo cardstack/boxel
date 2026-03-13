@@ -521,6 +521,7 @@ jobs:
             "server-endpoints/incoming-webhook-test.ts",
             "server-endpoints/webhook-commands-test.ts",
             "server-endpoints/webhook-receiver-test.ts",
+            "server-endpoints/federated-types-test.ts",
             "virtual-network-test.ts",
             "atomic-endpoints-test.ts",
             "request-forward-test.ts",
