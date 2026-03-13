@@ -69,6 +69,7 @@ interface Signature {
         | 'onTypeSearchChange'
         | 'onLoadMoreTypes'
         | 'hasMoreTypes'
+        | 'isLoadingTypes'
         | 'isLoadingMoreTypes'
         | 'typesTotalCount'
       >,
@@ -106,7 +107,8 @@ export default class SearchPanel extends Component<Signature> {
   @tracked private _typePageNumber = 0;
   @tracked private _typeSummariesData: TypeSummaryItem[] = [];
   @tracked private _typeSummariesTotal = 0;
-  @tracked private _typeSummariesLoading = false;
+  @tracked private _isLoadingTypes = false;
+  @tracked private _isLoadingMoreTypes = false;
   @tracked private _hasMoreTypes = false;
 
   @cached
@@ -190,7 +192,11 @@ export default class SearchPanel extends Component<Signature> {
         return;
       }
 
-      this._typeSummariesLoading = true;
+      if (append) {
+        this._isLoadingMoreTypes = true;
+      } else {
+        this._isLoadingTypes = true;
+      }
 
       try {
         let result = await this.realmServer.fetchCardTypeSummaries(realmURLs, {
@@ -214,7 +220,8 @@ export default class SearchPanel extends Component<Signature> {
         this._typeSummariesTotal = result.meta.page.total;
         this._hasMoreTypes =
           this._typeSummariesData.length < result.meta.page.total;
-        this._typeSummariesLoading = false;
+        this._isLoadingTypes = false;
+        this._isLoadingMoreTypes = false;
       } catch (e) {
         console.error('Failed to fetch card type summaries', e);
         if (!isDestroyed(this) && !isDestroying(this)) {
@@ -223,7 +230,8 @@ export default class SearchPanel extends Component<Signature> {
             this._typeSummariesTotal = 0;
           }
           this._hasMoreTypes = false;
-          this._typeSummariesLoading = false;
+          this._isLoadingTypes = false;
+          this._isLoadingMoreTypes = false;
         }
       }
     },
@@ -311,7 +319,7 @@ export default class SearchPanel extends Component<Signature> {
 
     if (hadSelectAll) {
       value.selected = [];
-    } else if (this._typeSummariesLoading) {
+    } else if (this._isLoadingTypes || this._isLoadingMoreTypes) {
       // Type summaries still loading — keep previous selections
       // to avoid jarring UI changes.
       value.selected = prev;
@@ -368,7 +376,11 @@ export default class SearchPanel extends Component<Signature> {
 
   @action
   private onLoadMoreTypes() {
-    if (this._typeSummariesLoading || !this._hasMoreTypes) {
+    if (
+      this._isLoadingTypes ||
+      this._isLoadingMoreTypes ||
+      !this._hasMoreTypes
+    ) {
       return;
     }
     this._typePageNumber = this._typePageNumber + 1;
@@ -392,7 +404,8 @@ export default class SearchPanel extends Component<Signature> {
         onTypeSearchChange=this.onTypeSearchChange
         onLoadMoreTypes=this.onLoadMoreTypes
         hasMoreTypes=this._hasMoreTypes
-        isLoadingMoreTypes=this._typeSummariesLoading
+        isLoadingTypes=this._isLoadingTypes
+        isLoadingMoreTypes=this._isLoadingMoreTypes
         typesTotalCount=this._typeSummariesTotal
       )
       (component

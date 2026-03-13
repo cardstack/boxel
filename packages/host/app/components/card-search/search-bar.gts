@@ -42,6 +42,7 @@ interface Signature {
     onTypeSearchChange?: (term: string) => void;
     onLoadMoreTypes?: () => void;
     hasMoreTypes?: boolean;
+    isLoadingTypes?: boolean;
     isLoadingMoreTypes?: boolean;
     typesTotalCount?: number;
     bottomTreatment?: BoxelInputBottomTreatments;
@@ -84,6 +85,7 @@ export default class SearchBar extends Component<Signature> {
           @onSearchChange={{@onTypeSearchChange}}
           @onLoadMore={{@onLoadMoreTypes}}
           @hasMore={{@hasMoreTypes}}
+          @isLoading={{@isLoadingTypes}}
           @isLoadingMore={{@isLoadingMoreTypes}}
           @totalCount={{@typesTotalCount}}
         />

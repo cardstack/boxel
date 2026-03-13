@@ -931,6 +931,8 @@ module('Integration | operator-mode | ui', function (hooks) {
     // Open type picker dropdown
     await click('[data-test-type-picker] [data-test-boxel-picker-trigger]');
     await waitFor('[data-test-boxel-picker-option-row]');
+    // Wait for all pages to load via infinite scroll
+    await waitFor('[data-test-boxel-picker-option-row="Pet"]');
 
     // "Any Type" (select-all) should be present with count
     assert
@@ -939,7 +941,7 @@ module('Integration | operator-mode | ui', function (hooks) {
     assert
       .dom('[data-test-boxel-picker-option-row="select-all"]')
       .containsText(
-        'Any Type (13)',
+        'Any Type (14)',
         'select-all shows count of all realm types',
       );
 
@@ -991,6 +993,8 @@ module('Integration | operator-mode | ui', function (hooks) {
     // Open type picker dropdown
     await click('[data-test-type-picker] [data-test-boxel-picker-trigger]');
     await waitFor('[data-test-boxel-picker-option-row]');
+    // Wait for all pages to load via infinite scroll
+    await waitFor('[data-test-boxel-picker-option-row="Pet"]');
 
     assert
       .dom('[data-test-boxel-picker-option-row="select-all"]')
@@ -998,7 +1002,7 @@ module('Integration | operator-mode | ui', function (hooks) {
     assert
       .dom('[data-test-boxel-picker-option-row="select-all"]')
       .containsText(
-        'Any Type (13)',
+        'Any Type (14)',
         'select-all shows count of all realm types',
       );
 
@@ -1036,7 +1040,7 @@ module('Integration | operator-mode | ui', function (hooks) {
 
     // Open type picker and select 'Pet'
     await click('[data-test-type-picker] [data-test-boxel-picker-trigger]');
-    await waitFor('[data-test-boxel-picker-option-row]');
+    await waitFor('[data-test-boxel-picker-option-row="Pet"]');
     await click('[data-test-boxel-picker-option-row="Pet"]');
 
     // Verify selected chip shows 'Pet'
@@ -1082,7 +1086,7 @@ module('Integration | operator-mode | ui', function (hooks) {
 
     // Open type picker and select 'Pet', then 'Person'
     await click('[data-test-type-picker] [data-test-boxel-picker-trigger]');
-    await waitFor('[data-test-boxel-picker-option-row]');
+    await waitFor('[data-test-boxel-picker-option-row="Pet"]');
     await click('[data-test-boxel-picker-option-row="Pet"]');
     await waitFor('[data-test-boxel-picker-option-row]');
     await click('[data-test-boxel-picker-option-row="Person"]');
@@ -1141,7 +1145,7 @@ module('Integration | operator-mode | ui', function (hooks) {
 
     // Select 'Pet' type
     await click('[data-test-type-picker] [data-test-boxel-picker-trigger]');
-    await waitFor('[data-test-boxel-picker-option-row]');
+    await waitFor('[data-test-boxel-picker-option-row="Pet"]');
     await click('[data-test-boxel-picker-option-row="Pet"]');
 
     // Verify 'Pet' is selected
@@ -1205,7 +1209,7 @@ module('Integration | operator-mode | ui', function (hooks) {
 
     // Select 'Pet' type
     await click('[data-test-type-picker] [data-test-boxel-picker-trigger]');
-    await waitFor('[data-test-boxel-picker-option-row]');
+    await waitFor('[data-test-boxel-picker-option-row="Pet"]');
     await click('[data-test-boxel-picker-option-row="Pet"]');
 
     // Only Pet cards should be visible in search results
