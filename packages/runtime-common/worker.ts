@@ -64,6 +64,18 @@ export interface StatusArgs {
   deps?: string[];
 }
 
+export interface IndexingProgressEvent {
+  type: 'indexing-started' | 'file-visited' | 'indexing-finished';
+  realmURL: string;
+  jobId: number;
+  jobType?: string;
+  totalFiles?: number;
+  filesCompleted?: number;
+  files?: string[];
+  url?: string;
+  stats?: Stats;
+}
+
 export class Worker {
   #log = logger('worker');
   #indexWriter: IndexWriter;
@@ -77,6 +89,7 @@ export class Worker {
   #realmAuthCache: Map<string, RealmAuthDataSource> = new Map();
   #secretSeed: string;
   #reportStatus: ((args: StatusArgs) => void) | undefined;
+  #reportProgress: ((event: IndexingProgressEvent) => void) | undefined;
   #realmServerMatrixUsername;
   #createPrerenderAuth: (
     userId: string,
@@ -93,6 +106,7 @@ export class Worker {
     realmServerMatrixUsername,
     secretSeed,
     reportStatus,
+    reportProgress,
     prerenderer,
     createPrerenderAuth,
   }: {
@@ -106,6 +120,7 @@ export class Worker {
     secretSeed: string;
     prerenderer: Prerenderer;
     reportStatus?: (args: StatusArgs) => void;
+    reportProgress?: (event: IndexingProgressEvent) => void;
     createPrerenderAuth: (
       userId: string,
       permissions: RealmPermissions,
@@ -117,6 +132,7 @@ export class Worker {
     this.#matrixURL = matrixURL;
     this.#secretSeed = secretSeed;
     this.#reportStatus = reportStatus;
+    this.#reportProgress = reportProgress;
     this.#realmServerMatrixUsername = realmServerMatrixUsername;
     this.#dbAdapter = dbAdapter;
     this.#queuePublisher = queuePublisher;
@@ -142,6 +158,7 @@ export class Worker {
       queuePublisher: this.#queuePublisher,
       getAuthedFetch: this.makeAuthedFetch.bind(this),
       reportStatus: this.reportStatus.bind(this),
+      reportProgress: this.reportProgress.bind(this),
       createPrerenderAuth: this.#createPrerenderAuth,
     };
 
@@ -219,6 +236,10 @@ export class Worker {
     if (args?.jobId) {
       this.#reportStatus?.({ ...args, jobId: String(args.jobId), status });
     }
+  }
+
+  private reportProgress(event: IndexingProgressEvent) {
+    this.#reportProgress?.(event);
   }
 }
 

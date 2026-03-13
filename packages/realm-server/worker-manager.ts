@@ -11,6 +11,7 @@ import {
   isUrlLike,
   type Expression,
   type StatusArgs,
+  type IndexingProgressEvent,
 } from '@cardstack/runtime-common';
 import yargs from 'yargs';
 import * as Sentry from '@sentry/node';
@@ -28,6 +29,8 @@ import {
   registerService,
   deregisterService,
 } from './lib/dev-service-registry';
+import { IndexingEventSink } from './indexing-event-sink';
+import { renderIndexingDashboard } from './handlers/handle-indexing-dashboard';
 
 /* About the Worker Manager
  *
@@ -116,6 +119,7 @@ let {
 let isReady = false;
 let isExiting = false;
 let workers: ChildProcess[] = [];
+let eventSink = new IndexingEventSink();
 
 process.on('SIGINT', () => (isExiting = true));
 process.on('SIGTERM', () => (isExiting = true));
@@ -141,6 +145,16 @@ if (port != null) {
     ctxt.set('Content-Type', 'application/json');
     ctxt.body = JSON.stringify(result);
     ctxt.status = isReady ? 200 : 503;
+  });
+  router.get('/_indexing-dashboard', async (ctxt: Koa.Context) => {
+    ctxt.set('Content-Type', 'text/html; charset=utf-8');
+    ctxt.body = renderIndexingDashboard(eventSink.getSnapshot());
+    ctxt.status = 200;
+  });
+  router.get('/_indexing-status', async (ctxt: Koa.Context) => {
+    ctxt.set('Content-Type', 'application/json');
+    ctxt.body = JSON.stringify(eventSink.getSnapshot());
+    ctxt.status = 200;
   });
 
   webServer
@@ -529,6 +543,15 @@ async function startWorker(
             currentState = undefined;
             (worker as any).__boxelIndexState = undefined;
           }
+        } else if (
+          typeof message === 'string' &&
+          message.startsWith('progress|')
+        ) {
+          let payload = message.substring('progress|'.length);
+          let progressEvent = JSON.parse(
+            payload,
+          ) as IndexingProgressEvent;
+          eventSink.handleEvent(progressEvent);
         }
       });
     }),
