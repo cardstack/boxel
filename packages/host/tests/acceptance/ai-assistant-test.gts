@@ -857,6 +857,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     );
 
     // Now select the minimal variant
+    await click('[data-test-llm-select-selected]');
     await click(`[data-test-llm-select-item="${gpt5ConfigId}"] button`);
     await click('[data-test-llm-select-selected]');
 
