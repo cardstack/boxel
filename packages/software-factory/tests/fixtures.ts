@@ -25,6 +25,11 @@ type StartedFactoryRealm = {
   stop(): Promise<void>;
 };
 
+type SharedPrerenderProcess = {
+  url: string;
+  stop(): Promise<void>;
+};
+
 export type FactoryRealmFixtures = {
   realm: StartedFactoryRealm;
   realmURL: URL;
@@ -34,6 +39,7 @@ export type FactoryRealmFixtures = {
 
 type FactoryRealmWorkerFixtures = {
   preparedRealmTemplate: PreparedRealmTemplate;
+  sharedPrerender: SharedPrerenderProcess;
   cachedContext: BrowserContext;
 };
 
@@ -116,13 +122,7 @@ async function runCachePrepare(realmDir = defaultRealmDir) {
       logs = appendLog(logs, String(chunk));
     });
 
-    let metadata = await waitForMetadataFile<PreparedRealmTemplate>(
-      metadataFile,
-      child,
-      () => logs,
-    );
-
-    await new Promise<void>((resolve, reject) => {
+    let exitPromise = new Promise<void>((resolve, reject) => {
       child.once('error', reject);
       child.once('exit', (code) => {
         if (code === 0) {
@@ -137,6 +137,14 @@ async function runCachePrepare(realmDir = defaultRealmDir) {
       });
     });
 
+    let metadata = await waitForMetadataFile<PreparedRealmTemplate>(
+      metadataFile,
+      child,
+      () => logs,
+    );
+
+    await exitPromise;
+
     return {
       metadata,
       logs,
@@ -148,6 +156,7 @@ async function runCachePrepare(realmDir = defaultRealmDir) {
 
 async function startRealmProcess(
   templateDatabaseName: string,
+  prerenderServerURL: string,
   realmDir = defaultRealmDir,
 ) {
   let tempDir = mkdtempSync(join(tmpdir(), 'software-factory-realm-'));
@@ -160,6 +169,7 @@ async function startRealmProcess(
     env: {
       ...process.env,
       SOFTWARE_FACTORY_METADATA_FILE: metadataFile,
+      SOFTWARE_FACTORY_PRERENDER_SERVER_URL: prerenderServerURL,
       SOFTWARE_FACTORY_TEMPLATE_DATABASE_NAME: templateDatabaseName,
     },
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -231,6 +241,73 @@ async function startRealmProcess(
   } satisfies StartedFactoryRealm;
 }
 
+async function startPrerenderProcess() {
+  let tempDir = mkdtempSync(join(tmpdir(), 'software-factory-prerender-'));
+  let metadataFile = join(tempDir, 'prerender.json');
+  let logs = '';
+
+  let child = spawn('pnpm', ['serve:prerender'], {
+    cwd: packageRoot,
+    detached: true,
+    env: {
+      ...process.env,
+      SOFTWARE_FACTORY_METADATA_FILE: metadataFile,
+    },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+
+  child.stdout?.on('data', (chunk) => {
+    logs = appendLog(logs, String(chunk));
+  });
+  child.stderr?.on('data', (chunk) => {
+    logs = appendLog(logs, String(chunk));
+  });
+
+  let metadata: {
+    url: string;
+  };
+
+  try {
+    metadata = await waitForMetadataFile<{ url: string }>(
+      metadataFile,
+      child,
+      () => logs,
+    );
+  } catch (error) {
+    killProcessGroup(child.pid!, 'SIGTERM');
+    throw error;
+  }
+
+  let stop = async () => {
+    try {
+      if (child.exitCode === null) {
+        killProcessGroup(child.pid!, 'SIGTERM');
+        await new Promise<void>((resolve, reject) => {
+          let timeout = setTimeout(() => {
+            killProcessGroup(child.pid!, 'SIGKILL');
+          }, 15_000);
+
+          child.once('error', (error) => {
+            clearTimeout(timeout);
+            reject(error);
+          });
+          child.once('exit', () => {
+            clearTimeout(timeout);
+            resolve();
+          });
+        });
+      }
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  };
+
+  return {
+    url: metadata.url,
+    stop,
+  } satisfies SharedPrerenderProcess;
+}
+
 export const test = base.extend<
   FactoryRealmFixtures,
   FactoryRealmWorkerFixtures
@@ -243,10 +320,23 @@ export const test = base.extend<
     { scope: 'worker' },
   ],
 
+  sharedPrerender: [
+    async ({ browserName: _browserName }, use) => {
+      let prerender = await startPrerenderProcess();
+      try {
+        await use(prerender);
+      } finally {
+        await prerender.stop();
+      }
+    },
+    { scope: 'worker' },
+  ],
+
   cachedContext: [
-    async ({ browser, preparedRealmTemplate }, use) => {
+    async ({ browser, preparedRealmTemplate, sharedPrerender }, use) => {
       let bootstrapRealm = await startRealmProcess(
         preparedRealmTemplate.templateDatabaseName,
+        sharedPrerender.url,
       );
       let context = await browser.newContext({
         baseURL: defaultRealmURL.href,
@@ -280,9 +370,10 @@ export const test = base.extend<
     { scope: 'worker' },
   ],
 
-  realm: async ({ preparedRealmTemplate }, use) => {
+  realm: async ({ preparedRealmTemplate, sharedPrerender }, use) => {
     let realm = await startRealmProcess(
       preparedRealmTemplate.templateDatabaseName,
+      sharedPrerender.url,
     );
     try {
       await use(realm);

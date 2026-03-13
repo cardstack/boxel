@@ -665,6 +665,7 @@ async function buildStartedRealm(
   let runner: QueueRunner | undefined;
   let prerenderer: any;
   let prerenderServer: any;
+  let managedPrerenderServer = false;
   let testRealmServer: RealmServer | undefined;
   let httpServer;
 
@@ -674,7 +675,11 @@ async function buildStartedRealm(
       adapter: dbAdapter,
       workerId: `software-factory-${process.pid}`,
     });
-    ({ prerenderer, server: prerenderServer } = await startPrerenderServer());
+    ({
+      prerenderer,
+      server: prerenderServer,
+      managed: managedPrerenderServer,
+    } = await startPrerenderServer());
     let virtualNetwork = createVirtualNetwork();
     let definitionLookup = new CachingDefinitionLookup(
       dbAdapter,
@@ -788,6 +793,7 @@ async function buildStartedRealm(
 
         try {
           if (
+            managedPrerenderServer &&
             prerenderServer &&
             typeof prerenderServer.__stopPrerenderer === 'function'
           ) {
@@ -798,7 +804,7 @@ async function buildStartedRealm(
         }
 
         try {
-          if (prerenderServer?.listening) {
+          if (managedPrerenderServer && prerenderServer?.listening) {
             await closeServer(prerenderServer);
           }
         } catch (error) {
@@ -806,7 +812,9 @@ async function buildStartedRealm(
         }
 
         try {
-          await (prerenderer as { stop?: () => Promise<void> })?.stop?.();
+          if (managedPrerenderServer) {
+            await (prerenderer as { stop?: () => Promise<void> })?.stop?.();
+          }
         } catch (error) {
           cleanupError ??= error;
         }
@@ -848,6 +856,7 @@ async function buildStartedRealm(
     }
     try {
       if (
+        managedPrerenderServer &&
         prerenderServer &&
         typeof prerenderServer.__stopPrerenderer === 'function'
       ) {
@@ -857,14 +866,16 @@ async function buildStartedRealm(
       // best effort cleanup
     }
     try {
-      if (prerenderServer?.listening) {
+      if (managedPrerenderServer && prerenderServer?.listening) {
         await closeServer(prerenderServer);
       }
     } catch {
       // best effort cleanup
     }
     try {
-      await (prerenderer as { stop?: () => Promise<void> })?.stop?.();
+      if (managedPrerenderServer) {
+        await (prerenderer as { stop?: () => Promise<void> })?.stop?.();
+      }
     } catch {
       // best effort cleanup
     }
@@ -982,7 +993,17 @@ async function getFreePort(): Promise<number> {
 async function startPrerenderServer(): Promise<{
   prerenderer: any;
   server: any;
+  managed: boolean;
 }> {
+  if (process.env.SOFTWARE_FACTORY_PRERENDER_SERVER_URL) {
+    return {
+      prerenderer: createRemotePrerenderer(
+        process.env.SOFTWARE_FACTORY_PRERENDER_SERVER_URL,
+      ),
+      server: undefined,
+      managed: false,
+    };
+  }
   let port = await getFreePort();
   let server = createPrerenderHttpServer({
     silent: Boolean(process.env.SILENT_PRERENDERER),
@@ -997,5 +1018,6 @@ async function startPrerenderServer(): Promise<{
   return {
     prerenderer: createRemotePrerenderer(`http://127.0.0.1:${port}`),
     server,
+    managed: true,
   };
 }

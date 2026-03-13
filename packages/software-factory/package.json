@@ -14,6 +14,7 @@
     "lint:format": "prettier --check .",
     "lint:format:fix": "prettier --write .",
     "lint:types": "tsc --noEmit src/index.ts",
+    "serve:prerender": "ts-node --transpileOnly --esm src/cli/serve-prerender.ts",
     "serve:realm": "ts-node --transpileOnly --esm src/cli/serve-realm.ts",
     "smoke:realm": "ts-node --transpileOnly --esm src/cli/smoke-realm.ts",
     "test:playwright": "playwright test",

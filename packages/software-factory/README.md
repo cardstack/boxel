@@ -49,6 +49,8 @@ pnpm smoke:realm ./my-realm Person/example-card
   codebase stays stable.
 - Playwright uses a single worker-scoped browser context so host assets and app
   shell requests stay warm in the browser cache across tests.
+- The Playwright worker also keeps a shared prerender server alive so per-test
+  realm restarts do not relaunch Chromium for realm-side prerender work.
 - Each Playwright test still starts a fresh realm server and fresh runtime
   database cloned from the cached template DB, so server-side mutations do not
   leak across tests.
