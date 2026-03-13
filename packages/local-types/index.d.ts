@@ -52,3 +52,27 @@ declare module '@ember/component' {
 import '../../runtime-common/global';
 
 import './matrix-js-sdk';
+
+import 'qunit';
+import 'qunit-dom';
+
+declare module '@cardstack/boxel-host/test-helpers' {
+  export function renderCard(
+    card: any,
+    opts?: { commandContext?: any; format?: string },
+  ): Promise<void>;
+  export function visitOperatorMode(state?: {
+    stacks?: Array<Array<{ id: string; format?: string }>>;
+    submode?: string;
+    [key: string]: unknown;
+  }): Promise<void>;
+  export function setupTestRealm(
+    hooks: {
+      beforeEach: (fn: () => Promise<void> | void) => void;
+      afterEach: (fn: () => Promise<void> | void) => void;
+    },
+    options: { contents: Record<string, object>; realmURL?: string },
+  ): void;
+  export function fetchCard(url: string): Promise<any>;
+  export function getDefaultWritableRealmURL(): string;
+}

@@ -15,6 +15,7 @@ import {
   type ClassDeclaration,
   type Declaration,
   type Reexport,
+  type TestDeclaration,
   isInternalReference,
 } from '@cardstack/runtime-common/module-syntax';
 
@@ -51,7 +52,8 @@ export type ModuleDeclaration =
   | CommandDeclaration
   | ClassDeclaration
   | FunctionDeclaration
-  | CardOrFieldReexport;
+  | CardOrFieldReexport
+  | TestDeclaration;
 
 export function isCardOrFieldDeclaration(
   declaration: ModuleDeclaration,
@@ -66,6 +68,12 @@ export function isCommandDeclaration(
   declaration: ModuleDeclaration,
 ): declaration is CommandDeclaration {
   return declaration.type === 'command';
+}
+
+export function isTestDeclaration(
+  declaration: ModuleDeclaration,
+): declaration is TestDeclaration {
+  return declaration.type === 'test';
 }
 
 export function isReexportCardOrField(
@@ -191,6 +199,8 @@ export default class ModuleContentsService extends Service {
           if (value.exportName !== undefined) {
             return value as ModuleDeclaration;
           }
+        } else if (value.type === 'test') {
+          return value as TestDeclaration;
         }
         return null;
       },

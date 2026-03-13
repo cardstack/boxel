@@ -8,6 +8,7 @@ import {
   type FileRenderArgs,
   logger,
   type RunCommandResponse,
+  type RunTestsResponse,
 } from '@cardstack/runtime-common';
 import { BrowserManager } from './browser-manager';
 import { PagePool } from './page-pool';
@@ -373,6 +374,43 @@ export class Prerenderer {
       });
     } catch (e) {
       log.error(`command run attempt failed (user ${userId})`, e);
+      throw e;
+    }
+  }
+
+  async runTests({
+    affinityType,
+    affinityValue,
+    auth,
+    moduleUrl,
+    filter,
+    opts,
+  }: {
+    affinityType: AffinityType;
+    affinityValue: string;
+    auth: string;
+    moduleUrl: string;
+    filter?: string;
+    opts?: { timeoutMs?: number };
+  }): Promise<{
+    response: RunTestsResponse;
+    timings: { launchMs: number; renderMs: number };
+    pool: PoolMeta;
+  }> {
+    if (this.#stopped) {
+      throw new Error('Prerenderer has been stopped and cannot be used');
+    }
+    try {
+      return await this.#renderRunner.runTestsAttempt({
+        affinityType,
+        affinityValue,
+        auth,
+        moduleUrl,
+        filter,
+        opts,
+      });
+    } catch (e) {
+      log.error(`test run attempt failed (module ${moduleUrl})`, e);
       throw e;
     }
   }

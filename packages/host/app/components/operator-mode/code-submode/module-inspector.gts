@@ -9,6 +9,7 @@ import { tracked } from '@glimmer/tracking';
 
 import Eye from '@cardstack/boxel-icons/eye';
 import FileCog from '@cardstack/boxel-icons/file-cog';
+import FlaskConical from '@cardstack/boxel-icons/flask-conical';
 import Schema from '@cardstack/boxel-icons/schema';
 
 import { task } from 'ember-concurrency';
@@ -52,6 +53,7 @@ import Playground from '@cardstack/host/components/operator-mode/code-submode/pl
 import SchemaEditor from '@cardstack/host/components/operator-mode/code-submode/schema-editor';
 import SpecPreview from '@cardstack/host/components/operator-mode/code-submode/spec-preview';
 import SpecPreviewBadge from '@cardstack/host/components/operator-mode/code-submode/spec-preview-badge';
+import TestRunnerPanel from '@cardstack/host/components/operator-mode/code-submode/test-runner-panel';
 
 import ToggleButton from '@cardstack/host/components/operator-mode/code-submode/toggle-button';
 import PreviewPanel from '@cardstack/host/components/operator-mode/preview-panel/index';
@@ -98,6 +100,7 @@ const moduleInspectorPanels: Record<ModuleInspectorView, ComponentLike> = {
   schema: Schema,
   preview: Eye,
   spec: FileCog,
+  test: FlaskConical,
 };
 
 interface ModuleInspectorSignature {
@@ -558,7 +561,11 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
   }
 
   get displayInspector() {
-    return this.args.selectedDeclaration;
+    return this.args.selectedDeclaration || this.isTestFile;
+  }
+
+  private get isTestFile() {
+    return this.args.readyFile?.url?.endsWith('.test.gts') ?? false;
   }
 
   <template>
@@ -609,32 +616,47 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
           }}
           data-test-preview-panel-header
         >
-          {{#each-in moduleInspectorPanels as |moduleInspectorView icon|}}
+          {{#if this.isTestFile}}
             <ToggleButton
               class='toggle-button'
-              @icon={{icon}}
-              @isActive={{eq this.activePanel moduleInspectorView}}
-              {{on 'click' (fn this.setActivePanel moduleInspectorView)}}
-              data-test-module-inspector-view={{moduleInspectorView}}
+              @icon={{FlaskConical}}
+              @isActive={{eq this.activePanel 'test'}}
+              {{on 'click' (fn this.setActivePanel 'test')}}
+              data-test-module-inspector-view='test'
             >
-              <:default>{{capitalize moduleInspectorView}}</:default>
-              <:annotation>
-                {{#if (eq moduleInspectorView 'spec')}}
-                  <SpecPreviewBadge
-                    @spec={{this.activeSpec}}
-                    @showCreateSpec={{this.showCreateSpec}}
-                    @createSpec={{this.createSpec}}
-                    @isCreateSpecInstanceRunning={{this.createSpecTask.isRunning}}
-                    @numberOfInstances={{this.specsForSelectedDefinition.length}}
-                  />
-                {{else if (eq moduleInspectorView 'schema')}}
-                  {{#if @selectedCardOrField}}
-                    <SchemaEditorBadge />
-                  {{/if}}
-                {{/if}}
-              </:annotation>
+              <:default>Test</:default>
+              <:annotation></:annotation>
             </ToggleButton>
-          {{/each-in}}
+          {{else}}
+            {{#each-in moduleInspectorPanels as |moduleInspectorView icon|}}
+              {{#unless (eq moduleInspectorView 'test')}}
+                <ToggleButton
+                  class='toggle-button'
+                  @icon={{icon}}
+                  @isActive={{eq this.activePanel moduleInspectorView}}
+                  {{on 'click' (fn this.setActivePanel moduleInspectorView)}}
+                  data-test-module-inspector-view={{moduleInspectorView}}
+                >
+                  <:default>{{capitalize moduleInspectorView}}</:default>
+                  <:annotation>
+                    {{#if (eq moduleInspectorView 'spec')}}
+                      <SpecPreviewBadge
+                        @spec={{this.activeSpec}}
+                        @showCreateSpec={{this.showCreateSpec}}
+                        @createSpec={{this.createSpec}}
+                        @isCreateSpecInstanceRunning={{this.createSpecTask.isRunning}}
+                        @numberOfInstances={{this.specsForSelectedDefinition.length}}
+                      />
+                    {{else if (eq moduleInspectorView 'schema')}}
+                      {{#if @selectedCardOrField}}
+                        <SchemaEditorBadge />
+                      {{/if}}
+                    {{/if}}
+                  </:annotation>
+                </ToggleButton>
+              {{/unless}}
+            {{/each-in}}
+          {{/if}}
         </header>
 
         <section
@@ -642,7 +664,12 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
           data-test-module-inspector='card-or-field'
           data-test-active-module-inspector-view={{this.activePanel}}
         >
-          {{#if (eq this.activePanel 'schema')}}
+          {{#if this.isTestFile}}
+            <TestRunnerPanel
+              @moduleUrl={{@readyFile.url}}
+              @realmUrl={{this.operatorModeStateService.realmURL}}
+            />
+          {{else if (eq this.activePanel 'schema')}}
             <SchemaEditorPanel class='non-preview-panel-content' />
           {{else if (eq this.activePanel 'preview')}}
             <Playground

@@ -151,12 +151,44 @@ export type RunCommandResponse = {
   error?: string | null;
 };
 
+export type TestResult = {
+  name: string;
+  status: 'pass' | 'fail' | 'error';
+  duration: number;
+  error?: {
+    message: string;
+    stack?: string;
+    actual?: unknown;
+    expected?: unknown;
+  };
+};
+
+export type RunTestsResponse = {
+  status: 'pass' | 'fail' | 'error';
+  total: number;
+  passed: number;
+  failed: number;
+  duration: number;
+  tests: TestResult[];
+};
+
+export type RunTestsArgs = {
+  moduleUrl: string;
+  auth: string;
+  affinityType: AffinityType;
+  affinityValue: string;
+  realm: string;
+  /** Run only the test whose name exactly matches this string. Omit to run all tests. */
+  filter?: string;
+};
+
 export interface Prerenderer {
   prerenderCard(args: PrerenderCardArgs): Promise<RenderResponse>;
   prerenderModule(args: ModulePrerenderArgs): Promise<ModuleRenderResponse>;
   prerenderFileExtract(args: ModulePrerenderArgs): Promise<FileExtractResponse>;
   prerenderFileRender(args: FileRenderArgs): Promise<FileRenderResponse>;
   runCommand(args: RunCommandArgs): Promise<RunCommandResponse>;
+  runTests(args: RunTestsArgs): Promise<RunTestsResponse>;
 }
 
 export type RealmAction = 'read' | 'write' | 'realm-owner' | 'assume-user';

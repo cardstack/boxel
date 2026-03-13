@@ -6,6 +6,8 @@
     "content-tag": "catalog:",
     "ember-source": "catalog:",
     "@glint/template": "^1.3.0",
-    "ember-provide-consume-context": "^0.7.0"
+    "ember-provide-consume-context": "^0.7.0",
+    "@types/qunit": "catalog:",
+    "qunit-dom": "catalog:"
   }
 }

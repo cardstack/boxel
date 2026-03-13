@@ -8,6 +8,7 @@ import {
   type FileRenderArgs,
   type RenderRouteOptions,
   type RunCommandResponse,
+  type RunTestsResponse,
   type AffinityType,
   serializeRenderRouteOptions,
   logger,
@@ -1449,6 +1450,186 @@ export class RenderRunner {
       });
     } catch (e) {
       log.warn(`Error disposing affinity %s on %s:`, affinityKey, reason, e);
+    }
+  }
+
+  async runTestsAttempt({
+    affinityType,
+    affinityValue,
+    auth,
+    moduleUrl,
+    filter,
+    opts,
+  }: {
+    affinityType: AffinityType;
+    affinityValue: string;
+    auth: string;
+    moduleUrl: string;
+    filter?: string;
+    opts?: { timeoutMs?: number };
+  }): Promise<{
+    response: RunTestsResponse;
+    timings: { launchMs: number; renderMs: number };
+    pool: {
+      pageId: string;
+      affinityType: AffinityType;
+      affinityValue: string;
+      reused: boolean;
+      evicted: boolean;
+      timedOut: boolean;
+    };
+  }> {
+    this.#nonce++;
+    let affinityKey = toAffinityKey({ affinityType, affinityValue });
+    log.info(
+      `running tests for module ${moduleUrl}, nonce=${this.#nonce} affinity=${affinityKey}`,
+    );
+
+    const { page, reused, launchMs, pageId, release } =
+      await this.#getPageForAffinity(affinityKey, auth);
+    const poolInfo = {
+      pageId: pageId ?? 'unknown',
+      affinityType,
+      affinityValue,
+      reused,
+      evicted: false,
+      timedOut: false,
+    };
+    this.#pagePool.resetConsoleErrors(pageId);
+
+    try {
+      let renderStart = Date.now();
+      let nonce = String(this.#nonce);
+
+      await page.evaluate(
+        (sessionAuth, nonce, moduleUrl) => {
+          localStorage.setItem('boxel-session', sessionAuth);
+          localStorage.setItem('boxel-test-runner-nonce', nonce);
+          localStorage.setItem('boxel-test-runner-module', moduleUrl);
+        },
+        auth,
+        nonce,
+        moduleUrl,
+      );
+
+      let queryParams: Record<string, string> = { module: moduleUrl, nonce };
+      if (filter) {
+        queryParams['filter'] = filter;
+      }
+      await transitionTo(page, 'test-runner', { queryParams });
+      log.info(
+        'test-runner navigated for module: %s nonce: %s filter: %s',
+        moduleUrl,
+        nonce,
+        filter ?? '<none>',
+      );
+
+      let waitResult = await withTimeout(
+        page,
+        async () => {
+          await page.waitForFunction(
+            (expectedNonce: string) => {
+              let containers = Array.from(
+                document.querySelectorAll(
+                  '[data-prerender][data-prerender-id="test-runner"]',
+                ),
+              ) as HTMLElement[];
+              let container =
+                containers.find(
+                  (candidate) =>
+                    candidate.dataset.prerenderNonce === expectedNonce,
+                ) ?? null;
+              if (!container) {
+                return false;
+              }
+              let status = container.dataset.prerenderStatus ?? '';
+              return ['ready', 'error'].includes(status);
+            },
+            {},
+            nonce,
+          );
+          return true;
+        },
+        opts?.timeoutMs,
+      );
+
+      if (isRenderError(waitResult)) {
+        let errorResponse: RunTestsResponse = {
+          status: 'error',
+          total: 0,
+          passed: 0,
+          failed: 0,
+          duration: 0,
+          tests: [],
+        };
+        return {
+          response: errorResponse,
+          timings: { launchMs, renderMs: Date.now() - renderStart },
+          pool: poolInfo,
+        };
+      }
+
+      let payload = await page.evaluate((expectedNonce: string) => {
+        let containers = Array.from(
+          document.querySelectorAll(
+            '[data-prerender][data-prerender-id="test-runner"]',
+          ),
+        ) as HTMLElement[];
+        let container =
+          containers.find(
+            (candidate) => candidate.dataset.prerenderNonce === expectedNonce,
+          ) ?? null;
+        let resultsElement = container?.querySelector(
+          '[data-test-results]',
+        ) as HTMLElement | null;
+        let raw = (resultsElement?.textContent ?? '').trim();
+        return { raw };
+      }, nonce);
+
+      let response: RunTestsResponse;
+      try {
+        response = JSON.parse(payload.raw) as RunTestsResponse;
+      } catch {
+        response = {
+          status: 'error',
+          total: 0,
+          passed: 0,
+          failed: 0,
+          duration: 0,
+          tests: [],
+        };
+      }
+
+      return {
+        response,
+        timings: { launchMs, renderMs: Date.now() - renderStart },
+        pool: poolInfo,
+      };
+    } catch (e) {
+      log.error('Error running tests in headless chrome:', e);
+      let errorResponse: RunTestsResponse = {
+        status: 'error',
+        total: 0,
+        passed: 0,
+        failed: 0,
+        duration: 0,
+        tests: [],
+      };
+      return {
+        response: errorResponse,
+        timings: { launchMs, renderMs: 0 },
+        pool: poolInfo,
+      };
+    } finally {
+      // Close the page after tests — each test run gets an isolated page
+      try {
+        await page.close();
+      } catch (e) {
+        log.warn('Error closing test-runner page:', e);
+      }
+      release();
+      // Evict the closed page from the pool so the next test run gets a fresh page
+      void this.#pagePool.disposeAffinity(affinityKey, { awaitIdle: false });
     }
   }
 }

@@ -119,7 +119,7 @@ interface OpenFileSubscriber {
   onStateChange: (state: FileResource['state']) => void;
 }
 
-export type ModuleInspectorView = 'schema' | 'spec' | 'preview';
+export type ModuleInspectorView = 'schema' | 'spec' | 'preview' | 'test';
 export const DEFAULT_MODULE_INSPECTOR_VIEW: ModuleInspectorView = 'schema';
 
 export default class OperatorModeStateService extends Service {

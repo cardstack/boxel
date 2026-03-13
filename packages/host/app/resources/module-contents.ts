@@ -21,17 +21,21 @@ import {
   isCardOrFieldDeclaration,
   isCommandDeclaration,
   isReexportCardOrField,
+  isTestDeclaration,
 } from '@cardstack/host/services/module-contents-service';
+import type { TestDeclaration } from '@cardstack/runtime-common/module-syntax';
 import type NetworkService from '@cardstack/host/services/network';
 
 export {
   isCardOrFieldDeclaration,
   isCommandDeclaration,
   isReexportCardOrField,
+  isTestDeclaration,
   type ModuleDeclaration,
   type CardOrFieldDeclaration,
   type CardOrFieldReexport,
   type CommandDeclaration,
+  type TestDeclaration,
 };
 
 interface Args {
@@ -82,6 +86,9 @@ export class ModuleContentsResource
       return;
     }
     if (this.executableFile === undefined) {
+      return;
+    }
+    if (this.executableFile.url.endsWith('.test.gts')) {
       return;
     }
     this.load.perform(this.executableFile);
