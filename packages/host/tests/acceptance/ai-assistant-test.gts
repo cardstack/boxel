@@ -850,6 +850,94 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await click('[data-test-close-ai-assistant]');
   });
 
+  test('LLM select footer shows "Go to current system card" action', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    await click('[data-test-open-ai-assistant]');
+    await waitFor('[data-room-settled]');
+    await click('[data-test-llm-select-selected]');
+
+    assert
+      .dom('[data-test-go-to-system-card]')
+      .exists('Go to system card action is visible');
+    assert
+      .dom('[data-test-go-to-system-card]')
+      .hasText('Go to current system card');
+
+    await click('[data-test-pill-menu-button]');
+    await click('[data-test-close-ai-assistant]');
+  });
+
+  test('LLM select footer shows "Restore default" when non-default system card is active', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}SystemCard/productivity`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    // Set the alternate system card as active
+    await click('[data-test-more-options-button]');
+    await click('[data-test-boxel-menu-item-text="Set as My System Card"]');
+
+    let matrixService = getService('matrix-service');
+    await waitUntil(
+      () =>
+        matrixService.systemCard?.modelConfigurations?.[0]?.modelId ===
+        'deepseek/deepseek-chat-v3-0324',
+    );
+
+    await click('[data-test-open-ai-assistant]');
+    await waitFor('[data-room-settled]');
+    await click('[data-test-llm-select-selected]');
+
+    assert
+      .dom('[data-test-restore-default-system-card]')
+      .exists('Restore default action is visible for non-default system card');
+
+    await click('[data-test-pill-menu-button]');
+    await click('[data-test-close-ai-assistant]');
+  });
+
+  test('LLM select footer hides "Restore default" when default system card is active', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    await click('[data-test-open-ai-assistant]');
+    await waitFor('[data-room-settled]');
+    await click('[data-test-llm-select-selected]');
+
+    assert
+      .dom('[data-test-restore-default-system-card]')
+      .doesNotExist(
+        'Restore default action is hidden when default system card is active',
+      );
+
+    await click('[data-test-pill-menu-button]');
+    await click('[data-test-close-ai-assistant]');
+  });
+
   test('auto-attached file is not displayed in interact mode', async function (assert) {
     await visitOperatorMode({
       submode: 'interact',
