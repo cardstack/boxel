@@ -138,8 +138,29 @@ const managedProcessStdio =
   process.env.SOFTWARE_FACTORY_DEBUG_SERVER === '1'
     ? ['ignore', 'inherit', 'inherit', 'ipc']
     : ['ignore', 'ignore', 'ignore', 'ipc'];
+const TRACE_TIMINGS = process.env.SOFTWARE_FACTORY_TRACE_TIMINGS === '1';
 
 let preparePgPromise: Promise<void> | undefined;
+
+function nowMs() {
+  return Number(process.hrtime.bigint()) / 1_000_000;
+}
+
+async function timed<T>(label: string, fn: () => Promise<T>): Promise<T> {
+  if (!TRACE_TIMINGS) {
+    return await fn();
+  }
+
+  let startedAt = nowMs();
+  try {
+    return await fn();
+  } finally {
+    let elapsedMs = nowMs() - startedAt;
+    console.error(
+      `[software-factory timing] ${label}: ${elapsedMs.toFixed(1)}ms`,
+    );
+  }
+}
 
 function stableStringify(value: unknown): string {
   if (value === null || typeof value !== 'object') {
@@ -778,7 +799,9 @@ async function startIsolatedRealmStack({
   let rootDir = mkdtempSync(join(tmpdir(), 'software-factory-realms-'));
   let testRealmDir = join(rootDir, 'test');
   fsExtra.ensureDirSync(testRealmDir);
-  copyRealmFixture(realmDir, testRealmDir);
+  await timed('copy realm fixture', async () => {
+    copyRealmFixture(realmDir, testRealmDir);
+  });
 
   let env = {
     ...process.env,
@@ -862,10 +885,12 @@ async function startIsolatedRealmStack({
   }) as SpawnedProcess;
 
   try {
-    await Promise.race([
-      waitForReady(realmServer, 'realm server'),
-      createProcessExitPromise(workerManager, 'worker manager'),
-    ]);
+    await timed('start isolated realm stack', async () => {
+      await Promise.race([
+        waitForReady(realmServer, 'realm server'),
+        createProcessExitPromise(workerManager, 'worker manager'),
+      ]);
+    });
   } catch (error) {
     try {
       await stopManagedProcess(realmServer);
@@ -932,19 +957,27 @@ async function buildTemplateDatabase({
   templateDatabaseName: string;
 }): Promise<void> {
   let builderDatabaseName = builderDatabaseNameForCacheKey(cacheKey);
-  let hasMigratedTemplate = await databaseExists(DEFAULT_MIGRATED_TEMPLATE_DB);
+  let hasMigratedTemplate = await timed('check migrated template exists', () =>
+    databaseExists(DEFAULT_MIGRATED_TEMPLATE_DB),
+  );
 
-  await dropDatabase(templateDatabaseName);
-  await dropDatabase(builderDatabaseName);
+  await timed('drop template database', () =>
+    dropDatabase(templateDatabaseName),
+  );
+  await timed('drop builder database', () => dropDatabase(builderDatabaseName));
 
   if (hasMigratedTemplate) {
-    await cloneDatabaseFromTemplate(
-      DEFAULT_MIGRATED_TEMPLATE_DB,
-      builderDatabaseName,
+    await timed('clone builder database from migrated template', () =>
+      cloneDatabaseFromTemplate(
+        DEFAULT_MIGRATED_TEMPLATE_DB,
+        builderDatabaseName,
+      ),
     );
   }
 
-  await seedRealmPermissions(builderDatabaseName, realmURL, permissions);
+  await timed('seed realm permissions', () =>
+    seedRealmPermissions(builderDatabaseName, realmURL, permissions),
+  );
 
   let stack = await startIsolatedRealmStack({
     realmDir,
@@ -956,32 +989,43 @@ async function buildTemplateDatabase({
   });
 
   try {
-    await waitForQueueIdle(builderDatabaseName);
+    await timed('wait for queue idle', () =>
+      waitForQueueIdle(builderDatabaseName),
+    );
   } finally {
-    await stopIsolatedRealmStack(stack);
+    await timed('stop isolated realm stack', () =>
+      stopIsolatedRealmStack(stack),
+    );
   }
 
-  await createTemplateSnapshot(builderDatabaseName, templateDatabaseName);
-  await dropDatabase(builderDatabaseName);
+  await timed('create template snapshot', () =>
+    createTemplateSnapshot(builderDatabaseName, templateDatabaseName),
+  );
+  await timed('drop builder database after snapshot', () =>
+    dropDatabase(builderDatabaseName),
+  );
 }
 
 async function startFactorySupportServices(): Promise<{
   context: FactorySupportContext;
   stop(): Promise<void>;
 }> {
-  await ensurePgReady();
-  await ensureHostReady();
-  let icons = await ensureIconsReady();
-  cleanupStaleSynapseContainers();
+  await timed('ensure pg ready', () => ensurePgReady());
+  await timed('ensure host ready', () => ensureHostReady());
+  let icons = await timed('ensure icons ready', () => ensureIconsReady());
+  await timed('cleanup stale synapse containers', async () => {
+    cleanupStaleSynapseContainers();
+  });
   let { synapseStart, synapseStop } = await loadSynapseModule();
   let { startPrerenderServer } = await loadIsolatedRealmServerModule();
 
-  let synapse = await synapseStart(
-    { suppressRegistrationSecretFile: true },
-    true,
+  let synapse = await timed('start synapse', () =>
+    synapseStart({ suppressRegistrationSecretFile: true }, true),
   );
-  await ensureSupportUsers(synapse);
-  let prerender = await startPrerenderServer();
+  await timed('ensure support users', () => ensureSupportUsers(synapse));
+  let prerender = await timed('start prerender server', () =>
+    startPrerenderServer(),
+  );
   let matrixURL =
     process.env.SOFTWARE_FACTORY_MATRIX_URL ?? DEFAULT_BROWSER_MATRIX_URL;
 
@@ -1012,14 +1056,18 @@ export async function startFactoryGlobalContext(
 ): Promise<FactoryGlobalContextHandle> {
   let realmDir = resolve(options.realmDir ?? DEFAULT_REALM_DIR);
   let realmURL = new URL((options.realmURL ?? DEFAULT_REALM_URL).href);
-  let support = await startFactorySupportServices();
+  let support = await timed('start support services', () =>
+    startFactorySupportServices(),
+  );
   try {
-    let template = await ensureFactoryRealmTemplate({
-      ...options,
-      realmDir,
-      realmURL,
-      context: support.context,
-    });
+    let template = await timed('ensure factory realm template', () =>
+      ensureFactoryRealmTemplate({
+        ...options,
+        realmDir,
+        realmURL,
+        context: support.context,
+      }),
+    );
 
     let context: FactoryTestContext = {
       ...support.context,
@@ -1111,11 +1159,13 @@ export async function startFactoryRealmServer(
   let ownedGlobalContext: FactoryGlobalContextHandle | undefined;
   let context = options.context ?? parseFactoryContext();
   if (!context) {
-    ownedGlobalContext = await startFactoryGlobalContext({
-      ...options,
-      realmDir,
-      realmURL,
-    });
+    ownedGlobalContext = await timed('start factory global context', () =>
+      startFactoryGlobalContext({
+        ...options,
+        realmDir,
+        realmURL,
+      }),
+    );
     context = ownedGlobalContext.context;
   }
 
@@ -1123,27 +1173,33 @@ export async function startFactoryRealmServer(
     templateDatabaseName = hasTemplateDatabaseName(context)
       ? context.templateDatabaseName
       : (
-          await ensureFactoryRealmTemplate({
-            ...options,
-            realmDir,
-            realmURL,
-            context,
-          })
+          await timed('ensure factory realm template', () =>
+            ensureFactoryRealmTemplate({
+              ...options,
+              realmDir,
+              realmURL,
+              context,
+            }),
+          )
         ).templateDatabaseName;
   }
 
   let databaseName = runtimeDatabaseName();
-  await dropDatabase(databaseName);
-  await cloneDatabaseFromTemplate(templateDatabaseName, databaseName);
+  await timed('drop runtime database', () => dropDatabase(databaseName));
+  await timed('clone runtime database from template', () =>
+    cloneDatabaseFromTemplate(templateDatabaseName, databaseName),
+  );
 
-  let stack = await startIsolatedRealmStack({
-    realmDir,
-    realmURL,
-    databaseName,
-    context,
-    migrateDB: false,
-    fullIndexOnStartup: false,
-  });
+  let stack = await timed('start runtime realm stack', () =>
+    startIsolatedRealmStack({
+      realmDir,
+      realmURL,
+      databaseName,
+      context,
+      migrateDB: false,
+      fullIndexOnStartup: false,
+    }),
+  );
 
   return {
     realmDir,
