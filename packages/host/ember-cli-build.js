@@ -1,5 +1,6 @@
 'use strict';
 
+const path = require('path');
 const EmberApp = require('ember-cli/lib/broccoli/ember-app');
 const { compatBuild } = require('@embroider/compat');
 const { Webpack } = require('@embroider/webpack');
@@ -47,6 +48,11 @@ module.exports = function (defaults) {
     packagerOptions: {
       ...{
         webpackConfig: {
+          entry: {
+            // Separate bundle for the live realm-test runner (live-test.html).
+            // Key must match the <script src> path so embroider rewrites the HTML correctly.
+            'assets/live-test.js': path.resolve(__dirname, 'tests/live-test.js'),
+          },
           devtool: 'source-map',
           module: {
             rules: [

@@ -1,0 +1,54 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Realm Test Runner</title>
+
+    <!--
+      Bootstrap: copy the environment config meta tag from the already-processed
+      tests/index.html before any scripts run. This is needed because:
+        - {{content-for "head"}} is only substituted for tests/index.html and
+          index.html (ember-cli classicEntrypoints), not for this file.
+        - The config/environment.js module reads that meta tag at runtime.
+        - Without it, Application.create(config.APP) throws.
+      Using synchronous XHR so the meta tag is in the DOM before vendor/host JS run.
+    -->
+    <script>
+      (function () {
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', '/tests/index.html', false /* sync */);
+        xhr.send(null);
+        if (xhr.status === 200) {
+          var tmp = document.createElement('html');
+          tmp.innerHTML = xhr.responseText;
+          var meta = tmp.querySelector('meta[name$="/config/environment"]');
+          if (meta) {
+            document.head.insertAdjacentHTML('beforeend', meta.outerHTML);
+          }
+        }
+        window.__LIVE_TEST__ = true;
+      })();
+    </script>
+
+    <link rel="stylesheet" href="/assets/vendor.css" />
+    <link rel="stylesheet" href="/assets/@cardstack/host.css" />
+    <link rel="stylesheet" href="/assets/test-support.css" />
+  </head>
+  <body>
+    <div id="qunit"></div>
+    <div id="qunit-fixture">
+      <div id="ember-testing-container">
+        <div id="ember-testing"></div>
+      </div>
+    </div>
+
+    <script type="module">
+      import * as ContentTag from '/assets/content-tag/standalone.js';
+      globalThis.ContentTagGlobal = ContentTag;
+    </script>
+    <script src="/assets/vendor.js"></script>
+    <script src="/assets/test-support.js"></script>
+    <script src="/assets/@cardstack/host.js"></script>
+    <script src="/assets/live-test.js"></script>
+  </body>
+</html>
