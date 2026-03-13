@@ -4,8 +4,10 @@ pnpm setup:base-in-deployment
 pnpm setup:experiments-in-deployment
 pnpm setup:catalog-in-deployment
 pnpm setup:skills-in-deployment
+pnpm setup:software-factory-in-deployment
 pnpm setup:boxel-homepage-in-deployment
 pnpm setup:catalog-new-in-deployment
+pnpm setup:openrouter-in-deployment
 
 SUBMISSION_REALM_PATH='/persistent/submissions'
 SUBMISSION_REALM_URL="${RESOLVED_SUBMISSION_REALM_URL:-https://realms-staging.stack.cards/submissions/}"
@@ -13,6 +15,8 @@ sh "$SCRIPTS_DIR/setup-submission-realm.sh" "$SUBMISSION_REALM_PATH"
 
 DEFAULT_CATALOG_REALM_URL='https://realms-staging.stack.cards/catalog/'
 CATALOG_REALM_URL="${RESOLVED_CATALOG_REALM_URL:-$DEFAULT_CATALOG_REALM_URL}"
+DEFAULT_SOFTWARE_FACTORY_REALM_URL='https://realms-staging.stack.cards/software-factory/'
+SOFTWARE_FACTORY_REALM_URL="${RESOLVED_SOFTWARE_FACTORY_REALM_URL:-$DEFAULT_SOFTWARE_FACTORY_REALM_URL}"
 DEFAULT_BOXEL_HOMEPAGE_REALM_URL='https://realms-staging.stack.cards/boxel-homepage/'
 BOXEL_HOMEPAGE_REALM_URL="${RESOLVED_BOXEL_HOMEPAGE_REALM_URL:-$DEFAULT_BOXEL_HOMEPAGE_REALM_URL}"
 DEFAULT_NEW_CATALOG_REALM_URL='https://realms-staging.stack.cards/catalog-new/'
@@ -67,4 +71,14 @@ NODE_NO_WARNINGS=1 \
   --path='/persistent/catalog-new' \
   --username='catalog_new_realm' \
   --fromUrl="${NEW_CATALOG_REALM_URL}" \
-  --toUrl="${NEW_CATALOG_REALM_URL}"
+  --toUrl="${NEW_CATALOG_REALM_URL}" \
+  \
+  --path='/persistent/openrouter' \
+  --username='openrouter_realm' \
+  --fromUrl='@cardstack/openrouter/' \
+  --toUrl='https://realms-staging.stack.cards/openrouter/' \
+  \
+  --path='/persistent/software-factory' \
+  --username='software_factory_realm' \
+  --fromUrl="${SOFTWARE_FACTORY_REALM_URL}" \
+  --toUrl="${SOFTWARE_FACTORY_REALM_URL}"

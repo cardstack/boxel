@@ -136,6 +136,11 @@ export async function registerRealmUsers(synapse: SynapseInstance) {
     'submission_realm',
     await realmPassword('submission_realm', realmSecretSeed),
   );
+  await registerUser(
+    synapse,
+    'software_factory_realm',
+    await realmPassword('software_factory_realm', realmSecretSeed),
+  );
 }
 
 export async function reloadAndOpenAiAssistant(page: Page) {

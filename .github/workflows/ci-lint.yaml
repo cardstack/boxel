@@ -80,6 +80,10 @@ jobs:
         if: always()
         run: pnpm run lint
         working-directory: packages/experiments-realm
+      - name: Lint Software Factory
+        if: always()
+        run: pnpm run lint
+        working-directory: packages/software-factory
       - name: Lint Boxel Tools VS Code extension
         if: always()
         run: pnpm run lint

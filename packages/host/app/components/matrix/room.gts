@@ -28,7 +28,11 @@ import { TrackedObject, TrackedMap, TrackedSet } from 'tracked-built-ins';
 
 import { v4 as uuidv4 } from 'uuid';
 
-import { Alert, LoadingIndicator } from '@cardstack/boxel-ui/components';
+import {
+  Alert,
+  BoxelButton,
+  LoadingIndicator,
+} from '@cardstack/boxel-ui/components';
 import { and, eq, not } from '@cardstack/boxel-ui/helpers';
 
 import type { ResolvedCodeRef } from '@cardstack/runtime-common';
@@ -47,6 +51,7 @@ import {
 } from '@cardstack/runtime-common/matrix-constants';
 
 import UpdateRoomSkillsCommand from '@cardstack/host/commands/update-room-skills';
+import ENV from '@cardstack/host/config/environment';
 import type { FileUploadState } from '@cardstack/host/lib/file-upload-state';
 import type { Message } from '@cardstack/host/lib/matrix-classes/message';
 import type { StackItem } from '@cardstack/host/lib/stack-item';
@@ -303,7 +308,37 @@ export default class Room extends Component<Signature> {
                     @disabled={{@roomResource.isActivatingLLM}}
                     @onExpand={{fn this.setSelectedBottomAction 'llm-select'}}
                     @onCollapse={{fn this.setSelectedBottomAction undefined}}
-                  />
+                  >
+                    <:footer>
+                      <li class='llm-select-footer'>
+                        {{#if this.systemCardId}}
+                          <BoxelButton
+                            @kind='text-only'
+                            @size='extra-small'
+                            class='llm-select-footer-action'
+                            {{on 'click' this.goToSystemCard}}
+                            data-test-go-to-system-card
+                          >
+                            Go to current system card
+                          </BoxelButton>
+                        {{/if}}
+                        {{#unless this.isDefaultSystemCard}}
+                          <BoxelButton
+                            @kind='text-only'
+                            @size='extra-small'
+                            class='llm-select-footer-action'
+                            {{on
+                              'click'
+                              (perform this.restoreDefaultSystemCardTask)
+                            }}
+                            data-test-restore-default-system-card
+                          >
+                            Restore default system card
+                          </BoxelButton>
+                        {{/unless}}
+                      </li>
+                    </:footer>
+                  </LLMSelect>
                 {{/if}}
                 {{#if this.displayLLMModeSelect}}
                   <LLMModeToggle
@@ -484,6 +519,26 @@ export default class Room extends Component<Signature> {
       .llm-select :deep(.menu-content) {
         margin-right: calc(-2 * var(--boxel-sp-sm));
         width: 100%;
+      }
+
+      .llm-select-footer {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-xxxs);
+        border-top: 1px solid var(--boxel-200);
+        padding-top: var(--boxel-sp-xxxs);
+      }
+
+      .llm-select-footer-action {
+        --boxel-button-padding: var(--boxel-sp-xxxs) var(--boxel-sp-sm);
+        --boxel-button-min-height: unset;
+        justify-content: flex-start;
+        font: 500 var(--boxel-font-xs);
+        color: var(--boxel-500);
+      }
+
+      .llm-select-footer-action:hover {
+        color: var(--boxel-dark);
       }
 
       .chat-input-area :deep(.minimized-arrow) {
@@ -1032,6 +1087,40 @@ export default class Room extends Component<Signature> {
       return acc;
     }, {});
   }
+
+  private get systemCardId(): string | undefined {
+    return this.matrixService.systemCard?.id;
+  }
+
+  private get isDefaultSystemCard(): boolean {
+    let systemCardId = this.systemCardId;
+    let defaultSystemCardId = ENV.defaultSystemCardId;
+    if (!defaultSystemCardId) {
+      return true;
+    }
+    return !systemCardId || systemCardId === defaultSystemCardId;
+  }
+
+  @action
+  private goToSystemCard() {
+    let systemCardId = this.systemCardId;
+    if (systemCardId) {
+      let stackIndex = Math.min(
+        this.operatorModeStateService.numberOfStacks(),
+        1,
+      );
+      let stackItem = this.operatorModeStateService.createStackItem(
+        systemCardId,
+        stackIndex,
+        'isolated',
+      );
+      this.operatorModeStateService.addItemToStack(stackItem);
+    }
+  }
+
+  private restoreDefaultSystemCardTask = task(async () => {
+    await this.matrixService.setUserSystemCard(undefined);
+  });
 
   private get sortedSkills(): RoomSkill[] {
     return [...this.skills].sort((a, b) => {

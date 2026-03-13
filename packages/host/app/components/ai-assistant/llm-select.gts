@@ -19,6 +19,9 @@ interface Signature {
     onExpand?: () => void;
     onCollapse?: () => void;
   };
+  Blocks: {
+    footer: [];
+  };
   Element: HTMLElement;
 }
 
@@ -64,6 +67,7 @@ export default class LLMSelect extends Component<Signature> {
               </button>
             </li>
           {{/each-in}}
+          {{yield to='footer'}}
         </ul>
       </:content>
     </PillMenu>

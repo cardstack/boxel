@@ -1,0 +1,33 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Wiki",
+        "module": "../wiki"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "tags": ["analytics-data", "metrics", "kpi"],
+      "content": "## Overview\n\nThe Metrics (KPI) card gives the workspace a structured home for key performance indicator with current value, target, trend, and time period.\n\nAs a first-class Boxel card, it can be linked to adjacent records, surfaced in filtered views, and reused in automation without the information collapsing into disconnected notes or one-off documents.\n\n## Core Mechanics\n\nMetrics (KPI) turns raw activity into structured measurement. The card needs to stay queryable, filterable, and composable so that summaries, dashboards, and automations can build on top of it instead of recreating calculations downstream.\n\nThe card can be created directly by a user, produced from a [[Workflow Playbook]], or updated in response to a [[Trigger]]. When AI is involved, a [[Prompt Template]] or [[Skill Card]] can shape how it is drafted, summarized, classified, or routed.\n\n## Integration Points\n\n- **[[Report]]** -- Metrics (KPI) can feed rollups and summaries that surface trends, status, or outcomes.\n- **[[Workflow Playbook]]** -- Metrics (KPI) can be created, reviewed, or progressed as one step inside a repeatable workflow.\n- **[[Trigger]]** -- Changes to Metrics (KPI) can fire automation, and automation can also create or update Metrics (KPI).\n- **[[Project]]** -- Metrics (KPI) can be grouped under a larger initiative so its work stays visible in context.\n- **[[Survey]]** -- Survey can provide adjacent context, downstream output, or grouped navigation around Metrics (KPI).\n- **[[Questionnaire]]** -- Questionnaire can provide adjacent context, downstream output, or grouped navigation around Metrics (KPI).\n\n## Example Use Cases\n\n- **System of record:** Teams create Metrics (KPI) as the structured home for key performance indicator with current value, target, trend, and time period and keep related work linked instead of scattered across notes.\n- **Automation handoff:** A [[Workflow Playbook]] or [[Trigger]] creates or updates Metrics (KPI) when upstream conditions are met, reducing repetitive setup work.\n- **Search and reporting:** Metrics (KPI) stays queryable for dashboards, summaries, and downstream actions without re-entering the same information in multiple places.",
+      "cardInfo": {
+        "name": "Metrics (KPI)",
+        "notes": null,
+        "summary": "Key performance indicator with current value, target, trend, and time period.",
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "relatedPages": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

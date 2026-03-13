@@ -1,0 +1,28 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Document",
+        "module": "../document"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "content": "# Health & Wellness Card Catalog\n\nCondensed stubs for Health & Wellness card types. These capture the domain memory and reusable behavior an agent should preserve, not exhaustive schema.\n\n### Health Record\n**Priority:** P2\n\n- **Core idea:** General health record container linking to lab results, medications, and history.\n\n---\n\n### Lab Result\n**Priority:** P2\n\n- **Core idea:** Lab test result with test name, value, units, reference range, and date.\n\n---\n\n### Prescription\n**Priority:** P2\n\n- **Core idea:** Medication prescription with drug, dosage, frequency, prescriber, and refill status.\n\n---\n\n### Sleep Record\n**Priority:** P2\n\n- **Core idea:** Sleep tracking data (Oura Ring model): duration, stages, HRV, readiness score, and trends.\n\n---\n\n### Immunization Record\n**Priority:** P3\n\n- **Core idea:** Vaccination record with vaccine name, date, provider, lot number, and next due date.\n\n---\n\n### Symptom Log\n**Priority:** P2\n\n- **Core idea:** Daily symptom tracker with severity, notes, triggers, and timeline visualization.\n",
+      "cardInfo": {
+        "name": "Health & Wellness Card Catalog",
+        "notes": null,
+        "title": "Health & Wellness Card Catalog",
+        "summary": "Condensed stubs for Health & Wellness card types.",
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "@cardstack/catalog/Theme/boxel-brand-guide"
+        }
+      }
+    }
+  }
+}
