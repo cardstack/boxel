@@ -21,6 +21,8 @@ with `SOFTWARE_FACTORY_INCLUDE_SKILLS=1`.
 
 - `pnpm cache:prepare`
   - Builds or reuses the cached template database for `demo-realm/`
+- `pnpm serve:support`
+  - Starts shared support services and prepares a reusable runtime context in the background
 - `pnpm serve:realm`
   - Starts the isolated realm server on `http://localhost:4205/test/`
 - `pnpm smoke:realm`
@@ -48,9 +50,12 @@ pnpm smoke:realm ./my-realm Person/example-card
 ## Notes
 
 - Template DBs are reused across runs while the seeded Postgres container stays up.
+- `serve:support` publishes a shared support context in `/tmp/software-factory-runtime/support.json`.
+- When that shared support context exists, `serve:realm` and `smoke:realm` reuse the running Synapse and prerender services instead of restarting them.
 - Each Playwright test still starts a fresh realm server and fresh runtime
   database cloned from the cached template DB, so server-side mutations do not
   leak across tests.
+- Playwright keeps the support services alive for the whole run and only restarts the realm server/runtime DB per test.
 - The browser tests seed a deterministic local Matrix user
   (`software-factory-browser`) so they do not depend on a human-managed profile.
 - Host requests for the base realm URL are redirected to the isolated realm

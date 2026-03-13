@@ -6,6 +6,7 @@ import { join, resolve } from 'node:path';
 import type { Page } from '@playwright/test';
 import { test as base, expect } from '@playwright/test';
 
+import { defaultSupportMetadataFile } from '../src/runtime-metadata';
 import { buildBrowserState, installBrowserState } from './helpers/browser-auth';
 
 type StartedFactoryRealm = {
@@ -77,6 +78,11 @@ async function startRealmProcess(realmDir = defaultRealmDir) {
   let tempDir = mkdtempSync(join(tmpdir(), 'software-factory-realm-'));
   let metadataFile = join(tempDir, 'runtime.json');
   let logs = '';
+  let supportMetadata = existsSync(defaultSupportMetadataFile)
+    ? (JSON.parse(readFileSync(defaultSupportMetadataFile, 'utf8')) as {
+        context?: Record<string, unknown>;
+      })
+    : undefined;
 
   let child = spawn('pnpm', ['serve:realm', realmDir], {
     cwd: packageRoot,
@@ -84,6 +90,11 @@ async function startRealmProcess(realmDir = defaultRealmDir) {
     env: {
       ...process.env,
       SOFTWARE_FACTORY_METADATA_FILE: metadataFile,
+      ...(supportMetadata?.context
+        ? {
+            SOFTWARE_FACTORY_CONTEXT: JSON.stringify(supportMetadata.context),
+          }
+        : {}),
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   });

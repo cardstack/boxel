@@ -16,6 +16,7 @@
     "lint:types": "tsc --noEmit src/index.ts",
     "serve:prerender": "tsx src/cli/serve-prerender.ts",
     "serve:realm": "tsx src/cli/serve-realm.ts",
+    "serve:support": "tsx src/cli/serve-support.ts",
     "smoke:realm": "tsx src/cli/smoke-realm.ts",
     "test:playwright": "playwright test",
     "test:playwright:headed": "playwright test --headed"

@@ -1,10 +1,19 @@
 // @ts-nocheck
+import { readSupportContext } from '../runtime-metadata.ts';
 import { writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import { startFactoryRealmServer } from '../harness.ts';
 
 let realmDir = resolve(process.cwd(), process.argv[2] ?? 'demo-realm');
+
+if (!process.env.SOFTWARE_FACTORY_CONTEXT) {
+  let supportContext = readSupportContext();
+  if (supportContext) {
+    process.env.SOFTWARE_FACTORY_CONTEXT = JSON.stringify(supportContext);
+  }
+}
+
 try {
   let runtime = await startFactoryRealmServer({
     realmDir,
