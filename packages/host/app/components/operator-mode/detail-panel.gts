@@ -7,6 +7,7 @@ import { capitalize } from '@ember/string';
 import Component from '@glimmer/component';
 
 import Package from '@cardstack/boxel-icons/package';
+import { dropTask } from 'ember-concurrency';
 import { use, resource } from 'ember-resources';
 
 import startCase from 'lodash/startCase';
@@ -260,7 +261,8 @@ export default class DetailPanel extends Component<Signature> {
             {
               label: 'Create Listing',
               icon: Package,
-              handler: this.createListingWithAI,
+              handler: this.createListingWithAI.perform,
+              loading: this.createListingWithAI.isRunning,
             },
           ]
         : []),
@@ -415,7 +417,7 @@ export default class DetailPanel extends Component<Signature> {
     this.args.openSearch(`carddef:${refURL}`);
   }
 
-  @action private async createListingWithAI() {
+  private createListingWithAI = dropTask(async () => {
     const command = new ListingCreateCommand(
       this.commandService.commandContext,
     );
@@ -431,7 +433,7 @@ export default class DetailPanel extends Component<Signature> {
       codeRef,
       targetRealm,
     });
-  }
+  });
 
   private get selectedDeclarationAsCodeRef(): ResolvedCodeRef {
     if (!this.args.selectedDeclaration?.exportName) {

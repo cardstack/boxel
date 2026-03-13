@@ -85,6 +85,7 @@ interface Action {
   label: string;
   handler: (args: any) => void | Promise<void>; // TODO: narrow this for each type of module
   icon: Icon;
+  loading?: boolean;
 }
 export interface BaseArgs {
   title: string;
@@ -186,6 +187,7 @@ const Active: TemplateOnlyComponent<ActiveSignature> = <template>
         class='action-button'
         @size='extra-small'
         @kind='text-only'
+        @loading={{actionButton.loading}}
         {{on 'click' actionButton.handler}}
       >
         <actionButton.icon width='13' height='13' />
