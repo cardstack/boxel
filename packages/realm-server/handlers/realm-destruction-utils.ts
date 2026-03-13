@@ -87,6 +87,48 @@ export async function removeMountedRealm(args: {
   }
 }
 
+export function destroyMountedRealm(args: {
+  realm: Realm;
+  realmPath: string;
+  realms: Realm[];
+  virtualNetwork: VirtualNetwork;
+}) {
+  let { realm, realmPath, realms, virtualNetwork } = args;
+  let cleanupError: Error | undefined;
+
+  try {
+    if (pathExistsSync(realmPath)) {
+      removeSync(realmPath);
+    }
+  } catch (error) {
+    cleanupError =
+      error instanceof Error
+        ? error
+        : new Error(`Failed to remove realm at ${realmPath}: ${String(error)}`);
+  }
+
+  try {
+    virtualNetwork.unmount(realm.handle);
+  } catch (error) {
+    cleanupError ??=
+      error instanceof Error
+        ? error
+        : new Error(`Failed to unmount realm ${realm.url}: ${String(error)}`);
+  }
+
+  let realmIndex = realms.findIndex(
+    (candidate) =>
+      ensureTrailingSlash(candidate.url) === ensureTrailingSlash(realm.url),
+  );
+  if (realmIndex !== -1) {
+    realms.splice(realmIndex, 1);
+  }
+
+  if (cleanupError) {
+    throw cleanupError;
+  }
+}
+
 export async function removeRealmDatabaseArtifacts(args: {
   dbAdapter: DBAdapter;
   realmURL: string;
@@ -129,6 +171,14 @@ export async function removeRealmDatabaseArtifacts(args: {
   ]);
   await query(dbAdapter, [
     `DELETE FROM realm_versions WHERE realm_url =`,
+    param(realmURL),
+  ]);
+  await query(dbAdapter, [
+    `DELETE FROM realm_file_meta WHERE realm_url =`,
+    param(realmURL),
+  ]);
+  await query(dbAdapter, [
+    `DELETE FROM session_rooms WHERE realm_url =`,
     param(realmURL),
   ]);
 }

@@ -82,6 +82,18 @@ module(`server-endpoints/${basename(__filename)}`, function (hooks) {
     );
   }
 
+  async function insertRealmFileMeta(realmURL: string, filePath: string) {
+    let { nameExpressions, valueExpressions } = asExpressions({
+      realm_url: realmURL,
+      file_path: filePath,
+      created_at: Math.floor(Date.now() / 1000),
+    });
+    await query(
+      context.dbAdapter,
+      insert('realm_file_meta', nameExpressions, valueExpressions),
+    );
+  }
+
   test('DELETE /_delete-realm removes a created realm, its published copies, and related domain claims', async function (assert) {
     let owner = `mango-${uuidv4()}`;
     let ownerUserId = `@${owner}:localhost`;
@@ -127,6 +139,9 @@ module(`server-endpoints/${basename(__filename)}`, function (hooks) {
     let sourceModuleURL = `${realmURL}person`;
     let publishedModuleURL = `${publishedRealmURL}person`;
     let unrelatedModuleURL = `${unrelatedRealmURL}person`;
+    let sourceFileMetaPath = `cleanup-${uuidv4()}.json`;
+    let publishedFileMetaPath = `cleanup-${uuidv4()}.json`;
+    let unrelatedFileMetaPath = `cleanup-${uuidv4()}.json`;
 
     await insertIndexEntry({
       table: 'boxel_index',
@@ -163,6 +178,9 @@ module(`server-endpoints/${basename(__filename)}`, function (hooks) {
     await insertModuleEntry(realmURL, sourceModuleURL);
     await insertModuleEntry(publishedRealmURL, publishedModuleURL);
     await insertModuleEntry(unrelatedRealmURL, unrelatedModuleURL);
+    await insertRealmFileMeta(realmURL, sourceFileMetaPath);
+    await insertRealmFileMeta(publishedRealmURL, publishedFileMetaPath);
+    await insertRealmFileMeta(unrelatedRealmURL, unrelatedFileMetaPath);
 
     let {
       nameExpressions: realmVersionNames,
@@ -222,6 +240,15 @@ module(`server-endpoints/${basename(__filename)}`, function (hooks) {
     await context.dbAdapter.execute(`INSERT INTO job_reservations
       (job_id, locked_until, worker_id)
       VALUES (${unrelatedJob.id}, NOW() + INTERVAL '5 minutes', 'worker-unrelated')`);
+    await context.dbAdapter.execute(`INSERT INTO session_rooms
+      (realm_url, matrix_user_id, room_id)
+      VALUES ('${realmURL}', '${ownerUserId}', 'source-room')`);
+    await context.dbAdapter.execute(`INSERT INTO session_rooms
+      (realm_url, matrix_user_id, room_id)
+      VALUES ('${publishedRealmURL}', '@published:localhost', 'published-room')`);
+    await context.dbAdapter.execute(`INSERT INTO session_rooms
+      (realm_url, matrix_user_id, room_id)
+      VALUES ('${unrelatedRealmURL}', '@unrelated:localhost', 'unrelated-room')`);
 
     let { valueExpressions, nameExpressions } = asExpressions({
       user_id: user.id,
@@ -412,6 +439,56 @@ module(`server-endpoints/${basename(__filename)}`, function (hooks) {
       unrelatedRealmMetaRows.length,
       1,
       'unrelated realm rows remain in realm_meta',
+    );
+
+    let sourceRealmFileMetaRows = await context.dbAdapter.execute(
+      `SELECT * FROM realm_file_meta WHERE realm_url = '${realmURL}'`,
+    );
+    let publishedRealmFileMetaRows = await context.dbAdapter.execute(
+      `SELECT * FROM realm_file_meta WHERE realm_url = '${publishedRealmURL}'`,
+    );
+    let unrelatedRealmFileMetaRows = await context.dbAdapter.execute(
+      `SELECT * FROM realm_file_meta WHERE realm_url = '${unrelatedRealmURL}'`,
+    );
+    assert.strictEqual(
+      sourceRealmFileMetaRows.length,
+      0,
+      'source realm rows are removed from realm_file_meta',
+    );
+    assert.strictEqual(
+      publishedRealmFileMetaRows.length,
+      0,
+      'published realm rows are removed from realm_file_meta',
+    );
+    assert.strictEqual(
+      unrelatedRealmFileMetaRows.length,
+      1,
+      'unrelated realm rows remain in realm_file_meta',
+    );
+
+    let sourceSessionRooms = await context.dbAdapter.execute(
+      `SELECT * FROM session_rooms WHERE realm_url = '${realmURL}'`,
+    );
+    let publishedSessionRooms = await context.dbAdapter.execute(
+      `SELECT * FROM session_rooms WHERE realm_url = '${publishedRealmURL}'`,
+    );
+    let unrelatedSessionRooms = await context.dbAdapter.execute(
+      `SELECT * FROM session_rooms WHERE realm_url = '${unrelatedRealmURL}'`,
+    );
+    assert.strictEqual(
+      sourceSessionRooms.length,
+      0,
+      'source realm rows are removed from session_rooms',
+    );
+    assert.strictEqual(
+      publishedSessionRooms.length,
+      0,
+      'published realm rows are removed from session_rooms',
+    );
+    assert.strictEqual(
+      unrelatedSessionRooms.length,
+      1,
+      'unrelated realm rows remain in session_rooms',
     );
 
     let pendingSourceJobs = await context.dbAdapter.execute(

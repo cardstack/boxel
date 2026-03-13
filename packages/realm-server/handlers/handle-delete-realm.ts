@@ -25,7 +25,7 @@ import {
 import type { CreateRoutesArgs } from '../routes';
 import type { RealmServerTokenClaim } from '../utils/jwt';
 import {
-  removeMountedRealm,
+  destroyMountedRealm,
   removeRealmDatabaseArtifacts,
 } from './realm-destruction-utils';
 
@@ -158,7 +158,7 @@ export default function handleDeleteRealm({
           PUBLISHED_DIRECTORY_NAME,
           publishedRealm.id,
         );
-        await removeMountedRealm({
+        destroyMountedRealm({
           realm: mountedPublishedRealm,
           realmPath: publishedRealmPath,
           realms,
@@ -193,7 +193,7 @@ export default function handleDeleteRealm({
         ` AND removed_at IS NULL`,
       ]);
 
-      await removeMountedRealm({
+      destroyMountedRealm({
         realm: sourceRealm,
         realmPath: sourceRealm.dir,
         realms,
