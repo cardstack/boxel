@@ -294,6 +294,9 @@ export async function startServer({
     stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
     env: {
       ...process.env,
+      // Matrix tests don't exercise GitHub PR creation, so disable that route
+      // to avoid pulling Octokit into the realm server startup path.
+      DISABLE_GITHUB_PR_ROUTE: 'true',
       PUBLISHED_REALM_BOXEL_SPACE_DOMAIN: 'localhost:4205',
       PUBLISHED_REALM_BOXEL_SITE_DOMAIN: 'localhost:4205',
     },
