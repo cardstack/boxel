@@ -9,6 +9,7 @@ import type {
   QueueRunner,
   Realm,
 } from '@cardstack/runtime-common';
+import type { FederatedCardTypeSummaryEntry } from '@cardstack/runtime-common/document-types';
 import type { PgAdapter } from '@cardstack/postgres';
 import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms';
 import {
@@ -21,6 +22,13 @@ import {
 } from '../helpers';
 import { createJWT as createRealmServerJWT } from '../../utils/jwt';
 import type { Server } from 'http';
+
+interface FederatedTypesResponse {
+  data: FederatedCardTypeSummaryEntry[];
+  meta: {
+    page: { total: number };
+  };
+}
 
 module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
   module('Realm Server Endpoints | /_federated-types', function (hooks) {
@@ -123,51 +131,61 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
       },
     });
 
-    test('QUERY /_federated-types returns type summaries from multiple realms grouped by realm URL', async function (assert) {
+    function makeAuthenticatedRequest(
+      realms: string[],
+      extra?: Record<string, unknown>,
+    ) {
       let realmServerToken = createRealmServerJWT(
         { user: ownerUserId, sessionRoom: 'session-room-test' },
         realmSecretSeed,
       );
-
-      let response = await request
+      return request
         .post('/_federated-types')
         .set('X-HTTP-Method-Override', 'QUERY')
         .set('Accept', 'application/json')
         .set('Authorization', `Bearer ${realmServerToken}`)
-        .send({ realms: [testRealm.url, secondaryRealm.url] });
+        .send({ realms, ...extra });
+    }
+
+    test('QUERY /_federated-types returns flat type summaries from multiple realms', async function (assert) {
+      let response = await makeAuthenticatedRequest([
+        testRealm.url,
+        secondaryRealm.url,
+      ]);
 
       assert.strictEqual(response.status, 200, 'HTTP 200 status');
-      let { data } = response.body as {
-        data: Record<
-          string,
-          {
-            data: {
-              type: string;
-              id: string;
-              attributes: { displayName: string; total: number };
-            }[];
-          }
-        >;
-      };
+      let body = response.body as FederatedTypesResponse;
 
-      assert.ok(data[testRealm.url], 'includes primary realm data');
-      assert.ok(data[secondaryRealm.url], 'includes secondary realm data');
+      assert.ok(Array.isArray(body.data), 'data is a flat array');
+      assert.ok(body.data.length > 0, 'has type summaries');
 
-      let primarySummaries = data[testRealm.url].data;
-      assert.ok(
-        primarySummaries.length > 0,
-        'primary realm has type summaries',
+      let primaryEntries = body.data.filter(
+        (entry) => entry.meta.realmURL === testRealm.url,
       );
+      let secondaryEntries = body.data.filter(
+        (entry) => entry.meta.realmURL === secondaryRealm.url,
+      );
+
+      assert.ok(primaryEntries.length > 0, 'has primary realm entries');
+      assert.ok(secondaryEntries.length > 0, 'has secondary realm entries');
+
       assert.strictEqual(
-        primarySummaries[0].type,
+        body.data[0].type,
         'card-type-summary',
-        'summary has correct type',
+        'entry has correct type',
+      );
+      assert.ok(body.data[0].meta.realmURL, 'entry has realmURL in meta');
+      assert.ok(body.data[0].attributes.displayName, 'entry has displayName');
+      assert.strictEqual(
+        typeof body.data[0].attributes.total,
+        'number',
+        'entry has total',
       );
 
-      let secondarySummaries = data[secondaryRealm.url].data;
-      assert.ok(
-        secondarySummaries.length > 0,
-        'secondary realm has type summaries',
+      assert.strictEqual(
+        body.meta.page.total,
+        body.data.length,
+        'meta.page.total matches data length when no pagination',
       );
 
       let publicHeader =
@@ -216,6 +234,7 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
         'response lists realms lacking read permission',
       );
     });
+
     test('QUERY /_federated-types returns 400 when realms are missing', async function (assert) {
       let response = await request
         .post('/_federated-types')
@@ -240,15 +259,211 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
         .send({ realms: [testRealm.url] });
 
       assert.strictEqual(response.status, 200, 'HTTP 200 status');
-      let { data } = response.body as {
-        data: Record<string, { data: { type: string; id: string }[] }>;
-      };
+      let body = response.body as FederatedTypesResponse;
 
-      assert.ok(data[testRealm.url], 'includes public realm data');
-      assert.ok(
-        data[testRealm.url].data.length > 0,
-        'public realm has type summaries',
+      assert.ok(Array.isArray(body.data), 'data is a flat array');
+      assert.ok(body.data.length > 0, 'public realm has type summaries');
+      assert.strictEqual(
+        body.data[0].meta.realmURL,
+        testRealm.url,
+        'entries are annotated with realmURL',
       );
+    });
+
+    test('QUERY /_federated-types with pagination returns limited results', async function (assert) {
+      let response = await makeAuthenticatedRequest(
+        [testRealm.url, secondaryRealm.url],
+        { page: { number: 0, size: 1 } },
+      );
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      let body = response.body as FederatedTypesResponse;
+
+      assert.strictEqual(body.data.length, 1, 'returns only 1 item');
+      assert.ok(body.meta.page.total > 1, 'total is greater than page size');
+    });
+
+    test('QUERY /_federated-types pagination page 2 returns different items', async function (assert) {
+      let page0Response = await makeAuthenticatedRequest(
+        [testRealm.url, secondaryRealm.url],
+        { page: { number: 0, size: 1 } },
+      );
+      let page1Response = await makeAuthenticatedRequest(
+        [testRealm.url, secondaryRealm.url],
+        { page: { number: 1, size: 1 } },
+      );
+
+      let page0Body = page0Response.body as FederatedTypesResponse;
+      let page1Body = page1Response.body as FederatedTypesResponse;
+
+      assert.strictEqual(page0Body.data.length, 1, 'page 0 has 1 item');
+      assert.strictEqual(page1Body.data.length, 1, 'page 1 has 1 item');
+
+      let page0Id = `${page0Body.data[0].id}-${page0Body.data[0].meta.realmURL}`;
+      let page1Id = `${page1Body.data[0].id}-${page1Body.data[0].meta.realmURL}`;
+      assert.notStrictEqual(
+        page0Id,
+        page1Id,
+        'page 0 and page 1 return different items',
+      );
+      assert.strictEqual(
+        page0Body.meta.page.total,
+        page1Body.meta.page.total,
+        'total is same across pages',
+      );
+    });
+
+    test('QUERY /_federated-types without pagination returns all items', async function (assert) {
+      let allResponse = await makeAuthenticatedRequest([
+        testRealm.url,
+        secondaryRealm.url,
+      ]);
+      let paginatedResponse = await makeAuthenticatedRequest(
+        [testRealm.url, secondaryRealm.url],
+        { page: { number: 0, size: 1 } },
+      );
+
+      let allBody = allResponse.body as FederatedTypesResponse;
+      let paginatedBody = paginatedResponse.body as FederatedTypesResponse;
+
+      assert.strictEqual(
+        allBody.data.length,
+        allBody.meta.page.total,
+        'without pagination, all items are returned',
+      );
+      assert.strictEqual(
+        allBody.meta.page.total,
+        paginatedBody.meta.page.total,
+        'total matches between paginated and non-paginated',
+      );
+    });
+
+    test('QUERY /_federated-types with searchKey filters results', async function (assert) {
+      let allResponse = await makeAuthenticatedRequest([testRealm.url]);
+      let allBody = allResponse.body as FederatedTypesResponse;
+
+      // Use a displayName or code_ref substring from the actual results
+      let firstEntry = allBody.data[0];
+      let searchTerm = firstEntry.attributes.displayName.substring(0, 4);
+
+      let searchResponse = await makeAuthenticatedRequest([testRealm.url], {
+        searchKey: searchTerm,
+      });
+      let searchBody = searchResponse.body as FederatedTypesResponse;
+
+      assert.ok(searchBody.data.length > 0, 'search returns results');
+      assert.ok(
+        searchBody.data.every(
+          (entry) =>
+            entry.attributes.displayName
+              .toLowerCase()
+              .includes(searchTerm.toLowerCase()) ||
+            entry.id.toLowerCase().includes(searchTerm.toLowerCase()),
+        ),
+        'all results match search term',
+      );
+      assert.strictEqual(
+        searchBody.meta.page.total,
+        searchBody.data.length,
+        'total matches filtered results when not paginated',
+      );
+    });
+
+    test('QUERY /_federated-types with searchKey and pagination combined', async function (assert) {
+      let allResponse = await makeAuthenticatedRequest([testRealm.url]);
+      let allBody = allResponse.body as FederatedTypesResponse;
+
+      let firstEntry = allBody.data[0];
+      let searchTerm = firstEntry.attributes.displayName.substring(0, 3);
+
+      let response = await makeAuthenticatedRequest([testRealm.url], {
+        searchKey: searchTerm,
+        page: { number: 0, size: 1 },
+      });
+      let body = response.body as FederatedTypesResponse;
+
+      assert.strictEqual(body.data.length, 1, 'returns 1 item');
+      let matchesDisplayName = body.data[0].attributes.displayName
+        .toLowerCase()
+        .includes(searchTerm.toLowerCase());
+      let matchesCodeRef = body.data[0].id
+        .toLowerCase()
+        .includes(searchTerm.toLowerCase());
+      let matchesSearch = matchesDisplayName || matchesCodeRef;
+      assert.ok(matchesSearch, 'result matches search term');
+      assert.ok(body.meta.page.total >= 1, 'total reflects filtered count');
+    });
+
+    test('QUERY /_federated-types with searchKey that matches nothing returns empty data', async function (assert) {
+      let response = await makeAuthenticatedRequest([testRealm.url], {
+        searchKey: 'zzzzNonExistentTypezzzzz',
+      });
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      let body = response.body as FederatedTypesResponse;
+
+      assert.strictEqual(body.data.length, 0, 'no results');
+      assert.strictEqual(body.meta.page.total, 0, 'total is 0');
+    });
+
+    test('QUERY /_federated-types searchKey is case-insensitive', async function (assert) {
+      let allResponse = await makeAuthenticatedRequest([testRealm.url]);
+      let allBody = allResponse.body as FederatedTypesResponse;
+      let firstEntry = allBody.data[0];
+      let searchTerm = firstEntry.attributes.displayName
+        .toUpperCase()
+        .substring(0, 4);
+
+      let response = await makeAuthenticatedRequest([testRealm.url], {
+        searchKey: searchTerm,
+      });
+      let body = response.body as FederatedTypesResponse;
+
+      assert.ok(
+        body.data.length > 0,
+        'case-insensitive search returns results',
+      );
+    });
+
+    test('QUERY /_federated-types each item has meta.realmURL', async function (assert) {
+      let response = await makeAuthenticatedRequest([
+        testRealm.url,
+        secondaryRealm.url,
+      ]);
+
+      let body = response.body as FederatedTypesResponse;
+
+      assert.ok(
+        body.data.every(
+          (entry) =>
+            typeof entry.meta.realmURL === 'string' &&
+            entry.meta.realmURL.length > 0,
+        ),
+        'every entry has a non-empty realmURL',
+      );
+
+      let realmURLs = new Set(body.data.map((entry) => entry.meta.realmURL));
+      assert.ok(realmURLs.has(testRealm.url), 'has entries from primary realm');
+      assert.ok(
+        realmURLs.has(secondaryRealm.url),
+        'has entries from secondary realm',
+      );
+    });
+
+    test('QUERY /_federated-types pagination beyond range returns empty data', async function (assert) {
+      let response = await makeAuthenticatedRequest([testRealm.url], {
+        page: { number: 9999, size: 50 },
+      });
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      let body = response.body as FederatedTypesResponse;
+
+      assert.strictEqual(
+        body.data.length,
+        0,
+        'no results for out-of-range page',
+      );
+      assert.ok(body.meta.page.total > 0, 'total still reflects actual count');
     });
   });
 });
