@@ -146,16 +146,18 @@ if (port != null) {
     ctxt.body = JSON.stringify(result);
     ctxt.status = isReady ? 200 : 503;
   });
-  router.get('/_indexing-dashboard', async (ctxt: Koa.Context) => {
-    ctxt.set('Content-Type', 'text/html; charset=utf-8');
-    ctxt.body = renderIndexingDashboard(eventSink.getSnapshot());
-    ctxt.status = 200;
-  });
-  router.get('/_indexing-status', async (ctxt: Koa.Context) => {
-    ctxt.set('Content-Type', 'application/json');
-    ctxt.body = JSON.stringify(eventSink.getSnapshot());
-    ctxt.status = 200;
-  });
+  if (!ECS_CONTAINER_METADATA_URI) {
+    router.get('/_indexing-dashboard', async (ctxt: Koa.Context) => {
+      ctxt.set('Content-Type', 'text/html; charset=utf-8');
+      ctxt.body = renderIndexingDashboard(eventSink.getSnapshot());
+      ctxt.status = 200;
+    });
+    router.get('/_indexing-status', async (ctxt: Koa.Context) => {
+      ctxt.set('Content-Type', 'application/json');
+      ctxt.body = JSON.stringify(eventSink.getSnapshot());
+      ctxt.status = 200;
+    });
+  }
 
   webServer
     .use(router.routes())
