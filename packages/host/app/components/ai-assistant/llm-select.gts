@@ -51,7 +51,7 @@ export default class LLMSelect extends Component<Signature> {
       </:headerDetail>
       <:content>
         <ul class='llm-list'>
-          {{#each @options key="id" as |option|}}
+          {{#each @options key='id' as |option|}}
             <li
               class='llm-option {{if (eq @selected option.id) "selected"}}'
               data-test-llm-select-item={{option.id}}
