@@ -239,10 +239,9 @@ export function createRoutes(args: CreateRoutesArgs) {
     grafanaAuthorization(args.grafanaSecret),
     handleFullReindex(args),
   );
-  router.get(
-    '/_indexing-dashboard',
-    handleIndexingDashboard(args),
-  );
+  if (args.assetsURL.hostname.includes('localhost')) {
+    router.get('/_indexing-dashboard', handleIndexingDashboard(args));
+  }
   router.post('/_post-deployment', handlePostDeployment(args));
   router.post(
     '/_realm-auth',

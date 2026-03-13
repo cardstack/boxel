@@ -596,22 +596,8 @@ function renderDashboard(data: Awaited<ReturnType<typeof getIndexingData>>): str
 
 export default function handleIndexingDashboard({
   dbAdapter,
-  grafanaSecret,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
-    let authorization = ctxt.req.headers['authorization'];
-    let queryToken = ctxt.query['token'];
-
-    // Allow auth via header or query param (for easy browser access)
-    if (authorization !== grafanaSecret && queryToken !== grafanaSecret) {
-      return setContextResponse(
-        ctxt,
-        new Response('Unauthorized - provide grafana secret as Authorization header or ?token= query param', {
-          status: 401,
-        }),
-      );
-    }
-
     let data = await getIndexingData(dbAdapter);
     let html = renderDashboard(data);
 
