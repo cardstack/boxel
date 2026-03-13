@@ -13,8 +13,6 @@ import {
 test.describe('glimmer-scoped-css', () => {
   const serverIndexUrl = new URL(appURL).origin;
 
-  let newCardURL: string;
-
   test(':global is ignored and does not affect styles', async ({ page }) => {
     const realmName = 'realm1';
     await clearLocalStorage(page, serverIndexUrl);
@@ -48,7 +46,7 @@ test.describe('glimmer-scoped-css', () => {
       }`,
     );
 
-    newCardURL = await postNewCard(page, realmURL, {
+    let newCardURL = await postNewCard(page, realmURL, {
       data: {
         type: 'card',
         attributes: {
@@ -105,7 +103,7 @@ test.describe('glimmer-scoped-css', () => {
       }`,
     );
 
-    newCardURL = await postNewCard(page, realmURL, {
+    let newCardURL = await postNewCard(page, realmURL, {
       data: {
         type: 'card',
         attributes: {
@@ -123,15 +121,17 @@ test.describe('glimmer-scoped-css', () => {
 
     await page.goto(newCardURL);
 
-    await expect(
-      page.locator('[data-test-scoped-style-restored]'),
-    ).toHaveCSS('background-color', 'rgb(1, 2, 3)');
+    await expect(page.locator('[data-test-scoped-style-restored]')).toHaveCSS(
+      'background-color',
+      'rgb(1, 2, 3)',
+    );
 
     await logout(page);
     await login(page, username, password, { url: newCardURL });
 
-    await expect(
-      page.locator('[data-test-scoped-style-restored]'),
-    ).toHaveCSS('background-color', 'rgb(1, 2, 3)');
+    await expect(page.locator('[data-test-scoped-style-restored]')).toHaveCSS(
+      'background-color',
+      'rgb(1, 2, 3)',
+    );
   });
 });

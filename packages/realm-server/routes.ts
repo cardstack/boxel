@@ -68,8 +68,6 @@ import {
 import handleWebhookReceiverRequest from './handlers/handle-webhook-receiver';
 import { buildCreatePrerenderAuth } from './prerender/auth';
 
-const nodeRequire = createRequire(__filename);
-
 export type CreateRoutesArgs = {
   serverURL: string;
   dbAdapter: DBAdapter;
