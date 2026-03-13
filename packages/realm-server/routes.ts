@@ -68,7 +68,7 @@ import {
 import handleWebhookReceiverRequest from './handlers/handle-webhook-receiver';
 import { buildCreatePrerenderAuth } from './prerender/auth';
 
-const require = createRequire(__filename);
+const nodeRequire = createRequire(__filename);
 
 export type CreateRoutesArgs = {
   serverURL: string;
@@ -349,7 +349,9 @@ function handleGitHubPRRequestLazy(args: CreateRoutesArgs) {
   return async function (ctxt: Koa.Context, next: Koa.Next) {
     if (!handler) {
       handler = (
-        require('./handlers/handle-github-pr') as typeof import('./handlers/handle-github-pr')
+        createRequire(__filename)(
+          './handlers/handle-github-pr',
+        ) as typeof import('./handlers/handle-github-pr')
       ).default(args);
     }
     return await handler(ctxt, next);
