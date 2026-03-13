@@ -1,5 +1,9 @@
+import type Owner from '@ember/owner';
 import Service from '@ember/service';
+import { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
+
+import type ResetService from './reset';
 
 // Render route errors abort the parent transition, so the nested render.error
 // route may not receive params or run its model hook. This service preserves
@@ -11,7 +15,17 @@ interface RenderErrorContext {
 }
 
 export default class RenderErrorStateService extends Service {
+  @service declare reset: ResetService;
   @tracked private _context: RenderErrorContext | undefined;
+
+  constructor(owner: Owner) {
+    super(owner);
+    this.reset.register(this);
+  }
+
+  resetState() {
+    this.clear();
+  }
 
   setError(context: RenderErrorContext) {
     this._context = context;

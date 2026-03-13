@@ -81,9 +81,15 @@ export class PrerenderedSearchResource extends Resource<Args> {
   constructor(owner: object) {
     super(owner);
     registerDestructor(this, () => {
+      this.search.cancelAll();
       for (let subscription of this.subscriptions) {
         subscription.unsubscribe();
       }
+      this.subscriptions = [];
+      this.realmsNeedingRefreshSet.clear();
+      this._instances = new TrackedArray();
+      this._meta = { page: { total: 0 } };
+      this._hasSearchRun = false;
     });
   }
 

@@ -4,6 +4,8 @@ DEFAULT_CATALOG_REALM_URL='https://realms-staging.stack.cards/catalog/'
 CATALOG_REALM_URL="${RESOLVED_CATALOG_REALM_URL:-$DEFAULT_CATALOG_REALM_URL}"
 DEFAULT_NEW_CATALOG_REALM_URL='https://realms-staging.stack.cards/catalog-new/'
 NEW_CATALOG_REALM_URL="${RESOLVED_NEW_CATALOG_REALM_URL:-$DEFAULT_NEW_CATALOG_REALM_URL}"
+DEFAULT_SOFTWARE_FACTORY_REALM_URL='https://realms-staging.stack.cards/software-factory/'
+SOFTWARE_FACTORY_REALM_URL="${RESOLVED_SOFTWARE_FACTORY_REALM_URL:-$DEFAULT_SOFTWARE_FACTORY_REALM_URL}"
 
 NODE_NO_WARNINGS=1 \
   NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=4096}" \
@@ -32,6 +34,8 @@ NODE_NO_WARNINGS=1 \
   --fromUrl="${NEW_CATALOG_REALM_URL}" \
   --toUrl="${NEW_CATALOG_REALM_URL}" \
   \
+  --fromUrl="${SOFTWARE_FACTORY_REALM_URL}" \
+  --toUrl="${SOFTWARE_FACTORY_REALM_URL}" \
+  \
   --fromUrl='@cardstack/openrouter/' \
   --toUrl='https://realms-staging.stack.cards/openrouter/'
-

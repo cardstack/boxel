@@ -37,6 +37,10 @@ const OWNER_DESTROYED_ERROR =
 // haven't been loaded into the store yet (prerendered results are HTML-only).
 export const knownFileMetaUrls = new Set<string>();
 
+export function clearKnownFileMetaUrls() {
+  knownFileMetaUrls.clear();
+}
+
 export class PrerenderedCard implements PrerenderedCardLike {
   component: HTMLComponent;
   constructor(

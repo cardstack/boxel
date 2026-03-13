@@ -1,4 +1,5 @@
 import { getComponentTemplate } from '@ember/component';
+import { destroy } from '@ember/destroyable';
 
 import type Owner from '@ember/owner';
 // @ts-expect-error
@@ -20,6 +21,12 @@ interface Signature {
   };
 }
 
+type ActiveRender = {
+  drop: object;
+};
+
+const activeRenders = new WeakMap<SimpleElement, ActiveRender>();
+
 export function render(
   C: ComponentLike<Signature>,
   element: SimpleElement,
@@ -30,7 +37,7 @@ export function render(
   // just grabs the template and would drop any associated class.
   const root = <template><C @format={{format}} /></template>;
 
-  // clear any previous render work
+  teardown(element);
   removeChildren(element);
 
   let { _runtime, _context, _owner, _builder } = owner.lookup(
@@ -47,9 +54,12 @@ export function render(
     layout,
   );
   let vm = (iterator as any).vm;
+  let result: ActiveRender | undefined;
 
   try {
-    inTransaction(_runtime.env, () => vm._execute());
+    inTransaction(_runtime.env, () => {
+      result = vm._execute();
+    });
   } catch (err: any) {
     // This is to compensate for the commitCacheGroup op code that is not called because
     // of the error being thrown here. we do this so we can keep the TRANSACTION_STACK
@@ -73,6 +83,22 @@ export function render(
     error.additionalErrors = [err];
     throw error;
   }
+
+  if (!result) {
+    throw new Error('isolated render did not produce a render result');
+  }
+
+  activeRenders.set(element, result);
+}
+
+export function teardown(element: SimpleElement): void {
+  let activeRender = activeRenders.get(element);
+  if (!activeRender) {
+    return;
+  }
+  activeRenders.delete(element);
+  destroy(activeRender.drop);
+  removeChildren(element);
 }
 
 function removeChildren(element: SimpleElement) {

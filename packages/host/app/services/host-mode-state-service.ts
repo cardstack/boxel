@@ -1,3 +1,4 @@
+import type Owner from '@ember/owner';
 import type RouterService from '@ember/routing/router-service';
 import { scheduleOnce } from '@ember/runloop';
 import Service, { service } from '@ember/service';
@@ -9,6 +10,7 @@ import stringify from 'safe-stable-stringify';
 import { TrackedArray } from 'tracked-built-ins';
 
 import type RealmService from './realm';
+import type ResetService from './reset';
 
 interface InitializeOptions {
   primaryCardId: string | null;
@@ -21,6 +23,7 @@ type SerializedStack = string[];
 export default class HostModeStateService extends Service {
   @service declare router: RouterService;
   @service declare realm: RealmService;
+  @service declare reset: ResetService;
 
   // The primary card comes from the main path segment of the URL.
   // The stack cards come from the `hostModeStack` query param.
@@ -32,6 +35,18 @@ export default class HostModeStateService extends Service {
   private stackCardItems: TrackedArray<string> = new TrackedArray();
   private currentRoutePath: string | null = null;
   private isStateInitialized = false;
+
+  constructor(owner: Owner) {
+    super(owner);
+    this.reset.register(this);
+  }
+
+  resetState() {
+    this.primaryCardItem = null;
+    this.stackCardItems = new TrackedArray();
+    this.currentRoutePath = null;
+    this.isStateInitialized = false;
+  }
 
   restore({
     primaryCardId,

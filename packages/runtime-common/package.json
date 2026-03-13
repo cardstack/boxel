@@ -95,8 +95,5 @@
     "lint:js": "eslint . ",
     "lint:js:fix": "eslint . --report-unused-disable-directives --fix",
     "lint:types": "glint"
-  },
-  "volta": {
-    "extends": "../../package.json"
   }
 }

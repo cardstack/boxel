@@ -1,4 +1,5 @@
 import { byteStreamToUint8Array } from '@cardstack/runtime-common';
+import { htmlSafe } from '@ember/template';
 import JsonIcon from '@cardstack/boxel-icons/json';
 import {
   BaseDefComponent,
@@ -13,7 +14,6 @@ import {
   type ByteStream,
   type SerializedFile,
 } from './file-api';
-import sanitizedHtml from './helpers/sanitized-html';
 
 const EXCERPT_MAX_LENGTH = 500;
 
@@ -47,7 +47,15 @@ function getExtension(url: string): string {
 }
 
 function fileNameWithoutExtension(name: string): string {
-  return name.replace(/\.[^/.]+$/, '');
+  let dot = name.lastIndexOf('.');
+  if (dot === -1) {
+    return name;
+  }
+  let slash = Math.max(name.lastIndexOf('/'), name.lastIndexOf('\\'));
+  if (dot < slash) {
+    return name;
+  }
+  return name.slice(0, dot);
 }
 
 function truncateExcerpt(text: string): string {
@@ -74,19 +82,25 @@ function prettyPrintJson(content: string): string {
 // content-tag misparses HTML tag literals in .gts files,
 // so we build span wrappers dynamically.
 function spanWrap(cls: string, content: string): string {
-  return `<${'span'} class="${cls}">${content}</${'span'}>`;
+  return '<span class="' + cls + '">' + content + '</span>';
 }
 
 // Regex patterns and replacements also avoid literal angle brackets
 // via RegExp constructor where they contain </ sequences.
-const KEY_RE = /(&quot;)((?:[^&]|&(?!quot;))*)(&quot;)\s*:/g;
+const KEY_RE = new RegExp(
+  '(&quot;)((?:[^&]|&(?!quot;))*)(&quot;)\\s*:',
+  'g',
+);
 const STRING_RE = new RegExp(
   '(&quot;)((?:[^&]|&(?!quot;))*)(&quot;)(?!\\s*(?:<\\/span>)?\\s*:)',
   'g',
 );
-const NUMBER_RE = /\b(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)\b/g;
-const BOOL_RE = /\b(true|false)\b/g;
-const NULL_RE = /\bnull\b/g;
+const NUMBER_RE = new RegExp(
+  '\\b(-?\\d+(?:\\.\\d+)?(?:[eE][+-]?\\d+)?)\\b',
+  'g',
+);
+const BOOL_RE = new RegExp('\\b(true|false)\\b', 'g');
+const NULL_RE = new RegExp('\\bnull\\b', 'g');
 
 function highlightJson(json: string): string {
   let escaped = escapeHtml(json);
@@ -114,9 +128,14 @@ class Isolated extends Component<typeof JsonFileDef> {
   get highlightedContent() {
     let content = this.args.model?.content ?? '';
     if (!content.trim()) {
-      return '';
+      return htmlSafe('');
     }
-    return highlightJson(prettyPrintJson(content));
+    // This component produces the entire HTML payload itself:
+    // `prettyPrintJson()` formats plain text, `highlightJson()` escapes that text,
+    // and only then adds the span wrappers we control for styling. Running the
+    // result back through DOMPurify adds DOMParser churn during prerender/indexing
+    // without providing extra protection.
+    return htmlSafe(highlightJson(prettyPrintJson(content)));
   }
 
   get hasContent() {
@@ -126,9 +145,7 @@ class Isolated extends Component<typeof JsonFileDef> {
   <template>
     <article class='json-isolated' data-test-json-isolated>
       {{#if this.hasContent}}
-        <pre class='json-isolated__content'>{{sanitizedHtml
-            this.highlightedContent
-          }}</pre>
+        <pre class='json-isolated__content'>{{this.highlightedContent}}</pre>
       {{else}}
         <header class='json-isolated__title'>{{this.title}}</header>
       {{/if}}
@@ -189,18 +206,21 @@ class Embedded extends Component<typeof JsonFileDef> {
   get highlightedContent() {
     let content = this.args.model?.content ?? '';
     if (!content.trim()) {
-      return '';
+      return htmlSafe('');
     }
-    return highlightJson(prettyPrintJson(content));
+    // This component produces the entire HTML payload itself:
+    // `prettyPrintJson()` formats plain text, `highlightJson()` escapes that text,
+    // and only then adds the span wrappers we control for styling. Running the
+    // result back through DOMPurify adds DOMParser churn during prerender/indexing
+    // without providing extra protection.
+    return htmlSafe(highlightJson(prettyPrintJson(content)));
   }
 
   <template>
     <article class='json-embedded' data-test-json-embedded>
       <header class='json-embedded__title'>{{this.title}}</header>
       <div class='json-embedded__content'>
-        <pre class='json-embedded__pre'>{{sanitizedHtml
-            this.highlightedContent
-          }}</pre>
+        <pre class='json-embedded__pre'>{{this.highlightedContent}}</pre>
       </div>
     </article>
     <style scoped>

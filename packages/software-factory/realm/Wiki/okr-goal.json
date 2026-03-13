@@ -1,0 +1,33 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Wiki",
+        "module": "../wiki"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "tags": ["strategy", "goals", "planning", "okr"],
+      "content": "## Overview\n\nAn OKR Goal (Objectives and Key Results) is a strategic planning card that connects high-level objectives to measurable outcomes. Each OKR Goal defines a qualitative objective that describes what you want to achieve, paired with two to five quantitative key results that define how you will measure success. This framework aligns teams around shared priorities and provides clear criteria for evaluating progress.\n\nOKR Goals operate on defined time horizons, typically quarterly or annually. They cascade from company-level objectives down through departments, teams, and individuals, creating a traceable line of sight from daily work to strategic intent.\n\n## How It Works\n\nThe Objective is a concise, aspirational statement that describes the desired outcome. It should be qualitative, motivating, and time-bounded. Good objectives answer the question: \"Where do we want to go?\"\n\nKey Results are the quantitative measures that indicate whether the objective has been achieved. Each key result has a starting value, a target value, and a current value that updates as progress is recorded. Key results should be specific, measurable, and challenging but achievable. They answer: \"How will we know we got there?\"\n\n### Scoring and Review\n\nAt the end of each cycle, key results are scored on a 0.0 to 1.0 scale. A score of 0.7 or above typically indicates success, reflecting the principle that OKRs should be ambitious enough that perfect scores suggest the targets were too easy. The aggregate score across all key results provides the overall objective score.\n\nRegular check-ins, usually weekly, update key result progress and surface blockers early. These check-ins create a cadence of accountability and allow course corrections before the cycle ends. The check-in data feeds into trend charts that visualize progress velocity.\n\n## Integration Points\n\nOKR Goals connect downward to the execution layer through [[Project]] and [[Task]] cards. Each key result may be linked to one or more projects that contribute to its progress. As [[Task]] items within those projects are completed, key result values update accordingly, creating automatic progress tracking from the bottom up.\n\nThe [[Deal]] pipeline feeds into revenue-related key results directly. When a deal closes, its value increments the relevant key result. This connection ensures that sales activity is visible in the strategic planning context and that revenue targets are tracked in real time rather than through periodic manual updates.\n\nVisualization of OKR progress happens on [[Kanban Board]] cards configured for goal tracking. Columns might represent scoring ranges (At Risk, On Track, Achieved) with each OKR Goal card placed according to its current aggregate score. This board gives leadership a quick visual overview of strategic health.\n\n[[Workflow Playbook]] entries define the OKR cycle process: drafting objectives, alignment reviews, weekly check-ins, mid-cycle adjustments, and end-of-cycle scoring. Automating this cadence ensures that the OKR practice remains consistent and that no steps are skipped during busy periods.\n\nTeam capacity planning uses OKR Goals to prioritize work allocation. When a [[Task]] or [[Project]] is proposed, it can be evaluated against active OKRs to determine strategic alignment. Work that does not contribute to any key result may be deprioritized or questioned.\n\n## Example Use Cases\n\n- **Revenue growth objective**: Key results track closed [[Deal]] value, new [[Contact]] acquisition rate, and expansion revenue from existing [[Organization]] accounts\n- **Product quality objective**: Key results measure [[Case]] resolution time, customer satisfaction scores, and bug [[Task]] completion rate across the engineering [[Kanban Board]]\n- **Operational efficiency objective**: Key results track [[Workflow Playbook]] automation adoption rate, average [[Task]] cycle time, and [[Project]] on-time delivery percentage\n- **Customer success objective**: Key results measure net revenue retention, [[Case]] first-response SLA compliance, and customer health score improvements linked to [[Contact]] engagement data",
+      "cardInfo": {
+        "name": "OKR Goal",
+        "notes": null,
+        "summary": "Objective with measurable key results for strategic alignment and progress tracking",
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "relatedPages": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

@@ -1,6 +1,6 @@
 import { expect, type Page } from '@playwright/test';
+import type { Credentials } from '../docker/synapse';
 import {
-  Credentials,
   loginUser,
   getAllRoomEvents,
   getJoinedRooms,
@@ -11,7 +11,8 @@ import {
   type UpdateUserOptions,
 } from '../docker/synapse';
 import { realmPassword } from './realm-credentials';
-import { appURL, BasicSQLExecutor, SQLExecutor } from './isolated-realm-server';
+import type { SQLExecutor } from './isolated-realm-server';
+import { appURL, BasicSQLExecutor } from './isolated-realm-server';
 import { APP_BOXEL_MESSAGE_MSGTYPE } from './matrix-constants';
 import { randomUUID } from 'crypto';
 
@@ -134,6 +135,11 @@ export async function registerRealmUsers(synapse: SynapseInstance) {
     synapse,
     'submission_realm',
     await realmPassword('submission_realm', realmSecretSeed),
+  );
+  await registerUser(
+    synapse,
+    'software_factory_realm',
+    await realmPassword('software_factory_realm', realmSecretSeed),
   );
 }
 
@@ -370,6 +376,13 @@ export async function showAllCards(page: Page) {
 }
 
 export async function logout(page: Page) {
+  await page
+    .locator('[data-test-room-settled]')
+    .waitFor({ state: 'attached', timeout: 5000 })
+    .catch(() => undefined);
+  await expect(
+    page.locator('[data-test-ai-assistant-message-pending="true"]'),
+  ).toHaveCount(0);
   await page.locator('[data-test-profile-icon-button]').click();
   await page.locator('[data-test-signout-button]').click();
 }
@@ -512,10 +525,22 @@ export async function sendMessage(
       await selectCardFromCatalog(page, cardId);
     }
   }
-  // can we check it's higher than before?
+  let messageCountBeforeSend = await page
+    .locator('[data-test-message-idx]')
+    .count();
   await page.waitForSelector(`[data-test-room-settled]`);
   await page.waitForSelector(`[data-test-can-send-msg]`);
   await page.locator('[data-test-send-message-btn]').click();
+  await expect(
+    page.locator(`[data-test-message-field="${roomId}"]`),
+  ).toHaveValue('');
+  await expect(
+    page.locator('[data-test-ai-assistant-message-pending="true"]'),
+  ).toHaveCount(0);
+  await expect(page.locator('[data-test-message-idx]')).toHaveCount(
+    messageCountBeforeSend + 1,
+  );
+  await page.waitForSelector(`[data-test-room-settled]`);
 }
 
 export async function assertMessages(

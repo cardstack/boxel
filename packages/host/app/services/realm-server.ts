@@ -103,7 +103,17 @@ export default class RealmServerService extends Service {
   }
 
   resetState() {
+    let catalogRealms = this.availableRealms.filter(
+      (realm) => realm.type === 'catalog',
+    );
     this.logout();
+    this.availableRealms = new TrackedArray([
+      { type: 'base', url: baseRealm.url },
+      ...catalogRealms,
+    ]);
+    this.eventSubscribers = new Map();
+    this._ready = new Deferred<void>();
+    this._ready.fulfill();
   }
 
   setClient(client: ExtendedClient) {
