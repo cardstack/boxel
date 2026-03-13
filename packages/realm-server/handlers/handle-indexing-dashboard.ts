@@ -1,6 +1,3 @@
-import type Koa from 'koa';
-import { setContextResponse } from '../middleware';
-import type { CreateRoutesArgs } from '../routes';
 import type { RealmIndexingState } from '../indexing-event-sink';
 
 function escapeHtml(str: string): string {
@@ -396,25 +393,4 @@ export function renderIndexingDashboard(snapshot: DashboardSnapshot): string {
   </script>
 </body>
 </html>`;
-}
-
-// This handler is for the realm server route (dev-only, proxies to worker-manager or renders empty)
-export default function handleIndexingDashboard(
-  _args: CreateRoutesArgs,
-): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
-  return async function (ctxt: Koa.Context, _next: Koa.Next) {
-    let html = renderIndexingDashboard({ active: [], history: [] });
-    return setContextResponse(
-      ctxt,
-      new Response(
-        html.replace(
-          '<h1>Indexing Dashboard</h1>',
-          '<h1>Indexing Dashboard</h1><p style="color:#f0883e;margin-bottom:16px">This endpoint is on the realm server. The live dashboard is served by the worker manager on its HTTP port.</p>',
-        ),
-        {
-          headers: { 'content-type': 'text/html; charset=utf-8' },
-        },
-      ),
-    );
-  };
 }
