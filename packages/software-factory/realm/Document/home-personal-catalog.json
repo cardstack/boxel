@@ -1,0 +1,28 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Document",
+        "module": "../document"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "content": "# Home & Personal Card Catalog\n\nCondensed stubs for Home & Personal card types. These capture the domain memory and reusable behavior an agent should preserve, not exhaustive schema.\n\n### Recipe\n**Priority:** P2\n\n- **Core idea:** Cooking recipe: ingredients, steps, prep/cook time, servings, nutrition, and photo.\n\n---\n\n### Timer\n**Priority:** P3\n\n- **Core idea:** Countdown/stopwatch timer with label, duration, alerts, and history.\n\n---\n\n### Wishlist\n**Priority:** P2\n\n- **Core idea:** Curated list of desired items with links, prices, priority, and purchase status.\n\n---\n\n### Calendar\n**Priority:** P1\n\n- **Core idea:** Calendar container: named collection of calendar events with view modes (day/week/month).\n\n---\n\n### Property\n**Priority:** P2\n\n- **Core idea:** Real estate property: address, type, value, size, features, and linked lease/mortgage.\n\n---\n\n### Lease\n**Priority:** P2\n\n- **Core idea:** Rental lease: property, tenant, landlord, term, rent amount, and terms.\n\n---\n\n### Personal Finance\n**Priority:** P2\n\n- **Core idea:** Personal finance dashboard: income, expenses, savings goals, net worth tracking.\n\n---\n\n### Vehicle\n**Priority:** P2\n\n- **Core idea:** Vehicle record: make, model, year, VIN, mileage. Links to service records, insurance, and mileage log.\n\n---\n\n### Service Record\n**Priority:** P3\n\n- **Core idea:** Vehicle/equipment maintenance record: date, service type, provider, cost, mileage.\n\n---\n\n### Insurance Policy\n**Priority:** P2\n\n- **Core idea:** Insurance coverage: provider, policy number, type, premium, coverage details, expiry.\n\n---\n\n### Mileage Log\n**Priority:** P3\n\n- **Core idea:** Trip mileage tracker: date, distance, purpose, start/end location. For tax/expense reporting.\n",
+      "cardInfo": {
+        "name": "Home & Personal Card Catalog",
+        "notes": null,
+        "title": "Home & Personal Card Catalog",
+        "summary": "Condensed stubs for Home & Personal card types.",
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "@cardstack/catalog/Theme/boxel-brand-guide"
+        }
+      }
+    }
+  }
+}

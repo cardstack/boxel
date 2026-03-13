@@ -1,0 +1,33 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Wiki",
+        "module": "../wiki"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "tags": ["billing", "finance", "accounting"],
+      "content": "## Overview\n\nAn Invoice is a formal billing document that records a financial transaction between a seller and a buyer. It contains line items, quantities, unit prices, tax calculations, discounts, and payment terms. Invoices serve as the authoritative record for revenue recognition, accounts receivable tracking, and financial reporting.\n\nIn the platform, Invoices are living documents that update their status as payments are received, partially applied, or disputed. They connect the sales pipeline to the finance function, ensuring that closed [[Deal]] records translate into billable events.\n\n## Core Mechanics\n\nEach Invoice contains a header with the issuing [[Organization]] details, billing [[Contact]] information, invoice number, issue date, and due date. The body consists of line items, each referencing a [[Product]] or service with quantity, unit price, and applicable tax rate. The system calculates subtotals, tax amounts, and the grand total automatically.\n\nPayment status follows a state machine: **Draft** (editable, not yet sent), **Sent** (delivered to the customer), **Partially Paid** (some amount received), **Paid** (fully settled), **Overdue** (past due date with balance remaining), and **Voided** (cancelled). Status transitions can trigger automated actions, such as sending reminder emails when an invoice becomes overdue.\n\n### Payment Tracking\n\nPayments are recorded against the invoice with date, amount, method, and reference number. Partial payments reduce the outstanding balance and keep the invoice in \"Partially Paid\" status until the full amount is received. Overpayments generate credit notes that can be applied to future invoices.\n\nThe platform supports multiple currencies. When the invoice currency differs from the [[Organization]] base currency, exchange rates are captured at invoice creation and payment receipt, with any variance recorded as a foreign exchange gain or loss.\n\n## Integration Points\n\nInvoices originate from closed [[Deal]] records or from [[Order]] fulfillment events. When a deal closes, the system can auto-generate an invoice using the deal's line items, pricing, and [[Contact]] billing details. For e-commerce scenarios, each [[Order]] triggers an invoice upon shipment confirmation.\n\nThe billing [[Contact]] receives the invoice via the platform's delivery system. Payment reminders follow schedules defined in the associated [[Workflow Playbook]], escalating from gentle reminders to formal notices as the overdue period extends.\n\n[[Product]] records provide the catalog data for line items, including SKU, description, standard pricing, and tax classification. When product prices change, existing invoices retain their original pricing while new invoices reflect updated rates.\n\nThe [[Organization]] card supplies both the seller's company details (for the invoice header) and the buyer's company details (for the billing address and tax identification).\n\n## Example Use Cases\n\n- **SaaS subscription billing**: Monthly invoices auto-generated from [[Deal]] terms, with [[Product]] line items for each subscribed module and usage-based overages\n- **Professional services**: Time-and-materials invoices with hours logged against a [[Project]], billed to the [[Contact]] at agreed rates\n- **Retail orders**: Invoice created from [[Order]] at checkout, payment captured immediately, status set to Paid\n- **Milestone billing**: Partial invoices issued at project milestones, tied to [[Deal]] payment schedules, tracked on the [[Kanban Board]]",
+      "cardInfo": {
+        "name": "Invoice",
+        "notes": null,
+        "summary": "Billing document with line items, tax calculations, and payment status tracking",
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "relatedPages": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

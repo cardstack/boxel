@@ -1,0 +1,33 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Wiki",
+        "module": "../wiki"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "tags": ["commerce", "catalog", "pricing"],
+      "content": "## Overview\n\nThe Product card represents a sellable item or service within a Boxel workspace. It stores the product name, description, pricing tiers, SKU, and variant information. Products are referenced by [[Deal]] line items, [[Invoice]] entries, and [[Order]] fulfillment records. They are the catalog from which commercial transactions draw their specifics.\n\nProducts are also a natural anchor for generated media. An [[AI Image]] card can produce hero shots, lifestyle photography, or variant previews that attach directly to the product, keeping visual assets co-located with pricing and inventory data.\n\n## Core Mechanics\n\n### Pricing Model\n\nEach product defines one or more pricing tiers. A tier specifies a unit price, currency, billing frequency (one-time, monthly, annual), and optional volume discounts. When a [[Deal]] includes a product, it pulls the relevant tier's pricing into the deal's value calculation. Pricing tiers can be marked as active or archived to manage catalog evolution without losing historical data.\n\n### Variants\n\nProducts support variants for size, color, region, or any custom dimension. Each variant can override the base product's price, SKU, and image. Variants appear as selectable options when adding a product to a [[Deal]] or [[Order]]. The variant structure keeps the catalog clean: one Product card with multiple configurations rather than dozens of near-duplicate cards.\n\n### Inventory and Availability\n\nFor physical goods, products track stock counts per variant. Low-stock thresholds can fire a [[Trigger]] that creates a reorder [[Task]] or notifies the procurement team. For digital goods and services, availability is always-on, but usage limits or seat counts can be enforced similarly.\n\n## Integration Points\n\n- **[[Invoice]]** -- Invoice line items reference products and variants, pulling in the current price and description.\n- **[[Order]]** -- Orders group multiple product line items with shipping and fulfillment details.\n- **[[Deal]]** -- Deals include products as proposed line items. Closing a deal converts proposed items into confirmed orders.\n- **[[AI Image]]** -- Products can auto-generate catalog imagery. A [[Workflow Playbook]] step can invoke AI Image generation using the product's name and description as prompt inputs.\n- **[[Integration]]** -- Products sync with external systems like Shopify, Stripe, or QuickBooks to keep pricing and inventory consistent.\n\n## Example Use Cases\n\n1. **Catalog management**: A merchandiser creates Product cards with variants for size and color. An [[AI Image]] step generates lifestyle photos for each variant. The products are linked to an e-commerce [[Integration]] that pushes them to Shopify.\n2. **Proposal building**: A sales rep adds products to a [[Deal]], selects pricing tiers, and generates a proposal document. The [[Invoice]] is auto-created from the deal's product line items when the deal closes.\n3. **Reorder automation**: A [[Trigger]] monitors inventory counts on physical products. When stock drops below threshold, it starts a [[Workflow Playbook]] that creates a purchase-order [[Task]] and notifies the supplier [[Contact]] via email.",
+      "cardInfo": {
+        "name": "Product",
+        "notes": null,
+        "summary": "Sellable item with pricing tiers, variants, inventory tracking, and connections to deals and invoices.",
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "relatedPages": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}
