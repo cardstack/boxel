@@ -6,7 +6,8 @@ const realmURL =
 
 export default defineConfig({
   testDir: './tests',
-  fullyParallel: true,
+  fullyParallel: false,
+  workers: 1,
   timeout: 60_000,
   expect: {
     timeout: 15_000,
@@ -17,5 +18,4 @@ export default defineConfig({
     screenshot: 'only-on-failure',
   },
   globalSetup: './playwright.global-setup.ts',
-  globalTeardown: './playwright.global-teardown.ts',
 });

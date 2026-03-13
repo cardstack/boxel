@@ -24,7 +24,7 @@ Those are the same local services the realm-server tests expect.
 - `pnpm smoke:realm`
   - Boots the realm server, fetches `person-1` as card JSON, and exits
 - `pnpm test:playwright`
-  - Runs the browser test against the cached local realm
+  - Runs the browser test against a fresh per-test realm server cloned from the cached template
 
 All commands accept an optional realm directory argument:
 
@@ -47,5 +47,13 @@ pnpm smoke:realm ./my-realm Person/example-card
 
 - Template DBs are intentionally reused across runs while the realm-server
   codebase stays stable.
+- Playwright uses a single worker-scoped browser context so host assets and app
+  shell requests stay warm in the browser cache across tests.
+- Each Playwright test still starts a fresh realm server and fresh runtime
+  database cloned from the cached template DB, so server-side mutations do not
+  leak across tests.
+- Realm-origin requests are forced to revalidate between tests. That preserves
+  host asset caching without letting mutated card responses leak into the next
+  fresh realm runtime.
 - The browser test seeds a deterministic local Matrix user
   (`software-factory-browser`) so it does not depend on a human-managed profile.

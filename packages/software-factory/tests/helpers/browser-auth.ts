@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { Page } from '@playwright/test';
+import type { BrowserContext, Page } from '@playwright/test';
 
 type BrowserAuth = {
   access_token: string;
@@ -9,6 +9,10 @@ type BrowserAuth = {
 };
 
 type BrowserSession = Record<string, string>;
+export type FactoryBrowserState = {
+  auth: BrowserAuth;
+  boxelSession: BrowserSession;
+};
 
 type BoxelProfile = {
   username: string;
@@ -175,7 +179,7 @@ async function getRealmAuthTokens(
 
 export async function buildBrowserState(
   realmURL: string,
-): Promise<{ auth: BrowserAuth; boxelSession: BrowserSession }> {
+): Promise<FactoryBrowserState> {
   let matrixAuth = await matrixLogin();
   let realmTokens = await getRealmAuthTokens(matrixAuth, realmURL);
 
@@ -193,13 +197,25 @@ export async function buildBrowserState(
   };
 }
 
-export async function seedBrowserSession(page: Page, realmURL: string) {
-  let state = await buildBrowserState(realmURL);
-  await page.addInitScript((payload) => {
+type InitScriptTarget =
+  | Pick<Page, 'addInitScript'>
+  | Pick<BrowserContext, 'addInitScript'>;
+
+export async function installBrowserState(
+  target: InitScriptTarget,
+  state: FactoryBrowserState,
+) {
+  await target.addInitScript((payload) => {
+    window.localStorage.clear();
     window.localStorage.setItem('auth', JSON.stringify(payload.auth));
     window.localStorage.setItem(
       'boxel-session',
       JSON.stringify(payload.boxelSession),
     );
   }, state);
+}
+
+export async function seedBrowserSession(page: Page, realmURL: string) {
+  let state = await buildBrowserState(realmURL);
+  await installBrowserState(page, state);
 }

@@ -1,5 +1,3 @@
 playwright-report/
 test-results/
 .software-factory-cache/
-.playwright-server.json
-playwright-server.log

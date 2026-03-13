@@ -109,6 +109,7 @@ export interface FactoryRealmOptions {
   permissions?: RealmPermissions;
   useCache?: boolean;
   cacheSalt?: string;
+  templateDatabaseName?: string;
 }
 
 export interface FactoryRealmTemplate {
@@ -121,7 +122,13 @@ export interface FactoryRealmTemplate {
 export interface StartedFactoryRealm {
   realmDir: string;
   realmURL: URL;
+  databaseName: string;
   cardURL(path: string): string;
+  createBearerToken(user?: string, permissions?: string[]): string;
+  authorizationHeaders(
+    user?: string,
+    permissions?: string[],
+  ): Record<string, string>;
   stop(): Promise<void>;
 }
 
@@ -730,6 +737,24 @@ async function buildStartedRealm(
     await testRealmServer.start();
 
     return {
+      createBearerToken: (
+        user = DEFAULT_REALM_OWNER,
+        permissions = DEFAULT_PERMISSIONS[DEFAULT_REALM_OWNER] ?? [
+          'read',
+          'write',
+          'realm-owner',
+        ],
+      ) =>
+        realm.createJWT(
+          {
+            user,
+            realm: realm.url,
+            permissions,
+            sessionRoom: `software-factory-session-room-for-${user}`,
+            realmServerURL: options.realmURL.href,
+          },
+          '7d',
+        ),
       stop: async ({
         preserveDatabase = false,
       }: { preserveDatabase?: boolean } = {}) => {
@@ -871,7 +896,9 @@ async function startFactoryRealmServer(
   await ensureFactoryPrerequisites();
 
   let templateDatabase: string | undefined;
-  if (options.useCache !== false) {
+  if (options.templateDatabaseName) {
+    templateDatabase = options.templateDatabaseName;
+  } else if (options.useCache !== false) {
     templateDatabase = (
       await ensureFactoryRealmTemplate({
         realmDir,
@@ -893,8 +920,15 @@ async function startFactoryRealmServer(
   return {
     realmDir,
     realmURL,
+    databaseName,
     cardURL(path: string) {
       return new URL(path, realmURL).href;
+    },
+    createBearerToken: runtime.createBearerToken,
+    authorizationHeaders(user?: string, permissions?: string[]) {
+      return {
+        Authorization: `Bearer ${runtime.createBearerToken(user, permissions)}`,
+      };
     },
     stop: runtime.stop,
   };
