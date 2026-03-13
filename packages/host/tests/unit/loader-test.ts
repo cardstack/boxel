@@ -6,6 +6,8 @@ import { module, test } from 'qunit';
 
 import { baseRealm, Loader } from '@cardstack/runtime-common';
 
+import type LoaderService from '@cardstack/host/services/loader-service';
+
 import {
   testRealmURL,
   setupCardLogs,
@@ -23,11 +25,13 @@ module('Unit | loader', function (hooks) {
   let mockMatrixUtils = setupMockMatrix(hooks);
 
   let loader: Loader;
+  let loaderService: LoaderService;
 
   setupRealmCacheTeardown(hooks);
 
   hooks.beforeEach(async function (this: RenderingTestContext) {
-    loader = getService('loader-service').loader;
+    loaderService = getService('loader-service');
+    loader = loaderService.loader;
 
     await withCachedRealmSetup(async () =>
       setupIntegrationTestRealm({
@@ -118,6 +122,21 @@ module('Unit | loader', function (hooks) {
           export let counter = 0;
           export function increment() {
             counter++;
+          }
+        `,
+          'styled-person.gts': `
+          import { CardDef, Component } from 'https://cardstack.com/base/card-api';
+          export class StyledPerson extends CardDef {
+            static isolated = class Isolated extends Component<typeof this> {
+              <template>
+                <div class="styled-person">Styled Person</div>
+                <style scoped>
+                  .styled-person {
+                    color: rgb(1, 2, 3);
+                  }
+                </style>
+              </template>
+            };
           }
         `,
           'foo.js': `
@@ -228,6 +247,29 @@ module('Unit | loader', function (hooks) {
     }>(`${testRealmURL}foo`);
     assert.strictEqual(checkImportMeta(), `${testRealmURL}foo.js`);
     assert.strictEqual(myLoader(), loader, 'the loader instance is correct');
+  });
+
+  test('session boundary reset rebuilds the loader so scoped CSS can be injected again', async function (assert) {
+    await loaderService.loader.import(`${testRealmURL}styled-person`);
+    assert
+      .dom('style[data-boxel-scoped-css]')
+      .exists('scoped CSS is injected after the initial import');
+
+    loaderService.resetSessionBoundary('test');
+
+    assert
+      .dom('style[data-boxel-scoped-css]')
+      .doesNotExist('session reset clears injected scoped CSS');
+    assert.notStrictEqual(
+      loaderService.loader,
+      loader,
+      'session reset replaces the loader instance',
+    );
+
+    await loaderService.loader.import(`${testRealmURL}styled-person`);
+    assert
+      .dom('style[data-boxel-scoped-css]')
+      .exists('scoped CSS is re-injected after the next import');
   });
 
   test('identify preserves original module for reexports', function (assert) {
