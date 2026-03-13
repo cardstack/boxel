@@ -14,6 +14,7 @@ import { cn } from '@cardstack/boxel-ui/helpers';
 
 import {
   MINIMUM_AI_CREDITS_TO_CONTINUE,
+  type CardErrorJSONAPI,
   type getCardCollection,
 } from '@cardstack/runtime-common';
 
@@ -180,8 +181,55 @@ function isPresent(val: SafeString | string | null | undefined) {
   return val ? val !== '' : false;
 }
 
-function collectionResourceError(id: string | null | undefined) {
-  return 'Cannot render ' + id;
+export function attachedCardErrorMessages(errors: CardErrorJSONAPI[]) {
+  let unreachableCount = 0;
+  let runtimeErrorCount = 0;
+  let genericErrorCount = 0;
+
+  for (let error of errors) {
+    if (isUnreachableCardError(error)) {
+      unreachableCount++;
+    } else if (error.status >= 500) {
+      runtimeErrorCount++;
+    } else {
+      genericErrorCount++;
+    }
+  }
+
+  return [
+    ...(unreachableCount > 0
+      ? [
+          unreachableCount === 1
+            ? `The card is unreachable. It may have been deleted, or you don't have permission to see it.`
+            : `These cards are unreachable. They may have been deleted, or you don't have permission to see them.`,
+        ]
+      : []),
+    ...(runtimeErrorCount > 0
+      ? [
+          runtimeErrorCount === 1
+            ? `This card could not be displayed because it hit a runtime error.`
+            : `Some cards could not be displayed because they hit runtime errors.`,
+        ]
+      : []),
+    ...(genericErrorCount > 0
+      ? [
+          genericErrorCount === 1
+            ? `This card could not be displayed because it has an error.`
+            : `Some cards could not be displayed because they have errors.`,
+        ]
+      : []),
+  ];
+}
+
+function isUnreachableCardError(error: CardErrorJSONAPI) {
+  let title = error.title.toLowerCase();
+
+  return (
+    [401, 403, 404].includes(error.status) ||
+    title === 'unauthorized' ||
+    title === 'forbidden' ||
+    title === 'not found'
+  );
 }
 
 export default class AiAssistantMessage extends Component<Signature> {
@@ -302,17 +350,25 @@ export default class AiAssistantMessage extends Component<Signature> {
           {{else}}
             <Alert @type='error' as |Alert|>
               <Alert.Messages @messages={{this.errorMessages}} />
-              <div class='alert-action-buttons-row'>
-                {{#if @waitAction}}
-                  <Alert.Action
-                    @actionName='Wait longer'
-                    @action={{@waitAction}}
-                  />
-                {{/if}}
-                {{#if @retryAction}}
-                  <Alert.Action @actionName='Retry' @action={{@retryAction}} />
-                {{/if}}
-              </div>
+              {{#if this.hasAlertActions}}
+                <div
+                  class='alert-action-buttons-row'
+                  data-test-alert-action-buttons-row
+                >
+                  {{#if @waitAction}}
+                    <Alert.Action
+                      @actionName='Wait longer'
+                      @action={{@waitAction}}
+                    />
+                  {{/if}}
+                  {{#if @retryAction}}
+                    <Alert.Action
+                      @actionName='Retry'
+                      @action={{@retryAction}}
+                    />
+                  {{/if}}
+                </div>
+              {{/if}}
             </Alert>
           {{/if}}
         {{/if}}
@@ -412,10 +468,14 @@ export default class AiAssistantMessage extends Component<Signature> {
   private get errorMessages() {
     return [
       ...(this.args.errorMessage ? [this.args.errorMessage] : []),
-      ...(this.args.collectionResource?.cardErrors.map((error) =>
-        collectionResourceError(error.id),
-      ) ?? []),
+      ...attachedCardErrorMessages(
+        this.args.collectionResource?.cardErrors ?? [],
+      ),
     ];
+  }
+
+  private get hasAlertActions() {
+    return Boolean(this.args.waitAction || this.args.retryAction);
   }
 
   private get isOutOfCreditsErrorMessage(): boolean {
