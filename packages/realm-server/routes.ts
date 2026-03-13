@@ -66,6 +66,7 @@ import {
   handleDeleteWebhookCommandRequest,
 } from './handlers/handle-webhook-commands';
 import handleWebhookReceiverRequest from './handlers/handle-webhook-receiver';
+import handleIndexingDashboard from './handlers/handle-indexing-dashboard';
 import { buildCreatePrerenderAuth } from './prerender/auth';
 
 export type CreateRoutesArgs = {
@@ -237,6 +238,10 @@ export function createRoutes(args: CreateRoutesArgs) {
     '/_grafana-full-reindex',
     grafanaAuthorization(args.grafanaSecret),
     handleFullReindex(args),
+  );
+  router.get(
+    '/_indexing-dashboard',
+    handleIndexingDashboard(args),
   );
   router.post('/_post-deployment', handlePostDeployment(args));
   router.post(
