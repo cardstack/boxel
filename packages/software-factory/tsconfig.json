@@ -5,6 +5,9 @@
     "module": "NodeNext",
     "moduleResolution": "nodenext",
     "allowSyntheticDefaultImports": true,
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": false,
+    "useDefineForClassFields": false,
     "noImplicitAny": true,
     "noImplicitThis": true,
     "alwaysStrict": true,
@@ -20,5 +23,5 @@
     "strict": true,
     "types": ["@cardstack/local-types", "node"]
   },
-  "include": ["./src/**/*.ts"]
+  "include": ["./src/**/*.ts", "./tests/**/*.ts", "./playwright.config.ts"]
 }
