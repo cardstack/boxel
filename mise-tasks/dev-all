@@ -2,12 +2,13 @@
 #MISE description="Start host app + full dev stack (host must be ready before realm server)"
 #MISE dir="packages/realm-server"
 
+# Add node_modules/.bin to PATH (mise run bypasses pnpm which normally does this)
+# MISE dir is packages/realm-server, so ../.. is repo root
+PATH="$(pwd)/../../node_modules/.bin:$(pwd)/node_modules/.bin:$PATH"
+
 READY_PATH="_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson"
 
-# Host readiness URL
-HOST_READY="${HOST_URL}"
-
-# Phase 2 readiness URLs (realm server + services)
+# Phase 1 readiness URLs (realm server + services)
 BASE_REALM_READY="http-get://${REALM_BASE_URL#http://}/base/${READY_PATH}"
 SKILLS_READY="http-get://${REALM_BASE_URL#http://}/skills/${READY_PATH}"
 REALM_URLS="${BASE_REALM_READY}|${SKILLS_READY}"
@@ -25,7 +26,7 @@ REALM_URLS="${REALM_URLS}|http-get://${REALM_BASE_URL#http://}/software-factory/
 
 REALM_URLS="${REALM_URLS}|${MATRIX_URL_VAL}|http://localhost:5001|${ICONS_URL}"
 
-# Phase 3 readiness URL (test realms)
+# Phase 2 readiness URL (test realms)
 NODE_TEST_REALM_READY="http-get://${REALM_TEST_URL#http://}/node-test/${READY_PATH}"
 
 # In environment mode, bootstrap infra before starting services
@@ -40,9 +41,20 @@ if [ -n "$BOXEL_ENVIRONMENT" ]; then
   ./scripts/start-matrix.sh
 fi
 
+# Start host app in background and wait for it before launching the rest.
+# start-server-and-test v1.x only supports 2 server phases (5 args), so we
+# start the host manually and use wait-on to gate readiness.
+pnpm --filter @cardstack/host start &
+HOST_PID=$!
+cleanup_host() {
+  kill "$HOST_PID" >/dev/null 2>&1 || true
+}
+trap cleanup_host EXIT INT TERM
+
+echo "Waiting for host app at ${HOST_URL}..."
+wait-on "$HOST_URL" --timeout 120000
+
 WAIT_ON_TIMEOUT=2400000 NODE_NO_WARNINGS=1 start-server-and-test \
-  'pnpm --filter @cardstack/host start' \
-  "$HOST_READY" \
   'run-p -ln start:pg start:matrix start:smtp start:prerender-dev start:prerender-manager-dev start:worker-development start:development' \
   "$REALM_URLS" \
   'run-p -ln start:worker-test start:test-realms' \
