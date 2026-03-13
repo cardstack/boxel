@@ -1,3 +1,5 @@
+#!/usr/bin/env ts-node
+
 import { realmPassword } from '../helpers/realm-credentials';
 
 let realmSecretSeed = process.env.REALM_SECRET_SEED;
