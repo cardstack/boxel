@@ -107,4 +107,40 @@ module(basename(__filename), function (hooks) {
       'leaves the stored session room alone for other send errors',
     );
   });
+
+  test('does not reject when clearing a stale session room fails', async function (assert) {
+    await insertSessionForAlice();
+    let originalExecute = dbAdapter.execute.bind(dbAdapter);
+    let failCleanup = false;
+    dbAdapter.execute = (async (
+      ...args: Parameters<typeof dbAdapter.execute>
+    ) => {
+      if (failCleanup) {
+        throw new Error('boom');
+      }
+      return await originalExecute(...args);
+    }) as typeof dbAdapter.execute;
+
+    let matrixClient = {
+      login: async () => undefined,
+      getUserId: () => '@realm_server:localhost',
+      sendEvent: async () => {
+        failCleanup = true;
+        throw new Error(
+          `Unable to send room event 'app.boxel.realm-event' to room ${staleRoomId}: status 403 - {"errcode":"M_FORBIDDEN","error":"User @realm_server:localhost not in room ${staleRoomId}"}`,
+        );
+      },
+    } as unknown as MatrixClient;
+
+    let adapter = new NodeAdapter('/tmp');
+
+    await adapter.broadcastRealmEvent(
+      makeEvent(),
+      realmURL.href,
+      matrixClient,
+      dbAdapter,
+    );
+
+    assert.true(true, 'broadcast resolves even if stale room cleanup fails');
+  });
 });

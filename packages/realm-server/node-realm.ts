@@ -318,11 +318,23 @@ export class NodeAdapter implements RealmAdapter {
         );
       } catch (e) {
         if (isRealmServerNotInRoomError(e, roomId)) {
-          let cleared = await clearSessionRoom(dbAdapter, userId, roomId);
-          realmEventsLog.warn(
-            `Skipping stale session room ${roomId} for user ${userId}; realm server is no longer in the room`,
-            { cleared, realmUrl },
-          );
+          try {
+            let cleared = await clearSessionRoom(dbAdapter, userId, roomId);
+            realmEventsLog.warn(
+              `Skipping stale session room ${roomId} for user ${userId}; realm server is no longer in the room`,
+              { cleared, realmUrl },
+            );
+          } catch (cleanupError) {
+            realmEventsLog.error(
+              `Failed to clear stale session room ${roomId} for user ${userId}`,
+              cleanupError,
+            );
+            realmEventsLog.error(
+              `Unable to send event in room ${roomId} for user ${userId}`,
+              event,
+              e,
+            );
+          }
           continue;
         }
         realmEventsLog.error(
