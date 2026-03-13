@@ -548,9 +548,7 @@ async function startWorker(
           message.startsWith('progress|')
         ) {
           let payload = message.substring('progress|'.length);
-          let progressEvent = JSON.parse(
-            payload,
-          ) as IndexingProgressEvent;
+          let progressEvent = JSON.parse(payload) as IndexingProgressEvent;
           eventSink.handleEvent(progressEvent);
         }
       });

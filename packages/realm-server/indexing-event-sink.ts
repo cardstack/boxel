@@ -46,7 +46,8 @@ export class IndexingEventSink {
       case 'file-visited': {
         let state = this.#active.get(event.realmURL);
         if (state) {
-          state.filesCompleted = event.filesCompleted ?? state.filesCompleted + 1;
+          state.filesCompleted =
+            event.filesCompleted ?? state.filesCompleted + 1;
           state.totalFiles = event.totalFiles ?? state.totalFiles;
           if (event.url) {
             state.completedFiles.push(event.url);
