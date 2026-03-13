@@ -21,14 +21,9 @@ export default class SetUserSystemCardCommand extends HostBaseCommand<
     return CardIdCard;
   }
 
-  requireInputFields = ['cardId'];
-
   protected async run(input: BaseCommandModule.CardIdCard): Promise<undefined> {
-    if (!input.cardId) {
-      throw new Error('cardId is required');
-    }
     await this.matrixService.ready;
-    await this.matrixService.setUserSystemCard(input.cardId);
+    await this.matrixService.setUserSystemCard(input.cardId || undefined);
     return undefined;
   }
 }

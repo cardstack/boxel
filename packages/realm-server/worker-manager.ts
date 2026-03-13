@@ -22,13 +22,7 @@ import Router from '@koa/router';
 import { ecsMetadata, fullRequestURL, livenessCheck } from './middleware';
 import type { Server } from 'http';
 import { PgAdapter } from '@cardstack/postgres';
-import type { CronJob } from 'cron';
-import { enqueueDailyCreditGrant } from './scripts/daily-credit-grant';
-import {
-  DAILY_CREDIT_GRANT_CRON_TZ,
-  createDailyCreditGrantCronJob,
-  parseLowCreditThreshold,
-} from './lib/daily-credit-grant-config';
+import { startCronJobs, stopCronJobs } from './lib/cron-scheduler';
 import {
   isEnvironmentMode,
   registerService,
@@ -122,7 +116,6 @@ let {
 let isReady = false;
 let isExiting = false;
 let workers: ChildProcess[] = [];
-let dailyCreditGrantJob: CronJob | undefined;
 
 process.on('SIGINT', () => (isExiting = true));
 process.on('SIGTERM', () => (isExiting = true));
@@ -192,10 +185,7 @@ const shutdown = (onShutdown?: () => void) => {
     deregisterService(serviceName);
   }
 
-  if (dailyCreditGrantJob) {
-    log.info('Stopping daily-credit-grant cron job...');
-    dailyCreditGrantJob.stop();
-  }
+  stopCronJobs();
 
   // Stop all workers
   if (workers.length > 0) {
@@ -285,7 +275,7 @@ let adapter: PgAdapter;
   }
   isReady = true;
   log.info('All workers have been started');
-  dailyCreditGrantJob = startDailyCreditGrantCron();
+  startCronJobs();
 })().catch((e: any) => {
   Sentry.captureException(e);
   log.error(
@@ -554,30 +544,6 @@ async function startWorker(
 
 async function query(expression: Expression) {
   return await _query(adapter, expression);
-}
-
-function startDailyCreditGrantCron() {
-  let lowCreditThreshold = parseLowCreditThreshold();
-  let job = createDailyCreditGrantCronJob(
-    async () => {
-      try {
-        await enqueueDailyCreditGrant({
-          lowCreditThreshold,
-          priority: 4,
-        });
-      } catch (error) {
-        Sentry.captureException(error);
-        log.error('daily-credit-grant cron failed to enqueue job', error);
-      }
-    },
-    { runOnInit: true },
-  );
-
-  job.start();
-  log.info(
-    `daily-credit-grant cron scheduled for 3:00am ${DAILY_CREDIT_GRANT_CRON_TZ}`,
-  );
-  return job;
 }
 
 interface IndexState {

@@ -271,6 +271,39 @@ export default class ChooseFileModal extends Component<Signature> {
   @action private handleKeydown(event: KeyboardEvent) {
     if (event.key === 'Escape') {
       this.pickTask.perform(undefined);
+      return;
+    }
+    if (event.key === 'Tab') {
+      this.trapFocus(event);
+    }
+  }
+
+  private trapFocus(event: KeyboardEvent) {
+    const container = event.currentTarget as HTMLElement;
+    const focusableSelector = [
+      'button:not([disabled]):not([tabindex="-1"])',
+      '[tabindex="0"]',
+      'input:not([disabled])',
+      'select:not([disabled])',
+      'a[href]',
+    ].join(', ');
+    const focusable = Array.from(
+      container.querySelectorAll<HTMLElement>(focusableSelector),
+    );
+    if (focusable.length < 2) return;
+    const first = focusable[0]!;
+    const last = focusable[focusable.length - 1]!;
+
+    if (event.shiftKey) {
+      if (document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      }
+    } else {
+      if (document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
     }
   }
 

@@ -87,6 +87,11 @@ export class CardIdCard extends CardDef {
   @field cardId = contains(StringField);
 }
 
+export class GetUserSystemCardResult extends CardDef {
+  @field cardId = contains(StringField);
+  @field isDefault = contains(BooleanField);
+}
+
 export class ShowCardInput extends CardDef {
   @field cardId = contains(StringField);
   @field format = contains(StringField);
@@ -612,4 +617,11 @@ export class SearchAndChooseInput extends CardDef {
 export class SearchAndChooseResult extends CardDef {
   @field selectedIds = containsMany(StringField);
   @field selectedCards = linksToMany(CardDef);
+}
+
+export class SyncOpenRouterModelsResult extends CardDef {
+  @field modelsProcessed = contains(NumberField);
+  @field totalModels = contains(NumberField);
+  @field status = contains(StringField);
+  @field errors = contains(StringField);
 }

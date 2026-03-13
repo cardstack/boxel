@@ -184,7 +184,24 @@ export default class IndexedFileTree extends Component<Signature> {
     const el = Array.from(
       nav.querySelectorAll<HTMLElement>('[data-path]'),
     ).find((candidate) => candidate.dataset.path === path);
-    el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    if (!el) return;
+
+    // Scroll within the nearest overflow:auto ancestor (the file list container),
+    // rather than calling scrollIntoView which can scroll the whole viewport.
+    const scrollContainer = nav.parentElement;
+    if (!scrollContainer) {
+      el.scrollIntoView({ block: 'nearest' });
+      return;
+    }
+
+    const containerRect = scrollContainer.getBoundingClientRect();
+    const elRect = el.getBoundingClientRect();
+
+    if (elRect.top < containerRect.top) {
+      scrollContainer.scrollTop -= containerRect.top - elRect.top;
+    } else if (elRect.bottom > containerRect.bottom) {
+      scrollContainer.scrollTop += elRect.bottom - containerRect.bottom;
+    }
   }
 
   @action
@@ -360,7 +377,7 @@ export default class IndexedFileTree extends Component<Signature> {
               // Directory: just move cursor, don't expand
               this.cursorPath = path;
             }
-            match.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+            this.scrollPathIntoView(path, nav);
           }
         }
         break;
