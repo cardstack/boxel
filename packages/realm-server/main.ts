@@ -89,6 +89,8 @@ if (process.env.DISABLE_MODULE_CACHING === 'true') {
 }
 
 const ENABLE_FILE_WATCHER = process.env.ENABLE_FILE_WATCHER === 'true';
+const FULL_INDEX_ON_STARTUP =
+  process.env.REALM_SERVER_FULL_INDEX_ON_STARTUP !== 'false';
 
 let {
   port,
@@ -240,7 +242,7 @@ let autoMigrate = migrateDB || undefined;
 log.info(
   `Realm server boot config: port=${port} serverURL=${serverURL} distURL=${distURL} matrixURL=${matrixURL} realmsRootPath=${realmsRootPath} migrateDB=${Boolean(
     migrateDB,
-  )} workerManagerPort=${workerManagerPort ?? 'none'} prerendererUrl=${prerendererUrl} enableFileWatcher=${ENABLE_FILE_WATCHER}`,
+  )} workerManagerPort=${workerManagerPort ?? 'none'} prerendererUrl=${prerendererUrl} enableFileWatcher=${ENABLE_FILE_WATCHER} fullIndexOnStartup=${FULL_INDEX_ON_STARTUP}`,
 );
 log.info(`Realm paths: ${paths.map(String).join(', ')}`);
 
@@ -323,7 +325,7 @@ const getIndexHTML = async () => {
         ),
       },
       {
-        fullIndexOnStartup: true,
+        ...(FULL_INDEX_ON_STARTUP ? { fullIndexOnStartup: true as const } : {}),
         ...(process.env.DISABLE_MODULE_CACHING === 'true'
           ? { disableModuleCaching: true }
           : {}),

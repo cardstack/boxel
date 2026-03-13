@@ -766,12 +766,14 @@ async function startIsolatedRealmStack({
   databaseName,
   context,
   migrateDB,
+  fullIndexOnStartup,
 }: {
   realmDir: string;
   realmURL: URL;
   databaseName: string;
   context: FactorySupportContext;
   migrateDB: boolean;
+  fullIndexOnStartup: boolean;
 }): Promise<RunningFactoryStack> {
   let rootDir = mkdtempSync(join(tmpdir(), 'software-factory-realms-'));
   let testRealmDir = join(rootDir, 'test');
@@ -792,6 +794,7 @@ async function startIsolatedRealmStack({
     MATRIX_URL: context.matrixURL,
     MATRIX_REGISTRATION_SHARED_SECRET: context.matrixRegistrationSecret,
     REALM_SERVER_MATRIX_USERNAME: DEFAULT_MATRIX_SERVER_USERNAME,
+    REALM_SERVER_FULL_INDEX_ON_STARTUP: String(fullIndexOnStartup),
     LOW_CREDIT_THRESHOLD: '2000',
     PUBLISHED_REALM_BOXEL_SPACE_DOMAIN: `localhost:${REALM_SERVER_PORT}`,
     PUBLISHED_REALM_BOXEL_SITE_DOMAIN: `localhost:${REALM_SERVER_PORT}`,
@@ -949,6 +952,7 @@ async function buildTemplateDatabase({
     databaseName: builderDatabaseName,
     context,
     migrateDB: !hasMigratedTemplate,
+    fullIndexOnStartup: true,
   });
 
   try {
@@ -1138,6 +1142,7 @@ export async function startFactoryRealmServer(
     databaseName,
     context,
     migrateDB: false,
+    fullIndexOnStartup: false,
   });
 
   return {
