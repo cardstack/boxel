@@ -7,6 +7,7 @@ if [ -n "$BOXEL_ENVIRONMENT" ]; then
   BASE_REALM="http-get://${REALM_HOST}/base/"
   CATALOG_REALM="http-get://${REALM_HOST}/catalog/"
   SKILLS_REALM="http-get://${REALM_HOST}/skills/"
+  SOFTWARE_FACTORY_REALM="http-get://${REALM_HOST}/software-factory/"
   BOXEL_HOMEPAGE_REALM="http-get://${REALM_HOST}/boxel-homepage/"
   EXPERIMENTS_REALM="http-get://${REALM_HOST}/experiments/"
   REALM_TEST_HOST="realm-test.${ENV_SLUG}.localhost"
@@ -17,6 +18,7 @@ else
   BASE_REALM="http-get://localhost:4201/base/"
   CATALOG_REALM="http-get://localhost:4201/catalog/"
   SKILLS_REALM="http-get://localhost:4201/skills/"
+  SOFTWARE_FACTORY_REALM="http-get://localhost:4201/software-factory/"
   BOXEL_HOMEPAGE_REALM="http-get://localhost:4201/boxel-homepage/"
   EXPERIMENTS_REALM="http-get://localhost:4201/experiments/"
   NODE_TEST_REALM="http-get://localhost:4202/node-test/"
@@ -31,6 +33,7 @@ NODE_TEST_REALM_READY="$NODE_TEST_REALM$READY_PATH"
 # Build the wait-on URL list, respecting SKIP_* flags (same as start-development.sh)
 WAIT_URLS="$BASE_REALM_READY"
 WAIT_URLS="$WAIT_URLS|${SKILLS_REALM}${READY_PATH}"
+WAIT_URLS="$WAIT_URLS|${SOFTWARE_FACTORY_REALM}${READY_PATH}"
 if [ -z "${SKIP_CATALOG:-}" ]; then
   WAIT_URLS="$WAIT_URLS|${CATALOG_REALM}${READY_PATH}"
 fi

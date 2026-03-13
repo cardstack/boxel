@@ -34,6 +34,15 @@ export class MockSlidingSync extends SlidingSync {
     return this;
   }
 
+  off(event: string, callback: Function) {
+    if (event === SlidingSyncEvent.Lifecycle) {
+      this.lifecycleCallbacks = this.lifecycleCallbacks.filter(
+        (existing) => existing !== callback,
+      );
+    }
+    return this;
+  }
+
   emit(event: string, ...args: any[]) {
     if (event === SlidingSyncEvent.Lifecycle) {
       this.lifecycleCallbacks.forEach((cb) => cb(...args));
@@ -123,5 +132,9 @@ export class MockSlidingSync extends SlidingSync {
       SlidingSyncState.Complete,
       mockResponse,
     );
+  }
+
+  stop() {
+    this.lifecycleCallbacks = [];
   }
 }

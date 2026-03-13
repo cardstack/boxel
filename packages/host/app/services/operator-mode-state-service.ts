@@ -220,6 +220,8 @@ export default class OperatorModeStateService extends Service {
   };
 
   resetState() {
+    this.getOpenCards.cancelAll();
+    this.setCardTitleTask.cancelAll();
     this._state = new TrackedObject({
       stacks: new TrackedArray([]),
       submode: Submodes.Interact,
@@ -235,6 +237,10 @@ export default class OperatorModeStateService extends Service {
     });
     this.cachedRealmURL = null;
     this.openFileSubscribers = [];
+    this.cardTitles = new TrackedMap();
+    this.moduleInspectorHistory = {};
+    this.profileSettingsOpen = false;
+    window.localStorage.removeItem(ModuleInspectorSelections);
     this.schedulePersist();
   }
 

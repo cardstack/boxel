@@ -1,13 +1,15 @@
 import { action } from '@ember/object';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
+import { cached, tracked } from '@glimmer/tracking';
 
+import Modifier from 'ember-modifier';
 import { consume } from 'ember-provide-consume-context';
 
 import pluralize from 'pluralize';
 
 import type { PickerOption } from '@cardstack/boxel-ui/components';
+
 import { eq } from '@cardstack/boxel-ui/helpers';
 
 import {
@@ -19,9 +21,7 @@ import {
 
 import { cardTypeDisplayName } from '@cardstack/runtime-common/helpers/card-type-display-name';
 
-import consumeContext from '@cardstack/host/helpers/consume-context';
 import { urlForRealmLookup } from '@cardstack/host/lib/utils';
-import ScrollAnchor from '@cardstack/host/modifiers/scroll-anchor';
 import type { PrerenderedSearchResource } from '@cardstack/host/resources/prerendered-search';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type RealmService from '@cardstack/host/services/realm';
@@ -45,6 +45,62 @@ import { getCodeRefFromSearchKey } from './utils';
 import type { PrerenderedCard } from '../prerendered-card-search';
 
 import type { NewCardArgs } from './utils';
+import type { NamedArgs } from 'ember-modifier';
+
+interface ScrollToFocusedSectionSignature {
+  Element: HTMLElement;
+  Args: {
+    Positional: [];
+    Named: { focusedSectionSid?: string | null; sectionSelector?: string };
+  };
+}
+
+class ScrollToFocusedSection extends Modifier<ScrollToFocusedSectionSignature> {
+  #previousSid: string | null = null;
+  #rafId: number | null = null;
+
+  modify(
+    element: HTMLElement,
+    // eslint-disable-next-line no-empty-pattern
+    []: [],
+    {
+      focusedSectionSid,
+      sectionSelector,
+    }: NamedArgs<ScrollToFocusedSectionSignature>,
+  ): void {
+    const currentSid = focusedSectionSid ?? null;
+    const prevSid = this.#previousSid;
+    this.#previousSid = currentSid;
+
+    // Cancel any pending scroll adjustment from a previous modify() call
+    // so rapid toggles don't cause stale callbacks to fire.
+    if (this.#rafId !== null) {
+      cancelAnimationFrame(this.#rafId);
+      this.#rafId = null;
+    }
+
+    if (currentSid && currentSid !== prevSid) {
+      // Checking "show only" — section moved to top, scroll to top.
+      // Defer to next frame so the DOM has re-rendered with the reordered sections;
+      // otherwise the browser's scroll anchoring can shift position back.
+      this.#rafId = requestAnimationFrame(() => {
+        this.#rafId = null;
+        element.scrollTop = 0;
+      });
+    } else if (!currentSid && prevSid && sectionSelector) {
+      // Unchecking "show only" — scroll to the previously focused section.
+      // Defer so the DOM has re-rendered with all sections restored.
+      const targetSid = prevSid;
+      this.#rafId = requestAnimationFrame(() => {
+        this.#rafId = null;
+        const sectionEl = element.querySelector(
+          `${sectionSelector}[data-section-sid="${targetSid}"]`,
+        ) as HTMLElement | null;
+        sectionEl?.scrollIntoView({ block: 'start', behavior: 'auto' });
+      });
+    }
+  }
+}
 
 export interface RealmSectionInfo {
   name: string;
@@ -114,20 +170,13 @@ export default class SearchContent extends Component<Signature> {
   /** Section id when focused: 'realm:<url>' or 'recents'. Null = no focus */
   @tracked focusedSection: string | null = null;
   @tracked displayedCountBySection: Record<string, number> = {};
-  @tracked scrollAnchorSid: string | null = null;
-
-  private get scrollAnchorSelector(): string | null {
-    if (this.scrollAnchorSid) {
-      return `[data-section-sid="${this.scrollAnchorSid}"]`;
-    }
-    return null;
-  }
 
   @consume(GetCardContextName) declare private getCard: getCard;
-  @tracked private cardResource: ReturnType<getCard> | undefined;
-  private makeCardResource = () => {
-    this.cardResource = this.getCard(this, () => this.searchKeyAsURL);
-  };
+
+  @cached
+  private get cardResource(): ReturnType<getCard> {
+    return this.getCard(this, () => this.searchKeyAsURL);
+  }
 
   private get shouldSkipQuery() {
     // In baseFilter mode (modal), only skip when search key is a URL
@@ -303,8 +352,6 @@ export default class SearchContent extends Component<Signature> {
 
   @action
   onFocusSection(sectionId: string | null) {
-    this.scrollAnchorSid = sectionId ?? this.focusedSection;
-
     this.focusedSection = sectionId;
     if (sectionId) {
       const current = this.displayedCountBySection[sectionId] ?? 0;
@@ -462,6 +509,15 @@ export default class SearchContent extends Component<Signature> {
       sections.push(...this.cardsByQuerySection);
     }
 
+    // Move focused section to front so it appears at the top
+    if (this.focusedSection) {
+      const idx = sections.findIndex((s) => s.sid === this.focusedSection);
+      if (idx > 0) {
+        const [focused] = sections.splice(idx, 1);
+        sections.unshift(focused);
+      }
+    }
+
     return sections;
   }
 
@@ -514,11 +570,10 @@ export default class SearchContent extends Component<Signature> {
   }
 
   <template>
-    {{consumeContext this.makeCardResource}}
     <div
-      {{ScrollAnchor
-        trackSelector='[data-section-sid]'
-        anchorSelector=this.scrollAnchorSelector
+      {{ScrollToFocusedSection
+        focusedSectionSid=this.focusedSection
+        sectionSelector='[data-section-sid]'
       }}
       class='search-sheet-content {{if @isCompact "compact"}}'
       ...attributes

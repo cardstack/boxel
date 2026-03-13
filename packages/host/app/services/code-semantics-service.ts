@@ -1,3 +1,4 @@
+import type Owner from '@ember/owner';
 import Service from '@ember/service';
 import { inject as service } from '@ember/service';
 
@@ -29,11 +30,13 @@ import { findDeclarationByName } from '../services/module-contents-service';
 
 import type LoaderService from './loader-service';
 import type OperatorModeStateService from './operator-mode-state-service';
+import type ResetService from './reset';
 import type { Ready } from '../resources/file';
 
 export default class CodeSemanticsService extends Service {
   @service declare operatorModeStateService: OperatorModeStateService;
   @service declare loaderService: LoaderService;
+  @service declare reset: ResetService;
 
   private onModuleEditCallback: ((state: State) => void) | undefined =
     undefined;
@@ -43,6 +46,16 @@ export default class CodeSemanticsService extends Service {
     Ready,
     ReturnType<typeof moduleContentsResource>
   >();
+
+  constructor(owner: Owner) {
+    super(owner);
+    this.reset.register(this);
+  }
+
+  resetState() {
+    this.onModuleEditCallback = undefined;
+    this.resourceCache = new WeakMap();
+  }
 
   private getResourceForFile(file: Ready | undefined) {
     if (!file) {
@@ -109,6 +122,12 @@ export default class CodeSemanticsService extends Service {
 
   setOnModuleEditCallback(callback: (state: State) => void) {
     this.onModuleEditCallback = callback;
+  }
+
+  clearOnModuleEditCallback(callback?: (state: State) => void) {
+    if (!callback || this.onModuleEditCallback === callback) {
+      this.onModuleEditCallback = undefined;
+    }
   }
 
   private handleModuleEdit(newState: State) {

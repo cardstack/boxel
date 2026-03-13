@@ -1,0 +1,33 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Wiki",
+        "module": "../wiki"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "tags": ["home-personal", "wishlist"],
+      "content": "## Overview\n\nThe Wishlist card gives the workspace a structured home for curated list of desired items with links, prices, priority, and purchase status.\n\nAs a first-class Boxel card, it can be linked to adjacent records, surfaced in filtered views, and reused in automation without the information collapsing into disconnected notes or one-off documents.\n\n## Core Mechanics\n\nWishlist acts as a canonical operational record. It keeps important facts, state changes, timestamps, and linked parties in one place so downstream workflows, approvals, and reporting can all rely on the same source of truth.\n\nThe card can be created directly by a user, produced from a [[Workflow Playbook]], or updated in response to a [[Trigger]]. When AI is involved, a [[Prompt Template]] or [[Skill Card]] can shape how it is drafted, summarized, classified, or routed.\n\n## Integration Points\n\n- **[[Calendar]]** -- Calendar can provide adjacent context, downstream output, or grouped navigation around Wishlist.\n- **[[Task]]** -- Wishlist often creates follow-up work or is itself tracked through task execution.\n- **[[Alert]]** -- Alert can provide adjacent context, downstream output, or grouped navigation around Wishlist.\n- **[[Workflow Playbook]]** -- Wishlist can be created, reviewed, or progressed as one step inside a repeatable workflow.\n- **[[Document]]** -- Wishlist can link to longer-form supporting content when a lightweight card needs deeper context.\n- **[[Recipe]]** -- Recipe can provide adjacent context, downstream output, or grouped navigation around Wishlist.\n\n## Example Use Cases\n\n- **System of record:** Teams create Wishlist as the structured home for curated list of desired items with links, prices, priority, and purchase status and keep related work linked instead of scattered across notes.\n- **Automation handoff:** A [[Workflow Playbook]] or [[Trigger]] creates or updates Wishlist when upstream conditions are met, reducing repetitive setup work.\n- **Search and reporting:** Wishlist stays queryable for dashboards, summaries, and downstream actions without re-entering the same information in multiple places.",
+      "cardInfo": {
+        "name": "Wishlist",
+        "notes": null,
+        "summary": "Curated list of desired items with links, prices, priority, and purchase status.",
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "relatedPages": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

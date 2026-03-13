@@ -1,0 +1,33 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Wiki",
+        "module": "../wiki"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "tags": ["crm", "sales", "pipeline", "revenue"],
+      "content": "## Overview\n\nThe Deal card tracks a sales opportunity from initial qualification through close. It captures the prospective buyer (a [[Contact]] at an [[Organization]]), the products or services being sold, the estimated value, the expected close date, and the current pipeline stage. Deals are the revenue backbone of any CRM workflow in Boxel, connecting people and companies to the products they want to buy.\n\nDeals do not exist in isolation. They link outward to [[Task]] cards for follow-up actions, [[Email Template]] cards for outreach, [[Invoice]] cards for billing after close, and [[Product]] cards for what is being sold.\n\n## Core Mechanics\n\n### Pipeline Stages\n\nA deal moves through a configurable pipeline: `Lead -> Qualified -> Proposal -> Negotiation -> Closed Won / Closed Lost`. Each stage transition records a timestamp and the user who advanced it. Stage transitions can fire a [[Trigger]] to automate next steps, such as generating a proposal document or scheduling a follow-up [[Task]].\n\n### Value and Forecasting\n\nEach deal has an estimated value and a probability percentage. The weighted pipeline value (value times probability) rolls up into forecasting dashboards. When a deal reaches \"Closed Won,\" its value converts from forecast to actual revenue and an [[Invoice]] can be auto-generated.\n\n### Multi-Contact Roles\n\nDeals often involve multiple people at the buying [[Organization]]. Each [[Contact]] on a deal has a role: Champion, Decision Maker, Influencer, or Blocker. Understanding the stakeholder map helps sales reps tailor their approach and identify risks.\n\n## Integration Points\n\n- **[[Contact]]** -- The people involved in the deal. Each contact's role is tracked on the deal relationship.\n- **[[Organization]]** -- The buying company. Pipeline views can group deals by organization for account-level analysis.\n- **[[Product]]** -- Line items on the deal reference specific products with quantities and unit prices.\n- **[[Invoice]]** -- When a deal closes, an invoice is generated from the deal's line items and sent to the billing [[Contact]].\n- **[[Task]]** -- Follow-up actions, meeting notes, and proposal reviews are tracked as tasks linked to the deal.\n- **[[Email Template]]** -- Sales sequences use templates personalized with deal and contact data to nurture the opportunity.\n\n## Example Use Cases\n\n1. **Outbound sales**: A rep creates a Deal linked to a [[Contact]] and [[Organization]], sets the pipeline stage to Qualified, and uses an [[Email Template]] to send a personalized intro. A [[Trigger]] schedules a follow-up [[Task]] if no reply arrives within three days.\n2. **Proposal automation**: When a deal moves to Proposal stage, a [[Workflow Playbook]] generates a scoped document from [[Product]] details, attaches pricing, and sends it to the decision-maker [[Contact]].\n3. **Revenue recognition**: A Closed Won deal fires a [[Trigger]] that creates an [[Invoice]], links it to the [[Organization]], and notifies the finance team via a [[Task]] on their [[Kanban Board]].",
+      "cardInfo": {
+        "name": "Deal",
+        "notes": null,
+        "summary": "Sales opportunity tracking with pipeline stages, multi-contact roles, forecasting, and automated invoicing.",
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "relatedPages": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

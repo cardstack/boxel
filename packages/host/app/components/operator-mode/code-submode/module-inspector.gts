@@ -82,6 +82,7 @@ import type SpecPanelService from '@cardstack/host/services/spec-panel-service';
 import type StoreService from '@cardstack/host/services/store';
 
 import { PlaygroundSelections } from '@cardstack/host/utils/local-storage-keys';
+import { runWhileActive } from '@cardstack/host/utils/run-while-active';
 
 import type {
   CardDef,
@@ -143,27 +144,34 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
   @tracked private specSearch: ReturnType<getCards<Spec>> | undefined;
   @tracked private cardResource: ReturnType<getCard> | undefined;
 
-  @use private isSpecResource = resource(() => {
+  @use private isSpecResource = resource(({ on }) => {
     let state = new TrackedObject<{ value: boolean }>({ value: false });
     let codeRef = this.selectedDeclarationAsCodeRef;
     if (!codeRef.module || !codeRef.name) {
       return state;
     }
-    (async () => {
+    let loader = this.loaderService.loader;
+    let relativeTo = new URL(this.operatorModeStateService.realmURL);
+    runWhileActive(on, async (isActive) => {
       try {
         let cardDef = await loadCardDef(codeRef, {
-          loader: this.loaderService.loader,
-          relativeTo: new URL(this.operatorModeStateService.realmURL),
+          loader,
+          relativeTo,
         });
+        if (!isActive()) {
+          return;
+        }
         state.value = isSpecCard(cardDef);
       } catch {
-        state.value = false;
+        if (isActive()) {
+          state.value = false;
+        }
       }
-    })();
+    });
     return state;
   });
 
-  @use private fileDefResource = resource(() => {
+  @use private fileDefResource = resource(({ on }) => {
     let state = new TrackedObject<{
       value: FileDef | undefined;
       isLoading: boolean;
@@ -177,13 +185,17 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
       return state;
     }
     let fileUrl = this.args.readyFile.url;
+    let store = this.store;
     void this.args.readyFile?.lastModified; // track lastModified to re-run on save
     state.isLoading = true;
-    (async () => {
+    runWhileActive(on, async (isActive) => {
       try {
-        let result = await this.store.getWithoutCache(fileUrl, {
+        let result = await store.getWithoutCache(fileUrl, {
           type: 'file-meta',
         });
+        if (!isActive()) {
+          return;
+        }
         if (isCardErrorJSONAPI(result)) {
           state.error = result;
           state.value = undefined;
@@ -192,12 +204,17 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
           state.error = undefined;
         }
       } catch (e) {
+        if (!isActive()) {
+          return;
+        }
         state.error = e;
         state.value = undefined;
       } finally {
-        state.isLoading = false;
+        if (isActive()) {
+          state.isLoading = false;
+        }
       }
-    })();
+    });
     return state;
   });
 

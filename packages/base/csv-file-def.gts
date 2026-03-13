@@ -1,4 +1,5 @@
 import { byteStreamToUint8Array } from '@cardstack/runtime-common';
+import { htmlSafe } from '@ember/template';
 import CsvIcon from '@cardstack/boxel-icons/csv';
 import {
   BaseDefComponent,
@@ -15,7 +16,6 @@ import {
   type ByteStream,
   type SerializedFile,
 } from './file-api';
-import sanitizedHtml from './helpers/sanitized-html';
 
 const EXCERPT_MAX_LENGTH = 500;
 
@@ -183,7 +183,11 @@ class Isolated extends Component<typeof CsvFileDef> {
   }
 
   get tableHtml() {
-    return csvToHtml(this.args.model?.content ?? '');
+    // `csvToHtml()` owns the whole rendering pipeline here: it escapes every
+    // cell value first and then assembles the table markup we control. A second
+    // sanitizer pass only reparses our own generated HTML during
+    // prerender/indexing and was showing up as avoidable DOMParser churn.
+    return htmlSafe(csvToHtml(this.args.model?.content ?? ''));
   }
 
   get hasContent() {
@@ -194,9 +198,7 @@ class Isolated extends Component<typeof CsvFileDef> {
     <article class='csv-isolated' data-test-csv-isolated>
       <header class='csv-isolated__title'>{{this.title}}</header>
       {{#if this.hasContent}}
-        <div class='csv-isolated__table'>
-          {{sanitizedHtml this.tableHtml}}
-        </div>
+        <div class='csv-isolated__table'>{{this.tableHtml}}</div>
       {{/if}}
     </article>
     <style scoped>
@@ -256,7 +258,11 @@ class Embedded extends Component<typeof CsvFileDef> {
   }
 
   get tableHtml() {
-    return csvToHtml(this.args.model?.content ?? '', 20);
+    // `csvToHtml()` owns the whole rendering pipeline here: it escapes every
+    // cell value first and then assembles the table markup we control. A second
+    // sanitizer pass only reparses our own generated HTML during
+    // prerender/indexing and was showing up as avoidable DOMParser churn.
+    return htmlSafe(csvToHtml(this.args.model?.content ?? '', 20));
   }
 
   get hasContent() {
@@ -267,9 +273,7 @@ class Embedded extends Component<typeof CsvFileDef> {
     <article class='csv-embedded' data-test-csv-embedded>
       <header class='csv-embedded__title'>{{this.title}}</header>
       {{#if this.hasContent}}
-        <div class='csv-embedded__content'>
-          {{sanitizedHtml this.tableHtml}}
-        </div>
+        <div class='csv-embedded__content'>{{this.tableHtml}}</div>
       {{/if}}
     </article>
     <style scoped>
