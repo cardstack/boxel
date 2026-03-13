@@ -1,19 +1,11 @@
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import {
-  mkdtempSync,
-  readdirSync,
-  readFileSync,
-  rmSync,
-  statSync,
-} from 'node:fs';
-import { tmpdir } from 'node:os';
+import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 
-import fsExtra from 'fs-extra';
-import jwt from 'jsonwebtoken';
+import * as jwt from 'jsonwebtoken';
 import { Client as PgClient } from 'pg';
-import type { RealmAction } from '../../runtime-common/index.ts';
+import type { RealmAction } from '../../runtime-common/index';
 
 type RealmPermissions = Record<string, RealmAction[]>;
 
@@ -37,6 +29,7 @@ export interface FactoryRealmOptions {
   cacheSalt?: string;
   templateDatabaseName?: string;
   context?: FactoryTestContext | FactorySupportContext;
+  runtimeController?: FactoryRealmRuntimeController;
 }
 
 export interface FactoryRealmTemplate {
@@ -67,26 +60,35 @@ export interface StartedFactoryRealm {
   stop(): Promise<void>;
 }
 
+export interface FactoryRealmRuntimeController {
+  startRuntime(config: {
+    realmDir: string;
+    realmURL: URL;
+    databaseName: string;
+    migrateDB: boolean;
+    fullIndexOnStartup: boolean;
+    permissions: RealmPermissions;
+  }): Promise<void>;
+  stopRuntime(): Promise<void>;
+  stop(): Promise<void>;
+}
+
 type FactoryGlobalContextHandle = {
   context: FactoryTestContext;
   stop(): Promise<void>;
 };
 
 type SpawnedProcess = ChildProcess & {
-  send(message: string): boolean;
+  send(message: unknown): boolean;
 };
 
 type RunningFactoryStack = {
   realmServer: SpawnedProcess;
-  workerManager: SpawnedProcess;
-  rootDir: string;
 };
 
 const packageRoot = resolve(process.cwd());
 const workspaceRoot = resolve(packageRoot, '..', '..');
 const realmServerDir = resolve(packageRoot, '..', 'realm-server');
-const baseRealmDir = resolve(packageRoot, '..', 'base');
-const skillsRealmDir = resolve(packageRoot, '..', 'skills-realm', 'contents');
 const boxelIconsDir = resolve(packageRoot, '..', 'boxel-icons');
 const prepareTestPgScript = resolve(
   realmServerDir,
@@ -94,13 +96,15 @@ const prepareTestPgScript = resolve(
   'scripts',
   'prepare-test-pg.sh',
 );
+const softwareFactoryRealmScript = resolve(
+  realmServerDir,
+  'scripts',
+  'software-factory-realm.ts',
+);
 
 const CACHE_VERSION = 4;
 const REALM_SERVER_PORT = Number(
   process.env.SOFTWARE_FACTORY_REALM_PORT ?? 4205,
-);
-const WORKER_MANAGER_PORT = Number(
-  process.env.SOFTWARE_FACTORY_WORKER_MANAGER_PORT ?? 4232,
 );
 const DEFAULT_REALM_URL = new URL(
   process.env.SOFTWARE_FACTORY_REALM_URL ??
@@ -134,7 +138,12 @@ const DEFAULT_PERMISSIONS: RealmPermissions = {
   '*': ['read'],
   [DEFAULT_REALM_OWNER]: ['read', 'write', 'realm-owner'],
 };
-const managedProcessStdio =
+const managedProcessStdio: ['ignore', 'inherit', 'inherit', 'ipc'] | [
+  'ignore',
+  'ignore',
+  'ignore',
+  'ipc',
+] =
   process.env.SOFTWARE_FACTORY_DEBUG_SERVER === '1'
     ? ['ignore', 'inherit', 'inherit', 'ipc']
     : ['ignore', 'ignore', 'ignore', 'ipc'];
@@ -359,8 +368,8 @@ function maybeRequire(specifier: string) {
 }
 
 async function loadSynapseModule() {
-  return (maybeRequire('../../matrix/docker/synapse/index.ts') ??
-    (await import('../../matrix/docker/synapse/index.ts'))) as {
+  return (maybeRequire('../../matrix/docker/synapse/index') ??
+    (await import('../../matrix/docker/synapse/index'))) as {
     registerUser: (
       synapse: SynapseInstance,
       username: string,
@@ -377,7 +386,7 @@ async function loadSynapseModule() {
 }
 
 async function loadIsolatedRealmServerModule() {
-  return (maybeRequire('../../matrix/helpers/isolated-realm-server.ts') ??
+  return (maybeRequire('../../matrix/helpers/isolated-realm-server') ??
     (await import('../../matrix/helpers/isolated-realm-server'))) as {
     startPrerenderServer: () => Promise<{
       url: string;
@@ -663,16 +672,15 @@ function browserPassword(username: string): string {
 async function ensureSupportUsers(synapse: SynapseInstance): Promise<void> {
   let { registerUser } = await loadSynapseModule();
 
-  await registerUser(
-    synapse,
+  for (let username of [
     DEFAULT_MATRIX_SERVER_USERNAME,
-    browserPassword(DEFAULT_MATRIX_SERVER_USERNAME),
-  );
-  await registerUser(
-    synapse,
     DEFAULT_MATRIX_BROWSER_USERNAME,
-    browserPassword(DEFAULT_MATRIX_BROWSER_USERNAME),
-  );
+    'test_realm',
+    'base_realm',
+    ...(INCLUDE_SKILLS ? ['skills_realm'] : []),
+  ]) {
+    await registerUser(synapse, username, browserPassword(username));
+  }
 }
 
 function parseFactoryContext(): FactoryTestContext | undefined {
@@ -727,6 +735,18 @@ function createProcessExitPromise(
   });
 }
 
+function isMessageType(
+  message: unknown,
+  type: string,
+): message is { type: string; error?: string } {
+  return (
+    typeof message === 'object' &&
+    message !== null &&
+    'type' in message &&
+    (message as { type: unknown }).type === type
+  );
+}
+
 async function waitForReady(
   proc: SpawnedProcess,
   label: string,
@@ -747,6 +767,48 @@ async function waitForReady(
 
   if (timedOut) {
     throw new Error(`Timed out waiting for ${label} to start`);
+  }
+}
+
+async function waitForTypedProcessMessage(
+  proc: SpawnedProcess,
+  {
+    label,
+    successType,
+    errorType = 'runtime-error',
+    timeoutMs = 120_000,
+  }: {
+    label: string;
+    successType: string;
+    errorType?: string;
+    timeoutMs?: number;
+  },
+): Promise<void> {
+  let timedOut = await Promise.race([
+    new Promise<void>((resolve, reject) => {
+      let onMessage = (message: unknown) => {
+        if (isMessageType(message, successType)) {
+          proc.off('message', onMessage);
+          resolve();
+          return;
+        }
+        if (isMessageType(message, errorType)) {
+          proc.off('message', onMessage);
+          reject(
+            new Error(
+              `${label} failed: ${message.error ?? 'unknown runtime error'}`,
+            ),
+          );
+        }
+      };
+      proc.on('message', onMessage);
+    }),
+    createProcessExitPromise(proc, label),
+    new Promise<true>((resolve) => setTimeout(() => resolve(true), timeoutMs)),
+  ]);
+
+  if (timedOut) {
+    throw new Error(`Timed out waiting for ${label}`);
   }
 }
 
@@ -771,16 +833,6 @@ async function stopManagedProcess(proc: SpawnedProcess): Promise<void> {
   proc.send('kill');
 }
 
-function copyRealmFixture(realmDir: string, destination: string): void {
-  fsExtra.copySync(realmDir, destination, {
-    preserveTimestamps: true,
-    filter(src) {
-      let relativePath = relative(realmDir, src).replace(/\\/g, '/');
-      return relativePath === '' || !shouldIgnoreFixturePath(relativePath);
-    },
-  });
-}
-
 async function startIsolatedRealmStack({
   realmDir,
   realmURL,
@@ -788,6 +840,7 @@ async function startIsolatedRealmStack({
   context,
   migrateDB,
   fullIndexOnStartup,
+  permissions,
 }: {
   realmDir: string;
   realmURL: URL;
@@ -795,14 +848,8 @@ async function startIsolatedRealmStack({
   context: FactorySupportContext;
   migrateDB: boolean;
   fullIndexOnStartup: boolean;
+  permissions: RealmPermissions;
 }): Promise<RunningFactoryStack> {
-  let rootDir = mkdtempSync(join(tmpdir(), 'software-factory-realms-'));
-  let testRealmDir = join(rootDir, 'test');
-  fsExtra.ensureDirSync(testRealmDir);
-  await timed('copy realm fixture', async () => {
-    copyRealmFixture(realmDir, testRealmDir);
-  });
-
   let env = {
     ...process.env,
     PGHOST: DEFAULT_PG_HOST,
@@ -821,75 +868,31 @@ async function startIsolatedRealmStack({
     LOW_CREDIT_THRESHOLD: '2000',
     PUBLISHED_REALM_BOXEL_SPACE_DOMAIN: `localhost:${REALM_SERVER_PORT}`,
     PUBLISHED_REALM_BOXEL_SITE_DOMAIN: `localhost:${REALM_SERVER_PORT}`,
+    SOFTWARE_FACTORY_REALM_DIR: realmDir,
+    SOFTWARE_FACTORY_REALM_URL: realmURL.href,
+    SOFTWARE_FACTORY_DATABASE_NAME: databaseName,
+    SOFTWARE_FACTORY_MATRIX_URL: context.matrixURL,
+    SOFTWARE_FACTORY_MATRIX_REGISTRATION_SECRET:
+      context.matrixRegistrationSecret,
+    SOFTWARE_FACTORY_PRERENDER_URL: context.prerenderURL,
+    SOFTWARE_FACTORY_PERMISSIONS: JSON.stringify(permissions),
+    SOFTWARE_FACTORY_FULL_INDEX_ON_STARTUP: String(fullIndexOnStartup),
+    SOFTWARE_FACTORY_AUTO_MIGRATE: String(migrateDB),
   };
 
-  let workerArgs = [
-    '--transpileOnly',
-    'worker-manager',
-    `--port=${WORKER_MANAGER_PORT}`,
-    `--matrixURL=${context.matrixURL}`,
-    `--prerendererUrl=${context.prerenderURL}`,
-    `--fromUrl=${realmURL.href}`,
-    `--toUrl=${realmURL.href}`,
-    '--fromUrl=https://cardstack.com/base/',
-    `--toUrl=http://localhost:${REALM_SERVER_PORT}/base/`,
-  ];
-  if (INCLUDE_SKILLS) {
-    workerArgs.push(
-      `--fromUrl=http://localhost:${REALM_SERVER_PORT}/skills/`,
-      `--toUrl=http://localhost:${REALM_SERVER_PORT}/skills/`,
-    );
-  }
-  if (migrateDB) {
-    workerArgs.splice(5, 0, '--migrateDB');
-  }
-
-  let workerManager = spawn('ts-node', workerArgs, {
-    cwd: realmServerDir,
-    env,
-    stdio: managedProcessStdio,
-  }) as SpawnedProcess;
-
-  let serverArgs = [
-    '--transpileOnly',
-    'main',
-    `--port=${REALM_SERVER_PORT}`,
-    `--matrixURL=${context.matrixURL}`,
-    `--realmsRootPath=${rootDir}`,
-    `--workerManagerPort=${WORKER_MANAGER_PORT}`,
-    `--prerendererUrl=${context.prerenderURL}`,
-    `--path=${testRealmDir}`,
-    '--username=test_realm',
-    `--fromUrl=${realmURL.href}`,
-    `--toUrl=${realmURL.href}`,
-    '--username=base_realm',
-    `--path=${baseRealmDir}`,
-    '--fromUrl=https://cardstack.com/base/',
-    `--toUrl=http://localhost:${REALM_SERVER_PORT}/base/`,
-  ];
-  if (INCLUDE_SKILLS) {
-    serverArgs.splice(
-      11,
-      0,
-      '--username=skills_realm',
-      `--path=${skillsRealmDir}`,
-      `--fromUrl=http://localhost:${REALM_SERVER_PORT}/skills/`,
-      `--toUrl=http://localhost:${REALM_SERVER_PORT}/skills/`,
-    );
-  }
-
-  let realmServer = spawn('ts-node', serverArgs, {
-    cwd: realmServerDir,
-    env,
-    stdio: managedProcessStdio,
-  }) as SpawnedProcess;
+  let realmServer = spawn(
+    'ts-node',
+    ['--transpileOnly', softwareFactoryRealmScript],
+    {
+      cwd: realmServerDir,
+      env,
+      stdio: managedProcessStdio,
+    },
+  ) as SpawnedProcess;
 
   try {
     await timed('start isolated realm stack', async () => {
-      await Promise.race([
-        waitForReady(realmServer, 'realm server'),
-        createProcessExitPromise(workerManager, 'worker manager'),
-      ]);
+      await waitForReady(realmServer, 'realm server');
     });
   } catch (error) {
     try {
@@ -897,19 +900,85 @@ async function startIsolatedRealmStack({
     } catch {
       // best effort cleanup
     }
-    try {
-      await stopManagedProcess(workerManager);
-    } catch {
-      // best effort cleanup
-    }
-    rmSync(rootDir, { recursive: true, force: true });
     throw error;
   }
 
   return {
     realmServer,
-    workerManager,
-    rootDir,
+  };
+}
+
+export async function startFactoryRealmRuntimeController(
+  context: FactorySupportContext | FactoryTestContext = getFactoryTestContext(),
+): Promise<FactoryRealmRuntimeController> {
+  let env = {
+    ...process.env,
+    PGHOST: DEFAULT_PG_HOST,
+    PGPORT: DEFAULT_PG_PORT,
+    PGUSER: DEFAULT_PG_USER,
+    NODE_NO_WARNINGS: '1',
+    NODE_ENV: 'test',
+    REALM_SERVER_SECRET_SEED,
+    REALM_SECRET_SEED,
+    GRAFANA_SECRET,
+    MATRIX_URL: context.matrixURL,
+    MATRIX_REGISTRATION_SHARED_SECRET: context.matrixRegistrationSecret,
+    REALM_SERVER_MATRIX_USERNAME: DEFAULT_MATRIX_SERVER_USERNAME,
+    LOW_CREDIT_THRESHOLD: '2000',
+    PUBLISHED_REALM_BOXEL_SPACE_DOMAIN: `localhost:${REALM_SERVER_PORT}`,
+    PUBLISHED_REALM_BOXEL_SITE_DOMAIN: `localhost:${REALM_SERVER_PORT}`,
+    SOFTWARE_FACTORY_MATRIX_URL: context.matrixURL,
+    SOFTWARE_FACTORY_MATRIX_REGISTRATION_SECRET:
+      context.matrixRegistrationSecret,
+    SOFTWARE_FACTORY_PRERENDER_URL: context.prerenderURL,
+  };
+
+  let realmServer = spawn(
+    'ts-node',
+    ['--transpileOnly', softwareFactoryRealmScript],
+    {
+      cwd: realmServerDir,
+      env,
+      stdio: managedProcessStdio,
+    },
+  ) as SpawnedProcess;
+
+  await waitForReady(realmServer, 'realm runtime controller');
+
+  return {
+    async startRuntime(config) {
+      realmServer.send({
+        type: 'start-runtime',
+        payload: {
+          realmDir: config.realmDir,
+          realmURL: config.realmURL.href,
+          databaseName: config.databaseName,
+          permissions: config.permissions,
+          fullIndexOnStartup: config.fullIndexOnStartup,
+          autoMigrate: config.migrateDB,
+        },
+      });
+      await timed('start isolated realm stack', async () => {
+        await waitForTypedProcessMessage(realmServer, {
+          label: 'runtime realm stack',
+          successType: 'runtime-started',
+        });
+      });
+    },
+    async stopRuntime() {
+      if (realmServer.exitCode !== null) {
+        return;
+      }
+      realmServer.send({ type: 'stop-runtime' });
+      await waitForTypedProcessMessage(realmServer, {
+        label: 'runtime realm stack shutdown',
+        successType: 'runtime-stopped',
+        timeoutMs: 15_000,
+      });
+    },
+    async stop() {
+      await stopManagedProcess(realmServer);
+    },
   };
 }
 
@@ -920,18 +989,6 @@ async function stopIsolatedRealmStack(
 
   try {
     await stopManagedProcess(stack.realmServer);
-  } catch (error) {
-    cleanupError ??= error;
-  }
-
-  try {
-    await stopManagedProcess(stack.workerManager);
-  } catch (error) {
-    cleanupError ??= error;
-  }
-
-  try {
-    rmSync(stack.rootDir, { recursive: true, force: true });
   } catch (error) {
     cleanupError ??= error;
   }
@@ -986,6 +1043,7 @@ async function buildTemplateDatabase({
     context,
     migrateDB: !hasMigratedTemplate,
     fullIndexOnStartup: true,
+    permissions,
   });
 
   try {
@@ -1190,16 +1248,38 @@ export async function startFactoryRealmServer(
     cloneDatabaseFromTemplate(templateDatabaseName, databaseName),
   );
 
-  let stack = await timed('start runtime realm stack', () =>
-    startIsolatedRealmStack({
-      realmDir,
-      realmURL,
-      databaseName,
-      context,
-      migrateDB: false,
-      fullIndexOnStartup: false,
-    }),
-  );
+  let runtimeController = options.runtimeController;
+  let stack: RunningFactoryStack | undefined;
+  try {
+    if (runtimeController) {
+      await timed('start runtime realm stack', () =>
+        runtimeController.startRuntime({
+          realmDir,
+          realmURL,
+          databaseName,
+          migrateDB: false,
+          fullIndexOnStartup: false,
+          permissions: options.permissions ?? DEFAULT_PERMISSIONS,
+        }),
+      );
+    } else {
+      stack = await timed('start runtime realm stack', () =>
+        startIsolatedRealmStack({
+          realmDir,
+          realmURL,
+          databaseName,
+          context,
+          migrateDB: false,
+          fullIndexOnStartup: false,
+          permissions: options.permissions ?? DEFAULT_PERMISSIONS,
+        }),
+      );
+    }
+  } catch (error) {
+    await dropDatabase(databaseName).catch(() => undefined);
+    await ownedGlobalContext?.stop().catch(() => undefined);
+    throw error;
+  }
 
   return {
     realmDir,
@@ -1220,7 +1300,11 @@ export async function startFactoryRealmServer(
       let cleanupError: unknown;
 
       try {
-        await stopIsolatedRealmStack(stack);
+        if (runtimeController) {
+          await runtimeController.stopRuntime();
+        } else if (stack) {
+          await stopIsolatedRealmStack(stack);
+        }
       } catch (error) {
         cleanupError ??= error;
       }

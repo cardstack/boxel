@@ -1,12 +1,16 @@
-import { spawn } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { resolve } from 'node:path';
 
 import type { Page } from '@playwright/test';
 import { test as base, expect } from '@playwright/test';
 
 import { defaultSupportMetadataFile } from '../src/runtime-metadata';
+import { readSupportContext } from '../src/runtime-metadata';
+import {
+  startFactoryRealmRuntimeController,
+  startFactoryRealmServer,
+  type FactoryTestContext,
+  type FactoryRealmRuntimeController,
+} from '../src/harness';
 import { buildBrowserState, installBrowserState } from './helpers/browser-auth';
 
 type StartedFactoryRealm = {
@@ -25,144 +29,25 @@ export type FactoryRealmFixtures = {
   authedPage: Page;
 };
 
+type InternalFactoryFixtures = {
+  supportContext: FactoryTestContext;
+  realmController: FactoryRealmRuntimeController;
+};
+
 const packageRoot = resolve(process.cwd());
 const defaultRealmDir = resolve(
   packageRoot,
   process.env.SOFTWARE_FACTORY_REALM_DIR ?? 'demo-realm',
 );
 
-function appendLog(buffer: string, chunk: string): string {
-  let combined = `${buffer}${chunk}`;
-  return combined.length > 20_000 ? combined.slice(-20_000) : combined;
-}
-
-function killProcessGroup(pid: number, signal: NodeJS.Signals) {
-  try {
-    process.kill(-pid, signal);
-  } catch (error) {
-    let nodeError = error as NodeJS.ErrnoException;
-    if (nodeError.code !== 'ESRCH') {
-      throw error;
-    }
+function getSupportContext(): FactoryTestContext {
+  let supportContext = readSupportContext() as FactoryTestContext | undefined;
+  if (!supportContext) {
+    throw new Error(
+      `software-factory support context is missing: ${defaultSupportMetadataFile}`,
+    );
   }
-}
-
-async function waitForMetadataFile<T>(
-  metadataFile: string,
-  child: ReturnType<typeof spawn>,
-  getLogs: () => string,
-  timeoutMs = 120_000,
-): Promise<T> {
-  let startedAt = Date.now();
-
-  while (Date.now() - startedAt < timeoutMs) {
-    if (existsSync(metadataFile)) {
-      return JSON.parse(readFileSync(metadataFile, 'utf8')) as T;
-    }
-
-    if (child.exitCode !== null) {
-      throw new Error(
-        `software-factory child exited early with code ${child.exitCode}\n${getLogs()}`,
-      );
-    }
-
-    await new Promise((resolve) => setTimeout(resolve, 100));
-  }
-
-  throw new Error(
-    `timed out waiting for software-factory metadata file ${metadataFile}\n${getLogs()}`,
-  );
-}
-
-async function startRealmProcess(realmDir = defaultRealmDir) {
-  let tempDir = mkdtempSync(join(tmpdir(), 'software-factory-realm-'));
-  let metadataFile = join(tempDir, 'runtime.json');
-  let logs = '';
-  let supportMetadata = existsSync(defaultSupportMetadataFile)
-    ? (JSON.parse(readFileSync(defaultSupportMetadataFile, 'utf8')) as {
-        context?: Record<string, unknown>;
-      })
-    : undefined;
-
-  let child = spawn('pnpm', ['serve:realm', realmDir], {
-    cwd: packageRoot,
-    detached: true,
-    env: {
-      ...process.env,
-      SOFTWARE_FACTORY_METADATA_FILE: metadataFile,
-      ...(supportMetadata?.context
-        ? {
-            SOFTWARE_FACTORY_CONTEXT: JSON.stringify(supportMetadata.context),
-          }
-        : {}),
-    },
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-
-  child.stdout?.on('data', (chunk) => {
-    logs = appendLog(logs, String(chunk));
-  });
-  child.stderr?.on('data', (chunk) => {
-    logs = appendLog(logs, String(chunk));
-  });
-
-  let metadata: {
-    realmDir: string;
-    realmURL: string;
-    sampleCardURL: string;
-    ownerBearerToken: string;
-  };
-
-  try {
-    metadata = await waitForMetadataFile<{
-      realmDir: string;
-      realmURL: string;
-      sampleCardURL: string;
-      ownerBearerToken: string;
-    }>(metadataFile, child, () => logs);
-  } catch (error) {
-    killProcessGroup(child.pid!, 'SIGTERM');
-    throw error;
-  }
-
-  let stop = async () => {
-    try {
-      if (child.exitCode === null) {
-        killProcessGroup(child.pid!, 'SIGTERM');
-        await new Promise<void>((resolve, reject) => {
-          let timeout = setTimeout(() => {
-            killProcessGroup(child.pid!, 'SIGKILL');
-          }, 15_000);
-
-          child.once('error', (error) => {
-            clearTimeout(timeout);
-            reject(error);
-          });
-          child.once('exit', () => {
-            clearTimeout(timeout);
-            resolve();
-          });
-        });
-      }
-    } finally {
-      rmSync(tempDir, { recursive: true, force: true });
-    }
-  };
-
-  return {
-    realmDir: metadata.realmDir,
-    realmURL: new URL(metadata.realmURL),
-    ownerBearerToken: metadata.ownerBearerToken,
-    cardURL(path: string) {
-      return new URL(path, metadata.realmURL).href;
-    },
-    authorizationHeaders() {
-      return {
-        Authorization: `Bearer ${metadata.ownerBearerToken}`,
-      };
-    },
-    stop,
-  } satisfies StartedFactoryRealm;
+  return supportContext;
 }
 
 async function registerRealmRedirect(
@@ -192,14 +77,38 @@ async function setRealmRedirects(page: Page) {
   }
 }
 
-export const test = base.extend<FactoryRealmFixtures>({
+export const test = base.extend<FactoryRealmFixtures, InternalFactoryFixtures>({
   page: async ({ page }, use) => {
     await setRealmRedirects(page);
     await use(page);
   },
 
-  realm: async ({ browserName: _browserName }, use) => {
-    let realm = await startRealmProcess();
+  supportContext: [
+    async ({ browserName: _browserName }, use) => {
+      await use(getSupportContext());
+    },
+    { scope: 'worker' },
+  ],
+
+  realmController: [
+    async ({ supportContext }, use) => {
+      let controller = await startFactoryRealmRuntimeController(supportContext);
+
+      try {
+        await use(controller);
+      } finally {
+        await controller.stop();
+      }
+    },
+    { scope: 'worker' },
+  ],
+
+  realm: async ({ realmController, supportContext }, use) => {
+    let realm = await startFactoryRealmServer({
+      realmDir: defaultRealmDir,
+      context: supportContext,
+      runtimeController: realmController,
+    });
 
     try {
       await use(realm);
