@@ -9,6 +9,7 @@ import {
 } from './card-api';
 import BooleanField from './boolean';
 import StringField from './string';
+import enumField from './enum';
 import { getMenuItems } from '@cardstack/runtime-common';
 import { type GetMenuItemParams } from './menu-items';
 import { type MenuItemOptions, MenuItem } from '@cardstack/boxel-ui/helpers';
@@ -32,6 +33,17 @@ import type {
   RealmMetaField,
 } from './command';
 
+const ReasoningEffortField = enumField(StringField, {
+  options: [
+    { value: '', label: 'None' },
+    { value: 'minimal', label: 'Minimal' },
+    { value: 'low', label: 'Low' },
+    { value: 'medium', label: 'Medium' },
+    { value: 'high', label: 'High' },
+    { value: 'xhigh', label: 'Extra High' },
+  ],
+});
+
 export class ModelConfiguration extends CardDef {
   static displayName = 'Model Configuration';
 
@@ -43,9 +55,9 @@ export class ModelConfiguration extends CardDef {
     description: 'Whether this model configuration supports tool usage',
   });
 
-  @field reasoningEffort = contains(StringField, {
+  @field reasoningEffort = contains(ReasoningEffortField, {
     description:
-      'Optional reasoning effort to pass when invoking this model (e.g. minimal, medium, maximal)',
+      'Optional reasoning effort to pass when invoking this model',
   });
 
   @field inputModalities = containsMany(StringField, {

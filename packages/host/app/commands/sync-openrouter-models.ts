@@ -233,28 +233,22 @@ export default class SyncOpenRouterModelsCommand extends HostBaseCommand<
       }
     }
 
-    // Step 5: Execute batches concurrently
+    // Step 5: Execute batches sequentially with retry on conflict
     let errors: string[] = [];
     let batches: AtomicOperation[][] = [];
     for (let i = 0; i < operations.length; i += BATCH_SIZE) {
       batches.push(operations.slice(i, i + BATCH_SIZE));
     }
 
-    let results = await Promise.allSettled(
-      batches.map((batch) =>
-        this.cardService.executeAtomicOperations(batch, new URL(realmURL)),
-      ),
-    );
-
     let processed = 0;
-    for (let i = 0; i < results.length; i++) {
-      if (results[i].status === 'fulfilled') {
-        processed += batches[i].length;
+    for (let i = 0; i < batches.length; i++) {
+      let batch = batches[i];
+      let result = await this.executeBatchWithRetry(batch, new URL(realmURL));
+      if (result.ok) {
+        processed += batch.length;
       } else {
-        let reason = (results[i] as PromiseRejectedResult).reason;
-        let msg = reason instanceof Error ? reason.message : String(reason);
-        console.error(`Batch ${i + 1} failed:`, msg);
-        errors.push(`Batch ${i + 1} (${batches[i].length} ops): ${msg}`);
+        console.error(`Batch ${i + 1} failed:`, result.error);
+        errors.push(`Batch ${i + 1} (${batch.length} ops): ${result.error}`);
       }
     }
 
@@ -271,20 +265,88 @@ export default class SyncOpenRouterModelsCommand extends HostBaseCommand<
     });
   }
 
+  private async executeBatchWithRetry(
+    batch: AtomicOperation[],
+    realmURL: URL,
+  ): Promise<{ ok: boolean; error?: string }> {
+    let result = await this.cardService.executeAtomicOperations(
+      batch,
+      realmURL,
+    );
+
+    if (!result.errors) {
+      return { ok: true };
+    }
+
+    // Parse failing hrefs from error details and flip their ops
+    let flippedHrefs = new Set<string>();
+    for (let error of result.errors) {
+      let hrefMatch = (error.detail ?? '').match(
+        /Resource (.+?) (?:already exists|does not exist)/,
+      );
+      if (!hrefMatch) {
+        continue;
+      }
+      let href = hrefMatch[1];
+      if (error.status === 409 || error.title === 'Resource already exists') {
+        flippedHrefs.add(href);
+      } else if (
+        error.status === 404 ||
+        error.title === 'Resource does not exist'
+      ) {
+        flippedHrefs.add(href);
+      }
+    }
+
+    if (flippedHrefs.size === 0) {
+      return {
+        ok: false,
+        error: JSON.stringify(result.errors),
+      };
+    }
+
+    // Retry with flipped ops
+    let retryBatch = batch.map((op) => {
+      if (flippedHrefs.has(op.href)) {
+        return {
+          ...op,
+          op: (op.op === 'add' ? 'update' : 'add') as 'add' | 'update',
+        };
+      }
+      return op;
+    });
+
+    let retryResult = await this.cardService.executeAtomicOperations(
+      retryBatch,
+      realmURL,
+    );
+
+    if (retryResult.errors) {
+      return {
+        ok: false,
+        error: `Retry failed: ${JSON.stringify(retryResult.errors)}`,
+      };
+    }
+    return { ok: true };
+  }
+
   private async fetchExistingSlugs(realmURL: string): Promise<Set<string>> {
     let slugs = new Set<string>();
     try {
-      let searchURL = `${realmURL}_search?${new URLSearchParams({
-        filter: JSON.stringify({
-          type: {
-            module: new URL('openrouter-model', realmURL).href,
-            name: 'OpenRouterModel',
+      let response = await this.network.authedFetch(`${realmURL}_search`, {
+        method: 'QUERY',
+        headers: {
+          Accept: SupportedMimeType.CardJson,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          filter: {
+            type: {
+              module: new URL('openrouter-model', realmURL).href,
+              name: 'OpenRouterModel',
+            },
           },
         }),
-      })}`;
-
-      let response = await this.network.authedFetch(searchURL, {
-        headers: { Accept: SupportedMimeType.CardJson },
       });
 
       if (response.ok) {
