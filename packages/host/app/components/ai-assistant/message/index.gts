@@ -5,6 +5,7 @@ import { action } from '@ember/object';
 import { service } from '@ember/service';
 import type { SafeString } from '@ember/template';
 import Component from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
 
 import Modifier from 'ember-modifier';
 import throttle from 'lodash/throttle';
@@ -233,6 +234,28 @@ class ScrollPosition extends Modifier<ScrollPositionSignature> {
   }
 }
 
+interface OutOfCreditsSnapshotSignature {
+  Args: {
+    Named: {
+      isOutOfCredits: boolean;
+      recordSnapshot: (isOutOfCredits: boolean) => void;
+    };
+  };
+}
+
+class OutOfCreditsSnapshot extends Modifier<OutOfCreditsSnapshotSignature> {
+  modify(
+    _element: HTMLElement,
+    _positional: [],
+    {
+      isOutOfCredits,
+      recordSnapshot,
+    }: OutOfCreditsSnapshotSignature['Args']['Named'],
+  ) {
+    recordSnapshot(isOutOfCredits);
+  }
+}
+
 function isThinkingMessage(s: string | null | undefined) {
   if (!s) {
     return false;
@@ -255,6 +278,8 @@ export default class AiAssistantMessage extends Component<Signature> {
   @service declare private matrixService: MatrixService;
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private billingService: BillingService;
+
+  @tracked private wasOutOfCreditsAtError: boolean | undefined;
 
   private get isReasoningExpandedByDefault() {
     let result =
@@ -354,7 +379,14 @@ export default class AiAssistantMessage extends Component<Signature> {
 
         {{#if this.errorMessages.length}}
           {{#if this.isOutOfCreditsErrorMessage}}
-            <Alert @type='error' as |Alert|>
+            <Alert
+              @type='error'
+              {{OutOfCreditsSnapshot
+                isOutOfCredits=this.isOutOfCredits
+                recordSnapshot=this.recordOutOfCreditsSnapshot
+              }}
+              as |Alert|
+            >
               <Alert.Messages @messages={{this.errorMessages}} />
               {{#if this.isOutOfCredits}}
                 <Alert.Action
@@ -363,9 +395,11 @@ export default class AiAssistantMessage extends Component<Signature> {
                 />
               {{else if @retryAction}}
                 <div class='credits-action-row'>
-                  <div class='credits-added' data-test-credits-added>
-                    Credits added!
-                  </div>
+                  {{#if this.shouldShowCreditsAdded}}
+                    <div class='credits-added' data-test-credits-added>
+                      Credits added!
+                    </div>
+                  {{/if}}
                   <Alert.Action @actionName='Retry' @action={{@retryAction}} />
                 </div>
               {{/if}}
@@ -505,6 +539,21 @@ export default class AiAssistantMessage extends Component<Signature> {
 
   private get isOutOfCredits() {
     return !this.hasMinimumCreditsToContinue;
+  }
+
+  @action
+  private recordOutOfCreditsSnapshot(isOutOfCredits: boolean) {
+    if (this.wasOutOfCreditsAtError === undefined) {
+      this.wasOutOfCreditsAtError = isOutOfCredits;
+    }
+  }
+
+  private get shouldShowCreditsAdded() {
+    return (
+      this.isOutOfCreditsErrorMessage &&
+      !this.isOutOfCredits &&
+      this.wasOutOfCreditsAtError === true
+    );
   }
 }
 
