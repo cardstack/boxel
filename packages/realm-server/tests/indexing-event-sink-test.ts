@@ -1,7 +1,8 @@
 import { module, test } from 'qunit';
+import { basename } from 'path';
 import { IndexingEventSink } from '../indexing-event-sink';
 
-module('IndexingEventSink', function () {
+module(basename(__filename), function () {
   test('tracks active indexing from start through file visits to finish', function (assert) {
     let sink = new IndexingEventSink();
 
