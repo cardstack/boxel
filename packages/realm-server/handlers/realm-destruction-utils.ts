@@ -1,5 +1,9 @@
-import type { Realm, VirtualNetwork } from '@cardstack/runtime-common';
-import { ensureTrailingSlash } from '@cardstack/runtime-common';
+import type {
+  DBAdapter,
+  Realm,
+  VirtualNetwork,
+} from '@cardstack/runtime-common';
+import { ensureTrailingSlash, param, query } from '@cardstack/runtime-common';
 import { pathExistsSync, readdirSync, removeSync } from 'fs-extra';
 import { join } from 'path';
 
@@ -81,4 +85,50 @@ export async function removeMountedRealm(args: {
   if (cleanupError) {
     throw cleanupError;
   }
+}
+
+export async function removeRealmDatabaseArtifacts(args: {
+  dbAdapter: DBAdapter;
+  realmURL: string;
+}) {
+  let { dbAdapter, realmURL } = args;
+  let pendingJobs = (await query(dbAdapter, [
+    `SELECT id FROM jobs WHERE concurrency_group =`,
+    param(`indexing:${realmURL}`),
+    ` AND status = 'unfulfilled'`,
+  ])) as { id: number }[];
+
+  if (pendingJobs.length > 0) {
+    await query(dbAdapter, [
+      `DELETE FROM job_reservations WHERE job_id IN (${pendingJobs
+        .map(({ id }) => id)
+        .join(', ')})`,
+    ]);
+  }
+
+  await query(dbAdapter, [
+    `DELETE FROM jobs WHERE concurrency_group =`,
+    param(`indexing:${realmURL}`),
+    ` AND status = 'unfulfilled'`,
+  ]);
+  await query(dbAdapter, [
+    `DELETE FROM modules WHERE resolved_realm_url =`,
+    param(realmURL),
+  ]);
+  await query(dbAdapter, [
+    `DELETE FROM boxel_index_working WHERE realm_url =`,
+    param(realmURL),
+  ]);
+  await query(dbAdapter, [
+    `DELETE FROM boxel_index WHERE realm_url =`,
+    param(realmURL),
+  ]);
+  await query(dbAdapter, [
+    `DELETE FROM realm_meta WHERE realm_url =`,
+    param(realmURL),
+  ]);
+  await query(dbAdapter, [
+    `DELETE FROM realm_versions WHERE realm_url =`,
+    param(realmURL),
+  ]);
 }

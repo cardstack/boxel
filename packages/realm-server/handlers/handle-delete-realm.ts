@@ -24,7 +24,10 @@ import {
 } from '../middleware';
 import type { CreateRoutesArgs } from '../routes';
 import type { RealmServerTokenClaim } from '../utils/jwt';
-import { removeMountedRealm } from './realm-destruction-utils';
+import {
+  removeMountedRealm,
+  removeRealmDatabaseArtifacts,
+} from './realm-destruction-utils';
 
 interface DeleteRealmJSON {
   data: {
@@ -165,6 +168,10 @@ export default function handleDeleteRealm({
           dbAdapter,
           new URL(publishedRealm.published_realm_url),
         );
+        await removeRealmDatabaseArtifacts({
+          dbAdapter,
+          realmURL: publishedRealm.published_realm_url,
+        });
       }
 
       await query(dbAdapter, [
@@ -193,6 +200,10 @@ export default function handleDeleteRealm({
         virtualNetwork,
       });
       await removeRealmPermissions(dbAdapter, parsedRealmURL);
+      await removeRealmDatabaseArtifacts({
+        dbAdapter,
+        realmURL,
+      });
 
       await setContextResponse(
         ctxt,

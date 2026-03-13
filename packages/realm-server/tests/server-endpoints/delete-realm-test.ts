@@ -10,7 +10,7 @@ import {
   query,
 } from '@cardstack/runtime-common';
 
-import { insertUser, realmSecretSeed } from '../helpers';
+import { insertJob, insertUser, realmSecretSeed } from '../helpers';
 import { createJWT as createRealmServerJWT } from '../../utils/jwt';
 import { setupServerEndpointsTest } from './helpers';
 
@@ -51,12 +51,44 @@ module(`server-endpoints/${basename(__filename)}`, function (hooks) {
     return response.body.data.id as string;
   }
 
+  async function insertIndexEntry(args: {
+    table: 'boxel_index' | 'boxel_index_working';
+    realmURL: string;
+    url: string;
+  }) {
+    let { nameExpressions, valueExpressions } = asExpressions({
+      url: args.url,
+      file_alias: args.url,
+      type: 'instance',
+      realm_version: 1,
+      realm_url: args.realmURL,
+    });
+    await query(
+      context.dbAdapter,
+      insert(args.table, nameExpressions, valueExpressions),
+    );
+  }
+
+  async function insertModuleEntry(realmURL: string, url: string) {
+    let { nameExpressions, valueExpressions } = asExpressions({
+      url,
+      cache_scope: 'public',
+      auth_user_id: '',
+      resolved_realm_url: realmURL,
+    });
+    await query(
+      context.dbAdapter,
+      insert('modules', nameExpressions, valueExpressions),
+    );
+  }
+
   test('DELETE /_delete-realm removes a created realm, its published copies, and related domain claims', async function (assert) {
     let owner = `mango-${uuidv4()}`;
     let ownerUserId = `@${owner}:localhost`;
     let realmURL = await createRealmFor(ownerUserId);
     let realmPath = new URL(realmURL).pathname.split('/').filter(Boolean);
     let publishedRealmURL = `http://${owner}.localhost:4445/published-${uuidv4()}/`;
+    let unrelatedRealmURL = `http://papaya.localhost:4445/unrelated-${uuidv4()}/`;
 
     let user = await insertUser(
       context.dbAdapter,
@@ -85,6 +117,111 @@ module(`server-endpoints/${basename(__filename)}`, function (hooks) {
 
     assert.strictEqual(publishResponse.status, 201, 'published realm created');
     let publishedRealmId = publishResponse.body.data.id as string;
+
+    let sourceIndexURL = `${realmURL}cleanup-${uuidv4()}.json`;
+    let publishedIndexURL = `${publishedRealmURL}cleanup-${uuidv4()}.json`;
+    let unrelatedIndexURL = `${unrelatedRealmURL}cleanup-${uuidv4()}.json`;
+    let sourceWorkingIndexURL = `${realmURL}working-${uuidv4()}.json`;
+    let publishedWorkingIndexURL = `${publishedRealmURL}working-${uuidv4()}.json`;
+    let unrelatedWorkingIndexURL = `${unrelatedRealmURL}working-${uuidv4()}.json`;
+    let sourceModuleURL = `${realmURL}person`;
+    let publishedModuleURL = `${publishedRealmURL}person`;
+    let unrelatedModuleURL = `${unrelatedRealmURL}person`;
+
+    await insertIndexEntry({
+      table: 'boxel_index',
+      realmURL,
+      url: sourceIndexURL,
+    });
+    await insertIndexEntry({
+      table: 'boxel_index',
+      realmURL: publishedRealmURL,
+      url: publishedIndexURL,
+    });
+    await insertIndexEntry({
+      table: 'boxel_index',
+      realmURL: unrelatedRealmURL,
+      url: unrelatedIndexURL,
+    });
+
+    await insertIndexEntry({
+      table: 'boxel_index_working',
+      realmURL,
+      url: sourceWorkingIndexURL,
+    });
+    await insertIndexEntry({
+      table: 'boxel_index_working',
+      realmURL: publishedRealmURL,
+      url: publishedWorkingIndexURL,
+    });
+    await insertIndexEntry({
+      table: 'boxel_index_working',
+      realmURL: unrelatedRealmURL,
+      url: unrelatedWorkingIndexURL,
+    });
+
+    await insertModuleEntry(realmURL, sourceModuleURL);
+    await insertModuleEntry(publishedRealmURL, publishedModuleURL);
+    await insertModuleEntry(unrelatedRealmURL, unrelatedModuleURL);
+
+    let {
+      nameExpressions: realmVersionNames,
+      valueExpressions: realmVersionValues,
+    } = asExpressions({
+      realm_url: unrelatedRealmURL,
+      current_version: 77,
+    });
+    await query(
+      context.dbAdapter,
+      insert('realm_versions', realmVersionNames, realmVersionValues),
+    );
+
+    for (let [cleanupRealmURL, realmVersion] of [
+      [realmURL, 91],
+      [publishedRealmURL, 92],
+      [unrelatedRealmURL, 93],
+    ] as const) {
+      let { nameExpressions, valueExpressions } = asExpressions(
+        {
+          realm_url: cleanupRealmURL,
+          realm_version: realmVersion,
+          value: {
+            scopedCssLinks: [],
+            types: {},
+            adoptsFromMap: {},
+          },
+        },
+        {
+          jsonFields: ['value'],
+        },
+      );
+      await query(
+        context.dbAdapter,
+        insert('realm_meta', nameExpressions, valueExpressions),
+      );
+    }
+
+    let pendingSourceJob = await insertJob(context.dbAdapter, {
+      job_type: 'from-scratch-index',
+      concurrency_group: `indexing:${realmURL}`,
+    });
+    let pendingPublishedJob = await insertJob(context.dbAdapter, {
+      job_type: 'from-scratch-index',
+      concurrency_group: `indexing:${publishedRealmURL}`,
+    });
+    let unrelatedJob = await insertJob(context.dbAdapter, {
+      job_type: 'from-scratch-index',
+      concurrency_group: `indexing:${unrelatedRealmURL}`,
+    });
+    await context.dbAdapter.execute(`INSERT INTO job_reservations
+      (job_id, locked_until, worker_id)
+      VALUES (${pendingSourceJob.id}, NOW() + INTERVAL '5 minutes', 'worker-source')`);
+    await context.dbAdapter.execute(`INSERT INTO job_reservations
+      (job_id, locked_until, worker_id)
+      VALUES (${pendingPublishedJob.id}, NOW() + INTERVAL '5 minutes', 'worker-published')`);
+    await context.dbAdapter.execute(`INSERT INTO job_reservations
+      (job_id, locked_until, worker_id)
+      VALUES (${unrelatedJob.id}, NOW() + INTERVAL '5 minutes', 'worker-unrelated')`);
 
     let { valueExpressions, nameExpressions } = asExpressions({
       user_id: user.id,
@@ -152,6 +289,179 @@ module(`server-endpoints/${basename(__filename)}`, function (hooks) {
       remainingPublishedRows.length,
       0,
       'published realm records are removed',
+    );
+
+    let sourceIndexRows = await context.dbAdapter.execute(
+      `SELECT * FROM boxel_index WHERE realm_url = '${realmURL}'`,
+    );
+    let publishedIndexRows = await context.dbAdapter.execute(
+      `SELECT * FROM boxel_index WHERE realm_url = '${publishedRealmURL}'`,
+    );
+    let unrelatedIndexRows = await context.dbAdapter.execute(
+      `SELECT * FROM boxel_index WHERE realm_url = '${unrelatedRealmURL}'`,
+    );
+    assert.strictEqual(
+      sourceIndexRows.length,
+      0,
+      'source realm rows are removed from boxel_index',
+    );
+    assert.strictEqual(
+      publishedIndexRows.length,
+      0,
+      'published realm rows are removed from boxel_index',
+    );
+    assert.ok(
+      unrelatedIndexRows.length > 0,
+      'unrelated realm rows remain in boxel_index',
+    );
+
+    let sourceWorkingRows = await context.dbAdapter.execute(
+      `SELECT * FROM boxel_index_working WHERE realm_url = '${realmURL}'`,
+    );
+    let publishedWorkingRows = await context.dbAdapter.execute(
+      `SELECT * FROM boxel_index_working WHERE realm_url = '${publishedRealmURL}'`,
+    );
+    let unrelatedWorkingRows = await context.dbAdapter.execute(
+      `SELECT * FROM boxel_index_working WHERE realm_url = '${unrelatedRealmURL}'`,
+    );
+    assert.strictEqual(
+      sourceWorkingRows.length,
+      0,
+      'source realm rows are removed from boxel_index_working',
+    );
+    assert.strictEqual(
+      publishedWorkingRows.length,
+      0,
+      'published realm rows are removed from boxel_index_working',
+    );
+    assert.ok(
+      unrelatedWorkingRows.length > 0,
+      'unrelated realm rows remain in boxel_index_working',
+    );
+
+    let sourceModuleRows = await context.dbAdapter.execute(
+      `SELECT * FROM modules WHERE resolved_realm_url = '${realmURL}'`,
+    );
+    let publishedModuleRows = await context.dbAdapter.execute(
+      `SELECT * FROM modules WHERE resolved_realm_url = '${publishedRealmURL}'`,
+    );
+    let unrelatedModuleRows = await context.dbAdapter.execute(
+      `SELECT * FROM modules WHERE resolved_realm_url = '${unrelatedRealmURL}'`,
+    );
+    assert.strictEqual(
+      sourceModuleRows.length,
+      0,
+      'source realm rows are removed from modules',
+    );
+    assert.strictEqual(
+      publishedModuleRows.length,
+      0,
+      'published realm rows are removed from modules',
+    );
+    assert.strictEqual(
+      unrelatedModuleRows.length,
+      1,
+      'unrelated realm rows remain in modules',
+    );
+
+    let remainingSourceRealmVersionRows = await context.dbAdapter.execute(
+      `SELECT * FROM realm_versions WHERE realm_url = '${realmURL}'`,
+    );
+    let remainingPublishedRealmVersionRows = await context.dbAdapter.execute(
+      `SELECT * FROM realm_versions WHERE realm_url = '${publishedRealmURL}'`,
+    );
+    let remainingUnrelatedRealmVersionRows = await context.dbAdapter.execute(
+      `SELECT * FROM realm_versions WHERE realm_url = '${unrelatedRealmURL}'`,
+    );
+    assert.strictEqual(
+      remainingSourceRealmVersionRows.length,
+      0,
+      'source realm rows are removed from realm_versions',
+    );
+    assert.strictEqual(
+      remainingPublishedRealmVersionRows.length,
+      0,
+      'published realm rows are removed from realm_versions',
+    );
+    assert.strictEqual(
+      remainingUnrelatedRealmVersionRows.length,
+      1,
+      'unrelated realm rows remain in realm_versions',
+    );
+
+    let sourceRealmMetaRows = await context.dbAdapter.execute(
+      `SELECT * FROM realm_meta WHERE realm_url = '${realmURL}'`,
+    );
+    let publishedRealmMetaRows = await context.dbAdapter.execute(
+      `SELECT * FROM realm_meta WHERE realm_url = '${publishedRealmURL}'`,
+    );
+    let unrelatedRealmMetaRows = await context.dbAdapter.execute(
+      `SELECT * FROM realm_meta WHERE realm_url = '${unrelatedRealmURL}'`,
+    );
+    assert.strictEqual(
+      sourceRealmMetaRows.length,
+      0,
+      'source realm rows are removed from realm_meta',
+    );
+    assert.strictEqual(
+      publishedRealmMetaRows.length,
+      0,
+      'published realm rows are removed from realm_meta',
+    );
+    assert.strictEqual(
+      unrelatedRealmMetaRows.length,
+      1,
+      'unrelated realm rows remain in realm_meta',
+    );
+
+    let pendingSourceJobs = await context.dbAdapter.execute(
+      `SELECT * FROM jobs WHERE concurrency_group = 'indexing:${realmURL}' AND status = 'unfulfilled'`,
+    );
+    let pendingPublishedJobs = await context.dbAdapter.execute(
+      `SELECT * FROM jobs WHERE concurrency_group = 'indexing:${publishedRealmURL}' AND status = 'unfulfilled'`,
+    );
+    let pendingUnrelatedJobs = await context.dbAdapter.execute(
+      `SELECT * FROM jobs WHERE concurrency_group = 'indexing:${unrelatedRealmURL}' AND status = 'unfulfilled'`,
+    );
+    assert.strictEqual(
+      pendingSourceJobs.length,
+      0,
+      'pending source realm jobs are removed',
+    );
+    assert.strictEqual(
+      pendingPublishedJobs.length,
+      0,
+      'pending published realm jobs are removed',
+    );
+    assert.strictEqual(
+      pendingUnrelatedJobs.length,
+      1,
+      'unrelated pending jobs remain',
+    );
+
+    let sourceReservations = await context.dbAdapter.execute(
+      `SELECT * FROM job_reservations WHERE job_id = ${pendingSourceJob.id}`,
+    );
+    let publishedReservations = await context.dbAdapter.execute(
+      `SELECT * FROM job_reservations WHERE job_id = ${pendingPublishedJob.id}`,
+    );
+    let unrelatedReservations = await context.dbAdapter.execute(
+      `SELECT * FROM job_reservations WHERE job_id = ${unrelatedJob.id}`,
+    );
+    assert.strictEqual(
+      sourceReservations.length,
+      0,
+      'source realm job reservations are removed',
+    );
+    assert.strictEqual(
+      publishedReservations.length,
+      0,
+      'published realm job reservations are removed',
+    );
+    assert.strictEqual(
+      unrelatedReservations.length,
+      1,
+      'unrelated job reservations remain',
     );
 
     let claimedDomains = (await context.dbAdapter.execute(
