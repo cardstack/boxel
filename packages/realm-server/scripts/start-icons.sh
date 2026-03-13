@@ -3,7 +3,7 @@
 if [ -n "$BOXEL_ENVIRONMENT" ]; then
   # In environment mode, use port 0 (dynamic) and register with Traefik.
   # http-server doesn't support port 0, so we pick a free port ourselves.
-  ICONS_PORT=$(python3 -c 'import socket; s=socket.socket(); s.bind(("",0)); print(s.getsockname()[1]); s.close()' 2>/dev/null || node -e 'const s=require("net").createServer();s.listen(0,()=>{console.log(s.address().port);s.close();})')
+  ICONS_PORT=$(node -e 'const s=require("net").createServer();s.listen(0,()=>{console.log(s.address().port);s.close();})')
   echo "Starting icons server on dynamic port ${ICONS_PORT}"
   cd "$(dirname "$0")/../../boxel-icons" && npx http-server --cors=Origin,X-Requested-With,Content-Type,Accept,Range,Authorization,X-Boxel-Assume-User --port "${ICONS_PORT}" dist &
   ICONS_PID=$!
