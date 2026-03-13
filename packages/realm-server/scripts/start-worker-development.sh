@@ -44,6 +44,7 @@ NODE_ENV=development \
   REALM_SECRET_SEED="shhh! it's a secret" \
   REALM_SERVER_MATRIX_USERNAME=realm_server \
   LOW_CREDIT_THRESHOLD=2000 \
+  OPENROUTER_REALM_URL="${REALM_BASE_URL}/openrouter/" \
   ts-node \
   --transpileOnly worker-manager \
   --allPriorityCount="${WORKER_ALL_PRIORITY_COUNT:-1}" \
@@ -66,6 +67,9 @@ NODE_ENV=development \
   \
   ${START_CATALOG:+--fromUrl="${NEW_CATALOG_REALM_URL}"} \
   ${START_CATALOG:+--toUrl="${NEW_CATALOG_REALM_URL}"} \
+  \
+  --fromUrl='@cardstack/openrouter/' \
+  --toUrl="${REALM_BASE_URL}/openrouter/" \
   \
   --fromUrl="${SOFTWARE_FACTORY_REALM_URL}" \
   --toUrl="${SOFTWARE_FACTORY_REALM_URL}"

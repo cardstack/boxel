@@ -147,6 +147,11 @@ LOW_CREDIT_THRESHOLD="${LOW_CREDIT_THRESHOLD:-2000}" \
   ${START_CATALOG:+--fromUrl="${NEW_CATALOG_REALM_URL}"} \
   ${START_CATALOG:+--toUrl="${NEW_CATALOG_REALM_URL}"} \
   \
+  --path='../openrouter-realm' \
+  --username='openrouter_realm' \
+  --fromUrl='@cardstack/openrouter/' \
+  --toUrl="${REALM_BASE_URL}/openrouter/" \
+  \
   --path='../software-factory/realm' \
   --username='software_factory_realm' \
   --fromUrl="${SOFTWARE_FACTORY_REALM_URL}" \

@@ -2282,6 +2282,24 @@ importers:
         specifier: 'catalog:'
         version: 2.8.2
 
+  packages/openrouter-realm:
+    devDependencies:
+      '@cardstack/boxel-icons':
+        specifier: workspace:*
+        version: link:../boxel-icons
+      '@cardstack/boxel-ui':
+        specifier: workspace:*
+        version: link:../boxel-ui/addon
+      '@cardstack/local-types':
+        specifier: workspace:*
+        version: link:../local-types
+      '@cardstack/runtime-common':
+        specifier: workspace:*
+        version: link:../runtime-common
+      ember-template-lint:
+        specifier: 'catalog:'
+        version: 7.9.3
+
   packages/postgres:
     dependencies:
       '@cardstack/runtime-common':

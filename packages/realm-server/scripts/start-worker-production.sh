@@ -11,6 +11,7 @@ NODE_NO_WARNINGS=1 \
   NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=4096}" \
   REALM_SERVER_MATRIX_USERNAME=realm_server \
   LOW_CREDIT_THRESHOLD=2000 \
+  OPENROUTER_REALM_URL='https://app.boxel.ai/openrouter/' \
   ts-node \
   --transpileOnly worker-manager \
   --allPriorityCount="${WORKER_ALL_PRIORITY_COUNT:-1}" \
@@ -32,6 +33,9 @@ NODE_NO_WARNINGS=1 \
   \
   --fromUrl="${NEW_CATALOG_REALM_URL}" \
   --toUrl="${NEW_CATALOG_REALM_URL}" \
+  \
+  --fromUrl='@cardstack/openrouter/' \
+  --toUrl='https://app.boxel.ai/openrouter/' \
   \
   --fromUrl="${SOFTWARE_FACTORY_REALM_URL}" \
   --toUrl="${SOFTWARE_FACTORY_REALM_URL}"

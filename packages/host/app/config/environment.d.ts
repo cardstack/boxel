@@ -19,6 +19,7 @@ declare const config: {
   resolvedCatalogRealmURL: string | undefined;
   resolvedNewCatalogRealmURL: string | undefined;
   resolvedSkillsRealmURL: string;
+  resolvedOpenRouterRealmURL: string | undefined;
   hostsOwnAssets: boolean;
   realmsServed?: string[];
   logLevels: string;

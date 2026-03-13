@@ -7,6 +7,7 @@ pnpm setup:skills-in-deployment
 pnpm setup:software-factory-in-deployment
 pnpm setup:boxel-homepage-in-deployment
 pnpm setup:catalog-new-in-deployment
+pnpm setup:openrouter-in-deployment
 
 SUBMISSION_REALM_PATH='/persistent/submissions'
 SUBMISSION_REALM_URL="${RESOLVED_SUBMISSION_REALM_URL:-https://app.boxel.ai/submissions/}"
@@ -71,6 +72,11 @@ NODE_NO_WARNINGS=1 \
   --username='catalog_new_realm' \
   --fromUrl="${NEW_CATALOG_REALM_URL}" \
   --toUrl="${NEW_CATALOG_REALM_URL}" \
+  \
+  --path='/persistent/openrouter' \
+  --username='openrouter_realm' \
+  --fromUrl='@cardstack/openrouter/' \
+  --toUrl='https://app.boxel.ai/openrouter/' \
   \
   --path='/persistent/software-factory' \
   --username='software_factory_realm' \

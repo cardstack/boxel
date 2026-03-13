@@ -29,6 +29,7 @@ function environmentDefaults() {
       catalogRealmURL: 'http://localhost:4201/catalog/',
       newCatalogRealmURL: 'http://localhost:4201/catalog-new/',
       skillsRealmURL: 'http://localhost:4201/skills/',
+      openRouterRealmURL: 'http://localhost:4201/openrouter/',
     };
   }
   let slug = environmentSlug();
@@ -41,6 +42,7 @@ function environmentDefaults() {
     catalogRealmURL: `http://${realmHost}/catalog/`,
     newCatalogRealmURL: `http://${realmHost}/catalog-new/`,
     skillsRealmURL: `http://${realmHost}/skills/`,
+    openRouterRealmURL: `http://${realmHost}/openrouter/`,
   };
 }
 
@@ -107,6 +109,8 @@ module.exports = function (environment) {
         defaults.newCatalogRealmURL,
     resolvedSkillsRealmURL:
       process.env.RESOLVED_SKILLS_REALM_URL || defaults.skillsRealmURL,
+    resolvedOpenRouterRealmURL:
+      process.env.RESOLVED_OPENROUTER_REALM_URL || defaults.openRouterRealmURL,
     featureFlags: {
       SHOW_ASK_AI: process.env.SHOW_ASK_AI === 'true' || false,
     },
