@@ -10,6 +10,7 @@ import {
   trackRuntimeModuleDependency,
   type RuntimeDependencyTrackingContext,
 } from './dependency-tracker';
+import { unresolveCardReference } from './card-reference-resolver';
 
 type FetchingModule = {
   state: 'fetching';
@@ -562,7 +563,9 @@ export class Loader {
     module: any,
     moduleIdentifier: string,
   ) {
-    let moduleId = trimExecutableExtension(new URL(moduleIdentifier)).href;
+    let moduleId = unresolveCardReference(
+      trimExecutableExtension(new URL(moduleIdentifier)).href,
+    );
     for (let propName of Object.keys(module)) {
       let exportedEntity = module[propName];
       if (
