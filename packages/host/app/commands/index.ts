@@ -23,6 +23,7 @@ import * as GenerateThemeExampleCommandModule from './generate-theme-example';
 import * as GetAllRealmMetasCommandModule from './get-all-realm-metas';
 import * as GetCardCommandModule from './get-card';
 import * as GetEventsFromRoomCommandModule from './get-events-from-room';
+import * as GetUserSystemCardCommandModule from './get-user-system-card';
 import * as InvalidateRealmUrlsCommandModule from './invalidate-realm-urls';
 import * as InviteUserToRoomCommandModule from './invite-user-to-room';
 import * as LintAndFixCommandModule from './lint-and-fix';
@@ -63,6 +64,7 @@ import * as ShowCardCommandModule from './show-card';
 import * as ShowFileCommandModule from './show-file';
 import * as SummarizeSessionCommandModule from './summarize-session';
 import * as SwitchSubmodeCommandModule from './switch-submode';
+import * as SyncOpenRouterModelsCommandModule from './sync-openrouter-models';
 import * as TransformCardsCommandModule from './transform-cards';
 import * as UnregisterBotCommandModule from './unregister-bot';
 import * as UpdateCodePathWithSelectionCommandModule from './update-code-path-with-selection';
@@ -311,6 +313,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
     SummarizeSessionCommandModule,
   );
   virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/sync-openrouter-models',
+    SyncOpenRouterModelsCommandModule,
+  );
+  virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/ai-assistant',
     UseAiAssistantCommandModule,
   );
@@ -341,6 +347,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/get-all-realm-metas',
     GetAllRealmMetasCommandModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/get-user-system-card',
+    GetUserSystemCardCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/search-google-images',
@@ -378,6 +388,7 @@ export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
   GenerateReadmeSpecCommandModule.default,
   GetAllRealmMetasCommandModule.default,
   GetCardCommandModule.default,
+  GetUserSystemCardCommandModule.default,
   GetEventsFromRoomCommandModule.default,
   InviteUserToRoomCommandModule.default,
   InvalidateRealmUrlsCommandModule.default,
@@ -422,6 +433,7 @@ export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
   ShowFileCommandModule.default,
   SummarizeSessionCommandModule.default,
   SwitchSubmodeCommandModule.default,
+  SyncOpenRouterModelsCommandModule.default,
   TransformCardsCommandModule.default,
   UnregisterBotCommandModule.default,
   CancelIndexingJobCommandModule.default,

@@ -4,8 +4,10 @@ pnpm setup:base-in-deployment
 pnpm setup:experiments-in-deployment
 pnpm setup:catalog-in-deployment
 pnpm setup:skills-in-deployment
+pnpm setup:software-factory-in-deployment
 pnpm setup:boxel-homepage-in-deployment
-pnpm setup:catalog-new-in-deployment
+pnpm setup:external-catalog-in-deployment
+pnpm setup:openrouter-in-deployment
 
 SUBMISSION_REALM_PATH='/persistent/submissions'
 SUBMISSION_REALM_URL="${RESOLVED_SUBMISSION_REALM_URL:-https://app.boxel.ai/submissions/}"
@@ -13,10 +15,12 @@ sh "$SCRIPTS_DIR/setup-submission-realm.sh" "$SUBMISSION_REALM_PATH"
 
 DEFAULT_CATALOG_REALM_URL='https://app.boxel.ai/catalog/'
 CATALOG_REALM_URL="${RESOLVED_CATALOG_REALM_URL:-$DEFAULT_CATALOG_REALM_URL}"
+DEFAULT_SOFTWARE_FACTORY_REALM_URL='https://app.boxel.ai/software-factory/'
+SOFTWARE_FACTORY_REALM_URL="${RESOLVED_SOFTWARE_FACTORY_REALM_URL:-$DEFAULT_SOFTWARE_FACTORY_REALM_URL}"
 DEFAULT_BOXEL_HOMEPAGE_REALM_URL='https://app.boxel.ai/boxel-homepage/'
 BOXEL_HOMEPAGE_REALM_URL="${RESOLVED_BOXEL_HOMEPAGE_REALM_URL:-$DEFAULT_BOXEL_HOMEPAGE_REALM_URL}"
-DEFAULT_NEW_CATALOG_REALM_URL='https://app.boxel.ai/catalog-new/'
-NEW_CATALOG_REALM_URL="${RESOLVED_NEW_CATALOG_REALM_URL:-$DEFAULT_NEW_CATALOG_REALM_URL}"
+DEFAULT_EXTERNAL_CATALOG_REALM_URL='https://app.boxel.ai/external-catalog/'
+EXTERNAL_CATALOG_REALM_URL="${RESOLVED_EXTERNAL_CATALOG_REALM_URL:-$DEFAULT_EXTERNAL_CATALOG_REALM_URL}"
 
 NODE_NO_WARNINGS=1 \
   LOW_CREDIT_THRESHOLD=2000 \
@@ -44,6 +48,11 @@ NODE_NO_WARNINGS=1 \
   --fromUrl='@cardstack/catalog/' \
   --toUrl="${CATALOG_REALM_URL}" \
   \
+  --path='/persistent/external-catalog' \
+  --username='external_catalog_realm' \
+  --fromUrl="${EXTERNAL_CATALOG_REALM_URL}" \
+  --toUrl="${EXTERNAL_CATALOG_REALM_URL}" \
+  \
   --path="${SUBMISSION_REALM_PATH}" \
   --username='submission_realm' \
   --fromUrl="${SUBMISSION_REALM_URL}" \
@@ -64,7 +73,13 @@ NODE_NO_WARNINGS=1 \
   --fromUrl='https://app.boxel.ai/experiments/' \
   --toUrl='https://app.boxel.ai/experiments/' \
   \
-  --path='/persistent/catalog-new' \
-  --username='catalog_new_realm' \
-  --fromUrl="${NEW_CATALOG_REALM_URL}" \
-  --toUrl="${NEW_CATALOG_REALM_URL}"
+  --path='/persistent/openrouter' \
+  --username='openrouter_realm' \
+  --fromUrl='@cardstack/openrouter/' \
+  --toUrl='https://app.boxel.ai/openrouter/' \
+  \
+  --path='/persistent/software-factory' \
+  --username='software_factory_realm' \
+  --fromUrl="${SOFTWARE_FACTORY_REALM_URL}" \
+  --toUrl="${SOFTWARE_FACTORY_REALM_URL}"
+  --toUrl='https://app.boxel.ai/experiments/'

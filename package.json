@@ -15,7 +15,8 @@
     "deploy:boxel-ui":"pnpm run build-common-deps && cd packages/boxel-ui/test-app && pnpm exec ember deploy",
     "deploy:boxel-ui:preview-staging": "pnpm run build-common-deps && cd packages/boxel-ui/test-app && pnpm exec ember deploy s3-preview-staging --verbose",
     "lint": "pnpm run --filter './packages/**' --if-present -r lint",
-    "lint:fix": "pnpm run --filter './packages/**' --if-present -r lint:fix"
+    "lint:fix": "pnpm run --filter './packages/**' --if-present -r lint:fix",
+    "openrouter:sync": "OPENROUTER_REALM_URL=${OPENROUTER_REALM_URL:-http://localhost:4201/openrouter/} pnpm --filter @cardstack/realm-server sync-openrouter-models"
   },
   "pnpm": {
     "allowedDeprecatedVersions": {
@@ -88,10 +89,6 @@
   },
   "engines": {
     "pnpm": "^10"
-  },
-  "volta": {
-    "node": "24.13.1",
-    "pnpm": "10.30.0"
   },
   "dependencies": {
     "matrix-js-sdk": "38.3.0"

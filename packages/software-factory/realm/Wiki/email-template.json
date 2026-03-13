@@ -1,0 +1,33 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Wiki",
+        "module": "../wiki"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "tags": ["email", "templates", "communication"],
+      "content": "## Overview\n\nAn Email Template is a reusable, branded communication structure with dynamic variable slots that can be populated from card data at send time. Templates ensure consistent messaging across teams while allowing personalization for each recipient. They support rich formatting, conditional sections, and attachment references.\n\nEmail Templates serve as the communication backbone for outreach, follow-ups, notifications, and transactional messages. Rather than composing each email from scratch, users select a template, review the auto-populated fields, and send with confidence that branding and messaging guidelines are met.\n\n## How It Works\n\nEach template defines a subject line pattern, a body with variable placeholders, and optional conditional blocks. Variables follow a mustache-style syntax and resolve against the linked [[Contact]] or [[Organization]] record. For example, `{{contact.firstName}}` pulls the recipient's first name, while `{{deal.value}}` inserts the current [[Deal]] amount.\n\nConditional sections allow the template to adapt based on data. A renewal email might include a discount offer block only when the [[Deal]] stage is \"At Risk,\" or suppress a product upsell section when the [[Contact]] already owns the product. This logic keeps templates flexible without requiring separate versions for every scenario.\n\nTemplates connect to the platform's sending infrastructure, which handles deliverability, tracking, and bounce management. Open rates and click-through data feed back into the [[Contact]] record, providing sales and marketing teams with engagement visibility.\n\n### AI-Assisted Composition\n\nWhen a [[Prompt Template]] is associated with an Email Template, the AI agent can generate personalized content for variable sections. Instead of static placeholder text, the agent crafts contextually relevant language based on the recipient's history, recent interactions, and current [[Deal]] status. This combines the consistency of templates with the personalization of human-written emails.\n\n## Integration Points\n\nEmail Templates are central to outbound communication in [[Workflow Playbook]] automations. A playbook step might specify \"Send follow-up using Template: Meeting Recap\" and the system automatically populates variables from the relevant [[Contact]] and [[Deal]] records.\n\nThe [[Organization]] card provides company-level data for B2B communications, including legal name, industry, and account tier. Templates can branch on these fields to adjust tone and content for enterprise versus startup recipients.\n\nFor mass outreach campaigns, Email Templates work alongside [[Contact]] list segments. Each recipient receives a personalized version of the template, with variable resolution happening per-contact. Delivery is batched and throttled to maintain sender reputation.\n\n## Example Use Cases\n\n- **Sales follow-up**: Auto-populates [[Contact]] name, references the [[Deal]] discussed, and includes a calendar link for next steps\n- **Invoice notification**: Sends payment reminders with [[Organization]] billing details and outstanding amount from the linked transaction\n- **Onboarding welcome**: Guides new users through setup, with conditional sections based on their subscription tier and [[Product]] selection\n- **Event invitation**: Personalizes event details per [[Contact]], includes RSVP tracking, and adapts content based on the recipient's [[Organization]] size\n- **Support resolution**: Notifies the [[Contact]] that their [[Case]] has been resolved, includes a satisfaction survey link, and references the specific issue",
+      "cardInfo": {
+        "name": "Email Template",
+        "notes": null,
+        "summary": "Reusable email with variable slots for branded, personalized communications",
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "relatedPages": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

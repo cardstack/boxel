@@ -2,11 +2,12 @@ import {
   CardDef,
   Component,
   field,
-  contains,
+  contains
 } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
 import NumberField from 'https://cardstack.com/base/number';
 import MarkdownField from 'https://cardstack.com/base/markdown';
+import type BrandGuide from 'https://cardstack.com/base/brand-guide';
 import { formatCurrency } from '@cardstack/boxel-ui/helpers';
 
 export class IkeaProduct extends CardDef {
@@ -30,65 +31,82 @@ export class IkeaProduct extends CardDef {
     },
   });
 
-  static isolated = class Isolated extends Component<typeof IkeaProduct> {
+  static isolated = class Isolated extends Component<typeof IkeaProduct> { // ¹ isolated format
     get currencyCode() {
       return this.args?.model?.currency ?? 'USD';
     }
 
+    get logo() {
+      return (this.args.model.cardInfo?.theme as BrandGuide)?.markUsage?.primaryMark1;
+    }
+
     <template>
-      <article class='product-sheet'>
-        <div class='hero-panel'>
-          {{#if @model.heroImage}}
-            <img
-              src={{@model.heroImage}}
-              alt={{@model.cardTitle}}
-              class='hero-image'
-            />
-          {{else}}
-            <div class='image-placeholder'>
-              <span>Awaiting imagery</span>
-            </div>
-          {{/if}}
-        </div>
-        <section class='details-panel'>
-          <header>
-            <p class='eyebrow'>IKEA COLLECTION</p>
-            <h1>{{if @model.cardTitle @model.cardTitle 'New product'}}</h1>
-            <p class='price-tag'>
-              {{formatCurrency @model.price currency=this.currencyCode}}
-            </p>
-          </header>
-          <div class='description-block'>
-            {{#if @model.cardDescription}}
-              <@fields.cardDescription />
+      <div class='product-container'>
+        <article class='product-sheet'>
+          <div class='hero-panel'>
+            {{#if @model.heroImage}}
+              <img
+                src={{@model.heroImage}}
+                alt={{@model.productName}}
+                class='hero-image'
+              />
             {{else}}
-              <p class='placeholder'>
-                Design notes coming soon. Add material, finishes, and care instructions to help shoppers choose confidently.
-              </p>
+              <div class='image-placeholder'>
+                <span>Awaiting imagery</span>
+              </div>
             {{/if}}
           </div>
-        </section>
-      </article>
+          <section class='details-panel'>
+            <header>
+              {{#if this.logo}}
+                <img
+                  src={{this.logo}}
+                  alt='IKEA'
+                  class='brand-logo'
+                />
+              {{/if}}
+              <p class='eyebrow'>IKEA COLLECTION</p>
+              <h1><@fields.cardTitle /></h1>
+              <p class='price-tag'>
+                {{formatCurrency @model.price currency=this.currencyCode}}
+              </p>
+            </header>
+            <div class='description-block'>
+              {{#if @model.cardDescription}}
+                <@fields.cardDescription />
+              {{else}}
+                <p class='placeholder'>
+                  Design notes coming soon. Add material, finishes, and care
+                  instructions to help shoppers choose confidently.
+                </p>
+              {{/if}}
+            </div>
+          </section>
+        </article>
+      </div>
       <style scoped>
-        .product-sheet { /* ¹⁷ IKEA-inspired split layout */
+        .product-container {
+          container-type: inline-size;
+          container-name: product-container;
+        }
+
+        .product-sheet {
           display: grid;
           grid-template-columns: minmax(18rem, 1.1fr) minmax(16rem, 0.9fr);
           gap: var(--boxel-sp-lg);
-          background: var(--card, #fffaf4);
-          color: var(--card-foreground, #1c1c1c);
-          padding: clamp(var(--boxel-sp), 3vw, var(--boxel-sp-2xl));
-          border-radius: var(--boxel-border-radius-lg, 1rem);
-          box-shadow: var(--boxel-box-shadow, 0 12px 45px rgba(0, 0, 0, 0.08));
+          background-color: var(--card);
+          color: var(--card-foreground);
+          padding: var(--boxel-sp-2xl);
         }
 
-        @media (max-width: 960px) {
+        @container product-container (inline-size <= 880px) {
           .product-sheet {
             grid-template-columns: 1fr;
           }
         }
 
         .hero-panel {
-          background: var(--background, #f6f7f9);
+          background-color: var(--background);
           border-radius: var(--boxel-border-radius-lg);
           padding: var(--boxel-sp);
           display: flex;
@@ -100,19 +118,18 @@ export class IkeaProduct extends CardDef {
           max-width: 100%;
           height: auto;
           border-radius: calc(var(--boxel-border-radius-lg) - 0.25rem);
-          box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.6);
         }
 
         .image-placeholder {
           width: 100%;
-          aspect-ratio: 4/3;
+          aspect-ratio: 4 / 3;
           border-radius: calc(var(--boxel-border-radius-lg) - 0.25rem);
-          border: 2px dashed var(--border, #ddd);
+          border: 2px dashed var(--border);
           display: flex;
           align-items: center;
           justify-content: center;
-          color: var(--muted-foreground, #7a7a7a);
-          font-size: 0.95rem;
+          color: var(--muted-foreground);
+          font-size: var(--boxel-font-size-sm);
           text-transform: uppercase;
           letter-spacing: 0.1em;
         }
@@ -124,39 +141,47 @@ export class IkeaProduct extends CardDef {
         }
 
         header {
-          border-bottom: 1px solid var(--border, rgba(0, 0, 0, 0.08));
+          border-bottom: 1px solid var(--border);
           padding-bottom: var(--boxel-sp);
         }
 
+        .brand-logo {
+          display: block;
+          height: 2.5rem;
+          width: auto;
+          margin-bottom: var(--boxel-sp-xs);
+        }
+
         .eyebrow {
-          color: #0058a3;
+          color: var(--primary);
           font-weight: 600;
           letter-spacing: 0.2em;
-          font-size: 0.75rem;
-          margin-bottom: 0.25rem;
+          font-size: var(--boxel-font-size-xs);
+          margin-bottom: var(--boxel-sp-xs);
+          text-transform: uppercase;
         }
 
         h1 {
-          font-size: clamp(1.6rem, 3vw, 2.4rem);
-          margin: 0 0 0.5rem;
-          line-height: 1.2;
+          font-size: var(--boxel-section-heading-font-size);
+          font-weight: var(--boxel-section-heading-font-weight);
+          margin: 0 0 var(--boxel-sp-xs);
+          line-height: var(--boxel-section-heading-line-height);
         }
 
         .price-tag {
-          font-size: clamp(1.35rem, 2vw, 1.8rem);
+          font-size: var(--boxel-font-size-xl);
           font-weight: 700;
-          color: #f8d12f;
-          text-shadow: 0 2px 14px rgba(248, 209, 47, 0.3);
+          color: var(--chart-4);
         }
 
         .description-block :is(p, ul, ol) {
-          font-size: 0.95rem;
-          line-height: 1.55;
-          margin-bottom: 0.75rem;
+          font-size: var(--boxel-body-font-size);
+          line-height: var(--boxel-body-line-height);
+          margin-bottom: var(--boxel-sp-sm);
         }
 
         .placeholder {
-          color: var(--muted-foreground, #6f7072);
+          color: var(--muted-foreground);
           font-style: italic;
         }
       </style>
@@ -168,17 +193,30 @@ export class IkeaProduct extends CardDef {
       return this.args?.model?.currency ?? 'USD';
     }
 
+    get logo() {
+      return (this.args.model.cardInfo?.theme as BrandGuide)?.markUsage?.primaryMark1;
+    }
+
     <template>
       <section class='embedded-card'>
         <div class='embedded-visual'>
           {{#if @model.heroImage}}
-            <img src={{@model.heroImage}} alt={{@model.cardTitle}} />
+            <img src={{@model.heroImage}} alt={{@model.productName}} />
           {{else}}
             <div class='tiny-placeholder'>IMG</div>
           {{/if}}
         </div>
         <div class='embedded-content'>
-          <p class='name'>{{if @model.cardTitle @model.cardTitle 'New product'}}</p>
+          <div class='name-row'>
+            <h3 class='name'><@fields.cardTitle /></h3>
+            {{#if this.logo}}
+              <img
+                src={{this.logo}}
+                alt='IKEA'
+                class='brand-logo'
+              />
+            {{/if}}
+          </div>
           <p class='price'>
             {{formatCurrency @model.price currency=this.currencyCode}}
           </p>
@@ -192,16 +230,17 @@ export class IkeaProduct extends CardDef {
           align-items: center;
           padding: var(--boxel-sp-xs);
           border-radius: var(--boxel-border-radius);
-          background: var(--card, #ffffff);
-          border: 1px solid var(--border, rgba(0, 0, 0, 0.06));
+          background-color: var(--card);
+          color: var(--card-foreground);
+          border: 1px solid var(--border);
         }
 
         .embedded-visual {
-          width: 64px;
-          height: 64px;
+          width: 4rem;
+          height: 4rem;
           border-radius: var(--boxel-border-radius);
           overflow: hidden;
-          background: var(--muted, #f3f4f6);
+          background-color: var(--muted);
           display: flex;
           align-items: center;
           justify-content: center;
@@ -214,20 +253,34 @@ export class IkeaProduct extends CardDef {
         }
 
         .tiny-placeholder {
-          font-size: 0.65rem;
+          font-size: var(--boxel-font-size-xs);
           letter-spacing: 0.15em;
-          color: var(--muted-foreground, #7f828b);
+          color: var(--muted-foreground);
+        }
+
+        .name-row {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: var(--boxel-sp-xs);
+          margin-bottom: var(--boxel-sp-6xs);
         }
 
         .name {
-          font-weight: 600;
-          margin: 0;
-          color: var(--card-foreground, #1d1d1f);
+          overflow: hidden;
+          white-space: nowrap;
+          text-overflow: ellipsis;
+        }
+
+        .brand-logo {
+          display: block;
+          height: 1.25rem;
+          width: auto;
+          flex-shrink: 0;
         }
 
         .price {
-          margin: 0.15rem 0 0;
-          color: #0058a3;
+          color: var(--primary);
           font-weight: 700;
         }
       </style>
@@ -243,13 +296,13 @@ export class IkeaProduct extends CardDef {
       <article class='fitted-card'>
         <div class='image-wrap'>
           {{#if @model.heroImage}}
-            <img src={{@model.heroImage}} alt={{@model.cardTitle}} />
+            <img src={{@model.heroImage}} alt={{@model.productName}} />
           {{else}}
             <div class='fitted-placeholder'>Awaiting photo</div>
           {{/if}}
         </div>
         <div class='text-block'>
-          <p class='title'>{{if @model.cardTitle @model.cardTitle 'New product'}}</p>
+          <p class='title boxel-ellipsize'><@fields.cardTitle /></p>
           <p class='price'>
             {{formatCurrency @model.price currency=this.currencyCode}}
           </p>
@@ -262,21 +315,20 @@ export class IkeaProduct extends CardDef {
           display: flex;
           flex-direction: column;
           justify-content: space-between;
-          padding: var(--boxel-sp);
-          border-radius: var(--boxel-border-radius-lg);
-          background: linear-gradient(180deg, #ffffff 0%, #f8f9fb 100%);
-          border: 1px solid rgba(0, 0, 0, 0.05);
-          box-shadow: 0 12px 30px rgba(26, 30, 34, 0.08);
+          padding: var(--boxel-sp-xs);
+          background-color: var(--card);
+          color: var(--card-foreground);
         }
 
         .image-wrap {
           flex: 1;
-          border-radius: var(--boxel-border-radius-lg);
-          background: var(--muted, #eef1f5);
+          border-radius: var(--boxel-border-radius);
+          background-color: var(--muted);
           overflow: hidden;
           display: flex;
           align-items: center;
           justify-content: center;
+          min-height: 0;
         }
 
         .image-wrap img {
@@ -286,28 +338,28 @@ export class IkeaProduct extends CardDef {
         }
 
         .fitted-placeholder {
-          font-size: 0.8rem;
+          font-size: var(--boxel-font-size-xs);
           letter-spacing: 0.2em;
-          color: var(--muted-foreground, #7c7f87);
+          color: var(--muted-foreground);
           text-transform: uppercase;
         }
 
         .text-block {
-          margin-top: var(--boxel-sp);
+          margin-top: var(--boxel-sp-xs);
+          overflow: hidden;
         }
 
         .title {
           font-weight: 600;
           margin: 0;
-          font-size: 1rem;
-          color: var(--card-foreground, #1d1d1f);
+          font-size: var(--boxel-font-size-sm);
         }
 
         .price {
-          margin: 0.25rem 0 0;
+          margin: var(--boxel-sp-6xs) 0 0;
           font-weight: 700;
-          font-size: 1.125rem;
-          color: #0058a3;
+          font-size: var(--boxel-font-size);
+          color: var(--primary);
         }
       </style>
     </template>

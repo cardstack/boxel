@@ -2254,11 +2254,12 @@ function getActiveLLMDetails(eventlist: DiscreteMatrixEvent[]): {
   };
 }
 
-const VALID_REASONING_EFFORTS: ReasoningEffort[] = [
+const VALID_REASONING_EFFORTS: (ReasoningEffort | 'xhigh')[] = [
   'minimal',
   'low',
   'medium',
   'high',
+  'xhigh',
   null,
 ];
 

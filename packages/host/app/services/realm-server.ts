@@ -391,15 +391,15 @@ export default class RealmServerService extends Service {
     }
 
     let { data } = await response.json();
-    let newCatalogURL = ENV.resolvedNewCatalogRealmURL;
-    let showNewCatalog =
-      window.localStorage.getItem('boxel:newCatalog') === 'true';
+    let externalCatalogURL = ENV.resolvedExternalCatalogRealmURL;
+    let showExternalCatalog =
+      window.localStorage.getItem('boxel:externalCatalog') === 'true';
 
     data.forEach((publicRealm: { id: string }) => {
       if (
-        newCatalogURL &&
-        publicRealm.id === newCatalogURL &&
-        !showNewCatalog
+        externalCatalogURL &&
+        publicRealm.id === externalCatalogURL &&
+        !showExternalCatalog
       ) {
         return;
       }
@@ -411,11 +411,11 @@ export default class RealmServerService extends Service {
       }
     });
 
-    if (showNewCatalog && newCatalogURL) {
-      if (!this.availableRealms.find((r) => r.url === newCatalogURL)) {
+    if (showExternalCatalog && externalCatalogURL) {
+      if (!this.availableRealms.find((r) => r.url === externalCatalogURL)) {
         this.availableRealms.push({
           type: 'catalog',
-          url: newCatalogURL,
+          url: externalCatalogURL,
         });
       }
     }

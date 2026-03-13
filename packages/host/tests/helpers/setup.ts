@@ -83,6 +83,9 @@ export function setupApplicationTest(hooks: NestedHooks) {
   setupWindowMock(hooks);
   setupFetchDebugging(hooks);
   hooks.afterEach(async function () {
+    resetServiceIfPresent(this.owner, 'service:ai-assistant-panel-service');
+    resetServiceIfPresent(this.owner, 'service:matrix-service');
+    resetServiceIfPresent(this.owner, 'service:operator-mode-state-service');
     await settled();
     (
       this.owner.lookup('service:reset') as ResetService | undefined
@@ -102,4 +105,18 @@ export function setupRenderingTest(hooks: NestedHooks) {
     )?.resetAll();
     cleanupMonacoEditorModels();
   });
+}
+
+function resetServiceIfPresent(
+  owner: {
+    __container__?: { cache?: Record<string, unknown> };
+    lookup(name: string): unknown;
+  },
+  name: string,
+) {
+  (
+    owner.__container__?.cache?.[name] as
+      | { resetState?: () => void }
+      | undefined
+  )?.resetState?.();
 }

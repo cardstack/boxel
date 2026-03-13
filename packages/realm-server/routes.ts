@@ -41,6 +41,7 @@ import handlePrerenderProxy from './handlers/handle-prerender-proxy';
 import handleSearch from './handlers/handle-search';
 import handleSearchPrerendered from './handlers/handle-search-prerendered';
 import handleRealmInfo from './handlers/handle-realm-info';
+import handleFederatedTypes from './handlers/handle-federated-types';
 import { multiRealmAuthorization } from './middleware/multi-realm-authorization';
 import handleGitHubPRRequest from './handlers/handle-github-pr';
 import handleDownloadRealm from './handlers/handle-download-realm';
@@ -164,6 +165,11 @@ export function createRoutes(args: CreateRoutesArgs) {
     '/_federated-info',
     multiRealmAuthorization(args),
     handleRealmInfo({ dbAdapter: args.dbAdapter }),
+  );
+  router.all(
+    '/_federated-types',
+    multiRealmAuthorization(args),
+    handleFederatedTypes({ dbAdapter: args.dbAdapter }),
   );
   router.all(
     '/_federated-search-prerendered',

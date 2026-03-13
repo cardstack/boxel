@@ -103,18 +103,19 @@ export default class Room {
     };
   }
 
-  get activeLLM() {
+  get activeLLMEventContent(): ActiveLLMEvent['content'] | undefined {
     let event = this._roomState?.events
       .get(APP_BOXEL_ACTIVE_LLM)
       ?.get('')?.event;
-    return (event as ActiveLLMEvent)?.content.model;
+    return (event as ActiveLLMEvent)?.content;
+  }
+
+  get activeLLM() {
+    return this.activeLLMEventContent?.model;
   }
 
   get activeInputModalities(): string[] | undefined {
-    let event = this._roomState?.events
-      .get(APP_BOXEL_ACTIVE_LLM)
-      ?.get('')?.event;
-    return (event as ActiveLLMEvent)?.content.inputModalities;
+    return this.activeLLMEventContent?.inputModalities;
   }
 
   get activeLLMMode(): LLMMode {

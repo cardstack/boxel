@@ -9,5 +9,6 @@ ts-node --transpileOnly ./scripts/migrate-realm-user @base_realm:localhost
 ts-node --transpileOnly ./scripts/migrate-realm-user @boxel_homepage_realm:localhost
 ts-node --transpileOnly ./scripts/migrate-realm-user @submission_realm:localhost
 ts-node --transpileOnly ./scripts/migrate-realm-user @experiments_realm:localhost
+ts-node --transpileOnly ./scripts/migrate-realm-user @software_factory_realm:localhost
 ts-node --transpileOnly ./scripts/migrate-realm-user @node-test_realm:localhost
 ts-node --transpileOnly ./scripts/migrate-realm-user @test_realm:localhost

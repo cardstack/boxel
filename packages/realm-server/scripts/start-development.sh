@@ -22,6 +22,11 @@ if [ -z "${SKIP_BOXEL_HOMEPAGE:-}" ]; then
   pnpm --dir=../boxel-homepage-realm boxel-homepage:setup
 fi
 
+if [ "${SKIP_CATALOG:-}" != "true" ]; then
+  pnpm --dir=../catalog catalog:setup
+  pnpm --dir=../catalog catalog:update
+fi
+
 if [ -z "$MATRIX_REGISTRATION_SHARED_SECRET" ]; then
   MATRIX_REGISTRATION_SHARED_SECRET=$(ts-node --transpileOnly "$SCRIPTS_DIR/matrix-registration-secret.ts")
   export MATRIX_REGISTRATION_SHARED_SECRET
@@ -56,24 +61,19 @@ fi
 
 DEFAULT_CATALOG_REALM_URL="${REALM_BASE_URL}/catalog/"
 CATALOG_REALM_URL="${RESOLVED_CATALOG_REALM_URL:-$DEFAULT_CATALOG_REALM_URL}"
-DEFAULT_NEW_CATALOG_REALM_URL="${REALM_BASE_URL}/catalog-new/"
-NEW_CATALOG_REALM_URL="${RESOLVED_NEW_CATALOG_REALM_URL:-$DEFAULT_NEW_CATALOG_REALM_URL}"
+DEFAULT_EXTERNAL_CATALOG_REALM_URL="${REALM_BASE_URL}/external-catalog/"
+EXTERNAL_CATALOG_REALM_URL="${RESOLVED_EXTERNAL_CATALOG_REALM_URL:-$DEFAULT_EXTERNAL_CATALOG_REALM_URL}"
+DEFAULT_SOFTWARE_FACTORY_REALM_URL="${REALM_BASE_URL}/software-factory/"
+SOFTWARE_FACTORY_REALM_URL="${RESOLVED_SOFTWARE_FACTORY_REALM_URL:-$DEFAULT_SOFTWARE_FACTORY_REALM_URL}"
 DEFAULT_BOXEL_HOMEPAGE_REALM_URL="${REALM_BASE_URL}/boxel-homepage/"
 BOXEL_HOMEPAGE_REALM_URL="${RESOLVED_BOXEL_HOMEPAGE_REALM_URL:-$DEFAULT_BOXEL_HOMEPAGE_REALM_URL}"
 DEFAULT_SUBMISSION_REALM_URL="${REALM_BASE_URL}/submissions/"
 SUBMISSION_REALM_URL="${RESOLVED_SUBMISSION_REALM_URL:-$DEFAULT_SUBMISSION_REALM_URL}"
 
-# This can be overridden from the environment to point to a different catalog
-# and is used in start-services-for-host-tests.sh to point to a trimmed down
+# Used in start-services-for-host-tests.sh to point to a trimmed down
 # version of the catalog-realm for faster startup.
 CATALOG_REALM_PATH="${CATALOG_REALM_PATH:-../catalog-realm}"
 SUBMISSION_REALM_PATH="${SUBMISSION_REALM_PATH:-${REALMS_ROOT}/submissions}"
-
-if [ -n "$USE_EXTERNAL_CATALOG" ]; then
-  pnpm --dir=../catalog catalog:setup
-  pnpm --dir=../catalog catalog:update
-  CATALOG_REALM_PATH='../catalog/contents'
-fi
 
 if [ -n "$START_SUBMISSION" ]; then
   sh "$SCRIPTS_DIR/setup-submission-realm.sh" "$SUBMISSION_REALM_PATH"
@@ -120,6 +120,11 @@ LOW_CREDIT_THRESHOLD="${LOW_CREDIT_THRESHOLD:-2000}" \
   ${START_CATALOG:+--fromUrl='@cardstack/catalog/'} \
   ${START_CATALOG:+--toUrl="${CATALOG_REALM_URL}"} \
   \
+  ${START_CATALOG:+--path='../catalog/contents'} \
+  ${START_CATALOG:+--username='external_catalog_realm'} \
+  ${START_CATALOG:+--fromUrl="${EXTERNAL_CATALOG_REALM_URL}"} \
+  ${START_CATALOG:+--toUrl="${EXTERNAL_CATALOG_REALM_URL}"} \
+  \
   --path='../skills-realm/contents' \
   --username='skills_realm' \
   --fromUrl="${REALM_BASE_URL}/skills/" \
@@ -140,7 +145,13 @@ LOW_CREDIT_THRESHOLD="${LOW_CREDIT_THRESHOLD:-2000}" \
   ${START_EXPERIMENTS:+--fromUrl="${REALM_BASE_URL}/experiments/"} \
   ${START_EXPERIMENTS:+--toUrl="${REALM_BASE_URL}/experiments/"} \
   \
-  ${START_CATALOG:+--path='../catalog-new/contents'} \
-  ${START_CATALOG:+--username='catalog_new_realm'} \
-  ${START_CATALOG:+--fromUrl="${NEW_CATALOG_REALM_URL}"} \
-  ${START_CATALOG:+--toUrl="${NEW_CATALOG_REALM_URL}"}
+  --path='../openrouter-realm' \
+  --username='openrouter_realm' \
+  --fromUrl='@cardstack/openrouter/' \
+  --toUrl="${REALM_BASE_URL}/openrouter/" \
+  \
+  --path='../software-factory/realm' \
+  --username='software_factory_realm' \
+  --fromUrl="${SOFTWARE_FACTORY_REALM_URL}" \
+  --toUrl="${SOFTWARE_FACTORY_REALM_URL}"
+  ${START_EXPERIMENTS:+--toUrl="${REALM_BASE_URL}/experiments/"}

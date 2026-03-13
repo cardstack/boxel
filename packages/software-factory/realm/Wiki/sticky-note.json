@@ -1,0 +1,33 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Wiki",
+        "module": "../wiki"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "tags": ["documents-content", "sticky", "note"],
+      "content": "## Overview\n\nThe Sticky Note card gives the workspace a structured home for colorful, short-form note designed for spatial arrangement on boards and artboards.\n\nAs a first-class Boxel card, it can be linked to adjacent records, surfaced in filtered views, and reused in automation without the information collapsing into disconnected notes or one-off documents.\n\n## Core Mechanics\n\nSticky Note usually evolves through drafting, review, and reuse. The card keeps its core content structured enough to be surfaced in different views, linked from related records, and updated by people or automation without losing provenance.\n\nThe card can be created directly by a user, produced from a [[Workflow Playbook]], or updated in response to a [[Trigger]]. When AI is involved, a [[Prompt Template]] or [[Skill Card]] can shape how it is drafted, summarized, classified, or routed.\n\n## Integration Points\n\n- **[[Document]]** -- Sticky Note can link to longer-form supporting content when a lightweight card needs deeper context.\n- **[[Note]]** -- Note can provide adjacent context, downstream output, or grouped navigation around Sticky Note.\n- **[[Article]]** -- Article can provide adjacent context, downstream output, or grouped navigation around Sticky Note.\n- **[[Prompt Template]]** -- Prompt-driven drafting or summarization can turn Sticky Note into a reusable AI-assisted workflow.\n- **[[Workflow Playbook]]** -- Sticky Note can be created, reviewed, or progressed as one step inside a repeatable workflow.\n- **[[Project]]** -- Sticky Note can be grouped under a larger initiative so its work stays visible in context.\n\n## Example Use Cases\n\n- **System of record:** Teams create Sticky Note as the structured home for colorful, short-form note designed for spatial arrangement on boards and artboards and keep related work linked instead of scattered across notes.\n- **Automation handoff:** A [[Workflow Playbook]] or [[Trigger]] creates or updates Sticky Note when upstream conditions are met, reducing repetitive setup work.\n- **Search and reporting:** Sticky Note stays queryable for dashboards, summaries, and downstream actions without re-entering the same information in multiple places.",
+      "cardInfo": {
+        "name": "Sticky Note",
+        "notes": null,
+        "summary": "Colorful, short-form note designed for spatial arrangement on boards and artboards.",
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "relatedPages": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

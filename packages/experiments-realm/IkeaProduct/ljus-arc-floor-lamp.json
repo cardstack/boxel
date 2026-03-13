@@ -23,7 +23,7 @@
     "relationships": {
       "cardInfo.theme": {
         "links": {
-          "self": "@cardstack/catalog/Theme/cardstack"
+          "self": "../default/5b09feb0-ed5f-4ee5-8836-36cbcb789a72"
         }
       }
     }

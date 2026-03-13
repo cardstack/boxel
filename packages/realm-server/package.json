@@ -102,8 +102,10 @@
     "setup:experiments-in-deployment": "mkdir -p /persistent/experiments && rsync --dry-run --itemize-changes --checksum --recursive ../experiments-realm/. /persistent/experiments/ && rsync --checksum --recursive ../experiments-realm/. /persistent/experiments/",
     "setup:catalog-in-deployment": "mkdir -p /persistent/catalog && rsync --dry-run --itemize-changes --checksum --recursive --delete ../catalog-realm/. /persistent/catalog/ && rsync --checksum --recursive --delete ../catalog-realm/. /persistent/catalog/",
     "setup:skills-in-deployment": "mkdir -p /persistent/skills",
+    "setup:software-factory-in-deployment": "mkdir -p /persistent/software-factory && rsync --dry-run --itemize-changes --checksum --recursive --delete ../software-factory/realm/. /persistent/software-factory/ && rsync --checksum --recursive --delete ../software-factory/realm/. /persistent/software-factory/",
     "setup:boxel-homepage-in-deployment": "mkdir -p /persistent/boxel-homepage",
-    "setup:catalog-new-in-deployment": "mkdir -p /persistent/catalog-new && pnpm --dir=../catalog-new catalog-new:setup && rsync --dry-run --itemize-changes --checksum --recursive --delete ../catalog-new/contents/. /persistent/catalog-new/ && rsync --checksum --recursive --delete ../catalog-new/contents/. /persistent/catalog-new/",
+    "setup:external-catalog-in-deployment": "mkdir -p /persistent/external-catalog && pnpm --dir=../catalog catalog:setup && rsync --dry-run --itemize-changes --checksum --recursive --delete ../catalog/contents/. /persistent/external-catalog/ && rsync --checksum --recursive --delete ../catalog/contents/. /persistent/external-catalog/",
+    "setup:openrouter-in-deployment": "mkdir -p /persistent/openrouter && rsync --dry-run --itemize-changes --checksum --recursive --delete ../openrouter-realm/. /persistent/openrouter/ && rsync --checksum --recursive --delete ../openrouter-realm/. /persistent/openrouter/",
     "start": "PGPORT=5435 NODE_NO_WARNINGS=1 ts-node --transpileOnly main",
     "start:base": "./scripts/start-base.sh --workerManagerPort=4213",
     "start:test-realms": "./scripts/start-test-realms.sh --workerManagerPort=4211",
@@ -136,10 +138,8 @@
     "full-reindex": "./scripts/full-reindex.sh",
     "check-user-pg-connections": "./scripts/check-user-pg-connections.sh",
     "sync-stripe-products": "NODE_NO_WARNINGS=1 PGDATABASE=boxel PGPORT=5435 ts-node --transpileOnly scripts/sync-stripe-products.ts",
+    "sync-openrouter-models": "NODE_NO_WARNINGS=1 PGDATABASE=boxel PGPORT=5435 ts-node --transpileOnly scripts/sync-openrouter-models.ts",
     "stripe": "docker run --rm --add-host=host.docker.internal:host-gateway -it stripe/stripe-cli:latest"
-  },
-  "volta": {
-    "extends": "../../package.json"
   },
   "dependencies": {
     "puppeteer": "^24.8.2"
