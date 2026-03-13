@@ -79,6 +79,8 @@ const DEFAULT_REALM_DIR = resolve(
 );
 const DEFAULT_REALM_OWNER = '@software-factory-owner:localhost';
 const DEFAULT_HOST_URL = process.env.HOST_URL ?? 'http://localhost:4200/';
+const DEFAULT_BASE_REALM_URL =
+  process.env.SOFTWARE_FACTORY_BASE_REALM_URL ?? 'http://localhost:4201/base/';
 const DEFAULT_MATRIX_URL = new URL(process.env.MATRIX_URL ?? matrixURL.href);
 const DEFAULT_MATRIX_USERNAME =
   process.env.SOFTWARE_FACTORY_MATRIX_USERNAME ?? 'software-factory-backend';
@@ -99,6 +101,7 @@ const CACHE_VERSION = 1;
 
 let prepareTestPgPromise: Promise<void> | undefined;
 let ensureMatrixUsersPromise: Promise<void> | undefined;
+let ensurePrerequisitesPromise: Promise<void> | undefined;
 
 export interface FactoryRealmOptions {
   realmDir?: string;
@@ -208,6 +211,66 @@ async function ensureTestPgPrepared() {
     });
   }
   await prepareTestPgPromise;
+}
+
+async function ensureServiceReady(
+  name: string,
+  request: Promise<Response>,
+  url: string,
+): Promise<void> {
+  let response: Response;
+  try {
+    response = await request;
+  } catch (error) {
+    throw new Error(
+      `${name} is not reachable at ${url}: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+  }
+
+  if (!response.ok) {
+    throw new Error(
+      `${name} is not ready at ${url}: status ${response.status}`,
+    );
+  }
+}
+
+async function ensureFactoryPrerequisites(): Promise<void> {
+  if (!ensurePrerequisitesPromise) {
+    ensurePrerequisitesPromise = (async () => {
+      await ensureServiceReady(
+        'Host app',
+        fetch(DEFAULT_HOST_URL),
+        DEFAULT_HOST_URL,
+      );
+      let baseInfoURL = new URL('_info', DEFAULT_BASE_REALM_URL).href;
+      await ensureServiceReady(
+        'Base realm',
+        fetch(baseInfoURL, {
+          method: 'QUERY',
+          headers: {
+            Accept: 'application/vnd.api+json',
+          },
+        }),
+        baseInfoURL,
+      );
+      let matrixVersionsURL = new URL(
+        '_matrix/client/versions',
+        DEFAULT_MATRIX_URL,
+      ).href;
+      await ensureServiceReady(
+        'Matrix server',
+        fetch(matrixVersionsURL),
+        matrixVersionsURL,
+      );
+    })().catch((error) => {
+      ensurePrerequisitesPromise = undefined;
+      throw error;
+    });
+  }
+
+  await ensurePrerequisitesPromise;
 }
 
 async function ensureFactoryMatrixUser(username: string): Promise<void> {
@@ -545,6 +608,7 @@ export async function ensureFactoryRealmTemplate(
   let templateDatabaseName = templateDatabaseNameForCacheKey(cacheKey);
 
   await ensureTestPgPrepared();
+  await ensureFactoryPrerequisites();
   if (await databaseExists(templateDatabaseName)) {
     return {
       cacheKey,
@@ -804,6 +868,7 @@ async function startFactoryRealmServer(
   let databaseName = options.databaseName ?? runtimeDatabaseName();
 
   await ensureTestPgPrepared();
+  await ensureFactoryPrerequisites();
 
   let templateDatabase: string | undefined;
   if (options.useCache !== false) {
