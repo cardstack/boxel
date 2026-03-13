@@ -5,6 +5,7 @@ import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { cached, tracked } from '@glimmer/tracking';
 
+import { restartableTask, timeout } from 'ember-concurrency';
 import { consume } from 'ember-provide-consume-context';
 
 import { resource, use } from 'ember-resources';
@@ -41,6 +42,14 @@ import {
 import type { WithBoundArgs } from '@glint/template';
 
 const OWNER_DESTROYED_ERROR = 'OWNER_DESTROYED_ERROR';
+const TYPE_PAGE_SIZE = 25;
+
+type TypeSummaryItem = {
+  id: string;
+  type: string;
+  attributes: { displayName: string; total: number; iconHTML: string };
+  meta?: { realmURL: string };
+};
 
 interface Signature {
   Args: {
@@ -57,6 +66,11 @@ interface Signature {
         | 'selectedTypes'
         | 'onTypeChange'
         | 'typeOptions'
+        | 'onTypeSearchChange'
+        | 'onLoadMoreTypes'
+        | 'hasMoreTypes'
+        | 'isLoadingMoreTypes'
+        | 'typesTotalCount'
       >,
       WithBoundArgs<
         typeof SearchContent,
@@ -86,6 +100,14 @@ export default class SearchPanel extends Component<Signature> {
 
   @tracked private selectedRealms: PickerOption[] = [];
   @tracked private activeSort: SortOption = SORT_OPTIONS[0];
+
+  // Type summaries state
+  @tracked private _typeSearchKey = '';
+  @tracked private _typePageNumber = 0;
+  @tracked private _typeSummariesData: TypeSummaryItem[] = [];
+  @tracked private _typeSummariesTotal = 0;
+  @tracked private _typeSummariesLoading = false;
+  @tracked private _hasMoreTypes = false;
 
   @cached
   private get recentCardCollection(): ReturnType<getCardCollection> {
@@ -152,35 +174,71 @@ export default class SearchPanel extends Component<Signature> {
   // can map to the same display name, e.g. different modules with the same card type name).
   private _typeCodeRefs = new Map<string, string[]>();
 
-  @use private cardTypeSummaries = resource(() => {
-    // Track selectedRealmURLs so we re-fetch when realms change
-    let realmURLs = this.selectedRealmURLs;
-    let state: {
-      data: {
-        id: string;
-        type: string;
-        attributes: { displayName: string; total: number; iconHTML: string };
-      }[];
-      isLoading: boolean;
-    } = new TrackedObject({ data: [], isLoading: true });
+  private fetchTypeSummaries = restartableTask(
+    async (
+      realmURLs: string[],
+      searchKey: string,
+      pageNumber: number,
+      append: boolean,
+    ) => {
+      // Debounce search requests (not load-more or initial load)
+      if (pageNumber === 0 && searchKey) {
+        await timeout(300);
+      }
 
-    (async () => {
+      if (isDestroyed(this) || isDestroying(this)) {
+        return;
+      }
+
+      this._typeSummariesLoading = true;
+
       try {
-        let result = await this.realmServer.fetchCardTypeSummaries(realmURLs);
-        if (!isDestroyed(this) && !isDestroying(this)) {
-          state.data = result.data;
-          state.isLoading = false;
+        let result = await this.realmServer.fetchCardTypeSummaries(realmURLs, {
+          searchKey: searchKey || undefined,
+          page: { number: pageNumber, size: TYPE_PAGE_SIZE },
+        });
+
+        if (isDestroyed(this) || isDestroying(this)) {
+          return;
         }
+
+        if (append) {
+          this._typeSummariesData = [
+            ...this._typeSummariesData,
+            ...result.data,
+          ];
+        } else {
+          this._typeSummariesData = result.data;
+        }
+
+        this._typeSummariesTotal = result.meta.page.total;
+        this._hasMoreTypes =
+          this._typeSummariesData.length < result.meta.page.total;
+        this._typeSummariesLoading = false;
       } catch (e) {
         console.error('Failed to fetch card type summaries', e);
         if (!isDestroyed(this) && !isDestroying(this)) {
-          state.data = [];
-          state.isLoading = false;
+          if (!append) {
+            this._typeSummariesData = [];
+            this._typeSummariesTotal = 0;
+          }
+          this._hasMoreTypes = false;
+          this._typeSummariesLoading = false;
         }
       }
-    })();
+    },
+  );
 
-    return state;
+  // Resource that watches selectedRealmURLs and typeSearchKey to trigger fetches
+  @use private _typeFetchTrigger = resource(() => {
+    let realmURLs = this.selectedRealmURLs;
+    let searchKey = this._typeSearchKey;
+
+    // Reset page and fetch
+    this._typePageNumber = 0;
+    this.fetchTypeSummaries.perform(realmURLs, searchKey, 0, false);
+
+    return { realmURLs, searchKey };
   });
 
   private get baseFilterCodeRefs(): Set<string> | undefined {
@@ -198,6 +256,9 @@ export default class SearchPanel extends Component<Signature> {
   }
 
   @use private typeFilter = resource(() => {
+    // Access _typeFetchTrigger to ensure we re-run when fetch completes
+    this._typeFetchTrigger;
+
     let value: { selected: PickerOption[]; options: PickerOption[] } =
       new TrackedObject({
         selected: [],
@@ -208,7 +269,7 @@ export default class SearchPanel extends Component<Signature> {
     const codeRefsByDisplayName = new Map<string, string[]>();
     const allowedCodeRefs = this.baseFilterCodeRefs;
 
-    for (const item of this.cardTypeSummaries.data) {
+    for (const item of this._typeSummariesData) {
       const name = item.attributes.displayName;
       const codeRef = item.id;
       if (!name) {
@@ -250,7 +311,7 @@ export default class SearchPanel extends Component<Signature> {
 
     if (hadSelectAll) {
       value.selected = [];
-    } else if (this.cardTypeSummaries.isLoading) {
+    } else if (this._typeSummariesLoading) {
       // Type summaries still loading — keep previous selections
       // to avoid jarring UI changes.
       value.selected = prev;
@@ -299,6 +360,26 @@ export default class SearchPanel extends Component<Signature> {
     this.activeSort = option;
   }
 
+  @action
+  private onTypeSearchChange(term: string) {
+    this._typeSearchKey = term;
+    this._typePageNumber = 0;
+  }
+
+  @action
+  private onLoadMoreTypes() {
+    if (this._typeSummariesLoading || !this._hasMoreTypes) {
+      return;
+    }
+    this._typePageNumber = this._typePageNumber + 1;
+    this.fetchTypeSummaries.perform(
+      this.selectedRealmURLs,
+      this._typeSearchKey,
+      this._typePageNumber,
+      true,
+    );
+  }
+
   <template>
     {{yield
       (component
@@ -308,6 +389,11 @@ export default class SearchPanel extends Component<Signature> {
         selectedTypes=this.typeFilter.selected
         onTypeChange=this.onTypeChange
         typeOptions=this.typeFilter.options
+        onTypeSearchChange=this.onTypeSearchChange
+        onLoadMoreTypes=this.onLoadMoreTypes
+        hasMoreTypes=this._hasMoreTypes
+        isLoadingMoreTypes=this._typeSummariesLoading
+        typesTotalCount=this._typeSummariesTotal
       )
       (component
         SearchContent

@@ -2,6 +2,7 @@ import type Owner from '@ember/owner';
 import { scheduleOnce } from '@ember/runloop';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
+import type { ComponentLike } from '@glint/template';
 import type { Select } from 'ember-power-select/components/power-select';
 import { includes } from 'lodash';
 
@@ -21,19 +22,17 @@ export type PickerOption = {
 
 export interface PickerSignature {
   Args: {
-    // State
+    afterOptionsComponent?: ComponentLike<any>;
+    disableClientSideSearch?: boolean;
     disabled?: boolean;
-    // Display
+    extra?: Record<string, unknown>;
     label: string;
     matchTriggerWidth?: boolean;
     maxSelectedDisplay?: number;
-
     onChange: (selected: PickerOption[]) => void;
-    // Data
+    onSearchTermChange?: (term: string) => void;
     options: PickerOption[];
-
     placeholder?: string;
-
     renderInPlace?: boolean;
     searchPlaceholder?: string;
     selected: PickerOption[];
@@ -86,7 +85,7 @@ export default class Picker extends Component<PickerSignature> {
   // - Then list already-selected options (so they stay visible even if they don't match the term)
   // - Then list unselected options that match the search term, in their original order
   get filteredOptions(): PickerOption[] {
-    if (!this.searchTerm) {
+    if (!this.searchTerm || this.args.disableClientSideSearch) {
       return this.args.options;
     }
 
@@ -174,6 +173,7 @@ export default class Picker extends Component<PickerSignature> {
 
   onSearchTermChange = (term: string) => {
     this.searchTerm = term;
+    this.args.onSearchTermChange?.(term);
   };
 
   onOptionHover = (option: PickerOption | null) => {
@@ -198,6 +198,7 @@ export default class Picker extends Component<PickerSignature> {
 
   get extra() {
     return {
+      ...this.args.extra,
       label: this.args.label,
       searchTerm: this.searchTerm,
       searchPlaceholder: this.args.searchPlaceholder,
@@ -276,6 +277,7 @@ export default class Picker extends Component<PickerSignature> {
       @extra={{this.extra}}
       @triggerComponent={{component this.triggerComponent}}
       @beforeOptionsComponent={{component PickerBeforeOptionsWithSearch}}
+      @afterOptionsComponent={{@afterOptionsComponent}}
       @dropdownClass='boxel-picker__dropdown'
       ...attributes
       as |option|

@@ -230,11 +230,20 @@ function registerTypesRoutes() {
         throw e;
       }
 
+      let searchKey = (payload as Record<string, unknown>).searchKey as
+        | string
+        | undefined;
+      let page = (payload as Record<string, unknown>).page as
+        | { number: number; size: number }
+        | undefined;
+
       let registry = getTestRealmRegistry();
-      let result: Record<
-        string,
-        ReturnType<typeof makeCardTypeSummaryDoc>
-      > = {};
+      let allEntries: {
+        id: string;
+        type: 'card-type-summary';
+        attributes: { displayName: string; total: number; iconHTML: string };
+        meta: { realmURL: string };
+      }[] = [];
 
       for (let realmURL of realmList) {
         let normalizedURL = ensureTrailingSlash(realmURL);
@@ -242,14 +251,43 @@ function registerTypesRoutes() {
         if (registryEntry?.realm) {
           let summaries =
             await registryEntry.realm.realmIndexQueryEngine.fetchCardTypeSummary();
-          result[normalizedURL] = makeCardTypeSummaryDoc(summaries);
+          let doc = makeCardTypeSummaryDoc(summaries);
+          for (let entry of doc.data) {
+            allEntries.push({
+              ...entry,
+              type: 'card-type-summary' as const,
+              meta: { realmURL: normalizedURL },
+            });
+          }
         }
       }
 
-      return new Response(JSON.stringify({ data: result }), {
-        status: 200,
-        headers: { 'content-type': SupportedMimeType.CardTypeSummary },
-      });
+      // Apply searchKey filter
+      if (searchKey) {
+        let term = searchKey.toLowerCase();
+        allEntries = allEntries.filter((entry) =>
+          entry.attributes.displayName.toLowerCase().includes(term),
+        );
+      }
+
+      let total = allEntries.length;
+
+      // Apply pagination
+      if (page) {
+        let start = page.number * page.size;
+        allEntries = allEntries.slice(start, start + page.size);
+      }
+
+      return new Response(
+        JSON.stringify({
+          data: allEntries,
+          meta: { page: { total } },
+        }),
+        {
+          status: 200,
+          headers: { 'content-type': SupportedMimeType.CardTypeSummary },
+        },
+      );
     },
   });
 }

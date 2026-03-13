@@ -476,15 +476,23 @@ export default class RealmServerService extends Service {
     return { data: json.data ?? [], publicReadableRealms };
   }
 
-  async fetchCardTypeSummaries(realmUrls: string[]): Promise<{
+  async fetchCardTypeSummaries(
+    realmUrls: string[],
+    options?: {
+      searchKey?: string;
+      page?: { number: number; size: number };
+    },
+  ): Promise<{
     data: {
       id: string;
       type: 'card-type-summary';
       attributes: { displayName: string; total: number; iconHTML: string };
+      meta?: { realmURL: string };
     }[];
+    meta: { page: { total: number } };
   }> {
     if (realmUrls.length === 0) {
-      return { data: [] };
+      return { data: [], meta: { page: { total: 0 } } };
     }
 
     let uniqueRealmUrls = Array.from(new Set(realmUrls));
@@ -497,13 +505,21 @@ export default class RealmServerService extends Service {
 
     let typesURL = new URL('_federated-types', realmServerURL);
 
+    let body: Record<string, unknown> = { realms: uniqueRealmUrls };
+    if (options?.searchKey) {
+      body.searchKey = options.searchKey;
+    }
+    if (options?.page) {
+      body.page = options.page;
+    }
+
     let response = await this.authedFetch(typesURL.href, {
       method: 'QUERY',
       headers: {
         Accept: SupportedMimeType.CardTypeSummary,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ realms: uniqueRealmUrls }),
+      body: JSON.stringify(body),
     });
 
     if (!response.ok) {
@@ -514,25 +530,19 @@ export default class RealmServerService extends Service {
     }
 
     let json = (await response.json()) as {
-      data: Record<
-        string,
-        {
-          data: {
-            id: string;
-            type: 'card-type-summary';
-            attributes: {
-              displayName: string;
-              total: number;
-              iconHTML: string;
-            };
-          }[];
-        }
-      >;
+      data: {
+        id: string;
+        type: 'card-type-summary';
+        attributes: {
+          displayName: string;
+          total: number;
+          iconHTML: string;
+        };
+        meta?: { realmURL: string };
+      }[];
+      meta: { page: { total: number } };
     };
-    let flatData = Object.values(json.data ?? {}).flatMap(
-      (realm) => realm.data,
-    );
-    return { data: flatData };
+    return { data: json.data ?? [], meta: json.meta ?? { page: { total: 0 } } };
   }
 
   async handleEvent(event: Partial<IEvent>) {
