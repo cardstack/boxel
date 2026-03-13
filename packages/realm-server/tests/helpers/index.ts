@@ -209,7 +209,9 @@ export const realmServerSecretSeed = "mum's the word";
 export const realmSecretSeed = `shhh! it's a secret`;
 export const grafanaSecret = `shhh! it's a secret`;
 export const matrixRegistrationSecret: string =
-  getSynapseConfig()!.registration_shared_secret; // as long as synapse has been started at least once, this will always exist
+  getSynapseConfig()?.registration_shared_secret ??
+  process.env.MATRIX_REGISTRATION_SHARED_SECRET ??
+  'software-factory-no-matrix';
 export const testCreatePrerenderAuth =
   buildCreatePrerenderAuth(realmSecretSeed);
 
