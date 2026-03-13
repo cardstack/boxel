@@ -1,0 +1,28 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Document",
+        "module": "../document"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "content": "# Documents & Content Card Catalog\n\nCondensed stubs for Documents & Content card types. These capture the domain memory and reusable behavior an agent should preserve, not exhaustive schema.\n\n### Document\n**Priority:** P0\n\n- **Core idea:** Rich text document with Markdown content, metadata, and version history. The foundational content card.\n\n---\n\n### Article\n**Priority:** P1\n\n- **Core idea:** Publishable article with author, publish date, categories, featured image, and SEO metadata.\n\n---\n\n### Bookmark\n**Priority:** P2\n\n- **Core idea:** Saved URL with title, description, favicon, screenshot preview, and tags.\n\n---\n\n### Whitepaper Template\n**Priority:** P2\n\n- **Core idea:** Structured long-form document template with sections (abstract, intro, methodology, findings, conclusion).\n\n---\n\n### Thread Document\n**Priority:** P2\n\n- **Core idea:** Converts conversation threads into structured documents, preserving attribution and chronology.\n\n---\n\n### Artboard\n**Priority:** P2\n\n- **Core idea:** Free-form canvas for arranging cards, images, and annotations spatially. Visual thinking space.\n\n---\n\n### Blog Post\n**Priority:** P1\n\n- **Core idea:** Blog entry with title, body, author, publish date, tags, featured image, and slug.\n\n---\n\n### Annotation\n**Priority:** P2\n\n- **Core idea:** Contextual note attached to a specific card, field, or selection. For review workflows and commentary.\n\n---\n\n### Note\n**Priority:** P1\n\n- **Core idea:** Quick-capture text note. Minimal structure, maximum speed. The digital sticky note.\n\n---\n\n### Sticky Note\n**Priority:** P2\n\n- **Core idea:** Colorful, short-form note designed for spatial arrangement on boards and artboards.\n\n---\n\n### Knowledge Graph Node\n**Priority:** P2\n\n- **Core idea:** A node in a knowledge graph (Roam Research-style). Bidirectional links, backlinks, and graph visualization. Visualizes how things relate to each other.\n\n---\n\n### Mermaid Diagram\n**Priority:** P1\n\n- **Core idea:** Rendered Mermaid diagram card. Supports mindmaps, Gantt charts, flowcharts, SWOT analysis, sequence diagrams. Stores the Mermaid source and renders it live.\n",
+      "cardInfo": {
+        "name": "Documents & Content Card Catalog",
+        "notes": null,
+        "title": "Documents & Content Card Catalog",
+        "summary": "Condensed stubs for Documents & Content card types.",
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "@cardstack/catalog/Theme/boxel-brand-guide"
+        }
+      }
+    }
+  }
+}

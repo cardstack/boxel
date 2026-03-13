@@ -1,0 +1,33 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Wiki",
+        "module": "../wiki"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "tags": ["legal-compliance", "signature"],
+      "content": "## Overview\n\nThe Signature card gives the workspace a structured home for reusable digital signature: image, metadata, timestamp. Applied to contracts and documents.\n\nAs a first-class Boxel card, it can be linked to adjacent records, surfaced in filtered views, and reused in automation without the information collapsing into disconnected notes or one-off documents.\n\n## Core Mechanics\n\nSignature acts as a canonical operational record. It keeps important facts, state changes, timestamps, and linked parties in one place so downstream workflows, approvals, and reporting can all rely on the same source of truth.\n\nThe card can be created directly by a user, produced from a [[Workflow Playbook]], or updated in response to a [[Trigger]]. When AI is involved, a [[Prompt Template]] or [[Skill Card]] can shape how it is drafted, summarized, classified, or routed.\n\n## Integration Points\n\n- **[[Document]]** -- Signature can link to longer-form supporting content when a lightweight card needs deeper context.\n- **[[Workflow Playbook]]** -- Signature can be created, reviewed, or progressed as one step inside a repeatable workflow.\n- **[[Alert]]** -- Alert can provide adjacent context, downstream output, or grouped navigation around Signature.\n- **[[Report]]** -- Signature can feed rollups and summaries that surface trends, status, or outcomes.\n- **[[Legal Contract]]** -- Legal Contract can provide adjacent context, downstream output, or grouped navigation around Signature.\n- **[[Policy Manual]]** -- Policy Manual can provide adjacent context, downstream output, or grouped navigation around Signature.\n\n## Example Use Cases\n\n- **System of record:** Teams create Signature as the structured home for reusable digital signature: image, metadata, timestamp. Applied to contracts and documents and keep related work linked instead of scattered across notes.\n- **Automation handoff:** A [[Workflow Playbook]] or [[Trigger]] creates or updates Signature when upstream conditions are met, reducing repetitive setup work.\n- **Search and reporting:** Signature stays queryable for dashboards, summaries, and downstream actions without re-entering the same information in multiple places.",
+      "cardInfo": {
+        "name": "Signature",
+        "notes": null,
+        "summary": "Reusable digital signature: image, metadata, timestamp. Applied to contracts and documents.",
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "relatedPages": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

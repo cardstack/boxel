@@ -1,0 +1,33 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Wiki",
+        "module": "../wiki"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "tags": ["identity-security", "pass", "wallet", "item"],
+      "content": "## Overview\n\nThe Pass / Wallet Item card gives the workspace a structured home for apple Wallet-style pass: boarding pass, movie ticket, payment card, loyalty card. Visual pass rendering with barcode/QR.\n\nAs a first-class Boxel card, it can be linked to adjacent records, surfaced in filtered views, and reused in automation without the information collapsing into disconnected notes or one-off documents.\n\n## Core Mechanics\n\nPass / Wallet Item anchors identity, permissions, or relationship context. It becomes most useful when other cards can link to it consistently, query against it safely, and inherit its context without duplicating sensitive or fast-changing information.\n\nThe card can be created directly by a user, produced from a [[Workflow Playbook]], or updated in response to a [[Trigger]]. When AI is involved, a [[Prompt Template]] or [[Skill Card]] can shape how it is drafted, summarized, classified, or routed.\n\n## Integration Points\n\n- **[[Credential]]** -- Pass / Wallet Item may depend on managed access or secure configuration stored separately.\n- **[[Integration]]** -- Pass / Wallet Item can sync with or depend on external systems through the shared integration layer.\n- **[[Tool Definition]]** -- Tool calls can read from or write to Pass / Wallet Item when automation needs structured side effects.\n- **[[Trigger]]** -- Changes to Pass / Wallet Item can fire automation, and automation can also create or update Pass / Wallet Item.\n- **[[Invitation]]** -- Invitation can provide adjacent context, downstream output, or grouped navigation around Pass / Wallet Item.\n- **[[API Key]]** -- API Key can provide adjacent context, downstream output, or grouped navigation around Pass / Wallet Item.\n\n## Example Use Cases\n\n- **System of record:** Teams create Pass / Wallet Item as the structured home for apple Wallet-style pass: boarding pass, movie ticket, payment card, loyalty card. Visual pass rendering with barcode/QR and keep related work linked instead of scattered across notes.\n- **Automation handoff:** A [[Workflow Playbook]] or [[Trigger]] creates or updates Pass / Wallet Item when upstream conditions are met, reducing repetitive setup work.\n- **Search and reporting:** Pass / Wallet Item stays queryable for dashboards, summaries, and downstream actions without re-entering the same information in multiple places.",
+      "cardInfo": {
+        "name": "Pass / Wallet Item",
+        "notes": null,
+        "summary": "Apple Wallet-style pass: boarding pass, movie ticket, payment card, loyalty card. Visual pass rendering with barcode/QR.",
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "relatedPages": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

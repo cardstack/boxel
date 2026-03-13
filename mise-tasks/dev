@@ -18,6 +18,7 @@ fi
 if [ -z "${SKIP_EXPERIMENTS:-}" ]; then
   WAIT_URLS="${WAIT_URLS}|http-get://${REALM_BASE_URL#http://}/experiments/${READY_PATH}"
 fi
+WAIT_URLS="${WAIT_URLS}|http-get://${REALM_BASE_URL#http://}/software-factory/${READY_PATH}"
 
 WAIT_URLS="${WAIT_URLS}|${MATRIX_URL_VAL}|http://localhost:5001|${ICONS_URL}"
 

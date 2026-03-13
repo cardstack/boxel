@@ -1,0 +1,28 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Document",
+        "module": "../document"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "content": "# Legal & Compliance Card Catalog\n\nCondensed stubs for Legal & Compliance card types. These capture the domain memory and reusable behavior an agent should preserve, not exhaustive schema.\n\n### Legal Contract\n**Priority:** P1\n\n- **Core idea:** Legal agreement with parties, terms, effective date, expiry, and signature status. Base type for specific contracts.\n\n---\n\n### Policy Manual\n**Priority:** P2\n\n- **Core idea:** Organizational policy document with sections, version history, and approval workflow.\n\n---\n\n### Audit Log\n**Priority:** P2\n\n- **Core idea:** Immutable audit trail: who, what, when, where. For compliance and accountability.\n\n---\n\n### Compliance Checklist\n**Priority:** P2\n\n- **Core idea:** Regulatory compliance tracker: requirements, evidence, status, and review date.\n\n---\n\n### NDA\n**Priority:** P2\n\n- **Core idea:** Non-disclosure agreement: parties, scope, duration, and effective date.\n\n---\n\n### Terms of Service\n**Priority:** P2\n\n- **Core idea:** Service terms document: clauses, effective date, version, and acceptance tracking.\n\n---\n\n### Privacy Policy\n**Priority:** P2\n\n- **Core idea:** Privacy policy with data collection practices, rights, retention, and jurisdiction.\n\n---\n\n### Employment Contract\n**Priority:** P2\n\n- **Core idea:** Employment agreement: role, compensation, terms, non-compete, and termination clauses.\n\n---\n\n### Enrollment Contract\n**Priority:** P2\n\n- **Core idea:** Enrollment agreement for courses, programs, or services with terms and obligations.\n\n---\n\n### Licensing Agreement\n**Priority:** P2\n\n- **Core idea:** IP licensing terms: scope, royalties, territory, duration, and exclusivity.\n\n---\n\n### Amendment\n**Priority:** P3\n\n- **Core idea:** Modification to an existing contract: original reference, changes, effective date.\n\n---\n\n### Power of Attorney\n**Priority:** P3\n\n- **Core idea:** Legal authority delegation: principal, agent, scope, duration, and revocation.\n\n---\n\n### Waiver / Release\n**Priority:** P3\n\n- **Core idea:** Liability waiver with scope, parties, and acknowledgment. AI-generated language with model attribution.\n\n---\n\n### Signature\n**Priority:** P2\n\n- **Core idea:** Reusable digital signature: image, metadata, timestamp. Applied to contracts and documents.\n\n---\n\n### Affidavit\n**Priority:** P3\n\n- **Core idea:** Sworn statement with declarant, content, notarization status, and date.\n",
+      "cardInfo": {
+        "name": "Legal & Compliance Card Catalog",
+        "notes": null,
+        "title": "Legal & Compliance Card Catalog",
+        "summary": "Condensed stubs for Legal & Compliance card types.",
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "@cardstack/catalog/Theme/boxel-brand-guide"
+        }
+      }
+    }
+  }
+}

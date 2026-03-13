@@ -1,0 +1,33 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Wiki",
+        "module": "../wiki"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "tags": ["operations", "inventory", "item"],
+      "content": "## Overview\n\nThe Inventory Item card gives the workspace a structured home for stockable item with SKU, quantity, location, reorder point, and supplier.\n\nAs a first-class Boxel card, it can be linked to adjacent records, surfaced in filtered views, and reused in automation without the information collapsing into disconnected notes or one-off documents.\n\n## Core Mechanics\n\nInventory Item acts as a canonical operational record. It keeps important facts, state changes, timestamps, and linked parties in one place so downstream workflows, approvals, and reporting can all rely on the same source of truth.\n\nThe card can be created directly by a user, produced from a [[Workflow Playbook]], or updated in response to a [[Trigger]]. When AI is involved, a [[Prompt Template]] or [[Skill Card]] can shape how it is drafted, summarized, classified, or routed.\n\n## Integration Points\n\n- **[[Order]]** -- Order can provide adjacent context, downstream output, or grouped navigation around Inventory Item.\n- **[[Product]]** -- Product can provide adjacent context, downstream output, or grouped navigation around Inventory Item.\n- **[[Vendor]]** -- Vendor can provide adjacent context, downstream output, or grouped navigation around Inventory Item.\n- **[[Alert]]** -- Alert can provide adjacent context, downstream output, or grouped navigation around Inventory Item.\n- **[[Workflow Playbook]]** -- Inventory Item can be created, reviewed, or progressed as one step inside a repeatable workflow.\n- **[[Report]]** -- Inventory Item can feed rollups and summaries that surface trends, status, or outcomes.\n\n## Example Use Cases\n\n- **System of record:** Teams create Inventory Item as the structured home for stockable item with SKU, quantity, location, reorder point, and supplier and keep related work linked instead of scattered across notes.\n- **Automation handoff:** A [[Workflow Playbook]] or [[Trigger]] creates or updates Inventory Item when upstream conditions are met, reducing repetitive setup work.\n- **Search and reporting:** Inventory Item stays queryable for dashboards, summaries, and downstream actions without re-entering the same information in multiple places.",
+      "cardInfo": {
+        "name": "Inventory Item",
+        "notes": null,
+        "summary": "Stockable item with SKU, quantity, location, reorder point, and supplier.",
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "relatedPages": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

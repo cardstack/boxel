@@ -1,0 +1,33 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Wiki",
+        "module": "../wiki"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "tags": ["standards-guidelines", "coding", "standard"],
+      "content": "## Overview\n\nThe Coding Standard card gives the workspace a structured home for coding conventions: language, linting rules, patterns, naming conventions, and examples.\n\nAs a first-class Boxel card, it can be linked to adjacent records, surfaced in filtered views, and reused in automation without the information collapsing into disconnected notes or one-off documents.\n\n## Core Mechanics\n\nCoding Standard usually evolves through drafting, review, and reuse. The card keeps its core content structured enough to be surfaced in different views, linked from related records, and updated by people or automation without losing provenance.\n\nThe card can be created directly by a user, produced from a [[Workflow Playbook]], or updated in response to a [[Trigger]]. When AI is involved, a [[Prompt Template]] or [[Skill Card]] can shape how it is drafted, summarized, classified, or routed.\n\n## Integration Points\n\n- **[[Document]]** -- Coding Standard can link to longer-form supporting content when a lightweight card needs deeper context.\n- **[[Prompt Template]]** -- Prompt-driven drafting or summarization can turn Coding Standard into a reusable AI-assisted workflow.\n- **[[Skill Card]]** -- Skills can define how agents classify, write, or transform Coding Standard in repeatable ways.\n- **[[Design System]]** -- Design System can provide adjacent context, downstream output, or grouped navigation around Coding Standard.\n- **[[Brand Voice]]** -- Brand Voice can provide adjacent context, downstream output, or grouped navigation around Coding Standard.\n- **[[Writing Style]]** -- Writing Style can provide adjacent context, downstream output, or grouped navigation around Coding Standard.\n\n## Example Use Cases\n\n- **System of record:** Teams create Coding Standard as the structured home for coding conventions: language, linting rules, patterns, naming conventions, and examples and keep related work linked instead of scattered across notes.\n- **Automation handoff:** A [[Workflow Playbook]] or [[Trigger]] creates or updates Coding Standard when upstream conditions are met, reducing repetitive setup work.\n- **Search and reporting:** Coding Standard stays queryable for dashboards, summaries, and downstream actions without re-entering the same information in multiple places.",
+      "cardInfo": {
+        "name": "Coding Standard",
+        "notes": null,
+        "summary": "Coding conventions: language, linting rules, patterns, naming conventions, and examples.",
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "relatedPages": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}
