@@ -477,6 +477,7 @@ jobs:
             "card-source-endpoints-test.ts",
             "definition-lookup-test.ts",
             "file-watcher-events-test.ts",
+            "indexing-event-sink-test.ts",
             "indexing-test.ts",
             "runtime-dependency-tracker-test.ts",
             "transpile-test.ts",

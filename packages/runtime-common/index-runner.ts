@@ -28,6 +28,7 @@ import { moduleFrom } from './code-ref';
 import type { CacheScope, DefinitionLookup } from './definition-lookup';
 import { resolveCardReference } from './card-reference-resolver';
 import { isCardError } from './error';
+import type { IndexingProgressEvent } from './worker';
 import { IndexRunnerDependencyManager } from './index-runner/dependency-resolver';
 import { discoverInvalidations } from './index-runner/discover-invalidations';
 import { visitFileForIndexing } from './index-runner/visit-file';
@@ -61,6 +62,7 @@ export class IndexRunner {
     jobInfo: JobInfo | undefined,
     status: 'start' | 'finish',
   ) => void;
+  #onProgress?: (event: IndexingProgressEvent) => void;
   readonly stats: Stats = {
     instancesIndexed: 0,
     filesIndexed: 0,
@@ -78,6 +80,7 @@ export class IndexRunner {
     ignoreData = {},
     jobInfo,
     reportStatus,
+    onProgress,
     prerenderer,
     auth,
     fetch,
@@ -97,6 +100,7 @@ export class IndexRunner {
       jobInfo: JobInfo | undefined,
       status: 'start' | 'finish',
     ): void;
+    onProgress?(event: IndexingProgressEvent): void;
   }) {
     this.#indexWriter = indexWriter;
     this.#realmPaths = new RealmPaths(realmURL);
@@ -105,6 +109,7 @@ export class IndexRunner {
     this.#ignoreData = ignoreData;
     this.#jobInfo = jobInfo ?? { jobId: -1, reservationId: -1 };
     this.#reportStatus = reportStatus;
+    this.#onProgress = onProgress;
     this.#prerenderer = prerenderer;
     this.#auth = auth;
     this.#fetch = fetch;
@@ -164,8 +169,26 @@ export class IndexRunner {
       await current.#dependencyResolver.orderInvalidationsByDependencies(
         invalidations,
       );
+    current.#onProgress?.({
+      type: 'indexing-started',
+      realmURL: current.realmURL.href,
+      jobId: current.#jobInfo.jobId,
+      jobType: 'from-scratch',
+      totalFiles: invalidations.length,
+      files: invalidations.map((u) => u.href),
+    });
+    let filesCompleted = 0;
     for (let invalidation of invalidations) {
       await current.tryToVisit(invalidation);
+      filesCompleted++;
+      current.#onProgress?.({
+        type: 'file-visited',
+        realmURL: current.realmURL.href,
+        jobId: current.#jobInfo.jobId,
+        url: invalidation.href,
+        filesCompleted,
+        totalFiles: invalidations.length,
+      });
     }
     current.#perfLog.debug(
       `${jobIdentity(current.#jobInfo)} completed index visit in ${Date.now() - visitStart} ms`,
@@ -176,6 +199,12 @@ export class IndexRunner {
       `${jobIdentity(current.#jobInfo)} completed index finalization in ${Date.now() - finalizeStart} ms`,
     );
     current.stats.totalIndexEntries = totalIndexEntries;
+    current.#onProgress?.({
+      type: 'indexing-finished',
+      realmURL: current.realmURL.href,
+      jobId: current.#jobInfo.jobId,
+      stats: current.stats,
+    });
     current.#log.debug(
       `${jobIdentity(current.#jobInfo)} completed from scratch indexing in ${Date.now() - start}ms`,
     );
@@ -242,6 +271,15 @@ export class IndexRunner {
     }
 
     let hrefs = urls.map((u) => u.href);
+    current.#onProgress?.({
+      type: 'indexing-started',
+      realmURL: current.realmURL.href,
+      jobId: current.#jobInfo.jobId,
+      jobType: 'incremental',
+      totalFiles: invalidations.length,
+      files: invalidations.map((u) => u.href),
+    });
+    let filesCompleted = 0;
     for (let invalidation of invalidations) {
       if (
         operations.get(invalidation.href) === 'delete' &&
@@ -251,10 +289,25 @@ export class IndexRunner {
       } else {
         await current.tryToVisit(invalidation);
       }
+      filesCompleted++;
+      current.#onProgress?.({
+        type: 'file-visited',
+        realmURL: current.realmURL.href,
+        jobId: current.#jobInfo.jobId,
+        url: invalidation.href,
+        filesCompleted,
+        totalFiles: invalidations.length,
+      });
     }
 
     let { totalIndexEntries } = await current.batch.done();
     current.stats.totalIndexEntries = totalIndexEntries;
+    current.#onProgress?.({
+      type: 'indexing-finished',
+      realmURL: current.realmURL.href,
+      jobId: current.#jobInfo.jobId,
+      stats: current.stats,
+    });
 
     current.#log.debug(
       `${jobIdentity(current.#jobInfo)} completed incremental indexing for ${urls.map((u) => u.href).join()} in ${
