@@ -179,4 +179,5 @@ import './queries-test';
 import './remote-prerenderer-test';
 import './runtime-dependency-tracker-test';
 import './sanitize-head-html-test';
+import './node-realm-test';
 import './session-room-queries-test';
