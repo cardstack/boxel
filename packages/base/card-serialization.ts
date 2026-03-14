@@ -28,6 +28,7 @@ import {
   getSerializer,
   humanReadable,
   identifyCard,
+  isRegisteredPrefix,
   isSingleCardDocument,
   isSingleFileMetaDocument,
   loadCardDef,
@@ -221,6 +222,11 @@ export function serializeCard(
     ...opts,
     ...{
       maybeRelativeURL(possibleURL: string) {
+        // Registered prefix refs (e.g. @cardstack/catalog/foo) are already
+        // in their canonical portable form — return as-is
+        if (isRegisteredPrefix(possibleURL)) {
+          return possibleURL;
+        }
         let url = maybeURL(possibleURL, modelRelativeTo);
         if (!url) {
           throw new Error(
@@ -316,6 +322,11 @@ export function serializeFileDef(
       ...opts,
       ...{
         maybeRelativeURL(possibleURL: string) {
+          // Registered prefix refs (e.g. @cardstack/catalog/foo) are already
+          // in their canonical portable form — return as-is
+          if (isRegisteredPrefix(possibleURL)) {
+            return possibleURL;
+          }
           let url = maybeURL(possibleURL, modelRelativeTo);
           if (!url) {
             throw new Error(

@@ -25,7 +25,9 @@ import {
   hasExecutableExtension,
   trimExecutableExtension,
 } from './index';
+import { isRegisteredPrefix } from './card-reference-resolver';
 import type { VirtualNetwork } from './virtual-network';
+import { unresolveCardReference } from './card-reference-resolver';
 
 const MODULES_TABLE = 'modules';
 const PREFERRED_EXECUTABLE_EXTENSIONS = ['.gts', '.ts', '.gjs', '.js'];
@@ -40,7 +42,7 @@ function canonicalURL(url: string, relativeTo?: string): string {
     let parsed = new URL(url, relativeTo);
     parsed.search = '';
     parsed.hash = '';
-    return parsed.href;
+    return unresolveCardReference(parsed.href);
   } catch (_e) {
     let stripped = url.split('#')[0] ?? url;
     return stripped.split('?')[0] ?? stripped;
@@ -54,7 +56,8 @@ function normalizeExecutableURL(url: string): string {
   try {
     return trimExecutableExtension(new URL(url)).href;
   } catch (_e) {
-    return url;
+    // Handle non-URL identifiers like @cardstack/catalog/foo.gts
+    return url.replace(/\.(gts|ts|js|gjs)$/, '');
   }
 }
 
@@ -769,6 +772,11 @@ export class CachingDefinitionLookup implements DefinitionLookup {
 
   private normalizeDependencyForLookup(dep: string, relativeTo: URL): string {
     let canonical = canonicalURL(dep, relativeTo.href);
+    // For registered prefix deps (e.g. @cardstack/catalog/foo.gts),
+    // trim executable extensions without URL parsing
+    if (isRegisteredPrefix(canonical)) {
+      return canonical.replace(/\.(gts|ts|js|gjs)$/, '');
+    }
     try {
       let url = new URL(canonical);
       if (hasExecutableExtension(url.href)) {

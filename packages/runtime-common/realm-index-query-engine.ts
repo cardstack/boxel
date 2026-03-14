@@ -9,6 +9,7 @@ import {
   maxLinkDepth,
   maybeURL,
   resolveCardReference,
+  isRegisteredPrefix,
   IndexQueryEngine,
   codeRefWithAbsoluteURL,
   logger,
@@ -1038,6 +1039,11 @@ function relativizeResource(
     setURL(maybeRelativeURL(urlObj, primaryURL, realmURL));
   });
   visitModuleDeps(resource, (moduleURL, setModuleURL) => {
+    // Registered prefix references (e.g. @cardstack/catalog/foo) are already
+    // in their canonical portable form — don't resolve or relativize them.
+    if (isRegisteredPrefix(moduleURL)) {
+      return;
+    }
     let absoluteModuleURL = new URL(
       resolveCardReference(moduleURL, resource.id ?? primaryURL),
     );
