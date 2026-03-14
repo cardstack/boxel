@@ -1,9 +1,9 @@
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { join, relative, resolve } from 'node:path';
 
-import * as jwt from 'jsonwebtoken';
 import { Client as PgClient } from 'pg';
 import type { RealmAction } from '../../runtime-common/index';
 
@@ -138,12 +138,13 @@ const DEFAULT_PERMISSIONS: RealmPermissions = {
   '*': ['read'],
   [DEFAULT_REALM_OWNER]: ['read', 'write', 'realm-owner'],
 };
-const managedProcessStdio: ['ignore', 'inherit', 'inherit', 'ipc'] | [
-  'ignore',
-  'ignore',
-  'ignore',
-  'ipc',
-] =
+const require = createRequire(import.meta.url);
+const { sign: signJWT } =
+  require('jsonwebtoken') as typeof import('jsonwebtoken');
+
+const managedProcessStdio:
+  | ['ignore', 'inherit', 'inherit', 'ipc']
+  | ['ignore', 'ignore', 'ignore', 'ipc'] =
   process.env.SOFTWARE_FACTORY_DEBUG_SERVER === '1'
     ? ['ignore', 'inherit', 'inherit', 'ipc']
     : ['ignore', 'ignore', 'ignore', 'ipc'];
@@ -706,7 +707,7 @@ function buildRealmToken(
     'realm-owner',
   ],
 ): string {
-  return jwt.sign(
+  return signJWT(
     {
       user,
       realm: realmURL.href,
