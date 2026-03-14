@@ -5,7 +5,7 @@ import {
 } from '@cardstack/runtime-common';
 import type { BotTriggerContent } from 'https://cardstack.com/base/matrix-event';
 import { createHash } from 'node:crypto';
-import type { GitHubClient } from './github';
+import type { GitHubClient, OpenPullRequestResult } from './github';
 
 const log = logger('bot-runner:create-listing-pr');
 
@@ -22,6 +22,14 @@ interface CreateListingPRContext {
   title: string;
   listingDisplayName: string;
   roomId: string;
+}
+
+export interface CreatedListingPRResult {
+  prNumber: number;
+  prUrl: string;
+  prTitle: string;
+  branchName: string;
+  summary: string | null;
 }
 
 function getCreateListingPRContext(
@@ -126,15 +134,15 @@ export class CreateListingPRHandler {
     runAs: string,
     runCommandResult?: RunCommandResponse | null,
     submissionCardUrl?: string | null,
-  ): Promise<void> {
+  ): Promise<CreatedListingPRResult | null> {
     let context = getCreateListingPRContext(eventContent);
     if (!context) {
-      return;
+      return null;
     }
     let { owner, repoName, repo, head, title, listingDisplayName } = context;
 
     try {
-      let body = await this.getSubmissionSummary(
+      let summary = await this.getSubmissionSummary(
         eventContent,
         runAs,
         runCommandResult,
@@ -146,7 +154,7 @@ export class CreateListingPRHandler {
         title,
         head,
         base: DEFAULT_BASE_BRANCH,
-        body: body ?? undefined,
+        body: summary ?? undefined,
       };
       let result = await this.githubClient.openPullRequest(prParams);
 
@@ -155,6 +163,7 @@ export class CreateListingPRHandler {
         repo,
         prUrl: result.html_url,
       });
+      return mapOpenPullRequestResult(result, title, head, summary);
     } catch (error) {
       let message = error instanceof Error ? error.message : String(error);
       if (message.includes('No commits between')) {
@@ -165,7 +174,7 @@ export class CreateListingPRHandler {
           listingDisplayName,
           error: message,
         });
-        return;
+        return null;
       }
 
       if (message.includes('A pull request already exists')) {
@@ -175,7 +184,7 @@ export class CreateListingPRHandler {
           head,
           error: message,
         });
-        return;
+        return null;
       }
 
       log.error('failed to open PR from pr-listing-create trigger', {
@@ -224,6 +233,21 @@ export class CreateListingPRHandler {
         : []),
     ].join('\n');
   }
+}
+
+function mapOpenPullRequestResult(
+  result: OpenPullRequestResult,
+  prTitle: string,
+  branchName: string,
+  summary: string | null,
+): CreatedListingPRResult {
+  return {
+    prNumber: result.number,
+    prUrl: result.html_url,
+    prTitle,
+    branchName,
+    summary,
+  };
 }
 
 async function getContentsFromRealm(cardResultString?: string | null): Promise<{

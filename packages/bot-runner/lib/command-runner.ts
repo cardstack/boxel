@@ -11,16 +11,22 @@ import {
 import { enqueueRunCommandJob } from '@cardstack/runtime-common/jobs/run-command';
 import {
   CreateListingPRHandler,
+  type CreatedListingPRResult,
   type BotTriggerEventContent,
 } from './create-listing-pr-handler';
 import type { GitHubClient } from './github';
 
 const log = logger('bot-runner');
+const CREATE_PR_CARD_COMMAND =
+  '@cardstack/catalog/commands/create-pr-card/default';
+const PATCH_CARD_INSTANCE_COMMAND =
+  '@cardstack/boxel-host/commands/patch-card-instance/default';
 
 export class CommandRunner {
   private createListingPRHandler: CreateListingPRHandler;
 
   constructor(
+    private submissionBotUserId: string,
     private dbAdapter: DBAdapter,
     private queuePublisher: QueuePublisher,
     githubClient: GitHubClient,
@@ -94,12 +100,20 @@ export class CommandRunner {
           eventContent,
           result,
         );
-        await this.createListingPRHandler.openCreateListingPR(
+        let prResult = await this.createListingPRHandler.openCreateListingPR(
           eventContent,
           runAs,
           result,
           submissionCardUrl,
         );
+        if (prResult && submissionCardUrl) {
+          await this.createAndLinkPrCard({
+            runAs,
+            realmURL,
+            submissionCardUrl,
+            prResult,
+          });
+        }
         return result;
       }
 
@@ -145,6 +159,53 @@ export class CommandRunner {
     return await job.done;
   }
 
+  private async createAndLinkPrCard({
+    runAs,
+    realmURL,
+    submissionCardUrl,
+    prResult,
+  }: {
+    runAs: string;
+    realmURL: string;
+    submissionCardUrl: string;
+    prResult: CreatedListingPRResult;
+  }): Promise<void> {
+    let submissionRealm = new URL('/submissions/', realmURL).href;
+    let prCardResult = await this.enqueueRunCommand({
+      runAs: this.submissionBotUserId,
+      realmURL: submissionRealm,
+      command: CREATE_PR_CARD_COMMAND,
+        commandInput: {
+          realm: submissionRealm,
+          prNumber: prResult.prNumber,
+          prUrl: prResult.prUrl,
+          prTitle: prResult.prTitle,
+          branchName: prResult.branchName,
+          prSummary: prResult.summary,
+          submittedBy: runAs,
+        },
+      });
+
+    let prCardUrl = getCardUrl(prCardResult.cardResultString);
+    await this.enqueueRunCommand({
+      runAs,
+      realmURL,
+      command: PATCH_CARD_INSTANCE_COMMAND,
+      commandInput: {
+        cardId: submissionCardUrl,
+        patch: {
+          relationships: {
+            prCard: {
+              links: {
+                self: prCardUrl,
+              },
+            },
+          },
+        },
+      },
+    });
+  }
+
   private async getCommandsForRegistration(
     registrationId: string,
   ): Promise<{ type: string; command: string }[]> {
@@ -168,7 +229,7 @@ export class CommandRunner {
   }
 }
 
-function getSubmissionCardUrl(
+function getCardUrl(
   cardResultString?: string | null,
 ): string | null {
   if (!cardResultString || !cardResultString.trim()) {
@@ -181,4 +242,10 @@ function getSubmissionCardUrl(
   } catch {
     return null;
   }
+}
+
+function getSubmissionCardUrl(
+  cardResultString?: string | null,
+): string | null {
+  return getCardUrl(cardResultString);
 }
