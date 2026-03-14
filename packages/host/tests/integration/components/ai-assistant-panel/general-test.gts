@@ -857,6 +857,39 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
     assert.dom('[data-test-credits-added]').exists();
   });
 
+  test('it does not claim credits added when balance is already sufficient', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+
+    let billingService = getService('billing-service');
+    let attributes = {
+      creditsAvailableInPlanAllowance: 20,
+      extraCreditsAvailableInBalance: 0,
+    };
+
+    billingService.fetchSubscriptionData = async () => {
+      return new Response(JSON.stringify({ data: { attributes } }));
+    };
+
+    await billingService.loadSubscriptionData();
+    await settled();
+
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: 'You need a minimum of 10 credits to continue using the AI bot. Please upgrade to a larger plan, or top up your account.',
+      msgtype: 'm.text',
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      errorMessage:
+        'You need a minimum of 10 credits to continue using the AI bot. Please upgrade to a larger plan, or top up your account.',
+    });
+
+    await waitFor('[data-test-message-idx="0"]');
+    assert.dom('[data-test-alert-action-button="Retry"]').exists();
+    assert.dom('[data-test-credits-added]').doesNotExist();
+    assert
+      .dom('[data-test-alert-action-button="Buy More Credits"]')
+      .doesNotExist();
+  });
+
   test('it can retry a message when receiving an error from the AI bot', async function (assert) {
     let roomId = await renderAiAssistantPanel();
 
