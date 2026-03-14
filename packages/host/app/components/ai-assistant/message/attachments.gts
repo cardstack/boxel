@@ -1,6 +1,9 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
-import type { getCardCollection } from '@cardstack/runtime-common';
+import type {
+  CardErrorJSONAPI,
+  getCardCollection,
+} from '@cardstack/runtime-common';
 
 import CardPill from '@cardstack/host/components/card-pill';
 import FilePill from '@cardstack/host/components/file-pill';
@@ -26,6 +29,58 @@ function findAttachedCardAsFile(
   return attachedCardsAsFiles?.find((file) => file.sourceUrl === card.id);
 }
 
+function cardErrorId(cardError: CardErrorJSONAPI) {
+  return cardError.id ?? '';
+}
+
+function cardErrorRealm(cardError: CardErrorJSONAPI) {
+  if (cardError.realm) {
+    return cardError.realm;
+  }
+
+  let id = cardError.id;
+  if (!id) {
+    return '';
+  }
+
+  try {
+    let url = new URL(id);
+    let lastSlashIndex = url.pathname.lastIndexOf('/');
+    let pathname =
+      lastSlashIndex >= 0 ? url.pathname.slice(0, lastSlashIndex + 1) : '/';
+    return `${url.origin}${pathname}`;
+  } catch {
+    return id;
+  }
+}
+
+function cardErrorDisplayTitle(cardError: CardErrorJSONAPI) {
+  if (cardError.meta.cardTitle) {
+    return cardError.meta.cardTitle;
+  }
+
+  let id = cardError.id;
+  if (!id) {
+    return 'Unavailable card';
+  }
+
+  let path = id;
+  try {
+    path = new URL(id).pathname;
+  } catch {
+    // ignore invalid urls
+  }
+
+  if (path.startsWith('/')) {
+    path = path.slice(1);
+  }
+
+  let segments = path.split('/').filter(Boolean);
+  let label = segments.slice(-2).join('/');
+
+  return label.replace(/\.[^.]+$/, '') || 'Unavailable card';
+}
+
 const Attachments: TemplateOnlyComponent<Signature> = <template>
   <ul class='items' data-test-message-items>
     {{#each @items as |item|}}
@@ -44,6 +99,19 @@ const Attachments: TemplateOnlyComponent<Signature> = <template>
                 @fileActionsEnabled={{if file true false}}
               />
             {{/let}}
+          </li>
+        {{/each}}
+        {{#each item.cardErrors as |cardError|}}
+          <li>
+            <CardPill
+              @cardId={{cardErrorId cardError}}
+              @displayTitle={{cardErrorDisplayTitle cardError}}
+              @borderType='solid'
+              @showErrorIcon={{true}}
+              @urlForRealmLookup={{cardErrorRealm cardError}}
+              title={{cardError.id}}
+              data-test-attached-card-error={{cardErrorId cardError}}
+            />
           </li>
         {{/each}}
       {{else}}

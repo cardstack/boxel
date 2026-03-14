@@ -256,6 +256,6 @@ export default class RoomMessage extends Component<Signature> {
     if (this.attachedCardCollection?.cardErrors.length === 0) {
       return undefined;
     }
-    return 'Error rendering attached cards.';
+    return undefined;
   }
 }

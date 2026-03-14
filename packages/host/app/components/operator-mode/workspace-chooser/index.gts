@@ -41,10 +41,7 @@ export default class WorkspaceChooser extends Component<Signature> {
         <span class='workspace-chooser__title'>Your Workspaces</span>
         <div class='workspace-list' data-test-workspace-list>
           {{#each this.realmServer.userRealmURLs as |realmURL|}}
-            <Workspace
-              @realmURL={{realmURL}}
-              data-test-workspace={{realmURL}}
-            />
+            <Workspace @realmURL={{realmURL}} @showMenu={{true}} />
           {{/each}}
           {{#if this.matrixService.isInitializingNewUser}}
             <WorkspaceLoadingIndicator />
