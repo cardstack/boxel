@@ -149,7 +149,6 @@ export default class ListingCreateCommand extends HostBaseCommand<
     if (!listingId) {
       throw new Error('Failed to create listing card (no localId)');
     }
-    await this.operatorModeStateService.openCardInInteractMode(listingId);
 
     const commandModule = await this.loadCommandModule();
     const listingCard = listing as CardAPI.CardDef; // ensure correct type
