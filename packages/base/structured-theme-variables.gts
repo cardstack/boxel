@@ -450,7 +450,6 @@ export default class ThemeVarField extends FieldDef {
   @field trackingNormal = contains(CSSValueField, {
     description: 'Specifies letter-spacing base value.',
   });
-
   // box-shadow variables
   @field shadow2xs = contains(CSSValueField, {
     description: 'Smallest shadow depth.',
