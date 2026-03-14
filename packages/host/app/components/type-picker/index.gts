@@ -9,6 +9,12 @@ interface Signature {
     selected: PickerOption[];
     onChange: (selected: PickerOption[]) => void;
     label?: string;
+    onSearchChange?: (term: string) => void;
+    onLoadMore?: () => void;
+    hasMore?: boolean;
+    isLoading?: boolean;
+    isLoadingMore?: boolean;
+    totalCount?: number;
   };
   Blocks: {};
 }
@@ -16,9 +22,13 @@ interface Signature {
 export default class TypePicker extends Component<Signature> {
   @cached
   get selectAllOption() {
+    let count =
+      this.args.totalCount !== undefined
+        ? this.args.totalCount
+        : this.args.options.length;
     return {
       id: 'select-all',
-      label: `Any Type (${this.args.options.length})`,
+      label: `Any Type (${count})`,
       shortLabel: `Any`,
       type: 'select-all',
     };
@@ -34,6 +44,10 @@ export default class TypePicker extends Component<Signature> {
       : [this.selectAllOption];
   }
 
+  get hasServerSearch(): boolean {
+    return !!this.args.onSearchChange;
+  }
+
   <template>
     <Picker
       @label={{if @label @label 'Type'}}
@@ -43,6 +57,12 @@ export default class TypePicker extends Component<Signature> {
       @maxSelectedDisplay={{3}}
       @renderInPlace={{false}}
       @matchTriggerWidth={{false}}
+      @onSearchTermChange={{@onSearchChange}}
+      @disableClientSideSearch={{this.hasServerSearch}}
+      @isLoading={{@isLoading}}
+      @isLoadingMore={{@isLoadingMore}}
+      @hasMore={{@hasMore}}
+      @onLoadMore={{@onLoadMore}}
       data-test-type-picker
     />
   </template>

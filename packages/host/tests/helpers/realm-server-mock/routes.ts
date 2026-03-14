@@ -14,9 +14,10 @@ import {
   type Query,
 } from '@cardstack/runtime-common';
 
-import type {
-  LinkableCollectionDocument,
-  PrerenderedCardCollectionDocument,
+import {
+  makeCardTypeSummaryDoc,
+  type LinkableCollectionDocument,
+  type PrerenderedCardCollectionDocument,
 } from '@cardstack/runtime-common/document-types';
 
 import ENV from '@cardstack/host/config/environment';
@@ -64,6 +65,7 @@ export function getRealmServerRoute(
 export function registerDefaultRoutes() {
   registerSearchRoutes();
   registerInfoRoutes();
+  registerTypesRoutes();
   registerCatalogRoutes();
   registerAuthRoutes();
 }
@@ -200,6 +202,92 @@ function registerInfoRoutes() {
         status: 200,
         headers,
       });
+    },
+  });
+}
+
+function registerTypesRoutes() {
+  registerRealmServerRoute({
+    path: '/_federated-types',
+    handler: async (req) => {
+      let payload;
+      try {
+        payload = await parseSearchRequestPayload(req.clone());
+      } catch (e) {
+        if (e instanceof SearchRequestError) {
+          return buildSearchErrorResponse(e.message);
+        }
+        throw e;
+      }
+
+      let realmList: string[];
+      try {
+        realmList = parseRealmsFromPayload(payload);
+      } catch (e) {
+        if (e instanceof SearchRequestError) {
+          return buildSearchErrorResponse(e.message);
+        }
+        throw e;
+      }
+
+      let searchKey = (payload as Record<string, unknown>).searchKey as
+        | string
+        | undefined;
+      let page = (payload as Record<string, unknown>).page as
+        | { number: number; size: number }
+        | undefined;
+
+      let registry = getTestRealmRegistry();
+      let allEntries: {
+        id: string;
+        type: 'card-type-summary';
+        attributes: { displayName: string; total: number; iconHTML: string };
+        meta: { realmURL: string };
+      }[] = [];
+
+      for (let realmURL of realmList) {
+        let normalizedURL = ensureTrailingSlash(realmURL);
+        let registryEntry = registry.get(normalizedURL);
+        if (registryEntry?.realm) {
+          let summaries =
+            await registryEntry.realm.realmIndexQueryEngine.fetchCardTypeSummary();
+          let doc = makeCardTypeSummaryDoc(summaries);
+          for (let entry of doc.data) {
+            allEntries.push({
+              ...entry,
+              type: 'card-type-summary' as const,
+              meta: { realmURL: normalizedURL },
+            });
+          }
+        }
+      }
+
+      // Apply searchKey filter
+      if (searchKey) {
+        let term = searchKey.toLowerCase();
+        allEntries = allEntries.filter((entry) =>
+          entry.attributes.displayName.toLowerCase().includes(term),
+        );
+      }
+
+      let total = allEntries.length;
+
+      // Apply pagination
+      if (page) {
+        let start = page.number * page.size;
+        allEntries = allEntries.slice(start, start + page.size);
+      }
+
+      return new Response(
+        JSON.stringify({
+          data: allEntries,
+          meta: { page: { total } },
+        }),
+        {
+          status: 200,
+          headers: { 'content-type': SupportedMimeType.CardTypeSummary },
+        },
+      );
     },
   });
 }

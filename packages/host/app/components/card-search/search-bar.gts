@@ -39,6 +39,12 @@ interface Signature {
     typeOptions: PickerOption[];
     selectedTypes: PickerOption[];
     onTypeChange: (selected: PickerOption[]) => void;
+    onTypeSearchChange?: (term: string) => void;
+    onLoadMoreTypes?: () => void;
+    hasMoreTypes?: boolean;
+    isLoadingTypes?: boolean;
+    isLoadingMoreTypes?: boolean;
+    typesTotalCount?: number;
     bottomTreatment?: BoxelInputBottomTreatments;
     state?: 'none' | 'valid' | 'invalid' | 'loading' | 'initial';
     id?: string;
@@ -76,6 +82,12 @@ export default class SearchBar extends Component<Signature> {
           @options={{@typeOptions}}
           @selected={{@selectedTypes}}
           @onChange={{@onTypeChange}}
+          @onSearchChange={{@onTypeSearchChange}}
+          @onLoadMore={{@onLoadMoreTypes}}
+          @hasMore={{@hasMoreTypes}}
+          @isLoading={{@isLoadingTypes}}
+          @isLoadingMore={{@isLoadingMoreTypes}}
+          @totalCount={{@typesTotalCount}}
         />
       </div>
       <div class='search-sheet__search-bar-separator' aria-hidden='true'></div>

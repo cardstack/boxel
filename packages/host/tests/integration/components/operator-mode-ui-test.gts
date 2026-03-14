@@ -907,7 +907,7 @@ module('Integration | operator-mode | ui', function (hooks) {
       );
   });
 
-  test('type options derived from recent cards when no search term, sorted alphabetically', async function (assert) {
+  test('type options derived from realm types when no search term, sorted alphabetically', async function (assert) {
     let recentCardsService = getService('recent-cards-service');
     recentCardsService.add(`${testRealmURL}Pet/mango`);
     recentCardsService.add(`${testRealmURL}Person/fadhlan`);
@@ -931,6 +931,8 @@ module('Integration | operator-mode | ui', function (hooks) {
     // Open type picker dropdown
     await click('[data-test-type-picker] [data-test-boxel-picker-trigger]');
     await waitFor('[data-test-boxel-picker-option-row]');
+    // Wait for all pages to load via infinite scroll
+    await waitFor('[data-test-boxel-picker-option-row="Pet"]');
 
     // "Any Type" (select-all) should be present with count
     assert
@@ -939,20 +941,20 @@ module('Integration | operator-mode | ui', function (hooks) {
     assert
       .dom('[data-test-boxel-picker-option-row="select-all"]')
       .containsText(
-        'Any Type (3)',
-        'select-all shows count of 3 types (Blog Post, Person, Pet)',
+        'Any Type (14)',
+        'select-all shows count of all realm types',
       );
 
-    // Type options should include types from recent cards
+    // Type options should include types from the realm
     assert
       .dom('[data-test-boxel-picker-option-row="Blog Post"]')
-      .exists('Blog Post type option present from recent cards');
+      .exists('Blog Post type option present from realm types');
     assert
       .dom('[data-test-boxel-picker-option-row="Person"]')
-      .exists('Person type option present from recent cards');
+      .exists('Person type option present from realm types');
     assert
       .dom('[data-test-boxel-picker-option-row="Pet"]')
-      .exists('Pet type option present from recent cards');
+      .exists('Pet type option present from realm types');
 
     // Verify alphabetical order
     const optionRows = [
@@ -971,8 +973,8 @@ module('Integration | operator-mode | ui', function (hooks) {
     );
   });
 
-  test('empty state shows no type options besides Any Type', async function (assert) {
-    // Do NOT add any recent cards
+  test('type options show all realm types even without recent cards', async function (assert) {
+    // Do NOT add any recent cards — types still come from the realm
     ctx.setCardInOperatorModeState(`${testRealmURL}grid`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -991,6 +993,8 @@ module('Integration | operator-mode | ui', function (hooks) {
     // Open type picker dropdown
     await click('[data-test-type-picker] [data-test-boxel-picker-trigger]');
     await waitFor('[data-test-boxel-picker-option-row]');
+    // Wait for all pages to load via infinite scroll
+    await waitFor('[data-test-boxel-picker-option-row="Pet"]');
 
     assert
       .dom('[data-test-boxel-picker-option-row="select-all"]')
@@ -998,8 +1002,8 @@ module('Integration | operator-mode | ui', function (hooks) {
     assert
       .dom('[data-test-boxel-picker-option-row="select-all"]')
       .containsText(
-        'Any Type (0)',
-        'select-all shows count of 0 when no types available',
+        'Any Type (14)',
+        'select-all shows count of all realm types',
       );
 
     const nonSelectAllOptions = document.querySelectorAll(
@@ -1007,8 +1011,8 @@ module('Integration | operator-mode | ui', function (hooks) {
     );
     assert.strictEqual(
       nonSelectAllOptions.length,
-      0,
-      'no type options besides Any Type when no cards are available',
+      13,
+      'all realm types are shown even without recent cards',
     );
   });
 
@@ -1036,7 +1040,7 @@ module('Integration | operator-mode | ui', function (hooks) {
 
     // Open type picker and select 'Pet'
     await click('[data-test-type-picker] [data-test-boxel-picker-trigger]');
-    await waitFor('[data-test-boxel-picker-option-row]');
+    await waitFor('[data-test-boxel-picker-option-row="Pet"]');
     await click('[data-test-boxel-picker-option-row="Pet"]');
 
     // Verify selected chip shows 'Pet'
@@ -1082,7 +1086,7 @@ module('Integration | operator-mode | ui', function (hooks) {
 
     // Open type picker and select 'Pet', then 'Person'
     await click('[data-test-type-picker] [data-test-boxel-picker-trigger]');
-    await waitFor('[data-test-boxel-picker-option-row]');
+    await waitFor('[data-test-boxel-picker-option-row="Pet"]');
     await click('[data-test-boxel-picker-option-row="Pet"]');
     await waitFor('[data-test-boxel-picker-option-row]');
     await click('[data-test-boxel-picker-option-row="Person"]');
@@ -1121,71 +1125,6 @@ module('Integration | operator-mode | ui', function (hooks) {
       .exists('BlogPost/1 is visible again after reverting to Any Type');
   });
 
-  test('type options update when search term changes and deduplicate', async function (assert) {
-    let recentCardsService = getService('recent-cards-service');
-    recentCardsService.add(`${testRealmURL}Pet/mango`);
-    recentCardsService.add(`${testRealmURL}Person/fadhlan`);
-
-    ctx.setCardInOperatorModeState(`${testRealmURL}grid`);
-    await renderComponent(
-      class TestDriver extends GlimmerComponent {
-        <template><OperatorMode @onClose={{noop}} /></template>
-      },
-    );
-    await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
-    await click(`[data-test-boxel-filter-list-button="All Cards"]`);
-    await waitFor(`[data-test-cards-grid-item]`);
-
-    // Search for 'Mango' — should match Pet/mango
-    await click(`[data-test-open-search-field]`);
-    await typeIn('[data-test-search-field]', 'Mango');
-    await click('[data-test-search-sheet] .search-sheet-content');
-    await waitFor('[data-test-search-label]', { timeout: 8000 });
-    await settled();
-
-    // Open type picker
-    await click('[data-test-type-picker] [data-test-boxel-picker-trigger]');
-    await waitFor('[data-test-boxel-picker-option-row]');
-
-    // 'Pet' should appear (from search results and/or recent cards, deduplicated)
-    assert
-      .dom('[data-test-boxel-picker-option-row="Pet"]')
-      .exists('Pet type option present');
-    // select-all should show count matching number of type options
-    assert
-      .dom('[data-test-boxel-picker-option-row="select-all"]')
-      .containsText('Any Type (', 'select-all shows type count');
-    // 'Person' should not appear since no Person cards match 'Mango'
-    assert
-      .dom('[data-test-boxel-picker-option-row="Person"]')
-      .doesNotExist('Person type option not present');
-
-    // Verify no duplicate Pet options — count all 'Pet' option rows
-    const petOptions = document.querySelectorAll(
-      '[data-test-boxel-picker-option-row="Pet"]',
-    );
-    assert.strictEqual(petOptions.length, 1, 'Pet type is deduplicated');
-
-    // Close the picker dropdown by clicking the trigger again
-    await click('[data-test-type-picker] [data-test-boxel-picker-trigger]');
-
-    // Change search to 'Fadhlan' — should match Person/fadhlan
-    await fillIn('[data-test-search-field]', '');
-    await typeIn('[data-test-search-field]', 'Fadhlan');
-    await click('[data-test-search-sheet] .search-sheet-content');
-    await waitFor('[data-test-search-label]', { timeout: 8000 });
-    await settled();
-
-    // Open type picker again
-    await click('[data-test-type-picker] [data-test-boxel-picker-trigger]');
-    await waitFor('[data-test-boxel-picker-option-row]');
-
-    // 'Person' should be present (from search results)
-    assert
-      .dom('[data-test-boxel-picker-option-row="Person"]')
-      .exists('Person type option present after search change');
-  });
-
   test('type selection persists when search term changes if type still available', async function (assert) {
     ctx.setCardInOperatorModeState(`${testRealmURL}grid`);
     await renderComponent(
@@ -1206,7 +1145,7 @@ module('Integration | operator-mode | ui', function (hooks) {
 
     // Select 'Pet' type
     await click('[data-test-type-picker] [data-test-boxel-picker-trigger]');
-    await waitFor('[data-test-boxel-picker-option-row]');
+    await waitFor('[data-test-boxel-picker-option-row="Pet"]');
     await click('[data-test-boxel-picker-option-row="Pet"]');
 
     // Verify 'Pet' is selected
@@ -1233,11 +1172,12 @@ module('Integration | operator-mode | ui', function (hooks) {
     await waitFor('[data-test-search-label]', { timeout: 8000 });
     await settled();
 
-    // Pet selection should be gone — reverts to "Any Type"
+    // Pet selection should persist — type options come from the realm,
+    // not search results, so they don't change with search term
     assert
-      .dom('[data-test-type-picker] [data-test-boxel-picker-remove-button]')
-      .doesNotExist(
-        'type selection clears when selected type no longer in results',
+      .dom('[data-test-type-picker] [data-test-boxel-picker-selected-item]')
+      .exists(
+        'type selection persists since type options are realm-level, not search-dependent',
       );
   });
 
@@ -1269,7 +1209,7 @@ module('Integration | operator-mode | ui', function (hooks) {
 
     // Select 'Pet' type
     await click('[data-test-type-picker] [data-test-boxel-picker-trigger]');
-    await waitFor('[data-test-boxel-picker-option-row]');
+    await waitFor('[data-test-boxel-picker-option-row="Pet"]');
     await click('[data-test-boxel-picker-option-row="Pet"]');
 
     // Only Pet cards should be visible in search results

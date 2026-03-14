@@ -2,10 +2,13 @@ import type Owner from '@ember/owner';
 import { scheduleOnce } from '@ember/runloop';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
+import type { ComponentLike } from '@glint/template';
+import { modifier } from 'ember-modifier';
 import type { Select } from 'ember-power-select/components/power-select';
 import { includes } from 'lodash';
 
 import type { Icon } from '../../icons/types.ts';
+import LoadingIndicator from '../loading-indicator/index.gts';
 import { BoxelMultiSelectBasic } from '../multi-select/index.gts';
 import PickerBeforeOptionsWithSearch from './before-options-with-search.gts';
 import PickerOptionRow from './option-row.gts';
@@ -21,19 +24,21 @@ export type PickerOption = {
 
 export interface PickerSignature {
   Args: {
-    // State
+    afterOptionsComponent?: ComponentLike<any>;
+    disableClientSideSearch?: boolean;
     disabled?: boolean;
-    // Display
+    extra?: Record<string, unknown>;
+    hasMore?: boolean;
+    isLoading?: boolean;
+    isLoadingMore?: boolean;
     label: string;
     matchTriggerWidth?: boolean;
     maxSelectedDisplay?: number;
-
     onChange: (selected: PickerOption[]) => void;
-    // Data
+    onLoadMore?: () => void;
+    onSearchTermChange?: (term: string) => void;
     options: PickerOption[];
-
     placeholder?: string;
-
     renderInPlace?: boolean;
     searchPlaceholder?: string;
     selected: PickerOption[];
@@ -42,6 +47,122 @@ export interface PickerSignature {
     default: [PickerOption, Select];
   };
   Element: HTMLElement;
+}
+
+let loadMoreSentinel = modifier(
+  (
+    element: Element,
+    [onLoadMore, isLoadingMore]: [
+      (() => void) | undefined,
+      boolean | undefined,
+    ],
+    { enabled }: { enabled?: boolean },
+  ) => {
+    if (!enabled || !onLoadMore) {
+      return;
+    }
+
+    let optionsList = element
+      .closest('.ember-basic-dropdown-content')
+      ?.querySelector('.ember-power-select-options');
+    if (!optionsList) {
+      return;
+    }
+
+    let handleScroll = () => {
+      if (isLoadingMore) {
+        return;
+      }
+      let { scrollTop, scrollHeight, clientHeight } = optionsList as Element;
+      if (scrollTop + clientHeight >= scrollHeight - 50) {
+        onLoadMore();
+      }
+    };
+
+    optionsList.addEventListener('scroll', handleScroll);
+
+    // Check immediately: if the list is short enough to fit without
+    // scrolling, we're already at the "bottom" and should load more.
+    requestAnimationFrame(() => handleScroll());
+
+    return () => optionsList!.removeEventListener('scroll', handleScroll);
+  },
+);
+
+interface PickerAfterOptionsSignature {
+  Args: {
+    extra?: Record<string, any>;
+    select: Record<string, any>;
+  };
+}
+
+class PickerAfterOptions extends Component<PickerAfterOptionsSignature> {
+  get isLoading(): boolean {
+    return !!this.args.extra?.['isLoading'];
+  }
+
+  get hasMore(): boolean {
+    return !!this.args.extra?.['hasMore'];
+  }
+
+  get isLoadingMore(): boolean {
+    return !!this.args.extra?.['isLoadingMore'];
+  }
+
+  get onLoadMore(): (() => void) | undefined {
+    return this.args.extra?.['onLoadMore'] as (() => void) | undefined;
+  }
+
+  <template>
+    {{#if this.isLoading}}
+      <div class='picker-full-loading-overlay' data-test-picker-loading>
+        <LoadingIndicator class='picker-full-loading-spinner' />
+      </div>
+    {{else if this.hasMore}}
+      <div
+        class='picker-infinite-scroll'
+        {{loadMoreSentinel
+          this.onLoadMore
+          this.isLoadingMore
+          enabled=this.hasMore
+        }}
+        data-test-picker-infinite-scroll
+      >
+        {{#if this.isLoadingMore}}
+          <div class='picker-bottom-loading' data-test-picker-loading-more>
+            <LoadingIndicator class='picker-loading-spinner' />
+          </div>
+        {{/if}}
+      </div>
+    {{/if}}
+
+    {{! template-lint-disable require-scoped-style }}
+    <style>
+      .picker-full-loading-overlay {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--boxel-light);
+      }
+      .picker-full-loading-spinner {
+        width: 24px;
+        height: 24px;
+      }
+      .picker-infinite-scroll {
+        min-height: 1px;
+      }
+      .picker-bottom-loading {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: var(--boxel-sp-xxs) 0;
+      }
+      .picker-loading-spinner {
+        width: 20px;
+        height: 20px;
+      }
+    </style>
+  </template>
 }
 
 export default class Picker extends Component<PickerSignature> {
@@ -86,7 +207,7 @@ export default class Picker extends Component<PickerSignature> {
   // - Then list already-selected options (so they stay visible even if they don't match the term)
   // - Then list unselected options that match the search term, in their original order
   get filteredOptions(): PickerOption[] {
-    if (!this.searchTerm) {
+    if (!this.searchTerm || this.args.disableClientSideSearch) {
       return this.args.options;
     }
 
@@ -134,6 +255,7 @@ export default class Picker extends Component<PickerSignature> {
     });
 
     const selectAll = options.filter((o) => o.type === 'select-all');
+
     return [...selectAll, ...selected, ...unselected];
   }
 
@@ -174,6 +296,7 @@ export default class Picker extends Component<PickerSignature> {
 
   onSearchTermChange = (term: string) => {
     this.searchTerm = term;
+    this.args.onSearchTermChange?.(term);
   };
 
   onOptionHover = (option: PickerOption | null) => {
@@ -198,12 +321,35 @@ export default class Picker extends Component<PickerSignature> {
 
   get extra() {
     return {
+      ...this.args.extra,
       label: this.args.label,
       searchTerm: this.searchTerm,
       searchPlaceholder: this.args.searchPlaceholder,
       onSearchTermChange: this.onSearchTermChange,
       maxSelectedDisplay: this.args.maxSelectedDisplay,
+      isLoading: this.args.isLoading,
+      isLoadingMore: this.args.isLoadingMore,
+      hasMore: this.args.hasMore,
+      onLoadMore: this.args.onLoadMore,
     };
+  }
+
+  get dropdownClass(): string {
+    let cls = 'boxel-picker__dropdown';
+    if (this.args.isLoading) {
+      cls += ' boxel-picker__dropdown--loading';
+    }
+    return cls;
+  }
+
+  get afterOptionsComponent(): ComponentLike<any> | undefined {
+    if (this.args.afterOptionsComponent) {
+      return this.args.afterOptionsComponent;
+    }
+    if (this.args.hasMore !== undefined || this.args.onLoadMore !== undefined) {
+      return PickerAfterOptions;
+    }
+    return undefined;
   }
 
   onChange = (selected: PickerOption[]) => {
@@ -276,7 +422,8 @@ export default class Picker extends Component<PickerSignature> {
       @extra={{this.extra}}
       @triggerComponent={{component this.triggerComponent}}
       @beforeOptionsComponent={{component PickerBeforeOptionsWithSearch}}
-      @dropdownClass='boxel-picker__dropdown'
+      @afterOptionsComponent={{this.afterOptionsComponent}}
+      @dropdownClass={{this.dropdownClass}}
       ...attributes
       as |option|
     >
@@ -299,6 +446,11 @@ export default class Picker extends Component<PickerSignature> {
         background-color: var(--boxel-200);
         margin: var(--boxel-sp-2xs) 0;
         width: 100%;
+      }
+
+      .boxel-picker__dropdown--loading .picker-before-options {
+        position: relative;
+        z-index: 2;
       }
 
       .boxel-picker__dropdown .ember-power-select-option {
