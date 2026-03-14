@@ -1,0 +1,46 @@
+{
+  "name": "Boxel PR Review",
+  "dockerComposeFile": "docker-compose.yml",
+  "service": "app",
+  "workspaceFolder": "/workspaces/boxel",
+
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {
+      "dockerDashComposeVersion": "v2"
+    },
+    "ghcr.io/devcontainers/features/python:1": {
+      "version": "3.11"
+    },
+    "ghcr.io/devcontainers/features/github-cli:1": {}
+  },
+
+  "forwardPorts": [4201, 4206, 8008],
+  "portsAttributes": {
+    "4201": { "label": "Realm Server", "onAutoForward": "silent" },
+    "4206": { "label": "Icons Server", "onAutoForward": "silent" },
+    "8008": { "label": "Matrix/Synapse", "onAutoForward": "silent" }
+  },
+
+  "postCreateCommand": "bash .devcontainer/setup.sh",
+  "postStartCommand": "bash .devcontainer/start-services.sh",
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "cardstack.boxel-tools",
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "typed-ember.glint-vscode"
+      ],
+      "settings": {
+        "terminal.integrated.defaultProfile.linux": "bash"
+      }
+    }
+  },
+
+  "hostRequirements": {
+    "cpus": 4,
+    "memory": "8gb",
+    "storage": "64gb"
+  }
+}
