@@ -10,149 +10,144 @@ import { renderComponent } from '../../helpers/render-component';
 
 import { setupOperatorModeTests } from './operator-mode/setup';
 
-module(
-  'Integration | components | create-listing-modal',
-  function (hooks) {
-    let ctx = setupOperatorModeTests(hooks);
+module('Integration | components | create-listing-modal', function (hooks) {
+  let ctx = setupOperatorModeTests(hooks);
 
-    let noop = () => {};
+  let noop = () => {};
 
-    test('modal is hidden by default', async function (assert) {
-      await renderComponent(
-        class TestDriver extends GlimmerComponent {
-          <template><OperatorMode @onClose={{noop}} /></template>
-        },
-      );
+  test('modal is hidden by default', async function (assert) {
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
 
-      assert.dom('[data-test-create-listing-modal]').doesNotExist();
+    assert.dom('[data-test-create-listing-modal]').doesNotExist();
+  });
+
+  test('modal renders when request is set', async function (assert) {
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+
+    ctx.operatorModeStateService.openCreateListingModal({
+      codeRef: { module: `${testRealmURL}pet`, name: 'Pet' },
+      targetRealm: testRealmURL,
     });
 
-    test('modal renders when request is set', async function (assert) {
-      await renderComponent(
-        class TestDriver extends GlimmerComponent {
-          <template><OperatorMode @onClose={{noop}} /></template>
-        },
-      );
+    await waitFor('[data-test-create-listing-modal]');
 
-      ctx.operatorModeStateService.openCreateListingModal({
-        codeRef: { module: `${testRealmURL}pet`, name: 'Pet' },
-        targetRealm: testRealmURL,
-      });
+    assert.dom('[data-test-create-listing-modal]').exists();
+    assert
+      .dom('[data-test-create-listing-modal]')
+      .includesText('Create Listing');
+  });
 
-      await waitFor('[data-test-create-listing-modal]');
+  test('shows target realm name', async function (assert) {
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
 
-      assert.dom('[data-test-create-listing-modal]').exists();
-      assert
-        .dom('[data-test-create-listing-modal]')
-        .includesText('Create Listing');
+    ctx.operatorModeStateService.openCreateListingModal({
+      codeRef: { module: `${testRealmURL}pet`, name: 'Pet' },
+      targetRealm: testRealmURL,
     });
 
-    test('shows target realm name', async function (assert) {
-      await renderComponent(
-        class TestDriver extends GlimmerComponent {
-          <template><OperatorMode @onClose={{noop}} /></template>
-        },
-      );
+    await waitFor('[data-test-create-listing-modal]');
 
-      ctx.operatorModeStateService.openCreateListingModal({
-        codeRef: { module: `${testRealmURL}pet`, name: 'Pet' },
-        targetRealm: testRealmURL,
-      });
+    assert
+      .dom('[data-test-create-listing-target-realm]')
+      .includesText(ctx.realmName);
+  });
 
-      await waitFor('[data-test-create-listing-modal]');
+  test('source select defaults to definition when no openCardId', async function (assert) {
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
 
-      assert
-        .dom('[data-test-create-listing-target-realm]')
-        .includesText(ctx.realmName);
+    ctx.operatorModeStateService.openCreateListingModal({
+      codeRef: { module: `${testRealmURL}pet`, name: 'Pet' },
+      targetRealm: testRealmURL,
     });
 
-    test('source select defaults to definition when no openCardId', async function (assert) {
-      await renderComponent(
-        class TestDriver extends GlimmerComponent {
-          <template><OperatorMode @onClose={{noop}} /></template>
-        },
-      );
+    await waitFor('[data-test-create-listing-modal]');
 
-      ctx.operatorModeStateService.openCreateListingModal({
-        codeRef: { module: `${testRealmURL}pet`, name: 'Pet' },
-        targetRealm: testRealmURL,
-      });
+    assert
+      .dom(
+        '.ember-power-select-trigger [data-test-create-listing-definition-option]',
+      )
+      .exists('definition option is selected in the trigger');
+  });
 
-      await waitFor('[data-test-create-listing-modal]');
+  test('source select pre-selects instance when openCardId is provided', async function (assert) {
+    let openCardId = `${testRealmURL}Pet/mango`;
 
-      assert
-        .dom(
-          '.ember-power-select-trigger [data-test-create-listing-definition-option]',
-        )
-        .exists('definition option is selected in the trigger');
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+
+    ctx.operatorModeStateService.openCreateListingModal({
+      codeRef: { module: `${testRealmURL}pet`, name: 'Pet' },
+      targetRealm: testRealmURL,
+      openCardId,
     });
 
-    test('source select pre-selects instance when openCardId is provided', async function (assert) {
-      let openCardId = `${testRealmURL}Pet/mango`;
+    await waitFor('[data-test-create-listing-modal]');
 
-      await renderComponent(
-        class TestDriver extends GlimmerComponent {
-          <template><OperatorMode @onClose={{noop}} /></template>
-        },
-      );
+    assert
+      .dom(
+        `.ember-power-select-trigger [data-test-create-listing-instance-option="${openCardId}"]`,
+      )
+      .exists('instance option matching openCardId is selected in the trigger');
+  });
 
-      ctx.operatorModeStateService.openCreateListingModal({
-        codeRef: { module: `${testRealmURL}pet`, name: 'Pet' },
-        targetRealm: testRealmURL,
-        openCardId,
-      });
+  test('cancel button closes modal', async function (assert) {
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
 
-      await waitFor('[data-test-create-listing-modal]');
-
-      assert
-        .dom(
-          `.ember-power-select-trigger [data-test-create-listing-instance-option="${openCardId}"]`,
-        )
-        .exists(
-          'instance option matching openCardId is selected in the trigger',
-        );
+    ctx.operatorModeStateService.openCreateListingModal({
+      codeRef: { module: `${testRealmURL}pet`, name: 'Pet' },
+      targetRealm: testRealmURL,
     });
 
-    test('cancel button closes modal', async function (assert) {
-      await renderComponent(
-        class TestDriver extends GlimmerComponent {
-          <template><OperatorMode @onClose={{noop}} /></template>
-        },
-      );
+    await waitFor('[data-test-create-listing-modal]');
+    await click('[data-test-create-listing-cancel-button]');
 
-      ctx.operatorModeStateService.openCreateListingModal({
-        codeRef: { module: `${testRealmURL}pet`, name: 'Pet' },
-        targetRealm: testRealmURL,
-      });
+    assert.dom('[data-test-create-listing-modal]').doesNotExist();
+  });
 
-      await waitFor('[data-test-create-listing-modal]');
-      await click('[data-test-create-listing-cancel-button]');
+  test('shows error when listing creation fails', async function (assert) {
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
 
-      assert.dom('[data-test-create-listing-modal]').doesNotExist();
+    // Provide an incomplete codeRef (missing 'module') so the create task
+    // fails synchronously with a descriptive error message.
+    ctx.operatorModeStateService.openCreateListingModal({
+      codeRef: { name: 'Pet' } as any,
+      targetRealm: testRealmURL,
     });
 
-    test('shows error when listing creation fails', async function (assert) {
-      await renderComponent(
-        class TestDriver extends GlimmerComponent {
-          <template><OperatorMode @onClose={{noop}} /></template>
-        },
-      );
+    await waitFor('[data-test-create-listing-modal]');
+    await click('[data-test-create-listing-confirm-button]');
 
-      // Provide an incomplete codeRef (missing 'module') so the create task
-      // fails synchronously with a descriptive error message.
-      ctx.operatorModeStateService.openCreateListingModal({
-        codeRef: { name: 'Pet' } as any,
-        targetRealm: testRealmURL,
-      });
+    await waitFor('[data-test-create-listing-error]');
 
-      await waitFor('[data-test-create-listing-modal]');
-      await click('[data-test-create-listing-confirm-button]');
-
-      await waitFor('[data-test-create-listing-error]');
-
-      assert
-        .dom('[data-test-create-listing-error]')
-        .includesText('Cannot create listing without a resolved code ref');
-    });
-  },
-);
+    assert
+      .dom('[data-test-create-listing-error]')
+      .includesText('Cannot create listing without a resolved code ref');
+  });
+});
