@@ -795,7 +795,6 @@ class Fitted extends Component<typeof OpenRouterModel> {
 
     <style scoped>
       .fitted-container {
-        container-type: size;
         width: 100%;
         height: 100%;
         background: var(--boxel-light, #ffffff);
@@ -804,9 +803,19 @@ class Fitted extends Component<typeof OpenRouterModel> {
         font-family: var(--boxel-font-family);
       }
 
-      /* Hide all by default */
-      .badge-format, .strip-format, .tile-format, .card-format {
+      /* Hide non-default formats */
+      .badge-format, .tile-format, .card-format {
         display: none;
+        width: 100%;
+        height: 100%;
+        box-sizing: border-box;
+      }
+
+      /* Strip is the default visible format */
+      .strip-format {
+        display: flex;
+        align-items: center;
+        padding: var(--boxel-sp-xxs) var(--boxel-sp-xs);
         width: 100%;
         height: 100%;
         box-sizing: border-box;
@@ -814,6 +823,7 @@ class Fitted extends Component<typeof OpenRouterModel> {
 
       /* Badge (<=150px, <170px) */
       @container (max-width: 150px) and (max-height: 169px) {
+        .strip-format { display: none; }
         .badge-format {
           display: flex;
           align-items: center;
@@ -827,13 +837,14 @@ class Fitted extends Component<typeof OpenRouterModel> {
         color: var(--boxel-dark);
       }
 
-      /* Strip (>150px, <170px) */
-      @container (min-width: 151px) and (max-height: 169px) {
-        .strip-format {
-          display: flex;
-          align-items: center;
-          padding: var(--boxel-sp-xxs) var(--boxel-sp-xs);
-        }
+      /* Tile (< 400px, >= 170px) — hide strip, show tile */
+      @container (max-width: 399px) and (min-height: 170px) {
+        .strip-format { display: none; }
+      }
+
+      /* Card (>= 400px, >= 170px) — hide strip, show card */
+      @container (min-width: 400px) and (min-height: 170px) {
+        .strip-format { display: none; }
       }
       .strip-content {
         display: flex;

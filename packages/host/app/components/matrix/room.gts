@@ -82,7 +82,7 @@ import AiAssistantAttachmentPicker from '../ai-assistant/attachment-picker';
 import AiAssistantChatInput from '../ai-assistant/chat-input';
 import FocusPill from '../ai-assistant/focus-pill';
 import LLMModeToggle from '../ai-assistant/llm-mode-toggle';
-import LLMSelect from '../ai-assistant/llm-select';
+import LLMSelect, { type LLMOption } from '../ai-assistant/llm-select';
 import { AiAssistantConversation } from '../ai-assistant/message';
 import NewSession from '../ai-assistant/new-session';
 import AiAssistantSkillMenu from '../ai-assistant/skill-menu';
@@ -1055,21 +1055,30 @@ export default class Room extends Component<Signature> {
     return this.args.roomResource.skills;
   }
 
-  private get llmsForSelectMenu() {
-    // Read from the LLM environment card if available
+  private get llmsForSelectMenu(): LLMOption[] {
+    // Read from the system card if available
     let systemCard = this.matrixService.systemCard;
     if (systemCard?.modelConfigurations) {
-      let options: Record<string, string> = {};
+      let options: LLMOption[] = [];
+      let configModelIds = new Set<string>();
       for (let modelConfig of systemCard.modelConfigurations) {
-        if (modelConfig.modelId) {
-          options[modelConfig.modelId] =
-            modelConfig.cardTitle || modelConfig.modelId;
+        if (modelConfig.modelId && modelConfig.id) {
+          options.push({
+            id: modelConfig.id,
+            modelId: modelConfig.modelId,
+            name: modelConfig.cardTitle || modelConfig.modelId,
+          });
+          configModelIds.add(modelConfig.modelId);
         }
       }
-      // Add any used LLMs that aren't already in the options
+      // Add any used LLMs that aren't already covered by a config
       for (let usedLLM of this.args.roomResource.usedLLMs) {
-        if (usedLLM && !options[usedLLM]) {
-          options[usedLLM] = usedLLM; // Use model ID as display name
+        if (usedLLM && !configModelIds.has(usedLLM)) {
+          options.push({
+            id: usedLLM,
+            modelId: usedLLM,
+            name: usedLLM,
+          });
         }
       }
       return options;
@@ -1082,10 +1091,11 @@ export default class Room extends Component<Signature> {
       .filter(Boolean)
       .sort();
 
-    return ids.reduce((acc: Record<string, string>, id) => {
-      acc[id] = DEFAULT_LLM_ID_TO_NAME[id] ?? id;
-      return acc;
-    }, {});
+    return ids.map((id) => ({
+      id,
+      modelId: id,
+      name: DEFAULT_LLM_ID_TO_NAME[id] ?? id,
+    }));
   }
 
   private get systemCardId(): string | undefined {

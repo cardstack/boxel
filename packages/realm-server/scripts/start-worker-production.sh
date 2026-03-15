@@ -2,8 +2,8 @@
 
 DEFAULT_CATALOG_REALM_URL='https://app.boxel.ai/catalog/'
 CATALOG_REALM_URL="${RESOLVED_CATALOG_REALM_URL:-$DEFAULT_CATALOG_REALM_URL}"
-DEFAULT_NEW_CATALOG_REALM_URL='https://app.boxel.ai/catalog-new/'
-NEW_CATALOG_REALM_URL="${RESOLVED_NEW_CATALOG_REALM_URL:-$DEFAULT_NEW_CATALOG_REALM_URL}"
+DEFAULT_EXTERNAL_CATALOG_REALM_URL='https://app.boxel.ai/external-catalog/'
+EXTERNAL_CATALOG_REALM_URL="${RESOLVED_EXTERNAL_CATALOG_REALM_URL:-$DEFAULT_EXTERNAL_CATALOG_REALM_URL}"
 DEFAULT_SOFTWARE_FACTORY_REALM_URL='https://app.boxel.ai/software-factory/'
 SOFTWARE_FACTORY_REALM_URL="${RESOLVED_SOFTWARE_FACTORY_REALM_URL:-$DEFAULT_SOFTWARE_FACTORY_REALM_URL}"
 
@@ -31,11 +31,12 @@ NODE_NO_WARNINGS=1 \
   --fromUrl='https://app.boxel.ai/skills/' \
   --toUrl='https://app.boxel.ai/skills/' \
   \
-  --fromUrl="${NEW_CATALOG_REALM_URL}" \
-  --toUrl="${NEW_CATALOG_REALM_URL}" \
+  --fromUrl="${EXTERNAL_CATALOG_REALM_URL}" \
+  --toUrl="${EXTERNAL_CATALOG_REALM_URL}" \
   \
   --fromUrl='@cardstack/openrouter/' \
   --toUrl='https://app.boxel.ai/openrouter/' \
   \
   --fromUrl="${SOFTWARE_FACTORY_REALM_URL}" \
   --toUrl="${SOFTWARE_FACTORY_REALM_URL}"
+  
