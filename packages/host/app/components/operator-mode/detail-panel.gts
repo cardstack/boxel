@@ -39,7 +39,7 @@ import {
   type CardErrorJSONAPI,
 } from '@cardstack/runtime-common';
 
-import ListingCreateCommand from '@cardstack/host/commands/listing-create';
+import OpenCreateListingModalCommand from '@cardstack/host/commands/open-create-listing-modal';
 import { getCardType } from '@cardstack/host/resources/card-type';
 import type { Ready } from '@cardstack/host/resources/file';
 
@@ -301,6 +301,11 @@ export default class DetailPanel extends Component<Signature> {
       ...(this.realm.canWrite(this.args.readyFile.url)
         ? [
             {
+              label: 'Create Listing',
+              icon: Package,
+              handler: this.createListingWithAI,
+            },
+            {
               label: 'Delete',
               icon: IconTrash,
               handler: () => this.args.delete(this.args.cardInstance),
@@ -416,21 +421,30 @@ export default class DetailPanel extends Component<Signature> {
   }
 
   @action private async createListingWithAI() {
-    const command = new ListingCreateCommand(
+    const command = new OpenCreateListingModalCommand(
       this.commandService.commandContext,
     );
-    let codeRef: ResolvedCodeRef = this.selectedDeclarationAsCodeRef;
-    if (!codeRef) {
-      throw new Error('codeRef is required to create listing');
-    }
     const targetRealm = this.operatorModeStateService.realmURL;
     if (!targetRealm) {
       throw new Error('targetRealm is required to create listing');
     }
-    await command.execute({
-      codeRef,
-      targetRealm,
-    });
+    if (this.isCardInstance) {
+      const openCardId = this.args.readyFile.url;
+      const codeRef = this.cardInstanceType?.type
+        ? getResolvedCodeRefFromType(this.cardInstanceType.type)
+        : undefined;
+      if (!codeRef) {
+        throw new Error('Cannot create listing: card type not yet loaded');
+      }
+      await command.execute({ openCardId, codeRef, targetRealm });
+    } else {
+      const codeRef: ResolvedCodeRef = this.selectedDeclarationAsCodeRef;
+      await command.execute({
+        codeRef,
+        openCardId: this.args.cardInstance?.id,
+        targetRealm,
+      });
+    }
   }
 
   private get selectedDeclarationAsCodeRef(): ResolvedCodeRef {
