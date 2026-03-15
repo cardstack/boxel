@@ -78,7 +78,11 @@ export default class CreateListingModal extends Component<Signature> {
         targetRealm: request.targetRealm,
         openCardId: this.activeOpenCardId ?? undefined,
       });
-      this.operatorModeStateService.closeCreateListingModal();
+      // Only close if the request hasn't been replaced by a newer one while
+      // the task was running (e.g. user dismissed and reopened for a different card).
+      if (this.request === request) {
+        this.operatorModeStateService.closeCreateListingModal();
+      }
     } catch (error) {
       this.errorMessage =
         error instanceof Error ? error.message : 'Failed to create listing';
@@ -175,6 +179,8 @@ export default class CreateListingModal extends Component<Signature> {
 
   @action private onClose() {
     this.errorMessage = undefined;
+    this._userSelectedKey = undefined;
+    this._userSelectedValue = null;
     this.operatorModeStateService.closeCreateListingModal();
   }
 
