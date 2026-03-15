@@ -429,7 +429,7 @@ export default class DetailPanel extends Component<Signature> {
       throw new Error('targetRealm is required to create listing');
     }
     if (this.isCardInstance) {
-      const openCardId = this.args.readyFile.url;
+      const openCardId = this.args.cardInstance?.id;
       const codeRef = this.cardInstanceType?.type
         ? getResolvedCodeRefFromType(this.cardInstanceType.type)
         : undefined;
