@@ -208,10 +208,22 @@ export const realmServerTestMatrix: MatrixConfig = {
 export const realmServerSecretSeed = "mum's the word";
 export const realmSecretSeed = `shhh! it's a secret`;
 export const grafanaSecret = `shhh! it's a secret`;
-export const matrixRegistrationSecret: string =
-  getSynapseConfig()?.registration_shared_secret ??
-  process.env.MATRIX_REGISTRATION_SHARED_SECRET ??
-  'software-factory-no-matrix';
+
+function getMatrixRegistrationSecret(): string {
+  let secret =
+    getSynapseConfig()?.registration_shared_secret ??
+    process.env.MATRIX_REGISTRATION_SHARED_SECRET;
+
+  if (!secret) {
+    throw new Error(
+      'Missing Matrix registration shared secret. Start Synapse first or set MATRIX_REGISTRATION_SHARED_SECRET.',
+    );
+  }
+
+  return secret;
+}
+
+export const matrixRegistrationSecret = getMatrixRegistrationSecret();
 export const testCreatePrerenderAuth =
   buildCreatePrerenderAuth(realmSecretSeed);
 

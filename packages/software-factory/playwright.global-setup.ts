@@ -1,16 +1,11 @@
 import { spawn } from 'node:child_process';
-import {
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  defaultSupportMetadataFile,
   sharedRuntimeDir,
+  writeSupportMetadata,
+  getSupportMetadataFile,
 } from './src/runtime-metadata.ts';
 
 const packageRoot = resolve(fileURLToPath(new URL('.', import.meta.url)));
@@ -79,7 +74,11 @@ async function waitForMetadataFile<T>(
 
   while (Date.now() - startedAt < timeoutMs) {
     if (existsSync(metadataFile)) {
-      return JSON.parse(readFileSync(metadataFile, 'utf8')) as T;
+      try {
+        return JSON.parse(readFileSync(metadataFile, 'utf8')) as T;
+      } catch {
+        // Retry until the writer finishes or timeout is reached.
+      }
     }
 
     if (child.exitCode !== null) {
@@ -99,6 +98,7 @@ async function waitForMetadataFile<T>(
 export default async function globalSetup() {
   rmSync(sharedRuntimeDir, { recursive: true, force: true });
   mkdirSync(sharedRuntimeDir, { recursive: true });
+  let metadataFile = getSupportMetadataFile();
 
   let logs = '';
   let child = spawn('pnpm', ['serve:support', realmDir], {
@@ -107,8 +107,7 @@ export default async function globalSetup() {
     stdio: ['ignore', 'pipe', 'pipe'],
     env: {
       ...process.env,
-      SOFTWARE_FACTORY_METADATA_FILE: defaultSupportMetadataFile,
-      SOFTWARE_FACTORY_SUPPORT_METADATA_FILE: defaultSupportMetadataFile,
+      SOFTWARE_FACTORY_SUPPORT_METADATA_FILE: metadataFile,
       SOFTWARE_FACTORY_SOURCE_REALM_DIR: testSourceRealmDir,
     },
   });
@@ -123,7 +122,7 @@ export default async function globalSetup() {
   let payload = await waitForMetadataFile<{
     realmDir: string;
     context: Record<string, unknown>;
-  }>(defaultSupportMetadataFile, child, () => logs);
+  }>(metadataFile, child, () => logs);
 
   let cacheLogs = '';
   let cacheChild = spawn('pnpm', ['cache:prepare', realmDir], {
@@ -145,15 +144,8 @@ export default async function globalSetup() {
 
   await waitForCommand(cacheChild, () => cacheLogs);
 
-  writeFileSync(
-    defaultSupportMetadataFile,
-    JSON.stringify(
-      {
-        ...payload,
-        pid: child.pid,
-      },
-      null,
-      2,
-    ),
-  );
+  writeSupportMetadata({
+    ...payload,
+    pid: child.pid,
+  });
 }

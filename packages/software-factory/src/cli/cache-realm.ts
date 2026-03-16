@@ -1,18 +1,21 @@
-// @ts-nocheck
 import { writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import { ensureFactoryRealmTemplate } from '../harness.ts';
+import {
+  ensureFactoryRealmTemplate,
+  type FactoryRealmOptions,
+} from '../harness.ts';
 import { readSupportContext } from '../runtime-metadata.ts';
 
 let realmDir = resolve(
   process.cwd(),
   process.argv[2] ?? 'test-fixtures/darkfactory-adopter',
 );
+let serializedSupportContext = process.env.SOFTWARE_FACTORY_CONTEXT;
 
-let supportContext = process.env.SOFTWARE_FACTORY_CONTEXT
-  ? JSON.parse(process.env.SOFTWARE_FACTORY_CONTEXT)
-  : readSupportContext();
+let supportContext: FactoryRealmOptions['context'] = serializedSupportContext
+  ? (JSON.parse(serializedSupportContext) as FactoryRealmOptions['context'])
+  : (readSupportContext() as FactoryRealmOptions['context']);
 
 try {
   let template = await ensureFactoryRealmTemplate({

@@ -1,6 +1,6 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 
 export const sharedRuntimeDir = join(tmpdir(), 'software-factory-runtime');
 export const defaultSupportMetadataFile = join(
@@ -11,19 +11,49 @@ export const defaultSupportMetadataFile = join(
 export function getSupportMetadataFile() {
   return (
     process.env.SOFTWARE_FACTORY_SUPPORT_METADATA_FILE ??
+    process.env.SOFTWARE_FACTORY_METADATA_FILE ??
     defaultSupportMetadataFile
   );
 }
 
-export function readSupportContext(): Record<string, unknown> | undefined {
+export function readSupportMetadata():
+  | {
+      context?: Record<string, unknown>;
+      pid?: number;
+      realmDir?: string;
+    }
+  | undefined {
   let metadataFile = getSupportMetadataFile();
   if (!existsSync(metadataFile)) {
     return undefined;
   }
 
-  let metadata = JSON.parse(readFileSync(metadataFile, 'utf8')) as {
-    context?: Record<string, unknown>;
-  };
+  try {
+    return JSON.parse(readFileSync(metadataFile, 'utf8')) as {
+      context?: Record<string, unknown>;
+      pid?: number;
+      realmDir?: string;
+    };
+  } catch (error) {
+    throw new Error(
+      `Unable to parse software-factory support metadata at ${metadataFile}: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+  }
+}
 
-  return metadata.context;
+export function readSupportContext(): Record<string, unknown> | undefined {
+  return readSupportMetadata()?.context;
+}
+
+export function writeSupportMetadata(payload: unknown): void {
+  let metadataFile = getSupportMetadataFile();
+  let tempFile = join(
+    dirname(metadataFile),
+    `.support.${process.pid}.${Date.now()}.tmp`,
+  );
+
+  writeFileSync(tempFile, JSON.stringify(payload, null, 2));
+  renameSync(tempFile, metadataFile);
 }

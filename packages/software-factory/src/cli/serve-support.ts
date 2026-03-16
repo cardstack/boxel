@@ -1,19 +1,13 @@
-// @ts-nocheck
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import { startFactorySupportServices } from '../harness.ts';
-import {
-  defaultSupportMetadataFile,
-  sharedRuntimeDir,
-} from '../runtime-metadata.ts';
+import { sharedRuntimeDir, writeSupportMetadata } from '../runtime-metadata.ts';
 
 let realmDir = resolve(
   process.cwd(),
   process.argv[2] ?? 'test-fixtures/darkfactory-adopter',
 );
-let metadataFile =
-  process.env.SOFTWARE_FACTORY_METADATA_FILE ?? defaultSupportMetadataFile;
 
 try {
   let support = await startFactorySupportServices();
@@ -24,7 +18,7 @@ try {
   };
 
   mkdirSync(sharedRuntimeDir, { recursive: true });
-  writeFileSync(metadataFile, JSON.stringify(payload, null, 2));
+  writeSupportMetadata(payload);
 
   console.log(JSON.stringify(payload, null, 2));
 

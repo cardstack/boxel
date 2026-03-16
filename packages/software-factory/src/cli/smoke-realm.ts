@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { resolve } from 'node:path';
 
 import { fetchRealmCardJson } from '../harness.ts';

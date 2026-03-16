@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { readSupportContext } from '../runtime-metadata.ts';
 import { writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
