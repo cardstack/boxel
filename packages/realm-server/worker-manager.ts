@@ -119,7 +119,13 @@ let {
 let isReady = false;
 let isExiting = false;
 let workers: ChildProcess[] = [];
-let eventSink = new IndexingEventSink();
+function isIndexingDashboardEnabled(): boolean {
+  return !ECS_CONTAINER_METADATA_URI;
+}
+
+let eventSink: IndexingEventSink | undefined = isIndexingDashboardEnabled()
+  ? new IndexingEventSink()
+  : undefined;
 
 process.on('SIGINT', () => (isExiting = true));
 process.on('SIGTERM', () => (isExiting = true));
@@ -146,7 +152,7 @@ if (port != null) {
     ctxt.body = JSON.stringify(result);
     ctxt.status = isReady ? 200 : 503;
   });
-  if (!ECS_CONTAINER_METADATA_URI) {
+  if (eventSink) {
     router.get('/_indexing-dashboard', async (ctxt: Koa.Context) => {
       ctxt.set('Content-Type', 'text/html; charset=utf-8');
       ctxt.body = renderIndexingDashboard(eventSink.getSnapshot());
@@ -546,12 +552,19 @@ async function startWorker(
             (worker as any).__boxelIndexState = undefined;
           }
         } else if (
+          eventSink &&
           typeof message === 'string' &&
           message.startsWith('progress|')
         ) {
-          let payload = message.substring('progress|'.length);
-          let progressEvent = JSON.parse(payload) as IndexingProgressEvent;
-          eventSink.handleEvent(progressEvent);
+          try {
+            let payload = message.substring('progress|'.length);
+            let progressEvent = JSON.parse(
+              payload,
+            ) as IndexingProgressEvent;
+            eventSink.handleEvent(progressEvent);
+          } catch (e) {
+            log.error(`Failed to parse progress event: ${e}`);
+          }
         }
       });
     }),
