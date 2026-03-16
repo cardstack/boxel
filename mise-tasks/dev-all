@@ -52,7 +52,8 @@ cleanup_host() {
 trap cleanup_host EXIT INT TERM
 
 echo "Waiting for host app at ${HOST_URL}..."
-wait-on "$HOST_URL" --timeout 120000
+until [ "$(curl -s -o /dev/null -w '%{http_code}' "$HOST_URL" 2>/dev/null)" = "200" ]; do sleep 2; done
+echo "Host app is ready."
 
 WAIT_ON_TIMEOUT=2400000 NODE_NO_WARNINGS=1 start-server-and-test \
   'run-p -ln start:pg start:matrix start:smtp start:prerender-dev start:prerender-manager-dev start:worker-development start:development' \
