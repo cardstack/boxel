@@ -176,6 +176,13 @@ export {
   isCardErrorJSONAPI,
 } from './error';
 export { validateWriteSize } from './write-size-validation';
+export {
+  registerCardReferencePrefix,
+  resolveCardReference,
+  unresolveCardReference,
+  isRegisteredPrefix,
+  cardIdToURL,
+} from './card-reference-resolver';
 
 export interface ResourceObject {
   type: string;

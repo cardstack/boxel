@@ -29,6 +29,7 @@ import {
   humanReadable,
   identifyCard,
   isRegisteredPrefix,
+  cardIdToURL,
   isSingleCardDocument,
   isSingleFileMetaDocument,
   loadCardDef,
@@ -112,7 +113,7 @@ export async function cardClassFromResource<CardT extends BaseDefConstructor>(
       {
         loader: myLoader(),
         relativeTo:
-          relativeTo ?? (resource.id ? new URL(resource.id) : undefined),
+          relativeTo ?? (resource.id ? cardIdToURL(resource.id) : undefined),
       },
     );
     if (!card) {
@@ -216,7 +217,7 @@ export function serializeCard(
   };
   let modelRelativeTo =
     model.id != null
-      ? new URL(model.id)
+      ? cardIdToURL(model.id)
       : (model[relativeTo] as URL | undefined);
   let data = serializeCardResource(model, doc, {
     ...opts,
@@ -313,7 +314,7 @@ export function serializeFileDef(
   };
   let modelRelativeTo =
     model.id != null
-      ? new URL(model.id)
+      ? cardIdToURL(model.id)
       : (model[relativeTo] as URL | undefined);
   let data = serializeCardResource(
     model,

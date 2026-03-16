@@ -8,7 +8,7 @@ import {
   isResolvedCodeRef,
   executableExtensions,
 } from '../index';
-import { resolveCardReference } from '../card-reference-resolver';
+import { resolveCardReference, cardIdToURL } from '../card-reference-resolver';
 // We only use a subset of SerializeOpts here; accept any to align with the
 // serializer interface without surfacing unused properties.
 import type { SerializeOpts } from 'https://cardstack.com/base/card-api';
@@ -35,7 +35,7 @@ export function serialize(
     opts?.relativeTo instanceof URL
       ? opts.relativeTo
       : doc?.data?.id && typeof doc.data.id === 'string'
-        ? new URL(doc.data.id)
+        ? cardIdToURL(doc.data.id)
         : undefined;
   return {
     ...codeRef,

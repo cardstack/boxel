@@ -6,6 +6,7 @@ import {
   CardError,
   isCardError,
 } from './index';
+import { cardIdToURL } from './card-reference-resolver';
 
 async function loadDocumentWithRequest(
   fetch: typeof globalThis.fetch,
@@ -72,7 +73,7 @@ export async function loadCardDocument(
   fetch: typeof globalThis.fetch,
   url: string,
 ) {
-  let requestURL = new URL(!url.endsWith('.json') ? `${url}.json` : url);
+  let requestURL = cardIdToURL(!url.endsWith('.json') ? `${url}.json` : url);
   let json = await loadDocumentWithRequest(
     fetch,
     url,
@@ -102,7 +103,7 @@ export async function loadFileMetaDocument(
   fetch: typeof globalThis.fetch,
   url: string,
 ): Promise<SingleFileMetaDocument | CardError> {
-  let requestURL = new URL(url);
+  let requestURL = cardIdToURL(url);
   let json = await loadDocumentWithRequest(
     fetch,
     url,

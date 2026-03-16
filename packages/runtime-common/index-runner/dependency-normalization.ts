@@ -1,5 +1,8 @@
 import { trimExecutableExtension } from '../index';
-import { isRegisteredPrefix } from '../card-reference-resolver';
+import {
+  isRegisteredPrefix,
+  resolveCardReference,
+} from '../card-reference-resolver';
 import { canonicalURL } from './dependency-url';
 
 export function isExtensionlessPath(url: URL): boolean {
@@ -20,6 +23,23 @@ export function normalizeRelationshipDependency(
   realmURL: URL,
 ): string {
   let canonical = canonicalURL(dep, relativeTo.href);
+  // Prefix-form deps (e.g. @cardstack/catalog/foo) are already canonical.
+  // Resolve to check realm membership and add .json if needed.
+  if (isRegisteredPrefix(canonical)) {
+    let resolved = resolveCardReference(canonical, undefined);
+    try {
+      let parsed = new URL(resolved);
+      if (
+        parsed.href.startsWith(realmURL.href) &&
+        isExtensionlessPath(parsed)
+      ) {
+        return `${canonical}.json`;
+      }
+    } catch (_err) {
+      // fall through
+    }
+    return canonical;
+  }
   try {
     let normalized = new URL(canonical);
     if (
@@ -39,7 +59,10 @@ export function canTraverseRelationshipDependency(
   realmURL: URL,
 ): boolean {
   try {
-    let parsed = new URL(dep);
+    let resolved = isRegisteredPrefix(dep)
+      ? resolveCardReference(dep, undefined)
+      : dep;
+    let parsed = new URL(resolved);
     if (!parsed.href.startsWith(realmURL.href)) {
       return false;
     }

@@ -25,7 +25,7 @@ import {
   hasExecutableExtension,
   trimExecutableExtension,
 } from './index';
-import { isRegisteredPrefix } from './card-reference-resolver';
+import { isRegisteredPrefix, cardIdToURL } from './card-reference-resolver';
 import type { VirtualNetwork } from './virtual-network';
 import { unresolveCardReference } from './card-reference-resolver';
 
@@ -898,7 +898,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
         let base = relativeTo;
         if (error.id) {
           try {
-            base = new URL(error.id);
+            base = cardIdToURL(error.id);
           } catch (_err) {
             base = relativeTo;
           }

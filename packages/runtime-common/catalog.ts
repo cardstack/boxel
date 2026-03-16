@@ -8,6 +8,7 @@ import { resolveAdoptedCodeRef } from './code-ref';
 import { realmURL } from './constants';
 import { logger } from './log';
 import type { LocalPath } from './paths';
+import { cardIdToURL } from './card-reference-resolver';
 
 // @ts-ignore TODO: fix catalog types in runtime-common
 import type { Listing } from '@cardstack/catalog/listing/listing';
@@ -213,10 +214,10 @@ export function planInstanceInstall(
   for (let instance of instances) {
     let sourceCodeRef = resolveAdoptedCodeRef(instance);
     let lid = resolver.local(instance.id);
-    if (baseRealmPath.inRealm(new URL(instance.id))) {
+    if (baseRealmPath.inRealm(cardIdToURL(instance.id))) {
       throw new Error('Cannot install instance from base realm');
     }
-    if (!baseRealmPath.inRealm(new URL(sourceCodeRef.module))) {
+    if (!baseRealmPath.inRealm(cardIdToURL(sourceCodeRef.module))) {
       let targetCodeRef = resolveTargetCodeRef(sourceCodeRef, resolver);
       modulesCopy.push({
         sourceCodeRef,

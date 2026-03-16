@@ -53,3 +53,10 @@ export function unresolveCardReference(resolvedURL: string): string {
   }
   return resolvedURL;
 }
+
+// Converts a card instance ID (which may be a registered prefix like
+// @cardstack/catalog/foo or a regular URL) to a URL object by resolving
+// the prefix to a real URL when needed.
+export function cardIdToURL(id: string): URL {
+  return new URL(resolveCardReference(id, undefined));
+}
