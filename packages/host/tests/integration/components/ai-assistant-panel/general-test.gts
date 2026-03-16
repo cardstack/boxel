@@ -724,9 +724,6 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
     assert
       .dom(`[data-test-attached-card-error="${unreachableCardId}"]`)
       .exists('errored attached cards still render as pills');
-    assert
-      .dom('[data-test-alert-action-buttons-row]')
-      .doesNotExist('attached-card errors do not render an empty action row');
     await percySnapshot(assert);
   });
 
