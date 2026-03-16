@@ -112,7 +112,7 @@
     "start:all": "mise run dev",
     "start:skip-optional-realms": "mise run dev-minimal",
     "start:services-for-host-tests": "mise run test-services-host",
-    "start:without-matrix": "./scripts/start-without-matrix.sh",
+    "start:without-matrix": "mise run dev-without-matrix",
     "start:staging": "./scripts/start-staging.sh",
     "start:development": "mise run services:realm-server -- --workerManagerPort=4210",
     "start:production": "./scripts/start-production.sh",
