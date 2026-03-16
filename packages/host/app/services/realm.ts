@@ -271,7 +271,9 @@ class RealmResource {
   }
 
   clearRealmSession(): void {
-    this.token = undefined;
+    this.auth = { type: 'anonymous' };
+    SessionStorage.remove(this.realmURL);
+    syncTokenToServiceWorker(this.realmURL, undefined);
     this.loginTask.cancelAll();
     this.tokenRefresher.cancelAll();
     this.loggingIn = undefined;
@@ -833,10 +835,12 @@ export default class RealmService extends Service {
 
   removeRealm(url: string) {
     let resource = this._realms.get(url);
-    if (!resource) {
-      return;
+    if (resource) {
+      resource.clearRealmSession();
+    } else {
+      SessionStorage.remove(url);
+      syncTokenToServiceWorker(url, undefined);
     }
-    resource.clearRealmSession();
     this._realms.delete(url);
     this.currentKnownRealms.delete(url);
   }
@@ -1279,6 +1283,18 @@ let SessionStorage = {
       );
     }
     syncTokenToServiceWorker(realmURL, token);
+  },
+  remove(realmURL: string) {
+    let sessionStr =
+      window.localStorage.getItem(SessionLocalStorageKey) ?? '{}';
+    let session = JSON.parse(sessionStr);
+    if (realmURL in session) {
+      delete session[realmURL];
+      window.localStorage.setItem(
+        SessionLocalStorageKey,
+        JSON.stringify(session),
+      );
+    }
   },
 };
 

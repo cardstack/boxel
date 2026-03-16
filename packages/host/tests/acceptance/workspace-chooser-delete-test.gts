@@ -2,7 +2,10 @@ import { click, waitUntil } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 
+import window from 'ember-window-mock';
 import { module, test } from 'qunit';
+
+import { SessionLocalStorageKey } from '@cardstack/host/utils/local-storage-keys';
 
 import {
   setupAcceptanceTestRealm,
@@ -16,7 +19,6 @@ import { setupBaseRealm } from '../helpers/base-realm';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { assertRecentFileURLs } from '../helpers/recent-files-cards';
 import { setupApplicationTest } from '../helpers/setup';
-import { SessionLocalStorageKey } from '@cardstack/host/utils/local-storage-keys';
 
 const ownedRealmURL = 'http://test-realm/testuser/owned-workspace/';
 const sharedRealmURL = 'http://test-realm/otheruser/shared-workspace/';
@@ -126,10 +128,14 @@ export class Person extends CardDef {}
       stacks: [[{ id: `${ownedRealmURL}index`, format: 'isolated' }]],
     });
 
-    let realmService = getService('realm');
     let recentFilesService = getService('recent-files-service');
-    await realmService.login(ownedRealmURL);
-    await realmService.login(sharedRealmURL);
+    window.localStorage.setItem(
+      SessionLocalStorageKey,
+      JSON.stringify({
+        [ownedRealmURL]: 'owned-token',
+        [sharedRealmURL]: 'shared-token',
+      }),
+    );
 
     let sessionsBeforeDelete = JSON.parse(
       window.localStorage.getItem(SessionLocalStorageKey) ?? '{}',
