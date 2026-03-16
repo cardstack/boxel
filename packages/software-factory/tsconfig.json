@@ -31,10 +31,20 @@
     },
     "types": ["@cardstack/local-types", "node"]
   },
+  "glint": {
+    "environment": ["ember-loose", "ember-template-imports"]
+  },
   "include": [
-    "./src/**/*.ts",
+    "../base/**/*",
+    "./src/**/*",
+    "./realm/**/*",
     "./playwright.config.ts",
     "./playwright.global-setup.ts",
     "./playwright.global-teardown.ts"
+  ],
+  "exclude": [
+    "../base/**/__boxel/**",
+    "./test-fixtures/**",
+    "./tests/**"
   ]
 }

@@ -104,7 +104,7 @@ const prepareTestPgScript = resolve(
   'prepare-test-pg.sh',
 );
 
-const CACHE_VERSION = 4;
+const CACHE_VERSION = 5;
 const REALM_SERVER_PORT = Number(
   process.env.SOFTWARE_FACTORY_REALM_PORT ?? 4205,
 );
@@ -137,6 +137,9 @@ const DEFAULT_MIGRATED_TEMPLATE_DB =
 const DEFAULT_REALM_LOG_LEVELS =
   process.env.SOFTWARE_FACTORY_REALM_LOG_LEVELS ??
   '*=info,realm:requests=warn,realm-index-updater=debug,index-runner=debug,index-perf=debug,index-writer=debug,worker=debug,worker-manager=debug,realm=debug,perf=debug';
+const DEFAULT_PRERENDER_LOG_LEVELS =
+  process.env.SOFTWARE_FACTORY_PRERENDER_LOG_LEVELS ??
+  '*=info,prerenderer=debug,prerenderer-chrome=debug,remote-prerenderer=debug';
 const DEFAULT_REALM_OWNER = '@software-factory-owner:localhost';
 const REALM_SECRET_SEED = "shhh! it's a secret";
 const REALM_SERVER_SECRET_SEED = "mum's the word";
@@ -150,6 +153,9 @@ const INCLUDE_SKILLS = process.env.SOFTWARE_FACTORY_INCLUDE_SKILLS === '1';
 const DEFAULT_PERMISSIONS: RealmPermissions = {
   '*': ['read'],
   [DEFAULT_REALM_OWNER]: ['read', 'write', 'realm-owner'],
+};
+const MOUNTED_REALM_PERMISSIONS: RealmPermissions = {
+  '*': ['read'],
 };
 const managedProcessStdio: StdioOptions =
   process.env.SOFTWARE_FACTORY_DEBUG_SERVER === '1'
@@ -1067,6 +1073,23 @@ async function buildTemplateDatabase({
   }
 
   await seedRealmPermissions(builderDatabaseName, realmURL, permissions);
+  await seedRealmPermissions(
+    builderDatabaseName,
+    new URL(`http://localhost:${REALM_SERVER_PORT}/base/`),
+    MOUNTED_REALM_PERMISSIONS,
+  );
+  await seedRealmPermissions(
+    builderDatabaseName,
+    LOCAL_SOFTWARE_FACTORY_SOURCE_URL,
+    MOUNTED_REALM_PERMISSIONS,
+  );
+  if (INCLUDE_SKILLS) {
+    await seedRealmPermissions(
+      builderDatabaseName,
+      new URL(`http://localhost:${REALM_SERVER_PORT}/skills/`),
+      MOUNTED_REALM_PERMISSIONS,
+    );
+  }
 
   let stack = await startIsolatedRealmStack({
     realmDir,
@@ -1104,7 +1127,31 @@ export async function startFactorySupportServices(): Promise<{
     true,
   );
   await ensureSupportUsers(synapse);
-  let prerender = await startPrerenderServer();
+  let previousPrerenderLogLevels =
+    process.env.SOFTWARE_FACTORY_PRERENDER_LOG_LEVELS;
+  let previousPrerenderSilent = process.env.SOFTWARE_FACTORY_PRERENDER_SILENT;
+  process.env.SOFTWARE_FACTORY_PRERENDER_LOG_LEVELS =
+    previousPrerenderLogLevels ?? DEFAULT_PRERENDER_LOG_LEVELS;
+  process.env.SOFTWARE_FACTORY_PRERENDER_SILENT =
+    previousPrerenderSilent ?? '0';
+
+  let prerender;
+  try {
+    prerender = await startPrerenderServer();
+  } finally {
+    if (previousPrerenderLogLevels === undefined) {
+      delete process.env.SOFTWARE_FACTORY_PRERENDER_LOG_LEVELS;
+    } else {
+      process.env.SOFTWARE_FACTORY_PRERENDER_LOG_LEVELS =
+        previousPrerenderLogLevels;
+    }
+
+    if (previousPrerenderSilent === undefined) {
+      delete process.env.SOFTWARE_FACTORY_PRERENDER_SILENT;
+    } else {
+      process.env.SOFTWARE_FACTORY_PRERENDER_SILENT = previousPrerenderSilent;
+    }
+  }
   let matrixURL = process.env.SOFTWARE_FACTORY_MATRIX_URL ?? getSynapseURL();
 
   return {
