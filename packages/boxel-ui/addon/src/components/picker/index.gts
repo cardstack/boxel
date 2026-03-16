@@ -402,11 +402,9 @@ export default class Picker extends Component<PickerSignature> {
 
   displayDivider = (option: PickerOption) => {
     return (
-      (this.isLastSelected(option) &&
-        this.hasUnselected &&
-        this.args.isLoading) ||
+      (this.isLastSelected(option) && this.hasUnselected) ||
       (option.type === 'select-all' &&
-        (this.selectedInSortedOptions.length === 0 || this.args.isLoading))
+        this.selectedInSortedOptions.length === 0)
     );
   };
 
