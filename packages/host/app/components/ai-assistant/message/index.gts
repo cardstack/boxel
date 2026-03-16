@@ -223,12 +223,14 @@ export function attachedCardErrorMessages(errors: CardErrorJSONAPI[]) {
 
 function isUnreachableCardError(error: CardErrorJSONAPI) {
   let title = error.title.toLowerCase();
+  let message = error.message.toLowerCase();
 
   return (
     [401, 403, 404].includes(error.status) ||
     title === 'unauthorized' ||
     title === 'forbidden' ||
-    title === 'not found'
+    title === 'not found' ||
+    message.includes('unable to fetch')
   );
 }
 

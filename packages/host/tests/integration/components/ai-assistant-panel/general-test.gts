@@ -719,7 +719,7 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
     assert
       .dom('[data-test-card-error]')
       .containsText(
-        `The card is unreachable. It is either missing or you don't have permission to see it.`,
+        `The card is unreachable. It may have been deleted, or you don't have permission to see it.`,
       );
     assert
       .dom(`[data-test-attached-card-error="${unreachableCardId}"]`)
