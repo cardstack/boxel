@@ -183,23 +183,32 @@ module(`server-endpoints/${basename(__filename)}`, function (hooks) {
     await insertRealmFileMeta(publishedRealmURL, publishedFileMetaPath);
     await insertRealmFileMeta(unrelatedRealmURL, unrelatedFileMetaPath);
 
-    for (let [cleanupRealmURL, currentVersion] of [
-      [realmURL, 75],
-      [publishedRealmURL, 76],
-      [unrelatedRealmURL, 77],
-    ] as const) {
-      let {
-        nameExpressions: realmVersionNames,
-        valueExpressions: realmVersionValues,
-      } = asExpressions({
-        realm_url: cleanupRealmURL,
-        current_version: currentVersion,
-      });
-      await query(
-        context.dbAdapter,
-        insert('realm_versions', realmVersionNames, realmVersionValues),
-      );
-    }
+    let existingSourceRealmVersionRows = await context.dbAdapter.execute(
+      `SELECT * FROM realm_versions WHERE realm_url = '${realmURL}'`,
+    );
+    let existingPublishedRealmVersionRows = await context.dbAdapter.execute(
+      `SELECT * FROM realm_versions WHERE realm_url = '${publishedRealmURL}'`,
+    );
+    assert.ok(
+      existingSourceRealmVersionRows.length > 0,
+      'source realm rows exist in realm_versions before deletion',
+    );
+    assert.ok(
+      existingPublishedRealmVersionRows.length > 0,
+      'published realm rows exist in realm_versions before deletion',
+    );
+
+    let {
+      nameExpressions: realmVersionNames,
+      valueExpressions: realmVersionValues,
+    } = asExpressions({
+      realm_url: unrelatedRealmURL,
+      current_version: 77,
+    });
+    await query(
+      context.dbAdapter,
+      insert('realm_versions', realmVersionNames, realmVersionValues),
+    );
 
     for (let [cleanupRealmURL, realmVersion] of [
       [realmURL, 91],
@@ -609,12 +618,17 @@ module(`server-endpoints/${basename(__filename)}`, function (hooks) {
       PUBLISHED_DIRECTORY_NAME,
       publishedRealmId,
     );
-    assert.true(existsSync(publishedRealmPath), 'published realm directory exists');
+    assert.true(
+      existsSync(publishedRealmPath),
+      'published realm directory exists',
+    );
 
     let mountedPublishedRealm = context.testRealmServer2.testingOnlyRealms.find(
       (realm) => realm.url === publishedRealmURL,
     );
-    assert.ok(mountedPublishedRealm, 'published realm is mounted');
+    if (!mountedPublishedRealm) {
+      throw new Error('expected published realm to be mounted');
+    }
     context.virtualNetwork.unmount(mountedPublishedRealm.handle);
 
     let mountedRealms = (
