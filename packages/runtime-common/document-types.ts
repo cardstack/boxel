@@ -208,6 +208,31 @@ export function makeCardTypeSummaryDoc(summaries: CardTypeSummary[]) {
   return { data };
 }
 
+export interface FederatedCardTypeSummaryEntry {
+  type: 'card-type-summary';
+  id: string;
+  attributes: {
+    displayName: string;
+    total: number;
+    iconHTML: string;
+  };
+  meta: {
+    realmURL: string;
+  };
+}
+
+export function makeFederatedCardTypeSummaryDoc(
+  entries: FederatedCardTypeSummaryEntry[],
+  total: number,
+) {
+  return {
+    data: entries,
+    meta: {
+      page: { total },
+    },
+  };
+}
+
 function isIncluded(
   included: any,
 ): included is (CardResource<Saved> | FileMetaResource)[] {

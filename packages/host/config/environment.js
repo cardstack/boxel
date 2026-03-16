@@ -27,8 +27,9 @@ function environmentDefaults() {
       iconsURL: 'http://localhost:4206',
       baseRealmURL: 'http://localhost:4201/base/',
       catalogRealmURL: 'http://localhost:4201/catalog/',
-      newCatalogRealmURL: 'http://localhost:4201/catalog-new/',
+      externalCatalogRealmURL: 'http://localhost:4201/external-catalog/',
       skillsRealmURL: 'http://localhost:4201/skills/',
+      openRouterRealmURL: 'http://localhost:4201/openrouter/',
     };
   }
   let slug = environmentSlug();
@@ -39,8 +40,9 @@ function environmentDefaults() {
     iconsURL: `http://icons.${slug}.localhost`,
     baseRealmURL: `http://${realmHost}/base/`,
     catalogRealmURL: `http://${realmHost}/catalog/`,
-    newCatalogRealmURL: `http://${realmHost}/catalog-new/`,
+    externalCatalogRealmURL: `http://${realmHost}/external-catalog/`,
     skillsRealmURL: `http://${realmHost}/skills/`,
+    openRouterRealmURL: `http://${realmHost}/openrouter/`,
   };
 }
 
@@ -105,12 +107,14 @@ module.exports = function (environment) {
     resolvedCatalogRealmURL: skipCatalog
       ? undefined
       : process.env.RESOLVED_CATALOG_REALM_URL || defaults.catalogRealmURL,
-    resolvedNewCatalogRealmURL: skipCatalog
+    resolvedExternalCatalogRealmURL: skipCatalog
       ? undefined
-      : process.env.RESOLVED_NEW_CATALOG_REALM_URL ||
-        defaults.newCatalogRealmURL,
+      : process.env.RESOLVED_EXTERNAL_CATALOG_REALM_URL ||
+        defaults.externalCatalogRealmURL,
     resolvedSkillsRealmURL:
       process.env.RESOLVED_SKILLS_REALM_URL || defaults.skillsRealmURL,
+    resolvedOpenRouterRealmURL:
+      process.env.RESOLVED_OPENROUTER_REALM_URL || defaults.openRouterRealmURL,
     featureFlags: {
       SHOW_ASK_AI: process.env.SHOW_ASK_AI === 'true' || false,
     },
@@ -140,7 +144,7 @@ module.exports = function (environment) {
 
     // Catalog realms are not available in test environment
     ENV.resolvedCatalogRealmURL = undefined;
-    ENV.resolvedNewCatalogRealmURL = undefined;
+    ENV.resolvedExternalCatalogRealmURL = undefined;
     ENV.defaultSystemCardId = 'http://test-realm/test/SystemCard/default';
   }
 

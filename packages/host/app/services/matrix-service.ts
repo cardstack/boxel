@@ -502,6 +502,7 @@ export default class MatrixService extends Service {
       // only so tests and app reloads do not accidentally wipe durable state.
       clearLocalStorage(window.localStorage);
       this.reset.resetAll();
+      this.loaderService.resetSessionBoundary('logout');
       this.unbindEventListeners();
       await client?.logout(true);
       // when user logs out we transition them back to an empty stack with the
@@ -1658,16 +1659,34 @@ export default class MatrixService extends Service {
     return this.timelineLoadingState.get(this.currentRoomId) ?? false;
   }
 
-  async sendActiveLLMEvent(roomId: string, model: string) {
-    let modelConfiguration = this.systemCard?.modelConfigurations?.find(
-      (configuration) => configuration.modelId === model,
-    );
+  async sendActiveLLMEvent(
+    roomId: string,
+    model: string,
+    config?: {
+      toolsSupported?: boolean;
+      reasoningEffort?: string;
+      inputModalities?: string[];
+    },
+  ) {
+    let resolvedConfig = config;
+    if (!resolvedConfig) {
+      let modelConfiguration = this.systemCard?.modelConfigurations?.find(
+        (configuration) => configuration.modelId === model,
+      );
+      if (modelConfiguration) {
+        resolvedConfig = {
+          toolsSupported: modelConfiguration.toolsSupported,
+          reasoningEffort: modelConfiguration.reasoningEffort,
+          inputModalities: modelConfiguration.inputModalities,
+        };
+      }
+    }
 
     await this.client.sendStateEvent(roomId, APP_BOXEL_ACTIVE_LLM, {
       model,
-      toolsSupported: modelConfiguration?.toolsSupported,
-      reasoningEffort: modelConfiguration?.reasoningEffort,
-      inputModalities: modelConfiguration?.inputModalities,
+      toolsSupported: resolvedConfig?.toolsSupported,
+      reasoningEffort: resolvedConfig?.reasoningEffort,
+      inputModalities: resolvedConfig?.inputModalities,
     });
   }
 

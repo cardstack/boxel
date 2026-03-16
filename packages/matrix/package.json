@@ -34,6 +34,7 @@
     "register-bot-user": "MATRIX_USERNAME=aibot MATRIX_PASSWORD=pass ts-node --transpileOnly ./scripts/register-test-user.ts",
     "register-submission-bot": "MATRIX_IS_ADMIN=TRUE MATRIX_USERNAME=submissionbot MATRIX_PASSWORD=password ts-node --transpileOnly ./scripts/register-test-user.ts",
     "register-realm-user-using-api": "MATRIX_USERNAME=submissionbot MATRIX_PASSWORD=password ts-node --transpileOnly ./scripts/register-realm-user-using-api.ts",
+    "realm-user-password": "ts-node --transpileOnly ./scripts/reveal-realm-user-password.ts",
     "setup-submission-bot": "MATRIX_USERNAME=submissionbot MATRIX_PASSWORD=password ts-node --transpileOnly ./scripts/setup-submission-bot.ts",
     "register-test-user": "MATRIX_USERNAME=user MATRIX_PASSWORD=password ts-node --transpileOnly ./scripts/register-test-user.ts",
     "register-skills-writer": "MATRIX_USERNAME=skills_writer MATRIX_PASSWORD=password ts-node --transpileOnly ./scripts/register-test-user.ts",

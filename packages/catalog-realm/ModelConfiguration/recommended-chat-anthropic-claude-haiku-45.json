@@ -1,0 +1,33 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "module": "../system-card/model-configuration",
+        "name": "ModelConfiguration"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "purpose": "chat",
+      "cardInfo": {
+        "notes": null,
+        "name": "",
+        "summary": "",
+        "cardThumbnailURL": null
+      },
+      "reasoningEffort": "none"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "openRouterModel": {
+        "links": {
+          "self": "@cardstack/openrouter/OpenRouterModel/anthropic-claude-haiku-4-5"
+        }
+      }
+    }
+  }
+}
