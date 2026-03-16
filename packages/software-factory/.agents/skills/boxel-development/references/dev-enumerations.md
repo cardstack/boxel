@@ -1,11 +1,13 @@
 ## Enum Field Essentials
 
 **CRITICAL Import Syntax:**
+
 ```gts
 import enumField from 'https://cardstack.com/base/enum'; // Default import, not { enumField }
 ```
 
 **Quick Start:**
+
 ```gts
 const StatusField = enumField(StringField, { options: ['Open', 'Closed'] });
 @field status = contains(StatusField);
@@ -14,16 +16,18 @@ const StatusField = enumField(StringField, { options: ['Open', 'Closed'] });
 **Template:** `<@fields.status />` renders a BoxelSelect in edit mode.
 
 **Rich options with labels/icons:**
+
 ```gts
-enumField(StringField, { 
+enumField(StringField, {
   options: [
     { value: 'high', label: 'High Priority', icon: ArrowUpIcon },
-    { value: 'low', label: 'Low Priority', icon: ArrowDownIcon }
-  ]
-})
+    { value: 'low', label: 'Low Priority', icon: ArrowDownIcon },
+  ],
+});
 ```
 
 **Key helpers:**
+
 - `enumValues(card, 'fieldName')` → array of primitive values
 - `enumOptions(card, 'fieldName')` → normalized `{ value, label, icon? }`
 
@@ -50,16 +54,19 @@ import { enumField } from 'https://cardstack.com/base/enum';
 ## Quick Start
 
 **Define:**
+
 ```gts
 const StatusField = enumField(StringField, { options: ['Open', 'Closed'] });
 ```
 
 **Use:**
+
 ```gts
 @field status = contains(StatusField);
 ```
 
 **Template:**
+
 ```hbs
 <@fields.status /> {{! Renders a BoxelSelect in edit mode }}
 ```
@@ -67,13 +74,13 @@ const StatusField = enumField(StringField, { options: ['Open', 'Closed'] });
 ## Rich Options (Labels/Icons)
 
 ```gts
-enumField(StringField, { 
+enumField(StringField, {
   options: [
     { value: 'high', label: 'High', icon: ArrowUpIcon },
     { value: 'medium', label: 'Medium', icon: MinusIcon },
-    { value: 'low', label: 'Low', icon: ArrowDownIcon }
-  ]
-})
+    { value: 'low', label: 'Low', icon: ArrowDownIcon },
+  ],
+});
 ```
 
 Editor shows labels/icons; stored value is the primitive `value`.
@@ -81,21 +88,23 @@ Editor shows labels/icons; stored value is the primitive `value`.
 ## Dynamic Options
 
 **Provide a function:**
+
 ```gts
-enumField(StringField, { 
-  options: function() { 
-    return this.someList; 
-  }
-})
+enumField(StringField, {
+  options: function () {
+    return this.someList;
+  },
+});
 ```
 
 **Per-usage override:**
+
 ```gts
-contains(Field, { 
-  configuration: enumConfig(function() { 
-    return { options: this.someList }; 
-  })
-})
+contains(Field, {
+  configuration: enumConfig(function () {
+    return { options: this.someList };
+  }),
+});
 ```
 
 **Note:** `this` is the containing card or field
@@ -103,13 +112,15 @@ contains(Field, {
 ## Helpers
 
 **enumValues** - Get array of primitive values:
+
 ```gts
-enumValues(card, 'enumFieldName') // → ['High', 'Medium', 'Low']
+enumValues(card, 'enumFieldName'); // → ['High', 'Medium', 'Low']
 ```
 
 **enumOptions** - Get normalized option objects:
+
 ```gts
-enumOptions(card, 'enumFieldName') // → [{ value, label, icon? }, ...]
+enumOptions(card, 'enumFieldName'); // → [{ value, label, icon? }, ...]
 ```
 
 ## Null Handling
@@ -117,6 +128,7 @@ enumOptions(card, 'enumFieldName') // → [{ value, label, icon? }, ...]
 If current value is `null` and `null` isn't in options, placeholder uses `unsetLabel` or "Choose…".
 
 To make `null` selectable:
+
 ```gts
 { value: null, label: 'None' }
 ```
@@ -135,38 +147,44 @@ To make `null` selectable:
 ## Minimal Example
 
 **Define:**
+
 ```gts
 import enumField from 'https://cardstack.com/base/enum';
 const Priority = enumField(StringField, { options: ['High', 'Medium', 'Low'] });
 ```
 
 **Use:**
+
 ```gts
-class Task extends CardDef { 
-  @field priority = contains(Priority); 
+class Task extends CardDef {
+  @field priority = contains(Priority);
 }
 ```
 
 **Template:**
+
 ```hbs
 <@fields.priority />
-{{enumValues @model 'priority'}} {{! ['High','Medium','Low'] }}
+{{enumValues @model 'priority'}}
+{{! ['High','Medium','Low'] }}
 ```
 
 ## Factory vs Usage (Clarity)
 
 **Factory defaults:**
+
 ```gts
-enumField(Base, { options }) // For simple/static defaults
+enumField(Base, { options }); // For simple/static defaults
 ```
 
 **Usage overrides:**
+
 ```gts
-contains(Field, { 
-  configuration: enumConfig(function() { 
-    return { options }; 
-  })
-}) // For per-instance behavior
+contains(Field, {
+  configuration: enumConfig(function () {
+    return { options };
+  }),
+}); // For per-instance behavior
 ```
 
 Both resolve to `@configuration.enum.options` for templates/formats.
@@ -192,18 +210,18 @@ const PriorityField = enumField(StringField, {
   options: [
     { value: 'high', label: 'High Priority', icon: ArrowUpIcon },
     { value: 'medium', label: 'Medium Priority' },
-    { value: 'low', label: 'Low Priority', icon: ArrowDownIcon }
-  ]
+    { value: 'low', label: 'Low Priority', icon: ArrowDownIcon },
+  ],
 });
 
 export class Task extends CardDef {
   @field taskName = contains(StringField);
   @field priority = contains(PriorityField);
-  
+
   @field title = contains(StringField, {
-    computeVia: function(this: Task) {
+    computeVia: function (this: Task) {
       return this.taskName ?? 'Untitled Task';
-    }
+    },
   });
 }
 ```

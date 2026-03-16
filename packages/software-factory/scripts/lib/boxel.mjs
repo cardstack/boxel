@@ -50,24 +50,29 @@ export function getActiveProfile() {
 }
 
 export async function matrixLogin(credentials = getActiveProfile()) {
-  let response = await fetch(new URL('_matrix/client/v3/login', credentials.matrixUrl), {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      identifier: {
-        type: 'm.id.user',
-        user: credentials.username,
+  let response = await fetch(
+    new URL('_matrix/client/v3/login', credentials.matrixUrl),
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
       },
-      password: credentials.password,
-      type: 'm.login.password',
-    }),
-  });
+      body: JSON.stringify({
+        identifier: {
+          type: 'm.id.user',
+          user: credentials.username,
+        },
+        password: credentials.password,
+        type: 'm.login.password',
+      }),
+    },
+  );
 
   let json = await response.json();
   if (!response.ok) {
-    throw new Error(`Matrix login failed: ${response.status} ${JSON.stringify(json)}`);
+    throw new Error(
+      `Matrix login failed: ${response.status} ${JSON.stringify(json)}`,
+    );
   }
 
   return {
@@ -105,37 +110,47 @@ export async function getOpenIdToken(matrixAuth) {
 
 export async function getRealmServerToken(matrixAuth) {
   let openIdToken = await getOpenIdToken(matrixAuth);
-  let response = await fetch(new URL('_server-session', matrixAuth.credentials.realmServerUrl), {
-    method: 'POST',
-    headers: {
-      Accept: 'application/json',
-      'Content-Type': 'application/json',
+  let response = await fetch(
+    new URL('_server-session', matrixAuth.credentials.realmServerUrl),
+    {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(openIdToken),
     },
-    body: JSON.stringify(openIdToken),
-  });
+  );
 
   if (!response.ok) {
     let text = await response.text();
-    throw new Error(`Realm server session request failed: ${response.status} ${text}`);
+    throw new Error(
+      `Realm server session request failed: ${response.status} ${text}`,
+    );
   }
 
   let token = response.headers.get('Authorization');
   if (!token) {
-    throw new Error('Realm server session response did not include an Authorization header');
+    throw new Error(
+      'Realm server session response did not include an Authorization header',
+    );
   }
   return token;
 }
 
 export async function getAccessibleRealmTokens(matrixAuth) {
   let serverToken = await getRealmServerToken(matrixAuth);
-  let response = await fetch(new URL('_realm-auth', matrixAuth.credentials.realmServerUrl), {
-    method: 'POST',
-    headers: {
-      Accept: 'application/json',
-      'Content-Type': 'application/json',
-      Authorization: serverToken,
+  let response = await fetch(
+    new URL('_realm-auth', matrixAuth.credentials.realmServerUrl),
+    {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        Authorization: serverToken,
+      },
     },
-  });
+  );
 
   if (!response.ok) {
     let text = await response.text();
@@ -170,15 +185,18 @@ export function buildBrowserSession(realmTokens, realmUrls) {
 }
 
 export async function searchRealm({ realmUrl, jwt, query }) {
-  let response = await fetch(new URL('./_search', ensureTrailingSlash(realmUrl)), {
-    method: 'QUERY',
-    headers: {
-      Accept: 'application/vnd.card+json',
-      'Content-Type': 'application/json',
-      ...(jwt ? { Authorization: jwt } : {}),
+  let response = await fetch(
+    new URL('./_search', ensureTrailingSlash(realmUrl)),
+    {
+      method: 'QUERY',
+      headers: {
+        Accept: 'application/vnd.card+json',
+        'Content-Type': 'application/json',
+        ...(jwt ? { Authorization: jwt } : {}),
+      },
+      body: JSON.stringify(query),
     },
-    body: JSON.stringify(query),
-  });
+  );
 
   if (!response.ok) {
     let text = await response.text();
@@ -230,7 +248,9 @@ export function fieldPairs(values) {
   for (let entry of forceArray(values)) {
     let index = entry.indexOf('=');
     if (index === -1) {
-      throw new Error(`Expected field pair in the form field=value, received: ${entry}`);
+      throw new Error(
+        `Expected field pair in the form field=value, received: ${entry}`,
+      );
     }
     result[entry.slice(0, index)] = entry.slice(index + 1);
   }

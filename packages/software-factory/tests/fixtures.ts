@@ -6,8 +6,11 @@ import { join, resolve } from 'node:path';
 import type { Page } from '@playwright/test';
 import { test as base, expect } from '@playwright/test';
 
-import { defaultSupportMetadataFile } from '../src/runtime-metadata';
-import { buildBrowserState, installBrowserState } from './helpers/browser-auth';
+import { defaultSupportMetadataFile } from '../src/runtime-metadata.js';
+import {
+  buildBrowserState,
+  installBrowserState,
+} from './helpers/browser-auth.js';
 
 type StartedFactoryRealm = {
   realmDir: string;
@@ -214,7 +217,7 @@ async function setRealmRedirects(page: Page) {
 }
 
 export const test = base.extend<FactoryRealmFixtures, FactoryRealmOptions>({
-  realmDir: [defaultRealmDir, { option: true }],
+  realmDir: [defaultRealmDir, { option: true, scope: 'worker' }],
 
   page: async ({ page }, use) => {
     await setRealmRedirects(page);

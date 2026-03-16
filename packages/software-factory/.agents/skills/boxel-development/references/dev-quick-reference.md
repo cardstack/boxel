@@ -1,16 +1,26 @@
 **Core imports:**
+
 ```gts
-import { CardDef, FieldDef, Component, field, contains, linksTo } from 'https://cardstack.com/base/card-api';
+import {
+  CardDef,
+  FieldDef,
+  Component,
+  field,
+  contains,
+  linksTo,
+} from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
 import NumberField from 'https://cardstack.com/base/number';
 ```
 
 **UI Components:**
+
 ```gts
 import { Button, Pill, BoxelSelect } from '@cardstack/boxel-ui/components';
 ```
 
 **Helpers:**
+
 ```gts
 import { eq, gt, and, or, not } from '@cardstack/boxel-ui/helpers';
 import { formatDateTime, formatCurrency } from '@cardstack/boxel-ui/helpers';
@@ -25,7 +35,16 @@ import { formatDateTime, formatCurrency } from '@cardstack/boxel-ui/helpers';
 ```gts
 // ═══ [EDIT TRACKING: ON] Mark all changes with ⁿ ═══
 // ¹ Core imports - ALWAYS needed for definitions
-import { CardDef, FieldDef, Component, field, contains, containsMany, linksTo, linksToMany } from 'https://cardstack.com/base/card-api';
+import {
+  CardDef,
+  FieldDef,
+  Component,
+  field,
+  contains,
+  containsMany,
+  linksTo,
+  linksToMany,
+} from 'https://cardstack.com/base/card-api';
 
 // ² Base field imports (only what you use)
 import StringField from 'https://cardstack.com/base/string';
@@ -41,19 +60,19 @@ import Base64ImageField from 'https://cardstack.com/base/base64-image'; // 🚨 
 
 // ⁸ FileDef imports - for file fields (use linksTo, never contains)
 import FileDef from 'https://cardstack.com/base/file-api';
-import ImageDef from 'https://cardstack.com/base/image-file-def';     // any image
-import PngDef from 'https://cardstack.com/base/png-image-def';        // .png
-import JpgDef from 'https://cardstack.com/base/jpg-image-def';        // .jpg/.jpeg
-import SvgDef from 'https://cardstack.com/base/svg-image-def';        // .svg
-import GifDef from 'https://cardstack.com/base/gif-image-def';        // .gif
-import WebpDef from 'https://cardstack.com/base/webp-image-def';      // .webp
-import AvifDef from 'https://cardstack.com/base/avif-image-def';      // .avif
+import ImageDef from 'https://cardstack.com/base/image-file-def'; // any image
+import PngDef from 'https://cardstack.com/base/png-image-def'; // .png
+import JpgDef from 'https://cardstack.com/base/jpg-image-def'; // .jpg/.jpeg
+import SvgDef from 'https://cardstack.com/base/svg-image-def'; // .svg
+import GifDef from 'https://cardstack.com/base/gif-image-def'; // .gif
+import WebpDef from 'https://cardstack.com/base/webp-image-def'; // .webp
+import AvifDef from 'https://cardstack.com/base/avif-image-def'; // .avif
 import MarkdownDef from 'https://cardstack.com/base/markdown-file-def'; // .md (NOT same as MarkdownField)
-import TextFileDef from 'https://cardstack.com/base/text-file-def';   // .txt
-import TsFileDef from 'https://cardstack.com/base/ts-file-def';       // .ts
-import GtsFileDef from 'https://cardstack.com/base/gts-file-def';     // .gts
-import JsonFileDef from 'https://cardstack.com/base/json-file-def';   // .json
-import CsvFileDef from 'https://cardstack.com/base/csv-file-def';     // .csv
+import TextFileDef from 'https://cardstack.com/base/text-file-def'; // .txt
+import TsFileDef from 'https://cardstack.com/base/ts-file-def'; // .ts
+import GtsFileDef from 'https://cardstack.com/base/gts-file-def'; // .gts
+import JsonFileDef from 'https://cardstack.com/base/json-file-def'; // .json
+import CsvFileDef from 'https://cardstack.com/base/csv-file-def'; // .csv
 import ColorField from 'https://cardstack.com/base/color';
 import EmailField from 'https://cardstack.com/base/email';
 import PercentageField from 'https://cardstack.com/base/percentage';
@@ -67,11 +86,38 @@ import AddressField from 'https://cardstack.com/base/address';
 // Never import and define the same field name - it causes conflicts!
 
 // ³ UI Component imports
-import { Button, Pill, Avatar, FieldContainer, CardContainer, BoxelSelect, ViewSelector } from '@cardstack/boxel-ui/components';
+import {
+  Button,
+  Pill,
+  Avatar,
+  FieldContainer,
+  CardContainer,
+  BoxelSelect,
+  ViewSelector,
+} from '@cardstack/boxel-ui/components';
 
 // ⁴ Helper imports
-import { eq, gt, gte, lt, lte, and, or, not, cn, add, subtract, multiply, divide } from '@cardstack/boxel-ui/helpers';
-import { currencyFormat, formatDateTime, optional, pick } from '@cardstack/boxel-ui/helpers';
+import {
+  eq,
+  gt,
+  gte,
+  lt,
+  lte,
+  and,
+  or,
+  not,
+  cn,
+  add,
+  subtract,
+  multiply,
+  divide,
+} from '@cardstack/boxel-ui/helpers';
+import {
+  currencyFormat,
+  formatDateTime,
+  optional,
+  pick,
+} from '@cardstack/boxel-ui/helpers';
 import { concat, fn } from '@ember/helper';
 import { get } from '@ember/helper';
 import { on } from '@ember/modifier';
@@ -83,7 +129,7 @@ import { task, restartableTask } from 'ember-concurrency';
 
 // ⁶ TIMING RULE: NEVER use requestAnimationFrame
 // - DOM timing: Use Glimmer modifiers with cleanup
-// - Async coordination: Use task/restartableTask from ember-concurrency  
+// - Async coordination: Use task/restartableTask from ember-concurrency
 // - Delays: Use await timeout(ms) from ember-concurrency, not setTimeout
 
 // ⁵ Icon imports

@@ -10,7 +10,11 @@ function ensureTrailingSlash(url) {
 }
 
 function timestampSlug(date = new Date()) {
-  return date.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'z').toLowerCase();
+  return date
+    .toISOString()
+    .replace(/[-:]/g, '')
+    .replace(/\.\d{3}Z$/, 'z')
+    .toLowerCase();
 }
 
 function runCommand(command, args, options = {}) {
@@ -21,7 +25,10 @@ function runCommand(command, args, options = {}) {
   });
 
   if (result.status !== 0) {
-    let details = [result.stdout, result.stderr].filter(Boolean).join('\n').trim();
+    let details = [result.stdout, result.stderr]
+      .filter(Boolean)
+      .join('\n')
+      .trim();
     throw new Error(`Command failed: ${command} ${args.join(' ')}\n${details}`);
   }
 
@@ -31,7 +38,9 @@ function runCommand(command, args, options = {}) {
 function readWorkspaceUrl(realmPath) {
   let syncFile = path.join(realmPath, '.boxel-sync.json');
   if (!fs.existsSync(syncFile)) {
-    throw new Error(`Expected synced realm at ${realmPath}; missing .boxel-sync.json`);
+    throw new Error(
+      `Expected synced realm at ${realmPath}; missing .boxel-sync.json`,
+    );
   }
 
   let { workspaceUrl } = JSON.parse(fs.readFileSync(syncFile, 'utf8'));
@@ -91,10 +100,14 @@ function summarizeFailures(report) {
   function visitSuite(suite, titlePath = []) {
     let nextTitlePath = suite.title ? [...titlePath, suite.title] : titlePath;
     for (let spec of suite.specs ?? []) {
-      let specPath = spec.title ? [...nextTitlePath, spec.title] : nextTitlePath;
+      let specPath = spec.title
+        ? [...nextTitlePath, spec.title]
+        : nextTitlePath;
       for (let test of spec.tests ?? []) {
         let results = test.results ?? [];
-        let failedResults = results.filter((result) => result.status !== 'passed' && result.status !== 'skipped');
+        let failedResults = results.filter(
+          (result) => result.status !== 'passed' && result.status !== 'skipped',
+        );
         if (failedResults.length === 0) {
           continue;
         }
@@ -123,16 +136,27 @@ function summarizeFailures(report) {
 }
 
 let args = parseArgs(process.argv.slice(2));
-let sourceRealmPath = path.resolve(args['realm-path'] ?? args._[0] ?? 'realms/software-factory-demo');
-let sourceRealmUrl = ensureTrailingSlash(args['realm-url'] ?? readWorkspaceUrl(sourceRealmPath));
+let sourceRealmPath = path.resolve(
+  args['realm-path'] ?? args._[0] ?? 'realms/software-factory-demo',
+);
+let sourceRealmUrl = ensureTrailingSlash(
+  args['realm-url'] ?? readWorkspaceUrl(sourceRealmPath),
+);
 let specRoot = path.resolve(sourceRealmPath, args['spec-dir'] ?? 'tests');
-let fixturesRoot = path.resolve(sourceRealmPath, args['fixtures-dir'] ?? 'tests/fixtures');
+let fixturesRoot = path.resolve(
+  sourceRealmPath,
+  args['fixtures-dir'] ?? 'tests/fixtures',
+);
 let sourceRealmName = path.basename(sourceRealmPath);
 let endpoint = args.endpoint ?? `${sourceRealmName}-test-${timestampSlug()}`;
 let credentials = getActiveProfile();
 let scratchRoot = path.resolve(
   args['scratch-root'] ??
-    path.join('realms', new URL(credentials.realmServerUrl).hostname, credentials.username),
+    path.join(
+      'realms',
+      new URL(credentials.realmServerUrl).hostname,
+      credentials.username,
+    ),
 );
 let scratchPath = path.join(scratchRoot, endpoint);
 
@@ -146,9 +170,12 @@ if (specFiles.length === 0) {
 }
 
 let scratchRealmUrl = ensureTrailingSlash(
-  args['scratch-url'] ?? new URL(`${credentials.username}/${endpoint}/`, credentials.realmServerUrl).href,
+  args['scratch-url'] ??
+    new URL(`${credentials.username}/${endpoint}/`, credentials.realmServerUrl)
+      .href,
 );
-let scratchName = args.name ?? `${sourceRealmName} Test ${new Date().toISOString()}`;
+let scratchName =
+  args.name ?? `${sourceRealmName} Test ${new Date().toISOString()}`;
 
 fs.mkdirSync(scratchRoot, { recursive: true });
 
@@ -159,7 +186,10 @@ let copiedFixtures = copyTreeContents(fixturesRoot, scratchPath);
 runCommand('boxel', ['sync', scratchPath, scratchRealmUrl, '--prefer-local']);
 
 let reportFile = path.join(os.tmpdir(), `${endpoint}-playwright-report.json`);
-let playwrightConfig = path.resolve(process.cwd(), 'playwright.realm.config.mjs');
+let playwrightConfig = path.resolve(
+  process.cwd(),
+  'playwright.realm.config.mjs',
+);
 let playwrightEnv = {
   BOXEL_SOURCE_REALM_PATH: sourceRealmPath,
   BOXEL_SOURCE_REALM_URL: sourceRealmUrl,
@@ -167,11 +197,20 @@ let playwrightEnv = {
   BOXEL_TEST_REALM_URL: scratchRealmUrl,
   PLAYWRIGHT_JSON_OUTPUT_FILE: reportFile,
 };
-let relativeSpecFiles = specFiles.map((filePath) => path.relative(sourceRealmPath, filePath));
+let relativeSpecFiles = specFiles.map((filePath) =>
+  path.relative(sourceRealmPath, filePath),
+);
 
 let testRun = spawnSync(
   'npx',
-  ['playwright', 'test', '--config', playwrightConfig, '--reporter=line,json', ...relativeSpecFiles],
+  [
+    'playwright',
+    'test',
+    '--config',
+    playwrightConfig,
+    '--reporter=line,json',
+    ...relativeSpecFiles,
+  ],
   {
     cwd: sourceRealmPath,
     encoding: 'utf8',
@@ -189,7 +228,9 @@ let summary = {
   sourceRealmUrl,
   scratchPath,
   scratchRealmUrl,
-  specFiles: specFiles.map((filePath) => path.relative(process.cwd(), filePath)),
+  specFiles: specFiles.map((filePath) =>
+    path.relative(process.cwd(), filePath),
+  ),
   copiedFixtures,
   expected: report.stats?.expected ?? 0,
   unexpected: report.stats?.unexpected ?? failures.length,

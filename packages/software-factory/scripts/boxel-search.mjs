@@ -10,7 +10,9 @@ import {
 
 let args = parseArgs(process.argv.slice(2));
 if (!args.realm) {
-  throw new Error('Usage: npm run boxel:search -- --realm <realm-url> [--type-name Ticket --type-module <module>] [--eq field=value] [--contains field=value]');
+  throw new Error(
+    'Usage: npm run boxel:search -- --realm <realm-url> [--type-name Ticket --type-module <module>] [--eq field=value] [--contains field=value]',
+  );
 }
 
 let matrixAuth = await matrixLogin();

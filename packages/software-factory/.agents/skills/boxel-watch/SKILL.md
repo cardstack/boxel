@@ -12,21 +12,27 @@ Start `boxel watch` with intelligent interval settings based on context.
 Analyze the conversation and recent activity to determine the appropriate watch settings:
 
 ### Active Development Mode (5s interval, 3s debounce)
+
 Use when:
+
 - User is actively editing .gts or .json files
 - User mentions "editing", "working on", "changing", "updating"
 - Recent file writes or edits in the workspace
 - User asks to "watch while I work"
 
 ### Monitoring Mode (30s interval, 10s debounce)
+
 Use when:
+
 - User wants to "keep an eye on" changes
 - User is doing research, reading, or planning
 - No recent edits to workspace files
 - User says "background", "monitor", or "check occasionally"
 
 ### Quick Feedback Mode (10s interval, 5s debounce)
+
 Use when:
+
 - User is testing changes in Boxel UI
 - User mentions "testing", "trying", "see if it works"
 - Balanced between responsiveness and efficiency
@@ -58,6 +64,7 @@ boxel watch . -i <interval> -d <debounce> -q
 ## Response Format
 
 When invoked, respond with:
+
 1. Detected mode and reasoning (1 sentence)
 2. The watch command being run
 3. How to stop or adjust

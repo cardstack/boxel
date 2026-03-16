@@ -1,6 +1,6 @@
 import { resolve } from 'node:path';
 
-import { expect, test } from './fixtures';
+import { expect, test } from './fixtures.js';
 
 const adopterRealmDir = resolve(
   process.cwd(),

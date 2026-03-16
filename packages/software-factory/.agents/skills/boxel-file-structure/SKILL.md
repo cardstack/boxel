@@ -16,11 +16,11 @@ Example: https://app.boxel.ai/sarah/pet-rescue/animals/dog.gts
 
 ## File Naming Conventions
 
-| Type | Convention | Example |
-|------|------------|---------|
-| Card definitions | `kebab-case.gts` | `blog-post.gts`, `grammy-award.gts` |
-| Instance directories | `PascalCase/` | `BlogPost/`, `GrammyAward/` |
-| Instance files | `kebab-case.json` | `my-first-post.json` |
+| Type                 | Convention        | Example                             |
+| -------------------- | ----------------- | ----------------------------------- |
+| Card definitions     | `kebab-case.gts`  | `blog-post.gts`, `grammy-award.gts` |
+| Instance directories | `PascalCase/`     | `BlogPost/`, `GrammyAward/`         |
+| Instance files       | `kebab-case.json` | `my-first-post.json`                |
 
 ## Directory Structure
 
@@ -43,6 +43,7 @@ workspace/
 **The `adoptsFrom.module` path is relative to the JSON file location.**
 
 ### ✅ Correct: Instance in subdirectory
+
 ```
 grammy-award.gts          # Definition at root
 GrammyAward/              # Instances in PascalCase directory
@@ -50,11 +51,12 @@ GrammyAward/              # Instances in PascalCase directory
 ```
 
 **In `GrammyAward/record-of-the-year.json`:**
+
 ```json
 {
   "meta": {
     "adoptsFrom": {
-      "module": "../grammy-award",  // ← Go UP to parent, then to file
+      "module": "../grammy-award", // ← Go UP to parent, then to file
       "name": "GrammyAward"
     }
   }
@@ -62,11 +64,12 @@ GrammyAward/              # Instances in PascalCase directory
 ```
 
 ### ❌ Wrong: Forgetting the relative path
+
 ```json
 {
   "meta": {
     "adoptsFrom": {
-      "module": "./grammy-award",  // ← WRONG! This looks in GrammyAward/
+      "module": "./grammy-award", // ← WRONG! This looks in GrammyAward/
       "name": "GrammyAward"
     }
   }
@@ -75,12 +78,12 @@ GrammyAward/              # Instances in PascalCase directory
 
 ## Path Rules Summary
 
-| JSON Location | Definition Location | Module Path |
-|--------------|---------------------|-------------|
-| `root/Instance.json` | `root/card.gts` | `"./card"` |
-| `root/Card/instance.json` | `root/card.gts` | `"../card"` |
-| `root/Card/Sub/instance.json` | `root/card.gts` | `"../../card"` |
-| `root/Card/instance.json` | `root/other/card.gts` | `"../other/card"` |
+| JSON Location                 | Definition Location   | Module Path       |
+| ----------------------------- | --------------------- | ----------------- |
+| `root/Instance.json`          | `root/card.gts`       | `"./card"`        |
+| `root/Card/instance.json`     | `root/card.gts`       | `"../card"`       |
+| `root/Card/Sub/instance.json` | `root/card.gts`       | `"../../card"`    |
+| `root/Card/instance.json`     | `root/other/card.gts` | `"../other/card"` |
 
 ## Instance JSON Structure (Full)
 
@@ -139,6 +142,7 @@ GrammyAward/              # Instances in PascalCase directory
 ```
 
 ### ❌ Wrong: Array syntax (does NOT work)
+
 ```json
 {
   "relationships": {
@@ -150,7 +154,8 @@ GrammyAward/              # Instances in PascalCase directory
   }
 }
 ```
-```
+
+````
 
 ### JSON Structure Rules
 
@@ -185,7 +190,7 @@ GrammyAward/              # Instances in PascalCase directory
 // In .gts definition:
 @field author = linksTo(Author);        // Author extends CardDef → relationships
 @field address = contains(AddressField); // AddressField extends FieldDef → attributes
-```
+````
 
 ```json
 // In .json instance:
@@ -222,11 +227,13 @@ When linking to other cards, use the card's URL without `.json`:
 These realms contain shared definitions you can import from:
 
 **Production:**
+
 - `https://cardstack.com/base/` - Core types (CardDef, FieldDef, etc.)
 - `https://app.boxel.ai/catalog/` - Catalog cards
 - `https://app.boxel.ai/skills/` - Skill cards
 
 **Staging:**
+
 - `https://cardstack.com/base/` - Same core types
 - `https://realms-staging.stack.cards/catalog/`
 - `https://realms-staging.stack.cards/skills/`
@@ -272,6 +279,7 @@ When using the `/_search` API endpoint:
 ```
 
 **With field filters:**
+
 ```json
 {
   "filter": {
@@ -285,21 +293,22 @@ When using the `/_search` API endpoint:
 
 ## Common Mistakes
 
-| Mistake | Fix |
-|---------|-----|
-| `"module": "./card"` from subdirectory | Use `"../card"` |
-| `contains(CardDef)` | Use `linksTo(CardDef)` |
-| `linksTo(FieldDef)` | Use `contains(FieldDef)` |
-| Link in `attributes` | Move to `relationships` |
-| FieldDef in `relationships` | Move to `attributes` |
-| Missing `data` wrapper in JSON | Wrap everything in `{"data": {...}}` |
-| PascalCase for `.gts` files | Use `kebab-case.gts` |
-| kebab-case for instance dirs | Use `PascalCase/` |
-| `linksToMany` as array | Use numbered keys: `field.0`, `field.1`, etc. |
+| Mistake                                | Fix                                           |
+| -------------------------------------- | --------------------------------------------- |
+| `"module": "./card"` from subdirectory | Use `"../card"`                               |
+| `contains(CardDef)`                    | Use `linksTo(CardDef)`                        |
+| `linksTo(FieldDef)`                    | Use `contains(FieldDef)`                      |
+| Link in `attributes`                   | Move to `relationships`                       |
+| FieldDef in `relationships`            | Move to `attributes`                          |
+| Missing `data` wrapper in JSON         | Wrap everything in `{"data": {...}}`          |
+| PascalCase for `.gts` files            | Use `kebab-case.gts`                          |
+| kebab-case for instance dirs           | Use `PascalCase/`                             |
+| `linksToMany` as array                 | Use numbered keys: `field.0`, `field.1`, etc. |
 
 ## Essential Formats
 
 Every CardDef should implement these templates:
+
 - `isolated` - Full detail view (scrollable)
 - `embedded` - Compact summary for lists
 - `fitted` - Fixed dimensions for grids/dashboards (CRITICAL for good UX)

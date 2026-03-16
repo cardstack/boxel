@@ -10,10 +10,13 @@ import {
 import { tmpdir } from 'node:os';
 import { join, relative, resolve } from 'node:path';
 
-import fsExtra from 'fs-extra';
-import jwt from 'jsonwebtoken';
+import type { StdioOptions } from 'node:child_process';
+
+import * as fsExtra from 'fs-extra';
+import * as jwt from 'jsonwebtoken';
 import { Client as PgClient } from 'pg';
-import type { RealmAction } from '../../runtime-common/index.ts';
+
+type RealmAction = 'read' | 'write' | 'realm-owner' | 'assume-user';
 
 type RealmPermissions = Record<string, RealmAction[]>;
 
@@ -145,10 +148,10 @@ const DEFAULT_PERMISSIONS: RealmPermissions = {
   '*': ['read'],
   [DEFAULT_REALM_OWNER]: ['read', 'write', 'realm-owner'],
 };
-const managedProcessStdio =
+const managedProcessStdio: StdioOptions =
   process.env.SOFTWARE_FACTORY_DEBUG_SERVER === '1'
-    ? ['ignore', 'inherit', 'inherit', 'ipc']
-    : ['ignore', 'ignore', 'ignore', 'ipc'];
+    ? (['ignore', 'inherit', 'inherit', 'ipc'] as const)
+    : (['ignore', 'ignore', 'ignore', 'ipc'] as const);
 
 let preparePgPromise: Promise<void> | undefined;
 
@@ -349,8 +352,8 @@ function maybeRequire(specifier: string) {
 }
 
 async function loadSynapseModule() {
-  return (maybeRequire('../../matrix/docker/synapse/index.ts') ??
-    (await import('../../matrix/docker/synapse/index.ts'))) as {
+  let moduleSpecifier = '../../matrix/docker/synapse/index.ts';
+  return (maybeRequire(moduleSpecifier) ?? (await import(moduleSpecifier))) as {
     registerUser: (
       synapse: SynapseInstance,
       username: string,
@@ -367,8 +370,8 @@ async function loadSynapseModule() {
 }
 
 async function loadIsolatedRealmServerModule() {
-  return (maybeRequire('../../matrix/helpers/isolated-realm-server.ts') ??
-    (await import('../../matrix/helpers/isolated-realm-server'))) as {
+  let moduleSpecifier = '../../matrix/helpers/isolated-realm-server.ts';
+  return (maybeRequire(moduleSpecifier) ?? (await import(moduleSpecifier))) as {
     startPrerenderServer: () => Promise<{
       url: string;
       stop(): Promise<void>;

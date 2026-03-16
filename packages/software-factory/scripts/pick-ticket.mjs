@@ -9,14 +9,20 @@ import {
 let args = parseArgs(process.argv.slice(2));
 let realmUrl = args.realm;
 if (!realmUrl) {
-  throw new Error('Usage: npm run boxel:pick-ticket -- --realm <realm-url> [--module <ticket-schema-module-url>]');
+  throw new Error(
+    'Usage: npm run boxel:pick-ticket -- --realm <realm-url> [--module <ticket-schema-module-url>]',
+  );
 }
 
-let statusList = (args.status ? String(args.status) : 'backlog,in_progress,review')
+let statusList = (
+  args.status ? String(args.status) : 'backlog,in_progress,review'
+)
   .split(',')
   .map((value) => value.trim())
   .filter(Boolean);
-let moduleUrl = args.module ?? `${realmUrl.endsWith('/') ? realmUrl : `${realmUrl}/`}darkfactory-schema`;
+let moduleUrl =
+  args.module ??
+  `${realmUrl.endsWith('/') ? realmUrl : `${realmUrl}/`}darkfactory-schema`;
 
 let matrixAuth = await matrixLogin();
 let realmTokens = await getAccessibleRealmTokens(matrixAuth);

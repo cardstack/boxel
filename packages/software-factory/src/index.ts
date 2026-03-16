@@ -8,4 +8,4 @@ export {
   type FactoryRealmTemplate,
   type FactoryTestContext,
   type StartedFactoryRealm,
-} from './harness';
+} from './harness.js';

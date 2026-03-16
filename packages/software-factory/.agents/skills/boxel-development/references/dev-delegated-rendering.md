@@ -1,17 +1,16 @@
 **Delegated rendering:**
+
 ```hbs
 <!-- Always use @fields, even for singular -->
-<@fields.author @format="embedded" />
-<@fields.items @format="embedded" />
+<@fields.author @format='embedded' />
+<@fields.items @format='embedded' />
 ```
 
 **Make cards clickable:**
+
 ```hbs
 <CardContainer
-  {{@context.cardComponentModifier
-    cardId=card.url
-    format='data'
-  }}
+  {{@context.cardComponentModifier cardId=card.url format='data'}}
   @displayBoundaries={{true}}
 >
   <card.component />
@@ -19,6 +18,7 @@
 ```
 
 **Avoid cycles:**
+
 ```gts
 // Canonical links only
 @field supervisor = linksTo(() => Employee);
@@ -41,51 +41,64 @@ Regular HTML selects are limited to plain text. BoxelSelect lets you create rich
 #### Pattern: Rich Select with Custom Options
 
 ```gts
-export class OptionField extends FieldDef { // ⁴³ Option field for select
+export class OptionField extends FieldDef {
+  // ⁴³ Option field for select
   static displayName = 'Option';
-  
+
   @field key = contains(StringField);
   @field label = contains(StringField);
   @field description = contains(StringField);
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <div class="option-display">
-        <strong>{{if @model.label @model.label "Unnamed Option"}}</strong>
-        <span>{{if @model.description @model.description "No description"}}</span>
+      <div class='option-display'>
+        <strong>{{if @model.label @model.label 'Unnamed Option'}}</strong>
+        <span>{{if
+            @model.description
+            @model.description
+            'No description'
+          }}</span>
       </div>
     </template>
   };
 }
 
-export class ProductCategory extends CardDef { // ⁴⁴ Card using BoxelSelect
+export class ProductCategory extends CardDef {
+  // ⁴⁴ Card using BoxelSelect
   @field selectedCategory = contains(OptionField);
-  
-  static edit = class Edit extends Component<typeof this> { // ⁴⁵ Edit format
+
+  static edit = class Edit extends Component<typeof this> {
+    // ⁴⁵ Edit format
     @tracked selectedOption = this.args.model?.selectedCategory;
 
     options = [
-      { key: '1', label: 'Electronics', description: 'Phones, computers, and gadgets' },
+      {
+        key: '1',
+        label: 'Electronics',
+        description: 'Phones, computers, and gadgets',
+      },
       { key: '2', label: 'Clothing', description: 'Fashion and apparel' },
-      { key: '3', label: 'Home & Garden', description: 'Furniture and decor' }
+      { key: '3', label: 'Home & Garden', description: 'Furniture and decor' },
     ];
 
-    updateSelection = (option: typeof this.options[0] | null) => {
+    updateSelection = (option: (typeof this.options)[0] | null) => {
       this.selectedOption = option;
-      this.args.model.selectedCategory = option ? new OptionField(option) : null;
-    }
+      this.args.model.selectedCategory = option
+        ? new OptionField(option)
+        : null;
+    };
 
     <template>
-      <FieldContainer @label="Product Category">
+      <FieldContainer @label='Product Category'>
         <BoxelSelect
           @selected={{this.selectedOption}}
           @options={{this.options}}
           @onChange={{this.updateSelection}}
           @searchEnabled={{true}}
-          @placeholder="Select a category..."
+          @placeholder='Select a category...'
           as |option|
         >
-          <div class="option-item">
+          <div class='option-item'>
             <span>{{option.label}}</span>
             <span>{{option.description}}</span>
           </div>
@@ -104,21 +117,21 @@ Create user-friendly edit controls that accept natural input. Hide complexity in
 // Example: Natural language time period input
 static edit = class Edit extends Component<typeof this> {
   @tracked showDetails = false;
-  
+
   parseInput = (value: string) => {
     // Parse "Q1 2025" → quarter: 1, year: 2025, startDate: Jan 1, endDate: Mar 31
     // Parse "April 2025" → month: 4, year: 2025, startDate: Apr 1, endDate: Apr 30
   }
-  
+
   <template>
     <FieldContainer @label="Time Period" @tag="label">
       <input placeholder="e.g., Q1 2025 or April 2025" {{on 'blur' this.parseInput}} />
     </FieldContainer>
-    
+
     <Button {{on 'click' (toggle 'showDetails' this)}}>
       {{if this.showDetails "Hide" "Show"}} Details
     </Button>
-    
+
     {{#if this.showDetails}}
       <!-- Show all parsed values for verification -->
       <!-- Allow manual override of auto-parsed results -->
@@ -158,19 +171,19 @@ viewReturnPolicy = () => {
 #### Template Example
 
 ```hbs
-<div class="order-card">
+<div class='order-card'>
   <!-- Custom action buttons -->
-  <div class="order-actions">
-    <Button @kind="primary" {{on "click" (fn this.viewOrder order)}}>
+  <div class='order-actions'>
+    <Button @kind='primary' {{on 'click' (fn this.viewOrder order)}}>
       View Order
     </Button>
-    
-    <Button @kind="secondary-light" {{on "click" (fn this.editOrder order)}}>
+
+    <Button @kind='secondary-light' {{on 'click' (fn this.editOrder order)}}>
       Edit Order
     </Button>
   </div>
-  
-  <Button @kind="text-only" {{on "click" (fn this.viewReturnPolicy)}}>
+
+  <Button @kind='text-only' {{on 'click' (fn this.viewReturnPolicy)}}>
     Return Policy
   </Button>
 </div>
@@ -182,6 +195,7 @@ viewReturnPolicy = () => {
 - `'edit'` - Open card for full editing
 
 #### Use Cases
+
 - Multiple direct call-to-actions per card (view, edit)
 - More control over user interactions
 - Link to any card via a card URL

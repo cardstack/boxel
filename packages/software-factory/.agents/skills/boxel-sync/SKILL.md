@@ -12,22 +12,30 @@ Smart bidirectional sync with context-aware conflict resolution.
 Analyze the situation to choose the right sync strategy:
 
 ### After Local Edits
+
 When Claude has been editing files locally:
+
 - Use `--prefer-local` to push changes
 - Creates checkpoint for the push
 
 ### After Server Activity
+
 When watch detected server changes or user mentions UI edits:
+
 - Use `--prefer-remote` or default (interactive)
 - Pull changes first
 
 ### After Restore
+
 When a restore was just performed:
+
 - Use `--prefer-local` to sync deletions to server
 - Essential for completing the restore workflow
 
 ### Conflict Detected
+
 When both sides have changes:
+
 - Show status first
 - Ask user preference or use `--prefer-newest`
 

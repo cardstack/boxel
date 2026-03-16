@@ -1,18 +1,23 @@
 **Always use optional chaining:**
+
 ```js
 // ❌ UNSAFE
-if (this.args.model.items.includes(x)) { }
+if (this.args.model.items.includes(x)) {
+}
 
 // ✅ SAFE
-if (this.args.model?.items?.includes?.(x)) { }
+if (this.args.model?.items?.includes?.(x)) {
+}
 ```
 
 **Provide defaults:**
+
 ```js
 return (this.args.model?.progress ?? 0) + 10;
 ```
 
 **Wrap cross-card access in try-catch:**
+
 ```js
 get authorName() {
   try {
@@ -32,6 +37,7 @@ get authorName() {
 ### Essential Defensive Patterns
 
 #### Always Use Optional Chaining (`?.`)
+
 ```js
 // ❌ UNSAFE: Will throw if model is undefined
 if (this.args.model.completedDays.includes(day)) { ... }
@@ -41,6 +47,7 @@ if (this.args.model?.completedDays?.includes?.(day)) { ... }
 ```
 
 #### Provide Default Values (`??`)
+
 ```js
 // ❌ UNSAFE: May result in NaN
 return this.args.model.progress + 10;
@@ -50,6 +57,7 @@ return (this.args.model?.progress ?? 0) + 10;
 ```
 
 #### Try-Catch for Network of Cards
+
 When accessing data across card relationships, always wrap in try-catch to handle missing or malformed data:
 
 ```js
@@ -61,13 +69,13 @@ get authorDisplayName() {
       console.warn('BlogPost: No author assigned');
       return 'Unknown Author';
     }
-    
+
     const name = author.name || author.title;
     if (!name) {
       console.warn('BlogPost: Author exists but has no name', { authorId: author.id });
       return 'Unnamed Author';
     }
-    
+
     return name;
   } catch (error) {
     console.error('BlogPost: Error accessing author data', {
@@ -86,12 +94,12 @@ get relatedPostsSummary() {
     if (!Array.isArray(posts)) {
       return 'No related posts';
     }
-    
+
     return posts
       .filter(post => post?.title) // Skip malformed entries
       .map(post => post.title)
       .join(', ') || 'No related posts';
-      
+
   } catch (error) {
     console.error('BlogPost: Failed to process related posts', error);
     return 'Related posts unavailable';
@@ -100,6 +108,7 @@ get relatedPostsSummary() {
 ```
 
 #### Validate Arrays Before Operations
+
 ```js
 // ❌ UNSAFE: May throw if not an array
 const sorted = this.completedDays.sort((a, b) => a - b);
@@ -111,7 +120,8 @@ if (!Array.isArray(this.completedDays) || !this.completedDays.length) {
 const sorted = [...this.completedDays].sort((a, b) => a - b);
 ```
 
-**Key Principles:** 
+**Key Principles:**
+
 - Assume data might be missing, null, or the wrong type
 - Provide meaningful fallbacks for user display
 - Log errors with context for debugging (include IDs, data state)

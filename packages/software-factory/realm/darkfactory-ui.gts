@@ -65,11 +65,21 @@ AgentProfile.isolated = class Isolated extends Component<typeof AgentProfile> {
   </template>
 };
 
-KnowledgeArticle.fitted = class Fitted extends Component<typeof KnowledgeArticle> {
+KnowledgeArticle.fitted = class Fitted extends Component<
+  typeof KnowledgeArticle
+> {
   <template>
     <div class='knowledge-card compact'>
-      <div class='kicker'>{{if @model.articleType @model.articleType 'article'}}</div>
-      <strong>{{if @model.articleTitle @model.articleTitle 'Untitled Article'}}</strong>
+      <div class='kicker'>{{if
+          @model.articleType
+          @model.articleType
+          'article'
+        }}</div>
+      <strong>{{if
+          @model.articleTitle
+          @model.articleTitle
+          'Untitled Article'
+        }}</strong>
     </div>
     <style scoped>
       .knowledge-card {
@@ -99,8 +109,16 @@ KnowledgeArticle.isolated = class Isolated extends Component<
   <template>
     <article class='surface'>
       <header>
-        <div class='kicker'>{{if @model.articleType @model.articleType 'article'}}</div>
-        <h1>{{if @model.articleTitle @model.articleTitle 'Untitled Article'}}</h1>
+        <div class='kicker'>{{if
+            @model.articleType
+            @model.articleType
+            'article'
+          }}</div>
+        <h1>{{if
+            @model.articleTitle
+            @model.articleTitle
+            'Untitled Article'
+          }}</h1>
       </header>
       {{#if @model.tags.length}}
         <section>
@@ -260,13 +278,23 @@ ProjectSchema.fitted = class Fitted extends Component<typeof ProjectSchema> {
 
 ProjectSchema.embedded = ProjectSchema.fitted;
 
-ProjectSchema.isolated = class Isolated extends Component<typeof ProjectSchema> {
+ProjectSchema.isolated = class Isolated extends Component<
+  typeof ProjectSchema
+> {
   <template>
     <article class='surface'>
       <header>
         <div class='row'>
-          <strong>{{if @model.projectCode @model.projectCode 'PROJECT'}}</strong>
-          <span>{{if @model.projectStatus @model.projectStatus 'planning'}}</span>
+          <strong>{{if
+              @model.projectCode
+              @model.projectCode
+              'PROJECT'
+            }}</strong>
+          <span>{{if
+              @model.projectStatus
+              @model.projectStatus
+              'planning'
+            }}</span>
         </div>
         <h1>{{if @model.projectName @model.projectName 'Untitled Project'}}</h1>
       </header>
@@ -333,7 +361,11 @@ DarkFactorySchema.fitted = class Fitted extends Component<
 > {
   <template>
     <div class='compact'>
-      <strong>{{if @model.factoryName @model.factoryName 'Dark Factory'}}</strong>
+      <strong>{{if
+          @model.factoryName
+          @model.factoryName
+          'Dark Factory'
+        }}</strong>
     </div>
     <style scoped>
       .compact {

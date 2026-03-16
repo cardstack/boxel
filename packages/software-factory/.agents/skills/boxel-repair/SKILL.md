@@ -6,6 +6,7 @@ description: Use when a Boxel workspace has broken realm metadata, missing icons
 # Boxel Repair
 
 Use this workflow when a workspace has any of these symptoms:
+
 - Missing icon/background in workspace tiles
 - Display name is `Unknown Workspace` or mismatched
 - Opening a workspace fails due to missing `cards-grid` relationship
@@ -27,6 +28,7 @@ boxel repair-realms
 ## Behavior
 
 `repair-realm` and `repair-realms` perform these repairs:
+
 - `.realm.json`: normalize `name`, `iconURL`, `backgroundURL`
 - `index.json`: ensure `relationships.cardsGrid.links.self` = `./cards-grid`
 - `cards-grid.json`: restore default cards-grid card if missing/corrupt

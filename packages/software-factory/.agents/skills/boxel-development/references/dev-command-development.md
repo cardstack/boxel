@@ -15,12 +15,14 @@ class MyInput extends CardDef {
 
 export class MyCommand extends Command<typeof MyInput, undefined> {
   static actionVerb = 'Process';
-  async getInputType() { return MyInput; }
-  
+  async getInputType() {
+    return MyInput;
+  }
+
   protected async run(input: MyInput): Promise<undefined> {
     // Validation first
     if (!input.targetRealm) throw new Error('Target realm required');
-    
+
     // Execute workflow
     // Return result or undefined
   }
@@ -40,20 +42,22 @@ import SearchCardsByQueryCommand from '@cardstack/boxel-host/commands/search-car
 // Save a card
 await new SaveCardCommand(this.commandContext).execute({
   card: myCard,
-  realm: 'https://realm-url/'
+  realm: 'https://realm-url/',
 });
 
 // Get a card
 const card = await new GetCardCommand(this.commandContext).execute({
-  cardId: 'https://realm/Card/id'
+  cardId: 'https://realm/Card/id',
 });
 
 // External API call
-const response = await new SendRequestViaProxyCommand(this.commandContext).execute({
+const response = await new SendRequestViaProxyCommand(
+  this.commandContext,
+).execute({
   url: 'https://api.example.com/endpoint',
   method: 'POST',
   requestBody: JSON.stringify(data),
-  headers: { 'Content-Type': 'application/json' }
+  headers: { 'Content-Type': 'application/json' },
 });
 ```
 
@@ -63,7 +67,7 @@ const response = await new SendRequestViaProxyCommand(this.commandContext).execu
 const headers = {
   'Content-Type': 'application/json',
   'HTTP-Referer': 'https://realms-staging.stack.cards',
-  'X-Title': 'Your App Name'
+  'X-Title': 'Your App Name',
 };
 
 const response = await new SendRequestViaProxyCommand(ctx).execute({
@@ -71,9 +75,9 @@ const response = await new SendRequestViaProxyCommand(ctx).execute({
   method: 'POST',
   requestBody: JSON.stringify({
     model: 'google/gemini-2.5-flash',
-    messages: [{ role: 'user', content: 'Your prompt' }]
+    messages: [{ role: 'user', content: 'Your prompt' }],
   }),
-  headers
+  headers,
 });
 
 if (!response.response.ok) throw new Error('API call failed');
@@ -90,7 +94,7 @@ import UploadImageCommand from 'https://realms-staging.stack.cards/catalog/comma
 
 const result = await new UploadImageCommand(this.commandContext).execute({
   sourceImageUrl: dataUrl,
-  targetRealmUrl: input.realm
+  targetRealmUrl: input.realm,
 });
 ```
 
@@ -99,14 +103,19 @@ const result = await new UploadImageCommand(this.commandContext).execute({
 ```gts
 import SearchCardsByQueryCommand from '@cardstack/boxel-host/commands/search-cards-by-query';
 
-const results = await new SearchCardsByQueryCommand(this.commandContext).execute({
+const results = await new SearchCardsByQueryCommand(
+  this.commandContext,
+).execute({
   query: {
     filter: {
-      on: { module: new URL('./product', import.meta.url).href, name: 'Product' },
-      eq: { status: 'active' }
-    }
+      on: {
+        module: new URL('./product', import.meta.url).href,
+        name: 'Product',
+      },
+      eq: { status: 'active' },
+    },
   },
-  realmURLs: [input.realm]
+  realmURLs: [input.realm],
 });
 ```
 
@@ -117,7 +126,7 @@ import { tracked } from '@glimmer/tracking';
 
 export class MyCommand extends Command<typeof Input, undefined> {
   @tracked step: 'idle' | 'processing' | 'completed' | 'error' = 'idle';
-  
+
   protected async run(input: Input): Promise<undefined> {
     this.step = 'processing';
     try {

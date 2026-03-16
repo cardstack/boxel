@@ -1,26 +1,29 @@
 **Card with computed title:**
+
 ```gts
 export class BlogPost extends CardDef {
   @field headline = contains(StringField);
-  
+
   @field title = contains(StringField, {
-    computeVia: function(this: BlogPost) {
+    computeVia: function (this: BlogPost) {
       return this.headline ?? 'Untitled Post';
-    }
+    },
   });
 }
 ```
 
 **Field definition:**
+
 ```gts
 export class AddressField extends FieldDef {
   @field street = contains(StringField);
   @field city = contains(StringField);
-  
+
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <div class="address">
-        <@fields.street /> <@fields.city />
+      <div class='address'>
+        <@fields.street />
+        <@fields.city />
       </div>
     </template>
   };
@@ -30,8 +33,17 @@ export class AddressField extends FieldDef {
 ## Core Patterns
 
 ### 1. Card Definition with Safe Computed Title
+
 ```gts
-import { CardDef, field, contains, linksTo, containsMany, linksToMany, Component } from 'https://cardstack.com/base/card-api';
+import {
+  CardDef,
+  field,
+  contains,
+  linksTo,
+  containsMany,
+  linksToMany,
+  Component,
+} from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
 import DateField from 'https://cardstack.com/base/date';
 import FileTextIcon from '@cardstack/boxel-icons/file-text';
@@ -41,15 +53,15 @@ export class BlogPost extends CardDef {
   static displayName = 'Blog Post';
   static icon = FileTextIcon; // ✅ CORRECT: Boxel icons for static card/field type icons
   static prefersWideFormat = true;
-  
+
   @field headline = contains(StringField);
   @field publishDate = contains(DateField);
   @field author = linksTo(Author);
   @field tags = containsMany(TagField);
   @field relatedPosts = linksToMany(() => BlogPost);
-  
+
   @field title = contains(StringField, {
-    computeVia: function(this: BlogPost) {
+    computeVia: function (this: BlogPost) {
       try {
         const baseTitle = this.headline ?? 'Untitled Post';
         const maxLength = 50;
@@ -59,7 +71,7 @@ export class BlogPost extends CardDef {
         console.error('BlogPost: Error computing title', e);
         return 'Untitled Post';
       }
-    }
+    },
   });
 }
 ```
@@ -69,7 +81,12 @@ export class BlogPost extends CardDef {
 **CRITICAL:** Every FieldDef file must import FieldDef and MUST be exported:
 
 ```gts
-import { FieldDef, field, contains, Component } from 'https://cardstack.com/base/card-api';
+import {
+  FieldDef,
+  field,
+  contains,
+  Component,
+} from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
 import LocationIcon from '@cardstack/boxel-icons/map-pin';
 import { concat } from '@ember/helper';
@@ -77,31 +94,37 @@ import { concat } from '@ember/helper';
 export class AddressField extends FieldDef {
   static displayName = 'Address';
   static icon = LocationIcon; // ✅ CORRECT: Boxel icons for static card/field type icons
-  
+
   @field street = contains(StringField);
   @field city = contains(StringField);
   @field postalCode = contains(StringField);
   @field country = contains(StringField);
-  
+
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <div class="address">
+      <div class='address'>
         {{#if @model.street}}
           <div><@fields.street /></div>
         {{else}}
-          <div class="placeholder">Street address not provided</div>
+          <div class='placeholder'>Street address not provided</div>
         {{/if}}
         <div>
-          {{if @model.city @model.city "City"}}{{if @model.postalCode (concat ", " @model.postalCode) ""}}
+          {{if @model.city @model.city 'City'}}{{if
+            @model.postalCode
+            (concat ', ' @model.postalCode)
+            ''
+          }}
         </div>
         {{#if @model.country}}
           <div><@fields.country /></div>
         {{else}}
-          <div class="placeholder">Country not specified</div>
+          <div class='placeholder'>Country not specified</div>
         {{/if}}
       </div>
       <style scoped>
-        .placeholder { font-style: italic; }
+        .placeholder {
+          font-style: italic;
+        }
       </style>
     </template>
   };
@@ -143,7 +166,7 @@ export class AddressField extends FieldDef {
 ```gts
 static isolated = class Isolated extends Component<typeof BlogPost> { // ³⁰ Isolated format
   @tracked showComments = false;
-  
+
   // ³¹ CRITICAL: Do ALL computation in functions, never in templates
   get safeTitle() {
     try {
@@ -153,7 +176,7 @@ static isolated = class Isolated extends Component<typeof BlogPost> { // ³⁰ I
       return 'Untitled Post';
     }
   }
-  
+
   get commentButtonText() {
     try {
       const count = this.args?.model?.commentCount ?? 0;
@@ -163,26 +186,26 @@ static isolated = class Isolated extends Component<typeof BlogPost> { // ³⁰ I
       return this.showComments ? 'Hide Comments' : 'Show Comments';
     }
   }
-  
+
   // methods referenced from templates must be defined with fat arrow (=>) so that they are properly bound when invoked
   toggleComments = () => {
     this.showComments = !this.showComments;
   }
-  
+
   <template>
     <!-- ³² Responsive surface that adapts from wide layouts down to mobile -->
     <article class="blog-post-surface">
       <header>
         <time>{{if @model.publishDate (formatDateTime @model.publishDate 'MMMM D, YYYY') "Date not set"}}</time>
         <h1>{{this.safeTitle}}</h1>
-        
+
         {{#if @fields.author}}
           <@fields.author />
         {{else}}
           <div class="author-placeholder">Author not specified</div>
         {{/if}}
       </header>
-      
+
       <div class="post-content">
         {{#if @model.body}}
           <@fields.body />
@@ -192,7 +215,7 @@ static isolated = class Isolated extends Component<typeof BlogPost> { // ³⁰ I
           </div>
         {{/if}}
       </div>
-      
+
       <!-- ³³ Handle arrays with REQUIRED spacing -->
       {{#if (gt @model.tags.length 0)}}
         <section class="tags-section">
@@ -202,12 +225,12 @@ static isolated = class Isolated extends Component<typeof BlogPost> { // ³⁰ I
           </div>
         </section>
       {{/if}}
-      
+
       {{#if (gt @model.commentCount 0)}}
       <div>
-        <Button 
-          @kind="text-only" 
-          @size="extra-small" 
+        <Button
+          @kind="text-only"
+          @size="extra-small"
           class="comment-button"
           {{on 'click' this.toggleComments}}
         >
@@ -218,7 +241,7 @@ static isolated = class Isolated extends Component<typeof BlogPost> { // ³⁰ I
         </Button>
        </div>
       {{/if}}
-      
+
       {{#if this.showComments}}
         <section class="comments-section">
           <h3>Discussion</h3>
@@ -232,7 +255,7 @@ static isolated = class Isolated extends Component<typeof BlogPost> { // ³⁰ I
         </section>
       {{/if}}
     </article>
-    
+
     <style scoped> /* ³⁴ Component styles */
       .blog-post-surface {
         width: 100%;
@@ -248,43 +271,43 @@ static isolated = class Isolated extends Component<typeof BlogPost> { // ³⁰ I
         font-size: 0.875rem;
         line-height: 1.3;
       }
-      
+
       @media (max-width: 800px) {
         .blog-post-surface {
           max-width: none;
           padding: clamp(1rem, 6vw, 1.5rem);
         }
       }
-      
+
       .blog-post-surface > header h1 {
         font-size: clamp(1.125rem, 3vw, 1.5rem);
         margin-top: 0.25rem;
         line-height: 1.2;
       }
-      
+
       .post-content {
         font-size: 0.8125rem;
         line-height: 1.25;
       }
-      
+
       /* ³⁵ CRITICAL: Always style buttons completely - never use unstyled */
       .comment-button {
         /* Style Boxel components to match your design */
         gap: var(--boxel-sp-2xs);
       }
-      
+
       .comment-button .button-icon {
         width: 1rem;
         height: 1rem;
       }
-      
+
       /* ³⁶ CRITICAL: Spacing for containsMany collections */
       .tags-container > .containsMany-field {
         display: flex;
         flex-wrap: wrap;
         gap: 0.25rem; /* Essential spacing between tags */
       }
-      
+
       .comments-container > .containsMany-field {
         display: flex;
         flex-direction: column;
@@ -305,7 +328,7 @@ export class Todo extends CardDef {
   constructor(owner: unknown, args: {}) {
     super(owner, args);
     this.createdDate = new Date(); // DON'T DO THIS
-    this.isCompleted = false;      // DON'T DO THIS
+    this.isCompleted = false; // DON'T DO THIS
   }
 }
 ```
@@ -328,16 +351,18 @@ export class Todo extends CardDef {
 // ✅ CORRECT: Define logic in JavaScript
 export class MyCard extends CardDef {
   get currentMonthDisplay() {
-    return new Intl.DateTimeFormat('en-US', { 
-      month: 'long', 
-      year: 'numeric' 
+    return new Intl.DateTimeFormat('en-US', {
+      month: 'long',
+      year: 'numeric',
     }).format(new Date());
   }
-  
+
   get processedData() {
-    return this.args.model?.data ? this.processData(this.args.model.data) : 'No data';
+    return this.args.model?.data
+      ? this.processData(this.args.model.data)
+      : 'No data';
   }
-  
+
   private processData(data: any) {
     // Complex processing logic here
     return result;

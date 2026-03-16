@@ -1,6 +1,7 @@
 ## File Organization
 
 ### Single App Structure
+
 ```
 my-realm/
 ├── blog-post.gts          # Card definition (kebab-case)
@@ -8,12 +9,13 @@ my-realm/
 ├── address-field.gts      # Field definition (kebab-case-field)
 ├── BlogPost/              # Instance directory (PascalCase)
 │   ├── hello-world.json   # Instance (any-name)
-│   └── second-post.json   
+│   └── second-post.json
 └── Author/
     └── jane-doe.json
 ```
 
 ### Related Cards App Structure
+
 **CRITICAL:** When creating apps with multiple related cards, organize them in common folders:
 
 ```
@@ -48,13 +50,16 @@ my-realm/
 **Path Consistency:** When creating multiple related JSON instances, track the exact file paths you create. Relationship links must match these paths exactly - if you create `Author/dr-nakamura.json`, reference it as `"../Author/dr-nakamura"` from other instances.
 
 ### Root Structure
+
 All data wrapped in a `data` object with:
-* `type`: Always `"card"` for instances
-* `attributes`: Field values go here
-* `relationships`: Links to other cards
-* `meta.adoptsFrom`: Connection to GTS definition
+
+- `type`: Always `"card"` for instances
+- `attributes`: Field values go here
+- `relationships`: Links to other cards
+- `meta.adoptsFrom`: Connection to GTS definition
 
 ### Instance Template
+
 ```json
 {
   "data": {
@@ -78,6 +83,7 @@ All data wrapped in a `data` object with:
 ### Field Value Patterns
 
 **Simple fields** (`contains(StringField)`, etc.):
+
 ```json
 "attributes": {
   "title": "My Title",
@@ -87,6 +93,7 @@ All data wrapped in a `data` object with:
 ```
 
 **Compound fields** (`contains(AddressField)` - a FieldDef):
+
 ```json
 "attributes": {
   "address": {
@@ -98,6 +105,7 @@ All data wrapped in a `data` object with:
 ```
 
 **Array fields** (`containsMany`):
+
 ```json
 "attributes": {
   "tags": ["urgent", "review", "frontend"],
@@ -111,6 +119,7 @@ All data wrapped in a `data` object with:
 ### Relationship Patterns
 
 **Single link** (`linksTo`):
+
 ```json
 "relationships": {
   "author": {
@@ -122,6 +131,7 @@ All data wrapped in a `data` object with:
 ```
 
 **Multiple links** (`linksToMany`) - note the `.0`, `.1` pattern:
+
 ```json
 "relationships": {
   "teamMembers.0": {
@@ -134,6 +144,7 @@ All data wrapped in a `data` object with:
 ```
 
 **Empty linksToMany** - when no relationships exist:
+
 ```json
 "relationships": {
   "nextLevels": {
@@ -143,14 +154,16 @@ All data wrapped in a `data` object with:
   }
 }
 ```
+
 Note: Use `null`, not an empty array `[]`
 
 ### Path Conventions
-* **Module paths**: Relative to JSON location, no `.gts` extension
-  * Local: `"../author"` or `"../../shared/address-field"`
-  * Base: `"https://cardstack.com/base/string"`
-* **Relationship paths**: Relative paths, no `.json` extension
-  * `"../Author/jane-doe"` not `"../Author/jane-doe.json"`
-* **Date formats**: 
-  * DateField: `"2024-11-15"`
-  * DateTimeField: `"2024-11-15T10:00:00Z"`
+
+- **Module paths**: Relative to JSON location, no `.gts` extension
+  - Local: `"../author"` or `"../../shared/address-field"`
+  - Base: `"https://cardstack.com/base/string"`
+- **Relationship paths**: Relative paths, no `.json` extension
+  - `"../Author/jane-doe"` not `"../Author/jane-doe.json"`
+- **Date formats**:
+  - DateField: `"2024-11-15"`
+  - DateTimeField: `"2024-11-15T10:00:00Z"`

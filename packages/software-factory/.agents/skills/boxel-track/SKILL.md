@@ -10,6 +10,7 @@ Start `boxel track` to monitor local file changes and create checkpoints automat
 ## When to Use Track
 
 Use **track** when you're editing files locally (in IDE, with AI agent, etc.) and want automatic backups:
+
 - Working in VS Code, Cursor, or other IDE
 - AI agent is editing files
 - You want checkpoint history of your work
@@ -45,6 +46,7 @@ boxel stop
 ## The Track → Sync Workflow
 
 ### Option 1: Manual Sync (Default)
+
 Track creates local checkpoints only. Push to server when ready:
 
 ```bash
@@ -56,11 +58,13 @@ boxel sync . --prefer-local
 ```
 
 This lets you:
+
 - Work offline with local backups
 - Batch multiple edits before pushing
 - Review changes before they go live
 
 ### Option 2: Real-Time Sync (--push)
+
 Auto-push changes to server as you edit:
 
 ```bash
@@ -75,25 +79,30 @@ Uses batch upload via `/_atomic` endpoint for efficient multi-file uploads. Defi
 When invoked, consider:
 
 ### Standard Development (3s debounce, 10s interval)
+
 - Normal editing workflow
 - Balanced between checkpoint frequency and overhead
 
 ### Fast Iteration (2s debounce, 5s interval)
+
 - Rapid prototyping
 - User says "track closely" or "capture everything"
 
 ### Background Tracking (5s debounce, 30s interval)
+
 - Long editing sessions
 - User says "just backup" or "light tracking"
 
 ## Response Format
 
 When invoked:
+
 1. Confirm workspace directory
 2. Start track with appropriate settings
 3. **Remind user about sync options**
 
 Example (without --push):
+
 ```
 Starting track in the current workspace (3s debounce, 10s interval).
 Checkpoints will be created automatically as you save files.
@@ -109,6 +118,7 @@ Use Ctrl+C to stop tracking, or `boxel stop` from another terminal.
 ```
 
 Example (with --push):
+
 ```
 Starting track with auto-push (3s debounce, 10s interval).
 Changes will be checkpointed AND pushed to server automatically.

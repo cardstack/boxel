@@ -72,7 +72,7 @@ async function matrixLogin(profile = getBrowserProfile()) {
     },
   );
 
-  let json = await response.json();
+  let json = (await response.json()) as BrowserAuth;
   if (!response.ok) {
     throw new Error(
       `Matrix login failed: ${response.status} ${JSON.stringify(json)}`,
@@ -92,7 +92,7 @@ async function getOpenIdToken(matrixAuth: {
   accessToken: string;
   userId: string;
   matrixUrl: string;
-}) {
+}): Promise<Record<string, unknown>> {
   let response = await fetch(
     new URL(
       `_matrix/client/v3/user/${encodeURIComponent(matrixAuth.userId)}/openid/request_token`,
@@ -114,7 +114,7 @@ async function getOpenIdToken(matrixAuth: {
     );
   }
 
-  return await response.json();
+  return (await response.json()) as Record<string, unknown>;
 }
 
 async function getRealmServerToken(

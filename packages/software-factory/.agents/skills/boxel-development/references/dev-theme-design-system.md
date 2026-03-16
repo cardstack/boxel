@@ -5,6 +5,7 @@
 - Theme linkage lives at `relationships.cardInfo.theme` on the card instance.
 
 ### 3.1 Theme Linking Rules
+
 - Set this as the Default Theme for all new, non-ThemeCard instances:
 
 ```
@@ -16,7 +17,9 @@
   }
 }
 ```
+
 - You must also set the remaining cardInfo properties in the card data attributes. Example:
+
 ```
 "attributes": {
   "cardInfo": {
@@ -27,6 +30,7 @@
   },
 }
 ```
+
 - IMPORTANT: Never set `cardInfo.theme` on ThemeCards (cards adopting from `https://cardstack.com/base/theme/default` or its subclasses) to avoid cycles.
 
 #### ThemeCard Types
@@ -41,11 +45,13 @@ A ThemeCard is an instance of a card definition that inherits from `https://card
   - `https://cardstack.com/base/brand-guide/default`
 
 ### 3.2 Canonical Theme Variables
+
 Use the variables directly (do not wrap with `hsl(var(...))`). Pair backgrounds with their foregrounds for contrast.
 
 Our design system is compatible with shadcn css variables.
 
 - Background Colors:
+
 ```
 --background
 --card
@@ -62,6 +68,7 @@ Our design system is compatible with shadcn css variables.
 ```
 
 - Foreground Colors:
+
 ```
 --foreground
 --card-foreground
@@ -75,17 +82,23 @@ Our design system is compatible with shadcn css variables.
 --sidebar-primary-foreground
 --sidebar-accent-foreground
 ```
+
 - Border Colors:
+
 ```
 --border
 --sidebar-border
 ```
+
 - Css Outline Colors:
+
 ```
 --ring
 --sidebar-ring
 ```
+
 - Chart Colors:
+
 ```
 --chart-1
 --chart-2
@@ -95,12 +108,15 @@ Our design system is compatible with shadcn css variables.
 ```
 
 - Fonts: (`font-family`)
+
 ```
 --font-sans
 --font-serif
 --font-mono
 ```
+
 - Radius: (`border-radius`)
+
 ```
 --radius
 --boxel-border-radius-xxs
@@ -111,7 +127,9 @@ Our design system is compatible with shadcn css variables.
 --boxel-border-radius-xl
 --boxel-border-radius-xxl
 ```
+
 - Spacing:
+
 ```
 --spacing
 --boxel-sp-6xs
@@ -130,7 +148,9 @@ Our design system is compatible with shadcn css variables.
 --boxel-sp-5xl
 --boxel-sp-6xl
 ```
+
 - Letter-spacing:
+
 ```
 --tracking-normal
 --boxel-lsp-xxl
@@ -141,7 +161,9 @@ Our design system is compatible with shadcn css variables.
 --boxel-lsp-xs
 --boxel-lsp-xxs
 ```
+
 - Shadows: (`box-shadow`)
+
 ```
 --shadow-2xs
 --shadow-xs
@@ -157,6 +179,7 @@ Our design system is compatible with shadcn css variables.
 ```
 
 - Font Sizes: (`font-size`)
+
 ```
 --boxel-font-size-2xl
 --boxel-font-size-xl
@@ -175,6 +198,7 @@ Our design system is compatible with shadcn css variables.
 #### CSS Usage Examples:
 
 ✅ Correct:
+
 ```
 background-color: var(--card);
 color: var(--card-foreground);
@@ -185,55 +209,60 @@ padding: var(--spacing);
 margin-top: calc(var(--spacing) * 2);
 box-shadow: var(--shadow-lg);
 ```
+
 ❌ Incorrect:
+
 ```
 background-color: hsl(var(--background));   /* Do not wrap in hsl() */
 ```
 
 ### CSS Safety (All Formats)
+
 - Always use `<style scoped>`; only `/* */` comments (never `//`).
 - No global selectors (`:root`, `body`, `html`). Define variables at component root.
 - Conservative z-index (< 10). No fixed overlays beyond card bounds.
 - Prefer inline SVG; always avoid `url(#id)` in SVG.
 
 ### Format Responsibilities (Theming-Aware)
+
 - Isolated: comfortable reading; scrollable surface; theme tokens for padding/typography.
 - Embedded: parent may clamp height; child respects theme tokens.
 - Fitted: no borders (parent draws chrome); internal layout uses theme spacing/typography.
 - Spacing for collections: `.container > .containsMany-field { gap: var(--boxel-sp, 1rem); }`
 
 ### Minimal Themed Template
+
 ```gts
 <template>
-  <article class="card">
-    <h2 class="title"><@fields.title /></h2>
-   {{#if @model.description}}
-      <p class="body"><@fields.description /></p>
-   {{/if}}
+  <article class='card'>
+    <h2 class='title'><@fields.title /></h2>
+    {{#if @model.description}}
+      <p class='body'><@fields.description /></p>
+    {{/if}}
   </article>
   <style scoped>
-     .card {
-        --my-card-background: var(--card, var(--boxel-light));
-        --my-card-foreground: var(--card-foreground, var(--boxel-dark));
-        --my-card-border: var(--border, var(--boxel-400));
-        --my-card-shadow: var(--shadow, var(--boxel-box-shadow));
+    .card {
+      --my-card-background: var(--card, var(--boxel-light));
+      --my-card-foreground: var(--card-foreground, var(--boxel-dark));
+      --my-card-border: var(--border, var(--boxel-400));
+      --my-card-shadow: var(--shadow, var(--boxel-box-shadow));
 
-        background-color: var(--my-card-background);
-        color: var(--my-card-foreground);
-        padding: var(--boxel-sp);
-        border: 1px solid var(--my-card-border);
-        border-radius: var(--boxel-border-radius);
-        box-shadow: var(--my-card-shadow);
-      }
-      .title {
-        font-size: var(--boxel-font-size-lg);
-        letter-spacing: var(--boxel-lsp-xs);
-        margin-bottom: var(--boxel-sp-sm);
-      }
-      .body {
-        font-size: var(--boxel-font-size-sm);
-        line-height: var(--boxel-line-height-sm);
-      }
+      background-color: var(--my-card-background);
+      color: var(--my-card-foreground);
+      padding: var(--boxel-sp);
+      border: 1px solid var(--my-card-border);
+      border-radius: var(--boxel-border-radius);
+      box-shadow: var(--my-card-shadow);
+    }
+    .title {
+      font-size: var(--boxel-font-size-lg);
+      letter-spacing: var(--boxel-lsp-xs);
+      margin-bottom: var(--boxel-sp-sm);
+    }
+    .body {
+      font-size: var(--boxel-font-size-sm);
+      line-height: var(--boxel-line-height-sm);
+    }
   </style>
 </template>
 ```
