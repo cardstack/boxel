@@ -41,9 +41,8 @@ function renderActiveCard(state: RealmIndexingState): string {
       ? Math.round((state.filesCompleted / state.totalFiles) * 100)
       : 0;
 
-  let remainingFiles = state.files.filter(
-    (f) => !state.completedFiles.includes(f),
-  );
+  const completedSet = new Set(state.completedFiles);
+  let remainingFiles = state.files.filter((f) => !completedSet.has(f));
   let remainingList = remainingFiles
     .map((f) => `<li>${escapeHtml(f)}</li>`)
     .join('');
