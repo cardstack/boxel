@@ -182,17 +182,23 @@ module(`server-endpoints/${basename(__filename)}`, function (hooks) {
     await insertRealmFileMeta(publishedRealmURL, publishedFileMetaPath);
     await insertRealmFileMeta(unrelatedRealmURL, unrelatedFileMetaPath);
 
-    let {
-      nameExpressions: realmVersionNames,
-      valueExpressions: realmVersionValues,
-    } = asExpressions({
-      realm_url: unrelatedRealmURL,
-      current_version: 77,
-    });
-    await query(
-      context.dbAdapter,
-      insert('realm_versions', realmVersionNames, realmVersionValues),
-    );
+    for (let [cleanupRealmURL, currentVersion] of [
+      [realmURL, 75],
+      [publishedRealmURL, 76],
+      [unrelatedRealmURL, 77],
+    ] as const) {
+      let {
+        nameExpressions: realmVersionNames,
+        valueExpressions: realmVersionValues,
+      } = asExpressions({
+        realm_url: cleanupRealmURL,
+        current_version: currentVersion,
+      });
+      await query(
+        context.dbAdapter,
+        insert('realm_versions', realmVersionNames, realmVersionValues),
+      );
+    }
 
     for (let [cleanupRealmURL, realmVersion] of [
       [realmURL, 91],
