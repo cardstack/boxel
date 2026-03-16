@@ -156,7 +156,7 @@ if (port != null) {
     ctxt.status = isReady ? 200 : 503;
   });
   if (eventSink) {
-    async function getPendingJobs(): Promise<PendingJob[]> {
+    let getPendingJobs = async (): Promise<PendingJob[]> => {
       let rows = (await query([
         `SELECT j.id, j.job_type, j.args, j.priority, j.created_at`,
         `FROM jobs j`,
