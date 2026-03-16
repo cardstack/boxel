@@ -6,9 +6,10 @@ import {
   readFileSync,
   rmSync,
   statSync,
+  writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, relative, resolve } from 'node:path';
+import { extname, join, relative, resolve } from 'node:path';
 
 import type { StdioOptions } from 'node:child_process';
 
@@ -162,10 +163,6 @@ const FULL_INDEX_REALM_STARTUP_TIMEOUT_MS = Number(
 );
 
 let preparePgPromise: Promise<void> | undefined;
-
-function logFactoryStep(message: string): void {
-  console.log(`[software-factory] ${message}`);
-}
 
 function stableStringify(value: unknown): string {
   if (value === null || typeof value !== 'object') {
@@ -825,6 +822,40 @@ function copyRealmFixture(realmDir: string, destination: string): void {
       return relativePath === '' || !shouldIgnoreFixturePath(relativePath);
     },
   });
+  rewriteFixtureSourceURLs(destination);
+}
+
+function rewriteFixtureSourceURLs(realmDir: string): void {
+  let rewritableExtensions = new Set(['.json', '.gts', '.ts', '.js', '.md']);
+  let replacements = [
+    {
+      from: PUBLIC_SOFTWARE_FACTORY_SOURCE_URL.href,
+      to: LOCAL_SOFTWARE_FACTORY_SOURCE_URL.href,
+    },
+  ];
+
+  function visit(currentDir: string) {
+    for (let entry of readdirSync(currentDir, { withFileTypes: true })) {
+      let absolutePath = join(currentDir, entry.name);
+      if (entry.isDirectory()) {
+        visit(absolutePath);
+        continue;
+      }
+      if (!entry.isFile() || !rewritableExtensions.has(extname(absolutePath))) {
+        continue;
+      }
+      let contents = readFileSync(absolutePath, 'utf8');
+      let rewritten = contents;
+      for (let { from, to } of replacements) {
+        rewritten = rewritten.split(from).join(to);
+      }
+      if (rewritten !== contents) {
+        writeFileSync(absolutePath, rewritten, 'utf8');
+      }
+    }
+  }
+
+  visit(realmDir);
 }
 
 async function startIsolatedRealmStack({
@@ -842,7 +873,6 @@ async function startIsolatedRealmStack({
   migrateDB: boolean;
   fullIndexOnStartup: boolean;
 }): Promise<RunningFactoryStack> {
-  logFactoryStep(`Preparing isolated realm stack for ${realmURL.href}`);
   let rootDir = mkdtempSync(join(tmpdir(), 'software-factory-realms-'));
   let testRealmDir = join(rootDir, 'test');
   ensureDirSync(testRealmDir);
@@ -869,8 +899,6 @@ async function startIsolatedRealmStack({
     PUBLISHED_REALM_BOXEL_SITE_DOMAIN: `localhost:${REALM_SERVER_PORT}`,
   };
 
-  logFactoryStep(`Realm log levels: ${env.LOG_LEVELS}`);
-
   let workerArgs = [
     '--transpileOnly',
     'worker-manager',
@@ -894,7 +922,6 @@ async function startIsolatedRealmStack({
     workerArgs.splice(5, 0, '--migrateDB');
   }
 
-  logFactoryStep(`Starting worker manager on port ${WORKER_MANAGER_PORT}`);
   let workerManager = spawn('ts-node', workerArgs, {
     cwd: realmServerDir,
     env,
@@ -934,7 +961,6 @@ async function startIsolatedRealmStack({
     );
   }
 
-  logFactoryStep(`Starting realm server on port ${REALM_SERVER_PORT}`);
   let realmServer = spawn('ts-node', serverArgs, {
     cwd: realmServerDir,
     env,
@@ -943,7 +969,6 @@ async function startIsolatedRealmStack({
   let getServerLogs = captureProcessLogs(realmServer);
 
   try {
-    logFactoryStep('Waiting for realm server readiness');
     await Promise.race([
       waitForReady(
         realmServer,
@@ -963,7 +988,6 @@ async function startIsolatedRealmStack({
       ),
       createProcessExitPromise(workerManager, 'worker manager'),
     ]);
-    logFactoryStep('Realm server reported ready');
   } catch (error) {
     try {
       await stopManagedProcess(realmServer);
@@ -1032,25 +1056,16 @@ async function buildTemplateDatabase({
   let builderDatabaseName = builderDatabaseNameForCacheKey(cacheKey);
   let hasMigratedTemplate = await databaseExists(DEFAULT_MIGRATED_TEMPLATE_DB);
 
-  logFactoryStep(
-    `Building template database ${templateDatabaseName} from realm fixture ${realmDir}`,
-  );
   await dropDatabase(templateDatabaseName);
   await dropDatabase(builderDatabaseName);
 
   if (hasMigratedTemplate) {
-    logFactoryStep(
-      `Cloning builder database ${builderDatabaseName} from migrated template ${DEFAULT_MIGRATED_TEMPLATE_DB}`,
-    );
     await cloneDatabaseFromTemplate(
       DEFAULT_MIGRATED_TEMPLATE_DB,
       builderDatabaseName,
     );
   }
 
-  logFactoryStep(
-    `Seeding permissions for builder database ${builderDatabaseName}`,
-  );
   await seedRealmPermissions(builderDatabaseName, realmURL, permissions);
 
   let stack = await startIsolatedRealmStack({
@@ -1063,47 +1078,34 @@ async function buildTemplateDatabase({
   });
 
   try {
-    logFactoryStep(
-      `Waiting for initial indexing to finish in ${builderDatabaseName}`,
-    );
     await waitForQueueIdle(builderDatabaseName);
   } finally {
     await stopIsolatedRealmStack(stack);
   }
 
-  logFactoryStep(
-    `Creating reusable template snapshot ${templateDatabaseName} from ${builderDatabaseName}`,
-  );
   await createTemplateSnapshot(builderDatabaseName, templateDatabaseName);
   await dropDatabase(builderDatabaseName);
-  logFactoryStep(`Template database ${templateDatabaseName} is ready`);
 }
 
 export async function startFactorySupportServices(): Promise<{
   context: FactorySupportContext;
   stop(): Promise<void>;
 }> {
-  logFactoryStep('Ensuring Postgres is ready');
   await ensurePgReady();
-  logFactoryStep('Ensuring host app is ready');
   await ensureHostReady();
-  logFactoryStep('Ensuring icons server is ready');
   let icons = await ensureIconsReady();
   cleanupStaleSynapseContainers();
   let { synapseStart, synapseStop } = await loadSynapseModule();
   let { getSynapseURL } = await loadMatrixEnvironmentConfigModule();
   let { startPrerenderServer } = await loadIsolatedRealmServerModule();
 
-  logFactoryStep('Starting Synapse support service');
   let synapse = await synapseStart(
     { suppressRegistrationSecretFile: true },
     true,
   );
   await ensureSupportUsers(synapse);
-  logFactoryStep('Starting prerender support service');
   let prerender = await startPrerenderServer();
   let matrixURL = process.env.SOFTWARE_FACTORY_MATRIX_URL ?? getSynapseURL();
-  logFactoryStep(`Support services ready with Matrix at ${matrixURL}`);
 
   return {
     context: {
@@ -1193,9 +1195,6 @@ export async function ensureFactoryRealmTemplate(
 
   try {
     if (await databaseExists(templateDatabaseName)) {
-      logFactoryStep(
-        `Reusing cached template database ${templateDatabaseName}`,
-      );
       return {
         cacheKey,
         templateDatabaseName,
@@ -1258,7 +1257,6 @@ export async function startFactoryRealmServer(
 
   let stack: RunningFactoryStack;
   try {
-    logFactoryStep(`Creating runtime database ${databaseName}`);
     await dropDatabase(databaseName);
     await cloneDatabaseFromTemplate(templateDatabaseName, databaseName);
 
@@ -1270,9 +1268,6 @@ export async function startFactoryRealmServer(
       migrateDB: false,
       fullIndexOnStartup: false,
     });
-    logFactoryStep(
-      `Runtime realm server is ready using database ${databaseName}`,
-    );
   } catch (error) {
     let cleanupError: unknown;
 
