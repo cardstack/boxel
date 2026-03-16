@@ -11,6 +11,7 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+. "$SCRIPT_DIR/env-slug.sh"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 TRAEFIK_DIR="$REPO_ROOT/traefik/dynamic"
 
@@ -37,7 +38,7 @@ if [ -z "$BRANCH" ]; then
   exit 1
 fi
 
-SLUG=$(echo "$BRANCH" | tr '[:upper:]' '[:lower:]' | sed 's|/|-|g; s|[^a-z0-9-]||g; s|-\+|-|g; s|^-\|-$||g')
+SLUG=$(compute_env_slug "$BRANCH")
 
 echo "Stopping all services for environment: $BRANCH (slug: $SLUG)"
 

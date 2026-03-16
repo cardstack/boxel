@@ -6,9 +6,19 @@
 # variables are correctly set when BOXEL_ENVIRONMENT is present. The standard-mode
 # branch uses ${VAR:-default} to avoid clobbering production/staging env vars in CI.
 
-compute_env_slug() {
-  echo "$1" | tr '[:upper:]' '[:lower:]' | sed 's|/|-|g; s|[^a-z0-9-]||g; s|-\+|-|g; s|^-\|-$||g'
-}
+# Resolve repo root from this file's location (works whether sourced or executed).
+# When sourced via mise's _.source, $0 may be the parent shell, so we also
+# try BASH_SOURCE and fall back to the path relative to .mise.toml (repo root).
+if [ -n "${BASH_SOURCE:-}" ]; then
+  _ENV_VARS_DIR="$(cd "$(dirname "$BASH_SOURCE")" && pwd)"
+  _REPO_ROOT="$(cd "$_ENV_VARS_DIR/../.." && pwd)"
+elif [ -f "./scripts/env-slug.sh" ]; then
+  _REPO_ROOT="$(pwd)"
+else
+  _REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+fi
+. "$_REPO_ROOT/scripts/env-slug.sh"
+unset _ENV_VARS_DIR _REPO_ROOT
 
 export PGPORT="${PGPORT:-5435}"
 

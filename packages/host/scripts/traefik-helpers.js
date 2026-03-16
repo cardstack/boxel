@@ -7,7 +7,8 @@ const path = require('path');
 const fs = require('fs');
 
 function getEnvSlug() {
-  // Prefer ENV_SLUG from mise's env-vars.sh; fall back to computing it
+  // Prefer ENV_SLUG from mise's env-vars.sh (canonical: scripts/env-slug.sh);
+  // fall back to computing it for non-mise contexts.
   if (process.env.ENV_SLUG) return process.env.ENV_SLUG;
   const raw = process.env.BOXEL_ENVIRONMENT || '';
   return raw
