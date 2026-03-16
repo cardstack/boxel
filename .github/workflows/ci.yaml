@@ -482,6 +482,7 @@ jobs:
             "runtime-dependency-tracker-test.ts",
             "transpile-test.ts",
             "module-syntax-test.ts",
+            "node-realm-test.ts",
             "permissions/permission-checker-test.ts",
             "prerendering-test.ts",
             "prerender-server-test.ts",
