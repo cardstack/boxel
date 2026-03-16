@@ -439,7 +439,7 @@ const getIndexHTML = async () => {
           if (process.send) {
             process.send(`sql-error:${e.message}`);
           }
-      });
+        });
     }
   });
   process.on('disconnect', () => {
