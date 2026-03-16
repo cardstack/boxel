@@ -38,11 +38,7 @@ const defaultRealmDir = resolve(
   process.env.SOFTWARE_FACTORY_REALM_DIR ?? 'test-fixtures/darkfactory-adopter',
 );
 const realmPort = Number(process.env.SOFTWARE_FACTORY_REALM_PORT ?? 4205);
-const publicSoftwareFactoryPrefix =
-  process.env.SOFTWARE_FACTORY_PUBLIC_SOURCE_URL ??
-  'http://localhost:4201/software-factory/';
 const localBasePrefix = `http://localhost:${realmPort}/base/`;
-const localSoftwareFactoryPrefix = `http://localhost:${realmPort}/software-factory/`;
 const localSkillsPrefix = `http://localhost:${realmPort}/skills/`;
 const testSourceRealmDir = resolve(
   packageRoot,
@@ -99,6 +95,7 @@ async function startRealmProcess(realmDir = defaultRealmDir) {
   let supportMetadata = existsSync(defaultSupportMetadataFile)
     ? (JSON.parse(readFileSync(defaultSupportMetadataFile, 'utf8')) as {
         context?: Record<string, unknown>;
+        templateDatabaseName?: string;
       })
     : undefined;
 
@@ -112,6 +109,12 @@ async function startRealmProcess(realmDir = defaultRealmDir) {
       ...(supportMetadata?.context
         ? {
             SOFTWARE_FACTORY_CONTEXT: JSON.stringify(supportMetadata.context),
+          }
+        : {}),
+      ...(supportMetadata?.templateDatabaseName
+        ? {
+            SOFTWARE_FACTORY_TEMPLATE_DATABASE_NAME:
+              supportMetadata.templateDatabaseName,
           }
         : {}),
     },
@@ -201,11 +204,6 @@ async function setRealmRedirects(page: Page) {
     page,
     'http://localhost:4201/base/',
     localBasePrefix,
-  );
-  await registerRealmRedirect(
-    page,
-    publicSoftwareFactoryPrefix,
-    localSoftwareFactoryPrefix,
   );
   if (process.env.SOFTWARE_FACTORY_INCLUDE_SKILLS === '1') {
     await registerRealmRedirect(

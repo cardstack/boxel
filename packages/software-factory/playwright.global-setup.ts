@@ -131,12 +131,14 @@ export default async function globalSetup() {
   }>(metadataFile, child, () => logs);
 
   let cacheLogs = '';
+  let cacheMetadataFile = resolve(sharedRuntimeDir, 'cache.json');
   let cacheChild = spawn('pnpm', ['cache:prepare', realmDir], {
     cwd: packageRoot,
     stdio: ['ignore', 'pipe', 'pipe'],
     env: {
       ...process.env,
       SOFTWARE_FACTORY_CONTEXT: JSON.stringify(payload.context),
+      SOFTWARE_FACTORY_METADATA_FILE: cacheMetadataFile,
       SOFTWARE_FACTORY_SOURCE_REALM_DIR: testSourceRealmDir,
     },
   });
@@ -149,9 +151,13 @@ export default async function globalSetup() {
   });
 
   await waitForCommand(cacheChild, () => cacheLogs);
+  let cachePayload = await waitForMetadataFile<{
+    templateDatabaseName: string;
+  }>(cacheMetadataFile, cacheChild, () => cacheLogs, 5_000);
 
   writeSupportMetadata({
     ...payload,
     pid: child.pid,
+    templateDatabaseName: cachePayload.templateDatabaseName,
   });
 }

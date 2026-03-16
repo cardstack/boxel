@@ -390,24 +390,27 @@ const getIndexHTML = async () => {
       registerService(httpServer, serviceName, { wildcardSubdomains: true });
     }
   });
+  let stopRealmServer = (notifyParent = false) => {
+    let stopPort =
+      (httpServer.address() as import('net').AddressInfo | null)?.port ?? port;
+    console.log(`stopping realm server on port ${stopPort}...`);
+    if (isEnvironmentMode()) {
+      deregisterEnvironment();
+    }
+    httpServer.closeAllConnections();
+    httpServer.close(() => {
+      queue.destroy(); // warning this is async
+      dbAdapter.close(); // warning this is async
+      console.log(`realm server on port ${stopPort} has stopped`);
+      if (notifyParent && process.send) {
+        process.send('stopped');
+      }
+      process.exit(0);
+    });
+  };
   process.on('message', (message) => {
     if (message === 'stop') {
-      let stopPort =
-        (httpServer.address() as import('net').AddressInfo | null)?.port ??
-        port;
-      console.log(`stopping realm server on port ${stopPort}...`);
-      if (isEnvironmentMode()) {
-        deregisterEnvironment();
-      }
-      httpServer.closeAllConnections();
-      httpServer.close(() => {
-        queue.destroy(); // warning this is async
-        dbAdapter.close(); // warning this is async
-        console.log(`realm server on port ${stopPort} has stopped`);
-        if (process.send) {
-          process.send('stopped');
-        }
-      });
+      stopRealmServer(true);
     } else if (message === 'kill') {
       console.log(`Ending server process...`);
       process.exit(0);
@@ -436,8 +439,12 @@ const getIndexHTML = async () => {
           if (process.send) {
             process.send(`sql-error:${e.message}`);
           }
-        });
+      });
     }
+  });
+  process.on('disconnect', () => {
+    console.log(`realm server IPC disconnected, shutting down...`);
+    stopRealmServer(false);
   });
 
   await server.start();

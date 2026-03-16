@@ -21,6 +21,7 @@ export function readSupportMetadata():
       context?: Record<string, unknown>;
       pid?: number;
       realmDir?: string;
+      templateDatabaseName?: string;
     }
   | undefined {
   let metadataFile = getSupportMetadataFile();
@@ -33,6 +34,7 @@ export function readSupportMetadata():
       context?: Record<string, unknown>;
       pid?: number;
       realmDir?: string;
+      templateDatabaseName?: string;
     };
   } catch (error) {
     throw new Error(

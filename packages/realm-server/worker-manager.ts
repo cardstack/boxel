@@ -271,6 +271,10 @@ const shutdown = (onShutdown?: () => void) => {
 
 process.on('SIGINT', () => shutdown());
 process.on('SIGTERM', () => shutdown());
+process.on('disconnect', () => {
+  log.info(`Parent IPC disconnected, shutting down worker manager...`);
+  shutdown();
+});
 process.on('uncaughtException', (err) => {
   log.error(`Uncaught exception in worker manager:`, err);
   shutdown();

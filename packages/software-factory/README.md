@@ -17,6 +17,10 @@ isolated realm server. By default it serves the test realm and base realm from
 the same fixed realm-server origin. The skills realm can be enabled when needed
 with `SOFTWARE_FACTORY_INCLUDE_SKILLS=1`.
 
+For the software-factory Playwright flow, the isolated realm stack is intended
+to be self-contained on `http://localhost:4205/`. The fixture realms and test
+startup do not require a separate external realm server on `http://localhost:4201/`.
+
 ## Commands
 
 - `pnpm cache:prepare`
@@ -61,3 +65,5 @@ pnpm smoke:realm ./my-realm Person/example-card
 - Host requests for the base realm URL are redirected to the isolated realm
   server. Skills redirects are only enabled when
   `SOFTWARE_FACTORY_INCLUDE_SKILLS=1`.
+- The test fixtures should point at the isolated `4205` software-factory source
+  realm directly, so they do not depend on any ambient external realm server.

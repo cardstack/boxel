@@ -1,15 +1,19 @@
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import {
+  createServer,
+  type IncomingMessage,
+  type ServerResponse,
+} from 'node:http';
+import {
   mkdtempSync,
   readdirSync,
   readFileSync,
   rmSync,
   statSync,
-  writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { extname, join, relative, resolve } from 'node:path';
+import { join, relative, resolve } from 'node:path';
 
 import type { StdioOptions } from 'node:child_process';
 
@@ -84,6 +88,9 @@ type SpawnedProcess = ChildProcess & {
 type RunningFactoryStack = {
   realmServer: SpawnedProcess;
   workerManager: SpawnedProcess;
+  compatProxy?: {
+    stop(): Promise<void>;
+  };
   rootDir: string;
 };
 
@@ -104,9 +111,12 @@ const prepareTestPgScript = resolve(
   'prepare-test-pg.sh',
 );
 
-const CACHE_VERSION = 5;
+const CACHE_VERSION = 6;
 const REALM_SERVER_PORT = Number(
   process.env.SOFTWARE_FACTORY_REALM_PORT ?? 4205,
+);
+const COMPAT_REALM_SERVER_PORT = Number(
+  process.env.SOFTWARE_FACTORY_COMPAT_REALM_PORT ?? 4201,
 );
 const WORKER_MANAGER_PORT = Number(
   process.env.SOFTWARE_FACTORY_WORKER_MANAGER_PORT ?? 4232,
@@ -116,11 +126,7 @@ const DEFAULT_REALM_URL = new URL(
     `http://localhost:${REALM_SERVER_PORT}/test/`,
 );
 const LOCAL_SOFTWARE_FACTORY_SOURCE_URL = new URL(
-  `http://localhost:${REALM_SERVER_PORT}/software-factory/`,
-);
-const PUBLIC_SOFTWARE_FACTORY_SOURCE_URL = new URL(
-  process.env.SOFTWARE_FACTORY_PUBLIC_SOURCE_URL ??
-    'http://localhost:4201/software-factory/',
+  `http://localhost:${REALM_SERVER_PORT}/public-software-factory-source/`,
 );
 const DEFAULT_REALM_DIR = resolve(
   packageRoot,
@@ -128,6 +134,10 @@ const DEFAULT_REALM_DIR = resolve(
 );
 const DEFAULT_HOST_URL = process.env.HOST_URL ?? 'http://localhost:4200/';
 const DEFAULT_ICONS_URL = process.env.ICONS_URL ?? 'http://localhost:4206/';
+const DEFAULT_ICONS_PROBE_URL = new URL(
+  '@cardstack/boxel-icons/v1/icons/code.js',
+  DEFAULT_ICONS_URL,
+).href;
 const DEFAULT_PG_PORT = process.env.SOFTWARE_FACTORY_PGPORT ?? '55436';
 const DEFAULT_PG_HOST = process.env.SOFTWARE_FACTORY_PGHOST ?? '127.0.0.1';
 const DEFAULT_PG_USER = process.env.SOFTWARE_FACTORY_PGUSER ?? 'postgres';
@@ -137,9 +147,6 @@ const DEFAULT_MIGRATED_TEMPLATE_DB =
 const DEFAULT_REALM_LOG_LEVELS =
   process.env.SOFTWARE_FACTORY_REALM_LOG_LEVELS ??
   '*=info,realm:requests=warn,realm-index-updater=debug,index-runner=debug,index-perf=debug,index-writer=debug,worker=debug,worker-manager=debug,realm=debug,perf=debug';
-const DEFAULT_PRERENDER_LOG_LEVELS =
-  process.env.SOFTWARE_FACTORY_PRERENDER_LOG_LEVELS ??
-  '*=info,prerenderer=debug,prerenderer-chrome=debug,remote-prerenderer=debug';
 const DEFAULT_REALM_OWNER = '@software-factory-owner:localhost';
 const REALM_SECRET_SEED = "shhh! it's a secret";
 const REALM_SERVER_SECRET_SEED = "mum's the word";
@@ -154,8 +161,9 @@ const DEFAULT_PERMISSIONS: RealmPermissions = {
   '*': ['read'],
   [DEFAULT_REALM_OWNER]: ['read', 'write', 'realm-owner'],
 };
-const MOUNTED_REALM_PERMISSIONS: RealmPermissions = {
+const DEFAULT_SOURCE_REALM_PERMISSIONS: RealmPermissions = {
   '*': ['read'],
+  [DEFAULT_REALM_OWNER]: ['read', 'write', 'realm-owner'],
 };
 const managedProcessStdio: StdioOptions =
   process.env.SOFTWARE_FACTORY_DEBUG_SERVER === '1'
@@ -423,7 +431,7 @@ async function ensureIconsReady(): Promise<{
   stop?: () => Promise<void>;
 }> {
   try {
-    let response = await fetch(DEFAULT_ICONS_URL);
+    let response = await fetch(DEFAULT_ICONS_PROBE_URL);
     if (response.ok) {
       return {};
     }
@@ -448,8 +456,13 @@ async function ensureIconsReady(): Promise<{
 
   await waitUntil(
     async () => {
+      if (child.exitCode !== null) {
+        throw new Error(
+          `icons server exited early with code ${child.exitCode}\n${logs}`,
+        );
+      }
       try {
-        let response = await fetch(DEFAULT_ICONS_URL);
+        let response = await fetch(DEFAULT_ICONS_PROBE_URL);
         return response.ok;
       } catch {
         return false;
@@ -458,7 +471,7 @@ async function ensureIconsReady(): Promise<{
     {
       timeout: 30_000,
       interval: 250,
-      timeoutMessage: `Timed out waiting for icons server at ${DEFAULT_ICONS_URL}\n${logs}`,
+      timeoutMessage: `Timed out waiting for icons server at ${DEFAULT_ICONS_PROBE_URL}\n${logs}`,
     },
   );
 
@@ -820,6 +833,127 @@ async function stopManagedProcess(proc: SpawnedProcess): Promise<void> {
   proc.send('kill');
 }
 
+async function readIncomingRequestBody(
+  req: IncomingMessage,
+): Promise<Buffer | undefined> {
+  let chunks: Buffer[] = [];
+  for await (let chunk of req) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+  return chunks.length ? Buffer.concat(chunks) : undefined;
+}
+
+async function startCompatRealmProxy({
+  listenPort,
+  targetPort,
+}: {
+  listenPort: number;
+  targetPort: number;
+}): Promise<
+  | {
+      stop(): Promise<void>;
+    }
+  | undefined
+> {
+  if (listenPort === targetPort) {
+    return undefined;
+  }
+
+  let server = createServer(
+    async (req: IncomingMessage, res: ServerResponse) => {
+      let incomingURL = new URL(
+        req.url ?? '/',
+        `http://127.0.0.1:${listenPort}`,
+      );
+      let upstreamURL = new URL(
+        `${incomingURL.pathname}${incomingURL.search}`,
+        `http://localhost:${targetPort}`,
+      );
+
+      try {
+        let body = await readIncomingRequestBody(req);
+        let headers = Object.fromEntries(
+          Object.entries(req.headers).filter(
+            ([key]) => key.toLowerCase() !== 'host',
+          ),
+        ) as Record<string, string>;
+        let response = await fetch(upstreamURL, {
+          method: req.method,
+          headers,
+          body: body as BodyInit | undefined,
+        });
+
+        let responseHeaders = new Headers(response.headers);
+        let location = responseHeaders.get('location');
+        if (location) {
+          responseHeaders.set(
+            'location',
+            location
+              .replace(
+                `http://localhost:${targetPort}/`,
+                `http://127.0.0.1:${listenPort}/`,
+              )
+              .replace(
+                `http://localhost:${targetPort}/`,
+                `http://localhost:${listenPort}/`,
+              ),
+          );
+        }
+
+        res.statusCode = response.status;
+        responseHeaders.forEach((value, key) => {
+          res.setHeader(key, value);
+        });
+        res.end(Buffer.from(await response.arrayBuffer()));
+      } catch (error) {
+        res.statusCode = 502;
+        res.setHeader('content-type', 'text/plain; charset=utf-8');
+        res.end(
+          `software-factory compat proxy failed for ${upstreamURL.href}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      }
+    },
+  );
+
+  let started = false;
+  for (let attempt = 0; attempt < 20; attempt++) {
+    try {
+      await new Promise<void>((resolve, reject) => {
+        server.once('error', reject);
+        server.listen(listenPort, '127.0.0.1', () => resolve());
+      });
+      started = true;
+      break;
+    } catch (error) {
+      let nodeError = error as NodeJS.ErrnoException;
+      if (nodeError.code !== 'EADDRINUSE') {
+        throw error;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+  }
+
+  if (!started) {
+    return undefined;
+  }
+
+  return {
+    async stop() {
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => {
+          if (error) {
+            reject(error);
+          } else {
+            resolve();
+          }
+        });
+      });
+    },
+  };
+}
+
 function copyRealmFixture(realmDir: string, destination: string): void {
   copySync(realmDir, destination, {
     preserveTimestamps: true,
@@ -828,40 +962,6 @@ function copyRealmFixture(realmDir: string, destination: string): void {
       return relativePath === '' || !shouldIgnoreFixturePath(relativePath);
     },
   });
-  rewriteFixtureSourceURLs(destination);
-}
-
-function rewriteFixtureSourceURLs(realmDir: string): void {
-  let rewritableExtensions = new Set(['.json', '.gts', '.ts', '.js', '.md']);
-  let replacements = [
-    {
-      from: PUBLIC_SOFTWARE_FACTORY_SOURCE_URL.href,
-      to: LOCAL_SOFTWARE_FACTORY_SOURCE_URL.href,
-    },
-  ];
-
-  function visit(currentDir: string) {
-    for (let entry of readdirSync(currentDir, { withFileTypes: true })) {
-      let absolutePath = join(currentDir, entry.name);
-      if (entry.isDirectory()) {
-        visit(absolutePath);
-        continue;
-      }
-      if (!entry.isFile() || !rewritableExtensions.has(extname(absolutePath))) {
-        continue;
-      }
-      let contents = readFileSync(absolutePath, 'utf8');
-      let rewritten = contents;
-      for (let { from, to } of replacements) {
-        rewritten = rewritten.split(from).join(to);
-      }
-      if (rewritten !== contents) {
-        writeFileSync(absolutePath, rewritten, 'utf8');
-      }
-    }
-  }
-
-  visit(realmDir);
 }
 
 async function startIsolatedRealmStack({
@@ -915,8 +1015,6 @@ async function startIsolatedRealmStack({
     `--toUrl=${realmURL.href}`,
     '--fromUrl=https://cardstack.com/base/',
     `--toUrl=http://localhost:${REALM_SERVER_PORT}/base/`,
-    `--fromUrl=${PUBLIC_SOFTWARE_FACTORY_SOURCE_URL.href}`,
-    `--toUrl=${LOCAL_SOFTWARE_FACTORY_SOURCE_URL.href}`,
   ];
   if (INCLUDE_SKILLS) {
     workerArgs.push(
@@ -973,6 +1071,10 @@ async function startIsolatedRealmStack({
     stdio: managedProcessStdio,
   }) as SpawnedProcess;
   let getServerLogs = captureProcessLogs(realmServer);
+  let compatProxy = await startCompatRealmProxy({
+    listenPort: COMPAT_REALM_SERVER_PORT,
+    targetPort: REALM_SERVER_PORT,
+  });
 
   try {
     await Promise.race([
@@ -1005,11 +1107,17 @@ async function startIsolatedRealmStack({
     } catch {
       // best effort cleanup
     }
+    try {
+      await compatProxy?.stop();
+    } catch {
+      // best effort cleanup
+    }
     rmSync(rootDir, { recursive: true, force: true });
     throw error;
   }
 
   return {
+    compatProxy,
     realmServer,
     workerManager,
     rootDir,
@@ -1029,6 +1137,12 @@ async function stopIsolatedRealmStack(
 
   try {
     await stopManagedProcess(stack.workerManager);
+  } catch (error) {
+    cleanupError ??= error;
+  }
+
+  try {
+    await stack.compatProxy?.stop();
   } catch (error) {
     cleanupError ??= error;
   }
@@ -1075,21 +1189,9 @@ async function buildTemplateDatabase({
   await seedRealmPermissions(builderDatabaseName, realmURL, permissions);
   await seedRealmPermissions(
     builderDatabaseName,
-    new URL(`http://localhost:${REALM_SERVER_PORT}/base/`),
-    MOUNTED_REALM_PERMISSIONS,
-  );
-  await seedRealmPermissions(
-    builderDatabaseName,
     LOCAL_SOFTWARE_FACTORY_SOURCE_URL,
-    MOUNTED_REALM_PERMISSIONS,
+    DEFAULT_SOURCE_REALM_PERMISSIONS,
   );
-  if (INCLUDE_SKILLS) {
-    await seedRealmPermissions(
-      builderDatabaseName,
-      new URL(`http://localhost:${REALM_SERVER_PORT}/skills/`),
-      MOUNTED_REALM_PERMISSIONS,
-    );
-  }
 
   let stack = await startIsolatedRealmStack({
     realmDir,
@@ -1127,31 +1229,7 @@ export async function startFactorySupportServices(): Promise<{
     true,
   );
   await ensureSupportUsers(synapse);
-  let previousPrerenderLogLevels =
-    process.env.SOFTWARE_FACTORY_PRERENDER_LOG_LEVELS;
-  let previousPrerenderSilent = process.env.SOFTWARE_FACTORY_PRERENDER_SILENT;
-  process.env.SOFTWARE_FACTORY_PRERENDER_LOG_LEVELS =
-    previousPrerenderLogLevels ?? DEFAULT_PRERENDER_LOG_LEVELS;
-  process.env.SOFTWARE_FACTORY_PRERENDER_SILENT =
-    previousPrerenderSilent ?? '0';
-
-  let prerender;
-  try {
-    prerender = await startPrerenderServer();
-  } finally {
-    if (previousPrerenderLogLevels === undefined) {
-      delete process.env.SOFTWARE_FACTORY_PRERENDER_LOG_LEVELS;
-    } else {
-      process.env.SOFTWARE_FACTORY_PRERENDER_LOG_LEVELS =
-        previousPrerenderLogLevels;
-    }
-
-    if (previousPrerenderSilent === undefined) {
-      delete process.env.SOFTWARE_FACTORY_PRERENDER_SILENT;
-    } else {
-      process.env.SOFTWARE_FACTORY_PRERENDER_SILENT = previousPrerenderSilent;
-    }
-  }
+  let prerender = await startPrerenderServer();
   let matrixURL = process.env.SOFTWARE_FACTORY_MATRIX_URL ?? getSynapseURL();
 
   return {
@@ -1306,6 +1384,11 @@ export async function startFactoryRealmServer(
   try {
     await dropDatabase(databaseName);
     await cloneDatabaseFromTemplate(templateDatabaseName, databaseName);
+    await seedRealmPermissions(
+      databaseName,
+      LOCAL_SOFTWARE_FACTORY_SOURCE_URL,
+      DEFAULT_SOURCE_REALM_PERMISSIONS,
+    );
 
     stack = await startIsolatedRealmStack({
       realmDir,

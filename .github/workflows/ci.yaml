@@ -674,6 +674,13 @@ jobs:
           working-directory: packages/host
           wait-for: 3m
           wait-on: http-get://localhost:4200
+      - name: Serve boxel-icons
+        uses: JarvusInnovations/background-action@2428e7b970a846423095c79d43f759abf979a635 # 1.0.7
+        with:
+          run: pnpm serve &
+          working-directory: packages/boxel-icons
+          wait-for: 3m
+          wait-on: http-get://localhost:4206/@cardstack/boxel-icons/v1/icons/code.js
       - name: Run Playwright tests
         run: pnpm test:playwright
         working-directory: packages/software-factory
