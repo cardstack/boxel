@@ -29,10 +29,6 @@ function findAttachedCardAsFile(
   return attachedCardsAsFiles?.find((file) => file.sourceUrl === card.id);
 }
 
-function cardErrorId(cardError: CardErrorJSONAPI) {
-  return cardError.id ?? '';
-}
-
 function cardErrorRealm(cardError: CardErrorJSONAPI) {
   if (cardError.realm) {
     return cardError.realm;
@@ -102,17 +98,19 @@ const Attachments: TemplateOnlyComponent<Signature> = <template>
           </li>
         {{/each}}
         {{#each item.cardErrors as |cardError|}}
-          <li>
-            <CardPill
-              @cardId={{cardErrorId cardError}}
-              @displayTitle={{cardErrorDisplayTitle cardError}}
-              @borderType='solid'
-              @showErrorIcon={{true}}
-              @urlForRealmLookup={{cardErrorRealm cardError}}
-              title={{cardError.id}}
-              data-test-attached-card-error={{cardErrorId cardError}}
-            />
-          </li>
+          {{#if cardError.id}}
+            <li>
+              <CardPill
+                @cardId={{cardError.id}}
+                @displayTitle={{cardErrorDisplayTitle cardError}}
+                @borderType='solid'
+                @showErrorIcon={{true}}
+                @urlForRealmLookup={{cardErrorRealm cardError}}
+                title={{cardError.id}}
+                data-test-attached-card-error={{cardError.id}}
+              />
+            </li>
+          {{/if}}
         {{/each}}
       {{else}}
         <li>
