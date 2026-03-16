@@ -1433,7 +1433,9 @@ export default class StoreService extends Service implements StoreInterface {
       if (!doc) {
         let json: CardDocument | undefined;
         if (this.isRenderStore && (globalThis as any).__boxelRenderContext) {
-          let result = await this.cardService.getSource(cardIdToURL(`${url}.json`));
+          let result = await this.cardService.getSource(
+            cardIdToURL(`${url}.json`),
+          );
           if (result.status === 200) {
             json = JSON.parse(result.content);
           } else {
