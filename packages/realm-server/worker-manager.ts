@@ -30,7 +30,10 @@ import {
   deregisterService,
 } from './lib/dev-service-registry';
 import { IndexingEventSink } from './indexing-event-sink';
-import { renderIndexingDashboard } from './handlers/handle-indexing-dashboard';
+import {
+  renderIndexingDashboard,
+  type PendingJob,
+} from './handlers/handle-indexing-dashboard';
 
 /* About the Worker Manager
  *
@@ -153,14 +156,49 @@ if (port != null) {
     ctxt.status = isReady ? 200 : 503;
   });
   if (eventSink) {
+    async function getPendingJobs(): Promise<PendingJob[]> {
+      let rows = (await query([
+        `SELECT j.id, j.job_type, j.args, j.priority, j.created_at`,
+        `FROM jobs j`,
+        `WHERE j.status = 'unfulfilled'`,
+        `AND j.job_type IN ('from-scratch-index', 'incremental-index')`,
+        `AND NOT EXISTS (`,
+        `  SELECT 1 FROM job_reservations jr`,
+        `  WHERE jr.job_id = j.id AND jr.completed_at IS NULL`,
+        `)`,
+        `ORDER BY j.created_at ASC`,
+      ])) as {
+        id: string;
+        job_type: string;
+        args: { realmURL?: string };
+        priority: number;
+        created_at: string;
+      }[];
+      return rows.map((r) => ({
+        jobId: Number(r.id),
+        jobType: r.job_type,
+        realmURL: r.args?.realmURL ?? 'unknown',
+        priority: r.priority,
+        createdAt: r.created_at,
+      }));
+    }
+
     router.get('/_indexing-dashboard', async (ctxt: Koa.Context) => {
       ctxt.set('Content-Type', 'text/html; charset=utf-8');
-      ctxt.body = renderIndexingDashboard(eventSink.getSnapshot());
+      let pending = await getPendingJobs();
+      ctxt.body = renderIndexingDashboard({
+        ...eventSink.getSnapshot(),
+        pending,
+      });
       ctxt.status = 200;
     });
     router.get('/_indexing-status', async (ctxt: Koa.Context) => {
       ctxt.set('Content-Type', 'application/json');
-      ctxt.body = JSON.stringify(eventSink.getSnapshot());
+      let pending = await getPendingJobs();
+      ctxt.body = JSON.stringify({
+        ...eventSink.getSnapshot(),
+        pending,
+      });
       ctxt.status = 200;
     });
   }
@@ -558,9 +596,7 @@ async function startWorker(
         ) {
           try {
             let payload = message.substring('progress|'.length);
-            let progressEvent = JSON.parse(
-              payload,
-            ) as IndexingProgressEvent;
+            let progressEvent = JSON.parse(payload) as IndexingProgressEvent;
             eventSink.handleEvent(progressEvent);
           } catch (e) {
             log.error(`Failed to parse progress event: ${e}`);

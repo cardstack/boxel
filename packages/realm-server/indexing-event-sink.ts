@@ -65,9 +65,7 @@ export class IndexingEventSink {
             if (!completedSet.has(event.url)) {
               completedSet.add(event.url);
               state.completedFiles.push(event.url);
-              if (
-                state.completedFiles.length > this.#maxCompletedFilesPerJob
-              ) {
+              if (state.completedFiles.length > this.#maxCompletedFilesPerJob) {
                 const excess =
                   state.completedFiles.length - this.#maxCompletedFilesPerJob;
                 const removed = state.completedFiles.splice(0, excess);

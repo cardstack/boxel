@@ -1,5 +1,13 @@
 import type { RealmIndexingState } from '../indexing-event-sink';
 
+export interface PendingJob {
+  jobId: number;
+  jobType: string;
+  realmURL: string;
+  createdAt: string;
+  priority: number;
+}
+
 function escapeHtml(str: string): string {
   return str
     .replace(/&/g, '&amp;')
@@ -102,16 +110,29 @@ function renderHistoryRow(state: RealmIndexingState): string {
     </tr>`;
 }
 
+function renderPendingRow(job: PendingJob): string {
+  let createdAt = new Date(job.createdAt);
+  return `
+    <tr>
+      <td>${job.jobId}</td>
+      <td>${escapeHtml(job.jobType)}</td>
+      <td class="realm-url-cell" title="${escapeHtml(job.realmURL)}">${escapeHtml(job.realmURL)}</td>
+      <td>${job.priority}</td>
+      <td>${timeSince(createdAt.getTime())}</td>
+    </tr>`;
+}
+
 export interface DashboardSnapshot {
   active: RealmIndexingState[];
+  pending: PendingJob[];
   history: RealmIndexingState[];
 }
 
 export function renderIndexingDashboard(snapshot: DashboardSnapshot): string {
-  let { active, history } = snapshot;
+  let { active, pending, history } = snapshot;
 
   let activeCards = active.map(renderActiveCard).join('');
-
+  let pendingRows = pending.map(renderPendingRow).join('');
   let historyRows = history.map(renderHistoryRow).join('');
 
   return `<!DOCTYPE html>
@@ -336,6 +357,10 @@ export function renderIndexingDashboard(snapshot: DashboardSnapshot): string {
       <div class="value">${active.length}</div>
       <div class="label">Active Jobs</div>
     </div>
+    <div class="summary-item${pending.length > 0 ? ' alert' : ''}">
+      <div class="value">${pending.length}</div>
+      <div class="label">Pending Jobs</div>
+    </div>
     <div class="summary-item">
       <div class="value">${active.reduce((s, a) => s + (a.totalFiles - a.filesCompleted), 0)}</div>
       <div class="label">Files Remaining</div>
@@ -348,6 +373,26 @@ export function renderIndexingDashboard(snapshot: DashboardSnapshot): string {
 
   <h2>Active Indexing</h2>
   ${activeCards.length > 0 ? `<div class="realm-grid">${activeCards}</div>` : '<div class="empty-state">No active indexing jobs</div>'}
+
+  <h2>Pending Jobs</h2>
+  ${
+    pending.length > 0
+      ? `<div class="table-wrapper">
+    <table>
+      <thead>
+        <tr>
+          <th>Job</th>
+          <th>Type</th>
+          <th>Realm</th>
+          <th>Priority</th>
+          <th>Queued</th>
+        </tr>
+      </thead>
+      <tbody>${pendingRows}</tbody>
+    </table>
+  </div>`
+      : '<div class="empty-state">No pending jobs</div>'
+  }
 
   <h2>Recent Completed</h2>
   ${
