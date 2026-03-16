@@ -16,6 +16,7 @@ import { setupBaseRealm } from '../helpers/base-realm';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { assertRecentFileURLs } from '../helpers/recent-files-cards';
 import { setupApplicationTest } from '../helpers/setup';
+import { SessionLocalStorageKey } from '@cardstack/host/utils/local-storage-keys';
 
 const ownedRealmURL = 'http://test-realm/testuser/owned-workspace/';
 const sharedRealmURL = 'http://test-realm/otheruser/shared-workspace/';
@@ -125,7 +126,23 @@ export class Person extends CardDef {}
       stacks: [[{ id: `${ownedRealmURL}index`, format: 'isolated' }]],
     });
 
+    let realmService = getService('realm');
     let recentFilesService = getService('recent-files-service');
+    await realmService.login(ownedRealmURL);
+    await realmService.login(sharedRealmURL);
+
+    let sessionsBeforeDelete = JSON.parse(
+      window.localStorage.getItem(SessionLocalStorageKey) ?? '{}',
+    ) as Record<string, string>;
+    assert.ok(
+      sessionsBeforeDelete[ownedRealmURL],
+      'owned realm session token exists before deletion',
+    );
+    assert.ok(
+      sessionsBeforeDelete[sharedRealmURL],
+      'shared realm session token exists before deletion',
+    );
+
     recentFilesService.recentFiles.push(
       {
         realmURL: new URL(ownedRealmURL),
@@ -168,6 +185,17 @@ export class Person extends CardDef {}
     assert.dom('[data-test-workspace="Owned Workspace"]').doesNotExist();
     assert.dom('[data-test-workspace="Shared Workspace"]').exists();
     assert.dom('[data-test-workspace-chooser]').exists();
+    let sessionsAfterDelete = JSON.parse(
+      window.localStorage.getItem(SessionLocalStorageKey) ?? '{}',
+    ) as Record<string, string>;
+    assert.notOk(
+      sessionsAfterDelete[ownedRealmURL],
+      'deleted realm session token is removed',
+    );
+    assert.ok(
+      sessionsAfterDelete[sharedRealmURL],
+      'other realm session token remains',
+    );
     assertRecentFileURLs(
       assert,
       recentFilesService.recentFiles,

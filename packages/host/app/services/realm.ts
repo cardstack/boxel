@@ -265,6 +265,12 @@ class RealmResource {
   });
 
   logout(): void {
+    this.clearRealmSession();
+    window.localStorage.removeItem(SessionLocalStorageKey);
+    syncTokenToServiceWorker(this.realmURL, undefined);
+  }
+
+  clearRealmSession(): void {
     this.token = undefined;
     this.loginTask.cancelAll();
     this.tokenRefresher.cancelAll();
@@ -272,8 +278,6 @@ class RealmResource {
     this.fetchInfoTask.cancelAll();
     this.fetchingInfo = undefined;
     this.fetchRealmPermissionsTask.cancelAll();
-    window.localStorage.removeItem(SessionLocalStorageKey);
-    syncTokenToServiceWorker(this.realmURL, undefined);
   }
 
   private fetchingInfo: Promise<void> | undefined;
@@ -832,7 +836,7 @@ export default class RealmService extends Service {
     if (!resource) {
       return;
     }
-    resource.logout();
+    resource.clearRealmSession();
     this._realms.delete(url);
     this.currentKnownRealms.delete(url);
   }
