@@ -133,6 +133,9 @@ const DEFAULT_PG_USER = process.env.SOFTWARE_FACTORY_PGUSER ?? 'postgres';
 const DEFAULT_MIGRATED_TEMPLATE_DB =
   process.env.SOFTWARE_FACTORY_MIGRATED_TEMPLATE_DB ??
   'boxel_migrated_template';
+const DEFAULT_REALM_LOG_LEVELS =
+  process.env.SOFTWARE_FACTORY_REALM_LOG_LEVELS ??
+  '*=info,realm:requests=warn,realm-index-updater=debug,index-runner=debug,index-perf=debug,index-writer=debug,worker=debug,worker-manager=debug,realm=debug,perf=debug';
 const DEFAULT_REALM_OWNER = '@software-factory-owner:localhost';
 const REALM_SECRET_SEED = "shhh! it's a secret";
 const REALM_SERVER_SECRET_SEED = "mum's the word";
@@ -151,6 +154,12 @@ const managedProcessStdio: StdioOptions =
   process.env.SOFTWARE_FACTORY_DEBUG_SERVER === '1'
     ? (['ignore', 'inherit', 'inherit', 'ipc'] as const)
     : (['ignore', 'pipe', 'pipe', 'ipc'] as const);
+const DEFAULT_REALM_STARTUP_TIMEOUT_MS = Number(
+  process.env.SOFTWARE_FACTORY_REALM_STARTUP_TIMEOUT_MS ?? 120_000,
+);
+const FULL_INDEX_REALM_STARTUP_TIMEOUT_MS = Number(
+  process.env.SOFTWARE_FACTORY_FULL_INDEX_REALM_STARTUP_TIMEOUT_MS ?? 600_000,
+);
 
 let preparePgPromise: Promise<void> | undefined;
 
@@ -731,7 +740,7 @@ function createProcessExitPromise(
 }
 
 function appendProcessLogs(buffer: string, chunk: Buffer | string): string {
-  return `${buffer}${String(chunk)}`.slice(-20_000);
+  return `${buffer}${String(chunk)}`.slice(-100_000);
 }
 
 function captureProcessLogs(proc: SpawnedProcess) {
@@ -855,9 +864,12 @@ async function startIsolatedRealmStack({
     REALM_SERVER_MATRIX_USERNAME: DEFAULT_MATRIX_SERVER_USERNAME,
     REALM_SERVER_FULL_INDEX_ON_STARTUP: String(fullIndexOnStartup),
     LOW_CREDIT_THRESHOLD: '2000',
+    LOG_LEVELS: DEFAULT_REALM_LOG_LEVELS,
     PUBLISHED_REALM_BOXEL_SPACE_DOMAIN: `localhost:${REALM_SERVER_PORT}`,
     PUBLISHED_REALM_BOXEL_SITE_DOMAIN: `localhost:${REALM_SERVER_PORT}`,
   };
+
+  logFactoryStep(`Realm log levels: ${env.LOG_LEVELS}`);
 
   let workerArgs = [
     '--transpileOnly',
@@ -936,7 +948,9 @@ async function startIsolatedRealmStack({
       waitForReady(
         realmServer,
         'realm server',
-        fullIndexOnStartup ? 300_000 : 120_000,
+        fullIndexOnStartup
+          ? FULL_INDEX_REALM_STARTUP_TIMEOUT_MS
+          : DEFAULT_REALM_STARTUP_TIMEOUT_MS,
         () =>
           [
             'realm server logs:',

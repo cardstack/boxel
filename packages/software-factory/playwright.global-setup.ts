@@ -24,6 +24,12 @@ const testSourceRealmDir = resolve(
 const realmDir = existsSync(configuredRealmDir)
   ? configuredRealmDir
   : fallbackRealmDir;
+const SETUP_COMMAND_TIMEOUT_MS = Number(
+  process.env.SOFTWARE_FACTORY_SETUP_COMMAND_TIMEOUT_MS ?? 900_000,
+);
+const SUPPORT_METADATA_TIMEOUT_MS = Number(
+  process.env.SOFTWARE_FACTORY_SUPPORT_METADATA_TIMEOUT_MS ?? 120_000,
+);
 
 function appendLog(buffer: string, chunk: string): string {
   let combined = `${buffer}${chunk}`;
@@ -33,7 +39,7 @@ function appendLog(buffer: string, chunk: string): string {
 async function waitForCommand(
   child: ReturnType<typeof spawn>,
   getLogs: () => string,
-  timeoutMs = 300_000,
+  timeoutMs = SETUP_COMMAND_TIMEOUT_MS,
 ): Promise<void> {
   let exit = new Promise<void>((resolve, reject) => {
     child.once('error', reject);
@@ -68,7 +74,7 @@ async function waitForMetadataFile<T>(
   metadataFile: string,
   child: ReturnType<typeof spawn>,
   getLogs: () => string,
-  timeoutMs = 120_000,
+  timeoutMs = SUPPORT_METADATA_TIMEOUT_MS,
 ): Promise<T> {
   let startedAt = Date.now();
 
