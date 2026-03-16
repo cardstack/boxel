@@ -346,7 +346,11 @@ export default class Picker extends Component<PickerSignature> {
     if (this.args.afterOptionsComponent) {
       return this.args.afterOptionsComponent;
     }
-    if (this.args.hasMore !== undefined || this.args.onLoadMore !== undefined) {
+    if (
+      this.args.hasMore !== undefined ||
+      this.args.onLoadMore !== undefined ||
+      this.args.isLoading
+    ) {
       return PickerAfterOptions;
     }
     return undefined;
@@ -398,9 +402,11 @@ export default class Picker extends Component<PickerSignature> {
 
   displayDivider = (option: PickerOption) => {
     return (
-      (this.isLastSelected(option) && this.hasUnselected) ||
+      (this.isLastSelected(option) &&
+        this.hasUnselected &&
+        this.args.isLoading) ||
       (option.type === 'select-all' &&
-        this.selectedInSortedOptions.length === 0)
+        (this.selectedInSortedOptions.length === 0 || this.args.isLoading))
     );
   };
 
@@ -451,6 +457,14 @@ export default class Picker extends Component<PickerSignature> {
       .boxel-picker__dropdown--loading .picker-before-options {
         position: relative;
         z-index: 2;
+      }
+
+      .boxel-picker__dropdown--loading
+        .ember-power-select-option:not(:first-child) {
+        display: none;
+      }
+      .boxel-picker__dropdown--loading .picker-divider:not(:last-child) {
+        display: none;
       }
 
       .boxel-picker__dropdown .ember-power-select-option {
