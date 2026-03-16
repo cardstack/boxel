@@ -1,6 +1,7 @@
 import type Koa from 'koa';
 import {
   asExpressions,
+  ensureTrailingSlash,
   fetchRealmPermissions,
   getMatrixUsername,
   param,
@@ -237,10 +238,6 @@ function assertIsDeleteRealmJSON(
   if (!('id' in data) || typeof data.id !== 'string') {
     throw new Error('json.data.id is required and must be a string');
   }
-}
-
-function ensureTrailingSlash(url: string) {
-  return url.endsWith('/') ? url : `${url}/`;
 }
 
 function normalizeRealmURL(realmURL: string): URL | null {
