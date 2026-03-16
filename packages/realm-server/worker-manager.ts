@@ -181,7 +181,7 @@ if (port != null) {
         priority: r.priority,
         createdAt: r.created_at,
       }));
-    }
+    };
 
     router.get('/_indexing-dashboard', async (ctxt: Koa.Context) => {
       ctxt.set('Content-Type', 'text/html; charset=utf-8');
