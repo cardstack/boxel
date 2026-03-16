@@ -1,0 +1,5 @@
+#!/bin/sh
+#MISE description="Start the Matrix Synapse server"
+#MISE dir="packages/matrix"
+
+exec sh scripts/start-synapse.sh

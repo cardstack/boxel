@@ -56,9 +56,11 @@ mise-tasks/
   lib/env-vars.sh              # Shared env computation (sourced by .mise.toml)
   infra/
     ensure-traefik             # Ensure Traefik is running (env mode only)
-    ensure-pg                  # Wait for PostgreSQL to be ready
+    ensure-pg, stop-pg         # Start/stop PostgreSQL
     ensure-db                  # Ensure per-environment database exists
     ensure-synapse             # Ensure Synapse + user registration
+    start-synapse, stop-synapse # Start/stop Synapse manually
+    start-admin, stop-admin    # Matrix admin console (port 8080)
     wait-for-prerender         # Wait for prerender server
   services/
     realm-server               # Full development realm server
@@ -67,6 +69,7 @@ mise-tasks/
       worker-test
     prerender, prerender-mgr   # Prerender server + manager
     icons                      # Boxel icons HTTP server
+    host-build                 # Build and watch the host app
     ai-bot                     # AI bot
     bot-runner                 # Bot runner
   dev                          # Full dev stack (realm server + workers + test realms)
@@ -119,18 +122,18 @@ This starts the host app first, waits for it to be ready, then starts the realm 
 
 The app is available at http://localhost:4200. You will be prompted to register an account. To make it easier, you can execute `pnpm register-test-user` in `packages/matrix/`. Now you can sign in with the test user using the credentials `username: user`, `password: password`.
 
-When you are done running the app you can stop the synapse server by running the following from the `packages/matrix` workspace:
+When you are done running the app you can stop the synapse server:
 
 ```
-pnpm stop:synapse
+mise run infra:stop-synapse
 ```
 
 ### Realm server Hosted App
 
 In order to run the realm server hosted app:
 
-1. `pnpm start:build` in the host/ workspace to re-build the host app (this step can be omitted if you do not want host app re-builds)
-2. `mise run dev` from the repo root to serve the base and experiments realms
+1. `mise run services:host-build` to re-build the host app (this step can be omitted if you do not want host app re-builds)
+2. `mise run dev` to serve the base and experiments realms
 
 You can visit the URL of each realm server to view that realm's app. So for instance, the base realm's app is available at `http://localhost:4201/base` and the experiments realm's app is at `http://localhost:4201/experiments`.
 
@@ -225,7 +228,7 @@ The realm server uses the request accept header to determine the type of request
 
 ### Database
 
-Boxel uses a Postgres database. In development, the Postgres database runs within a docker container, `boxel-pg`, that is started as part of `mise run dev`. You can manually start and stop the `boxel-pg` docker container using `mise run infra:ensure-pg` and `pnpm stop:pg` (from `packages/realm-server`). The postgres database runs on port 5435 so that it doesn't conflict with a natively installed postgres that may be running on your system.
+Boxel uses a Postgres database. In development, the Postgres database runs within a docker container, `boxel-pg`, that is started as part of `mise run dev`. You can manually start and stop the `boxel-pg` docker container using `mise run infra:ensure-pg` and `mise run infra:stop-pg`. The postgres database runs on port 5435 so that it doesn't conflict with a natively installed postgres that may be running on your system.
 
 When running tests for matrix tests we isolate the database between each test run by actually creating a new database for each test with a random database name (e.g. `test_db_1234567`). The test databases can be dropped by running `pnpm test:cleanup` from the `packages/matrix` workspace, this will drop all databases that match the pattern `test_db_%`.
 
@@ -279,18 +282,18 @@ This will create a new SQLite schema based on the current postgres DB (the schem
 
 The boxel platform leverages a Matrix server called Synapse in order to support identity, workflow, and chat behaviors. This project uses a dockerized Matrix server. We have multiple matrix server configurations (currently one for development that uses a persistent DB, and one for testing that uses an in-memory DB). You can find and configure these matrix servers at `packages/matrix/docker/synapse/*`.
 
-This server is automatically started as part of `mise run dev`, but if you wish to control it separately, from `packages/matrix`, execute:
+This server is automatically started as part of `mise run dev`, but if you wish to control it separately:
 
 ```
-pnpm start:synapse
+mise run infra:start-synapse
 ```
 
 The local Matrix server will be running at `http://localhost:8008`.
 
-To stop the matrix server, from `packages/matrix`, execute:
+To stop the matrix server:
 
 ```
-pnpm stop:synapse
+mise run infra:stop-synapse
 ```
 
 #### Matrix Administration
@@ -299,27 +302,27 @@ Matrix administration requires an administrative user and a special client in or
 
 First you must create an administrative user:
 
-1. start the matrix server `pnpm start:synapse`
+1. start the matrix server `mise run infra:start-synapse`
 2. run a script to create an administrative user:
    ```
    docker exec -it boxel-synapse register_new_matrix_user http://localhost:8008 -c /data/homeserver.yaml -u admin -p your_admin_password --admin
    ```
    Alternatively, you can execute `pnpm register-test-admin` and utilize the following credentials: `user: admin` and `password: password`.
 
-After you have created an administrative user and can start the admin console by executing the following in the packages/matrix workspace:
+After you have created an administrative user and can start the admin console:
 
 ```
-pnpm start:admin
+mise run infra:start-admin
 ```
 
 Then visit `http://localhost:8080`, and enter the admin user's username (`admin`) and the password, also enter in your matrix server url `http://localhost:8008` in the homeserver URL field, and click "Signin".
 
 Note you can use this same administrative interface to login to the staging and production matrix server. The credentials are available in AWS SSM Parameter Store.
 
-To stop the admin console run the following in the packages/matrix workspace:
+To stop the admin console:
 
 ```
-pnpm stop:admin
+mise run infra:stop-admin
 ```
 
 #### SMTP Server
@@ -458,10 +461,10 @@ To run the `packages/realm-server/` workspace tests start:
 
 ### Matrix tests
 
-This test suite contains tests that exercise matrix functionality. These tests are located at `packages/matrix/tests`, and are executed using the [Playwright](https://playwright.dev/) test runner. To run the tests from the command line, first make sure that the matrix server is not already running. You can stop the matrix server by executing the following from `packages/matrix`
+This test suite contains tests that exercise matrix functionality. These tests are located at `packages/matrix/tests`, and are executed using the [Playwright](https://playwright.dev/) test runner. To run the tests from the command line, first make sure that the matrix server is not already running:
 
 ```
-pnpm stop:synapse
+mise run infra:stop-synapse
 ```
 
 The matrix client relies upon the host app and the realm servers. Start the host app from the `packages/host` folder:

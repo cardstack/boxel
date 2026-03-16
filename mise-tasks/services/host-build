@@ -1,0 +1,5 @@
+#!/bin/sh
+#MISE description="Build and watch the host app (no live reload)"
+#MISE dir="packages/host"
+
+exec node --max-old-space-size=8192 ./node_modules/.bin/ember build --watch
